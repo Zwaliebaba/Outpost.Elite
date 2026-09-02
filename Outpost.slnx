@@ -1,0 +1,13 @@
+<Solution>
+  <Configurations>
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="NeuronCore/NeuronCore.vcxproj" Id="fb32eb57-8b0d-4048-9852-7b5ca9395aa2">
+    <Platform Solution="*|ARM64" Project="x64" />
+  </Project>
+  <Project Path="Outpost/Outpost.vcxproj" Id="a44f8fe6-9618-48f4-bdbf-ac0513748d87">
+    <Deploy />
+  </Project>
+</Solution>
