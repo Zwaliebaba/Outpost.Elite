@@ -9,7 +9,8 @@
 #                 finishes in 34s against the windows job's 4m35s on the same commit, so a
 #                 broken push says so while that job is still locating Visual Studio.
 #   windows       the real build and the real suite, which need MSVC and the 6502 oracle. This
-#                 is the one that decides.
+#                 is the one that decides. Builds BOTH configurations and runs the suite in
+#                 Release, because the sweeps are about four times dearer unoptimised.
 #
 # THE ORACLE IS NOT OPTIONAL HERE. A machine without the assembled game skips every oracle test
 # and fails exactly one, OracleIsPresent, by design (ADR-003 section 1, Risk R9) -- so a CI run
@@ -146,11 +147,11 @@ jobs:
     # exists for the day it does not, or for a self-hosted machine; the preflight below is what
     # will tell you which case you are in.
     runs-on: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
-    # Measured 2026-09-03 at 133 tests: 4m35s end to end, of which the suite itself is 3m27s.
-    # (The first run of this workflow was 3m52s with 82 tests and a 1m48s suite -- quoted here
-    # because it is where the 45-minute cap came from, not as a current figure.) That is with
-    # the exhaustive sweeps in an unoptimised Debug build, so there is room -- and the suite is
-    # now the whole cost of this job, which is what a split would have to address.
+    # Measured 2026-09-03 at 133 tests: 4m35s end to end, of which the suite itself was 3m27s --
+    # the exhaustive sweeps in an UNOPTIMISED build. The tests now run in Release for that reason;
+    # see the comment on the build steps for what that trades. (The first run of this workflow was
+    # 3m52s with 82 tests and a 1m48s suite, quoted here because it is where the 45-minute cap
+    # came from rather than as a current figure.)
     # The cap is here so that a genuine hang costs one run rather than six hours of runner time,
     # and it is deliberately far above the measurement rather than tight against it.
     timeout-minutes: 45
@@ -268,6 +269,22 @@ jobs:
       # SolutionDir is passed so the output lands at x64\Debug\ exactly as a local build puts it,
       # which is what AGENTS.md section 6 documents and what the oracle's root walk expects.
       # ---------------------------------------------------------------------------------------
+      # ---------------------------------------------------------------------------------------
+      # TWO BUILDS, AND THE TESTS RUN IN THE OPTIMISED ONE. Measured 2026-09-03: the same 139
+      # tests take 36.4s unoptimised and 9.4s at -O1 under g++, so the exhaustive sweeps are
+      # roughly four times dearer without an optimiser. MSVC Debug is worse again, because
+      # _ITERATOR_DEBUG_LEVEL=2 instruments every std::array index and this suite does almost
+      # nothing else -- the Windows job's test step was 3m27s of its 4m35s.
+      #
+      # So Release runs the suite and Debug is built but not run. What that trades is real and
+      # worth naming: a defect that appears only in a Debug build would not be caught HERE. Two
+      # things stand behind it -- the Debug configuration is still compiled on every push, so it
+      # cannot rot, and the Ubuntu leg runs the whole suite on every push at -O1, which is a
+      # different compiler and a different optimisation level from the one testing below.
+      #
+      # This also closes the standing "no Release leg" item: until now nothing built Release at
+      # all, and Release is the configuration the game would ship in.
+      # ---------------------------------------------------------------------------------------
       - name: Build Debug x64
         shell: pwsh
         run: |
@@ -280,22 +297,36 @@ jobs:
             /flp:logfile=build.log`;errorsonly
           if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with $LASTEXITCODE" }
 
+      - name: Build Release x64
+        shell: pwsh
+        run: |
+          & "${{ steps.vs.outputs.msbuild }}" Tests\GameLogicTests\GameLogicTests.vcxproj `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:PlatformToolset=${{ steps.vs.outputs.toolset }} `
+            /p:SolutionDir=$PWD\ `
+            /m /nologo /v:minimal `
+            /flp:logfile=build-release.log`;errorsonly
+          if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with $LASTEXITCODE" }
+
       # AGENTS.md section 6: build.log empty means clean. Parallel warnings scroll the real error
       # away, so the log is the authority rather than the tail of stdout.
-      - name: Report the build log
+      - name: Report the build logs
         if: always()
         shell: pwsh
         run: |
-          if (Test-Path build.log) {
-            $text = Get-Content build.log -Raw
-            if ([string]::IsNullOrWhiteSpace($text)) { Write-Host "build.log is empty -- clean build." }
-            else { Write-Host "::group::build.log"; Write-Host $text; Write-Host "::endgroup::" }
+          foreach ($log in @("build.log", "build-release.log")) {
+            if (Test-Path $log) {
+              $text = Get-Content $log -Raw
+              if ([string]::IsNullOrWhiteSpace($text)) { Write-Host "$log is empty -- clean build." }
+              else { Write-Host "::group::$log"; Write-Host $text; Write-Host "::endgroup::" }
+            }
           }
 
-      - name: Run the unit tests
+      - name: Run the unit tests (Release)
         shell: pwsh
         run: |
-          & "${{ steps.vs.outputs.vstest }}" x64\Debug\GameLogicTests.dll `
+          & "${{ steps.vs.outputs.vstest }}" x64\Release\GameLogicTests.dll `
             /Platform:x64 /Logger:trx`;LogFileName=GameLogicTests.trx /ResultsDirectory:TestResults
           if ($LASTEXITCODE -ne 0) { throw "vstest reported failures" }
 
