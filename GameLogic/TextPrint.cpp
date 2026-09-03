@@ -354,11 +354,11 @@ void MoveCursorDown(TextState& _text) noexcept
   ++_text.row;
 }
 
-void PrintThenDownAndSentenceCase(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept
+void PrintTitleLine(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept
 {
   _printer.Print(_token);
   MoveCursorDown(_text);
-  SetSentenceCase(_printer);
+  SetSentenceCaseAndNewline(_printer);
 }
 
 void PrintThenIndent(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept
