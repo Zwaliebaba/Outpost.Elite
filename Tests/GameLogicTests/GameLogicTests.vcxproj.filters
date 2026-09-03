@@ -18,6 +18,9 @@
     <ClInclude Include="OracleImage.h">
       <Filter>Oracle</Filter>
     </ClInclude>
+    <ClInclude Include="GoldenCanvas.h">
+      <Filter>Oracle</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -55,6 +58,12 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="TextPrintTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="GoldenCanvas.cpp">
+      <Filter>Oracle</Filter>
+    </ClCompile>
+    <ClCompile Include="GoldenTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
   </ItemGroup>

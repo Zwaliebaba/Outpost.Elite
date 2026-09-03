@@ -3,6 +3,8 @@
 **Status:** Accepted · 2026-09-02 · **revised in place** (this document is the sequence of
 record; the ADRs decide *what*, this decides *when*).
 **Owner decisions:** all five taken on 2026-09-02 and recorded in §8.
+**Phase 1 is closed** but for 1c-c (the control codes and the number printers), which is the
+one slice of it still open; §6.11 records what the drawing slices cost.
 **Phase 0 is closed**, bar slice 0e which is owner action: 0a (upstream referenced, §6.9), 0b-a (the
 assembler and label map), 0c (skeleton, the 6502 interpreter), 0f (the determinism guard) are
 built; 0b-b is cancelled and 0d deferred, both by owner ruling. **Phase 1 is under way**: 1b-a
@@ -337,6 +339,39 @@ Three things worth carrying forward:
   area where the oracle mechanism itself was new. Each of 1d-a to 1d-c ends with a byte compare
   against the shipped bitmap.
 
+### 6.11 What phase 1's drawing slices cost, and what the oracle earned
+
+Three defects in 1d-a, none of them visible by inspection, all three found by the same thing:
+**comparing the whole screen rather than the pixel the test was about.**
+
+- `Canvas` guarded its accesses with `& (SCREEN_SIZE - 1)`. `SCREEN_SIZE` is `0x2800`, which is
+  not a power of two, so the mask silently dropped bit 11 of every address that had it and put
+  pixels eight character rows from where they belonged. A test that checked only "the expected
+  byte changed" would have passed.
+- `PIXEL2` collapsed a carry chain into a constant. There is no `CLC` before the `ADC` that
+  negates a downward offset — unlike the x half, which has one — so the carry comes from the
+  range check that just failed and the carry that `ADC` produces is what the following `SBC`
+  borrows against. The visible consequence is that y1 = 128 and y1 = 129 plot the same row.
+- `LOIN`'s steep row step ends with `SBC` and no `CLC`, unlike both shallow paths, so its borrow
+  survives into the accumulator on every iteration that crosses a character row. Dropping it
+  left the port right for 71 pixels of a 72-pixel line, with one pixel one bit out of place.
+
+All three are Risk R4's shape exactly — 6502 flag semantics leaking — and the third is the
+second time in the project that an uncleared carry has been the bug (§6.4 was the first). That is
+now a pattern worth naming: **when a routine's structure looks symmetrical and one branch is
+missing a `CLC`, the asymmetry is the behaviour.**
+
+Two other things worth carrying forward:
+
+- **`DVID4` has no `RTS`.** It falls into a second, unlabelled copy of `LL28`'s body, and both
+  of its callers get it. Checking whether a routine actually returns, before porting it as a
+  function, is now part of reading one.
+- **The corpus's own scope was wrong twice, and in the same direction.** `1b`'s "same shape as
+  the four above, now unblocked" covered two routines that read workspaces phase 1 does not
+  define, and 1d-c's `CIRCLE` family reaches the sun line heap and `LL145`'s clipping. Both are
+  moved to 3a and 3c rather than forced. A ledger row that names a routine is not evidence that
+  its dependencies were checked.
+
 ### 6.9 Slice 0a was not finished, and the way it failed is the interesting part
 
 **Found 2026-09-03, on a clean clone.** Slice 0a was accepted on a mechanical criterion —
@@ -420,9 +455,9 @@ mechanical in a way they were not this morning.
 | **1c-b Extended tokens** ✅ **Built 2026-09-03** | `DETOK`, `DETOK2`, `DETOK3` and the case state they carry, plus the letter-pair, nested-token and randomised-variant paths. `TKN1`, `TKN2`, `RUTOK` and `MTIN` extracted. | **Met.** 199 of 255 tokens compared character for character in three case states, and 21 of the per-system overrides. The 56 deferred reach control codes; the tests count them. §6.8 records the two table-sizing lessons this slice taught. |
 | **1c-c Control codes and numbers** | `MT1`–`MT29` behind the control-code seam, `vowel`, `whitetext`, `feed`, the `DTW1`–`DTW8` justification behaviour; numbers (`BPRNT`, `pr2`, `pr5`, `pr6`, `TT11`). Most control codes move the cursor or clear the screen. | Lands **after 1d-b**, which is what they drive: they need a cursor and a canvas to move it on. The seam and its tests already exist. |
 | **1d-0 Canvas representation spike** ✅ **Built 2026-09-03** | Measure what the drawing code actually writes, before deciding what `Canvas` holds. `Tests/GameLogicTests/CanvasSpikeTests.cpp`. | **Met.** ADR-002 §4 amended from measurement (its new §7 carries the evidence), ADR-005 §1's orphaned screenshot dependency answered, and the `celllook` puzzle resolved. See §6.10. |
-| **1d-a Canvas and the pixel primitives** | `Canvas`: the four planes of ADR-002 §4, the original's addressing (`ylookup`, `celllook`), byte-wise EOR, and `Resolve()` to 320×200 indices. Routines: `PIXEL`, `PIXEL2`, `PIX1`, `DOT`, `CPIX2`/`CPIX4`, `HLOIN`/`HLOIN2`, `LOIN` all seven variants with the `LIJT*` jump tables as a `switch`. Tables `TWOS`, `TWOS2`, `CTWOS`, `CTWOS2`, `TWFL`, `TWFR`, `DTWOS`, `ylookup`, `celllook` extracted (the rest of 1a for this area). | Oracle: call the shipped routine and the port on the same inputs, then compare the 0x2000 bitmap plane **byte for byte**. Exhaustive over x mod 8 and the quadrant cases; swept for line endpoints. Erase-by-redraw checked on every case, since the ship and sun heaps depend on it. |
-| **1d-b Text and the font** | `TextPrint`: `TT26`/`CHPR` with the font, `setxc`/`setyc`/`doxc`/`doyc`, `INCYC`, `CLYNS`, the `MAG2` input colour and the cell-colour writes; `Font.cpp` extracted from `C.FONT.bin`. | Oracle: every printable character at sampled cells, comparing the glyph bytes **and** the colour cell. The `4 + XC` placement is a test, not a constant somebody typed. |
-| **1d-c Shapes and the golden harness** ∥ | `CIRCLE`, `CIRCLE2`, `BLINE`, `TT66`/`BOX`/`box2`/`boxs`. Golden harness: `Canvas::Resolve()` → PNG dump + hash, and `tools/golden_diff.py`. | Oracle for the arithmetic and the bitmap; the first golden lands with diff output attached (Risk R10). |
+| **1d-a Canvas and the pixel primitives** ✅ **Built 2026-09-03** | `Canvas`: the four planes of ADR-002 §4, the original's addressing (`ylookup`, `celllook`), byte-wise EOR, and `Resolve()` to 320×200 indices. Routines: `PIXEL`, `PIXEL2`, `PIX1`, `DOT`, `CPIX2`/`CPIX4`, `HLOIN`/`HLOIN2`, `LOIN` all seven variants with the `LIJT*` jump tables as a `switch`. Tables `TWOS`, `TWOS2`, `CTWOS`, `CTWOS2`, `TWFL`, `TWFR`, `DTWOS`, `ylookup`, `celllook` extracted (the rest of 1a for this area). | **Met, and the compare is the whole 0x2800 screen rather than the bitmap alone.** `PIXEL` over every x at eight distances, `PIXEL2` over all 65,536 coordinate pairs, `CPIX2`/`CPIX4` over every x in five colours, `HLOIN` over both ends across three cells, and **`LOIN` over 3,528 lines**. Three defects caught: a non-power-of-two bitmask corrupting addresses, a collapsed carry chain in `PIXEL2`, and an uncleared borrow in `LOIN`'s steep row step. See §6.11. |
+| **1d-b Text and the font** ✅ **Built 2026-09-03** | `TextPrint`: `TT26`/`CHPR` with the font, `setxc`/`setyc`/`doxc`/`doyc`, `INCYC`, `CLYNS`, the `MAG2` input colour and the cell-colour writes; `Font.cpp` extracted from `C.FONT.bin`. | **Met.** 5,376 printable characters at seven columns and four rows in two cell colours, the 31 control codes at nine cursor positions, and the `QQ17 = 255` suppression over every code — glyph, cursor and colour cell each compared. `TT66simp` ported too, which closes one of the slice's two seams; the bell is the other and belongs to phase 5. |
+| **1d-c The golden harness** ✅ **Built 2026-09-03** | `TT66simp`; the harness: `Canvas::Resolve()` → indexed PNG, `Canvas::Hash()`, `tools/golden_diff.py`. **`CIRCLE`, `CIRCLE2` and `BLINE` moved to 3c** — they reach `CHKON`, the sun line heap (`LSX2`/`LSY2`/`LSP`) and `LL145`'s clipping, none of which phase 1 defines. | **Met.** Two goldens, each checked twice: the shipped routines draw the scene into the oracle, its memory is decoded into a `Canvas`, and the two resolved images are compared **pixel for pixel** — then against a committed hash, which is what a self-comparison cannot catch. On a mismatch both images are written as PNGs and the failure names the `golden_diff.py` command (Risk R10). |
 
 ### 6.3 What slice 1b-a built
 
@@ -661,6 +696,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-03 | **Slices 1a (screen half), 1b-d (completed), 1d-a, 1d-b and 1d-c built.** The screen tables and the font extracted; `FMLTU2` and `DVID4` ported; `Canvas` and the pixel primitives, `LOIN` over 3,528 lines, `CHPR` over 5,376 characters, `TT66simp`, and the golden harness with two oracle-derived goldens. Three defects caught by whole-screen comparison and recorded in §6.11. `DVID3B2`/`LL51` moved to 3a and `CIRCLE`/`CIRCLE2`/`BLINE` to 3c, both because they read workspaces phase 1 does not define. **1c-c is the only slice of phase 1 still open.** |
 | 2026-09-03 | **Slice 1d-0 built, and 1d split into 1d-a/1d-b/1d-c.** The canvas representation spike measured the shipped drawing code instead of trusting ADR-002 §4's assertion, and the assertion did not survive: the C64 build of `PIXEL` writes masks that straddle multicolour pixel boundaries, which one colour index per pixel cannot express. ADR-002 §4 is amended to the four-plane design and gains a §7 of evidence; ADR-005 §1's screenshot dependency is answered from `ylookup`; 1c-c is ordered after 1d-b. §6.10 records it. |
 | 2026-09-03 | **Slice 0a repaired.** `Upstream/elite-source-code-library` was a gitlink with no `.gitmodules`, so a fresh clone got an empty directory and `--check-includes` reported 0/712 — every slice from 1a onward unbuildable off the author's machine. `.gitmodules` added; the tree is a **submodule**, which is what it always was. ADR-001 §5's "vendored ... not a submodule" corrected, along with the `.gitignore` block that claimed the tree was committed. §6.9 records the finding, including that §5's "everything not ours lives under `Upstream/`" omits the 13 committed files in `MasterFile/`. |
 | 2026-09-02 | Opened. Inventory of `MasterFile/`, target architecture, phases 0–6, owner decisions. |

@@ -13,7 +13,6 @@ namespace
 /// bits of the character and a shifted low byte. For a printable character that lands on
 /// FONT + (character - 32) * 8, which is where FONT_DATA starts.
 constexpr std::uint16_t FONT_BASE = 0x0B00;
-constexpr std::uint16_t GLYPH_POINTER_BASE = 0x0A00;
 
 /// 6502: LDX #10 / ASL A / ASL A / BCC / LDX #12 / ASL A / BCC / INX.
 [[nodiscard]] std::uint16_t GlyphPointer(std::uint8_t _character) noexcept
@@ -30,6 +29,30 @@ constexpr std::uint16_t GLYPH_POINTER_BASE = 0x0A00;
   return static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | ((_character << 3) & 0xFFu));
 }
 } // namespace
+
+void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept
+{
+  /*
+   * 6502: T6SL1 / T6SL2. The outer loop indexes ylookup by a screen row that is a multiple of
+   * eight, so it visits character rows 1 to 23; the inner one starts at Y = 0 and counts DOWN to
+   * 1, which stores at offset 0 first and then 255 down to 1 -- 256 bytes, the 32 cells this
+   * screen actually uses. The margins survive, which is why a cleared screen still has its
+   * border.
+   */
+  for (std::uint16_t row = 8; row < 0xC0u; row = static_cast<std::uint16_t>(row + 8u))
+  {
+    const std::uint16_t base = Canvas::RowOffset(static_cast<std::uint8_t>(row));
+    _canvas.Write(base, 0);
+    for (std::uint16_t offset = 255; offset >= 1; --offset)
+    {
+      _canvas.Write(static_cast<std::uint16_t>(base + offset), 0);
+    }
+  }
+
+  // 6502: INY / STY XC / STY YC -- Y reached zero on the way out, so this is (1, 1).
+  _state.column = 1;
+  _state.row = 1;
+}
 
 std::uint8_t TextPrinter::Print(std::uint8_t _character) noexcept
 {
