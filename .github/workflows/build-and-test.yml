@@ -17,6 +17,9 @@
 # they live on the runner and are thrown away with it. The only artefact is the test result file.
 name: Build and test
 
+# Every branch on push, and pull requests only when they come from a fork -- where the push
+# event does not fire for this repository. Without that condition a branch with a PR open gets
+# two identical runs, which is what the first version of this file did.
 on:
   push:
     branches: ["**"]
@@ -44,7 +47,9 @@ env:
 jobs:
   repo-checks:
     name: Repository checks
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,9 +78,16 @@ jobs:
 
   windows:
     name: Debug x64 build and tests
-    # Override with a repository variable to point at a self-hosted runner that has the pinned
-    # toolset. See the preflight step below for why that may be necessary.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    # windows-latest carries the pinned v145 as of the first run of this workflow. The override
+    # exists for the day it does not, or for a self-hosted machine; the preflight below is what
+    # will tell you which case you are in.
     runs-on: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
+    # Measured on the first run: 3m52s end to end, of which the suite itself is 1m48s and BeebAsm
+    # 26s. That is with the exhaustive sweeps in an unoptimised Debug build, so there is room.
+    # The cap is here so that a genuine hang costs one run rather than six hours of runner time,
+    # and it is deliberately far above the measurement rather than tight against it.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,9 +141,9 @@ jobs:
 
           if (-not $match) {
             Write-Host "::error::The projects pin PlatformToolset $requested and this runner has none matching $prefix.*"
-            Write-Host "::error::Hosted GitHub runners ship the toolset that comes with their Visual Studio image;"
-            Write-Host "::error::v145 is Visual Studio 18, which hosted images do not carry. Two ways forward:"
-            Write-Host "::error::  (1) point WINDOWS_RUNNER at a self-hosted machine that has it, or"
+            Write-Host "::error::A hosted runner ships whatever its Visual Studio image carries, and that changes."
+            Write-Host "::error::Two ways forward, and neither is silent:"
+            Write-Host "::error::  (1) point the WINDOWS_RUNNER repository variable at a machine that has it, or"
             Write-Host "::error::  (2) re-run this workflow from the Actions tab with the 'toolset' input set to one"
             Write-Host "::error::      of the toolsets listed above -- which tests a DIFFERENT compiler from the one"
             Write-Host "::error::      the project ships, and is a stopgap rather than an answer."
