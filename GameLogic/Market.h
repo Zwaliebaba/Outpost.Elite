@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Commander.h"
+#include "ExtendedTokens.h"
 #include "Rng.h"
+#include "TextPrint.h"
 
 #include <array>
 #include <cstdint>
@@ -126,5 +128,46 @@ void ReceiveCash(CommanderBlock& _commander, std::uint16_t _tenths) noexcept;
  * the tribble count is added in, and its addition takes the carry the loop left.
  */
 [[nodiscard]] bool CargoFits(const CommanderBlock& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept;
+
+/*
+ * 6502: TT152 -- the units an item is sold in, from two bits of its own gradient byte.
+ *
+ * Three answers and they are not laid out alike. Tonnes print "t" and a space; grams print "g"
+ * and a space; kilos print "kg" and NO space, because TT161 falls into TT16a and TT16a's `JMP
+ * DASC` returns rather than reaching the space. So the column after the units is one character to
+ * the left for the three items sold by the kilo, which is visible on the market screen and is the
+ * original's.
+ */
+void PrintMarketUnits(TokenPrinter& _printer, CharacterPrinter& _characters, std::uint8_t _gradient) noexcept;
+
+/*
+ * 6502: TT151 -- one line of the market screen: name, price, and how much there is.
+ *
+ * The price is recomputed here rather than read from anywhere, which is why MarketPrice exists
+ * and why this takes the economy and the randomiser rather than a table of prices. An item with
+ * none in stock prints a dash instead of a quantity, at a column of its own.
+ *
+ * `_misJumped` is MJ, and it makes the whole line print nothing at all -- there is no market in
+ * witchspace. It is game state, so it arrives as a value.
+ *
+ * The market is taken by REFERENCE and printing it changes it. `var`, which every price passes
+ * through, writes zero to AVL+16 on its way out -- so working out any price at all makes Alien
+ * Items unavailable, and the last line of the screen is always a dash. That is the third place
+ * this one side effect has surfaced: GenerateMarket has to reproduce it, EconomyAdjustment
+ * deliberately does not, and here it is again.
+ */
+void PrintMarketItem(TokenPrinter& _printer, CharacterPrinter& _characters, TextState& _text, int _item,
+                     std::uint8_t _economy, MarketState& _market, bool _misJumped) noexcept;
+
+/*
+ * 6502: TT167 -- the market screen.
+ *
+ * The screen reset at the top is TRADEMODE, which is TT66 and a keyboard flush; a caller does
+ * that first. What is here is the title, the rule, the column headings and the seventeen lines --
+ * and it is seventeen, not the sixteen GenerateMarket fills, so Alien Items appear with whatever
+ * availability the zeroing in `var` left them.
+ */
+void PrintMarketScreen(TokenPrinter& _printer, CharacterPrinter& _characters, TextState& _text,
+                       std::uint8_t _economy, MarketState& _market, bool _misJumped) noexcept;
 
 } // namespace Elite
