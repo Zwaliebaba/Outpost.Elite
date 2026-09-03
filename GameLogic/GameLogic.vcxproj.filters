@@ -48,6 +48,9 @@
     <ClInclude Include="Charts.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Commander.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Rng.h">
       <Filter>Kernel</Filter>
     </ClInclude>
@@ -83,6 +86,12 @@
     </ClCompile>
     <ClCompile Include="Charts.cpp">
       <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Commander.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="CommanderTable.cpp">
+      <Filter>Generated Data</Filter>
     </ClCompile>
     <ClCompile Include="MarketTable.cpp">
       <Filter>Generated Data</Filter>
