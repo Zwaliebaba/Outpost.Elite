@@ -79,6 +79,13 @@ jobs:
       - name: The determinism guard still detects violations
         run: python tools/check_gamelogic.py --self-test
 
+      # Project paths are relative to the PROJECT, not the repository, so a file added from
+      # another directory is one `..` away from an error only a Windows runner sees. This catches
+      # that -- and a source on disk that no project names, which the portable runner's glob would
+      # compile and the Windows build would silently omit.
+      - name: Project files match the tree
+        run: python tools/check_projects.py
+
       - name: Coverage ledger
         run: python tools/inventory.py
 

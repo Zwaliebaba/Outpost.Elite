@@ -197,7 +197,14 @@ Repository checks:
 ```
 python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/inventory.py                     # coverage ledger: ported / pending / unaccounted
+python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted
 ```
+
+**Add a new file to its `.vcxproj` AND its `.vcxproj.filters`.** The portable runner globs the
+directory and will happily compile a file no project names; MSVC will not, so the two builds
+quietly test different things. `check_projects.py` fails on that, on a path that does not resolve
+(`Include` is relative to the PROJECT, not to the repository), and on a filters file that has
+drifted from its project.
 
 **Read a routine through `tools/c64_source.py`, not by eye.** The upstream library is one tree
 serving ten versions of Elite, and a routine's C64 form is whatever survives its `IF` / `ELIF` /
