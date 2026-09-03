@@ -68,8 +68,12 @@ struct SystemData
  * sum of the old s0 and s1 plus the new s1. The order the original writes them in matters --
  * s2's new value is computed from bytes that have already been overwritten -- so the port keeps
  * that order rather than the one that reads more naturally.
+ *
+ * Returns the carry out of the last addition, which is the routine's real final state and is not
+ * decoration: the short-range chart reads it, four routines further on, to decide how big to draw
+ * a system. See PrintSystemName.
  */
-void TwistSeeds(SystemSeeds& _seeds) noexcept;
+bool TwistSeeds(SystemSeeds& _seeds) noexcept;
 
 /*
  * 6502: TT20 -- twist four times, which is one system along.
@@ -138,8 +142,14 @@ struct NearestSystem
  * Three or four letter-pairs, and which it is depends on bit 6 of the first seed byte. The seeds
  * are twisted between pairs and put back afterwards, so this leaves them as it found them --
  * callers depend on that, because printing a name must not move the universe.
+ *
+ * Returns the CARRY the routine ends on, which is the carry out of its last seed twist. That
+ * sounds like an implementation detail and is not: the short-range chart calls this and then
+ * adds two to a masked seed bit WITHOUT clearing the carry first, so this flag decides whether a
+ * system is drawn two pixels across or three. It is the only thing cpl leaves behind besides the
+ * characters.
  */
-void PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept;
+bool PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept;
 
 /*
  * 6502: PDESC's PD1 path -- a system's description.

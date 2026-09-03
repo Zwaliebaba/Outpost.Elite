@@ -92,7 +92,7 @@ void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept;
  * Two entry points in the original share this body, and the control codes below 32 are handled
  * here rather than by the caller, so this is where a newline actually moves the cursor.
  */
-class TextPrinter
+class TextPrinter : public TextSink
 {
 public:
   TextPrinter(Canvas& _canvas, TextState& _state, TextEffects* _effects = nullptr) noexcept
@@ -104,6 +104,14 @@ public:
 
   /// 6502: CHPR. Returns the character, as the routine does in A.
   std::uint8_t Print(std::uint8_t _character) noexcept;
+
+  /*
+   * The screen is where DASC sends a character it is not buffering, so this is a TextSink for
+   * the same reason DASC is: `JMP CHPR` is the last instruction on that path. Handing one of
+   * these to a CharacterPrinter wires the two text systems to the canvas exactly as the game
+   * wires them.
+   */
+  void Put(std::uint8_t _character) noexcept override { (void)Print(_character); }
 
 private:
   /// 6502: RR1 onwards -- the printable path, which is the glyph and its cell colour.

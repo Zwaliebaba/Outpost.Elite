@@ -152,6 +152,7 @@
     <ClInclude Include="TextPrint.h" />
     <ClInclude Include="Universe.h" />
     <ClInclude Include="Market.h" />
+    <ClInclude Include="Charts.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Rng.h" />
     <ClInclude Include="Tokens.h" />
@@ -176,6 +177,7 @@
     <ClCompile Include="TextPrint.cpp" />
     <ClCompile Include="Universe.cpp" />
     <ClCompile Include="Market.cpp" />
+    <ClCompile Include="Charts.cpp" />
     <ClCompile Include="MarketTable.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />

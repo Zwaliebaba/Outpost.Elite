@@ -84,13 +84,29 @@ public:
    *
    * A trapped call is recorded with the registers as they arrived, then returns immediately.
    */
+  /// How many memory addresses a trap hit carries with it. See `watch` below.
+  static constexpr std::size_t WATCH_SLOTS = 4;
+
   struct TrapHit
   {
     std::uint16_t address = 0;
     std::uint8_t a = 0;
     std::uint8_t x = 0;
     std::uint8_t y = 0;
+
+    /// The bytes at `watch`, as they were when the trap fired. Routines that take arguments in
+    /// memory rather than in registers -- SUN takes its centre in K3 and K4 -- cannot be
+    /// compared without this, because by the time the run ends the caller has moved on.
+    std::array<std::uint8_t, WATCH_SLOTS> watched{};
   };
+
+  /*
+   * Addresses recorded alongside every trap hit.
+   *
+   * Four is enough for every routine the suite traps and keeps the hit small; a slot left at
+   * zero records the byte at address zero, which no caller reads.
+   */
+  std::array<std::uint16_t, WATCH_SLOTS> watch{};
 
   /*
    * What the trapped routine's own RTS would have left behind.

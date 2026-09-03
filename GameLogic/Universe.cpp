@@ -8,7 +8,7 @@
 namespace Elite
 {
 
-void TwistSeeds(SystemSeeds& _seeds) noexcept
+bool TwistSeeds(SystemSeeds& _seeds) noexcept
 {
   std::array<std::uint8_t, 6>& q = _seeds.bytes;
 
@@ -30,7 +30,12 @@ void TwistSeeds(SystemSeeds& _seeds) noexcept
 
   const AddResult sumLow = AddWithCarry(low.value, q[2], false);
   q[4] = sumLow.value;
-  q[5] = AddWithCarry(high.value, q[3], sumLow.carry).value;
+
+  // 6502: TYA / ADC QQ15+3 / STA QQ15+5 / RTS -- the last instruction that touches the carry, so
+  // this is what the routine leaves in it.
+  const AddResult sumHigh = AddWithCarry(high.value, q[3], sumLow.carry);
+  q[5] = sumHigh.value;
+  return sumHigh.carry;
 }
 
 void NextSystem(SystemSeeds& _seeds) noexcept
@@ -236,7 +241,7 @@ NearestSystem FindNearestSystem(const SystemSeeds& _galaxy, std::uint8_t _crossh
   return best;
 }
 
-void PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept
+bool PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept
 {
   // 6502: TT53 -- the seeds are saved to QQ19 and put back at the end, because printing a name
   // must not move the universe on.
@@ -249,6 +254,13 @@ void PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept
    */
   int pairs = ((_seeds.bytes[0] & 0x40u) != 0u) ? 4 : 3;
 
+  /*
+   * 6502: the carry TT54 leaves on the last time round the loop, which nothing here clears
+   * afterwards -- TT56's restore is six loads and stores and a DEX. So it survives the RTS, and
+   * the short-range chart reads it.
+   */
+  bool carry = false;
+
   for (int pair = 0; pair < pairs; ++pair)
   {
     // 6502: LDA QQ15+5 / AND #%00011111 / BEQ -- a zero means this pair is simply skipped, which
@@ -260,10 +272,11 @@ void PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept
       _printer.Print(static_cast<std::uint8_t>(token | 0x80u));
     }
 
-    TwistSeeds(_seeds);
+    carry = TwistSeeds(_seeds);
   }
 
   _seeds = saved;
+  return carry;
 }
 
 void PrintSystemDescription(ExtendedTokenPrinter& _printer, Rng& _rng, const SystemSeeds& _seeds) noexcept

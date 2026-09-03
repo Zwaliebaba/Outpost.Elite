@@ -45,6 +45,9 @@
     <ClInclude Include="Market.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Charts.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Rng.h">
       <Filter>Kernel</Filter>
     </ClInclude>
@@ -76,6 +79,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Market.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Charts.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="MarketTable.cpp">
