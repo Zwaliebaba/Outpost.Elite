@@ -129,6 +129,7 @@
     <ClCompile Include="GoldenTests.cpp" />
     <ClCompile Include="NumberTests.cpp" />
     <ClCompile Include="UniverseTests.cpp" />
+    <ClCompile Include="MarketTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\GameLogic\GameLogic.vcxproj">

@@ -81,6 +81,10 @@ TABLES = [
     # is not in the table at all -- BPRNT subtracts it as an immediate 0x17 -- so the constant is
     # 0x17_4876E800, which is ten to the eleventh.
     Table("TEN_TO_THE_ELEVENTH", "TENS", 4, "ScreenTables.cpp", "the low four bytes of 10^11, for BPRNT"),
+    # ---- slice 2c: the market. Four bytes an item -- base price, economy gradient, base
+    # quantity, mask -- and seventeen items, because the market screen loops QQ29 to 17. GVL
+    # only fills quantities for the first sixteen, which is why Alien Items behave differently.
+    Table("MARKET_TABLE", "QQ23", 68, "MarketTable.cpp", "base price, gradient, quantity and mask per item"),
 ]
 
 
