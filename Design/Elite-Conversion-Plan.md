@@ -305,6 +305,38 @@ within a phase is the recommended one; slices marked ∥ can run in parallel.
 | **0e Permission** | Approach the rights holders about the intent to publish (ADR-001 §5). Until it closes, nothing is pushed to a public remote. | A written answer, recorded in ADR-001 §5, and the disposition of `Upstream/` decided accordingly. |
 | **0f Determinism guard** ✅ **Built 2026-09-03** | `tools/check_gamelogic.py`: fails if `GameLogic` names a clock, operating-system randomness, `float`, `double`, file or registry access, or a Win32 call. Comments and string literals are stripped first, so a comment explaining the float ban does not trip the float rule. | **Met.** Passes on the tree. A planted `<chrono>` include and a `double` were both caught, and the tree was clean again afterwards. `--self-test` proves the scanner still detects six violation kinds and correctly ignores four look-alikes, so the checker itself is checked. |
 
+### 6.10 The canvas was designed from an assertion, and the assertion was wrong
+
+**Slice 1d was one slice with a big scope and a quiet assumption underneath it.** ADR-002 §4
+said the canvas is "320×200 logical pixels, one byte per pixel holding a C64 colour index".
+Nothing in the corpus derived that; it reads like a description of the output, which it is, and
+was taken for a description of the storage, which it is not. A half day of measurement before
+`Canvas.cpp` rather than after it is what this entry is arguing for.
+
+The C64 screen is a **multicolour** bitmap: 160 double-width pixels of two bits each, with the
+colours for `%01` and `%10` in a per-8×8-cell byte in screen RAM and `%11` in colour RAM. The
+drawing routines EOR whole **bytes** into it. The decisive measurement is that the C64 build of
+`PIXEL` indexes `TWOS2`, whose masks slide by one bit, so three of the eight x offsets set the
+low bit of one multicolour pixel and the high bit of the next. **There is no colour index to
+store for that write.** Plot at x = 66 and then x = 68 and the byte reads `%01111000` — three
+lit pixels in three colours, the middle one a colour neither call asked for. ADR-002 §7 carries
+the measurements; ADR-002 §4 now carries the four-plane design that replaces the clause.
+
+Three things worth carrying forward:
+
+- **The spike paid for itself twice over before any code was written.** It also answered
+  ADR-005 §1's dependency on the cancelled emulator run — the space view's placement is `0x20`
+  in `ylookup`, a four-cell left margin, and the dashboard split is `ylookup[144]` landing on
+  character row 18 — which §6.5 had missed when it counted that slice's dependents.
+- **Deriving by hand got it wrong; measuring got it right.** `celllook` starts three cells into
+  screen RAM while the bitmap's margin is four, which reads as an off-by-one. It is not: `CHPR`
+  writes the colour *after* advancing the cursor, so both land on cell `4 + XC`. The hand
+  derivation in this project's own notes said otherwise for an hour.
+- **1d is now four slices, and 1c-c has an order.** The original 1d bundled the canvas, the
+  text printer, the golden harness and the deferred control codes into one sitting, in the one
+  area where the oracle mechanism itself was new. Each of 1d-a to 1d-c ends with a byte compare
+  against the shipped bitmap.
+
 ### 6.9 Slice 0a was not finished, and the way it failed is the interesting part
 
 **Found 2026-09-03, on a clean clone.** Slice 0a was accepted on a mechanical criterion —
@@ -386,8 +418,11 @@ mechanical in a way they were not this morning.
 | **1b-d Logarithm-table routines** ✅ **Built 2026-09-03** | `FMLTU`, `LL28`, `LL38`, `ARCTAN` — multiply and divide by adding logarithms, and the angle of a ratio. `DVID4`, `DVID3B2`, `FMLTU2` and `LL51` remain and are the same shape. | **Met.** All four compared against the shipped routines; the multiply, the divide and the angle **exhaustively over all 65,536 input pairs each**, the combine over a 200,000-case sweep. The divide's returned carry is compared too, because its callers branch on it. |
 | **1c-a Recursive tokens** ✅ **Built 2026-09-03** | `TT27` and everything it falls through into: `TT41`, `TT42`, `TT43`, `TT44`, `TT45`, `TT46`, `TT47`, `TT74`, `qw`, `ex` with its walk, and the case-flag state machine. Plus the `QQ18` and `QQ16` tables. | **Met.** **243 of 250 tokens compared character for character against the shipped printer, in all five capitalisation states.** The remaining 7 embed value tokens that read commander and system state; the test detects and counts those rather than skipping them silently. §6.7 explains the trap that made output comparable at all. |
 | **1c-b Extended tokens** ✅ **Built 2026-09-03** | `DETOK`, `DETOK2`, `DETOK3` and the case state they carry, plus the letter-pair, nested-token and randomised-variant paths. `TKN1`, `TKN2`, `RUTOK` and `MTIN` extracted. | **Met.** 199 of 255 tokens compared character for character in three case states, and 21 of the per-system overrides. The 56 deferred reach control codes; the tests count them. §6.8 records the two table-sizing lessons this slice taught. |
-| **1c-c Control codes and numbers** | `MT1`–`MT29` behind the control-code seam, `vowel`, `whitetext`, `feed`, the `DTW1`–`DTW8` justification behaviour; numbers (`BPRNT`, `pr2`, `pr5`, `pr6`, `TT11`). Most control codes move the cursor or clear the screen. | Lands with the canvas in 1d, which is what they drive. The seam and its tests already exist. |
-| **1d Canvas and text printing** ∥ | `Canvas` (XOR/OR pixel, `LOIN` all seven variants, `HLOIN`, `PIXEL`, `CPIX2`/`CPIX4`, `DOT`, `CIRCLE`, `CIRCLE2`, `BLINE`, `CLYNS`, `TT66`/`BOX`/`box2`), `TextPrint` (`TT26`/`CHPR` with the font, `setxc`/`setyc`, `INCYC`, the `MAG2` input colour). Golden-test harness: canvas → PNG dump + hash. | Oracle for the line routines (compare the bitmap bytes the 6502 wrote against the canvas); a golden of the title-screen frame's box and header text. |
+| **1c-c Control codes and numbers** | `MT1`–`MT29` behind the control-code seam, `vowel`, `whitetext`, `feed`, the `DTW1`–`DTW8` justification behaviour; numbers (`BPRNT`, `pr2`, `pr5`, `pr6`, `TT11`). Most control codes move the cursor or clear the screen. | Lands **after 1d-b**, which is what they drive: they need a cursor and a canvas to move it on. The seam and its tests already exist. |
+| **1d-0 Canvas representation spike** ✅ **Built 2026-09-03** | Measure what the drawing code actually writes, before deciding what `Canvas` holds. `Tests/GameLogicTests/CanvasSpikeTests.cpp`. | **Met.** ADR-002 §4 amended from measurement (its new §7 carries the evidence), ADR-005 §1's orphaned screenshot dependency answered, and the `celllook` puzzle resolved. See §6.10. |
+| **1d-a Canvas and the pixel primitives** | `Canvas`: the four planes of ADR-002 §4, the original's addressing (`ylookup`, `celllook`), byte-wise EOR, and `Resolve()` to 320×200 indices. Routines: `PIXEL`, `PIXEL2`, `PIX1`, `DOT`, `CPIX2`/`CPIX4`, `HLOIN`/`HLOIN2`, `LOIN` all seven variants with the `LIJT*` jump tables as a `switch`. Tables `TWOS`, `TWOS2`, `CTWOS`, `CTWOS2`, `TWFL`, `TWFR`, `DTWOS`, `ylookup`, `celllook` extracted (the rest of 1a for this area). | Oracle: call the shipped routine and the port on the same inputs, then compare the 0x2000 bitmap plane **byte for byte**. Exhaustive over x mod 8 and the quadrant cases; swept for line endpoints. Erase-by-redraw checked on every case, since the ship and sun heaps depend on it. |
+| **1d-b Text and the font** | `TextPrint`: `TT26`/`CHPR` with the font, `setxc`/`setyc`/`doxc`/`doyc`, `INCYC`, `CLYNS`, the `MAG2` input colour and the cell-colour writes; `Font.cpp` extracted from `C.FONT.bin`. | Oracle: every printable character at sampled cells, comparing the glyph bytes **and** the colour cell. The `4 + XC` placement is a test, not a constant somebody typed. |
+| **1d-c Shapes and the golden harness** ∥ | `CIRCLE`, `CIRCLE2`, `BLINE`, `TT66`/`BOX`/`box2`/`boxs`. Golden harness: `Canvas::Resolve()` → PNG dump + hash, and `tools/golden_diff.py`. | Oracle for the arithmetic and the bitmap; the first golden lands with diff output attached (Risk R10). |
 
 ### 6.3 What slice 1b-a built
 
@@ -626,6 +661,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-03 | **Slice 1d-0 built, and 1d split into 1d-a/1d-b/1d-c.** The canvas representation spike measured the shipped drawing code instead of trusting ADR-002 §4's assertion, and the assertion did not survive: the C64 build of `PIXEL` writes masks that straddle multicolour pixel boundaries, which one colour index per pixel cannot express. ADR-002 §4 is amended to the four-plane design and gains a §7 of evidence; ADR-005 §1's screenshot dependency is answered from `ylookup`; 1c-c is ordered after 1d-b. §6.10 records it. |
 | 2026-09-03 | **Slice 0a repaired.** `Upstream/elite-source-code-library` was a gitlink with no `.gitmodules`, so a fresh clone got an empty directory and `--check-includes` reported 0/712 — every slice from 1a onward unbuildable off the author's machine. `.gitmodules` added; the tree is a **submodule**, which is what it always was. ADR-001 §5's "vendored ... not a submodule" corrected, along with the `.gitignore` block that claimed the tree was committed. §6.9 records the finding, including that §5's "everything not ours lives under `Upstream/`" omits the 13 committed files in `MasterFile/`. |
 | 2026-09-02 | Opened. Inventory of `MasterFile/`, target architecture, phases 0–6, owner decisions. |
 | 2026-09-03 | **Slice 1c-b built** — the extended token system: the walkers, the case state, letter pairs, nested tokens and randomised variants, with `TKN1`, `TKN2`, `RUTOK` and `MTIN` extracted. Control codes are a declared seam and land with the canvas as slice 1c-c. §6.8 records why a table's size comes from its index range rather than from the next label. |
