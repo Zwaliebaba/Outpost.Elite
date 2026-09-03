@@ -128,7 +128,6 @@ public:
     const OracleImage& oracle = OracleImage::Instance();
     const std::uint16_t routine = oracle.Label("TT151");
     const std::uint16_t priced = oracle.Label("TT156"); // where QQ24 holds the final price
-    const std::uint16_t qq24 = oracle.Label("QQ24");
     const std::uint16_t qq26 = oracle.Label("QQ26");
     const std::uint16_t qq28 = oracle.Label("QQ28");
     const std::uint16_t mj = oracle.Label("MJ");
@@ -285,6 +284,243 @@ public:
 
     Assert::IsTrue(high.availability[0] > low.availability[0],
                    L"the same negative gradient should make the quantity RISE as economy rises");
+  }
+
+  /*
+   * 6502: LCASH and MCASH -- spending and receiving, over the boundary that matters.
+   *
+   * The boundary is "exactly affordable". LCASH subtracts unconditionally and adds the amount
+   * back when the top byte borrowed, so the interesting cases are cash equal to the price, one
+   * tenth under it, and one over -- and the port must leave the cash untouched on the failure.
+   */
+  TEST_METHOD(SpendingAndReceivingCashMatchTheShippedRoutines)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t cashAt = oracle.Label("CASH");
+
+    std::uint32_t compared = 0;
+    std::uint32_t refused = 0;
+
+    for (const std::uint32_t cash : { 0u, 1u, 255u, 256u, 1000u, 65535u, 65536u, 100000u, 0xFFFFFFFFu })
+    {
+      for (const std::uint32_t amount : { 0u, 1u, 255u, 256u, 999u, 1000u, 1001u, 65535u })
+      {
+        for (const bool spending : { true, false })
+        {
+          Cpu6502 cpu = oracle.Fresh();
+          cpu.memory[cashAt] = static_cast<std::uint8_t>(cash >> 24);
+          cpu.memory[static_cast<std::uint16_t>(cashAt + 1)] = static_cast<std::uint8_t>(cash >> 16);
+          cpu.memory[static_cast<std::uint16_t>(cashAt + 2)] = static_cast<std::uint8_t>(cash >> 8);
+          cpu.memory[static_cast<std::uint16_t>(cashAt + 3)] = static_cast<std::uint8_t>(cash);
+
+          cpu.a = 0;
+          cpu.x = static_cast<std::uint8_t>(amount);
+          cpu.y = static_cast<std::uint8_t>(amount >> 8);
+          cpu.sp = 0xFD;
+          const std::uint16_t routine = oracle.Label(spending ? "LCASH" : "MCASH");
+          Assert::IsTrue(cpu.CallSubroutine(routine, 10'000).completed, L"the cash routine should return");
+
+          const std::uint32_t after =
+            (static_cast<std::uint32_t>(cpu.memory[cashAt]) << 24)
+            | (static_cast<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(cashAt + 1)]) << 16)
+            | (static_cast<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(cashAt + 2)]) << 8)
+            | cpu.memory[static_cast<std::uint16_t>(cashAt + 3)];
+
+          Elite::CommanderBlock block;
+          block.SetCash(cash);
+          bool ourAnswer = true;
+          if (spending)
+          {
+            ourAnswer = Elite::SpendCash(block, static_cast<std::uint16_t>(amount));
+          }
+          else
+          {
+            Elite::ReceiveCash(block, static_cast<std::uint16_t>(amount));
+          }
+
+          const std::wstring where = std::wstring(spending ? L"LCASH(" : L"MCASH(") + std::to_wstring(cash)
+                                     + L", " + std::to_wstring(amount) + L")";
+          Assert::AreEqual<std::uint32_t>(after, block.Cash(), (where + L": cash").c_str());
+
+          if (spending)
+          {
+            // 6502: the carry on exit -- set when it was affordable, and cleared by MCASH's tail
+            // when it was not.
+            Assert::AreEqual(cpu.c, ourAnswer, (where + L": affordable").c_str());
+            if (!ourAnswer)
+            {
+              Assert::AreEqual<std::uint32_t>(cash, block.Cash(),
+                                              (where + L": a refused purchase must leave the cash alone").c_str());
+              ++refused;
+            }
+          }
+          ++compared;
+        }
+      }
+    }
+
+    Logger::WriteMessage(("LCASH and MCASH: " + std::to_string(compared) + " compared, " + std::to_string(refused)
+                          + " purchases refused")
+                           .c_str());
+    Assert::IsTrue(refused > 0, L"the failure path must be exercised");
+  }
+
+  /// 6502: GCASH -- the product times four, over every price against a spread of quantities.
+  TEST_METHOD(TotalPriceMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t p = oracle.Label("P");
+    const std::uint16_t q = oracle.Label("Q");
+
+    std::uint32_t compared = 0;
+    for (std::uint32_t price = 0; price < 256; ++price)
+    {
+      for (const std::uint32_t quantity : { 0u, 1u, 2u, 3u, 17u, 64u, 100u, 127u, 128u, 200u, 255u })
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.memory[p] = static_cast<std::uint8_t>(price);
+        cpu.memory[q] = static_cast<std::uint8_t>(quantity);
+        cpu.a = cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        Assert::IsTrue(cpu.CallSubroutine(oracle.Label("GCASH"), 10'000).completed, L"GCASH should return");
+
+        const std::uint16_t expected = static_cast<std::uint16_t>(cpu.x | (cpu.y << 8));
+        Assert::AreEqual<std::uint32_t>(expected,
+                                        Elite::TotalPrice(static_cast<std::uint8_t>(price),
+                                                          static_cast<std::uint8_t>(quantity)),
+                                        (L"GCASH(" + std::to_wstring(price) + L", " + std::to_wstring(quantity)
+                                         + L")")
+                                          .c_str());
+        ++compared;
+      }
+    }
+
+    Logger::WriteMessage(("GCASH: " + std::to_string(compared) + " totals compared").c_str());
+  }
+
+  /*
+   * 6502: tnpr -- does this much more of an item fit?
+   *
+   * Both rules, and the boundary of each. The tonne path is where the two off-by-ones cancel --
+   * the count comes out one high because the CPX left the carry set, and CRGO holds two more than
+   * the capacity -- so a hold filled to exactly its capacity is the case that catches a port that
+   * corrected either one.
+   */
+  TEST_METHOD(CargoCapacityMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t qq20 = oracle.Label("QQ20");
+    const std::uint16_t qq29 = oracle.Label("QQ29");
+    const std::uint16_t crgo = oracle.Label("CRGO");
+    const std::uint16_t tribble = oracle.Label("TRIBBLE");
+
+    std::uint32_t compared = 0;
+    std::uint32_t fitted = 0;
+
+    /*
+     * The amount is swept over every value a byte can hold rather than sampled.
+     *
+     * That is what reaches the case where the thirteen additions WRAP and the tribble addition's
+     * carry then decides the answer -- one value of the amount in each configuration, and a
+     * sampled grid misses it. Found by mutation: dropping that carry passed a coarser sweep.
+     */
+    for (const std::uint32_t capacity : { 22u, 37u })
+    {
+      for (const std::uint32_t filled : { 0u, 20u, 35u, 36u, 200u, 250u })
+      {
+       for (const bool concentrated : { false, true })
+       {
+        for (const std::uint32_t tribbles : { 0u, 1024u })
+        {
+          for (const std::uint32_t item : { 0u, 1u, 6u, 12u, 13u, 14u, 16u })
+          {
+            for (std::uint32_t amount = 0; amount < 256; ++amount)
+            {
+              Elite::CommanderBlock block;
+              block.At(Elite::Field::CargoCapacity) = static_cast<std::uint8_t>(capacity);
+              block.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)] =
+                static_cast<std::uint8_t>(tribbles);
+              block.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] =
+                static_cast<std::uint8_t>(tribbles >> 8);
+
+              /*
+               * Two layouts, and the second is not decoration.
+               *
+               * The carry the tribble addition consumes is the one the LAST addition produced --
+               * item 0, not the running total -- so it can only be set when item 0's own byte is
+               * large. Spreading the tonnage keeps it small and the carry is then always clear,
+               * which is how a port that dropped it passed a sweep of all 256 amounts. Found by
+               * mutation.
+               */
+              const std::size_t hold = static_cast<std::size_t>(Elite::Field::CargoHold);
+              if (concentrated)
+              {
+                block.bytes[hold + 0] = static_cast<std::uint8_t>(filled);
+              }
+              else
+              {
+                block.bytes[hold + 0] = static_cast<std::uint8_t>(filled / 3u);
+                block.bytes[hold + 5] = static_cast<std::uint8_t>(filled / 3u);
+                block.bytes[hold + 12] = static_cast<std::uint8_t>(filled - 2u * (filled / 3u));
+              }
+              block.bytes[hold + 14] = 90; // some gold already aboard, for the kilo path
+
+              Cpu6502 cpu = oracle.Fresh();
+              for (std::size_t index = 0; index < Elite::MARKET_ITEM_COUNT; ++index)
+              {
+                cpu.memory[static_cast<std::uint16_t>(qq20 + index)] = block.bytes[hold + index];
+              }
+              cpu.memory[crgo] = static_cast<std::uint8_t>(capacity);
+              cpu.memory[tribble] = static_cast<std::uint8_t>(tribbles);
+              cpu.memory[static_cast<std::uint16_t>(tribble + 1)] = static_cast<std::uint8_t>(tribbles >> 8);
+              cpu.memory[qq29] = static_cast<std::uint8_t>(item);
+
+              cpu.a = static_cast<std::uint8_t>(amount);
+              cpu.x = cpu.y = 0;
+              cpu.sp = 0xFD;
+              Assert::IsTrue(cpu.CallSubroutine(oracle.Label("tnpr"), 10'000).completed, L"tnpr should return");
+
+              // 6502: the carry on exit is set when there is NO room.
+              const bool gameFits = !cpu.c;
+              const bool ourFits =
+                Elite::CargoFits(block, static_cast<std::uint8_t>(item), static_cast<std::uint8_t>(amount));
+
+              Assert::AreEqual(gameFits, ourFits,
+                               (L"tnpr(item=" + std::to_wstring(item) + L" amount=" + std::to_wstring(amount)
+                                + L" filled=" + std::to_wstring(filled) + L" capacity=" + std::to_wstring(capacity)
+                                + L" tribbles=" + std::to_wstring(tribbles) + L")")
+                                 .c_str());
+
+              // A also comes back unchanged, because the routine pushes and pulls it.
+              Assert::AreEqual<std::uint32_t>(amount, cpu.a, L"tnpr should preserve A");
+              if (ourFits)
+              {
+                ++fitted;
+              }
+              ++compared;
+            }
+          }
+        }
+       }
+      }
+    }
+
+    Logger::WriteMessage(("tnpr: " + std::to_string(compared) + " capacity checks compared, "
+                          + std::to_string(fitted) + " fitted")
+                           .c_str());
+    Assert::IsTrue(fitted > 0 && fitted < compared, L"both answers must be exercised");
   }
 };
 
