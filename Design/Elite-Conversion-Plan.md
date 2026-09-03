@@ -373,6 +373,35 @@ Two other things worth carrying forward:
   moved to 3a and 3c rather than forced. A ledger row that names a routine is not evidence that
   its dependencies were checked.
 
+### 6.12 Phase 2 has a dependency chain nobody drew, and it ends at the line buffer
+
+Slice 2a's description looked like the easiest thing in the phase. `PDESC`'s generated path is
+four instructions: seed the RNG from the system's own seed bytes, print extended token 5. The
+port of it is right and it is two lines long.
+
+It cannot be compared against the game, and the reason is a chain:
+
+**`PDESC` → the extended control codes → the justification line buffer.**
+
+Token 5 reaches **nine** control codes. Five are two-line pokes at the `DTW` state. Two route to
+printers that already exist. `MT18` builds a random pronounceable word and needs only the RNG.
+And `MT17` prints the system's name as an ADJECTIVE — which it does by writing the name into the
+justification line buffer, reading back the last character, dropping it if it is a vowel, and
+appending "IAN". `TIBEDIED` becomes `TIBEDIEDIAN`.
+
+That needs `DTW3`, `DTW5` and `BUF` — the justification machinery that slice 1c-c listed under
+"`dtw1`–`dtw6`, `dtw8`, `feed`, `dtw*` justification state" and did not build. So the honest
+shape is one slice, **1c-c-b**, containing the control codes AND the line buffer, and `PDESC`
+lands when it does.
+
+**This is the fourth time in two phases that a slice's stated scope has not survived contact with
+what its routines actually read** — after `DVID3B2`/`LL51`, `CIRCLE`/`BLINE`, and `LL5` going the
+other way. The pattern is now clear enough to name: `Source-Inventory.md` is an excellent
+coverage ledger and an unreliable dependency graph, because its rows were written from what
+routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
+sittings, one pass over the ledger asking only "what does this read?" would be worth more than
+any amount of re-sequencing.
+
 ### 6.9 Slice 0a was not finished, and the way it failed is the interesting part
 
 **Found 2026-09-03, on a clean clone.** Slice 0a was accepted on a mechanical criterion —
@@ -615,9 +644,9 @@ Three things that is worth noting for the slices ahead:
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **2a Universe** | Seeds and galaxy (`TT20`, `TT54`, `TT111`, `TT18`, `TT146`), system data (`TT24`, `TT25`, `cpl`, `cmn`, `ypl`, `tal`, `fwl`, `pdesc`), the Data on System screen, `jmp`/`ee3` distances. | Oracle: all 8 × 256 systems' name, economy, government, tech, population, productivity, radius and description text match. Cross-check the previous DOS port's tables as a second opinion. |
+| **2a Universe** 🟡 **Generator built 2026-09-03** | Seeds and galaxy (`TT20`, `TT54`, `TT111`, `TT18`, `TT146`), system data (`TT24`, `TT25`, `cpl`, `cmn`, `ypl`, `tal`, `fwl`, `pdesc`), the Data on System screen, `jmp`/`ee3` distances. | **Met for everything but the description.** All 2,048 systems in all eight galaxies compared on economy, government, technology, population and productivity, and all 2,048 names character for character; `TT111` over 864 searches; `LL5` over all 65,536 radicands. Galaxy 1 system 0 is TIBEDIED. **The description is blocked** — see §6.12. The DOS-port cross-check needs a machine this work did not run on. |
 | **2b Charts** | `TT22` long-range, `TT23` short-range, crosshairs (`TT15`, `TT14`, `TT16`, `TT103`, `TT105`, `TT123`), `hyp`/`hy6` target and `TT147`, `TT16a` find planet by name, the `F` search flow. | Goldens of both charts for Lave; crosshair movement replay. |
-| **2c Trade and equipment** | `TT151`/`var`/`GVL` prices, `TT167` market, `TT219` buy, `TT210` sell, `gnum`, `TT213` inventory, `STATUS`, `EQSHP` with `prx`, `qv`, `refund`, `hm`, cash (`LCASH`, `MCASH`, `GCASH`), `TT162`/`TT160`/`TT161` units. | Oracle on prices for all systems and all commander states in a sampled grid; goldens of each screen; a scripted buy/sell replay ends with the oracle's credit total. |
+| **2c Trade and equipment** 🟡 **Price model built 2026-09-03** | `TT151`/`var`/`GVL` prices, `TT167` market, `TT219` buy, `TT210` sell, `gnum`, `TT213` inventory, `STATUS`, `EQSHP` with `prx`, `qv`, `refund`, `hm`, cash (`LCASH`, `MCASH`, `GCASH`), `TT162`/`TT160`/`TT161` units. | **Met for the price model.** Every price the game can quote — seventeen goods, eight economies, every value of the market's random byte, 34,816 in all — plus 512 generated markets driven through the RNG. The screens, the buying and the selling need the commander block (2d) and are not built. |
 | **2d Commander and saves** | `NA%` default commander, `JAMESON`, `CHK`/`CHK2`/`CHK3`, `sve`/`lod` replaced by `SaveBlock` (the exact original byte layout so an original C64 save imports) + `SaveStore` in the exe writing to LocalAppData; `trnme`/`gtnme` name entry; `DFAULT`/`qu5`; the `Y/N` prompts. | Round-trip test: save, load, `StateHash` identical; an original `.d64`-extracted commander file loads. |
 | **2e First playable** | `Game` top-level state (`BR1`, `BAY`, `TT170`, `DOENTRY`), key dispatch for the docked screens (`DOKEY`, `RDKEY`, `TT217`), `CanvasPresenter`, `KeyMap`, frame pacing; the title screen **without** the rotating ship (that needs LL9 — a placeholder box until 3b). | You can start a game, read every docked screen, trade, buy equipment, save and reload. Replay hash suite green across Debug/Release. |
 
@@ -698,6 +727,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-03 | **Phase 2's computational core built: 2a's generator and 2c's price model.** All 2,048 systems compared on every field and every name; `TT111`, `LL5`, and the whole market — 34,816 prices and 512 generated markets. `var` turned out to zero Alien Items' availability as a side effect of computing an economy adjustment. **2a's description is blocked** on a chain nobody had drawn: §6.12 records it, and it ends at the justification line buffer. **2e is not startable** without the two owner decisions ADR-005 §5 and Risk R3 defer to exactly this point. |
 | 2026-09-03 | **Slice 1c-c split.** The number printers (`BPRNT`, `TT11`, `pr2`, `pr5`, `pr6`) are built and compared character for character over 308 numbers. The control codes are scoped from `JMTB` read out of the binary: eleven are pure state, nine wait on `TT66`, `NLIN4` or phase-2 mission state, and building only the eleven would turn a seam that counts what it cannot do into one that ignores it. |
 | 2026-09-03 | **Slices 1a (screen half), 1b-d (completed), 1d-a, 1d-b and 1d-c built.** The screen tables and the font extracted; `FMLTU2` and `DVID4` ported; `Canvas` and the pixel primitives, `LOIN` over 3,528 lines, `CHPR` over 5,376 characters, `TT66simp`, and the golden harness with two oracle-derived goldens. Three defects caught by whole-screen comparison and recorded in §6.11. `DVID3B2`/`LL51` moved to 3a and `CIRCLE`/`CIRCLE2`/`BLINE` to 3c, both because they read workspaces phase 1 does not define. **1c-c is the only slice of phase 1 still open.** |
 | 2026-09-03 | **Slice 1d-0 built, and 1d split into 1d-a/1d-b/1d-c.** The canvas representation spike measured the shipped drawing code instead of trusting ADR-002 §4's assertion, and the assertion did not survive: the C64 build of `PIXEL` writes masks that straddle multicolour pixel boundaries, which one colour index per pixel cannot express. ADR-002 §4 is amended to the four-plane design and gains a §7 of evidence; ADR-005 §1's screenshot dependency is answered from `ylookup`; 1c-c is ordered after 1d-b. §6.10 records it. |

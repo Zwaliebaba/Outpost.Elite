@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ExtendedTokens.h"
+#include "Rng.h"
 #include "Tokens.h"
 
 #include <array>
@@ -138,5 +140,20 @@ struct NearestSystem
  * callers depend on that, because printing a name must not move the universe.
  */
 void PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept;
+
+/*
+ * 6502: PDESC's PD1 path -- a system's description.
+ *
+ * Four instructions and a jump, and they explain the whole trick. The RNG is seeded from the
+ * system's own seed bytes, and then extended token 5 is printed; that token is full of
+ * randomised alternatives, so the description comes out different for every system and the SAME
+ * every time you visit. Nothing is stored, and nothing needs to be.
+ *
+ * PDESC's other half looks up a handful of hand-written descriptions for particular systems
+ * during the missions, keyed on the system index and the galaxy. That reaches the mission state
+ * phase 4 owns, so it is not here; a caller that has reached this function has already decided
+ * the system has no override.
+ */
+void PrintSystemDescription(ExtendedTokenPrinter& _printer, Rng& _rng, const SystemSeeds& _seeds) noexcept;
 
 } // namespace Elite
