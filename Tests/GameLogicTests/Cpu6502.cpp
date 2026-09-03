@@ -256,7 +256,12 @@ bool Cpu6502::Step() noexcept
     {
       if (pc == trapped.address)
       {
-        trapHits.push_back(TrapHit{ pc, a, x, y });
+        TrapHit hit{ pc, a, x, y, {} };
+        for (std::size_t slot = 0; slot < WATCH_SLOTS; ++slot)
+        {
+          hit.watched[slot] = memory[watch[slot]];
+        }
+        trapHits.push_back(hit);
         const std::uint8_t lo = Pop();
         const std::uint8_t hi = Pop();
         pc = static_cast<std::uint16_t>((lo | (hi << 8)) + 1);

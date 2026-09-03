@@ -415,6 +415,32 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.13 A shipped bug the port had to keep: the first system of a galaxy cannot be found by name
+
+**Found 2026-09-03, building slice 2b.** Elite's short-range chart has an `F` key that asks for a
+planet name and moves the crosshairs to it. `HME2` implements it by turning the justification
+buffer into a scratch pad: control code 14 starts buffering, `cpl` prints each system's name into
+`BUF` instead of onto the screen, and the typed name is compared against it backwards.
+
+The comparison is `LDA INWK+5,X / ORA #%00100000 / CMP BUF,X`. The typed character has bit 5
+FORCED ON and the buffer's is taken as it is, so a match needs `cpl` to have printed in lower
+case — which depends on `QQ17`, which `HME2` never sets.
+
+`HME2` opens by printing extended token 14, and that token ends at `CLYNS`, which sets
+`QQ17 = %10000000`: sentence case with the "a letter has been seen" bit CLEAR. So the first name
+`cpl` prints comes out as `Tibedied` rather than `tibedied`, fails on its first character, and
+**the first system of every galaxy cannot be found by typing its name**. Printing it sets the bit,
+and every system after it matches.
+
+Measured rather than reasoned: the search finds 1,022 of 1,024 across two galaxies, and the two it
+misses are the two first systems. Both halves were checked separately — that `DETOK` of the prompt
+leaves `QQ17` at `%10000000`, and that `cpl` at that value prints `Tibedied` while at `%11000000`
+it prints `tibedied`.
+
+The port reproduces it, under ADR-003: match before improving. The test asserts the miss count is
+exactly two, so a later change that "fixes" the search fails rather than silently diverging from
+the game.
+
 ### 6.9 Slice 0a was not finished, and the way it failed is the interesting part
 
 **Found 2026-09-03, on a clean clone.** Slice 0a was accepted on a mechanical criterion —
@@ -658,7 +684,7 @@ Three things that is worth noting for the slices ahead:
 | Slice | Scope | Accept |
 |---|---|---|
 | **2a Universe** 🟡 **Generator and descriptions built 2026-09-03** | Seeds and galaxy (`TT20`, `TT54`, `TT111`, `TT18`, `TT146`), system data (`TT24`, `TT25`, `cpl`, `cmn`, `ypl`, `tal`, `fwl`, `pdesc`), the Data on System screen, `jmp`/`ee3` distances. | **Met for everything the screen does not need.** All 2,048 systems in all eight galaxies compared on economy, government, technology, population and productivity; all 2,048 names character for character; and — once 1c-c-b landed the control codes and the line buffer — **all 2,048 descriptions character for character** as well, which is the strongest single test in the port so far: token expansion, the randomised alternatives, the case machinery, the word wrap, the padding, `MT17`'s reach into the buffer and `MT18`'s random words all have to agree for one description to come out right. `TT111` over 864 searches; `LL5` over all 65,536 radicands. Galaxy 1 system 0 is TIBEDIED. What remains is the Data on System *screen* and `TT25`'s siblings, which are cursor and canvas work. The DOS-port cross-check needs a machine this work did not run on. |
-| **2b Charts** | `TT22` long-range, `TT23` short-range, crosshairs (`TT15`, `TT14`, `TT16`, `TT103`, `TT105`, `TT123`), `hyp`/`hy6` target and `TT147`, `TT16a` find planet by name, the `F` search flow. | Goldens of both charts for Lave; crosshair movement replay. |
+| **2b Charts** 🟡 **Geometry and search built 2026-09-03** | `TT22` long-range, `TT23` short-range, crosshairs (`TT15`, `TT14`, `TT16`, `TT103`, `TT105`, `TT123`), `NLIN`/`NLIN2`/`NLIN3`/`NLIN4`, `HME2` find planet by name; `hyp`/`hy6` target and `TT147` and the `F` key flow deferred. | **Met, and stronger than the stated criterion.** Not goldens but whole-screen comparisons against the shipped routines: both charts for all eight galaxies (the short-range one at four home positions), 1,200 crosshairs, 1,250 crosshair moves, 112 fuel circles, and `TT123` exhaustively over all 65,536 value-and-step pairs. `HME2` compared over 1,024 searches. **The stated criterion cannot be met and should not be**: the fuel circle is `CIRCLE2` and every system's blob on the short-range chart is `SUN`, both of which keep a line heap that belongs to 3c — so a golden of either chart would be a golden of a chart with its circles missing. They are seams whose ARGUMENTS are compared instead, which pins them before the drawing exists. `hyp` reaches fuel, cash and mission state (2d) and the `F` flow reaches `MT26`'s keyboard input, so both land with those. |
 | **2c Trade and equipment** 🟡 **Price model built 2026-09-03** | `TT151`/`var`/`GVL` prices, `TT167` market, `TT219` buy, `TT210` sell, `gnum`, `TT213` inventory, `STATUS`, `EQSHP` with `prx`, `qv`, `refund`, `hm`, cash (`LCASH`, `MCASH`, `GCASH`), `TT162`/`TT160`/`TT161` units. | **Met for the price model.** Every price the game can quote — seventeen goods, eight economies, every value of the market's random byte, 34,816 in all — plus 512 generated markets driven through the RNG. The screens, the buying and the selling need the commander block (2d) and are not built. |
 | **2d Commander and saves** | `NA%` default commander, `JAMESON`, `CHK`/`CHK2`/`CHK3`, `sve`/`lod` replaced by `SaveBlock` (the exact original byte layout so an original C64 save imports) + `SaveStore` in the exe writing to LocalAppData; `trnme`/`gtnme` name entry; `DFAULT`/`qu5`; the `Y/N` prompts. | Round-trip test: save, load, `StateHash` identical; an original `.d64`-extracted commander file loads. |
 | **2e First playable** | `Game` top-level state (`BR1`, `BAY`, `TT170`, `DOENTRY`), key dispatch for the docked screens (`DOKEY`, `RDKEY`, `TT217`), `CanvasPresenter`, `KeyMap`, frame pacing; the title screen **without** the rotating ship (that needs LL9 — a placeholder box until 3b). | You can start a game, read every docked screen, trade, buy equipment, save and reload. Replay hash suite green across Debug/Release. |
@@ -741,6 +767,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 | Date | Change |
 |---|---|
 | 2026-09-03 | **Phase 2's computational core built: 2a's generator and 2c's price model.** All 2,048 systems compared on every field and every name; `TT111`, `LL5`, and the whole market — 34,816 prices and 512 generated markets. `var` turned out to zero Alien Items' availability as a side effect of computing an economy adjustment. **2a's description is blocked** on a chain nobody had drawn: §6.12 records it, and it ends at the justification line buffer. **2e is not startable** without the two owner decisions ADR-005 §5 and Risk R3 defer to exactly this point. |
+| 2026-09-03 | **Slice 2b's geometry and search built.** Both charts compared whole-screen against the shipped routines across all eight galaxies, `TT123` exhaustively, and `HME2` over 1,024 searches. Three findings: the two charts map the same galaxy with additions that differ only by a `CLC` the short-range one does not have; a system's disc is sized by a carry left over from `cpl` or from its own screen row, so `AND #1 / ADC #2` yields two, three or four rather than the two-or-three it reads as; and §6.13 records a shipped bug the port keeps. `CIRCLE2` and `SUN` are seams whose arguments are compared, so the stated "golden of both charts" criterion is replaced by something stronger and honest about what 3c still owes. |
 | 2026-09-03 | **Slice 1c-c-b built, and phase 1 is closed.** Twenty of the thirty-one extended control codes, `DASC`, and the justification line buffer. `PDESC`'s 2,048 descriptions now compare character for character, which unblocks the last of slice 2a. Six of the nine codes the scoping note called blocked were not: §6.12 records the mirror image of the ledger problem — a dependency graph read too pessimistically. |
 | 2026-09-03 | **Slice 1c-c split.** The number printers (`BPRNT`, `TT11`, `pr2`, `pr5`, `pr6`) are built and compared character for character over 308 numbers. The control codes are scoped from `JMTB` read out of the binary: eleven are pure state, nine wait on `TT66`, `NLIN4` or phase-2 mission state, and building only the eleven would turn a seam that counts what it cannot do into one that ignores it. |
 | 2026-09-03 | **Slices 1a (screen half), 1b-d (completed), 1d-a, 1d-b and 1d-c built.** The screen tables and the font extracted; `FMLTU2` and `DVID4` ported; `Canvas` and the pixel primitives, `LOIN` over 3,528 lines, `CHPR` over 5,376 characters, `TT66simp`, and the golden harness with two oracle-derived goldens. Three defects caught by whole-screen comparison and recorded in §6.11. `DVID3B2`/`LL51` moved to 3a and `CIRCLE`/`CIRCLE2`/`BLINE` to 3c, both because they read workspaces phase 1 does not define. **1c-c is the only slice of phase 1 still open.** |
