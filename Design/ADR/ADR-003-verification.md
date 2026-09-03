@@ -1,6 +1,6 @@
 # ADR-003 — Verification: the Assembled Original Is the Oracle
 
-**Status:** Proposed · 2026-09-02
+**Status:** Proposed · 2026-09-02 · amended 2026-09-03 (§3: slice 2e's criterion split by owner ruling)
 **Depends on:** ADR-001 (fidelity), ADR-002 (exact semantics — without it there is nothing to compare)
 **Feeds:** the acceptance column of every slice in the plan; ADR-004 (test project shape)
 
@@ -88,6 +88,23 @@ build can be told to skip the encryption and the workspace-noise matching
   pointers as keys, and a CI grep guards `<chrono>`, `<random>`, `rand(` and `float` out of it.
 - The replay scripts double as the reproduction path for any bug report: the script that
   reaches the state is the ticket.
+
+**Owner ruling, 2026-09-03: slice 2e's acceptance criterion is split, because half of it is
+machine-checkable and half is not.**
+
+Slice 2e's criterion is "a person can play it", which no test can assert. Rather than build it
+unverified or leave it to a manual pass nobody repeats, the criterion splits along the line the
+machine can actually see:
+
+| Half | How | Where |
+|---|---|---|
+| The game runs, deterministically, and produces the same state from the same input | The replay hash above, driven through a **null presenter** — an implementation of the presentation seam that renders nothing. No window, no GPU, no audio device, so it runs on the Ubuntu leg beside the suite | CI, every push |
+| Every docked screen is legible; the cadence feels right; the keys are where a player expects | A person, on Windows, once per meaningful change to the shell | A sign-off recorded in the plan's 2e row |
+
+The null presenter is the part worth noting: it is not test scaffolding but the seam ADR-004 §1
+already requires between `GameLogic` and `Outpost.exe`, exercised with its other implementation.
+If a null presenter is awkward to write, that is evidence the seam is in the wrong place — which
+makes this a check on the architecture as well as on the game.
 
 ### §4 Bringing the oracle up
 
