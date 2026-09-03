@@ -200,6 +200,53 @@ public:
     }
   }
 
+  /*
+   * 6502: TT66simp -- the clear that CHPR's off-the-bottom path needs, which closes one of the
+   * two seams slice 1d-b declared. Drawn over first, so that a clear which only zeroed part of
+   * the screen would show up rather than passing on an already-blank canvas.
+   */
+  TEST_METHOD(ClearingTheTextAreaMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+
+    Cpu6502 cpu = oracle.Fresh();
+    Canvas canvas;
+
+    // Scribble the same pattern into both, so the clear has something to remove and the margins
+    // it must NOT remove are visible.
+    for (std::uint16_t offset = 0; offset < Canvas::BITMAP_SIZE; ++offset)
+    {
+      const std::uint8_t value = static_cast<std::uint8_t>(offset * 7u + 1u);
+      cpu.memory[static_cast<std::uint16_t>(zp.screen + offset)] = value;
+      canvas.Write(offset, value);
+    }
+
+    cpu.memory[zp.xc] = 17;
+    cpu.memory[zp.yc] = 9;
+    cpu.a = cpu.x = cpu.y = 0;
+    cpu.sp = 0xFD;
+
+    const auto run = cpu.CallSubroutine(oracle.Label("TT66simp"), 200'000);
+    Assert::IsTrue(run.completed, L"TT66simp should return");
+
+    TextState state;
+    state.column = 17;
+    state.row = 9;
+    Elite::ClearTextArea(canvas, state);
+
+    CompareScreens(cpu, zp.screen, canvas, L"TT66simp");
+    Assert::AreEqual<std::uint32_t>(cpu.memory[zp.xc], state.column, L"XC after the clear");
+    Assert::AreEqual<std::uint32_t>(cpu.memory[zp.yc], state.row, L"YC after the clear");
+
+    // The four-cell margins are not the screen's business and must survive.
+    Assert::AreNotEqual<std::uint32_t>(0, canvas.Screen()[Canvas::ROW_BYTES * 4], L"the left margin should survive");
+  }
+
   /// 6502: QQ17 = 255 -- the token printer's "measure, do not print" state. Nothing at all
   /// should reach the screen, and the cursor should not move either.
   TEST_METHOD(SuppressedOutputDrawsNothing)

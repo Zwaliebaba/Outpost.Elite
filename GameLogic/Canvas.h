@@ -143,6 +143,18 @@ public:
    */
   void Resolve(std::span<std::uint8_t> _out) const noexcept;
 
+  /*
+   * A hash of the resolved image, for golden tests (ADR-003 section 2).
+   *
+   * FNV-1a over the 320x200 indices rather than over the raw planes, because what a golden is
+   * asserting is what a person would see: a change of representation that produced the same
+   * picture should not fail one, and a bitmap that resolves differently should.
+   *
+   * Deterministic by construction -- no pointers, no padding, no float -- which is what lets the
+   * same value hold across Debug and Release and across machines (ADR-003 section 3).
+   */
+  [[nodiscard]] std::uint64_t Hash() const noexcept;
+
 private:
   std::array<std::uint8_t, SCREEN_SIZE> m_screen{};
   std::array<std::uint8_t, CELL_COLUMNS * CELL_ROWS> m_colourCells{};

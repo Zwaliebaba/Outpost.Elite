@@ -49,6 +49,15 @@ public:
 };
 
 /*
+ * 6502: TT66simp -- clear the text area and put the cursor back at (1, 1).
+ *
+ * It walks ylookup in steps of eight and zeroes 256 bytes from each character row's start, which
+ * is exactly the 32 cells the space view and the text screens occupy -- the four-cell margins
+ * either side are left alone. Rows 1 to 23 only; row 0 and the dashboard are not its business.
+ */
+void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept;
+
+/*
  * 6502: TT26 / CHPR -- print one character at the cursor and advance it.
  *
  * Two entry points in the original share this body, and the control codes below 32 are handled
