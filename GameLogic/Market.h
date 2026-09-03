@@ -170,4 +170,36 @@ void PrintMarketItem(TokenPrinter& _printer, CharacterPrinter& _characters, Text
 void PrintMarketScreen(TokenPrinter& _printer, CharacterPrinter& _characters, TextState& _text,
                        std::uint8_t _economy, MarketState& _market, bool _misJumped) noexcept;
 
+/// What one keystroke did to a number the player is typing. 6502: gnum's five exits.
+enum class DigitResult
+{
+  Accepted,    ///< 6502: TT226 -- the digit went in and the routine asks for another
+  Complete,    ///< 6502: OUT -- the number is finished, and it is whatever is in R
+  TakeAll,     ///< 6502: NWDAV1 -- "Y", meaning all of what is available
+  TakeNone,    ///< 6502: NWDAV3 -- "N"
+  LeaveScreen, ///< 6502: BAY2 -- a letter, which abandons the screen entirely
+};
+
+/*
+ * 6502: gnum's body, from the instruction after the key read to whichever exit it takes.
+ *
+ * The loop around this is a keyboard read, so the loop belongs with the key dispatch and the step
+ * is what can be compared. Four things about the step are worth knowing.
+ *
+ * The multiply by ten is `ASL A / STA T / ASL A / ASL A / ADC T / ADC S` -- twice, kept, times
+ * eight, add the kept copy back, add the digit -- and NEITHER addition has a `CLC`. Each takes
+ * the carry the shift or addition before it produced.
+ *
+ * "Y" and "N" are accepted whenever the value so far is ZERO, not only on the first keystroke.
+ * So typing 0 and then Y is accepted, because `LDX R / BNE` cannot tell them apart.
+ *
+ * A value of 26 or more refuses further digits. That is a cap on the NUMBER OF DIGITS by
+ * proxy -- three digits cannot be typed past 26 -- rather than a cap on the quantity.
+ *
+ * And the finished number may EXCEED what is available: `CMP QQ25 / BEQ TT226 / BCS OUT` lets an
+ * equal value carry on and a larger one finish, so the caller has to check. It is the buy screen
+ * that says no, not this.
+ */
+[[nodiscard]] DigitResult TypeDigit(std::uint8_t& _value, std::uint8_t _key, std::uint8_t _available) noexcept;
+
 } // namespace Elite

@@ -354,4 +354,85 @@ void PrintMarketScreen(TokenPrinter& _printer, CharacterPrinter& _characters, Te
   }
 }
 
+DigitResult TypeDigit(std::uint8_t& _value, std::uint8_t _key, std::uint8_t _available) noexcept
+{
+  /*
+   * 6502: LDX R / BNE NWDAV2 / CMP #'Y' / BEQ NWDAV1 / CMP #'N' / BEQ NWDAV3.
+   *
+   * The test is on the VALUE, not on how many keys have been pressed, so "Y" is still accepted
+   * after typing a zero.
+   */
+  if (_value == 0)
+  {
+    if (_key == 'Y')
+    {
+      _value = _available;
+      return DigitResult::TakeAll;
+    }
+    if (_key == 'N')
+    {
+      _value = 0;
+      return DigitResult::TakeNone;
+    }
+  }
+
+  // 6502: NWDAV2 -- STA Q / SEC / SBC #'0' / BCC OUT. Anything below '0' ends the number.
+  if (_key < '0')
+  {
+    return DigitResult::Complete;
+  }
+
+  const std::uint8_t digit = static_cast<std::uint8_t>(_key - '0');
+
+  // 6502: CMP #10 / BCS BAY2 -- and a letter does not end the number, it leaves the screen.
+  if (digit >= 10u)
+  {
+    return DigitResult::LeaveScreen;
+  }
+
+  // 6502: LDA R / CMP #26 / BCS OUT -- past 26 no further digit is taken.
+  if (_value >= 26u)
+  {
+    return DigitResult::Complete;
+  }
+
+  /*
+   * 6502: ASL A / STA T / ASL A / ASL A / ADC T / ADC S.
+   *
+   * Twice, kept; times eight; add the kept copy; add the digit. Neither addition clears the carry
+   * first, so each takes what the instruction before it left.
+   *
+   * BOTH of those carries are dead, and provably so: the cap above means the value here is at
+   * most 25, so the three shifts reach 200 without overflowing and the first addition reaches
+   * 250. Neither can carry. They are written as a chain anyway because that is what the six
+   * instructions are, and because the proof depends on the cap -- move the cap and the carries
+   * come alive.
+   *
+   * This is the second dead carry the port has kept rather than simplified; the justification
+   * routine's `LSR SC+1` is the other. Mutation testing finds both, and the answer in each case
+   * is that the mutation is EQUIVALENT rather than that the test is weak.
+   */
+  const ShiftResult twice = RotateLeft(_value, false);
+  const ShiftResult fourTimes = RotateLeft(twice.value, false);
+  const ShiftResult eightTimes = RotateLeft(fourTimes.value, false);
+
+  const AddResult tenTimes = AddWithCarry(eightTimes.value, twice.value, eightTimes.carry);
+  const AddResult withDigit = AddWithCarry(tenTimes.value, digit, tenTimes.carry);
+  _value = withDigit.value;
+
+  /*
+   * 6502: CMP QQ25 / BEQ TT226 / BCS OUT.
+   *
+   * A value equal to what is available carries on; one that exceeds it finishes, KEEPING the
+   * value. So the number the caller gets can be larger than the market holds, and refusing it is
+   * the caller's job.
+   */
+  if (_value != _available && _value > _available)
+  {
+    return DigitResult::Complete;
+  }
+
+  return DigitResult::Accepted;
+}
+
 } // namespace Elite
