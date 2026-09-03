@@ -199,29 +199,6 @@ enum class DigitResult
 };
 
 /*
- * Where a blocking key read comes from.
- *
- * 6502: TT217 -- "scan the keyboard until a key is pressed". The game BLOCKS here, inside a
- * screen's own loop, and that is a genuine architectural problem for this port rather than a
- * detail: ADR-004 section 1 says GameLogic's input is an `InputFrame`, which is a poll and not a
- * wait. The two cannot both be true of the same code.
- *
- * This slice does not resolve it, and deliberately: the routines that read the keyboard are
- * ported against this seam, exactly as the charts were ported against the seams for the drawing
- * they could not yet do. Whoever builds 2e decides how the seam is driven -- a pumped thread, a
- * coroutine, or rewriting the docked screens as state machines fed by `InputFrame`. The last of
- * those stops being a line-by-line port, which is the cost worth knowing before choosing it.
- */
-class KeySource
-{
-public:
-  virtual ~KeySource() = default;
-
-  /// 6502: TT217 -- block until a key is pressed, and return its character.
-  virtual std::uint8_t NextKey() = 0;
-};
-
-/*
  * 6502: gnum's body, from the instruction after the key read to whichever exit it takes.
  *
  * The loop around this is a keyboard read, so the loop belongs with the key dispatch and the step
