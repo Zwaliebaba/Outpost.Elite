@@ -233,16 +233,17 @@ std::uint8_t Cpu6502::RollRight(std::uint8_t _value) noexcept
   return result;
 }
 
-void Cpu6502::AddTrap(std::uint16_t _address)
+void Cpu6502::AddTrap(std::uint16_t _address, TrapExit _exit)
 {
-  for (const std::uint16_t existing : traps)
+  for (Trap& existing : traps)
   {
-    if (existing == _address)
+    if (existing.address == _address)
     {
+      existing.exit = _exit;
       return;
     }
   }
-  traps.push_back(_address);
+  traps.push_back(Trap{ _address, _exit });
 }
 
 bool Cpu6502::Step() noexcept
@@ -251,14 +252,18 @@ bool Cpu6502::Step() noexcept
   // the routine's own RTS would have done, so the caller continues as if it had run.
   if (!traps.empty())
   {
-    for (const std::uint16_t trapped : traps)
+    for (const Trap& trapped : traps)
     {
-      if (pc == trapped)
+      if (pc == trapped.address)
       {
         trapHits.push_back(TrapHit{ pc, a, x, y });
         const std::uint8_t lo = Pop();
         const std::uint8_t hi = Pop();
         pc = static_cast<std::uint16_t>((lo | (hi << 8)) + 1);
+        if (trapped.exit == TrapExit::ClearCarry)
+        {
+          c = false;
+        }
         return true;
       }
     }
