@@ -266,4 +266,19 @@ void PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept
   _seeds = saved;
 }
 
+void PrintSystemDescription(ExtendedTokenPrinter& _printer, Rng& _rng, const SystemSeeds& _seeds) noexcept
+{
+  /*
+   * 6502: PDL1K -- LDA QQ15+2,X / STA RAND,X for X counting down from 3.
+   *
+   * The randomness that varies a description is not random at all: it is the system's own seed,
+   * copied over the RNG state. So the same world reads the same way every time you arrive, and
+   * two worlds a light year apart read differently, out of one shared token.
+   */
+  _rng.SetState({ _seeds.bytes[2], _seeds.bytes[3], _seeds.bytes[4], _seeds.bytes[5] });
+
+  // 6502: LDA #5 / JMP DETOK.
+  _printer.Print(5);
+}
+
 } // namespace Elite
