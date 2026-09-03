@@ -148,6 +148,7 @@
     <ClInclude Include="EliteTypes.h" />
     <ClInclude Include="ExtendedTokens.h" />
     <ClInclude Include="LookupTables.h" />
+    <ClInclude Include="Canvas.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Rng.h" />
     <ClInclude Include="Tokens.h" />
@@ -167,6 +168,8 @@
     <ClCompile Include="ExtendedTokenTables.cpp" />
     <ClCompile Include="ScreenTables.cpp" />
     <ClCompile Include="Font.cpp" />
+    <ClCompile Include="Canvas.cpp" />
+    <ClCompile Include="Lines.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />
