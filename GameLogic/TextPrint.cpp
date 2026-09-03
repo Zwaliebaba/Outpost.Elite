@@ -2,6 +2,7 @@
 
 #include "TextPrint.h"
 
+#include "EliteTypes.h"
 #include "LookupTables.h"
 
 namespace Elite
@@ -29,6 +30,185 @@ constexpr std::uint16_t FONT_BASE = 0x0B00;
   return static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | ((_character << 3) & 0xFFu));
 }
 } // namespace
+
+/*
+ * 6502: BPRNT and the TT11 / pr2 / pr5 / pr6 entry points.
+ *
+ * The accumulator is five bytes -- S ahead of K's four -- because multiplying by ten needs the
+ * headroom. The original spells that multiply as three shifts and an add: shift once and keep a
+ * copy, shift twice more, add the copy back, which is x * 8 + x * 2.
+ *
+ * Digits come out by repeated subtraction of ten to the eleventh, counting how many times it
+ * fits before multiplying by ten and going round again. Eleven digits every time, with leading
+ * zeros suppressed into spaces until the first significant one -- the T byte is what remembers
+ * that, and the reason it is cleared rather than tested is that everything after the first digit
+ * prints even when it is a zero.
+ */
+void PrintNumber(TextSink& _sink, NumberWorkspace& _work, bool _withPoint) noexcept
+{
+  /*
+   * 6502: LDX #11 / STX T / PHP / BCC TT30.
+   *
+   * BCC skips the two decrements when the carry is CLEAR, so they happen for a number that IS
+   * getting a decimal point -- the point occupies one of the eleven positions, so both the
+   * leading-zero counter and the width lose one to pay for it. Reading the branch the other way
+   * round shifts the padding by two characters and puts the point where a digit belongs.
+   */
+  std::uint8_t t = 11;
+  if (_withPoint)
+  {
+    --t;
+    --_work.u;
+  }
+
+  // 6502: TT30. XX17 counts the digits down; U becomes the position the point falls at.
+  std::uint8_t xx17 = 11;
+  _work.u = static_cast<std::uint8_t>(11u - _work.u);
+  ++_work.u;
+
+  std::uint8_t s = 0;
+  std::uint8_t digit = 0;
+
+  for (;;)
+  {
+    // 6502: TT36 / tt37 -- how many times ten to the eleventh goes into what is left.
+    for (;;)
+    {
+      std::uint8_t remainder[4] = { 0, 0, 0, 0 };
+      bool noBorrow = true;
+      for (int index = 3; index >= 0; --index)
+      {
+        const std::uint16_t difference =
+          static_cast<std::uint16_t>(_work.k[index]) - TEN_TO_THE_ELEVENTH[index] - (noBorrow ? 0u : 1u);
+        remainder[index] = static_cast<std::uint8_t>(difference);
+        noBorrow = difference < 0x100u;
+      }
+      const std::uint16_t top = static_cast<std::uint16_t>(s) - 0x17u - (noBorrow ? 0u : 1u);
+
+      if (top >= 0x100u)
+      {
+        // 6502: BCC TT37 -- it did not fit, so this digit is done.
+        break;
+      }
+
+      for (int index = 0; index < 4; ++index)
+      {
+        _work.k[index] = remainder[index];
+      }
+      s = static_cast<std::uint8_t>(top);
+      ++digit;
+    }
+
+    /*
+     * 6502: TT37. Three ways to reach a character: a non-zero digit prints; a zero prints once
+     * the first significant digit has been seen (T cleared); and a zero before that prints a
+     * space, but only while U says there is still padding to spend.
+     */
+    bool print = true;
+    std::uint8_t character = 0;
+
+    if (digit != 0 || t == 0)
+    {
+      // 6502: TT32 -- a digit, and from here on zeros are digits too.
+      t = 0;
+      character = static_cast<std::uint8_t>(digit + 0x30u);
+    }
+    else
+    {
+      --_work.u;
+      if ((_work.u & 0x80u) == 0u)
+      {
+        // 6502: BPL TT34 -- still inside the number's own width, so nothing is printed at all.
+        print = false;
+      }
+      else
+      {
+        character = ' ';
+      }
+    }
+
+    if (print)
+    {
+      _sink.Put(character);
+    }
+
+    // 6502: TT34 -- DEC T / BPL / INC T, which is a decrement that will not go below zero.
+    if (t != 0)
+    {
+      --t;
+    }
+
+    --xx17;
+    if ((xx17 & 0x80u) != 0u)
+    {
+      // 6502: rT10 -- eleven digits done.
+      return;
+    }
+
+    if (xx17 == 0 && _withPoint)
+    {
+      // 6502: PLP / BCC -- the carry that was stashed at the top decides this, which is why it
+      // was stashed rather than tested there.
+      _sink.Put('.');
+    }
+
+    /*
+     * 6502: TT35 -- multiply the five-byte accumulator by ten. Shift once and keep a copy, shift
+     * twice more, then add the copy back: x * 8 + x * 2.
+     */
+    std::uint8_t copy[4] = { 0, 0, 0, 0 };
+    std::uint8_t copyHigh = 0;
+
+    const auto shiftLeft = [&]() noexcept {
+      bool carry = false;
+      for (int index = 3; index >= 0; --index)
+      {
+        const ShiftResult shifted = RotateLeftValue(_work.k[index], carry);
+        _work.k[index] = shifted.value;
+        carry = shifted.carry;
+      }
+      s = RotateLeftValue(s, carry).value;
+    };
+
+    shiftLeft();
+    for (int index = 0; index < 4; ++index)
+    {
+      copy[index] = _work.k[index];
+    }
+    copyHigh = s;
+
+    shiftLeft();
+    shiftLeft();
+
+    bool carry = false;
+    for (int index = 3; index >= 0; --index)
+    {
+      const AddResult sum = AddWithCarry(_work.k[index], copy[index], carry);
+      _work.k[index] = sum.value;
+      carry = sum.carry;
+    }
+    s = AddWithCarry(copyHigh, s, carry).value;
+
+    digit = 0;
+  }
+}
+
+void PrintValue(TextSink& _sink, std::uint16_t _value, std::uint8_t _digits, bool _withPoint) noexcept
+{
+  // 6502: TT11 -- STA U / LDA #0 / STA K / STA K+1 / STY K+2 / STX K+3. Only the low two bytes
+  // carry a value; the caller's sixteen bits arrive in Y and X.
+  NumberWorkspace work;
+  work.u = _digits;
+  work.k[2] = static_cast<std::uint8_t>(_value >> 8);
+  work.k[3] = static_cast<std::uint8_t>(_value);
+  PrintNumber(_sink, work, _withPoint);
+}
+
+void PrintByteValue(TextSink& _sink, std::uint8_t _value, bool _withPoint) noexcept
+{
+  // 6502: pr2 -- LDA #3 / LDY #0, so three digits and the byte in X.
+  PrintValue(_sink, _value, 3, _withPoint);
+}
 
 void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept
 {
