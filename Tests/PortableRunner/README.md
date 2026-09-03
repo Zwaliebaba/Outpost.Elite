@@ -5,7 +5,7 @@ same assertions, a different way of calling them.
 
 ```sh
 python tools/labels.py --assemble        # once: the oracle needs the assembled game
-Tests/PortableRunner/run_tests.sh        # 124 tests, about 18 seconds from cold
+Tests/PortableRunner/run_tests.sh        # 152 tests, about 37 seconds from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
 ```
 
@@ -19,13 +19,21 @@ with, and a disagreement between the two runners is decided in MSVC's favour eve
 What MSVC is not, is *available*. The port is written against the assembled original a routine at
 a time, and getting a carry chain right takes ten or twenty compile-run cycles. On a machine with
 no Visual Studio those cycles either do not happen, or they happen on CI at four minutes each.
-This runner turns that loop into eighteen seconds from cold and a quarter of a second when only
-one file changed — and every defect found while writing slices 1c-c-b, 2b, 2c and 2d was found
-here first, with MSVC agreeing exactly afterwards.
+This runner turns that loop into thirty-seven seconds from cold, and under six when one file
+changed and a filter narrows the run to the suite being worked on — and every defect found while
+writing slices 1c-c-b, 2a, 2b, 2c and 2d was found here first, with MSVC agreeing exactly
+afterwards.
 
-The second reason is CI. Measured on the same commit: the Ubuntu leg of
-`.github/workflows/build-and-test.yml` runs the whole suite in **34 seconds** end to end (52s on
-a cold BeebAsm cache) against the Windows job's **4m35s**. So a push that breaks the port says so
+Twenty of those thirty-seven are the RUN rather than the build, and almost all of it is two
+exhaustive sweeps: 2,048 system data screens compared character for character, and 393,216
+keystrokes through `gnum`. That is the cost of the sweeps being exhaustive rather than sampled, and
+it is why `run_tests.sh` takes a filter.
+
+The second reason is CI. Measured when the suite was 146 tests: the Ubuntu leg of
+`.github/workflows/build-and-test.yml` ran the whole suite in **34 seconds** end to end (52s on a
+cold BeebAsm cache) against the Windows job's **4m35s**. Both have grown since — the sweeps added
+for slice 2a are twenty seconds of run on their own — and the ratio is what the argument rests on,
+not the absolute figures. So a push that breaks the port says so
 while the Windows job is still locating Visual Studio. It is cheaper too, though by less than it
 feels: GitHub charges roughly twice the per-minute rate for a Windows runner, so the saving is
 that factor times the 8× shorter run — not the order of magnitude the rate alone suggests.
