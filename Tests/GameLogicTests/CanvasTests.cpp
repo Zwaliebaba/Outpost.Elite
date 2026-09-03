@@ -341,6 +341,70 @@ public:
     }
   }
 
+  /*
+   * 6502: LOIN. The one that matters, and the one the plan calls the densest code in the phase.
+   *
+   * The sweep is chosen to hit every branch the routine has rather than to be large: both
+   * gradients either side of the shallow/steep split, both directions on each axis, the swapped
+   * and unswapped entries, lines that start and end inside one character cell and lines that
+   * cross several, and the degenerate cases where one span is zero.
+   *
+   * Whole-screen compare, so a line that is right for most of its length and steps a row late at
+   * one cell boundary fails -- which is the failure this routine is most likely to have, because
+   * the carry out of the pointer arithmetic feeds the next iteration's accumulator.
+   */
+  TEST_METHOD(LineMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("LOIN");
+    const std::uint16_t y2Address = oracle.Label("Y2");
+
+    std::uint32_t cases = 0;
+
+    for (const std::uint32_t x1 : { 0u, 1u, 7u, 8u, 63u, 100u, 128u, 200u, 255u })
+    {
+      for (const std::uint32_t y1 : { 0u, 1u, 7u, 8u, 71u, 100u, 143u })
+      {
+        for (const std::uint32_t x2 : { 0u, 3u, 8u, 9u, 64u, 129u, 199u, 255u })
+        {
+          for (const std::uint32_t y2 : { 0u, 2u, 8u, 15u, 72u, 101u, 143u })
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            cpu.memory[zp.x1] = static_cast<std::uint8_t>(x1);
+            cpu.memory[zp.y1] = static_cast<std::uint8_t>(y1);
+            cpu.memory[zp.x2] = static_cast<std::uint8_t>(x2);
+            cpu.memory[y2Address] = static_cast<std::uint8_t>(y2);
+            cpu.a = cpu.x = cpu.y = 0;
+            cpu.sp = 0xFD;
+
+            const auto run = cpu.CallSubroutine(routine, 200'000);
+            Assert::IsTrue(run.completed, L"LOIN should return");
+
+            Canvas canvas;
+            DrawWorkspace work;
+            work.x1 = static_cast<std::uint8_t>(x1);
+            work.y1 = static_cast<std::uint8_t>(y1);
+            work.x2 = static_cast<std::uint8_t>(x2);
+            work.y2 = static_cast<std::uint8_t>(y2);
+            Elite::DrawLine(canvas, work);
+
+            CompareScreens(cpu, zp.screen, canvas,
+                           L"LOIN (" + std::to_wstring(x1) + L"," + std::to_wstring(y1) + L") to ("
+                             + std::to_wstring(x2) + L"," + std::to_wstring(y2) + L")");
+            ++cases;
+          }
+        }
+      }
+    }
+
+    Logger::WriteMessage(("LOIN: " + std::to_string(cases) + " lines compared byte for byte\n").c_str());
+  }
+
   /// Drawing anything twice puts the screen back exactly as it was. LL9 and SUN decide what to
   /// erase on the strength of this, so it is worth a test of its own rather than an assumption.
   TEST_METHOD(EveryPrimitiveErasesItself)

@@ -198,4 +198,400 @@ void DrawHorizontalLine(Canvas& _canvas, DrawWorkspace& _work) noexcept
   _canvas.ExclusiveOr(offset, LINE_LEFT_MASK_TABLE[_work.x2 & 0x07u]);
 }
 
+/*
+ * 6502: LOIN / LL30 -- the line.
+ *
+ * The densest routine in phase 1, and almost all of that density is unrolling. The shipped code
+ * has thirty-two copies of two loops: eight starting bit positions, each reached through a
+ * self-modifying JMP whose operand is patched from LIJT1..LIJT8, times up/down, times
+ * left/right. The port has the two loops, with the starting bit as a variable. Nothing about the
+ * result changes; the original was buying speed a 1 MHz machine needed and we do not.
+ *
+ * Two things are NOT unrolling and are ported as they are:
+ *
+ * The line is plotted one BIT at a time, not one multicolour pixel at a time -- TWOS is the
+ * eight single-bit masks. So a line alternates between the %01 and %10 colour of every cell it
+ * crosses, which is what gives Elite's wireframe its two-tone look, and is another thing a
+ * colour-per-pixel canvas could not have reproduced.
+ *
+ * And the carry threads through the SCREEN POINTER. Stepping to the next character cell is
+ * ADC #8 on the pointer's low byte, and the carry that leaves is still there when the next
+ * iteration adds the slope to the accumulator -- so on the iterations where a cell boundary
+ * happens to carry, the line advances by one extra step. That is why this keeps SC as two bytes
+ * with explicit carries rather than as a flat offset: a flat offset loses exactly that bit.
+ */
+
+namespace
+{
+/// 6502: SBC -- subtract with borrow, where the carry flag means "no borrow" going in and out.
+struct SubResult
+{
+  std::uint8_t value = 0;
+  bool carry = false;
+};
+
+[[nodiscard]] SubResult SubtractWithCarry(std::uint8_t _a, std::uint8_t _b, bool _carryIn) noexcept
+{
+  const std::uint16_t difference = static_cast<std::uint16_t>(_a) - _b - (_carryIn ? 0u : 1u);
+  return SubResult{ static_cast<std::uint8_t>(difference), difference < 0x100u };
+}
+
+/// 6502: SC and SCH -- the screen pointer, kept as the two bytes the original keeps, because the
+/// carry between them is load-bearing (see the note above).
+struct ScreenPointer
+{
+  std::uint8_t low = 0;
+  std::uint8_t high = 0;
+
+  [[nodiscard]] std::uint16_t At(std::uint8_t _y) const noexcept
+  {
+    return static_cast<std::uint16_t>(((static_cast<std::uint16_t>(high) << 8) | low) + _y);
+  }
+
+  /// Returns the carry out, which the caller may well still be using.
+  bool Add(std::uint8_t _amount, bool _carryIn) noexcept
+  {
+    const AddResult sum = AddWithCarry(low, _amount, _carryIn);
+    low = sum.value;
+    return sum.carry;
+  }
+
+  bool Subtract(std::uint8_t _amount, bool _carryIn) noexcept
+  {
+    const SubResult difference = SubtractWithCarry(low, _amount, _carryIn);
+    low = difference.value;
+    return difference.carry;
+  }
+};
+
+/// 6502: the LIlog chain in LOIN, and the LIloG chain in its steep half -- 256 * A / Q through
+/// the logarithm tables, saturating at 255. The same shape as LL28's body, but this copy stores
+/// nothing in `widget` and takes the operands in registers, so it is written out rather than
+/// shared: a helper that had to grow a flag to say whether it scribbles on zero page would be
+/// worse than two readable copies.
+[[nodiscard]] std::uint8_t Slope(std::uint8_t _numerator, std::uint8_t _denominator) noexcept
+{
+  if (_numerator == 0)
+  {
+    return 0;
+  }
+
+  const SubResult low = SubtractWithCarry(LOG_LOW_TABLE[_numerator], LOG_LOW_TABLE[_denominator], true);
+  const bool useOddTable = (low.value & 0x80u) != 0u;
+
+  const SubResult high = SubtractWithCarry(LOG_TABLE[_numerator], LOG_TABLE[_denominator], low.carry);
+  if (high.carry)
+  {
+    return 255;
+  }
+
+  return useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value];
+}
+
+
+/*
+ * 6502: STPX and everything it reaches -- the shallow case, where the line moves further across
+ * than it does up or down, so it plots one pixel per column and steps rows when the accumulator
+ * says to.
+ */
+void DrawShallowLine(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _p2, std::uint8_t _q2, std::uint8_t _s2,
+                     bool _swapped) noexcept
+{
+  // 6502: LDX X1 / CPX X2 / BCC LI3 -- draw left to right, swapping the ends if they arrived the
+  // other way round. DEC SWAP is what records that, and the record matters: a swapped line does
+  // not plot its first pixel.
+  if (_work.x1 >= _work.x2)
+  {
+    _swapped = true;
+    std::uint8_t swap = _work.x1;
+    _work.x1 = _work.x2;
+    _work.x2 = swap;
+    swap = _work.y1;
+    _work.y1 = _work.y2;
+    _work.y2 = swap;
+  }
+
+  // 6502: LI3 -- the slope, as a fraction of a row per column.
+  _q2 = Slope(_q2, _p2);
+
+  const bool goingUp = _work.y1 >= _work.y2;
+  const std::uint16_t rowAddress = static_cast<std::uint16_t>(Canvas::RowOffset(_work.y1));
+
+  ScreenPointer sc;
+  std::uint8_t y = 0;
+
+  if (goingUp)
+  {
+    // 6502: the AC19 block. SC is the row plus the byte within it, Y the pixel row in the cell.
+    const AddResult base = AddWithCarry(static_cast<std::uint8_t>(_work.x1 & 0xF8u),
+                                        static_cast<std::uint8_t>(rowAddress & 0xFFu), false);
+    sc.low = base.value;
+    sc.high = AddWithCarry(static_cast<std::uint8_t>(rowAddress >> 8), 0, base.carry).value;
+    y = static_cast<std::uint8_t>(_work.y1 & 0x07u);
+  }
+  else
+  {
+    /*
+     * 6502: DOWN. Same address by a different route: Y is biased up to 0xF8..0xFF and SC pulled
+     * down by 248 to match, so that INY runs off the end of a cell into zero and the branch that
+     * tests it is a BNE. The port keeps the bias rather than normalising it, because SC's low
+     * byte is what the carry chain reads.
+     */
+    sc.high = static_cast<std::uint8_t>(rowAddress >> 8);
+    const AddResult base = AddWithCarry(static_cast<std::uint8_t>(_work.x1 & 0xF8u),
+                                        static_cast<std::uint8_t>(rowAddress & 0xFFu), false);
+    sc.low = base.value;
+    if (base.carry)
+    {
+      ++sc.high;
+    }
+    if (!sc.Subtract(0xF7u, false))
+    {
+      --sc.high;
+    }
+    y = static_cast<std::uint8_t>((_work.y1 & 0x07u) ^ 0xF8u);
+  }
+
+  std::uint8_t bit = static_cast<std::uint8_t>(_work.x1 & 0x07u);
+  std::uint8_t count = _p2;
+  bool skipFirst = false;
+
+  if (_swapped)
+  {
+    // 6502: LDX P2 / INX / BEQ -- the swapped entry counts one more and enters past the plot.
+    count = static_cast<std::uint8_t>(_p2 + 1u);
+    if (count == 0)
+    {
+      return;
+    }
+    skipFirst = true;
+  }
+  else if (!goingUp && _p2 == 0)
+  {
+    // 6502: LDX P2 / BEQ LIE0 -- the downward entry checks for an empty line and the upward one
+    // does not. Not a symmetry the port may impose: upward with P2 = 0 really does plot 256
+    // pixels, because DEX wraps.
+    return;
+  }
+
+  bool carry = false; // 6502: the CLC at LIlog6, before either direction starts
+
+  for (;;)
+  {
+    if (!skipFirst)
+    {
+      _canvas.ExclusiveOr(sc.At(y), PIXEL_MASK_TABLE[bit]);
+    }
+    skipFirst = false;
+
+    // 6502: DEX / BEQ -- the pixel counter, tested before the step rather than after the plot.
+    --count;
+    if (count == 0)
+    {
+      return;
+    }
+
+    const AddResult accumulated = AddWithCarry(_s2, _q2, carry);
+    _s2 = accumulated.value;
+    carry = accumulated.carry;
+
+    if (carry)
+    {
+      if (goingUp)
+      {
+        // 6502: DEY / BPL -- up a pixel row, and up a character row when that runs out.
+        --y;
+        if ((y & 0x80u) != 0u)
+        {
+          const bool noBorrow = sc.Subtract(0x40u, carry);
+          sc.high = SubtractWithCarry(sc.high, 1u, noBorrow).value;
+          y = 7;
+        }
+      }
+      else
+      {
+        // 6502: INY / BNE -- the biased Y runs up to zero rather than down past it.
+        ++y;
+        if (y == 0)
+        {
+          const bool over = sc.Add(0x3Fu, carry);
+          sc.high = AddWithCarry(sc.high, 1u, over).value;
+          y = 0xF8u;
+        }
+      }
+      carry = false; // 6502: the CLC that every step path ends with
+    }
+
+    ++bit;
+    if (bit == 8)
+    {
+      /*
+       * 6502: LI89 / LI29 -- one character cell to the right, and here is the carry that a flat
+       * offset would lose. ADC #8 on the pointer's low byte can carry, and nothing clears it
+       * before the next iteration adds the slope, so that iteration advances one step further
+       * than the slope alone would take it.
+       */
+      bit = 0;
+      carry = sc.Add(8u, false);
+      if (carry)
+      {
+        ++sc.high;
+      }
+    }
+  }
+}
+
+/*
+ * 6502: STPY and everything it reaches -- the steep case, one pixel per ROW, stepping across
+ * when the accumulator says to. The mask is carried in R2 and shifted rather than indexed, which
+ * is why this half has no bit counter.
+ */
+void DrawSteepLine(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _p2, std::uint8_t _q2, std::uint8_t _s2,
+                   bool _swapped) noexcept
+{
+  // 6502: CPY Y2 / BCS LI15 -- draw downwards, swapping the ends if needed.
+  if (_work.y1 < _work.y2)
+  {
+    _swapped = true;
+    std::uint8_t swap = _work.x1;
+    _work.x1 = _work.x2;
+    _work.x2 = swap;
+    swap = _work.y1;
+    _work.y1 = _work.y2;
+    _work.y2 = swap;
+  }
+
+  const std::uint16_t rowAddress = static_cast<std::uint16_t>(Canvas::RowOffset(_work.y1));
+
+  ScreenPointer sc;
+  const AddResult base = AddWithCarry(static_cast<std::uint8_t>(_work.x1 & 0xF8u),
+                                      static_cast<std::uint8_t>(rowAddress & 0xFFu), false);
+  sc.low = base.value;
+  sc.high = AddWithCarry(static_cast<std::uint8_t>(rowAddress >> 8), 0, base.carry).value;
+
+  std::uint8_t y = static_cast<std::uint8_t>(_work.y1 & 0x07u);
+  std::uint8_t mask = PIXEL_MASK_TABLE[_work.x1 & 0x07u];
+
+  // 6502: LDX P2 / BEQ LIfudge -- a vertical line keeps a slope of zero rather than dividing.
+  if (_p2 != 0)
+  {
+    _p2 = Slope(_p2, _q2);
+  }
+
+  // 6502: LIfudge -- SEC / LDX Q2 / INX, then the direction test.
+  std::uint8_t count = static_cast<std::uint8_t>(_q2 + 1u);
+  const bool goingRight = SubtractWithCarry(_work.x2, _work.x1, true).carry;
+
+  // 6502: LDA SWAP / BEQ LI17 -- unswapped enters past the plot, swapped plots and counts one
+  // fewer. Both halves, left and right, do this the same way.
+  bool skipFirst = !_swapped;
+  if (_swapped)
+  {
+    --count;
+  }
+
+  bool carry = false;
+
+  for (;;)
+  {
+    if (!skipFirst)
+    {
+      _canvas.ExclusiveOr(sc.At(y), mask);
+    }
+    skipFirst = false;
+
+    /*
+     * 6502: LI17 / LI18 -- one pixel row up, every iteration. This is the steep case, so the row
+     * always moves and it is the column that waits for the accumulator.
+     *
+     * And the borrow this leaves is NOT cleared. Both shallow paths end their row step with a
+     * CLC and this one does not, so on any iteration that crosses a character row the SBC's
+     * carry survives into the accumulator below and the line advances one step further. Drop it
+     * and the port is right for 71 of a 72-pixel line, with one pixel one bit out -- which is
+     * what it did until this comment existed.
+     */
+    --y;
+    if ((y & 0x80u) != 0u)
+    {
+      const bool noBorrow = sc.Subtract(0x3Fu, carry);
+      const SubResult high = SubtractWithCarry(sc.high, 1u, noBorrow);
+      sc.high = high.value;
+      carry = high.carry;
+      y = 7;
+    }
+
+    const AddResult accumulated = AddWithCarry(_s2, _p2, carry);
+    _s2 = accumulated.value;
+    carry = accumulated.carry;
+
+    if (carry)
+    {
+      if (goingRight)
+      {
+        // 6502: LSR R2 / BCC / ROR R2 -- the mask walks right a bit at a time, and when it falls
+        // out of the byte it comes back at the top and the pointer steps a cell.
+        const bool fellOut = (mask & 0x01u) != 0u;
+        mask = static_cast<std::uint8_t>(mask >> 1);
+        if (fellOut)
+        {
+          mask = 0x80u;
+          carry = sc.Add(8u, false);
+          if (carry)
+          {
+            ++sc.high;
+          }
+        }
+      }
+      else
+      {
+        // 6502: LFT's ASL R2 / ROL R2 -- the same, leftwards.
+        const bool fellOut = (mask & 0x80u) != 0u;
+        mask = static_cast<std::uint8_t>(mask << 1);
+        if (fellOut)
+        {
+          mask = 0x01u;
+          if (!sc.Subtract(0x07u, false))
+          {
+            --sc.high;
+          }
+        }
+      }
+      carry = false; // 6502: every one of those paths reaches LIC5 or LIC6 with carry clear
+    }
+
+    // 6502: LIC5 / LIC6 -- DEX / BNE, so the count is tested after the step, not before it.
+    --count;
+    if (count == 0)
+    {
+      return;
+    }
+  }
+}
+} // namespace
+
+void DrawLine(Canvas& _canvas, DrawWorkspace& _work) noexcept
+{
+  // 6502: LDA #128 / STA S2 / ASL A / STA SWAP. The shift does three jobs at once: it leaves the
+  // accumulator seeded at half, it zeroes the swap flag, and it SETS carry, which is why the
+  // subtraction below has no SEC in front of it.
+  std::uint8_t s2 = 0x80;
+  bool swapped = false;
+
+  // 6502: LI1, LI2 -- the two spans, as magnitudes. Negating with EOR #255 / ADC #1 works
+  // because the branch that reaches it left carry clear.
+  SubResult span = SubtractWithCarry(_work.x2, _work.x1, true);
+  std::uint8_t p2 = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
+
+  span = SubtractWithCarry(_work.y2, _work.y1, true);
+  std::uint8_t q2 = span.carry ? span.value : AddWithCarry(static_cast<std::uint8_t>(span.value ^ 0xFFu), 1u, false).value;
+
+  if (q2 < p2)
+  {
+    DrawShallowLine(_canvas, _work, p2, q2, s2, swapped);
+    return;
+  }
+
+  DrawSteepLine(_canvas, _work, p2, q2, s2, swapped);
+}
+
 } // namespace Elite

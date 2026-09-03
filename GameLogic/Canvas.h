@@ -194,6 +194,11 @@ void PlotDash(Canvas& _canvas, DrawWorkspace& _work) noexcept;
 /// 6502: CPIX4 -- a two-by-two block: CPIX2, then the row above it.
 void PlotBlock(Canvas& _canvas, DrawWorkspace& _work) noexcept;
 
+/// 6502: LOIN / LL30 -- a line from (X1, Y1) to (X2, Y2), plotted one BIT at a time so that it
+/// alternates between each cell's two colours. The shipped code unrolls it into thirty-two
+/// copies reached through self-modifying jumps; this is the two loops those copies are.
+void DrawLine(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+
 /// 6502: HLOIN -- a horizontal line from X1 to X2 (exclusive) on row Y1. The ends are masked
 /// bytes and everything between is a whole byte, which is why a line's edge can come out a
 /// different colour from its body.
