@@ -110,6 +110,19 @@ public:
   /// 6502: msblob -- the dashboard's missile indicators, green up to NOMSL and black above it.
   virtual void ResetMissileIndicators() = 0;
 
+  /// 6502: LAUN -- the space station's docking tunnel, drawn as a sequence of expanding circles.
+  /// Arriving reaches it; `DOENTRY` is its only caller here.
+  virtual void ShowDockingTunnel() = 0;
+
+  /*
+   * 6502: DELAY -- wait for _frames VERTICAL SYNCS.
+   *
+   * Declared here as well as on `LineEntryEffects`, deliberately, and for the reason that one
+   * says: two independent statements of what a routine needs rather than one interface
+   * pretending to be shared. The executable satisfies both with one object.
+   */
+  virtual void WaitFrames(std::uint8_t _frames) = 0;
+
   /*
    * 6502: TITLE -- a rotating ship, a token under it, and a wait for a key.
    *
