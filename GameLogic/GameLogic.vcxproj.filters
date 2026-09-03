@@ -69,6 +69,9 @@
     <ClInclude Include="DockedKeys.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="StartUp.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Charts.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -130,6 +133,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="DockedKeys.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="StartUp.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Charts.cpp">

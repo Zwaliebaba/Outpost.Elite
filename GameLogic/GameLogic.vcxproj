@@ -160,6 +160,7 @@
     <ClInclude Include="StatusScreen.h" />
     <ClInclude Include="SystemScreen.h" />
     <ClInclude Include="DockedKeys.h" />
+    <ClInclude Include="StartUp.h" />
     <ClInclude Include="Charts.h" />
     <ClInclude Include="Commander.h" />
     <ClInclude Include="pch.h" />
@@ -194,6 +195,7 @@
     <ClCompile Include="StatusScreen.cpp" />
     <ClCompile Include="SystemScreen.cpp" />
     <ClCompile Include="DockedKeys.cpp" />
+    <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="Charts.cpp" />
     <ClCompile Include="Commander.cpp" />
     <ClCompile Include="CommanderTable.cpp" />
