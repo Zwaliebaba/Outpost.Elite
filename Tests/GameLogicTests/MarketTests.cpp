@@ -710,6 +710,139 @@ public:
                            .c_str());
     Assert::IsTrue(dashes > 0, L"the sold-out path must be reached");
   }
+
+  /*
+   * 6502: gnum's body -- one keystroke of a typed number, over every value against every key.
+   *
+   * The loop around it reads the keyboard, so the shipped routine is STEPPED from the instruction
+   * after the key read until it reaches one of its five exits, and the exit and the accumulator
+   * are what get compared. That tests the step exactly, without a stub standing in for the
+   * keyboard: the real branches run.
+   *
+   * Exhaustive in both dimensions -- 65,536 pairs at each availability -- because the multiply by
+   * ten threads a carry through two additions that have no CLC, and the values where that shows
+   * are the ones a sample would miss.
+   */
+  TEST_METHOD(TypingANumberMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+
+    // 6502: TT223's body starts after the key read, so that is where the stepping begins.
+    const std::uint16_t afterKeyRead = static_cast<std::uint16_t>(oracle.Label("TT223") + 3);
+    const std::uint16_t out = oracle.Label("OUT");
+    const std::uint16_t bay2 = oracle.Label("BAY2");
+    const std::uint16_t tt226 = oracle.Label("TT226");
+    const std::uint16_t nwdav1 = oracle.Label("NWDAV1");
+    const std::uint16_t nwdav3 = oracle.Label("NWDAV3");
+    const std::uint16_t r = oracle.Label("R");
+    const std::uint16_t qq25 = oracle.Label("QQ25");
+
+    std::array<std::uint32_t, 5> outcomes{};
+    std::uint32_t compared = 0;
+
+    for (const std::uint32_t available : { 0u, 1u, 25u, 26u, 60u, 255u })
+    {
+      for (std::uint32_t value = 0; value < 256; ++value)
+      {
+        for (std::uint32_t key = 0; key < 256; ++key)
+        {
+          Cpu6502 cpu = oracle.Fresh();
+
+          // The Y and N paths echo the key through DASC before they set the accumulator, and
+          // DASC reaches the screen. Trapping it keeps the stepping on gnum's own instructions,
+          // and the trap clears the carry because that is what DASC does.
+          cpu.AddTrap(oracle.Label("DASC"), Cpu6502::TrapExit::ClearCarry);
+          cpu.memory[r] = static_cast<std::uint8_t>(value);
+          cpu.memory[qq25] = static_cast<std::uint8_t>(available);
+          cpu.a = static_cast<std::uint8_t>(key);
+          cpu.x = cpu.y = 0;
+          cpu.sp = 0xFD;
+          cpu.pc = afterKeyRead;
+
+          Elite::DigitResult gameResult = Elite::DigitResult::Accepted;
+          bool reached = false;
+          for (int step = 0; step < 200; ++step)
+          {
+            if (cpu.pc == out)
+            {
+              gameResult = Elite::DigitResult::Complete;
+              reached = true;
+              break;
+            }
+            if (cpu.pc == bay2)
+            {
+              gameResult = Elite::DigitResult::LeaveScreen;
+              reached = true;
+              break;
+            }
+            if (cpu.pc == tt226)
+            {
+              gameResult = Elite::DigitResult::Accepted;
+              reached = true;
+              break;
+            }
+            if (cpu.pc == nwdav1)
+            {
+              gameResult = Elite::DigitResult::TakeAll;
+              reached = true;
+              break;
+            }
+            if (cpu.pc == nwdav3)
+            {
+              gameResult = Elite::DigitResult::TakeNone;
+              reached = true;
+              break;
+            }
+            Assert::IsTrue(cpu.Step(), L"gnum should not reach an unimplemented opcode");
+          }
+          Assert::IsTrue(reached, L"gnum's body should reach one of its five exits");
+
+          /*
+           * NWDAV1 and NWDAV3 set R after the branch, so the shipped accumulator is only
+           * comparable once those two instructions have run. Stepping them is a line each and
+           * keeps the comparison on the value rather than on the label.
+           */
+          if (gameResult == Elite::DigitResult::TakeAll || gameResult == Elite::DigitResult::TakeNone)
+          {
+            for (int step = 0; step < 200 && cpu.pc != out; ++step)
+            {
+              Assert::IsTrue(cpu.Step(), L"gnum's Y and N paths should reach OUT");
+            }
+          }
+
+          std::uint8_t ours = static_cast<std::uint8_t>(value);
+          const Elite::DigitResult ourResult =
+            Elite::TypeDigit(ours, static_cast<std::uint8_t>(key), static_cast<std::uint8_t>(available));
+
+          const std::wstring where = L"gnum(value=" + std::to_wstring(value) + L", key=" + std::to_wstring(key)
+                                     + L", available=" + std::to_wstring(available) + L")";
+          Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(gameResult),
+                                          static_cast<std::uint32_t>(ourResult), (where + L": the exit").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[r], ours, (where + L": the accumulator").c_str());
+
+          ++outcomes[static_cast<std::size_t>(ourResult)];
+          ++compared;
+        }
+      }
+    }
+
+    std::string report = "gnum: " + std::to_string(compared) + " keystrokes compared. Exits:";
+    const char* names[] = { " accepted=", " complete=", " take-all=", " take-none=", " leave-screen=" };
+    for (std::size_t index = 0; index < outcomes.size(); ++index)
+    {
+      report += names[index] + std::to_string(outcomes[index]);
+    }
+    Logger::WriteMessage(report.c_str());
+
+    for (std::size_t index = 0; index < outcomes.size(); ++index)
+    {
+      Assert::IsTrue(outcomes[index] > 0, L"every exit of gnum should be reached");
+    }
+  }
 };
 
 } // namespace GameLogicTests
