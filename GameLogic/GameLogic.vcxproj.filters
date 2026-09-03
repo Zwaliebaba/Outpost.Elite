@@ -9,6 +9,10 @@
       <UniqueIdentifier>{3f1a6c20-9d84-4b17-8e52-6c0b4a7d1e33}</UniqueIdentifier>
       <Extensions>h;cpp</Extensions>
     </Filter>
+    <Filter Include="Universe">
+      <UniqueIdentifier>{c94f1a27-3e60-4b85-9d12-7a5e28cb6403}</UniqueIdentifier>
+      <Extensions>h;cpp</Extensions>
+    </Filter>
     <Filter Include="Text">
       <UniqueIdentifier>{8f5e1a74-4bc6-4da9-e3f7-a0825dc1e94b}</UniqueIdentifier>
       <Extensions>h;cpp</Extensions>
@@ -34,6 +38,9 @@
     </ClInclude>
     <ClInclude Include="TextPrint.h">
       <Filter>Text</Filter>
+    </ClInclude>
+    <ClInclude Include="Universe.h">
+      <Filter>Universe</Filter>
     </ClInclude>
     <ClInclude Include="Rng.h">
       <Filter>Kernel</Filter>
@@ -61,6 +68,9 @@
     </ClCompile>
     <ClCompile Include="TextPrint.cpp">
       <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="Universe.cpp">
+      <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Rng.cpp">
       <Filter>Kernel</Filter>
