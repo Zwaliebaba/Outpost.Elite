@@ -109,6 +109,10 @@ extern const std::array<std::uint8_t, 256> ROW_ADDRESS_HIGH;
 extern const std::array<std::uint8_t, 25> CELL_ADDRESS_LOW;
 extern const std::array<std::uint8_t, 25> CELL_ADDRESS_HIGH;
 
+// 6502: TENS -- the low four bytes of 10^11. The most significant byte is not here: BPRNT
+// subtracts it as an immediate 0x17, so the whole constant is 0x17_4876E800.
+extern const std::array<std::uint8_t, 4> TEN_TO_THE_ELEVENTH;
+
 // 6502: FONT -- 96 characters of eight rows, starting at space. One bit per pixel here; CHPR
 // doubles each bit into a multicolour pixel on the way to the bitmap.
 extern const std::array<std::uint8_t, 768> FONT_DATA;

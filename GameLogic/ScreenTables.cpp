@@ -108,4 +108,9 @@ const std::array<std::uint8_t, 25> CELL_ADDRESS_HIGH = {
   0x63,
 };
 
+// 6502: TENS -- the low four bytes of 10^11, for BPRNT.
+const std::array<std::uint8_t, 4> TEN_TO_THE_ELEVENTH = {
+  0x48, 0x76, 0xE8, 0x00,
+};
+
 } // namespace Elite
