@@ -236,11 +236,14 @@ bool LoadCommander(std::span<const std::uint8_t, COMMANDER_FILE_SIZE> _file, Com
   /*
    * 6502: EOR #&A9 / TAX / LDA COK / CPX CHK2 / BEQ tZ / ORA #&80 / tZ: ORA #&40 / STA COK.
    *
-   * The competition flags, and they are the interesting half of this routine. Bit 6 records that
-   * the commander was loaded from a file at all; bit 7 records that the file's SECOND stored
-   * checksum did not agree with the first one EORed with &A9 -- which a tampered file would fail.
-   * So the game does not refuse such a file here: it remembers it, and the competition code
-   * further on reads the flag. That is why the check below is not the only thing that matters.
+   * The competition flags, and they are the interesting half of this routine. Bit 6 is the
+   * PLATFORM STAMP: every version sets its own bit here -- 1 for cassette, 3 for the Master, 6
+   * for the C64 -- so a competition entry says which Elite produced it. It is not "loaded from a
+   * file", tempting as that reading is from this routine alone; DFAULT sets it for the default
+   * commander too. Bit 7 records that the file's SECOND stored checksum did not agree with the
+   * first one EORed with &A9 -- which a tampered file would fail. So the game does not refuse
+   * such a file here: it remembers it, and the competition code further on reads the flag. That
+   * is why the check below is not the only thing that matters.
    */
   const std::uint8_t stamp = static_cast<std::uint8_t>(image.At(Field::ChecksumByte) ^ 0xA9u);
   std::uint8_t competition = _outBlock.At(Field::Competition);

@@ -119,8 +119,12 @@ void LoadCommanderName(std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
  *
  * Lowers the line limit to SEVEN for the question and puts it back to nine afterwards, so the
  * name is shorter than the filename the same buffer becomes. Prints extended token 8
- * ("{single cap}COMMANDER'S NAME? ") and reads a line; if nothing was typed, TR1 puts the
- * existing name back and the player keeps it.
+ * ("{single cap}COMMANDER'S NAME? ") and reads a line; if nothing was typed, TR1 puts a name
+ * back and the player keeps it.
+ *
+ * WHICH name is the part worth being careful about. TR1 reads NA%, the LAST SAVED commander's
+ * name, and not NAME, the one being played. The two are the same after any load or save and can
+ * differ before one, so `_name` here is the save image's.
  *
  * The five bytes it copies first are the drive and directory part of the filename, taken from the
  * five bytes BEFORE the name in the save image. That is file-system state and belongs with
