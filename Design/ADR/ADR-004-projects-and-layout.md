@@ -1,6 +1,7 @@
 # ADR-004 — Projects and Layout
 
-**Status:** Accepted · 2026-09-02 (§1 settled by owner ruling: own codebase, nothing lifted)
+**Status:** Accepted · 2026-09-02 (§1 settled by owner ruling: own codebase, nothing lifted) ·
+amended 2026-09-03 (§6 added by owner ruling: the portable test runner is sanctioned and CI-gated)
 **Depends on:** ADR-001; the conventions in `.clang-format`, `.clang-tidy`, `.editorconfig`
 **Feeds:** slice 0c; the *Home* column of [Source-Inventory.md](../Source-Inventory.md)
 
@@ -33,6 +34,8 @@ GameLogic.lib             THE PORT.  namespace Elite.  Deterministic and platfor
 Outpost.exe               composition root AND presentation: Main, AppConfig, Window, GpuDevice,
                           CanvasPresenter, SidSynth, KeyMap, SaveStore.  Written here, from scratch.
 Tests/GameLogicTests.dll  MSVC CppUnitTest: Cpu6502, the oracle fixture, the suites.
+Tests/PortableRunner/     NOT a project.  A shim and a generator that run the suite above with g++
+                          on a machine without Visual Studio.  See section 6.
 ```
 
 **Presentation lives in the executable**, not in a separate engine library. It is roughly ten
@@ -57,7 +60,10 @@ project configuration for the libraries.
   is a solution-level split rather than a code subdirectory.
 - **File names PascalCase and unique repo-wide**, including against the CRT, the STL and the
   Windows SDK, case-insensitively. This is why the port uses `Arith.h` rather than `Math.h`,
-  `Rng.h` rather than `Random.h`, and `Lines.cpp` rather than `Line.h`.
+  `Rng.h` rather than `Random.h`, and `Lines.cpp` rather than `Line.h`. **One exemption, and only
+  one:** `Tests/PortableRunner/Shim/` holds a `CppUnitTest.h`, a `NeuronCore.h` and a `pch.h` whose
+  names collide on purpose, because shadowing is how the runner works (§6). They are on no
+  project's include path.
 - **Includes are unqualified.** Each project lists the roots it is entitled to.
 - **Every added file goes into both** the `.vcxproj` and the `.filters`, in the same commit.
 - `pch.h` per project, including `NeuronCore.h`. For `GameLogic` that is an include, not a
@@ -99,10 +105,48 @@ separately rather than treating them as errors.
 | `golden_diff.py` | expected versus actual canvas → diff image | slice 1d |
 | `check_gamelogic.py` | Fails if `GameLogic` grows a clock, randomness, a float, file or registry access, or a Win32 call. Strips comments and string literals first, and `--self-test` checks the checker | **Built** (slice 0f) |
 
+One script lives outside `tools/`: `Tests/PortableRunner/generate_runner.py`, because it is
+useless without the shim headers beside it and moving it would split one mechanism across two
+directories. `tools/` remains the home for anything that acts on the repository as a whole.
+
+### §6 Two ways to run one suite
+
+**Owner ruling, 2026-09-03: commit the portable test runner and gate CI on it.**
+
+`Tests/PortableRunner/` builds `Tests/GameLogicTests/` with g++ and runs it. It does this by
+supplying three headers that shadow MSVC's `CppUnitTest.h`, this repository's `NeuronCore.h` and
+the test project's `pch.h`, and by generating — from a parse of the test files themselves — the
+`main` that MSVC's linker sections otherwise provide. **No file under `Tests/GameLogicTests/` or
+`GameLogic/` is edited or copied.** There is one suite; there are two ways to invoke it.
+
+**MSVC remains the authority.** A disagreement between the two runners is resolved in MSVC's
+favour, because MSVC is what the game ships built with. The Ubuntu leg is not a second opinion
+about what is correct — it is a faster way of finding out that something is wrong, and a second
+compiler's warnings for free.
+
+Three reasons it is here rather than in a scratch directory:
+
+1. **The loop.** Porting a routine against the assembled original takes ten or twenty
+   compile-run cycles to get one carry chain right. That is eighteen seconds from cold here and a
+   quarter of a second incrementally, against roughly four minutes per cycle through CI. Every
+   defect in slices 1c-c-b, 2b, 2c and 2d was found this way before MSVC compiled anything, and
+   MSVC then agreed exactly.
+2. **CI cost and latency.** The Ubuntu leg finishes the whole suite in about a minute on a runner
+   an order of magnitude cheaper than a Windows one.
+3. **The bus factor.** A fast feedback loop that exists only in one person's working directory is
+   not a capability the project has. That was the state of this until the ruling.
+
+The accepted cost is a second build definition for one suite, which can drift: the shim
+implements only the CppUnitTest surface the suites actually use, and a test that reached for
+`TEST_METHOD_INITIALIZE` would compile under MSVC and fail to compile here. That failure is loud
+and lands in the same pull request, which is the reason the leg is gated rather than advisory —
+an ungated second build path rots quietly, and this one is worth more than that.
+
 ## Consequences
 
 - Four projects, not five: there is no engine-presentation library and no dependency on any
   sibling repository. Everything in the tree was written for this game.
+- Two build systems for one test suite (§6), with MSVC deciding and Ubuntu going first.
 - The window, device, swap chain, presenter and synthesiser are work this project has to do
   rather than inherit. That is the accepted cost of the ruling, and it is bounded: the game
   needs one texture, one full-screen quad and one audio source voice.
