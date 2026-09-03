@@ -106,19 +106,22 @@ private:
 };
 
 /*
- * The control codes this port does not implement: 9, 11 and 21.
+ * The control codes that leave the text system.
  *
- * Every other code in the range 0 to 21 is text state or text output and is handled by the
- * printer below. These three are not. MT9 moves the cursor and clears to a new view, NLIN4
- * draws a horizontal rule, and CLYNS clears the bottom of the screen -- all of which reach the
- * canvas or the view state, so they are a seam rather than something this slice can port.
+ * JMTB has THIRTY-ONE reachable entries, not the twenty-one the low ones suggest, and every one
+ * of them is used by a token the game prints. Codes 22 to 31 are the mission briefings and the
+ * disk menu: they wait for keys, spin the title ship, read a typed line, or print a token under
+ * a game-state index. Nine and eleven reach the canvas.
  *
- * Codes 8 and 21 are split rather than deferred whole: the flags they set belong to the text
- * system and are set here, and only the cursor move or the screen clear is passed on. A
- * handler for those two must not also set DTW2, or it will set it twice.
+ * So this seam carries 9, 11, 22, 24, 25, 26, 27, 28, 30 and 31. Everything else in the range
+ * is text and is handled by the printer below.
  *
- * A printer built without a handler ignores all three, and the tests count how often that
- * happens.
+ * Codes 8, 21, 23 and 29 are SPLIT rather than deferred whole: the flags they set belong to the
+ * text system and are set here, and only the cursor move or the screen clear is passed on. A
+ * handler for those four must not set those flags again, or it will set them twice.
+ *
+ * A printer built without a handler ignores the deferred codes, and the tests count how often
+ * that happens.
  */
 class ControlCodes
 {

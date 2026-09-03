@@ -573,15 +573,43 @@ void ExtendedTokenPrinter::RunControlCode(std::uint8_t _code) noexcept
       }
       return;
 
+    case 23:
+    case 29:
+      /*
+       * 6502: MT23 and MT29 -- move to row 10 or row 6, switch to white text, then fall into
+       * MT13. They are one routine with two entry points, and the entry that sets the row is
+       * skipped by a BIT, the same trick MT1 and MT2 use.
+       *
+       * WHITETEXT between them is an RTS in this version; the C64's text is one colour. So all
+       * that is left besides the cursor move is MT13's pair of stores, which land here.
+       */
+      if (m_controls != nullptr)
+      {
+        m_controls->Run(_code);
+      }
+      state.alwaysLower = 0x80;
+      state.lowerCaseBits = 0x20;
+      return;
+
     default:
       /*
-       * 9 is MT9, which moves the cursor and clears to a new view, and 11 is NLIN4, which draws
-       * a rule across the screen. Both reach the canvas.
+       * The eight codes that leave the text system entirely, and every one of them is reached
+       * by a token the game actually prints:
        *
-       * 0 and 22 to 31 reach nothing at all: the original indexes JMTB with them and jumps to
-       * whatever two bytes it finds, which for code 0 is a pair of RTS opcodes read as an
-       * address. No token in the game contains one, and the port ignores them rather than
-       * inventing a meaning.
+       *     9        MT9    -- clears to a new view
+       *     11       NLIN4  -- draws a rule across the screen
+       *     22, 24   PAUSE, PAUSE2 -- spin the ship and wait for a key
+       *     25       BRIS   -- a token and a hundred-frame delay
+       *     26       MT26   -- read a line of text from the keyboard
+       *     27, 28   MT27, MT28 -- the mission captain's and planet's names, keyed on GCNT
+       *     30, 31   FILEPR, OTHERFILEPR -- disk names, keyed on DISK
+       *
+       * The last four are tokens under a game-state index rather than screen work, so they will
+       * land with the state that indexes them rather than with the canvas.
+       *
+       * Code 0 is the one entry that means nothing: JMTB is indexed from one, so code 0 reads
+       * the two bytes before the table and jumps to $6060. No token can contain it either --
+       * zero is what terminates one.
        */
       if (m_controls != nullptr)
       {
