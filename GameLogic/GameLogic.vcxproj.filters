@@ -51,6 +51,9 @@
     <ClInclude Include="MarketScreen.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Equipment.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="StatusScreen.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -99,6 +102,9 @@
     <ClCompile Include="MarketScreen.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
+    <ClCompile Include="Equipment.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
     <ClCompile Include="StatusScreen.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
@@ -112,6 +118,9 @@
       <Filter>Generated Data</Filter>
     </ClCompile>
     <ClCompile Include="MarketTable.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="EquipmentTable.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
     <ClCompile Include="Rng.cpp">

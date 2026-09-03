@@ -108,8 +108,6 @@ void BuyScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _m
   // 6502: LDA #2 / JSR TRADEMODE.
   _screen.effects.SetUpTradeScreen(BUY_CARGO_VIEW);
 
-  // 6502: TTX66's tail -- `LDX #1 / STX XC / STX YC / DEX / STX QQ17`. The seam draws; the text
-  // state is the port's, the same split CLYNS uses.
   _screen.text.column = 1;
   _screen.text.row = 1;
   _screen.printer.SetCaseFlags(0);
@@ -411,12 +409,8 @@ void ListCargo(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _m
 void InventoryScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market,
                      std::uint8_t _economy) noexcept
 {
-  // 6502: LDA #8 / JSR TRADEMODE, and the text state TTX66 ends on.
+  // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
   _screen.effects.SetUpTradeScreen(INVENTORY_VIEW);
-  _screen.text.column = 1;
-  _screen.text.row = 1;
-  _screen.printer.SetCaseFlags(0);
-  _screen.text.caseFlags = 0;
 
   // 6502: LDA #11 / JSR DOXC / LDA #164 / JSR TT60 -- and TT60 is four routines deep.
   _screen.text.column = INVENTORY_TITLE_COLUMN;

@@ -89,6 +89,11 @@ TABLES = [
     # quantity, mask -- and seventeen items, because the market screen loops QQ29 to 17. GVL
     # only fills quantities for the first sixteen, which is why Alien Items behave differently.
     Table("MARKET_TABLE", "QQ23", 68, "MarketTable.cpp", "base price, gradient, quantity and mask per item"),
+    # ---- slice 2c: the equipment shop. Two bytes an item, low byte first, in tenths of a credit
+    # -- and FOURTEEN items rather than twelve, because the C64 build sells the military and
+    # mining lasers the cassette version does not. Entry 0 is a placeholder: EQSHP computes the
+    # fuel price from how empty the tank is and writes it over PRXS before reading the table.
+    Table("EQUIPMENT_PRICES", "PRXS", 28, "EquipmentTable.cpp", "the price of each item, in tenths"),
 ]
 
 
