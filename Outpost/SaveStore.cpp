@@ -3,6 +3,7 @@
 #include "SaveStore.h"
 
 #include <fstream>
+#include <string_view>
 
 namespace Outpost
 {
@@ -15,6 +16,18 @@ constexpr std::uint8_t NAME_TERMINATOR = 13;
 /// One folder under LocalAppData, and one extension, so a person can find and copy them.
 constexpr const wchar_t* FOLDER = L"Outpost.Elite\\Commanders";
 constexpr const wchar_t* EXTENSION = L".cmdr";
+
+/*
+ * The stems Win32 resolves to a device rather than to a file.
+ *
+ * The list is fixed and has been since MS-DOS. CONIN$ and CONOUT$ are also devices but contain a
+ * character the name prompt cannot produce, so they cannot reach here; the rest can, because
+ * every one of them is letters and digits and no longer than seven characters.
+ */
+constexpr std::wstring_view RESERVED_DEVICES[] = {
+  L"CON",  L"PRN",  L"AUX",  L"NUL",  L"COM1", L"COM2", L"COM3", L"COM4", L"COM5", L"COM6", L"COM7",
+  L"COM8", L"COM9", L"LPT1", L"LPT2", L"LPT3", L"LPT4", L"LPT5", L"LPT6", L"LPT7", L"LPT8", L"LPT9",
+};
 
 /// LocalAppData, or an empty path. Read from the environment rather than through SHGetKnownFolderPath
 /// so that this file needs no additional library and no COM.
@@ -37,6 +50,40 @@ constexpr const wchar_t* EXTENSION = L".cmdr";
   return std::filesystem::path(value);
 }
 } // namespace
+
+bool SaveStore::IsReservedDeviceName(std::wstring_view _stem) noexcept
+{
+  for (const std::wstring_view device : RESERVED_DEVICES)
+  {
+    if (_stem.size() != device.size())
+    {
+      continue;
+    }
+
+    bool same = true;
+    for (std::size_t index = 0; index < device.size(); ++index)
+    {
+      // Only ASCII letters reach here, so folding by hand is exact and needs no locale.
+      wchar_t character = _stem[index];
+      if (character >= L'a' && character <= L'z')
+      {
+        character = static_cast<wchar_t>(character - (L'a' - L'A'));
+      }
+      if (character != device[index])
+      {
+        same = false;
+        break;
+      }
+    }
+
+    if (same)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 SaveStore::SaveStore()
 {
@@ -74,7 +121,7 @@ std::filesystem::path SaveStore::PathFor(std::span<const std::uint8_t, Elite::CO
     stem += static_cast<wchar_t>(byte);
   }
 
-  if (stem.empty())
+  if (stem.empty() || IsReservedDeviceName(stem))
   {
     return {};
   }

@@ -81,7 +81,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <UseFullPaths>true</UseFullPaths>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(MSBuildThisFileDirectory)..\..\GameLogic;$(MSBuildThisFileDirectory)..\..\NeuronCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(MSBuildThisFileDirectory)..\..\GameLogic;$(MSBuildThisFileDirectory)..\..\NeuronCore;$(MSBuildThisFileDirectory)..\..\Outpost;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -135,6 +135,13 @@
     <ClCompile Include="NameEntryTests.cpp" />
     <ClCompile Include="SaveGameTests.cpp" />
     <ClCompile Include="SystemScreenTests.cpp" />
+    <ClCompile Include="SaveStoreTests.cpp" />
+    <!-- The executable's commander store, compiled into the suite so it is covered rather
+         than only shipped. It is not in this directory, so it does not use this project's
+         precompiled header. -->
+    <ClCompile Include="..\Outpost\SaveStore.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="ChartTests.cpp" />
     <ClCompile Include="CommanderTests.cpp" />
     <ClCompile Include="CycleTests.cpp" />

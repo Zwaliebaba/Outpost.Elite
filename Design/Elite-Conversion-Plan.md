@@ -428,6 +428,42 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.23 "No oracle" is not "no test", and the difference was a defect
+
+`Outpost/SaveStore.cpp` shipped with a header saying, in as many words, that nothing in it was
+covered by the suite and that this was the whole reason the seam was drawn where it is. The first
+half was true and the second was an argument that does not follow.
+
+There is no ORACLE for the file: the C64 handed the Kernal a filename and an address range, and
+this writes eighty-five bytes to a path under LocalAppData, so there is no shipped routine to
+compare it against. But the format, the checksums, the competition number and every failure path
+are already compared against shipped routines in `GameLogicTests`, and what is left on this side
+of the seam — a path and two streams — has properties worth asserting even without a routine to
+disagree with.
+
+It had gone uncompiled for a day as well, because the only machine that could build it ran Windows
+and CI does not build `Outpost.vcxproj` (it would restore the whole WinUI 3 package set to compile
+two files). The file makes exactly one Win32 call. Ten lines of `GetEnvironmentVariableW` in the
+portable runner's shim, one source added to its makefile, and one constructor taking an explicit
+root instead of reading the environment, and it compiles and runs on both legs.
+
+**The first test written against it found a defect.** `PathFor` accepted any name of letters and
+digits and refused everything else, on the argument that the name reaches it from a FILE as well
+as from the keyboard and is therefore untrusted. That argument was right and the filter was not
+sufficient: every legacy Windows device name — `CON`, `PRN`, `AUX`, `NUL`, `COM1` to `COM9`,
+`LPT1` to `LPT9` — is made of letters and digits, is seven characters or fewer, and is typeable at
+the commander name prompt. Win32 resolves such a stem to the DEVICE whatever directory precedes it
+and whatever extension follows, so a player calling themselves CON would have had their commander
+written to the console, with the write reporting success, and read back from it.
+
+The near misses matter as much as the hits and the test walks them: `COM0` and `LPT0` are not
+devices, and neither is anything with a character appended, so a rule matching a prefix would
+break four ordinary names to fix twenty-two broken ones.
+
+The rule this argues for is narrower than "test everything": **when the reason something is
+untested is that it cannot be built here, price the shim before accepting the reason.** It was ten
+lines.
+
 ### 6.22 One number, two words, and a jump into the middle of the second
 
 `TT25` prints eight lines and three of them are worth writing down, because all three would pass a
@@ -1113,6 +1149,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-03 | **`SaveStore` compiled and tested, and it had a defect.** The file had been committed and left uncompiled because the only machine that could build it ran Windows, and its header argued that having no oracle meant having no test. Ten lines of Win32 stand-in in the portable runner's shim made both untrue. `PathFor` accepted `CON` — every legacy Windows device name is letters and digits and typeable at the commander name prompt, and Win32 resolves such a stem to the DEVICE whatever directory and extension surround it, so a player with that name would have had their commander written to the console. Five tests now cover the round trip, the names that must be refused, the near misses that must not be, the length check and the CR-terminated name. §6.23 records the argument. |
 | 2026-09-03 | **The Data on System screen built, which closes slice 2a.** All 2,048 systems in all eight galaxies compared character for character with the cursor stamped, `PDESC` included. The row had deferred `TT25` as "cursor and canvas work"; it is a token printer, a number printer and `TRADEMODE`, which is the fifth stale scope line this port has found. §6.22 records what the screen turned out to be: the economy is two words folded out of one number by a comparison whose carry comes from the `CMP` and not the `LSR`, the four species words share a scratch byte so the appearance decides the noun, and every planet's radius is between 2,816 and 6,911 km because of a `CLC / ADC #11`. Seventeen mutations, fifteen caught and two provably equivalent. Also adds `tools/c64_source.py`, which evaluates the upstream library's version conditionals instead of leaving them to be read by eye. |
 | 2026-09-03 | **`SVE`'s menu dispatch built, which closes slice 2d.** Twenty-one paths through the disk access menu compared against the shipped routine running whole — only the Kernal and the control-code routines that leave the text system stood in for — on every character with the cursor stamped, the keys consumed, the device traffic, both commanders byte for byte, the competition number and the carry. §6.21 records four findings, the first of them a bug a player can hit: a failed load leaves `JSR LOD`'s return address on the stack, so the next exit from the menu resumes `loading` — renaming the commander and telling `TT102` to restart the game when nothing was loaded. Option 4's carry comes from `DFAULT`'s last `CMP`; `BPRNT`'s field width is whatever the last caller left; and bit 6 of the competition flags is the C64 version stamp, not "loaded from a file" as slice 2d's comments had it. Twenty-one mutations, twenty-one caught. |
 | 2026-09-03 | **The save flow built, and it found a defect in slice 2d's shipped code (§6.20).** `SaveCommander` wrote two of the three checksums the original writes and never `CHK2`, so a file the port saved would load into the game flagged as tampered. Nothing caught it because `LoadCommander` only reads that byte, the round-trip test skipped it, and the comparison against the shipped routine **reproduced the arithmetic by hand and shared the same misreading**. Running the real `SV1` disagreed on the first commander. Sixty-seven commanders now compared file byte for byte, plus the competition number — a four-byte chain stored out of order folding the checksum, the competition flags, the third cash byte and the high byte of the kill tally. `LSR SVC` halves the save count rather than incrementing it. `Outpost/SaveStore` implements the store against LocalAppData. |
