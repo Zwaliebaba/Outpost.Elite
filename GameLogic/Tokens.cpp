@@ -2,6 +2,8 @@
 
 #include "Tokens.h"
 
+#include "TextPrint.h"
+
 #include "EliteConfig.h"
 #include "LookupTables.h"
 
@@ -44,6 +46,9 @@ constexpr std::uint8_t LETTER_PAIR_FIRST = 128;
 constexpr std::uint8_t PHRASE_AFTER_PAIRS = 160;
 constexpr std::uint8_t PHRASE_FIRST = 96;
 
+/// 6502: crlf -- LDA #21 / JSR DOXC. Where control code 9 puts the cursor before its colon.
+constexpr std::uint8_t CONTROL_CODE_9_COLUMN = 21;
+
 /// Characters 14 to 31 are phrases in disguise; this is the offset that maps them.
 constexpr std::uint8_t LOW_PHRASE_OFFSET = 114;
 constexpr std::uint8_t LOW_PHRASE_FIRST = 14;
@@ -82,9 +87,11 @@ void TokenPrinter::Print(std::uint8_t _token) noexcept
 
   if (_token == 9)
   {
-    // 6502: crlf -- returns the cursor to the left margin and prints a colon. The cursor move
-    // belongs to the canvas and lands with it in slice 1d; the colon is the visible half and
-    // is what a character-level comparison sees.
+    // 6502: crlf -- LDA #21 / JSR DOXC / JMP TT73. Tab to column 21, then a colon.
+    if (m_cursor != nullptr)
+    {
+      m_cursor->column = CONTROL_CODE_9_COLUMN;
+    }
     Print(':');
     return;
   }

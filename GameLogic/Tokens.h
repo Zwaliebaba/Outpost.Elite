@@ -5,6 +5,11 @@
 namespace Elite
 {
 
+/// Declared in TextPrint.h. The token printer only needs to move the cursor, so a pointer to an
+/// incomplete type keeps the include going one way: TextPrint knows about tokens, not the other
+/// way round.
+struct TextState;
+
 /*
  * Where printed characters go.
  *
@@ -63,6 +68,18 @@ public:
    */
   void SetValueTokens(ValueTokens* _values) noexcept { m_values = _values; }
 
+  /*
+   * 6502: XC -- the cursor, which control code 9 moves.
+   *
+   * `crlf` is `LDA #21 / JSR DOXC / JMP TT73`: tab to column 21, then a colon. Slice 1c-a printed
+   * the colon and left a comment saying the cursor move would land with the canvas; it did not,
+   * and the status screen is the first routine to notice -- it prints four headings through
+   * control code 9 and all of them came out at whatever column the previous line ended in.
+   *
+   * Optional, because every suite written before this one constructs a printer without one.
+   */
+  void SetCursor(TextState* _cursor) noexcept { m_cursor = _cursor; }
+
   /// 6502: QQ17 -- the capitalisation state. Bit 7 asks for sentence case, bit 6 records that
   /// the first letter has been seen, and 255 suppresses output entirely.
   [[nodiscard]] std::uint8_t CaseFlags() const noexcept { return m_caseFlags; }
@@ -80,6 +97,7 @@ private:
 
   TextSink& m_sink;
   ValueTokens* m_values = nullptr;
+  TextState* m_cursor = nullptr;
   std::uint8_t m_caseFlags = 0;
 };
 
