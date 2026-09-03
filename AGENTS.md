@@ -202,6 +202,31 @@ python tools/inventory.py                     # coverage ledger: ported / pendin
 **Report what you actually did.** "Builds clean, not run" and "builds, and the arithmetic suite
 is green against the oracle" are different claims. Never imply the second when you did the first.
 
+### CI
+
+[`.github/workflows/build-and-test.yml`](.github/workflows/build-and-test.yml) runs the same
+things on a push. Two jobs, because they need different machines:
+
+- **Repository checks** (Ubuntu, seconds): `inventory.py --check-includes`, `check_gamelogic.py`
+  and its `--self-test`, and the coverage ledger. This is the job that would have caught slice
+  0a's `.gitmodules` gap, because it starts from a fresh clone every time.
+- **Debug x64 build and tests** (Windows): builds BeebAsm at a pinned commit, assembles the
+  reference build, checks the generated tables against it, then builds
+  `Tests\GameLogicTests\GameLogicTests.vcxproj` and runs `vstest.console.exe`.
+
+Two things about that second job are deliberate and are explained in the workflow itself:
+
+- **It assembles the game before it builds ours.** A run without the oracle fails exactly one
+  test by design (Risk R9), so a CI that skipped this step would be permanently red for a reason
+  nobody would keep reading.
+- **It builds the test project, not the solution.** The project references pull in `GameLogic`
+  and `NeuronCore`; `Outpost.vcxproj` is the untouched WinUI 3 template that ADR-005 §5 defers,
+  and restoring the Windows App SDK to compile a project with no `Main.cpp` buys nothing.
+
+**Nothing derived from `Upstream/` leaves the runner.** The assembled blocks, the label map and
+BeebAsm are all built from source this project does not own (ADR-001 §5); the only artefact is
+the test result file. Do not add an upload that changes that.
+
 ---
 
 ## 7. Working rules
