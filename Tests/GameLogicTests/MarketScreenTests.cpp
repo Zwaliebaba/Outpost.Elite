@@ -9,6 +9,7 @@
 #include "Rng.h"
 #include "MarketScreen.h"
 #include "StateTokens.h"
+#include "StatusScreen.h"
 #include "TextPrint.h"
 #include "Tokens.h"
 
@@ -544,6 +545,7 @@ public:
                                 std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(NAME), current,
                                 selected, false);
       printer.SetValueTokens(&values);
+      printer.SetCursor(&text);
 
       ScriptedKeys keys(scenario.keys);
       RecordingEffects effects;
@@ -797,6 +799,7 @@ public:
                                 std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                 selected, false);
       printer.SetValueTokens(&values);
+      printer.SetCursor(&text);
 
       ScriptedKeys keys(scenario.keys);
       RecordingEffects effects;
@@ -854,6 +857,234 @@ public:
 
     Logger::WriteMessage(("TT210/TT213: " + std::to_string(compared)
                           + " cargo listings compared character for character, with the cursor stamped\n")
+                           .c_str());
+  }
+};
+
+TEST_CLASS(TheStatusScreenMatchesTheShippedGame)
+{
+public:
+  /*
+   * 6502: STATUS, whole screen, over the states it branches on.
+   *
+   * It reads no keys, so it needed no seam -- only the commander block. The cases cover the four
+   * condition lines (docked, and green/yellow/red in space), the three legal statuses, the rating
+   * either side of the 256-kill switch from shift-counting to comparisons, every combination of
+   * the seven equipment flags at their edges, and all four laser types.
+   */
+  TEST_METHOD(TheStatusReportMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t chpr = oracle.Label("CHPR");
+    const std::uint16_t trademode = oracle.Label("TRADEMODE");
+
+    struct Situation
+    {
+      const char* what;
+      std::uint8_t docked;
+      std::uint8_t junk;
+      std::uint8_t firstShip;
+      std::uint8_t energy;
+      std::uint8_t legal;
+      std::uint16_t kills;
+      std::uint8_t escapePod, fuelScoops, ecm, bomb, energyUnit, docking, galactic;
+      std::array<std::uint8_t, 4> lasers;
+    };
+
+    const std::vector<Situation> SITUATIONS = {
+      { "docked, clean, harmless, nothing fitted", 1, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "in space with nothing about", 0, 0, 0, 255, 0, 3, 0, 0, 0, 0, 0, 0, 0, { 15, 0, 0, 0 } },
+      { "in space, ships about, energy high", 0, 0, 5, 200, 0, 3, 0, 0, 0, 0, 0, 0, 0, { 15, 0, 0, 0 } },
+      { "in space, ships about, energy low", 0, 0, 5, 100, 0, 3, 0, 0, 0, 0, 0, 0, 0, { 15, 0, 0, 0 } },
+      { "in space, energy exactly 128", 0, 2, 9, 128, 0, 3, 0, 0, 0, 0, 0, 0, 0, { 15, 0, 0, 0 } },
+      { "an offender", 1, 0, 0, 255, 1, 5, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "one short of a fugitive", 1, 0, 0, 255, 49, 5, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "exactly a fugitive", 1, 0, 0, 255, 50, 5, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "one kill", 1, 0, 0, 255, 0, 1, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "four kills", 1, 0, 0, 255, 0, 4, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "255 kills", 1, 0, 0, 255, 0, 255, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "256 kills, the switch to comparisons", 1, 0, 0, 255, 0, 256, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "512 kills", 1, 0, 0, 255, 0, 512, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "2560 kills", 1, 0, 0, 255, 0, 2560, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "6400 kills, Elite", 1, 0, 0, 255, 0, 6400, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "everything fitted", 1, 0, 0, 255, 0, 100, 1, 1, 1, 1, 1, 1, 1, { 15, 143, 151, 50 } },
+      { "only the galactic drive", 1, 0, 0, 255, 0, 100, 0, 0, 0, 0, 0, 0, 1, { 0, 0, 0, 0 } },
+      { "only the energy bomb", 1, 0, 0, 255, 0, 100, 0, 0, 0, 1, 0, 0, 0, { 0, 0, 0, 0 } },
+      { "a laser on every mount", 1, 0, 0, 255, 0, 100, 0, 0, 0, 0, 0, 0, 0, { 143, 151, 50, 15 } },
+      { "a laser power nothing names", 1, 0, 0, 255, 0, 100, 0, 0, 0, 0, 0, 0, 0, { 99, 0, 0, 0 } },
+    };
+
+    std::uint32_t compared = 0;
+
+    for (const Situation& s : SITUATIONS)
+    {
+      const std::wstring where = Widen(std::string("STATUS: ") + s.what);
+
+      Elite::CommanderBlock commander = Elite::DefaultCommander();
+      commander.At(Elite::Field::LegalStatus) = s.legal;
+      commander.bytes[static_cast<std::size_t>(Elite::Field::Kills)] = static_cast<std::uint8_t>(s.kills & 0xFFu);
+      commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] =
+        static_cast<std::uint8_t>(s.kills >> 8);
+      commander.At(Elite::Field::EscapePod) = s.escapePod;
+      commander.At(Elite::Field::FuelScoops) = s.fuelScoops;
+      commander.At(Elite::Field::Ecm) = s.ecm;
+      commander.At(Elite::Field::EnergyBomb) = s.bomb;
+      commander.At(Elite::Field::EnergyUnit) = s.energyUnit;
+      commander.At(Elite::Field::DockingComputer) = s.docking;
+      commander.At(Elite::Field::GalacticDrive) = s.galactic;
+      for (std::size_t mount = 0; mount < 4; ++mount)
+      {
+        commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + mount] = s.lasers[mount];
+      }
+
+      constexpr std::uint8_t CROSSHAIR_X = 30;
+      constexpr std::uint8_t CROSSHAIR_Y = 160;
+
+      // ---- the shipped routine -----------------------------------------------------------
+      Cpu6502 cpu = oracle.Fresh();
+      cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+      cpu.AddTrap(trademode);
+      cpu.AddTrap(oracle.Label("NLIN"));
+      cpu.watch = { oracle.Label("XC"), oracle.Label("YC"), 0, 0 };
+
+      cpu.memory[oracle.Label("QQ12")] = s.docked;
+      cpu.memory[oracle.Label("JUNK")] = s.junk;
+      cpu.memory[static_cast<std::uint16_t>(oracle.Label("FRIN") + 2 + s.junk)] = s.firstShip;
+      cpu.memory[oracle.Label("ENERGY")] = s.energy;
+      cpu.memory[oracle.Label("FIST")] = s.legal;
+      cpu.memory[oracle.Label("TALLY")] = static_cast<std::uint8_t>(s.kills & 0xFFu);
+      cpu.memory[static_cast<std::uint16_t>(oracle.Label("TALLY") + 1)] = static_cast<std::uint8_t>(s.kills >> 8);
+      cpu.memory[oracle.Label("ESCP")] = s.escapePod;
+      cpu.memory[oracle.Label("BST")] = s.fuelScoops;
+      cpu.memory[oracle.Label("ECM")] = s.ecm;
+      cpu.memory[oracle.Label("BOMB")] = s.bomb;
+      cpu.memory[oracle.Label("ENGY")] = s.energyUnit;
+      cpu.memory[oracle.Label("DKCMP")] = s.docking;
+      cpu.memory[oracle.Label("GHYP")] = s.galactic;
+      for (std::size_t mount = 0; mount < 4; ++mount)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)] = s.lasers[mount];
+      }
+      cpu.memory[oracle.Label("QQ9")] = CROSSHAIR_X;
+      cpu.memory[oracle.Label("QQ10")] = CROSSHAIR_Y;
+      cpu.memory[oracle.Label("QQ0")] = commander.At(Elite::Field::SystemX);
+      cpu.memory[oracle.Label("QQ1")] = commander.At(Elite::Field::SystemY);
+
+      // The status screen's top four lines print the fuel and the cash through control codes 5
+      // and 0, which is not obvious from its source -- they arrive inside recursive token 126.
+      cpu.memory[oracle.Label("QQ14")] = commander.At(Elite::Field::Fuel);
+      cpu.memory[oracle.Label("GCNT")] = commander.At(Elite::Field::GalaxyNumber);
+      for (std::size_t index = 0; index < 4; ++index)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)] =
+          commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+      }
+      const Elite::SystemSeeds galaxy = commander.GalaxySeeds();
+      for (std::size_t index = 0; index < 6; ++index)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ21") + index)] = galaxy.bytes[index];
+
+        // QQ2 is the CURRENT system's seeds, which control code 2 prints. Leaving it at whatever
+        // a fresh image holds made the game print an empty name where the port printed a real
+        // one -- a hole in the setup rather than a difference in the port.
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ2") + index)] = galaxy.bytes[index];
+      }
+      for (std::size_t index = 0; index < Elite::COMMANDER_NAME_SIZE; ++index)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("NAME") + index)] =
+          Elite::DefaultCommanderName()[index];
+      }
+      cpu.memory[oracle.Label("QQ17")] = 0;
+      cpu.memory[oracle.Label("XC")] = 1;
+      cpu.memory[oracle.Label("YC")] = 1;
+      cpu.memory[oracle.Label("DTW1")] = 0;
+      cpu.memory[oracle.Label("DTW2")] = 0xFF;
+      cpu.memory[oracle.Label("DTW3")] = 0;
+      cpu.memory[oracle.Label("DTW4")] = 0;
+      cpu.memory[oracle.Label("DTW5")] = 0;
+      cpu.memory[oracle.Label("DTW6")] = 0;
+      cpu.memory[oracle.Label("DTW8")] = 0xFF;
+
+      cpu.a = cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      const auto run = cpu.CallSubroutine(oracle.Label("STATUS"), 4'000'000);
+      Assert::IsTrue(run.completed && !run.illegalOpcode, (where + L": STATUS should return").c_str());
+
+      std::vector<std::uint32_t> expected;
+      for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+      {
+        if (hit.address == chpr)
+        {
+          expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8)
+                             | (static_cast<std::uint32_t>(hit.watched[1]) << 16));
+        }
+      }
+
+      // ---- the port ------------------------------------------------------------------------
+      RecordingSink sink;
+      Elite::TextState text;
+      text.column = 1;
+      text.row = 1;
+      text.caseFlags = 0;
+      sink.cursor = &text;
+      Elite::CharacterPrinter characters(sink);
+      characters.state.sentenceStart = 0xFF;
+      Elite::TokenPrinter printer(characters);
+      printer.SetCaseFlags(0);
+
+      const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
+      Elite::SystemSeeds current = galaxy;
+      Elite::SystemSeeds selected = galaxy;
+      Elite::StateTokens values(printer, text, commander,
+                                std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
+                                selected, false);
+      printer.SetValueTokens(&values);
+      printer.SetCursor(&text);
+
+      ScriptedKeys keys({});
+      RecordingEffects effects;
+      Elite::Rng rng;
+      Elite::ExtendedTokenPrinter extended(characters, printer, rng);
+      Elite::TradeScreen screen{ printer, characters, extended, text, keys, effects, rng };
+
+      const Elite::ShipCondition condition{ s.docked, s.junk, s.firstShip, s.energy };
+      Elite::StatusScreen(screen, commander, condition, CROSSHAIR_X, CROSSHAIR_Y, selected);
+
+      if (sink.stamped != expected)
+      {
+        Assert::Fail((where + L" differs, " + FirstDifference(expected, sink.stamped)).c_str());
+      }
+
+      /*
+       * QQ17 at the end, which is state the characters alone do not show.
+       *
+       * The docked branch prints its newline through TT67K -- LDA #12 falling straight into CHPR
+       * -- rather than through TT67, which goes via TT27. For character 12 the two print the same
+       * byte, but TT27's path CLEARS the "first letter seen" bit on a non-letter and TT67K does
+       * not touch QQ17 at all, so the next letter would capitalise differently. Comparing the
+       * flags is what tells them apart; a mutation swapping one for the other passed without it.
+       */
+      Assert::AreEqual(cpu.memory[oracle.Label("QQ17")], printer.CaseFlags(),
+                       (where + L": the case flags at the end").c_str());
+
+      // TT111 leaves the system it found in QQ15, and the screen's title line reads it.
+      for (std::size_t index = 0; index < 6; ++index)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ15") + index)],
+                         selected.bytes[index],
+                         (where + L": the selected system's seed byte " + std::to_wstring(index)).c_str());
+      }
+
+      ++compared;
+    }
+
+    Logger::WriteMessage(("STATUS: " + std::to_string(compared)
+                          + " status screens compared character for character, with the cursor stamped\n")
                            .c_str());
   }
 };
