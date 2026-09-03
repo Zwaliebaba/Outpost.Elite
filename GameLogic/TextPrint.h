@@ -122,4 +122,21 @@ private:
   TextEffects* m_effects = nullptr;
 };
 
+/*
+ * The three token wrappers that also move the cursor.
+ *
+ * They are here rather than beside the others in Tokens.h because they need a TextState as well
+ * as a TokenPrinter, and Tokens.h is the header TextPrint.h includes rather than the other way
+ * round.
+ */
+
+/// 6502: INCYC -- INC YC. The whole routine.
+void MoveCursorDown(TextState& _text) noexcept;
+
+/// 6502: TT60, which falls into TTX69 and then into TT69 -- a token, a row down, sentence case.
+void PrintThenDownAndSentenceCase(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
+
+/// 6502: plf2 -- JSR plf / LDA #6 / JMP DOXC. A token, a newline, then indent to column six.
+void PrintThenIndent(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
+
 } // namespace Elite
