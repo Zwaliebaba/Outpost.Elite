@@ -66,6 +66,11 @@ struct Scratch
   std::uint16_t k3 = 0;
   std::uint16_t k4 = 0;
   std::uint16_t stp = 0;
+  std::uint16_t qq8 = 0;
+  std::uint16_t qq12 = 0;
+  std::uint16_t qq22 = 0;
+  std::uint16_t safehouse = 0;
+  std::uint16_t klo = 0;
   std::uint16_t screen = 0;
 
   explicit Scratch(const OracleImage& _oracle)
@@ -82,6 +87,11 @@ struct Scratch
     , k3(_oracle.Label("K3"))
     , k4(_oracle.Label("K4"))
     , stp(_oracle.Label("STP"))
+    , qq8(_oracle.Label("QQ8"))
+    , qq12(_oracle.Label("QQ12"))
+    , qq22(_oracle.Label("QQ22"))
+    , safehouse(_oracle.Label("safehouse"))
+    , klo(_oracle.Label("KLO"))
   {
     const Cpu6502 cpu = _oracle.Fresh();
     const std::uint16_t low = _oracle.Label("ylookupl");
@@ -194,6 +204,35 @@ struct GalaxyNumber : public Elite::ValueTokens
   std::uint32_t unexpected = 0;
 };
 
+/*
+ * 6502: CHPR, with a note of every character that reached it.
+ *
+ * The charts are compared by whole screen, but hyp's own output is compared as CHARACTERS,
+ * because CHPR is trapped in the oracle for those runs and never draws anything. So the port's
+ * printer keeps a list as well as drawing.
+ */
+struct RecordingScreen : public Elite::TextPrinter
+{
+  RecordingScreen(Canvas& _canvas, Elite::TextState& _state) noexcept
+    : Elite::TextPrinter(_canvas, _state)
+  {
+  }
+
+  void Put(std::uint8_t _character) noexcept override
+  {
+    characters.push_back(_character);
+    if (draw)
+    {
+      Elite::TextPrinter::Put(_character);
+    }
+  }
+
+  /// Cleared for the runs whose oracle has CHPR trapped, so that neither side draws a glyph and
+  /// the canvas carries only what the drawing routines put there.
+  bool draw = true;
+  std::vector<std::uint8_t> characters;
+};
+
 /// The port's side of the same: the two text systems wired to the canvas the way the game wires
 /// them -- token printer into DASC, DASC into CHPR.
 struct PortScreen
@@ -202,6 +241,7 @@ struct PortScreen
     : screen(canvas, text)
     , characters(screen)
     , printer(characters, &galaxy)
+    , extended(characters, printer, rng)
   {
     galaxy.number = _galaxy;
     text.column = 1;
@@ -216,10 +256,54 @@ struct PortScreen
   DrawWorkspace work;
   Elite::TextState text;
   GalaxyNumber galaxy;
-  Elite::TextPrinter screen;
+  Elite::Rng rng;
+  RecordingScreen screen;
   Elite::CharacterPrinter characters;
   Elite::TokenPrinter printer;
+  Elite::ExtendedTokenPrinter extended;
 };
+
+/// 6502: CLYNS, which clears screen memory the port has no canvas for.
+struct CountedEffects : public Elite::ChartEffects
+{
+  void ClearBottomRows() override { ++cleared; }
+  std::uint32_t cleared = 0;
+};
+
+class CapturingSink : public Elite::TextSink
+{
+public:
+  void Put(std::uint8_t _character) override { characters.push_back(_character); }
+  std::vector<std::uint8_t> characters;
+};
+
+std::wstring Describe(const std::vector<std::uint8_t>& _bytes)
+{
+  std::wstring text = L"[";
+  for (std::size_t index = 0; index < _bytes.size() && index < 48; ++index)
+  {
+    if (index != 0)
+    {
+      text += L' ';
+    }
+    text += std::to_wstring(_bytes[index]);
+  }
+  if (_bytes.size() > 48)
+  {
+    text += L" ...";
+  }
+  return text + L"]";
+}
+
+std::string AsText(const std::vector<std::uint8_t>& _bytes)
+{
+  std::string text;
+  for (const std::uint8_t byte : _bytes)
+  {
+    text += (byte >= 32 && byte < 127) ? static_cast<char>(byte) : '.';
+  }
+  return text;
+}
 } // namespace
 
 TEST_CLASS(ChartsAgainstTheShippedGame)
@@ -719,6 +803,317 @@ public:
                           + std::to_string(discsSeen) + " system discs")
                            .c_str());
     Assert::IsTrue(discsSeen > 50, L"the sample should put a good number of systems on screen");
+  }
+
+  /*
+   * 6502: TT147 and ee3 -- the two messages hyp prints besides the system's name.
+   *
+   * ee3 is swept over every count a byte can hold, because it is BPRNT under a fixed width and
+   * the padding is where number printers go wrong.
+   */
+  TEST_METHOD(RangeErrorAndCountdownMatchTheShippedRoutines)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t chpr = oracle.Label("CHPR");
+
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+      cpu.memory[oracle.Label("QQ17")] = 0;
+      SeedAfterScreenReset(cpu, oracle);
+      cpu.memory[oracle.Label("QQ17")] = 0;
+      cpu.a = cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      Assert::IsTrue(cpu.CallSubroutine(oracle.Label("TT147"), 200'000).completed, L"TT147 should return");
+
+      std::vector<std::uint8_t> expected;
+      for (const auto& hit : cpu.trapHits)
+      {
+        expected.push_back(hit.a);
+      }
+
+      CapturingSink sink;
+      Elite::CharacterPrinter characters(sink);
+      characters.state.sentenceStart = 0xFF;
+      Elite::TokenPrinter printer(characters);
+      printer.SetCaseFlags(0);
+      Elite::PrintRangeError(printer);
+
+      Assert::IsTrue(sink.characters == expected,
+                     (L"TT147 differs\n  game: " + Describe(expected) + L"\n  port: "
+                      + Describe(sink.characters))
+                       .c_str());
+      Logger::WriteMessage(("TT147: \"" + AsText(expected) + "\"").c_str());
+    }
+
+    std::uint32_t compared = 0;
+    for (std::uint32_t count = 0; count < 256; ++count)
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+      SeedAfterScreenReset(cpu, oracle);
+      cpu.memory[oracle.Label("QQ17")] = 0;
+      cpu.a = 0;
+      cpu.x = static_cast<std::uint8_t>(count);
+      cpu.y = 0;
+      cpu.sp = 0xFD;
+      Assert::IsTrue(cpu.CallSubroutine(oracle.Label("ee3"), 200'000).completed, L"ee3 should return");
+
+      std::vector<std::uint8_t> expected;
+      for (const auto& hit : cpu.trapHits)
+      {
+        expected.push_back(hit.a);
+      }
+
+      CapturingSink sink;
+      Elite::CharacterPrinter characters(sink);
+      characters.state.sentenceStart = 0xFF;
+      Elite::TextState text;
+      text.column = 9;
+      text.row = 9;
+      Elite::PrintCountdown(characters, text, static_cast<std::uint8_t>(count));
+
+      const std::wstring where = L"ee3(" + std::to_wstring(count) + L")";
+      Assert::IsTrue(sink.characters == expected,
+                     (where + L" differs\n  game: " + Describe(expected) + L"\n  port: "
+                      + Describe(sink.characters))
+                       .c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("XC")], text.column, (where + L": XC").c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("YC")], text.row, (where + L": YC").c_str());
+      ++compared;
+    }
+
+    Logger::WriteMessage(("ee3: " + std::to_string(compared) + " countdowns compared").c_str());
+  }
+
+  /*
+   * 6502: hm -- erase the crosshair, find the system nearest it, draw it again, clear the message
+   * rows. Compared as a whole screen plus the coordinates it settles on.
+   */
+  TEST_METHOD(SelectingTheNearestSystemMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+
+    SystemSeeds galaxy = Elite::GALAXY_ONE_SEEDS;
+    std::uint32_t compared = 0;
+
+    for (int galaxyNumber = 1; galaxyNumber <= 4; ++galaxyNumber)
+    {
+      for (const std::uint32_t view : { 0x40u, 0x80u })
+      {
+        for (const std::uint32_t cursor : { 0u, 30u, 96u, 150u, 200u, 255u })
+        {
+          ChartView chart;
+          chart.view = static_cast<std::uint8_t>(view);
+          chart.homeX = 20;
+          chart.homeY = 173;
+          chart.cursorX = static_cast<std::uint8_t>(cursor);
+          chart.cursorY = static_cast<std::uint8_t>(255u - cursor);
+
+          Cpu6502 cpu = oracle.Fresh();
+          cpu.AddTrap(oracle.Label("CLYNS"));
+          LoadSeeds(cpu, zp.qq21, galaxy);
+          SeedChart(cpu, zp, chart);
+          cpu.a = cpu.x = cpu.y = 0;
+          cpu.sp = 0xFD;
+          Assert::IsTrue(cpu.CallSubroutine(oracle.Label("hm"), 2'000'000).completed, L"hm should return");
+
+          Canvas canvas;
+          DrawWorkspace work;
+          CountedEffects effects;
+          ChartView ours = chart;
+          const Elite::NearestSystem nearest =
+            Elite::SelectNearestSystem(canvas, work, ours, galaxy, &effects);
+
+          const std::wstring where = Where(L"hm", chart) + L" galaxy " + std::to_wstring(galaxyNumber);
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq9], ours.cursorX, (where + L": QQ9").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq10], ours.cursorY, (where + L": QQ10").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq8], static_cast<std::uint8_t>(nearest.distance),
+                                          (where + L": QQ8").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.qq8 + 1)],
+                                          static_cast<std::uint8_t>(nearest.distance >> 8),
+                                          (where + L": QQ8+1").c_str());
+          Assert::AreEqual<std::uint32_t>(1u, effects.cleared, (where + L": CLYNS reached once").c_str());
+          CompareScreens(cpu, zp.screen, canvas, where);
+          ++compared;
+        }
+      }
+      Elite::NextGalaxy(galaxy);
+    }
+
+    Logger::WriteMessage(("hm: " + std::to_string(compared) + " selections compared by whole screen").c_str());
+  }
+
+  /*
+   * 6502: hyp -- the hyperspace key, over every branch it has.
+   *
+   * CTRL is not trapped: it reads KLO+6 and hands it back, so the keyboard is set by writing that
+   * byte, which is what the interrupt handler would have done. CLYNS and CHPR are trapped, and
+   * Ghy is trapped so that taking the galactic branch is visible without running the equipment
+   * check behind it.
+   *
+   * What is compared is the branch taken, the text printed, the countdown, the seeds saved for
+   * the jump, and the screen -- because on a chart hyp moves the crosshairs through hm before it
+   * decides anything.
+   */
+  TEST_METHOD(HyperspaceRequestMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t ghy = oracle.Label("Ghy");
+
+    SystemSeeds galaxy = Elite::GALAXY_ONE_SEEDS;
+    std::uint32_t compared = 0;
+    std::array<std::uint32_t, 6> outcomes{};
+
+    for (int galaxyNumber = 1; galaxyNumber <= 2; ++galaxyNumber)
+    {
+      for (const std::uint32_t docked : { 0u, 1u })
+      {
+        for (const std::uint32_t countdown : { 0u, 5u })
+        {
+          for (const std::uint32_t control : { 0u, 0x80u })
+          {
+            for (const std::uint32_t view : { 0u, 0x20u, 0x40u, 0x80u })
+            {
+              for (const std::uint32_t fuel : { 0u, 10u, 70u, 255u })
+              {
+                for (const std::uint32_t cursor : { 20u, 40u, 96u, 200u })
+                {
+                  ChartView chart;
+                  chart.view = static_cast<std::uint8_t>(view);
+                  chart.fuel = static_cast<std::uint8_t>(fuel);
+                  chart.homeX = 20;
+                  chart.homeY = 173;
+                  chart.cursorX = static_cast<std::uint8_t>(cursor);
+                  chart.cursorY = static_cast<std::uint8_t>(173u - cursor / 2u);
+
+                  Cpu6502 cpu = oracle.Fresh();
+                  cpu.AddTrap(oracle.Label("CHPR"), Cpu6502::TrapExit::ClearCarry);
+                  cpu.AddTrap(oracle.Label("CLYNS"));
+                  cpu.AddTrap(ghy);
+                  LoadSeeds(cpu, zp.qq21, galaxy);
+                  SeedChart(cpu, zp, chart);
+                  SeedAfterScreenReset(cpu, oracle);
+                  cpu.memory[zp.qq12] = static_cast<std::uint8_t>(docked);
+                  cpu.memory[static_cast<std::uint16_t>(zp.qq22 + 1)] = static_cast<std::uint8_t>(countdown);
+                  cpu.memory[zp.qq22] = static_cast<std::uint8_t>(countdown);
+
+                  // 6502: CTRL is LDX #6 / LDA KLO,X / TAX / RTS, so the key is a byte in the
+                  // table the interrupt handler fills rather than anything to trap.
+                  cpu.memory[static_cast<std::uint16_t>(zp.klo + 6)] = static_cast<std::uint8_t>(control);
+
+                  cpu.a = cpu.x = cpu.y = 0;
+                  cpu.sp = 0xFD;
+                  const auto run = cpu.CallSubroutine(oracle.Label("hyp"), 5'000'000);
+                  Assert::IsTrue(run.completed && !run.illegalOpcode, L"hyp should return");
+
+                  std::vector<std::uint8_t> expected;
+                  bool wentGalactic = false;
+                  for (const auto& hit : cpu.trapHits)
+                  {
+                    if (hit.address == ghy)
+                    {
+                      wentGalactic = true;
+                    }
+                    else if (hit.address == oracle.Label("CHPR"))
+                    {
+                      expected.push_back(hit.a);
+                    }
+                  }
+
+                  PortScreen port(static_cast<std::uint8_t>(galaxyNumber - 1));
+                  port.screen.draw = false; // the oracle's CHPR is trapped, so neither side draws
+                  CountedEffects effects;
+                  Elite::JumpState jump;
+                  jump.docked = static_cast<std::uint8_t>(docked);
+                  jump.countdown = static_cast<std::uint8_t>(countdown);
+                  jump.controlHeld = control != 0;
+
+                  ChartView ours = chart;
+                  const Elite::JumpOutcome outcome =
+                    Elite::RequestHyperspace(port.canvas, port.work, port.printer, port.extended, port.text, ours,
+                                             jump, galaxy, &effects);
+
+                  const std::wstring where = Where(L"hyp", chart) + L" docked=" + std::to_wstring(docked)
+                                             + L" count=" + std::to_wstring(countdown) + L" ctrl="
+                                             + std::to_wstring(control) + L" galaxy=" + std::to_wstring(galaxyNumber);
+
+                  Assert::AreEqual(wentGalactic, outcome == Elite::JumpOutcome::Galactic,
+                                   (where + L": the galactic branch").c_str());
+
+                  // The screen text is compared through the sink rather than the canvas, because
+                  // CHPR is trapped and never draws; the canvas carries hm's crosshairs only.
+                  Assert::IsTrue(port.screen.characters == expected,
+                                 (where + L" text differs\n  game: " + Describe(expected) + L"\n  port: "
+                                  + Describe(port.screen.characters))
+                                   .c_str());
+
+                  Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq9], ours.cursorX, (where + L": QQ9").c_str());
+                  Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq10], ours.cursorY, (where + L": QQ10").c_str());
+                  Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.qq22 + 1)],
+                                                  jump.countdown, (where + L": QQ22+1").c_str());
+
+                  /*
+                   * The cursor has to be compared on its own. CHPR is trapped on both sides, so
+                   * nothing it would have drawn reaches the screen -- which means a message put
+                   * on the wrong row is invisible to the whole-screen compare below.
+                   */
+                  Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("XC")], port.text.column,
+                                                  (where + L": XC").c_str());
+                  Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("YC")], port.text.row,
+                                                  (where + L": YC").c_str());
+
+                  if (outcome == Elite::JumpOutcome::CountingDown || outcome == Elite::JumpOutcome::OutOfRange)
+                  {
+                    for (std::size_t index = 0; index < jump.target.bytes.size(); ++index)
+                    {
+                      Assert::AreEqual<std::uint32_t>(
+                        cpu.memory[static_cast<std::uint16_t>(zp.safehouse + index)], jump.target.bytes[index],
+                        (where + L": safehouse " + std::to_wstring(index)).c_str());
+                    }
+                  }
+
+                  CompareScreens(cpu, zp.screen, port.canvas, where);
+
+                  ++outcomes[static_cast<std::size_t>(outcome)];
+                  ++compared;
+                }
+              }
+            }
+          }
+        }
+      }
+      Elite::NextGalaxy(galaxy);
+    }
+
+    std::string report = "hyp: " + std::to_string(compared) + " requests compared. Outcomes:";
+    const char* names[] = { " docked=", " busy=", " galactic=", " already-there=", " out-of-range=",
+                            " counting-down=" };
+    for (std::size_t index = 0; index < outcomes.size(); ++index)
+    {
+      report += names[index] + std::to_string(outcomes[index]);
+    }
+    Logger::WriteMessage(report.c_str());
+
+    // Every branch must actually be reached, or the sweep is testing less than it looks.
+    for (std::size_t index = 0; index < outcomes.size(); ++index)
+    {
+      Assert::IsTrue(outcomes[index] > 0, L"every branch of hyp should be exercised");
+    }
   }
 
   /*

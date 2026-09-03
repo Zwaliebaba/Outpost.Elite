@@ -161,6 +161,11 @@ public:
   /// only callers in the game.
   void PrintByte(std::uint8_t _byte) noexcept;
 
+  /// 6502: DASC -- the routine this printer sends its characters to, and the one every other
+  /// part of the game prints through as well. Callers that print a NUMBER rather than a token
+  /// need it, because BPRNT ends there too.
+  [[nodiscard]] CharacterPrinter& Characters() noexcept { return m_characters; }
+
   /// 6502: DTW1 to DTW8, and BUF. They live with DASC because that is the routine that reads
   /// and writes most of them.
   [[nodiscard]] ExtendedTextState& State() noexcept { return m_characters.state; }

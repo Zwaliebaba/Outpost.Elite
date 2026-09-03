@@ -176,6 +176,94 @@ void DrawShortRangeChart(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _p
                          const ChartView& _view, const SystemSeeds& _galaxy, ChartShapes* _shapes) noexcept;
 
 /*
+ * 6502: CLYNS -- clear the bottom two rows of the screen and put the cursor there.
+ *
+ * The chart routines reach it through `hm`, and it clears screen memory the way TT66 does, so it
+ * is the same seam control code 21 already declares. The two flags it sets are text state and are
+ * set by the caller rather than here.
+ */
+class ChartEffects
+{
+public:
+  virtual ~ChartEffects() = default;
+  virtual void ClearBottomRows() = 0;
+};
+
+/*
+ * 6502: QQ12, QQ22, QQ8 and safehouse -- what choosing a hyperspace target reads and writes
+ * besides the chart.
+ *
+ * None of this is the charts' own state: it is the commander's, and slice 2d owns where it lives.
+ * It arrives here as a value for the same reason the market's does -- the arithmetic that reads
+ * it is this slice's even though the bytes are not.
+ */
+struct JumpState
+{
+  std::uint8_t docked = 0;    ///< 6502: QQ12 -- non-zero while docked, and you cannot jump docked
+  std::uint8_t countdown = 0; ///< 6502: QQ22+1 -- non-zero while a jump is already counting down
+  std::uint16_t distance = 0; ///< 6502: QQ8 -- how far the selected system is, in tenths
+  bool controlHeld = false;   ///< 6502: JSR CTRL / BMI Ghy -- the galactic hyperdrive's key
+
+  /// 6502: safehouse -- the seeds of the system being jumped to, saved because the countdown
+  /// runs while the player keeps moving the crosshairs.
+  SystemSeeds target;
+};
+
+/// What `hyp` decided. The original says it by which routine it jumps to; this says it by name.
+enum class JumpOutcome
+{
+  Docked,       ///< 6502: dockEd -- and the message has been printed
+  Busy,         ///< a countdown is already running, or the view cannot select a system
+  Galactic,     ///< 6502: Ghy -- CTRL was held, and that needs equipment state (slice 2d)
+  AlreadyThere, ///< the crosshairs are on the system you are in, so there is nothing to jump to
+  OutOfRange,   ///< 6502: TT147 -- too far or not enough fuel, and "RANGE?" has been printed
+  CountingDown, ///< the name has been printed and the countdown has started
+};
+
+/*
+ * 6502: TT147 -- "RANGE?", which is a token and a question mark.
+ *
+ * Reached both from `hyp` and from the equipment screen, which is why it is a routine of its own
+ * for two instructions.
+ */
+void PrintRangeError(TokenPrinter& _printer) noexcept;
+
+/*
+ * 6502: ee3 -- print the hyperspace countdown at the top left.
+ *
+ * Three digits and no decimal point, at (1, 1). The cursor move is two calls that share their
+ * argument: DOXC and DOYC are both handed the same 1, which is why the number sits in the corner
+ * rather than anywhere the caller chose.
+ */
+void PrintCountdown(TextSink& _sink, TextState& _text, std::uint8_t _count) noexcept;
+
+/*
+ * 6502: hm -- put the crosshairs on the system nearest to where they are, and clear the message
+ * rows underneath.
+ *
+ * Erase, search, redraw: the first TT103 rubs out the crosshair that is there, because LOIN
+ * draws by EOR, and the second draws it at wherever TT111 settled.
+ */
+NearestSystem SelectNearestSystem(Canvas& _canvas, DrawWorkspace& _work, ChartView& _view,
+                                  const SystemSeeds& _galaxy, ChartEffects* _effects) noexcept;
+
+/*
+ * 6502: hyp -- the hyperspace key, up to the point where the countdown starts.
+ *
+ * Everything after the countdown is arrival: `hyp1` copies the saved seeds over the commander's
+ * system and rolls a new market, and `TT18` deducts the fuel and flies the tunnel. Those are the
+ * commander's and the flight model's, so this stops where the countdown begins.
+ *
+ * The two range tests are not one test. A distance of 256 tenths or more fails on its HIGH byte
+ * alone, before the fuel is looked at; only then is the low byte compared against the fuel. So a
+ * system 25.6 light years away is out of range even with a full tank, and the message is the same
+ * one you get for having no fuel.
+ */
+JumpOutcome RequestHyperspace(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _printer,
+                              ExtendedTokenPrinter& _extended, TextState& _text, ChartView& _view,
+                              JumpState& _jump, const SystemSeeds& _galaxy, ChartEffects* _effects) noexcept;
+
+/*
  * 6502: HME2's HME3 loop -- find a system by the name that was typed.
  *
  * The search is the justification buffer used as a scratch pad. Control code 14 turns buffering
