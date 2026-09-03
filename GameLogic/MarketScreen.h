@@ -3,6 +3,7 @@
 #include "Commander.h"
 #include "ExtendedTokens.h"
 #include "Market.h"
+#include "Rng.h"
 #include "TextPrint.h"
 #include "Tokens.h"
 
@@ -66,10 +67,18 @@ struct TradeScreen
 {
   TokenPrinter& printer;
   CharacterPrinter& characters;
+  ExtendedTokenPrinter& extended;
   TextState& text;
   KeySource& keys;
   TradeScreenEffects& effects;
+  Rng& rng;
 };
+
+/// 6502: QQ11 -- which trading screen this is. The value decides whether the cargo listing offers
+/// each item for sale or only lists it, so it is an argument rather than a constant.
+inline constexpr std::uint8_t BUY_CARGO_VIEW = 2;
+inline constexpr std::uint8_t SELL_CARGO_VIEW = 4;
+inline constexpr std::uint8_t INVENTORY_VIEW = 8;
 
 /*
  * 6502: TT219 -- the buy screen.
@@ -94,5 +103,43 @@ struct TradeScreen
  */
 void BuyScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market,
                std::uint8_t _economy, bool _misJumped) noexcept;
+
+/*
+ * 6502: TT210 -- list what is in the hold, and on the Sell Cargo screen offer each item for sale.
+ *
+ * ONE routine for two screens, told apart by `LDA QQ11 / CMP #4`. The inventory screen falls into
+ * it from TT213 with QQ11 = 8 and gets a list; the sell screen enters at the top with QQ11 = 4
+ * and gets a list with a "SELL (Y/N)?" after every line. That is why this takes the view rather
+ * than being written twice.
+ *
+ * The selling half has two details worth knowing. It prints the item's line a second time with
+ * PRINTING SWITCHED OFF -- `LDX #255 / STX QQ17 / JSR TT151` -- purely to leave the price in
+ * QQ24, so a routine whose job is to print is called for its arithmetic. And because every price
+ * goes through `var`, that call also zeroes Alien Items' availability (§6.16): SELLING anything
+ * makes them unavailable, which is the fourth place this one side effect has surfaced.
+ *
+ * A refused quantity jumps to NWDAV4, which prints "ITEM?", beeps, and re-enters at the TOP of
+ * the item's line -- so the whole line is printed again, not just the question.
+ *
+ * The Trumble tail at the end runs on the inventory screen only. Its extended tokens are all
+ * blank in this version of Elite, so nothing of it is visible except the count and a possible
+ * "s" -- but it calls DORND, so it moves the random state, and that is observable.
+ */
+void ListCargo(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market, std::uint8_t _economy,
+               std::uint8_t _view) noexcept;
+
+/*
+ * 6502: TT213 -- the inventory screen, which FALLS INTO TT210.
+ *
+ * A title, a rule, the fuel and cash lines, and the words "LARGE CARGO BAY" when the hold is a
+ * big one. That last test is `LDA CRGO / CMP #26`, and 26 sits between the two capacities as they
+ * are STORED rather than as they are described: a standard hold is 22 and a large one 37, because
+ * CRGO holds two more than the tonnage it stands for (§6.15).
+ *
+ * The rule is NLIN4, which is the canvas's rather than this routine's, so a caller draws
+ * DrawSeparator at row 19 -- the same split the market screen already uses for NLIN3.
+ */
+void InventoryScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market,
+                     std::uint8_t _economy) noexcept;
 
 } // namespace Elite

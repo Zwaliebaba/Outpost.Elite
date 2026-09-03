@@ -6,6 +6,7 @@
 #include "Commander.h"
 #include "ExtendedTokens.h"
 #include "Market.h"
+#include "Rng.h"
 #include "MarketScreen.h"
 #include "StateTokens.h"
 #include "TextPrint.h"
@@ -546,7 +547,9 @@ public:
 
       ScriptedKeys keys(scenario.keys);
       RecordingEffects effects;
-      Elite::TradeScreen screen{ printer, characters, text, keys, effects };
+      Elite::Rng rng;
+      Elite::ExtendedTokenPrinter extended(characters, printer, rng);
+      Elite::TradeScreen screen{ printer, characters, extended, text, keys, effects, rng };
 
       Elite::BuyScreen(screen, commander, market, ECONOMY, false);
 
@@ -588,6 +591,269 @@ public:
 
     Logger::WriteMessage(("TT219: " + std::to_string(compared)
                           + " buy screens compared character for character, with the cursor stamped\n")
+                           .c_str());
+  }
+};
+
+TEST_CLASS(TheCargoListingMatchesTheShippedGame)
+{
+public:
+  /*
+   * 6502: TT210 as the Sell Cargo screen, and TT213 as the Inventory screen.
+   *
+   * One routine, two screens, told apart by QQ11 -- so both are driven through the same
+   * comparison with the view as a parameter. The scripts exercise selling nothing, selling some,
+   * selling the lot with "Y", refusing with "N", a quantity larger than the hold (which reprints
+   * the whole line rather than just the question), and a letter that abandons the screen.
+   *
+   * The inventory cases add what only that screen reaches: the large cargo bay line, and the
+   * Trumble tail with none, one and several -- which prints almost nothing but moves the random
+   * state, so the state is compared afterwards.
+   */
+  TEST_METHOD(ListingAndSellingCargoMatchTheShippedRoutines)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t chpr = oracle.Label("CHPR");
+    const std::uint16_t tt217 = oracle.Label("TT217");
+    const std::uint16_t trademode = oracle.Label("TRADEMODE");
+    const std::uint16_t clyns = oracle.Label("CLYNS");
+    const std::uint16_t dn2 = oracle.Label("dn2");
+    const std::uint16_t rand = oracle.Label("RAND");
+
+    struct Scenario
+    {
+      const char* what;
+      std::uint8_t view;         ///< 4 sells, 8 lists
+      std::vector<std::uint8_t> keys;
+      std::uint8_t held;         ///< how much of everything is in the hold
+      std::uint8_t capacity;     ///< CRGO as stored, so 22 is a standard hold and 37 a large one
+      std::uint16_t trumbles;
+    };
+
+    const std::vector<std::uint8_t> RETURNS(24, 13);
+    const auto withReturns = [&RETURNS](std::vector<std::uint8_t> _first) {
+      _first.insert(_first.end(), RETURNS.begin(), RETURNS.end());
+      return _first;
+    };
+
+    const std::vector<Scenario> SCENARIOS = {
+      { "an empty hold, listed", Elite::INVENTORY_VIEW, {}, 0, 22, 0 },
+      { "a full hold, listed", Elite::INVENTORY_VIEW, {}, 5, 22, 0 },
+      { "a large cargo bay", Elite::INVENTORY_VIEW, {}, 3, 37, 0 },
+      /*
+       * The two capacities either side of the threshold. Neither is a capacity the game hands
+       * out -- a standard hold stores 22 and a large one 37 -- but `CMP #26` reads CRGO as a
+       * byte, and testing only the two real values leaves the constant free to move by one in
+       * either direction. Found by mutation: 25 passed as readily as 26.
+       */
+      { "one below the large-bay threshold", Elite::INVENTORY_VIEW, {}, 3, 25, 0 },
+      { "exactly the large-bay threshold", Elite::INVENTORY_VIEW, {}, 3, 26, 0 },
+      { "one Trumble", Elite::INVENTORY_VIEW, {}, 2, 22, 1 },
+      { "several Trumbles", Elite::INVENTORY_VIEW, {}, 2, 22, 700 },
+      { "sell nothing", Elite::SELL_CARGO_VIEW, RETURNS, 5, 22, 0 },
+      { "sell one of the first", Elite::SELL_CARGO_VIEW, withReturns({ '1', 13 }), 5, 22, 0 },
+      { "sell the lot with Y", Elite::SELL_CARGO_VIEW, withReturns({ 'Y' }), 5, 22, 0 },
+      { "refuse with N", Elite::SELL_CARGO_VIEW, withReturns({ 'N' }), 5, 22, 0 },
+      { "more than the hold holds", Elite::SELL_CARGO_VIEW, withReturns({ '9', 13 }), 5, 22, 0 },
+      { "a letter leaves at once", Elite::SELL_CARGO_VIEW, { 'C' }, 5, 22, 0 },
+    };
+
+    // A fixed random state, so the Trumble tail's DORND has somewhere to start from.
+    const std::array<std::uint8_t, 4> SEED = { 0x21, 0x43, 0x65, 0x87 };
+
+    std::uint32_t compared = 0;
+
+    for (const Scenario& scenario : SCENARIOS)
+    {
+      constexpr std::uint8_t ECONOMY = 3;
+      constexpr std::uint8_t RANDOMISER = 37;
+      const bool inventory = scenario.view == Elite::INVENTORY_VIEW;
+
+      const std::wstring where =
+        Widen(std::string(inventory ? "TT213: " : "TT210: ") + scenario.what);
+
+      // ---- the shipped routine ------------------------------------------------------------
+      Cpu6502 cpu = oracle.Fresh();
+      cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+      cpu.AddTrap(trademode);
+      cpu.AddTrap(clyns);
+      cpu.AddTrap(dn2);
+      cpu.watch = { oracle.Label("XC"), oracle.Label("YC"), 0, 0 };
+
+      Elite::CommanderBlock commander = Elite::DefaultCommander();
+      commander.SetCash(1000);
+      commander.At(Elite::Field::CargoCapacity) = scenario.capacity;
+      commander.At(Elite::Field::Tribbles) = static_cast<std::uint8_t>(scenario.trumbles & 0xFFu);
+      commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] =
+        static_cast<std::uint8_t>(scenario.trumbles >> 8);
+      for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
+      {
+        commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + item] = scenario.held;
+      }
+
+      Elite::MarketState market;
+      market.randomiser = RANDOMISER;
+      for (auto& stock : market.availability)
+      {
+        stock = 30;
+      }
+
+      for (std::size_t index = 0; index < 4; ++index)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)] =
+          commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+        cpu.memory[static_cast<std::uint16_t>(rand + index)] = SEED[index];
+      }
+      cpu.memory[oracle.Label("CRGO")] = scenario.capacity;
+      cpu.memory[oracle.Label("QQ14")] = commander.At(Elite::Field::Fuel);
+      cpu.memory[oracle.Label("GCNT")] = commander.At(Elite::Field::GalaxyNumber);
+      cpu.memory[oracle.Label("QQ28")] = ECONOMY;
+      cpu.memory[oracle.Label("QQ26")] = RANDOMISER;
+      cpu.memory[oracle.Label("QQ11")] = scenario.view;
+      cpu.memory[oracle.Label("MJ")] = 0;
+      cpu.memory[oracle.Label("TRIBBLE")] = commander.At(Elite::Field::Tribbles);
+      cpu.memory[static_cast<std::uint16_t>(oracle.Label("TRIBBLE") + 1)] =
+        commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u];
+      for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("AVL") + item)] = market.availability[item];
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ20") + item)] = scenario.held;
+      }
+      for (std::size_t index = 0; index < Elite::COMMANDER_NAME_SIZE; ++index)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("NAME") + index)] =
+          Elite::DefaultCommanderName()[index];
+      }
+      const Elite::SystemSeeds seeds = commander.GalaxySeeds();
+      for (std::size_t index = 0; index < 6; ++index)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ15") + index)] = seeds.bytes[index];
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ2") + index)] = seeds.bytes[index];
+      }
+
+      cpu.memory[oracle.Label("QQ17")] = 0;
+      cpu.memory[oracle.Label("XC")] = 1;
+      cpu.memory[oracle.Label("YC")] = 1;
+      cpu.memory[oracle.Label("DTW1")] = 0;
+      cpu.memory[oracle.Label("DTW2")] = 0xFF;
+      cpu.memory[oracle.Label("DTW3")] = 0;
+      cpu.memory[oracle.Label("DTW4")] = 0;
+      cpu.memory[oracle.Label("DTW5")] = 0;
+      cpu.memory[oracle.Label("DTW6")] = 0;
+      cpu.memory[oracle.Label("DTW8")] = 0xFF;
+
+      cpu.a = cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+
+      const std::uint16_t entry = inventory ? oracle.Label("TT213") : oracle.Label("TT210");
+      const KeyboardRun run =
+        RunWithKeys(cpu, entry, tt217, scenario.keys, oracle.Label("BAY2"), 4'000'000);
+      Assert::IsTrue(run.completed, (where + L": the shipped screen should finish").c_str());
+
+      std::vector<std::uint32_t> expected;
+      std::vector<std::uint32_t> gameEffects;
+      for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+      {
+        if (hit.address == chpr)
+        {
+          expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8)
+                             | (static_cast<std::uint32_t>(hit.watched[1]) << 16));
+        }
+        else if (hit.address == trademode)
+        {
+          gameEffects.push_back(0x100u + hit.a);
+        }
+        else if (hit.address == clyns)
+        {
+          gameEffects.push_back(0x200u);
+        }
+        else if (hit.address == dn2)
+        {
+          gameEffects.push_back(0x300u);
+        }
+      }
+
+      // ---- the port ------------------------------------------------------------------------
+      RecordingSink sink;
+      Elite::TextState text;
+      text.column = 1;
+      text.row = 1;
+      text.caseFlags = 0;
+      sink.cursor = &text;
+      Elite::CharacterPrinter characters(sink);
+      characters.state.sentenceStart = 0xFF;
+      Elite::TokenPrinter printer(characters);
+      printer.SetCaseFlags(0);
+
+      const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
+      Elite::SystemSeeds current = seeds;
+      Elite::SystemSeeds selected = seeds;
+      Elite::StateTokens values(printer, text, commander,
+                                std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
+                                selected, false);
+      printer.SetValueTokens(&values);
+
+      ScriptedKeys keys(scenario.keys);
+      RecordingEffects effects;
+      Elite::Rng rng;
+      rng.SetState(SEED);
+      Elite::ExtendedTokenPrinter extended(characters, printer, rng);
+      Elite::TradeScreen screen{ printer, characters, extended, text, keys, effects, rng };
+
+      if (inventory)
+      {
+        Elite::InventoryScreen(screen, commander, market, ECONOMY);
+      }
+      else
+      {
+        Elite::ListCargo(screen, commander, market, ECONOMY, scenario.view);
+      }
+
+      // ---- compare -------------------------------------------------------------------------
+      Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
+      Assert::AreEqual(run.keysTaken, keys.Taken(), (where + L": how many keys were read").c_str());
+
+      if (sink.stamped != expected)
+      {
+        Assert::Fail((where + L" differs, " + FirstDifference(expected, sink.stamped)).c_str());
+      }
+
+      Assert::AreEqual(gameEffects.size(), effects.log.size(), (where + L": how many seams were reached").c_str());
+      for (std::size_t index = 0; index < gameEffects.size(); ++index)
+      {
+        Assert::AreEqual(gameEffects[index], effects.log[index], (where + L": seam " + std::to_wstring(index)).c_str());
+      }
+
+      for (std::size_t index = 0; index < 4; ++index)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)],
+                         commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index],
+                         (where + L": cash byte " + std::to_wstring(index)).c_str());
+
+        // The Trumble tail calls DORND, so the random state is part of what this screen does.
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + index)], rng.State()[index],
+                         (where + L": random state byte " + std::to_wstring(index)).c_str());
+      }
+      for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ20") + item)],
+                         commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + item],
+                         (where + L": the hold, item " + std::to_wstring(item)).c_str());
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("AVL") + item)],
+                         market.availability[item],
+                         (where + L": the market, item " + std::to_wstring(item)).c_str());
+      }
+
+      ++compared;
+    }
+
+    Logger::WriteMessage(("TT210/TT213: " + std::to_string(compared)
+                          + " cargo listings compared character for character, with the cursor stamped\n")
                            .c_str());
   }
 };

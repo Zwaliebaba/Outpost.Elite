@@ -13,9 +13,6 @@ namespace Elite
 
 namespace
 {
-/// 6502: LDA #2 / JSR TRADEMODE -- QQ11 = 2 is the Buy Cargo screen.
-constexpr std::uint8_t BUY_VIEW = 2;
-
 /// 6502: the tokens the retry loop complains with.
 constexpr std::uint8_t QUANTITY_TOKEN = 176;  ///< recursive token 16, "QUANTITY"
 constexpr std::uint8_t CARGO_TOKEN = 206;     ///< recursive token 46, " CARGO{sentence case}"
@@ -36,6 +33,30 @@ constexpr std::uint8_t CASH_LINE_TOKEN = 119;
 /// 6502: TT222 -- LDA QQ29 / CLC / ADC #5 / JSR DOYC. Item N's line ends by putting the cursor on
 /// row N + 5, which is where item N + 1 is printed.
 constexpr std::uint8_t FIRST_ITEM_ROW_OFFSET = 5;
+
+/// 6502: LDA #14 / JSR DOXC -- where the quantity goes on a cargo listing.
+constexpr std::uint8_t QUANTITY_COLUMN = 14;
+
+/// 6502: LDA #205 / JSR TT27 and LDA #206 / JSR DETOK -- "SELL" and "{all caps}(Y/N)?".
+constexpr std::uint8_t SELL_TOKEN = 205;
+constexpr std::uint8_t YES_NO_TOKEN = 206;
+
+/// 6502: LDA #176 / JSR prq -- NWDAV4's complaint, the same token TT219's TQ4 uses.
+constexpr std::uint8_t ITEM_TOKEN = 176;
+
+/// 6502: LDX #255 / STX QQ17 -- printing off, so TT151 can be called for its arithmetic alone.
+constexpr std::uint8_t PRINTING_OFF = 255;
+
+/// 6502: the inventory screen's furniture.
+constexpr std::uint8_t INVENTORY_TITLE_COLUMN = 11;
+constexpr std::uint8_t INVENTORY_TITLE_TOKEN = 164;   ///< recursive token 4, "INVENTORY{crlf}"
+constexpr std::uint8_t LARGE_CARGO_BAY_TOKEN = 107;
+constexpr std::uint8_t LARGE_HOLD_THRESHOLD = 26;     ///< 6502: CMP #26, against CRGO as stored
+
+/// 6502: LDA #198 / JSR DETOK, and the four at 111 to 114 that DORND chooses between. All of them
+/// are blank in this version of Elite, which is why the Trumble line is a bare number.
+constexpr std::uint8_t TRUMBLE_ADJECTIVE_FIRST = 111;
+constexpr std::uint8_t TRUMBLE_NOUN_TOKEN = 198;
 
 /*
  * 6502: TT163 -- LDA #17 / JSR DOXC / LDA #255 / BNE TT162+2.
@@ -85,7 +106,7 @@ void BuyScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _m
                std::uint8_t _economy, bool _misJumped) noexcept
 {
   // 6502: LDA #2 / JSR TRADEMODE.
-  _screen.effects.SetUpTradeScreen(BUY_VIEW);
+  _screen.effects.SetUpTradeScreen(BUY_CARGO_VIEW);
 
   // 6502: TTX66's tail -- `LDX #1 / STX XC / STX YC / DEX / STX QQ17`. The seam draws; the text
   // state is the port's, the same split CLYNS uses.
@@ -214,6 +235,206 @@ void BuyScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _m
     _screen.text.row = static_cast<std::uint8_t>(item + FIRST_ITEM_ROW_OFFSET);
     _screen.text.column = 0;
   }
+}
+
+void ListCargo(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market, std::uint8_t _economy,
+               std::uint8_t _view) noexcept
+{
+  const std::size_t hold = static_cast<std::size_t>(Field::CargoHold);
+
+  // 6502: LDY #0 / TT211: STY QQ29.
+  for (int item = 0; item < MARKET_ITEM_COUNT; ++item)
+  {
+    /*
+     * 6502: NWDAVxx -- and NWDAV4 comes back HERE, not to the question.
+     *
+     * So a refused quantity reprints the whole line: the name, the amount held, the units and the
+     * prompt. That is why the retry is a loop around the line rather than around the question.
+     */
+    for (;;)
+    {
+      // 6502: LDX QQ20,Y / BEQ TT212 -- nothing of this item, nothing to print.
+      const std::uint8_t held = _commander.bytes[hold + static_cast<std::size_t>(item)];
+      if (held == 0)
+      {
+        break;
+      }
+
+      // 6502: TYA / ASL A / ASL A / TAY / LDA QQ23+1,Y / STA QQ19+1 -- the gradient byte, which is
+      // all TT152 reads to decide the units.
+      const MarketItem entry = MarketItemAt(item);
+
+      // 6502: JSR TT69 -- sentence case AND a newline, because TT69 falls into TT67.
+      SetSentenceCaseAndNewline(_screen.printer);
+
+      // 6502: CLC / LDA QQ29 / ADC #208 / JSR TT27.
+      _screen.printer.Print(static_cast<std::uint8_t>(FIRST_ITEM_TOKEN + item));
+
+      // 6502: LDA #14 / JSR DOXC / PLA / TAX / STA QQ25 / CLC / JSR pr2.
+      _screen.text.column = QUANTITY_COLUMN;
+      PrintByteValue(_screen.characters, held, false);
+
+      // 6502: JSR TT152.
+      PrintMarketUnits(_screen.printer, _screen.characters, entry.gradient);
+
+      // 6502: LDA QQ11 / CMP #4 / BNE TT212 -- only the sell screen asks.
+      if (_view != SELL_CARGO_VIEW)
+      {
+        break;
+      }
+
+      // 6502: LDA #205 / JSR TT27 / LDA #206 / JSR DETOK.
+      _screen.printer.Print(SELL_TOKEN);
+      _screen.extended.Print(YES_NO_TOKEN);
+
+      // 6502: JSR gnum -- and QQ25 is the amount HELD, so "Y" sells the lot.
+      const NumberEntry number = ReadNumber(_screen.keys, _screen.characters, _screen.text, held);
+
+      // 6502: gnum's JMP BAY2.
+      if (number.outcome == DigitResult::LeaveScreen)
+      {
+        return;
+      }
+
+      /*
+       * 6502: BEQ TT212 / BCS NWDAV4, and the order is the original's.
+       *
+       * The BEQ reads the Z flag `LDA R` at gnum's exit left, so a quantity of zero moves on
+       * before the carry is looked at. The two cannot both be true here -- a zero cannot exceed
+       * an amount held that the loop has already established is not zero -- but the order is kept
+       * because it is what the routine does, and because that argument depends on a fact about
+       * the loop rather than about gnum.
+       */
+      if (number.value == 0)
+      {
+        break;
+      }
+
+      if (number.outcome == DigitResult::TooBig)
+      {
+        // 6502: NWDAV4 -- JSR TT67 / LDA #176 / JSR prq / JSR dn2 / LDY QQ29 / JMP NWDAVxx.
+        PrintNewline(_screen.printer);
+        PrintThenQuestion(_screen.printer, ITEM_TOKEN);
+        _screen.effects.BeepAndPause();
+        continue;
+      }
+
+      /*
+       * 6502: LDA QQ29 / LDX #255 / STX QQ17 / JSR TT151.
+       *
+       * The line is printed AGAIN with printing switched off, purely so that TT151 leaves the
+       * price in QQ24. A routine whose job is to print is being called for its arithmetic.
+       *
+       * QQ17 lives in two places in this port -- the token printer owns the flags and CHPR reads
+       * a copy to notice the value 255 -- so both are set. That duplication is a wart worth
+       * collapsing when something owns the text state properly; until then, setting one and not
+       * the other prints a line the original suppresses.
+       */
+      const std::uint8_t savedFlags = _screen.printer.CaseFlags();
+      const std::uint8_t savedTextFlags = _screen.text.caseFlags;
+      _screen.printer.SetCaseFlags(PRINTING_OFF);
+      _screen.text.caseFlags = PRINTING_OFF;
+
+      PrintMarketItem(_screen.printer, _screen.characters, _screen.text, item, _economy, _market, false);
+      const std::uint8_t price = MarketPrice(item, _economy, _market.randomiser);
+
+      // 6502: LDA #0 / STA QQ17 -- printing back on, and it is ALL CAPS afterwards rather than
+      // whatever it was before.
+      (void)savedFlags;
+      (void)savedTextFlags;
+      _screen.printer.SetCaseFlags(0);
+      _screen.text.caseFlags = 0;
+
+      // 6502: LDA QQ20,Y / SEC / SBC R / STA QQ20,Y.
+      _commander.bytes[hold + static_cast<std::size_t>(item)] = static_cast<std::uint8_t>(held - number.value);
+
+      // 6502: LDA R / STA P / LDA QQ24 / STA Q / JSR GCASH / JSR MCASH.
+      ReceiveCash(_commander, TotalPrice(price, number.value));
+      break;
+    }
+  }
+
+  /*
+   * 6502: LDA QQ11 / CMP #4 / BNE P%+8 / JSR dn2 / JMP BAY2.
+   *
+   * The sell screen ends with a beep and a jump to the INVENTORY screen -- it does not return.
+   * The port returns instead and leaves the jump to the caller, because BAY2 is the docked
+   * dispatch and that belongs to 2e; a screen that called the next screen would be a loop this
+   * layer has no way out of.
+   */
+  if (_view == SELL_CARGO_VIEW)
+  {
+    _screen.effects.BeepAndPause();
+    return;
+  }
+
+  /*
+   * 6502: the Trumble tail, which only the inventory screen reaches.
+   *
+   * Every extended token it prints is blank in this version of Elite, so what a player sees is a
+   * count and possibly an "s". It still calls DORND, which moves the random state -- so the tail
+   * is not a no-op even when it prints almost nothing.
+   */
+  SetSentenceCaseAndNewline(_screen.printer);
+
+  const std::uint16_t trumbles = static_cast<std::uint16_t>(
+    _commander.At(Field::Tribbles) | (_commander.bytes[static_cast<std::size_t>(Field::Tribbles) + 1u] << 8));
+
+  // 6502: LDA TRIBBLE / ORA TRIBBLE+1 / BNE P%+3 / zebra: RTS.
+  if (trumbles == 0)
+  {
+    return;
+  }
+
+  // 6502: CLC / LDA #0 / LDX TRIBBLE / LDY TRIBBLE+1 / JSR TT11 -- no padding, no decimal point.
+  PrintValue(_screen.characters, trumbles, 0, false);
+
+  /*
+   * 6502: JSR DORND / AND #3 / CLC / ADC #111 / JSR DETOK.
+   *
+   * DORND rather than DORND2, so the carry on entry participates -- and what it is here is
+   * whatever TT11 left, which is why the random state after this is worth comparing rather than
+   * assuming.
+   */
+  const RngResult roll = _screen.rng.Next(false);
+  _screen.extended.Print(static_cast<std::uint8_t>(TRUMBLE_ADJECTIVE_FIRST + (roll.value & 0x03u)));
+  _screen.extended.Print(TRUMBLE_NOUN_TOKEN);
+
+  // 6502: LDA TRIBBLE+1 / BNE DOANS / LDX TRIBBLE / DEX / BEQ zebra / DOANS: LDA #'s' / JMP DASC.
+  if (trumbles == 1)
+  {
+    return;
+  }
+  _screen.characters.Put('s');
+}
+
+void InventoryScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market,
+                     std::uint8_t _economy) noexcept
+{
+  // 6502: LDA #8 / JSR TRADEMODE, and the text state TTX66 ends on.
+  _screen.effects.SetUpTradeScreen(INVENTORY_VIEW);
+  _screen.text.column = 1;
+  _screen.text.row = 1;
+  _screen.printer.SetCaseFlags(0);
+  _screen.text.caseFlags = 0;
+
+  // 6502: LDA #11 / JSR DOXC / LDA #164 / JSR TT60 -- and TT60 is four routines deep.
+  _screen.text.column = INVENTORY_TITLE_COLUMN;
+  PrintTitleLine(_screen.printer, _screen.text, INVENTORY_TITLE_TOKEN);
+
+  // 6502: JSR NLIN4 -- the rule is the canvas's, so a caller draws it.
+
+  // 6502: JSR fwl -- which is control code 5, so it goes through the token printer.
+  _screen.printer.Print(5);
+
+  // 6502: LDA CRGO / CMP #26 / BCC P%+7 / LDA #107 / JSR TT27.
+  if (_commander.At(Field::CargoCapacity) >= LARGE_HOLD_THRESHOLD)
+  {
+    _screen.printer.Print(LARGE_CARGO_BAY_TOKEN);
+  }
+
+  // 6502: JMP TT210 -- a jump rather than a call, so the listing IS the rest of this screen.
+  ListCargo(_screen, _commander, _market, _economy, INVENTORY_VIEW);
 }
 
 } // namespace Elite
