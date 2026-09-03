@@ -159,6 +159,7 @@
     <ClInclude Include="SaveGame.h" />
     <ClInclude Include="StatusScreen.h" />
     <ClInclude Include="SystemScreen.h" />
+    <ClInclude Include="DockedKeys.h" />
     <ClInclude Include="Charts.h" />
     <ClInclude Include="Commander.h" />
     <ClInclude Include="pch.h" />
@@ -192,6 +193,7 @@
     <ClCompile Include="SaveGame.cpp" />
     <ClCompile Include="StatusScreen.cpp" />
     <ClCompile Include="SystemScreen.cpp" />
+    <ClCompile Include="DockedKeys.cpp" />
     <ClCompile Include="Charts.cpp" />
     <ClCompile Include="Commander.cpp" />
     <ClCompile Include="CommanderTable.cpp" />

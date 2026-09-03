@@ -428,6 +428,30 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.24 A path relative to the wrong thing, and the check that should have existed
+
+The Windows leg went red on `error C1083: Cannot open source file: '..\Outpost\SaveStore.cpp'`.
+The project is at `Tests/GameLogicTests/`, and MSBuild reads an `Include` relative to the PROJECT
+rather than to the repository — so reaching `Outpost/` needs two `..`, not one. A second to make,
+four minutes of Windows CI to report, and invisible on the Linux leg, which globs its sources and
+never reads the project file at all.
+
+`tools/check_projects.py` now runs on the Ubuntu leg and resolves every `ClCompile` and
+`ClInclude` path the way MSBuild does. Writing it turned up three problems that were already in
+the tree and had nothing to do with the change that prompted it:
+
+- `GoldenCanvas.h` was in the test project's `.filters` and not in the project.
+- `SaveStore.cpp` and `SaveStore.h` were in `Outpost.vcxproj` and in neither its filters.
+- and the check for the OTHER direction — a source on disk that no project names — matters more
+  than the resolution check does. The portable runner GLOBS `GameLogic/*.cpp`. A file added to the
+  tree and forgotten in the project compiles, runs and passes on Linux, and is simply absent from
+  the Windows build: a green suite testing less than it says, with nothing anywhere to say so.
+
+The general shape is worth naming because this repository has two builds of the same sources and
+they disagree about how they find them. One globs and one enumerates. Wherever two mechanisms
+answer the same question differently, the cheap one has to check the expensive one — otherwise the
+expensive one is the only place a drift shows, and it is the one that runs least often.
+
 ### 6.23 "No oracle" is not "no test", and the difference was a defect
 
 `Outpost/SaveStore.cpp` shipped with a header saying, in as many words, that nothing in it was
@@ -1149,6 +1173,8 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-03 | **The top-level key dispatch built** — `TT102`'s decision half, which is slice 2e's "key dispatch for the docked screens". 16,384 dispatches compared: every one of the 256 key codes against four values of `QQ12`, four views, the counter running and stopped, and the hyperspace key held and not, by stepping the shipped routine until it reaches one of nineteen addresses that ARE the answer. Launch is tested before the docked split; "H" is read from the key matrix rather than from the accumulator, so holding it discards whatever else was pressed; `QQ12` is tested two different ways in the same routine. Eight mutations, eight caught — two only after the sweep was widened to values of `QQ12` the game never writes, which is where the two tests of it disagree. |
+| 2026-09-03 | **CI went red on a project path relative to the wrong thing, and now cannot again.** `..\Outpost\SaveStore.cpp` from a project two directories down needs two `..`; MSBuild resolves an `Include` against the PROJECT. `tools/check_projects.py` runs on the Ubuntu leg and resolves every path the way MSBuild does — and also catches the reverse, a source on disk that no project names, which the portable runner's glob would compile and the Windows build would silently omit. It found three problems already in the tree. §6.24 records the shape. |
 | 2026-09-03 | **`SaveStore` compiled and tested, and it had a defect.** The file had been committed and left uncompiled because the only machine that could build it ran Windows, and its header argued that having no oracle meant having no test. Ten lines of Win32 stand-in in the portable runner's shim made both untrue. `PathFor` accepted `CON` — every legacy Windows device name is letters and digits and typeable at the commander name prompt, and Win32 resolves such a stem to the DEVICE whatever directory and extension surround it, so a player with that name would have had their commander written to the console. Five tests now cover the round trip, the names that must be refused, the near misses that must not be, the length check and the CR-terminated name. §6.23 records the argument. |
 | 2026-09-03 | **The Data on System screen built, which closes slice 2a.** All 2,048 systems in all eight galaxies compared character for character with the cursor stamped, `PDESC` included. The row had deferred `TT25` as "cursor and canvas work"; it is a token printer, a number printer and `TRADEMODE`, which is the fifth stale scope line this port has found. §6.22 records what the screen turned out to be: the economy is two words folded out of one number by a comparison whose carry comes from the `CMP` and not the `LSR`, the four species words share a scratch byte so the appearance decides the noun, and every planet's radius is between 2,816 and 6,911 km because of a `CLC / ADC #11`. Seventeen mutations, fifteen caught and two provably equivalent. Also adds `tools/c64_source.py`, which evaluates the upstream library's version conditionals instead of leaving them to be read by eye. |
 | 2026-09-03 | **`SVE`'s menu dispatch built, which closes slice 2d.** Twenty-one paths through the disk access menu compared against the shipped routine running whole — only the Kernal and the control-code routines that leave the text system stood in for — on every character with the cursor stamped, the keys consumed, the device traffic, both commanders byte for byte, the competition number and the carry. §6.21 records four findings, the first of them a bug a player can hit: a failed load leaves `JSR LOD`'s return address on the stack, so the next exit from the menu resumes `loading` — renaming the commander and telling `TT102` to restart the game when nothing was loaded. Option 4's carry comes from `DFAULT`'s last `CMP`; `BPRNT`'s field width is whatever the last caller left; and bit 6 of the competition flags is the C64 version stamp, not "loaded from a file" as slice 2d's comments had it. Twenty-one mutations, twenty-one caught. |

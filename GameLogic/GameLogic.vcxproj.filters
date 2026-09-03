@@ -66,6 +66,9 @@
     <ClInclude Include="SystemScreen.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="DockedKeys.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Charts.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -124,6 +127,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="SystemScreen.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedKeys.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Charts.cpp">
