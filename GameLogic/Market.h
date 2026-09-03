@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Commander.h"
 #include "Rng.h"
 
 #include <array>
@@ -84,5 +85,46 @@ struct MarketState
  * generating a market, it has to do this itself.
  */
 void GenerateMarket(Rng& _rng, std::uint8_t _economy, MarketState& _outMarket) noexcept;
+
+/*
+ * 6502: LCASH -- spend an amount, in tenths of a credit.
+ *
+ * Returns false when it cannot be afforded, and the cash is then exactly as it was. The original
+ * gets there by an unusual route: the four subtractions run unconditionally, and if the top one
+ * borrowed the routine FALLS THROUGH into MCASH, which adds the same amount straight back. So
+ * the commander is briefly in debt, and no caller can tell.
+ */
+[[nodiscard]] bool SpendCash(CommanderBlock& _commander, std::uint16_t _tenths) noexcept;
+
+/// 6502: MCASH -- receive an amount. Cannot fail, and returns with the carry clear so that a
+/// caller sharing LCASH's exit reads it as "not affordable".
+void ReceiveCash(CommanderBlock& _commander, std::uint16_t _tenths) noexcept;
+
+/*
+ * 6502: GCASH -- what a quantity costs, in tenths.
+ *
+ * The multiply times FOUR. Prices are quoted in tenths of a credit but held in units of
+ * four-tenths, so every total in the game passes through this and a port that dropped the two
+ * shifts would sell everything at a quarter price.
+ */
+[[nodiscard]] std::uint16_t TotalPrice(std::uint8_t _price, std::uint8_t _quantity) noexcept;
+
+/*
+ * 6502: tnpr -- is there room for this much more of an item?
+ *
+ * Two rules, and which applies depends on the item: the first thirteen are tonne canisters and
+ * share the hold's capacity, and the last four -- gold, platinum, gem-stones and alien items --
+ * are measured in kilos or grams and are each capped at 200 of their own unit.
+ *
+ * The tonne path counts the hold and adds ONE MORE than it should, because the `CPX` that chose
+ * the path left the carry set and the first `ADC` consumes it. That is not a defect: `CRGO` holds
+ * two more than the capacity it describes, and the original's own comment says the pair is
+ * deliberate -- "A contains the number of canisters plus 1, while CRGO contains our cargo
+ * capacity plus 2". Fix either one alone and the hold is off by a tonne.
+ *
+ * Tribbles are cargo too. Two hundred and fifty-six of them weigh a tonne, so the HIGH byte of
+ * the tribble count is added in, and its addition takes the carry the loop left.
+ */
+[[nodiscard]] bool CargoFits(const CommanderBlock& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept;
 
 } // namespace Elite
