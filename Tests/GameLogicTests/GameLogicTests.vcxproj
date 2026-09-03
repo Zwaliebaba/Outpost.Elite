@@ -138,6 +138,7 @@
     <ClCompile Include="SystemScreenTests.cpp" />
     <ClCompile Include="SaveStoreTests.cpp" />
     <ClCompile Include="DockedKeyTests.cpp" />
+    <ClCompile Include="StartUpTests.cpp" />
     <!-- The executable's commander store, compiled into the suite so it is covered rather
          than only shipped. It is not in this directory, so it does not use this project's
          precompiled header. -->
