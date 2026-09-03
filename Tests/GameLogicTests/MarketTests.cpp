@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::MarketState;
@@ -32,6 +33,76 @@ namespace GameLogicTests
 
 namespace
 {
+/*
+ * 6502: CHPR, with the cursor it was called at.
+ *
+ * The market screen's whole job is putting the right thing in the right column, so a comparison
+ * of the characters alone would pass a port that printed every line one cell left. Each character
+ * is stamped with XC and YC as it goes by, on both sides.
+ */
+struct RecordingSink : public Elite::TextSink
+{
+  void Put(std::uint8_t _character) override
+  {
+    const std::uint32_t column = (cursor != nullptr) ? cursor->column : 0u;
+    const std::uint32_t row = (cursor != nullptr) ? cursor->row : 0u;
+    stamped.push_back(static_cast<std::uint32_t>(_character) | (column << 8) | (row << 16));
+  }
+
+  Elite::TextState* cursor = nullptr;
+  std::vector<std::uint32_t> stamped;
+};
+
+/// A window of both sequences around the first place they differ, which is the only part worth
+/// reading when a whole screen is being compared.
+std::wstring FirstDifference(const std::vector<std::uint32_t>& _game, const std::vector<std::uint32_t>& _port)
+{
+  std::size_t at = 0;
+  while (at < _game.size() && at < _port.size() && _game[at] == _port[at])
+  {
+    ++at;
+  }
+
+  const auto window = [](const std::vector<std::uint32_t>& _seq, std::size_t _from) {
+    std::wstring text = L"[";
+    for (std::size_t index = _from; index < _seq.size() && index < _from + 14; ++index)
+    {
+      const std::uint8_t character = static_cast<std::uint8_t>(_seq[index]);
+      text += (character >= 32 && character < 127) ? static_cast<wchar_t>(character) : L'.';
+      text += L'@';
+      text += std::to_wstring((_seq[index] >> 8) & 0xFFu);
+      text += L',';
+      text += std::to_wstring((_seq[index] >> 16) & 0xFFu);
+      text += L' ';
+    }
+    return text + L"]";
+  };
+
+  const std::size_t from = (at > 6) ? at - 6 : 0;
+  return L"first difference at " + std::to_wstring(at) + L" of " + std::to_wstring(_game.size()) + L"/"
+         + std::to_wstring(_port.size()) + L"\n  game: " + window(_game, from) + L"\n  port: " + window(_port, from);
+}
+
+std::wstring DescribeStamped(const std::vector<std::uint32_t>& _stamped)
+{
+  std::wstring text = L"[";
+  for (std::size_t index = 0; index < _stamped.size() && index < 40; ++index)
+  {
+    const std::uint8_t character = static_cast<std::uint8_t>(_stamped[index]);
+    text += (character >= 32 && character < 127) ? static_cast<wchar_t>(character) : L'.';
+    text += L'@';
+    text += std::to_wstring((_stamped[index] >> 8) & 0xFFu);
+    text += L',';
+    text += std::to_wstring((_stamped[index] >> 16) & 0xFFu);
+    text += L' ';
+  }
+  if (_stamped.size() > 40)
+  {
+    text += L"...";
+  }
+  return text + L"]";
+}
+
 bool OracleMissing()
 {
   const OracleImage& oracle = OracleImage::Instance();
@@ -521,6 +592,123 @@ public:
                           + std::to_string(fitted) + " fitted")
                            .c_str());
     Assert::IsTrue(fitted > 0 && fitted < compared, L"both answers must be exercised");
+  }
+
+  /*
+   * 6502: TT167 -- the whole market screen, compared as the sequence of characters that reach
+   * CHPR and the cursor each line starts at.
+   *
+   * Characters rather than a screen, because TT167 opens with TRADEMODE and that is TT66: it
+   * resets the view and draws the border, which is screen work rather than market work. Trapping
+   * CHPR means neither side draws, so what is left to compare is exactly what the market screen
+   * decides -- every name, every price, every unit, every quantity, and where each goes.
+   *
+   * Swept over all eight economies and a spread of market randomisers, which is what varies both
+   * the prices and which items run out and print a dash instead of a number.
+   */
+  TEST_METHOD(TheMarketScreenMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t chpr = oracle.Label("CHPR");
+
+    std::uint32_t compared = 0;
+    std::uint32_t dashes = 0;
+
+    for (std::uint32_t economy = 0; economy < 8; ++economy)
+    {
+      for (const std::uint32_t randomiser : { 0u, 1u, 37u, 128u, 200u, 255u })
+      {
+        Elite::MarketState market;
+        market.randomiser = static_cast<std::uint8_t>(randomiser);
+        for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
+        {
+          // A spread of stock levels including zero, so the dash path is reached.
+          market.availability[item] =
+            static_cast<std::uint8_t>((item * 17u + randomiser) % 5u == 0u ? 0u : (item * 13u + randomiser) & 0x3Fu);
+          market.price[item] =
+            Elite::MarketPrice(static_cast<int>(item), static_cast<std::uint8_t>(economy),
+                               static_cast<std::uint8_t>(randomiser));
+        }
+
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+        cpu.AddTrap(oracle.Label("TRADEMODE"));
+        cpu.watch = { oracle.Label("XC"), oracle.Label("YC"), 0, 0 };
+
+        cpu.memory[oracle.Label("QQ28")] = static_cast<std::uint8_t>(economy);
+        cpu.memory[oracle.Label("QQ26")] = static_cast<std::uint8_t>(randomiser);
+        cpu.memory[oracle.Label("MJ")] = 0;
+        cpu.memory[oracle.Label("QQ17")] = 0x80;
+        cpu.memory[oracle.Label("XC")] = 1;
+        cpu.memory[oracle.Label("YC")] = 1;
+        cpu.memory[oracle.Label("DTW1")] = 0;
+        cpu.memory[oracle.Label("DTW2")] = 0xFF;
+        cpu.memory[oracle.Label("DTW3")] = 0;
+        cpu.memory[oracle.Label("DTW4")] = 0;
+        cpu.memory[oracle.Label("DTW5")] = 0;
+        cpu.memory[oracle.Label("DTW6")] = 0;
+        cpu.memory[oracle.Label("DTW8")] = 0xFF;
+        for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
+        {
+          cpu.memory[static_cast<std::uint16_t>(oracle.Label("AVL") + item)] = market.availability[item];
+        }
+
+        cpu.a = cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        const auto run = cpu.CallSubroutine(oracle.Label("TT167"), 5'000'000);
+        Assert::IsTrue(run.completed && !run.illegalOpcode, L"TT167 should return");
+
+        // Every character, with the cursor it was printed at -- so a line in the right words at
+        // the wrong column fails.
+        std::vector<std::uint32_t> expected;
+        for (const auto& hit : cpu.trapHits)
+        {
+          if (hit.address == chpr)
+          {
+            expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8)
+                               | (static_cast<std::uint32_t>(hit.watched[1]) << 16));
+          }
+        }
+
+        RecordingSink sink;
+        Elite::TextState text;
+        text.column = 1;
+        text.row = 1;
+        text.caseFlags = 0x80;
+        sink.cursor = &text;
+        Elite::CharacterPrinter characters(sink);
+        characters.state.sentenceStart = 0xFF;
+        Elite::TokenPrinter printer(characters);
+        printer.SetCaseFlags(0x80);
+
+        Elite::PrintMarketScreen(printer, characters, text, static_cast<std::uint8_t>(economy), market, false);
+
+        const std::wstring where = L"TT167 (economy " + std::to_wstring(economy) + L", randomiser "
+                                   + std::to_wstring(randomiser) + L")";
+        if (sink.stamped != expected)
+        {
+          Assert::Fail((where + L" differs, " + FirstDifference(expected, sink.stamped)).c_str());
+        }
+
+        for (const std::uint8_t stock : market.availability)
+        {
+          if (stock == 0)
+          {
+            ++dashes;
+          }
+        }
+        ++compared;
+      }
+    }
+
+    Logger::WriteMessage(("TT167: " + std::to_string(compared) + " market screens compared character for character, "
+                          + std::to_string(dashes) + " sold-out lines among them")
+                           .c_str());
+    Assert::IsTrue(dashes > 0, L"the sold-out path must be reached");
   }
 };
 
