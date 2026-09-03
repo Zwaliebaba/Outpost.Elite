@@ -134,6 +134,7 @@
     <ClCompile Include="StateTokenTests.cpp" />
     <ClCompile Include="NameEntryTests.cpp" />
     <ClCompile Include="SaveGameTests.cpp" />
+    <ClCompile Include="SystemScreenTests.cpp" />
     <ClCompile Include="ChartTests.cpp" />
     <ClCompile Include="CommanderTests.cpp" />
     <ClCompile Include="CycleTests.cpp" />

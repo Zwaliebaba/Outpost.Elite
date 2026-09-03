@@ -357,6 +357,11 @@ void MoveCursorDown(TextState& _text) noexcept
 void PrintTitleLine(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept
 {
   _printer.Print(_token);
+  MoveDownAndNewline(_printer, _text);
+}
+
+void MoveDownAndNewline(TokenPrinter& _printer, TextState& _text) noexcept
+{
   MoveCursorDown(_text);
   SetSentenceCaseAndNewline(_printer);
 }
