@@ -260,9 +260,17 @@ public:
 
       /*
        * SVE itself asks for a drive, prints menus and writes a file. What is being compared is
-       * its arithmetic half, so the loop and the two checksums are stepped directly: the copy is
-       * eight instructions and reproducing it here is less misleading than trapping six routines
-       * and hoping the remainder is the same shape.
+       * its arithmetic half, so the loop and the three checksums are stepped directly: the copy
+       * is eight instructions and reproducing it here is less misleading than trapping six
+       * routines and hoping the remainder is the same shape.
+       *
+       * THAT REASONING COST SOMETHING, and it is worth leaving written down. A hand-built model
+       * can share the port's misreading, and this one did: it stepped CHECK2 and CHECK and
+       * stopped, exactly as SaveCommander did, so the third stored checksum was missing from
+       * both sides and 221 blocks agreed. `SaveGameTests` now runs the real SV1 up to the Kernal
+       * call and compares the whole file, which is the version of this test that cannot share a
+       * mistake with the code it checks. This one is kept for the breadth -- 221 blocks against
+       * that suite's 67 -- and corrected below.
        */
       cpu.x = 0x4C;
       for (int step = 0x4C; step >= 0; --step)
@@ -280,6 +288,10 @@ public:
       cpu.sp = 0xFD;
       Assert::IsTrue(cpu.CallSubroutine(oracle.Label("CHECK"), 10'000).completed, L"CHECK should return");
       cpu.memory[oracle.Label("CHK")] = cpu.a;
+
+      // 6502: PLA / EOR #&A9 / STA CHK2 -- the store this model was missing. It sits four
+      // instructions past the competition number in SV1, well after the two CHECK calls.
+      cpu.memory[oracle.Label("CHK2")] = static_cast<std::uint8_t>(cpu.a ^ 0xA9u);
 
       std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> file{};
       Elite::SaveCommander(block, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name),
@@ -341,15 +353,16 @@ public:
       Assert::IsTrue(loadedName == name, L"the name must come back");
 
       /*
-       * Every byte but three must come back unchanged, and the three are the point of the
-       * exercise rather than exceptions to it. The competition flags gain bits 6 and 7 on the way
-       * in -- that is what the load is FOR. The second checksum is written by the save. And the
-       * first is written by the save and then not loaded at all, because the copy loop stops one
-       * byte short of it.
+       * Every byte but FOUR must come back unchanged, and the four are the point of the exercise
+       * rather than exceptions to it. The competition flags gain bit 6 on the way in -- that is
+       * what the load is FOR. All three checksums are written by the save; two of them are then
+       * loaded back over the caller's block, and the third is not, because DFAULT's copy loop
+       * stops one byte short of it.
        */
       for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
       {
         if (index == static_cast<std::size_t>(Field::Competition)
+            || index == static_cast<std::size_t>(Field::Checksum2Byte)
             || index == static_cast<std::size_t>(Field::Checksum3Byte)
             || index == static_cast<std::size_t>(Field::ChecksumByte))
         {
@@ -359,8 +372,28 @@ public:
                                         (L"round trip differs at byte " + std::to_wstring(index)).c_str());
       }
 
+      /*
+       * Bit 6 says it came from a file. Bit 7 must not be ADDED, which is the assertion the third
+       * checksum earns: the save writes CHK2 = CHK EOR &A9 and the load sets bit 7 when they
+       * disagree. Until 2026-09-03 the port did not write CHK2 at all, and this test passed
+       * anyway, because it skipped the byte and only looked at bit 6.
+       *
+       * Not "bit 7 is clear": `ORA #&80` only ever SETS it, so a block that arrives with the bit
+       * already on keeps it -- and one of the sample blocks is all 255. What a correct save
+       * guarantees is that loading it does not turn the bit on, not that it turns it off.
+       */
       Assert::IsTrue((loaded.At(Field::Competition) & 0x40u) != 0u,
                      L"loading sets the flag that says the commander came from a file");
+      Assert::AreEqual<std::uint32_t>(block.At(Field::Competition) & 0x80u,
+                                      loaded.At(Field::Competition) & 0x80u,
+                                      L"a correctly saved file is not newly flagged as tampered");
+
+      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> written{};
+      Elite::SaveCommander(block, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name),
+                           std::span<std::uint8_t, Elite::COMMANDER_FILE_SIZE>(written));
+      Assert::AreEqual<std::uint32_t>(written[8u + static_cast<std::size_t>(Field::Checksum2Byte)],
+                                      loaded.At(Field::Checksum2Byte),
+                                      L"the second checksum is loaded back over the caller's block");
 
       // The block's own checksum byte is never loaded, so it keeps whatever the caller had.
       Assert::AreEqual<std::uint32_t>(block.At(Field::ChecksumByte), loaded.At(Field::ChecksumByte),

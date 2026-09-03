@@ -169,6 +169,23 @@ void SaveCommander(const CommanderBlock& _block, std::span<const std::uint8_t, C
   image.At(Field::Checksum3Byte) = Checksum2(image);
   image.At(Field::ChecksumByte) = Checksum(image);
 
+  /*
+   * 6502: PLA / EOR #&A9 / STA CHK2 -- the THIRD stored byte, and this port did not write it
+   * until the save flow was built on top and the comparison found it missing.
+   *
+   * It sits four instructions past the competition number in SV1, well after the two CHECK calls,
+   * which is why reading SVE from the top and stopping at them looked complete. Nothing caught
+   * it: LoadCommander only READS CHK2, to decide whether to set the tampered bit in the
+   * competition flags, and a round trip through a port that got it wrong on both sides agreed
+   * with itself. A file saved that way loads into the original with bit 7 of COK set -- flagged
+   * as tampered by the game's own copy protection.
+   *
+   * Writing it here rather than in the save flow is safe and is what the original does in effect:
+   * both CHECK and CHECK2 read the block's first seventy-four bytes only, so byte seventy-four
+   * cannot change what they returned.
+   */
+  image.At(Field::Checksum2Byte) = static_cast<std::uint8_t>(image.At(Field::ChecksumByte) ^ 0xA9u);
+
   for (std::size_t index = 0; index < COMMANDER_BLOCK_SIZE; ++index)
   {
     _outFile[BLOCK_IN_FILE + index] = image.bytes[index];
