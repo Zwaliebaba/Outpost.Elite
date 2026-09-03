@@ -1,6 +1,6 @@
 # ADR-001 — Scope and Fidelity: Port the C64 Game As It Is, First
 
-**Status:** Accepted · 2026-09-02 (§5 amended the same day by owner ruling — see below)
+**Status:** Accepted · 2026-09-02 (§5 amended the same day by owner ruling — see below); §5 amended again 2026-09-03 (make the repository private)
 **Depends on:** — (root decision)
 **Feeds:** every other ADR; the plan's phases 1–5 exist to satisfy it, phase 6 is what it defers
 
@@ -92,6 +92,35 @@ done at once, because the second has no definition of "correct" until the first 
    If 0e does not produce permission, the fallback is the posture this ADR first proposed:
    private, undistributed, `Upstream/` excised from the published history rather than merely
    deleted at the tip.
+
+   **Owner ruling, 2026-09-03: make the repository private now, rather than at the fallback.**
+
+   The clause above — "nothing is pushed to a public remote until 0e closes" — had never been
+   true. `Zwaliebaba/Outpost.Elite` is public (checked against the GitHub API, not assumed), CI
+   assembles the game on every push, and `MasterFile/` has been tracked since `92a3c7f`. So this
+   is not a new posture; it is the stated one, applied.
+
+   Three things it does and does not do, in order of how easily each is misread:
+
+   - **It stops the exposure continuing. It does not undo it.** The commits are public and have
+     been. Anyone who cloned has a copy. Nothing short of a history rewrite plus a request to
+     GitHub touches that, and neither was ruled.
+   - **It costs the project nothing.** The oracle build is untouched, no history is rewritten, no
+     network dependency enters CI, and every existing clone stays valid. Public visibility is not
+     something a personal port needs before 0e answers.
+   - **It does not close 0e.** The written answer from the rights holders is still what closes
+     it, and this ruling only removes the pressure of an open question being answered by default.
+
+   The alternatives put to the owner and not chosen were: strip `MasterFile/` from the history
+   (which would make the oracle depend on fetching a pinned upstream commit at build time — a new
+   failure mode in CI, and a rewritten history that invalidates every clone), document that
+   permission exists (which needs a real grant from a real rights holder, not a reading of a
+   licence file), and accept the risk in writing (defensible for a hobby port, but it should be a
+   decision with a name on it rather than the unexamined default it had become).
+
+   **The action is the owner's.** Repository visibility is not something any tool in this project
+   can change; it is one setting under the repository's own settings page. Until it is taken,
+   slice 0e stays open and Risk R1 stays marked realised.
 
 ## What "faithful" does not mean
 

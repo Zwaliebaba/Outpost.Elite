@@ -2,19 +2,24 @@
 
 **Status:** Accepted · 2026-09-02 · **revised in place** (this document is the sequence of
 record; the ADRs decide *what*, this decides *when*).
-**Owner decisions:** all five taken on 2026-09-02 and recorded in §8.
+**Owner decisions:** all five taken on 2026-09-02, and four more on 2026-09-03. All recorded in §8.
 **Phase 2's computational content is complete and verified; what remains of it is the input
 layer and the shell.** 2a and 2b are done. 2c has its price model, its trade arithmetic, its
 market screen and `gnum`; its remaining screens are loops around the keyboard. 2d has the
 commander block, both checksums and the save format; its file I/O and name entry read the
-keyboard. **2e cannot be started from here** — its criterion is that a person can play it, and
-that needs a Windows shell and the Risk R3 frame-rate decision, both recorded in its row.
+keyboard. **2e's decisions are settled and it still needs a Windows machine** — Risk R3 is
+answered (count cycles, and the counter is built; §6.17 explains why the question was not the one
+being asked) and its verification is split between a CI replay-hash leg and a human sign-off, but
+its criterion is that a person can play it and nothing here can launch a window.
 
 **Phase 1 is closed.** 1c-c-b built 2026-09-03: twenty of the thirty-one extended control codes
 are ported and compared against the shipped dispatch, the justification line buffer with them,
 and the three that reach the canvas stay a counted seam. §6.11 records what the drawing slices
 cost and §6.12 what the last one was hiding.
-**Phase 0 is closed**, bar slice 0e which is owner action: 0a (upstream referenced, §6.9), 0b-a (the
+**Phase 0 is closed**, bar slice 0e — which is owner action, is overdue, and turned out to have
+been breached before it was written: the repository is public and has tracked `MasterFile/` since
+`92a3c7f`. Ruled 2026-09-03: make it private. **Nothing in this project can do that; the owner
+must.** The rest: 0a (upstream referenced, §6.9), 0b-a (the
 assembler and label map), 0c (skeleton, the 6502 interpreter), 0f (the determinism guard) are
 built; 0b-b is cancelled and 0d deferred, both by owner ruling. **Phase 1 is under way**: 1b-a
 and 1b-b have ported eighteen arithmetic routines. **The oracle is live**, which is the gate
@@ -313,7 +318,7 @@ within a phase is the recommended one; slices marked ∥ can run in parallel.
 | **0b-b Emulator measurements** ❌ **Cancelled 2026-09-03 by owner ruling** | *"You can ignore the use of VICE, no need to do a reference run."* No emulator is installed and none will be. | **Dropped, not deferred.** It was gating two things and each now has a different answer, below. |
 | **0c Repository skeleton** ✅ **Built 2026-09-02** | `AGENTS.md` written for this repository from its own `.clang-tidy`/`.clang-format`, not adapted from a sibling; `GameLogic` (static lib) and `Tests/GameLogicTests` (CppUnitTest) added to `Outpost.slnx`; `tools/inventory.py` built; `Cpu6502` written and proved. | **Met.** Debug x64 builds clean; 16 tests pass, of which 11 pin the interpreter against published 6502 behaviour and 5 are the first oracle suite. See §6.1. |
 | **0d Application shell** ⏸ **deferred to phase 2 by owner ruling, 2026-09-03** | *"Do not strip WinUI, ignore it and proceed."* The `Outpost` project is left exactly as it is, packages and all. Nothing here is done now. | Re-enters the plan at **2e**, which is the first slice that needs a window because it is the first playable build. Until then the port is game logic proved by tests, and the shell is not on the critical path. |
-| **0e Permission** | Approach the rights holders about the intent to publish (ADR-001 §5). Until it closes, nothing is pushed to a public remote. | A written answer, recorded in ADR-001 §5, and the disposition of `Upstream/` decided accordingly. |
+| **0e Permission** 🔴 **Owner action, and overdue** | Approach the rights holders about the intent to publish (ADR-001 §5). ~~Until it closes, nothing is pushed to a public remote.~~ **That clause was already false when it was written**: `Zwaliebaba/Outpost.Elite` is public — confirmed against the GitHub API rather than assumed — and `MasterFile/` has been tracked since `92a3c7f`. Those 13 masters are 5,577 lines carrying "copyright D. Braben and I. Bell 1985" and Moxon's commentary copyright in their own headers. The structural mitigation did hold: `Upstream/` is a **submodule**, so the ~3,000 library files are a gitlink and not content, and no assembled binary is tracked. The exposure is the 13 masters and nothing else. | **Ruled 2026-09-03: make the repository private.** Cheapest complete stop — the oracle build is untouched, no history rewrite, no network dependency in CI — and the publication intent stays intact for this slice to resolve properly. It does not undo what is already public. **This is the one thing in the project no tool available here can do**: repository visibility is changed by the owner at github.com/Zwaliebaba/Outpost.Elite → Settings → General → Danger Zone → Change visibility. Until that is done the slice stays open and Risk R1 stays realised. The written answer from the rights holders is still what actually closes it. |
 | **0f Determinism guard** ✅ **Built 2026-09-03** | `tools/check_gamelogic.py`: fails if `GameLogic` names a clock, operating-system randomness, `float`, `double`, file or registry access, or a Win32 call. Comments and string literals are stripped first, so a comment explaining the float ban does not trip the float rule. | **Met.** Passes on the tree. A planted `<chrono>` include and a `double` were both caught, and the tree was clean again afterwards. `--self-test` proves the scanner still detects six violation kinds and correctly ignores four look-alikes, so the checker itself is checked. |
 
 ### 6.10 The canvas was designed from an assertion, and the assertion was wrong
@@ -421,6 +426,55 @@ coverage ledger and an unreliable dependency graph, because its rows were writte
 routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
+
+### 6.17 The C64 main loop has no frame cap, so the frame rate is not a setting
+
+Risk R3 has said since the plan opened that "the original's main loop ran as fast as the machine
+allowed". That was inherited from the BBC-oriented commentary and never checked against the C64
+build, and checking it changed what the risk was asking.
+
+**The check.** `WSCAN` is the routine that waits for vertical sync. Rather than read the version
+gates — which is what got this wrong the first time — the assembled C64 binary was scanned for
+the byte pattern of a `JSR` or `JMP` to `WSCAN`'s address, and each hit resolved to the nearest
+preceding label. There are exactly three:
+
+| Caller | What it is |
+|---|---|
+| `DELAY` | the pause routine, which loops `WSCAN` N times — so its argument is a count of **frames** |
+| `TT16+7` | moving the chart crosshairs, which waits for sync to avoid tearing |
+| `FREEZE` | the pause-the-game routine |
+
+**`main_flight_loop_part_13_of_16.asm` has a `JSR WSCAN`, and the C64 is not in its version
+gate.** The gate reads `_CASSETTE_VERSION OR _DISC_FLIGHT OR _6502SP_VERSION`, and the BBC needs
+it for a palette trick the C64 does not do. So the premise is confirmed and sharpened: **the
+main loop is uncapped**, and that is why the real game visibly slows down when the screen fills
+with ships.
+
+**What that means for the port.** "What step rate should we use" has no answer in the source,
+because the original does not have a step rate — it has a loop and a processor. The rate is a
+*consequence*. So the timing model is two things, not one:
+
+- **The main loop is cycle-budgeted and free-running.** Measure what an iteration costs, divide
+  by the clock, and let it slow under load exactly as the original does. A fixed rate would be a
+  behaviour the game never had — and one that makes combat *easier* than it shipped, because the
+  slowdown is part of the difficulty.
+- **`DELAY`, `TT16` and `FREEZE` are frame-quantised** and need a vertical-sync tick. 50 Hz is
+  the default: this is a Firebird UK release, and `wscan.asm`'s own comment says the screen
+  refreshes "50 times a second (50Hz) on PAL systems, or 60 times a second (60Hz) on NTSC" —
+  the game is agnostic and the *machine* decides, so the port exposes it and defaults to PAL.
+
+The cycle counter this needed is built and lives in `Cpu6502` (Risk R3). It is validated against
+two of the game's own routines, hand-counted from the source: `TT54` at 66 cycles over 23
+instructions and `DORND` at 36 over 13, both exact. `DORND2` — one byte earlier, at the `CLC`
+that makes the entry carry-independent — costs 38, and the two-cycle difference is asserted
+rather than the totals, which is what pins the model to a known instruction.
+
+**The residual, stated rather than buried.** The counter does not price a trapped call, so any
+measurement of a routine that prints or plots is a lower bound; and it does not model the cycles
+the VIC-II steals from the processor for character and sprite fetches, which on a real C64 is a
+further 5-10%. The port will therefore run slightly fast unless that is corrected once a loop
+exists to measure. Both omissions are documented on the `cycles` field itself, where anyone
+reading a number will see them.
 
 ### 6.16 One side effect, surfacing for the third time
 
@@ -724,7 +778,7 @@ is the real cost. The original's loop ran as fast as the machine allowed, and th
 follows from that rate. Nothing in the oracle answers "how many iterations per second did a real
 machine manage", because the interpreter has no notion of time.
 
-Two honest options, neither of them chosen yet because nothing needs it until slice 2e:
+Two honest options were put to the owner:
 
 - **Count cycles.** Give the interpreter a cycle count per instruction and run a main-loop
   iteration in a representative scene. Divide by the processor clock and the answer falls out,
@@ -734,8 +788,8 @@ Two honest options, neither of them chosen yet because nothing needs it until sl
   second, expose it in configuration, and tune by feel. Cheap, and honest so long as nobody
   later describes it as measured.
 
-**Risk R3 is unchanged in substance and worse in outlook**: its mitigation used to be "measure
-it in VICE", and that mitigation is gone. The row now says so.
+**Ruled 2026-09-03: count cycles. Built the same day, and the question turned out to be a
+different one — see §6.17.**
 
 ### 6.4 What slice 1b-b built, and the defect it caught
 
@@ -768,7 +822,7 @@ Three things that is worth noting for the slices ahead:
 | **2b Charts** ✅ **Built 2026-09-03** | `TT22` long-range, `TT23` short-range, crosshairs (`TT15`, `TT14`, `TT16`, `TT103`, `TT105`, `TT123`), `NLIN`/`NLIN2`/`NLIN3`/`NLIN4`, `HME2` find planet by name, `hyp`/`hy6` target selection with `hm`, `ee3` and `TT147`. **The scope line named `TT16a` as "find planet by name" and it is not** — it prints "g", for grams, on the market screen; `HME2` is the search, and it is built. | **Met, and stronger than the stated criterion.** Not goldens but whole-screen comparisons against the shipped routines: both charts for all eight galaxies (the short-range one at four home positions), 1,200 crosshairs, 1,250 crosshair moves, 112 fuel circles, and `TT123` exhaustively over all 65,536 value-and-step pairs. `HME2` compared over 1,024 searches. **The stated criterion cannot be met and should not be**: the fuel circle is `CIRCLE2` and every system's blob on the short-range chart is `SUN`, both of which keep a line heap that belongs to 3c — so a golden of either chart would be a golden of a chart with its circles missing. They are seams whose ARGUMENTS are compared instead, which pins them before the drawing exists. `hyp` was scoped out on first reading as needing commander state, and that was too pessimistic in the way §6.12 describes: the state is an INPUT, not something this slice has to own, so it arrives as a value the way the market's does and the logic is ported. All 1,024 combinations of docked, countdown, CTRL, view, fuel and crosshair position compared — every one of the six branches reached — on the text, the cursor, the countdown, the seeds saved for the jump and the screen. What genuinely remains outside is `Ghy` (the galactic hyperdrive reads the equipment you are carrying), `hyp1`/`TT18` (arrival: the market roll and the tunnel), and `MT26`'s keyboard half of the `F` flow. |
 | **2c Trade and equipment** 🟡 **Price model and trade arithmetic built 2026-09-03** | `TT151`/`var`/`GVL` prices, `TT167` market, `TT219` buy, `TT210` sell, `gnum`, `TT213` inventory, `STATUS`, `EQSHP` with `prx`, `qv`, `refund`, `hm`, cash (`LCASH`, `MCASH`, `GCASH`), `TT162`/`TT160`/`TT161` units. | **Met for everything that is arithmetic.** Every price the game can quote — seventeen goods, eight economies, every value of the market's random byte, 34,816 in all — plus 512 generated markets. And with 2d's commander block in place, the four routines the buying and selling are built on: `LCASH`, `MCASH`, `GCASH` over every price, and `tnpr` over 86,016 capacity checks. §6.15 records what `tnpr` turned out to be. **The market screen and `gnum` are built too**: `TT167` with `TT151`, `TT152` and the unit printers, compared **character for character with the cursor stamped on every character** across all eight economies and six market randomisers — 405 characters a screen, 48 screens. Stamping the cursor is what makes it a real comparison; the characters alone would pass a port that printed every line one cell left. `gnum`'s body — one keystroke of a typed number — is compared over **393,216 keystrokes**, every value against every key at six availabilities, by stepping the shipped routine to whichever of its five exits it reaches. **What is left is the screens themselves**: `TT219` (buy), `TT210` (sell), `TT213` (inventory), `STATUS` and `EQSHP` are loops around `gnum` and `TT217`, so they need the key dispatch and land with 2e. |
 | **2d Commander and saves** 🟡 **Block, checksums and save format built 2026-09-03** | `NA%` default commander, `JAMESON`, `CHK`/`CHK2`/`CHK3`, `sve`/`lod` replaced by `SaveBlock` (the exact original byte layout so an original C64 save imports) + `SaveStore` in the exe writing to LocalAppData; `trnme`/`gtnme` name entry; `DFAULT`/`qu5`; the `Y/N` prompts. | **Met for the format; the file I/O and the name entry are not built.** The seventy-seven-byte block with every field named from the assembled build, both checksums, and the save and load layout — compared against `CHECK`, `CHECK2`, `SVE`'s copy and `DFAULT` over 221 blocks (the shipped default, all-zeros, all-255, a single bit walked through all 77 bytes, and 64 pseudo-random fills). The block is held as BYTES with named offsets rather than as a struct: the save file is those bytes, so making them the storage removes the serialiser a `.d64` import could drift from. Three findings recorded in §6.14. `SaveStore` (the file itself, in LocalAppData), `trnme`/`gtnme` name entry and the `Y/N` prompts need the keyboard and land with 2e. |
-| **2e First playable** ⛔ **Not startable in this environment** | `Game` top-level state (`BR1`, `BAY`, `TT170`, `DOENTRY`), key dispatch for the docked screens (`DOKEY`, `RDKEY`, `TT217`), `CanvasPresenter`, `KeyMap`, frame pacing; the title screen **without** the rotating ship (that needs LL9 — a placeholder box until 3b). | **Cannot be met from here, and the reason is the environment rather than the scope.** Its criterion is that a PERSON can play it: a Windows executable, a window, a keyboard, and someone to press the keys. `Outpost.vcxproj` is still the untouched WinUI 3 template ADR-005 §5 defers, CI builds only the test project, and this work has run entirely on Linux against the 6502 interpreter. Nothing in 2e can be verified the way every slice so far has been. **Two things are needed before it starts**, and both are the owner's: (1) Risk R3 — the frame rate has no oracle, and whoever takes 2e must CHOOSE between giving the interpreter a cycle count and measuring a main-loop iteration against the processor clock, or picking 10–20 steps per second and tuning by feel, and say which; (2) a Windows machine or runner that can build and launch the shell. Everything 2e needs from GameLogic now exists. |
+| **2e First playable** 🟠 **Unblocked on decisions, still blocked on a Windows machine** | `Game` top-level state (`BR1`, `BAY`, `TT170`, `DOENTRY`), key dispatch for the docked screens (`DOKEY`, `RDKEY`, `TT217`), `CanvasPresenter`, `KeyMap`, frame pacing; the title screen **without** the rotating ship (that needs LL9 — a placeholder box until 3b). | **Both owner decisions are now taken, and one of them was answered wrongly in this row until 2026-09-03.** (1) **Risk R3 is settled: count cycles, and the counter is built** — but the row used to say the choice was between measuring a rate and picking one, and §6.17 records why that was the wrong framing. The C64 main loop has no frame cap at all, so there is no rate to pick: the loop is cycle-budgeted and free-running, and a separate 50 Hz PAL vertical-sync tick serves `DELAY`, `TT16` and `FREEZE`. (2) **Verification is split, ruled 2026-09-03**: the replay-hash half runs in CI through a null presenter — no window, no GPU, so it goes on the Ubuntu leg — and "is every docked screen legible, does the cadence feel right" is a human sign-off recorded here. That is ADR-003 §3 extended rather than a new mechanism. **What is still needed is a Windows machine or runner that can build and launch the shell.** `Outpost.vcxproj` is the untouched WinUI 3 template ADR-005 §5 defers, and CI builds only the test project. Everything 2e needs from `GameLogic` exists, and the first thing it should do is measure a main-loop iteration and write the number down. |
 
 ### Phase 3 — Flight and the 3D pipeline
 
@@ -834,6 +888,20 @@ where the 6502-semantics approach leaks (Risk R4), and by 2e there is a playable
 | 4 | Presentation code | **Ignore the sibling repositories; write our own.** No `NeuronClient`; presentation lives in `Outpost.exe`. | ADR-004 §1; §2 of this document |
 | 5 | Platforms | **Left as they are** (x64, x86, ARM64 in the solution), which is not what the plan recommended. Removing platforms was not put to the owner and is not a change to make unilaterally, and keeping MSIX makes ARM64 more plausible rather than less. x64 is the platform that is built and tested; the others are unmaintained. | ADR-004 §1 |
 
+### Owner decisions — taken 2026-09-03
+
+| # | Question | Ruling | Where it landed |
+|---|---|---|---|
+| 6 | Risk R3: how is the step rate determined? | **Count cycles**, rather than pick a number and tune by feel. | Built the same day: `Cpu6502` counts cycles, `CycleTests` validates it against two hand-counted routines. R3 rewritten; **§6.17 records that the question was mis-framed** — the C64 loop has no frame cap, so the rate is a consequence, not a setting, and the model splits into a cycle-budgeted main loop plus a 50 Hz PAL vertical-sync tick. |
+| 7 | How is slice 2e verified, given it needs a window? | **Split the criterion.** The replay-hash half runs in CI through a null presenter; the legibility and feel half is a human sign-off. | ADR-003 §3; the 2e row |
+| 8 | Slice 0e: the repository is public and tracks `MasterFile/`. | **Make the repository private.** | The 0e row; Risk R1, now marked realised. **Owner action, not yet taken** — no tool available here can change repository visibility. |
+| 9 | The portable test runner that existed only in a working directory. | **Commit it and gate CI on it.** MSVC stays the authority. | ADR-004 §6; `Tests/PortableRunner/`; the `linux-tests` job |
+
+**Decision 8 is the one that was not a design question.** It records a policy this document had
+already stated and the repository had never met, and the fix is one setting in GitHub. The
+engineering half — `Upstream/` as a submodule, no assembled binaries committed, nothing lifted
+into `GameLogic/` — did hold, which is why the exposure is 13 files rather than 3,000.
+
 **Decisions 1 and 3 pull against each other and the corpus says so.** Vendoring places roughly
 3,000 unlicensed files in the tree, and publishing that tree is the largest legal exposure in
 the project. The structural mitigation is that everything not ours lives under `Upstream/` and
@@ -847,6 +915,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-03 | **Four owner decisions taken (§8), and one of them found a mis-framed risk.** *Count cycles* for R3 — built the same day, and scanning the assembled binary for `WSCAN` calls showed the C64 main loop has **no frame cap at all** (§6.17), so the rate is a consequence rather than a setting and the timing model splits in two. The counter is validated against `TT54` and `DORND` hand-counted from the source, both exact, and a mutation pass found one real gap in the branch timing. *Split 2e's criterion* between a CI replay-hash leg and a human sign-off. *Make the repository private* — recording that slice 0e's "nothing is pushed to a public remote" clause **was already false when written**, and that the fix is owner action no tool here can take. *Commit the portable test runner and gate CI on it* — ADR-004 §6, a third CI job, and the fast feedback loop stops living in one working directory. |
 | 2026-09-03 | **Phase 2's computational core built: 2a's generator and 2c's price model.** All 2,048 systems compared on every field and every name; `TT111`, `LL5`, and the whole market — 34,816 prices and 512 generated markets. `var` turned out to zero Alien Items' availability as a side effect of computing an economy adjustment. **2a's description is blocked** on a chain nobody had drawn: §6.12 records it, and it ends at the justification line buffer. **2e is not startable** without the two owner decisions ADR-005 §5 and Risk R3 defer to exactly this point. |
 | 2026-09-03 | **`gnum` built, and phase 2's boundary drawn.** One keystroke of a typed number, compared over 393,216 keystrokes by stepping the shipped routine to each of its five exits. Both carries in its multiply by ten are dead and provably so — the cap at 26 keeps every intermediate under 256 — which is the second dead carry the port has kept rather than simplified. Phase 2's computational content is now complete; what remains is the input layer, and **2e is not startable in this environment**: its criterion is that a person can play it. Its row records the two things the owner has to supply. |
 | 2026-09-03 | **Slice 2c's market screen built.** `TT167`, `TT151` and the unit printers, compared character for character with the cursor stamped on each one, over 48 screens. §6.16 records `var`'s AVL+16 store surfacing for the third time — printing the screen makes Alien Items unavailable, and the whole-screen comparison caught it on the last character of the first case. |
