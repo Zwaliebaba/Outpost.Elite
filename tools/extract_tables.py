@@ -77,6 +77,10 @@ TABLES = [
     Table("CELL_ADDRESS_HIGH", "celllookh", 25, "ScreenTables.cpp", "high byte of the same"),
     # 96 characters of 8 rows, from C.FONT.bin.
     Table("FONT_DATA", "FONT", 768, "Font.cpp", "eight bytes a character, from space upwards"),
+    # ---- slice 2d: the commander. 98 bytes because that is what JAMESON copies -- LDY #&61 and
+    # count down -- rather than the 85 the name plus the data block come to. The thirteen past
+    # the block are copied too, so they are extracted too.
+    Table("DEFAULT_COMMANDER", "NA2%", 98, "CommanderTable.cpp", "the factory commander: eight bytes of name, then the block"),
     # Four bytes, read as TENS,X with X counting 3 down to 0. The fifth and most significant byte
     # is not in the table at all -- BPRNT subtracts it as an immediate 0x17 -- so the constant is
     # 0x17_4876E800, which is ten to the eleventh.

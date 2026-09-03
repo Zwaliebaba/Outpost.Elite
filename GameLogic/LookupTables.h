@@ -121,4 +121,13 @@ extern const std::array<std::uint8_t, 68> MARKET_TABLE;
 // doubles each bit into a multicolour pixel on the way to the bitmap.
 extern const std::array<std::uint8_t, 768> FONT_DATA;
 
+/*
+ * 6502: NA2% -- the commander the game starts from.
+ *
+ * Eight bytes of name and then the 77-byte data block, and thirteen more because JAMESON copies
+ * ninety-eight rather than the eighty-five the two come to. The extra bytes are copied by the
+ * game and so are extracted by the port; nothing reads them.
+ */
+extern const std::array<std::uint8_t, 98> DEFAULT_COMMANDER;
+
 } // namespace Elite
