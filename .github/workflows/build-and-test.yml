@@ -6,8 +6,8 @@
 #                 seconds to run, and it catches the mistakes that are easiest to make.
 #   linux-tests   the same suite, the same oracle, built with g++ through the portable runner
 #                 (Tests/PortableRunner/README.md). Not an authority -- MSVC is -- but it
-#                 finishes in about a minute, so a broken push says so long before the Windows
-#                 job has finished locating Visual Studio.
+#                 finishes in 52s against the windows job's 3m52s, so a broken push says so while
+#                 that job is still locating Visual Studio.
 #   windows       the real build and the real suite, which need MSVC and the 6502 oracle. This
 #                 is the one that decides.
 #
@@ -91,9 +91,10 @@ jobs:
     name: Suite on Ubuntu (portable runner)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
-    # Measured: BeebAsm builds in about a minute uncached, the assembly takes seconds, and the
-    # suite is roughly 18s from cold on four cores. The cap is far above that for the same reason
-    # the windows job's is -- a hang should cost one run, not a day of runner time.
+    # Measured on the first run: 52s end to end, of which BeebAsm is 18s uncached, both
+    # assemblies under a second, and the build-and-run step 20s. The cap is far above that for
+    # the same reason the windows job's is -- a hang should cost one run, not a day of runner
+    # time.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

@@ -24,8 +24,11 @@ one file changed — and every defect found while writing slices 1c-c-b, 2b, 2c 
 here first, with MSVC agreeing exactly afterwards.
 
 The second reason is CI. The Ubuntu leg of `.github/workflows/build-and-test.yml` runs the whole
-suite in well under a minute on a runner that costs a tenth of a Windows one, which means a push
-that breaks the port says so before the Windows job has finished restoring Visual Studio.
+suite in **52 seconds** measured end to end — 18s of that building BeebAsm uncached — against the
+Windows job's 3m52s. So a push that breaks the port says so while the Windows job is still
+locating Visual Studio. It is cheaper too, though by less than it feels: GitHub charges roughly
+twice the per-minute rate for a Windows runner, so the saving is that factor times the 4.5×
+shorter run, not the order of magnitude a first guess suggests.
 
 ## How it works
 
