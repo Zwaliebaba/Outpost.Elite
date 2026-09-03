@@ -46,9 +46,23 @@ up as wrong prices in a system three galaxies away.
    result is then narrowed identically (e.g. computing `a*b` in `unsigned` and taking the byte
    the original took).
 4. **The canvas is 320×200 logical pixels**, one byte per pixel holding a C64 colour index, and
-   all line and circle arithmetic is in that space with the original's algorithms
+   — ⚠️ **under measurement, 2026-09-03; do not implement this clause until it is resolved.**
+   This was asserted rather than derived, and the C64 screen is a *multicolour* bitmap: 160
+   double-width pixels of two bits each, with per-8×8-cell colour in screen RAM that the game
+   both writes and EORs (`BULBCOL`). The drawing routines EOR whole *bytes*, and the C64 build
+   of `PIXEL` indexes `TWOS2`, whose masks straddle multicolour pixel boundaries — a write that
+   an index-per-pixel canvas cannot express at all. `Tests/GameLogicTests/CanvasSpikeTests.cpp`
+   measures this against the shipped game; **slice 1d amends this clause from what it finds**
+   before writing `Canvas.cpp`. The rest of this ADR is unaffected.
+
+   The clause as originally written continues: all line and circle arithmetic is in that space
+   with the original's algorithms
    (`LOIN`'s seven variants, `CIRCLE2`'s step table). Sub-pixel accuracy, anti-aliasing and
    higher internal resolution are phase-6 items that would fork the drawing code, not change it.
+   Whatever the canvas turns out to hold, the *logical* coordinate space and the algorithms
+   above are unchanged; what is in question is only the representation the port writes into,
+   and it is a `GameLogic`-internal question — ADR-005's `R8_UINT` texture seam is unaffected,
+   because the resolve to colour indices simply moves inside `Canvas`.
 5. **Erase-by-XOR is available.** `Canvas` provides XOR plotting, and the line heaps are ported,
    because `LL9` and `SUN` use the heap contents to decide what to erase. Whether the executable
    presents every intermediate state or only the end of an iteration is a presentation

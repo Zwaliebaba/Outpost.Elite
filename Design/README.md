@@ -1,8 +1,9 @@
 # Design/ — Outpost: Elite
 
 **Status:** opened 2026-09-02; all five owner decisions taken the same day, and **slices 0a and
-0c are built** — the upstream source is vendored and proved, the 6502 oracle runs, and the
-first routine is ported and matching it.
+0c are built** — the upstream source is referenced and proved, the 6502 oracle runs, and the
+first routine is ported and matching it. **A fresh clone needs `git submodule update --init`
+before any of that is true** (Elite-Conversion-Plan.md §6.9).
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
@@ -16,9 +17,10 @@ under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game 
 library files** plus the font binary, and the routine bodies, ship blueprints and token tables
 all live in those includes rather than in the masters. They were not in this repository.
 
-**Slice 0a fixed that**: the upstream tree is vendored at `Upstream/elite-source-code-library`,
-pinned at commit `aa3f7ee`, and all 712 include paths resolve. `tools/inventory.py
---check-includes` is the standing proof. See
+**Slice 0a fixed that**: the upstream tree sits at `Upstream/elite-source-code-library`, pinned
+at commit `aa3f7ee`, and all 712 include paths resolve. It is a **submodule**, not a copy —
+a fresh clone needs `git submodule update --init` before anything here can be built or tested,
+and `tools/inventory.py --check-includes` is the standing proof either way. See
 [Elite-Conversion-Plan.md §1](Elite-Conversion-Plan.md#1-what-we-actually-have).
 
 ## Reading order
@@ -50,8 +52,9 @@ pinned at commit `aa3f7ee`, and all 712 include paths resolve. `tools/inventory.
 - **Not a licence.** The upstream source carries no licence (ADR-001 §5, Risk R1), and the
   owner intends to publish eventually, which makes this the project's largest exposure rather
   than a footnote. Slice **0e** seeks the rights holders' permission, and nothing is pushed to
-  a public remote until it closes. Everything not ours lives under `Upstream/` and nowhere
-  else, so the decision stays reversible.
+  a public remote until it closes. `Upstream/` is a submodule, so none of its content is in
+  this history at all — but `MasterFile/`'s 13 files are, and they carry the same copyright.
+  ADR-001 §5 records that as an open owner decision.
 
 ## Conventions
 
