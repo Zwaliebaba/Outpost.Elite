@@ -349,4 +349,22 @@ void TextPrinter::PrintGlyph(std::uint8_t _character) noexcept
   m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.cellColour);
 }
 
+void MoveCursorDown(TextState& _text) noexcept
+{
+  ++_text.row;
+}
+
+void PrintThenDownAndSentenceCase(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept
+{
+  _printer.Print(_token);
+  MoveCursorDown(_text);
+  SetSentenceCase(_printer);
+}
+
+void PrintThenIndent(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept
+{
+  PrintThenNewline(_printer, _token);
+  _text.column = 6;
+}
+
 } // namespace Elite

@@ -235,4 +235,43 @@ void TokenPrinter::PrintPhrase(std::uint8_t _token) noexcept
   }
 }
 
+void PrintSpace(TokenPrinter& _printer) noexcept
+{
+  _printer.Print(' ');
+}
+
+void PrintNewline(TokenPrinter& _printer) noexcept
+{
+  _printer.Print(12);
+}
+
+void SetSentenceCase(TokenPrinter& _printer) noexcept
+{
+  _printer.SetCaseFlags(0x80);
+}
+
+void PrintThenSpace(TokenPrinter& _printer, std::uint8_t _token) noexcept
+{
+  _printer.Print(_token);
+  PrintSpace(_printer);
+}
+
+void PrintThenQuestion(TokenPrinter& _printer, std::uint8_t _token) noexcept
+{
+  _printer.Print(_token);
+  _printer.Print('?');
+}
+
+void PrintThenColon(TokenPrinter& _printer, std::uint8_t _token) noexcept
+{
+  _printer.Print(_token);
+  _printer.Print(':');
+}
+
+void PrintThenNewline(TokenPrinter& _printer, std::uint8_t _token) noexcept
+{
+  _printer.Print(_token);
+  PrintNewline(_printer);
+}
+
 } // namespace Elite

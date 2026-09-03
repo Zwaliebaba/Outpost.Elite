@@ -131,6 +131,7 @@
     <ClCompile Include="UniverseTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MarketScreenTests.cpp" />
+    <ClCompile Include="StateTokenTests.cpp" />
     <ClCompile Include="ChartTests.cpp" />
     <ClCompile Include="CommanderTests.cpp" />
     <ClCompile Include="CycleTests.cpp" />
