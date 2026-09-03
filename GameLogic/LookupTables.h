@@ -117,6 +117,16 @@ extern const std::array<std::uint8_t, 4> TEN_TO_THE_ELEVENTH;
 // four bytes for each of the seventeen goods.
 extern const std::array<std::uint8_t, 68> MARKET_TABLE;
 
+/*
+ * 6502: PRXS -- what each piece of equipment costs, two bytes an item, low byte first, in tenths
+ * of a credit.
+ *
+ * FOURTEEN items, not the twelve the cassette version sells: the C64 build adds the military and
+ * mining lasers at the end. Entry 0 is a placeholder of 1 that EQSHP overwrites before it reads
+ * the table, because the price of fuel depends on how empty the tank is.
+ */
+extern const std::array<std::uint8_t, 28> EQUIPMENT_PRICES;
+
 // 6502: FONT -- 96 characters of eight rows, starting at space. One bit per pixel here; CHPR
 // doubles each bit into a multicolour pixel on the way to the bitmap.
 extern const std::array<std::uint8_t, 768> FONT_DATA;

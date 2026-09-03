@@ -154,6 +154,7 @@
     <ClInclude Include="Market.h" />
     <ClInclude Include="StateTokens.h" />
     <ClInclude Include="MarketScreen.h" />
+    <ClInclude Include="Equipment.h" />
     <ClInclude Include="StatusScreen.h" />
     <ClInclude Include="Charts.h" />
     <ClInclude Include="Commander.h" />
@@ -183,11 +184,13 @@
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="StateTokens.cpp" />
     <ClCompile Include="MarketScreen.cpp" />
+    <ClCompile Include="Equipment.cpp" />
     <ClCompile Include="StatusScreen.cpp" />
     <ClCompile Include="Charts.cpp" />
     <ClCompile Include="Commander.cpp" />
     <ClCompile Include="CommanderTable.cpp" />
     <ClCompile Include="MarketTable.cpp" />
+    <ClCompile Include="EquipmentTable.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />

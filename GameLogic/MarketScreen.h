@@ -37,14 +37,35 @@ public:
    * 6502: TRADEMODE -- TT66 (set QQ11, clear the screen, draw the border box), FLKB (flush the
    * keyboard buffer) and DOVDU19 (a palette change this build does not act on).
    *
-   * The PIXELS are the seam's. The text state TTX66 ends on -- column 1, row 1, ALL CAPS -- is
-   * set by the caller below, the same split CLYNS already uses. What TTX66 also does to the ball
-   * line heap, the laser, DLY and `de` is flight state and belongs to phase 3.
+   * ALL of it is the seam's, including the text state TTX66 ends on -- `LDX #1 / STX XC / STX YC
+   * / DEX / STX QQ17`, so column 1, row 1, ALL CAPS. An earlier draft had the screens set those
+   * themselves on the grounds that pixels are the seam's and state is the port's, which is the
+   * split CLYNS uses. It is wrong here, and only a screen that REDRAWS ITSELF shows why: the
+   * equipment shop loops back to the top after every purchase, and on the second pass the game
+   * carries the cursor and the case flags over from the first. A port that reset them would print
+   * its title in the wrong place and in the wrong case, and the three screens that run once would
+   * never have noticed.
+   *
+   * What TTX66 also does to the ball line heap, the laser, DLY and `de` is flight state and
+   * belongs to phase 3.
    */
   virtual void SetUpTradeScreen(std::uint8_t _view) = 0;
 
   /// 6502: CLYNS -- clear the bottom three text rows of the upper screen.
   virtual void ClearBottomRows() = 0;
+
+  /*
+   * 6502: TT66 on its own -- set QQ11, clear the screen, draw the border box.
+   *
+   * Separate from SetUpTradeScreen above because TRADEMODE is TT66 plus a keyboard flush plus a
+   * palette write, and the equipment shop's view menu calls the bare TT66. The flush is invisible
+   * to a test that scripts its keys, which is exactly why it is worth keeping the two apart
+   * rather than letting one stand in for the other.
+   */
+  virtual void ClearToView(std::uint8_t _view) = 0;
+
+  /// 6502: msblob -- reset the dashboard's missile indicators. The dashboard is phase 3's.
+  virtual void ResetMissileIndicators() = 0;
 
   /*
    * 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.
@@ -79,6 +100,7 @@ struct TradeScreen
 inline constexpr std::uint8_t BUY_CARGO_VIEW = 2;
 inline constexpr std::uint8_t SELL_CARGO_VIEW = 4;
 inline constexpr std::uint8_t INVENTORY_VIEW = 8;
+inline constexpr std::uint8_t EQUIP_SHIP_VIEW = 32;
 
 /*
  * 6502: TT219 -- the buy screen.

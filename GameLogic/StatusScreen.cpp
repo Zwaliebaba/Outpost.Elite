@@ -137,12 +137,8 @@ constexpr std::uint8_t DOCKED_TOKEN = 205;
 void StatusScreen(TradeScreen& _screen, const CommanderBlock& _commander, const ShipCondition& _condition,
                   std::uint8_t _crosshairX, std::uint8_t _crosshairY, SystemSeeds& _outSelected) noexcept
 {
-  // 6502: LDA #8 / JSR TRADEMODE, and the text state TTX66 ends on.
+  // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
   _screen.effects.SetUpTradeScreen(INVENTORY_VIEW);
-  _screen.text.column = 1;
-  _screen.text.row = 1;
-  _screen.printer.SetCaseFlags(0);
-  _screen.text.caseFlags = 0;
 
   /*
    * 6502: JSR TT111 -- the system nearest the crosshairs, whose seeds the title line then prints.

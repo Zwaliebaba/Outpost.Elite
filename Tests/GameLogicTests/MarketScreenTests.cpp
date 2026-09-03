@@ -9,6 +9,7 @@
 #include "Rng.h"
 #include "MarketScreen.h"
 #include "StateTokens.h"
+#include "Equipment.h"
 #include "StatusScreen.h"
 #include "TextPrint.h"
 #include "Tokens.h"
@@ -125,7 +126,7 @@ struct KeyboardRun
  */
 KeyboardRun RunWithKeys(Cpu6502& _cpu, std::uint16_t _routine, std::uint16_t _keyRead,
                         const std::vector<std::uint8_t>& _keys, std::uint16_t _leaveAt = 0,
-                        std::uint32_t _budget = 400'000)
+                        std::uint32_t _budget = 400'000, std::uint16_t _alsoLeaveAt = 0)
 {
   constexpr std::uint16_t STOP = 0xFFF9;
   KeyboardRun run{};
@@ -140,7 +141,13 @@ KeyboardRun RunWithKeys(Cpu6502& _cpu, std::uint16_t _routine, std::uint16_t _ke
 
   while (run.instructions < _budget)
   {
-    if (_leaveAt != 0 && _cpu.pc == _leaveAt)
+    /*
+     * TWO addresses, because a screen can be left two ways and they are different labels. The
+     * equipment shop's quiet exits go to BAY; gnum's letter exit is `JMP BAY2`, which is the
+     * INVENTORY screen -- so a run that stopped only at BAY would go on to draw the whole
+     * inventory and ask for keys nobody scripted.
+     */
+    if ((_leaveAt != 0 && _cpu.pc == _leaveAt) || (_alsoLeaveAt != 0 && _cpu.pc == _alsoLeaveAt))
     {
       run.completed = true;
       run.leftEarly = true;
@@ -224,6 +231,8 @@ public:
   void SetUpTradeScreen(std::uint8_t _view) override { log.push_back(static_cast<std::uint32_t>(0x100u + _view)); }
   void ClearBottomRows() override { log.push_back(0x200u); }
   void BeepAndPause() override { log.push_back(0x300u); }
+  void ClearToView(std::uint8_t _view) override { log.push_back(static_cast<std::uint32_t>(0x400u + _view)); }
+  void ResetMissileIndicators() override { log.push_back(0x500u); }
 
   std::vector<std::uint32_t> log;
 };
@@ -1085,6 +1094,299 @@ public:
 
     Logger::WriteMessage(("STATUS: " + std::to_string(compared)
                           + " status screens compared character for character, with the cursor stamped\n")
+                           .c_str());
+  }
+};
+
+TEST_CLASS(TheEquipmentShopMatchesTheShippedGame)
+{
+public:
+  /*
+   * 6502: EQSHP, with prx, qv, eq and refund.
+   *
+   * Every branch of the thirteen-comparison chain, each item bought once into an empty ship and
+   * once into one that already has it, plus the two lasers that need a view chosen, the refund
+   * for replacing one laser with another, and the three ways out.
+   *
+   * TT66 and msblob are trapped alongside the usual three, so the view menu's screen clear and
+   * the dashboard's missile indicators are compared as seam calls rather than skipped.
+   */
+  TEST_METHOD(BuyingEquipmentMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t chpr = oracle.Label("CHPR");
+    const std::uint16_t tt217 = oracle.Label("TT217");
+    const std::uint16_t trademode = oracle.Label("TRADEMODE");
+    const std::uint16_t clyns = oracle.Label("CLYNS");
+    const std::uint16_t dn2 = oracle.Label("dn2");
+    const std::uint16_t tt66 = oracle.Label("TT66");
+    const std::uint16_t msblob = oracle.Label("msblob");
+
+    struct Scenario
+    {
+      const char* what;
+      std::uint8_t tech;
+      std::vector<std::uint8_t> keys;
+      std::uint32_t cash;                 ///< in tenths
+      std::uint8_t fuel;
+      std::uint8_t capacity;
+      std::uint8_t missiles;
+      std::array<std::uint8_t, 7> fitted; ///< ECM, scoops, pod, bomb, unit, docking, galactic
+      std::array<std::uint8_t, 4> lasers;
+    };
+
+    static constexpr std::array<std::uint8_t, 7> NOTHING = { 0, 0, 0, 0, 0, 0, 0 };
+    static constexpr std::array<std::uint8_t, 4> NO_LASERS = { 0, 0, 0, 0 };
+    const std::uint32_t RICH = 999999u;
+
+    // 13 is RETURN. A purchase redraws the screen and asks again, so every script ends with one.
+    const std::vector<Scenario> SCENARIOS = {
+      { "nothing entered", 5, { 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "a letter", 5, { 'C' }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "a number past what is sold", 5, { '9', 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "fill the tank", 5, { '1', 13, 13 }, RICH, 20, 22, 0, NOTHING, NO_LASERS },
+      { "fill an already full tank", 5, { '1', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a missile", 5, { '2', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a fifth missile", 5, { '2', 13 }, RICH, 70, 22, 4, NOTHING, NO_LASERS },
+      { "buy a large cargo bay", 5, { '3', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a second large cargo bay", 5, { '3', 13 }, RICH, 70, 37, 0, NOTHING, NO_LASERS },
+      { "buy an ECM", 5, { '4', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a second ECM", 5, { '4', 13 }, RICH, 70, 22, 0, { 1, 0, 0, 0, 0, 0, 0 }, NO_LASERS },
+      { "buy a pulse laser, front", 9, { '5', 13, '0', 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a beam laser over a pulse", 9, { '6', 13, '1', 13 }, RICH, 70, 22, 0, NOTHING, { 0, 15, 0, 0 } },
+      { "an invalid view then a valid one", 9, { '6', 13, '9', '2', 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy fuel scoops", 9, { '7', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a second set of scoops", 9, { '7', 13 }, RICH, 70, 22, 0, { 0, 1, 0, 0, 0, 0, 0 }, NO_LASERS },
+      { "buy an escape pod", 9, { '8', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a second escape pod", 9, { '8', 13 }, RICH, 70, 22, 0, { 0, 0, 1, 0, 0, 0, 0 }, NO_LASERS },
+      { "buy an energy bomb", 9, { '9', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a second energy bomb", 9, { '9', 13 }, RICH, 70, 22, 0, { 0, 0, 0, 1, 0, 0, 0 }, NO_LASERS },
+      { "buy an energy unit", 14, { '1', '0', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a second energy unit", 14, { '1', '0', 13 }, RICH, 70, 22, 0, { 0, 0, 0, 0, 1, 0, 0 }, NO_LASERS },
+      { "buy a docking computer", 14, { '1', '1', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a second docking computer", 14, { '1', '1', 13 }, RICH, 70, 22, 0, { 0, 0, 0, 0, 0, 1, 0 }, NO_LASERS },
+      { "buy a galactic hyperdrive", 14, { '1', '2', 13, 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a second galactic drive", 14, { '1', '2', 13 }, RICH, 70, 22, 0, { 0, 0, 0, 0, 0, 0, 1 }, NO_LASERS },
+      { "buy a military laser, left", 14, { '1', '3', 13, '2', 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "buy a mining laser over a beam", 14, { '1', '4', 13, '3', 13 }, RICH, 70, 22, 0, NOTHING, { 0, 0, 0, 143 } },
+      /*
+       * The other two laser powers the refund knows, and one it does not.
+       *
+       * `refund` matches the OLD laser's power against pulse, beam and military and falls through
+       * to the mining laser's price for anything else -- so replacing a military laser and
+       * replacing a power nothing names are different amounts of money, and a mutation that
+       * conflated them passed until these three lines existed.
+       */
+      { "replace a military laser", 14, { '5', 13, '0', 13 }, RICH, 70, 22, 0, NOTHING, { 151, 0, 0, 0 } },
+      { "replace a mining laser", 14, { '6', 13, '0', 13 }, RICH, 70, 22, 0, NOTHING, { 50, 0, 0, 0 } },
+      { "replace a power nothing names", 14, { '5', 13, '0', 13 }, RICH, 70, 22, 0, NOTHING, { 99, 0, 0, 0 } },
+      { "cannot afford it", 14, { '1', '2', 13 }, 100u, 70, 22, 0, NOTHING, NO_LASERS },
+      { "a station that sells almost nothing", 0, { 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "the tech level at the cap's edge", 8, { 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      { "one below the menu's screen clear", 7, { '5', 13, '0', 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+      /*
+       * A laser bought at exactly tech level 8, which is where `CMP #8 / BCC` decides whether the
+       * view menu clears the screen first. Tech 7 and 9 straddle it and neither pins it -- a
+       * mutation moving the test to `> 8` passed until this line existed.
+       */
+      { "a laser at the menu's threshold", 8, { '5', 13, '0', 13 }, RICH, 70, 22, 0, NOTHING, NO_LASERS },
+    };
+
+    std::uint32_t compared = 0;
+
+    for (const Scenario& s : SCENARIOS)
+    {
+      const std::wstring where = Widen(std::string("EQSHP: ") + s.what);
+
+      Elite::CommanderBlock commander = Elite::DefaultCommander();
+      commander.SetCash(s.cash);
+      commander.At(Elite::Field::Fuel) = s.fuel;
+      commander.At(Elite::Field::CargoCapacity) = s.capacity;
+      commander.At(Elite::Field::Missiles) = s.missiles;
+      commander.At(Elite::Field::Ecm) = s.fitted[0];
+      commander.At(Elite::Field::FuelScoops) = s.fitted[1];
+      commander.At(Elite::Field::EscapePod) = s.fitted[2];
+      commander.At(Elite::Field::EnergyBomb) = s.fitted[3];
+      commander.At(Elite::Field::EnergyUnit) = s.fitted[4];
+      commander.At(Elite::Field::DockingComputer) = s.fitted[5];
+      commander.At(Elite::Field::GalacticDrive) = s.fitted[6];
+      for (std::size_t mount = 0; mount < 4; ++mount)
+      {
+        commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + mount] = s.lasers[mount];
+      }
+
+      // ---- the shipped routine ------------------------------------------------------------
+      Cpu6502 cpu = oracle.Fresh();
+      cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+      cpu.AddTrap(trademode);
+      cpu.AddTrap(clyns);
+      cpu.AddTrap(dn2);
+      cpu.AddTrap(tt66);
+      cpu.AddTrap(msblob);
+      cpu.watch = { oracle.Label("XC"), oracle.Label("YC"), 0, 0 };
+
+      cpu.memory[oracle.Label("tek")] = s.tech;
+      cpu.memory[oracle.Label("QQ14")] = s.fuel;
+      cpu.memory[oracle.Label("CRGO")] = s.capacity;
+      cpu.memory[oracle.Label("NOMSL")] = s.missiles;
+      cpu.memory[oracle.Label("ECM")] = s.fitted[0];
+      cpu.memory[oracle.Label("BST")] = s.fitted[1];
+      cpu.memory[oracle.Label("ESCP")] = s.fitted[2];
+      cpu.memory[oracle.Label("BOMB")] = s.fitted[3];
+      cpu.memory[oracle.Label("ENGY")] = s.fitted[4];
+      cpu.memory[oracle.Label("DKCMP")] = s.fitted[5];
+      cpu.memory[oracle.Label("GHYP")] = s.fitted[6];
+      for (std::size_t mount = 0; mount < 4; ++mount)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)] = s.lasers[mount];
+      }
+      for (std::size_t index = 0; index < 4; ++index)
+      {
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)] =
+          commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+      }
+      cpu.memory[oracle.Label("GCNT")] = commander.At(Elite::Field::GalaxyNumber);
+      cpu.memory[oracle.Label("QQ17")] = 0;
+      cpu.memory[oracle.Label("XC")] = 1;
+      cpu.memory[oracle.Label("YC")] = 1;
+      cpu.memory[oracle.Label("DTW1")] = 0;
+      cpu.memory[oracle.Label("DTW2")] = 0xFF;
+      cpu.memory[oracle.Label("DTW3")] = 0;
+      cpu.memory[oracle.Label("DTW4")] = 0;
+      cpu.memory[oracle.Label("DTW5")] = 0;
+      cpu.memory[oracle.Label("DTW6")] = 0;
+      cpu.memory[oracle.Label("DTW8")] = 0xFF;
+
+      cpu.a = cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+
+      const KeyboardRun run =
+        RunWithKeys(cpu, oracle.Label("EQSHP"), tt217, s.keys, oracle.Label("BAY"), 8'000'000,
+                    oracle.Label("BAY2"));
+      Assert::IsTrue(run.completed, (where + L": the shipped screen should finish").c_str());
+
+      std::vector<std::uint32_t> expected;
+      std::vector<std::uint32_t> gameEffects;
+      for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+      {
+        if (hit.address == chpr)
+        {
+          expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8)
+                             | (static_cast<std::uint32_t>(hit.watched[1]) << 16));
+        }
+        else if (hit.address == trademode)
+        {
+          gameEffects.push_back(0x100u + hit.a);
+        }
+        else if (hit.address == clyns)
+        {
+          gameEffects.push_back(0x200u);
+        }
+        else if (hit.address == dn2)
+        {
+          gameEffects.push_back(0x300u);
+        }
+        else if (hit.address == tt66)
+        {
+          gameEffects.push_back(0x400u + hit.a);
+        }
+        else if (hit.address == msblob)
+        {
+          gameEffects.push_back(0x500u);
+        }
+      }
+
+      // ---- the port ------------------------------------------------------------------------
+      RecordingSink sink;
+      Elite::TextState text;
+      text.column = 1;
+      text.row = 1;
+      text.caseFlags = 0;
+      sink.cursor = &text;
+      Elite::CharacterPrinter characters(sink);
+      characters.state.sentenceStart = 0xFF;
+      Elite::TokenPrinter printer(characters);
+      printer.SetCaseFlags(0);
+
+      const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
+      Elite::SystemSeeds current = commander.GalaxySeeds();
+      Elite::SystemSeeds selected = commander.GalaxySeeds();
+      Elite::StateTokens values(printer, text, commander,
+                                std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
+                                selected, false);
+      printer.SetValueTokens(&values);
+      printer.SetCursor(&text);
+
+      ScriptedKeys keys(s.keys);
+      RecordingEffects effects;
+      Elite::Rng rng;
+      Elite::ExtendedTokenPrinter extended(characters, printer, rng);
+      Elite::TradeScreen screen{ printer, characters, extended, text, keys, effects, rng };
+
+      Elite::EquipShipScreen(screen, commander, s.tech);
+
+      // ---- compare -------------------------------------------------------------------------
+      Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
+      Assert::AreEqual(run.keysTaken, keys.Taken(), (where + L": how many keys were read").c_str());
+
+      if (sink.stamped != expected)
+      {
+        Assert::Fail((where + L" differs, " + FirstDifference(expected, sink.stamped)).c_str());
+      }
+
+      Assert::AreEqual(gameEffects.size(), effects.log.size(), (where + L": how many seams were reached").c_str());
+      for (std::size_t index = 0; index < gameEffects.size(); ++index)
+      {
+        Assert::AreEqual(gameEffects[index], effects.log[index], (where + L": seam " + std::to_wstring(index)).c_str());
+      }
+
+      // Everything a purchase can change.
+      struct Check
+      {
+        const char* name;
+        std::uint16_t address;
+        Elite::Field field;
+      };
+      const Check CHECKS[] = {
+        { "fuel", oracle.Label("QQ14"), Elite::Field::Fuel },
+        { "cargo capacity", oracle.Label("CRGO"), Elite::Field::CargoCapacity },
+        { "missiles", oracle.Label("NOMSL"), Elite::Field::Missiles },
+        { "ECM", oracle.Label("ECM"), Elite::Field::Ecm },
+        { "fuel scoops", oracle.Label("BST"), Elite::Field::FuelScoops },
+        { "escape pod", oracle.Label("ESCP"), Elite::Field::EscapePod },
+        { "energy bomb", oracle.Label("BOMB"), Elite::Field::EnergyBomb },
+        { "energy unit", oracle.Label("ENGY"), Elite::Field::EnergyUnit },
+        { "docking computer", oracle.Label("DKCMP"), Elite::Field::DockingComputer },
+        { "galactic drive", oracle.Label("GHYP"), Elite::Field::GalacticDrive },
+      };
+      for (const Check& check : CHECKS)
+      {
+        Assert::AreEqual(cpu.memory[check.address], commander.At(check.field),
+                         (where + L": " + Widen(check.name)).c_str());
+      }
+      for (std::size_t mount = 0; mount < 4; ++mount)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)],
+                         commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + mount],
+                         (where + L": laser mount " + std::to_wstring(mount)).c_str());
+      }
+      for (std::size_t index = 0; index < 4; ++index)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)],
+                         commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index],
+                         (where + L": cash byte " + std::to_wstring(index)).c_str());
+      }
+
+      ++compared;
+    }
+
+    Logger::WriteMessage(("EQSHP: " + std::to_string(compared)
+                          + " equipment screens compared character for character, with the cursor stamped\n")
                            .c_str());
   }
 };
