@@ -23,12 +23,12 @@ This runner turns that loop into eighteen seconds from cold and a quarter of a s
 one file changed — and every defect found while writing slices 1c-c-b, 2b, 2c and 2d was found
 here first, with MSVC agreeing exactly afterwards.
 
-The second reason is CI. The Ubuntu leg of `.github/workflows/build-and-test.yml` runs the whole
-suite in **52 seconds** measured end to end — 18s of that building BeebAsm uncached — against the
-Windows job's 3m52s. So a push that breaks the port says so while the Windows job is still
-locating Visual Studio. It is cheaper too, though by less than it feels: GitHub charges roughly
-twice the per-minute rate for a Windows runner, so the saving is that factor times the 4.5×
-shorter run, not the order of magnitude a first guess suggests.
+The second reason is CI. Measured on the same commit: the Ubuntu leg of
+`.github/workflows/build-and-test.yml` runs the whole suite in **34 seconds** end to end (52s on
+a cold BeebAsm cache) against the Windows job's **4m35s**. So a push that breaks the port says so
+while the Windows job is still locating Visual Studio. It is cheaper too, though by less than it
+feels: GitHub charges roughly twice the per-minute rate for a Windows runner, so the saving is
+that factor times the 8× shorter run — not the order of magnitude the rate alone suggests.
 
 ## How it works
 

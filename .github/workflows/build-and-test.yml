@@ -6,8 +6,8 @@
 #                 seconds to run, and it catches the mistakes that are easiest to make.
 #   linux-tests   the same suite, the same oracle, built with g++ through the portable runner
 #                 (Tests/PortableRunner/README.md). Not an authority -- MSVC is -- but it
-#                 finishes in 52s against the windows job's 3m52s, so a broken push says so while
-#                 that job is still locating Visual Studio.
+#                 finishes in 34s against the windows job's 4m35s on the same commit, so a
+#                 broken push says so while that job is still locating Visual Studio.
 #   windows       the real build and the real suite, which need MSVC and the 6502 oracle. This
 #                 is the one that decides.
 #
@@ -91,10 +91,10 @@ jobs:
     name: Suite on Ubuntu (portable runner)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
-    # Measured on the first run: 52s end to end, of which BeebAsm is 18s uncached, both
-    # assemblies under a second, and the build-and-run step 20s. The cap is far above that for
-    # the same reason the windows job's is -- a hang should cost one run, not a day of runner
-    # time.
+    # Measured: 34s end to end with BeebAsm cached, 52s on a cold cache (BeebAsm is 18s of
+    # that). Both assemblies take under a second; the build-and-run step is 26s. The cap is far
+    # above that for the same reason the windows job's is -- a hang should cost one run, not a
+    # day of runner time.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -146,8 +146,11 @@ jobs:
     # exists for the day it does not, or for a self-hosted machine; the preflight below is what
     # will tell you which case you are in.
     runs-on: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
-    # Measured on the first run: 3m52s end to end, of which the suite itself is 1m48s and BeebAsm
-    # 26s. That is with the exhaustive sweeps in an unoptimised Debug build, so there is room.
+    # Measured 2026-09-03 at 133 tests: 4m35s end to end, of which the suite itself is 3m27s.
+    # (The first run of this workflow was 3m52s with 82 tests and a 1m48s suite -- quoted here
+    # because it is where the 45-minute cap came from, not as a current figure.) That is with
+    # the exhaustive sweeps in an unoptimised Debug build, so there is room -- and the suite is
+    # now the whole cost of this job, which is what a split would have to address.
     # The cap is here so that a genuine hang costs one run rather than six hours of runner time,
     # and it is deliberately far above the measurement rather than tight against it.
     timeout-minutes: 45
