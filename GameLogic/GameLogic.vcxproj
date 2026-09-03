@@ -165,6 +165,8 @@
     <ClCompile Include="Rng.cpp" />
     <ClCompile Include="SineTable.cpp" />
     <ClCompile Include="ExtendedTokenTables.cpp" />
+    <ClCompile Include="ScreenTables.cpp" />
+    <ClCompile Include="Font.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />

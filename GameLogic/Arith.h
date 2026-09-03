@@ -124,4 +124,22 @@ void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
 /// 6502: ARCTAN -- the angle of the ratio P over Q, as a byte turn.
 [[nodiscard]] std::uint8_t Arctan(MathWorkspace& _work) noexcept;
 
+/// 6502: FMLTU2 -- A = K * sin(A) / 256, where the sine comes from SNE indexed by the low five
+/// bits of A. It sets Q and falls straight through into FMLTU, so this is that whole path.
+[[nodiscard]] std::uint8_t MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a) noexcept;
+
+/*
+ * 6502: DVID4 -- an 8.8 fixed-point divide. P comes out as the whole part of A / Q, and R as
+ * the fraction: eight steps of restoring division, then -- because the routine has no RTS of
+ * its own -- LL28's body scaling the remainder back up, which leaves R.
+ *
+ * Both halves are the routine. Its two callers in the shipped game JSR to the top and return
+ * from the bottom of the code it falls into, so a port that stopped after the division would be
+ * a different routine that happens to share a name. Returns R.
+ *
+ * The shipped C64 build unrolls the eight steps rather than looping; that changes nothing about
+ * the result, which is why this reads as a loop.
+ */
+[[nodiscard]] std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept;
+
 } // namespace Elite
