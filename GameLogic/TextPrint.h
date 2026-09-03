@@ -170,6 +170,10 @@ void MoveCursorDown(TextState& _text) noexcept;
  */
 void PrintTitleLine(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
 
+/// 6502: TTX69 -- the same chain one link down, entered without a token. Moves the cursor to the
+/// next row, sets sentence case and prints a newline, so it is TWO vertical movements.
+void MoveDownAndNewline(TokenPrinter& _printer, TextState& _text) noexcept;
+
 /// 6502: plf2 -- JSR plf / LDA #6 / JMP DOXC. A token, a newline, then indent to column six.
 void PrintThenIndent(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
 

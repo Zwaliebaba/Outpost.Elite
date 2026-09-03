@@ -199,6 +199,19 @@ python tools/inventory.py --check-includes    # every master INCLUDE resolves in
 python tools/inventory.py                     # coverage ledger: ported / pending / unaccounted
 ```
 
+**Read a routine through `tools/c64_source.py`, not by eye.** The upstream library is one tree
+serving ten versions of Elite, and a routine's C64 form is whatever survives its `IF` / `ELIF` /
+`ELSE` / `ENDIF` conditionals -- which nest, and which include `NOT(...)` blocks that are easy to
+skim past. Porting the BBC Master's version of a routine by mistake is a real failure mode, met
+more than once here.
+
+```
+python tools/c64_source.py --code library/common/main/subroutine/tt25.asm
+```
+
+It evaluates the conditionals against the master build's own symbol values and errors on a symbol
+it does not know rather than guessing FALSE.
+
 **Report what you actually did.** "Builds clean, not run" and "builds, and the arithmetic suite
 is green against the oracle" are different claims. Never imply the second when you did the first.
 
