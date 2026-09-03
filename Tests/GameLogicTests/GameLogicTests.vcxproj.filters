@@ -81,6 +81,9 @@
     <ClCompile Include="StateTokenTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="NameEntryTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="ChartTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>

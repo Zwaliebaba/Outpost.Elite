@@ -155,6 +155,7 @@
     <ClInclude Include="StateTokens.h" />
     <ClInclude Include="MarketScreen.h" />
     <ClInclude Include="Equipment.h" />
+    <ClInclude Include="NameEntry.h" />
     <ClInclude Include="StatusScreen.h" />
     <ClInclude Include="Charts.h" />
     <ClInclude Include="Commander.h" />
@@ -185,6 +186,7 @@
     <ClCompile Include="StateTokens.cpp" />
     <ClCompile Include="MarketScreen.cpp" />
     <ClCompile Include="Equipment.cpp" />
+    <ClCompile Include="NameEntry.cpp" />
     <ClCompile Include="StatusScreen.cpp" />
     <ClCompile Include="Charts.cpp" />
     <ClCompile Include="Commander.cpp" />
