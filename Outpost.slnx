@@ -7,10 +7,12 @@
   <Project Path="NeuronCore/NeuronCore.vcxproj" Id="fb32eb57-8b0d-4048-9852-7b5ca9395aa2">
     <Platform Solution="*|ARM64" Project="x64" />
   </Project>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/GameLogicTests/GameLogicTests.vcxproj" Id="b2d58e41-7c3f-4e26-ad99-4a8f1b6c2e03">
+      <Platform Solution="*|ARM64" Project="x64" />
+    </Project>
+  </Folder>
   <Project Path="GameLogic/GameLogic.vcxproj" Id="a1c47f30-6b2e-4d15-9c88-3f7e0a5b1d92">
-    <Platform Solution="*|ARM64" Project="x64" />
-  </Project>
-  <Project Path="Tests/GameLogicTests/GameLogicTests.vcxproj" Id="b2d58e41-7c3f-4e26-ad99-4a8f1b6c2e03">
     <Platform Solution="*|ARM64" Project="x64" />
   </Project>
   <Project Path="Outpost/Outpost.vcxproj" Id="a44f8fe6-9618-48f4-bdbf-ac0513748d87">
