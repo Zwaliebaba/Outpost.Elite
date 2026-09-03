@@ -78,7 +78,8 @@ loader 22, sprites 5 — 710 includes, all distinct; verified mechanically 2026-
 
 | Labels | Files | Home | Disposition |
 |---|---|---|---|
-| `loin_part_1_of_7` … `part_7_of_7` (some paired with `loinq`), `hloin`, `hloin2`, `nlin`, `nlin2`, `nlin3`, `nlin4`, `pix1`, `pixel`, `pixel2`, `dot`, `cpix4`, `cpix2-cpixk`, `lijt1`–`lijt8` | 24 | `Lines.cpp`, `Canvas.cpp` | Port — `lijt*` are the self-modifying jump tables the line routines use; they become a `switch` on quadrant. |
+| ✅ `hloin`, `pixel`, `pixel2`, `pix1`, `cpix4`, `cpix2-cpixk` | 6 | `Canvas.h`, `Lines.cpp` | **Ported 2026-09-03** (slice 1d-a). Each compared against the shipped routine by **whole-screen byte compare** — all 0x2800 bytes after every call — so a routine that draws the right pixel and scribbles elsewhere fails. `PIXEL` over every x at eight distances; `PIXEL2` over all 65,536 coordinate pairs; `CPIX2`/`CPIX4` over every x in five colours; `HLOIN` over both ends across three cells. |
+| `loin_part_1_of_7` … `part_7_of_7` (some paired with `loinq`), `hloin2`, `nlin`, `nlin2`, `nlin3`, `nlin4`, `dot`, `lijt1`–`lijt8` | 18 | `Lines.cpp`, `Canvas.cpp` | Port — `lijt*` are the self-modifying jump tables the line routines use; they become a `switch` on quadrant. `dot` reads the compass workspace and goes with the dashboard in 3d. |
 | `bline`, `circle`, `circle2`, `flip`, `stars`, `stars1`, `stars2`, `stars6`, `nwstars` | 9 | `Circles.cpp`, `Stardust.cpp` | Port |
 | `lsx2`, `lsy2`, `shppt`, `ll9_part_1_of_12` … `part_12_of_12`, `ll61`, `ll62`, `ll145_part_1_of_4` … `part_4_of_4`, `ll118`, `ll120`, `ll123`, `ll129`, `proj`, `pl2`, `edges`, `chkon`, `plut-pu1` | 28 | `ShipDraw.cpp`, `LineHeap.h` | Port |
 | `planet`, `pl9_part_1_of_3` … `part_3_of_3`, `pls1`, `pls2`, `pls22`, `pls3`–`pls6`, `wpls2`, `wp1`, `wpls`, `pl21`, `sun_part_1_of_4` … `part_4_of_4`, `solar`, `nwq`, `wpshps`, `flflls`, `sos1` | 24 | `Planet.cpp`, `Sun.cpp` | Port |

@@ -51,5 +51,8 @@
     <ClCompile Include="CanvasSpikeTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="CanvasTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
