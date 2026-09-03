@@ -1,0 +1,601 @@
+# Elite Conversion Plan — 6502 to modern C++
+
+**Status:** Accepted · 2026-09-02 · **revised in place** (this document is the sequence of
+record; the ADRs decide *what*, this decides *when*).
+**Owner decisions:** all five taken on 2026-09-02 and recorded in §8.
+**Phase 0 is closed**, bar slice 0e which is owner action: 0a (upstream vendored), 0b-a (the
+assembler and label map), 0c (skeleton, the 6502 interpreter), 0f (the determinism guard) are
+built; 0b-b is cancelled and 0d deferred, both by owner ruling. **Phase 1 is under way**: 1b-a
+and 1b-b have ported eighteen arithmetic routines. **The oracle is live**, which is the gate
+phases 1 to 4 were waiting on.
+
+---
+
+## 0. Summary
+
+The goal is a C++ port of Commodore 64 Elite, running as `Outpost.exe` inside this solution,
+that plays exactly like the original before it plays any better. The plan is built on three
+ideas:
+
+1. **The original binary is the oracle.** The assembled 6502 game, executed by a small 6502
+   interpreter inside the test project, tells us what every arithmetic, text, universe and
+   drawing routine is *supposed* to return. Each ported routine is tested against it on the same
+   inputs. This turns "does it feel right" into "does it match", routine by routine (ADR-003).
+2. **Game logic is a platform-free, deterministic library.** Everything that was 6502 code
+   becomes `GameLogic` (namespace `Elite`): no window, no GPU, no clock, no file system. It draws
+   into an in-memory 320×200 indexed canvas and emits sound-register writes. The executable
+   presents that canvas and plays those sounds (ADR-002, ADR-004, ADR-005).
+3. **Port in the order the game can be played.** Data and arithmetic first (testable with no
+   screen), then the docked game (charts, market, equipment, saves — a playable build with no
+   flight), then flight and drawing, then combat and the wider universe, then sound. Each slice
+   ends in something that runs.
+
+The work is sized in [§6](#6-the-build-order); the coverage ledger is
+[Source-Inventory.md](Source-Inventory.md).
+
+---
+
+## 1. What we actually have
+
+### 1.1 `MasterFile/` — 13 master files, 5,615 lines, and 710 files that are not here
+
+| File | Lines | What it is | Port disposition |
+|---|---|---|---|
+| `elite-source.asm` | 1,498 | The main game. Configuration constants (ship type numbers, key codes, colour bytes, sound numbers, memory map) then **627 `INCLUDE` lines** that pull in every routine, split into the eleven code blocks ELTA–ELTK | **Port** (via its includes) |
+| `elite-data.asm` | 283 | Recursive token table, sine/arctan tables, extended token tables, ship blueprints (36 ships) — **58 `INCLUDE`s** plus an `INCBIN` of the font `C.FONT.bin` | **Port as generated data** |
+| `elite-loader.asm` | 325 | The game loader: zero page setup, the dashboard bitmap (`dials.asm`), the colour maps (`sdump`, `cdump`), sprite definitions, date string, plus seven loader code parts | **Extract assets; code not ported** |
+| `elite-sprites.asm` | 84 | Sprite definitions (`spritp.asm` via macros) | **Extract asset** |
+| `elite-gma1.asm` | 1,550 | Disk fast loader | Not ported |
+| `elite-gma2.asm` | 86 | Empty loader stage | Not ported |
+| `elite-gma3.asm` | 300 | Disk protection (disabled) | Not ported |
+| `elite-firebird.asm` | 274 | BASIC autoboot | Not ported |
+| `elite-send.asm` | 701 | PDS transfer utility | Not ported |
+| `elite-checksum.asm` | 325 | Reference for `elite-checksum.py` | Not ported (checksum *logic* the game applies to saves is — see `CHK` in the inventory) |
+| `elite-readme.asm` | 146 | Disk README generator | Not ported |
+| `elite-build-options.asm` | 5 | `_VERSION=8` (C64), `_VARIANT=1` (GMA85 NTSC), `_MATCH_ORIGINAL_BINARIES=TRUE`, `_MAX_COMMANDER=FALSE` | Fixes which variant we port (ADR-001) |
+| `README.md` | 38 | Moxon's index of the above | — |
+
+**The include tree was absent, and is now vendored.** The `INCLUDE` paths are of the form
+`library/<lineage>/main/<kind>/<name>.asm` and
+`versions/c64/1-source-files/main-sources/elite-build-options.asm`, which is the layout of the
+upstream repository **`markmoxon/elite-source-code-library`**. Slice 0a cloned it to
+`Upstream/elite-source-code-library`, pinned at commit **`aa3f7ee`** (2026-09-01), and proved
+the acceptance criterion mechanically:
+
+| Check | Result |
+|---|---|
+| Distinct `INCLUDE`/`INCBIN` paths in the masters | 712 (710 under `library/`, plus the build options and the font) |
+| Resolved against the vendored tree | **712 / 712** |
+| The 13 masters compared byte-for-byte with their upstream copies | **identical** |
+
+`tools/inventory.py --check-includes` is that check, and it runs in a second.
+
+Breakdown of the 710 missing files by lineage — this matters because it says how much of the
+game is shared with the BBC versions (where bbcelite.com's deep-dive articles apply verbatim)
+and how much is C64-specific:
+
+| Lineage | Subroutines | Variables / tables | Macros | Workspaces | Total | Meaning |
+|---|---|---|---|---|---|---|
+| `common` | 363 | 33 | 8 | 4 | **408** | Identical across every Elite version — the core game |
+| `enhanced` | 55 | 36 | 6 | 1 | **98** | Shared by the disc/6502SP/Master/C64 "enhanced" versions: extended tokens, missions, extra ships |
+| `advanced` | 12 | 13 | — | 1 | **26** | Shared by 6502SP/Master/C64 |
+| `master` | 8 | 8 | — | — | **16** | Shared with the BBC Master version (the C64's direct ancestor) |
+| `6502sp` | 6 | 1 | — | — | **7** | Borrowed from the second-processor version |
+| `c64` | 91 | 55 | 4 (sprites) | 4 | **155** | C64-only: VIC-II drawing, SID sound and music, sprites, keyboard, Kernal disk I/O, Trumbles |
+
+The C64 game is the BBC Master lineage with a C64 platform layer of ~155 files. About 78% of
+the routine bodies are the same code every Elite has, which is why an oracle-driven port is
+tractable: most of it is well-documented integer arithmetic and state machines with no
+hardware in them.
+
+### 1.2 What the solution contains today
+
+- `Outpost.slnx` with two projects and three platforms (x64, x86, ARM64).
+- `NeuronCore/` — static library, C++20, v145. Two headers: `NeuronCore.h` (the shared PCH
+  content: STL, Win32, Winsock, C++/WinRT base) and `Debug.h` (`DebugTrace`, `Fatal`,
+  `ASSERT` family). Nothing else yet.
+- `Outpost/` — a **WinUI 3 / Windows App SDK 2.4 desktop app template**, MSIX single-project
+  packaged, C++/WinRT 3.0, with `packages.config` pulling WebView2, AI/ML, Widgets, Search and
+  DWrite packages. It has `pch.h/.cpp` and assets only: no `Main.cpp`, no XAML page. It
+  references `NeuronCore`. ADR-005 recommends replacing this shell (owner decision, §8).
+- `.clang-format`, `.clang-tidy`, `.editorconfig` — copied from Outpost.Frontier. They cite an
+  `AGENTS.md` and a `Build/` folder that do not exist here yet.
+
+### 1.3 What the sibling repositories give us
+
+**Owner ruling, 2026-09-02: none of it is used.** The codebase is this project's own
+(ADR-004 §1). The sibling trees are named here only so that a later reader knows they were
+considered and deliberately not drawn on:
+
+- **Outpost.Frontier** and **Outpost.Warzone** — same family, same conventions, and a
+  `NeuronClient` project containing a window, a D3D12 device and an XAudio2 device that an
+  earlier draft proposed lifting. Not lifted. The presentation layer is written here.
+- **`~/source/repos/Elite`** — a *previous* port by the owner of the **1987 IBM PC DOS**
+  Elite (`ELITEL.EXE`, reverse-engineered x86, 25k lines) to C++/D3D11 with CMake, 8.2k lines,
+  eleven phases marked complete in its `migration.md`. It is a different code base (Andy
+  Onions' x86 rewrite, 31 ship types, CGA 320×200×4) and does not follow the house style, so
+  **none of it is copied**. Three of its decisions are validated here and adopted: CPU-side
+  framebuffer uploaded to a GPU texture and blitted at integer scale; integer arithmetic
+  preserved rather than floated; golden regression tests over the RNG and all 2,048 systems.
+  Its universe output is a useful *second* cross-check for galaxy generation, since both games
+  derive from the same seeds.
+
+---
+
+## 2. Target architecture
+
+```
+NeuronCore.lib                 foundation (exists): the shared precompiled-header content and Debug.h.
+├── GameLogic.lib              THE PORT.  namespace Elite.  Deterministic, platform-free.
+│                              Input: InputFrame.  Output: Canvas (320x200 indexed) + SoundEvents.
+└── Outpost.exe                composition root AND presentation, all written here: Main, AppConfig,
+                               Window (raw Win32), GpuDevice + swap chain (D3D12), CanvasPresenter,
+                               SidSynth (sound events → XAudio2), KeyMap (VK → Elite keys),
+                               SaveStore (commander files).  Packaged MSIX, no XAML (ADR-005 §5).
+Tests/GameLogicTests.dll       CppUnitTest.  Cpu6502 oracle, arithmetic/token/universe suites,
+                               golden canvases, replay hashes.
+tools/                         inventory.py (coverage ledger), extract_tables.py (asm → C++ data),
+                               labels.py (BeebAsm listing → label addresses), golden_diff.py, check_gamelogic.py
+MasterFile/                    the 13 masters.  Reference only.  Never compiled, never included.
+Upstream/                      the vendored upstream tree, pinned at aa3f7ee.  Never edited, never compiled.
+```
+
+### 2.1 The seam: what `GameLogic` looks like from outside
+
+```cpp
+namespace Elite
+{
+struct InputFrame            // one iteration's worth of keys, already logical (KeyMap did the VK work)
+{
+  std::uint64_t held;        // bit per Elite key (KYTB order); the port keeps the original polling model
+  std::uint64_t pressed;     // edges, for the screens that read a single key
+};
+
+class Game                   // 6502: the whole of ELTA..ELTK
+{
+public:
+  void Reset();                                   // 6502: RESET / BEGIN / BR1 flow
+  void Step(const InputFrame& _input);            // one main-loop iteration (flight or docked)
+  [[nodiscard]] const Canvas& Frame() const;      // 320x200, one byte per pixel, C64 colour index
+  [[nodiscard]] std::span<const SoundEvent> Sounds() const;   // register-level SID writes this step
+  [[nodiscard]] std::uint64_t StateHash() const;  // for replay determinism (ADR-003 §3)
+  ...
+};
+}
+```
+
+`Step` is one iteration of the original's main loop. The original's loop has no fixed period;
+its rate depended on how much was on screen. §5.3 says how the executable paces it.
+
+### 2.2 Module map (files in `GameLogic/`, flat, PascalCase — ADR-004)
+
+Only the shape; the full label-by-label mapping is in
+[Source-Inventory.md](Source-Inventory.md).
+
+| Area | Files | Original |
+|---|---|---|
+| Kernel | `EliteTypes.h`, `Arith.h/.cpp`, `Rng.h/.cpp`, `LookupTables.h`, `SineTable.cpp`, `ArctanTable.cpp`, `LogTables.cpp` | zero-page workspace, `MULT*`, `MULTU`, `FMLTU`, `DVID*`, `LL28`, `ARCTAN`, `SQUA`, `DORND`, `SNE`, `ACT`, `LOG`/`ANTILOG` |
+| Text | `Tokens.h/.cpp`, `ExtendedTokens.h/.cpp`, `TokenTables.cpp`, `TextPrint.h/.cpp`, `Font.cpp` | `QQ18`, `TT27`, `TKN1`, `DETOK`, `MT1`–`MT29`, `TT26`/`CHPR`, `DTW*`, `BPRNT`, `C.FONT.bin` |
+| Canvas | `Canvas.h/.cpp`, `Lines.cpp`, `Circles.cpp` | `LOIN` 1–7, `HLOIN`, `PIXEL`, `CPIX*`, `CIRCLE`, `CIRCLE2`, `BLINE`, `TT66`/`BOX`, `CLYNS` |
+| Universe | `Universe.h/.cpp`, `SystemData.h/.cpp`, `Charts.h/.cpp` | `TT20`, `TT54`, `TT24`, `TT25`, `cpl`, `TT111`, `TT22`, `TT23`, `TT18` |
+| Commander | `Commander.h/.cpp`, `Market.h/.cpp`, `Equipment.h/.cpp`, `SaveBlock.cpp` | `NA%`, `QQ23`, `TT151`, `var`, `TT219`, `TT210`, `EQSHP`, `prx`, `qv`, `CHK`/`CHK2`/`CHK3` |
+| Screens | `Screens.h/.cpp`, `StatusScreen.cpp`, `MarketScreen.cpp`, `ChartScreens.cpp`, `TitleScreen.cpp` | `STATUS`, `TT167`, `TT213`, `TT22`/`TT23`, `TITLE`, `TT167`… |
+| Ships | `ShipBlueprints.h`, `ShipBlueprintData.cpp`, `ShipSlot.h`, `Bubble.h/.cpp` | `XX21`, `VERTEX`/`EDGE`/`FACE`, `INWK`/`K%`, `FRIN`, `MANY`, `UNIV`, `NWSHP`, `KILLSHP`, `ZINF` |
+| Motion | `ShipMove.h/.cpp`, `Orientation.cpp` | `MVEIT` 1–9, `MVS4`, `MVS5`, `MVT*`, `TIDY`, `MAS*`, `NORM` |
+| Drawing | `ShipDraw.h/.cpp`, `LineHeap.h`, `Planet.cpp`, `Sun.cpp`, `Stardust.cpp`, `Explosion.cpp` | `LL9` 1–12, `LL145` 1–4, `SHPPT`, `PLANET`, `PL9`, `PLS*`, `SUN` 1–4, `STARS*`, `DOEXP` |
+| Flight | `FlightLoop.h/.cpp`, `Dashboard.h/.cpp`, `Scanner.cpp`, `Lasers.cpp`, `Docking.cpp` | main flight loop 1–16, `DIALS` 1–4, `DILX`, `COMPAS`, `SCAN`, `MSBAR`, `LASLI`, `HITCH`, `LAUN`, `DOCKIT` |
+| AI & combat | `Tactics.h/.cpp`, `Missiles.cpp`, `Ecm.cpp` | `TACTICS` 1–7, `ANGRY`, `FRMIS`, `SFRMIS`, `ECMOF`, `OOPS`, `DEATH` |
+| Game loop | `GameLoop.h/.cpp`, `Hyperspace.cpp`, `Spawn.cpp`, `Missions.cpp`, `Trumbles.cpp` | main game loop 1–6, `hyp`, `MJP`, `ghy`, `BRIEF*`, `DEBRIEF*`, `TBRIEF`, `MVTRIBS`, `TRIBTA` |
+| Input | `EliteKeys.h`, `KeyPoll.cpp` | `KYTB`, `KEYLOOK`, `RDKEY`, `DOKEY`, `CTRL`, `DKS*` |
+| Sound | `SoundEvents.h`, `SoundEffects.cpp`, `Music.cpp`, `TuneData.cpp` | `NOISE`, `BEEP`, `EXNO*`, `sfx*` tables, the `BD*` music player, the tune blocks |
+| Top | `Game.h/.cpp` | `BR1`, `BAY`, `RESET`, `RES2`, `DEATH2`, `TT170` |
+
+Sizing rule of thumb from the inventory: ~520 routine-ish files become ~45 C++ files. A typical
+6502 routine of 30–80 lines becomes 10–40 lines of C++; the port will land around **25–35k
+lines** of `GameLogic` including comments carried over, plus ~8k of generated data.
+
+---
+
+## 3. Verification strategy (summary of ADR-003)
+
+Three instruments, each cheap to keep running:
+
+| Instrument | What it proves | Lands in |
+|---|---|---|
+| **6502 oracle** — a `Cpu6502` interpreter in `GameLogicTests` loads the assembled ELTA–ELTK, WORDS, IANTOK and SHIPS binaries at their original addresses, sets zero page / registers, `JSR`s a labelled routine, and returns the resulting memory and registers. Each ported pure routine is compared against it over exhaustive or sampled inputs. | Arithmetic, RNG, tokens, universe generation, market, checksums, ship transforms, line clipping — the ~78% that is hardware-free | Slice 0c (the interpreter), then every slice |
+| **Golden canvases** — the port's 320×200 canvas after a scripted sequence, hashed and stored; first goldens taken by comparing against emulator screenshots by eye, then frozen | Screens, dashboard, planet/sun/ship rendering | Slice 1d onward |
+| **Replay hash** — a scripted `InputFrame` sequence run twice (and across Debug/Release) must yield identical `StateHash` per step | Whole-game determinism, the precondition for everything above staying meaningful | Slice 2e onward |
+
+The reference binaries are built with BeebAsm from the upstream tree (`make encrypt=no
+match=no`), which is how label addresses are obtained too. They are **not committed** (ADR-001
+§5); the tests read their location from `Tests/GameLogicTests/Oracle.json` and report
+*skipped, oracle absent* — loudly — when it is missing.
+
+---
+
+## 4. Principles for the porting work itself
+
+1. **One routine, one function, one comment.** Every function names its 6502 label. Where a
+   6502 routine has multiple entry points (`TT26`/`CHPR`, `hy6`/`docked`), each entry point is
+   a function, and the shared tail is a private helper.
+2. **Keep the original's data model until the oracle is green, then and only then tidy.** The
+   37-byte `INWK` ship block becomes a `struct ShipSlot` whose fields are the 6502 names
+   (`x_lo`, `x_hi`, `x_sgn` → `x` as a signed 24-bit sign-magnitude helper type), not a
+   redesigned entity.
+3. **Zero page becomes a struct, not globals.** `ZeroPage` and `Workspace` structs owned by
+   `Game`. It is fine for them to be large and ugly; they are the original's memory map with
+   names. A later slice can move fields to where they belong once tests pin behaviour.
+4. **Self-modifying code and stack tricks are documented at the call site.** The original
+   patches operands (e.g. the line-drawing routines) and pops return addresses in places. The
+   port replaces each with a named parameter or an explicit state variable, and says so.
+5. **Hardware is emulated by effect, not by mechanism.** VIC-II hardware sprites (scanner
+   blips, the laser sights, Trumbles), the raster interrupt that recolours the dashboard, and
+   the multicolour bitmap's per-cell colour constraints all become ordinary canvas drawing
+   that produces the same pixels. The SID becomes a sequence of register writes consumed by a
+   synthesiser in the executable.
+6. **Erase-by-redraw stays where logic depends on it.** The original erases lines by drawing
+   them again (EOR). `Canvas` keeps XOR pixel semantics; ship and sun line heaps are ported
+   because `LL9` and `SUN` use them to decide *what* to erase, and golden tests compare frames
+   at the end of a full iteration, where both approaches agree.
+7. **Known original bugs are ported, then listed.** E.g. `NRU% = 0` (Data on System can crash
+   for a few systems) ships as-is behind a documented constant, and the fix is a modernisation
+   option, not a silent change (ADR-001 §3).
+8. **No third-party code.** A 6502 interpreter is ~600 lines and is written here (test-only);
+   the SID synthesiser is a small voice model, not reSID (which is GPL). Frontier's AGENTS.md
+   §5 rule applies.
+
+---
+
+## 5. Presentation (summary of ADR-005)
+
+### 5.1 Screen
+
+The C64 game draws into a 320×200 multicolour bitmap: a 256×144 space view at the top (the
+constants `X = 128`, `Y = 72` are its centre) and a dashboard from character row 18 down, with
+its own colour map. The port's `Canvas` is 320×200 bytes of C64 colour index. `CanvasPresenter`
+uploads it each presented frame into an `R8_UINT` texture, and a full-screen pixel shader maps
+index → palette and samples with nearest filtering at the largest integer scale that fits the
+window (4× = 1280×800 on a 1080p display), letterboxed. The exact horizontal placement of the
+256-wide view inside the 320 bitmap is confirmed against the emulator in slice 0b.
+
+### 5.2 Sound
+
+Sixteen sound effects (`sfxplas` … `sfxelas2`) are described by tables of SID parameters and
+driven by an interrupt-time player; the music player (`BD*`) is a separate interrupt routine
+with nine tune data blocks. `GameLogic` ports both players *as state machines that emit
+register writes per tick*; `SidSynth` in the executable renders three voices (waveform,
+frequency, pulse width, ADSR; filter optional) into an XAudio2 source voice at 44.1 kHz. If
+fidelity is not reached, the fallback is recorded samples — a decision for slice 5, not now.
+
+### 5.3 Timing
+
+The original iterates its main loop as fast as the machine allows, so speed and turn rates were
+tuned to *that* cadence. Slice 0b measures it in VICE (iterations per second in an empty view,
+with three ships, with eight ships). The executable then runs `Step` at a **fixed rate chosen
+from that measurement** (expected 10–20 Hz), presenting every step, with vsync. A "variable
+rate like the original" mode is a modernisation option. This is the one place where fidelity
+cannot be defined by the oracle, and it is called out as Risk R3.
+
+### 5.4 Input
+
+`Window` (from Frontier) produces a key-state table; `KeyMap` in the executable turns virtual
+keys into `Elite::InputFrame` bits using the original C64 key assignments as the default map
+(`f0`–`f9`, `DINT`, `FINT`, `HINT`, `OINT`, `YINT` and the flight keys in `KYTB`). Remapping is a
+modernisation item.
+
+---
+
+## 6. The build order
+
+Slices are small enough to land in one sitting each and every one ends with something that
+runs or a test that is green. "Accept" is what has to be true to close the slice. The order
+within a phase is the recommended one; slices marked ∥ can run in parallel.
+
+### Phase 0 — Foundations (nothing ported yet)
+
+| Slice | Scope | Accept |
+|---|---|---|
+| **0a Source acquisition** ✅ **Built 2026-09-02** | Vendored `markmoxon/elite-source-code-library` at `Upstream/elite-source-code-library`, pinned at `aa3f7ee` (2026-09-01), per the owner's ruling to vendor rather than reference a sibling checkout (ADR-001 §5). | **Met.** 712/712 include paths and the font binary resolve; all 13 masters byte-for-byte identical to upstream; `tools/inventory.py --check-includes` is the standing check. |
+| **0b-a Label map** ✅ **Built 2026-09-03** | Build BeebAsm from source, assemble the C64 variant, and normalise its label dump and load addresses into something the oracle can read (`tools/labels.py`). | **Met.** BeebAsm 1.11 built with the VS 18 toolchain; the variant assembles to all eleven blocks; **1,782 labels** and the 11-block load map exported. The oracle now calls the shipped game by name. |
+| **0b-b Emulator measurements** ❌ **Cancelled 2026-09-03 by owner ruling** | *"You can ignore the use of VICE, no need to do a reference run."* No emulator is installed and none will be. | **Dropped, not deferred.** It was gating two things and each now has a different answer, below. |
+| **0c Repository skeleton** ✅ **Built 2026-09-02** | `AGENTS.md` written for this repository from its own `.clang-tidy`/`.clang-format`, not adapted from a sibling; `GameLogic` (static lib) and `Tests/GameLogicTests` (CppUnitTest) added to `Outpost.slnx`; `tools/inventory.py` built; `Cpu6502` written and proved. | **Met.** Debug x64 builds clean; 16 tests pass, of which 11 pin the interpreter against published 6502 behaviour and 5 are the first oracle suite. See §6.1. |
+| **0d Application shell** ⏸ **deferred to phase 2 by owner ruling, 2026-09-03** | *"Do not strip WinUI, ignore it and proceed."* The `Outpost` project is left exactly as it is, packages and all. Nothing here is done now. | Re-enters the plan at **2e**, which is the first slice that needs a window because it is the first playable build. Until then the port is game logic proved by tests, and the shell is not on the critical path. |
+| **0e Permission** | Approach the rights holders about the intent to publish (ADR-001 §5). Until it closes, nothing is pushed to a public remote. | A written answer, recorded in ADR-001 §5, and the disposition of `Upstream/` decided accordingly. |
+| **0f Determinism guard** ✅ **Built 2026-09-03** | `tools/check_gamelogic.py`: fails if `GameLogic` names a clock, operating-system randomness, `float`, `double`, file or registry access, or a Win32 call. Comments and string literals are stripped first, so a comment explaining the float ban does not trip the float rule. | **Met.** Passes on the tree. A planted `<chrono>` include and a `double` were both caught, and the tree was clean again afterwards. `--self-test` proves the scanner still detects six violation kinds and correctly ignores four look-alikes, so the checker itself is checked. |
+
+### 6.1 What slice 0c actually built
+
+| Piece | Detail |
+|---|---|
+| `Tests/GameLogicTests/Cpu6502.h/.cpp` | An NMOS 6502 interpreter, ~470 lines, every documented opcode, decimal mode, and the indirect-jump page bug. `CallSubroutine` pushes an unreachable return address and stops on it, and *also* stops when the stack unwinds past its entry point — because the game discards its own return address in places, and a run that does that has finished too. |
+| `Tests/GameLogicTests/Cpu6502Tests.cpp` | 11 tests pinning the interpreter against published behaviour before it is trusted as an oracle: carry versus borrow in subtraction, signed overflow separate from carry, zero-page index wrapping, the indirect-jump page bug, stack balance across call and return, signed backward branches, decimal addition, and the illegal-opcode stop. |
+| `GameLogic/EliteTypes.h` | The numeric vocabulary of ADR-002: `AddWithCarry` returning value, carry and overflow; `RotateLeft`/`RotateRight`; `SignMag24` for the three-byte sign-magnitude coordinate. |
+| `GameLogic/Rng.h/.cpp` | The first ported routine (`DORND` and its repeatable entry point), carrying its `// 6502:` marker per AGENTS.md R7. |
+| `Tests/GameLogicTests/RngTests.cpp` | The first oracle suite, and it needs no assembled game: the routine is 20 bytes, so the test assembles it and runs both. 60,000 iterations across three starting states, plus 8,192 first-call comparisons, all agreeing on the returned byte, the previous byte, both flags and all four state bytes. |
+| `tools/inventory.py` | `--check-includes` (712/712) and the coverage report: 707 distinct library stems, **603 named in the ledger, 104 not yet**. That 104 is the ledger's real backlog and the number slice 1a starts chipping at. |
+
+The order here was deliberate: the interpreter is tested against the processor's published
+behaviour *before* anything trusts it, because an oracle nobody checked is just a second
+opinion from the same author.
+
+### 6.2 What slice 0b-a built, and why it changes the shape of everything after it
+
+BeebAsm turned out not to be a dependency to wait on. It is open source, so it was cloned and
+built from source with the VS 18 toolchain (its own CMake file is GCC-flavoured, so the sources
+were compiled directly). It lives in `Tools-ext/`, which is **gitignored** — it is a tool we
+run, never a library we link, and vendoring a GPL project into a tree intended for publication
+is a licence question nobody needs.
+
+| Piece | Detail |
+|---|---|
+| Assembly | The C64 variant assembles to all eleven blocks, `ELTA.bin`…`ELTK.bin`, loading contiguously at `$1D00`–`$3ED2` and `$6A00`–`$CCD7`. |
+| `tools/labels.py` | Runs the assembler and normalises two awkward formats into plain tables: BeebAsm's label dump is one line of Python-2 dict syntax, and the load addresses exist only as `PRINT` lines in the verbose log. Output is `Design/Reference/Labels.txt` (**1,782 labels**) and `Binaries.txt`. |
+| `Tests/GameLogicTests/OracleImage.*` | Loads all eleven blocks into a 64 KB image and resolves labels by name, so a test says `oracle.Label("MULTU")` rather than an address. Each call gets a fresh copy, so tests cannot leak state into one another. |
+| `OracleTests.cpp` | The generator compared against the routine **as it actually ships**, over 20,000 iterations. Plus the presence tests that make an absent oracle loud. |
+
+**Why this matters more than the slice count suggests.** Until now the oracle could only reach
+routines short enough to hand-assemble into a test — which is essentially none of the game. It
+can now call any of 1,782 labels in the shipped binary with chosen inputs and read back the
+memory. That is the instrument the whole plan is built on, and phases 1 through 4 are now
+mechanical in a way they were not this morning.
+
+### Phase 1 — Kernel (no screen needed; oracle-driven throughout)
+
+| Slice | Scope | Accept |
+|---|---|---|
+| **1a Data extraction** 🟡 **Trigonometry and logarithms built 2026-09-03; the rest pending** | `tools/extract_tables.py` emits `*.cpp` data files, **extracted from the assembled binaries by label and length rather than by parsing the assembler** — see §6.6 for why that is the cheaper and truer route. Built so far: `log`, `logL`, `antilog`, `antilogODD`, `SNE`, `ACT`. Still to extract: `QQ18`, `TKN1`/`RUPLA`/`RUGAL`/`RUTOK`, `QQ23`, `NA%`, `XX21` and the blueprints, `E%`, `KWL%`/`KWH%`, `scacol`, `TWOS`/`CTWOS`/`TWFL`/`TWFR`, the sound and tune tables, `sdump`/`cdump`, `dials`, `spritp`, the font. | **Met for what is built.** Each array is compared byte for byte against the same address range in the oracle's image, so a stale or hand-edited table fails a test. `--check` does the same from the command line. Adding a table is one row in the tool. |
+| **1b-a Multiply and add** ✅ **Built 2026-09-03** | `MULTU`, `MU11`, `MU1`, `MULT1`, `MULT12`, `SQUA`, `SQUA2`, `MLU2`, `ADD` (with `MU8`/`MU9`) — the shift-and-add core and sign-magnitude addition. | **Met.** Every multiply compared against the shipped routine over **all 65,536 input pairs**; the addition over a 200,000-case deterministic sweep plus eleven sign-magnitude edge cases. Green in Debug and Release. See §6.3. |
+| **1b-b Multiply-accumulate and divide** ✅ **Built 2026-09-03** | `MAD`, `MU5`, `MU6`, `MULTS`, `MLTU2`, `TIS1` (with `DVID96`), `TIS2`, `DVIDT` — everything in the division and accumulate family that needs no table and no game state. | **Met.** Exhaustive where the input space is 16 bits, 150,000-case sweeps above. Green in Debug and Release. §6.4 records the one defect it caught. |
+| **1b-c State-dependent helpers** | `MULT3`, `MLS1`/`MLS2` setup, `MLU1`, `MUT1`–`MUT3`, `TAS3`, `TIS3`, `DV41`, `DV42`, `CNTR`, `BUMP2`, `REDU2`, `NORM`, `LL5`. Each reads ship slots, rotation angles, stardust arrays or the damping flag. | Land with the workspace they belong to, in slice 3a, rather than being forced into the kernel early. |
+| **1b-d Logarithm-table routines** ✅ **Built 2026-09-03** | `FMLTU`, `LL28`, `LL38`, `ARCTAN` — multiply and divide by adding logarithms, and the angle of a ratio. `DVID4`, `DVID3B2`, `FMLTU2` and `LL51` remain and are the same shape. | **Met.** All four compared against the shipped routines; the multiply, the divide and the angle **exhaustively over all 65,536 input pairs each**, the combine over a 200,000-case sweep. The divide's returned carry is compared too, because its callers branch on it. |
+| **1c-a Recursive tokens** ✅ **Built 2026-09-03** | `TT27` and everything it falls through into: `TT41`, `TT42`, `TT43`, `TT44`, `TT45`, `TT46`, `TT47`, `TT74`, `qw`, `ex` with its walk, and the case-flag state machine. Plus the `QQ18` and `QQ16` tables. | **Met.** **243 of 250 tokens compared character for character against the shipped printer, in all five capitalisation states.** The remaining 7 embed value tokens that read commander and system state; the test detects and counts those rather than skipping them silently. §6.7 explains the trap that made output comparable at all. |
+| **1c-b Extended tokens** ✅ **Built 2026-09-03** | `DETOK`, `DETOK2`, `DETOK3` and the case state they carry, plus the letter-pair, nested-token and randomised-variant paths. `TKN1`, `TKN2`, `RUTOK` and `MTIN` extracted. | **Met.** 199 of 255 tokens compared character for character in three case states, and 21 of the per-system overrides. The 56 deferred reach control codes; the tests count them. §6.8 records the two table-sizing lessons this slice taught. |
+| **1c-c Control codes and numbers** | `MT1`–`MT29` behind the control-code seam, `vowel`, `whitetext`, `feed`, the `DTW1`–`DTW8` justification behaviour; numbers (`BPRNT`, `pr2`, `pr5`, `pr6`, `TT11`). Most control codes move the cursor or clear the screen. | Lands with the canvas in 1d, which is what they drive. The seam and its tests already exist. |
+| **1d Canvas and text printing** ∥ | `Canvas` (XOR/OR pixel, `LOIN` all seven variants, `HLOIN`, `PIXEL`, `CPIX2`/`CPIX4`, `DOT`, `CIRCLE`, `CIRCLE2`, `BLINE`, `CLYNS`, `TT66`/`BOX`/`box2`), `TextPrint` (`TT26`/`CHPR` with the font, `setxc`/`setyc`, `INCYC`, the `MAG2` input colour). Golden-test harness: canvas → PNG dump + hash. | Oracle for the line routines (compare the bitmap bytes the 6502 wrote against the canvas); a golden of the title-screen frame's box and header text. |
+
+### 6.3 What slice 1b-a built
+
+Nine routines: the unsigned shift-and-add multiply and its register-argument entry point, the
+sign-magnitude multiply and its two-scratch-byte variant, both squaring entry points, the
+magnitude-times-Q helper, and sign-magnitude addition with its subtract-and-negate branch.
+
+| Routine group | Coverage |
+|---|---|
+| `MULTU`, `MU11`, `MULT1`, `MULT12`, `MLU2` | **All 65,536 input pairs each**, comparing the returned high byte and the low byte left in scratch |
+| `SQUA`, `SQUA2` | All 256 inputs, both entry points |
+| `ADD` | 200,000-case deterministic sweep over four bytes of input, plus eleven hand-picked sign-magnitude edges |
+
+Three things worth carrying forward:
+
+- **The multiplier is decremented before the loop and the addition is done with carry set**, so
+  the two cancel out. It reads like an off-by-one and is not, which is why `Arith.cpp` says so
+  at the top rather than leaving the next reader to work it out.
+- **`MU11` must not be called with a zero multiplier.** It decrements first, so zero would
+  become 255 and the routine would multiply by that. The game's callers check for zero and jump
+  to a different tail; the test does the same, and the port keeps the check in `MultiplyUnsigned`
+  where the original has it.
+- **The unsigned multiply is also checked against actual multiplication**, not just against the
+  oracle. An oracle comparison alone proves the port agrees with the original, which is the goal
+  — but for a routine whose whole job is `a * b` it costs one line to also confirm both of them
+  are right, and that line would have caught a shared misreading of the calling convention.
+
+### 6.8 Two lessons about sizing an extracted table
+
+Slice 1c-b spent most of its debugging on one wrong number, and the mistake generalises.
+
+**A table's size is what can index it, not the gap to the next label.** The extended letter-pair
+table was extracted at the 26 bytes its neighbouring label implied. It failed on the second
+token. The routine that reads it accepts every byte from 215 to 255, so it is reachable to
+offset 81 — and Elite genuinely lets it overlap the table that follows, sharing address space
+where the ranges allow. Deriving a length from the next label is a guess dressed as a
+measurement. Derive it from the index range instead, and let the byte-comparison test confirm it.
+
+**The game's table walkers are not bounded lookups.** They count terminators with nothing to
+stop them. Ask for a token past the last entry and the original keeps scanning into whatever
+follows, while the port bounds-checks and returns. Past the end the two are not comparable:
+one has stopped and the other is still running. The test therefore compares the entries that
+are bounded on both sides and says why it stops where it does.
+
+Neither of these is a defect in the port. Both are the kind of thing that only surfaces when a
+comparison is exact, which is the argument for making it exact.
+
+### 6.7 Comparing output, not just arithmetic
+
+Everything before slice 1c compared a routine's *return value*. Text does not have one: the
+printer's whole job is the sequence of characters it hands to something else. So the oracle
+gained a mechanism it will need for the rest of the port.
+
+**Call traps.** The interpreter can be told that certain addresses are to be recorded and
+returned from rather than executed. Trapping the game's character routine turns "what did this
+token print" into a list, with none of the screen code running underneath. The same mechanism
+will serve the drawing slices, where trapping the pixel routine turns "what did this draw" into
+a list of plotted points.
+
+It works for the game's control flow as it actually is, which is the part worth noting: the
+printer reaches its character routine by a jump rather than a call in several paths, so the
+trap's simulated return lands where that routine's own return would have. Nothing had to be
+special-cased.
+
+**The phase boundary is measured rather than assumed.** Seven of the 250 tokens expand into
+text that embeds a value token, and those print cash or fuel from commander state that phase 2
+owns. Comparing them would be comparing against uninitialised memory. The test therefore runs
+the port with a provider that records when game state is reached, skips those tokens, and
+**counts them** — so a change that quietly made everything skip would show up as a count of 250
+instead of passing green.
+
+### 6.6 Extracting data from the binary rather than from the source
+
+The plan originally had the extractor parse the assembler for each table. Building it that way
+turned out to be the wrong instinct, and the reason generalises.
+
+**The source computes these tables; it does not contain them.** They are built with
+assembly-time loops and macros, so a parser would have had to evaluate that — which is to say,
+be a second assembler. Meanwhile the bytes that actually matter are the ones the game ships
+with, and those are sitting in the assembled blocks the oracle already loads. Extracting by
+label and length is a dozen lines instead of a subsystem, and it reads the same artefact the
+port is being tested against.
+
+It is also self-checking, which matters more than the simplicity. A one-way copy with no check
+goes stale. `TableTests.cpp` compares every generated array against the same address range in
+the oracle's image, so an edited file, a regeneration against a different build, or a length
+changed in the extractor but not in the declaration all fail a test rather than drifting.
+
+**This slice also closed a gap in the oracle itself.** The tables live in the *data* build, not
+the code blocks, so the image had never loaded them: the angle routine could not have been
+tested at all. `tools/labels.py` now assembles both files and merges their labels, taking the
+count from 1,782 to 1,927 and the loaded blocks from eleven to thirteen. Reading the saved
+filename out of the assembler's own log rather than guessing it from the printed name is what
+makes that reliable, because the two do not agree.
+
+### 6.5 What cancelling the reference run costs, and what replaces it
+
+The emulator run was carrying two things. Losing it is not free, and pretending otherwise is how
+a corpus starts lying.
+
+**1. The first golden canvases (slice 1d) lose their acceptance method — and gain a better one.**
+The plan said a person would accept each first golden by eye against an emulator screenshot.
+That is no longer available, and the replacement is stronger rather than weaker: **the oracle can
+draw the screen itself.** The game's drawing routines write into a bitmap in the 64 KB image,
+so a test can call them, decode those bytes into canvas form, and compare pixel for pixel
+against the port. That is an exact comparison rather than a human judgement, it needs no
+emulator, and it extends the oracle to the drawing code instead of stopping at arithmetic.
+Goldens stay useful for whole screens assembled over many calls, but they stop being the
+*authority* for anything the oracle can reach. **ADR-003 §2 is amended accordingly.**
+
+**2. The step cadence (Risk R3) has no measurement, and now no planned source for one.** This
+is the real cost. The original's loop ran as fast as the machine allowed, and the feel of flight
+follows from that rate. Nothing in the oracle answers "how many iterations per second did a real
+machine manage", because the interpreter has no notion of time.
+
+Two honest options, neither of them chosen yet because nothing needs it until slice 2e:
+
+- **Count cycles.** Give the interpreter a cycle count per instruction and run a main-loop
+  iteration in a representative scene. Divide by the processor clock and the answer falls out,
+  with no emulator and no guesswork. It is perhaps a day of work and it is the option that
+  actually measures something.
+- **Pick a number and make it a setting.** Ship a default in the region of 10 to 20 steps per
+  second, expose it in configuration, and tune by feel. Cheap, and honest so long as nobody
+  later describes it as measured.
+
+**Risk R3 is unchanged in substance and worse in outlook**: its mitigation used to be "measure
+it in VICE", and that mitigation is gone. The row now says so.
+
+### 6.4 What slice 1b-b built, and the defect it caught
+
+Eight more routines: the multiply-accumulate the geometry runs on, two block-fill helpers, the
+scaled multiply, the sixteen-step wide multiply, and three divisions.
+
+**Seven matched first time. The sixteen-step long division did not, and that is the useful
+part of this entry.** The port restarted the carry flag at zero on every step of the loop. In
+the original the carry threads straight through: what falls out of the top of the quotient on
+one step is shifted into the remainder on the next. The two versions agree for a great many
+inputs and part company on the very first case the sweep tried, returning 128 where the game
+returns 165.
+
+Three things that is worth noting for the slices ahead:
+
+- **It is invisible by inspection.** Both versions are a rotate, a compare, a conditional
+  subtract and two more rotates. Nothing about the wrong one looks wrong, which is precisely
+  the failure mode the whole oracle approach exists to catch (Risk R4).
+- **It cost about a minute to find and fix**, because the failure named the routine, the
+  iteration and both numbers. That is the argument for exhaustive-or-swept comparison over
+  spot checks.
+- **The comment now says why the carry threads**, so the next person to read the loop does not
+  quietly simplify it back.
+
+### Phase 2 — The docked game (playable without flight)
+
+| Slice | Scope | Accept |
+|---|---|---|
+| **2a Universe** | Seeds and galaxy (`TT20`, `TT54`, `TT111`, `TT18`, `TT146`), system data (`TT24`, `TT25`, `cpl`, `cmn`, `ypl`, `tal`, `fwl`, `pdesc`), the Data on System screen, `jmp`/`ee3` distances. | Oracle: all 8 × 256 systems' name, economy, government, tech, population, productivity, radius and description text match. Cross-check the previous DOS port's tables as a second opinion. |
+| **2b Charts** | `TT22` long-range, `TT23` short-range, crosshairs (`TT15`, `TT14`, `TT16`, `TT103`, `TT105`, `TT123`), `hyp`/`hy6` target and `TT147`, `TT16a` find planet by name, the `F` search flow. | Goldens of both charts for Lave; crosshair movement replay. |
+| **2c Trade and equipment** | `TT151`/`var`/`GVL` prices, `TT167` market, `TT219` buy, `TT210` sell, `gnum`, `TT213` inventory, `STATUS`, `EQSHP` with `prx`, `qv`, `refund`, `hm`, cash (`LCASH`, `MCASH`, `GCASH`), `TT162`/`TT160`/`TT161` units. | Oracle on prices for all systems and all commander states in a sampled grid; goldens of each screen; a scripted buy/sell replay ends with the oracle's credit total. |
+| **2d Commander and saves** | `NA%` default commander, `JAMESON`, `CHK`/`CHK2`/`CHK3`, `sve`/`lod` replaced by `SaveBlock` (the exact original byte layout so an original C64 save imports) + `SaveStore` in the exe writing to LocalAppData; `trnme`/`gtnme` name entry; `DFAULT`/`qu5`; the `Y/N` prompts. | Round-trip test: save, load, `StateHash` identical; an original `.d64`-extracted commander file loads. |
+| **2e First playable** | `Game` top-level state (`BR1`, `BAY`, `TT170`, `DOENTRY`), key dispatch for the docked screens (`DOKEY`, `RDKEY`, `TT217`), `CanvasPresenter`, `KeyMap`, frame pacing; the title screen **without** the rotating ship (that needs LL9 — a placeholder box until 3b). | You can start a game, read every docked screen, trade, buy equipment, save and reload. Replay hash suite green across Debug/Release. |
+
+### Phase 3 — Flight and the 3D pipeline
+
+| Slice | Scope | Accept |
+|---|---|---|
+| **3a Ship slots and motion** | `ShipSlot`, `Bubble` (`FRIN`, `MANY`, `UNIV`, `NWSHP`, `NWS1`, `KILLSHP`, `KS1`–`KS4`, `ZINF`, `RESET`/`RES2`, `ZES1`/`ZES2`, `GINF`), `MVEIT` 1–9, `MVT1`, `MVT3`, `MVT6`, `MVS4`, `MVS5`, `MV40`, `TIDY`, `MAS1`–`MAS4`, `TAS1`–`TAS6`, `DCS1`, `ABORT`, `sightcol`. | Oracle: run `MVEIT` on a slot with sampled orientations/speeds/roll/pitch for N iterations; byte-identical `INWK`. |
+| **3b Ship drawing** | `LL9` 1–12, `LL61`, `LL62`, `LL118`, `LL120`, `LL123`, `LL129`, `LL145` 1–4 clipping, `SHPPT`, `LL5`, the ship line heap (`LSX2`/`LSY2`), `PROJ`, `PL2`. Title screen rotating ship. | Oracle: for sampled ship types and orientations the list of clipped line segments matches; golden of the title screen Cobra at frames 1, 30, 60. |
+| **3c Planet, sun, stardust** ∥ | `PLANET`, `PL9` 1–3, `PLS1`–`PLS6`, `PLS22`, `WPLS`/`WPLS2`, `WP1`, `EDGES`, `CHKON`, `PL21`, `SUN` 1–4 with its heap, `CIRCLE` uses, `STARS`, `STARS1`, `STARS2`, `STARS6`, `NWSTARS`, `FLIP`, `WPSHPS`, `FLFLLS`, `SOLAR`, `NWQ`. | Goldens of the launch view at Lave (planet + sun + stardust) at several iterations; oracle for `PLS`/`CHKON` arithmetic. |
+| **3d Flight loop and dashboard** | Main flight loop 1–16, `DIALS` 1–4, `DILX`/`DIL2`, `COMPAS`/`SP1`/`SP2`/`SPS*`, `SCAN` (sprite blips as canvas draws), `MSBAR`, `ECBLB`/`SPBLB`, `PZW`, `MESS`/`me1`/`mes9`, `LASLI`, `LAUN`/`LL164` hyperspace tunnel, `DEATH` (the "GAME OVER" fly-by), `WARP` (J), `CTRL`, `DOKEY` flight half, `SPIN`, `cargo` canisters, docking check (`ISDK` path in loop part 10–11). | Launch from Lave, fly, dock manually, hyperspace to Diso, dock. Goldens of the dashboard; replay hashes for the whole trip. |
+
+### Phase 4 — Combat and a living universe
+
+| Slice | Scope | Accept |
+|---|---|---|
+| **4a Tactics** | `TACTICS` 1–7, `DOCKIT`, `ANGRY`, `FR1`, `FRS1`, `FRMIS`, `SFRMIS`, `SFS1`/`SFS2` spawning from ships, `HITCH`, `OOPS`, `EXNO*`, `ECMOF`, `SESCP`, `bomboff` / energy bomb. | Oracle for `TACTICS` decisions on sampled states (they consume `DORND`, so seed-locked); a replay: launch, get attacked, win. |
+| **4b Explosions and death** ∥ | `DOEXP`, `EXLOOK`, `PTCLS2`, `SOS1`, `DEATH2`, the escape pod, `BAD`/`FAROF`/`FAROF2`, `SHD`/`DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle. |
+| **4c Main game loop** | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds. |
+| **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps. |
+
+### Phase 5 — Sound and music
+
+| Slice | Scope | Accept |
+|---|---|---|
+| **5a Effects** | `NOISE`, `NOISE2`, `BEEP`, `EXNO`, `EXNO2`, `EXNO3`, `SOFLUSH`, `NOISEOFF`, `HYPNOISE`, the `sfx*` tables, the interrupt-time effect player (`soint`, `comirq1`'s SID half) as a per-step state machine emitting `SoundEvent`s; `SidSynth` in the exe. | The register-write log for each of the 16 effects matches the oracle's over the effect's duration; audible check against VICE. |
+| **5b Music** | The `BD*` player (`bdirqhere`, `bdro*`, `bdlab*`, `bdentry`, jump tables), `comudat`, `music_variables`, the nine tune blocks, `startat`/`startbd`/`stopbd`, docking music trigger, the `M` mute keys. | Register-write log for the first 2,000 ticks of each tune matches the oracle. |
+
+### Phase 6 — Modernisation (each item its own ADR when it comes)
+
+Not planned in detail on purpose (Risk R7). Candidates, in the order they are likely to be
+wanted: window/fullscreen and scale options; key remapping and gamepad; a "fixed bugs" toggle
+(`NRU%`, others found on the way); PAL/NTSC timing option; save-slot UI; then the things that
+change the game (higher internal resolution for lines, smoother iteration rate). Each is gated
+on the fidelity suites staying green with the option *off*.
+
+---
+
+## 7. Effort and shape of the curve
+
+Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
+
+| Phase | Slices | Sittings | Notes |
+|---|---|---|---|
+| 0 | 6 | 4–6 | 0a and 0c are done; 0b needs BeebAsm installed |
+| 1 | 4 | 6–9 | mostly mechanical once the oracle harness pattern exists |
+| 2 | 5 | 8–12 | the text screens are many but shallow |
+| 3 | 4 | 10–15 | `LL9` and `MVEIT` are the densest code in the game |
+| 4 | 4 | 8–12 | tactics is long but well documented |
+| 5 | 2 | 4–7 | the synthesiser is the unknown |
+| **Total** | **23** | **40–60** | before modernisation |
+
+The curve front-loads risk: by the end of phase 1 the oracle has either proven itself or shown
+where the 6502-semantics approach leaks (Risk R4), and by 2e there is a playable build.
+
+---
+
+## 8. Owner decisions — taken 2026-09-02
+
+| # | Question | Ruling | Where it landed |
+|---|---|---|---|
+| 1 | Licence posture | **Intend to publish eventually.** Not a permanently private port. | ADR-001 §5; new slice **0e Permission**; Risk R1 rewritten |
+| 2 | Application shell | **Keep MSIX packaging, drop WinUI 3.** A packaged Win32 desktop app: raw window, flip-model swap chain, no XAML. | ADR-005 §5; slice 0d |
+| 3 | Where the upstream tree lives | **Vendored** at `Upstream/elite-source-code-library`, pinned at `aa3f7ee`. | ADR-001 §5; ADR-004 §3; slice 0a, built |
+| 4 | Presentation code | **Ignore the sibling repositories; write our own.** No `NeuronClient`; presentation lives in `Outpost.exe`. | ADR-004 §1; §2 of this document |
+| 5 | Platforms | **Left as they are** (x64, x86, ARM64 in the solution), which is not what the plan recommended. Removing platforms was not put to the owner and is not a change to make unilaterally, and keeping MSIX makes ARM64 more plausible rather than less. x64 is the platform that is built and tested; the others are unmaintained. | ADR-004 §1 |
+
+**Decisions 1 and 3 pull against each other and the corpus says so.** Vendoring places roughly
+3,000 unlicensed files in the tree, and publishing that tree is the largest legal exposure in
+the project. The structural mitigation is that everything not ours lives under `Upstream/` and
+nowhere else, and the assembled binaries are never committed — so the decision stays reversible
+by removing one directory rather than by unpicking a history. Slice 0e is what resolves it, and
+nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk R1.
+
+---
+
+## 9. Revision log
+
+| Date | Change |
+|---|---|
+| 2026-09-02 | Opened. Inventory of `MasterFile/`, target architecture, phases 0–6, owner decisions. |
+| 2026-09-03 | **Slice 1c-b built** — the extended token system: the walkers, the case state, letter pairs, nested tokens and randomised variants, with `TKN1`, `TKN2`, `RUTOK` and `MTIN` extracted. Control codes are a declared seam and land with the canvas as slice 1c-c. §6.8 records why a table's size comes from its index range rather than from the next label. |
+| 2026-09-03 | **Slice 1c-a built** — the recursive token printer, 243 of 250 tokens compared character for character in all five capitalisation states. The oracle gained **call traps** (§6.7), which is how output becomes comparable and is what the drawing slices will use too. `QQ18` and `QQ16` extracted; `EliteConfig.h` added for the build constants. |
+| 2026-09-03 | **Slices 1a (in part) and 1b-d built.** The extractor pulls tables from the assembled binaries rather than the assembler source (§6.6), and the oracle now loads the data build too — thirteen blocks, 1,927 labels — which is what made the angle routine testable at all. Trigonometry and logarithm tables extracted and self-verifying; four logarithm routines ported and exhaustively compared. |
+| 2026-09-03 | Owner ruling: *"You can ignore the use of VICE, no need to do a reference run."* **Slice 0b-b cancelled.** Its two dependents are re-answered in §6.5: goldens move from screenshot comparison to exact oracle comparison (ADR-003 §2 amended, R5 revised), and the step cadence **loses its mitigation outright** (R3). **Slice 0f built** — the determinism guard, proved against a planted violation. **Phase 0 is closed** but for slice 0e, which is owner action. |
+| 2026-09-03 | **Slice 1b-b built** — the multiply-accumulate and division family, eight routines (§6.4). One real defect caught by the oracle, in the long division's carry chain. 1b re-split into 1b-c (state-dependent helpers, deferred to 3a) and 1b-d (the table routines, still waiting on 1a). |
+| 2026-09-03 | **Slice 1b-a built** — the multiply and add core, nine routines, exhaustively verified against the shipped game (§6.3). Slice 1b split into 1b-a (built), 1b-b (divide, arctan and the rest) and 1b-c (the logarithm-table routines, which wait on 1a). |
+| 2026-09-03 | Owner ruling: *"Do not strip WinUI, ignore it and proceed."* Slice 0d deferred to phase 2 (ADR-005 §5); the `Outpost` project is left untouched. **Slice 0b-a built** — BeebAsm built from source, the variant assembled, 1,782 labels exported, and the oracle now calls the shipped game by name (§6.2). `Oracle.json` dropped in favour of repository-root discovery (ADR-003 §1 amended). R9 exercised. |
+| 2026-09-02 | All five decisions taken (§8). Upstream vendored, so §1.1 changes from "absent" to a resolved check. Architecture loses `NeuronClient`: presentation is our own and lives in the executable. Shell is packaged Win32, not WinUI 3. Slices 0e (permission) and 0f (determinism guard) added; 0b marked blocked on BeebAsm. **Slices 0a and 0c built** — §6.1 records what landed. |

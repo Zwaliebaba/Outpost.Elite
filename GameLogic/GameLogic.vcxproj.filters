@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Kernel">
+      <UniqueIdentifier>{3f1a6c20-9d84-4b17-8e52-6c0b4a7d1e33}</UniqueIdentifier>
+      <Extensions>h;cpp</Extensions>
+    </Filter>
+    <Filter Include="Text">
+      <UniqueIdentifier>{8f5e1a74-4bc6-4da9-e3f7-a0825dc1e94b}</UniqueIdentifier>
+      <Extensions>h;cpp</Extensions>
+    </Filter>
+    <Filter Include="Generated Data">
+      <UniqueIdentifier>{7e4d0f63-3ab5-4c98-d2e6-9f714cb0d83a}</UniqueIdentifier>
+      <Extensions>cpp</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="Arith.h">
+      <Filter>Kernel</Filter>
+    </ClInclude>
+    <ClInclude Include="EliteTypes.h">
+      <Filter>Kernel</Filter>
+    </ClInclude>
+    <ClInclude Include="LookupTables.h">
+      <Filter>Kernel</Filter>
+    </ClInclude>
+    <ClInclude Include="Rng.h">
+      <Filter>Kernel</Filter>
+    </ClInclude>
+    <ClInclude Include="EliteConfig.h">
+      <Filter>Kernel</Filter>
+    </ClInclude>
+    <ClInclude Include="Tokens.h">
+      <Filter>Text</Filter>
+    </ClInclude>
+    <ClInclude Include="ExtendedTokens.h">
+      <Filter>Text</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp" />
+    <ClCompile Include="Arith.cpp">
+      <Filter>Kernel</Filter>
+    </ClCompile>
+    <ClCompile Include="Rng.cpp">
+      <Filter>Kernel</Filter>
+    </ClCompile>
+    <ClCompile Include="LogTables.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="SineTable.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="ArctanTable.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="TokenTables.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="Tokens.cpp">
+      <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="ExtendedTokens.cpp">
+      <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="ExtendedTokenTables.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
