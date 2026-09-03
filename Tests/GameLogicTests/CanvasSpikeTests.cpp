@@ -389,9 +389,10 @@ public:
    * documented in the masters as "EOR'd into screen RAM" to toggle the E.C.M. and station bulbs.
    * Cell colour is mutable game state on the same footing as the bitmap, not a fixed palette.
    *
-   * Note the discrepancy this logs, which slice 1d has to resolve: the bitmap's own left margin
-   * is 4 cells (ylookup adds 0x20) but celllook starts 3 cells in. One of the two is adjusted by
-   * its callers, and the port needs to know which before it computes a cell address.
+   * The three-cell offset in celllook looks like it disagrees with the bitmap's four-cell left
+   * margin, and it does not: CHPR writes the colour AFTER advancing the cursor, so the colour
+   * lands at celllook + (XC + 1) = cell 4 + XC, which is exactly the cell the glyph went into.
+   * TextAndItsColourLandInTheSameCell measures that rather than trusting this paragraph.
    */
   TEST_METHOD(CellColourIsASeparateMutablePlane)
   {
@@ -417,13 +418,83 @@ public:
                 + Hex(static_cast<std::uint16_t>(cellAddress(row) - scbase), 4) + "\n";
     }
     report += "  bitmap left margin   " + Hex(SPACE_VIEW_MARGIN, 2) + " bytes = 4 cells\n";
-    report += "  celllook offset      3 cells past the start of screen RAM -- RESOLVE THIS IN 1d\n";
+    report += "  celllook offset      3 cells, because CHPR colours the cell after INC XC\n";
     Logger::WriteMessage(report.c_str());
 
     Assert::AreEqual<std::uint32_t>(SCREEN_RAM_OFFSET + 3u, static_cast<std::uint32_t>(cellAddress(0) - scbase),
                                     L"screen RAM starts at SCBASE + 0x2000 and celllook is offset three cells into it");
     Assert::AreEqual<std::uint32_t>(40u, static_cast<std::uint32_t>(cellAddress(1) - cellAddress(0)),
                                     L"one colour byte per cell, 40 cells to a row");
+  }
+
+  /*
+   * 6502: CHPR -- one character into the bitmap, then its colour into the cell.
+   *
+   * This is the test that settles where text sits, and it is worth having because the two
+   * address paths look like they disagree. The glyph goes to bitmap cell 4 + XC (CHPR builds
+   * SCBASE + YC * 320 + 32 + XC * 8, the same 32-byte margin ylookup uses). The colour goes to
+   * celllook[YC] + XC, and celllook starts three cells into screen RAM -- but only after the
+   * routine has already incremented XC. Both therefore land on cell 4 + XC.
+   *
+   * The port must not "tidy" that by making celllook start at four cells: the increment is
+   * ordinary cursor advance and other callers depend on it.
+   */
+  TEST_METHOD(TextAndItsColourLandInTheSameCell)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+
+    for (std::uint8_t column = 0; column < 3; ++column)
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      const std::uint16_t scbase = ScreenBase(cpu, oracle);
+      const std::array<std::uint8_t, 65536> before = cpu.memory;
+
+      cpu.memory[oracle.Label("XC")] = column;
+      cpu.memory[oracle.Label("YC")] = 3;
+      cpu.memory[oracle.Label("COL2")] = 0x40; // 6502: MAG2 -- purple on black, the text view's cell colour.
+      cpu.a = 'A';
+      cpu.x = 0;
+      cpu.y = 0;
+      cpu.sp = 0xFD;
+
+      const auto run = cpu.CallSubroutine(oracle.Label("CHPR"), 200'000);
+      Assert::IsTrue(run.completed, L"CHPR should return");
+
+      int glyphCell = -1;
+      int colourCell = -1;
+      for (std::uint32_t address = scbase; address < scbase + SCREEN_RAM_OFFSET + 0x400u; ++address)
+      {
+        if (cpu.memory[address] == before[address])
+        {
+          continue;
+        }
+        const std::uint32_t offset = address - scbase;
+        if (offset < BITMAP_SIZE)
+        {
+          if (glyphCell < 0)
+          {
+            glyphCell = static_cast<int>((offset % 320) / 8);
+          }
+        }
+        else if (colourCell < 0)
+        {
+          colourCell = static_cast<int>((offset - SCREEN_RAM_OFFSET) % 40);
+        }
+      }
+
+      Logger::WriteMessage(("CHPR 'A' at XC = " + std::to_string(column) + "   glyph cell " + std::to_string(glyphCell)
+                            + "   colour cell " + std::to_string(colourCell) + "   XC after = "
+                            + std::to_string(cpu.memory[oracle.Label("XC")]) + "\n")
+                             .c_str());
+
+      Assert::AreEqual(4 + static_cast<int>(column), glyphCell, L"the glyph belongs in cell 4 + XC");
+      Assert::AreEqual(glyphCell, colourCell, L"the colour belongs in the same cell as the glyph");
+      Assert::AreEqual<std::uint32_t>(column + 1u, cpu.memory[oracle.Label("XC")], L"CHPR advances the cursor");
+    }
   }
 
   /// A guard on the reasoning above rather than on the game. If IsMulticolourAligned is wrong,
