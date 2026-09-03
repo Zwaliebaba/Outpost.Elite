@@ -436,31 +436,60 @@ public:
   }
 
   /*
-   * 6502: PDESC's generated path -- and the dependency it turned out to have.
+   * 6502: PDESC's generated path -- every system's description, in every galaxy.
    *
-   * The port of PDESC itself is four instructions and it is right: the RNG is seeded from the
-   * system's own seed bytes and extended token 5 is printed. But the description it produces
-   * cannot yet be compared against the game, and finding out why is what this test records.
+   * This is the test slice 2a could not write. A description is four instructions of PDESC and
+   * then the whole of the extended token system: the RNG is seeded from the system's own seed
+   * bytes and extended token 5 is printed, and that token reaches nine control codes, the
+   * justification line buffer, the recursive printer and the system name. Slice 1c-c-b built
+   * the missing half, so the comparison is now the real one -- 2,048 descriptions, character
+   * for character, through a trap on the screen routine.
    *
-   * The token reaches NINE control codes. Five are two-line pokes at the DTW state. Two route to
-   * printers that already exist. The other two do not: MT18 builds a random pronounceable word,
-   * and MT17 prints the system name as an ADJECTIVE -- which it does by writing the name into the
-   * justification line buffer, looking at the last character, dropping it if it is a vowel, and
-   * appending "IAN". So "TIBEDIED" becomes "TIBEDIEDIAN".
+   * It is the strongest single test in the port so far, because almost everything text-related
+   * is underneath it. Token expansion, the randomised alternatives, the case machinery, the
+   * word wrap, the padding that widens the gaps, MT17's trick of reaching back into the buffer
+   * to turn a name into an adjective, and MT18's random pronounceable words all have to agree
+   * for a single description to come out right, and all 2,048 do.
    *
-   * That needs DTW3, DTW5 and the line buffer, which is the justification machinery slice 1c-c
-   * listed and did not build. So the chain is PDESC -> the control codes -> the line buffer, and
-   * it is one slice rather than a patch.
-   *
-   * Until then this asserts what IS true and pins the dependency: the RNG seeding, and exactly
-   * which control codes the descriptions reach. A change to the token or the printer that
-   * altered that set fails here rather than being discovered later by a player reading a
-   * description with a hole in it.
+   * The trap is on CHPR with the carry cleared on return, because that is what CHPR does and
+   * the justification's SBC borrows on the strength of it.
    */
-  TEST_METHOD(SystemDescriptionsSeedFromTheirSeedsAndNameTheirDependency)
+  TEST_METHOD(EverySystemDescriptionInEveryGalaxyMatches)
   {
-    SystemSeeds galaxy = Elite::GALAXY_ONE_SEEDS;
+    if (OracleMissing())
+    {
+      return;
+    }
 
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t chpr = oracle.Label("CHPR");
+    const std::uint16_t pdesc = oracle.Label("PDESC");
+
+    /*
+     * Control code 3 is the name of the system being described, and it arrives as a value token
+     * because the recursive printer has no universe of its own. This is what slice 2a's half of
+     * the seam looks like once filled: the name comes from PrintSystemName, which is the port of
+     * the very routine the game reaches here.
+     */
+    struct SystemNameTokens : public Elite::ValueTokens
+    {
+      void Print(std::uint8_t _token, Elite::TextSink&) override
+      {
+        if (_token == 3 && printer != nullptr)
+        {
+          Elite::PrintSystemName(*printer, seeds);
+          return;
+        }
+        ++unexpected;
+      }
+
+      Elite::TokenPrinter* printer = nullptr;
+      SystemSeeds seeds;
+      std::uint32_t unexpected = 0;
+    };
+
+    /// 9, 11 and 21 reach the canvas. A description that reached one would be a hole in this.
     struct CountingControls : public Elite::ControlCodes
     {
       void Run(std::uint8_t _code) override { ++counts[_code]; }
@@ -468,41 +497,111 @@ public:
     };
 
     CountingControls controls;
-    std::uint32_t described = 0;
+    SystemSeeds galaxy = Elite::GALAXY_ONE_SEEDS;
+    std::uint32_t compared = 0;
+    std::string firstDescription;
 
     for (int galaxyNumber = 1; galaxyNumber <= 8; ++galaxyNumber)
     {
       SystemSeeds seeds = galaxy;
+
       for (int system = 0; system < 256; ++system)
       {
-        Collector collector;
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+        LoadSeeds(cpu, zp.qq15, seeds);
+
+        // 6502: LDA QQ8 / ORA QQ8+1 / BNE PD1 -- a non-zero distance takes the generated path
+        // rather than the handful of hand-written mission descriptions, which are phase 4's.
+        cpu.memory[oracle.Label("QQ8")] = 1;
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ8") + 1)] = 0;
+
+        cpu.memory[oracle.Label("QQ17")] = 0;
+        cpu.memory[oracle.Label("DTW1")] = 0;
+        cpu.memory[oracle.Label("DTW2")] = 0;
+        cpu.memory[oracle.Label("DTW3")] = 0;
+        cpu.memory[oracle.Label("DTW4")] = 0;
+        cpu.memory[oracle.Label("DTW5")] = 0;
+        cpu.memory[oracle.Label("DTW6")] = 0;
+        cpu.memory[oracle.Label("DTW8")] = 0xFF;
+        for (std::uint16_t index = 0; index < Elite::CharacterPrinter::BUFFER_SIZE; ++index)
+        {
+          cpu.memory[static_cast<std::uint16_t>(oracle.Label("BUF") + index)] = 0;
+        }
+
+        cpu.a = cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+
+        const auto run = cpu.CallSubroutine(pdesc, 500'000);
+        Assert::IsTrue(run.completed && !run.illegalOpcode, L"PDESC should return");
+
+        std::string expected;
+        for (const auto& hit : cpu.trapHits)
+        {
+          expected += static_cast<char>(hit.a);
+        }
+
+        Collector screen;
+        Elite::CharacterPrinter characters(screen);
+        SystemNameTokens names;
+        names.seeds = seeds;
+        Elite::TokenPrinter recursive(characters, &names);
+        names.printer = &recursive;
         Elite::Rng rng;
-        Elite::TokenPrinter recursive(collector, nullptr);
-        Elite::ExtendedTokenPrinter printer(collector, recursive, rng, &controls);
+        Elite::ExtendedTokenPrinter printer(characters, recursive, rng, &controls);
         Elite::PrintSystemDescription(printer, rng, seeds);
 
-        // The description varies with the system and is stable for it, which is the whole point
-        // of seeding from the seed rather than from the RNG's own state.
-        Elite::Rng repeat;
-        Collector again;
-        Elite::TokenPrinter recursiveAgain(again, nullptr);
-        Elite::ExtendedTokenPrinter printerAgain(again, recursiveAgain, repeat, &controls);
-        Elite::PrintSystemDescription(printerAgain, repeat, seeds);
-        Assert::IsTrue(collector.text == again.text, L"a system's description must be the same every visit");
+        const std::wstring where = L"galaxy " + std::to_wstring(galaxyNumber) + L" system "
+                                   + std::to_wstring(system) + L" (seeds " + Widen(Show(seeds)) + L")";
 
-        ++described;
+        Assert::AreEqual<std::uint32_t>(0u, names.unexpected,
+                                        (where + L": only the system name should be a value token").c_str());
+
+        if (expected != screen.text)
+        {
+          Assert::Fail((where + L"\n  game: \"" + Widen(expected) + L"\"\n  port: \"" + Widen(screen.text) + L"\"")
+                         .c_str());
+        }
+
+        if (galaxyNumber == 1 && system == 0)
+        {
+          firstDescription = screen.text;
+        }
+
+        ++compared;
         Elite::NextSystem(seeds);
       }
+
       Elite::NextGalaxy(galaxy);
     }
 
-    Assert::AreEqual<std::uint32_t>(2048u, described, L"every system should be described");
+    Assert::AreEqual<std::uint32_t>(2048u, compared, L"every system should be described");
 
-    // 6502: PDL1K -- the RNG state is the system's seed bytes 2 to 5, not anything random.
+    std::uint32_t deferred = 0;
+    for (const std::uint32_t count : controls.counts)
+    {
+      deferred += count;
+    }
+    Assert::AreEqual<std::uint32_t>(0u, deferred,
+                                    L"no generated description should reach a control code the port defers");
+
+    Logger::WriteMessage(("PDESC: 2,048 descriptions compared. Galaxy 1 system 0 reads:\n" + firstDescription + "\n")
+                           .c_str());
+  }
+
+  /*
+   * The other half of PDESC's seeding, checked on its own because the sweep above would pass
+   * with the wrong seed bytes as long as both sides used the same wrong ones.
+   */
+  TEST_METHOD(SystemDescriptionsSeedFromTheirOwnSeedBytes)
+  {
+    // 6502: PDL1K -- LDA QQ15+2,X / STA RAND,X, counting X down from 3.
     Elite::Rng rng;
-    Collector sink;
-    Elite::TokenPrinter recursive(sink, nullptr);
-    Elite::ExtendedTokenPrinter printer(sink, recursive, rng, &controls);
+    Collector screen;
+    Elite::CharacterPrinter characters(screen);
+    Elite::TokenPrinter recursive(characters, nullptr);
+    Elite::ExtendedTokenPrinter printer(characters, recursive, rng, nullptr);
+
     const SystemSeeds probe = { { 11, 22, 33, 44, 55, 66 } };
     Elite::PrintSystemDescription(printer, rng, probe);
 
@@ -510,23 +609,7 @@ public:
     Elite::Rng seeded;
     seeded.SetState({ probe.bytes[2], probe.bytes[3], probe.bytes[4], probe.bytes[5] });
     Assert::AreEqual<std::uint32_t>(33u, seeded.State()[0], L"the RNG is seeded from seed byte 2");
-
-    std::string report = "PDESC: 2,048 descriptions generated. Control codes they reach:\n";
-    int distinct = 0;
-    for (std::size_t code = 0; code < controls.counts.size(); ++code)
-    {
-      if (controls.counts[code] != 0)
-      {
-        ++distinct;
-        report += "  code " + std::to_string(code) + ": " + std::to_string(controls.counts[code]) + "\n";
-      }
-    }
-    report += "  => BLOCKED on slice 1c-c-b and the justification line buffer (MT17).\n";
-    Logger::WriteMessage(report.c_str());
-
-    Assert::AreEqual<std::uint32_t>(9, static_cast<std::uint32_t>(distinct),
-                                    L"the descriptions are expected to reach exactly nine control codes; if this "
-                                    L"changed, the dependency this test documents has changed with it");
+    Assert::IsFalse(screen.text.empty(), L"a description should have been produced");
   }
 
   /*

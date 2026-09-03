@@ -92,10 +92,31 @@ public:
     std::uint8_t y = 0;
   };
 
-  std::vector<std::uint16_t> traps;
+  /*
+   * What the trapped routine's own RTS would have left behind.
+   *
+   * A trap returns without running anything, so a routine whose callers depend on the flags it
+   * exits with is not faithfully stood in for by the default. CHPR is the case that matters:
+   * every path through it ends CLC, and the justification code four instructions later does an
+   * SBC that borrows because of it. Trapping CHPR without this makes the game's own text come
+   * out a character wider than the game produces.
+   */
+  enum class TrapExit
+  {
+    Unchanged,  ///< leave the flags as the caller had them
+    ClearCarry, ///< the routine ends CLC
+  };
+
+  struct Trap
+  {
+    std::uint16_t address = 0;
+    TrapExit exit = TrapExit::Unchanged;
+  };
+
+  std::vector<Trap> traps;
   std::vector<TrapHit> trapHits;
 
-  void AddTrap(std::uint16_t _address);
+  void AddTrap(std::uint16_t _address, TrapExit _exit = TrapExit::Unchanged);
   void ClearTrapHits() noexcept { trapHits.clear(); }
 
   // ---- helpers for fixtures ----------------------------------------------------------
