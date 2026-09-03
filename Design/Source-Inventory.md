@@ -67,9 +67,11 @@ loader 22, sprites 5 — 710 includes, all distinct; verified mechanically 2026-
 | ✅ `mad`, `mu5`, `mu6`, `mls1`'s `mults` body, `mltu2`, `tis1` (with `dvid96`), `tis2`, `dvidt` | 8 | `Arith.cpp` | **Ported 2026-09-03** (slice 1b-b). The multiply-accumulate, the scaled and wide multiplies, and the three divisions. Exhaustive where the input space is 16 bits, 150,000-case sweeps above that. |
 | `mult3`, `mls1`/`mls2`'s setup, `mlu1`, `mut1`, `mut2`, `mut3`, `tas3`, `tis3`, `dv41`, `dv42`, `cntr`, `bump2`, `redu2`, `norm`, `ll5` | 15 | `Arith.cpp`, `ShipMove.cpp` | Port. Each reads game state the port has not defined yet — ship slots (`INWK`), the rotation angles (`ALP1`), the stardust arrays or the damping flag — so they land with the workspace they belong to rather than with the kernel. |
 | ✅ `fmltu`, `ll28`, `ll38`, `arctan` (with `ars1`) | 4 | `Arith.cpp` | **Ported 2026-09-03** (slice 1b-d). The multiply, the divide and the angle verified over all 65,536 input pairs each; the combine over a 200,000-case sweep. The divide's returned carry is compared too, since callers branch on it. |
-| `fmltu2`, `dvid4`, `dvid3b2`, `ll51` | 4 | `Arith.cpp` | Port — same shape as the four above, now unblocked. |
+| ✅ `fmltu2`, `dvid4` (with the unlabelled `LL28` copy it falls into) | 2 | `Arith.cpp` | **Ported 2026-09-03** (slice 1b-d, completed). Both compared against the shipped routines over all 65,536 input pairs. `DVID4` has **no `RTS`**: it runs on into a second, unlabelled copy of `LL28`'s body, and both of its callers get it, so the port is the whole path — an 8.8 fixed-point divide leaving the whole part in `P` and the fraction in `R`. |
+| `dvid3b2`, `ll51` | 2 | `Arith.cpp`, `ShipMove.cpp` | Port — **deferred to 3a, 2026-09-03**, for the reason 1b-c was: `dvid3b2` reads `INWK+6..8` and `ll51` reads `XX15`/`XX16`, and neither workspace exists yet. `DVID3B`, the state-free entry `dvid3b2` falls into, goes with them. |
 | ✅ `log`, `logl`, `antilog-alogh`, `antilogodd` | 4 | `LogTables.cpp` | **Extracted 2026-09-03** (slice 1a), byte-compared against the oracle image by `TableTests.cpp`. |
-| `ylookupl`, `ylookuph`, `celllookl`, `celllookh`, `twos`, `dtwos`, `ctwos`, `ctwos2`, `twos2`, `twfl`, `twfr`, `tens` | 12 | `LookupTables.h` | Data. `ylookup`/`celllook` are bitmap-address tables — the canvas computes addresses directly, but the tables are kept for the oracle comparisons. |
+| ✅ `ylookupl`, `ylookuph`, `celllookl`, `celllookh`, `twos`, `dtwos`, `ctwos2`, `twos2`, `twfl`, `twfr` | 10 | `LookupTables.h`, `ScreenTables.cpp` | **Extracted 2026-09-03** (slice 1a, the screen half), byte-compared against the oracle image. Lengths come from what indexes each table, not from the next label (plan §6.8). `ylookup`/`celllook` are bitmap-address tables — the canvas computes those addresses directly, and a test proves the two agree for all 256 rows. |
+| `ctwos`, `tens` | 2 | `LookupTables.h` | Data — deferred. `ctwos`'s only C64 consumer is `DIL2`, a dashboard routine (slice 3d), so its index range cannot be established from a phase-1 caller; `tens` belongs with `BPRNT` in 1c-c. |
 | `mvt3`, `mvs5`, `mas1`, `mas2`, `mas3`, `mvt1`, `mvs4`, `mvt6`, `mv40`, `tidy`, `tas1`, `tas2`, `tas4`, `tas6`, `dcs1`, `sps1`–`sps4`, `sp1`, `sp2` | 21 | `ShipMove.cpp`, `Orientation.cpp`, `Dashboard.cpp` (compass parts) | Port |
 
 ### 1.5 Drawing primitives
@@ -146,7 +148,7 @@ and replaces the hand count.
 | `xx21`, `e_per_cent` (`E%`), `kwl_per_cent`, `kwh_per_cent` | 4 | `ShipBlueprintData.cpp`, `LookupTables.h` | Data |
 | `vertex`, `edge`, `face` (macros) | 3 | `tools/extract_tables.py` | Replace |
 | `ship_missile`, `ship_coriolis`, `ship_escape_pod`, `ship_plate`, `ship_canister`, `ship_boulder`, `ship_asteroid`, `ship_splinter`, `ship_shuttle`, `ship_transporter`, `ship_cobra_mk_3`, `ship_python`, `ship_boa`, `ship_anaconda`, `ship_rock_hermit`, `ship_viper`, `ship_sidewinder`, `ship_mamba`, `ship_krait`, `ship_adder`, `ship_gecko`, `ship_cobra_mk_1`, `ship_worm`, `ship_cobra_mk_3_p`, `ship_asp_mk_2`, `ship_python_p`, `ship_fer_de_lance`, `ship_moray`, `ship_thargoid`, `ship_thargon`, `ship_constrictor`, `ship_cougar`, `ship_dodo` | 33 | `ShipBlueprintData.cpp` | Data — 33 blueprints (the `NTY = 33` ship types) |
-| `C.FONT.bin` (`INCBIN`, **also not in `MasterFile/`**) | 1 | `Font.cpp` | Data |
+| ✅ `C.FONT.bin` (`INCBIN`) | 1 | `Font.cpp` | **Extracted 2026-09-03** (slice 1a) — 768 bytes, 96 characters of eight rows, byte-compared against the oracle image. |
 
 ---
 

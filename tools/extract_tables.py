@@ -58,6 +58,25 @@ TABLES = [
     Table("EXTENDED_PAIR_TABLE", "TKN2", 82, "ExtendedTokenTables.cpp", "letter pairs for the extended tokens"),
     Table("SYSTEM_TOKEN_TABLE", "RUTOK", 625, "ExtendedTokenTables.cpp", "per-system description overrides"),
     Table("VARIANT_BASE_TABLE", "MTIN", 38, "ExtendedTokenTables.cpp", "the first of each token's random variants"),
+    # ---- slice 1d: the screen. Lengths come from what indexes each table, per section 6.8.
+    # TWOS, TWOS2, TWFL and TWFR are all read with an index masked to AND 7, so eight entries.
+    Table("PIXEL_MASK_TABLE", "TWOS", 8, "ScreenTables.cpp", "one pixel of a line, by x within the byte"),
+    Table("DASH_MASK_TABLE", "TWOS2", 8, "ScreenTables.cpp", "the mark PIXEL plots, by x within the byte"),
+    # CTWOS2 is read as CTWOS2,X and as CTWOS2+2,X with X masked to AND 7, so it is reachable to
+    # offset 9 -- the two extra rows its callers rely on, not padding.
+    Table("MULTICOLOUR_MASK_TABLE", "CTWOS2", 10, "ScreenTables.cpp", "multicolour-aligned pixel masks, two entries per pixel"),
+    # Four entries and no C64 routine indexes it in this build; extracted because the ledger
+    # names it and it is four bytes, not because anything reads it yet.
+    Table("DASHBOARD_MASK_TABLE", "DTWOS", 4, "ScreenTables.cpp", "one multicolour pixel, by pixel number"),
+    Table("LINE_RIGHT_MASK_TABLE", "TWFR", 8, "ScreenTables.cpp", "a horizontal line's first byte, filled from x rightwards"),
+    Table("LINE_LEFT_MASK_TABLE", "TWFL", 8, "ScreenTables.cpp", "a horizontal line's last byte, filled leftwards to x"),
+    # Indexed by a screen y and a character row, so 256 and 25.
+    Table("ROW_ADDRESS_LOW", "ylookupl", 256, "ScreenTables.cpp", "low byte of the bitmap address of screen row y"),
+    Table("ROW_ADDRESS_HIGH", "ylookuph", 256, "ScreenTables.cpp", "high byte of the same"),
+    Table("CELL_ADDRESS_LOW", "celllookl", 25, "ScreenTables.cpp", "low byte of the colour-cell address of character row"),
+    Table("CELL_ADDRESS_HIGH", "celllookh", 25, "ScreenTables.cpp", "high byte of the same"),
+    # 96 characters of 8 rows, from C.FONT.bin.
+    Table("FONT_DATA", "FONT", 768, "Font.cpp", "eight bytes a character, from space upwards"),
 ]
 
 

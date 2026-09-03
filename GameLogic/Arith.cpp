@@ -456,16 +456,15 @@ std::uint8_t MultiplyByLog(MathWorkspace& _work, std::uint8_t _a) noexcept
   return useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value];
 }
 
-bool DivideToR(MathWorkspace& _work, std::uint8_t _a) noexcept
+/*
+ * 6502: LL28's body, from the STA widget onwards -- the part after the "does it fit" guard.
+ *
+ * It is a helper because the shipped game has this code TWICE: once inside LL28, and once
+ * unlabelled at the end of DVID4, which falls into it. The second copy is byte-identical except
+ * that it has no guard in front, so the two share this and differ only in what precedes it.
+ */
+bool DivideByLogarithms(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
-  if (_a >= _work.q)
-  {
-    // 6502: LL2 -- the ratio does not fit in a byte, so it pins at the maximum. The carry the
-    // comparison left is set, and callers read it.
-    _work.r = 255;
-    return true;
-  }
-
   _work.widget = _a;
 
   if (_a == 0)
@@ -492,6 +491,19 @@ bool DivideToR(MathWorkspace& _work, std::uint8_t _a) noexcept
   const std::uint8_t index = static_cast<std::uint8_t>(highDifference);
   _work.r = useOddTable ? ANTILOG_ODD_TABLE[index] : ANTILOG_TABLE[index];
   return false;
+}
+
+bool DivideToR(MathWorkspace& _work, std::uint8_t _a) noexcept
+{
+  if (_a >= _work.q)
+  {
+    // 6502: LL2 -- the ratio does not fit in a byte, so it pins at the maximum. The carry the
+    // comparison left is set, and callers read it.
+    _work.r = 255;
+    return true;
+  }
+
+  return DivideByLogarithms(_work, _a);
 }
 
 std::uint8_t CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
@@ -594,6 +606,65 @@ std::uint8_t Arctan(MathWorkspace& _work) noexcept
   }
 
   return angle;
+}
+
+std::uint8_t MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a) noexcept
+{
+  // 6502: FMLTU2's own three instructions. It then falls through into FMLTU with K in A, so the
+  // multiplicand is K and the multiplier is the sine it just put in Q.
+  _work.q = SINE_TABLE[_a & 0x1Fu];
+  return MultiplyByLog(_work, _work.k[0]);
+}
+
+std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
+{
+  // 6502: DVID4. Restoring division: shift the dividend up a bit at a time, and after each
+  // shift subtract the divisor if it fits, recording whether it did as the next quotient bit.
+  //
+  // The comparison is what carries the quotient bit. CMP leaves carry SET when the value is not
+  // smaller than Q, and the SBC that follows consumes that same set carry as "no borrow" -- so
+  // the subtract is correct and the ROL that follows shifts a 1 in. When the branch is taken
+  // instead, carry is clear and the ROL shifts a 0. One flag doing two jobs, which is why the
+  // port keeps the comparison and the shift adjacent rather than tidying them apart.
+  // 6502: ASL A -- a left shift is a rotate with no carry coming in.
+  const ShiftResult shifted = RotateLeftValue(_a, false);
+  _work.p = shifted.value;
+
+  std::uint8_t remainder = 0;
+  bool carry = shifted.carry;
+
+  for (int step = 0; step < 8; ++step)
+  {
+    const ShiftResult next = RotateLeftValue(remainder, carry);
+    remainder = next.value;
+
+    // 6502: CMP Q / BCC / SBC Q -- subtract only when it fits, and the comparison's carry is
+    // both the decision and the quotient bit.
+    carry = remainder >= _work.q;
+    if (carry)
+    {
+      remainder = static_cast<std::uint8_t>(remainder - _work.q);
+    }
+
+    const ShiftResult quotient = RotateLeftValue(_work.p, carry);
+    _work.p = quotient.value;
+    carry = quotient.carry;
+  }
+
+  /*
+   * And now the part that is easy to miss: DVID4 has no RTS.
+   *
+   * It runs straight on into an unlabelled copy of LL28's body, and both of its callers get
+   * that. The copy is byte-identical to LL28 except that the "does it fit in a byte" guard in
+   * front of it is absent -- which is safe rather than sloppy, because a remainder is always
+   * smaller than the divisor it came from, so the guard could never have fired here.
+   *
+   * The consequence for callers: P holds the quotient of the eight steps, and R holds that
+   * remainder scaled up by the same divisor. Returning only the remainder, as an eight-step
+   * divide would, is not what the game does.
+   */
+  (void)DivideByLogarithms(_work, remainder);
+  return _work.r;
 }
 
 } // namespace Elite

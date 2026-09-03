@@ -61,4 +61,56 @@ extern const std::array<std::uint8_t, 625> SYSTEM_TOKEN_TABLE;
 // 6502: MTIN -- for each token that has randomised variants, the first of them.
 extern const std::array<std::uint8_t, 38> VARIANT_BASE_TABLE;
 
+/*
+ * The screen tables (slice 1d).
+ *
+ * Every one is indexed by a value the caller has already masked, and the array length is what
+ * that mask can reach rather than the gap to the next label -- Elite overlaps its tables where
+ * the ranges allow (plan section 6.8).
+ *
+ * The two-bit multicolour pixel is the thing to keep in mind reading these: a byte is four
+ * pixels, so a mask that looks like it covers "one pixel" may cover a bit of two.
+ */
+
+// 6502: TWOS -- one pixel of a line, selected by x within the byte. LOIN part 5 reads it with
+// x AND 7. On this lineage the masks slide by one bit, so half of them straddle two multicolour
+// pixels; that is the game's behaviour, not a porting artefact (ADR-002 section 7).
+extern const std::array<std::uint8_t, 8> PIXEL_MASK_TABLE;
+
+// 6502: TWOS2 -- the mark PIXEL plots, again by x AND 7, and again bit-sliding rather than
+// pixel-aligned.
+extern const std::array<std::uint8_t, 8> DASH_MASK_TABLE;
+
+// 6502: CTWOS2 -- the multicolour-ALIGNED masks, two identical entries per pixel so that a pair
+// of x values share one. CPIX2 and SCAN read it as CTWOS2+2,X with x AND 7, which is why it runs
+// to ten entries rather than eight.
+extern const std::array<std::uint8_t, 10> MULTICOLOUR_MASK_TABLE;
+
+// 6502: DTWOS -- one aligned multicolour pixel by pixel number. Nothing in the C64 build indexes
+// it; it is here because the ledger names it and it is four bytes.
+extern const std::array<std::uint8_t, 4> DASHBOARD_MASK_TABLE;
+
+// 6502: TWFR, TWFL -- a horizontal line's end bytes: TWFR fills from x rightwards to the end of
+// the byte, TWFL fills leftwards from the start of the byte to x. Everything between is 0xFF.
+extern const std::array<std::uint8_t, 8> LINE_RIGHT_MASK_TABLE;
+extern const std::array<std::uint8_t, 8> LINE_LEFT_MASK_TABLE;
+
+// 6502: ylookupl, ylookuph -- the bitmap address of screen row y, which is
+// SCBASE + 0x20 + (y >> 3) * 320. The 0x20 is the space view's four-cell left margin.
+// Canvas computes that arithmetic directly; these are kept so a test can prove the two agree
+// for all 256 rows, and so the oracle has something to compare against.
+extern const std::array<std::uint8_t, 256> ROW_ADDRESS_LOW;
+extern const std::array<std::uint8_t, 256> ROW_ADDRESS_HIGH;
+
+// 6502: celllookl, celllookh -- the colour-cell address of a character row, which is
+// SCBASE + 0x2003 + 40 * row. The three-cell offset is not a margin: CHPR writes the colour
+// after advancing the cursor, so celllook[row] + (XC + 1) lands on cell 4 + XC, the same cell
+// the glyph went into.
+extern const std::array<std::uint8_t, 25> CELL_ADDRESS_LOW;
+extern const std::array<std::uint8_t, 25> CELL_ADDRESS_HIGH;
+
+// 6502: FONT -- 96 characters of eight rows, starting at space. One bit per pixel here; CHPR
+// doubles each bit into a multicolour pixel on the way to the bitmap.
+extern const std::array<std::uint8_t, 768> FONT_DATA;
+
 } // namespace Elite
