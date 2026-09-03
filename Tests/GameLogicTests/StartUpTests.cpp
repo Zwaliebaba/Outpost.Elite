@@ -99,6 +99,10 @@ public:
   void StopTheme() override { seams.push_back({ "stopat", 0, 0, 0 }); }
   void ResetMissileIndicators() override { seams.push_back({ "msblob", 0, 0, 0 }); }
 
+  // Reached by DOENTRY rather than by the start sequence, so neither script here should see one.
+  void ShowDockingTunnel() override { seams.push_back({ "LAUN", 0, 0, 0 }); }
+  void WaitFrames(std::uint8_t _frames) override { seams.push_back({ "DELAY", _frames, 0, 0 }); }
+
   std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance) override
   {
     seams.push_back({ "TITLE", _token, _shipType, _distance });
