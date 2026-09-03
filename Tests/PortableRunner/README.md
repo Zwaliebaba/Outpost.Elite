@@ -37,17 +37,24 @@ that factor times the 8× shorter run — not the order of magnitude the rate al
 | Header | Stands in for | What it does |
 |---|---|---|
 | `CppUnitTest.h` | `VC\Auxiliary\VS\UnitTest\include\CppUnitTest.h` | `TEST_CLASS`/`TEST_METHOD` become a struct and a member function; `Assert::*` throw |
-| `NeuronCore.h` | `NeuronCore/NeuronCore.h` | the two Win32 calls `OracleImage.cpp` uses, answered from `/proc/self/exe` |
+| `NeuronCore.h` | `NeuronCore/NeuronCore.h` | the three Win32 calls under test reach for: two answered from `/proc/self/exe`, one from the environment |
 | `pch.h` | `Tests/GameLogicTests/pch.h` | includes the two above |
 
 `generate_runner.py` then parses the test files for `TEST_CLASS` and `TEST_METHOD` and writes one
 translation unit per test file that calls every method in it, plus a `main`, plus a makefile.
 `run_tests.sh` regenerates, builds with `make -j`, and runs.
 
-**No file under `Tests/GameLogicTests/` or `GameLogic/` changes, and none of it is copied.** That
-is the property that makes this trustworthy: there is one suite, and the two runners disagree only
-about how it is invoked. A test added to a `.cpp` is picked up by both without being registered
-anywhere.
+**No file under `Tests/GameLogicTests/`, `GameLogic/` or `Outpost/` changes, and none of it is
+copied.** That is the property that makes this trustworthy: there is one suite, and the two runners
+disagree only about how it is invoked. A test added to a `.cpp` is picked up by both without being
+registered anywhere.
+
+One file from `Outpost/` is compiled here too: `SaveStore.cpp`, the commander store. It is the
+executable's, not `GameLogic`'s, because the determinism guard forbids file access there — and it
+was committed and left uncompiled for a day because the only machine that could build it ran
+Windows. Ten lines of `GetEnvironmentVariableW` in the shim made that untrue, and the first test
+written against it found a defect. `Main.cpp` is not compiled here and does not need to be: it is a
+`wWinMain` with nothing to assert.
 
 The build output goes to `x64/Debug/PortableTests`, deliberately the same directory MSBuild puts
 `GameLogicTests.dll` in, because the oracle finds the repository by walking up from wherever its

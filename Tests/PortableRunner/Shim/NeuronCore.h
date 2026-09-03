@@ -22,14 +22,17 @@
 
 #include <climits>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <unistd.h>
 
 #define MAX_PATH 4096
 
+using DWORD = unsigned long;
 using HMODULE = void*;
 using LPCWSTR = const wchar_t*;
+using LPWSTR = wchar_t*;
 
 #define GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS 1
 #define GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT 2
@@ -43,6 +46,43 @@ inline int GetModuleHandleExW(int, LPCWSTR, HMODULE* _module)
 {
   *_module = nullptr;
   return 1;
+}
+
+/*
+ * Where a commander file goes -- the one Win32 call Outpost/SaveStore.cpp makes.
+ *
+ * Answered from the process environment, which is the same question Windows answers, so the
+ * default SaveStore constructor works here too when LOCALAPPDATA is set. The contract is Win32's
+ * and is easy to get wrong in a stand-in: with a null buffer it returns the length INCLUDING the
+ * terminator, and with a real one the length EXCLUDING it. SaveStore's `written >= needed` check
+ * depends on both halves.
+ */
+inline DWORD GetEnvironmentVariableW(LPCWSTR _name, LPWSTR _buffer, DWORD _size)
+{
+  std::string narrow;
+  for (const wchar_t* at = _name; *at != 0; ++at)
+  {
+    narrow += static_cast<char>(*at);
+  }
+
+  const char* value = std::getenv(narrow.c_str());
+  if (value == nullptr)
+  {
+    return 0;
+  }
+
+  const std::size_t length = std::strlen(value);
+  if (_buffer == nullptr || _size <= length)
+  {
+    return static_cast<DWORD>(length + 1);
+  }
+
+  for (std::size_t index = 0; index < length; ++index)
+  {
+    _buffer[index] = static_cast<wchar_t>(static_cast<unsigned char>(value[index]));
+  }
+  _buffer[length] = 0;
+  return static_cast<DWORD>(length);
 }
 
 /// The running executable's path, widened a byte at a time. Non-ASCII path components would come
