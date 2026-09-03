@@ -423,12 +423,25 @@ public:
 
     const OracleImage& oracle = OracleImage::Instance();
 
-    /// 9, 11 and 21 reach the canvas, so the port defers them and there is nothing to compare.
-    constexpr std::array<std::uint8_t, 3> DEFERRED = { 9, 11, 21 };
+    /*
+     * The codes the port cannot compare against the shipped routine.
+     *
+     * 9, 11 and 21 reach the canvas. 22, 24 and 26 wait for a key or read a typed line, so
+     * running them in the oracle would spin until the instruction budget ran out; 25 prints a
+     * token and then delays for a hundred frames. 27, 28, 30 and 31 print a token chosen by
+     * GCNT or DISK, which is game state the printer does not hold.
+     *
+     * 21 is in this list and still has a ported half -- see REACHES_SEAM below. It is here
+     * because CLYNS clears screen memory the port has no canvas for, not because its flags are
+     * unported.
+     */
+    constexpr std::array<std::uint8_t, 11> DEFERRED = { 9, 11, 21, 22, 24, 25, 26, 27, 28, 30, 31 };
 
-    /// 8 and 21 are split: the flags they set are text state and stay here, and only the cursor
-    /// move or the screen clear is passed on. So code 8 reaches the seam AND is comparable.
-    constexpr std::array<std::uint8_t, 4> REACHES_SEAM = { 8, 9, 11, 21 };
+    /// 8, 21, 23 and 29 are split: the flags they set are text state and stay here, and only the
+    /// cursor move or the screen clear is passed on. So they reach the seam AND are comparable
+    /// -- except 21, whose screen half the port has no canvas for.
+    constexpr std::array<std::uint8_t, 14> REACHES_SEAM = { 8,  9,  11, 21, 22, 23, 24,
+                                                            25, 26, 27, 28, 29, 30, 31 };
 
     /*
      * Two starting states, because one is not enough to see everything.
@@ -449,7 +462,7 @@ public:
 
     for (const TextStateBytes& start : { plain, lowered })
     {
-      for (std::uint8_t code = 1; code <= 21; ++code)
+      for (std::uint8_t code = 1; code <= 31; ++code)
       {
         const bool deferred = std::find(DEFERRED.begin(), DEFERRED.end(), code) != DEFERRED.end();
         const bool seam = std::find(REACHES_SEAM.begin(), REACHES_SEAM.end(), code) != REACHES_SEAM.end();
@@ -542,9 +555,13 @@ public:
     }
 
     Logger::WriteMessage(("JMTB: " + std::to_string(compared) + " control code expansions compared, "
-                          + std::to_string(DEFERRED.size()) + " codes deferred to the canvas")
+                          + std::to_string(DEFERRED.size()) + " of 31 codes deferred")
                            .c_str());
-    Assert::AreEqual<std::uint32_t>(36u, compared, L"eighteen of the twenty-one codes stay inside the text system");
+
+    // Twenty of the thirty-one reachable codes are compared, in two case states each. The table
+    // has a thirty-second entry and DETOK2 can never dispatch it: the test is CMP #32 / BCC, so
+    // a byte of 32 is a space rather than a code.
+    Assert::AreEqual<std::uint32_t>(40u, compared, L"twenty of the thirty-one codes stay inside the text system");
   }
 
   /*
