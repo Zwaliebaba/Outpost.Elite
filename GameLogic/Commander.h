@@ -154,10 +154,16 @@ struct CommanderBlock
 /*
  * 6502: SVE's SVL1 loop, plus the two CHECK calls -- write a commander out.
  *
- * The checksums go into the FILE and not into the live commander: `STA CHK3` and `STA CHK` write
- * to NA%, which is the copy about to be written to disk, and the block at TP is left exactly as
- * it was. So saving does not change the commander, and a port that stored them back would give
- * the next save a different checksum from the one the original computes.
+ * The checksums go into the FILE and not into the live commander: `STA CHK3`, `STA CHK` and
+ * `STA CHK2` all write to NA%, which is the copy about to be written to disk, and the block at TP
+ * is left exactly as it was. So saving does not change the commander, and a port that stored them
+ * back would give the next save a different checksum from the one the original computes.
+ *
+ * ALL THREE, and the third one was missing here until 2026-09-03. `CHK2` is the checksum EOR &A9
+ * and SV1 writes it four instructions past the competition number, long after the two CHECK
+ * calls -- so a reading that stopped at those looked complete. `LoadCommander` only reads it, to
+ * decide whether to flag the file as tampered, so a round trip agreed with itself and the gap
+ * survived 221 compared blocks. Building the save flow on top is what found it.
  */
 void SaveCommander(const CommanderBlock& _block, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
                    std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept;

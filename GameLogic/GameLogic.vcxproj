@@ -156,6 +156,7 @@
     <ClInclude Include="MarketScreen.h" />
     <ClInclude Include="Equipment.h" />
     <ClInclude Include="NameEntry.h" />
+    <ClInclude Include="SaveGame.h" />
     <ClInclude Include="StatusScreen.h" />
     <ClInclude Include="Charts.h" />
     <ClInclude Include="Commander.h" />
@@ -187,6 +188,7 @@
     <ClCompile Include="MarketScreen.cpp" />
     <ClCompile Include="Equipment.cpp" />
     <ClCompile Include="NameEntry.cpp" />
+    <ClCompile Include="SaveGame.cpp" />
     <ClCompile Include="StatusScreen.cpp" />
     <ClCompile Include="Charts.cpp" />
     <ClCompile Include="Commander.cpp" />

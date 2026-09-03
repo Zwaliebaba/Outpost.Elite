@@ -84,6 +84,9 @@
     <ClCompile Include="NameEntryTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="SaveGameTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="ChartTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
