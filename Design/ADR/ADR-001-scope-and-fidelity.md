@@ -40,8 +40,24 @@ done at once, because the second has no definition of "correct" until the first 
    basis; the code is copyright D. Braben and I. Bell, the commentary Mark Moxon. The owner has
    ruled two things that this ADR originally assumed the other way:
 
-   - **The upstream tree is vendored**, at `Upstream/elite-source-code-library`, pinned at
-     commit `aa3f7ee` (2026-09-01). It is not a submodule and not a sibling checkout.
+   - **The upstream tree is referenced at `Upstream/elite-source-code-library`**, pinned at
+     commit `aa3f7ee` (2026-09-01), and not a sibling checkout. **Corrected 2026-09-03:** this
+     ADR said "vendored ... not a submodule", and the tree has never been either. What the
+     repository actually holds at that path is a **gitlink** — mode `160000`, the commit hash
+     and nothing else — which is a submodule entry in all but the registration. That
+     registration was missing, so `git submodule` could not act on it and a fresh clone got an
+     empty directory with no URL to recover from; `tools/inventory.py --check-includes`
+     reported **0 of 712** include paths resolving, and nothing from slice 1a onward could be
+     built. `.gitmodules` now names the path and the upstream URL, and one
+     `git submodule update --init` restores the tree.
+
+     The correction is a description catching up with the tree, not a change of posture, and it
+     lands on the safer side of the ruling: because the content is referenced rather than
+     copied, **none of the ~3,000 unlicensed files has ever entered this repository's history.**
+     What was described as reversible in one command turns out never to have needed reversing.
+     The cost is that the pin depends on `markmoxon/elite-source-code-library` continuing to
+     exist and continuing to contain `aa3f7ee`; if that becomes a risk the answer is a mirror
+     under the owner's account, not a copy into this history.
    - **The intent is to publish eventually.** This repository is therefore not permanently
      private, and the plan gains a slice — **0e, Permission** — that seeks the rights holders'
      agreement. Nothing is pushed to a public remote until 0e closes.
@@ -51,8 +67,14 @@ done at once, because the second has no definition of "correct" until the first 
    the single largest legal exposure in the project (Risk R1). The mitigation is structural,
    so that the decision stays reversible in one command:
 
-   - Everything not ours lives under **`Upstream/` and nothing else**. No original assembler is
-     copied into `GameLogic/`, `Tests/` or `Design/`. Removing one directory removes all of it.
+   - Everything not ours lives under **`Upstream/`, with one exception this section used to
+     omit**. No original assembler is copied into `GameLogic/`, `Tests/` or `Design/`, and
+     `Upstream/` is a reference rather than a copy, so nothing under it is in the history at
+     all. **`MasterFile/` is the exception, and it is committed:** 13 files, 5,615 lines,
+     headed `copyright D. Braben and I. Bell 1985` with commentary `copyright Mark Moxon`.
+     "Removing one directory removes all of it" was therefore not true — removing `Upstream/`
+     removes nothing, and `MasterFile/` is what a published history would carry. That is an
+     owner decision (see the note under 0e in the plan), not something the corpus settles.
    - The **reference binaries are never committed** (`.gitignore` covers
      `Upstream/**/3-assembled-output/`, `5-compiled-game-disks/` and `4-reference-binaries/`).
      They are what an oracle run needs on the machine, not in the history. **The third of those

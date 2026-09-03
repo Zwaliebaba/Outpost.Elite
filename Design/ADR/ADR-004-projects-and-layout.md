@@ -67,9 +67,11 @@ project configuration for the libraries.
 
 - `MasterFile/` stays exactly as it is: the 13 masters, reference only, never compiled, never on
   an include path. It is the index into the upstream tree and what `tools/inventory.py` parses.
-- `Upstream/elite-source-code-library` is the vendored upstream tree, pinned at `aa3f7ee`
-  (ADR-001 §5). **Never edited, never reformatted, never compiled by this solution.** All of it
-  is under that one directory so the licence decision stays reversible.
+- `Upstream/elite-source-code-library` is the upstream tree, a **submodule** pinned at
+  `aa3f7ee` (ADR-001 §5, corrected 2026-09-03). **Never edited, never reformatted, never
+  compiled by this solution.** A fresh clone has nothing there until
+  `git submodule update --init` runs, and until it does `tools/inventory.py --check-includes`
+  reports 0/712 and nothing from slice 1a onward can be built.
 - Generated data files (`ShipBlueprintData.cpp`, `TokenTables.cpp`, `SineTable.cpp`,
   `ArctanTable.cpp`, `LogTables.cpp`, `SoundTables.cpp`, `TuneData.cpp`, `Font.cpp`,
   `DashboardImage.cpp`, `SpriteData.cpp`, `Palette.cpp`, `CommanderData.cpp`) are **checked in**,

@@ -3,7 +3,7 @@
 **Status:** Accepted · 2026-09-02 · **revised in place** (this document is the sequence of
 record; the ADRs decide *what*, this decides *when*).
 **Owner decisions:** all five taken on 2026-09-02 and recorded in §8.
-**Phase 0 is closed**, bar slice 0e which is owner action: 0a (upstream vendored), 0b-a (the
+**Phase 0 is closed**, bar slice 0e which is owner action: 0a (upstream referenced, §6.9), 0b-a (the
 assembler and label map), 0c (skeleton, the 6502 interpreter), 0f (the determinism guard) are
 built; 0b-b is cancelled and 0d deferred, both by owner ruling. **Phase 1 is under way**: 1b-a
 and 1b-b have ported eighteen arithmetic routines. **The oracle is live**, which is the gate
@@ -55,12 +55,13 @@ The work is sized in [§6](#6-the-build-order); the coverage ledger is
 | `elite-build-options.asm` | 5 | `_VERSION=8` (C64), `_VARIANT=1` (GMA85 NTSC), `_MATCH_ORIGINAL_BINARIES=TRUE`, `_MAX_COMMANDER=FALSE` | Fixes which variant we port (ADR-001) |
 | `README.md` | 38 | Moxon's index of the above | — |
 
-**The include tree was absent, and is now vendored.** The `INCLUDE` paths are of the form
+**The include tree was absent, and is now referenced.** The `INCLUDE` paths are of the form
 `library/<lineage>/main/<kind>/<name>.asm` and
 `versions/c64/1-source-files/main-sources/elite-build-options.asm`, which is the layout of the
-upstream repository **`markmoxon/elite-source-code-library`**. Slice 0a cloned it to
-`Upstream/elite-source-code-library`, pinned at commit **`aa3f7ee`** (2026-09-01), and proved
-the acceptance criterion mechanically:
+upstream repository **`markmoxon/elite-source-code-library`**. Slice 0a put it at
+`Upstream/elite-source-code-library` as a **submodule** pinned at commit **`aa3f7ee`**
+(2026-09-01) — see §6.9 for why that word matters and what it cost to discover — and proved the
+acceptance criterion mechanically:
 
 | Check | Result |
 |---|---|
@@ -137,7 +138,8 @@ Tests/GameLogicTests.dll       CppUnitTest.  Cpu6502 oracle, arithmetic/token/un
 tools/                         inventory.py (coverage ledger), extract_tables.py (asm → C++ data),
                                labels.py (BeebAsm listing → label addresses), golden_diff.py, check_gamelogic.py
 MasterFile/                    the 13 masters.  Reference only.  Never compiled, never included.
-Upstream/                      the vendored upstream tree, pinned at aa3f7ee.  Never edited, never compiled.
+Upstream/                      the upstream tree as a SUBMODULE, pinned at aa3f7ee.  Never edited, never compiled.
+                               A fresh clone needs "git submodule update --init" before anything builds.
 ```
 
 ### 2.1 The seam: what `GameLogic` looks like from outside
@@ -295,13 +297,47 @@ within a phase is the recommended one; slices marked ∥ can run in parallel.
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **0a Source acquisition** ✅ **Built 2026-09-02** | Vendored `markmoxon/elite-source-code-library` at `Upstream/elite-source-code-library`, pinned at `aa3f7ee` (2026-09-01), per the owner's ruling to vendor rather than reference a sibling checkout (ADR-001 §5). | **Met.** 712/712 include paths and the font binary resolve; all 13 masters byte-for-byte identical to upstream; `tools/inventory.py --check-includes` is the standing check. |
+| **0a Source acquisition** ✅ **Built 2026-09-02 · repaired 2026-09-03** | `markmoxon/elite-source-code-library` at `Upstream/elite-source-code-library`, pinned at `aa3f7ee` (2026-09-01), per the owner's ruling to hold it here rather than reference a sibling checkout (ADR-001 §5). | **Met, and now met on a clean clone too.** 712/712 include paths and the font binary resolve; all 13 masters byte-for-byte identical to upstream; `tools/inventory.py --check-includes` is the standing check. It reported **0/712 on a fresh clone until 2026-09-03**, because the gitlink had no `.gitmodules` — see §6.9. |
 | **0b-a Label map** ✅ **Built 2026-09-03** | Build BeebAsm from source, assemble the C64 variant, and normalise its label dump and load addresses into something the oracle can read (`tools/labels.py`). | **Met.** BeebAsm 1.11 built with the VS 18 toolchain; the variant assembles to all eleven blocks; **1,782 labels** and the 11-block load map exported. The oracle now calls the shipped game by name. |
 | **0b-b Emulator measurements** ❌ **Cancelled 2026-09-03 by owner ruling** | *"You can ignore the use of VICE, no need to do a reference run."* No emulator is installed and none will be. | **Dropped, not deferred.** It was gating two things and each now has a different answer, below. |
 | **0c Repository skeleton** ✅ **Built 2026-09-02** | `AGENTS.md` written for this repository from its own `.clang-tidy`/`.clang-format`, not adapted from a sibling; `GameLogic` (static lib) and `Tests/GameLogicTests` (CppUnitTest) added to `Outpost.slnx`; `tools/inventory.py` built; `Cpu6502` written and proved. | **Met.** Debug x64 builds clean; 16 tests pass, of which 11 pin the interpreter against published 6502 behaviour and 5 are the first oracle suite. See §6.1. |
 | **0d Application shell** ⏸ **deferred to phase 2 by owner ruling, 2026-09-03** | *"Do not strip WinUI, ignore it and proceed."* The `Outpost` project is left exactly as it is, packages and all. Nothing here is done now. | Re-enters the plan at **2e**, which is the first slice that needs a window because it is the first playable build. Until then the port is game logic proved by tests, and the shell is not on the critical path. |
 | **0e Permission** | Approach the rights holders about the intent to publish (ADR-001 §5). Until it closes, nothing is pushed to a public remote. | A written answer, recorded in ADR-001 §5, and the disposition of `Upstream/` decided accordingly. |
 | **0f Determinism guard** ✅ **Built 2026-09-03** | `tools/check_gamelogic.py`: fails if `GameLogic` names a clock, operating-system randomness, `float`, `double`, file or registry access, or a Win32 call. Comments and string literals are stripped first, so a comment explaining the float ban does not trip the float rule. | **Met.** Passes on the tree. A planted `<chrono>` include and a `double` were both caught, and the tree was clean again afterwards. `--self-test` proves the scanner still detects six violation kinds and correctly ignores four look-alikes, so the checker itself is checked. |
+
+### 6.9 Slice 0a was not finished, and the way it failed is the interesting part
+
+**Found 2026-09-03, on a clean clone.** Slice 0a was accepted on a mechanical criterion —
+712/712 include paths resolve — and the criterion was sound. What nobody checked is that it
+still held on a machine other than the one it was written on. It did not. On a fresh clone the
+same command reported **0 of 712**, and every slice from 1a onward was unbuildable.
+
+The cause is one missing file. `Upstream/elite-source-code-library` is recorded in the index as
+a **gitlink**: mode `160000`, the commit hash `aa3f7ee`, and nothing else. That is a submodule
+entry, and a submodule entry without a `.gitmodules` to name its URL is inert — `git submodule
+update --init` answers `no submodule mapping found` and there is no other way to recover the
+content, because the repository never held it. So a clone got an empty directory where 710
+routine bodies, the font and the assembled blocks were supposed to be.
+
+`.gitmodules` now exists and names the path and the upstream URL. One `git submodule update
+--init` restores the tree, and `--check-includes` is green again.
+
+Three things worth carrying forward:
+
+- **The corpus said "vendored ... not a submodule" and the tree said otherwise.** ADR-001 §5 is
+  corrected rather than reinterpreted. This is the failure mode AGENTS.md §7 names — code and
+  `Design/` disagreeing — arriving in the one place nobody re-reads, which is the description of
+  something already accepted.
+- **An acceptance criterion that only ever ran on the author's machine has not been tested, it
+  has been demonstrated.** Everything phase 0 built is exercised on each test run and would have
+  survived; slice 0a's output is the one thing that is only touched at clone time, which is why
+  it is the one thing that broke. Anything whose accept depends on the state of the working tree
+  should be re-run from a clean clone before its slice is closed.
+- **The accident landed on the safer side of R1.** Because the content was referenced rather
+  than copied, none of the ~3,000 unlicensed files has ever entered this history. What ADR-001
+  described as reversible in one command turns out never to have needed reversing — and the
+  files that *are* committed, and would be published, are the 13 in `MasterFile/`, which §5 did
+  not mention. That is now recorded there as an owner decision, not settled by the corpus.
 
 ### 6.1 What slice 0c actually built
 
@@ -590,6 +626,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-03 | **Slice 0a repaired.** `Upstream/elite-source-code-library` was a gitlink with no `.gitmodules`, so a fresh clone got an empty directory and `--check-includes` reported 0/712 — every slice from 1a onward unbuildable off the author's machine. `.gitmodules` added; the tree is a **submodule**, which is what it always was. ADR-001 §5's "vendored ... not a submodule" corrected, along with the `.gitignore` block that claimed the tree was committed. §6.9 records the finding, including that §5's "everything not ours lives under `Upstream/`" omits the 13 committed files in `MasterFile/`. |
 | 2026-09-02 | Opened. Inventory of `MasterFile/`, target architecture, phases 0–6, owner decisions. |
 | 2026-09-03 | **Slice 1c-b built** — the extended token system: the walkers, the case state, letter pairs, nested tokens and randomised variants, with `TKN1`, `TKN2`, `RUTOK` and `MTIN` extracted. Control codes are a declared seam and land with the canvas as slice 1c-c. §6.8 records why a table's size comes from its index range rather than from the next label. |
 | 2026-09-03 | **Slice 1c-a built** — the recursive token printer, 243 of 250 tokens compared character for character in all five capitalisation states. The oracle gained **call traps** (§6.7), which is how output becomes comparable and is what the drawing slices will use too. `QQ18` and `QQ16` extracted; `EliteConfig.h` added for the build constants. |

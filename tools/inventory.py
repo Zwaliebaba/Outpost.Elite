@@ -64,7 +64,7 @@ def check_includes(paths: dict[str, list[str]]) -> int:
     if missing:
         print(f"FAIL  {len(missing)} include path(s) do not resolve")
         return 1
-    print("OK    every INCLUDE and INCBIN resolves in the vendored upstream tree")
+    print("OK    every INCLUDE and INCBIN resolves in the upstream tree")
     return 0
 
 
