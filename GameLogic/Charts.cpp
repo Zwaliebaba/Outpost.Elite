@@ -57,6 +57,16 @@ constexpr std::uint8_t SHORT_RANGE_RULE = 19;
 constexpr std::uint8_t TITLE_LONG_RANGE = 199;
 constexpr std::uint8_t TITLE_SHORT_RANGE = 190;
 
+/// 6502: the tokens hyp prints -- "HYPERSPACE ", " TO " and "RANGE", and the extended one that
+/// says you are docked.
+constexpr std::uint8_t HYPERSPACE_TOKEN = 189;
+constexpr std::uint8_t TO_TOKEN = 45;
+constexpr std::uint8_t RANGE_TOKEN = 202;
+constexpr std::uint8_t DOCKED_TOKEN = 205;
+
+/// 6502: LDA #15 -- fifteen counts, in both bytes of QQ22.
+constexpr std::uint8_t COUNTDOWN_START = 15;
+
 /// 6502: bit 7 of QQ11.
 [[nodiscard]] constexpr bool ShortRange(std::uint8_t _view) noexcept
 {
@@ -442,6 +452,145 @@ void DrawShortRangeChart(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _p
 
     NextSystem(seeds);
   }
+}
+
+void PrintRangeError(TokenPrinter& _printer) noexcept
+{
+  // 6502: TT147 -- LDA #202 / JSR TT27 / LDA #'?' / JMP TT27.
+  _printer.Print(RANGE_TOKEN);
+  _printer.Print('?');
+}
+
+void PrintCountdown(TextSink& _sink, TextState& _text, std::uint8_t _count) noexcept
+{
+  /*
+   * 6502: ee3 -- LDA #1 / JSR DOXC / JSR DOYC.
+   *
+   * One load feeding two calls: DOXC takes the accumulator and DOYC takes it again, unchanged.
+   * So the countdown always sits at (1, 1) and neither cursor is the caller's to choose.
+   */
+  _text.column = 1;
+  _text.row = 1;
+
+  // 6502: LDY #0 / CLC / LDA #3 / JMP TT11 -- three digits, no point, and the value arrives in
+  // X with Y as its high byte, which is always zero here.
+  PrintValue(_sink, _count, 3, false);
+}
+
+NearestSystem SelectNearestSystem(Canvas& _canvas, DrawWorkspace& _work, ChartView& _view,
+                                  const SystemSeeds& _galaxy, ChartEffects* _effects) noexcept
+{
+  // 6502: hm -- JSR TT103 / JSR TT111 / JSR TT103 / JMP CLYNS. The first call rubs the crosshair
+  // out, because LOIN draws by EOR and drawing it twice is how it moves.
+  DrawTargetCrosshairs(_canvas, _work, _view);
+
+  const NearestSystem nearest = FindNearestSystem(_galaxy, _view.cursorX, _view.cursorY, _view.homeX, _view.homeY);
+  _view.cursorX = nearest.x;
+  _view.cursorY = nearest.y;
+
+  DrawTargetCrosshairs(_canvas, _work, _view);
+
+  if (_effects != nullptr)
+  {
+    _effects->ClearBottomRows();
+  }
+
+  return nearest;
+}
+
+JumpOutcome RequestHyperspace(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _printer,
+                              ExtendedTokenPrinter& _extended, TextState& _text, ChartView& _view,
+                              JumpState& _jump, const SystemSeeds& _galaxy, ChartEffects* _effects) noexcept
+{
+  if (_jump.docked != 0)
+  {
+    /*
+     * 6502: dockEd -- JSR CLYNS / LDA #15 / JSR DOXC / LDA #205 / JMP DETOK.
+     *
+     * The message is an EXTENDED token, which is why this routine needs both printers: the rest
+     * of hyp prints recursive ones.
+     */
+    if (_effects != nullptr)
+    {
+      _effects->ClearBottomRows();
+    }
+    _text.column = 15;
+    _extended.Print(DOCKED_TOKEN);
+    return JumpOutcome::Docked;
+  }
+
+  // 6502: LDA QQ22+1 / BEQ / RTS -- a countdown already running swallows the key.
+  if (_jump.countdown != 0)
+  {
+    return JumpOutcome::Busy;
+  }
+
+  // 6502: JSR CTRL / BMI Ghy -- the galactic hyperdrive, which reads the equipment the commander
+  // is carrying and so lands with slice 2d.
+  if (_jump.controlHeld)
+  {
+    return JumpOutcome::Galactic;
+  }
+
+  if (_view.view == 0)
+  {
+    // 6502: TTX110 -- from the space view there are no crosshairs to move, so the search runs
+    // without the two TT103 calls that bracket it on a chart.
+    const NearestSystem nearest = FindNearestSystem(_galaxy, _view.cursorX, _view.cursorY, _view.homeX, _view.homeY);
+    _view.cursorX = nearest.x;
+    _view.cursorY = nearest.y;
+    _jump.distance = nearest.distance;
+    _jump.target = nearest.seeds;
+  }
+  else if ((_view.view & 0xC0u) == 0u)
+  {
+    // 6502: AND #%11000000 / BNE / RTS -- neither chart is showing, so there is nothing selected.
+    return JumpOutcome::Busy;
+  }
+  else
+  {
+    const NearestSystem nearest = SelectNearestSystem(_canvas, _work, _view, _galaxy, _effects);
+    _jump.distance = nearest.distance;
+    _jump.target = nearest.seeds;
+  }
+
+  // 6502: TTX111 -- LDA QQ8 / ORA QQ8+1 / BNE / RTS. A distance of zero is the system you are
+  // already in, and the key does nothing at all -- not even a message.
+  if (_jump.distance == 0)
+  {
+    return JumpOutcome::AlreadyThere;
+  }
+
+  // 6502: LDA #7 / JSR DOXC, then row 23 on a chart and 17 in space.
+  _text.column = 7;
+  _text.row = (_view.view != 0) ? std::uint8_t{ 23 } : std::uint8_t{ 17 };
+
+  _printer.SetCaseFlags(0);
+  _printer.Print(HYPERSPACE_TOKEN);
+
+  /*
+   * 6502: LDA QQ8+1 / BNE goTT147 / LDA QQ14 / CMP QQ8 / BCS.
+   *
+   * Two tests, not one. Anything 256 tenths or further fails on its HIGH byte before the fuel is
+   * looked at, so a system 25.6 light years away is out of range with a full tank -- and says the
+   * same thing it says when the tank is empty.
+   */
+  if ((_jump.distance >> 8) != 0 || _view.fuel < static_cast<std::uint8_t>(_jump.distance))
+  {
+    PrintRangeError(_printer);
+    return JumpOutcome::OutOfRange;
+  }
+
+  _printer.Print(TO_TOKEN);
+
+  SystemSeeds naming = _jump.target;
+  PrintSystemName(_printer, naming);
+
+  // 6502: wW / wW2 -- LDA #15 / STA QQ22+1 / STA QQ22 / TAX / JMP ee3. Both bytes of the
+  // countdown take the same value, and the one that is printed is the one in X.
+  _jump.countdown = COUNTDOWN_START;
+  PrintCountdown(_extended.Characters(), _text, COUNTDOWN_START);
+  return JumpOutcome::CountingDown;
 }
 
 bool FindSystemByName(TokenPrinter& _printer, CharacterPrinter& _characters, ChartView& _view,
