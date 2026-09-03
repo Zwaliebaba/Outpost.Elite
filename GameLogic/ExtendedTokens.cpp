@@ -105,8 +105,9 @@ void CharacterPrinter::Put(std::uint8_t _character) noexcept
     ++state.bufferLength;
   }
   // Past the buffer the original writes on into the recursive token table, which would be a
-  // real defect rather than a benign spill. Nothing in the game reaches it; the port drops the
-  // character rather than reproducing the corruption.
+  // real defect rather than the benign spill into the ship tables below it. Nothing in the game
+  // reaches that far; the port drops the character and does not count it, rather than
+  // reproducing the corruption and then reading it back.
 }
 
 void CharacterPrinter::Emit(std::uint8_t _count) noexcept
