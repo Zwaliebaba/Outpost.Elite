@@ -72,5 +72,8 @@
     <ClCompile Include="UniverseTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="MarketTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

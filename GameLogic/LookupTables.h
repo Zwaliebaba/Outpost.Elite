@@ -113,6 +113,10 @@ extern const std::array<std::uint8_t, 25> CELL_ADDRESS_HIGH;
 // subtracts it as an immediate 0x17, so the whole constant is 0x17_4876E800.
 extern const std::array<std::uint8_t, 4> TEN_TO_THE_ELEVENTH;
 
+// 6502: QQ23 -- the market table: base price, economy gradient, base quantity and random mask,
+// four bytes for each of the seventeen goods.
+extern const std::array<std::uint8_t, 68> MARKET_TABLE;
+
 // 6502: FONT -- 96 characters of eight rows, starting at space. One bit per pixel here; CHPR
 // doubles each bit into a multicolour pixel on the way to the bitmap.
 extern const std::array<std::uint8_t, 768> FONT_DATA;

@@ -42,6 +42,9 @@
     <ClInclude Include="Universe.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Market.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Rng.h">
       <Filter>Kernel</Filter>
     </ClInclude>
@@ -71,6 +74,12 @@
     </ClCompile>
     <ClCompile Include="Universe.cpp">
       <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Market.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketTable.cpp">
+      <Filter>Generated Data</Filter>
     </ClCompile>
     <ClCompile Include="Rng.cpp">
       <Filter>Kernel</Filter>

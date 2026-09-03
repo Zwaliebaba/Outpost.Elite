@@ -146,6 +146,7 @@ and replaces the hand count.
 
 | Labels | Files | Home | Disposition |
 |---|---|---|---|
+| ✅ `qq23` | 1 | `MarketTable.cpp` | **Extracted 2026-09-03** (slice 2c) — four bytes each for seventeen goods, byte-compared against the oracle image. |
 | `char`, `twok`, `cont`, `rtok` (macros) | 4 | `tools/extract_tables.py` | Replace — the macros encode tokens; the extractor reproduces the encoding (or reads the assembled `WORDS.bin`) |
 | ✅ `qq18` | 1 | `TokenTables.cpp` | **Extracted 2026-09-03** (slice 1c-a) — the recursive token table, byte-compared against the oracle image. |
 | ✅ `sne`, `act` | 2 | `SineTable.cpp`, `ArctanTable.cpp` | **Extracted 2026-09-03** (slice 1a), byte-compared against the oracle image. |
