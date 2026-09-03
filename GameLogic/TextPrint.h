@@ -133,8 +133,17 @@ private:
 /// 6502: INCYC -- INC YC. The whole routine.
 void MoveCursorDown(TextState& _text) noexcept;
 
-/// 6502: TT60, which falls into TTX69 and then into TT69 -- a token, a row down, sentence case.
-void PrintThenDownAndSentenceCase(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
+/*
+ * 6502: TT60 -- and it is a chain of four routines, each falling into the next.
+ *
+ * TT60 (`JSR TT27`) falls into TTX69 (`JSR INCYC`), which falls into TT69 (set sentence case),
+ * which falls into TT67 (print a newline). The assembled addresses are 27268, 27271, 27274 and
+ * 27278 -- three bytes, three bytes, four bytes, with no RTS anywhere in them. So `JSR TT60`
+ * prints a token, moves the cursor down a row, switches to sentence case AND prints a newline,
+ * which is two vertical movements rather than one and is what puts the blank line under the
+ * inventory screen's title.
+ */
+void PrintTitleLine(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;
 
 /// 6502: plf2 -- JSR plf / LDA #6 / JMP DOXC. A token, a newline, then indent to column six.
 void PrintThenIndent(TokenPrinter& _printer, TextState& _text, std::uint8_t _token) noexcept;

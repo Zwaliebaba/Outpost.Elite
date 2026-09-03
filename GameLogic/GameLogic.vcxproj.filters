@@ -48,6 +48,9 @@
     <ClInclude Include="StateTokens.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="MarketScreen.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Charts.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -88,6 +91,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="StateTokens.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketScreen.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Charts.cpp">

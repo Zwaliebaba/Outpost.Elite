@@ -102,8 +102,15 @@ void PrintSpace(TokenPrinter& _printer) noexcept;
 /// 6502: TT67 -- LDA #12 / JMP TT27. Character twelve is the newline the screen understands.
 void PrintNewline(TokenPrinter& _printer) noexcept;
 
-/// 6502: TT69 -- LDA #%10000000 / STA QQ17. Sentence case, with the next letter capitalised.
-void SetSentenceCase(TokenPrinter& _printer) noexcept;
+/*
+ * 6502: TT69, which FALLS INTO TT67 -- sentence case, and then a newline.
+ *
+ * The fall-through is not visible in the source and is exact in the assembled build: TT69 is
+ * `LDA #%10000000 / STA QQ17`, four bytes, and TT67 begins at TT69 + 4. So there is no RTS, and
+ * every `JSR TT69` in the game prints a newline as well as setting the flag. The sell screen
+ * calls it once per line and relies on it.
+ */
+void SetSentenceCaseAndNewline(TokenPrinter& _printer) noexcept;
 
 /// 6502: spc -- JSR TT27 / JMP TT162. A token then a space.
 void PrintThenSpace(TokenPrinter& _printer, std::uint8_t _token) noexcept;

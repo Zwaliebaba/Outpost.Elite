@@ -245,9 +245,10 @@ void PrintNewline(TokenPrinter& _printer) noexcept
   _printer.Print(12);
 }
 
-void SetSentenceCase(TokenPrinter& _printer) noexcept
+void SetSentenceCaseAndNewline(TokenPrinter& _printer) noexcept
 {
   _printer.SetCaseFlags(0x80);
+  PrintNewline(_printer);
 }
 
 void PrintThenSpace(TokenPrinter& _printer, std::uint8_t _token) noexcept
