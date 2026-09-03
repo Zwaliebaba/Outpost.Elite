@@ -102,6 +102,9 @@
     <ClCompile Include="DockingTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="DockedSessionTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\Outpost\SaveStore.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
