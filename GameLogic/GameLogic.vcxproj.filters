@@ -32,6 +32,9 @@
     <ClInclude Include="Canvas.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="TextPrint.h">
+      <Filter>Text</Filter>
+    </ClInclude>
     <ClInclude Include="Rng.h">
       <Filter>Kernel</Filter>
     </ClInclude>
@@ -55,6 +58,9 @@
     </ClCompile>
     <ClCompile Include="Lines.cpp">
       <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="TextPrint.cpp">
+      <Filter>Text</Filter>
     </ClCompile>
     <ClCompile Include="Rng.cpp">
       <Filter>Kernel</Filter>

@@ -149,6 +149,7 @@
     <ClInclude Include="ExtendedTokens.h" />
     <ClInclude Include="LookupTables.h" />
     <ClInclude Include="Canvas.h" />
+    <ClInclude Include="TextPrint.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Rng.h" />
     <ClInclude Include="Tokens.h" />
@@ -170,6 +171,7 @@
     <ClCompile Include="Font.cpp" />
     <ClCompile Include="Canvas.cpp" />
     <ClCompile Include="Lines.cpp" />
+    <ClCompile Include="TextPrint.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />

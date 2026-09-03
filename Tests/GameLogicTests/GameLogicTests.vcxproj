@@ -124,6 +124,7 @@
     <ClCompile Include="TokenTests.cpp" />
     <ClCompile Include="CanvasSpikeTests.cpp" />
     <ClCompile Include="CanvasTests.cpp" />
+    <ClCompile Include="TextPrintTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\GameLogic\GameLogic.vcxproj">
