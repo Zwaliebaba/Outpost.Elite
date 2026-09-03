@@ -1,6 +1,6 @@
 # ADR-001 — Scope and Fidelity: Port the C64 Game As It Is, First
 
-**Status:** Accepted · 2026-09-02 (§5 amended the same day by owner ruling — see below); §5 amended again 2026-09-03 (make the repository private)
+**Status:** Accepted · 2026-09-02 (§5 amended the same day by owner ruling — see below); §5 amended twice more 2026-09-03 (make it private, then reversed: it stays public, knowingly)
 **Depends on:** — (root decision)
 **Feeds:** every other ADR; the plan's phases 1–5 exist to satisfy it, phase 6 is what it defers
 
@@ -93,34 +93,34 @@ done at once, because the second has no definition of "correct" until the first 
    private, undistributed, `Upstream/` excised from the published history rather than merely
    deleted at the tip.
 
-   **Owner ruling, 2026-09-03: make the repository private now, rather than at the fallback.**
+   **Owner ruling, 2026-09-03: the repository stays public.** This reverses the ruling taken
+   earlier the same day, which was to make it private; that ruling was recorded here and is
+   recorded as reversed rather than removed.
 
-   The clause above — "nothing is pushed to a public remote until 0e closes" — had never been
-   true. `Zwaliebaba/Outpost.Elite` is public (checked against the GitHub API, not assumed), CI
-   assembles the game on every push, and `MasterFile/` has been tracked since `92a3c7f`. So this
-   is not a new posture; it is the stated one, applied.
+   What the two rulings share is the finding that prompted them, and it stands: the clause this
+   section used to carry -- "nothing is pushed to a public remote until 0e closes" -- had never
+   been true. `Zwaliebaba/Outpost.Elite` is public (checked against the GitHub API, not assumed),
+   CI assembles the game on every push, and `MasterFile/` has been tracked since `92a3c7f`. The
+   clause is gone, because a rule nobody follows is worse than no rule.
 
-   Three things it does and does not do, in order of how easily each is misread:
+   **This does not make the exposure smaller. It makes it accepted rather than mitigated**, and
+   the difference is worth writing down:
 
-   - **It stops the exposure continuing. It does not undo it.** The commits are public and have
-     been. Anyone who cloned has a copy. Nothing short of a history rewrite plus a request to
-     GitHub touches that, and neither was ruled.
-   - **It costs the project nothing.** The oracle build is untouched, no history is rewritten, no
-     network dependency enters CI, and every existing clone stays valid. Public visibility is not
-     something a personal port needs before 0e answers.
-   - **It does not close 0e.** The written answer from the rights holders is still what closes
-     it, and this ruling only removes the pressure of an open question being answered by default.
+   - The 13 masters are still public and still carry `copyright D. Braben and I. Bell 1985` in
+     their own headers, with the commentary `copyright Mark Moxon`. That is 5,615 lines of source
+     this project does not own, in a repository anyone can read.
+   - What the structural mitigation bought is unchanged and is why this is 13 files rather than
+     3,000: `Upstream/` is a **submodule**, so the library is a gitlink and not content; no
+     assembled binary is tracked; and no original assembler is copied into `GameLogic/`, `Tests/`
+     or `Design/`. Those rules stay, and they are what keeps the decision cheap to revisit.
+   - **Slice 0e is not closed by this.** What closes it is a written answer from the rights
+     holders. Until then the position is "published knowingly, pending permission" rather than
+     "published because it is fine", and Risk R1 says so.
 
-   The alternatives put to the owner and not chosen were: strip `MasterFile/` from the history
-   (which would make the oracle depend on fetching a pinned upstream commit at build time — a new
-   failure mode in CI, and a rewritten history that invalidates every clone), document that
-   permission exists (which needs a real grant from a real rights holder, not a reading of a
-   licence file), and accept the risk in writing (defensible for a hobby port, but it should be a
-   decision with a name on it rather than the unexamined default it had become).
-
-   **The action is the owner's.** Repository visibility is not something any tool in this project
-   can change; it is one setting under the repository's own settings page. Until it is taken,
-   slice 0e stays open and Risk R1 stays marked realised.
+   The fallback if permission is refused is unchanged: private, undistributed, and `Upstream/`
+   excised from the published history rather than merely deleted at the tip. Going public first
+   makes that fallback more expensive, not less, because a history that has been read cannot be
+   unread -- and that cost is part of what this ruling accepts.
 
 ## What "faithful" does not mean
 
