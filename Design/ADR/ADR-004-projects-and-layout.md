@@ -131,8 +131,10 @@ Three reasons it is here rather than in a scratch directory:
    quarter of a second incrementally, against roughly four minutes per cycle through CI. Every
    defect in slices 1c-c-b, 2b, 2c and 2d was found this way before MSVC compiled anything, and
    MSVC then agreed exactly.
-2. **CI cost and latency.** The Ubuntu leg finishes the whole suite in about a minute on a runner
-   an order of magnitude cheaper than a Windows one.
+2. **CI latency, and some cost.** Measured on the first run: the Ubuntu leg finishes in **52
+   seconds** end to end against the Windows job's 3m52s. The cost saving is real but smaller than
+   it looks — GitHub charges roughly twice the per-minute rate for a Windows runner, so it is that
+   factor times the shorter run, not the order of magnitude a first guess suggests.
 3. **The bus factor.** A fast feedback loop that exists only in one person's working directory is
    not a capability the project has. That was the state of this until the ruling.
 
