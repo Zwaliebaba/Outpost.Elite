@@ -741,7 +741,7 @@ public:
     const std::uint16_t r = oracle.Label("R");
     const std::uint16_t qq25 = oracle.Label("QQ25");
 
-    std::array<std::uint32_t, 5> outcomes{};
+    std::array<std::uint32_t, 6> outcomes{};
     std::uint32_t compared = 0;
 
     for (const std::uint32_t available : { 0u, 1u, 25u, 26u, 60u, 255u })
@@ -769,7 +769,14 @@ public:
           {
             if (cpu.pc == out)
             {
-              gameResult = Elite::DigitResult::Complete;
+              /*
+               * OUT is reached from three places and the CARRY is what tells them apart -- it is
+               * whichever comparison branched here, because `LDA #&10 / STA COL2 / LDA R` does
+               * not touch it. The buy screen's `JSR gnum / BCS TQ4` reads exactly this bit, so a
+               * test that mapped every arrival at OUT to one outcome could not see the
+               * difference between a number the game accepts and one it refuses.
+               */
+              gameResult = cpu.c ? Elite::DigitResult::TooBig : Elite::DigitResult::Complete;
               reached = true;
               break;
             }
@@ -799,7 +806,7 @@ public:
             }
             Assert::IsTrue(cpu.Step(), L"gnum should not reach an unimplemented opcode");
           }
-          Assert::IsTrue(reached, L"gnum's body should reach one of its five exits");
+          Assert::IsTrue(reached, L"gnum's body should reach one of its exits");
 
           /*
            * NWDAV1 and NWDAV3 set R after the branch, so the shipped accumulator is only
@@ -831,7 +838,7 @@ public:
     }
 
     std::string report = "gnum: " + std::to_string(compared) + " keystrokes compared. Exits:";
-    const char* names[] = { " accepted=", " complete=", " take-all=", " take-none=", " leave-screen=" };
+    const char* names[] = { " accepted=", " complete=", " too-big=", " take-all=", " take-none=", " leave-screen=" };
     for (std::size_t index = 0; index < outcomes.size(); ++index)
     {
       report += names[index] + std::to_string(outcomes[index]);

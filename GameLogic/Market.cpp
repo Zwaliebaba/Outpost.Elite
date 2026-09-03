@@ -9,6 +9,22 @@
 namespace Elite
 {
 
+namespace
+{
+/*
+ * 6502: MAG2 = $40 (elite-source.asm) and the &10 that OUT stores over it.
+ *
+ * The first is a multicolour palette byte for screen RAM -- purple on black -- and gnum uses it
+ * to mark what the player is typing. The second is white, which is what the rest of a text screen
+ * is drawn in. They are colour cell values rather than indices, so they go into COL2 as they are.
+ */
+constexpr std::uint8_t TEXT_COLOUR_TYPING = 0x40;
+constexpr std::uint8_t TEXT_COLOUR_NORMAL = 0x10;
+
+/// 6502: LDX #12 / STX T1 -- how many keys gnum will take before ending the number itself.
+constexpr int KEY_LIMIT = 12;
+} // namespace
+
 MarketItem MarketItemAt(int _item) noexcept
 {
   const int offset = _item * 4;
@@ -390,10 +406,11 @@ DigitResult TypeDigit(std::uint8_t& _value, std::uint8_t _key, std::uint8_t _ava
     return DigitResult::LeaveScreen;
   }
 
-  // 6502: LDA R / CMP #26 / BCS OUT -- past 26 no further digit is taken.
+  // 6502: LDA R / CMP #26 / BCS OUT -- past 26 no further digit is taken, and the carry the CMP
+  // leaves is SET, which is what tells the caller the number was refused rather than finished.
   if (_value >= 26u)
   {
-    return DigitResult::Complete;
+    return DigitResult::TooBig;
   }
 
   /*
@@ -429,10 +446,73 @@ DigitResult TypeDigit(std::uint8_t& _value, std::uint8_t _key, std::uint8_t _ava
    */
   if (_value != _available && _value > _available)
   {
-    return DigitResult::Complete;
+    return DigitResult::TooBig;
   }
 
   return DigitResult::Accepted;
+}
+
+NumberEntry ReadNumber(KeySource& _keys, CharacterPrinter& _characters, TextState& _text,
+                       std::uint8_t _available) noexcept
+{
+  // 6502: LDA #MAG2 / STA COL2 -- purple for what the player types.
+  _text.cellColour = TEXT_COLOUR_TYPING;
+
+  NumberEntry entry{};
+
+  // 6502: LDX #0 / STX R / LDX #12 / STX T1.
+  for (int remaining = KEY_LIMIT; remaining > 0; --remaining)
+  {
+    // 6502: TT223 -- JSR TT217, which does not return until a key is pressed.
+    const std::uint8_t key = _keys.NextKey();
+    entry.outcome = TypeDigit(entry.value, key, _available);
+
+    /*
+     * 6502: TT226's `LDA Q / JSR TT26`, and the same call at the top of NWDAV1 and NWDAV3.
+     *
+     * Only these three echo. The exits that END the number print nothing, which is why a
+     * refused quantity leaves the line as the player typed it rather than adding the key that
+     * refused it.
+     */
+    if (entry.outcome == DigitResult::Accepted || entry.outcome == DigitResult::TakeAll
+        || entry.outcome == DigitResult::TakeNone)
+    {
+      _characters.Put(key);
+    }
+
+    if (entry.outcome != DigitResult::Accepted)
+    {
+      break;
+    }
+
+    /*
+     * 6502: DEC T1 / BNE TT223, and what happens when it does NOT branch.
+     *
+     * The twelfth accepted key leaves T1 at zero and the loop falls straight into OUT -- so the
+     * number ends because the counter ran out, not because the player ended it, and the carry is
+     * whatever the last comparison left. That last comparison is `CMP QQ25 / BEQ TT226`, taken,
+     * which is how TT226 was reached; but TT226's `JSR TT26` clears the carry on the way past.
+     * So the exit is a clear carry: the number is finished and usable.
+     */
+    if (remaining == 1)
+    {
+      entry.outcome = DigitResult::Complete;
+    }
+  }
+
+  /*
+   * 6502: OUT -- LDA #&10 / STA COL2.
+   *
+   * BAY2 is the one exit that does not pass through OUT, so the colour is left purple when a
+   * letter abandons the screen. The screen that follows sets it again, which is presumably why
+   * nobody noticed.
+   */
+  if (entry.outcome != DigitResult::LeaveScreen)
+  {
+    _text.cellColour = TEXT_COLOUR_NORMAL;
+  }
+
+  return entry;
 }
 
 } // namespace Elite

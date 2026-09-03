@@ -170,14 +170,55 @@ void PrintMarketItem(TokenPrinter& _printer, CharacterPrinter& _characters, Text
 void PrintMarketScreen(TokenPrinter& _printer, CharacterPrinter& _characters, TextState& _text,
                        std::uint8_t _economy, MarketState& _market, bool _misJumped) noexcept;
 
-/// What one keystroke did to a number the player is typing. 6502: gnum's five exits.
+/*
+ * What one keystroke did to a number the player is typing.
+ *
+ * 6502: gnum's exits -- and there are FOUR labels for six outcomes, which is why this enum has
+ * six entries. `OUT` is the only way out of the number-building path, and it begins `LDA #&10 /
+ * STA COL2 / LDA R / RTS`: neither LDA nor STA touches the carry, so the carry a caller reads is
+ * whichever comparison branched to OUT.
+ *
+ *   BCC OUT   (the key was below '0')      carry CLEAR -- the number is finished
+ *   BCS OUT   (the value reached 26)       carry SET   -- too big
+ *   BCS OUT   (the value passed QQ25)      carry SET   -- too big
+ *   NWDAV1/3  ("Y" or "N")                 carry CLEAR, because JSR TT26 exits CLC
+ *   falling out of the twelve-key loop     carry CLEAR, same reason
+ *
+ * That distinction is load-bearing: the buy screen's `JSR gnum / BCS TQ4` re-asks for a quantity
+ * on a set carry and accepts the number on a clear one. Reporting one `Complete` for both would
+ * give a port that silently accepts a purchase the original refuses.
+ */
 enum class DigitResult
 {
   Accepted,    ///< 6502: TT226 -- the digit went in and the routine asks for another
-  Complete,    ///< 6502: OUT -- the number is finished, and it is whatever is in R
+  Complete,    ///< 6502: OUT with the carry CLEAR -- the number is finished and usable
+  TooBig,      ///< 6502: OUT with the carry SET -- 26 or more, or past what is available
   TakeAll,     ///< 6502: NWDAV1 -- "Y", meaning all of what is available
   TakeNone,    ///< 6502: NWDAV3 -- "N"
   LeaveScreen, ///< 6502: BAY2 -- a letter, which abandons the screen entirely
+};
+
+/*
+ * Where a blocking key read comes from.
+ *
+ * 6502: TT217 -- "scan the keyboard until a key is pressed". The game BLOCKS here, inside a
+ * screen's own loop, and that is a genuine architectural problem for this port rather than a
+ * detail: ADR-004 section 1 says GameLogic's input is an `InputFrame`, which is a poll and not a
+ * wait. The two cannot both be true of the same code.
+ *
+ * This slice does not resolve it, and deliberately: the routines that read the keyboard are
+ * ported against this seam, exactly as the charts were ported against the seams for the drawing
+ * they could not yet do. Whoever builds 2e decides how the seam is driven -- a pumped thread, a
+ * coroutine, or rewriting the docked screens as state machines fed by `InputFrame`. The last of
+ * those stops being a line-by-line port, which is the cost worth knowing before choosing it.
+ */
+class KeySource
+{
+public:
+  virtual ~KeySource() = default;
+
+  /// 6502: TT217 -- block until a key is pressed, and return its character.
+  virtual std::uint8_t NextKey() = 0;
 };
 
 /*
@@ -201,5 +242,33 @@ enum class DigitResult
  * that says no, not this.
  */
 [[nodiscard]] DigitResult TypeDigit(std::uint8_t& _value, std::uint8_t _key, std::uint8_t _available) noexcept;
+
+/// What gnum returned: the number in R, and which of its exits produced it.
+struct NumberEntry
+{
+  std::uint8_t value = 0;                        ///< 6502: R, which is also what OUT leaves in A
+  DigitResult outcome = DigitResult::Complete;
+};
+
+/*
+ * 6502: gnum -- the whole routine, loop and all.
+ *
+ * TypeDigit above is one step of this; here is the loop around it. Three things it owns rather
+ * than the step:
+ *
+ * TWELVE keys, from `LDX #12 / STX T1`. Twelve accepted digits in a row fall out of the loop into
+ * OUT, so the number ends without the player pressing anything to end it. Since a value of 26 or
+ * more refuses further digits, the twelfth key is only reachable by typing digits that keep the
+ * value under 26 -- zeros, in practice.
+ *
+ * THE ECHO. `TT226` prints the key through TT26, and so do the "Y" and "N" paths, so what the
+ * player typed appears on screen. The exits that end the number do not echo.
+ *
+ * THE COLOUR. `LDA #MAG2 / STA COL2` on entry and `LDA #&10 / STA COL2` at OUT, so the digits are
+ * typed in purple and the screen goes back to white afterwards -- and it does that on EVERY exit,
+ * including the ones that abandon the number.
+ */
+[[nodiscard]] NumberEntry ReadNumber(KeySource& _keys, CharacterPrinter& _characters, TextState& _text,
+                                     std::uint8_t _available) noexcept;
 
 } // namespace Elite
