@@ -1,0 +1,914 @@
+#include "pch.h"
+
+#include "OracleImage.h"
+
+#include "Arith.h"
+
+#include <cstdint>
+#include <string>
+
+using namespace Microsoft::VisualStudio::CppUnitTestFramework;
+using Elite::AddSignedResult;
+using Elite::MathWorkspace;
+using Elite::Testing::Cpu6502;
+using Elite::Testing::OracleImage;
+
+/*
+ * The arithmetic kernel against the shipped routines (slice 1b, ADR-003).
+ *
+ * Where the whole input space is 16 bits these run exhaustively -- 65,536 comparisons is a
+ * fraction of a second and it removes the question of whether the interesting case was the one
+ * nobody sampled. ADD takes four bytes of input, so it gets a deterministic sweep plus the
+ * edges that actually break sign-magnitude arithmetic: zero, negative zero, and equal
+ * magnitudes with opposite signs.
+ *
+ * One shortcut worth naming: these routines touch only zero page, so a single loaded image is
+ * reused across iterations and just the scratch bytes are reset. Copying 64 KB per call would
+ * turn an exhaustive sweep into gigabytes of memcpy for no extra confidence.
+ */
+namespace GameLogicTests
+{
+
+namespace
+{
+
+/// Zero-page addresses, resolved once from the label table.
+struct Scratch
+{
+  std::uint16_t p = 0;
+  std::uint16_t q = 0;
+  std::uint16_t r = 0;
+  std::uint16_t s = 0;
+  std::uint16_t t = 0;
+  std::uint16_t t1 = 0;
+  std::uint16_t u = 0;
+
+  explicit Scratch(const OracleImage& _oracle)
+    : p(_oracle.Label("P"))
+    , q(_oracle.Label("Q"))
+    , r(_oracle.Label("R"))
+    , s(_oracle.Label("S"))
+    , t(_oracle.Label("T"))
+    , t1(_oracle.Label("T1"))
+    , u(_oracle.Label("U"))
+  {
+  }
+};
+
+bool OracleMissing()
+{
+  const OracleImage& oracle = OracleImage::Instance();
+  if (oracle.Available())
+  {
+    return false;
+  }
+  Logger::WriteMessage(("SKIPPED -- oracle absent: " + oracle.Reason()).c_str());
+  return true;
+}
+
+std::wstring Context(const wchar_t* _what, std::uint32_t _a, std::uint32_t _b)
+{
+  return std::wstring(_what) + L" with inputs " + std::to_wstring(_a) + L" and " + std::to_wstring(_b);
+}
+
+/// A small deterministic generator, so a failure is reproducible from its iteration number.
+std::uint32_t NextSample(std::uint32_t& _state) noexcept
+{
+  _state = _state * 1664525u + 1013904223u;
+  return _state;
+}
+
+} // namespace
+
+TEST_CLASS(MultiplicationAgainstTheShippedGame)
+{
+public:
+  /// (A P) = P * Q, unsigned, over every possible pair.
+  TEST_METHOD(UnsignedMultiplyMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("MULTU");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t p = 0; p < 256; ++p)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.p] = static_cast<std::uint8_t>(p);
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"MULTU should return");
+
+        MathWorkspace work;
+        work.p = static_cast<std::uint8_t>(p);
+        work.q = static_cast<std::uint8_t>(q);
+        const std::uint8_t high = Elite::MultiplyUnsigned(work);
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", p, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", p, q).c_str());
+
+        // The product really is the product -- a check the oracle cannot give us, since it
+        // would be agreeing with itself.
+        Assert::AreEqual<std::uint32_t>(p * q, static_cast<std::uint32_t>((high << 8) | work.p),
+                                        Context(L"the 16-bit product", p, q).c_str());
+      }
+    }
+  }
+
+  /// (A P) = P * X, the entry point that takes its multiplier in a register.
+  TEST_METHOD(MultiplyByRegisterMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("MU11");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t p = 0; p < 256; ++p)
+    {
+      // X = 0 is not a legal entry: the caller checks for it and jumps elsewhere, so the
+      // routine would decrement to 255 and multiply by that. Matching the game means not
+      // calling it that way either.
+      for (std::uint32_t x = 1; x < 256; ++x)
+      {
+        cpu.memory[zp.p] = static_cast<std::uint8_t>(p);
+        cpu.a = 0;
+        cpu.x = static_cast<std::uint8_t>(x);
+        cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"MU11 should return");
+
+        MathWorkspace work;
+        work.p = static_cast<std::uint8_t>(p);
+        const std::uint8_t high = Elite::MultiplyByX(work, static_cast<std::uint8_t>(x));
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", p, x).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", p, x).c_str());
+      }
+    }
+  }
+
+  /// (A P) = Q * A for sign-magnitude operands, including the sign of the product.
+  TEST_METHOD(SignedMultiplyMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("MULT1");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = static_cast<std::uint8_t>(a);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"MULT1 should return");
+
+        MathWorkspace work;
+        work.q = static_cast<std::uint8_t>(q);
+        const std::uint8_t high = Elite::MultiplySigned(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", a, q).c_str());
+      }
+    }
+  }
+
+  /// The same multiplication, landing in a different pair of scratch bytes.
+  TEST_METHOD(SignedMultiplyIntoScratchMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("MULT12");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = static_cast<std::uint8_t>(a);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"MULT12 should return");
+
+        MathWorkspace work;
+        work.q = static_cast<std::uint8_t>(q);
+        Elite::MultiplySignedToSR(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.s], work.s, Context(L"S", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.r], work.r, Context(L"R", a, q).c_str());
+      }
+    }
+  }
+
+  /// (A P) = |A| * Q.
+  TEST_METHOD(MagnitudeTimesQMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("MLU2");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = static_cast<std::uint8_t>(a);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"MLU2 should return");
+
+        MathWorkspace work;
+        work.q = static_cast<std::uint8_t>(q);
+        const std::uint8_t high = Elite::MultiplyMagnitudeByQ(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", a, q).c_str());
+      }
+    }
+  }
+
+  TEST_METHOD(SquaringMatchesForEveryInput)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t value = 0; value < 256; ++value)
+    {
+      // SQUA clears the sign bit first; SQUA2 trusts the caller to have done so.
+      struct Variant
+      {
+        const char* label;
+        bool clearsSignBit;
+      };
+
+      for (const Variant& variant : { Variant{ "SQUA", true }, Variant{ "SQUA2", false } })
+      {
+        cpu.a = static_cast<std::uint8_t>(value);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(oracle.Label(variant.label), 5'000);
+        Assert::IsTrue(run.completed, L"the squaring routine should return");
+
+        MathWorkspace work;
+        const std::uint8_t high = variant.clearsSignBit ? Elite::Square(work, static_cast<std::uint8_t>(value))
+                                                        : Elite::SquareUnsigned(work, static_cast<std::uint8_t>(value));
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", value, 0).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", value, 0).c_str());
+      }
+    }
+  }
+};
+
+TEST_CLASS(SignedAdditionAgainstTheShippedGame)
+{
+public:
+  /// (A X) = (A P) + (S R). Four bytes of input, so a deterministic sweep rather than an
+  /// exhaustive one, with the sign-magnitude edge cases pinned separately below.
+  TEST_METHOD(SignedAdditionMatchesOverASweep)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("ADD");
+
+    Cpu6502 cpu = oracle.Fresh();
+    std::uint32_t state = 20260903u;
+
+    for (std::uint32_t iteration = 0; iteration < 200'000; ++iteration)
+    {
+      const std::uint32_t sample = NextSample(state);
+      const std::uint8_t a = static_cast<std::uint8_t>(sample);
+      const std::uint8_t p = static_cast<std::uint8_t>(sample >> 8);
+      const std::uint8_t s = static_cast<std::uint8_t>(sample >> 16);
+      const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
+
+      cpu.memory[zp.p] = p;
+      cpu.memory[zp.s] = s;
+      cpu.memory[zp.r] = r;
+      cpu.a = a;
+      cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.c = false;
+
+      const auto run = cpu.CallSubroutine(routine, 5'000);
+      Assert::IsTrue(run.completed, L"ADD should return");
+
+      MathWorkspace work;
+      work.p = p;
+      work.s = s;
+      work.r = r;
+      const AddSignedResult actual = Elite::AddSigned(work, a);
+
+      const std::wstring where = L" at iteration " + std::to_wstring(iteration);
+      Assert::AreEqual<std::uint32_t>(cpu.a, actual.high, (L"high byte" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.x, actual.low, (L"low byte" + where).c_str());
+    }
+  }
+
+  /// The cases sign-magnitude arithmetic actually gets wrong: equal magnitudes cancelling,
+  /// negative zero, and a borrow that has to propagate into the negation.
+  TEST_METHOD(SignedAdditionMatchesAtTheAwkwardEdges)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("ADD");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    struct Case
+    {
+      std::uint8_t a;
+      std::uint8_t p;
+      std::uint8_t s;
+      std::uint8_t r;
+    };
+
+    const Case cases[] = {
+      { 0x00, 0x00, 0x00, 0x00 }, // zero plus zero
+      { 0x80, 0x00, 0x00, 0x00 }, // negative zero plus zero
+      { 0x00, 0x00, 0x80, 0x00 }, // zero plus negative zero
+      { 0x01, 0x00, 0x81, 0x00 }, // equal magnitudes, opposite signs
+      { 0x81, 0x00, 0x01, 0x00 }, // the same, the other way round
+      { 0x01, 0x00, 0x80, 0x01 }, // borrow out of the low byte
+      { 0x80, 0x01, 0x01, 0x00 }, // borrow the other way
+      { 0x7F, 0xFF, 0x7F, 0xFF }, // largest positive magnitudes, overflowing
+      { 0xFF, 0xFF, 0xFF, 0xFF }, // largest negative magnitudes
+      { 0x00, 0x01, 0x80, 0x02 }, // small negative difference needing negation
+      { 0x40, 0x00, 0xC0, 0x00 }, // exact cancellation with the sign flipped
+    };
+
+    for (const Case& item : cases)
+    {
+      cpu.memory[zp.p] = item.p;
+      cpu.memory[zp.s] = item.s;
+      cpu.memory[zp.r] = item.r;
+      cpu.a = item.a;
+      cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.c = false;
+
+      const auto run = cpu.CallSubroutine(routine, 5'000);
+      Assert::IsTrue(run.completed);
+
+      MathWorkspace work;
+      work.p = item.p;
+      work.s = item.s;
+      work.r = item.r;
+      const AddSignedResult actual = Elite::AddSigned(work, item.a);
+
+      const std::wstring where = L" for A=" + std::to_wstring(item.a) + L" P=" + std::to_wstring(item.p) + L" S="
+                                 + std::to_wstring(item.s) + L" R=" + std::to_wstring(item.r);
+      Assert::AreEqual<std::uint32_t>(cpu.a, actual.high, (L"high byte" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.x, actual.low, (L"low byte" + where).c_str());
+    }
+  }
+};
+
+TEST_CLASS(DivisionAndAccumulateAgainstTheShippedGame)
+{
+public:
+  /// (A X) = Q * A + (S R) -- the multiply-accumulate the geometry code runs on.
+  TEST_METHOD(MultiplyAndAddMatchesOverASweep)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("MAD");
+
+    Cpu6502 cpu = oracle.Fresh();
+    std::uint32_t state = 7771u;
+
+    for (std::uint32_t iteration = 0; iteration < 200'000; ++iteration)
+    {
+      const std::uint32_t sample = NextSample(state);
+      const std::uint8_t a = static_cast<std::uint8_t>(sample);
+      const std::uint8_t q = static_cast<std::uint8_t>(sample >> 8);
+      const std::uint8_t s = static_cast<std::uint8_t>(sample >> 16);
+      const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
+
+      cpu.memory[zp.q] = q;
+      cpu.memory[zp.s] = s;
+      cpu.memory[zp.r] = r;
+      cpu.a = a;
+      cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.c = false;
+
+      const auto run = cpu.CallSubroutine(routine, 5'000);
+      Assert::IsTrue(run.completed, L"MAD should return");
+
+      MathWorkspace work;
+      work.q = q;
+      work.s = s;
+      work.r = r;
+      const AddSignedResult actual = Elite::MultiplyAndAdd(work, a);
+
+      const std::wstring where = L" at iteration " + std::to_wstring(iteration);
+      Assert::AreEqual<std::uint32_t>(cpu.a, actual.high, (L"high byte" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.x, actual.low, (L"low byte" + where).c_str());
+    }
+  }
+
+  TEST_METHOD(BlockFillAndPairSetMatchForEveryInput)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t blockAddress = oracle.Label("K");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t value = 0; value < 256; ++value)
+    {
+      cpu.a = static_cast<std::uint8_t>(value);
+      cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      Assert::IsTrue(cpu.CallSubroutine(oracle.Label("MU5"), 500).completed);
+
+      MathWorkspace fill;
+      Elite::FillK(fill, static_cast<std::uint8_t>(value));
+      for (std::uint16_t byte = 0; byte < 4; ++byte)
+      {
+        Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(blockAddress + byte)], fill.k[byte],
+                                        Context(L"K block byte", value, byte).c_str());
+      }
+
+      cpu.a = static_cast<std::uint8_t>(value);
+      cpu.sp = 0xFD;
+      Assert::IsTrue(cpu.CallSubroutine(oracle.Label("MU6"), 500).completed);
+
+      MathWorkspace pair;
+      Elite::SetPairP(pair, static_cast<std::uint8_t>(value));
+      Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], pair.p, Context(L"P", value, 0).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.p + 1)], pair.p1,
+                                      Context(L"P+1", value, 0).c_str());
+    }
+  }
+
+  /// The scaled multiply, over every input pair.
+  TEST_METHOD(ScaledMultiplyMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("MULTS");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      for (std::uint32_t p = 0; p < 256; ++p)
+      {
+        cpu.memory[zp.p] = static_cast<std::uint8_t>(p);
+        cpu.memory[static_cast<std::uint16_t>(zp.p + 1)] = 0;
+        cpu.a = static_cast<std::uint8_t>(a);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"MULTS should return");
+
+        MathWorkspace work;
+        work.p = static_cast<std::uint8_t>(p);
+        const std::uint8_t high = Elite::MultiplyScaled(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", a, p).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", a, p).c_str());
+      }
+    }
+  }
+
+  /// The sixteen-step wide multiply.
+  TEST_METHOD(WideMultiplyMatchesOverASweep)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("MLTU2");
+
+    Cpu6502 cpu = oracle.Fresh();
+    std::uint32_t state = 31337u;
+
+    for (std::uint32_t iteration = 0; iteration < 150'000; ++iteration)
+    {
+      const std::uint32_t sample = NextSample(state);
+      const std::uint8_t a = static_cast<std::uint8_t>(sample);
+      const std::uint8_t p = static_cast<std::uint8_t>(sample >> 8);
+      const std::uint8_t q = static_cast<std::uint8_t>(sample >> 16);
+
+      cpu.memory[zp.p] = p;
+      cpu.memory[static_cast<std::uint16_t>(zp.p + 1)] = 0;
+      cpu.memory[zp.q] = q;
+      cpu.a = a;
+      cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.c = false;
+
+      const auto run = cpu.CallSubroutine(routine, 5'000);
+      Assert::IsTrue(run.completed, L"MLTU2 should return");
+
+      MathWorkspace work;
+      work.p = p;
+      work.q = q;
+      const std::uint8_t high = Elite::MultiplyWide(work, a);
+
+      const std::wstring where = L" at iteration " + std::to_wstring(iteration);
+      Assert::AreEqual<std::uint32_t>(cpu.a, high, (L"high byte" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.p + 1)], work.p1,
+                                      (L"middle byte" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, (L"low byte" + where).c_str());
+    }
+  }
+
+  /// A = A / Q, saturating, over every input pair.
+  TEST_METHOD(DivideByQMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("TIS2");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = static_cast<std::uint8_t>(a);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"TIS2 should return");
+
+        MathWorkspace work;
+        work.q = static_cast<std::uint8_t>(q);
+        const std::uint8_t result = Elite::DivideByQ(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"quotient", a, q).c_str());
+      }
+    }
+  }
+
+  /// The shared divide-by-96 tail, over every input.
+  TEST_METHOD(DivideBy96MatchesForEveryInput)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+
+    std::uint16_t routine = 0;
+    if (!oracle.TryLabel("DVID96", routine))
+    {
+      Logger::WriteMessage("SKIPPED -- this build has no DVID96 entry point");
+      return;
+    }
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      cpu.a = static_cast<std::uint8_t>(a);
+      cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.c = false;
+
+      const auto run = cpu.CallSubroutine(routine, 5'000);
+      Assert::IsTrue(run.completed, L"DVID96 should return");
+
+      MathWorkspace work;
+      const std::uint8_t result = Elite::DivideBy96(work, static_cast<std::uint8_t>(a));
+
+      Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"quotient", a, 0).c_str());
+    }
+  }
+
+  /// (A ?) = (-X * A + (S R)) / 96.
+  TEST_METHOD(MultiplyAddDivide96MatchesOverASweep)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("TIS1");
+
+    Cpu6502 cpu = oracle.Fresh();
+    std::uint32_t state = 909090u;
+
+    for (std::uint32_t iteration = 0; iteration < 150'000; ++iteration)
+    {
+      const std::uint32_t sample = NextSample(state);
+      const std::uint8_t a = static_cast<std::uint8_t>(sample);
+      const std::uint8_t x = static_cast<std::uint8_t>(sample >> 8);
+      const std::uint8_t s = static_cast<std::uint8_t>(sample >> 16);
+      const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
+
+      cpu.memory[zp.s] = s;
+      cpu.memory[zp.r] = r;
+      cpu.a = a;
+      cpu.x = x;
+      cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.c = false;
+
+      const auto run = cpu.CallSubroutine(routine, 5'000);
+      Assert::IsTrue(run.completed, L"TIS1 should return");
+
+      MathWorkspace work;
+      work.s = s;
+      work.r = r;
+      const std::uint8_t result = Elite::MultiplyAddDivide96(work, a, x);
+
+      const std::wstring where = L" at iteration " + std::to_wstring(iteration);
+      Assert::AreEqual<std::uint32_t>(cpu.a, result, (L"result" + where).c_str());
+    }
+  }
+
+  /// The sixteen-step long division.
+  TEST_METHOD(WideDivideMatchesOverASweep)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("DVIDT");
+
+    Cpu6502 cpu = oracle.Fresh();
+    std::uint32_t state = 246810u;
+
+    for (std::uint32_t iteration = 0; iteration < 150'000; ++iteration)
+    {
+      const std::uint32_t sample = NextSample(state);
+      const std::uint8_t a = static_cast<std::uint8_t>(sample);
+      const std::uint8_t p = static_cast<std::uint8_t>(sample >> 8);
+      const std::uint8_t q = static_cast<std::uint8_t>(sample >> 16);
+
+      cpu.memory[zp.p] = p;
+      cpu.memory[static_cast<std::uint16_t>(zp.p + 1)] = 0;
+      cpu.memory[zp.q] = q;
+      cpu.a = a;
+      cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.c = false;
+
+      const auto run = cpu.CallSubroutine(routine, 5'000);
+      Assert::IsTrue(run.completed, L"DVIDT should return");
+
+      MathWorkspace work;
+      work.p = p;
+      work.q = q;
+      const std::uint8_t result = Elite::DivideWide(work, a);
+
+      const std::wstring where = L" at iteration " + std::to_wstring(iteration);
+      Assert::AreEqual<std::uint32_t>(cpu.a, result, (L"result" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, (L"P" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.p + 1)], work.p1,
+                                      (L"P+1" + where).c_str());
+    }
+  }
+};
+
+TEST_CLASS(LogarithmRoutinesAgainstTheShippedGame)
+{
+public:
+  /// A = A * Q / 256, through the logarithm tables, over every input pair.
+  TEST_METHOD(LogMultiplyMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("FMLTU");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = static_cast<std::uint8_t>(a);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"FMLTU should return");
+
+        MathWorkspace work;
+        work.q = static_cast<std::uint8_t>(q);
+        const std::uint8_t result = Elite::MultiplyByLog(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"product", a, q).c_str());
+      }
+    }
+  }
+
+  /// R = 256 * A / Q, over every input pair, including the carry the callers branch on.
+  TEST_METHOD(LogDivideMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("LL28");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = static_cast<std::uint8_t>(a);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"LL28 should return");
+
+        MathWorkspace work;
+        work.q = static_cast<std::uint8_t>(q);
+        const bool carry = Elite::DivideToR(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.r], work.r, Context(L"R", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.c ? 1u : 0u, carry ? 1u : 0u, Context(L"carry", a, q).c_str());
+      }
+    }
+  }
+
+  /// The signed combine, over a sweep of its four input bytes.
+  TEST_METHOD(SignedCombineMatchesOverASweep)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("LL38");
+
+    Cpu6502 cpu = oracle.Fresh();
+    std::uint32_t state = 55501u;
+
+    for (std::uint32_t iteration = 0; iteration < 200'000; ++iteration)
+    {
+      const std::uint32_t sample = NextSample(state);
+      const std::uint8_t a = static_cast<std::uint8_t>(sample);
+      const std::uint8_t s = static_cast<std::uint8_t>(sample >> 8);
+      const std::uint8_t q = static_cast<std::uint8_t>(sample >> 16);
+      const std::uint8_t r = static_cast<std::uint8_t>(sample >> 24);
+
+      cpu.memory[zp.s] = s;
+      cpu.memory[zp.q] = q;
+      cpu.memory[zp.r] = r;
+      cpu.a = a;
+      cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.c = false;
+
+      const auto run = cpu.CallSubroutine(routine, 5'000);
+      Assert::IsTrue(run.completed, L"LL38 should return");
+
+      MathWorkspace work;
+      work.s = s;
+      work.q = q;
+      work.r = r;
+      const std::uint8_t result = Elite::CombineSigned(work, a);
+
+      const std::wstring where = L" at iteration " + std::to_wstring(iteration);
+      Assert::AreEqual<std::uint32_t>(cpu.a, result, (L"result" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.memory[zp.s], work.s, (L"S" + where).c_str());
+    }
+  }
+
+  /// The angle of P over Q, over every input pair. This one decides how the ship responds to
+  /// the stick, so it is worth every one of the 65,536 comparisons.
+  TEST_METHOD(ArctanMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("ARCTAN");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t p = 0; p < 256; ++p)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.p] = static_cast<std::uint8_t>(p);
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"ARCTAN should return");
+
+        MathWorkspace work;
+        work.p = static_cast<std::uint8_t>(p);
+        work.q = static_cast<std::uint8_t>(q);
+        const std::uint8_t angle = Elite::Arctan(work);
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, angle, Context(L"angle", p, q).c_str());
+      }
+    }
+  }
+};
+
+} // namespace GameLogicTests
