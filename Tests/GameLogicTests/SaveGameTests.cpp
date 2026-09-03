@@ -3,7 +3,13 @@
 #include "OracleImage.h"
 
 #include "Commander.h"
+#include "ExtendedTokens.h"
+#include "Rng.h"
 #include "SaveGame.h"
+#include "StateTokens.h"
+#include "TextPrint.h"
+#include "Tokens.h"
+#include "Universe.h"
 
 #include <array>
 #include <cstdint>
@@ -15,6 +21,8 @@ using Elite::CommanderBlock;
 using Elite::CompetitionNumber;
 using Elite::Field;
 using Elite::KeySource;
+using Elite::CharacterPrinter;
+using Elite::TokenPrinter;
 using Elite::Testing::Cpu6502;
 using Elite::Testing::OracleImage;
 
@@ -95,8 +103,14 @@ public:
   {
     if (m_taken >= m_keys.size())
     {
+      /*
+       * A port that asks for more keys than the game did is the failure this records, and it has
+       * to be allowed to finish so the assertion can report it. RETURN ends a typed line and "N"
+       * both answers "are you sure" and leaves the menu, so alternating the two gets out of every
+       * loop in this slice.
+       */
       m_overrun = true;
-      return 'N';
+      return ((m_extra++ % 2u) == 0u) ? static_cast<std::uint8_t>(13) : static_cast<std::uint8_t>('N');
     }
     return m_keys[m_taken++];
   }
@@ -106,6 +120,7 @@ public:
 private:
   std::vector<std::uint8_t> m_keys;
   std::size_t m_taken = 0;
+  std::size_t m_extra = 0;
   bool m_overrun = false;
 };
 
@@ -357,9 +372,10 @@ public:
     }
 
     /*
-     * Bit 6 says the commander came from a file; bit 7 says the file's CHK2 disagreed with the
-     * checksum EORed with &A9. A save that writes CHK2 correctly must leave bit 7 CLEAR -- which
-     * is the property the missing store broke, and the reason it was worth finding.
+     * Bit 6 is the C64's platform stamp, which DFAULT sets on anything it loads; bit 7 says the
+     * file's CHK2 disagreed with the checksum EORed with &A9. A save that writes CHK2 correctly
+     * must leave bit 7 CLEAR -- which is the property the missing store broke, and the reason it
+     * was worth finding.
      */
     Assert::AreEqual<std::uint8_t>(0x40, loaded.At(Field::Competition),
                                    L"loaded from a file, and not flagged as tampered");
@@ -372,6 +388,561 @@ public:
     store.failWrites = true;
     CommanderBlock another = Elite::DefaultCommander();
     Assert::IsFalse(Elite::SaveCommanderTo(store, another, name).written, L"a write failure is reported");
+  }
+};
+
+
+/*
+ * The disk access menu, against the game (slice 2d).
+ *
+ * SVE is five options wrapped around routines this slice already proved one at a time, so what
+ * is left to compare is the SHAPE: which key reaches which leaf, what each leaf prints, how many
+ * keys it swallows, what it leaves in the two commanders, and the carry -- which is the only
+ * thing SVE actually returns and the least predictable part of it.
+ *
+ * The shipped routine runs whole. Only the Kernal is stood in for: the two calls that touch a
+ * device, the setup around them, and the handful of control-code routines that leave the text
+ * system. Everything else -- DETOK, MT26, GTNMEW, TRNME, BPRNT, CHECK, DFAULT, JAMESON, YESNO --
+ * is the game's own code, which is why this comparison is worth making at all.
+ */
+namespace
+{
+/// 6502: KERNALSVE = &FFD8 and KERNALLOAD = &FFD5. Constants in the source, not labels.
+constexpr std::uint16_t KERNAL_SAVE = 0xFFD8;
+constexpr std::uint16_t KERNAL_LOAD = 0xFFD5;
+
+/// 6502: TAP% = &CF00 -- the staging area LOD reads into before copying to NA%+8.
+constexpr std::uint16_t TAPE_BUFFER = 0xCF00;
+
+/// The commander the fixture's device hands back, which is deliberately not the default one.
+CommanderBlock FileCommander()
+{
+  CommanderBlock block = Elite::DefaultCommander();
+  block.SetCash(123456);
+  block.At(Field::Fuel) = 42;
+  block.At(Field::GalaxyNumber) = 3;
+  block.At(Field::SaveCount) = 0x60;
+  block.bytes[static_cast<std::size_t>(Field::Kills) + 1u] = 0x11;
+  return block;
+}
+
+std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> FileImage()
+{
+  static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> WHOEVER = { 'X', 'X', 'X', 13, 0, 0, 0, 0 };
+  std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> file{};
+  Elite::SaveCommander(FileCommander(), WHOEVER, file);
+  return file;
+}
+
+/// The port's side of the Kernal: one file, and the two ways it can go wrong.
+class DeviceStore : public Elite::CommanderStore
+{
+public:
+  bool Write(std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE> _name,
+             std::span<const std::uint8_t, Elite::COMMANDER_FILE_SIZE> _file) override
+  {
+    for (std::size_t index = 0; index < _name.size(); ++index)
+    {
+      wroteName[index] = _name[index];
+    }
+    for (std::size_t index = 0; index < _file.size(); ++index)
+    {
+      wrote[index] = _file[index];
+    }
+    ++writes;
+    return !failDevice;
+  }
+
+  bool Read(std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE> _name,
+            std::span<std::uint8_t, Elite::COMMANDER_FILE_SIZE> _outFile) override
+  {
+    for (std::size_t index = 0; index < _name.size(); ++index)
+    {
+      readName[index] = _name[index];
+    }
+    ++reads;
+    if (failDevice)
+    {
+      return false;
+    }
+    const auto file = FileImage();
+    for (std::size_t index = 0; index < _outFile.size(); ++index)
+    {
+      _outFile[index] = file[index];
+    }
+    // 6502: the first byte of the block, which LOD tests for bit 7 and nothing else. Only the
+    // FIRST read is spoiled, so a script can pick the wrong file and then the right one.
+    if (badFile && reads == 1)
+    {
+      _outFile[Elite::COMMANDER_NAME_SIZE] = static_cast<std::uint8_t>(_outFile[Elite::COMMANDER_NAME_SIZE] | 0x80u);
+    }
+    return true;
+  }
+
+  std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> wrote{};
+  std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> wroteName{};
+  std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> readName{};
+  int writes = 0;
+  int reads = 0;
+  bool failDevice = false;
+  bool badFile = false;
+};
+
+/// 6502: DELAY and FLKB, recorded rather than performed.
+class MenuEffects : public Elite::LineEntryEffects
+{
+public:
+  void WaitFrames(std::uint8_t) override { ++waits; }
+  void FlushKeyboard() override { ++flushes; }
+  int waits = 0;
+  int flushes = 0;
+};
+
+/// The control codes that leave the text system. Every one of them is trapped on the other side.
+class IgnoredControls : public Elite::ControlCodes
+{
+public:
+  void Run(std::uint8_t _code) override { codes.push_back(_code); }
+  std::vector<std::uint8_t> codes;
+};
+
+/// Every character with the cursor it was printed at, exactly as the docked screens compare.
+struct StampedSink : public Elite::TextSink
+{
+  void Put(std::uint8_t _character) override
+  {
+    const std::uint32_t column = (cursor != nullptr) ? cursor->column : 0u;
+    const std::uint32_t row = (cursor != nullptr) ? cursor->row : 0u;
+    stamped.push_back(static_cast<std::uint32_t>(_character) | (column << 8) | (row << 16));
+  }
+
+  Elite::TextState* cursor = nullptr;
+  std::vector<std::uint32_t> stamped;
+};
+
+std::string Legible(const std::vector<std::uint32_t>& _stamped)
+{
+  std::string text;
+  for (const std::uint32_t entry : _stamped)
+  {
+    const std::uint8_t character = static_cast<std::uint8_t>(entry);
+    text += (character >= 32 && character < 127) ? static_cast<char>(character) : '.';
+  }
+  return text;
+}
+
+/// What one run of the shipped SVE left behind.
+struct ShippedMenu
+{
+  bool completed = false;
+  bool carry = false;
+  std::size_t keysTaken = 0;
+  int reads = 0;
+  int writes = 0;
+  std::vector<std::uint32_t> printed;
+  std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
+  std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name{};
+  CommanderBlock block;
+  std::uint8_t disk = 0;
+  std::array<std::uint8_t, 4> competition{}; ///< 6502: K to K+3
+};
+
+/*
+ * Run SVE with the device and the screen stood in for.
+ *
+ * The keyboard is answered at `t` rather than at TT217, because SVE and YESNO call the inner
+ * entry point directly and MT26 reaches it through the outer one -- so `t` is the only address
+ * every key in the menu passes through. TT217's own tail is performed here (Y from YSAV, X from
+ * the key) so that a routine entering at either label sees what the real one would leave.
+ */
+ShippedMenu RunShippedMenu(const OracleImage& _oracle, const std::wstring& _where,
+                           const std::vector<std::uint8_t>& _keys, const CommanderBlock& _live,
+                           std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE> _liveName,
+                           std::span<const std::uint8_t, Elite::COMMANDER_FILE_SIZE> _image, bool _useDisk,
+                           bool _failDevice, bool _badFile, std::uint8_t _numberWidth)
+{
+  constexpr std::uint16_t STOP = 0xFFF9;
+
+  Cpu6502 cpu = _oracle.Fresh();
+  const std::uint16_t chpr = _oracle.Label("CHPR");
+  const std::uint16_t keyRead = _oracle.Label("t");
+  const std::uint16_t ysav = _oracle.Label("YSAV");
+  const std::uint16_t na = _oracle.Label("NA%");
+  const std::uint16_t name = _oracle.Label("NAME");
+  const std::uint16_t tp = _oracle.Label("TP");
+  const std::uint16_t disk = _oracle.Label("DISK");
+  const std::uint16_t bprnt = _oracle.Label("BPRNT");
+  const std::uint16_t k = _oracle.Label("K");
+
+  cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+  // The seams: two of them are the C64's own hardware waits, and the rest are the control-code
+  // routines that leave the text system. DOXC rather than MT8, because the port splits MT8 the
+  // same way -- the column is the canvas's and the sentence-case flag is the text system's.
+  for (const char* seam : { "DELAY", "FLKB", "MT9", "NLIN4", "DOXC", "DOYC", "FILEPR", "OTHERFILEPR",
+                            "KERNALSETUP", "SETL1", "SWAPPZERO" })
+  {
+    cpu.AddTrap(_oracle.Label(seam));
+  }
+  cpu.watch = { _oracle.Label("XC"), _oracle.Label("YC"), 0, 0 };
+
+  // The text system's own state, which lives in a loaded block rather than in zero page -- so
+  // leaving it alone compares the port against whatever the binary happens to hold.
+  for (const char* byte : { "DTW1", "DTW2", "DTW3", "DTW4", "DTW5", "DTW6", "QQ17" })
+  {
+    cpu.memory[_oracle.Label(byte)] = 0;
+  }
+  cpu.memory[_oracle.Label("DTW8")] = 0xFF;
+  for (std::uint16_t index = 0; index < Elite::CharacterPrinter::BUFFER_SIZE; ++index)
+  {
+    cpu.memory[static_cast<std::uint16_t>(_oracle.Label("BUF") + index)] = 0;
+  }
+
+  cpu.memory[_oracle.Label("XC")] = 1;
+  cpu.memory[_oracle.Label("YC")] = 1;
+  cpu.memory[_oracle.Label("COL2")] = 0;
+  cpu.memory[disk] = _useDisk ? 0xFF : 0x00;
+
+  /*
+   * 6502: U -- BPRNT's field width, and SV1 never sets it.
+   *
+   * It is a scratch byte in zero page that ZERO does not clear, so the competition number comes
+   * out padded to whatever the last caller of BPRNT left behind. Seeding it here is what makes
+   * that dependency a comparison rather than an accident: the scripts vary it, and the port has
+   * to be handed the same value.
+   */
+  cpu.memory[_oracle.Label("U")] = _numberWidth;
+
+  for (std::size_t index = 0; index < Elite::COMMANDER_FILE_SIZE; ++index)
+  {
+    cpu.memory[static_cast<std::uint16_t>(na + index)] = _image[index];
+  }
+  for (std::size_t index = 0; index < Elite::COMMANDER_NAME_SIZE; ++index)
+  {
+    cpu.memory[static_cast<std::uint16_t>(name + index)] = _liveName[index];
+  }
+  for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
+  {
+    cpu.memory[static_cast<std::uint16_t>(tp + index)] = _live.bytes[index];
+  }
+
+  cpu.a = cpu.x = cpu.y = 0;
+  cpu.sp = 0xFD;
+  const std::uint8_t entrySp = cpu.sp;
+  const std::uint16_t ret = static_cast<std::uint16_t>(STOP - 1);
+  cpu.memory[static_cast<std::uint16_t>(0x0100 + cpu.sp)] = static_cast<std::uint8_t>(ret >> 8);
+  --cpu.sp;
+  cpu.memory[static_cast<std::uint16_t>(0x0100 + cpu.sp)] = static_cast<std::uint8_t>(ret & 0xFFu);
+  --cpu.sp;
+  cpu.pc = _oracle.Label("SVE");
+
+  ShippedMenu run{};
+
+  const auto ReturnFromCall = [&]() {
+    const std::uint8_t lo = cpu.memory[static_cast<std::uint16_t>(0x0100 + ((cpu.sp + 1u) & 0xFFu))];
+    const std::uint8_t hi = cpu.memory[static_cast<std::uint16_t>(0x0100 + ((cpu.sp + 2u) & 0xFFu))];
+    cpu.sp = static_cast<std::uint8_t>(cpu.sp + 2u);
+    cpu.pc = static_cast<std::uint16_t>((lo | (hi << 8)) + 1);
+  };
+
+  for (std::uint32_t step = 0; step < 3'000'000; ++step)
+  {
+    if (cpu.pc == STOP || cpu.sp == entrySp)
+    {
+      run.completed = true;
+      break;
+    }
+
+    /*
+     * 6502: K to K+3, read as BPRNT is entered rather than afterwards.
+     *
+     * BPRNT prints by repeated subtraction FROM K, so by the time it returns the number is gone.
+     * A test that read K at the end would compare the port's competition number against zero.
+     */
+    if (cpu.pc == bprnt)
+    {
+      for (std::size_t index = 0; index < run.competition.size(); ++index)
+      {
+        run.competition[index] = cpu.memory[static_cast<std::uint16_t>(k + index)];
+      }
+    }
+
+    if (cpu.pc == keyRead)
+    {
+      Assert::IsTrue(run.keysTaken < _keys.size(),
+                     (_where + L": the shipped menu asked for more keys than the script holds").c_str());
+      // 6502: LDA TRANTABLE,X / LDY YSAV / TAX -- TT217's tail, whichever label was entered.
+      cpu.a = _keys[run.keysTaken++];
+      cpu.x = cpu.a;
+      cpu.y = cpu.memory[ysav];
+      ReturnFromCall();
+      continue;
+    }
+
+    if (cpu.pc == KERNAL_LOAD || cpu.pc == KERNAL_SAVE)
+    {
+      if (cpu.pc == KERNAL_LOAD)
+      {
+        ++run.reads;
+        const auto file = FileImage();
+        for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
+        {
+          cpu.memory[static_cast<std::uint16_t>(TAPE_BUFFER + index)] = file[Elite::COMMANDER_NAME_SIZE + index];
+        }
+        if (_badFile && run.reads == 1)
+        {
+          cpu.memory[TAPE_BUFFER] = static_cast<std::uint8_t>(cpu.memory[TAPE_BUFFER] | 0x80u);
+        }
+      }
+      else
+      {
+        ++run.writes;
+      }
+      cpu.c = _failDevice; // 6502: the Kernal sets the carry on failure, and SV1 keeps it in a PHP
+      ReturnFromCall();
+      continue;
+    }
+
+    Assert::IsTrue(cpu.Step(), L"SVE should not reach an unimplemented opcode");
+  }
+
+  run.carry = cpu.c;
+  run.disk = cpu.memory[disk];
+  for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+  {
+    if (hit.address == chpr)
+    {
+      run.printed.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8)
+                            | (static_cast<std::uint32_t>(hit.watched[1]) << 16));
+    }
+  }
+  for (std::size_t index = 0; index < Elite::COMMANDER_FILE_SIZE; ++index)
+  {
+    run.image[index] = cpu.memory[static_cast<std::uint16_t>(na + index)];
+  }
+  for (std::size_t index = 0; index < Elite::COMMANDER_NAME_SIZE; ++index)
+  {
+    run.name[index] = cpu.memory[static_cast<std::uint16_t>(name + index)];
+  }
+  for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
+  {
+    run.block.bytes[index] = cpu.memory[static_cast<std::uint16_t>(tp + index)];
+  }
+  return run;
+}
+} // namespace
+
+TEST_CLASS(TheDiskAccessMenuMatchesTheShippedGame)
+{
+public:
+  /*
+   * Every leaf of SVE, and the two ways back into it.
+   *
+   * The scripts walk each of the five options, both answers to "are you sure", the media toggle
+   * (which is the only path that redisplays the menu without an error), a device that refuses a
+   * save and one that refuses a load, a file that is not a commander -- and, after each of those
+   * failures, one more key. That last key is the point of the whole test: LOD's error paths jump
+   * back to SVE without unwinding, so what happens next is decided by a stack frame the player
+   * cannot see.
+   */
+  TEST_METHOD(EveryPathThroughTheMenuMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    using Outcome = Elite::DiskMenuOutcome;
+
+    struct Script
+    {
+      const char* what;
+      std::vector<std::uint8_t> keys;
+      Outcome outcome = Outcome::Left;
+      bool useDisk = false;
+      bool failDevice = false;
+      bool badFile = false;
+      std::uint8_t numberWidth = 0; ///< 6502: U, which SV1 inherits rather than setting
+    };
+
+    const std::vector<Script> SCRIPTS = {
+      { "5 leaves", { '5' }, Outcome::Left },
+      { "0 leaves, being below the range", { '0' }, Outcome::Left },
+      { "a letter leaves", { 'A' }, Outcome::Left },
+      { "3 toggles the media and redisplays", { '3', '5' }, Outcome::Left },
+      { "3 twice comes back to tape", { '3', '3', '5' }, Outcome::Left },
+      { "3 from disk", { '3', '5' }, Outcome::Left, true },
+      { "4 then N leaves without resetting", { '4', 'N' }, Outcome::Left },
+      { "4 then anything then Y resets", { '4', 'Q', '?', 'Y' }, Outcome::Reset },
+      { "1 loads a commander", { '1', 'B', 'E', 'L', 'L', 13 }, Outcome::Loaded },
+      { "1 with nothing typed keeps the name", { '1', 13 }, Outcome::Loaded },
+      { "1 with ESCAPE still loads", { '1', 'Z', 27 }, Outcome::Loaded },
+      { "2 saves and waits for a key", { '2', 'B', 'E', 'L', 'L', 13, ' ' }, Outcome::Saved },
+      { "2 with nothing typed", { '2', 13, ' ' }, Outcome::Saved },
+      // U wider than the number pads it; U narrower cannot make it shorter, because BPRNT stops
+      // suppressing leading zeros once it has printed one digit.
+      { "2 with U at eleven", { '2', 'W', 13, ' ' }, Outcome::Saved, false, false, false, 11 },
+      { "2 with U at three", { '2', 'W', 13, ' ' }, Outcome::Saved, false, false, false, 3 },
+      { "a save the device refuses", { '2', 'B', 'E', 'L', 'L', 13, ' ', '5' }, Outcome::Left, false, true },
+      { "a load the device refuses, then 5",
+        { '1', 'B', 'E', 'L', 'L', 13, ' ', '5' },
+        Outcome::Left,
+        false,
+        true },
+      { "a load the device refuses, then 4 and N",
+        { '1', 'B', 'E', 'L', 'L', 13, ' ', '4', 'N' },
+        Outcome::Left,
+        false,
+        true },
+      { "a file that is not a commander, then 5",
+        { '1', 'B', 'E', 'L', 'L', 13, ' ', '5' },
+        Outcome::Left,
+        false,
+        false,
+        true },
+      { "a bad file, then a good load",
+        { '1', 'B', 'A', 'D', 13, ' ', '1', 'O', 'K', 13 },
+        Outcome::Loaded,
+        false,
+        false,
+        true },
+      { "a bad file, then a save",
+        { '1', 'B', 'A', 'D', 13, ' ', '2', 'Z', 13, ' ' },
+        Outcome::Saved,
+        false,
+        false,
+        true },
+    };
+
+    static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> LIVE_NAME = { 'J', 'A', 'M', 'E',
+                                                                                        'S', 'O', 'N', 13 };
+    std::uint32_t compared = 0;
+
+    for (const Script& script : SCRIPTS)
+    {
+      const std::wstring where = Widen(std::string("SVE: ") + script.what);
+
+      const OracleImage& oracle = OracleImage::Instance();
+
+      // The live commander and the save image start out different, so a routine that wrote the
+      // wrong one of the two would be visible rather than a no-op.
+      CommanderBlock live = Elite::DefaultCommander();
+      live.SetCash(7770);
+      live.At(Field::Fuel) = 55;
+      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
+      CommanderBlock saved = Elite::DefaultCommander();
+      saved.At(Field::GalaxyNumber) = 1;
+      static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> IMAGE_NAME = { 'O', 'L', 'D', 13,
+                                                                                           0,   0,   0,   0 };
+      Elite::SaveCommander(saved, IMAGE_NAME, image);
+
+      const ShippedMenu shipped =
+        RunShippedMenu(oracle, where, script.keys, live, LIVE_NAME, image, script.useDisk, script.failDevice,
+                       script.badFile, script.numberWidth);
+      Assert::IsTrue(shipped.completed, (where + L": SVE should return").c_str());
+
+      // ---- the port ------------------------------------------------------------------------
+      StampedSink sink;
+      Elite::TextState text;
+      text.column = 1;
+      text.row = 1;
+      sink.cursor = &text;
+
+      CommanderBlock portBlock = live;
+      std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> portName = LIVE_NAME;
+      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> portImage = image;
+      std::array<std::uint8_t, 16> buffer{};
+
+      Elite::Rng rng;
+      IgnoredControls controls;
+      Elite::CharacterPrinter characters(sink);
+      TokenPrinter recursive(characters);
+      recursive.SetCursor(&text);
+      Elite::SystemSeeds current{};
+      Elite::SystemSeeds selected{};
+      Elite::StateTokens values(recursive, text, portBlock, portName, current, selected, false);
+      recursive.SetValueTokens(&values);
+      Elite::ExtendedTokenPrinter extended(characters, recursive, rng, &controls);
+
+      ScriptedKeys keys(script.keys);
+      MenuEffects effects;
+      DeviceStore store;
+      store.failDevice = script.failDevice;
+      store.badFile = script.badFile;
+      Elite::NumberWorkspace numbers;
+      numbers.u = script.numberWidth; // 6502: U, exactly as it was seeded on the other side
+      bool useDisk = script.useDisk;
+
+      Elite::SaveScreen screen{ recursive, characters, extended, sink,    text,
+                                keys,      effects,    store,     numbers };
+
+      const Elite::DiskMenuResult result =
+        Elite::DiskAccessMenu(screen, portBlock, portName, portImage, buffer, useDisk);
+
+      // ---- compare -------------------------------------------------------------------------
+      Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
+      Assert::AreEqual(shipped.keysTaken, keys.Taken(), (where + L": how many keys were read").c_str());
+
+      Assert::AreEqual(shipped.printed.size(), sink.stamped.size(),
+                       (where + L": how many characters were printed -- game \"" + Widen(Legible(shipped.printed))
+                        + L"\", port \"" + Widen(Legible(sink.stamped)) + L"\"")
+                         .c_str());
+      for (std::size_t index = 0; index < shipped.printed.size(); ++index)
+      {
+        Assert::AreEqual(shipped.printed[index], sink.stamped[index],
+                         (where + L": character " + std::to_wstring(index) + L" -- game \""
+                          + Widen(Legible(shipped.printed)) + L"\", port \"" + Widen(Legible(sink.stamped)) + L"\"")
+                           .c_str());
+      }
+
+      // 6502: the carry, which is the whole of SVE's return value.
+      Assert::AreEqual(shipped.carry, result.newCommander, (where + L": the carry on return").c_str());
+
+      // The leaf the menu reached. The oracle cannot say this directly -- the original returns a
+      // carry and nothing else -- so it is the port's reading of which label ran, pinned here so
+      // a change that swapped two of them would have to be deliberate.
+      Assert::AreEqual(static_cast<int>(script.outcome), static_cast<int>(result.outcome),
+                       (where + L": which leaf was reached").c_str());
+
+      // 6502: K to K+3 -- only written by a save, and left alone by everything else.
+      if (script.outcome == Outcome::Saved)
+      {
+        for (std::size_t index = 0; index < shipped.competition.size(); ++index)
+        {
+          Assert::AreEqual(shipped.competition[index], result.competition.value[index],
+                           (where + L": competition byte " + std::to_wstring(index)).c_str());
+        }
+      }
+
+      // 6502: DISK -- 0 for tape, &FF for disk.
+      Assert::AreEqual<std::uint8_t>(shipped.disk, useDisk ? 0xFFu : 0x00u, (where + L": the media flag").c_str());
+
+      // 6502: NA% -- the last saved commander, name and block.
+      for (std::size_t index = 0; index < Elite::COMMANDER_FILE_SIZE; ++index)
+      {
+        Assert::AreEqual(shipped.image[index], portImage[index],
+                         (where + L": save image byte " + std::to_wstring(index)).c_str());
+      }
+
+      // 6502: NAME and TP -- the commander being played, which only DFAULT writes.
+      for (std::size_t index = 0; index < Elite::COMMANDER_NAME_SIZE; ++index)
+      {
+        Assert::AreEqual(shipped.name[index], portName[index],
+                         (where + L": live name byte " + std::to_wstring(index)).c_str());
+      }
+      for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
+      {
+        Assert::AreEqual(shipped.block.bytes[index], portBlock.bytes[index],
+                         (where + L": live commander byte " + std::to_wstring(index)).c_str());
+      }
+
+      // The device saw the same traffic, in the same direction.
+      Assert::AreEqual(shipped.reads, store.reads, (where + L": how many reads").c_str());
+      Assert::AreEqual(shipped.writes, store.writes, (where + L": how many writes").c_str());
+
+      ++compared;
+    }
+
+    Logger::WriteMessage(("SVE: " + std::to_string(compared) + " paths through the disk access menu\n").c_str());
   }
 };
 

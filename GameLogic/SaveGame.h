@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Commander.h"
+#include "ExtendedTokens.h"
+#include "NameEntry.h"
 #include "TextPrint.h"
 
 #include <array>
@@ -104,6 +106,16 @@ struct SaveOutcome
 {
   bool written = false;
   CompetitionNumber competition{};
+
+  /*
+   * 6502: NA% after SVL1 -- the save image, and it outlives the write.
+   *
+   * SV1 calls DFAULT once the Kernal returns, and DFAULT reads NA% rather than re-reading the
+   * disk, so the bytes have to be here for the menu to reproduce that. Returning them also says
+   * something true about the original: the image the game keeps and the file on the device are
+   * the same bytes, and only the image is ever read back.
+   */
+  std::array<std::uint8_t, COMMANDER_FILE_SIZE> image{};
 };
 
 [[nodiscard]] SaveOutcome SaveCommanderTo(CommanderStore& _store, CommanderBlock& _block,
@@ -119,5 +131,119 @@ struct SaveOutcome
  */
 [[nodiscard]] bool LoadCommanderFrom(CommanderStore& _store, CommanderBlock& _outBlock,
                                      std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept;
+
+/*
+ * Everything the disk access menu prints, reads and stores through.
+ *
+ * One struct for the same reason the trading screens have one: the alternative is a
+ * nine-argument function. `chpr` is the CHARACTER printer rather than the token one, because
+ * MT26 prints through CHPR directly and the distinction is load-bearing (§6.19).
+ */
+struct SaveScreen
+{
+  TokenPrinter& printer;
+  CharacterPrinter& characters;
+  ExtendedTokenPrinter& extended;
+  TextSink& chpr;
+  TextState& text;
+  KeySource& keys;
+  LineEntryEffects& effects;
+  CommanderStore& store;
+
+  /*
+   * 6502: K and U -- and U is the reason this is a reference rather than a local.
+   *
+   * SV1 prints the competition number with `CLC / JSR BPRNT` and never sets U, which is BPRNT's
+   * field width. U is a scratch byte in zero page that ZERO does not clear, so the number is
+   * printed to whatever width the last caller of BPRNT happened to leave behind. The upstream
+   * source says so in as many words. It is harmless -- the number always has ten digits, so all
+   * that varies is a leading space -- but a port that chose a width here would be inventing one.
+   */
+  NumberWorkspace& numbers;
+};
+
+/// How the menu ended. 6502: which label it reached, and the carry it left.
+enum class DiskMenuOutcome
+{
+  Left,    ///< 6502: feb13 -- any key but 1 to 4, and CLC
+  Loaded,  ///< 6502: `loading` -- SEC, and a different commander is in place
+  Saved,   ///< 6502: SVEX after a successful save -- and CLC, even though DFAULT just ran
+  Reset,   ///< 6502: option 4 -- JAMESON then DFAULT, so the default commander is loaded
+};
+
+/*
+ * The leaf, the carry, and the competition number if one was worked out.
+ *
+ * `outcome` and `newCommander` DISAGREE after a failed load: the leaf is whichever one the
+ * player reached, and the carry is set by the stack frame that failure left behind. That is not
+ * an inconsistency in the port -- it is what the routine does, and the header above says how.
+ */
+
+/// 6502: the four keys SVE compares against, in the order it compares them.
+inline constexpr std::uint8_t DISK_MENU_LOAD = '1';
+inline constexpr std::uint8_t DISK_MENU_SAVE = '2';
+inline constexpr std::uint8_t DISK_MENU_MEDIA = '3';
+inline constexpr std::uint8_t DISK_MENU_DEFAULT = '4';
+
+struct DiskMenuResult
+{
+  DiskMenuOutcome outcome = DiskMenuOutcome::Left;
+  bool newCommander = false;        ///< 6502: the carry on return
+  CompetitionNumber competition{};  ///< 6502: K to K+3, when a save happened
+};
+
+/*
+ * 6502: SVE -- the disk access menu, which is what the C64 build calls its save routine.
+ *
+ * Five options around routines that all exist by now, and three things about it are worth
+ * knowing before reading it.
+ *
+ * IT IS A LOOP, and not only for option 3. Toggling the media redisplays the menu, obviously --
+ * but so does every FAILURE: a save the Kernal refuses reaches `tapeerror`, prints an error,
+ * waits for a key and jumps back to SVE, and a file that is not a commander reaches `ELT2F` and
+ * does the same. There is no way to leave the menu by failing.
+ *
+ * AND A FAILED LOAD POISONS EVERY LATER EXIT. Those failures are inside `JSR LOD`, and they
+ * leave by `JMP SVE` rather than by returning, so the menu is re-entered with LOD's return
+ * address still on the stack. Whatever the player does next, its RTS lands back in `loading` at
+ * `JSR TRNME / SEC / RTS` -- so leaving with "5" after a failed load renames the commander to
+ * whatever was typed and reports a new commander loaded, which sends TT102 to restart the game
+ * instead of to the docking bay. Nothing was loaded. The frame is pushed again on each failed
+ * load, so the stack grows until it does not.
+ *
+ * SAVING RELOADS. After a successful write, SV1 calls DFAULT on the file it has just written and
+ * waits for a key before returning. So a save is also a load: the commander that carries on is
+ * the one DFAULT rebuilt, with the platform bit stamped into its competition flags and its own
+ * checksum byte left at whatever the copy loop stopped short of.
+ *
+ * AND THE CARRY IS NOT WHAT IT LOOKS LIKE. `SVEX` and `feb13` both clear it, so a save and an
+ * exit say "no new commander" -- the save in spite of the DFAULT it just ran. Option 1 sets it
+ * with an explicit `SEC`. Option 4 sets it too, and NOTHING IN SVE WRITES IT: `JMP DFAULT` is a
+ * tail call, and DFAULT's last comparison is `CMP CHK3` on the path where the two agree, which
+ * leaves the carry set. So the flag that tells TT102 to restart the game is, for the reset, a
+ * side effect of a checksum test three routines away.
+ */
+/*
+ * THE TWO COMMANDERS ARE BOTH ARGUMENTS, and keeping them apart is the whole reason this reads
+ * the way it does.
+ *
+ *   `_block` and `_name`   6502: TP and NAME -- the commander being played
+ *   `_image`               6502: NA% -- the last saved commander, as a file
+ *
+ * Nothing in the menu writes the live commander except DFAULT. A load fills the IMAGE and returns
+ * with the carry set so the caller will run DFAULT; TRNME renames the IMAGE; JAMESON overwrites
+ * the IMAGE. Collapsing the two -- which is tempting, since every caller does DFAULT immediately
+ * -- changes what the menu PRINTS: option 2's line shows the live commander's name through
+ * control code 4, so a save that the device then refuses would redisplay the menu under the new
+ * name in a port that had folded them together, and under the old one in the game.
+ *
+ * `_buffer` is the line editor's, and it is what names the file: KERNALSETUP builds the filename
+ * from INWK+5, which is where MT26 just wrote. On the load path TRNME has not run yet, so a
+ * player who types a new name loads from THAT file while the image still holds the old one.
+ */
+[[nodiscard]] DiskMenuResult DiskAccessMenu(SaveScreen& _screen, CommanderBlock& _block,
+                                            std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name,
+                                            std::span<std::uint8_t, COMMANDER_FILE_SIZE> _image,
+                                            std::span<std::uint8_t> _buffer, bool& _useDisk) noexcept;
 
 } // namespace Elite
