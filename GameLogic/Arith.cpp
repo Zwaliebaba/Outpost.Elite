@@ -667,4 +667,59 @@ std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
   return _work.r;
 }
 
+void SquareRoot(MathWorkspace& _work) noexcept
+{
+  /*
+   * 6502: LL5. The radicand is (R Q); Y and X hold the running remainder, S the bits still to be
+   * shifted in, and Q accumulates the answer.
+   *
+   * The subtraction compares (X Y) against (Q 0x40) and takes it away when it fits. The original
+   * spells the comparison as CPX / BCC / BNE / CPY, which is a three-way branch on two bytes,
+   * and then relies on the carry that comparison left to make the SBC below correct. Both halves
+   * are kept as flags here for that reason.
+   */
+  std::uint8_t y = _work.r;
+  std::uint8_t s = _work.q;
+  std::uint8_t x = 0;
+  _work.q = 0;
+
+  for (int round = 0; round < 8; ++round)
+  {
+    // 6502: CPX Q / BCC LL7 / BNE / CPY #64 / BCC LL7 -- does (Q 0x40) fit into (X Y)?
+    bool fits = false;
+    if (x > _work.q)
+    {
+      fits = true;
+    }
+    else if (x == _work.q && y >= 0x40u)
+    {
+      fits = true;
+    }
+
+    if (fits)
+    {
+      // 6502: TYA / SBC #64 / TAY / TXA / SBC Q / TAX -- the comparison left carry set, so the
+      // subtraction borrows nothing on its first half.
+      const std::uint16_t low = static_cast<std::uint16_t>(y) - 0x40u;
+      y = static_cast<std::uint8_t>(low);
+      const std::uint16_t high = static_cast<std::uint16_t>(x) - _work.q - (low < 0x100u ? 0u : 1u);
+      x = static_cast<std::uint8_t>(high);
+    }
+
+    // 6502: LL7 -- ROL Q brings in the answer bit, which is the carry the comparison left set
+    // exactly when the candidate fitted.
+    _work.q = RotateLeftValue(_work.q, fits).value;
+
+    // 6502: two rounds of ASL S / ROL A / ROL A -- two more bits of the radicand into (X Y).
+    for (int pair = 0; pair < 2; ++pair)
+    {
+      const ShiftResult shifted = RotateLeftValue(s, false);
+      s = shifted.value;
+      const ShiftResult lowHalf = RotateLeftValue(y, shifted.carry);
+      y = lowHalf.value;
+      x = RotateLeftValue(x, lowHalf.carry).value;
+    }
+  }
+}
+
 } // namespace Elite

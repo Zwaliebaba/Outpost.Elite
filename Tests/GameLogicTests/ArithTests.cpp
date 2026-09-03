@@ -991,6 +991,57 @@ public:
   }
 
   /*
+   * 6502: LL5 -- the square root, over all 65,536 radicands.
+   *
+   * Also checked against real arithmetic, which earns its line here: the routine truncates
+   * rather than rounds, so agreeing with the game AND with the integer square root pins both
+   * that the port is right and that the original does what it looks like.
+   */
+  TEST_METHOD(SquareRootMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("LL5");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t r = 0; r < 256; ++r)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.r] = static_cast<std::uint8_t>(r);
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"LL5 should return");
+
+        MathWorkspace work;
+        work.r = static_cast<std::uint8_t>(r);
+        work.q = static_cast<std::uint8_t>(q);
+        Elite::SquareRoot(work);
+
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.q], work.q, Context(L"root", r, q).c_str());
+
+        // The radicand is (R Q), so the answer should be its integer square root.
+        const std::uint32_t radicand = (r << 8) | q;
+        std::uint32_t root = 0;
+        while ((root + 1) * (root + 1) <= radicand)
+        {
+          ++root;
+        }
+        Assert::AreEqual<std::uint32_t>(root, work.q, Context(L"the real square root", r, q).c_str());
+      }
+    }
+  }
+
+  /*
    * The division half really divides, and what it is dividing is worth stating.
    *
    * DVID4 is an 8.8 fixed-point divide: P comes out as the whole part of A / Q and R as the

@@ -142,4 +142,16 @@ void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
  */
 [[nodiscard]] std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
+/*
+ * 6502: LL5 -- Q = square root of (R Q), by the schoolbook bitwise method.
+ *
+ * Eight rounds, each shifting two more bits of the radicand in and testing whether the next
+ * candidate bit fits. The comparison is spread across three registers with a borrow threaded
+ * between them, which is why this is ported as flags rather than as arithmetic.
+ *
+ * The inventory grouped this with the state-dependent helpers and deferred it to 3a. It is not
+ * state-dependent -- it takes R and Q and leaves Q -- and TT111 needs it, so it lands here.
+ */
+void SquareRoot(MathWorkspace& _work) noexcept;
+
 } // namespace Elite

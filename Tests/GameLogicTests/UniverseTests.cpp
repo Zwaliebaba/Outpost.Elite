@@ -354,6 +354,86 @@ public:
   }
 
   /*
+   * 6502: TT111 -- the system nearest the crosshairs, in every galaxy, over a grid of crosshair
+   * positions and from several starting systems.
+   *
+   * Everything the routine leaves behind is compared: the seeds it settled on, the index, the two
+   * coordinates it writes back, the distance, and the system data it falls into TT24 to produce.
+   * The distance is the part worth checking hardest -- it is measured differently from the metric
+   * the search used, four instructions apart in the original, and getting them the same way round
+   * would put every system in the game at a plausible but wrong range.
+   */
+  TEST_METHOD(NearestSystemMatchesTheShippedRoutine)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("TT111");
+    const std::uint16_t qq0 = oracle.Label("QQ0");
+    const std::uint16_t qq1 = oracle.Label("QQ1");
+    const std::uint16_t qq8 = oracle.Label("QQ8");
+    const std::uint16_t qq9 = oracle.Label("QQ9");
+    const std::uint16_t qq10 = oracle.Label("QQ10");
+    const std::uint16_t zz = oracle.Label("ZZ");
+
+    SystemSeeds galaxy = Elite::GALAXY_ONE_SEEDS;
+    std::uint32_t compared = 0;
+
+    for (int galaxyNumber = 1; galaxyNumber <= 8; ++galaxyNumber)
+    {
+      for (std::uint32_t crossX = 0; crossX < 256; crossX += 23)
+      {
+        for (std::uint32_t crossY = 0; crossY < 256; crossY += 29)
+        {
+          const std::uint8_t currentX = static_cast<std::uint8_t>(crossX ^ 0x5Au);
+          const std::uint8_t currentY = static_cast<std::uint8_t>(crossY ^ 0xA5u);
+
+          Cpu6502 cpu = oracle.Fresh();
+          LoadSeeds(cpu, zp.qq21, galaxy);
+          cpu.memory[qq9] = static_cast<std::uint8_t>(crossX);
+          cpu.memory[qq10] = static_cast<std::uint8_t>(crossY);
+          cpu.memory[qq0] = currentX;
+          cpu.memory[qq1] = currentY;
+          cpu.a = cpu.x = cpu.y = 0;
+          cpu.sp = 0xFD;
+
+          const auto run = cpu.CallSubroutine(routine, 2'000'000);
+          Assert::IsTrue(run.completed, L"TT111 should return");
+
+          const Elite::NearestSystem ours = Elite::FindNearestSystem(
+            galaxy, static_cast<std::uint8_t>(crossX), static_cast<std::uint8_t>(crossY), currentX, currentY);
+
+          const std::wstring where = L"galaxy " + std::to_wstring(galaxyNumber) + L" crosshairs ("
+                                     + std::to_wstring(crossX) + L"," + std::to_wstring(crossY) + L") from ("
+                                     + std::to_wstring(currentX) + L"," + std::to_wstring(currentY) + L")";
+
+          Assert::IsTrue(ReadSeeds(cpu, zp.qq15) == ours.seeds, (where + L": seeds").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zz], ours.index, (where + L": index").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[qq9], ours.x, (where + L": x").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[qq10], ours.y, (where + L": y").c_str());
+
+          const std::uint16_t distance =
+            static_cast<std::uint16_t>(cpu.memory[qq8] | (cpu.memory[static_cast<std::uint16_t>(qq8 + 1)] << 8));
+          Assert::AreEqual<std::uint32_t>(distance, ours.distance, (where + L": distance").c_str());
+
+          // And the TT24 it jumps into rather than returning from.
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq3], ours.data.economy, (where + L": economy").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq5], ours.data.techLevel, (where + L": tech level").c_str());
+
+          ++compared;
+        }
+      }
+
+      Elite::NextGalaxy(galaxy);
+    }
+
+    Logger::WriteMessage(("TT111: " + std::to_string(compared) + " searches compared\n").c_str());
+  }
+
+  /*
    * 6502: cpl -- every system's name, in every galaxy, compared character for character through
    * a trap on the character routine.
    *

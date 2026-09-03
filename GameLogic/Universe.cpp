@@ -139,6 +139,103 @@ SystemData GenerateSystemData(const SystemSeeds& _seeds) noexcept
   return data;
 }
 
+namespace
+{
+/// 6502: the EOR #255 / ADC #1 that follows a borrow -- a negate reached with carry clear.
+[[nodiscard]] std::uint8_t AbsoluteDifference(std::uint8_t _a, std::uint8_t _b) noexcept
+{
+  const std::uint16_t difference = static_cast<std::uint16_t>(_a) - _b;
+  const std::uint8_t value = static_cast<std::uint8_t>(difference);
+  if (difference < 0x100u)
+  {
+    return value;
+  }
+  return AddWithCarry(static_cast<std::uint8_t>(value ^ 0xFFu), 1, false).value;
+}
+} // namespace
+
+NearestSystem FindNearestSystem(const SystemSeeds& _galaxy, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
+                                std::uint8_t _currentX, std::uint8_t _currentY) noexcept
+{
+  // 6502: JSR TT81 -- the search always starts from the galaxy's own seeds, not from wherever
+  // the seeds happen to be.
+  SystemSeeds seeds = _galaxy;
+
+  NearestSystem best;
+  std::uint8_t bestMetric = 0x7F; // 6502: LDY #127 / STY T
+  std::uint8_t index = 0;
+
+  for (;;)
+  {
+    /*
+     * 6502: TT130. A system's galactic coordinates are two of its seed bytes: x is byte 3 and y
+     * is byte 1. Nothing computes them -- they simply are the seed, which is why moving one
+     * system along moves you across the galaxy.
+     */
+    const std::uint8_t dx = AbsoluteDifference(seeds.bytes[3], _crosshairX) >> 1;
+    const std::uint8_t dy = AbsoluteDifference(seeds.bytes[1], _crosshairY) >> 1;
+
+    // 6502: CLC / ADC S / CMP T / BCS TT135 -- nearer than the best so far, and strictly so.
+    const std::uint8_t metric = AddWithCarry(dy, dx, false).value;
+    if (metric < bestMetric)
+    {
+      bestMetric = metric;
+      best.seeds = seeds;
+      best.index = index;
+    }
+
+    NextSystem(seeds);
+
+    // 6502: INC U / BNE TT130 -- 256 systems, counted by a byte that wraps to zero.
+    ++index;
+    if (index == 0)
+    {
+      break;
+    }
+  }
+
+  best.x = best.seeds.bytes[3];
+  best.y = best.seeds.bytes[1];
+
+  /*
+   * 6502: TT139 onwards -- the real distance, which is a different measurement from the one the
+   * search just used. dx is squared whole; dy is HALVED first, then squared.
+   */
+  MathWorkspace work;
+  const std::uint8_t high = SquareUnsigned(work, AbsoluteDifference(best.x, _currentX));
+  const std::uint8_t squaredHigh = high;
+  const std::uint8_t squaredLow = work.p;
+
+  const std::uint8_t halfDy = static_cast<std::uint8_t>(AbsoluteDifference(best.y, _currentY) >> 1);
+  const std::uint8_t secondHigh = SquareUnsigned(work, halfDy);
+
+  // 6502: CLC / ADC K / STA Q / PLA / ADC K+1 / BCC / LDA #255 -- the sum saturates rather than
+  // wrapping, because a distance that wrapped would read as very close indeed.
+  const AddResult sumLow = AddWithCarry(work.p, squaredLow, false);
+  const AddResult sumHigh = AddWithCarry(secondHigh, squaredHigh, sumLow.carry);
+
+  work.q = sumLow.value;
+  work.r = sumHigh.carry ? std::uint8_t{ 255 } : sumHigh.value;
+
+  // 6502: JSR LL5 -- Q becomes the square root of (R Q).
+  SquareRoot(work);
+
+  // 6502: ASL A / ROL QQ8+1 twice -- the answer times four, as a sixteen-bit value.
+  std::uint8_t distanceLow = work.q;
+  std::uint8_t distanceHigh = 0;
+  for (int shift = 0; shift < 2; ++shift)
+  {
+    const ShiftResult shifted = RotateLeft(distanceLow, false);
+    distanceLow = shifted.value;
+    distanceHigh = RotateLeft(distanceHigh, shifted.carry).value;
+  }
+  best.distance = static_cast<std::uint16_t>((static_cast<std::uint16_t>(distanceHigh) << 8) | distanceLow);
+
+  // 6502: JMP TT24 -- the routine does not return, it continues into the data generator.
+  best.data = GenerateSystemData(best.seeds);
+  return best;
+}
+
 void PrintSystemName(TokenPrinter& _printer, SystemSeeds& _seeds) noexcept
 {
   // 6502: TT53 -- the seeds are saved to QQ19 and put back at the end, because printing a name

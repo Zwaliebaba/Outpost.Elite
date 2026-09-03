@@ -96,6 +96,41 @@ void NextGalaxy(SystemSeeds& _seeds) noexcept;
 [[nodiscard]] SystemData GenerateSystemData(const SystemSeeds& _seeds) noexcept;
 
 /*
+ * 6502: TT111's result -- the system nearest the crosshairs, and how far away it is.
+ *
+ * The routine leaves all of this behind in zero page and in QQ8/QQ9/QQ10, and its callers read
+ * every part of it, so the port hands it back as one thing rather than through five outputs.
+ */
+struct NearestSystem
+{
+  SystemSeeds seeds;              ///< 6502: QQ15, left at the system that was found
+  std::uint8_t index = 0;         ///< 6502: ZZ, its number within the galaxy
+  std::uint8_t x = 0;             ///< 6502: QQ9, the found system's galactic x
+  std::uint8_t y = 0;             ///< 6502: QQ10, and its y
+  std::uint16_t distance = 0;     ///< 6502: QQ8, in tenths of a light year
+  SystemData data;                ///< from the TT24 this routine falls into
+};
+
+/*
+ * 6502: TT111 -- find the system nearest the crosshairs, and how far it is from where you are.
+ *
+ * Two halves that look alike and are not. The SEARCH walks all 256 systems of the galaxy and
+ * measures with half of |dx| plus half of |dy| -- cheap, and good enough to pick a system. The
+ * DISTANCE it then reports is the real one: dx squared plus half-dy squared, square-rooted, times
+ * four. Using the search metric for the answer would put every system in the game at the wrong
+ * range, and the two are four instructions apart in the original.
+ *
+ * The halving of dy in both is the chart's aspect ratio, not an approximation.
+ *
+ * Like several routines before it this one has no RTS: it ends in JMP TT24, so a caller gets the
+ * system's data as well, and the port returns that too rather than pretending the jump is not
+ * there.
+ */
+[[nodiscard]] NearestSystem FindNearestSystem(const SystemSeeds& _galaxy, std::uint8_t _crosshairX,
+                                              std::uint8_t _crosshairY, std::uint8_t _currentX,
+                                              std::uint8_t _currentY) noexcept;
+
+/*
  * 6502: cpl -- print a system's name.
  *
  * Three or four letter-pairs, and which it is depends on bit 6 of the first seed byte. The seeds
