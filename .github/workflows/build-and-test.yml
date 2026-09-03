@@ -1,10 +1,15 @@
 # Build Debug|x64 and run the unit tests.
 #
-# Two jobs, because they need very different things and one of them can run anywhere:
+# Three jobs, because they need very different things and two of them can run anywhere:
 #
 #   repo-checks   the coverage ledger and the determinism guard. No compiler, no assembler,
 #                 seconds to run, and it catches the mistakes that are easiest to make.
-#   windows       the real build and the real suite, which need MSVC and the 6502 oracle.
+#   linux-tests   the same suite, the same oracle, built with g++ through the portable runner
+#                 (Tests/PortableRunner/README.md). Not an authority -- MSVC is -- but it
+#                 finishes in about a minute, so a broken push says so long before the Windows
+#                 job has finished locating Visual Studio.
+#   windows       the real build and the real suite, which need MSVC and the 6502 oracle. This
+#                 is the one that decides.
 #
 # THE ORACLE IS NOT OPTIONAL HERE. A machine without the assembled game skips every oracle test
 # and fails exactly one, OracleIsPresent, by design (ADR-003 section 1, Risk R9) -- so a CI run
@@ -75,6 +80,63 @@ jobs:
 
       - name: Coverage ledger
         run: python tools/inventory.py
+
+  # -------------------------------------------------------------------------------------------
+  # The suite on Linux, through Tests/PortableRunner. Same test files, same oracle, g++ instead
+  # of MSVC -- see that directory's README for what the runner is and, more importantly, what it
+  # is not. It is here for speed and for a second compiler's opinion, and it never overrules the
+  # windows job below.
+  # -------------------------------------------------------------------------------------------
+  linux-tests:
+    name: Suite on Ubuntu (portable runner)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    # Measured: BeebAsm builds in about a minute uncached, the assembly takes seconds, and the
+    # suite is roughly 18s from cold on four cores. The cap is far above that for the same reason
+    # the windows job's is -- a hang should cost one run, not a day of runner time.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The same pinned commit the windows job builds, so the two legs assemble the same game
+      # from the same source. The cache key carries the OS because the artefact is a native
+      # binary and the two jobs must not share one.
+      - name: Cache BeebAsm
+        id: beebasm-cache
+        uses: actions/cache@v4
+        with:
+          path: Tools-ext/beebasm/out
+          key: beebasm-${{ runner.os }}-${{ env.BEEBASM_REF }}
+
+      - name: Build BeebAsm
+        if: steps.beebasm-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/stardot/beebasm.git Tools-ext/beebasm
+          cd Tools-ext/beebasm
+          git checkout "$BEEBASM_REF"
+          mkdir -p out
+          # BeebAsm's CMakeLists exists, but compiling the sources directly is what the windows
+          # job does and it keeps the two legs saying the same thing.
+          g++ -std=c++14 -O2 -o out/beebasm src/*.cpp
+
+      - name: Assemble the reference build
+        run: python tools/labels.py --assemble
+
+      # Deliberately duplicated from the windows job. Running it on both legs is what turns
+      # "the generated tables match the binaries" into "and the two platforms assemble the same
+      # binaries" -- a divergence between GNU and MSVC BeebAsm builds would otherwise only ever
+      # be visible as an unexplained oracle failure.
+      - name: Generated tables still match the binaries
+        run: python tools/extract_tables.py --check
+
+      - name: Build and run the suite
+        run: Tests/PortableRunner/run_tests.sh
 
   windows:
     name: Debug x64 build and tests
