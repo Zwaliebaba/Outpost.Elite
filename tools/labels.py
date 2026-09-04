@@ -54,6 +54,9 @@ ASSEMBLIES = [
     ("data", "versions/c64/1-source-files/main-sources/elite-data.asm"),
 ]
 
+# Where the oracle loads blocks from, and what `Binaries.txt`'s first column is relative to.
+ASSEMBLED = UPSTREAM / "versions" / "c64" / "3-assembled-output"
+
 LABELS_OUT = REFERENCE / "Labels.txt"
 BINARIES_OUT = REFERENCE / "Binaries.txt"
 
@@ -149,7 +152,40 @@ def parse_binaries() -> list[tuple[str, int]]:
     if any(name == "LODATA.bin" for name, _address in found):
         found = [(name, address) for name, address in found if name not in contained]
 
-    return found
+    return found + loaded_at_runtime()
+
+
+# ---- blocks the assembly does not produce ------------------------------------------------------
+#
+# The dashboard bitmap. `wantdials` copies 2,240 bytes from `DSTORE%` into `DLOC%`, and nothing
+# the modern build assembles goes anywhere near `DSTORE%`: the image ships inside `COMLOD.bin` and
+# the C64's own loader puts it there at run time. Without this row the oracle's memory at
+# `DSTORE%` is zero, and a comparison of `wantdials` copies blanks on both sides, agrees, and
+# proves nothing (plan §6.78).
+#
+# `DSTORE% = SCBASE + &AF90` with `SCBASE = &4000`, from elite-source.asm under `_GMA_RELEASE`,
+# which is the variant this build is. That it starts at the file's FIRST byte rather than at the
+# `+&18` the original build script loads it to is settled by rendering it: 2,240 is exactly seven
+# character rows of forty cells, and decoding those bytes from offset zero produces the dashboard
+# with its labels aligned to the cell grid.
+RUNTIME_BLOCKS = [
+    ("../1-source-files/images/C.CODIALS.bin", 0x4000 + 0xAF90, 2248),
+]
+
+
+def loaded_at_runtime() -> list[tuple[str, int]]:
+    """Blocks the game's loader places, which no assembly step saves."""
+    rows: list[tuple[str, int]] = []
+    for name, address, expected in RUNTIME_BLOCKS:
+        path = ASSEMBLED / name
+        if not path.is_file():
+            sys.exit(f"error: {path} not found -- the upstream submodule may not be checked out")
+        size = path.stat().st_size
+        if size != expected:
+            sys.exit(f"error: {name} is {size} bytes, expected {expected} -- the load address "
+                     f"in RUNTIME_BLOCKS was derived for the expected size and needs rechecking")
+        rows.append((name, address))
+    return rows
 
 
 def main() -> int:

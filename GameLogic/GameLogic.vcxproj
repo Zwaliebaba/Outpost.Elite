@@ -228,6 +228,7 @@
     <ClCompile Include="Dashboard.cpp" />
     <ClCompile Include="FlightLoop.cpp" />
     <ClCompile Include="Controls.cpp" />
+    <ClCompile Include="DashboardImage.cpp" />
     <ClCompile Include="Lasers.cpp" />
     <ClCompile Include="Messages.cpp" />
     <ClCompile Include="Scanner.cpp" />
