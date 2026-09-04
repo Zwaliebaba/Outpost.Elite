@@ -486,17 +486,29 @@ look like two things are one. A port that has separated them (this one has) must
 they are independent; where the original relies on the overlap, the port has to make the copy
 explicit and say why.
 
-**One decision left open, deliberately.** `XX15` is six bytes to the geometry and four to the line
-drawing, and they are the same six: `X1`, `Y1`, `X2`, `Y2` are `XX15` to `XX15+3`. `LL9` uses it
-both ways within one call — part 8 stores a screen coordinate into `XX15(1 0)`, part 10 loads a
-vertex pair into all six and `LL147` clips them back down to four. So `DrawWorkspace` and the
-geometry vector are one workspace, and the port currently has only the first four bytes of it. The
-choice is between adding two bytes and letting the geometry address `DrawWorkspace` as six, or
-keeping two structures and copying between them at every vertex. The first is what the original
-does; the second is what the port's existing field names make easy, and it puts a copy in the
-hottest loop in the game where a divergence could hide. The recommendation is the first, and the
-cost is that `x1`/`y1`/`x2`/`y2` stop being plain fields — which is a rename across `Lines.cpp`,
-`Charts.cpp` and their suites, and belongs in its own commit before `LL9` rather than inside it.
+**And `XX15`, where the first answer was expensive and wrong.** `XX15` is six bytes to the
+geometry and four to the line drawing, and they are the same six: `X1`, `Y1`, `X2`, `Y2` are
+`XX15` to `XX15+3`. `LL145` is what settles that this is a calling convention and not storage
+reuse — it takes three SIXTEEN-bit coordinates in `XX15(5 0)` and returns four EIGHT-bit ones in
+`X1`, `Y1`, `X2`, `Y2`, overwriting its own arguments as it clips. `XX15+1` is `x1_hi` on the way
+in and `Y1` on the way out. There is no point at which a copy between two structures could be
+made, so keeping `DrawWorkspace` and a separate geometry vector is not an option that survives
+reading the routine.
+
+The first conclusion drawn from that was that `DrawWorkspace` has to become an addressable block,
+`x1`/`y1`/`x2`/`y2` stop being plain fields, and 154 call sites across `Lines.cpp`, `Charts.cpp`,
+`ShipDraw.cpp` and four suites get renamed — a commit of its own before `LL9`. That was wrong, and
+one grep says so: across all twelve parts of `LL9`, all four of `LL145`, and `LL51`, `LL61`,
+`LL62`, `LL118`, `LL120`, `LL123` and `LL129`, **`XX15` is never indexed by a register.** Every
+access is `XX15+n` with a literal `n`. `XX1`, `XX2`, `XX3`, `XX12`, `XX16` and `XX18` are all
+indexed by X or Y and do have to be arrays; `XX15` does not, and neither do `CNT`, `SWAP`, `XX0`,
+`XX13`, `XX17`, `XX19`, `XX20` or `XX4`.
+
+So the change is two more named bytes on `DrawWorkspace` and no rename at all, and it lands with
+`LL51` — the first routine that reads them — rather than in a commit of its own. The general point
+is worth keeping: **whether a 6502 workspace needs to be an array in the port is decided by
+whether a register ever indexes it, and that is one grep rather than a judgement.** It is the same
+question §6.8 asks about a table's SIZE, asked about its SHAPE.
 
 ### 6.36 A test that agreed with the game on every case and exercised one branch
 
