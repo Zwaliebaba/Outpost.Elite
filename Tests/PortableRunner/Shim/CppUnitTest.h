@@ -140,6 +140,31 @@ public:
     }
   }
 
+  /*
+   * The pointer pair, which MSVC's CppUnitTest has and this shim did not.
+   *
+   * Templated on the pointee for the same reason MSVC templates them: `IsNull(p)` has to take any
+   * pointer type without the caller casting, and a `const void*` parameter would accept an
+   * integer zero as well, which is a different assertion.
+   */
+  template <typename T>
+  static void IsNull(const T* _actual, const wchar_t* _message = nullptr)
+  {
+    if (_actual != nullptr)
+    {
+      throw ShimFailure("IsNull: got a pointer -- " + ShimNarrow(_message));
+    }
+  }
+
+  template <typename T>
+  static void IsNotNull(const T* _actual, const wchar_t* _message = nullptr)
+  {
+    if (_actual == nullptr)
+    {
+      throw ShimFailure("IsNotNull: got nullptr -- " + ShimNarrow(_message));
+    }
+  }
+
   static void IsTrue(bool _condition, const wchar_t* _message = nullptr)
   {
     if (!_condition)
