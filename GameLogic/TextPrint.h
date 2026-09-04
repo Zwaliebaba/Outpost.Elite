@@ -46,6 +46,22 @@ struct TextState
 };
 
 /*
+ * 6502: DLY, de, MCH and messXC -- what an in-flight message needs between frames.
+ *
+ * `DLY` counts it down, `MCH` is the token on screen so it can be printed AGAIN to erase it, `de`
+ * is one bit saying whether " DESTROYED" is appended, and `messXC` is the column the last message
+ * started at. The message logic is `Messages.h`'s; the STRUCT is here because `CLYNS` clears the
+ * first two, and a text routine that clears message state has to be able to name it (§6.67).
+ */
+struct MessageState
+{
+  std::uint8_t delay = 0;  ///< 6502: DLY
+  std::uint8_t append = 0; ///< 6502: de
+  std::uint8_t token = 0;  ///< 6502: MCH
+  std::uint8_t column = 0; ///< 6502: messXC
+};
+
+/*
  * The two things CHPR does that this slice cannot finish.
  *
  * Character 7 rings the bell, which is a sound event and belongs to phase 5; and a character
@@ -145,10 +161,16 @@ void SetUpTextScreen(TokenPrinter& _printer, TextState& _text, ExtendedTextState
  *
  * DTW2 goes to 255 here and to 128 in TTX66 above, which is not a typo in either: 255 tells the
  * extended printer that no sentence is in progress, and the message CLYNS is clearing for starts
- * one. DLY and `de` are the message-delay counters and are flight state, so they are not here.
+ * one.
+ *
+ * THIS USED TO BE `CLYNS2` UNDER `CLYNS`'S NAME. `CLYNS` opens `LDA #0 / STA DLY / STA de` and
+ * then falls into `CLYNS2`; the port implemented the second and called it the first, because when
+ * it was written the message counters had nowhere to live. Nothing in the library calls `CLYNS2`
+ * -- it is a label with no callers -- so every real caller wanted the two stores, and slice 3d-c
+ * put them back (§6.67).
  */
 void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text,
-                      ExtendedTextState& _extended) noexcept;
+                      ExtendedTextState& _extended, MessageState& _message) noexcept;
 
 /// 6502: LDA #21 / STA YC -- the row CLYNS leaves the cursor on, which is the top of the three it
 /// cleared and where every in-flight message and every "PRESS SPACE" prompt begins.

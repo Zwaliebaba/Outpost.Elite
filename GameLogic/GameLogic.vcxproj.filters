@@ -66,6 +66,9 @@
     <ClInclude Include="Scanner.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="Messages.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="Dashboard.h">
       <Filter>Canvas</Filter>
     </ClInclude>
@@ -214,6 +217,9 @@
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="Scanner.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Messages.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="Dashboard.cpp">

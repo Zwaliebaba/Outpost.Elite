@@ -240,7 +240,14 @@ public:
     const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("CLYNS"));
     Assert::IsTrue(run.completed, L"CLYNS returned");
 
-    Elite::ClearMessageRows(canvas, printer, text, characters.state);
+    // 6502: CLYNS clears the message counters too, which the port's copy did not until 3d-c
+    // gave them a home (§6.67).
+    Elite::MessageState message;
+    message.delay = 0x5Au;
+    message.append = 0x5Au;
+    Elite::ClearMessageRows(canvas, printer, text, characters.state, message);
+    Assert::AreEqual<std::uint8_t>(0, message.delay, L"CLYNS clears DLY");
+    Assert::AreEqual<std::uint8_t>(0, message.append, L"and de");
 
     CompareTextState(FromOracle(cpu, oracle), FromPort(printer, text, characters.state), L"CLYNS");
 

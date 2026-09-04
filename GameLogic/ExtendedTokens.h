@@ -33,6 +33,18 @@ struct ExtendedTextState
 };
 
 /*
+ * 6502: MT15 -- `LDA #0 / STA DTW4 / ASL A / STA DTW5`. Stop justifying and throw the buffered
+ * line away.
+ *
+ * It is a function as well as a control code because `MESS` calls it as a SUBROUTINE, in the
+ * middle of using the justifier as a measuring device: justify with bit 6 set so nothing flushes,
+ * print the token to find its width, then call this to turn the buffer off before printing it for
+ * real. `MT14` shares its tail through an `EQUB &2C` -- that one in the usual place, unlike the
+ * one in `MESS` (§6.66).
+ */
+void StopJustifying(ExtendedTextState& _state) noexcept;
+
+/*
  * 6502: DASC, which the game also knows as TT26.
  *
  * Every printed character in Elite passes through here, from both text systems at once: the
