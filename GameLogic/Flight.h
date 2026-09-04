@@ -19,7 +19,7 @@
 namespace Elite
 {
 
-/*
+  /*
  * 6502: ZERO -- `LDX #(de-FRIN)` and a zero-fill down to `FRIN`.
  *
  * FIFTY-NINE BYTES BY ADDRESS, and the port has them in seven structures: the ship slots and
@@ -31,9 +31,9 @@ namespace Elite
  * range, and what makes it one range is the layout: a routine that cleared "the bubble" and "the
  * flight status" separately would agree with it today and stop agreeing the moment either grew.
  */
-void ClearBubbleState(FlightLoop& _loop) noexcept;
+  void ClearBubbleState(FlightLoop& _loop) noexcept;
 
-/*
+  /*
  * 6502: RES2 -- the ship, the heaps, the dashboard and the stardust, and then straight into ZINF.
  *
  * IT RE-CENTRES THE PITCH AND NOT THE ROLL. `STA JSTY` is there and `STA JSTX` is not, and
@@ -41,9 +41,9 @@ void ClearBubbleState(FlightLoop& _loop) noexcept;
  * it while the pitch is put back to centre. The ship also starts with `ALPHA`, `ALP1` and `DELTA`
  * all at 3, from one `LDA #3`: a slow roll and a slow drift, which is what a launch looks like.
  */
-void ResetShipAndBubble(FlightLoop& _loop) noexcept;
+  void ResetShipAndBubble(FlightLoop& _loop) noexcept;
 
-/*
+  /*
  * 6502: RESET -- the universe, and then `RES2`, which it falls into.
  *
  * THE 255 THAT MEANS "DOCKED" IS THE SAME 255 THAT FILLS THE SHIELDS. `LDX #6` counts a loop down
@@ -56,12 +56,12 @@ void ResetShipAndBubble(FlightLoop& _loop) noexcept;
  * `YC` instead of the last three, which is the BBC's layout -- the third time a documented range
  * has turned out to be another version's (§6.38, §6.45).
  */
-void ResetGame(FlightLoop& _loop, std::uint8_t& _docked) noexcept;
+  void ResetGame(FlightLoop& _loop, std::uint8_t& _docked) noexcept;
 
-/// 6502: LDA #12 / STA DELTA -- how fast you leave the slot, and it is four times `RES2`'s 3.
-inline constexpr std::uint8_t LAUNCH_SPEED = 12;
+  /// 6502: LDA #12 / STA DELTA -- how fast you leave the slot, and it is four times `RES2`'s 3.
+  inline constexpr std::uint8_t LAUNCH_SPEED = 12;
 
-/*
+  /*
  * 6502: TT110 -- leave the station, or refuse to.
  *
  * `LDX QQ12 / BEQ NLUNCH` is the refusal: pressing "1" in flight falls straight through to the
@@ -73,8 +73,7 @@ inline constexpr std::uint8_t LAUNCH_SPEED = 12;
  * contraband fine is ORed into `FIST` on the way out, so leaving is what levies it rather than
  * being scanned.
  */
-void Launch(FlightLoop& _loop, StartUpEffects& _start, SpawnEffects& _spawn,
-            std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
-            std::uint8_t _techLevel, SystemSeeds& _selected) noexcept;
+  void Launch(FlightLoop& _loop, StartUpEffects& _start, SpawnEffects& _spawn, std::uint8_t& _docked, std::uint8_t _crosshairX,
+              std::uint8_t _crosshairY, std::uint8_t _techLevel, SystemSeeds& _selected) noexcept;
 
 } // namespace Elite
