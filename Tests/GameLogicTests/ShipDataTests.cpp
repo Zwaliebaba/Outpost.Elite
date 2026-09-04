@@ -303,6 +303,152 @@ public:
   }
 };
 
+/*
+ * 6502: NWSHP, against the shipped routine.
+ *
+ * The interesting half is the refusal. Elite will not create a ship whose line heap would run
+ * down into the slot block it is about to write, and a port that skipped that check would create
+ * ships the game refuses -- which nothing about a working game would reveal until the bubble was
+ * full of Anacondas.
+ */
+TEST_CLASS(CreatingAShip)
+{
+public:
+  TEST_METHOD(TheSlotAndTheRefusalsMatchNWSHP)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t frin = oracle.Label("FRIN");
+    const std::uint16_t many = oracle.Label("MANY");
+    const std::uint16_t junk = oracle.Label("JUNK");
+    const std::uint16_t slsp = oracle.Label("SLSP");
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t nwshp = oracle.Label("NWSHP");
+
+    struct Case
+    {
+      const char* what;
+      std::uint8_t type;
+      std::uint8_t occupied;   ///< how many slots are already full
+      std::uint16_t heapBottom; ///< 6502: SLSP on entry
+    };
+
+    const std::vector<Case> CASES = {
+      { "a Cobra into an empty bubble", 11, 0, Elite::SHIP_HEAP_TOP },
+      { "the space station, which keeps no heap", Elite::SHIP_TYPE_STATION, 0, Elite::SHIP_HEAP_TOP },
+      { "a missile", 1, 0, Elite::SHIP_HEAP_TOP },
+      { "a canister, which is junk", 5, 0, Elite::SHIP_HEAP_TOP },
+      { "an escape pod, the first junk type", 3, 0, Elite::SHIP_HEAP_TOP },
+      { "a rock hermit, junk by name only", Elite::SHIP_TYPE_HERMIT, 0, Elite::SHIP_HEAP_TOP },
+      { "a shuttle, one below the junk limit", 9, 0, Elite::SHIP_HEAP_TOP },
+      { "type 11, one past it", 11, 0, Elite::SHIP_HEAP_TOP },
+      { "the planet", 128, 0, Elite::SHIP_HEAP_TOP },
+      { "the sun", 129, 0, Elite::SHIP_HEAP_TOP },
+      { "into a bubble with three ships", 20, 3, Elite::SHIP_HEAP_TOP },
+      { "into the LAST free slot", 20, Elite::MAX_SHIPS - 1u, Elite::SHIP_HEAP_TOP },
+      { "into a FULL bubble", 20, Elite::MAX_SHIPS, Elite::SHIP_HEAP_TOP },
+      // The heap refusals: SLSP walked down until it collides with slot 0's block.
+      { "with the heap nearly spent", 11, 0, 0xF980 },
+      { "with the heap one block clear", 11, 0, 0xF960 },
+      { "with the heap already inside the blocks", 11, 0, 0xF910 },
+      { "with the heap spent entirely", 11, 0, 0xF900 },
+    };
+
+    std::uint32_t admitted = 0;
+    std::uint32_t refused = 0;
+
+    for (const Case& item : CASES)
+    {
+      const std::wstring where = Widen(std::string("NWSHP: ") + item.what);
+
+      Cpu6502 cpu = oracle.Fresh();
+      Elite::Bubble bubble;
+
+      // The same starting bubble on both sides: `occupied` slots holding a Viper.
+      for (std::uint8_t filled = 0; filled < item.occupied; ++filled)
+      {
+        cpu.memory[static_cast<std::uint16_t>(frin + filled)] = 16;
+        bubble.slots[filled] = 16;
+      }
+
+      cpu.memory[slsp] = static_cast<std::uint8_t>(item.heapBottom & 0xFFu);
+      cpu.memory[static_cast<std::uint16_t>(slsp + 1)] = static_cast<std::uint8_t>(item.heapBottom >> 8);
+      bubble.heapBottom = item.heapBottom;
+
+      // A recognisable INWK on both sides, so the copy into the slot is checked rather than
+      // assumed -- a routine that wrote nothing would agree with one that wrote zeroes.
+      Elite::ShipBlock work;
+      for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
+      {
+        const std::uint8_t value = static_cast<std::uint8_t>(0xA0u + offset);
+        cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = value;
+        work[offset] = value;
+      }
+
+      cpu.a = item.type;
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(nwshp);
+      Assert::IsTrue(run.completed, (where + L": NWSHP returned").c_str());
+
+      const Elite::NewShip created = Elite::AddShip(bubble, work, item.type);
+
+      // The carry is the answer, and both refusals clear it.
+      Assert::AreEqual(cpu.c, created.created, (where + L": whether the ship was created").c_str());
+      (created.created ? admitted : refused) += 1u;
+
+      // Every slot, so a routine that picked the wrong one is caught rather than averaged away.
+      for (std::uint8_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(frin + slot)], bubble.slots[slot],
+                         (where + L": FRIN slot " + std::to_wstring(slot)).c_str());
+      }
+
+      Assert::AreEqual(cpu.memory[junk], bubble.junk, (where + L": JUNK").c_str());
+      for (std::uint8_t type = 0; type <= Elite::SHIP_TYPE_COUNT; ++type)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(many + type)], bubble.counts[type],
+                         (where + L": MANY for type " + std::to_wstring(type)).c_str());
+      }
+
+      const std::uint16_t heap = static_cast<std::uint16_t>(
+        cpu.memory[slsp] | (cpu.memory[static_cast<std::uint16_t>(slsp + 1)] << 8));
+      Assert::AreEqual(heap, bubble.heapBottom, (where + L": SLSP").c_str());
+
+      // INWK as the routine left it, including NEWB at offset 36 and the heap pointer at 33/34.
+      for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work[offset],
+                         (where + L": INWK+" + std::to_wstring(offset)).c_str());
+      }
+
+      // And the block that was written into the slot, when one was.
+      if (created.created)
+      {
+        const std::uint16_t block = Elite::SlotAddress(created.slot);
+        for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(block + offset)],
+                           bubble.blocks[created.slot][offset],
+                           (where + L": the slot's block at +" + std::to_wstring(offset)).c_str());
+        }
+      }
+    }
+
+    /*
+     * BOTH ANSWERS HAPPENED, which is what stops this being a test that cannot fail. A port that
+     * always created the ship and an oracle comparison that never exercised a refusal would agree
+     * on every assertion above; the counts are what say the refusal path was reached at all.
+     */
+    Assert::IsTrue(admitted > 0u, L"some of the cases created a ship");
+    Assert::IsTrue(refused >= 3u, L"and at least three were refused -- a full bubble and the heap");
+    Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(CASES.size()), admitted + refused,
+                                    L"every case was one or the other");
+  }
+};
+
 TEST_CLASS(TheMotionArithmetic)
 {
 public:
