@@ -1,8 +1,16 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Canvas">
+      <UniqueIdentifier>{8f4a2c61-5d37-4e29-a8b6-1c9e30fd7a45}</UniqueIdentifier>
+      <Extensions>h;cpp</Extensions>
+    </Filter>
     <Filter Include="Kernel">
       <UniqueIdentifier>{3f1a6c20-9d84-4b17-8e52-6c0b4a7d1e33}</UniqueIdentifier>
+      <Extensions>h;cpp</Extensions>
+    </Filter>
+    <Filter Include="Universe">
+      <UniqueIdentifier>{c94f1a27-3e60-4b85-9d12-7a5e28cb6403}</UniqueIdentifier>
       <Extensions>h;cpp</Extensions>
     </Filter>
     <Filter Include="Text">
@@ -25,6 +33,54 @@
     <ClInclude Include="LookupTables.h">
       <Filter>Kernel</Filter>
     </ClInclude>
+    <ClInclude Include="Canvas.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="TextPrint.h">
+      <Filter>Text</Filter>
+    </ClInclude>
+    <ClInclude Include="Universe.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Market.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="StateTokens.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="MarketScreen.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Equipment.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="NameEntry.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="SaveGame.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="StatusScreen.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="SystemScreen.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="DockedKeys.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="StartUp.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Docking.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Charts.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Commander.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Rng.h">
       <Filter>Kernel</Filter>
     </ClInclude>
@@ -42,6 +98,69 @@
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="Arith.cpp">
       <Filter>Kernel</Filter>
+    </ClCompile>
+    <ClCompile Include="Canvas.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Lines.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="TextPrint.cpp">
+      <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="Universe.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Market.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="StateTokens.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketScreen.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Equipment.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="NameEntry.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="SaveGame.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="StatusScreen.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="SystemScreen.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedKeys.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="StartUp.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Docking.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Charts.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Commander.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="CommanderTable.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketTable.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="EquipmentTable.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="KeyTable.cpp">
+      <Filter>Generated Data</Filter>
     </ClCompile>
     <ClCompile Include="Rng.cpp">
       <Filter>Kernel</Filter>
@@ -65,6 +184,12 @@
       <Filter>Text</Filter>
     </ClCompile>
     <ClCompile Include="ExtendedTokenTables.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenTables.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="Font.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
   </ItemGroup>

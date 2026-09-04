@@ -16,7 +16,8 @@ repository root:
     python tools/labels.py --assemble      # run BeebAsm first, then parse
 
 BeebAsm is not vendored (it is GPL, and it is a tool rather than a library).  --assemble looks
-for it at Tools-ext/beebasm/out/beebasm.exe; build it there from github.com/stardot/beebasm.
+for it at Tools-ext/beebasm/out/, under either the MSVC name (beebasm.exe) or the one every
+other toolchain produces (beebasm); build it there from github.com/stardot/beebasm.
 """
 
 from __future__ import annotations
@@ -30,7 +31,20 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 UPSTREAM = REPO / "Upstream" / "elite-source-code-library"
 REFERENCE = REPO / "Design" / "Reference"
-BEEBASM = REPO / "Tools-ext" / "beebasm" / "out" / "beebasm.exe"
+# BeebAsm's own build produces `beebasm.exe` under MSVC and `beebasm` everywhere else, and both
+# are wanted: the Windows CI job builds it with cl, the Linux one with g++, and they assemble the
+# same game from the same pinned commit. Neither name is preferred -- the first that exists wins.
+BEEBASM_CANDIDATES = [
+    REPO / "Tools-ext" / "beebasm" / "out" / "beebasm.exe",
+    REPO / "Tools-ext" / "beebasm" / "out" / "beebasm",
+]
+
+
+def find_beebasm() -> Path | None:
+    for candidate in BEEBASM_CANDIDATES:
+        if candidate.is_file():
+            return candidate
+    return None
 
 # Two assemblies, because the game and its data are built separately and the oracle needs both:
 # the code blocks hold the routines and the logarithm tables, while the data build holds the
@@ -61,8 +75,11 @@ def compile_log_path(_which: str) -> Path:
 
 
 def assemble() -> int:
-    if not BEEBASM.is_file():
-        print(f"error: BeebAsm not found at {BEEBASM}")
+    beebasm = find_beebasm()
+    if beebasm is None:
+        print("error: BeebAsm not found. Looked for:")
+        for candidate in BEEBASM_CANDIDATES:
+            print(f"       {candidate}")
         print("       Clone github.com/stardot/beebasm and build it there, then retry.")
         return 1
     if not UPSTREAM.is_dir():
@@ -72,7 +89,7 @@ def assemble() -> int:
     REFERENCE.mkdir(parents=True, exist_ok=True)
 
     for which, source in ASSEMBLIES:
-        command = [str(BEEBASM), "-i", source, "-v", "-d", "-labels", str(raw_labels_path(which))]
+        command = [str(beebasm), "-i", source, "-v", "-d", "-labels", str(raw_labels_path(which))]
         print(f"assembling {which}: {source}")
         completed = subprocess.run(command, cwd=UPSTREAM, capture_output=True, text=True)
         compile_log_path(which).write_text(completed.stdout + completed.stderr, encoding="utf-8")

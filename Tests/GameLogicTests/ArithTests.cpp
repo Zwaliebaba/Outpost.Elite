@@ -909,6 +909,165 @@ public:
       }
     }
   }
+
+  /// A = K * sin(A) / 256. Exhaustive: A is a byte and K is a byte, so 65,536 pairs.
+  TEST_METHOD(SineMultiplyMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t routine = oracle.Label("FMLTU2");
+    const std::uint16_t k = oracle.Label("K");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      for (std::uint32_t kValue = 0; kValue < 256; ++kValue)
+      {
+        cpu.memory[k] = static_cast<std::uint8_t>(kValue);
+        cpu.a = static_cast<std::uint8_t>(a);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"FMLTU2 should return");
+
+        MathWorkspace work;
+        work.k[0] = static_cast<std::uint8_t>(kValue);
+        const std::uint8_t result = Elite::MultiplyKBySine(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"product", a, kValue).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("Q")], work.q, Context(L"Q", a, kValue).c_str());
+      }
+    }
+  }
+
+  /*
+   * DVID4 over every input pair: the quotient it leaves in P, the R it leaves through the code
+   * it falls into, and the value in A at the return.
+   *
+   * Q = 0 is included deliberately. The routine has no guard for it and neither does the port,
+   * so both must agree on the nonsense they produce -- a port that "helpfully" returned early
+   * there would diverge from the game on an input its callers are responsible for avoiding.
+   */
+  TEST_METHOD(RestoringDivideMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("DVID4");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t a = 0; a < 256; ++a)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = static_cast<std::uint8_t>(a);
+        cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"DVID4 should return");
+
+        MathWorkspace work;
+        work.q = static_cast<std::uint8_t>(q);
+        const std::uint8_t result = Elite::DivideAndScale(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"returned value", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"quotient", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.r], work.r, Context(L"R", a, q).c_str());
+      }
+    }
+  }
+
+  /*
+   * 6502: LL5 -- the square root, over all 65,536 radicands.
+   *
+   * Also checked against real arithmetic, which earns its line here: the routine truncates
+   * rather than rounds, so agreeing with the game AND with the integer square root pins both
+   * that the port is right and that the original does what it looks like.
+   */
+  TEST_METHOD(SquareRootMatchesExhaustively)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("LL5");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    for (std::uint32_t r = 0; r < 256; ++r)
+    {
+      for (std::uint32_t q = 0; q < 256; ++q)
+      {
+        cpu.memory[zp.r] = static_cast<std::uint8_t>(r);
+        cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
+        cpu.a = cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        cpu.c = false;
+
+        const auto run = cpu.CallSubroutine(routine, 5'000);
+        Assert::IsTrue(run.completed, L"LL5 should return");
+
+        MathWorkspace work;
+        work.r = static_cast<std::uint8_t>(r);
+        work.q = static_cast<std::uint8_t>(q);
+        Elite::SquareRoot(work);
+
+        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.q], work.q, Context(L"root", r, q).c_str());
+
+        // The radicand is (R Q), so the answer should be its integer square root.
+        const std::uint32_t radicand = (r << 8) | q;
+        std::uint32_t root = 0;
+        while ((root + 1) * (root + 1) <= radicand)
+        {
+          ++root;
+        }
+        Assert::AreEqual<std::uint32_t>(root, work.q, Context(L"the real square root", r, q).c_str());
+      }
+    }
+  }
+
+  /*
+   * The division half really divides, and what it is dividing is worth stating.
+   *
+   * DVID4 is an 8.8 fixed-point divide: P comes out as the whole part of A / Q and R as the
+   * fraction, scaled to a byte. The ASL A / STA P at the top is what makes that work -- it puts
+   * A's top bit into the remainder before the first step and leaves the rest of A in P, where
+   * each ROL P hands over the next bit while shifting a quotient bit in behind it. One register
+   * being both the dividend and the quotient is the trick the whole routine turns on.
+   *
+   * An oracle comparison alone proves the port agrees with the game; this also confirms they are
+   * both right. Only P is checked -- R is a logarithm approximation of the fraction, not an
+   * exact one, and comparing it to real arithmetic would fail on rounding rather than on error.
+   */
+  TEST_METHOD(TheRestoringDivideReallyDivides)
+  {
+    for (std::uint32_t q = 1; q < 256; ++q)
+    {
+      for (std::uint32_t a = 0; a < 256; ++a)
+      {
+        MathWorkspace work;
+        work.q = static_cast<std::uint8_t>(q);
+        (void)Elite::DivideAndScale(work, static_cast<std::uint8_t>(a));
+
+        Assert::AreEqual<std::uint32_t>(a / q, work.p, Context(L"whole part", a, q).c_str());
+      }
+    }
+  }
 };
 
 } // namespace GameLogicTests

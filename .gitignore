@@ -380,13 +380,19 @@ captures/
 *.replay
 
 # ---------------------------------------------------------------------------
-# Vendored upstream Elite source (Design/ADR-001 section 5).
+# Upstream Elite source, referenced as a submodule (Design/ADR-001 section 5).
 #
-# The tree itself IS committed, deliberately, per the owner's ruling to vendor
-# rather than reference a sibling checkout. What must never be committed is the
-# build output: the assembled game binaries and the disk images are derived
-# from content we do not own, and an oracle run needs them on the machine, not
-# in the history. Regenerate them with BeebAsm; do not push them.
+# CORRECTED 2026-09-03: this block used to say "the tree itself IS committed".
+# It never was. Upstream/elite-source-code-library is a gitlink -- a pinned
+# commit in markmoxon/elite-source-code-library, restored with
+# "git submodule update --init". Nothing under it is in this history, so the
+# rules below no longer keep anything out of the repository; they are kept
+# because they still document what an oracle run produces on the machine and
+# must not be pushed if the posture ever changes to a real vendored copy.
+#
+# The build output is the assembled game binaries and the disk images. They are
+# derived from content we do not own, and an oracle run needs them on disk, not
+# in a history. Regenerate them with BeebAsm; do not push them.
 Upstream/**/3-assembled-output/*.bin
 Upstream/**/3-assembled-output/*.txt
 Upstream/**/5-compiled-game-disks/
@@ -412,3 +418,7 @@ Design/Reference/Labels.txt
 Design/Reference/Binaries.txt
 Design/Reference/labels-*.txt
 Design/Reference/compile-*.txt
+
+# The executable's NuGet packages, restored by the build (Outpost/packages.config).
+packages/
+nuget.exe

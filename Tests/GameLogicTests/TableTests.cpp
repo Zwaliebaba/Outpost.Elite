@@ -74,6 +74,23 @@ void CompareAgainstImage(const char* _label, std::span<const std::uint8_t> _gene
 TEST_CLASS(GeneratedTablesMatchTheGame)
 {
 public:
+  /*
+   * 6502: TRANTABLE -- the keyboard's matrix position to a character.
+   *
+   * Extracted rather than written out, because the constants the port compares against are the
+   * other end of this table: `f8` is internal key 37 and `TRANTABLE[37]` is `'8'`. A hand-typed
+   * copy that agreed with the source's comments and not with its bytes would pass every test in
+   * the suite except this one.
+   */
+  TEST_METHOD(TheKeyTranslationTableMatches)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    CompareAgainstImage("TRANTABLE", Elite::KEY_TRANSLATION);
+  }
+
   TEST_METHOD(LogarithmTablesMatch)
   {
     if (OracleMissing())
@@ -99,6 +116,25 @@ public:
   /// A cheap sanity check that does not consult the oracle at all: the sine table should climb
   /// to its peak and come back down. If the extractor ever grabbed the wrong address range,
   /// this says so in a way that reads as an obvious wrongness rather than a byte mismatch.
+  TEST_METHOD(ScreenTablesMatch)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    CompareAgainstImage("TWOS", Elite::PIXEL_MASK_TABLE);
+    CompareAgainstImage("TWOS2", Elite::DASH_MASK_TABLE);
+    CompareAgainstImage("CTWOS2", Elite::MULTICOLOUR_MASK_TABLE);
+    CompareAgainstImage("DTWOS", Elite::DASHBOARD_MASK_TABLE);
+    CompareAgainstImage("TWFR", Elite::LINE_RIGHT_MASK_TABLE);
+    CompareAgainstImage("TWFL", Elite::LINE_LEFT_MASK_TABLE);
+    CompareAgainstImage("ylookupl", Elite::ROW_ADDRESS_LOW);
+    CompareAgainstImage("ylookuph", Elite::ROW_ADDRESS_HIGH);
+    CompareAgainstImage("celllookl", Elite::CELL_ADDRESS_LOW);
+    CompareAgainstImage("celllookh", Elite::CELL_ADDRESS_HIGH);
+    CompareAgainstImage("FONT", Elite::FONT_DATA);
+  }
+
   TEST_METHOD(TheSineTableLooksLikeASineCurve)
   {
     Assert::AreEqual<std::uint32_t>(0, Elite::SINE_TABLE[0], L"a quarter turn starts at zero");

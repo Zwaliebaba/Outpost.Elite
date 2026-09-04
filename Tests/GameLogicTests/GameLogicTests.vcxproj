@@ -81,7 +81,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <UseFullPaths>true</UseFullPaths>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(MSBuildThisFileDirectory)..\..\GameLogic;$(MSBuildThisFileDirectory)..\..\NeuronCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(MSBuildThisFileDirectory)..\..\GameLogic;$(MSBuildThisFileDirectory)..\..\NeuronCore;$(MSBuildThisFileDirectory)..\..\Outpost;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -104,6 +104,7 @@
   <ItemGroup>
     <ClInclude Include="Cpu6502.h" />
     <ClInclude Include="OracleImage.h" />
+    <ClInclude Include="GoldenCanvas.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
@@ -122,6 +123,43 @@
     <ClCompile Include="TableTests.cpp" />
     <ClCompile Include="ExtendedTokenTests.cpp" />
     <ClCompile Include="TokenTests.cpp" />
+    <ClCompile Include="CanvasSpikeTests.cpp" />
+    <ClCompile Include="CanvasTests.cpp" />
+    <ClCompile Include="TextPrintTests.cpp" />
+    <ClCompile Include="GoldenCanvas.cpp" />
+    <ClCompile Include="GoldenTests.cpp" />
+    <ClCompile Include="NumberTests.cpp" />
+    <ClCompile Include="UniverseTests.cpp" />
+    <ClCompile Include="MarketTests.cpp" />
+    <ClCompile Include="MarketScreenTests.cpp" />
+    <ClCompile Include="StateTokenTests.cpp" />
+    <ClCompile Include="NameEntryTests.cpp" />
+    <ClCompile Include="SaveGameTests.cpp" />
+    <ClCompile Include="SystemScreenTests.cpp" />
+    <ClCompile Include="SaveStoreTests.cpp" />
+    <ClCompile Include="DockedKeyTests.cpp" />
+    <ClCompile Include="StartUpTests.cpp" />
+    <ClCompile Include="DockingTests.cpp" />
+    <ClCompile Include="DockedSessionTests.cpp" />
+    <ClCompile Include="ShellTests.cpp" />
+    <!-- The parts of the executable that are decisions rather than API calls, compiled into the
+         suite so they are covered rather than only shipped: the commander store, the palette and
+         viewport arithmetic, and the key map. None is in this directory, so none uses this
+         project's precompiled header. Window.cpp, CanvasPresenter.cpp and Shell.cpp are
+         deliberately absent, because they need a window and a GPU; the Outpost build on the
+         Windows leg of CI is what compiles those. -->
+    <ClCompile Include="..\..\Outpost\SaveStore.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\Presentation.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\KeyMap.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="ChartTests.cpp" />
+    <ClCompile Include="CommanderTests.cpp" />
+    <ClCompile Include="CycleTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\GameLogic\GameLogic.vcxproj">

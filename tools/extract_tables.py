@@ -58,6 +58,48 @@ TABLES = [
     Table("EXTENDED_PAIR_TABLE", "TKN2", 82, "ExtendedTokenTables.cpp", "letter pairs for the extended tokens"),
     Table("SYSTEM_TOKEN_TABLE", "RUTOK", 625, "ExtendedTokenTables.cpp", "per-system description overrides"),
     Table("VARIANT_BASE_TABLE", "MTIN", 38, "ExtendedTokenTables.cpp", "the first of each token's random variants"),
+    # ---- slice 1d: the screen. Lengths come from what indexes each table, per section 6.8.
+    # TWOS, TWOS2, TWFL and TWFR are all read with an index masked to AND 7, so eight entries.
+    Table("PIXEL_MASK_TABLE", "TWOS", 8, "ScreenTables.cpp", "one pixel of a line, by x within the byte"),
+    Table("DASH_MASK_TABLE", "TWOS2", 8, "ScreenTables.cpp", "the mark PIXEL plots, by x within the byte"),
+    # CTWOS2 is read as CTWOS2,X and as CTWOS2+2,X with X masked to AND 7, so it is reachable to
+    # offset 9 -- the two extra rows its callers rely on, not padding.
+    Table("MULTICOLOUR_MASK_TABLE", "CTWOS2", 10, "ScreenTables.cpp", "multicolour-aligned pixel masks, two entries per pixel"),
+    # Four entries and no C64 routine indexes it in this build; extracted because the ledger
+    # names it and it is four bytes, not because anything reads it yet.
+    Table("DASHBOARD_MASK_TABLE", "DTWOS", 4, "ScreenTables.cpp", "one multicolour pixel, by pixel number"),
+    Table("LINE_RIGHT_MASK_TABLE", "TWFR", 8, "ScreenTables.cpp", "a horizontal line's first byte, filled from x rightwards"),
+    Table("LINE_LEFT_MASK_TABLE", "TWFL", 8, "ScreenTables.cpp", "a horizontal line's last byte, filled leftwards to x"),
+    # Indexed by a screen y and a character row, so 256 and 25.
+    Table("ROW_ADDRESS_LOW", "ylookupl", 256, "ScreenTables.cpp", "low byte of the bitmap address of screen row y"),
+    Table("ROW_ADDRESS_HIGH", "ylookuph", 256, "ScreenTables.cpp", "high byte of the same"),
+    Table("CELL_ADDRESS_LOW", "celllookl", 25, "ScreenTables.cpp", "low byte of the colour-cell address of character row"),
+    Table("CELL_ADDRESS_HIGH", "celllookh", 25, "ScreenTables.cpp", "high byte of the same"),
+    # 96 characters of 8 rows, from C.FONT.bin.
+    Table("FONT_DATA", "FONT", 768, "Font.cpp", "eight bytes a character, from space upwards"),
+    # ---- slice 2d: the commander. 98 bytes because that is what JAMESON copies -- LDY #&61 and
+    # count down -- rather than the 85 the name plus the data block come to. The thirteen past
+    # the block are copied too, so they are extracted too.
+    Table("DEFAULT_COMMANDER", "NA2%", 98, "CommanderTable.cpp", "the factory commander: eight bytes of name, then the block"),
+    # Four bytes, read as TENS,X with X counting 3 down to 0. The fifth and most significant byte
+    # is not in the table at all -- BPRNT subtracts it as an immediate 0x17 -- so the constant is
+    # 0x17_4876E800, which is ten to the eleventh.
+    Table("TEN_TO_THE_ELEVENTH", "TENS", 4, "ScreenTables.cpp", "the low four bytes of 10^11, for BPRNT"),
+    # ---- slice 2c: the market. Four bytes an item -- base price, economy gradient, base
+    # quantity, mask -- and seventeen items, because the market screen loops QQ29 to 17. GVL
+    # only fills quantities for the first sixteen, which is why Alien Items behave differently.
+    Table("MARKET_TABLE", "QQ23", 68, "MarketTable.cpp", "base price, gradient, quantity and mask per item"),
+    # ---- slice 2c: the equipment shop. Two bytes an item, low byte first, in tenths of a credit
+    # -- and FOURTEEN items rather than twelve, because the C64 build sells the military and
+    # mining lasers the cassette version does not. Entry 0 is a placeholder: EQSHP computes the
+    # fuel price from how empty the tank is and writes it over PRXS before reading the table.
+    Table("EQUIPMENT_PRICES", "PRXS", 28, "EquipmentTable.cpp", "the price of each item, in tenths"),
+    # ---- slice 2e: the keyboard. Sixty-five bytes, because that is what can index it -- RDKEY
+    # produces internal key numbers 0 to 64 and ZEKTRAN clears exactly that many bytes of the key
+    # logger. The next label is 130 bytes further on, so the extent is decided by the indexer
+    # rather than by the layout, as section 6.8 requires.
+    Table("KEY_TRANSLATION", "TRANTABLE", 65, "KeyTable.cpp",
+          "the character TT217 returns for each internal key number"),
 ]
 
 
