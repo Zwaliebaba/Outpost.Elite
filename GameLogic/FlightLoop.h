@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "Arith.h"
+#include "Dashboard.h"
 #include "Rng.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
@@ -85,6 +86,64 @@ namespace Elite
  */
 [[nodiscard]] std::uint8_t DampTowardsCentre(std::uint8_t _value, std::uint8_t _dockingComputer,
                                              std::uint8_t _dampingDisabled) noexcept;
+
+/*
+ * 6502: DENGY -- take one unit off the energy banks, and say whether that emptied them.
+ *
+ * `DEC ENERGY / PHP / BNE P%+5 / INC ENERGY / PLP / RTS`. The `PHP` is the point: the flag the
+ * caller sees is the one the DECREMENT set, not the one the `INC` that undoes it would have. So
+ * the banks never reach zero through this -- one is the floor -- and the caller still learns that
+ * they tried to.
+ *
+ * `ENERGY` at zero decrements to 255, which is not guarded and does not need to be: nothing calls
+ * this with the banks already empty.
+ */
+[[nodiscard]] bool DrainEnergy(FlightStatus& _status) noexcept;
+
+/*
+ * 6502: SHD, which FALLS INTO DENGY -- bump a shield by one, and PAY FOR IT.
+ *
+ * `INX / BEQ SHD-2`, and `SHD-2` is the `DEX / RTS` two bytes above the label. So a shield already
+ * at 255 is put back and the routine returns; anything less is incremented AND THEN RUNS ON INTO
+ * `DENGY`, which takes a unit off the energy banks.
+ *
+ * A port that read this as a saturating increment -- which is exactly what the four instructions
+ * look like -- would recharge the shields for free (§6.83). Flight loop part 13 calls it twice
+ * per eighth frame, so the difference is the whole economy of running with the shields down.
+ */
+[[nodiscard]] std::uint8_t RechargeShield(FlightStatus& _status, std::uint8_t _shield) noexcept;
+
+/*
+ * 6502: FAROF2, with `FAROF` one instruction above it -- is every one of a ship's high bytes
+ * below `_limit`?
+ *
+ * Three compares and two branches, and the carry it returns is the answer: SET when the ship is
+ * inside the box, clear when any axis is outside it. `FAROF` is `LDA #224` and then this, which
+ * is the distance at which the flight loop stops caring about a ship at all.
+ */
+[[nodiscard]] bool WithinRange(const ShipBlock& _work, std::uint8_t _limit) noexcept;
+
+/// 6502: FAROF -- `WithinRange` at the limit the loop uses, which is 224.
+[[nodiscard]] inline bool WithinLoopRange(const ShipBlock& _work) noexcept
+{
+  return WithinRange(_work, 224u);
+}
+
+/*
+ * 6502: HITCH -- have we hit this ship?
+ *
+ * FIVE WAYS TO SAY NO BEFORE IT MEASURES ANYTHING. A non-zero `INWK+8` (the ship is not in front
+ * of us), a negative type (the planet or the sun), an exploding ship, or a large x or y offset all
+ * take the same `BNE HI1` out with the carry as `CLC` left it. Only then does it square x and y,
+ * add them, and compare the sum against the blueprint's own target area at `(XX0),0` and
+ * `(XX0),1`.
+ *
+ * The overflow path is not the same as the near misses. `BCS TN10` reaches a `CLC / RTS` of its
+ * own, which says "no" for a sum too big to compare rather than for a ship too far to the side --
+ * the same answer by a different route, and the port keeps them apart because the original does.
+ */
+[[nodiscard]] bool IsHit(const ShipBlock& _work, MathWorkspace& _math, std::uint16_t _blueprint,
+                         std::uint8_t _type) noexcept;
 
 /// 6502: SFS1 -- phase 4's "spawn a child ship from this one", which is where the wreckage
 /// actually comes from. It is here rather than in `Spawn.h` because the only thing in this slice

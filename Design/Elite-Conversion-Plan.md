@@ -428,6 +428,105 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.84 A branch out of a sixteen-bit compare, sharing a label with four rejections
+
+`HITCH` decides whether the player's laser hit a ship. It ends:
+
+```
+ LDY #2
+ LDA (XX0),Y
+ CMP S
+ BNE HI1
+ DEY
+ LDA (XX0),Y
+ CMP R
+.HI1
+ RTS
+```
+
+Four instructions earlier in the same routine, `BNE HI1` means "no, we missed" — three times, from
+tests on the z sign byte, the type and the explosion flag, all of them reached with the carry
+still clear from the `CLC` at the top. The port read this fourth one the same way and returned
+false.
+
+**It is the early ANSWER of a sixteen-bit comparison.** `HI1` is a bare `RTS`, so the branch
+returns the carry `CMP S` has just set: whether the blueprint's target-area high byte is at least
+as large as the sum of squares. Only when the high bytes are EQUAL does the low byte need
+comparing. It is the standard 6502 idiom for comparing two sixteen-bit values, written the
+standard way, and it fails on the very first case — a ship dead ahead at zero offset, which the
+game calls a hit and the port called a miss.
+
+**The label is the trap.** Five branches reach `HI1` and four of them mean one thing; sharing a
+`RTS` between "the answer is no" and "the answer is in the carry" costs nothing on a 6502 and
+loses the distinction a reader needs. §6.64 recorded the same shape from the other side — a
+branch to a label that turned out to BE a return — and the rule that comes out of both is the
+same: **a shared exit label says where control goes, not what it means, and the meaning has to
+be recovered from the flags at each branch.**
+
+### 6.83 A shield that pays for itself, four instructions apart
+
+```
+ DEX
+ RTS
+.SHD
+ INX
+ BEQ SHD-2
+```
+
+That is the whole of `SHD`, and it reads as a saturating increment: bump the shield, and put it
+back if it wrapped. It is not. The file ends there and the build's next include is `dengy.asm`,
+so a shield below 255 is incremented and then **runs straight on into `DENGY`**, which takes a
+unit off the energy banks.
+
+So recharging a shield costs energy, a full shield costs nothing, and the four instructions say
+none of that. Flight loop part 13 calls it twice on every eighth frame when the banks are more
+than half full, which makes this the whole economy of flying with the shields down — and a port
+that stopped at the `BEQ` would hand the player free shields for ever.
+
+This is §6.62's shape for the seventh time and the first where the two halves are so unrelated
+that the fall-through reads as a mistake in the listing rather than as a routine. `tools/
+c64_source.py` names the next include on every unterminated file precisely because of §6.62, and
+that is what caught it here.
+
+**`DENGY`'s own answer is worth a line too.** `DEC ENERGY / PHP / BNE P%+5 / INC ENERGY / PLP` --
+the flag the caller receives is the one the DECREMENT set, saved across the `INC` that undoes it.
+So the banks never reach zero through this routine, one is the floor, and the caller still learns
+that they tried to.
+
+### 6.82 The §6.12 pass on slice 3d-d-iii-b, and three jumps that are not exits
+
+The sixteen flight-loop parts with `FRMIS` and `KS1`. **541 instructions and 58 call targets, 52
+of them outside the unit — and 38 of those 52 are already ported.** What is left is fourteen:
+`ANGRY`, `HITCH`, `FRS1`, `NWSPS`, `OOPS`, `EXNO`, `EXNO2`, `EXNO3`, `SHD`, `FAROF`, `FAROF2`,
+`ESCAPE` and `MVTRIBS`, which are phase 4's, and `DEATH`, which is 3d-e's. `BEEP`, `NOISE`,
+`SETL1`, `startbd`, `stopbd` and `BOMBOFF` stay behind the seams they already have.
+
+So the loop can be built now, against a phase-4 seam, exactly as §6.69 predicted when it put this
+last.
+
+**THREE OF ITS JUMPS ARE NOT EXITS AND THREE ARE.** That distinction is the whole shape of the
+routine and a port that gets it wrong produces something that runs and is not the loop.
+
+`JMP MVTRIBS` in part 1 looks like the end of the frame. `MVTRIBS` ends `JMP NOMVETR`, which is
+the label part 2 begins at — so the pair is a CALL written as two jumps, and reading the first as
+a departure loses fifteen parts of work on every frame with a Trumble aboard.
+
+`JMP MAL1` at the end of part 12 is the per-ship loop's back edge, and `KS1` ends with the same
+instruction — which is why §6.69 moved `KS1` into this unit. It re-reads `XSAV` after `KILLSHP`
+has renumbered every slot above the dead one, so the loop resumes at the slot the dead ship's
+successor has just moved into.
+
+The three that do leave are `JMP DOENTRY` (part 9, docked), `JMP DEATH` (parts 9 and 15) and
+`JMP ESCAPE` (part 3). None of them returns, so the port's loop hands back an OUTCOME rather than
+falling off its end — the same shape `TT102`'s dispatch takes, and for the same reason: the labels
+span phases this slice does not own.
+
+**Two smaller things the pass found.** `MA14+2` is a mid-instruction entry that works only
+because `INWK+35` is in zero page: `INWK` is at 9, so `STA INWK+35` assembles as a two-byte
+`STA zp` and `BEQ MA14+2` lands on the `LDA TYPE` after it, skipping the store of the damaged
+shields. And part 3 picks the laser's sound through `EQUB &2C` — the sixth time this port has met
+the idiom, and the second in two slices (§6.79).
+
 ### 6.81 A collapsed routine that was right only because half of it was missing
 
 Slice 2e ported `TT66`'s text state and left its pixels behind a seam (§6.77). The text half

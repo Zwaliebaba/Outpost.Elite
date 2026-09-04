@@ -6,6 +6,7 @@
 #include "Arith.h"
 #include "FlightLoop.h"
 #include "Rng.h"
+#include "Dashboard.h"
 #include "ShipBlueprint.h"
 #include "ShipSlot.h"
 
@@ -545,6 +546,246 @@ public:
     // Without this the `AND (XX0),Y` could be dropped entirely and the sweep would still pass on
     // any build whose blueprints all have the low nibble of byte 0 set.
     Assert::IsTrue(cappedByBlueprint > 0u, L"and at least one blueprint held the count down");
+  }
+};
+
+
+TEST_CLASS(TheLoopArithmetic)
+{
+public:
+  /*
+   * 6502: SHD, which falls into DENGY -- and the fall-through is the whole finding.
+   *
+   * Both are swept exhaustively in the shield AND across the energy banks, because `SHD` is not
+   * the saturating increment its four instructions look like: anything below 255 is incremented
+   * and then PAYS a unit of energy, and only a full shield escapes without one (§6.83). A port
+   * that stopped at the `BEQ` would agree on every shield value and be wrong about the banks
+   * every time.
+   *
+   * `DENGY`'s own answer is the flag its `PHP` saved, from the DECREMENT rather than from the
+   * `INC` that undoes it -- so the caller hears "the banks hit zero" on the pass where they are
+   * put back to one.
+   */
+  TEST_METHOD(TheShieldAndTheBanksMatchSHDAndDENGY)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t shd = oracle.Label("SHD");
+    const std::uint16_t dengy = oracle.Label("DENGY");
+    const std::uint16_t energy = oracle.Label("ENERGY");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    std::uint32_t compared = 0;
+    std::uint32_t paid = 0;
+    std::uint32_t free = 0;
+    std::uint32_t emptied = 0;
+
+    for (std::uint32_t banks = 0; banks < 256u; ++banks)
+    {
+      // ---- DENGY on its own ------------------------------------------------------------------
+      {
+        cpu.memory[energy] = static_cast<std::uint8_t>(banks);
+        Assert::IsTrue(cpu.CallSubroutine(dengy, 200).completed, L"DENGY returned");
+
+        Elite::FlightStatus status;
+        status.energy = static_cast<std::uint8_t>(banks);
+        const bool ours = Elite::DrainEnergy(status);
+
+        const std::wstring where = Widen("DENGY(" + std::to_string(banks) + ")");
+        Assert::AreEqual(cpu.memory[energy], status.energy, (where + L": ENERGY").c_str());
+        Assert::AreEqual(cpu.z, ours, (where + L": the flag PHP saved").c_str());
+        emptied += ours ? 1u : 0u;
+      }
+
+      // ---- SHD, which spends it ----------------------------------------------------------------
+      for (const std::uint8_t shield : { std::uint8_t{ 0 }, std::uint8_t{ 1 }, std::uint8_t{ 128 },
+                                         std::uint8_t{ 254 }, std::uint8_t{ 255 } })
+      {
+        cpu.memory[energy] = static_cast<std::uint8_t>(banks);
+        cpu.x = shield;
+        Assert::IsTrue(cpu.CallSubroutine(shd, 200).completed, L"SHD returned");
+
+        Elite::FlightStatus status;
+        status.energy = static_cast<std::uint8_t>(banks);
+        const std::uint8_t ours = Elite::RechargeShield(status, shield);
+
+        const std::wstring where =
+          Widen("SHD(shield " + std::to_string(shield) + ", banks " + std::to_string(banks) + ")");
+        Assert::AreEqual(cpu.x, ours, (where + L": the shield").c_str());
+        Assert::AreEqual(cpu.memory[energy], status.energy, (where + L": ENERGY").c_str());
+
+        if (status.energy == banks)
+        {
+          ++free;
+        }
+        else
+        {
+          ++paid;
+        }
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(256u * 5u, compared, L"the whole sweep ran");
+    Assert::IsTrue(paid > 0u, L"most shields cost a unit of energy");
+    Assert::IsTrue(free > 0u, L"and a full one costs nothing");
+    Assert::AreEqual<std::uint32_t>(1u, emptied, L"exactly one starting value empties the banks");
+  }
+
+  /// 6502: FAROF and FAROF2 -- every limit against a spread of ship positions, and the three
+  /// compares in the order the routine makes them.
+  TEST_METHOD(TheRangeTestMatchesFAROF)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t farof = oracle.Label("FAROF");
+    const std::uint16_t farof2 = oracle.Label("FAROF2");
+    const std::uint16_t inwk = oracle.Label("INWK");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    std::uint32_t compared = 0;
+    std::uint32_t inside = 0;
+
+    const std::vector<std::uint8_t> AXES = { 0, 1, 223, 224, 225, 255 };
+
+    for (const std::uint8_t x : AXES)
+    {
+      for (const std::uint8_t y : AXES)
+      {
+        for (const std::uint8_t z : AXES)
+        {
+          Elite::ShipBlock work{};
+          work[1] = x;
+          work[4] = y;
+          work[7] = z;
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+          }
+
+          // `FAROF` first, which is `LDA #224` and then the body.
+          Assert::IsTrue(cpu.CallSubroutine(farof, 200).completed, L"FAROF returned");
+          const std::wstring where =
+            Widen("FAROF(" + std::to_string(x) + ", " + std::to_string(y) + ", "
+                  + std::to_string(z) + ")");
+          Assert::AreEqual(cpu.c, Elite::WithinLoopRange(work), where.c_str());
+
+          // Then the body on its own, at limits either side of the one `FAROF` chooses.
+          for (const std::uint8_t limit : { std::uint8_t{ 0 }, std::uint8_t{ 1 },
+                                            std::uint8_t{ 192 }, std::uint8_t{ 224 },
+                                            std::uint8_t{ 255 } })
+          {
+            cpu.a = limit;
+            Assert::IsTrue(cpu.CallSubroutine(farof2, 200).completed, L"FAROF2 returned");
+            const bool ours = Elite::WithinRange(work, limit);
+
+            Assert::AreEqual(cpu.c, ours,
+                             (where + L" at limit " + std::to_wstring(limit)).c_str());
+            inside += ours ? 1u : 0u;
+            ++compared;
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(6u * 6u * 6u * 5u, compared, L"the whole sweep ran");
+    Assert::IsTrue(inside > 0u, L"some ships were inside the box");
+    Assert::IsTrue(inside < compared, L"and some outside it");
+  }
+
+  /*
+   * 6502: HITCH -- five ways to say no, then the arithmetic.
+   *
+   * Swept over every blueprint this build carries, because the answer's last step compares
+   * against the blueprint's own target area at `(XX0),0` and `(XX0),1` -- a port that used a
+   * fixed radius would agree on the Cobra and miss the Thargoid.
+   *
+   * The overflow path is covered on purpose: `BCS TN10` reaches a `CLC / RTS` of its own, which
+   * is the same answer as the near misses by a different route, and a sum that big needs offsets
+   * near 255 to produce.
+   */
+  TEST_METHOD(TheHitTestMatchesHITCH)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t hitch = oracle.Label("HITCH");
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t xx0 = oracle.Label("XX0");
+    const std::uint16_t type = oracle.Label("TYPE");
+
+    Cpu6502 cpu = oracle.Fresh();
+
+    std::uint32_t compared = 0;
+    std::uint32_t hits = 0;
+
+    const std::vector<std::uint8_t> OFFSETS = { 0, 1, 8, 20, 63, 128, 200, 255 };
+
+    for (std::uint8_t shipType = 1; shipType <= Elite::SHIP_TYPE_COUNT; ++shipType)
+    {
+      const std::uint16_t blueprint = Elite::BlueprintAddress(shipType);
+      if (blueprint == 0u)
+      {
+        continue;
+      }
+
+      for (const std::uint8_t across : OFFSETS)
+      {
+        for (const std::uint8_t down : OFFSETS)
+        {
+          for (const std::uint8_t behind : { std::uint8_t{ 0 }, std::uint8_t{ 1 } })
+          {
+            for (const std::uint8_t exploding : { std::uint8_t{ 0 }, std::uint8_t{ 0x20 } })
+            {
+              Elite::ShipBlock work{};
+              work[0] = across;
+              work[3] = down;
+              work[8] = behind;
+              work[31] = exploding;
+
+              for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+              {
+                cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+              }
+              cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
+              cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] =
+                static_cast<std::uint8_t>(blueprint >> 8);
+              cpu.memory[type] = shipType;
+
+              Assert::IsTrue(cpu.CallSubroutine(hitch, 5'000).completed, L"HITCH returned");
+
+              Elite::MathWorkspace math;
+              const bool ours = Elite::IsHit(work, math, blueprint, shipType);
+
+              const std::wstring where =
+                Widen("HITCH(type " + std::to_string(shipType) + ", x " + std::to_string(across)
+                      + ", y " + std::to_string(down) + ", z-sign " + std::to_string(behind)
+                      + ", exploding " + std::to_string(exploding) + ")");
+              Assert::AreEqual(cpu.c, ours, where.c_str());
+
+              hits += ours ? 1u : 0u;
+              ++compared;
+            }
+          }
+        }
+      }
+    }
+
+    Assert::IsTrue(compared > 3'000u, L"the sweep is worth its name");
+    Assert::IsTrue(hits > 0u, L"and some of them were hits");
   }
 };
 
