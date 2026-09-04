@@ -108,6 +108,24 @@
     <ClCompile Include="ShellTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="ShipDataTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipMoveTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipDrawTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="SpawnTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="PlanetDrawTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="StardustTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\Outpost\SaveStore.cpp">
       <Filter>Suites</Filter>
     </ClCompile>

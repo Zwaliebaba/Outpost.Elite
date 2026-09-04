@@ -48,6 +48,26 @@ struct AddResult
   return AddResult{ result, sum > 0xFFu, overflow };
 }
 
+/*
+ * 6502: SBC -- subtract with borrow, where the carry means "no borrow" both going in and coming
+ * out, so a subtraction that has not borrowed leaves it SET.
+ *
+ * It lives here beside `AddWithCarry` rather than in one .cpp file because the two are the same
+ * primitive and the sign-magnitude arithmetic in `ShipMove.cpp` needs it as much as the line
+ * drawing in `Lines.cpp` does -- and a second private copy is how the two quietly stop agreeing.
+ */
+struct SubResult
+{
+  std::uint8_t value = 0;
+  bool carry = false;
+};
+
+[[nodiscard]] constexpr SubResult SubtractWithCarry(std::uint8_t _a, std::uint8_t _b, bool _carryIn) noexcept
+{
+  const std::uint16_t difference = static_cast<std::uint16_t>(_a) - _b - (_carryIn ? 0u : 1u);
+  return SubResult{ static_cast<std::uint8_t>(difference), difference < 0x100u };
+}
+
 /// The 6502's ROL on a byte: shift left, carry in at bit 0, old bit 7 out.
 struct ShiftResult
 {

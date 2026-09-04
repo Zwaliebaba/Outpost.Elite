@@ -159,4 +159,24 @@ extern const std::array<std::uint8_t, 98> DEFAULT_COMMANDER;
  */
 extern const std::array<std::uint8_t, 65> KEY_TRANSLATION;
 
+/*
+ * 6502: XX21 through the last ship blueprint -- the whole ship data region, addressed as the
+ * game addresses it (slice 3a).
+ *
+ * ONE ARRAY AND NOT THIRTY-THREE, and that is a finding rather than a preference. Two blueprints
+ * declare more data in their header than fits before the next one begins (the splinter by 24
+ * bytes, the Thargon by 60), and those same two are the only ships with no `_EDGES` label, so
+ * the labels cannot arbitrate; a third has four bytes of slack. Slicing per ship would truncate
+ * two of them or hand them their neighbour's bytes. Plan §6.32 has the measurements.
+ *
+ * Underneath that is the reason it was never going to work: the game has NO CONCEPT of where a
+ * blueprint ends. `NWSHP` puts an address into `XX0` and every read is `LDA (XX0),Y`. So the
+ * port keeps the region and the addresses, and `ShipBlueprint.h` is the indexing.
+ *
+ * The size is derived, not chosen -- `tools/extract_tables.py` computes it from the last
+ * blueprint's own header -- so if it ever changed this declaration would stop compiling, which is
+ * the failure worth having.
+ */
+extern const std::array<std::uint8_t, 8073> SHIP_DATA;
+
 } // namespace Elite

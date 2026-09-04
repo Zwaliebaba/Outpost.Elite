@@ -181,7 +181,7 @@ std::uint16_t TotalPrice(std::uint8_t _price, std::uint8_t _quantity) noexcept
   MathWorkspace work;
   work.p = _price;
   work.q = _quantity;
-  std::uint8_t high = MultiplyUnsigned(work);
+  std::uint8_t high = MultiplyUnsigned(work).high;
 
   // 6502: GC2 -- ASL P / ROL A, twice.
   for (int shift = 0; shift < 2; ++shift)
