@@ -93,6 +93,12 @@ jobs:
       - name: The app still uses names GameLogic has, with the right argument counts
         run: python tools/check_outpost.py
 
+      # GitHub renders a table with the header's number of columns and drops the rest in silence,
+      # so a row that grew an extra cell on the end stops being readable without changing at all
+      # in the raw file. Thirteen inventory rows had done exactly that (§6.72).
+      - name: Design tables still render everything they hold
+        run: python tools/check_docs.py
+
       - name: Coverage ledger
         run: python tools/inventory.py
 
