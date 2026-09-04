@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Arith.h"
+#include "Canvas.h"
+#include "LineHeap.h"
 #include "ShipSlot.h"
 
 #include <cstdint>
@@ -24,6 +26,10 @@ namespace Elite
 /// C64 source annotates as "the 256 x 144 space view". Canvas::SPACE_VIEW_HEIGHT is the 144.
 inline constexpr std::uint8_t SPACE_VIEW_CENTRE_X = 128;
 inline constexpr std::uint8_t SPACE_VIEW_CENTRE_Y = 72;
+
+/// 6502: `#Y*2`, which the drawing code writes out every time rather than naming. It is the row
+/// the dashboard starts on, so it is the first row a ship may not occupy.
+inline constexpr std::uint8_t SPACE_VIEW_BOTTOM = 2 * SPACE_VIEW_CENTRE_Y;
 
 /// 6502: the coordinate bytes of a ship's data block -- x, y and z, each a sixteen-bit magnitude
 /// and a sign byte. Named here rather than in `ShipSlot.h` because this is the first code that
@@ -100,8 +106,12 @@ struct ProjectResult
 /*
  * 6502: PROJ -- project a ship, planet or sun onto the screen.
  *
- *   K3(1 0) = #X + x / z
- *   K4(1 0) = #Y - y / z
+ *   K3(1 0) = #X + 256 * x / z
+ *   K4(1 0) = #Y - 256 * y / z
+ *
+ * The 256 is the scale `DVID3B` divides at and neither the upstream summary nor the routine's
+ * name mentions -- see `Arith.h`. It is what makes one pixel a ratio of 1/256, so a ship a
+ * quarter of the way to the screen edge is one whose x is an eighth of its z.
  *
  * The minus on y is an `EOR #128` on the sign byte before the divide, because space has y going
  * up and the screen has it going down.
@@ -111,5 +121,56 @@ struct ProjectResult
  * overflow, but a port that computed both and assigned at the end would be a different routine.
  */
 ProjectResult Project(const ShipBlock& _ship, MathWorkspace& _math, Projection& _screen) noexcept;
+
+/*
+ * 6502: LL155, with the LL27 loop it is the head of -- draw every line on a ship's line heap.
+ *
+ * Byte 0 of the heap is its length in bytes, and under four there is not a whole line there, so
+ * nothing is drawn. Everything after it is groups of four: x1, y1, x2, y2, which are `XX15` to
+ * `XX15+3` -- the SAME zero-page bytes as `X1`, `Y1`, `X2`, `Y2`, so the loop writes straight into
+ * `LOIN`'s arguments and calls it. `DrawWorkspace` is those four bytes here.
+ *
+ * `LOIN` plots by EOR, so this both draws a ship and rubs it out; which one it is depends only on
+ * whether the same lines are already on the screen. That is the whole of Elite's ship animation.
+ */
+void DrawShipLines(Canvas& _canvas, DrawWorkspace& _draw, const LineHeap& _heap,
+                   std::uint16_t _address) noexcept;
+
+/*
+ * 6502: LL81 -- store the heap's length in byte 0 and fall straight into `LL155`.
+ *
+ * Two instructions and a fall-through, and the fall-through is the routine: `LL9` reaches it
+ * having built the heap and left the length in `U`, and `SHPPT` reaches `LL81+2` with the length
+ * already in A. Both then draw. Ported as one function with the length as a parameter, because
+ * the difference between the two entry points is only where the byte came from.
+ */
+void StoreLineCountAndDraw(Canvas& _canvas, DrawWorkspace& _draw, LineHeap& _heap,
+                           std::uint16_t _address, std::uint8_t _count) noexcept;
+
+/*
+ * 6502: EE51 -- take the ship off the screen, if it is on it.
+ *
+ * Bit 3 of `INWK+31` is the whole state: set means the lines on the heap are currently on the
+ * screen. The routine clears it with an `EOR` (not an `AND`, because A already holds the mask and
+ * the bit is known set) and redraws, which erases. If the bit is clear there is nothing there and
+ * it returns through `LL10-1`, an `RTS` that belongs to the routine before it.
+ */
+void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, const LineHeap& _heap) noexcept;
+
+/*
+ * 6502: SHPPT, with its `Shpt` helper and its `nono` exit -- a distant ship, drawn as a dot.
+ *
+ * Two four-pixel horizontal lines one row apart, built onto the ship's line heap so that the next
+ * frame erases them the same way it erases a wireframe. `LL9` comes here when a ship is too far
+ * away to be worth drawing properly.
+ *
+ * IT DOES NOT TEST `PROJ`'S CARRY. It tests the accumulator ORed with `K3+1`, and on one of
+ * `PROJ`'s two overflow exits the accumulator is zero and `K3+1` still holds the previous
+ * projection's high byte. So a ship whose x coordinate overflowed can be drawn at wherever the
+ * last one was, and reproducing that is why `_screen` is a parameter that outlives the call
+ * rather than a local. It is a bug in the original, forty years old and shipped.
+ */
+void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, LineHeap& _heap,
+                     MathWorkspace& _math, Projection& _screen) noexcept;
 
 } // namespace Elite

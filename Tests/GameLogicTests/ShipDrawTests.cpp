@@ -4,10 +4,14 @@
 #include "OracleImage.h"
 
 #include "Arith.h"
+#include "Canvas.h"
+#include "LineHeap.h"
 #include "ShipDraw.h"
 #include "ShipSlot.h"
 
+#include <array>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -49,6 +53,59 @@ const std::vector<std::uint8_t> EDGES = { 0, 1, 2, 63, 64, 127, 128, 255 };
 
 /// The low bytes, which reach the answer only through the scaling, so three values are enough.
 const std::vector<std::uint8_t> LOW = { 0, 1, 0x80, 0xFF };
+
+/// Somewhere in the arena between `K%` and `LS%` for a ship's line heap to live, with room above
+/// it for the longest heap any blueprint asks for (157 bytes, the Anaconda and the Constrictor).
+constexpr std::uint16_t HEAP_AT = 0xFE00;
+
+/// 6502: SCBASE, derived the way `CanvasTests.cpp` derives it -- from ylookup's first entry less
+/// the space view's four-cell left margin, because it is an assembler constant and not a label.
+std::uint16_t ScreenBase(const OracleImage& _oracle)
+{
+  const Cpu6502 cpu = _oracle.Fresh();
+  const std::uint16_t low = _oracle.Label("ylookupl");
+  const std::uint16_t high = _oracle.Label("ylookuph");
+  return static_cast<std::uint16_t>((cpu.memory[low] | (cpu.memory[high] << 8)) - 0x20u);
+}
+
+void CompareScreens(const Cpu6502& _cpu, std::uint16_t _screenBase, const Elite::Canvas& _canvas,
+                    const std::wstring& _context)
+{
+  const std::span<const std::uint8_t> ours = _canvas.Screen();
+  for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
+  {
+    const std::uint8_t expected = _cpu.memory[static_cast<std::uint16_t>(_screenBase + offset)];
+    if (expected != ours[offset])
+    {
+      Assert::Fail((_context + L": the screen differs at offset " + std::to_wstring(offset)
+                    + L" -- game has " + std::to_wstring(expected) + L", port has "
+                    + std::to_wstring(ours[offset]))
+                     .c_str());
+    }
+  }
+}
+
+/// Put the same heap bytes in both, and clear what is around them so a stray write shows up.
+void SeedHeap(Cpu6502& _cpu, Elite::LineHeap& _heap, const std::vector<std::uint8_t>& _bytes)
+{
+  for (std::uint16_t offset = 0; offset < 256u; ++offset)
+  {
+    const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
+    const std::uint8_t value = (offset < _bytes.size()) ? _bytes[offset] : std::uint8_t{ 0 };
+    _cpu.memory[address] = value;
+    _heap.Write(address, value);
+  }
+}
+
+void CompareHeaps(const Cpu6502& _cpu, const Elite::LineHeap& _heap, const std::wstring& _context)
+{
+  for (std::uint16_t offset = 0; offset < 256u; ++offset)
+  {
+    const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
+    Assert::AreEqual(_cpu.memory[address], _heap.Read(address),
+                     (_context + L": heap byte " + std::to_wstring(offset)).c_str());
+  }
+}
 } // namespace
 
 TEST_CLASS(TheProjectionDivide)
@@ -499,6 +556,297 @@ public:
     Assert::IsTrue(projected > 0u, L"a ship projected onto the screen");
     Assert::IsTrue(lostOnX > 0u, L"a ship was lost on the x divide");
     Assert::IsTrue(lostOnY > 0u, L"a ship was lost on the y divide, with K3 already written");
+  }
+};
+
+
+/*
+ * The ship line heap, and the three routines that read and write it (slice 3b).
+ *
+ * These are the first tests in the suite where the answer is the SCREEN rather than a byte, so
+ * every one of them compares the whole 10,240-byte canvas against the game's own memory. A line
+ * that is right for most of its length and steps a row late at one cell boundary fails.
+ */
+TEST_CLASS(TheShipLineHeap)
+{
+public:
+  /*
+   * 6502: LL155 and its LL27 loop.
+   *
+   * The lengths are the interesting input, not the coordinates: 0 and 3 draw nothing, 4 is the
+   * first that draws, and a length that is not a multiple of four leaves a partial entry at the
+   * end which the original reads anyway -- the loop tests `Y < XX20` after advancing, so it will
+   * happily draw a line out of three bytes and whatever follows them.
+   */
+  TEST_METHOD(DrawingTheHeapMatchesLL155)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t ll155 = oracle.Label("LL155");
+    const std::uint16_t screenBase = ScreenBase(oracle);
+
+    // Five lines' worth of coordinates, so a length can take any prefix of them.
+    const std::vector<std::uint8_t> lines = {
+      0,                    // byte 0 is the length, overwritten per case
+      10,  20,  200, 20,    // a long horizontal
+      0,   0,   255, 143,   // corner to corner
+      64,  100, 64,  8,     // vertical
+      1,   1,   2,   3,     // two pixels apart
+      250, 140, 255, 143,   // hard against the bottom right
+    };
+
+    std::uint32_t cases = 0;
+    for (const std::uint8_t length : { 0, 1, 3, 4, 5, 8, 9, 12, 17, 20, 21 })
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      Elite::Canvas canvas;
+      Elite::DrawWorkspace draw;
+      Elite::LineHeap heap;
+
+      std::vector<std::uint8_t> seeded = lines;
+      seeded[0] = length;
+      SeedHeap(cpu, heap, seeded);
+
+      cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
+      cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
+
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(ll155, 500'000);
+      Assert::IsTrue(run.completed, L"LL155 returned");
+
+      Elite::DrawShipLines(canvas, draw, heap, HEAP_AT);
+
+      CompareScreens(cpu, screenBase, canvas, L"LL155 length " + std::to_wstring(length));
+      CompareHeaps(cpu, heap, L"LL155 length " + std::to_wstring(length));
+      ++cases;
+    }
+
+    Assert::AreEqual<std::uint32_t>(11u, cases, L"every length ran");
+  }
+
+  /// 6502: LL81 -- the length goes in from U, and then the same drawing happens. Entered at the
+  /// label rather than at `LL81+2`, so this is the path `LL9` takes.
+  TEST_METHOD(StoringTheLengthMatchesLL81)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t uu = oracle.Label("U");
+    const std::uint16_t ll81 = oracle.Label("LL81");
+    const std::uint16_t screenBase = ScreenBase(oracle);
+
+    const std::vector<std::uint8_t> lines = { 99, 5, 5, 60, 40, 100, 100, 104, 96, 8, 143, 250, 0 };
+
+    std::uint32_t cases = 0;
+    for (const std::uint8_t count : { 0, 3, 4, 8, 12, 13 })
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      Elite::Canvas canvas;
+      Elite::DrawWorkspace draw;
+      Elite::LineHeap heap;
+
+      SeedHeap(cpu, heap, lines);
+      cpu.memory[uu] = count;
+      cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
+      cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
+
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(ll81, 500'000);
+      Assert::IsTrue(run.completed, L"LL81 returned");
+
+      Elite::StoreLineCountAndDraw(canvas, draw, heap, HEAP_AT, count);
+
+      CompareScreens(cpu, screenBase, canvas, L"LL81 count " + std::to_wstring(count));
+      CompareHeaps(cpu, heap, L"LL81 count " + std::to_wstring(count));
+      ++cases;
+    }
+
+    Assert::AreEqual<std::uint32_t>(6u, cases, L"every count ran");
+  }
+
+  /*
+   * 6502: EE51 -- both halves, which is the point: with bit 3 clear it must do NOTHING, and a
+   * port that redrew anyway would erase a ship that was never on the screen and leave its lines
+   * behind for good.
+   */
+  TEST_METHOD(ErasingAShipMatchesEE51)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t ee51 = oracle.Label("EE51");
+    const std::uint16_t screenBase = ScreenBase(oracle);
+
+    const std::vector<std::uint8_t> lines = { 12, 30, 30, 90, 30, 90, 30, 90, 90, 30, 90, 30, 30 };
+
+    std::uint32_t cases = 0;
+    std::uint32_t erased = 0;
+    for (const std::uint8_t state : { 0x00, 0x08, 0x07, 0x0F, 0xF7, 0xFF })
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      Elite::Canvas canvas;
+      Elite::DrawWorkspace draw;
+      Elite::LineHeap heap;
+      Elite::ShipBlock ship;
+
+      SeedHeap(cpu, heap, lines);
+      cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
+      cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
+      cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = state;
+      ship[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
+      ship[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
+      ship[Elite::SHIP_STATE_OFFSET] = state;
+
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(ee51, 500'000);
+      Assert::IsTrue(run.completed, L"EE51 returned");
+
+      Elite::EraseShip(canvas, draw, ship, heap);
+
+      const std::wstring where = L"EE51 state " + std::to_wstring(state);
+      CompareScreens(cpu, screenBase, canvas, where);
+      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)],
+                       ship[Elite::SHIP_STATE_OFFSET], (where + L": INWK+31").c_str());
+      erased += ((state & 0x08u) != 0u) ? 1u : 0u;
+      ++cases;
+    }
+
+    Assert::AreEqual<std::uint32_t>(6u, cases, L"every state ran");
+    Assert::AreEqual<std::uint32_t>(3u, erased, L"three of the six had something to erase");
+  }
+
+  /*
+   * 6502: SHPPT -- and run as a SEQUENCE rather than as six separate calls, because one of the
+   * things being tested is what it does with state left over from the call before it (§6.33).
+   *
+   * `PROJ` can return with the carry set having already written `K3` and not `K4`, and SHPPT does
+   * not look at the carry: it ORs the accumulator with `K3+1`. So a ship whose x coordinate
+   * overflowed sees the PREVIOUS ship's high byte, and whether it is drawn depends on what was
+   * projected before it. A test that reset the machine between positions would agree with the
+   * game on every case and still miss that entirely.
+   */
+  TEST_METHOD(DrawingADistantShipMatchesSHPPT)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t shppt = oracle.Label("SHPPT");
+    const std::uint16_t k3 = oracle.Label("K3");
+    const std::uint16_t k4 = oracle.Label("K4");
+    const std::uint16_t screenBase = ScreenBase(oracle);
+
+    // x_lo, x_hi, x_sign, y_lo, y_hi, y_sign, z_lo, z_hi, z_sign -- and then the state byte.
+    struct Position
+    {
+      std::array<std::uint8_t, 9> block;
+      std::uint8_t state;
+      const wchar_t* what;
+    };
+
+    /*
+     * The coordinates are chosen with the divide's SCALE in mind, which is the thing about this
+     * chain that is easiest to get wrong from the outside: `DVID3B` returns 256 times the ratio,
+     * not the ratio, so an offset of one pixel is x/z = 1/256 and a ship at z = 1 is off the
+     * screen whatever its x is. The first draft of this test used z = 1 throughout and every
+     * single position came out rejected -- agreeing with the game, and testing one branch.
+     */
+    const std::vector<Position> POSITIONS = {
+      { { 0, 0, 0, 0, 0, 0, 0, 4, 0 }, 0x00, L"dead centre, a quarter of the way out" },
+      { { 0, 0, 0, 0, 0, 0, 0, 4, 0 }, 0x08, L"the same place, and now already drawn" },
+      { { 0, 1, 0, 0, 0, 0, 0, 4, 0 }, 0x08, L"64 pixels right" },
+      { { 0, 1, 0x80, 0, 1, 0, 0, 4, 0 }, 0x08, L"left and up" },
+      { { 0, 1, 0, 0, 1, 0x80, 0, 4, 0 }, 0x08, L"right and down" },
+      { { 0xF4, 0x01, 0, 0, 0, 0, 0, 4, 0 }, 0x08, L"x + 3 carries out of the byte" },
+      { { 0, 0, 0, 0x18, 0x01, 0x80, 0, 4, 0 }, 0x08, L"y on the dashboard's first row" },
+      { { 0x88, 0x13, 0, 0, 0, 0, 0, 4, 0 }, 0x08, L"x overflows the high-byte test" },
+      { { 0, 1, 0, 0x88, 0x13, 0, 0, 4, 0 }, 0x08, L"y overflows AFTER K3 has been stored" },
+      { { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, 0x08, L"z is zero, so the ORA #1 decides it" },
+      { { 0, 1, 0, 0, 1, 0, 0, 4, 0x80 }, 0x08, L"behind the player" },
+      { { 0, 0x10, 0, 0, 0x08, 0, 0, 0x40, 0 }, 0x08, L"a long way off, and back on screen" },
+      { { 0, 0, 0, 0, 0, 0, 0, 4, 0 }, 0x08, L"centre once more, after the stale ones" },
+    };
+
+    Cpu6502 cpu = oracle.Fresh();
+    Elite::Canvas canvas;
+    Elite::DrawWorkspace draw;
+    Elite::LineHeap heap;
+    Elite::MathWorkspace math;
+    Elite::Projection screen;
+    Elite::ShipBlock ship;
+
+    SeedHeap(cpu, heap, {});
+    cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
+    cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
+    ship[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
+    ship[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
+
+    // K3 and K4 start where the machine starts them, and the port has to agree from there --
+    // the stale-coordinate path reads them before anything has written them.
+    screen.x = cpu.memory[k3];
+    screen.x1 = cpu.memory[static_cast<std::uint16_t>(k3 + 1)];
+    screen.y = cpu.memory[k4];
+    screen.y1 = cpu.memory[static_cast<std::uint16_t>(k4 + 1)];
+
+    std::uint32_t drawn = 0;
+    std::uint32_t halfWritten = 0;
+    for (const Position& position : POSITIONS)
+    {
+      const Elite::Projection before = screen;
+
+      for (std::uint8_t byte = 0; byte < 9u; ++byte)
+      {
+        cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = position.block[byte];
+        ship[byte] = position.block[byte];
+      }
+      cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = position.state;
+      ship[Elite::SHIP_STATE_OFFSET] = position.state;
+
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(shppt, 500'000);
+      Assert::IsTrue(run.completed, L"SHPPT returned");
+
+      Elite::DrawShipAsPoint(canvas, draw, ship, heap, math, screen);
+
+      const std::wstring where = std::wstring(L"SHPPT: ") + position.what;
+      CompareScreens(cpu, screenBase, canvas, where);
+      CompareHeaps(cpu, heap, where);
+      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)],
+                       ship[Elite::SHIP_STATE_OFFSET], (where + L": INWK+31").c_str());
+      Assert::AreEqual(cpu.memory[k3], screen.x, (where + L": K3").c_str());
+      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k3 + 1)], screen.x1,
+                       (where + L": K3+1").c_str());
+      Assert::AreEqual(cpu.memory[k4], screen.y, (where + L": K4").c_str());
+      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k4 + 1)], screen.y1,
+                       (where + L": K4+1").c_str());
+
+      const bool nowDrawn = (ship[Elite::SHIP_STATE_OFFSET] & Elite::SHIP_STATE_DRAWN) != 0u;
+      drawn += nowDrawn ? 1u : 0u;
+
+      // The case the sequence exists for: `PROJ` stored K3, then gave up on K4, so the ship is
+      // refused while carrying half a new position. Whatever comes next reads the other half.
+      if (!nowDrawn && (screen.x != before.x || screen.x1 != before.x1) && screen.y == before.y
+          && screen.y1 == before.y1)
+      {
+        ++halfWritten;
+      }
+    }
+
+    Assert::IsTrue(drawn > 0u, L"some of the sequence was drawn");
+    Assert::IsTrue(drawn < POSITIONS.size(), L"and some of it was refused");
+    Assert::IsTrue(halfWritten > 0u, L"and at least one was refused with K3 written and K4 not");
   }
 };
 

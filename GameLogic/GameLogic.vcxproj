@@ -155,6 +155,7 @@
     <ClInclude Include="ShipSlot.h" />
     <ClInclude Include="ShipMove.h" />
     <ClInclude Include="ShipDraw.h" />
+    <ClInclude Include="LineHeap.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="StateTokens.h" />
     <ClInclude Include="MarketScreen.h" />

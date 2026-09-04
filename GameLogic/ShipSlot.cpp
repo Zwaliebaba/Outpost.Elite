@@ -92,7 +92,7 @@ NewShip AddShip(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType) noexc
 
     // 6502: NW6 -- LDY #14 / LDA (XX0),Y / STA INWK+35, then byte 19 masked to three bits.
     _work[SHIP_ENERGY_OFFSET] = ShipByte(static_cast<std::uint16_t>(blueprint + 14u));
-    _work[SHIP_MISSILES_OFFSET] =
+    _work[SHIP_STATE_OFFSET] =
       static_cast<std::uint8_t>(ShipByte(static_cast<std::uint16_t>(blueprint + 19u)) & 7u);
   }
 

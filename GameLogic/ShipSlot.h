@@ -57,7 +57,28 @@ inline constexpr std::uint8_t SHIP_FLAGS_OFFSET = 36;
 inline constexpr std::uint8_t SHIP_HEAP_LOW_OFFSET = 33;  ///< 6502: INWK+33 / INWK+34, the ship's
 inline constexpr std::uint8_t SHIP_HEAP_HIGH_OFFSET = 34; ///< own heap pointer
 inline constexpr std::uint8_t SHIP_ENERGY_OFFSET = 35;    ///< 6502: INWK+35, from blueprint byte 14
-inline constexpr std::uint8_t SHIP_MISSILES_OFFSET = 31;  ///< 6502: INWK+31, blueprint byte 19 AND 7
+
+/*
+ * 6502: INWK+31 -- one byte holding five things, which is why it does not get a name saying what
+ * it is FOR.
+ *
+ * Slice 3a called this `SHIP_MISSILES_OFFSET`, because `NWSHP` is the only routine that had
+ * reached it and all `NWSHP` does is OR the blueprint's missile count into the bottom three bits.
+ * The drawing code reads the same byte for something else entirely -- bit 3 says whether the ship
+ * is currently on the screen, and it is what `EE51` tests to decide whether there is anything to
+ * rub out. Two names for one offset is the §6.34 trap set deliberately, so there is one name and
+ * the bits are documented.
+ *
+ * Bits 4 and the rest of the upper half are left unnamed until the routines that read them are
+ * ported; guessing at them from the bit numbers is how the wrong constant gets used once.
+ */
+inline constexpr std::uint8_t SHIP_STATE_OFFSET = 31;
+
+inline constexpr std::uint8_t SHIP_STATE_MISSILES = 0x07;  ///< 6502: blueprint byte 19 AND 7
+inline constexpr std::uint8_t SHIP_STATE_DRAWN = 0x08;     ///< 6502: bit 3 -- on the screen now
+inline constexpr std::uint8_t SHIP_STATE_EXPLODING = 0x20; ///< 6502: bit 5
+inline constexpr std::uint8_t SHIP_STATE_FIRING = 0x40;    ///< 6502: bit 6 -- laser
+inline constexpr std::uint8_t SHIP_STATE_KILLED = 0x80;    ///< 6502: bit 7 -- killed, not yet exploding
 
 /// 6502: the ship types NWSHP and KILLSHP single out by name.
 inline constexpr std::uint8_t SHIP_TYPE_STATION = 2;  ///< 6502: SST -- skips the heap allocation
@@ -81,8 +102,8 @@ struct ShipBlock
 {
   std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes{};
 
-  [[nodiscard]] std::uint8_t& operator[](std::size_t _offset) noexcept { return bytes[_offset]; }
-  [[nodiscard]] std::uint8_t operator[](std::size_t _offset) const noexcept { return bytes[_offset]; }
+  [[nodiscard]] constexpr std::uint8_t& operator[](std::size_t _offset) noexcept { return bytes[_offset]; }
+  [[nodiscard]] constexpr std::uint8_t operator[](std::size_t _offset) const noexcept { return bytes[_offset]; }
 };
 
 /*
