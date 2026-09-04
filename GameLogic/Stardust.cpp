@@ -74,7 +74,7 @@ void PlotStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, S
   const AddSignedResult sum = AddSigned(_math, _a);
   _math.yyNext = sum.high;
   _dust.yLow[_at] = sum.low;
-  PlotRelativePixel(_canvas, _draw);
+  (void)PlotRelativePixel(_canvas, _draw);
 }
 
 void FlipStardust(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust) noexcept
@@ -88,7 +88,7 @@ void FlipStardust(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust) noexce
     _dust.x[at] = was;
     _draw.zz = _dust.z[at];
 
-    PlotRelativePixel(_canvas, _draw);
+    (void)PlotRelativePixel(_canvas, _draw);
   }
 }
 
@@ -235,7 +235,7 @@ void MoveStardustAhead(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _ma
       _draw.zz = _dust.z[at];
     }
 
-    PlotRelativePixel(_canvas, _draw);
+    (void)PlotRelativePixel(_canvas, _draw);
   }
 }
 
@@ -369,7 +369,7 @@ void MoveStardustAstern(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _m
       _draw.zz = _dust.z[at];
     }
 
-    PlotRelativePixel(_canvas, _draw);
+    (void)PlotRelativePixel(_canvas, _draw);
   }
 }
 
@@ -534,7 +534,7 @@ void MoveStardustSideways(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& 
       _dust.z[at] = _draw.zz;
     }
 
-    PlotRelativePixel(_canvas, _draw);
+    (void)PlotRelativePixel(_canvas, _draw);
   }
 
   // 6502: the loop leaves through `BEQ ST2`, so the angles are put back on the way out.

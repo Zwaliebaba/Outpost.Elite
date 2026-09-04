@@ -265,7 +265,15 @@ void PlotPixel(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _x, std::uint
 
 /// 6502: PIXEL2 -- the same, for a point given in the space view's own sign-magnitude
 /// coordinates relative to the centre. Falls through into PIXEL, so this is that whole path.
-void PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+/*
+ * Returns the exit carry, which one caller reads: `nWq` fills the stardust field with
+ * `JSR PIXEL2 / DEY / BNE SAL4` and the next iteration opens with `JSR DORND`, so the generator
+ * runs on whatever the plot left (§6.57). The eleventh dropped flag.
+ *
+ * The stardust's own movers do NOT read it -- they follow the plot with `JSR DV42`, and `DVID4`
+ * opens with an `ASL` -- so they discard it explicitly rather than by accident.
+ */
+[[nodiscard]] bool PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept;
 
 /// 6502: CPIX2 -- a two-pixel dash at (X1, Y1) in the colour in COL. The second pixel can land
 /// in the next character cell, and the routine detects that from the mask rather than from x.

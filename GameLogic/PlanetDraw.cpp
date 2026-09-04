@@ -1086,4 +1086,124 @@ void DrawSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, Math
   _state.sunXNext = _centre.x1;
 }
 
+
+void ClearShipBlock(ShipBlock& _work) noexcept
+{
+  // 6502: ZINF -- LDY #NI%-1 / LDA #0 / .ZI1 STA INWK,Y / DEY / BPL ZI1.
+  for (std::size_t byte = 0; byte < SHIP_BLOCK_SIZE; ++byte)
+  {
+    _work[byte] = 0;
+  }
+
+  /*
+   * 6502: LDA #96 / STA INWK+18 / STA INWK+22 / ORA #%10000000 / STA INWK+14.
+   *
+   * The three high bytes of `roofv_y`, `sidev_x` and `nosev_z`, so the ship comes out square to
+   * the axes -- and the sign on the nose is what makes it face TOWARDS the player. 96 rather than
+   * 127 because the orientation vectors are unit vectors at a scale of 96, which is the same 96
+   * `PLANET` divides by for its radius.
+   */
+  _work[18] = 96;
+  _work[22] = 96;
+  _work[14] = static_cast<std::uint8_t>(96u | 0x80u);
+}
+
+
+void SeedStardustField(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng,
+                       bool _carryIn) noexcept
+{
+  /*
+   * 6502: nWq -- three random bytes per speck, and the generator is threaded straight through.
+   *
+   * `JSR PIXEL2 / DEY / BNE SAL4` and then `JSR DORND`, so each speck's first random byte runs
+   * on the carry the PREVIOUS speck's plot left -- which is `ZZ >= 80`, the distance test inside
+   * `PIXEL` (§6.57). The field a fresh view is filled with therefore depends on where the last
+   * speck was drawn.
+   *
+   * `ORA #8` on the distance keeps every speck at least eight units away, so none of them starts
+   * on the player's face.
+   */
+  bool carry = _carryIn;
+
+  for (std::uint8_t at = _dust.count; at != 0u; --at)
+  {
+    RngResult roll = _rng.Next(carry);
+    _draw.zz = static_cast<std::uint8_t>(roll.value | 8u);
+    _dust.z[at] = _draw.zz;
+
+    roll = _rng.Next(roll.carry);
+    _dust.x[at] = roll.value;
+    _draw.x1 = roll.value;
+
+    roll = _rng.Next(roll.carry);
+    _dust.y[at] = roll.value;
+    _draw.y1 = roll.value;
+
+    carry = PlotRelativePixel(_canvas, _draw);
+  }
+}
+
+
+void ClearAllShips(PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
+                   BubbleEffects& _effects) noexcept
+{
+  // 6502: WPSHPS -- LDX #0 / .WSL1 LDA FRIN,X / BEQ WS2 / BMI WS1.
+  for (std::size_t slot = 0; slot < _bubble.slots.size(); ++slot)
+  {
+    const std::uint8_t type = _bubble.slots[slot];
+    if (type == 0u)
+    {
+      break; // 6502: BEQ WS2 -- the first empty slot ends the list
+    }
+    if ((type & 0x80u) != 0u)
+    {
+      continue; // 6502: BMI WS1 -- the planet and the sun have no blip and no line heap
+    }
+
+    // 6502: JSR GINF / LDY #31 / .WSL2 -- thirty-two bytes, not the whole block.
+    for (std::size_t byte = 0; byte < 32u; ++byte)
+    {
+      _work[byte] = _bubble.blocks[slot][byte];
+    }
+
+    _effects.ScanShip(_work, type);
+
+    /*
+     * 6502: LDY #31 / LDA (INF),Y / AND #%10100111 / STA (INF),Y.
+     *
+     * It masks the byte in the SLOT and not the copy in `INWK`, so the two disagree the moment
+     * this returns -- which is correct, because the caller is about to redraw everything from
+     * the slots. The mask clears bits 3, 4 and 6: "drawn on screen", "firing a laser", and the
+     * one in between.
+     */
+    _bubble.blocks[slot][SHIP_STATE_OFFSET] =
+      static_cast<std::uint8_t>(_bubble.blocks[slot][SHIP_STATE_OFFSET] & 0xA7u);
+  }
+
+  // 6502: WS2 -- LDX #0 / STX LSP / DEX / STX LSX2 / STX LSY2. Note `LSP` goes to ZERO here and
+  // to one in `WP1`; the two are not the same reset.
+  _state.lsp = 0;
+  _state.SetBallX(0, 0xFF);
+  _state.SetBallY(0, 0xFF);
+
+  // 6502: and the fall-through into FLFLLS.
+  ClearSunHeap(_state);
+}
+
+
+void SeedStardustAndClearShips(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng,
+                               PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
+                               BubbleEffects& _effects, std::uint8_t _viewType,
+                               bool _carryIn) noexcept
+{
+  // 6502: NWSTARS -- LDA QQ11 / BNE WPSHPS. `QQ11` is the view TYPE, zero for the space view,
+  // and a menu has no stardust to fill.
+  if (_viewType == 0u)
+  {
+    SeedStardustField(_canvas, _draw, _dust, _rng, _carryIn);
+  }
+
+  ClearAllShips(_state, _bubble, _work, _effects);
+}
+
 } // namespace Elite
