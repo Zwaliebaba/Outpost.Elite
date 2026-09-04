@@ -246,7 +246,10 @@ public:
     // What the autopilot can ask for. `ASL` doubles it, so 0x40 is the smallest roll request
     // whose doubling sets bit 7 -- the boundary the `BIT` after the shift is testing.
     const std::vector<std::uint8_t> REQUESTS = { 0x00, 0x01, 0x3F, 0x40, 0x7F, 0x80, 0xC0, 0xFF };
-    const std::vector<std::uint8_t> SPEEDS = { 0, 21, 22, 23, 255 };
+    // EORed with DELTA, which every case starts at 7, so the speeds coming back out of the
+    // stub are 7, 23, 22, 21 and 248 -- the clamp's boundary from both sides and one far
+    // above it.
+    const std::vector<std::uint8_t> SPEEDS = { 0, 16, 17, 18, 255 };
 
     std::vector<Case> cases;
 
@@ -297,9 +300,18 @@ public:
 
     for (const Case& item : cases)
     {
-      // 6502: JSR DOCKIT, replaced -- LDA #n / STA INWK+27 .. INWK+30 / RTS.
+      /*
+       * 6502: JSR DOCKIT, replaced -- LDA INWK+27 / EOR #n / STA INWK+27, then LDA #n /
+       * STA INWK+28 .. INWK+30, then RTS.
+       *
+       * The speed is EORed rather than stored because the real `DOCKIT` READS `INWK+27`: it is
+       * handed the current speed and gives back an adjusted one. A stub that only wrote it would
+       * make `LDA DELTA / STA INWK+27` invisible, and a port that dropped that instruction would
+       * pass -- which is exactly what the mutation sweep found before this was an EOR.
+       */
       const std::uint8_t stub[] = {
-        0xA9, item.autopilot.speed,
+        0xAD, static_cast<std::uint8_t>((inwk + 27) & 0xFFu), static_cast<std::uint8_t>((inwk + 27) >> 8),
+        0x49, item.autopilot.speed,
         0x8D, static_cast<std::uint8_t>((inwk + 27) & 0xFFu), static_cast<std::uint8_t>((inwk + 27) >> 8),
         0xA9, item.autopilot.acceleration,
         0x8D, static_cast<std::uint8_t>((inwk + 28) & 0xFFu), static_cast<std::uint8_t>((inwk + 28) >> 8),
@@ -352,7 +364,7 @@ public:
         void ScanKeyboard() override { ++scans; }
         void RunDockingComputer(Elite::ShipBlock& _work) override
         {
-          _work[27] = answer.speed;
+          _work[27] = static_cast<std::uint8_t>(_work[27] ^ answer.speed);
           _work[28] = answer.acceleration;
           _work[29] = answer.roll;
           _work[30] = answer.pitch;
