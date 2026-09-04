@@ -311,12 +311,16 @@ void MovePointOnScreen(DrawWorkspace& _draw, const GeometryWorkspace& _geometry,
                        MathWorkspace& _math) noexcept;
 
 /*
- * 6502: XX13, SWAP and dontclip -- what `LL145` reports, and the one flag that switches it off.
+ * 6502: XX13 and dontclip -- what `LL145` reports, and the one flag that switches it off.
  *
  * `dontclip` is NOT the clipper's own state: `TT23` sets it to 199 so that the short-range chart
  * can use the whole screen instead of being clipped to the space view, and `RES2` clears it
  * again. It is a slice-2 routine reaching into a slice-3b one, which the ledger's row does not
- * say, so it is a parameter here rather than a constant.
+ * say, so it is a parameter here rather than a constant. `TT23` writes `Yx2M1` in the same two
+ * instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` writes both.
+ *
+ * `SWAP` used to be here and is now on `DrawWorkspace`: `LOIN` writes the same byte and `WPLS2`
+ * reads what `LOIN` left, so it is not the clipper's to own (§6.46).
  */
 struct ClipState
 {
@@ -327,10 +331,6 @@ struct ClipState
    * `LL83` reads.
    */
   std::uint8_t xx13 = 0;
-
-  /// 6502: SWAP -- &FF when the two ends came back exchanged, which the caller needs because a
-  /// line that was reversed cannot be joined onto the end of the one before it.
-  std::uint8_t swap = 0;
 
   /// 6502: dontclip -- bit 7 set means return the line unclipped.
   std::uint8_t dontclip = 0;

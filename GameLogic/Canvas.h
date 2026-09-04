@@ -224,6 +224,20 @@ struct DrawWorkspace
   std::uint8_t r2 = 0;
 
   /*
+   * 6502: SWAP -- did the last line come out with its ends the other way round?
+   *
+   * It is here rather than with the clipper because ONE byte at 1780 has two writers and two
+   * readers, and they do not pair up: `LL145` and `LOIN` both write it, and `BLINE` reads what
+   * `LL145` left while `WPLS2` reads what `LOIN` left. Slice 3b modelled it as the clipper's
+   * report and `LOIN` kept its own copy in a local, which agreed with the game until `WPLS2`
+   * asked `LOIN` for it (§6.46).
+   *
+   * It is 0 or 255 rather than a bool because `LOIN` writes it with `DEC` and `WPLS2` tests it
+   * with `BNE`.
+   */
+  std::uint8_t swap = 0;
+
+  /*
    * 6502: XX15+4 and XX15+5 (slice 3b).
    *
    * `X1`, `Y1`, `X2` and `Y2` are not four bytes the line drawing owns -- they are the first four

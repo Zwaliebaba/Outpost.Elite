@@ -654,7 +654,7 @@ bool ClipLineKeepingSwap(DrawWorkspace& _draw, GeometryWorkspace& _geometry, Mat
   // 6502: LLX117 -- put the other end in the near slot and clip that too.
   SwapEnds(_draw, _geometry);
   MovePointOnScreen(_draw, _geometry, _math);
-  _clip.swap = static_cast<std::uint8_t>(_clip.swap - 1u);
+  _draw.swap = static_cast<std::uint8_t>(_draw.swap - 1u);
 
   RepackClipped(_draw, _geometry);
   return false;
@@ -663,7 +663,7 @@ bool ClipLineKeepingSwap(DrawWorkspace& _draw, GeometryWorkspace& _geometry, Mat
 bool ClipLine(DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
               ClipState& _clip) noexcept
 {
-  _clip.swap = 0;
+  _draw.swap = 0;
   return ClipLineKeepingSwap(_draw, _geometry, _math, _clip, _draw.xx15Plus5);
 }
 
