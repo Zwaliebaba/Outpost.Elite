@@ -701,4 +701,92 @@ public:
   }
 };
 
+
+TEST_CLASS(TheMissileLock)
+{
+public:
+  /*
+   * 6502: ABORT and ABORT2 -- every slot, every colour, every missile count.
+   *
+   * The assertion that matters is `MSAR`. `ABORT2` ends `STY MSAR`, and Y at that point is the
+   * ZERO `MSBAR` returned rather than the colour the caller passed in -- a register side effect
+   * surviving a `JSR`, three instructions after the call that produced it. A port that stored the
+   * argument would be right about the light and wrong about the lock.
+   */
+  TEST_METHOD(SettingTheMissileTargetMatchesABORT2)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Labels at(oracle);
+    const std::uint16_t abort = oracle.Label("ABORT");
+    const std::uint16_t abort2 = oracle.Label("ABORT2");
+    const std::uint16_t mstg = oracle.Label("MSTG");
+    const std::uint16_t msar = oracle.Label("MSAR");
+    const std::uint16_t nomsl = oracle.Label("NOMSL");
+
+    Cpu6502 cpu = oracle.Fresh();
+    Elite::Canvas canvas;
+
+    const std::uint8_t COLOURS[] = { Elite::MISSILE_NONE, Elite::MISSILE_LOCKED,
+                                     Elite::MISSILE_ARMED, Elite::MISSILE_READY };
+
+    std::uint32_t compared = 0;
+
+    for (const bool viaAbort : { false, true })
+    {
+      for (std::uint32_t missiles = 1; missiles <= 4; ++missiles)
+      {
+        for (const std::uint8_t colour : COLOURS)
+        {
+          for (const std::uint8_t target : { std::uint8_t{ 0 }, std::uint8_t{ 3 }, std::uint8_t{ 0xFF } })
+          {
+            FillScreens(cpu, canvas, at.screen, 0x00u);
+
+            cpu.memory[nomsl] = static_cast<std::uint8_t>(missiles);
+            cpu.memory[mstg] = 0x2Au;
+            cpu.memory[msar] = 0x2Au;
+            cpu.x = target;
+            cpu.y = colour;
+
+            const Elite::Testing::RunResult run =
+              cpu.CallSubroutine(viaAbort ? abort : abort2, 2'000);
+            Assert::IsTrue(run.completed, L"ABORT returned");
+
+            Elite::Bubble bubble;
+            bubble.missileTarget = 0x2Au;
+            std::uint8_t seeking = 0x2Au;
+
+            if (viaAbort)
+            {
+              Elite::AbortMissileLock(canvas, bubble, seeking,
+                                      static_cast<std::uint8_t>(missiles), colour);
+            }
+            else
+            {
+              Elite::SetMissileTarget(canvas, bubble, seeking,
+                                      static_cast<std::uint8_t>(missiles), target, colour);
+            }
+
+            const std::wstring where =
+              Widen(std::string(viaAbort ? "ABORT" : "ABORT2") + "(target "
+                    + std::to_string(target) + ", colour " + std::to_string(colour)
+                    + ", NOMSL " + std::to_string(missiles) + ")");
+
+            (void)CompareScreens(cpu, at.screen, canvas, 0x00u, where);
+            Assert::AreEqual(cpu.memory[mstg], bubble.missileTarget, (where + L": MSTG").c_str());
+            Assert::AreEqual(cpu.memory[msar], seeking, (where + L": MSAR").c_str());
+            ++compared;
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(2u * 4u * 4u * 3u, compared, L"the whole sweep ran");
+  }
+};
+
 } // namespace GameLogicTests

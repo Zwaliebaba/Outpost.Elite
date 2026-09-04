@@ -160,6 +160,31 @@ void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
  */
 void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, std::uint8_t _colour) noexcept;
 
+/*
+ * 6502: RED2, YELLOW2, GREEN2 -- the missile indicator's four states, as SCREEN RAM palette
+ * bytes rather than bitmap colours. Black is no missile at all.
+ */
+inline constexpr std::uint8_t MISSILE_NONE = 0x00;
+inline constexpr std::uint8_t MISSILE_LOCKED = 0x27;  ///< 6502: RED2 -- armed and locked
+inline constexpr std::uint8_t MISSILE_ARMED = 0x87;   ///< 6502: YELLOW2 -- armed, seeking
+inline constexpr std::uint8_t MISSILE_READY = 0x57;   ///< 6502: GREEN2 -- unarmed
+
+/*
+ * 6502: ABORT2 -- point the leftmost missile at slot X, and recolour its indicator.
+ *
+ * `STY MSAR` STORES ZERO, not the colour it was handed: `MSBAR` ends `LDY #0`, and the store
+ * three instructions later reads that rather than the Y the caller passed. So every call clears
+ * "the missile is seeking a lock" whatever colour it sets the light to -- which is a register
+ * side effect surviving a `JSR`, and the reason `SetMissileIndicator` is documented as leaving
+ * Y at zero even though nothing in the port needs it to (§6.68).
+ */
+void SetMissileTarget(Canvas& _canvas, Bubble& _bubble, std::uint8_t& _missileSeeking,
+                      std::uint8_t _missiles, std::uint8_t _target, std::uint8_t _colour) noexcept;
+
+/// 6502: ABORT -- `LDX #&FF` and then straight into `ABORT2`: no target, so the lock is off.
+void AbortMissileLock(Canvas& _canvas, Bubble& _bubble, std::uint8_t& _missileSeeking,
+                      std::uint8_t _missiles, std::uint8_t _colour) noexcept;
+
 /// 6502: ECBLB -- toggle the E.C.M. bulb, two cells of it, by EORing `BULBCOL` in and out.
 void ToggleEcmIndicator(Canvas& _canvas) noexcept;
 

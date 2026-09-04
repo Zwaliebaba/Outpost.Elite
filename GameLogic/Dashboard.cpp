@@ -163,6 +163,23 @@ void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, std::uint8_t _c
   _canvas.Write(static_cast<std::uint16_t>(MISSILE_CELL + cell), _colour);
 }
 
+void SetMissileTarget(Canvas& _canvas, Bubble& _bubble, std::uint8_t& _missileSeeking,
+                      std::uint8_t _missiles, std::uint8_t _target, std::uint8_t _colour) noexcept
+{
+  _bubble.missileTarget = _target;                          // 6502: STX MSTG
+  SetMissileIndicator(_canvas, _missiles, _colour);         // 6502: LDX NOMSL / JSR MSBAR
+
+  // 6502: STY MSAR -- and Y is the ZERO `MSBAR` ended on, not the colour that went in.
+  _missileSeeking = 0;
+}
+
+void AbortMissileLock(Canvas& _canvas, Bubble& _bubble, std::uint8_t& _missileSeeking,
+                      std::uint8_t _missiles, std::uint8_t _colour) noexcept
+{
+  // 6502: ABORT -- LDX #&FF, and no RTS: it runs straight into ABORT2.
+  SetMissileTarget(_canvas, _bubble, _missileSeeking, _missiles, 0xFFu, _colour);
+}
+
 void ToggleEcmIndicator(Canvas& _canvas) noexcept
 {
   // 6502: ECBLB -- two cells, one above the other, EORed in and out.
