@@ -1406,6 +1406,18 @@ public:
       { "both behind you", 1, 0, 0, 0, 0x81, 0x00, 0x81, 0x00 },
       { "no junk at all", 0, 0, 0, 0, 0x30, 0x40, 0x30, 0x40 },
       { "junk right up to the slot", 3, 0, 0, 0, 0x30, 0x40, 0x30, 0x40 },
+
+      /*
+       * The `CMP #2 / BCC WA1` boundary, from both sides and on both bodies. `MAS2` ORs the three
+       * sign bytes and drops bit 7, so a sign byte of 2 IS a largest axis of 2 -- which is the
+       * smallest distance the routine will still warp from. Without these four the comparison
+       * cannot tell `< 2` from `< 3`, which is what the mutation sweep found.
+       */
+      { "the planet at exactly two", 1, 0, 0, 0, 0x02, 0x00, 0x30, 0x40 },
+      { "the planet at one below two", 1, 0, 0, 0, 0x01, 0x00, 0x30, 0x40 },
+      { "the sun at exactly two", 1, 0, 0, 0, 0x30, 0x40, 0x02, 0x00 },
+      { "the sun at one below two", 1, 0, 0, 0, 0x30, 0x40, 0x01, 0x00 },
+      { "both at exactly two", 1, 0, 0, 0, 0x02, 0x00, 0x02, 0x00 },
     };
 
     std::uint32_t jumped = 0;
