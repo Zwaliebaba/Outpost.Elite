@@ -211,4 +211,104 @@ struct GeometryWorkspace
  */
 void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept;
 
+/*
+ * The line clipper's arithmetic (slice 3b).
+ *
+ * `LL145` clips a line whose ends are sixteen-bit coordinates down to the eight-bit screen, and
+ * to do that it has to step along the line by a gradient. These three are that step. They are
+ * one routine with four entry points in the original and they jump into each other's bodies, so
+ * they are ported together.
+ */
+
+/// What `LL120` and `LL123` leave in (Y X) -- a sixteen-bit signed step along the line.
+struct SlopeStep
+{
+  std::uint8_t low = 0;  ///< 6502: X
+  std::uint8_t high = 0; ///< 6502: Y
+};
+
+/*
+ * 6502: LL129 -- Q = XX12+2, (S R) = |S R|, and the answer is the sign the step will get.
+ *
+ * The returned byte is the ORIGINAL S EOR'd with the slope direction in `XX12+3`, taken before
+ * the magnitude is made positive. Both callers push it and use it at the very end to decide
+ * whether to negate, so it is a return value here rather than a side effect.
+ */
+[[nodiscard]] std::uint8_t PrepareSlope(MathWorkspace& _math, const GeometryWorkspace& _geometry) noexcept;
+
+/*
+ * 6502: LL120 and LL123, which are the same code with the dispatch the other way round.
+ *
+ * `T` says whether the line is steep or shallow, and that decides whether the step is a multiply
+ * or a divide: `LL120` multiplies on a shallow slope and divides on a steep one, `LL123` does the
+ * opposite. `LL120` also sets `R` from `x1_lo` first, which `LL123` does not.
+ *
+ * The result takes the OPPOSITE sign to the slope direction, which is why both end by negating
+ * when `LL129`'s byte came out positive rather than negative.
+ */
+[[nodiscard]] SlopeStep StepAlongX(MathWorkspace& _math, const GeometryWorkspace& _geometry,
+                                   const DrawWorkspace& _draw) noexcept;
+[[nodiscard]] SlopeStep StepAlongY(MathWorkspace& _math, const GeometryWorkspace& _geometry) noexcept;
+
+/*
+ * 6502: LL118 -- move a point along its line until it is on the screen.
+ *
+ * Four clamps in order, one per edge, and each is "step along the slope by however far off you
+ * are, then set the coordinate to the edge". The step is `LL120` for the x edges and `LL123` for
+ * the y ones, which is the same code under a different reading of `T`.
+ *
+ * The point goes IN as two sixteen-bit coordinates in `XX15(1 0)` and `XX15(3 2)` and comes out
+ * as two eight-bit ones in `XX15` and `XX15+2` -- so in this port's field names, x1 in `x1` and
+ * y1 in `x2`. That is `XX15`'s aliasing doing its work: `Y1` and `Y2` hold the high bytes going
+ * in and are cleared on the way out.
+ */
+void MovePointOnScreen(DrawWorkspace& _draw, const GeometryWorkspace& _geometry,
+                       MathWorkspace& _math) noexcept;
+
+/*
+ * 6502: XX13, SWAP and dontclip -- what `LL145` reports, and the one flag that switches it off.
+ *
+ * `dontclip` is NOT the clipper's own state: `TT23` sets it to 199 so that the short-range chart
+ * can use the whole screen instead of being clipped to the space view, and `RES2` clears it
+ * again. It is a slice-2 routine reaching into a slice-3b one, which the ledger's row does not
+ * say, so it is a parameter here rather than a constant.
+ */
+struct ClipState
+{
+  /*
+   * 6502: XX13 -- 0 if the far end is on screen, 143 if neither end is, 71 if only the near one
+   * is. The upstream header gives 0, 95 and 191, which are the BBC's: they are `Y*2-1` and half
+   * of it, and the C64's Y is 72 rather than 96. 143 has bit 7 SET, which is what the test at
+   * `LL83` reads.
+   */
+  std::uint8_t xx13 = 0;
+
+  /// 6502: SWAP -- &FF when the two ends came back exchanged, which the caller needs because a
+  /// line that was reversed cannot be joined onto the end of the one before it.
+  std::uint8_t swap = 0;
+
+  /// 6502: dontclip -- bit 7 set means return the line unclipped.
+  std::uint8_t dontclip = 0;
+};
+
+/*
+ * 6502: LL145 and LL147 -- clip a line to the screen.
+ *
+ * In: three sixteen-bit coordinates, x1 in `XX15(1 0)`, y1 in `XX15(3 2)` and x2 in `XX15(5 4)`,
+ * with y2 in `XX12(1 0)`. Out: four eight-bit ones in `X1`, `Y1`, `X2`, `Y2` -- the SAME bytes,
+ * which is why `XX15` cannot be split into a geometry vector and a line (§6.37).
+ *
+ * Returns true when the line cannot be made to fit, which is the carry the original sets.
+ *
+ * `LL147` is the second entry point and differs in ONE thing: it does not zero `SWAP` first, so a
+ * caller that clips several segments in a row accumulates the flag. `LL9` part 10 is its only
+ * caller and it happens to have `XX15+5` in the accumulator at the call, so the byte is passed
+ * explicitly here rather than assumed.
+ */
+[[nodiscard]] bool ClipLine(DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+                            ClipState& _clip) noexcept;
+[[nodiscard]] bool ClipLineKeepingSwap(DrawWorkspace& _draw, GeometryWorkspace& _geometry,
+                                       MathWorkspace& _math, ClipState& _clip,
+                                       std::uint8_t _a) noexcept;
+
 } // namespace Elite
