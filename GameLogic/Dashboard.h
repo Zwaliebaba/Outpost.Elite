@@ -64,10 +64,15 @@ inline constexpr std::uint16_t MISSILE_CELL = Canvas::DASHBOARD_CELLS + 24u * 40
  * `CABTMP`, `ALTIT` and `FLH` have no writer in this slice -- flight loop part 15 sets the first
  * two and the damage flash is 3d-d's -- so 3d-b reads them and 3d-d fills them in.
  *
- * `ECMP` joined them in 3d-d-i and is the one field here no dial reads. It is `ECMA`'s other
- * half -- whether the E.C.M. that is running is ours or somebody else's -- and `ECMOF` clears
- * the pair with a single `LDA #0`, which is the shape a struct field and a reference parameter
- * between them would have hidden. Its other writer is flight loop part 3, in 3d-d-iii.
+ * THREE OF THEM ARE NOT DIALS. `ECMP` joined in 3d-d-i -- it is `ECMA`'s other half, whether the
+ * E.C.M. running is ours or somebody else's, and `ECMOF` clears the pair with a single `LDA #0`,
+ * which is the shape a struct field and a reference parameter between them would have hidden.
+ * `LAS2` and `MJ` joined in 3d-d-iii-a because `TTX66` clears the first and `WARP` reads the
+ * second, and neither had anywhere else to be: both are one byte of per-flight state with a
+ * single writer and a single reader, which is what everything else here is.
+ *
+ * So the struct is now "the per-flight bytes" rather than "what the dials read", and the name it
+ * kept from 3d-b understates it.
  */
 struct FlightStatus
 {
@@ -81,6 +86,14 @@ struct FlightStatus
   std::uint8_t ecmCountdown = 0;        ///< 6502: ECMA
   std::uint8_t ecmOurs = 0;             ///< 6502: ECMP
   std::uint8_t damageFlash = 0;         ///< 6502: FLH
+
+  /// 6502: LAS2 -- the laser power for the view being shown, or zero for "no laser here, stop
+  /// pulsing". `TTX66` clears it on every screen change and flight loop part 16 reads it.
+  std::uint8_t viewLaser = 0;
+
+  /// 6502: MJ -- non-zero in witchspace. `WARP` refuses to work while it is set, which is why
+  /// you cannot skip past a Thargoid ambush.
+  std::uint8_t midJump = 0;
 };
 
 /// What `PZW` hands back: the original returns one colour in A and another in X, and both of its

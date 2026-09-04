@@ -7,8 +7,12 @@
 #include "Controls.h"
 #include "Dashboard.h"
 #include "ShipDraw.h"
+#include "ExtendedTokens.h"
+#include "Rng.h"
 #include "ShipSlot.h"
+#include "Stardust.h"
 #include "TextPrint.h"
+#include "Tokens.h"
 
 namespace Elite
 {
@@ -185,5 +189,116 @@ void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _ma
                        Bubble& _bubble, const FlightState& _flight, const FlightStatus& _status,
                        std::uint8_t _fuel, Compass& _compass, SightEffects& _effects,
                        std::uint8_t _view) noexcept;
+
+/// What `LOOK1` and `WARP` reach that is neither memory nor the canvas.
+class ViewEffects
+{
+public:
+  virtual ~ViewEffects() = default;
+
+  /// 6502: LDA #0 / JSR DOVDU19 -- a palette change, which on this build writes a VIC-II colour
+  /// register. `LOOK1` makes it the first thing it does, before it has even looked at the view.
+  virtual void SetPalette(std::uint8_t _colour) = 0;
+
+  /// 6502: LDY #sfxboop / JMP NOISE -- the refusal noise `WARP` makes when it will not warp.
+  virtual void PlaySound(std::uint8_t _effect) = 0;
+};
+
+/// 6502: sfxboop -- the effect number `WARP` asks for when it refuses.
+inline constexpr std::uint8_t SOUND_BOOP = 6;
+
+/*
+ * Everything a screen change works on.
+ *
+ * One struct for the reason `TradeScreen`, `SaveScreen` and `GameStart` are structs: the
+ * alternative is a function with eighteen arguments, written four times. `TTX66` genuinely
+ * touches all of this -- the line heaps, the token printer, the message counters, the laser, the
+ * stardust and the dashboard -- because clearing the screen means forgetting everything drawn on
+ * it, and everything drawn on it belongs to somebody different.
+ *
+ * The references are what the original's globals are. Nothing here is aggregated state the game
+ * does not have: each field is one 6502 label, and the struct is the argument list.
+ */
+struct FlightScreen
+{
+  Canvas& canvas;
+  DrawWorkspace& draw;
+  MathWorkspace& math;
+  GeometryWorkspace& geometry;
+
+  Stardust& dust;
+  PlanetSunState& heaps;
+  Bubble& bubble;
+  ShipBlock& work;          ///< 6502: INWK
+
+  ScreenState& screen;
+  TextState& text;
+  ExtendedTextState& extended;
+  TokenPrinter& printer;
+  TextSink& sink;
+  MessageState& message;
+
+  FlightState& flight;
+  FlightStatus& status;
+  Compass& compass;
+  Rng& rng;
+
+  const CommanderBlock& commander;  ///< 6502: TP, for the LASER bytes `SIGHT` reads
+  std::uint8_t& trumbleSprites;     ///< 6502: TRIBCT
+
+  SightEffects& sight;
+  ViewEffects& effects;
+
+  std::uint8_t& view;       ///< 6502: QQ11 -- which screen is up
+  std::uint8_t& spaceView;  ///< 6502: VIEW -- which way the player is looking, 0 to 3
+  std::uint8_t& explosions; ///< 6502: EV
+  std::uint8_t fuel = 0;    ///< 6502: QQ14, which `DIALS` reads and nothing here writes
+};
+
+/*
+ * 6502: TT66, which is `STA QQ11` and then falls into TTX66 -- change to a screen and clear it.
+ *
+ * The port has had HALF of this since slice 2e: `SetUpTextScreen` is the text state and the
+ * pixels were left behind `TradeScreenEffects::ClearToView`, because the dashboard, the sprites,
+ * the border and the colour bands were phase 3's (§6.77). This is the whole routine.
+ *
+ * FOUR THINGS IT FORGETS, and they are the reason it reaches so far: the ball line heap (`LSP`),
+ * the sun's (`FLFLLS`), the laser (`LAS2`) and any message on screen (`DLY`, `de`). A screen
+ * change wipes the bitmap, so everything that remembers what it drew there has to be told.
+ *
+ * `QQ17` IS WRITTEN TWICE AND THE SECOND ONE WINS -- 128 near the top and 0 five bytes from the
+ * end, so a caller sees ALL CAPS while `DTW2` keeps the 128. §6.29 records the port nearly
+ * shipping the first reading.
+ *
+ * The view's name is printed only on the space view, at column 11 of row 1: `LDA VIEW / ORA #&60`
+ * turns 0 to 3 into tokens 96 to 99, then a space, then token 175 -- "VIEW".
+ */
+void SetUpScreen(FlightScreen& _screen, std::uint8_t _view) noexcept;
+
+/*
+ * 6502: LOOK1 -- change the view, with `LQ` and `LO2` as its other two paths.
+ *
+ * THREE EXITS AND THEY DO DIFFERENT AMOUNTS OF WORK. On a non-space screen it sets the view,
+ * clears, draws the sights and tail-jumps to `NWSTARS`. On the space view with the SAME view
+ * already showing it returns having done nothing but the palette. Otherwise it clears, flips the
+ * stardust, wipes the ships and falls into `SIGHT` -- and does NOT reseed the dust, which is why
+ * switching views mirrors the field in the diagonal rather than replacing it.
+ */
+void ChangeView(FlightScreen& _screen, std::uint8_t _to) noexcept;
+
+/*
+ * 6502: WARP -- the "J" key, which jumps you a long way towards the planet or the sun.
+ *
+ * It refuses in four cases and the first three are one `ORA` chain: any junk in the slot above
+ * the junk count, a space station in the bubble, or witchspace. The fourth is distance -- both
+ * the planet and the sun have to be at least two of `MAS2`'s units away, and a NEGATIVE sign
+ * byte skips that test for whichever body it belongs to, because a body behind you cannot be
+ * flown into.
+ *
+ * The jump itself is `ADD` with `S`, `R` and `P` all set to &81, which is -1 in sign-magnitude
+ * with the low bit set: it subtracts a fixed amount from each body's z. Then the view is reset
+ * through `LOOK1` and the main loop counter is forced so the next pass does a full update.
+ */
+void Warp(FlightScreen& _screen) noexcept;
 
 } // namespace Elite
