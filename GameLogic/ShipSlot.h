@@ -81,8 +81,13 @@ inline constexpr std::uint8_t SHIP_STATE_FIRING = 0x40;    ///< 6502: bit 6 -- l
 inline constexpr std::uint8_t SHIP_STATE_KILLED = 0x80;    ///< 6502: bit 7 -- killed, not yet exploding
 
 /// 6502: the ship types NWSHP and KILLSHP single out by name.
+/// 6502: MSL -- the only type that carries a target slot in its AI byte, which `KILLSHP` has to
+/// renumber, and the one `MVEIT` runs tactics on every iteration rather than one in eight.
+inline constexpr std::uint8_t SHIP_TYPE_MISSILE = 1;
 inline constexpr std::uint8_t SHIP_TYPE_STATION = 2;  ///< 6502: SST -- skips the heap allocation
 inline constexpr std::uint8_t SHIP_TYPE_HERMIT = 15;  ///< 6502: HER -- counts as junk despite its type
+inline constexpr std::uint8_t SHIP_TYPE_CONSTRICTOR = 31; ///< 6502: CON -- the mission ship, whose
+                                                          ///< death sets a mission flag
 inline constexpr std::uint8_t JUNK_TYPE_FIRST = 3;    ///< 6502: JL = ESC
 inline constexpr std::uint8_t JUNK_TYPE_LIMIT = 11;   ///< 6502: JH = SHU+2, exclusive
 
@@ -136,6 +141,29 @@ struct Bubble
   /// 6502: JUNK -- cargo canisters, escape pods and the rest, counted together as well as
   /// separately, because the tactics code asks "is any of this worth shooting at".
   std::uint8_t junk = 0;
+
+  /*
+   * 6502: MSTG -- which slot the player's missile is locked on, or 255 for none.
+   *
+   * It is bubble state and not missile state, because `KILLSHP` has to know: killing the ship a
+   * missile is chasing has to unlock it, and killing a ship BELOW it in the list has to renumber
+   * it, since every slot above the dead one shifts down.
+   */
+  std::uint8_t missileTarget = 0xFF;
+
+  /*
+   * 6502: SSPR -- and it is not a byte of its own. `MANY` is at 1117 and `SSPR` at 1119, and
+   * `SST` is 2, so **`SSPR` IS `MANY + SST`**: "is the space station present" and "how many
+   * space stations are in the bubble" are one byte with two names (§6.58).
+   *
+   * That is why nothing ever sets it when a station is created -- `NWSHP`'s `INC MANY,X` has
+   * already done it -- and why `KS4`'s `STA SSPR` is how the count is cleared. The port had it
+   * as a separate field for about an hour, and the sweep caught it on the first station kill.
+   */
+  [[nodiscard]] std::uint8_t StationPresent() const noexcept
+  {
+    return counts[SHIP_TYPE_STATION];
+  }
 
   /// 6502: SLSP -- the bottom of the ship line heap, which grows DOWN from LS%. It is bubble
   /// state rather than drawing state: `NWSHP` moves it and `KILLSHP` moves it back, and what
