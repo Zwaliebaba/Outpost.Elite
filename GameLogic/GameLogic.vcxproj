@@ -160,6 +160,7 @@
     <ClInclude Include="PlanetDraw.h" />
     <ClInclude Include="Dashboard.h" />
     <ClInclude Include="FlightLoop.h" />
+    <ClInclude Include="Controls.h" />
     <ClInclude Include="Lasers.h" />
     <ClInclude Include="Messages.h" />
     <ClInclude Include="Scanner.h" />
@@ -226,6 +227,7 @@
     <ClCompile Include="PlanetDraw.cpp" />
     <ClCompile Include="Dashboard.cpp" />
     <ClCompile Include="FlightLoop.cpp" />
+    <ClCompile Include="Controls.cpp" />
     <ClCompile Include="Lasers.cpp" />
     <ClCompile Include="Messages.cpp" />
     <ClCompile Include="Scanner.cpp" />

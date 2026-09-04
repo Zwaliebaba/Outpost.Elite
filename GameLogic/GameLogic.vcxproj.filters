@@ -75,6 +75,9 @@
     <ClInclude Include="FlightLoop.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Controls.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Dashboard.h">
       <Filter>Canvas</Filter>
     </ClInclude>
@@ -232,6 +235,9 @@
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="FlightLoop.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Controls.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Dashboard.cpp">
