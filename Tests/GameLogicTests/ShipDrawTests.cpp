@@ -1462,4 +1462,309 @@ public:
   }
 };
 
+
+namespace
+{
+/// The seams `LL9` leaves its own code through, counted rather than performed. `DOEXP` and
+/// `PLANET` are trapped in the oracle so that both sides stop at the same place.
+class CountingDrawEffects final : public Elite::ShipDrawEffects
+{
+public:
+  std::uint32_t planets = 0;
+  std::uint32_t explosions = 0;
+  std::uint32_t clouds = 0;
+
+  void DrawPlanetOrSun() override { ++planets; }
+  void DrawExplosion() override { ++explosions; }
+  void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override { ++clouds; }
+};
+} // namespace
+
+TEST_CLASS(TheShipDrawing)
+{
+public:
+  /*
+   * 6502: LL9, parts 1 to 12 -- the whole of it.
+   *
+   * This is the slice's acceptance criterion and it is compared on everything the routine can
+   * touch: the entire canvas, the entire line heap, `INWK`, the two bytes it writes into `K%`
+   * through `INF`, the face flags in `XX2` and every projected vertex in `XX3`.
+   *
+   * `XX3` lives at 256 in the original -- the bottom of the stack page -- so the comparison
+   * stops at 192, well below where the 6502's own stack is working. The largest blueprint fills
+   * 148 bytes of it.
+   *
+   * `DOEXP` and `PLANET` are trapped on both sides. The explosion-cloud block is NOT exercised:
+   * reaching it needs a ship that has just been killed, and the `JSR DORND` in it runs on a carry
+   * this port cannot determine, which is why it is behind the seam. The test asserts the seam is
+   * never reached rather than pretending otherwise.
+   */
+  TEST_METHOD(DrawingAShipMatchesLL9)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t xx0 = oracle.Label("XX0");
+    const std::uint16_t xx2 = oracle.Label("XX2");
+    const std::uint16_t xx3 = oracle.Label("XX3");
+    const std::uint16_t inf = oracle.Label("INF");
+    const std::uint16_t type = oracle.Label("TYPE");
+    const std::uint16_t ll9 = oracle.Label("LL9");
+    const std::uint16_t doexp = oracle.Label("DOEXP");
+    const std::uint16_t planet = oracle.Label("PLANET");
+    const std::uint16_t dontclip = oracle.Label("dontclip");
+    const std::uint16_t screenBase = ScreenBase(oracle);
+
+    constexpr std::uint16_t SLOT_AT = 0xF900; // 6502: K%, the first slot.
+    constexpr std::uint16_t XX3_BYTES = 192;
+
+    // Every ship type, and for each of them a set of positions and orientations chosen to reach
+    // the routine's decisions: near and far, left and right, above and below, and behind.
+    struct Placement
+    {
+      std::array<std::uint8_t, 9> position;
+      std::uint8_t state;
+      const wchar_t* what;
+    };
+
+    /*
+     * The distances are chosen against blueprint byte 13, the range past which a ship stops
+     * being a wireframe: it runs from 5 to 125 across the thirty-three, and `z_hi` under 16
+     * skips that test entirely, so those placements draw properly for every ship. The first
+     * draft used distances that made 317 of 363 cases a rejection, which is a sweep that agrees
+     * with the game about doing nothing (§6.36).
+     */
+    const std::vector<Placement> PLACEMENTS = {
+      { { 0, 0, 0, 0, 0, 0, 0, 2, 0 }, 0x00, L"straight ahead" },
+      { { 0, 1, 0, 0, 1, 0, 0, 4, 0 }, 0x08, L"up and to the right, and already drawn" },
+      { { 0, 1, 0x80, 0, 1, 0x80, 0, 4, 0 }, 0x08, L"down and to the left" },
+      { { 0x80, 0, 0, 0x80, 0, 0, 0, 1, 0 }, 0x08, L"close enough to fill the view" },
+      { { 0, 3, 0, 0, 2, 0x80, 0, 8, 0 }, 0x08, L"off to one side but still in front" },
+      { { 0, 1, 0, 0, 1, 0, 0, 4, 0x80 }, 0x08, L"behind the player" },
+      { { 0, 4, 0, 0, 0, 0, 0, 4, 0 }, 0x08, L"exactly as wide as it is distant" },
+      { { 0, 0, 0, 0, 0, 0, 0, 0xC0, 0 }, 0x08, L"past the distance cap" },
+      { { 0, 1, 0, 0, 1, 0, 0, 5, 0 }, 0x48, L"firing its laser" },
+      { { 0, 1, 0, 0, 1, 0, 0, 5, 0 }, 0x28, L"exploding" },
+      { { 0, 0x10, 0, 0, 0x08, 0, 0, 0x40, 0 }, 0x08, L"a long way off, so a dot" },
+      { { 0, 0, 0, 0, 0, 0, 0, 2, 0 }, 0x08, L"back where it started" },
+      /*
+       * Three placements added after mutation testing, because three of `LL9`'s paths were
+       * unreached: the floor of four that pulls a vertex in front of the player before dividing
+       * by its z, the `ovflw` retry that halves the position when a face's arithmetic
+       * overflows, and the test that stops the edge loop when the line heap is full. All three
+       * need the ship CLOSE -- close enough that its own vertices straddle the player's plane.
+       */
+      { { 30, 0, 0, 0, 0, 0, 40, 0, 0 }, 0x08, L"close enough for a vertex to be behind you" },
+      { { 0, 0, 0, 0, 0, 0, 20, 0, 0 }, 0x08, L"almost touching" },
+      { { 60, 0, 0, 40, 0, 0x80, 90, 0, 0 }, 0x08, L"close and off to one side" },
+      { { 0, 0, 0, 0, 0, 0, 250, 0, 0 }, 0x08, L"close, and large enough to overflow a face" },
+      { { 0, 0, 0, 0, 0, 0, 0x80, 0, 0 }, 0x08, L"close, and showing enough edges to fill the heap" },
+      // The big ships -- the station, the Anaconda, the Thargoid -- only fit on the screen from
+      // a long way back, and it is those that have more edges than their heap allowance holds.
+      { { 0, 0, 0, 0, 0, 0, 0, 0x10, 0 }, 0x48, L"a large ship at a distance, firing" },
+      { { 0, 0, 0, 0, 0, 0, 0, 0x20, 0 }, 0x48, L"further still, firing" },
+    };
+
+    /*
+     * Three orientations, and the layout is the thing to get right: each vector is three
+     * SIXTEEN-BIT sign-magnitude numbers as (lo, hi) pairs, with the sign in bit 7 of the high
+     * byte -- so a unit vector of 96 is `hi = 96, lo = 0`, not the other way round. `LL21` reads
+     * the pair as `ASL lo / ROL hi`, which is nine bits of the high byte and would make a vector
+     * written the wrong way round come out as exactly zero. The first draft of this test did
+     * that, agreed with the game on all 396 cases, and drew almost nothing (§6.36 again).
+     *
+     * The order within INWK+9 onwards is nosev, roofv, sidev.
+     */
+    const std::vector<std::array<std::uint8_t, 18>> ORIENTATIONS = {
+      // Facing away from the player: nose along +z, roof along +y, side along +x.
+      { 0, 0, 0, 0, 0, 96, 0, 0, 0, 96, 0, 0, 0, 96, 0, 0, 0, 0 },
+      // Facing the player, which is what a ship attacking you looks like.
+      { 0, 0, 0, 0, 0, 0xE0, 0, 0, 0, 96, 0, 0, 0, 0xE0, 0, 0, 0, 0 },
+      // Rolled and pitched, so that all three vectors have two non-zero components.
+      { 0, 0, 0, 60, 0, 74, 0, 0, 0, 74, 0, 0xBC, 0, 96, 0, 0, 0, 0 },
+    };
+
+    std::uint32_t compared = 0;
+    std::uint32_t drawn = 0;
+    std::uint32_t asPoints = 0;
+    std::uint32_t erased = 0;
+    std::uint32_t heapFilled = 0;
+
+    for (std::uint8_t shipType = 1; shipType <= Elite::SHIP_TYPE_COUNT; ++shipType)
+    {
+      const std::uint16_t blueprint = Elite::BlueprintAddress(shipType);
+      if (blueprint == 0u)
+      {
+        continue;
+      }
+
+      for (std::size_t place = 0; place < PLACEMENTS.size(); ++place)
+      {
+        const Placement& placement = PLACEMENTS[place];
+
+        // Every orientation against every placement rather than one apiece: mutation testing
+        // found three of `LL9`'s paths unreached with one, and which faces a ship shows is
+        // decided by its orientation rather than by where it is.
+        for (const std::array<std::uint8_t, 18>& orientation : ORIENTATIONS)
+        {
+        Cpu6502 cpu = oracle.Fresh();
+        Elite::Canvas canvas;
+        Elite::DrawWorkspace draw;
+        Elite::GeometryWorkspace geometry;
+        Elite::MathWorkspace math;
+        Elite::ClipState clip;
+        Elite::Projection screen;
+        Elite::ShipBlock work;
+        Elite::ShipBlock slot;
+        Elite::LineHeap heap;
+        CountingDrawEffects effects;
+
+        cpu.AddTrap(doexp);
+        cpu.AddTrap(planet);
+
+        SeedHeap(cpu, heap, {});
+
+        // XX3's compared range, cleared on both sides so an unwritten byte cannot pass by luck.
+        for (std::uint16_t byte = 0; byte < XX3_BYTES; ++byte)
+        {
+          cpu.memory[static_cast<std::uint16_t>(xx3 + byte)] = 0;
+        }
+        for (std::uint16_t byte = 0; byte < 16u; ++byte)
+        {
+          cpu.memory[static_cast<std::uint16_t>(xx2 + byte)] = 0;
+        }
+
+        for (std::size_t byte = 0; byte < 9u; ++byte)
+        {
+          cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = placement.position[byte];
+          work[byte] = placement.position[byte];
+        }
+        for (std::size_t byte = 0; byte < 18u; ++byte)
+        {
+          cpu.memory[static_cast<std::uint16_t>(inwk + 9u + byte)] = orientation[byte];
+          work[9u + byte] = orientation[byte];
+        }
+        cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = placement.state;
+        work[Elite::SHIP_STATE_OFFSET] = placement.state;
+        cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
+        cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
+        work[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
+        work[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
+
+        cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint);
+        cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+        cpu.memory[inf] = static_cast<std::uint8_t>(SLOT_AT);
+        cpu.memory[static_cast<std::uint16_t>(inf + 1)] = static_cast<std::uint8_t>(SLOT_AT >> 8);
+        cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)] = 0x5A;
+        cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 30)] = 0xA5;
+        slot[28] = 0x5A;
+        slot[30] = 0xA5;
+        cpu.memory[type] = shipType;
+        cpu.memory[dontclip] = 0;
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(ll9, 4'000'000);
+        Assert::IsTrue(run.completed, L"LL9 returned");
+
+        Elite::DrawShip(canvas, draw, geometry, math, clip, screen, work, slot, heap, blueprint,
+                        shipType, effects);
+
+        const std::wstring where =
+          Widen("LL9(type=" + std::to_string(shipType) + "): ") + placement.what;
+
+        CompareScreens(cpu, screenBase, canvas, where);
+        CompareHeaps(cpu, heap, where);
+
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+                           (where + L": INWK+" + std::to_wstring(byte)).c_str());
+        }
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)], slot[28],
+                         (where + L": the slot's byte 28").c_str());
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 30)], slot[30],
+                         (where + L": the slot's byte 30").c_str());
+        // `XX18` is the ship's position as the face loop leaves it, and the `ovflw` retry is
+        // the only thing that changes it after the dot products -- so comparing it is how a
+        // retry that ran, or failed to, is seen from outside the routine.
+        for (std::size_t byte = 0; byte < 9u; ++byte)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("XX18") + byte)],
+                           geometry.xx18[byte],
+                           (where + L": XX18+" + std::to_wstring(byte)).c_str());
+        }
+
+        /*
+         * Twelve of `XX2`'s sixteen bytes, and the four left out are the ones it SHARES with
+         * `K3` and `K4` -- `XX2` is at 53, `K3` at 53 and `K4` at 67, so indices 0, 1, 14 and 15
+         * are the projected screen position as well as face flags. On the `SHPPT` path the
+         * original's `PROJ` writes them and the port's separate `Projection` does not, so those
+         * four differ by construction.
+         *
+         * That is a divergence with a measured bound rather than an argued one: no blueprint of
+         * the thirty-three names a face index that `EE29` or `EE30` does not write, so a stale
+         * flag cannot be read at all, aliased or otherwise. The four bytes are compared under
+         * their other name by `ProjectingAShipMatchesPROJ` and `DrawingADistantShipMatchesSHPPT`.
+         */
+        for (std::size_t byte = 2; byte < 14u; ++byte)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx2 + byte)], geometry.xx2[byte],
+                           (where + L": XX2+" + std::to_wstring(byte)).c_str());
+        }
+        for (std::uint16_t byte = 0; byte < XX3_BYTES; ++byte)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx3 + byte)],
+                           geometry.xx3[byte],
+                           (where + L": XX3+" + std::to_wstring(byte)).c_str());
+        }
+
+        Assert::AreEqual<std::uint32_t>(0u, effects.clouds, (where + L": no cloud was seeded").c_str());
+        Assert::AreEqual<std::uint32_t>(0u, effects.planets, (where + L": not a planet").c_str());
+        Assert::AreEqual<std::uint32_t>(
+          static_cast<std::uint32_t>(cpu.trapHits.size()), effects.explosions,
+          (where + L": the explosion seam agreed").c_str());
+
+        // Did the edge loop stop because the blueprint's own heap allowance ran out? That is
+        // the one path in `LL9` a whole-heap comparison cannot distinguish from the loop simply
+        // finishing, so it is counted.
+        if (heap.Read(HEAP_AT) >= Elite::ShipByte(static_cast<std::uint16_t>(blueprint + 5u)))
+        {
+          ++heapFilled;
+        }
+        if (heap.Read(HEAP_AT) == 8u)
+        {
+          ++asPoints;
+        }
+        else if (heap.Read(HEAP_AT) >= 4u)
+        {
+          ++drawn;
+        }
+        else
+        {
+          ++erased;
+        }
+        ++compared;
+        }
+      }
+    }
+
+    Logger::WriteMessage(("LL9: " + std::to_string(compared) + " ships drawn -- "
+                          + std::to_string(drawn) + " as wireframes, " + std::to_string(asPoints)
+                          + " as dots, " + std::to_string(erased) + " rubbed out, "
+                          + std::to_string(heapFilled) + " filling the blueprint's heap")
+                           .c_str());
+
+    Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(Elite::SHIP_TYPE_COUNT)
+                                      * static_cast<std::uint32_t>(PLACEMENTS.size())
+                                      * static_cast<std::uint32_t>(ORIENTATIONS.size()),
+                                    compared, L"every ship in every placement and orientation");
+    Assert::IsTrue(drawn > 0u, L"a ship was drawn as a wireframe");
+    Assert::IsTrue(asPoints > 0u, L"a ship was drawn as a dot");
+    Assert::IsTrue(erased > 0u, L"a ship was refused and rubbed out");
+  }
+};
+
 } // namespace GameLogicTests

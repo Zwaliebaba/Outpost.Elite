@@ -160,9 +160,24 @@ struct WideResult
  */
 void DivideToUR(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
+/*
+ * What `LL38` leaves behind, and the carry is part of it.
+ *
+ * The routine's own header says "C flag: set if the addition overflowed, clear otherwise", and it
+ * goes to some trouble to make that true -- the subtracting branch has an explicit `CLC` before
+ * its `RTS` that would otherwise be dead. `LL9`'s face-visibility loop reads it: a `BCS ovflw`
+ * there halves the ship's position and starts the face again. The port returned only the byte
+ * until `LL9` needed the flag, which is the third time a dropped register has come back (§6.33).
+ */
+struct SignedSum
+{
+  std::uint8_t value = 0;
+  bool carry = false;
+};
+
 /// 6502: LL38 (with its LL39 and LL40 branches) -- combines Q and R under the signs in A and S,
 /// flipping S when the result turns negative.
-[[nodiscard]] std::uint8_t CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
+[[nodiscard]] SignedSum CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /// 6502: ARCTAN -- the angle of the ratio P over Q, as a byte turn.
 [[nodiscard]] std::uint8_t Arctan(MathWorkspace& _work) noexcept;

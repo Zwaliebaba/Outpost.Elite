@@ -193,6 +193,51 @@ struct GeometryWorkspace
 
   /// 6502: XX12 -- three sign-magnitude dot products, magnitude then sign.
   std::array<std::uint8_t, 6> xx12{};
+
+  /*
+   * 6502: XX2 -- one byte per face saying whether you can see it, and SIXTEEN of them.
+   *
+   * Three measurements agree (§6.37): the edge data indexes it with a NIBBLE, the largest face
+   * count across the thirty-three blueprints is fifteen, and `XX2` is at 53 with `XX16` at 69.
+   *
+   * Those are the same bytes as `K3` and `K4`, which hold a projected screen position -- 53/54
+   * and 67/68 sit inside this range. They are never live together, because `SHPPT` is a jump out
+   * of `LL9` part 2 and `EE30` fills this in part 4. The port stores them apart; nothing may
+   * assume that means they are independent.
+   */
+  std::array<std::uint8_t, 16> xx2{};
+
+  /*
+   * 6502: XX3 -- the projected vertices, four bytes each: x as sixteen bits, then y.
+   *
+   * In the original this is at 256, the bottom of the STACK page, and the 6502's own stack grows
+   * down towards it from 511. Nothing here needs that, but the SIZE does come from it: the edge
+   * data indexes this with a whole byte and reads up to `XX3+3,X`, so 259 bytes are reachable.
+   * The game itself never fills more than 148 -- thirty-seven vertices, the Anaconda.
+   */
+  std::array<std::uint8_t, 260> xx3{};
+
+  /// 6502: XX4 -- the ship's distance, as the visibility test's units. Thirty-one until part 2
+  /// works out the real one, and zero while the ship is exploding so that everything is drawn.
+  std::uint8_t xx4 = 0;
+
+  /// 6502: XX17 -- how far each of `LL9`'s three loops has walked, in its own units: vertices in
+  /// part 6, edges in part 10, and a shift count in part 5.
+  std::uint8_t xx17 = 0;
+
+  /// 6502: XX18 -- the ship's position copied out of `INWK`, halved until it fits, and then
+  /// replaced by its own dot products with the orientation vectors.
+  std::array<std::uint8_t, 9> xx18{};
+
+  /// 6502: XX20 -- what each loop counts up to, taken from the blueprint's header.
+  std::uint8_t xx20 = 0;
+
+  /// 6502: CNT -- where the next projected vertex goes in `XX3`, in bytes.
+  std::uint8_t cnt = 0;
+
+  /// 6502: V(1 0) -- a walker into the blueprint. An address here, because the blueprints are one
+  /// address-indexed region (§6.32) rather than an array per ship.
+  std::uint16_t v = 0;
 };
 
 /*
@@ -310,5 +355,52 @@ struct ClipState
 [[nodiscard]] bool ClipLineKeepingSwap(DrawWorkspace& _draw, GeometryWorkspace& _geometry,
                                        MathWorkspace& _math, ClipState& _clip,
                                        std::uint8_t _a) noexcept;
+
+
+/*
+ * The two places `LL9` leaves its own code (slice 3b).
+ *
+ * `PLANET` is a tail jump taken when the type is negative, and belongs to 3c. `DOEXP` is the
+ * explosion, filed under `Explosion.cpp`; `SeedExplosionCloud` is the six instructions that set
+ * one up, and they are behind the seam rather than in `LL9` for two reasons -- what they write is
+ * `DOEXP`'s state, and the `JSR DORND` among them runs on whatever carry `LOIN` last left, which
+ * this port cannot say without reading all thirty-two of `LOIN`'s unrolled copies.
+ */
+class ShipDrawEffects
+{
+public:
+  virtual ~ShipDrawEffects() = default;
+
+  /// 6502: LL25 -- JMP PLANET, for a type with bit 7 set.
+  virtual void DrawPlanetOrSun() = 0;
+
+  /// 6502: LL14's JMP DOEXP -- redraw the explosion cloud, which is how it is erased.
+  virtual void DrawExplosion() = 0;
+
+  /// 6502: the EE55 block -- byte 1 of the heap is the cloud's size, byte 2 its particle count
+  /// from the blueprint, and bytes 3 to 6 are random.
+  virtual void SeedExplosionCloud(LineHeap& _heap, std::uint16_t _address,
+                                  std::uint16_t _blueprint) = 0;
+};
+
+/*
+ * 6502: LL9 parts 1 to 12 -- draw a ship.
+ *
+ * The hardest routine in Elite, and the shape of it is three passes: decide which of the ship's
+ * faces you can see, project the vertices those faces touch, then walk the edges between visible
+ * vertices and clip each one onto the screen. What comes out is the ship's line heap, which is
+ * then drawn -- and drawn by EOR, so the same call erases the last frame's ship on the way.
+ *
+ * `_work` is `INWK`, the zero-page copy. `_slot` is the same ship's block in `K%`, which part 1
+ * writes two bytes of directly through `INF` rather than waiting for the copy back.
+ *
+ * A ship too far away is drawn as a dot by `SHPPT` instead, and one behind the player or wider
+ * than it is distant is rubbed out and abandoned. Both are `LL9` deciding not to draw, not the
+ * caller.
+ */
+void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry,
+              MathWorkspace& _math, ClipState& _clip, Projection& _screen, ShipBlock& _work,
+              ShipBlock& _slot, LineHeap& _heap, std::uint16_t _blueprint, std::uint8_t _type,
+              ShipDrawEffects& _effects) noexcept;
 
 } // namespace Elite
