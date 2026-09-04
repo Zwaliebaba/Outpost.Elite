@@ -40,11 +40,24 @@ constexpr std::uint8_t SPACE_VIEW_CENTRE_X = 128;
 constexpr std::uint8_t SPACE_VIEW_CENTRE_Y = Elite::Canvas::SPACE_VIEW_HEIGHT / 2;
 constexpr int PLACEHOLDER_PROJECTION = 6000; ///< half-width times distance, so 28 for the Cobra
 constexpr int PLACEHOLDER_MIN_HALF_WIDTH = 16;
-constexpr int PLACEHOLDER_MAX_HALF_WIDTH = 100;
 
-/// The row the title's prompt is printed on: below the box and still inside the space view,
-/// whose last character row is 17 (`DLOC%` puts the dashboard at 18).
-constexpr std::uint8_t TITLE_PROMPT_ROW = 17;
+/// The nearest ship's box would reach row 15 and collide with the prompt, so the placeholder
+/// gives way to the text rather than the other way round: half the height is half the width, and
+/// 88 puts the bottom edge at y = 116, clear of the prompt's row.
+constexpr int PLACEHOLDER_MAX_HALF_WIDTH = 88;
+
+/*
+ * 6502: TITLE -- LDA #15 / STA YC / LDA #1 / STA XC, immediately before the PLA and DETOK that
+ * print the token this routine was passed.
+ *
+ * BR1 sets the column to 3 before it calls TITLE and TITLE OVERWRITES IT, which is why the port
+ * keeps both: `TITLE_PROMPT_COLUMN` is BR1's store and is pinned against the shipped sequence,
+ * and these two are what actually decide where the prompt lands. Getting that wrong is visible
+ * rather than academic -- "Press Space Or Fire,Commander." is thirty characters, and from column
+ * 3 the last two fall off the 32-column screen and wrap onto the next row.
+ */
+constexpr std::uint8_t TITLE_PROMPT_ROW = 15;
+constexpr std::uint8_t TITLE_PROMPT_COLUMN = 1;
 
 void DrawPlaceholderShip(Elite::Canvas& _canvas, std::uint8_t _distance) noexcept
 {
@@ -282,9 +295,9 @@ std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipT
 
   if (m_extendedPrinter != nullptr && m_text != nullptr)
   {
-    // 6502: LDA #3 / JSR DOXC, and the prompt goes under the ship rather than over it.
+    // 6502: LDA #15 / STA YC / LDA #1 / STA XC -- TITLE's own cursor, not BR1's.
     m_text->row = TITLE_PROMPT_ROW;
-    m_text->column = Elite::TITLE_PROMPT_COLUMN;
+    m_text->column = TITLE_PROMPT_COLUMN;
     m_extendedPrinter->Print(_token);
   }
 

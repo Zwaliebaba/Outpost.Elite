@@ -453,26 +453,34 @@ public:
    * Resolve turns the bits into colours, and the case worth pinning is the one ADR-002 section 7
    * is about: two marks that share no bit still light three pixels in three colours, and the
    * middle one is a colour neither of them drew.
+   *
+   * IT IS PINNED ON THE DASHBOARD, because that is the only part of the screen the VIC-II shows
+   * in multicolour: `wantdials` sets bit 4 of `caravanserai` for the rows below the raster split
+   * and nothing else ever does. The same two marks in the space view are two separate one-bit
+   * pixels, which is the test below.
    */
-  TEST_METHOD(ResolveGivesEachPixelPairItsCellColour)
+  TEST_METHOD(ResolveGivesEachPixelPairItsCellColourOnTheDashboard)
   {
+    constexpr int Y = Canvas::DASHBOARD_CELL_ROW * 8 + 4;
+
     Canvas canvas;
     canvas.SetBackground(0);
+    canvas.SetDashboardShown(true);
 
     DrawWorkspace work;
     work.zz = 255;
-    Elite::PlotPixel(canvas, work, 66, 60);
-    Elite::PlotPixel(canvas, work, 68, 60);
+    Elite::PlotPixel(canvas, work, 66, Y);
+    Elite::PlotPixel(canvas, work, 68, Y);
 
     // 6502: a screen RAM byte -- high nibble is the colour for %01, low nibble for %10.
-    const int cell = (60 / 8) * Canvas::CELL_COLUMNS + (Canvas::SPACE_VIEW_MARGIN + 64) / 8;
-    canvas.Screen()[Canvas::SPACE_CELLS + cell] = 0x27; // red for %01, yellow for %10
-    canvas.SetCellColour(cell, 5);                      // green for %11
+    const int cell = (Y / 8) * Canvas::CELL_COLUMNS + (Canvas::SPACE_VIEW_MARGIN + 64) / 8;
+    canvas.Screen()[Canvas::DASHBOARD_CELLS + cell] = 0x27; // red for %01, yellow for %10
+    canvas.SetCellColour(cell, 5);                          // green for %11
 
     std::array<std::uint8_t, Canvas::WIDTH * Canvas::HEIGHT> image{};
     canvas.Resolve(image);
 
-    const std::uint8_t* row = image.data() + 60 * Canvas::WIDTH + ((Canvas::SPACE_VIEW_MARGIN + 64) / 8) * 8;
+    const std::uint8_t* row = image.data() + Y * Canvas::WIDTH + ((Canvas::SPACE_VIEW_MARGIN + 64) / 8) * 8;
 
     Assert::AreEqual<std::uint32_t>(2, row[0], L"the first pixel is %01, so red");
     Assert::AreEqual<std::uint32_t>(2, row[1], L"and it is two columns wide");
@@ -480,6 +488,45 @@ public:
     Assert::AreEqual<std::uint32_t>(5, row[3], L"and it too is two columns wide");
     Assert::AreEqual<std::uint32_t>(7, row[4], L"the third is %10, so yellow");
     Assert::AreEqual<std::uint32_t>(0, row[6], L"the fourth was never drawn, so background");
+  }
+
+  /*
+   * The game screen is STANDARD bitmap mode, and this is the regression test for the day it was
+   * not: `moonflower` and `caravanserai` both ship with bit 4 clear, so one bit is one pixel and
+   * a set bit takes the cell's high nibble while a clear one takes its low nibble.
+   *
+   * Decoding it as multicolour instead reads every PAIR of bits as one two-bit code, which halves
+   * the horizontal resolution and turns the 8x8 font into stripes. It is worth asserting on an
+   * asymmetric byte -- %10110001 reads the same forwards as a pair of codes and differently as
+   * eight bits, and a symmetric one would have let the wrong decode pass.
+   */
+  TEST_METHOD(ResolveDrawsTheGameScreenInStandardBitmapMode)
+  {
+    constexpr int Y = 60;
+    constexpr int CELL_COLUMN = (Canvas::SPACE_VIEW_MARGIN + 64) / 8;
+    constexpr std::uint8_t BITS = 0xB1u; // %10110001
+
+    Canvas canvas;
+    canvas.Write(static_cast<std::uint16_t>((Y / 8) * Canvas::ROW_BYTES + CELL_COLUMN * 8 + (Y % 8)), BITS);
+
+    const int cell = (Y / 8) * Canvas::CELL_COLUMNS + CELL_COLUMN;
+    canvas.Screen()[Canvas::SCREEN_CELLS + cell] = 0x27; // red for a 1, yellow for a 0
+
+    // Colour RAM and the background are not read in this mode, so a lurid value in either must
+    // not appear anywhere in the row.
+    canvas.SetCellColour(cell, 5);
+    canvas.SetBackground(13);
+
+    std::array<std::uint8_t, Canvas::WIDTH * Canvas::HEIGHT> image{};
+    canvas.Resolve(image);
+
+    const std::uint8_t* row = image.data() + Y * Canvas::WIDTH + CELL_COLUMN * 8;
+    for (int pixel = 0; pixel < 8; ++pixel)
+    {
+      const std::uint32_t expected = (((BITS >> (7 - pixel)) & 1u) != 0u) ? 2u : 7u;
+      Assert::AreEqual<std::uint32_t>(expected, row[pixel],
+                                      (L"pixel " + std::to_wstring(pixel) + L" of %10110001").c_str());
+    }
   }
 };
 
