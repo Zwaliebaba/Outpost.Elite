@@ -210,8 +210,15 @@ void MultiplySignedToK(MathWorkspace& _work, std::uint8_t _a) noexcept;
 void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcept;
 
 /*
- * 6502: DVID3B -- K(3 2 1 0) = P(2 1 0) / (S R Q), sign-magnitude, twenty-four bits over
- * twenty-four (slice 3b). This is the divide the whole of the projection runs through.
+ * 6502: DVID3B -- sign-magnitude, twenty-four bits over twenty-four (slice 3b). This is the
+ * divide the whole of the projection runs through.
+ *
+ * IT RETURNS 256 TIMES THE RATIO. The upstream summary and the routine's own name both say
+ * `K(3 2 1 0) = P(2 1 0) / (S R Q)`, and that is the ratio with a scale left off: the eight-bit
+ * division at the middle of it produces `256 * A / Q`, and the shifts at the end put back the
+ * difference between the two scaling loops and nothing else. So `K = 256 * P / (S R Q)`, which is
+ * what makes it a projection -- one screen pixel is a ratio of 1/256, and a ship at z = 1 is off
+ * the screen whatever its x is. §6.36 records what it cost to find that out.
  *
  * The trick that makes it work with an EIGHT-bit divider is scaling. Shift the numerator left
  * until its top byte reaches 64, counting the shifts up in Y; shift the denominator left until

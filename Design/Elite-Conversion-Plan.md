@@ -428,6 +428,39 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.36 A test that agreed with the game on every case and exercised one branch
+
+The first `SHPPT` suite ran twelve ship positions through the shipped routine and through the
+port, comparing the whole 10,240-byte canvas, the whole line heap, the state byte and both screen
+coordinates after each one. Every byte matched. Every one of the twelve was rejected as off-screen
+and nothing was ever drawn, so what the run actually proved was that the port agrees with the game
+about doing nothing.
+
+The comparison did not catch it. `Assert::IsTrue(drawn > 0)` did.
+
+The cause is a scale. `DVID3B` returns **256 times the ratio**, not the ratio: the eight-bit
+division in the middle of it computes `256 * A / Q`, and the shifts at the end put back the
+difference between the two scaling loops and nothing else. Its upstream summary line says
+`K(3 2 1 0) = (A P+1 P) / (z_sign z_hi z_lo)` and `PROJ`'s says `K3(1 0) = #X + x / z`, and both
+are the ratio with the scale left off — informally true, and wrong by a factor of 256 for anyone
+choosing test inputs. The test used z = 1 throughout, which is the closest a ship can be; at that
+distance the `ORA #1` on the numerator alone puts the answer at 256, `K+1` is 1, and every ship is
+off the screen. Both headers now state the scale, because the next routine that divides by z will
+be read alongside the same summary line.
+
+The rule this makes explicit, which had been practice without being stated: **a swept comparison
+asserts that each named outcome occurred at least once.** `PLS6`'s four exits, `DVID3B`'s three
+tails, `PROJ`'s three outcomes and `SHPPT`'s drawn / refused / half-written all carry a counter and
+an assertion. Nine slices in, this is the first time a coverage assertion was the only thing that
+failed — and it failed on the one test in the phase whose inputs are hand-chosen rather than swept,
+which is not a coincidence. A sweep over all 65,536 pairs cannot miss the interesting half; twelve
+positions written by hand can miss all of it.
+
+One more equivalent mutation, and the same shape as §6.35's: rewriting `LL155`'s heap walk from a
+do-while to a while passes everything, because the `length < 4` guard above it has already decided
+the first test. Twelve of the thirteen mutations on this unit were caught; that one is the
+thirteenth, and it is recorded rather than fixed.
+
 ### 6.35 Six places where a ledger row can name a routine no branch ever enters
 
 The §6.12 pass on the projection chain — `DVID3B` → `DVID3B2` → `PLS6` → `PROJ`, which is every
@@ -1467,7 +1500,7 @@ Three things that is worth noting for the slices ahead:
 | Slice | Scope | Accept |
 |---|---|---|
 | **3a Ship slots and motion** | `ShipSlot`, `Bubble` (`FRIN`, `MANY`, `UNIV`, `NWSHP`, `NWS1`, `KILLSHP`, `KS1`–`KS4`, `ZINF`, `RESET`/`RES2`, `ZES1`/`ZES2`, `GINF`), `MVEIT` 1–9, `MVT1`, `MVT3`, `MVT6`, `MVS4`, `MVS5`, `MV40`, `TIDY`, `MAS1`–`MAS4`, `TAS1`–`TAS6`, `DCS1`, `ABORT`, `sightcol`. | Oracle: run `MVEIT` on a slot with sampled orientations/speeds/roll/pitch for N iterations; byte-identical `INWK`. |
-| **3b Ship drawing** 🟠 **The projection is built, 2026-09-04** | `LL9` 1–12, `LL61`, `LL62`, `LL118`, `LL120`, `LL123`, `LL129`, `LL145` 1–4 clipping, `SHPPT`, ✅ `PROJ`, ✅ `PLS6`, ✅ `DVID3B`/`DVID3B2`, `PLUT`. Title screen rotating ship. | Oracle: for sampled ship types and orientations the list of clipped line segments matches; golden of the title screen Cobra at frames 1, 30, 60. **The scope line is now twice corrected.** §6.34 removed `LL5` (ported in phase 1) and `LSX2`/`LSY2` (3c's heap, not the ship heap). §6.35 removes `PL2` — `PROJ` reaches `PL2-1`, which is `PROJ`'s own `RTS`, and `PL2` itself erases the planet and sun heap — and adds `PLS6`, which the 3c row had grouped with the planet code by name. **`PROJ` and everything it divides through are built and swept**: 65,280 divides, 65,536 divides by a ship's z, 65,536 screen offsets across all four of `PLS6`'s exits, and 3,072 projections including the half-written case. Seventeen mutations caught, one recorded as equivalent. |
+| **3b Ship drawing** 🟠 **The projection is built, 2026-09-04** | `LL9` 1–12, `LL61`, `LL62`, `LL118`, `LL120`, `LL123`, `LL129`, `LL145` 1–4 clipping, `SHPPT`, ✅ `PROJ`, ✅ `PLS6`, ✅ `DVID3B`/`DVID3B2`, `PLUT`. Title screen rotating ship. | Oracle: for sampled ship types and orientations the list of clipped line segments matches; golden of the title screen Cobra at frames 1, 30, 60. **The scope line is now twice corrected.** §6.34 removed `LL5` (ported in phase 1) and `LSX2`/`LSY2` (3c's heap, not the ship heap). §6.35 removes `PL2` — `PROJ` reaches `PL2-1`, which is `PROJ`'s own `RTS`, and `PL2` itself erases the planet and sun heap — and adds `PLS6`, which the 3c row had grouped with the planet code by name. **`PROJ` and everything it divides through are built and swept**: 65,280 divides, 65,536 divides by a ship's z, 65,536 screen offsets across all four of `PLS6`'s exits, and 3,072 projections including the half-written case. **The ship line heap and the three routines that read it followed the same day**: `LL155`, `LL81`, `EE51` and `SHPPT`, compared on the whole canvas rather than on a byte, and `SHPPT` compared as a SEQUENCE because it reads a coordinate the previous projection left behind. Twenty-nine mutations caught across the two units, two equivalent. §6.36 is the one finding that came from a coverage assertion rather than from a comparison. |
 | **3c Planet, sun, stardust** ∥ | `PLANET`, `PL9` 1–3, `PLS1`–`PLS6`, `PLS22`, `WPLS`/`WPLS2`, `WP1`, `EDGES`, `CHKON`, `PL21`, `SUN` 1–4 with its heap, `CIRCLE` uses, `STARS`, `STARS1`, `STARS2`, `STARS6`, `NWSTARS`, `FLIP`, `WPSHPS`, `FLFLLS`, `SOLAR`, `NWQ`. | Goldens of the launch view at Lave (planet + sun + stardust) at several iterations; oracle for `PLS`/`CHKON` arithmetic. |
 | **3d Flight loop and dashboard** | Main flight loop 1–16, `DIALS` 1–4, `DILX`/`DIL2`, `COMPAS`/`SP1`/`SP2`/`SPS*`, `SCAN` (sprite blips as canvas draws), `MSBAR`, `ECBLB`/`SPBLB`, `PZW`, `MESS`/`me1`/`mes9`, `LASLI`, `LAUN`/`LL164` hyperspace tunnel, `DEATH` (the "GAME OVER" fly-by), `WARP` (J), `CTRL`, `DOKEY` flight half, `SPIN`, `cargo` canisters, docking check (`ISDK` path in loop part 10–11). | Launch from Lave, fly, dock manually, hyperspace to Diso, dock. Goldens of the dashboard; replay hashes for the whole trip. |
 
@@ -1560,6 +1593,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **The ship line heap, and the first thing the port draws for a ship** — `LL155`/`LL27`, `LL81`, `EE51` and `SHPPT`, all four compared against the shipped code on the whole 10,240-byte canvas. The heap is the arena from `K%` to `LS%` addressed absolutely, because `XX19` points into it and `KILLSHP` shuffles runs of it down; an array per ship cannot express either. `SHPPT` is compared as a SEQUENCE (§6.33 again): it tests `PROJ`'s accumulator rather than its carry, and one of `PROJ`'s overflow exits leaves the accumulator zero and `K3+1` holding the last ship's high byte, so a ship really can be drawn where the previous one was. **§6.36 is the finding worth reading**: the first version of that test agreed with the game byte for byte on all twelve positions and exercised one branch, because `DVID3B` returns 256 TIMES the ratio and every position used z = 1. The comparison passed; the coverage assertion is what failed. Both headers now state the scale, which neither the upstream summary line nor the routine's name does. Also: `INWK+31` was called `SHIP_MISSILES_OFFSET` by 3a and is a packed byte — bit 3 is what `EE51` reads to decide whether there is anything to rub out — so it is now `SHIP_STATE_OFFSET` with its bits named, rather than two names for one offset. |
 | 2026-09-04 | **The projection chain built — `DVID3B`, `DVID3B2`, `PLS6`, `PROJ`** — which is every pixel the space view will draw, and three more ledger moves with it (§6.35). `DVID3B2` was filed with the movement code because it reads `INWK+6..8`; its callers are the projection and the planet drawing, and nothing in `MVEIT`'s tree touches it. `PLS6` was filed with the planet drawing because the row wrote `pls3`–`pls6` as a RANGE OF NAMES; its only callers are `PROJ`'s two. And `PL2` was in 3b because `PROJ` branches to `PL2-1`, which is `PROJ`'s own `RTS` and not `PL2` at all — the row named the routine the address arithmetic points near. That last one is enumerable rather than anecdotal: the C64 build has 43 backward label-with-offset targets, 27 of them alternative entry points into the same source file (as `MVT1-2` is, ported correctly in 3a) and **six that land in the file before the one that names them** — `LASLI-1`, `LL10-1`, `PL2-1`, `SFS1-2`, `WPLS-1`, `ypl-1`. One down, five to check as their slices open. Also recorded: a mutation the sweep does NOT catch, because the loop shape it changes is equivalent, and the header comment that had claimed otherwise. |
 | 2026-09-04 | **Slice 3b opened with its own §6.12 pass, before any of it was written.** Three corrections to the row (§6.34): `LL5`, `LL28` and `LL38` are already ported, from phase 1; the row names `LSX2`/`LSY2` as "the ship line heap" and they are the PLANET AND SUN heap, which belongs to 3c — the ship heap is the `LS%`/`SLSP` region 3a already modelled; and `LL9` jumps to `DOEXP`, a seam the row does not name. The middle one is a new shape of the pattern: not a row written from what a routine is about, but **two structures with confusable names and the row picking the wrong one**, which asking "what does this read?" cannot catch and asking "who writes this?" catches in one grep. In the other direction: `LL9`'s only external calls are `DORND` and `FMLTU`, both ported, so the hardest routine in Elite has two dependencies and both exist. |
 | 2026-09-04 | **Slice 3a's acceptance criterion met: `MVEIT` runs.** Sixteen ships for twenty iterations each with byte-identical `INWK`, plus the seam counts asserted — `SCAN` and `TACTICS` are stubs but how often each is reached is behaviour, and the sun is never scanned at all. Eight routines were ported ahead of it and every one matched first time; `MVEIT` did not, and §6.33 records the two reasons, both invisible to a single call. `BPL MV43` branches to the SUBTRACTION, so "signs agree" means subtract here and add everywhere else in the file; and the `ADC` after `JSR MLTU2` has no `CLC`, so it runs on the multiplier's exit carry, which the port was discarding. The generalisation is cheap: where a routine's output feeds back into its own input, compare a RUN and not a call. |

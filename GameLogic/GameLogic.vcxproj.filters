@@ -54,6 +54,9 @@
     <ClInclude Include="ShipDraw.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="LineHeap.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="Market.h">
       <Filter>Universe</Filter>
     </ClInclude>
