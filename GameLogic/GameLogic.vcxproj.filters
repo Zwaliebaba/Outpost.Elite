@@ -48,6 +48,9 @@
     <ClInclude Include="ShipSlot.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="ShipMove.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Market.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -175,6 +178,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="ShipSlot.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipMove.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Rng.cpp">
