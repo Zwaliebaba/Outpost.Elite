@@ -428,6 +428,41 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.33 Two defects one call could not have found
+
+`MVEIT` is slice 3a's acceptance criterion and the plan wrote it as *"run `MVEIT` on a slot with
+sampled orientations/speeds/roll/pitch for N iterations; byte-identical `INWK`"*. The N is the
+part that earned its place.
+
+Eight routines were ported ahead of it — the blueprints, `NORM`, `MULT3`, the bubble, `NWSHP`,
+`MVT1`/`MVT3`/`MVT6`, `MVS4`/`MVS5`, `TIDY` — and every one matched the shipped game on its first
+run. `MVEIT` did not, and the two things wrong with it are both invisible to a single call:
+
+- **`BPL MV43` branches to the SUBTRACTION.** Every other sign test in the file reads "signs
+  agree, so add"; this one reads "signs agree, so subtract", because the branch target is the
+  subtracting path and the fall-through is the adding one. Written the natural way round it is
+  wrong for half its inputs, and on a still ship with nobody turning it is wrong by exactly one in
+  the low byte of y.
+- **The `ADC` after `JSR MLTU2` has no `CLC`.** It runs on the carry the multiplier exits with —
+  `MLTU2` ends `DEX / BNE / RTS`, neither of which touches the flag, so what survives is the carry
+  from its final `ROR P`. The port's `MultiplyWide` returned only the byte and discarded it.
+
+Neither is exotic and both are the same family as §6.29's: arithmetic whose meaning depends on a
+flag that no instruction in sight sets. What made them findable was iterating. **A single call
+compares one step of arithmetic; twenty calls compare the FEEDBACK** — the damping in the tail,
+the sixteenth-pass `TIDY`, the acceleration cleared each iteration — and a routine that is out by
+one in a byte nothing immediately reads agrees for one pass and separates over twenty.
+
+That is worth generalising, because it is cheap to act on: **where a routine's output is fed back
+into its own input, compare a RUN and not a call.** The cost is one loop in the test; the return
+is every error that compounds rather than showing.
+
+The seam counts turned out to be worth asserting for the same reason. `SCAN` and `TACTICS` are
+stubs here, but how OFTEN each is reached is behaviour: an ordinary ship is scanned twice a pass,
+an exploding one once, and the sun never — and a missile runs its tactics every pass where a Krait
+runs them one pass in eight. All of that is `MVEIT`'s control flow rather than its arithmetic, and
+`INWK` alone would not have shown any of it.
+
 ### 6.32 The ship blueprints cannot be thirty-three arrays, and the data says so three ways
 
 Phase 3 opened with §6.12's own instruction — one pass over the ledger asking only "what does
@@ -1437,6 +1472,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **Slice 3a's acceptance criterion met: `MVEIT` runs.** Sixteen ships for twenty iterations each with byte-identical `INWK`, plus the seam counts asserted — `SCAN` and `TACTICS` are stubs but how often each is reached is behaviour, and the sun is never scanned at all. Eight routines were ported ahead of it and every one matched first time; `MVEIT` did not, and §6.33 records the two reasons, both invisible to a single call. `BPL MV43` branches to the SUBTRACTION, so "signs agree" means subtract here and add everywhere else in the file; and the `ADC` after `JSR MLTU2` has no `CLC`, so it runs on the multiplier's exit carry, which the port was discarding. The generalisation is cheap: where a routine's output feeds back into its own input, compare a RUN and not a call. |
 | 2026-09-04 | **Phase 3 opened with the ledger pass §6.12 asked for, and the ship data extracted.** `MVEIT` reads the blueprint's maximum speed and `NWSHP` three more of its bytes, so 3a touches data the row files under 3b — §6.12's pattern for the seventh time, caught by looking this time rather than by failing. The blueprints are extracted as ONE 8,073-byte region indexed by address rather than 33 arrays, because two of them declare more data than fits before the next one begins (the splinter by 24 bytes, the Thargon by 60), those same two have no `_EDGES` label, and the game has no concept of a blueprint's end anyway. §6.32 also records the same mistake made one level up and caught by the new suite: the region was first sized from the `SHIP_` labels, and the pointer table was walked to 39 entries when it is 33 — past the end it returns `E%`'s bytes as addresses, which came out as 1, 24865 and 41120. |
 | 2026-09-03 | **The executable links, and building it found a defect that had been latent since the projects were created.** Every one of the ~1200 lines of Win32 and Direct3D written blind COMPILED first time; the failure was thirty-one `LNK2038: mismatch detected for 'C++/WinRT version'` at the link step, because `Outpost` carries the CppWinRT NuGet package (3.0) and every other project takes the SDK's (2.0). `GameLogicTests.dll` had never noticed, because it and `GameLogic.lib` are both 2.0 — the mismatch needs a binary that links one against the other, and until this slice none existed. §6.30 records it, and the fix: `GameLogic` and `NeuronCore` never used C++/WinRT at all, they inherited it from the shared precompiled header, so `NEURON_NO_CPPWINRT` takes it back out and `Outpost/pch.h` is the one place that keeps it. |
 | 2026-09-03 | **Slice 2e's shell built, and the Windows CI leg now compiles the executable.** The split is the point: the palette, the viewport, the step accumulator and the key map are decisions rather than API calls, so they are in `Presentation.cpp` and `KeyMap.cpp` where the suite reaches them on both legs; Direct3D, the message pump and the composition root are the rest, and CI restores the project's packages and builds them unpackaged in Debug and Release. `TRANTABLE` is EXTRACTED rather than replaced, and the ledger said otherwise — `TT217` gives the dispatch a key NUMBER and the screens a CHARACTER, so a map straight to a character agrees with the game on the keys somebody thought to try. The blocking-`KeySource` question ADR-004 and `TextPrint.h` left open is answered: a nested message pump, single-threaded. §6.29 records a misreading of `TT66` that a confident paragraph nearly shipped, and §6.28 one 6502 byte the port keeps in two variables. |

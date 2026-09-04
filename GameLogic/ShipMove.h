@@ -115,4 +115,96 @@ void RotateCoordinatePair(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _
  */
 void TidyOrientation(ShipBlock& _work, MathWorkspace& _math) noexcept;
 
+/*
+ * 6502: MV40 -- move a PLANET or a SUN, which is the whole of `MVEIT` for a negative ship type.
+ *
+ * It is a BRANCH of `MVEIT` rather than a subroutine of it: `MV3` reaches it with `JMP MV40` and
+ * it leaves with `JMP MV45`, back into `MVEIT`'s tail. So it skips the scanner, the acceleration
+ * clamp and the ordinary rotation, and does its own -- which is right, because a planet is not on
+ * the scanner, does not accelerate, and rotates about the player rather than about itself.
+ *
+ * The arithmetic is the player's roll and pitch applied in the opposite direction, which is what
+ * makes the world turn when the ship does. Both `K` and `K2` are live across it, which is why
+ * `MathWorkspace` carries two blocks.
+ *
+ * ITS ADDITIONS DISCARD THEIR LOW BYTE. `LDA K / CLC / ADC K2` throws the result away and keeps
+ * only the carry, because the answer is stored from K+1 upwards -- the bottom byte exists solely
+ * to carry into the byte above it. A port that stored it would be writing a fourth byte nothing
+ * reads, and one that skipped the addition would lose the carry.
+ */
+void MovePlanetOrSun(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _alpha,
+                     std::uint8_t _beta) noexcept;
+
+/*
+ * What `MVEIT` reaches outside itself, and both are seams for the same reason the docked screens'
+ * were: they belong to slices that do not exist yet.
+ *
+ * `SCAN` is the scanner blip, which is slice 3d's dashboard. `TACTICS` is the combat AI, which is
+ * PHASE 4. Neither appears in the plan's 3a row -- the §6.12 pass found them -- and `MVEIT` calls
+ * both directly, so a port of it without them would either not compile or quietly do nothing
+ * where the game does something.
+ */
+class ShipEffects
+{
+public:
+  virtual ~ShipEffects() = default;
+
+  /// 6502: SCAN -- draw or erase this ship's blip on the scanner. Slice 3d.
+  virtual void UpdateScanner(ShipBlock& _work) = 0;
+
+  /// 6502: TACTICS -- decide what a hostile ship does next. Phase 4.
+  virtual void RunTactics(ShipBlock& _work) = 0;
+};
+
+/*
+ * 6502: ALPHA, ALP1, ALP2, BETA, BET1, BET2, DELTA, MCNT, XSAV, TYPE and RAT2 -- the flight state
+ * `MVEIT` reads, none of which belongs to the ship it is moving.
+ *
+ * The roll and pitch are each kept THREE WAYS in the original -- signed, magnitude and sign -- and
+ * that is not redundancy the port can collapse: `MVEIT` uses `ALPHA` for one multiply, `ALP1` for
+ * another and `ALP2` for the sign of a third, all in the same rotation. Which one it reaches for
+ * is part of the arithmetic.
+ */
+struct FlightState
+{
+  std::uint8_t alpha = 0;   ///< 6502: ALPHA -- roll, signed
+  std::uint8_t alp1 = 0;    ///< 6502: ALP1 -- its magnitude
+  std::uint8_t alp2 = 0;    ///< 6502: ALP2 -- its sign
+  std::uint8_t alp2Next = 0;///< 6502: ALP2+1 -- the sign flipped, which MVEIT uses as well
+  std::uint8_t beta = 0;    ///< 6502: BETA -- pitch, signed
+  std::uint8_t bet1 = 0;    ///< 6502: BET1 -- its magnitude
+  std::uint8_t bet2 = 0;    ///< 6502: BET2 -- its sign
+  std::uint8_t delta = 0;   ///< 6502: DELTA -- the player's speed
+
+  /// 6502: MCNT and XSAV -- the main loop counter and the slot being moved. `MVEIT` uses their
+  /// EOR to spread expensive work across iterations, so that `TIDY` runs on one ship every
+  /// sixteenth pass and `TACTICS` on one every eighth, rather than on all of them at once.
+  std::uint8_t mainLoopCounter = 0;
+  std::uint8_t slot = 0;
+
+  std::uint8_t type = 0;    ///< 6502: TYPE -- negative for the planet and the sun
+  std::uint8_t rat2 = 0;    ///< 6502: RAT2 -- scratch, but MVEIT leaves it set
+};
+
+/// 6502: MSL -- the missile's ship type, which `MVEIT` singles out so that a missile runs its
+/// tactics on EVERY iteration rather than one in eight. A missile that thought once every eighth
+/// of a second would be trivial to outrun.
+inline constexpr std::uint8_t SHIP_TYPE_MISSILE = 1;
+
+/*
+ * 6502: MVEIT -- move one ship, and the whole of slice 3a's arithmetic meets here.
+ *
+ * `_blueprint` is `XX0`, which the routine reads exactly once: byte 15, the maximum speed, to
+ * clamp acceleration against. That single read is why the blueprints had to be extracted before
+ * this slice could be compared against the game at all (§6.32).
+ *
+ * FOUR PATHS LEAVE IT DIFFERENT SHAPES. An exploding or dead ship (bits 5 or 7 of INWK+31) skips
+ * everything but the scanner. A negative type is the planet or the sun and goes through `MV40`,
+ * skipping the scanner, the acceleration and the ordinary rotation. The SUN skips the orientation
+ * rotation too -- `AND #&81 / CMP #&81` is a test for type 129 and nothing else. Everything else
+ * runs the lot.
+ */
+void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
+              std::uint16_t _blueprint) noexcept;
+
 } // namespace Elite

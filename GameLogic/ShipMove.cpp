@@ -2,6 +2,8 @@
 
 #include "ShipMove.h"
 
+#include "ShipBlueprint.h"
+
 #include <array>
 
 namespace Elite
@@ -364,6 +366,340 @@ void TidyOrientation(ShipBlock& _work, MathWorkspace& _math) noexcept
   {
     _work[9u + static_cast<std::uint8_t>(offset)] = 0;
   }
+}
+
+
+void MovePlanetOrSun(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _alpha,
+                     std::uint8_t _beta) noexcept
+{
+  // 6502: LDA ALPHA / EOR #128 / STA Q -- the player's roll, applied the other way round.
+  _math.q = static_cast<std::uint8_t>(_alpha ^ 0x80u);
+  _math.p = _work[0];
+  _math.p1 = _work[1];
+  MultiplySignedToK(_math, _work[2]);      // 6502: JSR MULT3 -- K = -alpha * x
+  AddShipCoordinateToK(_work, _math, 3u);  // 6502: LDX #3 / JSR MVT3 -- K = y - alpha * x
+
+  // 6502: LDA K+1 / STA K2+1 / STA P ... -- the result parked in K2 while MULT3 refills K.
+  _math.k2[1] = _math.k[1];
+  _math.p = _math.k[1];
+  _math.k2[2] = _math.k[2];
+  _math.p1 = _math.k[2];
+  _math.q = _beta;
+  _math.k2[3] = _math.k[3];
+
+  MultiplySignedToK(_math, _math.k[3]);    // 6502: JSR MULT3 -- K = beta * K2
+  AddShipCoordinateToK(_work, _math, 6u);  // 6502: LDX #6 / JSR MVT3 -- K = z + beta * K2
+
+  // 6502: the new z, and P set up for the multiply that follows.
+  _math.p = _math.k[1];
+  _work[6] = _math.k[1];
+  _math.p1 = _math.k[2];
+  _work[7] = _math.k[2];
+  _work[8] = _math.k[3];
+
+  // 6502: EOR #128 / JSR MULT3 -- K = -beta * z', with Q still holding beta.
+  MultiplySignedToK(_math, static_cast<std::uint8_t>(_math.k[3] ^ 0x80u));
+
+  // 6502: LDA K+3 / AND #128 / STA T / EOR K2+3 / BMI MV1 -- which way the two blocks point.
+  _math.t = static_cast<std::uint8_t>(_math.k[3] & 0x80u);
+  std::uint8_t high = 0;
+
+  if (((_math.t ^ _math.k2[3]) & 0x80u) == 0u)
+  {
+    /*
+     * 6502: LDA K / CLC / ADC K2 -- and the result is DISCARDED. Only the carry it produces is
+     * wanted, because the answer is stored from K+1 upwards.
+     */
+    bool carry = AddWithCarry(_math.k[0], _math.k2[0], false).carry;
+
+    AddResult sum = AddWithCarry(_math.k[1], _math.k2[1], carry);
+    _work[3] = sum.value;
+    carry = sum.carry;
+
+    sum = AddWithCarry(_math.k[2], _math.k2[2], carry);
+    _work[4] = sum.value;
+    carry = sum.carry;
+
+    high = AddWithCarry(_math.k[3], _math.k2[3], carry).value;
+  }
+  else
+  {
+    // 6502: MV1 -- LDA K / SEC / SBC K2, discarded for its borrow in the same way.
+    bool carry = SubtractWithCarry(_math.k[0], _math.k2[0], true).carry;
+
+    SubResult difference = SubtractWithCarry(_math.k[1], _math.k2[1], carry);
+    _work[3] = difference.value;
+    carry = difference.carry;
+
+    difference = SubtractWithCarry(_math.k[2], _math.k2[2], carry);
+    _work[4] = difference.value;
+    carry = difference.carry;
+
+    // 6502: LDA K2+3 / AND #127 / STA P / LDA K+3 / AND #127 / SBC P / STA P -- magnitudes only.
+    _math.p = static_cast<std::uint8_t>(_math.k2[3] & 0x7Fu);
+    difference = SubtractWithCarry(static_cast<std::uint8_t>(_math.k[3] & 0x7Fu), _math.p, carry);
+    _math.p = difference.value;
+    high = difference.value;
+
+    if (!difference.carry)
+    {
+      // 6502: the subtraction went past zero, so negate all three bytes.
+      SubResult negated = SubtractWithCarry(1, _work[3], false);
+      _work[3] = negated.value;
+
+      negated = SubtractWithCarry(0, _work[4], negated.carry);
+      _work[4] = negated.value;
+
+      negated = SubtractWithCarry(0, _math.p, negated.carry);
+      high = static_cast<std::uint8_t>(negated.value | 0x80u);
+    }
+  }
+
+  // 6502: MV2 -- EOR T / STA INWK+5, the sign the two blocks agreed on.
+  _work[5] = static_cast<std::uint8_t>(high ^ _math.t);
+
+  // 6502: LDA ALPHA / STA Q ... / JSR MULT3 / LDX #0 / JSR MVT3 -- x = x + alpha * y'.
+  _math.q = _alpha;
+  _math.p = _work[3];
+  _math.p1 = _work[4];
+  MultiplySignedToK(_math, _work[5]);
+  AddShipCoordinateToK(_work, _math, 0u);
+
+  _work[0] = _math.k[1];
+  _work[1] = _math.k[2];
+  _work[2] = _math.k[3];
+
+  // 6502: JMP MV45 -- back into MVEIT's tail, which the caller runs.
+}
+
+
+namespace
+{
+/*
+ * 6502: MV45 onwards -- the tail both paths through MVEIT join at.
+ *
+ * `MV40` reaches it with `JMP MV45` and the ordinary path falls into it, so it is written once
+ * here rather than duplicated. Everything in it is about the ship's OWN motion: its speed along
+ * its own z axis, and its own roll and pitch.
+ */
+void MoveShipTail(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight,
+                  ShipEffects& _effects) noexcept
+{
+  // 6502: LDA DELTA / STA R / LDA #128 / LDX #6 / JSR MVT1 -- z -= the player's speed. The 128 is
+  // a sign and nothing else, which is why this is the unmasked entry point.
+  _math.r = _flight.delta;
+  AddToShipCoordinate(_work, _math, 128, 6u, false);
+
+  // 6502: LDA TYPE / AND #&81 / CMP #&81 / BNE P%+3 / RTS -- the SUN, and only the sun, stops
+  // here. It has no orientation to rotate.
+  if ((_flight.type & 0x81u) == 0x81u)
+  {
+    return;
+  }
+
+  // 6502: LDY #9 / JSR MVS4, three times -- the nose, roof and side vectors by the player's turn.
+  RotateShipVector(_work, _math, 9u, _flight.alpha, _flight.beta);
+  RotateShipVector(_work, _math, 15u, _flight.alpha, _flight.beta);
+  RotateShipVector(_work, _math, 21u, _flight.alpha, _flight.beta);
+
+  /*
+   * 6502: the ship's own roll, at INWK+30, then its pitch at INWK+29.
+   *
+   * `CMP #127 / SBC #0` is a DAMPING and reads as one only once you see the carry: the compare
+   * sets it when the magnitude is 127, so the subtraction takes nothing off; below that it takes
+   * one off every iteration. So a ship at full roll holds it and any other roll decays to zero,
+   * which is how a ship straightens up after a turn without anything deciding that it should.
+   */
+  const std::uint8_t ROLL_AND_PITCH[2] = { 30u, 29u };
+  const std::uint8_t VECTORS[2][3] = { { 9u, 11u, 13u }, { 21u, 23u, 25u } };
+
+  for (int which = 0; which < 2; ++which)
+  {
+    const std::uint8_t at = ROLL_AND_PITCH[which];
+    _flight.rat2 = static_cast<std::uint8_t>(_work[at] & 0x80u);
+
+    const std::uint8_t magnitude = static_cast<std::uint8_t>(_work[at] & 0x7Fu);
+    if (magnitude == 0u)
+    {
+      continue; // 6502: BEQ MV8 / BEQ MV5 -- no turn, so nothing to apply and nothing to damp
+    }
+
+    const SubResult damped = SubtractWithCarry(magnitude, 0, magnitude >= 127u);
+    _work[at] = static_cast<std::uint8_t>(damped.value | _flight.rat2);
+
+    // 6502: LDX #15 / LDY #9 / JSR MVS5, three times over -- the orientation vectors turned
+    // against the ship's own roll or pitch.
+    RotateCoordinatePair(_work, _math, 15u, VECTORS[which][0], _flight.rat2);
+    RotateCoordinatePair(_work, _math, 17u, VECTORS[which][1], _flight.rat2);
+    RotateCoordinatePair(_work, _math, 19u, VECTORS[which][2], _flight.rat2);
+  }
+
+  /*
+   * 6502: MV5 -- LDA INWK+31 / AND #&A0 / BNE MVD1 / ORA #16 / STA INWK+31 / JMP SCAN.
+   *
+   * Bit 4 is "this ship is drawn on the scanner". A live ship sets it and gets scanned AGAIN --
+   * the second call of the iteration -- while an exploding one clears it instead and is not.
+   */
+  if ((_work[31] & 0xA0u) != 0u)
+  {
+    _work[31] = static_cast<std::uint8_t>(_work[31] & 0xEFu); // 6502: MVD1
+    return;
+  }
+
+  _work[31] = static_cast<std::uint8_t>(_work[31] | 0x10u);
+  _effects.UpdateScanner(_work); // 6502: JMP SCAN -- a tail call, so it is the last thing done
+}
+} // namespace
+
+void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
+              std::uint16_t _blueprint) noexcept
+{
+  // 6502: LDA INWK+31 / AND #&A0 / BNE MV30 -- exploding or already dead, so straight to the
+  // scanner. Nothing below moves it, which is why a wreck hangs where it died.
+  if ((_work[31] & 0xA0u) == 0u)
+  {
+    // 6502: LDA MCNT / EOR XSAV / AND #15 / BNE MV3 / JSR TIDY -- one ship every sixteenth pass.
+    if ((static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 15u) == 0u)
+    {
+      TidyOrientation(_work, _math);
+    }
+
+    // 6502: MV3 -- LDX TYPE / BPL P%+5 / JMP MV40. The planet and the sun move differently and
+    // rejoin at MV45.
+    if ((_flight.type & 0x80u) != 0u)
+    {
+      MovePlanetOrSun(_work, _math, _flight.alpha, _flight.beta);
+      MoveShipTail(_work, _math, _flight, _effects);
+      return;
+    }
+
+    /*
+     * 6502: LDA INWK+32 / BPL MV30 / CPX #MSL / BEQ MV26 / LDA MCNT / EOR XSAV / AND #7 / BNE MV30.
+     *
+     * A missile thinks on EVERY iteration and everything else on one in eight, which is the whole
+     * reason a missile is frightening and a Krait is not.
+     */
+    if ((_work[32] & 0x80u) != 0u
+        && (_flight.type == SHIP_TYPE_MISSILE
+            || (static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 7u) == 0u))
+    {
+      _effects.RunTactics(_work); // 6502: MV26
+    }
+  }
+
+  _effects.UpdateScanner(_work); // 6502: MV30 -- JSR SCAN
+
+  /*
+   * 6502: LDA INWK+27 / ASL A / ASL A / STA Q, then three axes of FMLTU and MVT1-2.
+   *
+   * The ship's speed, times four, scaling its own nose vector into its position -- so a ship moves
+   * along the direction it is pointing, and the multiply is the unsigned high-byte one because
+   * only the magnitude matters here. The sign comes from the coordinate byte handed to `MVT1-2`.
+   */
+  _math.q = static_cast<std::uint8_t>(_work[27] << 2);
+
+  const std::uint8_t AXES[3][2] = { { 10u, 0u }, { 12u, 3u }, { 14u, 6u } };
+  for (const auto& axis : AXES)
+  {
+    _math.r = MultiplyByLog(_math, static_cast<std::uint8_t>(_work[axis[0]] & 0x7Fu));
+    AddToShipCoordinate(_work, _math, _work[axis[0]], axis[1], true);
+  }
+
+  /*
+   * 6502: LDA INWK+27 / CLC / ADC INWK+28 / BPL P%+4 / LDA #0 / LDY #15 / CMP (XX0),Y / BCC P%+4 /
+   * LDA (XX0),Y / STA INWK+27 / LDA #0 / STA INWK+28.
+   *
+   * Speed plus acceleration, clamped at both ends: a negative result becomes zero and anything
+   * above the blueprint's maximum speed becomes that maximum. THEN THE ACCELERATION IS CLEARED --
+   * it is a one-shot each iteration, not a persistent force, which is why a ship that stops being
+   * pushed stops accelerating immediately rather than coasting up to speed.
+   */
+  AddResult speed = AddWithCarry(_work[27], _work[28], false);
+  std::uint8_t wanted = ((speed.value & 0x80u) != 0u) ? std::uint8_t{ 0 } : speed.value;
+
+  const std::uint8_t maximum = ShipByte(static_cast<std::uint16_t>(_blueprint + 15u));
+  if (wanted >= maximum)
+  {
+    wanted = maximum;
+  }
+  _work[27] = wanted;
+  _work[28] = 0;
+
+  /*
+   * 6502: the rotation of the ship's POSITION by the player's roll and pitch -- y -= a*x,
+   * z += b*K2, y = K2 - b*z, x += a*y -- through `MLTU2` and `MVT6`.
+   *
+   * `MLTU2-2` is `STX Q` and then `MLTU2`, so setting Q and calling the ported routine is the
+   * same two instructions. `K2` holds the intermediate y while `P` is reused for the next
+   * multiply, which is the second place in this slice that needs both blocks at once.
+   */
+  _math.q = _flight.alp1; // 6502: LDX ALP1 / JSR MLTU2-2
+  _math.p = static_cast<std::uint8_t>(_work[0] ^ 0xFFu);
+  _math.p2 = MultiplyWide(_math, _work[1]).high;
+  _math.k2[3] = AddShipCoordinateToP(_work, _math, static_cast<std::uint8_t>(_flight.alp2Next ^ _work[2]), 3u);
+
+  _math.k2[1] = _math.p1;
+  _math.p = static_cast<std::uint8_t>(_math.p1 ^ 0xFFu);
+  _math.k2[2] = _math.p2;
+
+  _math.q = _flight.bet1; // 6502: LDX BET1 / JSR MLTU2-2
+  _math.p2 = MultiplyWide(_math, _math.p2).high;
+  _work[8] = AddShipCoordinateToP(_work, _math, static_cast<std::uint8_t>(_math.k2[3] ^ _flight.bet2), 6u);
+  _work[6] = _math.p1;
+  _math.p = static_cast<std::uint8_t>(_math.p1 ^ 0xFFu);
+  _work[7] = _math.p2;
+
+  // 6502: JSR MLTU2 -- Q is still BET1, and ITS CARRY is what the arithmetic below runs on.
+  const WideResult wide = MultiplyWide(_math, _math.p2);
+  _math.p2 = wide.high;
+  _work[5] = _math.k2[3];
+
+  /*
+   * 6502: EOR BET2 / EOR INWK+8 / BPL MV43.
+   *
+   * `BPL` branches when bit 7 is CLEAR, and what it branches to is the SUBTRACTION -- so the
+   * signs agreeing means subtract and disagreeing means add, which is the opposite way round from
+   * every other sign test in this file. Reading it the natural way put the ship's y coordinate one
+   * out on the first iteration, which is how it was found.
+   */
+  if (((_math.k2[3] ^ _flight.bet2 ^ _work[8]) & 0x80u) != 0u)
+  {
+    /*
+     * 6502: `LDA P+1 / ADC K2+1` with NO `CLC`. It runs on the carry `MLTU2` left, because
+     * nothing between them touches it -- `STA`, `LDA` and `EOR` do not.
+     */
+    AddResult sum = AddWithCarry(_math.p1, _math.k2[1], wide.carry);
+    _work[3] = sum.value;
+    sum = AddWithCarry(_math.p2, _math.k2[2], sum.carry);
+    _work[4] = sum.value;
+  }
+  else
+  {
+    // 6502: MV43 -- `LDA K2+1 / SBC P+1`, and no `SEC` either, for the same reason.
+    SubResult difference = SubtractWithCarry(_math.k2[1], _math.p1, wide.carry);
+    _work[3] = difference.value;
+    difference = SubtractWithCarry(_math.k2[2], _math.p2, difference.carry);
+    _work[4] = difference.value;
+
+    if (!difference.carry)
+    {
+      SubResult negated = SubtractWithCarry(1, _work[3], false);
+      _work[3] = negated.value;
+      negated = SubtractWithCarry(0, _work[4], negated.carry);
+      _work[4] = negated.value;
+      _work[5] = static_cast<std::uint8_t>(_work[5] ^ 0x80u);
+    }
+  }
+
+  // 6502: MV44 -- LDX ALP1 / ... / JSR MVT6 -- x = x + alpha * y.
+  _math.q = _flight.alp1;
+  _math.p = static_cast<std::uint8_t>(_work[3] ^ 0xFFu);
+  _math.p2 = MultiplyWide(_math, _work[4]).high;
+  _work[2] = AddShipCoordinateToP(_work, _math, static_cast<std::uint8_t>(_flight.alp2 ^ _work[5]), 0u);
+  _work[1] = _math.p2;
+  _work[0] = _math.p1;
+
+  MoveShipTail(_work, _math, _flight, _effects); // 6502: falls into MV45
 }
 
 } // namespace Elite

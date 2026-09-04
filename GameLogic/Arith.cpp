@@ -249,7 +249,7 @@ std::uint8_t MultiplyScaled(MathWorkspace& _work, std::uint8_t _a) noexcept
   return static_cast<std::uint8_t>(a | _work.t);
 }
 
-std::uint8_t MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   // The multiplier arrives complemented, which turns the usual add-on-a-set-bit test into an
   // add-on-a-clear-bit one and saves the routine an instruction per step.
@@ -292,7 +292,8 @@ std::uint8_t MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept
     carry = rotatedLow.carry;
   }
 
-  return a;
+  // The carry is the one the final `ROR P` left, which is what MVEIT reads. See the header.
+  return WideResult{ a, carry };
 }
 
 std::uint8_t DivideBy96(MathWorkspace& _work, std::uint8_t _a) noexcept
