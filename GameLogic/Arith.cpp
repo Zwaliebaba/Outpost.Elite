@@ -967,4 +967,49 @@ void DivideSignedToK(MathWorkspace& _work) noexcept
   _work.k[3] = _work.t;
 }
 
+
+void DivideToUR(MathWorkspace& _work, std::uint8_t _a) noexcept
+{
+  // 6502: LL84 -- the divisor is zero, so there is no answer to give.
+  if (_work.q == 0u)
+  {
+    _work.r = 50;
+    _work.u = 50;
+    return;
+  }
+
+  // 6502: LL63 -- halve A until LL28 will take it. The shift happens before the test, so an A
+  // that is already smaller than Q is still halved once and the count is still one.
+  std::uint8_t shifts = 0;
+  std::uint8_t value = _a;
+  do
+  {
+    value = static_cast<std::uint8_t>(value >> 1);
+    ++shifts;
+  } while (value >= _work.q);
+
+  _work.s = shifts;
+  (void)DivideToR(_work, value);
+
+  // 6502: LL64 -- and double the answer back, through U. The sign test is on U after the rotate,
+  // so an answer that needs seventeen bits is an overflow and takes the same exit as a zero
+  // divisor does.
+  std::uint8_t doubled = _work.r;
+  for (std::uint8_t remaining = shifts; remaining != 0u; --remaining)
+  {
+    const ShiftResult shifted = RotateLeftValue(doubled, false);
+    doubled = shifted.value;
+    _work.u = RotateLeft(_work.u, shifted.carry).value;
+
+    if ((_work.u & 0x80u) != 0u)
+    {
+      _work.r = 50;
+      _work.u = 50;
+      return;
+    }
+  }
+
+  _work.r = doubled;
+}
+
 } // namespace Elite
