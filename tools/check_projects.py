@@ -10,7 +10,8 @@ Three ways a .vcxproj drifts from the tree, all of them met here:
     a machine with no MSBuild at all.
   * a source on disk that no project names. The portable runner GLOBS `GameLogic/*.cpp`, so a file
     someone forgot to add to the project compiles and passes there and is simply absent from the
-    Windows build -- a green suite testing less than it says.
+    Windows build -- a green suite testing less than it says. Shaders count: an `.hlsl` the project
+    does not name is not compiled by anything at all, and the first sign of it is a black window.
   * a .filters entry that disagrees with its .vcxproj. A filters entry for a file the project does
     not build is dead; a project entry with no filter puts the file loose at the root of the tree
     in the IDE.
@@ -28,7 +29,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 MSBUILD = "{http://schemas.microsoft.com/developer/msbuild/2003}"
-ITEMS = ("ClCompile", "ClInclude")
+# The item types that name a FILE this repository owns. FxCompile and None are here for the
+# shaders: `.hlsl` is compiled by FXC rather than by CL, and `.hlsli` is carried rather than
+# compiled, so without these two a shader on disk that no project names would be invisible to
+# check (2) below -- which is the exact failure this script exists to catch for `.cpp`.
+ITEMS = ("ClCompile", "ClInclude", "FxCompile", "None")
 
 # Each project, and the directory whose sources it is expected to name in full. A project may name
 # files from elsewhere -- the test project builds Outpost/SaveStore.cpp so that it is covered --
@@ -85,7 +90,9 @@ def main() -> int:
 
         # (2) every source in the project's own directory is named by it.
         directory = REPO / owned
-        for source in sorted(directory.glob("*.cpp")) + sorted(directory.glob("*.h")):
+        sources = (sorted(directory.glob("*.cpp")) + sorted(directory.glob("*.h"))
+                   + sorted(directory.glob("*.hlsl")) + sorted(directory.glob("*.hlsli")))
+        for source in sources:
             if source.resolve() not in on_disk:
                 failures.append(f"{relative}: {source.relative_to(REPO)} is on disk and the project does"
                                 " not name it, so MSVC will not build it")

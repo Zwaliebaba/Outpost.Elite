@@ -64,6 +64,11 @@
     <None Include="packages.config">
       <Filter>Project Files</Filter>
     </None>
+    <None Include="Canvas.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="CanvasVertexShader.hlsl" />
+    <FxCompile Include="CanvasPixelShader.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="$(MSBuildThisFileDirectory)..\..\natvis\wil.natstepfilter">

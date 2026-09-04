@@ -428,6 +428,28 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.31 A shader compiled at run time is a shader nobody has read
+
+The presenter's first draft built its HLSL with `D3DCompile` from a string literal, which is the
+normal thing to do and was, here, the one remaining hole in the argument this slice is built on.
+Everything else in the shell went onto the Windows CI leg precisely so that code written on a
+machine that cannot run it would at least be READ by a compiler. Twenty-five lines of HLSL sat
+outside that: nothing in the build touched them, and the first check they would ever get was a
+person launching the game and seeing a black window with an eight-digit HRESULT in a message box.
+
+So the shaders became `.hlsl` files that FXC compiles into C arrays in `$(IntDir)`, which the
+presenter includes. A typo in them is now a build error like any other. Two things fall out of it
+that were not the reason for doing it: `d3dcompiler.lib` and its `d3dcompiler_47.dll` are gone,
+which a packaged application would otherwise have had to carry; and `tools/check_projects.py`
+gained `FxCompile` and `None` to its item types, because an `.hlsl` on disk that no project names
+is not compiled by ANYTHING -- a worse version of the `.cpp` case that script already existed to
+catch.
+
+The general form is the one this slice keeps running into: **verification you cannot run is not
+verification, and the question is always what would have to be true for a machine to check this.**
+For the C++ it was a CI leg that builds the executable. For the shader it was moving it from a
+string into the build. Neither needed a display, and both found or foreclosed something.
+
 ### 6.30 Two static libraries, one C++/WinRT, and thirty-one link errors nobody could have seen
 
 Building `Outpost.exe` for the first time produced no compile errors at all -- about twelve
