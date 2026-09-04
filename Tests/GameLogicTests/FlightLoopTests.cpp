@@ -16,11 +16,12 @@ using Elite::Testing::Cpu6502;
 using Elite::Testing::OracleImage;
 
 /*
- * The flight loop's distance helpers (slice 3d-d-i).
+ * What the flight loop calls but does not need (slice 3d-d-i).
  *
- * All four are small enough to sweep properly: `MAS2` and `MAS4` are exhaustive in the byte they
- * OR into, `MAS3` over every high byte a block can hold, and `MAS1` over the coordinates that
- * make its sixteen-bit doubling overflow -- which is the case its third byte exists for.
+ * All four distance helpers are small enough to sweep properly: `MAS2` and `MAS4` are exhaustive
+ * in the byte they OR into, `MAS3` over every high byte a block can hold, and `MAS1` over the
+ * coordinates that make its sixteen-bit doubling overflow -- which is the case its third byte
+ * exists for. `cntr` is exhaustive outright, in the reading and in both flags.
  */
 namespace GameLogicTests
 {
@@ -290,6 +291,84 @@ public:
 
     Assert::AreEqual<std::uint32_t>(8u * 8u * 8u * 8u, compared, L"the whole sweep ran");
     Assert::IsTrue(overflowed > 0u, L"and the doubling overflowed into the third byte");
+  }
+
+  /*
+   * 6502: cntr -- every reading, against every combination of the two flags.
+   *
+   * Two hundred and fifty-six values by three settings of `auto` and three of `DAMP` is 2,304
+   * calls, which is the whole input space with the "non-zero" tests given a 1 and an &FF each --
+   * `DAMP` only ever holds those two, but `auto` is a countdown in the docking computer and the
+   * routine tests it rather than comparing it.
+   *
+   * AND IT PROVES THE DEAD TAIL. A trap on `REDU` is armed for the whole sweep: if any input
+   * reached it the trap would fire, and the count at the end is zero, so the port is entitled to
+   * leave `.REDU DEX / BEQ BUMP` out. The trap also returns early rather than running those two
+   * instructions, so an input that reached it would diverge here as well -- two ways to catch
+   * the same mistake, because "this instruction cannot run" is exactly the claim a port should
+   * not be allowed to make on its own authority (§6.71).
+   */
+  TEST_METHOD(TheControlDampingMatchesCntr)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t cntr = oracle.Label("cntr");
+    const std::uint16_t autoPilot = oracle.Label("auto");
+    const std::uint16_t damp = oracle.Label("DAMP");
+
+    Cpu6502 cpu = oracle.Fresh();
+    cpu.AddTrap(oracle.Label("REDU"));
+
+    std::uint32_t compared = 0;
+    std::uint32_t moved = 0;
+    std::uint32_t stood = 0;
+
+    for (const std::uint8_t docking : { std::uint8_t{ 0 }, std::uint8_t{ 1 }, std::uint8_t{ 0xFF } })
+    {
+      for (const std::uint8_t damping : { std::uint8_t{ 0 }, std::uint8_t{ 1 }, std::uint8_t{ 0xFF } })
+      {
+        for (std::uint32_t reading = 0; reading < 256; ++reading)
+        {
+          const std::uint8_t value = static_cast<std::uint8_t>(reading);
+
+          cpu.memory[autoPilot] = docking;
+          cpu.memory[damp] = damping;
+          cpu.x = value;
+
+          const Elite::Testing::RunResult run = cpu.CallSubroutine(cntr, 200);
+          Assert::IsTrue(run.completed, L"cntr returned");
+
+          const std::uint8_t ours = Elite::DampTowardsCentre(value, docking, damping);
+
+          const std::wstring where =
+            Widen("cntr(" + std::to_string(reading) + ", auto " + std::to_string(docking)
+                  + ", DAMP " + std::to_string(damping) + ")");
+
+          Assert::AreEqual(cpu.x, ours, where.c_str());
+          Assert::AreEqual(cpu.memory[autoPilot], docking, (where + L": auto is left alone").c_str());
+          Assert::AreEqual(cpu.memory[damp], damping, (where + L": DAMP is left alone").c_str());
+
+          if (cpu.x == value)
+          {
+            ++stood;
+          }
+          else
+          {
+            ++moved;
+          }
+          ++compared;
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(3u * 3u * 256u, compared, L"the whole sweep ran");
+    Assert::IsTrue(moved > 0u, L"some readings were damped");
+    Assert::IsTrue(stood > 0u, L"and some were not");
+    Assert::AreEqual<std::size_t>(0u, cpu.trapHits.size(), L"REDU was never reached");
   }
 };
 
