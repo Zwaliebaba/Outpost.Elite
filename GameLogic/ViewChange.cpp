@@ -2,6 +2,8 @@
 
 #include "ViewChange.h"
 
+#include "LookupTables.h"
+
 namespace Elite
 {
 
@@ -133,6 +135,52 @@ void ForgetScannerBlips(Bubble& _bubble) noexcept
     ShipBlock& block = _bubble.blocks[slot];
     block[31] = static_cast<std::uint8_t>(block[31] & 0xEFu);
   }
+}
+
+void HideAllSprites(SightEffects& _effects) noexcept
+{
+  _effects.SetRasterMode(0x05u);   // 6502: LDA #%101 / JSR SETL1
+  _effects.SetSpritesEnabled(0u);  // 6502: LDA #%00000000 / STA VIC+&15
+  _effects.SetRasterMode(0x04u);   // 6502: LDA #%100, and it falls into SETL1
+}
+
+void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
+                   GeometryWorkspace& _geometry, ScreenState& _screen, Bubble& _bubble,
+                   const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
+                   Compass& _compass, SightEffects& _effects) noexcept
+{
+  // 6502: JSR BOX2 -- at its label, so eighteen rows: the space view's height (§6.79).
+  DrawBorder(_canvas, _draw, BORDER_ROWS_SPACE_VIEW);
+
+  _screen.colourBank = COLOUR_BANK_DASHBOARD; // 6502: LDA #&91 / STA abraxas
+  _screen.bitmapMode = BITMAP_MODE_DASHBOARD; // 6502: LDA #%11010000 / STA caravanserai
+
+  // 6502: LDA DFLAG / BNE nearlyxmas -- the dashboard is already there, so skip the expensive
+  // half. The border above and the bands below happen either way.
+  if (_screen.dashboardShown == 0u)
+  {
+    /*
+     * 6502: LDX #8 / V = DSTORE% / SC = DLOC% / JSR mvblockK, then LDY #&C0 / LDX #1 /
+     * JSR mvbllop with `V` and `SC` still where the first call left them.
+     *
+     * 2,240 bytes, and NOT the first 2,240: the second entry stores at Y and counts down to 1,
+     * so offset 2,048 is skipped and offset 2,240 is written (§6.78).
+     */
+    CopyPagesDown(_canvas, DASHBOARD_IMAGE.data(), DASHBOARD_BITMAP, 8u, 0u);
+    CopyPagesDown(_canvas, DASHBOARD_IMAGE.data() + 8u * 256u,
+                  static_cast<std::uint16_t>(DASHBOARD_BITMAP + 8u * 256u), 1u, 0xC0u);
+
+    ForgetScannerBlips(_bubble); // 6502: JSR zonkscanners
+
+    // 6502: JSR DIALS -- all seven dials and the compass, on a dashboard that has just arrived
+    // as a picture with every bar empty.
+    DrawDials(_canvas, _draw, _math, _geometry, _flight, _status, _fuel, _compass, _bubble);
+  }
+
+  DrawColourBands(_canvas);   // 6502: .nearlyxmas JSR BLUEBAND
+  HideAllSprites(_effects);   // 6502: JSR NOSPRITES
+
+  _screen.dashboardShown = 0xFFu; // 6502: LDA #&FF / STA DFLAG
 }
 
 } // namespace Elite

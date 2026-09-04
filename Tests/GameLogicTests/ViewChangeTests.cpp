@@ -3,8 +3,13 @@
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
+#include "Arith.h"
 #include "Canvas.h"
+#include "Controls.h"
+#include "Dashboard.h"
 #include "LookupTables.h"
+#include "ShipDraw.h"
+#include "ShipMove.h"
 #include "ShipSlot.h"
 #include "ViewChange.h"
 
@@ -467,6 +472,212 @@ public:
         }
       }
     }
+  }
+};
+
+
+TEST_CLASS(TheDashboardScreen)
+{
+public:
+  /*
+   * 6502: wantdials -- the dashboard arriving, and the dashboard already being there.
+   *
+   * The whole routine including `DIALS`, so this is the widest comparison in the slice: the
+   * border, the 2,240-byte copy, every blip forgotten, seven dials, the compass, two colour
+   * bands and the sprites switched off, against the game doing all of it.
+   *
+   * BOTH VALUES OF `DFLAG`. The flag skips the expensive half and not the cheap one -- with the
+   * dashboard already up, the border, the two mode bytes, the bands and the sprites still happen
+   * and only the copy, the blips and `DIALS` are skipped. A port that read the flag as "return
+   * early" would agree on the second frame and differ on everything drawn on top of it.
+   */
+  TEST_METHOD(TheDashboardScreenMatchesWantdials)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t wantdials = oracle.Label("wantdials");
+    const std::uint16_t screen = ScreenBase(oracle);
+
+    struct At
+    {
+      std::uint16_t abraxas, caravanserai, dflag, delta, alp1, alp2, beta, bet1;
+      std::uint16_t energy, fsh, ash, qq14, cabtmp, gntmp, altit, mcnt, flh, qq11;
+      std::uint16_t comx, comy, comc, many, kPercent, frin, t2;
+    } at{};
+
+    at.abraxas = oracle.Label("abraxas");
+    at.caravanserai = oracle.Label("caravanserai");
+    at.dflag = oracle.Label("DFLAG");
+    at.delta = oracle.Label("DELTA");
+    at.alp1 = oracle.Label("ALP1");
+    at.alp2 = oracle.Label("ALP2");
+    at.beta = oracle.Label("BETA");
+    at.bet1 = oracle.Label("BET1");
+    at.energy = oracle.Label("ENERGY");
+    at.fsh = oracle.Label("FSH");
+    at.ash = oracle.Label("ASH");
+    at.qq14 = oracle.Label("QQ14");
+    at.cabtmp = oracle.Label("CABTMP");
+    at.gntmp = oracle.Label("GNTMP");
+    at.altit = oracle.Label("ALTIT");
+    at.mcnt = oracle.Label("MCNT");
+    at.flh = oracle.Label("FLH");
+    at.qq11 = oracle.Label("QQ11");
+    at.comx = oracle.Label("COMX");
+    at.comy = oracle.Label("COMY");
+    at.comc = oracle.Label("COMC");
+    at.many = oracle.Label("MANY");
+    at.kPercent = oracle.Label("K%");
+    at.frin = oracle.Label("FRIN");
+    at.t2 = oracle.Label("T2");
+
+    struct Recorder final : Elite::SightEffects
+    {
+      std::vector<std::uint8_t> modes;
+      std::vector<std::uint8_t> masks;
+      std::uint32_t colours = 0;
+
+      void SetRasterMode(std::uint8_t _mode) override { modes.push_back(_mode); }
+      void SetSightColour(std::uint8_t) override { ++colours; }
+      void SetSpritesEnabled(std::uint8_t _mask) override { masks.push_back(_mask); }
+    };
+
+    std::uint32_t compared = 0;
+    std::uint32_t copies = 0;
+
+    for (const std::uint8_t already : { std::uint8_t{ 0 }, std::uint8_t{ 0xFF }, std::uint8_t{ 1 } })
+    {
+      for (const std::uint8_t counter : { std::uint8_t{ 0 }, std::uint8_t{ 2 }, std::uint8_t{ 9 } })
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        Elite::Canvas canvas;
+        cpu.AddTrap(oracle.Label("SETL1"));
+
+        FillScreens(cpu, canvas, screen, 0x00u);
+
+        const std::uint8_t READINGS[] = { 14u, 5u, 128u, 200u, 3u, 180u, 90u, 60u,
+                                          40u, 100u, 70u, 120u, 0xFFu };
+        const std::uint16_t WHERE[] = { at.delta, at.alp1, at.alp2, at.beta, at.bet1,
+                                        at.energy, at.fsh, at.ash, at.qq14, at.cabtmp,
+                                        at.gntmp, at.altit, at.flh };
+        for (std::size_t index = 0; index < 13u; ++index)
+        {
+          cpu.memory[WHERE[index]] = READINGS[index];
+        }
+        cpu.memory[at.mcnt] = counter;
+        cpu.memory[at.qq11] = 0u;
+        cpu.memory[at.dflag] = already;
+        cpu.memory[at.abraxas] = 0x81u;
+        cpu.memory[at.caravanserai] = 0xC0u;
+        cpu.memory[at.t2] = 0x77u;
+
+        Elite::Bubble bubble;
+        bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
+        cpu.memory[static_cast<std::uint16_t>(at.many + Elite::SHIP_TYPE_STATION)] = 1u;
+
+        // Two ships in the bubble, both with bit 4 of byte 31 set, so `zonkscanners` has
+        // something to forget -- and the DFLAG case that skips it has to leave it alone.
+        const std::uint8_t TYPES[] = { 3u, 5u };
+        for (std::size_t slot = 0; slot < 2u; ++slot)
+        {
+          bubble.slots[slot] = TYPES[slot];
+          cpu.memory[static_cast<std::uint16_t>(at.frin + slot)] = TYPES[slot];
+        }
+
+        std::uint32_t state = 0x77C1A305u ^ (counter * 0x9E3779B9u) ^ already;
+        for (std::size_t slot = 0; slot < 2u; ++slot)
+        {
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            state = state * 1103515245u + 12345u;
+            const std::uint8_t value =
+              (byte == 31u) ? 0xFFu : static_cast<std::uint8_t>(state >> 17);
+            bubble.blocks[slot][byte] = value;
+            cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE
+                                                  + byte)] = value;
+          }
+        }
+
+        Elite::Compass compass{ 0xC3u, 0x9Cu, Elite::COMPASS_AHEAD };
+        cpu.memory[at.comx] = compass.x;
+        cpu.memory[at.comy] = compass.y;
+        cpu.memory[at.comc] = compass.colour;
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(wantdials, 400'000);
+        Assert::IsTrue(run.completed, L"wantdials returned");
+
+        Elite::DrawWorkspace draw;
+        Elite::MathWorkspace math;
+        Elite::GeometryWorkspace geometry;
+        Elite::ScreenState screenState;
+        screenState.dashboardShown = already;
+        draw.t2 = 0x77u;
+
+        Elite::FlightState flight;
+        flight.delta = READINGS[0];
+        flight.alp1 = READINGS[1];
+        flight.alp2 = READINGS[2];
+        flight.beta = READINGS[3];
+        flight.bet1 = READINGS[4];
+        flight.mainLoopCounter = counter;
+
+        Elite::FlightStatus status;
+        status.energy = READINGS[5];
+        status.forwardShield = READINGS[6];
+        status.aftShield = READINGS[7];
+        status.cabinTemperature = READINGS[9];
+        status.laserTemperature = READINGS[10];
+        status.altitude = READINGS[11];
+        status.damageFlash = READINGS[12];
+
+        Recorder effects;
+        Elite::ShowDashboard(canvas, draw, math, geometry, screenState, bubble, flight, status,
+                             READINGS[8], compass, effects);
+
+        const std::wstring where =
+          Widen("wantdials(DFLAG " + std::to_string(already) + ", MCNT " + std::to_string(counter) + ")");
+
+        const std::uint32_t touched = CompareScreens(cpu, screen, canvas, 0x00u, where);
+
+        Assert::AreEqual(cpu.memory[at.abraxas], screenState.colourBank, (where + L": abraxas").c_str());
+        Assert::AreEqual(cpu.memory[at.caravanserai], screenState.bitmapMode,
+                         (where + L": caravanserai").c_str());
+        Assert::AreEqual(cpu.memory[at.dflag], screenState.dashboardShown, (where + L": DFLAG").c_str());
+        Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
+        Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
+        Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
+        Assert::AreEqual(cpu.memory[at.t2], draw.t2, (where + L": T2").c_str());
+
+        for (std::size_t slot = 0; slot < 2u; ++slot)
+        {
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            const std::uint16_t address =
+              static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte);
+            Assert::AreEqual(cpu.memory[address], bubble.blocks[slot][byte],
+                             (where + L": K% slot " + std::to_wstring(slot) + L" byte "
+                              + std::to_wstring(byte)).c_str());
+          }
+        }
+
+        // `NOSPRITES` runs either way, so the seam sees the same three calls whatever `DFLAG` is.
+        Assert::AreEqual<std::size_t>(2u, effects.modes.size(), (where + L": two raster switches").c_str());
+        Assert::AreEqual<std::size_t>(1u, effects.masks.size(), (where + L": one sprite mask").c_str());
+        Assert::AreEqual<std::uint32_t>(0u, effects.masks[0], (where + L": and it is zero").c_str());
+        Assert::AreEqual<std::size_t>(2u, cpu.trapHits.size(), (where + L": the game switched twice").c_str());
+
+        Assert::IsTrue(touched > 0u, (where + L": something was drawn").c_str());
+        copies += (already == 0u) ? 1u : 0u;
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(9u, compared, L"the whole sweep ran");
+    Assert::IsTrue(copies > 0u && copies < compared, L"both halves of the DFLAG test were taken");
   }
 };
 
