@@ -153,4 +153,108 @@ std::uint8_t AddShipCoordinateToP(const ShipBlock& _work, MathWorkspace& _math, 
   return _a;
 }
 
+
+void RotateShipVector(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _y, std::uint8_t _alpha,
+                      std::uint8_t _beta) noexcept
+{
+  // 6502: LDA ALPHA / STA Q ... -- Y = Y - alpha * X, and the subtraction is an EOR #128.
+  _math.q = _alpha;
+  _math.r = _work[_y + 2u];
+  _math.s = _work[_y + 3u];
+  _math.p = _work[_y];
+  AddSignedResult result = MultiplyAndAdd(_math, static_cast<std::uint8_t>(_work[_y + 1u] ^ 0x80u));
+  _work[_y + 3u] = result.high;
+  _work[_y + 2u] = result.low;
+  _math.p = result.low; // 6502: STX P
+
+  // 6502: X = X + alpha * Y
+  _math.r = _work[_y];
+  _math.s = _work[_y + 1u];
+  result = MultiplyAndAdd(_math, _work[_y + 3u]);
+  _work[_y + 1u] = result.high;
+  _work[_y] = result.low;
+  _math.p = result.low;
+
+  // 6502: LDA BETA / STA Q -- Y = Y - beta * Z
+  _math.q = _beta;
+  _math.r = _work[_y + 2u];
+  _math.s = _work[_y + 3u];
+  _math.p = _work[_y + 4u];
+  result = MultiplyAndAdd(_math, static_cast<std::uint8_t>(_work[_y + 5u] ^ 0x80u));
+  _work[_y + 3u] = result.high;
+  _work[_y + 2u] = result.low;
+  _math.p = result.low;
+
+  // 6502: Z = Z + beta * Y
+  _math.r = _work[_y + 4u];
+  _math.s = _work[_y + 5u];
+  result = MultiplyAndAdd(_math, _work[_y + 3u]);
+  _work[_y + 5u] = result.high;
+  _work[_y + 4u] = result.low;
+}
+
+namespace
+{
+/*
+ * One half of MVS5: shrink the value at `_from` and add a sixteenth of the one at `_other`.
+ *
+ * The two halves of the routine are this with the indices swapped, so it is written once. The
+ * only difference between them is an extra sign flip, which is `_flip`.
+ */
+[[nodiscard]] AddSignedResult RotateHalf(const ShipBlock& _work, MathWorkspace& _math,
+                                         std::uint8_t _from, std::uint8_t _other, std::uint8_t _rat2,
+                                         bool _flip) noexcept
+{
+  // 6502: LDA INWK+1,X / AND #127 / LSR A / STA T -- half the magnitude of the high byte...
+  _math.t = static_cast<std::uint8_t>((_work[_from + 1u] & 0x7Fu) >> 1);
+
+  // ...taken off the value, which is what keeps the rotation from growing without bound.
+  const SubResult low = SubtractWithCarry(_work[_from], _math.t, true);
+  _math.r = low.value;
+  _math.s = SubtractWithCarry(_work[_from + 1u], 0, low.carry).value;
+
+  // 6502: LDA INWK,Y / STA P / LDA INWK+1,Y / AND #128 / STA T -- the other value and its sign.
+  _math.p = _work[_other];
+  _math.t = static_cast<std::uint8_t>(_work[_other + 1u] & 0x80u);
+
+  // 6502: LSR A / ROR P, four times -- (A P) divided by sixteen, which is the rotation's angle.
+  std::uint8_t high = static_cast<std::uint8_t>(_work[_other + 1u] & 0x7Fu);
+  for (int shift = 0; shift < 4; ++shift)
+  {
+    const bool carry = (high & 1u) != 0u;
+    high = static_cast<std::uint8_t>(high >> 1);
+    _math.p = static_cast<std::uint8_t>((_math.p >> 1) | (carry ? 0x80u : 0u));
+  }
+
+  // 6502: ORA T / [EOR #128] / EOR RAT2 -- the sign back on, the half's own flip, the direction.
+  std::uint8_t signed_ = static_cast<std::uint8_t>(high | _math.t);
+  if (_flip)
+  {
+    signed_ = static_cast<std::uint8_t>(signed_ ^ 0x80u);
+  }
+  signed_ = static_cast<std::uint8_t>(signed_ ^ _rat2);
+
+  return AddSigned(_math, signed_); // 6502: JSR ADD
+}
+} // namespace
+
+void RotateCoordinatePair(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x, std::uint8_t _y,
+                          std::uint8_t _rat2) noexcept
+{
+  // 6502: JSR ADD / STA K+1 / STX K -- the first half is held in K while the second runs.
+  const AddSignedResult first = RotateHalf(_work, _math, _x, _y, _rat2, false);
+  _math.k[1] = first.high;
+  _math.k[0] = first.low;
+
+  // 6502: the same with X and Y swapped, and the EOR #128 that makes it a rotation.
+  const AddSignedResult second = RotateHalf(_work, _math, _y, _x, _rat2, true);
+  _work[_y + 1u] = second.high;
+  _work[_y] = second.low;
+
+  // 6502: LDX Q / LDA K / STA INWK,X / LDA K+1 / STA INWK+1,X -- and only now is X written, so
+  // the second half read the value the first half had not yet replaced.
+  _work[_x] = _math.k[0];
+  _work[_x + 1u] = _math.k[1];
+}
+
 } // namespace Elite
