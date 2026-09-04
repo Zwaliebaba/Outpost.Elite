@@ -3,6 +3,7 @@
 #include "Arith.h"
 #include "Canvas.h"
 #include "ShipDraw.h"
+#include "ShipSlot.h"
 
 #include <array>
 #include <cstdint>
@@ -68,6 +69,16 @@ struct PlanetSunState
    * the same build, which is why it cannot be folded into a single constant.
    */
   std::uint8_t yx2M1 = 0;
+
+  /*
+   * 6502: PLTOG -- whether the planet gets its detail drawn, and it has ONE reader and NO WRITER.
+   *
+   * `PL9` reads it and nothing in the whole C64 build stores to it. Other versions toggle it from
+   * a key; this one takes whatever the loader left in the byte at 7439 and keeps it for the life
+   * of the game. So it is initialised from the image rather than defaulted here, and a port that
+   * assumed "off" would draw featureless planets for ever.
+   */
+  std::uint8_t pltog = 0;
 
   /*
    * 6502: K5, K6, STP and FLAG -- the ball's walk, and they are the planet's state rather than
@@ -211,5 +222,90 @@ void DrawBall(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
 [[nodiscard]] bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
                               GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                               const Projection& _centre) noexcept;
+
+/*
+ * 6502: PLS1 -- one axis of the planet's position, divided by its distance.
+ *
+ * Three values come back and the original returns them in three places: A is the magnitude
+ * (saturated at 254 when it will not fit in a byte), Y is the sign from `K+3`, and X has been
+ * STEPPED ON BY TWO so the caller can walk the axes without counting.
+ */
+struct AxisResult
+{
+  std::uint8_t value = 0; ///< 6502: A
+  std::uint8_t sign = 0;  ///< 6502: Y
+  std::uint8_t at = 0;    ///< 6502: X, after its two INXs
+};
+
+[[nodiscard]] AxisResult DivideAxisByZ(const ShipBlock& _ship, MathWorkspace& _math,
+                                       std::uint8_t _at) noexcept;
+
+/// 6502: PLS3 -- the same, scaled by 222/256, and returned as a signed sixteen-bit value with the
+/// high half in Y. `X` is preserved here rather than stepped, through `U`.
+[[nodiscard]] AxisResult ScaleAxisByZ(const ShipBlock& _ship, MathWorkspace& _math,
+                                      std::uint8_t _at) noexcept;
+
+/// 6502: PLS4 -- where a meridian starts, as an angle: `ARCTAN` of the ratio, flipped by the
+/// roof vector's sign, and divided by four to index a sixty-fourth of a turn.
+void SetMeridianAngle(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
+
+/// 6502: PLS5 -- two axes into `K2+2`/`K2+3` and their signs into `XX16+2`/`XX16+3`.
+void LoadTwoAxes(const ShipBlock& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry,
+                 std::uint8_t _at) noexcept;
+
+/*
+ * 6502: PLS22, and PLS2 which is the two instructions above it.
+ *
+ * An ellipse rather than a circle: the two axes are `K2(1 0)` and `K2(3 2)` with their signs in
+ * `XX16`, so a meridian drawn edge-on is a line and one drawn face-on is a circle, and every
+ * angle between is the same code. It walks `CNT2` by `STP` and stops when `BLINE` reports it has
+ * passed `TGT` -- 31 for a meridian and 64 for a crater, which is why one is a half-turn and the
+ * other a whole one.
+ */
+void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                 GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                 const Projection& _centre) noexcept;
+
+void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                     GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                     const Projection& _centre) noexcept;
+
+/*
+ * 6502: PL9, in its three parts -- the planet's outline and then its markings.
+ *
+ * Elite's planets have two looks and the game picks between them with one bit of the system's
+ * tech level: `SOS1` spawns the planet as `128 OR (tek AND 2)`, so type 128 gets MERIDIANS -- two
+ * great circles seen at whatever angle the planet is turned to -- and type 130 gets a CRATER,
+ * which is one small ellipse offset from the centre.
+ *
+ * Neither is drawn at all unless `PLTOG` says so, and the crater is skipped for a planet turned
+ * away from you (`INWK+20` negative, which is the nose vector pointing off).
+ */
+void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                      GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                      const ShipBlock& _ship, Projection& _centre, std::uint8_t _type) noexcept;
+
+/*
+ * 6502: PLANET -- the entry the main loop calls for both the planet and the sun.
+ *
+ * It rejects the object before projecting it: a distance sign byte of 48 or more is too far to
+ * see, and a zero distance is the case the divide cannot take. Then `PROJ`, then the radius --
+ * `96 * 256 / z`, saturated at 248 -- and then the bottom bit of `TYPE` chooses which of the two
+ * things it is.
+ *
+ * `DrawSun` is the seam: the sun is the next unit, and `PLANET` reaches it with a `JMP` rather
+ * than a call, so it is a tail and not a return.
+ */
+class PlanetDrawEffects
+{
+public:
+  virtual ~PlanetDrawEffects() = default;
+  virtual void DrawSun() = 0;
+};
+
+void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                     GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                     const ShipBlock& _ship, Projection& _centre, std::uint8_t _type,
+                     PlanetDrawEffects& _effects) noexcept;
 
 } // namespace Elite
