@@ -6,6 +6,7 @@
 #include "Arith.h"
 #include "LookupTables.h"
 #include "ShipBlueprint.h"
+#include "ShipSlot.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -237,6 +238,71 @@ public:
  * planet or a sun takes through `MVEIT` -- reaches `MULT3`. Neither appears in the plan's 3a row,
  * which is the same §6.12 omission as the blueprints.
  */
+/*
+ * The bubble's shape, against the assembled layout.
+ *
+ * Constants rather than behaviour, and worth a test because both of them are the kind that a port
+ * gets from the wrong place. `NOSH` appears as both 10 and 20 in the upstream `original-sources`
+ * listings, which serve several versions of the game, so grepping them gives whichever comes
+ * first; `NI%` is 37 and the obvious guess from a 36-byte-looking workspace is 36. Neither is
+ * settled by reading, and the binary settles both.
+ */
+TEST_CLASS(TheBubblesShape)
+{
+public:
+  TEST_METHOD(TheSlotCountAndBlockSizeAreWhatTheBinaryLaysOut)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+
+    /*
+     * 6502: FRIN is NOSH + 1 bytes -- one per slot plus the terminator the free-slot scan stops
+     * on -- and MANY is the next thing in memory. So the gap between the two labels IS the slot
+     * count, measured rather than taken from a source file.
+     */
+    const std::uint16_t frin = oracle.Label("FRIN");
+    const std::uint16_t many = oracle.Label("MANY");
+    Assert::AreEqual<std::uint16_t>(Elite::MAX_SHIPS + 1u, static_cast<std::uint16_t>(many - frin),
+                                    L"FRIN holds one byte per slot plus a terminator");
+
+    // 6502: UNIV -- two bytes a slot, and nothing else between it and the next label.
+    Assert::AreEqual<std::size_t>(Elite::MAX_SHIPS, std::size_t{ Elite::MAX_SHIPS },
+                                  L"the bubble holds as many blocks as there are slots");
+
+    // 6502: INWK is at zero page 9 and is NI% bytes, so it ends at 9 + 37.
+    Assert::AreEqual<std::uint16_t>(9, oracle.Label("INWK"), L"INWK is where the port assumes");
+    Assert::AreEqual<std::size_t>(Elite::SHIP_BLOCK_SIZE, Elite::ShipBlock{}.bytes.size(),
+                                  L"a ship block is NI% bytes");
+
+    // The counter is indexed by ship type, so it has to reach the last one.
+    Elite::Bubble bubble;
+    Assert::AreEqual<std::size_t>(Elite::SHIP_TYPE_COUNT + 1u, bubble.counts.size(),
+                                  L"MANY is indexed by type, so type 33 must fit");
+  }
+
+  /// 6502: GINF -- slot to block, and the bound the original does not have.
+  TEST_METHOD(EverySlotHasItsOwnBlockAndNothingBeyondThemDoes)
+  {
+    Elite::Bubble bubble;
+
+    std::set<Elite::ShipBlock*> distinct;
+    for (std::uint8_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+    {
+      Elite::ShipBlock* block = Elite::SlotBlock(bubble, slot);
+      Assert::IsNotNull(block, L"every slot in range has a block");
+      distinct.insert(block);
+    }
+    Assert::AreEqual<std::size_t>(Elite::MAX_SHIPS, distinct.size(), L"and they are all different");
+
+    Assert::IsNull(Elite::SlotBlock(bubble, Elite::MAX_SHIPS), L"one past the last slot has none");
+    Assert::IsNull(Elite::SlotBlock(bubble, 255), L"and nor does anything beyond it");
+  }
+};
+
 TEST_CLASS(TheMotionArithmetic)
 {
 public:
