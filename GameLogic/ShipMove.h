@@ -84,4 +84,35 @@ void RotateShipVector(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _y, s
 void RotateCoordinatePair(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x, std::uint8_t _y,
                           std::uint8_t _rat2) noexcept;
 
+/*
+ * 6502: TIS3, which FALLS INTO DVIDT -- one component of the third orientation vector, worked out
+ * from the other two.
+ *
+ * `(-x_a * z_a - x_b * z_b) / x_c`, in the indices `_x`, `_y` and `_a`. The three arguments are
+ * axis selectors into the two vectors at INWK+10 and INWK+16, stepping in twos, and `_a` picks
+ * the axis the division is BY -- which is why `TIDY` chooses it from whichever component is
+ * largest rather than always the same one.
+ *
+ * The fall-through is not incidental: `TIS3` sets up P, Q and A and then runs off its end into
+ * the divider, so a caller of `TIS3` gets a division whether it wanted one or not.
+ */
+[[nodiscard]] std::uint8_t OrientationComponent(const ShipBlock& _work, MathWorkspace& _math,
+                                               std::uint8_t _a, std::uint8_t _x,
+                                               std::uint8_t _y) noexcept;
+
+/*
+ * 6502: TIDY -- put a ship's orientation vectors back into shape.
+ *
+ * `MVEIT` runs this on one ship every sixteenth iteration of the main loop, because the rounding
+ * in `MVS4` and `MVS5` accumulates: the vectors slowly stop being unit length and stop being at
+ * right angles to each other. This normalises the first, RECOMPUTES the third from the other two,
+ * normalises that, and then rebuilds the second as their cross product.
+ *
+ * WHICH COMPONENT IT DIVIDES BY IS CHOSEN, not fixed. `AND #&60` on each component in turn asks
+ * whether it is large enough to divide by safely, and `TI1`/`TI2` are the fallbacks when it is
+ * not -- so the routine has three shapes depending on which way the ship happens to be pointing,
+ * and a port that always used the first would be right until a ship pointed down an axis.
+ */
+void TidyOrientation(ShipBlock& _work, MathWorkspace& _math) noexcept;
+
 } // namespace Elite
