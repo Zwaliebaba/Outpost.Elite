@@ -428,6 +428,42 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.30 Two static libraries, one C++/WinRT, and thirty-one link errors nobody could have seen
+
+Building `Outpost.exe` for the first time produced no compile errors at all -- about twelve
+hundred lines of Win32 and Direct3D written on a machine that cannot run either, and the compiler
+took all of it. It failed at the LINK step, thirty-one times over:
+
+```
+GameLogic.lib(TextPrint.obj) : error LNK2038: mismatch detected for 'C++/WinRT version':
+    value '2.0.250303.5' doesn't match value '3.0.260818.1' in pch.obj
+```
+
+`Outpost` carries the `Microsoft.Windows.CppWinRT` NuGet package and therefore compiles against
+3.0; every other project takes the 2.0 that ships inside the Windows SDK. C++/WinRT emits a
+`detect_mismatch` pragma so that the linker refuses to mix them, and it is right to -- they are
+different headers with different inline definitions of the same names.
+
+**Nothing could have caught this earlier, and that is the point.** The defect has been latent
+since the projects were created: `GameLogicTests.dll` links `GameLogic.lib` and both are 2.0, so
+the suite has always been consistent with itself. The mismatch needs a binary that links the
+library built one way against objects built the other, and until this slice no such binary was
+ever produced. A CI leg that builds the executable is not a formality on top of a green suite; it
+is a different question, and the first time it was asked it found something.
+
+The fix is not to align the versions. It is that `GameLogic` and `NeuronCore` were never using
+C++/WinRT in the first place -- they inherited it from the shared precompiled header, which
+includes `winrt/Windows.Foundation.h` and does `using namespace winrt;` for the benefit of the one
+project that needs it. ADR-004 makes `GameLogic` deterministic and platform-free, and AGENTS.md §5
+calls C++/WinRT "a COM-helper sanction only", for the presentation layer's `com_ptr` and
+`check_hresult`. A static library with no COM in it emitting a version directive is a constraint
+on everything that links it, bought for nothing. So `NeuronCore.h` gained a `NEURON_NO_CPPWINRT`
+guard, and `Outpost/pch.h` is now the single place that does not define it.
+
+The general shape is worth keeping: **a dependency acquired by inheritance rather than by need
+costs nothing until something else needs a different version of it.** The shared header is a
+convenience, and the price of a convenience is paid by whoever links it.
+
 ### 6.29 The routine did not end where the line did
 
 `TT66` sets the text state every docked screen is entered with, so the shell had to answer it and
@@ -1337,6 +1373,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-03 | **The executable links, and building it found a defect that had been latent since the projects were created.** Every one of the ~1200 lines of Win32 and Direct3D written blind COMPILED first time; the failure was thirty-one `LNK2038: mismatch detected for 'C++/WinRT version'` at the link step, because `Outpost` carries the CppWinRT NuGet package (3.0) and every other project takes the SDK's (2.0). `GameLogicTests.dll` had never noticed, because it and `GameLogic.lib` are both 2.0 — the mismatch needs a binary that links one against the other, and until this slice none existed. §6.30 records it, and the fix: `GameLogic` and `NeuronCore` never used C++/WinRT at all, they inherited it from the shared precompiled header, so `NEURON_NO_CPPWINRT` takes it back out and `Outpost/pch.h` is the one place that keeps it. |
 | 2026-09-03 | **Slice 2e's shell built, and the Windows CI leg now compiles the executable.** The split is the point: the palette, the viewport, the step accumulator and the key map are decisions rather than API calls, so they are in `Presentation.cpp` and `KeyMap.cpp` where the suite reaches them on both legs; Direct3D, the message pump and the composition root are the rest, and CI restores the project's packages and builds them unpackaged in Debug and Release. `TRANTABLE` is EXTRACTED rather than replaced, and the ledger said otherwise — `TT217` gives the dispatch a key NUMBER and the screens a CHARACTER, so a map straight to a character agrees with the game on the keys somebody thought to try. The blocking-`KeySource` question ADR-004 and `TextPrint.h` left open is answered: a nested message pump, single-threaded. §6.29 records a misreading of `TT66` that a confident paragraph nearly shipped, and §6.28 one 6502 byte the port keeps in two variables. |
 | 2026-09-03 | **A whole docked session runs, which is the CI half of slice 2e's acceptance criterion.** One null presenter satisfying all five seam interfaces, a scripted keyboard, and a session that starts through `TT170` and is driven by `TT102`'s dispatch into every docked screen the port has. It asserts what no per-routine test can: two tonnes of food bought on the buy screen are two tonnes in the hold when the inventory prints it, and the cash falls by twice the price the market quoted. §6.27 records what it cannot check — LAYOUT, because `CHPR` advances the cursor and `CHPR` is the presenter, so a null one has no cursor to compare. The human half of the criterion is the only thing that covers a session's layout, and this half being green is not the criterion being met. |
 | 2026-09-03 | **`DOENTRY` built, and the ledger had it filed as the program's entry point.** It is the DOCKING routine — the mission dispatcher that runs when the ship arrives at a station — which makes the sixth stale scope line and the first that was wrong about what a routine IS. 12,800 commanders docked and compared on which of seven labels each reaches. §6.26 records the finding underneath: the Trumbles mission's cash test compares ONE BYTE of a four-byte value, so eligibility is a band 1,536 credits wide recurring every 6,553.6 rather than a threshold — a player with 5,017.6 credits is offered the mission and one with 10,000 is not. The upstream source's own two comments on those three instructions disagree with each other and neither is right. Kept rather than fixed, with a test that fails if anyone supplies the correction. Eleven mutations, eleven caught. |
