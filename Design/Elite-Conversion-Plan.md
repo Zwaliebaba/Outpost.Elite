@@ -428,6 +428,47 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.69 The §6.12 pass on slice 3d-d, and a unit that is a slice and a half again
+
+The flight loop, and the pass says the same thing about 3d-d that §6.59 said about the whole 3d
+row: it is too big to be one unit. **866 instructions**, against 3d-a's 180 and 3d-b's 250 —
+607 in the sixteen loop parts and 259 in the helpers around them — and **64 distinct `JSR`/`JMP`
+targets**, which is more than any slice this port has done.
+
+**Where the 64 go.** Twenty-six are ported. Fourteen belong to phase 4 and stay seams: `ANGRY`,
+`HITCH`, `OOPS`, `EXNO` and its two friends, `FAROF`/`FAROF2`, `SHD`, `DENGY`, `MVTRIBS`, `NWSPS`,
+`SFS1`. Eight are hardware or presentation and belong behind a seam like the sound: `BEEP`,
+`NOISE`, `SETL1`, `DOVDU19`, `startbd`, `stopbd`, `SIGHT`, `BOMBOFF`. `DEATH` is 3d-e's. That
+leaves fifteen to build, and the row names five of them.
+
+| To build | Instructions |
+|---|---|
+| the sixteen loop parts | 607 |
+| `DOKEY`'s flight half | 88 |
+| `WARP` | 40 |
+| `LOOK1` | 20 |
+| `MAS1`–`MAS4` | 48 |
+| `SPIN`/`SPIN2`, `cntr` | 36 |
+| `FRMIS`, `ECMOF`, `KS1`, `CTRL`, `tnpr1`, `U%` | ~35 |
+
+**Three the ledger says are ported and are not.** `LOOK1` appears in `DockedKeys.h` only as the
+name of an outcome the docked dispatch defers — "`JMP LOOK1`, in flight only" — which is a
+mention, not a port. `KS1` and `MAS1`–`MAS4` appear nowhere at all. A `grep` for the label finds
+the first and calls it built, which is the same trap §6.41 recorded when a routine was marked
+ported and absent; the check has to be for a DEFINITION, and this pass nearly repeated it.
+
+**The proposed split**, on the same principle as §6.59's — each unit resting on the last:
+
+| | |
+|---|---|
+| **3d-d-i** | `MAS1`–`MAS4`, `cntr`, `tnpr1`, `ECMOF`, `FRMIS`, `KS1` — the helpers the loop calls, none of which needs the loop |
+| **3d-d-ii** | `LOOK1`, `WARP`, `SPIN`/`SPIN2`, `CTRL` and `DOKEY`'s flight half — the player's controls |
+| **3d-d-iii** | the sixteen loop parts themselves, which by then call nothing unbuilt but phase 4 |
+
+Doing it in that order means the loop is written last, against a set of routines that have each
+been compared to the game on their own. Written first, it would be sixteen parts and fifteen
+unported helpers at once, and a divergence anywhere in it would have 866 instructions to hide in.
+
 ### 6.68 Three uncleared adds in one routine, and only two of them matter
 
 `LASLI` picks where the laser beams converge, and it does it in nine instructions with three
@@ -814,7 +855,7 @@ port stops checking.
 | **3d-a** 🟢 | `SCAN`, `COMPAS`, `DOT`, `SP1`/`SP2`, `SPS1`–`SPS4`, `TAS2`, `scacol` — **built 2026-09-04** in `Scanner.h/.cpp`, 44 mutations with 42 caught and two measured equivalents. `TAS2` was not in the list and is not optional: `SPS1` falls into it and `SPS4` jumps to it, and it falls into `NORM` (§6.62). Both seams gone (§6.61). |
 | **3d-b** 🟢 | `DIALS` 1–4, `DIL`/`DILX`/`DIL2`, `MSBAR`, `ECBLB`/`ECBLB2`/`SPBLB`, `PZW`, `CTWOS` — **built 2026-09-04** in `Dashboard.h/.cpp`, 45 mutations with 44 caught and one equivalent. `DILX` is one routine with four entry points and three of them are shift counts (§6.63); `dec27` is an early RETURN and five sixths of the dashboard is one pass in four (§6.64); and the fourteenth flag is the first that an `SBC` reads rather than an `ADC` (§6.65). |
 | **3d-c** 🟢 | `MESS`/`me1`/`mes9`, `ABORT`/`ABORT2`, `LASLI`/`LASLI2`/`las` — **built 2026-09-04** in `Messages.h/.cpp`, `Lasers.h/.cpp` and `Dashboard.h/.cpp`. Fixed `CLYNS`, which had been `CLYNS2` under its name since 1c (§6.67), and settled which of `LASLI`'s three uncleared adds matter (§6.68). |
-| **3d-d** | the sixteen flight-loop parts with `LOOK1`, `KS1`, `WARP`, `SPIN`, `CTRL`, `cntr`, `U%`, the `DOKEY` flight half and the docking check |
+| **3d-d** | the sixteen flight-loop parts with `LOOK1`, `KS1`, `WARP`, `SPIN`, `CTRL`, `cntr`, `U%`, the `DOKEY` flight half and the docking check — **866 instructions and 64 call targets, so §6.69 splits it again into 3d-d-i, ii and iii**, and adds `MAS1`–`MAS4`, `FRMIS`, `ECMOF` and `tnpr1`, which the row does not name |
 | **3d-e** | `LAUN`/`LL164` and `DEATH` — the two set pieces |
 
 3d-a first because `SCAN` is buildable today: it rests on `CPIX4` and `CTWOS2`, both ported, and
