@@ -603,7 +603,7 @@ void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, Ship
   const std::uint8_t AXES[3][2] = { { 10u, 0u }, { 12u, 3u }, { 14u, 6u } };
   for (const auto& axis : AXES)
   {
-    _math.r = MultiplyByLog(_math, static_cast<std::uint8_t>(_work[axis[0]] & 0x7Fu));
+    _math.r = MultiplyByLog(_math, static_cast<std::uint8_t>(_work[axis[0]] & 0x7Fu), false).high;
     AddToShipCoordinate(_work, _math, _work[axis[0]], axis[1], true);
   }
 

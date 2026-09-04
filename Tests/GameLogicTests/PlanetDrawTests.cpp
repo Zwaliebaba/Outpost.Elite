@@ -52,6 +52,7 @@ struct HeapLabels
   std::uint16_t lso = 0, lsx2 = 0, lsy2 = 0, lsp = 0, sunx = 0, yx2m1 = 0;
   std::uint16_t yy = 0, t = 0, k = 0, k3 = 0, k4 = 0, p = 0;
   std::uint16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0, swap = 0, type = 0, dontclip = 0;
+  std::uint16_t k5 = 0, k6 = 0, stp = 0, flag = 0, cnt = 0, xx13 = 0, xx12 = 0;
   std::uint16_t screen = 0;
 
   explicit HeapLabels(const OracleImage& _oracle)
@@ -64,6 +65,9 @@ struct HeapLabels
     x2 = _oracle.Label("X2");     y2 = _oracle.Label("Y2");
     swap = _oracle.Label("SWAP"); type = _oracle.Label("TYPE");
     dontclip = _oracle.Label("dontclip");
+    k5 = _oracle.Label("K5");   k6 = _oracle.Label("K6");   stp = _oracle.Label("STP");
+    flag = _oracle.Label("FLAG"); cnt = _oracle.Label("CNT");
+    xx13 = _oracle.Label("XX13"); xx12 = _oracle.Label("XX12");
 
     const Cpu6502 cpu = _oracle.Fresh();
     screen = static_cast<std::uint16_t>((cpu.memory[_oracle.Label("ylookupl")]
@@ -564,6 +568,231 @@ public:
     Assert::AreEqual<std::uint32_t>(16u * 16u * 7u * 2u, compared, L"every centre and radius");
     Assert::IsTrue(visible > 0u, L"some circles were on screen");
     Assert::IsTrue(visible < compared, L"and some were not");
+  }
+};
+
+
+TEST_CLASS(TheBallDrawing)
+{
+public:
+  /*
+   * 6502: CIRCLE, CIRCLE2 and BLINE -- the planet as a sixty-four-sided polygon.
+   *
+   * Compared on the whole canvas AND on the heap it builds, because the heap is what `WPLS2`
+   * will walk next frame: a circle drawn correctly onto a wrong heap looks right once and leaves
+   * the screen dirty for ever after. Every centre and radius that puts a circle wholly on the
+   * screen, wholly off it, and across each edge, so the run-breaking path runs.
+   */
+  TEST_METHOD(TheCircleMatchesCIRCLE)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const HeapLabels at(oracle);
+    const std::uint16_t circle = oracle.Label("CIRCLE");
+
+    const std::vector<std::uint16_t> CENTRES = { 0, 40, 128, 200, 255, 256, 0xFF00u };
+    const std::vector<std::uint8_t> RADII = { 0, 1, 7, 8, 30, 59, 60, 96, 255 };
+
+    std::uint32_t compared = 0;
+    std::uint32_t marked = 0;
+    std::uint32_t drew = 0;
+    std::uint32_t refused = 0;
+
+    for (const std::uint16_t x : CENTRES)
+    {
+      for (const std::uint16_t y : CENTRES)
+      {
+        for (const std::uint8_t radius : RADII)
+        {
+          Cpu6502 cpu = oracle.Fresh();
+          Elite::Canvas canvas;
+          Elite::PlanetSunState state;
+          Elite::DrawWorkspace draw;
+          Elite::GeometryWorkspace geometry;
+          Elite::MathWorkspace math;
+          Elite::ClipState clip;
+          Elite::Projection centre;
+
+          SeedBallHeap(cpu, state, at, 0x8D14E703u, 1);
+          SeedSunHeap(cpu, state, at, 0x2C6A91B7u);
+
+          centre.x = static_cast<std::uint8_t>(x);
+          centre.x1 = static_cast<std::uint8_t>(x >> 8);
+          centre.y = static_cast<std::uint8_t>(y);
+          centre.y1 = static_cast<std::uint8_t>(y >> 8);
+          math.k[0] = radius;
+          state.yx2M1 = 143;
+
+          // `CIRCLE2` opens by zeroing `CNT`, which a sweep that leaves it at zero anyway
+          // cannot measure (§6.48).
+          math.cnt = 200;
+          cpu.memory[at.cnt] = 200;
+
+          cpu.memory[at.k3] = centre.x;
+          cpu.memory[static_cast<std::uint16_t>(at.k3 + 1)] = centre.x1;
+          cpu.memory[at.k4] = centre.y;
+          cpu.memory[static_cast<std::uint16_t>(at.k4 + 1)] = centre.y1;
+          cpu.memory[at.k] = radius;
+          cpu.memory[at.yx2m1] = 143;
+          cpu.memory[at.dontclip] = 0;
+          clip.dontclip = 0;
+
+          const Elite::Testing::RunResult run = cpu.CallSubroutine(circle, 8'000'000);
+          Assert::IsTrue(run.completed, L"CIRCLE returned");
+
+          const bool off = Elite::DrawCircle(canvas, state, draw, geometry, math, clip, centre);
+
+          const std::wstring where = Widen("CIRCLE x=" + std::to_string(x) + " y="
+                                           + std::to_string(y) + " r=" + std::to_string(radius));
+          Assert::AreEqual(cpu.c, off, (where + L": the carry").c_str());
+          marked += CompareScreens(cpu, at.screen, canvas, where);
+          CompareHeaps(cpu, state, at, where);
+
+          for (std::size_t byte = 0; byte < 4u; ++byte)
+          {
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k5 + byte)], state.k5[byte],
+                             (where + L": K5+" + std::to_wstring(byte)).c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k6 + byte)], state.k6[byte],
+                             (where + L": K6+" + std::to_wstring(byte)).c_str());
+          }
+          Assert::AreEqual(cpu.memory[at.stp], state.stp, (where + L": STP").c_str());
+          Assert::AreEqual(cpu.memory[at.flag], state.flag, (where + L": FLAG").c_str());
+          Assert::AreEqual(cpu.memory[at.cnt], math.cnt, (where + L": CNT").c_str());
+
+          refused += off ? 1u : 0u;
+          drew += off ? 0u : 1u;
+          ++compared;
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(7u * 7u * 9u, compared, L"every centre and radius");
+    Assert::IsTrue(marked > 0u, L"the circles were actually drawn");
+    Assert::IsTrue(drew > 0u, L"some circles were on screen");
+    Assert::IsTrue(refused > 0u, L"and some were refused");
+    Logger::WriteMessage(("CIRCLE: " + std::to_string(compared) + " circles, "
+                          + std::to_string(drew) + " drawn, " + std::to_string(refused)
+                          + " refused, " + std::to_string(marked) + " marked bytes")
+                           .c_str());
+  }
+
+  /*
+   * 6502: BLINE on its own, because `CIRCLE2` never reaches it with a set carry and `PLS22`
+   * does -- and `TXA / ADC K4` is its first instruction (§6.20).
+   *
+   * The `FLAG` and heap states are swept as well: the first segment of a circle takes a
+   * different path from the rest, and a segment following a break takes a third.
+   */
+  TEST_METHOD(TheSegmentMatchesBLINE)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const HeapLabels at(oracle);
+    const std::uint16_t bline = oracle.Label("BLINE");
+
+    std::uint32_t compared = 0;
+    std::uint32_t marked = 0;
+
+    for (const std::uint8_t flag : { 0x00u, 0x01u, 0xFFu })
+    {
+      for (const bool carryIn : { false, true })
+      {
+        for (const std::uint8_t lsp : { 1, 2, 40 })
+        {
+          for (const std::uint8_t xIn : { 0u, 5u, 128u, 250u })
+          {
+            /*
+             * Three segments: one wholly on screen, one that has to be clipped at an end, and one
+             * that `LL145` refuses entirely. The third is the `BCS BL5` path, and without it the
+             * sweep cannot tell a break from no break (§6.48).
+             */
+            for (const int shape : { 0, 1, 2 })
+            {
+            Cpu6502 cpu = oracle.Fresh();
+            Elite::Canvas canvas;
+            Elite::PlanetSunState state;
+            Elite::DrawWorkspace draw;
+            Elite::GeometryWorkspace geometry;
+            Elite::MathWorkspace math;
+            Elite::ClipState clip;
+            Elite::Projection centre;
+
+            SeedBallHeap(cpu, state, at, 0x51F3A2C9u + lsp, lsp);
+
+            const std::uint8_t ENDS[3][8] = {
+              { 30, 0, 90, 0, 200, 0, 60, 0 },     // both ends on screen
+              { 30, 0, 90, 0, 200, 2, 60, 0 },     // one end a long way to the right
+              { 200, 8, 90, 0, 250, 9, 60, 0 },    // both ends off the same side
+            };
+            const std::uint8_t* const ends = ENDS[shape];
+            const std::uint8_t k5[4] = { ends[0], ends[1], ends[2], ends[3] };
+            const std::uint8_t k6[4] = { ends[4], ends[5], ends[6], ends[7] };
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              state.k5[byte] = k5[byte];
+              state.k6[byte] = k6[byte];
+              cpu.memory[static_cast<std::uint16_t>(at.k5 + byte)] = k5[byte];
+              cpu.memory[static_cast<std::uint16_t>(at.k6 + byte)] = k6[byte];
+            }
+
+            centre.y = 72;
+            centre.y1 = 0;
+            math.t = 0;
+            math.cnt = 12;
+            state.stp = 4;
+            state.flag = flag;
+
+            cpu.memory[at.k4] = 72;
+            cpu.memory[static_cast<std::uint16_t>(at.k4 + 1)] = 0;
+            cpu.memory[at.t] = 0;
+            cpu.memory[at.cnt] = 12;
+            cpu.memory[at.stp] = 4;
+            cpu.memory[at.flag] = flag;
+            cpu.memory[at.dontclip] = 0;
+            clip.dontclip = 0;
+
+            cpu.x = static_cast<std::uint8_t>(xIn);
+            cpu.c = carryIn;
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(bline, 400'000);
+            Assert::IsTrue(run.completed, L"BLINE returned");
+
+            const std::uint8_t got =
+              Elite::DrawBallLine(canvas, state, draw, geometry, math, clip, centre,
+                                  static_cast<std::uint8_t>(xIn), carryIn);
+
+            const std::wstring where = Widen("BLINE flag=" + std::to_string(flag) + " carry="
+                                             + std::to_string(carryIn ? 1 : 0) + " lsp="
+                                             + std::to_string(lsp) + " x=" + std::to_string(xIn)
+                                             + " shape=" + std::to_string(shape));
+            Assert::AreEqual(cpu.a, got, (where + L": the returned CNT").c_str());
+            marked += CompareScreens(cpu, at.screen, canvas, where);
+            CompareHeaps(cpu, state, at, where);
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k5 + byte)], state.k5[byte],
+                               (where + L": K5+" + std::to_wstring(byte)).c_str());
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k6 + byte)], state.k6[byte],
+                               (where + L": K6+" + std::to_wstring(byte)).c_str());
+            }
+            Assert::AreEqual(cpu.memory[at.flag], state.flag, (where + L": FLAG").c_str());
+            Assert::AreEqual(cpu.memory[at.cnt], math.cnt, (where + L": CNT").c_str());
+            ++compared;
+            }
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(3u * 2u * 3u * 4u * 3u, compared, L"every state and entry");
+    Assert::IsTrue(marked > 0u, L"the segments were actually drawn");
   }
 };
 

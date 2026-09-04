@@ -231,19 +231,19 @@ void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathW
     // FLIPS it when a subtraction goes past zero, so what comes out at the end is the sign of the
     // answer and not of the first product.
     _math.q = magnitude[0];
-    const std::uint8_t first = MultiplyByLog(_math, _geometry.xx16[base]);
+    const std::uint8_t first = MultiplyByLog(_math, _geometry.xx16[base], false).high;
     _math.t = first;
     _math.s = static_cast<std::uint8_t>(sign[0] ^ _geometry.xx16[base + 1]);
 
     // Q is set twice on purpose and the first is not dead: `FMLTU` reads Q as one operand and
     // the original stores the product straight back over it. `STA Q / JSR FMLTU / STA Q`.
     _math.q = magnitude[1];
-    _math.q = MultiplyByLog(_math, _geometry.xx16[base + 2]);
+    _math.q = MultiplyByLog(_math, _geometry.xx16[base + 2], false).high;
     _math.r = _math.t;
     _math.t = CombineSigned(_math, static_cast<std::uint8_t>(sign[1] ^ _geometry.xx16[base + 3])).value;
 
     _math.q = magnitude[2];
-    _math.q = MultiplyByLog(_math, _geometry.xx16[base + 4]);
+    _math.q = MultiplyByLog(_math, _geometry.xx16[base + 4], false).high;
     _math.r = _math.t;
 
     _geometry.xx12[vector * 2u] =
@@ -714,16 +714,16 @@ std::uint8_t FaceVisibility(const DrawWorkspace& _draw, const GeometryWorkspace&
                             MathWorkspace& _math) noexcept
 {
   _math.q = _geometry.xx12[0];
-  _math.t = MultiplyByLog(_math, _draw.x1);
+  _math.t = MultiplyByLog(_math, _draw.x1, false).high;
   _math.s = static_cast<std::uint8_t>(_geometry.xx12[1] ^ _draw.y1);
 
   _math.q = _geometry.xx12[2];
-  _math.q = MultiplyByLog(_math, _draw.x2);
+  _math.q = MultiplyByLog(_math, _draw.x2, false).high;
   _math.r = _math.t;
   _math.t = CombineSigned(_math, static_cast<std::uint8_t>(_geometry.xx12[3] ^ _draw.y2)).value;
 
   _math.q = _geometry.xx12[4];
-  _math.q = MultiplyByLog(_math, _draw.xx15Plus4);
+  _math.q = MultiplyByLog(_math, _draw.xx15Plus4, false).high;
   _math.r = _math.t;
   const std::uint8_t magnitude =
     CombineSigned(_math, static_cast<std::uint8_t>(_draw.xx15Plus5 ^ _geometry.xx12[5])).value;
@@ -1083,7 +1083,7 @@ void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometr
 
   _geometry.xx20 = ShipByte(static_cast<std::uint16_t>(_blueprint + 8u));
   _geometry.v = static_cast<std::uint16_t>(_blueprint + 20u);
-  _geometry.cnt = 0;
+  _math.cnt = 0;
 
   for (std::uint8_t vertex = 0;;)
   {
@@ -1159,7 +1159,7 @@ void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometr
       // 6502: LL60 to LL70 -- the projection itself, and the only place in the port where the
       // divide is picked by which of two routines can do it: LL28 when the coordinate is smaller
       // than the distance, LL61 when it is not.
-      std::uint8_t x = _geometry.cnt;
+      std::uint8_t x = _math.cnt;
 
       _math.q = _math.t;
       if (_draw.x1 < _math.q)
@@ -1221,8 +1221,8 @@ void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometr
     // 6502: LL50 -- on to the next vertex, six bytes along, and stop when the count runs out or
     // the index wraps. The carry out of CNT's addition is what feeds XX17's, so a heap that has
     // filled past 255 ends the loop as well.
-    const AddResult nextCnt = AddWithCarry(_geometry.cnt, 4, false);
-    _geometry.cnt = nextCnt.value;
+    const AddResult nextCnt = AddWithCarry(_math.cnt, 4, false);
+    _math.cnt = nextCnt.value;
     const AddResult nextVertex = AddWithCarry(_geometry.xx17, 6, nextCnt.carry);
     vertex = nextVertex.value;
 

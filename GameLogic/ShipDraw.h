@@ -232,8 +232,8 @@ struct GeometryWorkspace
   /// 6502: XX20 -- what each loop counts up to, taken from the blueprint's header.
   std::uint8_t xx20 = 0;
 
-  /// 6502: CNT -- where the next projected vertex goes in `XX3`, in bytes.
-  std::uint8_t cnt = 0;
+  // 6502: CNT -- where the next projected vertex goes in `XX3`, in bytes -- is on
+  // `MathWorkspace`. It is not this workspace's byte: fourteen routines share it (§6.49).
 
   /// 6502: V(1 0) -- a walker into the blueprint. An address here, because the blueprints are one
   /// address-indexed region (§6.32) rather than an array per ship.

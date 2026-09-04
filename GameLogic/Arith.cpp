@@ -440,13 +440,23 @@ std::uint8_t DivideWide(MathWorkspace& _work, std::uint8_t _a) noexcept
  * results are right about half the time, which is the worst possible failure mode.
  */
 
-std::uint8_t MultiplyByLog(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult MultiplyByLog(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept
 {
   _work.widget = _a;
 
+  /*
+   * 6502: TAX / BEQ MU3, and LDX Q / BEQ MU3again -- the two zero exits, and neither of them
+   * touches the carry. `MU3` is `LDX P / RTS` with A still zero; `MU3again` is `LDA #0 / LDX P /
+   * RTS`. So on both, the carry the caller arrived with is the carry it leaves with.
+   *
+   * That is why `_carryIn` exists and why passing the wrong one is mostly harmless: the returned
+   * BYTE is zero on either path whatever the flag was, so only a caller that reads the carry can
+   * tell. Two do -- `DOEXP` (`JSR FMLTU / ADC R`) and `CIRCLE2` through `FMLTU2` -- and the
+   * others follow the call with a `STA`.
+   */
   if (_a == 0 || _work.q == 0)
   {
-    return 0;
+    return { 0, _carryIn };
   }
 
   const AddResult low = AddWithCarry(LOG_LOW_TABLE[_a], LOG_LOW_TABLE[_work.q], false);
@@ -455,10 +465,11 @@ std::uint8_t MultiplyByLog(MathWorkspace& _work, std::uint8_t _a) noexcept
   const AddResult high = AddWithCarry(LOG_TABLE[_work.q], LOG_TABLE[_a], low.carry);
   if (!high.carry)
   {
-    return 0;
+    return { 0, false }; // 6502: BCC MU3again -- the branch is taken, so the carry is clear
   }
 
-  return useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value];
+  // 6502: the two antilog exits, reached because the BCC above was NOT taken.
+  return { useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value], true };
 }
 
 /*
@@ -621,12 +632,12 @@ std::uint8_t Arctan(MathWorkspace& _work) noexcept
   return angle;
 }
 
-std::uint8_t MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept
 {
   // 6502: FMLTU2's own three instructions. It then falls through into FMLTU with K in A, so the
   // multiplicand is K and the multiplier is the sine it just put in Q.
   _work.q = SINE_TABLE[_a & 0x1Fu];
-  return MultiplyByLog(_work, _work.k[0]);
+  return MultiplyByLog(_work, _work.k[0], _carryIn);
 }
 
 std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
