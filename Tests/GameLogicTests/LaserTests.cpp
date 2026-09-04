@@ -47,12 +47,6 @@ std::wstring Widen(const std::string& _text)
   return std::wstring(_text.begin(), _text.end());
 }
 
-/// 6502: DENGY -- the energy drain, which is phase 4b's.
-struct CountingEffects final : Elite::LaserEffects
-{
-  void DrainEnergy() override { ++drains; }
-  std::uint32_t drains = 0;
-};
 } // namespace
 
 
@@ -81,7 +75,7 @@ public:
     const std::uint16_t gntmp = oracle.Label("GNTMP");
     const std::uint16_t qq11 = oracle.Label("QQ11");
     const std::uint16_t rand = oracle.Label("RAND");
-    const std::uint16_t dengy = oracle.Label("DENGY");
+    const std::uint16_t energyBanks = oracle.Label("ENERGY");
 
     const Cpu6502 image = oracle.Fresh();
     const std::uint16_t screenBase = static_cast<std::uint16_t>(
@@ -104,11 +98,16 @@ public:
           Elite::Rng rng;
           Elite::LaserBurst burst;
           Elite::FlightStatus status;
-          CountingEffects effects;
 
-          // 6502: JSR DENGY -- the energy drain is phase 4b's, so it is trapped on one side and
-          // counted on the other.
-          cpu.AddTrap(dengy);
+          /*
+           * 6502: JSR DENGY -- built in slice 3d-d-iii-b, so it is no longer trapped.
+           *
+           * The banks start at a value the drain can be seen in and are compared afterwards, which
+           * is stronger than counting the calls was: a port that drained twice, or drained the
+           * wrong byte, now differs rather than agreeing on a tally.
+           */
+          status.energy = 0x40u;
+          cpu.memory[energyBanks] = 0x40u;
 
           std::uint32_t state = 0x3F17C5A9u ^ (seed * 0x9E3779B9u);
           std::array<std::uint8_t, 4> bytes{};
@@ -134,7 +133,7 @@ public:
           const Elite::Testing::RunResult run = cpu.CallSubroutine(lasli, 200'000);
           Assert::IsTrue(run.completed, L"LASLI returned");
 
-          (void)Elite::FireLaser(canvas, draw, rng, burst, status, effects, view, carryIn);
+          (void)Elite::FireLaser(canvas, draw, rng, burst, status, view, carryIn);
 
           const std::wstring where =
             Widen("LASLI seed " + std::to_string(seed) + " view " + std::to_string(view)
@@ -162,8 +161,8 @@ public:
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)],
                              rng.State()[byte], (where + L": RAND+" + std::to_wstring(byte)).c_str());
           }
-          Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.drains,
-                                        (where + L": the energy drain").c_str());
+          Assert::AreEqual(cpu.memory[energyBanks], status.energy,
+                           (where + L": ENERGY, after the drain DENGY does").c_str());
 
           /*
            * The heat added is always EIGHT, and that is worth asserting rather than assuming.

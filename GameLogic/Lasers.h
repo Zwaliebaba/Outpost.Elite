@@ -34,15 +34,6 @@ struct LaserBurst
 };
 
 /// What `LASLI` reaches outside this slice.
-class LaserEffects
-{
-public:
-  virtual ~LaserEffects() = default;
-
-  /// 6502: DENGY -- take a unit off the energy banks. Phase 4b.
-  virtual void DrainEnergy() = 0;
-};
-
 /*
  * 6502: LASLI -- fire: pick the convergence point, heat the laser, drain the banks, draw.
  *
@@ -57,7 +48,7 @@ public:
  * `ADC`. The port returns it rather than guessing.
  */
 [[nodiscard]] bool FireLaser(Canvas& _canvas, DrawWorkspace& _draw, Rng& _rng, LaserBurst& _burst,
-                             FlightStatus& _status, LaserEffects& _effects, std::uint8_t _view,
+                             FlightStatus& _status, std::uint8_t _view,
                              bool _carryIn) noexcept;
 
 /*
