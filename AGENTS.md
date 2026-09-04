@@ -198,13 +198,36 @@ Repository checks:
 python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/inventory.py                     # coverage ledger: ported / pending / unaccounted
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted
+python tools/check_outpost.py                 # every Elite:: name Outpost/ uses still exists
 ```
+
+**`check_outpost.py` exists because the portable runner compiles no part of `Outpost/`.** It is
+Win32 and DirectX 12, so a hosted Linux runner cannot build it -- and that leaves a whole
+executable outside every check runnable there. Renaming a `GameLogic` type breaks the app with the
+Linux suite still green, which is how `DockedShip` becoming `FlightStatus` reached the Windows job.
+The check asserts the NAMES still resolve; it cannot check a signature, and only building the app
+can.
 
 **Add a new file to its `.vcxproj` AND its `.vcxproj.filters`.** The portable runner globs the
 directory and will happily compile a file no project names; MSVC will not, so the two builds
 quietly test different things. `check_projects.py` fails on that, on a path that does not resolve
 (`Include` is relative to the PROJECT, not to the repository), and on a filters file that has
 drifted from its project.
+
+**Mutation-test a finished unit, and do it in a worktree.** A slice is not done until each of its
+decisions has been shown to matter: change one constant, one comparison or one flag in the ported
+source, run the suite, and a mutation that nothing catches is either a gap in the tests or an
+equivalent worth measuring and recording. Run it against a detached worktree rather than the
+working tree --
+
+```
+git worktree add --detach <scratch>/mutant HEAD
+ln -s <repo>/Upstream <scratch>/mutant/Upstream          # the submodule and the assembled oracle
+ln -sf <repo>/Design/Reference/*.txt <scratch>/mutant/Design/Reference/
+```
+
+-- because the alternative is a working tree that holds deliberately broken code for half an hour
+at a time, which cannot be committed and hides any real change made while it runs.
 
 **Read a routine through `tools/c64_source.py`, not by eye.** The upstream library is one tree
 serving ten versions of Elite, and a routine's C64 form is whatever survives its `IF` / `ELIF` /
