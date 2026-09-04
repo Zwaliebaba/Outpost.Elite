@@ -179,6 +179,7 @@
     <ClInclude Include="Docking.h" />
     <ClInclude Include="Charts.h" />
     <ClInclude Include="Commander.h" />
+    <ClInclude Include="Combat.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Rng.h" />
     <ClInclude Include="Tokens.h" />
@@ -215,6 +216,7 @@
     <ClCompile Include="Docking.cpp" />
     <ClCompile Include="Charts.cpp" />
     <ClCompile Include="Commander.cpp" />
+    <ClCompile Include="Combat.cpp" />
     <ClCompile Include="CommanderTable.cpp" />
     <ClCompile Include="MarketTable.cpp" />
     <ClCompile Include="EquipmentTable.cpp" />

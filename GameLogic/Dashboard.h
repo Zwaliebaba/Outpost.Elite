@@ -250,6 +250,21 @@ public:
   virtual bool PlaySound(std::uint8_t _effect) = 0;
 
   /*
+   * 6502: LDX #n / JMP NOISE2 -- the same sound, with the sustain and the frequency supplied.
+   *
+   * `NOISE2` is `BIT SOUR1 / STA XX15 / STX XX15+1 / EQUB &50` and then straight into `NOISE`
+   * past its `CLV`. The `BIT` on a byte holding `RTS` sets the overflow flag, which is what the
+   * two `BVS`es inside `NOISE` read to take these two bytes instead of the effect table's -- so
+   * `NOISE2` is not a different routine, it is `NOISE` with V set. The `EQUB &50` is a `BVC` that
+   * cannot branch, swallowing the `CLV` that would have cleared it (§6.79's idiom, seventh time).
+   *
+   * The explosions are the only callers in this port's reach, and they differ by pitch as much as
+   * by effect: 208 for a hit and 81 for a kill.
+   */
+  virtual bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain,
+                                std::uint8_t _frequency) = 0;
+
+  /*
    * 6502: LDY #sfxecm / JMP NOISEOFF -- stop it again.
    *
    * `NOISEOFF` walks the three SID voices looking for the one playing this effect and runs its

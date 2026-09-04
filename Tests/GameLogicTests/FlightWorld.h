@@ -262,6 +262,7 @@ inline void Seed(World& _world, std::uint32_t _seed)
   _world.status.damageFlash = 0u;
   _world.status.ecmCountdown = 0u;
   _world.fuel = 40u;
+  _world.commander.At(Elite::Field::Fuel) = _world.fuel; // `Mirror` sends the block, not the byte
 
   _world.flight.delta = 14u;
   _world.flight.alp1 = 5u;
@@ -287,7 +288,7 @@ struct Where
   std::uint16_t abraxas, caravanserai, dflag, comx, comy, comc, t2;
   std::uint16_t delta, alp1, alp2, beta, bet1, energy, fsh, ash, qq14;
   std::uint16_t cabtmp, gntmp, altit, mcnt, flh, ecma, laser, tribble, tribct;
-  std::uint16_t screen;
+  std::uint16_t tp, mch, messxc, screen;
 
   explicit Where(const OracleImage& _oracle)
   {
@@ -321,7 +322,9 @@ struct Where
     altit = _oracle.Label("ALTIT");      mcnt = _oracle.Label("MCNT");
     flh = _oracle.Label("FLH");          ecma = _oracle.Label("ECMA");
     laser = _oracle.Label("LASER");      tribble = _oracle.Label("TRIBBLE");
-    tribct = _oracle.Label("TRIBCT");    screen = ScreenBase(_oracle);
+    tribct = _oracle.Label("TRIBCT");    tp = _oracle.Label("TP");
+    mch = _oracle.Label("MCH");          messxc = _oracle.Label("messXC");
+    screen = ScreenBase(_oracle);
   }
 };
 
@@ -356,8 +359,13 @@ inline void Mirror(const World& _world, Cpu6502& _cpu, const Where& _at)
   block(_at.lsx2, _world.heaps.ball.data(), _world.heaps.ball.size());
   _cpu.memory[_at.lsp] = _world.heaps.lsp;
 
-  block(_at.laser, &_world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)], 4u);
-  block(_at.tribble, &_world.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)], 2u);
+  /*
+   * The WHOLE commander block, because `LASER` and `TRIBBLE` are two fields of one structure and
+   * the routines that read the others -- `OUCH` empties a hold slot, `EXNO2` adds to the tally,
+   * the flight loop reads `ESCP`, `ECM` and `NOMSL` -- would otherwise be comparing the port's
+   * zeroes against whatever the shipped block happens to hold.
+   */
+  block(_at.tp, _world.commander.bytes.data(), Elite::COMMANDER_BLOCK_SIZE);
   _cpu.memory[_at.tribct] = _world.trumbles;
 
   const std::array<std::uint8_t, 4> seed = _world.rng.State();
@@ -384,6 +392,8 @@ inline void Mirror(const World& _world, Cpu6502& _cpu, const Where& _at)
 
   _cpu.memory[_at.dly] = _world.message.delay;
   _cpu.memory[_at.de] = _world.message.append;
+  _cpu.memory[_at.mch] = _world.message.token;
+  _cpu.memory[_at.messxc] = _world.message.column;
   _cpu.memory[_at.las2] = _world.status.viewLaser;
   _cpu.memory[static_cast<std::uint16_t>(_at.qq22 + 1)] = _world.status.hyperspaceCountdown;
   _cpu.memory[_at.mj] = _world.status.midJump;

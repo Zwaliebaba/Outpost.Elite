@@ -138,6 +138,9 @@
     <ClCompile Include="FlightLoopTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="CombatTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="ControlsTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
