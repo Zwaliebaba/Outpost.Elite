@@ -1210,4 +1210,63 @@ void SeedStardustAndClearShips(Canvas& _canvas, DrawWorkspace& _draw, Stardust& 
   ClearAllShips(_canvas, _draw, _state, _bubble, _work, _flight, _view);
 }
 
+void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                        GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                        const Projection& _centre, std::uint8_t _index) noexcept
+{
+  // 6502: .HFL1 LDA XX4 / AND #7 / CLC / ADC #8 / STA K -- the ring's starting radius.
+  _math.k[0] = static_cast<std::uint8_t>((_index & 7u) + 8u);
+
+  for (;;)
+  {
+    /*
+     * 6502: .HFL2 LDA #1 / STA LSP / JSR CIRCLE2.
+     *
+     * The heap is rewound to one before every circle, so each ring is drawn over the last one's
+     * run rather than after it -- and because `BLINE` EORs, drawing the next size erases the
+     * previous. The whole effect is one heap entry deep.
+     */
+    _state.lsp = 1u;
+    DrawBall(_canvas, _state, _draw, _geometry, _math, _clip, _centre, false);
+
+    // 6502: ASL K / BCS HF8 -- a radius past 128 doubles out of the byte and ends the ring.
+    const ShiftResult doubled = RotateLeftValue(_math.k[0], false);
+    _math.k[0] = doubled.value;
+
+    if (doubled.carry)
+    {
+      return;
+    }
+
+    // 6502: LDA K / CMP #160 / BCC HFL2 -- and 160 is half the screen's width, so a ring is
+    // abandoned once it is wider than the view rather than once it is off it.
+    if (_math.k[0] >= 160u)
+    {
+      return;
+    }
+  }
+}
+
+void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                         GeometryWorkspace& _geometry, MathWorkspace& _math,
+                         ClipState& _clip) noexcept
+{
+  // 6502: LDX #X / STX K3 / LDX #Y / STX K4 / LDX #0 / STX XX4 / STX K3+1 / STX K4+1.
+  Projection centre{};
+  centre.x = SPACE_VIEW_CENTRE_X;
+  centre.y = SPACE_VIEW_CENTRE_Y;
+  centre.x1 = 0;
+  centre.y1 = 0;
+
+  // 6502: .HFL5 JSR HFL1 / INC XX4 / LDX XX4 / CPX #8 / BNE HFL5.
+  for (std::uint8_t index = 0; index < 8u; ++index)
+  {
+    _geometry.xx4 = index;
+    DrawHyperspaceRing(_canvas, _state, _draw, _geometry, _math, _clip, centre, index);
+  }
+
+  // 6502: the loop leaves `XX4` at eight, and `LL9` part 1 is the next thing to read it.
+  _geometry.xx4 = 8u;
+}
+
 } // namespace Elite
