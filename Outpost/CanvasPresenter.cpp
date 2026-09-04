@@ -43,12 +43,52 @@ D3D12_RESOURCE_BARRIER Transition(ID3D12Resource* _resource, D3D12_RESOURCE_STAT
 
 CanvasPresenter::~CanvasPresenter()
 {
+  Destroy();
+}
+
+void CanvasPresenter::Destroy() noexcept
+{
   if (m_device)
   {
     // The GPU may still be reading the buffers about to be released, and a shutdown path logs
     // rather than throws (AGENTS.md section 5), so the wait is unconditional and unchecked.
     WaitForGpu();
   }
+
+  /*
+   * RELEASED EXPLICITLY rather than left to the members' own destructors, because the whole point
+   * of this routine is the path where no destructor runs. Every `com_ptr` in the class is here;
+   * one left out is one live object in the report, which is how you find out.
+   */
+  for (UINT frame = 0; frame < FRAME_COUNT; ++frame)
+  {
+    // Mapped once at creation and never unmapped since (see `Create`), so this is the other half
+    // of that pairing rather than a precaution.
+    if (m_uploads[frame] && m_uploadMemory[frame] != nullptr)
+    {
+      m_uploads[frame]->Unmap(0, nullptr);
+    }
+    m_uploadMemory[frame] = nullptr;
+
+    m_uploads[frame] = nullptr;
+    m_allocators[frame] = nullptr;
+    m_backBuffers[frame] = nullptr;
+  }
+
+  m_commands = nullptr;
+  m_pipeline = nullptr;
+  m_rootSignature = nullptr;
+  m_texture = nullptr;
+  m_textureHeap = nullptr;
+  m_renderTargetHeap = nullptr;
+  m_fence = nullptr;
+
+  // The swap chain holds the back buffers and the queue holds work, so both go before the device
+  // that made them; `m_device` last is what leaves the report empty rather than one short.
+  m_swapChain = nullptr;
+  m_queue = nullptr;
+  m_device = nullptr;
+
   if (m_fenceEvent != nullptr)
   {
     CloseHandle(m_fenceEvent);
