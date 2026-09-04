@@ -197,10 +197,9 @@ struct FlightState
   std::uint8_t rat2 = 0;
 };
 
-/// 6502: MSL -- the missile's ship type, which `MVEIT` singles out so that a missile runs its
-/// tactics on EVERY iteration rather than one in eight. A missile that thought once every eighth
-/// of a second would be trivial to outrun.
-inline constexpr std::uint8_t SHIP_TYPE_MISSILE = 1;
+// 6502: MSL -- `SHIP_TYPE_MISSILE` is in `ShipSlot.h` with the other type numbers. `MVEIT`
+// singles it out so that a missile runs its tactics on EVERY iteration rather than one in eight;
+// a missile that thought once every eighth of a second would be trivial to outrun.
 
 /*
  * 6502: MVEIT -- move one ship, and the whole of slice 3a's arithmetic meets here.
