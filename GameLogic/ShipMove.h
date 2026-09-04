@@ -187,6 +187,17 @@ struct FlightState
 
   std::uint8_t type = 0;    ///< 6502: TYPE -- negative for the planet and the sun
 
+  /*
+   * 6502: XX0(1 0) -- the blueprint the loop is working from, AND IT IS NOT RESET PER SHIP.
+   *
+   * Part 4 writes it only for a ship with a blueprint: `LDA TYPE / BMI MA21` skips the two loads
+   * for the planet and the sun. So a body inherits whatever the last real ship left, and `MVEIT`
+   * reads byte 15 of it to clamp the speed -- on the one path a body reaches that clamp, which is
+   * when it is exploding or dead. It is loop state and not ship state, which is why it sits here
+   * beside `TYPE` and `XSAV` rather than being passed down (§6.90).
+   */
+  std::uint16_t blueprint = 0;
+
   /// 6502: RAT and RAT2 -- scratch, but `MVEIT` leaves `RAT2` set and `PLUT` writes both as sign
   /// masks. Two routines, two meanings, the same two bytes; they are never live together because
   /// `PLUT` runs when the view changes and `MVS5` while a ship moves.

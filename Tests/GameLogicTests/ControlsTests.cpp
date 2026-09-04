@@ -532,6 +532,7 @@ public:
             void SetRasterMode(std::uint8_t _mode) override { modes.push_back(_mode); }
             void SetSightColour(std::uint8_t _colour) override { colour = _colour; ++colours; }
             void SetSpritesEnabled(std::uint8_t _mask) override { enabled = _mask; }
+            void MaskSprites(std::uint8_t) override {}
           } effects;
 
           Elite::MathWorkspace math;

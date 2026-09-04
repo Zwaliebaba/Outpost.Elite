@@ -21,6 +21,9 @@
     <ClInclude Include="GoldenCanvas.h">
       <Filter>Oracle</Filter>
     </ClInclude>
+    <ClInclude Include="FlightWorld.h">
+      <Filter>Oracle</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -133,6 +136,9 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="FlightLoopTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="CombatTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="ControlsTests.cpp">

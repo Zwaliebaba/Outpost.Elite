@@ -192,6 +192,17 @@ void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
 void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, std::uint8_t _colour) noexcept;
 
 /*
+ * 6502: msblob -- redraw all four indicators from `NOMSL`.
+ *
+ * TWO LOOPS AND ONE COUNTER. `.ss` walks X down from four drawing black until it MEETS `NOMSL`,
+ * then falls into `.SAL8`, which carries on down the same X drawing green -- so the split point
+ * is the count and neither loop knows how many it will draw. `CPX NOMSL / BEQ SAL8` never fires
+ * for a full rail, because X starts at four and a rail holds four, so the black loop is skipped
+ * entirely; and it never fires for an empty one either, because X reaches zero first.
+ */
+void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles) noexcept;
+
+/*
  * 6502: BLACK2, RED2, YELLOW2, GREEN2 -- the missile indicator's four states, as SCREEN RAM
  * palette bytes rather than bitmap colours.
  *
@@ -234,8 +245,35 @@ class DashboardEffects
 public:
   virtual ~DashboardEffects() = default;
 
-  /// 6502: LDY #sfxecm / JSR NOISE -- the E.C.M. hum.
-  virtual void PlaySound(std::uint8_t _effect) = 0;
+  /*
+   * 6502: LDY #sfxecm / JSR NOISE -- the E.C.M. hum.
+   *
+   * RETURNS `NOISE`'s CARRY, because one caller reads it. The routine ends `SEC / RTS` on the
+   * path that gives the effect a SID voice, and reaches `SOUR1`'s bare `RTS` with the carry
+   * CLEAR when a higher-priority sound is already playing in all three -- and the flight loop's
+   * `JSR NOISE / JSR LASLI` runs `DORND` on whichever it left, so the laser burst lands a pixel
+   * further down when the shot was heard than when it was drowned out (§6.86).
+   *
+   * `NOISE` has a third exit the seam cannot express: with `DNOIZ` set the very first branch
+   * leaves for `SOUR1` with the caller's own carry untouched. The port has no sound-off option
+   * to reach it, so a bool is complete for what is modelled and would not be if one arrived.
+   */
+  virtual bool PlaySound(std::uint8_t _effect) = 0;
+
+  /*
+   * 6502: LDX #n / JMP NOISE2 -- the same sound, with the sustain and the frequency supplied.
+   *
+   * `NOISE2` is `BIT SOUR1 / STA XX15 / STX XX15+1 / EQUB &50` and then straight into `NOISE`
+   * past its `CLV`. The `BIT` on a byte holding `RTS` sets the overflow flag, which is what the
+   * two `BVS`es inside `NOISE` read to take these two bytes instead of the effect table's -- so
+   * `NOISE2` is not a different routine, it is `NOISE` with V set. The `EQUB &50` is a `BVC` that
+   * cannot branch, swallowing the `CLV` that would have cleared it (§6.79's idiom, seventh time).
+   *
+   * The explosions are the only callers in this port's reach, and they differ by pitch as much as
+   * by effect: 208 for a hit and 81 for a kill.
+   */
+  virtual bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain,
+                                std::uint8_t _frequency) = 0;
 
   /*
    * 6502: LDY #sfxecm / JMP NOISEOFF -- stop it again.

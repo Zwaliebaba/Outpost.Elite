@@ -163,6 +163,24 @@ void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, std::uint8_t _c
   _canvas.Write(static_cast<std::uint16_t>(MISSILE_CELL + cell), _colour);
 }
 
+void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles) noexcept
+{
+  // 6502: LDX #4 / .ss CPX NOMSL / BEQ SAL8 / LDY #BLACK2 / JSR MSBAR / DEX / BNE ss.
+  std::uint8_t indicator = 4u;
+  while (indicator != _missiles && indicator != 0u)
+  {
+    SetMissileIndicator(_canvas, indicator, MISSILE_NONE);
+    --indicator;
+  }
+
+  // 6502: .SAL8 LDY #GREEN2 / JSR MSBAR / DEX / BNE SAL8 -- the same X, carrying on downwards.
+  while (indicator != 0u)
+  {
+    SetMissileIndicator(_canvas, indicator, MISSILE_READY);
+    --indicator;
+  }
+}
+
 void SetMissileTarget(Canvas& _canvas, Bubble& _bubble, std::uint8_t& _missileSeeking,
                       std::uint8_t _missiles, std::uint8_t _target, std::uint8_t _colour) noexcept
 {
@@ -196,7 +214,7 @@ void ToggleStationIndicator(Canvas& _canvas) noexcept
 void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept
 {
   _status.ecmCountdown = 32u;     // 6502: LDA #32 / STA ECMA
-  _effects.PlaySound(SOUND_ECM);  // 6502: LDY #sfxecm / JSR NOISE
+  (void)_effects.PlaySound(SOUND_ECM);  // 6502: LDY #sfxecm / JSR NOISE
   ToggleEcmIndicator(_canvas);    // 6502: and no RTS -- it falls into ECBLB
 }
 
