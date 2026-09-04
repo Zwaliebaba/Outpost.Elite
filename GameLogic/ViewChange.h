@@ -2,7 +2,11 @@
 
 #include <cstdint>
 
+#include "Arith.h"
 #include "Canvas.h"
+#include "Controls.h"
+#include "Dashboard.h"
+#include "ShipDraw.h"
 #include "ShipSlot.h"
 
 namespace Elite
@@ -81,6 +85,35 @@ void DrawColourBand(Canvas& _canvas, std::uint16_t _cell) noexcept;
 void DrawColourBands(Canvas& _canvas) noexcept;
 
 /*
+ * 6502: abraxas, caravanserai and DFLAG -- what the screen is currently set up as.
+ *
+ * The first two READ LIKE REGISTERS AND ARE NOT. `abraxas` is the value the raster interrupt
+ * pokes into `VIC+&18` on its next pass and `caravanserai` the one for `VIC+&11`, so both are
+ * ordinary bytes here and only the handler that reads them is hardware. §6.73 made the opposite
+ * mistake about `SIGHT`; this is the same question with the answer the other way round.
+ *
+ * `abraxas` says which block of screen RAM colours the bottom of the screen -- &81 for the one at
+ * &6000 and &91 for the one at &6400, which is the dashboard's. `caravanserai` chooses standard
+ * or multicolour bitmap for the same half. `DFLAG` is the cheap half of it: non-zero means the
+ * dashboard is already on screen, so `wantdials` can skip copying it in again.
+ */
+struct ScreenState
+{
+  std::uint8_t colourBank = 0x81;  ///< 6502: abraxas
+  std::uint8_t bitmapMode = 0xC0;  ///< 6502: caravanserai
+  std::uint8_t dashboardShown = 0; ///< 6502: DFLAG
+};
+
+/// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
+/// extra bit the dashboard's bottom half needs.
+inline constexpr std::uint8_t COLOUR_BANK_DASHBOARD = 0x91;
+inline constexpr std::uint8_t BITMAP_MODE_DASHBOARD = 0xD0;
+
+/// 6502: NOSPRITES -- switch every sprite off, bracketed by the two raster-mode changes like
+/// `SIGHT`. Six instructions, and all six are the seam.
+void HideAllSprites(SightEffects& _effects) noexcept;
+
+/*
  * 6502: BOX2 -- the border: two vertical edges, a byte in the top right, and a rule across row 0.
  *
  * `_rows` IS SPELLED AS AN ASSEMBLER DIRECTIVE. The routine opens `LDX #18 / STX T2`, and
@@ -110,5 +143,24 @@ inline constexpr std::uint8_t BORDER_ROWS_TEXT_SCREEN = 25;
  * the sun -- neither of which has a blip to forget.
  */
 void ForgetScannerBlips(Bubble& _bubble) noexcept;
+
+/*
+ * 6502: wantdials -- put the dashboard on screen, or leave it there if it already is.
+ *
+ * IT TAKES EVERYTHING `DIALS` TAKES, and that is the routine being honest rather than the port
+ * being clumsy: `wantdials` draws the border, copies the dashboard picture in, forgets every
+ * blip and then draws all seven dials, so a caller has to hand it the whole flight state. The
+ * only thing it adds of its own is `DFLAG`.
+ *
+ * `DFLAG` SKIPS THE EXPENSIVE HALF AND NOT THE CHEAP ONE. With the dashboard already on screen it
+ * still redraws the border, still rewrites `abraxas` and `caravanserai`, still draws the bands
+ * and still hides the sprites -- what it skips is the 2,240-byte copy, the blip clearing and
+ * `DIALS`. So a port that treated the flag as "do nothing" would agree on the pixels the second
+ * time and differ on the first.
+ */
+void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
+                   GeometryWorkspace& _geometry, ScreenState& _screen, Bubble& _bubble,
+                   const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
+                   Compass& _compass, SightEffects& _effects) noexcept;
 
 } // namespace Elite
