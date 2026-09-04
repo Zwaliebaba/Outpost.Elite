@@ -94,6 +94,12 @@ TABLES = [
     # mining lasers the cassette version does not. Entry 0 is a placeholder: EQSHP computes the
     # fuel price from how empty the tank is and writes it over PRXS before reading the table.
     Table("EQUIPMENT_PRICES", "PRXS", 28, "EquipmentTable.cpp", "the price of each item, in tenths"),
+    # ---- slice 2e: the keyboard. Sixty-five bytes, because that is what can index it -- RDKEY
+    # produces internal key numbers 0 to 64 and ZEKTRAN clears exactly that many bytes of the key
+    # logger. The next label is 130 bytes further on, so the extent is decided by the indexer
+    # rather than by the layout, as section 6.8 requires.
+    Table("KEY_TRANSLATION", "TRANTABLE", 65, "KeyTable.cpp",
+          "the character TT217 returns for each internal key number"),
 ]
 
 

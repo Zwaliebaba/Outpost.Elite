@@ -74,6 +74,23 @@ void CompareAgainstImage(const char* _label, std::span<const std::uint8_t> _gene
 TEST_CLASS(GeneratedTablesMatchTheGame)
 {
 public:
+  /*
+   * 6502: TRANTABLE -- the keyboard's matrix position to a character.
+   *
+   * Extracted rather than written out, because the constants the port compares against are the
+   * other end of this table: `f8` is internal key 37 and `TRANTABLE[37]` is `'8'`. A hand-typed
+   * copy that agreed with the source's comments and not with its bytes would pass every test in
+   * the suite except this one.
+   */
+  TEST_METHOD(TheKeyTranslationTableMatches)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    CompareAgainstImage("TRANTABLE", Elite::KEY_TRANSLATION);
+  }
+
   TEST_METHOD(LogarithmTablesMatch)
   {
     if (OracleMissing())

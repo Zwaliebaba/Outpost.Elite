@@ -40,12 +40,16 @@ SUITE_NAMESPACE = "GameLogicTests"
 # directory is suites, which arrive through the generated units.
 ORACLE_SOURCES = ["Cpu6502.cpp", "OracleImage.cpp", "GoldenCanvas.cpp"]
 
-# The executable's own files that the suite covers. `SaveStore` is the one piece of Outpost/ with
-# a test, and it earns its place here: it was written, committed and left uncompiled for a day
-# because the only machine that could build it was a Windows one, and the shim beside this script
-# turned out to need ten lines to make that untrue. Main.cpp is not listed -- it is a wWinMain and
-# there is nothing in it to assert.
-EXECUTABLE_SOURCES = ["SaveStore.cpp"]
+# The executable's own files that the suite covers, which is every one that does not call into
+# Windows. `SaveStore` earned its place by being written, committed and left uncompiled for a day
+# because the only machine that could build it was a Windows one -- and the shim beside this
+# script turned out to need ten lines to make that untrue.
+#
+# `Presentation` and `KeyMap` are here by design rather than by accident: slice 2e's shell splits
+# its decisions from its API calls precisely so that the decisions can be tested on a machine with
+# no GPU and no Windows SDK. What is left in Window.cpp, CanvasPresenter.cpp and Main.cpp is
+# Direct3D, a message pump and a thread, and those are verified by compiling.
+EXECUTABLE_SOURCES = ["SaveStore.cpp", "Presentation.cpp", "KeyMap.cpp"]
 
 
 def write_if_changed(_path: Path, _text: str) -> None:

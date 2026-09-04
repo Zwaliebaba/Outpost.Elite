@@ -100,6 +100,37 @@ public:
     }
   }
 
+  /*
+   * The floating-point form, which is a DIFFERENT assertion rather than a convenience: MSVC's
+   * CppUnitTest declares AreEqual(double, double, double, const wchar_t*) and compares the
+   * magnitude of the difference against the tolerance. Without it here a test that MSVC compiles
+   * does not build under this runner, which is the one thing the shim exists to prevent.
+   *
+   * Written over `double` rather than templated so that a mixed call -- an int expected against a
+   * double actual, say -- converts and compiles exactly as it does under MSVC, instead of failing
+   * to deduce T and sending the author off to write the test differently for the two runners.
+   */
+  static void AreEqual(double _expected, double _actual, double _tolerance, const wchar_t* _message = nullptr)
+  {
+    const double difference = _expected - _actual;
+    const double magnitude = (difference < 0.0) ? -difference : difference;
+
+    // A NaN on either side fails: every comparison against it is false, so `magnitude > tolerance`
+    // would quietly pass one. Asking whether the difference is within tolerance, rather than
+    // whether it is outside it, is what makes that the failing answer.
+    if (!(magnitude <= _tolerance))
+    {
+      throw ShimFailure("AreEqual: expected " + ShimShow(_expected) + " actual " + ShimShow(_actual)
+                        + " tolerance " + ShimShow(_tolerance) + " -- " + ShimNarrow(_message));
+    }
+  }
+
+  static void AreEqual(float _expected, float _actual, float _tolerance, const wchar_t* _message = nullptr)
+  {
+    AreEqual(static_cast<double>(_expected), static_cast<double>(_actual), static_cast<double>(_tolerance),
+             _message);
+  }
+
   template <typename T>
   static void AreNotEqual(const T& _expected, const T& _actual, const wchar_t* _message = nullptr)
   {

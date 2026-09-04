@@ -140,4 +140,23 @@ extern const std::array<std::uint8_t, 768> FONT_DATA;
  */
 extern const std::array<std::uint8_t, 98> DEFAULT_COMMANDER;
 
+/*
+ * 6502: TRANTABLE -- the character `TT217` hands back for each internal key number.
+ *
+ * The C64's keyboard produces a MATRIX POSITION, not a character, and `RDKEY` returns that
+ * position: 0 to 64, which is why `ZEKTRAN` clears sixty-five bytes of the key logger. This is
+ * the table that turns one into the other, and it is game data rather than platform policy --
+ * every routine that compares a key against `'1'` or `'Y'` or 13 is comparing against what this
+ * produced, so a shell that invented its own mapping would be playing a different game.
+ *
+ * It is worth knowing that the two halves are BOTH used. `TT102` dispatches on the raw position
+ * (`f8` is 37, not `'8'`); every docked screen reads the translated character through the
+ * `KeySource` seam. So the executable needs the position for one and this table's output for the
+ * other, from the same key press.
+ *
+ * Entry 0 is 0, which is `RDKEY`'s "no key" -- so the table's own identity for "nothing pressed"
+ * is a character the text system will not print.
+ */
+extern const std::array<std::uint8_t, 65> KEY_TRANSLATION;
+
 } // namespace Elite

@@ -4,10 +4,14 @@
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="SaveStore.cpp" />
+    <ClCompile Include="Presentation.cpp" />
+    <ClCompile Include="KeyMap.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="SaveStore.h" />
+    <ClInclude Include="Presentation.h" />
+    <ClInclude Include="KeyMap.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Assets\Wide310x150Logo.scale-200.png">
