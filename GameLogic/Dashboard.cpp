@@ -196,7 +196,7 @@ void ToggleStationIndicator(Canvas& _canvas) noexcept
 void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept
 {
   _status.ecmCountdown = 32u;     // 6502: LDA #32 / STA ECMA
-  _effects.PlaySound(SOUND_ECM);  // 6502: LDY #sfxecm / JSR NOISE
+  (void)_effects.PlaySound(SOUND_ECM);  // 6502: LDY #sfxecm / JSR NOISE
   ToggleEcmIndicator(_canvas);    // 6502: and no RTS -- it falls into ECBLB
 }
 

@@ -5,6 +5,7 @@
 #include "Arith.h"
 #include "Dashboard.h"
 #include "Controls.h"
+#include "Lasers.h"
 #include "Rng.h"
 #include "ShipMove.h"
 #include "ViewChange.h"
@@ -224,11 +225,15 @@ inline constexpr std::uint8_t BOMB_BITMAP_MODE = 0xD0;
 inline constexpr std::uint8_t LASER_POWER_MINING = 50;
 inline constexpr std::uint8_t LASER_POWER_MILITARY = 151;
 
-/// What the flight loop reaches that phase 4 owns, plus the sound.
-class FlightLoopEffects
+/*
+ * What the flight loop reaches that phase 4 owns, plus the sound.
+ *
+ * It IS a `DashboardEffects`, because part 3 starts the E.C.M. through `ECBLB2` and part 16 stops
+ * it through `ECMOF`, and both of those already had a seam for the SID.
+ */
+class FlightLoopEffects : public DashboardEffects
 {
 public:
-  virtual ~FlightLoopEffects() = default;
 
   /*
    * 6502: JMP MVTRIBS, which ends `JMP NOMVETR`.
@@ -239,13 +244,18 @@ public:
    */
   virtual void MoveTrumbles() = 0;
 
-  /// 6502: JSR NOISE / JMP NOISE -- the SID, which is hardware.
-  virtual void PlaySound(std::uint8_t _effect) = 0;
-
   /// 6502: JSR startbd and JSR stopbd -- the docking music, which is a second interrupt handler.
   virtual void StartDockingMusic() = 0;
   virtual void StopDockingMusic() = 0;
+
+  /// 6502: JSR FRS1 with X = the type -- phase 4's "put a ship right in front of us". The carry
+  /// says whether it fitted, and `FRMIS` gives up when it did not.
+  [[nodiscard]] virtual bool SpawnAhead(std::uint8_t _type) = 0;
+
+  /// 6502: JSR ANGRY with A = the type -- phase 4's "that ship has noticed".
+  virtual void Anger(std::uint8_t _type) = 0;
 };
+
 
 /*
  * 6502: M% and the fifteen parts after it -- how a frame in space ends.
@@ -270,6 +280,7 @@ struct FlightLoop
   KeyLogger& keys;             ///< 6502: KLO
   ControlState& control;       ///< 6502: JSTX, JSTY and `auto`
   ControlOptions& options;     ///< 6502: DAMP, DJD and JSTK
+  LaserBurst& burst;           ///< 6502: LASX and LASY, which `LASLI` picks and draws through
 
   FlightLoopEffects& effects;
 };
@@ -287,6 +298,21 @@ struct FlightLoop
  * -- and `cntr` touches no flags on any of its three paths. So the four added to the pitch is
  * four or five depending on the low bit of the roll (§6.85).
  */
+/// 6502: the two messages `FRMIS` can end on. 201 is "MISSILE JAMMED".
+inline constexpr std::uint8_t MESSAGE_MISSILE_JAMMED = 201;
+
+/*
+ * 6502: FRMIS -- fire the missile that is locked on.
+ *
+ * `FRS1` puts one in front of us and hands back a carry; a clear one means the bubble is full,
+ * and `FR1` prints "MISSILE JAMMED" and stops. Otherwise the target is told it has been shot at,
+ * the lock is dropped, the count goes down and the launch is heard.
+ *
+ * `LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY` reads the TARGET's type out of the slot the lock
+ * names -- so what gets angry is the ship being shot at, not the missile.
+ */
+void FireMissile(FlightLoop& _loop) noexcept;
+
 [[nodiscard]] LoopOutcome BeginFlightFrame(FlightLoop& _loop) noexcept;
 
 } // namespace Elite

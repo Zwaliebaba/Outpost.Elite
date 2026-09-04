@@ -407,7 +407,7 @@ void Warp(FlightScreen& _screen) noexcept
 
   if ((occupied | station | _screen.status.midJump) != 0u)
   {
-    _screen.effects.PlaySound(SOUND_BOOP); // 6502: .WA1 LDY #sfxboop / JMP NOISE
+    (void)_screen.effects.PlaySound(SOUND_BOOP); // 6502: .WA1 LDY #sfxboop / JMP NOISE
     return;
   }
 
@@ -425,7 +425,7 @@ void Warp(FlightScreen& _screen) noexcept
   {
     if (LargestAxis(_screen.bubble, 0u) < 2u)
     {
-      _screen.effects.PlaySound(SOUND_BOOP);
+      (void)_screen.effects.PlaySound(SOUND_BOOP);
       return;
     }
   }
@@ -436,7 +436,7 @@ void Warp(FlightScreen& _screen) noexcept
   {
     if (LargestAxis(_screen.bubble, 1u) < 2u)
     {
-      _screen.effects.PlaySound(SOUND_BOOP);
+      (void)_screen.effects.PlaySound(SOUND_BOOP);
       return;
     }
   }

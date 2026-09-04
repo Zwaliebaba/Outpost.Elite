@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "FlightWorld.h"
 #include "OracleImage.h"
 
 #include "Arith.h"
@@ -31,24 +32,6 @@ using Elite::Testing::OracleImage;
 namespace GameLogicTests
 {
 
-namespace
-{
-bool OracleMissing()
-{
-  const OracleImage& oracle = OracleImage::Instance();
-  if (oracle.Available())
-  {
-    return false;
-  }
-  Logger::WriteMessage(("SKIPPED -- oracle absent: " + oracle.Reason()).c_str());
-  return true;
-}
-
-std::wstring Widen(const std::string& _text)
-{
-  return std::wstring(_text.begin(), _text.end());
-}
-} // namespace
 
 
 TEST_CLASS(TheFlightLoopDistanceHelpers)
@@ -99,7 +82,7 @@ public:
                    : Elite::LargestAxisFrom(bubble, slot, static_cast<std::uint8_t>(seedByte));
 
             const std::wstring where =
-              Widen(std::string(viaM ? "m" : "MAS2") + "(slot " + std::to_string(slot) + ", A "
+              WidenText(std::string(viaM ? "m" : "MAS2") + "(slot " + std::to_string(slot) + ", A "
                     + std::to_string(seedByte) + ")");
             Assert::AreEqual(cpu.a, ours, where.c_str());
             ++compared;
@@ -146,7 +129,7 @@ public:
         Assert::IsTrue(run.completed, L"MAS4 returned");
 
         Assert::AreEqual(cpu.a, Elite::LargestShipAxis(work, static_cast<std::uint8_t>(seedByte)),
-                         Widen("MAS4(A " + std::to_string(seedByte) + ")").c_str());
+                         WidenText("MAS4(A " + std::to_string(seedByte) + ")").c_str());
         ++compared;
       }
     }
@@ -199,7 +182,7 @@ public:
           Elite::MathWorkspace math;
           const std::uint8_t ours = Elite::SumOfSquares(bubble, math, 0);
 
-          const std::wstring where = Widen("MAS3(" + std::to_string(x) + ", " + std::to_string(y)
+          const std::wstring where = WidenText("MAS3(" + std::to_string(x) + ", " + std::to_string(y)
                                            + ", " + std::to_string(z) + ")");
           Assert::AreEqual(cpu.a, ours, where.c_str());
 
@@ -277,7 +260,7 @@ public:
             const std::uint8_t ours = Elite::DoubleAndAddCoordinate(work, math, 9, 0);
 
             const std::wstring where =
-              Widen("MAS1(low " + std::to_string(low) + ", high " + std::to_string(high)
+              WidenText("MAS1(low " + std::to_string(low) + ", high " + std::to_string(high)
                     + ", sign " + std::to_string(sign) + ", target " + std::to_string(target) + ")");
 
             Assert::AreEqual(cpu.a, ours, (where + L": the returned magnitude").c_str());
@@ -350,7 +333,7 @@ public:
           const std::uint8_t ours = Elite::DampTowardsCentre(value, docking, damping);
 
           const std::wstring where =
-            Widen("cntr(" + std::to_string(reading) + ", auto " + std::to_string(docking)
+            WidenText("cntr(" + std::to_string(reading) + ", auto " + std::to_string(docking)
                   + ", DAMP " + std::to_string(damping) + ")");
 
           Assert::AreEqual(cpu.x, ours, where.c_str());
@@ -445,7 +428,7 @@ public:
         Elite::SpawnItems(math, effects, type, static_cast<std::uint8_t>(count));
 
         const std::wstring where =
-          Widen("SPIN2(count " + std::to_string(count) + ", type " + std::to_string(type) + ")");
+          WidenText("SPIN2(count " + std::to_string(count) + ", type " + std::to_string(type) + ")");
 
         Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.types.size(),
                                       (where + L": how many were spawned").c_str());
@@ -509,7 +492,7 @@ public:
           Elite::SpawnDebris(rng, math, effects, blueprint, type, carry);
 
           const std::wstring where =
-            Widen("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed)
+            WidenText("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed)
                   + ", carry " + std::to_string(carry ? 1 : 0) + ")");
 
           Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.types.size(),
@@ -596,7 +579,7 @@ public:
         status.energy = static_cast<std::uint8_t>(banks);
         const bool ours = Elite::DrainEnergy(status);
 
-        const std::wstring where = Widen("DENGY(" + std::to_string(banks) + ")");
+        const std::wstring where = WidenText("DENGY(" + std::to_string(banks) + ")");
         Assert::AreEqual(cpu.memory[energy], status.energy, (where + L": ENERGY").c_str());
         Assert::AreEqual(cpu.z, ours, (where + L": the flag PHP saved").c_str());
         emptied += ours ? 1u : 0u;
@@ -615,7 +598,7 @@ public:
         const std::uint8_t ours = Elite::RechargeShield(status, shield);
 
         const std::wstring where =
-          Widen("SHD(shield " + std::to_string(shield) + ", banks " + std::to_string(banks) + ")");
+          WidenText("SHD(shield " + std::to_string(shield) + ", banks " + std::to_string(banks) + ")");
         Assert::AreEqual(cpu.x, ours, (where + L": the shield").c_str());
         Assert::AreEqual(cpu.memory[energy], status.energy, (where + L": ENERGY").c_str());
 
@@ -676,7 +659,7 @@ public:
           // `FAROF` first, which is `LDA #224` and then the body.
           Assert::IsTrue(cpu.CallSubroutine(farof, 200).completed, L"FAROF returned");
           const std::wstring where =
-            Widen("FAROF(" + std::to_string(x) + ", " + std::to_string(y) + ", "
+            WidenText("FAROF(" + std::to_string(x) + ", " + std::to_string(y) + ", "
                   + std::to_string(z) + ")");
           Assert::AreEqual(cpu.c, Elite::WithinLoopRange(work), where.c_str());
 
@@ -771,7 +754,7 @@ public:
               const bool ours = Elite::IsHit(work, math, blueprint, shipType);
 
               const std::wstring where =
-                Widen("HITCH(type " + std::to_string(shipType) + ", x " + std::to_string(across)
+                WidenText("HITCH(type " + std::to_string(shipType) + ", x " + std::to_string(across)
                       + ", y " + std::to_string(down) + ", z-sign " + std::to_string(behind)
                       + ", exploding " + std::to_string(exploding) + ")");
               Assert::AreEqual(cpu.c, ours, where.c_str());
@@ -786,6 +769,721 @@ public:
 
     Assert::IsTrue(compared > 3'000u, L"the sweep is worth its name");
     Assert::IsTrue(hits > 0u, L"and some of them were hits");
+  }
+};
+
+/*
+ * The frame's opening (slice 3d-d-iii-b, parts 1 to 3).
+ *
+ * `M%` is entered by `CallSubroutine` and never returns: it runs into part 4 at `MA3`, or leaves
+ * for `ESCAPE`. Both are trapped, so the trap's own RTS lands on the fake return address and the
+ * run finishes where the port's `LoopOutcome` says it does.
+ *
+ * Five of the routines it reaches are seams and are trapped rather than run: `MVTRIBS` cannot be
+ * (it is entered by `JMP` and leaves by `JMP NOMVETR`, so a trap's RTS would unwind the run) and
+ * is patched with a jump straight back instead. Everything else -- `ABORT`, `MSBAR`, `WARP`,
+ * `ECBLB2`, `LASLI`, `MESS` -- is already ported and runs for real, so the whole-canvas compare
+ * covers what they draw.
+ */
+namespace
+{
+/// Flat memory the game never touches, where the patched `MVTRIBS` counts its own arrivals.
+constexpr std::uint16_t TRUMBLE_PROBE = 0xFFF0;
+
+/// Where the oracle keeps what the frame's opening reads and writes, beyond the shared `Where`.
+struct LoopWhere
+{
+  std::uint16_t jstx, jsty, autoByte, damp, djd, jstk;
+  std::uint16_t alpha, alp2Next, bet2, bet2Next, delt4;
+  std::uint16_t las, lasct, lasx, lasy, msar, mstg, ecmp, moonflower;
+  std::uint16_t klo, tp, mch, messxc, gntmp, energy;
+
+  std::uint16_t mvtribs, nomvetr, ma3, escape, frs1, angry, startbd, stopbd, noise;
+  std::uint16_t mainLoop;
+
+  explicit LoopWhere(const OracleImage& _oracle)
+  {
+    jstx = _oracle.Label("JSTX");            jsty = _oracle.Label("JSTY");
+    autoByte = _oracle.Label("auto");        damp = _oracle.Label("DAMP");
+    djd = _oracle.Label("DJD");              jstk = _oracle.Label("JSTK");
+    alpha = _oracle.Label("ALPHA");
+    alp2Next = static_cast<std::uint16_t>(_oracle.Label("ALP2") + 1u);
+    bet2 = _oracle.Label("BET2");
+    bet2Next = static_cast<std::uint16_t>(_oracle.Label("BET2") + 1u);
+    delt4 = _oracle.Label("DELT4");          las = _oracle.Label("LAS");
+    lasct = _oracle.Label("LASCT");          lasx = _oracle.Label("LASX");
+    lasy = _oracle.Label("LASY");            msar = _oracle.Label("MSAR");
+    mstg = _oracle.Label("MSTG");            ecmp = _oracle.Label("ECMP");
+    moonflower = _oracle.Label("moonflower");
+    klo = _oracle.Label("KLO");              tp = _oracle.Label("TP");
+    mch = _oracle.Label("MCH");              messxc = _oracle.Label("messXC");
+    gntmp = _oracle.Label("GNTMP");          energy = _oracle.Label("ENERGY");
+
+    mvtribs = _oracle.Label("MVTRIBS");      nomvetr = _oracle.Label("NOMVETR");
+    ma3 = _oracle.Label("MA3");              escape = _oracle.Label("ESCAPE");
+    frs1 = _oracle.Label("FRS1");            angry = _oracle.Label("ANGRY");
+    startbd = _oracle.Label("startbd");      stopbd = _oracle.Label("stopbd");
+    noise = _oracle.Label("NOISE");          mainLoop = _oracle.Label("M%");
+  }
+};
+
+/*
+ * The flight loop's own seams, recording into the world's sound list.
+ *
+ * One list, because `NOISE` is one routine: the loop reaches it through `FlightLoopEffects` and
+ * `WARP` reaches it through `ViewEffects`, and a frame that boops for a refused warp and then
+ * whooshes for a missile has to compare in that order against the oracle's trap hits.
+ */
+struct RecordingLoop final : Elite::FlightLoopEffects
+{
+  std::vector<std::uint8_t>& sounds;
+  std::vector<std::uint8_t> stopped;
+  std::vector<std::uint8_t> spawned;
+  std::vector<std::uint8_t> angered;
+  std::uint32_t trumbleMoves = 0;
+  std::uint32_t musicStarts = 0;
+  std::uint32_t musicStops = 0;
+
+  /// What `FRS1` answers -- carry set for "there was room", clear for a full bubble.
+  bool spawnSucceeds = true;
+
+  explicit RecordingLoop(std::vector<std::uint8_t>& _sounds) noexcept : sounds(_sounds) {}
+
+  bool PlaySound(std::uint8_t _effect) override { sounds.push_back(_effect); return true; }
+  void StopSound(std::uint8_t _effect) override { stopped.push_back(_effect); }
+  void MoveTrumbles() override { ++trumbleMoves; }
+  void StartDockingMusic() override { ++musicStarts; }
+  void StopDockingMusic() override { ++musicStops; }
+  bool SpawnAhead(std::uint8_t _type) override { spawned.push_back(_type); return spawnSucceeds; }
+  void Anger(std::uint8_t _type) override { angered.push_back(_type); }
+};
+
+/// Everything one frame needs that the shared `World` does not carry.
+struct Frame
+{
+  World world;
+  Elite::ControlState control;
+  Elite::ControlOptions options;
+  Elite::KeyLogger keys{};
+  Elite::LaserBurst burst{};
+  RecordingLoop effects{ world.effects.sounds };
+
+  explicit Frame(std::uint32_t _seed)
+  {
+    Seed(world, _seed);
+    world.commander.At(Elite::Field::Fuel) = world.fuel;
+
+    /*
+     * A message already up, and a REAL one.
+     *
+     * `Seed` leaves `MCH` at zero, and a message that jams sends `MESS` down `me1` to erase
+     * whatever is showing -- so a zero would be printed, and `TT27` opens `TAX / BEQ csh`, which
+     * prints the player's cash. The game cannot reach that: `MCH` is written only by `MESS`
+     * itself, and the erase only runs when `DLY` is non-zero, which only `MESS` makes it.
+     */
+    world.message.token = 101u;
+    world.message.column = 9u;
+    world.message.append = 1u;
+    world.message.delay = 12u;
+    world.screen.upperBitmapMode = 0xC0u;
+    world.status.laserCount = 0u;
+    world.status.laserPower = 0u;
+    world.status.missileArmed = 0u;
+    world.status.ecmOurs = 0u;
+    world.bubble.missileTarget = 0xFFu;
+    world.flight.delt4 = 0u;
+    world.flight.delt4Next = 0u;
+    control.roll = 128u;
+    control.pitch = 128u;
+  }
+};
+
+/// The port's world into the oracle, for everything past what `Mirror` covers.
+void MirrorFrame(const Frame& _frame, Cpu6502& _cpu, const Where& _at, const LoopWhere& _loop)
+{
+  const World& world = _frame.world;
+
+  for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
+  {
+    _cpu.memory[static_cast<std::uint16_t>(_loop.tp + index)] = world.commander.bytes[index];
+  }
+  for (std::size_t slot = 0; slot < _frame.keys.size(); ++slot)
+  {
+    _cpu.memory[static_cast<std::uint16_t>(_loop.klo + slot)] = _frame.keys[slot];
+  }
+
+  _cpu.memory[_loop.jstx] = _frame.control.roll;
+  _cpu.memory[_loop.jsty] = _frame.control.pitch;
+  _cpu.memory[_loop.autoByte] = _frame.control.dockingComputer;
+  _cpu.memory[_loop.damp] = _frame.options.dampingDisabled;
+  _cpu.memory[_loop.djd] = _frame.options.recentreDisabled;
+  _cpu.memory[_loop.jstk] = _frame.options.joystick;
+
+  _cpu.memory[_loop.alpha] = world.flight.alpha;
+  _cpu.memory[_loop.alp2Next] = world.flight.alp2Next;
+  _cpu.memory[_loop.bet2] = world.flight.bet2;
+  _cpu.memory[_loop.bet2Next] = world.flight.bet2Next;
+  _cpu.memory[_loop.delt4] = world.flight.delt4;
+  _cpu.memory[static_cast<std::uint16_t>(_loop.delt4 + 1u)] = world.flight.delt4Next;
+
+  _cpu.memory[_loop.las] = world.status.laserPower;
+  _cpu.memory[_loop.lasct] = world.status.laserCount;
+  _cpu.memory[_loop.msar] = world.status.missileArmed;
+  _cpu.memory[_loop.mstg] = world.bubble.missileTarget;
+  _cpu.memory[_loop.ecmp] = world.status.ecmOurs;
+  _cpu.memory[_loop.moonflower] = world.screen.upperBitmapMode;
+
+  _cpu.memory[_loop.lasx] = _frame.burst.x;
+  _cpu.memory[_loop.lasy] = _frame.burst.y;
+
+  _cpu.memory[_loop.mch] = world.message.token;
+  _cpu.memory[_loop.messxc] = world.message.column;
+}
+
+/// Every byte the frame's opening can write, beyond what `CompareState` already covers.
+void CompareFrame(const Cpu6502& _cpu, const Frame& _frame, const LoopWhere& _loop,
+                  const std::wstring& _context)
+{
+  const World& world = _frame.world;
+
+  auto same = [&](std::uint16_t _address, std::uint8_t _ours, const wchar_t* _name) {
+    Assert::AreEqual(_cpu.memory[_address], _ours, (_context + L": " + _name).c_str());
+  };
+
+  same(_loop.jstx, _frame.control.roll, L"JSTX");
+  same(_loop.jsty, _frame.control.pitch, L"JSTY");
+  same(_loop.autoByte, _frame.control.dockingComputer, L"auto");
+
+  same(_loop.alpha, world.flight.alpha, L"ALPHA");
+  same(_loop.alp2Next, world.flight.alp2Next, L"ALP2+1");
+  same(_loop.bet2, world.flight.bet2, L"BET2");
+  same(_loop.bet2Next, world.flight.bet2Next, L"BET2+1");
+  same(_loop.delt4, world.flight.delt4, L"DELT4");
+  same(static_cast<std::uint16_t>(_loop.delt4 + 1u), world.flight.delt4Next, L"DELT4+1");
+
+  same(_loop.las, world.status.laserPower, L"LAS");
+  same(_loop.lasct, world.status.laserCount, L"LASCT");
+  same(_loop.lasx, _frame.burst.x, L"LASX");
+  same(_loop.lasy, _frame.burst.y, L"LASY");
+  same(_loop.msar, world.status.missileArmed, L"MSAR");
+  same(_loop.mstg, world.bubble.missileTarget, L"MSTG");
+  same(_loop.ecmp, world.status.ecmOurs, L"ECMP");
+  same(_loop.moonflower, world.screen.upperBitmapMode, L"moonflower");
+
+  same(_loop.mch, world.message.token, L"MCH");
+  same(_loop.messxc, world.message.column, L"messXC");
+  same(_loop.gntmp, world.status.laserTemperature, L"GNTMP");
+  same(_loop.energy, world.status.energy, L"ENERGY");
+
+  for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
+  {
+    Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_loop.tp + index)],
+                     world.commander.bytes[index],
+                     (_context + L": commander byte " + std::to_wstring(index)).c_str());
+  }
+}
+
+/*
+ * Run one frame on both sides and compare everything.
+ *
+ * The marker is 0x1D as it is in the screen tests, so "drew nothing" and "drew a zero" stay
+ * different answers across the whole bitmap.
+ */
+void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at,
+                   const LoopWhere& _loop, const std::wstring& _context)
+{
+  Cpu6502 cpu = _oracle.Fresh();
+
+  cpu.AddTrap(_loop.ma3);
+  cpu.AddTrap(_loop.escape);
+  cpu.AddTrap(_loop.startbd);
+  cpu.AddTrap(_loop.stopbd);
+  cpu.AddTrap(_loop.angry);
+  cpu.AddTrap(_loop.frs1, _frame.effects.spawnSucceeds ? Cpu6502::TrapExit::SetCarry
+                                                       : Cpu6502::TrapExit::ClearCarry);
+
+  // `NOISE` ends `SEC / RTS` on the path that gives the effect a voice, and `LASLI`'s opening
+  // `DORND` rolls that carry into its own answer (§6.86).
+  cpu.AddTrap(_loop.noise, Cpu6502::TrapExit::SetCarry);
+
+  /*
+   * `MVTRIBS` is entered by `JMP` and leaves by `JMP NOMVETR`, so it is patched rather than
+   * trapped: a trap's RTS would pop the fake return address and end the run mid-frame. The `INC`
+   * in front of the jump back is what makes "it was reached" observable at all -- without it the
+   * oracle's side of the comparison would only be the branch the port itself takes.
+   */
+  cpu.memory[TRUMBLE_PROBE] = 0u;
+  const std::uint8_t back[] = { 0xEEu, static_cast<std::uint8_t>(TRUMBLE_PROBE & 0xFFu),
+                                static_cast<std::uint8_t>(TRUMBLE_PROBE >> 8),
+                                0x4Cu, static_cast<std::uint8_t>(_loop.nomvetr & 0xFFu),
+                                static_cast<std::uint8_t>(_loop.nomvetr >> 8) };
+  cpu.Load(_loop.mvtribs, back, sizeof(back));
+
+  FillScreens(cpu, _frame.world.canvas, _at.screen, 0x1Du);
+  Mirror(_frame.world, cpu, _at);
+  MirrorFrame(_frame, cpu, _at, _loop);
+
+  const Elite::Testing::RunResult run = cpu.CallSubroutine(_loop.mainLoop, 2'000'000);
+  Assert::IsTrue(run.completed, (_context + L": M% reached an exit").c_str());
+
+  Elite::FlightScreen screen = _frame.world.Screen();
+  Elite::FlightLoop loop{ screen,        _frame.keys,  _frame.control,
+                          _frame.options, _frame.burst, _frame.effects };
+  const Elite::LoopOutcome outcome = Elite::BeginFlightFrame(loop);
+
+  // ---- the exit ------------------------------------------------------------------------------
+  std::uint32_t reachedMa3 = 0;
+  std::uint32_t escaped = 0;
+  std::vector<std::uint8_t> sounds;
+  std::vector<std::uint8_t> spawned;
+  std::vector<std::uint8_t> angered;
+  std::uint32_t starts = 0;
+  std::uint32_t stops = 0;
+
+  for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+  {
+    if (hit.address == _loop.ma3)          { ++reachedMa3; }
+    else if (hit.address == _loop.escape)  { ++escaped; }
+    else if (hit.address == _loop.noise)   { sounds.push_back(hit.y); }
+    else if (hit.address == _loop.frs1)    { spawned.push_back(hit.x); }
+    else if (hit.address == _loop.angry)   { angered.push_back(hit.a); }
+    else if (hit.address == _loop.startbd) { ++starts; }
+    else if (hit.address == _loop.stopbd)  { ++stops; }
+  }
+
+  const bool wantEscape = (outcome == Elite::LoopOutcome::Escaped);
+  Assert::AreEqual<std::uint32_t>(wantEscape ? 1u : 0u, escaped,
+                                  (_context + L": ESCAPE taken").c_str());
+  Assert::AreEqual<std::uint32_t>(wantEscape ? 0u : 1u, reachedMa3,
+                                  (_context + L": fell into MA3").c_str());
+
+  // ---- the seams -----------------------------------------------------------------------------
+  Assert::AreEqual(sounds.size(), _frame.world.effects.sounds.size(),
+                   (_context + L": sounds asked for").c_str());
+  for (std::size_t index = 0; index < sounds.size(); ++index)
+  {
+    Assert::AreEqual(sounds[index], _frame.world.effects.sounds[index],
+                     (_context + L": sound " + std::to_wstring(index)).c_str());
+  }
+
+  Assert::AreEqual(spawned.size(), _frame.effects.spawned.size(),
+                   (_context + L": FRS1 calls").c_str());
+  for (std::size_t index = 0; index < spawned.size(); ++index)
+  {
+    Assert::AreEqual(spawned[index], _frame.effects.spawned[index],
+                     (_context + L": FRS1 type").c_str());
+  }
+
+  Assert::AreEqual(angered.size(), _frame.effects.angered.size(),
+                   (_context + L": ANGRY calls").c_str());
+  for (std::size_t index = 0; index < angered.size(); ++index)
+  {
+    Assert::AreEqual(angered[index], _frame.effects.angered[index],
+                     (_context + L": ANGRY type").c_str());
+  }
+
+  Assert::AreEqual(starts, _frame.effects.musicStarts, (_context + L": startbd").c_str());
+  Assert::AreEqual(stops, _frame.effects.musicStops, (_context + L": stopbd").c_str());
+  Assert::AreEqual<std::uint32_t>(cpu.memory[TRUMBLE_PROBE], _frame.effects.trumbleMoves,
+                                  (_context + L": MVTRIBS").c_str());
+
+  // ---- the world -----------------------------------------------------------------------------
+  CompareScreens(cpu, _at.screen, _frame.world.canvas, 0x1Du, _context);
+  CompareState(cpu, _frame.world, _at, _context);
+  CompareFrame(cpu, _frame, _loop, _context);
+}
+} // namespace
+
+TEST_CLASS(TheFlightFrameOpening)
+{
+public:
+  /*
+   * 6502: M% parts 1 and 2 -- the seed stir, the Trumbles and both control rates.
+   *
+   * The pitch is swept against every roll because of what the roll leaves behind: its magnitude
+   * ends `CMP #8 / BCS P%+3 / LSR A` and the pitch's begins `ADC #4` with no `SEC` or `CLC`
+   * between them, and `cntr` sets no flags on any of its three paths -- so the four added to the
+   * pitch is four or five depending on the roll (§6.85). A port that cleared the carry would be
+   * right for every roll of eight or more and wrong for half the rest, which is why the sweep
+   * covers both sides of eight and both parities below it.
+   */
+  TEST_METHOD(TheControlRatesMatchM)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    const std::uint8_t RATES[] = { 1u, 2u, 96u, 120u, 127u, 128u, 129u, 136u, 160u, 200u, 254u,
+                                   255u };
+
+    std::uint32_t compared = 0;
+    std::uint32_t moved = 0;
+
+    for (const std::uint8_t roll : RATES)
+    {
+      for (const std::uint8_t pitch : RATES)
+      {
+        for (std::uint8_t mode = 0; mode < 4u; ++mode)
+        {
+          Frame frame(roll * 7u + pitch * 3u + mode);
+          frame.control.roll = roll;
+          frame.control.pitch = pitch;
+          frame.options.dampingDisabled = ((mode & 1u) != 0u) ? 0xFFu : 0u;
+          frame.control.dockingComputer = ((mode & 2u) != 0u) ? 0xFFu : 0u;
+          frame.world.trumbles = ((roll & 1u) != 0u) ? 0u : 3u;
+
+          const std::wstring where =
+            WidenText("M% (JSTX " + std::to_string(roll) + ", JSTY " + std::to_string(pitch)
+                      + ", mode " + std::to_string(mode) + ")");
+          CompareFrames(frame, oracle, at, loop, where);
+
+          moved += frame.effects.trumbleMoves;
+          ++compared;
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(12u * 12u * 4u, compared, L"the whole sweep ran");
+    Assert::IsTrue(moved > 0u, L"the Trumbles moved on some passes");
+  }
+
+  /*
+   * 6502: M% part 3's speed keys -- and both ends of the range they clamp against.
+   *
+   * `CMP #40 / BCS MA17` makes forty the ceiling and `DEC DELTA / BNE MA4 / INC DELTA` makes one
+   * the floor, so a ship at rest is not a state the keys can produce. Both keys held at once is
+   * a real frame: the speed rises and then falls in the same pass.
+   */
+  TEST_METHOD(TheSpeedKeysMatchM)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    const std::uint8_t SPEEDS[] = { 1u, 2u, 20u, 38u, 39u, 40u, 41u, 255u };
+
+    std::uint32_t compared = 0;
+
+    for (const std::uint8_t speed : SPEEDS)
+    {
+      for (std::uint8_t keys = 0; keys < 4u; ++keys)
+      {
+        Frame frame(speed + keys * 101u);
+        frame.world.flight.delta = speed;
+        frame.keys[Elite::KEY_SPEED_UP] = ((keys & 1u) != 0u) ? 0xFFu : 0u;
+        frame.keys[Elite::KEY_SLOW_DOWN] = ((keys & 2u) != 0u) ? 0xFFu : 0u;
+
+        const std::wstring where =
+          WidenText("M% (DELTA " + std::to_string(speed) + ", keys " + std::to_string(keys) + ")");
+        CompareFrames(frame, oracle, at, loop, where);
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(8u * 4u, compared, L"the whole sweep ran");
+  }
+
+  /*
+   * 6502: M% part 3's missile keys, and the branch that skips five others.
+   *
+   * `.MA25 LDA KY16 / BEQ MA24 / LDA MSTG / BMI MA64 / JSR FRMIS` -- pressing "M" with no lock
+   * jumps clear over the energy bomb, the docking-computer cancel, the escape pod, the warp and
+   * the E.C.M. Every one of those five is held down in the sweep so that the skip is visible as
+   * five things NOT happening rather than as one branch not taken.
+   */
+  TEST_METHOD(TheMissileKeysMatchM)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    struct Case
+    {
+      const char* what;
+      std::uint8_t missiles, target, armed;
+      bool unarm, arm, fire, spawns;
+    };
+
+    const std::vector<Case> CASES = {
+      { "nothing pressed", 3, 0xFF, 0, false, false, false, true },
+      { "unarm with three on the rail", 3, 0xFF, 0xFF, true, false, false, true },
+      { "unarm with an empty rail", 0, 0xFF, 0xFF, true, false, false, true },
+      { "unarm with one left", 1, 0xFF, 0xFF, true, false, false, true },
+      { "arm with three on the rail", 3, 0xFF, 0, false, true, false, true },
+      { "arm with an empty rail", 0, 0xFF, 0, false, true, false, true },
+      { "arm while already locked", 3, 2, 0, false, true, false, true },
+      { "arm and unarm together", 3, 0xFF, 0xFF, true, true, false, true },
+      { "fire with no lock -- skips five keys", 3, 0xFF, 0xFF, false, false, true, true },
+      { "fire with a lock, room to spawn", 3, 2, 0xFF, false, false, true, true },
+      { "fire with a lock, bubble full", 3, 2, 0xFF, false, false, true, false },
+      { "fire with a lock and one missile", 1, 1, 0xFF, false, false, true, true },
+      { "fire not pressed, lock held", 3, 2, 0xFF, false, false, false, true },
+    };
+
+    std::uint32_t skipped = 0;
+    std::uint32_t jammed = 0;
+
+    for (const Case& item : CASES)
+    {
+      Frame frame(0x31u);
+      frame.world.commander.At(Elite::Field::Missiles) = item.missiles;
+      frame.world.bubble.missileTarget = item.target;
+      frame.world.status.missileArmed = item.armed;
+      frame.effects.spawnSucceeds = item.spawns;
+
+      frame.keys[Elite::KEY_UNARM_MISSILE] = item.unarm ? 0xFFu : 0u;
+      frame.keys[Elite::KEY_ARM_MISSILE] = item.arm ? 0xFFu : 0u;
+      frame.keys[Elite::KEY_FIRE_MISSILE] = item.fire ? 0xFFu : 0u;
+
+      // The five keys `BMI MA64` jumps over, all held, on every case.
+      frame.keys[Elite::KEY_ENERGY_BOMB] = 0xFFu;
+      frame.keys[Elite::KEY_CANCEL_DOCKING] = 0xFFu;
+      frame.keys[Elite::KEY_ESCAPE_POD] = 0xFFu;
+      frame.keys[Elite::KEY_ECM] = 0xFFu;
+      frame.world.commander.At(Elite::Field::EnergyBomb) = 1u;
+      frame.world.commander.At(Elite::Field::EscapePod) = 0u; // or the frame would end at ESCAPE
+      frame.world.commander.At(Elite::Field::Ecm) = 0xFFu;
+      frame.control.dockingComputer = 0xFFu;
+
+      const std::wstring where = WidenText(std::string("M% (") + item.what + ")");
+      CompareFrames(frame, oracle, at, loop, where);
+
+      if (item.fire && (item.target & 0x80u) != 0u)
+      {
+        ++skipped;
+        Assert::AreEqual<std::uint32_t>(0u, frame.effects.musicStops,
+                                        (where + L": the cancel key was skipped").c_str());
+        Assert::AreEqual<std::uint8_t>(1u, frame.world.commander.At(Elite::Field::EnergyBomb),
+                                       (where + L": and so was the bomb").c_str());
+      }
+      if (item.fire && (item.target & 0x80u) == 0u && !item.spawns)
+      {
+        ++jammed;
+      }
+    }
+
+    Assert::IsTrue(skipped > 0u, L"the skip was reached");
+    Assert::IsTrue(jammed > 0u, L"and a jammed missile too");
+  }
+
+  /*
+   * 6502: M% part 3's other keys -- the bomb, the docking computer, the pod, the warp, the E.C.M.
+   *
+   * The docking-computer case is the one worth the table: `LDA KY19 / AND DKCMP / BEQ MA68 /
+   * EOR KLO+&29 / BEQ MA68` reads `KY5` by offset rather than by name, so holding "X" while
+   * pressing "C" cancels the request. Nothing in the original source says so.
+   */
+  TEST_METHOD(TheSecondaryKeysMatchM)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    struct Case
+    {
+      const char* what;
+      std::uint8_t key, fitting, bomb, ecmCountdown, midJump, dockingComputer, pitchUp;
+    };
+
+    const std::vector<Case> CASES = {
+      { "the bomb, unfitted", Elite::KEY_ENERGY_BOMB, 0, 0, 0, 0, 0, 0 },
+      { "the bomb, one bit left", Elite::KEY_ENERGY_BOMB, 0, 1, 0, 0, 0, 0 },
+      { "the bomb, halfway through", Elite::KEY_ENERGY_BOMB, 0, 0x10u, 0, 0, 0, 0 },
+      { "the bomb, last frame", Elite::KEY_ENERGY_BOMB, 0, 0x80u, 0, 0, 0, 0 },
+      { "cancel docking, running", Elite::KEY_CANCEL_DOCKING, 0, 0, 0, 0, 0xFFu, 0 },
+      { "cancel docking, not running", Elite::KEY_CANCEL_DOCKING, 0, 0, 0, 0, 0, 0 },
+      { "the pod, unfitted", Elite::KEY_ESCAPE_POD, 0, 0, 0, 0, 0, 0 },
+      { "the pod, fitted", Elite::KEY_ESCAPE_POD, 0xFFu, 0, 0, 0, 0, 0 },
+      { "the pod, mid-jump", Elite::KEY_ESCAPE_POD, 0xFFu, 0, 0, 0xFFu, 0, 0 },
+      { "the warp", Elite::KEY_WARP, 0, 0, 0, 0, 0, 0 },
+      { "the warp, mid-jump", Elite::KEY_WARP, 0, 0, 0, 0xFFu, 0, 0 },
+      { "E.C.M., unfitted", Elite::KEY_ECM, 0, 0, 0, 0, 0, 0 },
+      { "E.C.M., fitted and idle", Elite::KEY_ECM, 0xFFu, 0, 0, 0, 0, 0 },
+      { "E.C.M., already running", Elite::KEY_ECM, 0xFFu, 0, 20u, 0, 0, 0 },
+      { "docking, unfitted", Elite::KEY_DOCKING_COMPUTER, 0, 0, 0, 0, 0, 0 },
+      { "docking, fitted", Elite::KEY_DOCKING_COMPUTER, 0xFFu, 0, 0, 0, 0, 0 },
+      { "docking, with X held", Elite::KEY_DOCKING_COMPUTER, 0xFFu, 0, 0, 0, 0, 0xFFu },
+      { "docking, already running", Elite::KEY_DOCKING_COMPUTER, 0xFFu, 0, 0, 0, 0xFFu, 0 },
+      { "X alone, no docking key", Elite::KEY_PITCH_UP, 0xFFu, 0, 0, 0, 0, 0xFFu },
+    };
+
+    std::uint32_t escaped = 0;
+
+    for (const Case& item : CASES)
+    {
+      Frame frame(0x77u);
+      frame.keys[item.key] = 0xFFu;
+      frame.keys[Elite::KEY_PITCH_UP] = item.pitchUp;
+      frame.world.commander.At(Elite::Field::EnergyBomb) = item.bomb;
+      frame.world.commander.At(Elite::Field::EscapePod) =
+        (item.key == Elite::KEY_ESCAPE_POD) ? item.fitting : 0u;
+      frame.world.commander.At(Elite::Field::Ecm) =
+        (item.key == Elite::KEY_ECM) ? item.fitting : 0u;
+      frame.world.commander.At(Elite::Field::DockingComputer) =
+        (item.key == Elite::KEY_DOCKING_COMPUTER || item.key == Elite::KEY_PITCH_UP)
+          ? item.fitting : 0u;
+      frame.world.status.ecmCountdown = item.ecmCountdown;
+      frame.world.status.midJump = item.midJump;
+      frame.control.dockingComputer = item.dockingComputer;
+
+      const std::wstring where = WidenText(std::string("M% (") + item.what + ")");
+      CompareFrames(frame, oracle, at, loop, where);
+
+      escaped += (item.key == Elite::KEY_ESCAPE_POD && item.fitting != 0u && item.midJump == 0u)
+                   ? 1u : 0u;
+    }
+
+    Assert::AreEqual<std::uint32_t>(1u, escaped, L"exactly one case left through ESCAPE");
+  }
+
+  /*
+   * 6502: M% part 3's tail -- `DELT4`, and the gun.
+   *
+   * Four laser types across four views, because the sound is chosen by an `EQUB &2C` that
+   * swallows an `LDY` (§6.79) and the countdown by `PLA / BPL ma1 / LDA #0`, so a beam laser
+   * gets no countdown and can be held down while a pulse laser cannot. `GNTMP` is swept across
+   * the jam at 242 from both sides.
+   */
+  TEST_METHOD(TheGunMatchesM)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    const std::uint8_t FITTED[] = { 0u, Elite::LASER_PULSE, Elite::LASER_BEAM,
+                                    Elite::LASER_MILITARY, Elite::LASER_POWER_MINING };
+    const std::uint8_t HEAT[] = { 0u, 100u, 241u, 242u, 243u };
+    const std::uint8_t COUNTS[] = { 0u, 1u, 7u };
+
+    std::uint32_t compared = 0;
+    std::uint32_t fired = 0;
+
+    for (std::uint8_t view = 0; view < 4u; ++view)
+    {
+      for (const std::uint8_t fitted : FITTED)
+      {
+        for (const std::uint8_t heat : HEAT)
+        {
+          for (const std::uint8_t count : COUNTS)
+          {
+            Frame frame(view * 13u + fitted + heat + count);
+            frame.world.spaceView = view;
+            frame.world.view = 0u;
+            frame.world.status.laserTemperature = heat;
+            frame.world.status.laserCount = count;
+            frame.keys[Elite::KEY_FIRE] = 0xFFu;
+            for (std::size_t index = 0; index < 4u; ++index)
+            {
+              frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + index] =
+                (index == view) ? fitted : 0u;
+            }
+
+            const std::wstring where =
+              WidenText("M% (VIEW " + std::to_string(view) + ", LASER " + std::to_string(fitted)
+                        + ", GNTMP " + std::to_string(heat) + ", LASCT " + std::to_string(count)
+                        + ")");
+            CompareFrames(frame, oracle, at, loop, where);
+
+            fired += (frame.world.status.laserPower != 0u) ? 1u : 0u;
+            ++compared;
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(4u * 5u * 5u * 3u, compared, L"the whole sweep ran");
+    Assert::IsTrue(fired > 0u, L"the gun went off on some passes");
+  }
+
+  /*
+   * 6502: M% part 3's tail on a chart -- `LASLI2 LDA QQ11 / BNE LASLI-1`.
+   *
+   * The laser still heats, still drains the banks and still picks a convergence point when the
+   * player is looking at a chart; it just does not draw. The frame is otherwise the firing case
+   * above, so the only difference between the two is the bitmap.
+   */
+  TEST_METHOD(TheGunOnAChartMatchesM)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    for (const std::uint8_t view : { std::uint8_t{ 64 }, std::uint8_t{ 128 }, std::uint8_t{ 255 } })
+    {
+      Frame frame(view);
+      frame.world.view = view;
+      frame.world.spaceView = 0u;
+      frame.world.status.laserTemperature = 40u;
+      frame.keys[Elite::KEY_FIRE] = 0xFFu;
+      frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] =
+        Elite::LASER_BEAM;
+
+      CompareFrames(frame, oracle, at, loop,
+                    WidenText("M% (QQ11 " + std::to_string(view) + ", firing)"));
+    }
+  }
+
+  /*
+   * 6502: M% with the energy banks nearly out.
+   *
+   * `LASLI` ends `JSR DENGY`, which is the only thing in the opening that touches `ENERGY`, and
+   * the drain is what makes firing cost something. One at the boundary and one at zero, because
+   * `DENGY` is `LDA ENERGY / BEQ D1 / DEC ENERGY` and a bank at zero must stay there.
+   */
+  TEST_METHOD(TheEnergyDrainMatchesM)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    for (const std::uint8_t energy : { std::uint8_t{ 0 }, std::uint8_t{ 1 }, std::uint8_t{ 2 },
+                                       std::uint8_t{ 200 } })
+    {
+      Frame frame(energy + 5u);
+      frame.world.status.energy = energy;
+      frame.world.status.laserTemperature = 40u;
+      frame.keys[Elite::KEY_FIRE] = 0xFFu;
+      frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] =
+        Elite::LASER_PULSE;
+
+      CompareFrames(frame, oracle, at, loop,
+                    WidenText("M% (ENERGY " + std::to_string(energy) + ", firing)"));
+    }
   }
 };
 
