@@ -428,6 +428,55 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.45 The §6.12 pass on 3c's second unit, and the comment it falsified was mine
+
+Run before writing the planet and sun line heap, and the first thing it found was a sentence
+committed an hour earlier. `Stardust` held `XX(1 0)` and `YY(1 0)` with the note *"they are here
+rather than in `MathWorkspace` because nothing outside the stardust reads them"*. A scan of every
+file the C64 build assembles says otherwise:
+
+| Label | Files that touch it |
+|---|---|
+| `YY` | `stars1`, `stars2`, `stars6`, `pix1`, **`edges`**, **`wpls`**, **`sun` parts 2, 3 and 4** |
+| `XX` | `stars1`, `stars2`, `stars6`, `mls2`, `mut1`, `mut2`, **`sun` part 3** |
+| `newzp` | `stars2`, and nothing else |
+
+`XX` is at 93, `YY` at 95 and `SUNX` at 97 — three consecutive sixteen-bit values, which is what
+they are: a shared coordinate pair, not a workspace one routine owns. The two users are never
+live at the same time, which is precisely why nothing would ever have failed and why the comment
+would have survived until someone tried to give `EDGES` a `Stardust&`. `XX` and `YY` are now in
+`MathWorkspace`; `newzp` stays, because it really is the stardust's alone.
+
+The correction that matters is not the move. It is that **where a routine lives and what it reads
+are separate questions**, and the ledger has now conflated them seven times. `MLS2`, `MUT1` and
+`MUT2` stay in `Stardust.cpp` — their only callers in the entire build are `STARS1` and `STARS6`,
+so that is filing by what they do — and they take `MathWorkspace` rather than `Stardust`, because
+the bytes they read are shared. Row 94 files them under `Arith.cpp`; row 94 is wrong about the
+file and right about the parameter, and the port had it exactly the other way round.
+
+Three more findings from the same pass:
+
+**`NWSTARS` is not a routine.** It is `LDA QQ11 / BNE WPSHPS`, falling through `nWq` → `WPSHPS` →
+`FLFLLS` → `RTS`. Four labels the ledger lists separately, one chain, and the head cannot be
+ported without the tail — which means the planet and sun line heap has to come *before* the
+stardust's initialiser rather than after it. `WPSHPS` reaches `SCAN`, so the chain also carries a
+seam.
+
+**`PL44` is defined in two files.** `edges.asm` and `pls6.asm` both have a `.PL44`, each behind an
+`IF`, and only `pls6`'s is in this build — so `CHKON`'s `BMI PL44` branches into the tail of a
+routine slice 3b already ported, not into the one sitting next to it in the source. Both happen
+to be `CLC / RTS`, so a port that picked the wrong one would be right by luck. That is worth
+saying plainly: **the check that a label resolves to what you think is not vindicated by the
+output agreeing.**
+
+**`Yx2M1` is a variable, and the header calls it a constant.** The upstream comment for `CHKON`
+documents `CPX #2*Y-1`; the C64 assembles `CPX Yx2M1`, a byte at 184 that `TT23` sets to **199**
+and `TT23`'s own tail and `RES2` set back to **143**. It travels in lockstep with `dontclip` —
+the same two-instruction pairs write both — so it is the second byte of the same view-extent
+state §6.38 found, and the slice that makes `TT23` write one must write both. The clipper is
+unaffected: `LL118` and `LL145` compare against the literal, and the scan confirms `Yx2M1` has
+exactly four readers — `CHKON` and `SUN` parts 1 and 2.
+
 ### 6.44 Three views, three routines, and the six instructions that route between them
 
 The stardust is the whole of Elite's sense of motion — twelve specks in a box, moved and redrawn

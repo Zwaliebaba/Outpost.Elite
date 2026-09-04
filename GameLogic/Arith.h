@@ -33,6 +33,20 @@ struct MathWorkspace
   std::uint8_t t1 = 0;
   std::uint8_t u = 0;
 
+  /*
+   * 6502: XX(1 0) and YY(1 0) -- two sixteen-bit scratch values at zero page 93 and 95.
+   *
+   * They are here rather than with the stardust, which is where they were first put and where
+   * only their FIRST caller lives (§6.45). `EDGES`, `WPLS` and three of `SUN`'s four parts read
+   * and write the same two labels, and `SUNX` sits immediately after them at 97 -- so they are a
+   * shared coordinate pair, not a workspace one routine owns. The two users are never live at
+   * the same time, which is exactly why nothing would ever have failed.
+   */
+  std::uint8_t xx = 0;
+  std::uint8_t xxNext = 0;
+  std::uint8_t yy = 0;
+  std::uint8_t yyNext = 0;
+
   // 6502: widget -- a scratch byte the logarithm routines use to hold their first operand
   // while the index register is busy addressing a table.
   std::uint8_t widget = 0;

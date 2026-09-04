@@ -48,31 +48,31 @@ std::uint8_t MultiplyByRoll(MathWorkspace& _math, const FlightState& _flight, st
 }
 
 std::uint8_t MultiplyPositionByRoll(MathWorkspace& _math, const FlightState& _flight,
-                                    const Stardust& _dust, std::uint8_t _a) noexcept
+                                    std::uint8_t _a) noexcept
 {
-  _math.r = _dust.xx;
-  _math.s = _dust.xxNext;
+  _math.r = _math.xx;
+  _math.s = _math.xxNext;
   return MultiplyByRoll(_math, _flight, _a);
 }
 
-std::uint8_t MultiplyPosition(MathWorkspace& _math, const Stardust& _dust, std::uint8_t _a) noexcept
+std::uint8_t MultiplyPosition(MathWorkspace& _math, std::uint8_t _a) noexcept
 {
-  _math.r = _dust.xx;
+  _math.r = _math.xx;
   return MultiplySigned(_math, _a);
 }
 
-std::uint8_t MultiplyPositionSigned(MathWorkspace& _math, const Stardust& _dust, std::uint8_t _a) noexcept
+std::uint8_t MultiplyPositionSigned(MathWorkspace& _math, std::uint8_t _a) noexcept
 {
   // 6502: MUT2 falls into MUT1, so it sets BOTH halves and not just S.
-  _math.s = _dust.xxNext;
-  return MultiplyPosition(_math, _dust, _a);
+  _math.s = _math.xxNext;
+  return MultiplyPosition(_math, _a);
 }
 
 void PlotStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Stardust& _dust,
                   std::uint8_t _at, std::uint8_t _a) noexcept
 {
   const AddSignedResult sum = AddSigned(_math, _a);
-  _dust.yyNext = sum.high;
+  _math.yyNext = sum.high;
   _dust.yLow[_at] = sum.low;
   PlotRelativePixel(_canvas, _draw);
 }
@@ -146,51 +146,51 @@ void MoveStardustAhead(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _ma
 
     // Its height and its distance across, each scaled by how much closer it now is.
     const WideResult height = MultiplyByHeight(_math, _draw, _dust, at);
-    _dust.yyNext = height.high;
+    _math.yyNext = height.high;
     const AddResult yLow = AddWithCarry(_math.p, _dust.yLow[at], height.carry);
-    _dust.yy = yLow.value;
+    _math.yy = yLow.value;
     _math.r = yLow.value;
-    _dust.yyNext = AddWithCarry(_draw.y1, _dust.yyNext, yLow.carry).value;
-    _math.s = _dust.yyNext;
+    _math.yyNext = AddWithCarry(_draw.y1, _math.yyNext, yLow.carry).value;
+    _math.s = _math.yyNext;
 
     _draw.x1 = _dust.x[at];
     const WideResult across = MultiplyMagnitudeByQ(_math, _draw.x1);
-    _dust.xxNext = across.high;
+    _math.xxNext = across.high;
     const AddResult xLow = AddWithCarry(_math.p, _dust.xLow[at], across.carry);
-    _dust.xx = xLow.value;
-    _dust.xxNext = AddWithCarry(_draw.x1, _dust.xxNext, xLow.carry).value;
+    _math.xx = xLow.value;
+    _math.xxNext = AddWithCarry(_draw.x1, _math.xxNext, xLow.carry).value;
 
     // 6502: the roll, as two multiply-and-adds with the signs crossed over.
     std::uint8_t rolled =
-      MultiplyByRoll(_math, _flight, static_cast<std::uint8_t>(_dust.xxNext ^ _flight.alp2Next));
+      MultiplyByRoll(_math, _flight, static_cast<std::uint8_t>(_math.xxNext ^ _flight.alp2Next));
     AddSignedResult sum = AddSigned(_math, rolled);
-    _dust.yyNext = sum.high;
-    _dust.yy = sum.low;
+    _math.yyNext = sum.high;
+    _math.yy = sum.low;
 
-    rolled = MultiplyPositionByRoll(_math, _flight, _dust,
+    rolled = MultiplyPositionByRoll(_math, _flight,
                                     static_cast<std::uint8_t>(sum.high ^ _flight.alp2));
     sum = AddSigned(_math, rolled);
-    _dust.xxNext = sum.high;
-    _dust.xx = sum.low;
+    _math.xxNext = sum.high;
+    _math.xx = sum.low;
 
     // And the pitch.
     _math.q = MultiplyScaledBy(_math, _flight.bet1,
-                               static_cast<std::uint8_t>(_dust.yyNext ^ _flight.bet2Next));
-    const std::uint8_t pitched = MultiplyPositionSigned(_math, _dust, _math.q);
+                               static_cast<std::uint8_t>(_math.yyNext ^ _flight.bet2Next));
+    const std::uint8_t pitched = MultiplyPositionSigned(_math, _math.q);
     sum = AddSigned(_math, DoubleAndFold(_math, pitched));
-    _dust.xxNext = sum.high;
+    _math.xxNext = sum.high;
     _dust.xLow[at] = sum.low;
 
-    _math.r = _dust.yy;
-    _math.s = _dust.yyNext;
+    _math.r = _math.yy;
+    _math.s = _math.yyNext;
     _math.p = 0;
     PlotStardust(_canvas, _draw, _math, _dust, at,
                  static_cast<std::uint8_t>(_flight.beta ^ 0x80u));
 
     // 6502: the three kill tests. A speck that has drifted more than 120 either way, or come
     // closer than 16, is not clipped -- it is thrown away and a new one rolled at the edge.
-    _draw.x1 = _dust.xxNext;
-    _dust.x[at] = _dust.xxNext;
+    _draw.x1 = _math.xxNext;
+    _dust.x[at] = _math.xxNext;
 
     /*
      * Three kill tests, and WHICH of them fires decides the carry the first `DORND` below runs
@@ -198,15 +198,15 @@ void MoveStardustAhead(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _ma
      * clear. The generator takes the carry as an operand, so the speck that replaces one which
      * drifted sideways is a different speck from the one replacing a speck that came too close.
      */
-    bool killed = (_dust.xxNext & 0x7Fu) >= 120u;
+    bool killed = (_math.xxNext & 0x7Fu) >= 120u;
     bool entryCarry = true;
 
     if (!killed)
     {
-      _dust.y[at] = _dust.yyNext;
-      _draw.y1 = _dust.yyNext;
+      _dust.y[at] = _math.yyNext;
+      _draw.y1 = _math.yyNext;
 
-      killed = (_dust.yyNext & 0x7Fu) >= 120u;
+      killed = (_math.yyNext & 0x7Fu) >= 120u;
       if (!killed && _dust.z[at] < 16u)
       {
         killed = true;
@@ -260,19 +260,19 @@ void MoveStardustAstern(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _m
      */
     _draw.x1 = _dust.x[at];
     const WideResult across = MultiplyMagnitudeByQ(_math, _draw.x1);
-    _dust.xxNext = across.high;
+    _math.xxNext = across.high;
     const SubResult xLow = SubtractWithCarry(_dust.xLow[at], _math.p, across.carry);
-    _dust.xx = xLow.value;
-    const SubResult xHigh = SubtractWithCarry(_draw.x1, _dust.xxNext, xLow.carry);
-    _dust.xxNext = xHigh.value;
+    _math.xx = xLow.value;
+    const SubResult xHigh = SubtractWithCarry(_draw.x1, _math.xxNext, xLow.carry);
+    _math.xxNext = xHigh.value;
 
     const WideResult height = MultiplyByHeight(_math, _draw, _dust, at);
-    _dust.yyNext = height.high;
+    _math.yyNext = height.high;
     const SubResult yLow = SubtractWithCarry(_dust.yLow[at], _math.p, height.carry);
-    _dust.yy = yLow.value;
+    _math.yy = yLow.value;
     _math.r = yLow.value;
-    const SubResult yHigh = SubtractWithCarry(_draw.y1, _dust.yyNext, yLow.carry);
-    _dust.yyNext = yHigh.value;
+    const SubResult yHigh = SubtractWithCarry(_draw.y1, _math.yyNext, yLow.carry);
+    _math.yyNext = yHigh.value;
     _math.s = yHigh.value;
 
     // 6502: `ADC DELT4` -- on the borrow the subtraction above left, with no `CLC` between them.
@@ -284,16 +284,16 @@ void MoveStardustAstern(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _m
     // The roll, and the two sign bytes are the other way round from the front view's -- which is
     // the whole of what makes the dust roll the opposite way when you look behind you.
     std::uint8_t rolled =
-      MultiplyByRoll(_math, _flight, static_cast<std::uint8_t>(_dust.xxNext ^ _flight.alp2));
+      MultiplyByRoll(_math, _flight, static_cast<std::uint8_t>(_math.xxNext ^ _flight.alp2));
     AddSignedResult sum = AddSigned(_math, rolled);
-    _dust.yyNext = sum.high;
-    _dust.yy = sum.low;
+    _math.yyNext = sum.high;
+    _math.yy = sum.low;
 
-    rolled = MultiplyPositionByRoll(_math, _flight, _dust,
+    rolled = MultiplyPositionByRoll(_math, _flight,
                                     static_cast<std::uint8_t>(sum.high ^ _flight.alp2Next));
     sum = AddSigned(_math, rolled);
-    _dust.xxNext = sum.high;
-    _dust.xx = sum.low;
+    _math.xxNext = sum.high;
+    _math.xx = sum.low;
 
     /*
      * And the pitch, where the two routines diverge further than a sign: `STARS1` squares the
@@ -301,23 +301,23 @@ void MoveStardustAstern(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _m
      * multiplies it by the negated x instead. The port keeps both as written (ADR-003).
      */
     _math.q = MultiplyScaledBy(_math, _flight.bet1,
-                               static_cast<std::uint8_t>(_dust.yyNext ^ _flight.bet2Next));
-    _math.s = _dust.xxNext;
+                               static_cast<std::uint8_t>(_math.yyNext ^ _flight.bet2Next));
+    _math.s = _math.xxNext;
     const std::uint8_t pitched =
-      MultiplyPosition(_math, _dust, static_cast<std::uint8_t>(_dust.xxNext ^ 0x80u));
+      MultiplyPosition(_math, static_cast<std::uint8_t>(_math.xxNext ^ 0x80u));
     sum = AddSigned(_math, DoubleAndFold(_math, pitched));
-    _dust.xxNext = sum.high;
+    _math.xxNext = sum.high;
     _dust.xLow[at] = sum.low;
 
-    _math.r = _dust.yy;
-    _math.s = _dust.yyNext;
+    _math.r = _math.yy;
+    _math.s = _math.yyNext;
     _math.p = 0;
     PlotStardust(_canvas, _draw, _math, _dust, at, _flight.beta);
 
-    _draw.x1 = _dust.xxNext;
-    _dust.x[at] = _dust.xxNext;
-    _draw.y1 = _dust.yyNext;
-    _dust.y[at] = _dust.yyNext;
+    _draw.x1 = _math.xxNext;
+    _dust.x[at] = _math.xxNext;
+    _draw.y1 = _math.yyNext;
+    _dust.y[at] = _math.yyNext;
 
     /*
      * Two kill tests rather than three, and both on the values just stored: more than 110 up or
@@ -327,7 +327,7 @@ void MoveStardustAstern(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _m
      * Both arrive at the generator with carry SET, so `KILL6` has one entry where `KILL1` has
      * two.
      */
-    const bool killed = (_dust.yyNext & 0x7Fu) >= 110u || _dust.z[at] >= 160u;
+    const bool killed = (_math.yyNext & 0x7Fu) >= 110u || _dust.z[at] >= 160u;
 
     if (killed)
     {
@@ -440,37 +440,37 @@ void MoveStardustSideways(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& 
     std::uint8_t pitched = MultiplyScaledBy(_math, _flight.bet1,
                                             static_cast<std::uint8_t>(_draw.y1 ^ _flight.bet2));
     sum = AddSigned(_math, pitched);
-    _dust.xx = sum.low;
-    _dust.xxNext = sum.high;
+    _math.xx = sum.low;
+    _math.xxNext = sum.high;
 
     _math.r = _dust.yLow[at];
     _math.s = _draw.y1;
     pitched = MultiplyScaledBy(_math, _flight.bet1,
                                static_cast<std::uint8_t>(sum.high ^ _flight.bet2Next));
     sum = AddSigned(_math, pitched);
-    _dust.yy = sum.low;
-    _dust.yyNext = sum.high;
+    _math.yy = sum.low;
+    _math.yyNext = sum.high;
 
     // And the roll, as one scale factor used by both multiply-accumulates.
     _math.q = MultiplyScaledBy(_math, _flight.alp1,
                                static_cast<std::uint8_t>(sum.high ^ _flight.alp2));
 
-    _math.r = _dust.xx;
-    _math.s = _dust.xxNext;
-    sum = MultiplyAndAdd(_math, static_cast<std::uint8_t>(_dust.xxNext ^ 0x80u));
-    _dust.xxNext = sum.high;
+    _math.r = _math.xx;
+    _math.s = _math.xxNext;
+    sum = MultiplyAndAdd(_math, static_cast<std::uint8_t>(_math.xxNext ^ 0x80u));
+    _math.xxNext = sum.high;
     _dust.xLow[at] = sum.low;
 
-    _math.r = _dust.yy;
-    _math.s = _dust.yyNext;
-    sum = MultiplyAndAdd(_math, _dust.yyNext);
+    _math.r = _math.yy;
+    _math.s = _math.yyNext;
+    sum = MultiplyAndAdd(_math, _math.yyNext);
     _math.s = sum.high;
     _math.r = sum.low;
     _math.p = 0;
     PlotStardust(_canvas, _draw, _math, _dust, at, _flight.alpha);
 
-    _dust.x[at] = _dust.xxNext;
-    _draw.x1 = _dust.xxNext;
+    _dust.x[at] = _math.xxNext;
+    _draw.x1 = _math.xxNext;
 
     /*
      * 6502: AND #%01111111 / EOR #%01111111 / CMP newzp / BCC KILL2 / BEQ KILL2.
@@ -483,7 +483,7 @@ void MoveStardustSideways(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& 
      * Two branches, two entry carries: `BCC` arrives with it clear and `BEQ` with it set, and the
      * generator reads it.
      */
-    const std::uint8_t room = static_cast<std::uint8_t>((_dust.xxNext & 0x7Fu) ^ 0x7Fu);
+    const std::uint8_t room = static_cast<std::uint8_t>((_math.xxNext & 0x7Fu) ^ 0x7Fu);
 
     bool killed = room <= _dust.newzp;
     bool entryCarry = room == _dust.newzp;
@@ -491,12 +491,12 @@ void MoveStardustSideways(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& 
 
     if (!killed)
     {
-      _dust.y[at] = _dust.yyNext;
-      _draw.y1 = _dust.yyNext;
+      _dust.y[at] = _math.yyNext;
+      _draw.y1 = _math.yyNext;
 
       // 6502: CMP #116 / BCS ST5 -- and no test on the distance at all, because it has not
       // changed.
-      if ((_dust.yyNext & 0x7Fu) >= 116u)
+      if ((_math.yyNext & 0x7Fu) >= 116u)
       {
         killed = true;
         entryCarry = true;

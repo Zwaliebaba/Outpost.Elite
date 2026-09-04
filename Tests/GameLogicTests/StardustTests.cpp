@@ -290,8 +290,8 @@ public:
           cpu.memory[at.p] = a;                math.p = a;
           cpu.memory[at.r] = operand;          math.r = operand;
           cpu.memory[at.s] = a;                math.s = a;
-          cpu.memory[at.xx] = operand;         dust.xx = operand;
-          cpu.memory[static_cast<std::uint16_t>(at.xx + 1)] = a; dust.xxNext = a;
+          cpu.memory[at.xx] = operand;         math.xx = operand;
+          cpu.memory[static_cast<std::uint16_t>(at.xx + 1)] = a; math.xxNext = a;
 
           const std::uint8_t slot = 5;
           cpu.y = slot;
@@ -325,17 +325,17 @@ public:
             case 4:
               name = L"MLS2";
               cpu.CallSubroutine(oracle.Label("MLS2"), 20'000);
-              got = Elite::MultiplyPositionByRoll(math, flight, dust, a);
+              got = Elite::MultiplyPositionByRoll(math, flight, a);
               break;
             case 5:
               name = L"MUT1";
               cpu.CallSubroutine(oracle.Label("MUT1"), 20'000);
-              got = Elite::MultiplyPosition(math, dust, a);
+              got = Elite::MultiplyPosition(math, a);
               break;
             case 6:
               name = L"MUT2";
               cpu.CallSubroutine(oracle.Label("MUT2"), 20'000);
-              got = Elite::MultiplyPositionSigned(math, dust, a);
+              got = Elite::MultiplyPositionSigned(math, a);
               break;
             default:
               name = L"MULTS-2";
