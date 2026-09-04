@@ -428,6 +428,33 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.95 The launch depends on a byte nothing on the way to it writes
+
+§6.94 established that `HFS1` does not set `STP`, and that `CIRCLE2` cannot terminate without one:
+`BLINE` advances `CNT` by `STP` and the loop exits on `CNT >= 65`, so a zero step is an infinite
+loop and not a degenerate circle.
+
+`TT110` calls `HFS1`. `RES2`, which `TT110` calls first, does not set `STP` either. **And the only
+writer of `STP` in the whole build is `CIRCLE`** — reached from the planet, the sun, and the
+short-range chart's fuel radius. None of those runs while docked except the chart, and the chart
+is a key the player need not press.
+
+So the path from a cold start to the first launch does not write `STP`, and in the assembled
+image the byte at 172 is zero. Whether the real machine hangs on it depends entirely on what the
+loader leaves in the zero page, which is outside the assembled binaries and outside what this port
+can know.
+
+**The port reproduces the loop rather than guarding it** (ADR-003), and the comparison seeds `STP`
+with the 4 the fuel circle leaves. What is worth recording is not the hazard but its shape: this
+is the third variable in two slices — after `XX0` (§6.90) and `STP` itself (§6.94) — whose value
+at a call site comes from **whichever earlier screen the player happened to visit**. Elite's
+zero page is not a set of variables with owners; it is a scratchpad, and a routine's inputs
+include everything that ran before it.
+
+The practical consequence for the port is a rule for the app: the flight world must be
+constructed with these bytes at values some earlier screen would have left, not at zero. A
+default-constructed `PlanetSunState` is a state the game cannot be in.
+
 ### 6.94 An effect that erases itself, and a step it does not set
 
 `HFS1` draws the eight expanding rings the game shows on a launch and on a hyperspace jump. Two

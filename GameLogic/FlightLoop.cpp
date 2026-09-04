@@ -586,50 +586,6 @@ namespace Elite
     return LoopOutcome::Continued;
   }
 
-  namespace
-  {
-    /*
-     * 6502: KILLSHP's four calls, wired to the routines the port already has.
-     *
-     * `SpawnEffects` was a seam when `KILLSHP` was written, because the dashboard did not exist yet.
-     * It does now, and every one of the four is ported -- so the flight loop hands `KILLSHP` the real
-     * thing rather than counting calls it could make for real (§6.73's rule, applied forwards).
-     */
-    class LoopSpawnEffects final : public Elite::SpawnEffects
-    {
-    public:
-      explicit LoopSpawnEffects(Elite::FlightLoop& _loop) noexcept
-        : m_loop(_loop)
-      {
-      }
-
-      void AbortMissile(std::uint8_t _colour) override
-      {
-        Elite::FlightScreen& screen = m_loop.screen;
-        Elite::AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.At(Elite::Field::Missiles),
-                                _colour);
-      }
-
-      void ShowMessage(std::uint8_t _token) override
-      {
-        Elite::FlightScreen& screen = m_loop.screen;
-        Elite::ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, _token, screen.view);
-      }
-
-      void ToggleStationIndicator() override
-      {
-        Elite::ToggleStationIndicator(m_loop.screen.canvas);
-      }
-
-      void ResetMissileIndicators() override
-      {
-        Elite::ResetMissileIndicators(m_loop.screen.canvas, m_loop.screen.commander.At(Elite::Field::Missiles));
-      }
-
-    private:
-      Elite::FlightLoop& m_loop;
-    };
-  } // namespace
 
   namespace
   {
@@ -807,6 +763,28 @@ namespace Elite
     // 6502: LDX TYPE / JSR EXNO2 -- and what `.MA14` stores is what NOISE2 left in A (§6.86's
     // dependency again: the dead ship's energy byte comes out of the sound system).
     return {true, RecordKill(screen, _loop.effects, _type)};
+  }
+
+  void LoopSpawnEffects::AbortMissile(std::uint8_t _colour)
+  {
+    FlightScreen& screen = m_loop.screen;
+    AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.At(Field::Missiles), _colour);
+  }
+
+  void LoopSpawnEffects::ShowMessage(std::uint8_t _token)
+  {
+    FlightScreen& screen = m_loop.screen;
+    Elite::ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, _token, screen.view);
+  }
+
+  void LoopSpawnEffects::ToggleStationIndicator()
+  {
+    Elite::ToggleStationIndicator(m_loop.screen.canvas);
+  }
+
+  void LoopSpawnEffects::ResetMissileIndicators()
+  {
+    Elite::ResetMissileIndicators(m_loop.screen.canvas, m_loop.screen.commander.At(Field::Missiles));
   }
 
   LoopOutcome MoveEveryShip(FlightLoop& _loop) noexcept
