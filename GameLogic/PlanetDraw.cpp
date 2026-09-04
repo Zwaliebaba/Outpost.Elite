@@ -801,8 +801,8 @@ void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _d
 
 void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
                      GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                     const ShipBlock& _ship, Projection& _centre, std::uint8_t _type,
-                     PlanetDrawEffects& _effects) noexcept
+                     Rng& _rng, const ShipBlock& _ship, Projection& _centre,
+                     std::uint8_t _type) noexcept
 {
   /*
    * 6502: PLANET -- three rejections before any arithmetic.
@@ -840,11 +840,250 @@ void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _dr
   // 6502: LDA TYPE / LSR A / BCC PL9 / JMP SUN.
   if ((_type & 0x01u) != 0u)
   {
-    _effects.DrawSun();
+    DrawSun(_canvas, _state, _draw, _math, _rng, _centre);
     return;
   }
 
   DrawPlanetDetail(_canvas, _state, _draw, _geometry, _math, _clip, _ship, _centre, _type);
+}
+
+
+void DrawSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, MathWorkspace& _math,
+             Rng& _rng, const Projection& _centre) noexcept
+{
+  // 6502: LDA #1 / STA LSX -- entry 0 stops being the "nothing there" flag the moment the
+  // routine commits to drawing, so a `WPLS` interrupted halfway still has something to erase.
+  _state.sun[0] = 1;
+
+  if (CircleOffScreen(_state, _math, _centre))
+  {
+    // 6502: BCS PLF3M3 / JMP WPLS -- nothing of it is on screen, so only rub out the old one.
+    EraseSun(_canvas, _state, _math, _draw);
+    return;
+  }
+
+  /*
+   * 6502: LDA #0 / LDX K / CPX #96 / ROL A / CPX #40 / ROL A / CPX #16 / ROL A.
+   *
+   * Three comparisons rolled into three bits, so `CNT` is 0, 1, 3 or 7 -- the mask the random
+   * byte is ANDed with before it is added to each row's half-width. A distant sun is a smooth
+   * disc and a near one has a ragged edge, and this is the whole of that effect.
+   */
+  std::uint8_t rough = 0;
+  rough = static_cast<std::uint8_t>((rough << 1) | ((_math.k[0] >= 96u) ? 1u : 0u));
+  rough = static_cast<std::uint8_t>((rough << 1) | ((_math.k[0] >= 40u) ? 1u : 0u));
+  rough = static_cast<std::uint8_t>((rough << 1) | ((_math.k[0] >= 16u) ? 1u : 0u));
+  _math.cnt = rough;
+
+  /*
+   * 6502: PLF18 -- where to stop. `CHKON` left the circle's top and bottom in `P+1` and `P+2`,
+   * and the bottom row of the sun is whichever of that and the screen's own bottom comes first.
+   * A sun whose top is at row 0 is given a `TGT` of 1 rather than 0, because row 0 is the flag.
+   */
+  std::uint8_t bottom = _state.yx2M1;
+  if (_math.p2 == 0u && _state.yx2M1 >= _math.p1)
+  {
+    bottom = (_math.p1 != 0u) ? _math.p1 : std::uint8_t{ 1 };
+  }
+  _math.tgt = bottom;
+
+  /*
+   * 6502: LDA Yx2M1 / SEC / SBC K4 / TAX / LDA #0 / SBC K4+1 -- how far the bottom row is from
+   * the sun's centre, which is where the walk starts.
+   */
+  const SubResult offsetLow = SubtractWithCarry(_state.yx2M1, _centre.y, true);
+  std::uint8_t at = offsetLow.value;
+  const SubResult offsetHigh = SubtractWithCarry(0u, _centre.y1, offsetLow.carry);
+
+  std::uint8_t sign = 0;
+  if ((offsetHigh.value & 0x80u) != 0u)
+  {
+    // 6502: PLF3 -- the centre is BELOW the bottom row, so the walk starts above it and the
+    // offset is negated. `V+1` becomes 255, which is what `PLF10` reads as "still climbing".
+    at = AddWithCarry(static_cast<std::uint8_t>(at ^ 0xFFu), 1u, false).value;
+    sign = 0xFF;
+  }
+  else if (offsetHigh.value != 0u)
+  {
+    // 6502: PLF4 -- further than a byte, so start at the sun's own edge.
+    at = _math.k[0];
+    sign = 0;
+  }
+  else if (at == 0u)
+  {
+    sign = 0xFF; // 6502: PLF17 -- exactly on the centre
+  }
+  else if (at >= _math.k[0])
+  {
+    at = _math.k[0]; // 6502: BCC PLF5 not taken, so PLF4
+    sign = 0;
+  }
+
+  // 6502: PLF5 -- STX V / STA V+1, and K2(1 0) = K * K, which every row's width is measured
+  // against.
+  _state.v = at;
+  _state.vNext = sign;
+
+  _math.k2[1] = SquareUnsigned(_math, _math.k[0]);
+  _math.k2[0] = _math.p;
+
+  // 6502: part 2 -- rub out the rows BELOW the sun, with last frame's centre, before any of
+  // this frame's arithmetic touches `YY`.
+  std::uint8_t row = _state.yx2M1;
+  _math.yy = _state.sunX;
+  _math.yyNext = _state.sunXNext;
+
+  while (row != _math.tgt && row != 0u)
+  {
+    if (_state.sun[row] != 0u)
+    {
+      EraseSunRow(_canvas, _state, _math, _draw, _state.sun[row], row);
+    }
+    --row;
+  }
+
+  /*
+   * 6502: PLFL -- the body, one screen row at a time.
+   *
+   * `PLF6` is the loop's tail and it does three things at once: step the row, step the distance
+   * from the centre, and notice when the walk has gone past the sun's other edge. The distance
+   * counts DOWN while the row is below the centre and UP once it is above, which is what the
+   * sign byte in `V+1` is for.
+   */
+  /*
+   * 6502: `PLF6`'s `DEY / BEQ PLF8` leaves through the ROUTINE'S TAIL and not through part 4, so
+   * a sun that reaches the top of the screen does not get the rows above it erased -- there are
+   * none. The other exit, `PLF10`'s `CPX K`, falls into part 4 because there are.
+   */
+  bool eraseAbove = false;
+
+  for (;;)
+  {
+    // 6502: the half-width, as sqrt(K^2 - v^2).
+    _math.t = SquareUnsigned(_math, _state.v);
+    const SubResult widthLow = SubtractWithCarry(_math.k2[0], _math.p, true);
+    _math.q = widthLow.value;
+    _math.r = SubtractWithCarry(_math.k2[1], _math.t, widthLow.carry).value;
+
+    _draw.y1 = row;
+    const bool rootCarry = SquareRoot(_math);
+
+    // 6502: JSR DORND / AND CNT / CLC / ADC Q / BCC PLF44 / LDA #255 -- the ragged edge, and it
+    // saturates rather than wrapping round to nothing. The generator runs on the carry `LL5`
+    // left, which is the last bit out of the square root (§6.55).
+    const RngResult roll = _rng.Next(rootCarry);
+    const AddResult ragged =
+      AddWithCarry(static_cast<std::uint8_t>(roll.value & _math.cnt), _math.q, false);
+    std::uint8_t width = ragged.value;
+    if (ragged.carry)
+    {
+      width = 255;
+    }
+
+    // 6502: PLF44 -- LDX LSO,Y / STA LSO,Y. The old width is kept and the new one stored, and
+    // what gets drawn is the DIFFERENCE between the two lines rather than both of them.
+    const std::uint8_t was = _state.sun[row];
+    _state.sun[row] = width;
+
+    if (was != 0u)
+    {
+      // The old line, clipped against LAST frame's centre.
+      _math.yy = _state.sunX;
+      _math.yyNext = _state.sunXNext;
+      (void)ClipSunRow(_state, _math, _draw, was, row);
+      _math.xx = _draw.x1;
+      _math.xxNext = _draw.x2;
+
+      // And the new one, against this frame's.
+      _math.yy = _centre.x;
+      _math.yyNext = _centre.x1;
+      const bool offScreen = ClipSunRow(_state, _math, _draw, _state.sun[row], row);
+
+      if (!offScreen)
+      {
+        // 6502: the two ends CROSSED OVER, so what is drawn is one end of the old line to the
+        // matching end of the new one -- the sliver that has appeared or gone.
+        const std::uint8_t held = _draw.x2;
+        _draw.x2 = _math.xx;
+        _math.xx = held;
+        DrawHorizontalLine(_canvas, _draw);
+      }
+
+      // 6502: PLF23 -- and the other sliver.
+      _draw.x1 = _math.xx;
+      _draw.x2 = _math.xxNext;
+      DrawHorizontalLine(_canvas, _draw);
+    }
+    else
+    {
+      // 6502: PLF11 -- nothing was there last frame, so the whole of the new line is drawn.
+      _math.yy = _centre.x;
+      _math.yyNext = _centre.x1;
+      if (ClipSunRow(_state, _math, _draw, _state.sun[row], row))
+      {
+        _state.sun[row] = 0;
+      }
+      else
+      {
+        DrawHorizontalLine(_canvas, _draw);
+      }
+    }
+
+    // 6502: PLF6 -- DEY / BEQ PLF8.
+    --row;
+    if (row == 0u)
+    {
+      break;
+    }
+
+    if (_state.vNext != 0u)
+    {
+      // 6502: PLF10 -- above the centre, so the distance GROWS, and once it passes the radius
+      // there is no more sun below and part 4 takes over.
+      const std::uint8_t next = static_cast<std::uint8_t>(_state.v + 1u);
+      _state.v = next;
+      if (next > _math.k[0])
+      {
+        eraseAbove = true;
+        break;
+      }
+    }
+    else
+    {
+      /*
+       * 6502: DEC V / BNE PLFL / DEC V+1.
+       *
+       * The decrement is UNCONDITIONAL and the branch only decides whether the high byte follows
+       * it down. So V reaching zero is what flips the walk from "coming in towards the centre"
+       * to "going out the other side", and it does it by making V+1 negative rather than by
+       * testing anything.
+       */
+      --_state.v;
+      if (_state.v == 0u)
+      {
+        --_state.vNext;
+      }
+    }
+  }
+
+  // 6502: part 4 -- rub out whatever is left above the sun, again with last frame's centre.
+  if (eraseAbove)
+  {
+    _math.yy = _state.sunX;
+    _math.yyNext = _state.sunXNext;
+    while (row != 0u)
+    {
+      if (_state.sun[row] != 0u)
+      {
+        EraseSunRow(_canvas, _state, _math, _draw, _state.sun[row], row);
+      }
+      --row;
+    }
+  }
+
+  // 6502: PLF8 -- and this frame's centre becomes next frame's.
+  _state.sunX = _centre.x;
+  _state.sunXNext = _centre.x1;
 }
 
 } // namespace Elite

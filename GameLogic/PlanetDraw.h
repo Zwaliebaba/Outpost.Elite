@@ -3,6 +3,7 @@
 #include "Arith.h"
 #include "Canvas.h"
 #include "ShipDraw.h"
+#include "Rng.h"
 #include "ShipSlot.h"
 
 #include <array>
@@ -79,6 +80,24 @@ struct PlanetSunState
    * assumed "off" would draw featureless planets for ever.
    */
   std::uint8_t pltog = 0;
+
+  /*
+   * 6502: V(1 0) -- 91 and 92, and the sun uses them as a COUNTER PAIR.
+   *
+   * Eleven files write these two bytes and they do not agree about what they are. `DETOK`,
+   * `TACTICS`, `TAS1`, `EX` and `LL9` part 5 use them as a POINTER, read through `LDA (V),Y`;
+   * `SUN` uses them as a signed distance from the sun's centre that it walks with `DEC V` and
+   * `INX / STX V`. One storage, two meanings.
+   *
+   * The port keeps them apart -- `GeometryWorkspace::v` is a `std::uint16_t` because the
+   * blueprints are an address-indexed region (§6.32), and making it a byte pair to share with a
+   * counter would make `LL9` worse to read for no gain. That is §6.49's expensive branch, so
+   * here is the measurement it requires: **every one of the eleven users initialises the pair
+   * before reading it**, none passes it to another, and no two are live at once. A divergence
+   * cannot be observed.
+   */
+  std::uint8_t v = 0;
+  std::uint8_t vNext = 0;
 
   /*
    * 6502: K5, K6, STP and FLAG -- the ball's walk, and they are the planet's state rather than
@@ -293,19 +312,31 @@ void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _d
  * `96 * 256 / z`, saturated at 248 -- and then the bottom bit of `TYPE` chooses which of the two
  * things it is.
  *
- * `DrawSun` is the seam: the sun is the next unit, and `PLANET` reaches it with a `JMP` rather
- * than a call, so it is a tail and not a return.
+ * It reaches the sun with a `JMP` rather than a `JSR`, so that is a tail call and not a return --
+ * which is why the two share this entry rather than the caller choosing between them.
  */
-class PlanetDrawEffects
-{
-public:
-  virtual ~PlanetDrawEffects() = default;
-  virtual void DrawSun() = 0;
-};
+
+/*
+ * 6502: SUN, in its four parts -- and it is not a filled circle drawn the obvious way.
+ *
+ * The sun is a stack of horizontal lines, one per screen row, whose half-widths come from
+ * `sqrt(K^2 - v^2)` with a few random bits added so the edge is ragged rather than smooth. What
+ * makes the routine worth reading is that it never erases and redraws: for each row it holds the
+ * OLD half-width and the NEW one, clips both, and draws only the two pieces that DIFFER -- so a
+ * sun drifting across the screen costs two short lines a row instead of two long ones.
+ *
+ * That is also why it takes the old centre as well as the new: `SUNX` is last frame's, `K3` is
+ * this frame's, and the routine ends by copying one into the other.
+ *
+ * `CNT` is the raggedness, three bits rolled straight out of three comparisons against the
+ * radius, so a small sun is smooth and a large one is not.
+ */
+void DrawSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, MathWorkspace& _math,
+             Rng& _rng, const Projection& _centre) noexcept;
 
 void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
                      GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                     const ShipBlock& _ship, Projection& _centre, std::uint8_t _type,
-                     PlanetDrawEffects& _effects) noexcept;
+                     Rng& _rng, const ShipBlock& _ship, Projection& _centre,
+                     std::uint8_t _type) noexcept;
 
 } // namespace Elite

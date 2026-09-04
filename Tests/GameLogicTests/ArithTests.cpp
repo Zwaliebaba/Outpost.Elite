@@ -1068,7 +1068,8 @@ public:
         MathWorkspace work;
         work.r = static_cast<std::uint8_t>(r);
         work.q = static_cast<std::uint8_t>(q);
-        Elite::SquareRoot(work);
+        const bool carry = Elite::SquareRoot(work);
+        Assert::AreEqual(cpu.c, carry, L"LL5's exit carry, which the sun's DORND runs on");
 
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.q], work.q, Context(L"root", r, q).c_str());
 

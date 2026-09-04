@@ -273,7 +273,7 @@ struct SignedSum
  * The inventory grouped this with the state-dependent helpers and deferred it to 3a. It is not
  * state-dependent -- it takes R and Q and leaves Q -- and TT111 needs it, so it lands here.
  */
-void SquareRoot(MathWorkspace& _work) noexcept;
+[[nodiscard]] bool SquareRoot(MathWorkspace& _work) noexcept;
 
 /*
  * 6502: MULT3 -- K(4) = (A P+1 P) * Q, a twenty-four bit magnitude by an eight bit one, signed
