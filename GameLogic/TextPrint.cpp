@@ -237,6 +237,31 @@ void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept
   _state.row = 1;
 }
 
+void ResetCellColours(Canvas& _canvas) noexcept
+{
+  /*
+   * 6502: BOL3 / BOL4. SC starts at &6004 -- three cells past `celllook`'s base, which is the
+   * four-cell left margin the bitmap has too -- and the outer loop runs 24 times, stepping SC on
+   * by 40 rather than by 32, because a screen row is 40 cells wide and Elite uses the middle 32.
+   *
+   * Row 24 is not filled. TTX66K counts 24 rows from row 0, so the bottom row of the screen keeps
+   * whatever it had; nothing the port prints reaches it (`ClearTextArea` stops at row 23 too).
+   *
+   * NOR ARE THE MARGINS, and on the hardware they do not need to be: the LOADER fills both whole
+   * 1 KB blocks of screen RAM with the same &10 before the game starts, and TTX66K only refreshes
+   * the 32 cells the game screen occupies. The port has no loader stage, so its margins stay at
+   * zero -- which is black on black, and is invisible only because nothing draws into them.
+   */
+  for (int row = 0; row < 24; ++row)
+  {
+    const std::uint16_t base = static_cast<std::uint16_t>(Canvas::CellRowOffset(row) + 1);
+    for (int cell = 0; cell < 32; ++cell)
+    {
+      _canvas.Write(static_cast<std::uint16_t>(base + cell), TEXT_COLOUR_WHITE);
+    }
+  }
+}
+
 void SetUpTextScreen(TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended) noexcept
 {
   // 6502: JSR MT2 -- LDA #32 / STA DTW1 / LDA #0 / STA DTW6. Sentence case for the extended

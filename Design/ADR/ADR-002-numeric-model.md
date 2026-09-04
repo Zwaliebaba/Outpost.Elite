@@ -52,32 +52,51 @@ up as wrong prices in a system three galaxies away.
    `Tests/GameLogicTests/CanvasSpikeTests.cpp` measured the shipped game; §7 below records what
    it found and why the original clause could not work.
 
+   **Amended again 2026-09-04**, in the two rows of the table below and in the resolve bullet.
+   The clause said the VIC-II was in multicolour bitmap mode and that the two 0x400 blocks were
+   "space view" and "text view". Both are wrong, and the source settles it: `moonflower` and
+   `caravanserai` — the values `comirq1` writes to VIC register &16 above and below the raster
+   split — are both `%11000000`, so **bit 4 is clear and the screen is in STANDARD bitmap mode**.
+   `wantdials` sets bit 4 for the lower half and points `abraxas` at the second block, and that
+   is the only thing that ever does. So the game screen, space view and text views alike, is one
+   bit per pixel; **multicolour is the dashboard and nothing else**. Likewise `zebop` is always
+   &81, so the first block colours the whole screen and the second colours only the dashboard.
+
+   This was not a documentation slip. `Canvas::Resolve` implemented the clause as written, and
+   the consequence was that every glyph the game drew came out as unreadable half-width stripes,
+   because an 8×8 font decoded two bits at a time is not the font. Every test in the suite passed
+   throughout: the per-routine tests compare the bitmap planes, which were correct, and the two
+   goldens compared the port against the oracle through the same wrong decode on both sides.
+
    `Canvas` therefore holds four planes, laid out as the original's memory is so that an oracle
    comparison is a byte compare and not a translation:
 
    | Plane | Size | Original | Holds |
    |---|---|---|---|
-   | `m_bitmap` | 0x2000 | `SCBASE` | four two-bit multicolour pixels per byte; `row * 320 + cell * 8 + subRow` |
-   | `m_spaceCells` | 0x400 | `SCBASE+0x2000` | space view cell colours: high nibble for `%01`, low for `%10` |
-   | `m_textCells` | 0x400 | `SCBASE+0x2400` | the same for the text view; the game switches between the two |
-   | `m_colourCells` | 1000 | colour RAM | the colour for `%11`, one nibble per cell |
+   | `m_bitmap` | 0x2000 | `SCBASE` | eight one-bit pixels per byte on the game screen, four two-bit ones on the dashboard; `row * 320 + cell * 8 + subRow` |
+   | `SCREEN_CELLS` | 0x400 | `SCBASE+0x2000` | the whole screen's cell colours: high nibble for a set bit (`%01`), low for a clear one (`%10`) |
+   | `DASHBOARD_CELLS` | 0x400 | `SCBASE+0x2400` | the same, read only for the dashboard rows and only while it is shown |
+   | `m_colourCells` | 1000 | colour RAM | the colour for `%11`, one nibble per cell — multicolour only, so dashboard only |
 
-   plus one background index for `%00`. About 11 KB in total.
+   plus one background index for `%00`, and one flag for whether the dashboard is on screen,
+   which is the single thing that selects the mode and the block together. About 11 KB in total.
 
    - **Drawing is byte-wise exclusive-or into `m_bitmap`**, at the addresses the original
      computes. `ylookup` and `celllook` are ported as the tables they are.
    - **Cell colour is mutable state, not a palette.** The game writes it (`RED2`, `GREEN2`,
      `YELLOW2`, `BLACK2` for the missile indicators, `MAG2` for the text view) and EORs it
      (`BULBCOL`, to toggle the E.C.M. and station bulbs). It cannot be a constant table.
-   - **`Canvas::Resolve()` produces the 320×200 indexed image** ADR-005 §1 uploads: each
-     multicolour pixel doubled horizontally, its two bits selecting background, the cell's two
-     nibbles, or colour RAM. **ADR-005 is unaffected** — the seam is unchanged and the resolve
-     simply lives inside `Canvas`.
+   - **`Canvas::Resolve()` produces the 320×200 indexed image** ADR-005 §1 uploads, decoding
+     each half of the split screen in its own mode: on the game screen one bit is one pixel and
+     takes the cell's high or low nibble; on the dashboard each two bits are one pixel doubled
+     horizontally, selecting background, either nibble, or colour RAM. **ADR-005 is unaffected**
+     — the seam is unchanged and the resolve simply lives inside `Canvas`.
    - **The logical coordinate space is unchanged**: the space view is x ∈ [0,255] over
      y ∈ [0,143], centred on `X = 128`, `Y = 72`, and all line and circle arithmetic runs in it
-     with the original's algorithms (`LOIN`'s seven variants, `CIRCLE2`'s step table). Two
-     x-units share one multicolour pixel; the view sits four character cells in from the left,
-     so x 0..255 covers cells 4..35 of 40. Sub-pixel accuracy, anti-aliasing and higher internal
+     with the original's algorithms (`LOIN`'s seven variants, `CIRCLE2`'s step table). One
+     x-unit is one pixel on the game screen and half a doubled pixel on the dashboard; either
+     way the view sits four character cells in from the left, so x 0..255 covers cells 4..35 of
+     40 and spans the same 256 columns of the resolved image. Sub-pixel accuracy, anti-aliasing and higher internal
      resolution stay phase-6 items that would fork the drawing code rather than change it.
 
 5. **Erase-by-XOR is available.** `Canvas` provides XOR plotting, and the line heaps are ported,
@@ -120,6 +139,13 @@ p0 = %01   p1 = %11   p2 = %10   p3 = %00
 
 — and `%11` in the middle is a colour neither call asked for. An index-per-pixel canvas cannot
 produce it.
+
+**Scope, noted 2026-09-04.** This measurement is about MULTICOLOUR pixels, so where it bites is
+the dashboard and the scanner — the only part of the screen in that mode (§4). It is still the
+right conclusion for the whole canvas, and the mode split makes the case rather than weakening
+it: the same bitmap byte is eight pixels in the upper half of the screen and four in the lower,
+so there is no per-pixel colour representation that can even be *decoded* without knowing which
+half a byte belongs to. Keeping the bytes is what makes one canvas serve both.
 
 Two further measurements the same spike took, both of which the port depends on:
 

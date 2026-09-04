@@ -310,8 +310,3 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE, _In_ LPWSTR,
 {
   return Guarded(_instance);
 }
-
-int APIENTRY WinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int)
-{
-  return Guarded(_instance);
-}

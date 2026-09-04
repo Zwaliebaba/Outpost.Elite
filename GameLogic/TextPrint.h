@@ -16,6 +16,14 @@ namespace Elite
  * are character cells, not pixels, and the printer advances them itself, so a caller that prints
  * two characters in a row does not touch them.
  */
+/// 6502: the `&10` RES2 stores in COL2 -- colour 1 (white) for bitmap code %01 and colour 0
+/// (black) for %10. The default text colour of every screen in the game.
+inline constexpr std::uint8_t TEXT_COLOUR_WHITE = 0x10;
+
+/// 6502: MAG2 -- purple for %01, black for %10. GNUM and MT26 switch to it while the player is
+/// typing and back to `TEXT_COLOUR_WHITE` when the line is done.
+inline constexpr std::uint8_t TEXT_COLOUR_PURPLE = 0x40;
+
 struct TextState
 {
   std::uint8_t column = 0; ///< 6502: XC
@@ -25,8 +33,15 @@ struct TextState
   /// to notice the value 255, which means "print nothing at all".
   std::uint8_t caseFlags = 0;
 
-  /// 6502: COL2 -- the cell colour written alongside every glyph. MAG2 (0x40) is purple on
-  /// black, which is what the text view uses.
+  /*
+   * 6502: COL2 -- the palette byte written alongside every glyph.
+   *
+   * ZERO IS BLACK ON BLACK, and that is the shipped value: `COL2` is uninitialised memory, and
+   * what puts `TEXT_COLOUR_WHITE` in it before anything prints is RES2, which the start sequence
+   * reaches twice before the first title screen. So a caller that prints without running RES2
+   * prints invisibly, exactly as the original would -- the default is left at zero rather than
+   * "fixed" here so that a screen compared against the oracle starts from the same byte it does.
+   */
   std::uint8_t cellColour = 0;
 };
 
@@ -86,6 +101,21 @@ void PrintByteValue(TextSink& _sink, std::uint8_t _value, bool _withPoint) noexc
  * either side are left alone. Rows 1 to 23 only; row 0 and the dashboard are not its business.
  */
 void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept;
+
+/*
+ * 6502: TTX66K's BOL3 / BOL4 -- the palette byte behind every character cell.
+ *
+ * THIS IS WHAT MAKES THE PICTURE VISIBLE, and it is separate from `ClearTextArea` for the same
+ * reason it is separate on the hardware: TT66simp zeroes the BITMAP, and the bitmap holds two-bit
+ * codes rather than colours. Code %01 takes the high nibble of the cell's byte in screen RAM and
+ * %10 takes the low nibble, so a screen whose cells are still zero draws black on black no matter
+ * what is in the bitmap -- every glyph, every line, the whole frame.
+ *
+ * `&10` is white for %01 and black for %10, which is the pair TTX66K fills 24 rows of 32 cells
+ * with before it clears anything. CHPR overwrites the cells it prints into with `COL2`, so this
+ * is what colours everything the text printer does NOT touch: the lines, the box, the chart.
+ */
+void ResetCellColours(Canvas& _canvas) noexcept;
 
 /*
  * 6502: TT66, which falls into TTX66 -- the text state a screen change leaves behind.
