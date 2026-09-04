@@ -65,6 +65,21 @@ public:
 
   [[nodiscard]] bool Ready() const noexcept { return m_device != nullptr; }
 
+  /*
+   * Wait for the GPU and release everything, without needing the destructor to run.
+   *
+   * THE SHELL ENDS THE PROCESS WHERE IT STANDS when the window closes (`GameShell::Abandon`, and
+   * `Shell.h` argues for why), so on the ordinary way out of a docked game -- the player clicking
+   * the X while the game is blocked in `TT217` -- no destructor anywhere runs. That is fine for
+   * memory, which the OS reclaims, and not fine for Direct3D: the debug layer reports every
+   * unreleased object at process exit, so quitting printed forty live objects and three live DXGI
+   * ones every time. They were never a leak, but a warning nobody can act on is a warning
+   * everybody learns to skip past, and the next real one goes with it.
+   *
+   * Idempotent, and safe on a presenter that was never created.
+   */
+  void Destroy() noexcept;
+
 private:
   /// Two, which is the minimum a flip-model chain allows and enough for a program that never
   /// runs ahead: one frame is being presented while the next is being built.

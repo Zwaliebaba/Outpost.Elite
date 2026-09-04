@@ -146,7 +146,18 @@ void GameShell::Abandon()
    * The window is gone and the game is somewhere inside a ported routine with no way to be told.
    * Unwinding is not available -- most of `GameLogic` is `noexcept` -- and returning a character
    * would put the caller into a loop that never ends, so the process stops here.
+   *
+   * THE GRAPHICS ARE RELEASED BY HAND FIRST, because ending the process here means no destructor
+   * anywhere runs and `~CanvasPresenter` is one of them. Memory does not care -- the OS takes it
+   * back either way -- but the Direct3D debug layer reports what is still live when the process
+   * dies, so closing the window used to print forty live D3D12 objects and three DXGI ones. None
+   * of them was a leak; they were all still owned, by an object that never got to let go.
+   *
+   * This is the ONLY exit a docked game normally takes. Every screen ends blocked in `TT217`, so
+   * the player clicking the X arrives here rather than at `Run`'s loop condition.
    */
+  m_presenter.Destroy();
+
   ExitProcess(0);
   std::terminate(); // not reached; ExitProcess does not return
 }
