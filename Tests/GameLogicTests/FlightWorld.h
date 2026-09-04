@@ -194,6 +194,9 @@ struct World
   std::uint8_t view = 0;
   std::uint8_t spaceView = 0;
   std::uint8_t explosions = 0;
+
+  /// 6502: QQ14 -- kept only so the fixtures can name it; the byte the port reads is the
+  /// commander block's, because part 15's fuel scooping writes it and a copy would drift.
   std::uint8_t fuel = 0;
 
   World() { printer.SetCursor(&text); }
@@ -204,7 +207,7 @@ struct World
                                 bubble, work,  screen,    text,     characters.state,
                                 printer, characters, message, flight, status, compass, rng,
                                 commander, trumbles, sight, effects,
-                                view, spaceView, explosions, fuel };
+                                view, spaceView, explosions };
   }
 };
 
@@ -455,7 +458,7 @@ inline void Mirror(const World& _world, Cpu6502& _cpu, const Where& _at)
   _cpu.memory[_at.altit] = _world.status.altitude;
   _cpu.memory[_at.flh] = _world.status.damageFlash;
   _cpu.memory[_at.ecma] = _world.status.ecmCountdown;
-  _cpu.memory[_at.qq14] = _world.fuel;
+  // `QQ14` came over with the whole commander block above; `Seed` keeps `World::fuel` equal to it.
 }
 
 /// Compare every byte of state the screen routines can touch.

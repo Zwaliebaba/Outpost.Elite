@@ -320,7 +320,8 @@ void SetUpScreen(FlightScreen& _screen, std::uint8_t _view) noexcept
   _screen.text.row = 1u;    // 6502: STA YC
 
   SetUpScreenPixels(_screen.canvas, _screen.draw, _screen.math, _screen.geometry, _screen.text,
-                    _screen.screen, _screen.bubble, _screen.flight, _screen.status, _screen.fuel,
+                    _screen.screen, _screen.bubble, _screen.flight, _screen.status,
+                    _screen.commander.At(Field::Fuel),
                     _screen.compass, _screen.sight, _screen.view); // 6502: JSR TTX66K
 
   // 6502: LDX QQ22+1 / BEQ OLDBOX / JSR ee3 -- the hyperspace countdown outlives a screen change

@@ -1521,7 +1521,6 @@ LoopOutcome EndFlightFrame(FlightLoop& _loop) noexcept
       const AddResult tank = AddWithCarry(scooped.value, commander.At(Field::Fuel), scooped.carry);
 
       commander.At(Field::Fuel) = (tank.value < FUEL_MAXIMUM) ? tank.value : FUEL_MAXIMUM;
-      screen.fuel = commander.At(Field::Fuel);
 
       ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message,
                   MESSAGE_SCOOPS_ON, screen.view);
