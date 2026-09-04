@@ -94,6 +94,23 @@ void DrawColourBands(Canvas& _canvas) noexcept
   DrawColourBand(_canvas, 37u * 8u);   // 6502: SCBASE+37*8, and it FALLS INTO BLUEBANDS
 }
 
+void DrawBorder(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _rows) noexcept
+{
+  _draw.t2 = _rows; // 6502: STX T2
+
+  // 6502: LDY #LO(SCBASE+3*8) / STY SC / LDY #HI(SCBASE+3*8) / LDA #%00000011 / JSR BOXS2.
+  ToggleVerticalEdge(_canvas, 3u * 8u, 0x03u, _rows);
+
+  // 6502: the same again at cell 36 with the opposite two pixels, and the count comes back out
+  // of `T2` rather than out of X -- `BOXS2` leaves X at zero.
+  ToggleVerticalEdge(_canvas, 36u * 8u, 0xC0u, _draw.t2);
+
+  // 6502: LDA #1 / STA SCBASE+&118 -- one byte, in cell 35 of the top character row.
+  _canvas.Write(0x118u, 1u);
+
+  DrawScreenRule(_canvas, _draw, 0u); // 6502: LDX #0, and it falls into BOXS
+}
+
 void ForgetScannerBlips(Bubble& _bubble) noexcept
 {
   // 6502: LDX #0 / .zonkL LDA FRIN,X / BEQ zonk1 -- it stops at the first empty slot, which is

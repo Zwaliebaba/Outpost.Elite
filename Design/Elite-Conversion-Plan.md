@@ -428,6 +428,39 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.79 An instruction spelled as data, again, and this time it is a screen height
+
+`BOX2` draws the border. It opens:
+
+```
+.BOX2
+ LDX #18
+ STX T2
+```
+
+and `TTX66K` reaches it by running off its own end:
+
+```
+ LDX #25
+ EQUB &2C
+```
+
+`&2C` is `BIT abs`, and its two operand bytes are the `A2 12` of `LDX #18`. So a `JSR BOX2` loads
+18 and a fall-through keeps 25 — **and the difference is the height of the screen**: a text screen
+is 25 character rows and the space view, with the dashboard under it, is 18. Seven rows of border,
+decided by whether control arrived at a label or two bytes past it.
+
+This is the fifth time this port has met the idiom, after `PZW`'s red, `DILX`'s four entry points,
+`MESS`'s swallowed `STA YC` and `LASLI`'s. §6.63 named the shape and §6.74 named what the shapes
+have in common. What is new here is the SIZE of what the byte decides: the previous four hid a
+load or a store, and this one hides the difference between two screen layouts.
+
+The port takes the count as an argument, the way `DrawBar` takes `DILX`'s shift count, and the
+comparison calls the routine at both entries — at its label, and at `BOX2 + 2`, which is exactly
+where the swallowed instruction ends. A port that had taken 18 from a constant would have agreed
+with the game on the space view and drawn seven rows too few on every text screen, which is the
+kind of divergence that looks like a rendering bug for a week.
+
 ### 6.78 The §6.12 pass on slice 3d-d-iii-a, and a binary the oracle does not load
 
 `LOOK1`, `WARP` and the `TT66` chain §6.77 moved out of 3d-d-ii. **252 instructions, 23 external

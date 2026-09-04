@@ -81,6 +81,27 @@ void DrawColourBand(Canvas& _canvas, std::uint16_t _cell) noexcept;
 void DrawColourBands(Canvas& _canvas) noexcept;
 
 /*
+ * 6502: BOX2 -- the border: two vertical edges, a byte in the top right, and a rule across row 0.
+ *
+ * `_rows` IS SPELLED AS AN ASSEMBLER DIRECTIVE. The routine opens `LDX #18 / STX T2`, and
+ * `TTX66K` reaches it by falling off its own end through `LDX #25 / EQUB &2C` -- the `&2C` is
+ * `BIT abs`, whose two operand bytes ARE the `LDX #18`, so the fall-through keeps 25 and a `JSR
+ * BOX2` gets 18. A text screen is 25 character rows tall and the space view is 18, and that
+ * whole distinction is one byte of data standing in for an instruction (§6.79).
+ *
+ * `T2` carries the count from the first edge to the second, which is why the port writes it
+ * rather than using `_rows` twice: they are the same number and the original reads them from
+ * different places.
+ */
+void DrawBorder(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _rows) noexcept;
+
+/// 6502: LDX #18 -- what a `JSR BOX2` gets, which is the space view's height in character rows.
+inline constexpr std::uint8_t BORDER_ROWS_SPACE_VIEW = 18;
+
+/// 6502: LDX #25 -- what falling through from `TTX66K` keeps, which is the whole screen.
+inline constexpr std::uint8_t BORDER_ROWS_TEXT_SCREEN = 25;
+
+/*
  * 6502: zonkscanners -- clear bit 4 of byte 31 in every ship in the bubble.
  *
  * Bit 4 is "this ship is on the scanner", so this is the bookkeeping half of wiping the scanner:
