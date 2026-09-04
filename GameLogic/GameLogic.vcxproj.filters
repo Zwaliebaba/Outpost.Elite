@@ -159,6 +159,9 @@
     <ClCompile Include="EquipmentTable.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
+    <ClCompile Include="KeyTable.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
     <ClCompile Include="Rng.cpp">
       <Filter>Kernel</Filter>
     </ClCompile>

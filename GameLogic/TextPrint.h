@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Canvas.h"
+#include "ExtendedTokens.h"
 #include "Tokens.h"
 
 #include <cstdint>
@@ -85,6 +86,43 @@ void PrintByteValue(TextSink& _sink, std::uint8_t _value, bool _withPoint) noexc
  * either side are left alone. Rows 1 to 23 only; row 0 and the dashboard are not its business.
  */
 void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept;
+
+/*
+ * 6502: TT66, which falls into TTX66 -- the text state a screen change leaves behind.
+ *
+ * ONLY the text state. The rest of TTX66 is the ball line heap, the laser, the message delay and
+ * `TTX66K` -- the dashboard, the sprites, the border box and the colour bands -- all of which is
+ * flight state and phase 3's. So this is the half of the routine that GameLogic owns, and the
+ * seam a screen is entered through (`TradeScreenEffects::ClearToView`) is this plus that.
+ *
+ * QQ17 IS WRITTEN TWICE AND THE SECOND ONE WINS. Near the top the routine does `LDA #128 / STA
+ * QQ17 / STA DTW2`, and its LAST five bytes are `LDX #1 / STX XC / STX YC / DEX / STX QQ17` -- so
+ * the state a caller sees is QQ17 = 0, ALL CAPS, while DTW2 keeps the 128. Reading the first
+ * store and stopping there is an easy mistake to make and this port nearly made it: the upstream
+ * source packs the routine across three numbered lines and the tail is on the third.
+ * `TheScreenSeamsMatchTheShippedRoutines` runs the shipped TT66 and compares every byte of text
+ * state against this, which is the only reason the question is settled rather than argued.
+ */
+void SetUpTextScreen(TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended) noexcept;
+
+/*
+ * 6502: CLYNS, which falls into CLYNS2 -- clear the bottom three text rows.
+ *
+ * The three rows are 21, 22 and 23, and the routine reaches them by address rather than through
+ * `ylookup`: `SCBASE + &1A60` is character row 21 at the four-cell left margin, and `&140` is one
+ * character row. So it clears the same 32 cells `ClearTextArea` does, three rows of them, and
+ * leaves the cursor at column 1 of row 21 ready for the message that follows.
+ *
+ * DTW2 goes to 255 here and to 128 in TTX66 above, which is not a typo in either: 255 tells the
+ * extended printer that no sentence is in progress, and the message CLYNS is clearing for starts
+ * one. DLY and `de` are the message-delay counters and are flight state, so they are not here.
+ */
+void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text,
+                      ExtendedTextState& _extended) noexcept;
+
+/// 6502: LDA #21 / STA YC -- the row CLYNS leaves the cursor on, which is the top of the three it
+/// cleared and where every in-flight message and every "PRESS SPACE" prompt begins.
+inline constexpr std::uint8_t MESSAGE_ROW = 21;
 
 /*
  * 6502: TT26 / CHPR -- print one character at the cursor and advance it.

@@ -10,6 +10,9 @@ namespace Elite
 
 namespace
 {
+/// 6502: the 128 that TTX66 and CLYNS both store into QQ17 -- bit 7, "sentence case".
+constexpr std::uint8_t SENTENCE_CASE = 0x80;
+
 /// 6502: the font pointer CHPR builds -- 0x0A00 + (character << 3), assembled from the two high
 /// bits of the character and a shifted low byte. For a printable character that lands on
 /// FONT + (character - 32) * 8, which is where FONT_DATA starts.
@@ -232,6 +235,60 @@ void ClearTextArea(Canvas& _canvas, TextState& _state) noexcept
   // 6502: INY / STY XC / STY YC -- Y reached zero on the way out, so this is (1, 1).
   _state.column = 1;
   _state.row = 1;
+}
+
+void SetUpTextScreen(TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended) noexcept
+{
+  // 6502: JSR MT2 -- LDA #32 / STA DTW1 / LDA #0 / STA DTW6. Sentence case for the extended
+  // printer: bit 5 is what lowers a letter, and DTW6 is the override that forces it always.
+  _extended.lowerCaseBits = 32;
+  _extended.alwaysLower = 0;
+
+  // 6502: LDA #128 / STA QQ17 / STA DTW2 -- and only DTW2 keeps it. See the header: the routine's
+  // last five bytes put QQ17 back to zero.
+  _extended.sentenceStart = SENTENCE_CASE;
+
+  /*
+   * 6502: LDX #1 / STX XC / STX YC / DEX / STX QQ17.
+   *
+   * QQ17 IS ASSIGNED TWICE HERE because the port keeps one 6502 byte in two places: the token
+   * printer owns it, and `TextState` carries a copy that CHPR reads for the single value 255
+   * ("print nothing"). Every routine that assigns QQ17 has to assign both or they drift, and this
+   * is the first caller outside the token printer that holds both. Section 6.28 of the plan
+   * records why that duplication is worth removing and why doing it here would be the wrong slice.
+   */
+  _printer.SetCaseFlags(0);
+  _text.caseFlags = 0;
+
+  _text.column = 1;
+  _text.row = 1;
+}
+
+void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text,
+                      ExtendedTextState& _extended) noexcept
+{
+  // 6502: CLYNS2 -- LDA #255 / STA DTW2 / LDA #128 / STA QQ17 / LDA #21 / STA YC / LDA #1 / STA XC.
+  _extended.sentenceStart = 0xFF;
+  _printer.SetCaseFlags(SENTENCE_CASE);
+  _text.caseFlags = SENTENCE_CASE;
+  _text.row = MESSAGE_ROW;
+  _text.column = 1;
+
+  /*
+   * 6502: CLYLOOP2 / CLYLOOP. Three passes, each 256 bytes, starting at SCBASE + &1A60 and
+   * stepping &140 -- and the inner loop is the same store-then-count-down that ClearTextArea
+   * uses, so offset 0 is written first and then 255 down to 1.
+   */
+  std::uint16_t base = Canvas::RowOffset(MESSAGE_ROW * 8);
+  for (int pass = 0; pass < 3; ++pass)
+  {
+    _canvas.Write(base, 0);
+    for (std::uint16_t offset = 255; offset >= 1; --offset)
+    {
+      _canvas.Write(static_cast<std::uint16_t>(base + offset), 0);
+    }
+    base = static_cast<std::uint16_t>(base + Canvas::ROW_BYTES);
+  }
 }
 
 std::uint8_t TextPrinter::Print(std::uint8_t _character) noexcept

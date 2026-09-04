@@ -428,6 +428,61 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.29 The routine did not end where the line did
+
+`TT66` sets the text state every docked screen is entered with, so the shell had to answer it and
+`GameLogic` had to have it. The upstream source is a BBC BASIC assembler listing with several
+instructions per numbered line, and line 9400 is the whole of `TT66` up to its last `JSR`:
+
+```
+.TT66 STAQQ11:.TTX66 JSRMT2: ... :LDA#128:STAQQ17:STADTW2: ... :LDA#1:STAXC:STAYC:JSRTTX66K
+```
+
+Read that and stop, and the answer is obvious: `QQ17 = 128`, sentence case. It is also wrong. The
+routine continues across lines 9410 and 9420, and its last five bytes are `LDX #1 / STX XC / STX
+YC / DEX / STX QQ17` -- so `QQ17` goes back to **zero**, ALL CAPS, and only `DTW2` keeps the 128.
+
+What makes this worth writing down is not the mistake but how close it came to being committed
+with a confident comment attached. The draft had a paragraph explaining that an existing comment
+in `MarketScreen.h` -- which said all caps, and was right -- had quoted the *cassette* build and
+that this build differed. It was a plausible story, it fitted the evidence available, and it was
+entirely invented. §6.20 already says a hand-built oracle can share the port's misreading; this is
+the same failure without the oracle: **a misreading plus a justification is harder to spot than a
+misreading alone**, because the justification is what a reviewer reads instead of the source.
+
+The rule that caught it is §6.20's, applied without exception: where a routine can be run, run it.
+`TT66` can -- `TTX66K` and `FLFLLS` are the only things in it that need a VIC-II, and neither
+touches a byte of text state -- so `TheScreenSeamsMatchTheShippedRoutines` traps those two, calls
+the shipped routine, and compares `XC`, `YC`, `QQ17`, `DTW1`, `DTW2` and `DTW6` against the port.
+It cost about what reading the routine a second time would have cost, and unlike reading it a
+second time it could not have agreed with the first reading.
+
+There is a smaller finding underneath it, which is why the seam was worth testing at all. The
+per-screen oracle tests set this state up **on both sides**, so a seam that got it wrong would
+agree with the game on every screen in the suite and still print every one of them in the wrong
+case. The session harness of §6.27 set `XC`, `YC` and `QQ17` from a comment and did not set `DTW1`,
+`DTW2` or `DTW6` at all. Neither was a test failure waiting to happen; both were tests that could
+not fail.
+
+### 6.28 One 6502 byte, two C++ variables
+
+`QQ17` is the capitalisation state, and the port keeps it in two places: `TokenPrinter::m_caseFlags`,
+which is the live one every printing path reads and writes, and `TextState::caseFlags`, which
+`CHPR` reads for the single value 255 ("print nothing at all"). They are one byte in the game.
+
+Nothing has gone wrong yet, because until slice 2e every caller that assigned `QQ17` was inside
+the token printer and only touched its own copy. `SetUpTextScreen` is the first routine outside it
+that holds both, and it has to assign both -- which is a rule a reader has to know rather than one
+the types enforce, and exactly the kind of rule that is obeyed until it is not.
+
+The fix is to give `TokenPrinter` a reference to the `TextState` it already has a pointer to and
+delete the duplicate, which is a change to the token printer, the character printer, every screen
+that constructs one and about a dozen tests. That is a refactor with no behavioural content, and
+doing it inside a slice whose subject is the window would mean a diff where the risky part is
+invisible among the mechanical part. It is written down here instead, with the note that the
+duplication is REAL and not a false alarm: two variables holding one byte, kept in step by
+convention.
+
 ### 6.27 What a null presenter can and cannot verify
 
 Slice 2e's acceptance criterion was split on 2026-09-03: a replay through a null presenter, which

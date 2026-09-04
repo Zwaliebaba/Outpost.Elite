@@ -138,9 +138,13 @@
     </ClCompile>
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="SaveStore.cpp" />
+    <ClCompile Include="Presentation.cpp" />
+    <ClCompile Include="KeyMap.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SaveStore.h" />
+    <ClInclude Include="Presentation.h" />
+    <ClInclude Include="KeyMap.h" />
   </ItemGroup>
   <!--
     SaveStore implements Elite::CommanderStore, so the executable needs GameLogic. This is the

@@ -80,19 +80,18 @@ class NullShell final : public Elite::TradeScreenEffects,
 {
 public:
   // 6502: TRADEMODE, CLYNS, TT66, msblob and dn2.
+  /*
+   * 6502: TRADEMODE -- TT66, a keyboard flush and a palette write.
+   *
+   * The text state is `SetUpTextScreen`, which is TT66's own and is compared against the shipped
+   * routine by `TheScreenSeamsMatchTheShippedRoutines`. It used to be four lines written here
+   * from a comment, and they were nearly right: XC, YC and QQ17 were correct and DTW1, DTW2 and
+   * DTW6 were not set at all, which no assertion in this file could have noticed.
+   */
   void SetUpTradeScreen(std::uint8_t _view) override
   {
-    view = _view;
-    // 6502: TTX66's tail -- LDX #1 / STX XC / STX YC / DEX / STX QQ17.
-    if (cursor != nullptr)
-    {
-      cursor->column = 1;
-      cursor->row = 1;
-    }
-    if (printer != nullptr)
-    {
-      printer->SetCaseFlags(0);
-    }
+    ClearToView(_view);
+    FlushKeyboard();
     Note("view " + std::to_string(_view));
   }
   void ClearBottomRows() override { Note("clyns"); }
@@ -100,6 +99,10 @@ public:
   void ClearToView(std::uint8_t _view) override
   {
     view = _view;
+    if (cursor != nullptr && printer != nullptr && extended != nullptr)
+    {
+      Elite::SetUpTextScreen(*printer, *cursor, *extended);
+    }
     Note("clear " + std::to_string(_view));
   }
   void ResetMissileIndicators() override { Note("missiles"); }
@@ -126,6 +129,7 @@ public:
 
   Elite::TextState* cursor = nullptr;
   Elite::TokenPrinter* printer = nullptr;
+  Elite::ExtendedTextState* extended = nullptr;
   std::uint8_t view = 0;
   std::uint8_t titleAnswer = 'N';
   std::vector<std::string> log;
@@ -242,6 +246,7 @@ struct Session
     recursive.SetCursor(&text);
     shell.cursor = &text;
     shell.printer = &recursive;
+    shell.extended = &characters.state;
     characters.state.sentenceStart = 0xFF;
   }
 
