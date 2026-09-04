@@ -273,6 +273,16 @@ namespace Elite
     std::uint8_t& view;       ///< 6502: QQ11 -- which screen is up
     std::uint8_t& spaceView;  ///< 6502: VIEW -- which way the player is looking, 0 to 3
     std::uint8_t& explosions; ///< 6502: EV
+
+    /*
+     * 6502: tek -- the current system's tech level, which the flight loop READS.
+     *
+     * Here because part 14 spawns the station and `NWSPS` picks a Coriolis or a Dodo by this byte.
+     * It belongs to the docked half -- `CurrentSystem` carries it and arriving writes it -- so this
+     * is a reference to that byte and not a second copy of it, the same arrangement as `QQ11` and
+     * the commander block.
+     */
+    std::uint8_t& techLevel;
   };
 
   /*

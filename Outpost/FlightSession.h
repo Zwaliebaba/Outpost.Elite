@@ -46,10 +46,9 @@ namespace Outpost
    * WHAT IS HONESTLY MISSING, said here rather than left to be found while flying.
    *
    *   - `TACTICS` and `DOCKIT` are phase 4, so nothing in the bubble fights or flies itself.
-   *   - `NWSPS`, `FRS1`, `SFS1` and `ANGRY` are phase 4, so the station is not put back when you
-   *     launch, a fired missile never appears, and a dying ship drops no wreckage. That also means
-   *     `LoopOutcome::Docked` cannot occur: part 9's docking check needs `SSPR`, and only `NWSPS`
-   *     sets it.
+   *   - `FRS1`, `SFS1` and `ANGRY` are phase 4, so a fired missile never appears and a dying ship
+   *     drops no wreckage. `NWSPS` is NOT among them any more: the station is put back on a launch
+   *     and near the planet, so `SSPR` is set and `LoopOutcome::Docked` is reachable.
    *   - `DOEXP` is phase 4, so a ship that explodes vanishes instead.
    *   - `MVTRIBS` and the whole SID are phase 5, so a flight is silent.
    *   - The laser sights and the Trumbles are VIC-II SPRITES, and the presenter resolves the
@@ -70,7 +69,7 @@ namespace Outpost
   public:
     FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
                   Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::CommanderBlock& _commander, Elite::Rng& _rng,
-                  Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions) noexcept;
+                  Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions, std::uint8_t& _techLevel) noexcept;
 
     FlightSession(const FlightSession&) = delete;
     FlightSession& operator=(const FlightSession&) = delete;
@@ -113,7 +112,6 @@ namespace Outpost
     void StopDockingMusic() override;
     [[nodiscard]] bool SpawnAhead(std::uint8_t _type) override;
     void Anger(std::uint8_t _type) override;
-    void SpawnStation() override;
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override;
 
     // ---- Elite::ShipEffects and Elite::ShipDrawEffects ------------------------------------------

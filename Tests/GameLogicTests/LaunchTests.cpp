@@ -233,7 +233,6 @@ namespace GameLogicTests
     {
       std::vector<std::uint8_t> sounds;
       std::uint32_t musicStops = 0;
-      std::uint32_t stationSpawns = 0;
 
       bool PlaySound(std::uint8_t _effect) override
       {
@@ -257,10 +256,6 @@ namespace GameLogicTests
         return true;
       }
       void Anger(std::uint8_t) override {}
-      void SpawnStation() override
-      {
-        ++stationSpawns;
-      }
       bool SpawnChild(std::uint8_t, std::uint8_t) override
       {
         return true;
@@ -297,7 +292,7 @@ namespace GameLogicTests
     {
       std::uint16_t nostm, lsx2, lsy2, mstg, jstx, jsty, alp2Next, bet2, bet2Next;
       std::uint16_t col2, dontclip, yx2m1, slsp, bomb, qq12, qq22, hfx, autoByte;
-      std::uint16_t inwk, fist, tek, stp, res2, reset, tt110, laun, nwsps, stopbd, noise;
+      std::uint16_t inwk, fist, stp, res2, reset, tt110, laun, stopbd, noise;
 
       explicit LaunchWhere(const OracleImage& _oracle)
       {
@@ -321,13 +316,11 @@ namespace GameLogicTests
         autoByte = _oracle.Label("auto");
         inwk = _oracle.Label("INWK");
         fist = _oracle.Label("FIST");
-        tek = _oracle.Label("tek");
         stp = _oracle.Label("STP");
         res2 = _oracle.Label("RES2");
         reset = _oracle.Label("RESET");
         tt110 = _oracle.Label("TT110");
         laun = _oracle.Label("LAUN");
-        nwsps = _oracle.Label("NWSPS");
         stopbd = _oracle.Label("stopbd");
         noise = _oracle.Label("NOISE");
       }
@@ -366,8 +359,7 @@ namespace GameLogicTests
     }
 
     /// Send everything `Mirror` does not, and everything the launch reads.
-    void MirrorLeaving(const Leaving& _leaving, Cpu6502& _cpu, const Where& _at, const LaunchWhere& _to, std::uint8_t _docked,
-                       std::uint8_t _techLevel)
+    void MirrorLeaving(const Leaving& _leaving, Cpu6502& _cpu, const Where& _at, const LaunchWhere& _to, std::uint8_t _docked)
     {
       const World& world = _leaving.world;
 
@@ -385,7 +377,6 @@ namespace GameLogicTests
       _cpu.memory[_to.qq22] = world.status.hyperspaceCounter;
       _cpu.memory[_to.hfx] = world.screen.hyperspaceEffect;
       _cpu.memory[_to.qq12] = _docked;
-      _cpu.memory[_to.tek] = _techLevel;
 
       /*
        * 6502: STP -- and `TT110` does not set it either (§6.94, §6.95).
@@ -493,7 +484,7 @@ namespace GameLogicTests
         cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
         FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
         Mirror(leaving.world, cpu, at);
-        MirrorLeaving(leaving, cpu, at, to, 0xFFu, 7u);
+        MirrorLeaving(leaving, cpu, at, to, 0xFFu);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.res2, 2'000'000);
         Assert::IsTrue(run.completed, L"RES2 returned");
@@ -552,7 +543,7 @@ namespace GameLogicTests
         cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
         FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
         Mirror(leaving.world, cpu, at);
-        MirrorLeaving(leaving, cpu, at, to, 0u, 7u);
+        MirrorLeaving(leaving, cpu, at, to, 0u);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.reset, 2'000'000);
         Assert::IsTrue(run.completed, L"RESET returned");
@@ -605,12 +596,18 @@ namespace GameLogicTests
 
       for (const std::uint8_t docked : {std::uint8_t{0}, std::uint8_t{0xFF}})
       {
-        for (const std::uint8_t techLevel : {std::uint8_t{0}, std::uint8_t{2}, std::uint8_t{7}})
+        /*
+         * 6502: tek -- and TEN is in the sweep on purpose, because `NWSPS` picks a Dodo at ten and
+         * above. Without it the station's blueprint entry would be the Coriolis in every case and
+         * the branch that overwrites it would never run (§6.94's lesson, applied to a comparison).
+         */
+        for (const std::uint8_t techLevel : {std::uint8_t{0}, std::uint8_t{2}, std::uint8_t{7}, std::uint8_t{10}, std::uint8_t{14}})
         {
           for (const std::uint8_t contraband : {std::uint8_t{0}, std::uint8_t{5}})
           {
             Leaving leaving;
             Occupy(leaving, docked + techLevel * 7u + contraband);
+            leaving.world.techLevel = techLevel; // 6502: tek, which `Mirror` sends to the oracle
 
             const std::size_t hold = static_cast<std::size_t>(Elite::Field::CargoHold);
             leaving.world.commander.bytes[hold + 3u] = contraband;
@@ -623,12 +620,11 @@ namespace GameLogicTests
             cpu.AddTrap(to.stopbd);
             cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
             cpu.AddTrap(to.laun);
-            cpu.AddTrap(to.nwsps);
             cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
             FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
             Mirror(leaving.world, cpu, at);
-            MirrorLeaving(leaving, cpu, at, to, docked, techLevel);
+            MirrorLeaving(leaving, cpu, at, to, docked);
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(to.tt110, 8'000'000);
             Assert::IsTrue(run.completed, L"TT110 returned");
@@ -650,15 +646,12 @@ namespace GameLogicTests
             CompareLeaving(cpu, leaving, to, flag, where);
 
             std::uint32_t tunnels = 0;
-            std::uint32_t stations = 0;
             for (const Cpu6502::TrapHit& hit : cpu.trapHits)
             {
               tunnels += (hit.address == to.laun) ? 1u : 0u;
-              stations += (hit.address == to.nwsps) ? 1u : 0u;
             }
 
             Assert::AreEqual(tunnels, leaving.start.tunnels, (where + L": LAUN").c_str());
-            Assert::AreEqual(stations, leaving.effects.stationSpawns, (where + L": NWSPS").c_str());
             Assert::AreEqual<std::uint8_t>(0u, flag, (where + L": QQ12 is cleared on both paths").c_str());
 
             launched += (docked != 0u) ? 1u : 0u;

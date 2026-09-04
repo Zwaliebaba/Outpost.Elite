@@ -586,7 +586,6 @@ namespace Elite
     return LoopOutcome::Continued;
   }
 
-
   namespace
   {
     /// 6502: INWK's bytes parts 4 to 12 name by number.
@@ -822,7 +821,7 @@ namespace Elite
       const bool isBody = (type & 0x80u) != 0u;
       if (!isBody)
       {
-        screen.flight.blueprint = BlueprintAddress(type);
+        screen.flight.blueprint = BlueprintFor(screen.bubble, type);
 
         /*
          * 6502: part 5 -- LDA BOMB / BPL MA21 and four tests under it.
@@ -1164,7 +1163,7 @@ namespace Elite
          * what processes it. A port that wrote a `for` over the slots would skip a ship for every
          * one killed.
          */
-        KillShip(screen.bubble, _loop.heap, screen.heaps, screen.work, commander, spawning, slot);
+        KillShip(screen.bubble, _loop.heap, screen.heaps, screen.work, commander, spawning, slot, screen.flight.blueprint);
       }
       else
       {
@@ -1319,7 +1318,11 @@ namespace Elite
         if (ahead && WithinRange(screen.work, STATION_SPAWN_RANGE))
         {
           EraseSun(screen.canvas, screen.heaps, screen.math, screen.draw); // 6502: JSR WPLS
-          _loop.effects.SpawnStation();                                    // 6502: JSR NWSPS
+
+          // 6502: JSR NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties
+          // the sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
+          LoopSpawnEffects spawning(_loop);
+          (void)AddStation(screen.bubble, screen.work, spawning, screen.techLevel, screen.flight.blueprint);
         }
       }
 

@@ -217,6 +217,7 @@ namespace GameLogicTests
     std::uint8_t view = 0;
     std::uint8_t spaceView = 0;
     std::uint8_t explosions = 0;
+    std::uint8_t techLevel = 0; ///< 6502: tek -- part 14's station reads it
 
     /// 6502: QQ14 -- kept only so the fixtures can name it; the byte the port reads is the
     /// commander block's, because part 15's fuel scooping writes it and a copy would drift.
@@ -230,8 +231,8 @@ namespace GameLogicTests
     [[nodiscard]] Elite::FlightScreen Screen() noexcept
     {
       return Elite::FlightScreen{
-        canvas,  draw,   math,   geometry, dust, heaps,     bubble,   work,  screen,  text, characters.state, printer,   characters,
-        message, flight, status, compass,  rng,  commander, trumbles, sight, effects, view, spaceView,        explosions};
+        canvas,  draw,   math,   geometry, dust, heaps,     bubble,   work,  screen,  text, characters.state, printer,    characters,
+        message, flight, status, compass,  rng,  commander, trumbles, sight, effects, view, spaceView,        explosions, techLevel};
     }
   };
 
@@ -252,6 +253,17 @@ namespace GameLogicTests
     }
     _world.bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
     _world.bubble.junk = 1u;
+
+    /*
+     * 6502: XX21+2*SST-2 -- the pointer table's station entry, which the game has held since boot.
+     *
+     * Zero is not a value the machine can have here (§6.95's rule, second byte): `NWSHP` refuses a
+     * type whose entry is zero, so an unseeded bubble would silently stop creating stations. The
+     * Coriolis is what `BEGIN` leaves and what every system below tech level ten keeps.
+     */
+    _world.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+
+    _world.techLevel = 7u; // 6502: tek -- below the Dodo's threshold, so the seeded state is stable
 
     for (std::size_t slot = 0; slot < _world.bubble.blocks.size(); ++slot)
     {
@@ -343,6 +355,7 @@ namespace GameLogicTests
     std::uint16_t delta, alp1, alp2, beta, bet1, energy, fsh, ash, qq14, xx0;
     std::uint16_t cabtmp, gntmp, altit, mcnt, flh, ecma, laser, tribble, tribct;
     std::uint16_t tp, mch, messxc, screen;
+    std::uint16_t tek, xx21Station, spasto; ///< 6502: tek, XX21+2*SST-2, and BEGIN's saved copy of it
 
     explicit Where(const OracleImage& _oracle)
     {
@@ -410,6 +423,17 @@ namespace GameLogicTests
       tp = _oracle.Label("TP");
       mch = _oracle.Label("MCH");
       messxc = _oracle.Label("messXC");
+      tek = _oracle.Label("tek");
+
+      /*
+       * 6502: XX21+2*SST-2 -- the only two bytes of the pointer table the game writes.
+       *
+       * Computed from `XX21` and `SST` rather than looked up, because it has no label of its own:
+       * the original addresses it as an expression and so does this.
+       */
+      xx21Station = static_cast<std::uint16_t>(_oracle.Label("XX21") + 2u * Elite::SHIP_TYPE_STATION - 2u);
+      spasto = _oracle.Label("spasto");
+
       screen = ScreenBase(_oracle);
     }
   };
@@ -489,6 +513,29 @@ namespace GameLogicTests
     _cpu.memory[_at.viewByte] = _world.spaceView;
     _cpu.memory[_at.qq11] = _world.view;
 
+    _cpu.memory[_at.tek] = _world.techLevel;
+
+    /*
+     * 6502: BEGIN's `LDA XX21+SST*2-2 / STA spasto`, which the fixture has to do itself.
+     *
+     * `spasto` is `EQUW &8888` in the source and `BEGIN` overwrites it at boot with the Coriolis's
+     * table entry. `BEGIN` is startup code and `OracleImage::Fresh()` does not run it, so the
+     * assembled image still holds the placeholder -- and `NWSPS` copies `spasto` INTO the table, so
+     * a comparison against an image that has not booted spawns a station whose blueprint is &8888.
+     * That is not a state the machine is ever in, which is §6.95's rule reaching a third byte: the
+     * ORACLE has to be put into a state the game could be in, not just the port.
+     *
+     * The port needs no field for it. Nothing writes `spasto` after `BEGIN`, and the port's ship
+     * data region is immutable, so `BlueprintAddress(SHIP_TYPE_STATION)` IS `spasto` for ever.
+     */
+    const std::uint16_t coriolis = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+    _cpu.memory[_at.spasto] = static_cast<std::uint8_t>(coriolis & 0xFFu);
+    _cpu.memory[static_cast<std::uint16_t>(_at.spasto + 1u)] = static_cast<std::uint8_t>(coriolis >> 8);
+
+    // 6502: XX21+2*SST-2 -- RAM, and the port's copy of it is `Bubble::stationBlueprint`.
+    _cpu.memory[_at.xx21Station] = static_cast<std::uint8_t>(_world.bubble.stationBlueprint & 0xFFu);
+    _cpu.memory[static_cast<std::uint16_t>(_at.xx21Station + 1u)] = static_cast<std::uint8_t>(_world.bubble.stationBlueprint >> 8);
+
     _cpu.memory[_at.abraxas] = _world.screen.colourBank;
     _cpu.memory[_at.caravanserai] = _world.screen.bitmapMode;
     _cpu.memory[_at.dflag] = _world.screen.dashboardShown;
@@ -546,6 +593,12 @@ namespace GameLogicTests
     same(_at.comc, _world.compass.colour, L"COMC");
     same(_at.tribct, _world.trumbles, L"TRIBCT");
     same(_at.nostm, _world.dust.count, L"NOSTM");
+    same(_at.tek, _world.techLevel, L"tek");
+
+    // 6502: XX21+2*SST-2 -- the self-modified table entry. It is compared as state rather than
+    // asserted about because `NWSPS` is the only writer, so an unexpected change is a defect.
+    same(_at.xx21Station, static_cast<std::uint8_t>(_world.bubble.stationBlueprint & 0xFFu), L"XX21+2*SST-2");
+    same(static_cast<std::uint16_t>(_at.xx21Station + 1u), static_cast<std::uint8_t>(_world.bubble.stationBlueprint >> 8), L"XX21+2*SST-1");
 
     for (std::size_t index = 0; index < _world.heaps.sun.size(); ++index)
     {
