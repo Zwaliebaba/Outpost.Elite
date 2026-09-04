@@ -53,13 +53,15 @@ public:
   {
   }
 
-  /// The text system the shell drives, wired up by the composition root once it exists.
+  /// The text system the shell drives, wired up by the composition root once it exists. The
+  /// message counters come with it because `CLYNS` clears them (§6.67).
   void Attach(Elite::TokenPrinter& _printer, Elite::TextState& _text,
-              Elite::ExtendedTextState& _extended) noexcept
+              Elite::ExtendedTextState& _extended, Elite::MessageState& _message) noexcept
   {
     m_printer = &_printer;
     m_text = &_text;
     m_extended = &_extended;
+    m_message = &_message;
   }
 
   /*
@@ -141,6 +143,7 @@ private:
   Elite::TokenPrinter* m_printer = nullptr;
   Elite::TextState* m_text = nullptr;
   Elite::ExtendedTextState* m_extended = nullptr;
+  Elite::MessageState* m_message = nullptr;
   Elite::ExtendedTokenPrinter* m_extendedPrinter = nullptr;
 
   std::uint8_t m_view = 0; ///< 6502: QQ11

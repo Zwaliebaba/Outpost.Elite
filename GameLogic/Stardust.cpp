@@ -18,7 +18,10 @@ namespace Elite
 std::uint8_t DivideSpeedBy(MathWorkspace& _math, const FlightState& _flight, std::uint8_t _a) noexcept
 {
   _math.q = _a;
-  return DivideAndScale(_math, _flight.delta);
+
+  // 6502: DVID4's exit carry is the divide's saturation flag and only `SPS2` reads it -- the
+  // stardust follows this with `LSR P`, which makes its own (§6.60).
+  return DivideAndScale(_math, _flight.delta).r;
 }
 
 std::uint8_t DivideSpeedByDistance(MathWorkspace& _math, const FlightState& _flight,

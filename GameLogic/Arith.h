@@ -123,11 +123,23 @@ struct WideResult
 /// 6502: MULT12 -- (S R) = Q * A, sign-magnitude. The result is left in the workspace.
 void MultiplySignedToSR(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
-/// 6502: SQUA2 -- (A P) = A * A for an A already known to be positive.
-[[nodiscard]] std::uint8_t SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
+/*
+ * 6502: SQUA2 -- (A P) = A * A for an A already known to be positive.
+ *
+ * Returns the carry, because `MAS3` reads it: it sums three squares with `JSR SQUA2 / ADC R` and
+ * no `CLC` between them, twice over. The fifteenth dropped flag -- and it is ALWAYS CLEAR, over
+ * every input either entry point can be given, which the exhaustive sweep asserts rather than
+ * argues. `MU1`, taken when A is zero, opens `CLC`; `MU11` ends on a `ROR P` that never carries
+ * out for a square.
+ *
+ * So `MAS3` was already right before this was modelled: an `ADC` cannot see a clear carry, which
+ * is §6.65's question answered the harmless way. `DVID4`'s carry is the same shape (§6.60);
+ * `DIL2`'s is not, because there it lands in an `SBC` (§6.70).
+ */
+[[nodiscard]] WideResult SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
-/// 6502: SQUA -- (A P) = |A| * |A|, clearing the sign bit first.
-[[nodiscard]] std::uint8_t Square(MathWorkspace& _work, std::uint8_t _a) noexcept;
+/// 6502: SQUA -- (A P) = |A| * |A|, clearing the sign bit first. Carries the same flag.
+[[nodiscard]] WideResult Square(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /// What the sign-magnitude addition hands back: the original returns the high byte in A and
 /// the low byte in X, and callers use both.
@@ -249,6 +261,14 @@ struct SignedSum
 [[nodiscard]] WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a,
                                          bool _carryIn) noexcept;
 
+/// What `DVID4` leaves: `R`, and the carry `SPS2` passes on to `SP2` (§6.60). `P` is in the
+/// workspace, as the original leaves it.
+struct ScaledDivision
+{
+  std::uint8_t r = 0;
+  bool carry = false;
+};
+
 /*
  * 6502: DVID4 -- an 8.8 fixed-point divide. P comes out as the whole part of A / Q, and R as
  * the fraction: eight steps of restoring division, then -- because the routine has no RTS of
@@ -256,12 +276,18 @@ struct SignedSum
  *
  * Both halves are the routine. Its two callers in the shipped game JSR to the top and return
  * from the bottom of the code it falls into, so a port that stopped after the division would be
- * a different routine that happens to share a name. Returns R.
+ * a different routine that happens to share a name.
+ *
+ * THE EXIT CARRY IS THE LOGARITHM DIVIDE'S, and only the saturating exit sets it. The eight
+ * division steps cannot leave it set: `ASL A / STA P` puts a zero in P's bit 0, and eight
+ * `ROL P`s later that zero is what comes out -- so the carry at the fall-through is always
+ * clear, and what a caller sees is `LL222` or nothing. `SPS2` hands it to an `ADC #195` and an
+ * `SBC T` with no `CLC` or `SEC` between, which is the thirteenth dropped flag (§6.60).
  *
  * The shipped C64 build unrolls the eight steps rather than looping; that changes nothing about
  * the result, which is why this reads as a loop.
  */
-[[nodiscard]] std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept;
+[[nodiscard]] ScaledDivision DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /*
  * 6502: LL5 -- Q = square root of (R Q), by the schoolbook bitwise method.

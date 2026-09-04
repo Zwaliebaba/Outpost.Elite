@@ -155,7 +155,8 @@ DockingOutcome MissionOnDocking(const CommanderBlock& _commander) noexcept
   return TrumblesOrBay(_commander);
 }
 
-DockingResult DockAtStation(StartUpEffects& _effects, CommanderBlock& _commander, DockedShip& _ship,
+DockingResult DockAtStation(StartUpEffects& _effects, CommanderBlock& _commander,
+                            FlightStatus& _status, FlightState& _flight,
                             std::uint8_t& _dockedFlag, std::uint8_t _view, bool _hyperspaceHeld) noexcept
 {
   // 6502: JSR RES2 -- once here, where the cold start reaches it twice (§6.25).
@@ -171,12 +172,12 @@ DockingResult DockAtStation(StartUpEffects& _effects, CommanderBlock& _commander
    * in the original -- ALPHA, BETA, ALP1 and BET1, the roll and pitch -- and RES2 has already
    * zeroed them, which is presumably why.
    */
-  _ship.speed = 0;
-  _ship.laserTemperature = 0;
-  _ship.hyperspaceCountdown = 0;
-  _ship.forwardShield = 0xFF;
-  _ship.aftShield = 0xFF;
-  _ship.energy = 0xFF;
+  _flight.delta = 0;
+  _status.laserTemperature = 0;
+  _status.hyperspaceCountdown = 0;
+  _status.forwardShield = 0xFF;
+  _status.aftShield = 0xFF;
+  _status.energy = 0xFF;
 
   // 6502: LDY #44 / JSR DELAY.
   _effects.WaitFrames(DOCKING_PAUSE_FRAMES);
@@ -190,7 +191,7 @@ DockingResult DockAtStation(StartUpEffects& _effects, CommanderBlock& _commander
    */
   if (result.outcome == DockingOutcome::DockingBay)
   {
-    result.bay = EnterDockingBay(_dockedFlag, _view, _ship.hyperspaceCountdown, _hyperspaceHeld);
+    result.bay = EnterDockingBay(_dockedFlag, _view, _status.hyperspaceCountdown, _hyperspaceHeld);
   }
 
   return result;

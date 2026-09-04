@@ -308,6 +308,7 @@ public:
     const Scratch zp(oracle);
 
     Cpu6502 cpu = oracle.Fresh();
+    std::uint32_t carries = 0;
 
     for (std::uint32_t value = 0; value < 256; ++value)
     {
@@ -329,13 +330,35 @@ public:
         Assert::IsTrue(run.completed, L"the squaring routine should return");
 
         MathWorkspace work;
-        const std::uint8_t high = variant.clearsSignBit ? Elite::Square(work, static_cast<std::uint8_t>(value))
-                                                        : Elite::SquareUnsigned(work, static_cast<std::uint8_t>(value));
+        const Elite::WideResult squared =
+          variant.clearsSignBit ? Elite::Square(work, static_cast<std::uint8_t>(value))
+                                : Elite::SquareUnsigned(work, static_cast<std::uint8_t>(value));
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", value, 0).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, squared.high, Context(L"high byte", value, 0).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", value, 0).c_str());
+
+        // 6502: the exit carry, which `MAS3` reads in an `ADC` with no `CLC` (§6.70). The sweep
+        // was already exhaustive, so widening the model cost this one line -- §6.42 for the fifth
+        // time.
+        Assert::AreEqual(cpu.c, squared.carry, Context(L"exit carry", value, 0).c_str());
+        carries += squared.carry ? 1u : 0u;
       }
     }
+
+    /*
+     * And it is NEVER SET, over every input either entry point can be given -- which is the half
+     * §6.65 says decides whether a dropped carry matters, and it says this one does not.
+     *
+     * `MAS3` reads it in an `ADC` with no `CLC`, twice over, and an `ADC` cannot see a clear
+     * carry. So the port was already right about `MAS3` before the flag was modelled at all, and
+     * the widening buys the proof rather than a fix. `DVID4`'s carry (§6.60) is the same shape;
+     * `DIL2`'s (§6.65) is not, because there it lands in an `SBC`.
+     *
+     * Asserted as zero rather than left uncounted, because "always clear" is a claim about all
+     * 512 inputs and this is the sweep that can make it.
+     */
+    Assert::AreEqual<std::uint32_t>(0u, carries,
+                                    L"the squaring routine never exits with the carry set");
   }
 };
 
@@ -1024,11 +1047,15 @@ public:
 
         MathWorkspace work;
         work.q = static_cast<std::uint8_t>(q);
-        const std::uint8_t result = Elite::DivideAndScale(work, static_cast<std::uint8_t>(a));
+        const Elite::ScaledDivision result = Elite::DivideAndScale(work, static_cast<std::uint8_t>(a));
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"returned value", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, result.r, Context(L"returned value", a, q).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"quotient", a, q).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.r], work.r, Context(L"R", a, q).c_str());
+
+        // 6502: the exit carry, which `SPS2` hands to `SP2`'s `ADC #195` and `SBC T` (§6.60).
+        // The sweep was already exhaustive, so widening the model cost this one line.
+        Assert::AreEqual(cpu.c, result.carry, Context(L"exit carry", a, q).c_str());
       }
     }
   }

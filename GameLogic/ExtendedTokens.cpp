@@ -33,6 +33,13 @@
 namespace Elite
 {
 
+void StopJustifying(ExtendedTextState& _state) noexcept
+{
+  // 6502: MT15 -- LDA #0 / STA DTW4 / ASL A / STA DTW5.
+  _state.justify = 0;
+  _state.bufferLength = 0;
+}
+
 namespace
 {
 constexpr std::uint8_t FIRST_CHARACTER = 32;
@@ -537,9 +544,9 @@ void ExtendedTokenPrinter::RunControlCode(std::uint8_t _code) noexcept
       return;
 
     case 15:
-      // 6502: MT15 -- stop justifying, and throw away anything buffered.
-      state.justify = 0;
-      state.bufferLength = 0;
+      // 6502: MT15 -- stop justifying, and throw away anything buffered. The same two stores the
+      // free function below makes, because `MESS` reaches them by `JSR` rather than by token.
+      StopJustifying(state);
       return;
 
     case 16:

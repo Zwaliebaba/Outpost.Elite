@@ -224,6 +224,18 @@ struct DrawWorkspace
   std::uint8_t r2 = 0;
 
   /*
+   * 6502: SC(1 0) -- the screen pointer, and it is here because the DASHBOARD keeps it between
+   * calls (slice 3d-b).
+   *
+   * `DIALS` sets it once and then calls `DIL` and `DIL2` seven times; each of them advances it by
+   * one character row on the way out, so where the next dial goes is what the last one left. The
+   * line drawing keeps its own local copy because nothing reads `LOIN`'s, and `CPIX2` returns its
+   * one rather than storing it, because `SCAN` reads it immediately -- but a value seven calls
+   * live is state, not a return.
+   */
+  std::uint16_t sc = 0;
+
+  /*
    * 6502: SWAP -- did the last line come out with its ends the other way round?
    *
    * It is here rather than with the clipper because ONE byte at 1780 has two writers and two
@@ -275,12 +287,36 @@ void PlotPixel(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _x, std::uint
  */
 [[nodiscard]] bool PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept;
 
-/// 6502: CPIX2 -- a two-pixel dash at (X1, Y1) in the colour in COL. The second pixel can land
-/// in the next character cell, and the routine detects that from the mask rather than from x.
-void PlotDash(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+/*
+ * 6502: what `CPIX2` leaves in SC(1 0), Y and X, and `SCAN` is the caller that reads all three.
+ *
+ * The scanner's stick is drawn by walking on from where the dot finished rather than by plotting
+ * (x, y) pairs, so it needs the pointer and the row the dash left behind -- and the mask index,
+ * because the stick has the same pixel pattern as the dot's right-hand pixel. Nothing else reads
+ * them, but they are the routine's outputs whether or not anybody asks.
+ *
+ * `address` is ONE sixteen-bit value rather than the two bytes the original keeps, and that is a
+ * different judgement from `ScreenPointer`'s in `Lines.cpp`. There the split is load-bearing:
+ * `LOIN` runs `SBC #247` for its own borrow and reads the result. Here both moves are a full
+ * sixteen-bit add or subtract of 320 with the carry into the high byte spelled out (`SEC` on the
+ * way up, a `CPY` that has just set it on the way down) and no exit carry read -- so the pair and
+ * the sixteen-bit value are the same number, not merely the same number in practice.
+ */
+struct CellCursor
+{
+  std::uint16_t address = 0; ///< 6502: SC(1 0) -- the character block, INCLUDING the wrap below
+  std::uint8_t row = 0;      ///< 6502: Y -- the pixel row within it
+  std::uint8_t pixel = 0;    ///< 6502: X -- x AND 7, the index into CTWOS2
+};
 
-/// 6502: CPIX4 -- a two-by-two block: CPIX2, then the row above it.
-void PlotBlock(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+/// 6502: CPIX2 -- a two-pixel dash at (X1, Y1) in the colour in COL. The second pixel can land
+/// in the next character cell, and the routine detects that from the mask rather than from x --
+/// which is why the cursor it returns can point one cell to the right of (X1, Y1)'s own.
+CellCursor PlotDash(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+
+/// 6502: CPIX4 -- a two-by-two block: CPIX2, then the row above it. The cursor is the SECOND
+/// call's, which is the row `SCAN` starts its stick from.
+CellCursor PlotBlock(Canvas& _canvas, DrawWorkspace& _work) noexcept;
 
 /// 6502: LOIN / LL30 -- a line from (X1, Y1) to (X2, Y2), plotted one BIT at a time so that it
 /// alternates between each cell's two colours. The shipped code unrolls it into thirty-two

@@ -2,6 +2,7 @@
 
 #include "ShipMove.h"
 
+#include "Scanner.h"
 #include "ShipBlueprint.h"
 
 #include <utility>
@@ -484,8 +485,8 @@ namespace
  * here rather than duplicated. Everything in it is about the ship's OWN motion: its speed along
  * its own z axis, and its own roll and pitch.
  */
-void MoveShipTail(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight,
-                  ShipEffects& _effects) noexcept
+void MoveShipTail(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math,
+                  FlightState& _flight, std::uint8_t _view) noexcept
 {
   // 6502: LDA DELTA / STA R / LDA #128 / LDX #6 / JSR MVT1 -- z -= the player's speed. The 128 is
   // a sign and nothing else, which is why this is the unmasked entry point.
@@ -549,12 +550,15 @@ void MoveShipTail(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight,
   }
 
   _work[31] = static_cast<std::uint8_t>(_work[31] | 0x10u);
-  _effects.UpdateScanner(_work); // 6502: JMP SCAN -- a tail call, so it is the last thing done
+
+  // 6502: JMP SCAN -- a tail call, so it is the last thing done.
+  DrawScannerBlip(_canvas, _draw, _work, _flight.type, _view);
 }
 } // namespace
 
-void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
-              std::uint16_t _blueprint) noexcept
+void MoveShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math,
+              FlightState& _flight, ShipEffects& _effects, std::uint16_t _blueprint,
+              std::uint8_t _view) noexcept
 {
   // 6502: LDA INWK+31 / AND #&A0 / BNE MV30 -- exploding or already dead, so straight to the
   // scanner. Nothing below moves it, which is why a wreck hangs where it died.
@@ -571,7 +575,7 @@ void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, Ship
     if ((_flight.type & 0x80u) != 0u)
     {
       MovePlanetOrSun(_work, _math, _flight.alpha, _flight.beta);
-      MoveShipTail(_work, _math, _flight, _effects);
+      MoveShipTail(_canvas, _draw, _work, _math, _flight, _view);
       return;
     }
 
@@ -589,7 +593,7 @@ void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, Ship
     }
   }
 
-  _effects.UpdateScanner(_work); // 6502: MV30 -- JSR SCAN
+  DrawScannerBlip(_canvas, _draw, _work, _flight.type, _view); // 6502: MV30 -- JSR SCAN
 
   /*
    * 6502: LDA INWK+27 / ASL A / ASL A / STA Q, then three axes of FMLTU and MVT1-2.
@@ -701,7 +705,7 @@ void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, Ship
   _work[1] = _math.p2;
   _work[0] = _math.p1;
 
-  MoveShipTail(_work, _math, _flight, _effects); // 6502: falls into MV45
+  MoveShipTail(_canvas, _draw, _work, _math, _flight, _view); // 6502: falls into MV45
 }
 
 

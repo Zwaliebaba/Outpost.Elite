@@ -90,6 +90,17 @@ extern const std::array<std::uint8_t, 10> MULTICOLOUR_MASK_TABLE;
 // it; it is here because the ledger names it and it is four bytes.
 extern const std::array<std::uint8_t, 4> DASHBOARD_MASK_TABLE;
 
+/*
+ * 6502: CTWOS -- the same four masks again, at a different address, and this is the one the
+ * dashboard reads (slice 3d-b).
+ *
+ * `DIL2` indexes it with a bar position below four, which is what sizes it; the listing carries a
+ * fifth byte past that, a repeat of the first, which nothing can reach. It holds the same values
+ * as `DTWOS` and is extracted separately anyway: two labels at two addresses are two tables, and
+ * one array shared between them would be the port asserting something the game does not (§6.63).
+ */
+extern const std::array<std::uint8_t, 4> DASHBOARD_PIXEL_TABLE;
+
 // 6502: TWFR, TWFL -- a horizontal line's end bytes: TWFR fills from x rightwards to the end of
 // the byte, TWFL fills leftwards from the start of the byte to x. Everything between is 0xFF.
 extern const std::array<std::uint8_t, 8> LINE_RIGHT_MASK_TABLE;
@@ -178,5 +189,71 @@ extern const std::array<std::uint8_t, 65> KEY_TRANSLATION;
  * the failure worth having.
  */
 extern const std::array<std::uint8_t, 8073> SHIP_DATA;
+
+/*
+ * 6502: scacol -- what colour a ship's blip is on the scanner, by ship type (slice 3d).
+ *
+ * The colours are FOUR MULTICOLOUR PIXELS EACH and not colour numbers, which is why they read as
+ * 0x55, 0xAA, 0xFF and 0x5A: `SCAN` ANDs the entry with the pixel mask, so a "colour" here is a
+ * bit pattern that survives the AND. `RED` is %01 four times, `YELLOW` %10 four times, `GREEN`
+ * %11 four times, and `WHITE` is %01 %01 %10 %10 -- the striped blip a Thargoid gets.
+ *
+ * THREE OF THE NAMES ARE THE SAME COLOUR. `BLUE`, `CYAN` and `MAG` are all defined as `YELLOW`
+ * on this build, so the escape pod, the Cobra and the Python come out the same yellow the
+ * listing's three different names suggest they would not. Twenty-one of the thirty-four entries
+ * are 0xAA for that reason.
+ *
+ * Entry 0 is the empty slot and entry 32 is the Cougar, both zero -- a blip ANDed to nothing,
+ * which is a ship that leaves no mark. Sized by what can index it, as `MANY` is.
+ */
+extern const std::array<std::uint8_t, 34> SCANNER_COLOUR_TABLE;
+
+/*
+ * 6502: sightcol -- the colour of the laser sights, by which laser is fitted.
+ *
+ * A colour NUMBER here rather than a bit pattern, unlike the scanner table above it, because the
+ * sights are a sprite and this goes straight into the VIC-II's sprite colour register.
+ *
+ * Indexed as `sightcol-SPOFF%,Y` with Y the sprite pointer the routine has just chosen, so the
+ * table is walked in the same order the four `CMP`s test: pulse, beam, military, and then
+ * anything else, which is the mining laser by elimination rather than by name. Pulse and beam
+ * are both 7, so two of the four entries are indistinguishable in play.
+ */
+extern const std::array<std::uint8_t, 4> LASER_SIGHT_COLOUR_TABLE;
+
+/*
+ * 6502: TRIBTA and TRIBMA -- the Trumble population, turned into sprites.
+ *
+ * `SIGHT` masks the high byte of the count to `AND #%01111111` and shifts it right four times, so
+ * the index is 0 to 7 and both tables have eight entries. `TRIBTA` is how many sprites that many
+ * Trumbles are worth and `TRIBMA` is which of the eight VIC-II sprites to switch on for it.
+ *
+ * BOTH END ON A REPEAT. Entries 6 and 7 are identical in each, so a hold with 112 Trumbles looks
+ * exactly like one with 255 of them: the population saturates rather than wrapping round to
+ * nothing, which is what the table is for.
+ */
+extern const std::array<std::uint8_t, 8> TRUMBLE_COUNT_TABLE;
+extern const std::array<std::uint8_t, 8> TRUMBLE_SPRITE_TABLE;
+
+/*
+ * 6502: DSTORE% -- the dashboard picture, which `wantdials` copies into the bitmap.
+ *
+ * Seven character rows of forty cells at eight bytes each is 2,240, and this is 2,241. The
+ * labels, the bar frames, the scanner's ellipse and the word ELITE are all in here as pixels:
+ * the game draws only what MOVES, and this is everything that does not.
+ *
+ * THE COPY IS 2,240 BYTES AND THEY ARE NOT THE FIRST 2,240. `wantdials` copies eight whole pages
+ * and then re-enters the copier at `mvbllop` with Y = &C0, and that entry stores at Y and counts
+ * DOWN to 1 -- so the last byte it reaches is offset 2,240 and the byte at offset 2,048 is never
+ * touched at all. Both happen to be zero, so the hole and the overrun are invisible on screen and
+ * neither is invisible to a byte-for-byte comparison.
+ *
+ * THE ONLY TABLE HERE THAT NO ASSEMBLY STEP PRODUCES. The image ships inside `COMLOD.bin` and
+ * the C64's own loader places it at `DSTORE%`, so BeebAsm never emits a label for it and the
+ * address comes from the source's `SCBASE + &AF90`. Before `Binaries.txt` carried the row, the
+ * oracle held zeros there — and a comparison of `wantdials` would have copied blanks on both
+ * sides and agreed (§6.78).
+ */
+extern const std::array<std::uint8_t, 2241> DASHBOARD_IMAGE;
 
 } // namespace Elite

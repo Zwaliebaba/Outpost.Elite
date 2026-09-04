@@ -198,13 +198,53 @@ Repository checks:
 python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/inventory.py                     # coverage ledger: ported / pending / unaccounted
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted
+python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
+python tools/check_docs.py                    # no table row is wider than its header
 ```
+
+**`check_docs.py` exists because a Markdown table drops what it cannot fit.** GitHub renders a
+table with the header's number of columns and discards every cell past it without a word, so a
+row that has grown an extra `| ... |` on the end reads perfectly in the raw file and is missing
+its last paragraphs on the web. Thirteen rows of `Source-Inventory.md` had done that, one of them
+holding nineteen invisible cells (§6.72). **Append a slice's result INSIDE the notes column, with
+`<br><br>` between entries, never as a new cell.**
+
+**`check_outpost.py` exists because the portable runner compiles no part of `Outpost/`.** It is
+Win32 and DirectX 12, so a hosted Linux runner cannot build it -- and that leaves a whole
+executable outside every check runnable there. Renaming a `GameLogic` type breaks the app with the
+Linux suite still green, which is how `DockedShip` becoming `FlightStatus` reached the Windows job.
+The check asserts the names still resolve AND that every `Elite::` call passes as many arguments
+as the declaration takes -- the second half added after the name check alone let a fifth parameter
+on `ClearMessageRows` reach the Windows job, the second break of the same afternoon through the
+same hole. It still cannot check parameter TYPES at an unchanged arity, and only building the app
+can.
 
 **Add a new file to its `.vcxproj` AND its `.vcxproj.filters`.** The portable runner globs the
 directory and will happily compile a file no project names; MSVC will not, so the two builds
 quietly test different things. `check_projects.py` fails on that, on a path that does not resolve
 (`Include` is relative to the PROJECT, not to the repository), and on a filters file that has
 drifted from its project.
+
+**Mutation-test a finished unit, and do it in a worktree.** A slice is not done until each of its
+decisions has been shown to matter: change one constant, one comparison or one flag in the ported
+source, run the suite, and a mutation that nothing catches is either a gap in the tests or an
+equivalent worth measuring and recording. Run it against a detached worktree rather than the
+working tree --
+
+```
+git worktree add --detach <scratch>/mutant HEAD
+ln -s <repo>/Upstream <scratch>/mutant/Upstream          # the submodule and the assembled oracle
+ln -sf <repo>/Design/Reference/*.txt <scratch>/mutant/Design/Reference/
+```
+
+-- because the alternative is a working tree that holds deliberately broken code for half an hour
+at a time, which cannot be committed and hides any real change made while it runs.
+
+**A mutation that HANGS is caught, and a harness that reads the last line will say otherwise.**
+Turning `cnt - 1` into `cnt - 2` in a loop that stops at zero makes an odd count run for ever; the
+suite times out, no `N passed, M failed` line is printed, and a harness that looks for one reports
+a compile error. Look at what the run actually did before believing that label: a timeout is the
+strongest possible catch and the easiest to file as a tooling failure.
 
 **Read a routine through `tools/c64_source.py`, not by eye.** The upstream library is one tree
 serving ten versions of Elite, and a routine's C64 form is whatever survives its `IF` / `ELIF` /
@@ -228,8 +268,9 @@ is green against the oracle" are different claims. Never imply the second when y
 things on a push. Two jobs, because they need different machines:
 
 - **Repository checks** (Ubuntu, seconds): `inventory.py --check-includes`, `check_gamelogic.py`
-  and its `--self-test`, and the coverage ledger. This is the job that would have caught slice
-  0a's `.gitmodules` gap, because it starts from a fresh clone every time.
+  and its `--self-test`, `check_projects.py`, `check_outpost.py`, `check_docs.py`, and the
+  coverage ledger. This is the job that would have caught slice 0a's `.gitmodules` gap, because
+  it starts from a fresh clone every time.
 - **Debug x64 build and tests** (Windows): builds BeebAsm at a pinned commit, assembles the
   reference build, checks the generated tables against it, then builds
   `Tests\GameLogicTests\GameLogicTests.vcxproj` and runs `vstest.console.exe`.
@@ -269,7 +310,8 @@ the test result file. Do not add an upload that changes that.
 - [ ] Files are PascalCase, flat, unique repo-wide including against the CRT and STL.
 - [ ] Every added/removed/moved file is in both the `.vcxproj` **and** the `.filters`.
 - [ ] `GameLogic` gained no clock, no randomness, no float, no Win32 call.
-- [ ] `Design/Source-Inventory.md` updated for anything you ported; `tools/inventory.py` run.
+- [ ] `Design/Source-Inventory.md` updated for anything you ported, INSIDE the notes column
+      rather than as a new cell; `tools/inventory.py` and `tools/check_docs.py` run.
 - [ ] It builds — Debug at minimum — and you said which configurations you actually built.
 - [ ] Tests for the layer you touched were run, and you said which, and whether the oracle was
       present.

@@ -42,12 +42,18 @@ class Table:
     anybody chose.
     """
 
-    def __init__(self, _identifier: str, _label: str, _length, _file: str, _summary: str):
+    def __init__(self, _identifier: str, _label: str, _length, _file: str, _summary: str,
+                 _address: int | None = None):
         self.identifier = _identifier
         self.label = _label
         self.length = _length
         self.file = _file
         self.summary = _summary
+
+        # An explicit address, for a block that has no label because no assembly step produces it.
+        # `DSTORE%` is the case: the dashboard bitmap arrives at run time, so BeebAsm never emits
+        # a label for it and the address comes from the source's own `SCBASE + &AF90` (§6.78).
+        self.address = _address
 
     def extent(self, _image: bytearray, _labels: dict[str, int]) -> int:
         return self.length(_image, _labels) if callable(self.length) else self.length
@@ -171,6 +177,42 @@ TABLES = [
     # blueprints, because the game addresses all of them absolutely and so this port can too.
     Table("SHIP_DATA", "XX21", ship_data_extent, "ShipData.cpp",
           "the pointer table, E%'s defaults and all 33 ship blueprints, addressed from XX21"),
+    # ---- slice 3d: the scanner. Indexed by ship TYPE, so it is sized the way `MANY` is --
+    # SHIP_TYPE_COUNT + 1, keeping entry 0 so the index is the type rather than the type minus
+    # one. The listing's Cougar is the last entry a type can reach; the CYAN and the EQUD after
+    # it are past the end of what anything indexes and so are not extracted.
+    Table("SCANNER_COLOUR_TABLE", "scacol", SHIP_TYPE_COUNT + 1, "ScreenTables.cpp",
+          "the colour a ship's blip is drawn in, by ship type"),
+    # ---- slice 3d-b: the dashboard. `DIL2` reads CTWOS,X with X below four, so four entries --
+    # the fifth byte the listing shows is past what anything can index. It is extracted separately
+    # from `DTWOS` even though the two hold the same values, because they are two labels at two
+    # addresses and sharing one array would assert something the game does not (§6.63).
+    Table("DASHBOARD_PIXEL_TABLE", "CTWOS", 4, "ScreenTables.cpp",
+          "one aligned multicolour pixel, for the dashboard's bars"),
+    # The dashboard picture itself, which `wantdials` copies into the bitmap. No label anywhere:
+    # the image ships inside `COMLOD.bin` and the C64's loader places it at `DSTORE%` at run time,
+    # so the address is the source's own `SCBASE + &AF90` rather than something BeebAsm emitted.
+    #
+    # 2,241 AND NOT 2,240. `wantdials` copies eight whole pages and then re-enters `mvblockK` at
+    # `mvbllop` with Y = &C0, and that entry stores at Y and counts DOWN to 1 -- so the last byte
+    # it touches is offset &900, which is 2,240, and the byte at 2,048 is never touched at all.
+    # 2,240 bytes are copied and they are not the first 2,240 (§6.78).
+    Table("DASHBOARD_IMAGE", "DSTORE%", 7 * 40 * 8 + 1, "DashboardImage.cpp",
+          "the dashboard picture, sized by the last byte the copy reaches",
+          _address=0x4000 + 0xAF90),
+    # ---- slice 3d-d-ii: the laser sights and the Trumbles, all three read by `SIGHT`.
+    # `sightcol` is indexed as `sightcol-SPOFF%,Y` with Y between SPOFF% and SPOFF%+3, so four
+    # entries -- one per laser the sights can be drawn for, and the mining laser's is last
+    # because it is the "anything else" case rather than because it is a mining laser.
+    Table("LASER_SIGHT_COLOUR_TABLE", "sightcol", 4, "ScreenTables.cpp",
+          "the colour of the laser sights, by laser type"),
+    # `TRIBBLE+1` is masked to `AND #%01111111` and then shifted right four times, so X is
+    # between 0 and 7 and both tables are eight entries. Both end on a repeated last value,
+    # which is what makes the population saturate rather than wrap.
+    Table("TRUMBLE_COUNT_TABLE", "TRIBTA", 8, "ScreenTables.cpp",
+          "how many Trumble sprites to show, by population"),
+    Table("TRUMBLE_SPRITE_TABLE", "TRIBMA", 8, "ScreenTables.cpp",
+          "which sprites to enable for that many Trumbles"),
 ]
 
 
@@ -249,9 +291,9 @@ def main() -> int:
 
     grouped: dict[str, list[tuple[Table, bytes]]] = {}
     for table in TABLES:
-        if table.label not in labels:
+        if table.address is None and table.label not in labels:
             sys.exit(f"error: label '{table.label}' is not in {LABELS.name}")
-        address = labels[table.label]
+        address = table.address if table.address is not None else labels[table.label]
         length = table.extent(image, labels)
         data = bytes(image[address : address + length])
         if len(data) != length:
