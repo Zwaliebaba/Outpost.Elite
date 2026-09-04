@@ -224,6 +224,18 @@ struct DrawWorkspace
   std::uint8_t r2 = 0;
 
   /*
+   * 6502: SC(1 0) -- the screen pointer, and it is here because the DASHBOARD keeps it between
+   * calls (slice 3d-b).
+   *
+   * `DIALS` sets it once and then calls `DIL` and `DIL2` seven times; each of them advances it by
+   * one character row on the way out, so where the next dial goes is what the last one left. The
+   * line drawing keeps its own local copy because nothing reads `LOIN`'s, and `CPIX2` returns its
+   * one rather than storing it, because `SCAN` reads it immediately -- but a value seven calls
+   * live is state, not a return.
+   */
+  std::uint16_t sc = 0;
+
+  /*
    * 6502: SWAP -- did the last line come out with its ends the other way round?
    *
    * It is here rather than with the clipper because ONE byte at 1780 has two writers and two

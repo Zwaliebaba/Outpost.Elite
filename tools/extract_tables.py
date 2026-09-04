@@ -177,6 +177,12 @@ TABLES = [
     # it are past the end of what anything indexes and so are not extracted.
     Table("SCANNER_COLOUR_TABLE", "scacol", SHIP_TYPE_COUNT + 1, "ScreenTables.cpp",
           "the colour a ship's blip is drawn in, by ship type"),
+    # ---- slice 3d-b: the dashboard. `DIL2` reads CTWOS,X with X below four, so four entries --
+    # the fifth byte the listing shows is past what anything can index. It is extracted separately
+    # from `DTWOS` even though the two hold the same values, because they are two labels at two
+    # addresses and sharing one array would assert something the game does not (§6.63).
+    Table("DASHBOARD_PIXEL_TABLE", "CTWOS", 4, "ScreenTables.cpp",
+          "one aligned multicolour pixel, for the dashboard's bars"),
 ]
 
 
