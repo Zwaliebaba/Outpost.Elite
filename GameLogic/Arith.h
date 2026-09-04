@@ -143,6 +143,23 @@ struct WideResult
 /// carry the routine leaves, because its callers branch on it.
 [[nodiscard]] bool DivideToR(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
+/*
+ * 6502: LL61 (with its LL84 error exit) -- (U R) = 256 * A / Q, for an A that is NOT smaller
+ * than Q (slice 3b).
+ *
+ * `LL28`'s sister, and it works by borrowing `LL28`: halve A until it is small enough, divide,
+ * then double the answer back the same number of times. The doubling is into `U`, which is why
+ * this one is sixteen bits wide where `LL28` is eight.
+ *
+ * Two ways to fail and both answer 50 rather than saturating: a zero divisor, and an overflow out
+ * of the doubling. Fifty is not a rounding of anything -- it is a value `LL9` treats as "this
+ * vertex is roughly here", and the ship still gets drawn.
+ *
+ * `S` is used as scratch for the shift count and is LEFT there. `LL28` does not touch it, which
+ * is what makes that safe, and a port that gave `LL28` a use for `S` would break this quietly.
+ */
+void DivideToUR(MathWorkspace& _work, std::uint8_t _a) noexcept;
+
 /// 6502: LL38 (with its LL39 and LL40 branches) -- combines Q and R under the signs in A and S,
 /// flipping S when the result turns negative.
 [[nodiscard]] std::uint8_t CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept;

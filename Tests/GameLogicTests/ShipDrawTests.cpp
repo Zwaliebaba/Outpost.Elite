@@ -1385,4 +1385,81 @@ public:
   }
 };
 
+
+TEST_CLASS(TheWideDivide)
+{
+public:
+  /*
+   * 6502: LL61 -- (U R) = 256 * A / Q for A >= Q, and its LL84 error exit.
+   *
+   * Swept over every A and every Q, all 65,536 pairs, because the routine's shape is entirely
+   * decided by how many halvings A needs and the answer changes at every power of two. `U` is
+   * seeded to a value the caller might plausibly have left there, because the routine ROTATES
+   * into it rather than clearing it first -- what U held on entry is part of the answer.
+   */
+  TEST_METHOD(TheWideDivideMatchesLL61)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t qq = oracle.Label("Q");
+    const std::uint16_t rr = oracle.Label("R");
+    const std::uint16_t ss = oracle.Label("S");
+    const std::uint16_t uu = oracle.Label("U");
+    const std::uint16_t ll61 = oracle.Label("LL61");
+
+    std::uint32_t compared = 0;
+    std::uint32_t failed = 0;
+    std::uint32_t divided = 0;
+
+    for (std::uint32_t q = 0; q < 256u; ++q)
+    {
+      for (std::uint32_t a = 0; a < 256u; ++a)
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        Elite::MathWorkspace math;
+
+        // Not zero: `ROL U` brings the old bits back up, so a cleared U would hide a port that
+        // dropped the rotate and assigned instead.
+        const std::uint8_t seededU = static_cast<std::uint8_t>((a * 7u + q * 13u) & 0x3Fu);
+
+        cpu.memory[qq] = static_cast<std::uint8_t>(q);
+        cpu.memory[uu] = seededU;
+        math.q = static_cast<std::uint8_t>(q);
+        math.u = seededU;
+
+        cpu.a = static_cast<std::uint8_t>(a);
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(ll61, 100'000);
+        Assert::IsTrue(run.completed, L"LL61 returned");
+
+        Elite::DivideToUR(math, static_cast<std::uint8_t>(a));
+
+        const std::wstring where =
+          Widen("LL61(a=" + std::to_string(a) + ", Q=" + std::to_string(q) + ", U="
+                + std::to_string(seededU) + ")");
+        Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
+        Assert::AreEqual(cpu.memory[uu], math.u, (where + L": U").c_str());
+        Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
+
+        if (math.r == 50u && math.u == 50u)
+        {
+          ++failed;
+        }
+        else
+        {
+          ++divided;
+        }
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(65536u, compared, L"every pair was compared");
+    Assert::IsTrue(failed > 0u, L"the LL84 exit was taken");
+    Assert::IsTrue(divided > 0u, L"and an answer was produced");
+  }
+};
+
 } // namespace GameLogicTests
