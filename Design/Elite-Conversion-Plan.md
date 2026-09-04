@@ -428,6 +428,33 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.96 A generated-file check that was also a formatting check
+
+`extract_tables.py --check` compared the whole text of thirteen generated files against what the
+generator would write. That is not what it was for. The day the tree moved to
+`NamespaceIndentation: All`, a whole-tree format pass edited the generated files like any other,
+and the check reported **thirteen stale tables whose numbers were perfectly correct** — on both CI
+legs, on a commit that had changed nothing but whitespace.
+
+The obvious fix is to make the generator emit the formatted layout, and it is the wrong one twice
+over. Shelling out to clang-format needs the formatter on `PATH` in every job that runs the
+check, and the Windows runner does not have it there. Hand-matching the formatter's output is
+worse: clang-format's braced-list rules depend on the list's length and its trailing comma, so
+"indent everything by two" reproduces some arrays and not others, and the generator would have to
+be re-tuned every time the config changed.
+
+**The check now compares the bytes and not the text.** Every `0x..` literal in the file, in order,
+against the bytes the binaries give — so a reformat is invisible and a wrong number is not. It
+gives up noticing an edited comment, which is exactly right: a comment is not data, and the
+formatter is allowed to rewrite one.
+
+The general point is about what a check is *for*. This one was written when the generated files
+were the only thing that wrote them, and comparing the text was a cheap, exact proxy for
+comparing the data. The proxy held until a second writer appeared. **A check whose subject and
+whose method differ will eventually report on the method** — and the tell was that its failure
+message ("out of date -- run without --check") described a fix that would have made the files
+worse.
+
 ### 6.95 The launch depends on a byte nothing on the way to it writes
 
 §6.94 established that `HFS1` does not set `STP`, and that `CIRCLE2` cannot terminate without one:

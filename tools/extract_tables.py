@@ -20,6 +20,7 @@ Needs Design/Reference/Labels.txt and Binaries.txt, and the assembled .bin files
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -257,6 +258,24 @@ def format_table(_table: Table, _bytes: bytes) -> str:
     return "\n".join(lines)
 
 
+BYTE_RE = re.compile(r"0x([0-9A-Fa-f]{2})")
+
+
+def bytes_in(_text: str) -> list[int]:
+    """Every `0x..` literal in a generated file, in order.
+
+    THE CHECK COMPARES DATA AND NOT TEXT, and it did not always. Comparing the whole file made
+    `--check` a formatting check as well as a content one, and the day the tree moved to
+    `NamespaceIndentation: All` it reported thirteen stale tables whose numbers were perfectly
+    correct. Formatting is clang-format's job and these files are formatted like any other;
+    what this tool owns is the bytes.
+
+    What it gives up is noticing an edited comment, and that is the right thing to give up: a
+    comment is not data, and the formatter is allowed to rewrite one.
+    """
+    return [int(value, 16) for value in BYTE_RE.findall(_text)]
+
+
 def build_file(_name: str, _tables: list[tuple[Table, bytes]]) -> str:
     header = [
         "#include \"pch.h\"",
@@ -302,18 +321,23 @@ def main() -> int:
         print(f"  {table.identifier:<20} {table.label:<12} {address:#06x}  {length} bytes")
 
     stale = 0
+    rewritten: list[Path] = []
     for filename, tables in grouped.items():
         text = build_file(filename, tables)
         path = OUTPUT / filename
         current = path.read_text(encoding="utf-8") if path.is_file() else None
 
         if args.check:
-            if current != text:
-                print(f"STALE  {filename} differs from what the binaries say it should be")
+            if current is None:
+                print(f"MISSING  {filename} has not been generated")
+                stale += 1
+            elif bytes_in(current) != bytes_in(text):
+                print(f"STALE  {filename} does not hold what the binaries say it should")
                 stale += 1
             continue
 
         path.write_text(text, encoding="utf-8", newline="\n")
+        rewritten.append(path)
         print(f"wrote  {path.relative_to(REPO)}")
 
     if args.check:
@@ -321,6 +345,13 @@ def main() -> int:
             print(f"\nFAIL  {stale} generated file(s) are out of date -- run without --check")
             return 1
         print("\nOK    every generated table matches the assembled binaries")
+        return 0
+
+    # The text this writes is unformatted, because keeping a generator in step with clang-format
+    # by hand is how the two drift; run the formatter over what it wrote instead.
+    if rewritten:
+        print(f"\nNOW   run clang-format over the {len(rewritten)} file(s) above -- this tool "
+              "writes bytes, not layout")
 
     return 0
 
