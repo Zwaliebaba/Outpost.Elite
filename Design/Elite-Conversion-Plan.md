@@ -428,6 +428,56 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.78 The §6.12 pass on slice 3d-d-iii-a, and a binary the oracle does not load
+
+`LOOK1`, `WARP` and the `TT66` chain §6.77 moved out of 3d-d-ii. **252 instructions, 23 external
+call targets, 14 of them already ported** — `ADD`, `DIALS`, `FLFLLS`, `FLIP`, `GINF`, `HLOIN`,
+`MT2`, `NWSTARS`, `SIGHT`, `TT162`, `TT27`, `WPSHPS`, `ee3` and `MAS2`/`m`. Four more are inside
+the unit (`BOXS2`, `NOSPRITES`, `ZES1k`, `ZES2k`), `NOISE` already has a seam, and `DOVDU19`
+needs one.
+
+**More of `TTX66K` is comparable than it looks.** `abraxas` and `caravanserai` read like VIC-II
+registers and are not: they are ordinary variables holding the values the raster interrupt pokes
+into `VIC+&18` and `VIC+&11` on its next pass. `wantdials` writing them is plain state, and only
+the handler that reads them is hardware. That is the opposite mistake from §6.73's — there a
+routine was filed as hardware because two of its writes went to registers; here two writes that
+look like registers are memory.
+
+**But the dashboard bitmap is not in the oracle.** `wantdials` copies 2,240 bytes from `DSTORE%`
+into `DLOC%` — eight whole pages and then &C0 more, through `mvblockK` and its second entry
+`mvbllop`. `DSTORE%` is `SCBASE + &AF90`, which is &EF90, and **nothing assembles anything
+there**: `SHIPS.bin` runs out at &EF8C, three bytes short, and `DSTORE%` is filled by the C64's
+LOADER from `CODIALS.bin` — a file named only in a comment in `elite-loader.asm` and INCBINed
+nowhere.
+
+So a comparison of `wantdials` written today would copy zeros in the oracle and zeros in the
+port, agree perfectly, and prove nothing about the one thing the routine exists to do.
+
+Where the bytes actually are is settled by the ORIGINAL build script, not by the modern one.
+`S.COMLODS.txt` line 1000 reads `OSCLI("L.:2.C.CODIALS "+STR$~(O%+&18))`, then advances by
+`&8C0 + &21` — and `&8C0` is 2,240, the exact length `wantdials` copies. So the dashboard image is
+loaded &18 bytes into the loader's own output, ships inside `COMLOD.bin`, and reaches `DSTORE%`
+because the loader puts it there at run time. `C.CODIALS.bin` itself is 2,248 bytes with its last
+eight zero.
+
+**The first task of this unit is therefore not a routine.** It is to establish which 2,240 bytes
+of that file the game ends up copying, load them at `DSTORE%` in `Binaries.txt`, and give the port
+the same bytes as data the way `Font.cpp` holds the font — with a test that fails if `DSTORE%` is
+blank, because a blank one is what makes the comparison silently vacuous.
+
+**This is the first thing the port has needed that the assembled build does not contain.** Every
+table so far came out of the image, by label, because everything so far was assembled into it —
+the font included, which is `INCBIN`ed and so has a `FONT` label at &0B00. A run-time load has no
+label and no block, and the difference is invisible until a routine reads from it. The check that
+would have caught it earlier is the same one §6.12 asks: not "is this routine ported?" but "what
+does it READ?", extended one step further than the port has been asking it — **what does it read
+that was never assembled?**
+
+`mvblockK` is worth reading twice on its own account. `LDY #0`, then `LDA (V),Y / STA (SC),Y /
+DEY / BNE mvbllop`: offset 0 is copied FIRST, then the loop counts down 255, 254 … 1, so a page
+comes across in the order 0, 255, 254, …, 1 rather than either way round. The result is the same
+and the trace is not, which matters for a port that compares intermediate state.
+
 ### 6.77 A routine counted as ported when half of it is
 
 §6.73's pass listed fifteen external call targets for slice 3d-d-ii and said eight were already
@@ -736,7 +786,8 @@ ported and absent; the check has to be for a DEFINITION, and this pass nearly re
 |---|---|
 | **3d-d-i** ✅ | `MAS1`–`MAS4` **built 2026-09-04** in `FlightLoop.h/.cpp` (11 mutations, 11 caught), then `cntr` there and `ECMOF` in `Dashboard.h/.cpp` as `StopEcm`. `tnpr1` was **already built in slice 2c** and should never have been on this list (§6.71). `FRMIS` needs phase 4's `FRS1` and `ANGRY`, and `KS1` ends `JMP MAL1` — a jump back INTO the loop, not a call — so both move to 3d-d-iii |
 | **3d-d-ii** ✅ | **Built 2026-09-04**: `BUMP2`, `REDU2`, `DOKEY`'s flight half, `SPIN`/`SPIN2` and `SIGHT`. §6.73's pass added `SIGHT` (two thirds of it is canvas and game state, not hardware) and `BUMP2`/`REDU2` (`DOKEY`'s, not `cntr`'s). `CTRL` is one instruction falling into the key seam, with nothing to compare. **`LOOK1` and `WARP` move to 3d-d-iii** — they need `TT66`'s PIXELS, and the port has `TT66`'s text state (§6.77) |
-| **3d-d-iii** | `LOOK1`, `WARP` and the `TT66` chain they need — `TTX66`, `TTX66K`, `BOXS`, `BOX2`, `BLUEBAND`, `BLUEBANDS`, `wantdials`, `zonkscanners`, `NOSPRITES`, `ZES1k`, `ZES2k`: 252 instructions and 23 external targets (§6.77) — then the sixteen loop parts themselves, with `FRMIS` and `KS1`, which by then call nothing unbuilt but phase 4 |
+| **3d-d-iii-a** | `LOOK1`, `WARP` and the `TT66` chain they need — `TTX66`, `TTX66K`, `BOXS`, `BOX2`, `BOXS2`, `BLUEBAND`, `BLUEBANDS`, `wantdials`, `zonkscanners`, `NOSPRITES`, `ZES1k`, `ZES2k`, `mvblockK`: 252 instructions and 23 external targets, 14 of them ported (§6.77, §6.78). **It needs `C.CODIALS.bin` loaded at `DSTORE%` first** — the dashboard bitmap is read at run time by the loader and is in no assembled block, so the oracle's memory there is zero |
+| **3d-d-iii-b** | the sixteen loop parts themselves, with `FRMIS` and `KS1`, which by then call nothing unbuilt but phase 4 |
 
 Doing it in that order means the loop is written last, against a set of routines that have each
 been compared to the game on their own. Written first, it would be sixteen parts and fifteen
