@@ -4,6 +4,8 @@
 
 #include "ShipBlueprint.h"
 
+#include <utility>
+
 #include <array>
 
 namespace Elite
@@ -700,6 +702,72 @@ void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, Ship
   _work[0] = _math.p1;
 
   MoveShipTail(_work, _math, _flight, _effects); // 6502: falls into MV45
+}
+
+
+namespace
+{
+
+/// 6502: PUS1 -- swap one orientation vector's x and z, flipping a sign on each side. Called for
+/// the nose, roof and side vectors, and the third time by falling into it rather than calling.
+void SwapVectorAxes(ShipBlock& _work, const FlightState& _flight, std::size_t _at) noexcept
+{
+  const std::uint8_t low = _work[_at];
+  _work[_at] = _work[_at + 4u];
+  _work[_at + 4u] = low;
+
+  const std::uint8_t high = static_cast<std::uint8_t>(_work[_at + 1u] ^ _flight.rat);
+  _work[_at + 1u] = static_cast<std::uint8_t>(_work[_at + 5u] ^ _flight.rat2);
+  _work[_at + 5u] = high;
+}
+
+} // namespace
+
+void FlipAxesForView(ShipBlock& _work, FlightState& _flight, std::uint8_t _view) noexcept
+{
+  // 6502: BEQ PU2-1 -- the front view needs nothing, and PU2-1 is the RTS at the end of the rear
+  // view's block.
+  if (_view == 0u)
+  {
+    return;
+  }
+
+  FlipAxes(_work, _flight, _view);
+}
+
+void FlipAxes(ShipBlock& _work, FlightState& _flight, std::uint8_t _view) noexcept
+{
+  // 6502: PU1 -- the DEX comes first, so everything below reads the view MINUS ONE.
+  const std::uint8_t which = static_cast<std::uint8_t>(_view - 1u);
+
+  if (which == 0u)
+  {
+    // The rear view: the ship is behind you, so x and z both point the other way. Eight sign
+    // bytes -- the position's x and z, and the x and z of all three orientation vectors.
+    for (const std::size_t at : { 2u, 8u, 10u, 14u, 16u, 20u, 22u, 26u })
+    {
+      _work[at] = static_cast<std::uint8_t>(_work[at] ^ 0x80u);
+    }
+    return;
+  }
+
+  // 6502: PU2 -- `LDA #0 / CPX #2 / ROR A` puts the comparison's carry into bit 7 of a zero, so
+  // RAT2 is the sign mask for the right view and RAT for the left. One instruction less than an
+  // `if`, and the reason the two masks are always each other's complement.
+  _flight.rat2 = (which >= 2u) ? std::uint8_t{ 0x80 } : std::uint8_t{ 0x00 };
+  _flight.rat = static_cast<std::uint8_t>(_flight.rat2 ^ 0x80u);
+
+  // The position, whose low and high bytes swap plainly and whose signs swap with a flip.
+  std::swap(_work[0], _work[6]);
+  std::swap(_work[1], _work[7]);
+
+  const std::uint8_t sign = static_cast<std::uint8_t>(_work[2] ^ _flight.rat);
+  _work[2] = static_cast<std::uint8_t>(_work[8] ^ _flight.rat2);
+  _work[8] = sign;
+
+  SwapVectorAxes(_work, _flight, 9);
+  SwapVectorAxes(_work, _flight, 15);
+  SwapVectorAxes(_work, _flight, 21);
 }
 
 } // namespace Elite

@@ -183,7 +183,12 @@ struct FlightState
   std::uint8_t slot = 0;
 
   std::uint8_t type = 0;    ///< 6502: TYPE -- negative for the planet and the sun
-  std::uint8_t rat2 = 0;    ///< 6502: RAT2 -- scratch, but MVEIT leaves it set
+
+  /// 6502: RAT and RAT2 -- scratch, but `MVEIT` leaves `RAT2` set and `PLUT` writes both as sign
+  /// masks. Two routines, two meanings, the same two bytes; they are never live together because
+  /// `PLUT` runs when the view changes and `MVS5` while a ship moves.
+  std::uint8_t rat = 0;
+  std::uint8_t rat2 = 0;
 };
 
 /// 6502: MSL -- the missile's ship type, which `MVEIT` singles out so that a missile runs its
@@ -206,5 +211,26 @@ inline constexpr std::uint8_t SHIP_TYPE_MISSILE = 1;
  */
 void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
               std::uint16_t _blueprint) noexcept;
+
+
+/*
+ * 6502: PLUT and PU1 -- flip a ship's axes for the view the player is looking through.
+ *
+ * Elite draws all four views with one piece of geometry: rather than four projections, it turns
+ * the SHIP round. The rear view flips eight sign bytes; the left and right views swap x with z
+ * throughout and then flip one of the two, which is what `RAT` and `RAT2` are -- one mask each,
+ * built from a single `LDA #0 / CPX #2 / ROR A`.
+ *
+ * The ledger files this with the ship drawing, and it is not drawing: it is a transform of
+ * `INWK`, in the same family as `MVS4` and `MVS5`, and the source's own category for it is
+ * Flight. Its caller is the main flight loop, which calls both entry points -- `PLUT` reads the
+ * view for itself and `PU1` is entered with it already in X.
+ *
+ * The third `PUS1` is a FALL-THROUGH rather than a call, and what it falls into is the `RTS` at
+ * `LO2` -- the first byte of the next routine's file. The upstream comment says it falls into
+ * `LOOK1`, which is thirteen bytes further on; it is `LO2` that returns it.
+ */
+void FlipAxesForView(ShipBlock& _work, FlightState& _flight, std::uint8_t _view) noexcept;
+void FlipAxes(ShipBlock& _work, FlightState& _flight, std::uint8_t _view) noexcept;
 
 } // namespace Elite

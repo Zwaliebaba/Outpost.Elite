@@ -807,4 +807,94 @@ public:
   }
 };
 
+
+TEST_CLASS(TheViewAxes)
+{
+public:
+  /*
+   * 6502: PLUT and PU1 -- both entry points, every view, and one view the game never sets.
+   *
+   * The interesting inputs are the views themselves rather than the coordinates, so the whole of
+   * `INWK` is filled with a pattern that makes every byte distinguishable and the comparison is
+   * on all thirty-seven of them plus `RAT` and `RAT2`. A port that swapped the right pair of
+   * bytes and the wrong pair of signs passes a test that only looks at the position.
+   *
+   * View 4 is in the sweep and the game never produces it: `PU1` decrements without checking, so
+   * it takes the same path as the right view, and the port has to agree about that rather than
+   * about the three values it will see.
+   */
+  TEST_METHOD(FlippingTheAxesMatchesPLUT)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t view = oracle.Label("VIEW");
+    const std::uint16_t rat = oracle.Label("RAT");
+    const std::uint16_t rat2 = oracle.Label("RAT2");
+    const std::uint16_t plut = oracle.Label("PLUT");
+    const std::uint16_t pu1 = oracle.Label("PU1");
+
+    std::uint32_t compared = 0;
+    for (const std::uint8_t which : { 0, 1, 2, 3, 4 })
+    {
+      for (int entry = 0; entry < 2; ++entry)
+      {
+        // PLUT reads VIEW itself; PU1 is entered with it in X, so the front view reaches the
+        // rear view's code through it and that difference is part of what is compared.
+        if (entry == 1 && which == 0)
+        {
+          continue;
+        }
+
+        Cpu6502 cpu = oracle.Fresh();
+        Elite::ShipBlock work;
+        Elite::FlightState flight;
+
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          const std::uint8_t value = static_cast<std::uint8_t>(byte * 7u + 3u);
+          cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = value;
+          work[byte] = value;
+        }
+        cpu.memory[view] = which;
+        cpu.memory[rat] = 0x11;
+        cpu.memory[rat2] = 0x22;
+        flight.rat = 0x11;
+        flight.rat2 = 0x22;
+
+        cpu.x = which;
+        const Elite::Testing::RunResult run =
+          cpu.CallSubroutine((entry == 0) ? plut : pu1, 20'000);
+        Assert::IsTrue(run.completed, L"the axis flip returned");
+
+        if (entry == 0)
+        {
+          Elite::FlipAxesForView(work, flight, which);
+        }
+        else
+        {
+          Elite::FlipAxes(work, flight, which);
+        }
+
+        const std::wstring where =
+          Widen(std::string(entry == 0 ? "PLUT" : "PU1") + "(view=" + std::to_string(which) + ")");
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+                           (where + L": INWK+" + std::to_wstring(byte)).c_str());
+        }
+        Assert::AreEqual(cpu.memory[rat], flight.rat, (where + L": RAT").c_str());
+        Assert::AreEqual(cpu.memory[rat2], flight.rat2, (where + L": RAT2").c_str());
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(9u, compared, L"both entry points, every view");
+  }
+};
+
 } // namespace GameLogicTests
