@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -263,6 +264,160 @@ public:
     }
 
     Assert::AreEqual<std::uint32_t>(3u * 8u * 8u * 8u * 8u, compared, L"the whole sweep ran");
+  }
+};
+
+/*
+ * The two rotation steppers (slice 3a).
+ *
+ * `MVS4` turns one of a ship's three orientation vectors by the player's roll and pitch; `MVS5`
+ * turns a pair of coordinates by a fixed sixteenth, which is how a ship's own roll and pitch are
+ * applied. `MVEIT` calls the first three times and the second six.
+ */
+TEST_CLASS(TheRotationSteppers)
+{
+public:
+  /// 6502: MVS4 -- four multiply-accumulates, and the subtractions are sign flips.
+  TEST_METHOD(RotatingAVectorMatchesMVS4)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t alpha = oracle.Label("ALPHA");
+    const std::uint16_t beta = oracle.Label("BETA");
+    const std::uint16_t mvs4 = oracle.Label("MVS4");
+
+    // The three vectors MVEIT rotates: the ship's nose, roof and side.
+    const std::vector<std::uint8_t> VECTORS = { 9, 15, 21 };
+    const std::vector<std::uint8_t> ANGLES = { 0, 1, 31, 127, 128, 129, 255 };
+
+    std::uint32_t compared = 0;
+    for (const std::uint8_t vector : VECTORS)
+    {
+      for (const std::uint8_t a : ANGLES)
+      {
+        for (const std::uint8_t b : ANGLES)
+        {
+          for (const std::uint8_t seed : EDGES)
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            Elite::ShipBlock work;
+            Elite::MathWorkspace math;
+
+            // Six bytes of vector, spread so the three axes differ from one another.
+            for (std::uint8_t byte = 0; byte < 6u; ++byte)
+            {
+              const std::uint8_t value = static_cast<std::uint8_t>(seed ^ (byte * 0x27u));
+              cpu.memory[static_cast<std::uint16_t>(inwk + vector + byte)] = value;
+              work[vector + byte] = value;
+            }
+            cpu.memory[alpha] = a;
+            cpu.memory[beta] = b;
+
+            cpu.y = vector;
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(mvs4);
+            Assert::IsTrue(run.completed, L"MVS4 returned");
+
+            Elite::RotateShipVector(work, math, vector, a, b);
+
+            const std::wstring where =
+              Widen("MVS4(y=" + std::to_string(vector) + ", alpha=" + std::to_string(a)
+                    + ", beta=" + std::to_string(b) + ", seed=" + std::to_string(seed) + ")");
+            for (std::uint8_t byte = 0; byte < 6u; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + vector + byte)],
+                               work[vector + byte],
+                               (where + L": INWK+" + std::to_wstring(vector + byte)).c_str());
+            }
+            ++compared;
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(3u * 7u * 7u * 8u, compared, L"the whole sweep ran");
+  }
+
+  /*
+   * 6502: MVS5 -- and the ordering is the assertion worth having.
+   *
+   * The routine computes both halves before writing either back to X, holding the first in K, so
+   * the second half reads the value the first has not yet replaced. A port that wrote as it went
+   * would feed the first result into the second and produce a rotation that is subtly wrong in a
+   * way only a long run would show.
+   */
+  TEST_METHOD(RotatingAPairMatchesMVS5)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t rat2 = oracle.Label("RAT2");
+    const std::uint16_t mvs5 = oracle.Label("MVS5");
+
+    // The six pairs MVEIT rotates, three for roll and three for pitch.
+    const std::vector<std::pair<std::uint8_t, std::uint8_t>> PAIRS = {
+      { 15, 9 }, { 17, 11 }, { 19, 13 }, { 15, 21 }, { 17, 23 }, { 19, 25 },
+    };
+
+    std::uint32_t compared = 0;
+    for (const auto& pair : PAIRS)
+    {
+      for (const std::uint8_t direction : { std::uint8_t{ 0 }, std::uint8_t{ 128 } })
+      {
+        for (const std::uint8_t xLow : EDGES)
+        {
+          for (const std::uint8_t xHigh : EDGES)
+          {
+            for (const std::uint8_t yLow : EDGES)
+            {
+              Cpu6502 cpu = oracle.Fresh();
+              Elite::ShipBlock work;
+              Elite::MathWorkspace math;
+
+              const std::uint8_t yHigh = static_cast<std::uint8_t>(yLow ^ 0x93u);
+              const std::uint8_t bytes[4] = { xLow, xHigh, yLow, yHigh };
+              const std::uint8_t at[4] = { pair.first, static_cast<std::uint8_t>(pair.first + 1u),
+                                           pair.second, static_cast<std::uint8_t>(pair.second + 1u) };
+              for (int index = 0; index < 4; ++index)
+              {
+                cpu.memory[static_cast<std::uint16_t>(inwk + at[index])] = bytes[index];
+                work[at[index]] = bytes[index];
+              }
+              cpu.memory[rat2] = direction;
+
+              cpu.x = pair.first;
+              cpu.y = pair.second;
+              const Elite::Testing::RunResult run = cpu.CallSubroutine(mvs5);
+              Assert::IsTrue(run.completed, L"MVS5 returned");
+
+              Elite::RotateCoordinatePair(work, math, pair.first, pair.second, direction);
+
+              const std::wstring where = Widen(
+                "MVS5(x=" + std::to_string(pair.first) + ", y=" + std::to_string(pair.second)
+                + ", rat2=" + std::to_string(direction) + ", " + std::to_string(xLow) + "/"
+                + std::to_string(xHigh) + " " + std::to_string(yLow) + ")");
+              for (int index = 0; index < 4; ++index)
+              {
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + at[index])],
+                                 work[at[index]],
+                                 (where + L": INWK+" + std::to_wstring(at[index])).c_str());
+              }
+              ++compared;
+            }
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(6u * 2u * 8u * 8u * 8u, compared, L"the whole sweep ran");
   }
 };
 
