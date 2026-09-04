@@ -428,6 +428,28 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.70 The fifteenth flag, and a rule that saved the work before it started
+
+§6.69 flagged `MAS3` before slice 3d-d-i was written: `JSR SQUA2 / ADC R`, twice, with no `CLC`,
+and `SquareUnsigned` returning the byte alone. On the record so far that reads like a defect.
+
+§6.65's rule says to ask two questions and in which order. *Does the instruction that reads it
+care?* — it is an `ADC`, so only a SET carry is observable. *Is it ever set?* — the exhaustive
+sweep for `SQUA` and `SQUA2` already existed, so widening the model cost one assertion line
+(§6.42's pattern for the fifth time), and the answer over all 512 inputs is NO. `MU1`, the path
+taken when A is zero, opens `CLC`; `MU11` ends on a `ROR P` that never carries out for a square.
+
+**So the port was already right about `MAS3` before the flag was modelled at all**, and the
+widening buys a proof rather than a fix. That is a different outcome from the previous four
+dropped flags and it is the first one the rule PREDICTED — the finding was raised, the rule said
+which half to measure first, and the measurement said no change was needed. §6.60's carry is the
+same shape; §6.65's is not, because there it lands in an `SBC` and a clear carry borrows.
+
+The assertion is `carries == 0` and not an uncounted loop, because "always clear" is a claim about
+all 512 inputs and this is the sweep that can make it. A comment saying so would have been the
+same reasoning with nothing checking it — which is how §6.68's laser comment came to be wrong
+about its own arithmetic.
+
 ### 6.69 The §6.12 pass on slice 3d-d, and a unit that is a slice and a half again
 
 The flight loop, and the pass says the same thing about 3d-d that §6.59 said about the whole 3d

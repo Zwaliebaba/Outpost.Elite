@@ -924,7 +924,7 @@ void DrawSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, Math
   _state.v = at;
   _state.vNext = sign;
 
-  _math.k2[1] = SquareUnsigned(_math, _math.k[0]);
+  _math.k2[1] = SquareUnsigned(_math, _math.k[0]).high;
   _math.k2[0] = _math.p;
 
   // 6502: part 2 -- rub out the rows BELOW the sun, with last frame's centre, before any of
@@ -960,7 +960,7 @@ void DrawSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, Math
   for (;;)
   {
     // 6502: the half-width, as sqrt(K^2 - v^2).
-    _math.t = SquareUnsigned(_math, _state.v);
+    _math.t = SquareUnsigned(_math, _state.v).high;
     const SubResult widthLow = SubtractWithCarry(_math.k2[0], _math.p, true);
     _math.q = widthLow.value;
     _math.r = SubtractWithCarry(_math.k2[1], _math.t, widthLow.carry).value;
