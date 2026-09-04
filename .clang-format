@@ -43,9 +43,9 @@ ContinuationIndentWidth: 2
 # Allman: every brace on its own line.
 BreakBeforeBraces: Allman
 
-# `namespace Neuron` does not indent its contents — the whole file would be one level in for no
-# information gained.
-NamespaceIndentation: None
+# `namespace Neuron` indents its contents like any other block — the nesting is visible where it
+# starts and where it ends, rather than being something you have to remember.
+NamespaceIndentation: All
 
 # -2, matching IndentWidth: `public:` sits flush with the `class`, its members one step in.
 AccessModifierOffset: -2

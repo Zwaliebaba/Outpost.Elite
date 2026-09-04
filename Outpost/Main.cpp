@@ -52,99 +52,98 @@
 namespace
 {
 
-/// The window opens at this scale, which is 960x600 -- large enough to read on a modern display
-/// and small enough to fit inside one. The player can resize; the viewport follows.
-constexpr int INITIAL_SCALE = 3;
+  /// The window opens at this scale, which is 960x600 -- large enough to read on a modern display
+  /// and small enough to fit inside one. The player can resize; the viewport follows.
+  constexpr int INITIAL_SCALE = 3;
 
-/*
- * Everything a docked game is, wired together once.
- *
- * The declaration order is the construction order and it is load-bearing, which is why the
- * members are grouped by what they depend on rather than by what they are.
- */
-struct Game
-{
-  Game()
-    : shell(window, presenter, canvas)
-    , screen(canvas, text, &shell)
-    , characters(screen)
-    , recursive(characters)
-    , values(recursive, text, commander, name, currentSeeds, selectedSeeds, false)
-    , extended(characters, recursive, rng, &shell)
-    , trade{ recursive, characters, extended, text, shell, shell, rng }
-    , save{ recursive, characters, extended, screen, text, shell, shell, store, numbers }
+  /*
+   * Everything a docked game is, wired together once.
+   *
+   * The declaration order is the construction order and it is load-bearing, which is why the
+   * members are grouped by what they depend on rather than by what they are.
+   */
+  struct Game
   {
-    recursive.SetValueTokens(&values);
-    recursive.SetCursor(&text);
-    shell.Attach(recursive, text, characters.state, message);
-    shell.AttachExtended(extended);
+    Game()
+      : shell(window, presenter, canvas),
+        screen(canvas, text, &shell),
+        characters(screen),
+        recursive(characters),
+        values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
+        extended(characters, recursive, rng, &shell),
+        trade{recursive, characters, extended, text, shell, shell, rng},
+        save{recursive, characters, extended, screen, text, shell, shell, store, numbers}
+    {
+      recursive.SetValueTokens(&values);
+      recursive.SetCursor(&text);
+      shell.Attach(recursive, text, characters.state, message);
+      shell.AttachExtended(extended);
 
-    // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
-    // capital letter of the first screen depends on.
-    characters.state.sentenceStart = 0xFF;
-  }
+      // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
+      // capital letter of the first screen depends on.
+      characters.state.sentenceStart = 0xFF;
+    }
 
-  Game(const Game&) = delete;
-  Game& operator=(const Game&) = delete;
+    Game(const Game&) = delete;
+    Game& operator=(const Game&) = delete;
 
-  // ---- the platform ---------------------------------------------------------------------------
-  Outpost::Window window;
-  Outpost::CanvasPresenter presenter;
-  Elite::Canvas canvas;
-  Outpost::GameShell shell;
-  Outpost::SaveStore store;
+    // ---- the platform ---------------------------------------------------------------------------
+    Outpost::Window window;
+    Outpost::CanvasPresenter presenter;
+    Elite::Canvas canvas;
+    Outpost::GameShell shell;
+    Outpost::SaveStore store;
 
-  // ---- the text system ------------------------------------------------------------------------
-  Elite::TextState text;
-  Elite::TextPrinter screen;
-  Elite::CharacterPrinter characters;
-  Elite::TokenPrinter recursive;
-  Elite::Rng rng;
-  Elite::NumberWorkspace numbers;
+    // ---- the text system ------------------------------------------------------------------------
+    Elite::TextState text;
+    Elite::TextPrinter screen;
+    Elite::CharacterPrinter characters;
+    Elite::TokenPrinter recursive;
+    Elite::Rng rng;
+    Elite::NumberWorkspace numbers;
 
-  // ---- the commander and the universe ----------------------------------------------------------
-  Elite::CommanderBlock commander = Elite::DefaultCommander();
-  std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-  std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
-  std::array<std::uint8_t, 16> buffer{};
-  bool useDisk = false;
+    // ---- the commander and the universe ----------------------------------------------------------
+    Elite::CommanderBlock commander = Elite::DefaultCommander();
+    std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
+    std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
+    std::array<std::uint8_t, 16> buffer{};
+    bool useDisk = false;
 
-  Elite::SystemSeeds currentSeeds{};
-  Elite::SystemSeeds selectedSeeds{};
-  Elite::CurrentSystem current;
-  Elite::MarketState market;
-  Elite::FlightStatus status;
-  Elite::MessageState message; ///< 6502: DLY, de, MCH and messXC
+    Elite::SystemSeeds currentSeeds{};
+    Elite::SystemSeeds selectedSeeds{};
+    Elite::CurrentSystem current;
+    Elite::MarketState market;
+    Elite::FlightStatus status;
+    Elite::MessageState message; ///< 6502: DLY, de, MCH and messXC
 
-  std::uint8_t crosshairX = 0;
-  std::uint8_t crosshairY = 0;
-  std::uint8_t explosionCount = 0;
-  std::uint8_t dockedFlag = 0;
+    std::uint8_t crosshairX = 0;
+    std::uint8_t crosshairY = 0;
+    std::uint8_t explosionCount = 0;
+    std::uint8_t dockedFlag = 0;
 
-  // ---- the screens ------------------------------------------------------------------------------
-  Elite::StateTokens values;
-  Elite::ExtendedTokenPrinter extended;
-  Elite::TradeScreen trade;
-  Elite::SaveScreen save;
-};
+    // ---- the screens ------------------------------------------------------------------------------
+    Elite::StateTokens values;
+    Elite::ExtendedTokenPrinter extended;
+    Elite::TradeScreen trade;
+    Elite::SaveScreen save;
+  };
 
-/*
- * One key, and whatever screen it reaches.
- *
- * 6502: what `TT102` does with the label it chose. The dispatch itself is `ActionForKey`, which
- * is compared against the shipped routine over 16,384 states; this is the other half, and the
- * actions that need phase 3 are refused rather than silently ignored -- a docked game that did
- * nothing for a launch key would look exactly like one that had wired it up.
- */
-void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
-{
-  switch (_outcome.action)
+  /*
+   * One key, and whatever screen it reaches.
+   *
+   * 6502: what `TT102` does with the label it chose. The dispatch itself is `ActionForKey`, which
+   * is compared against the shipped routine over 16,384 states; this is the other half, and the
+   * actions that need phase 3 are refused rather than silently ignored -- a docked game that did
+   * nothing for a launch key would look exactly like one that had wired it up.
+   */
+  void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
   {
+    switch (_outcome.action)
+    {
     case Elite::KeyAction::StatusMode:
     {
-      const Elite::ShipCondition condition{ _game.dockedFlag, 0, 0, _game.status.energy };
-      Elite::StatusScreen(_game.trade, _game.commander, condition, _game.crosshairX, _game.crosshairY,
-                          _game.selectedSeeds);
+      const Elite::ShipCondition condition{_game.dockedFlag, 0, 0, _game.status.energy};
+      Elite::StatusScreen(_game.trade, _game.commander, condition, _game.crosshairX, _game.crosshairY, _game.selectedSeeds);
       return;
     }
 
@@ -153,8 +152,7 @@ void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
       // 6502: JSR TT111 / JMP TT25 -- the screen reads what the search leaves behind.
       const Elite::NearestSystem found =
         Elite::FindNearestSystem(_game.commander.GalaxySeeds(), _game.crosshairX, _game.crosshairY,
-                                 _game.commander.At(Elite::Field::SystemX),
-                                 _game.commander.At(Elite::Field::SystemY));
+                                 _game.commander.At(Elite::Field::SystemX), _game.commander.At(Elite::Field::SystemY));
       _game.selectedSeeds = found.seeds;
       Elite::SystemDataScreen(_game.trade, _game.selectedSeeds, found.data, found.distance);
       return;
@@ -163,8 +161,7 @@ void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
     case Elite::KeyAction::MarketPrice:
       // 6502: TT167. The screen reset above it is TRADEMODE, which the caller does.
       _game.shell.SetUpTradeScreen(Elite::BUY_CARGO_VIEW);
-      Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.text, _game.current.economy,
-                               _game.market, false);
+      Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.text, _game.current.economy, _game.market, false);
       return;
 
     case Elite::KeyAction::BuyCargo:
@@ -172,8 +169,7 @@ void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
       return;
 
     case Elite::KeyAction::SellCargo:
-      Elite::ListCargo(_game.trade, _game.commander, _game.market, _game.current.economy,
-                       Elite::SELL_CARGO_VIEW);
+      Elite::ListCargo(_game.trade, _game.commander, _game.market, _game.current.economy, Elite::SELL_CARGO_VIEW);
       return;
 
     case Elite::KeyAction::Inventory:
@@ -186,8 +182,8 @@ void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
 
     case Elite::KeyAction::DiskAccess:
     {
-      const Elite::DiskMenuResult menu = Elite::DiskAccessMenu(_game.save, _game.commander, _game.name,
-                                                               _game.image, _game.buffer, _game.useDisk);
+      const Elite::DiskMenuResult menu =
+        Elite::DiskAccessMenu(_game.save, _game.commander, _game.name, _game.image, _game.buffer, _game.useDisk);
       // 6502: BCC P%+5 / JMP QU5 / JMP BAY -- and QU5 is DFAULT, which installs the loaded image.
       if (menu.newCommander)
       {
@@ -212,92 +208,89 @@ void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
     case Elite::KeyAction::MoveCrosshairs:
     case Elite::KeyAction::Nothing:
       return;
-  }
-}
-
-/// 6502: TT102 -- decide, then do. The two are separate because the start sequence FORCES a key
-/// and hands back what the dispatch made of it, so it has already decided by the time it returns.
-void PressKey(Game& _game, std::uint8_t _key)
-{
-  Perform(_game, Elite::ActionForKey(_key, _game.dockedFlag, _game.shell.View(),
-                                     _game.status.hyperspaceCountdown, false));
-}
-
-int Run(HINSTANCE _instance)
-{
-  auto game = std::make_unique<Game>();
-
-  game->window.Create(_instance, INITIAL_SCALE);
-  game->presenter.Create(game->window.Handle());
-
-  // 6502: NA% -- the commander the disk menu's "load" compares against, and the one SVE writes.
-  Elite::SaveCommander(game->commander, game->name, game->image);
-
-  Elite::GameStart start{ game->shell,          game->save,       game->text,
-                          game->commander,      game->name,       game->image,
-                          game->buffer,         game->useDisk,    game->current,
-                          game->selectedSeeds,  game->crosshairX, game->crosshairY,
-                          game->explosionCount, game->dockedFlag };
-
-  // 6502: TT170 -- the cold start. It ends by pressing "8" for the player and entering the docked
-  // half of the main loop, which is why there is no separate "draw the first screen" step.
-  const Elite::ForcedKey begun = Elite::ResetAndStartGame(start);
-  if (begun.loop == Elite::MainLoop::Docked)
-  {
-    // 6502: the market is rolled on arrival rather than by the start sequence, and the market
-    // screen reads it -- so a game that skipped this would print a table of zeroes.
-    Elite::GenerateMarket(game->rng, game->current.economy, game->market);
-
-    // 6502: BAY forces "8" and TT102 has already dispatched it, so this PERFORMS that outcome
-    // rather than deciding it again -- deciding twice would work today and stop working the
-    // moment the dispatch depends on something the first decision changed.
-    Perform(*game, begun.outcome);
-  }
-
-  /*
-   * 6502: MLOOP's second half -- poll the keyboard, dispatch, repeat.
-   *
-   * The POSITION goes to the dispatch and not the character, which is the whole reason `KeyMap`
-   * maps a Windows key to a C64 matrix position: `TT102` compares against 37 for "8" and never
-   * against `'8'`. A shell that handed it the translated character would find that no docked
-   * screen key worked at all.
-   */
-  while (game->shell.Turn())
-  {
-    std::uint8_t key = 0;
-    if (game->window.TakeKey(key))
-    {
-      PressKey(*game, key);
     }
   }
 
-  return 0;
-}
+  /// 6502: TT102 -- decide, then do. The two are separate because the start sequence FORCES a key
+  /// and hands back what the dispatch made of it, so it has already decided by the time it returns.
+  void PressKey(Game& _game, std::uint8_t _key)
+  {
+    Perform(_game, Elite::ActionForKey(_key, _game.dockedFlag, _game.shell.View(), _game.status.hyperspaceCountdown, false));
+  }
 
-/*
- * The one place an exception is caught (AGENTS.md section 5).
- *
- * Everything below `Run` reports failure by throwing through `winrt::check_hresult`, which means
- * a missing GPU or a refused window arrives here as one message rather than as a silent exit.
- */
-int Guarded(HINSTANCE _instance) noexcept
-{
-  try
+  int Run(HINSTANCE _instance)
   {
-    return Run(_instance);
+    auto game = std::make_unique<Game>();
+
+    game->window.Create(_instance, INITIAL_SCALE);
+    game->presenter.Create(game->window.Handle());
+
+    // 6502: NA% -- the commander the disk menu's "load" compares against, and the one SVE writes.
+    Elite::SaveCommander(game->commander, game->name, game->image);
+
+    Elite::GameStart start{game->shell,      game->save,       game->text,           game->commander, game->name,
+                           game->image,      game->buffer,     game->useDisk,        game->current,   game->selectedSeeds,
+                           game->crosshairX, game->crosshairY, game->explosionCount, game->dockedFlag};
+
+    // 6502: TT170 -- the cold start. It ends by pressing "8" for the player and entering the docked
+    // half of the main loop, which is why there is no separate "draw the first screen" step.
+    const Elite::ForcedKey begun = Elite::ResetAndStartGame(start);
+    if (begun.loop == Elite::MainLoop::Docked)
+    {
+      // 6502: the market is rolled on arrival rather than by the start sequence, and the market
+      // screen reads it -- so a game that skipped this would print a table of zeroes.
+      Elite::GenerateMarket(game->rng, game->current.economy, game->market);
+
+      // 6502: BAY forces "8" and TT102 has already dispatched it, so this PERFORMS that outcome
+      // rather than deciding it again -- deciding twice would work today and stop working the
+      // moment the dispatch depends on something the first decision changed.
+      Perform(*game, begun.outcome);
+    }
+
+    /*
+     * 6502: MLOOP's second half -- poll the keyboard, dispatch, repeat.
+     *
+     * The POSITION goes to the dispatch and not the character, which is the whole reason `KeyMap`
+     * maps a Windows key to a C64 matrix position: `TT102` compares against 37 for "8" and never
+     * against `'8'`. A shell that handed it the translated character would find that no docked
+     * screen key worked at all.
+     */
+    while (game->shell.Turn())
+    {
+      std::uint8_t key = 0;
+      if (game->window.TakeKey(key))
+      {
+        PressKey(*game, key);
+      }
+    }
+
+    return 0;
   }
-  catch (const winrt::hresult_error& failure)
+
+  /*
+   * The one place an exception is caught (AGENTS.md section 5).
+   *
+   * Everything below `Run` reports failure by throwing through `winrt::check_hresult`, which means
+   * a missing GPU or a refused window arrives here as one message rather than as a silent exit.
+   */
+  int Guarded(HINSTANCE _instance) noexcept
   {
-    MessageBoxW(nullptr, failure.message().c_str(), L"Elite", MB_OK | MB_ICONERROR);
-    return 1;
+    try
+    {
+      return Run(_instance);
+    }
+    catch (const winrt::hresult_error& failure)
+    {
+      MessageBoxW(nullptr, failure.message().c_str(), L"Elite", MB_OK | MB_ICONERROR);
+      return 1;
+    }
+    catch (const std::exception& failure)
+    {
+      const std::string what = failure.what();
+      MessageBoxA(nullptr, what.c_str(), "Elite", MB_OK | MB_ICONERROR);
+      return 1;
+    }
   }
-  catch (const std::exception& failure)
-  {
-    const std::string what = failure.what();
-    MessageBoxA(nullptr, what.c_str(), "Elite", MB_OK | MB_ICONERROR);
-    return 1;
-  }
-}
 } // namespace
 
 /*
