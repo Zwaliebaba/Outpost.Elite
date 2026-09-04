@@ -54,6 +54,7 @@ struct HeapLabels
   std::uint16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0, swap = 0, type = 0, dontclip = 0;
   std::uint16_t k5 = 0, k6 = 0, stp = 0, flag = 0, cnt = 0, xx13 = 0, xx12 = 0;
   std::uint16_t inwk = 0, k2 = 0, xx16 = 0, tgt = 0, cnt2 = 0, pltog = 0, sun = 0;
+  std::uint16_t qq11 = 0;
   std::uint16_t screen = 0;
 
   explicit HeapLabels(const OracleImage& _oracle)
@@ -72,6 +73,7 @@ struct HeapLabels
     inwk = _oracle.Label("INWK"); k2 = _oracle.Label("K2"); xx16 = _oracle.Label("XX16");
     tgt = _oracle.Label("TGT");   cnt2 = _oracle.Label("CNT2");
     pltog = _oracle.Label("PLTOG"); sun = _oracle.Label("SUN");
+    qq11 = _oracle.Label("QQ11");
 
     const Cpu6502 cpu = _oracle.Fresh();
     screen = static_cast<std::uint16_t>((cpu.memory[_oracle.Label("ylookupl")]
@@ -1201,6 +1203,254 @@ public:
     Assert::IsTrue(redrawn > 0u, L"and redrawn over itself");
     Logger::WriteMessage(("SUN: " + std::to_string(compared) + " frames, "
                           + std::to_string(marked) + " marked bytes")
+                           .c_str());
+  }
+};
+
+
+namespace
+{
+/// 6502: SCAN -- the scanner is slice 3d's, so `WPSHPS` reaches it through a seam that records
+/// what it was asked to do.
+class RecordingScanner : public Elite::BubbleEffects
+{
+public:
+  std::vector<std::pair<std::uint8_t, std::uint8_t>> scanned; // slot type, state byte
+  void ScanShip(const Elite::ShipBlock& _work, std::uint8_t _type) override
+  {
+    scanned.emplace_back(_type, _work[Elite::SHIP_STATE_OFFSET]);
+  }
+};
+} // namespace
+
+
+TEST_CLASS(TheBubbleReset)
+{
+public:
+  /// 6502: ZINF -- clear a block and square it to the axes.
+  TEST_METHOD(TheBlockIsClearedTheSameWay)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const HeapLabels at(oracle);
+
+    Cpu6502 cpu = oracle.Fresh();
+    Elite::ShipBlock work{};
+
+    // Fill both sides with something, so "cleared" means cleared rather than "already zero".
+    for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+    {
+      const std::uint8_t value = static_cast<std::uint8_t>(0x5Au + byte * 7u);
+      work[byte] = value;
+      cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = value;
+    }
+
+    Assert::IsTrue(cpu.CallSubroutine(oracle.Label("ZINF"), 20'000).completed, L"ZINF returned");
+    Elite::ClearShipBlock(work);
+
+    for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+    {
+      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                       (L"ZINF: INWK+" + std::to_wstring(byte)).c_str());
+    }
+  }
+
+  /*
+   * 6502: NWSTARS, nWq and WPSHPS -- one fall-through chain the ledger lists as four rows.
+   *
+   * The stardust half is compared on the whole canvas, all six arrays and the generator's four
+   * state bytes, because each speck's first random byte runs on the carry the PREVIOUS speck's
+   * plot left. The ship half is compared on every slot's state byte and on the scanner seam,
+   * because `WPSHPS` masks the byte in the SLOT and leaves the copy in `INWK` alone.
+   */
+  TEST_METHOD(TheFieldAndTheShipsAreResetTheSameWay)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const HeapLabels at(oracle);
+    const std::uint16_t nwstars = oracle.Label("NWSTARS");
+    const std::uint16_t scan = oracle.Label("SCAN");
+    const std::uint16_t rand = oracle.Label("RAND");
+    const std::uint16_t frin = oracle.Label("FRIN");
+    const std::uint16_t kPercent = oracle.Label("K%");
+    const std::uint16_t nostm = oracle.Label("NOSTM");
+
+    const std::vector<std::vector<std::uint8_t>> FLEETS = {
+      {},
+      { 1, 0 },
+      { 3, 9, 2, 0 },
+      { 128, 5, 129, 7, 0 },
+      { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 },
+    };
+
+    std::uint32_t compared = 0;
+    std::uint32_t marked = 0;
+    std::uint32_t scannedTotal = 0;
+    std::uint32_t replaced = 0;
+
+    for (const std::vector<std::uint8_t>& fleet : FLEETS)
+    {
+      for (const std::uint8_t viewType : { 0u, 1u, 4u })
+      {
+        for (const std::uint8_t count : { 3, 12 })
+        {
+          for (const bool carryIn : { false, true })
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            Elite::Canvas canvas;
+            Elite::DrawWorkspace draw;
+            Elite::Stardust dust;
+            Elite::Rng rng;
+            Elite::PlanetSunState state;
+            Elite::Bubble bubble;
+            Elite::ShipBlock work{};
+            RecordingScanner scanner;
+
+            // 6502: SCAN is slice 3d's, so it is trapped on one side and recorded on the other.
+            cpu.AddTrap(scan);
+
+            SeedSunHeap(cpu, state, at, 0x2C6A91B7u);
+            SeedBallHeap(cpu, state, at, 0x8D14E703u, 40);
+
+            dust.count = count;
+            cpu.memory[nostm] = count;
+            for (std::size_t slot = 0; slot < Elite::STARDUST_SLOTS; ++slot)
+            {
+              const std::uint8_t value = static_cast<std::uint8_t>(0x31u + slot * 11u);
+              dust.x[slot] = dust.y[slot] = dust.z[slot] = value;
+              cpu.memory[static_cast<std::uint16_t>(oracle.Label("SX") + slot)] = value;
+              cpu.memory[static_cast<std::uint16_t>(oracle.Label("SY") + slot)] = value;
+              cpu.memory[static_cast<std::uint16_t>(oracle.Label("SZ") + slot)] = value;
+            }
+
+            const std::array<std::uint8_t, 4> seed = { 0x2B, 0x49, 0xC3, 0x71 };
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              cpu.memory[static_cast<std::uint16_t>(rand + byte)] = seed[byte];
+            }
+            rng.SetState(seed);
+
+            // The fleet, in both FRIN and the K% blocks it points at.
+            for (std::size_t slot = 0; slot < fleet.size() && slot < Elite::MAX_SHIPS; ++slot)
+            {
+              bubble.slots[slot] = fleet[slot];
+              cpu.memory[static_cast<std::uint16_t>(frin + slot)] = fleet[slot];
+              for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+              {
+                const std::uint8_t value =
+                  static_cast<std::uint8_t>(0x11u + slot * 13u + byte * 3u);
+                bubble.blocks[slot][byte] = value;
+                cpu.memory[static_cast<std::uint16_t>(
+                  kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
+              }
+            }
+
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              const std::uint8_t value = static_cast<std::uint8_t>(0xC7u - byte * 5u);
+              work[byte] = value;
+              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = value;
+            }
+
+            cpu.memory[at.qq11] = viewType;
+            cpu.c = carryIn;
+
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(nwstars, 200'000);
+            Assert::IsTrue(run.completed, L"NWSTARS returned");
+
+            Elite::SeedStardustAndClearShips(canvas, draw, dust, rng, state, bubble, work, scanner,
+                                             viewType, carryIn);
+
+            const std::wstring where =
+              Widen("NWSTARS ships=" + std::to_string(fleet.size()) + " view="
+                    + std::to_string(viewType) + " count=" + std::to_string(count) + " carry="
+                    + std::to_string(carryIn ? 1 : 0));
+
+            marked += CompareScreens(cpu, at.screen, canvas, where);
+            CompareHeaps(cpu, state, at, where);
+
+            for (std::size_t slot = 0; slot < Elite::STARDUST_SLOTS; ++slot)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("SX") + slot)],
+                               dust.x[slot], (where + L": SX").c_str());
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("SY") + slot)],
+                               dust.y[slot], (where + L": SY").c_str());
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("SZ") + slot)],
+                               dust.z[slot], (where + L": SZ").c_str());
+            }
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)],
+                               rng.State()[byte],
+                               (where + L": RAND+" + std::to_wstring(byte)).c_str());
+            }
+            for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+            {
+              Assert::AreEqual(
+                cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE
+                                                      + Elite::SHIP_STATE_OFFSET)],
+                bubble.blocks[slot][Elite::SHIP_STATE_OFFSET],
+                (where + L": the slot's state byte").c_str());
+            }
+
+            // `WPSHPS` copies THIRTY-TWO bytes into `INWK`, not the whole block, so the four
+            // above them keep whatever was there. Comparing the copy is what measures that.
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                               (where + L": INWK+" + std::to_wstring(byte)).c_str());
+            }
+
+            Assert::AreEqual<std::size_t>(cpu.trapHits.size(), scanner.scanned.size(),
+                                          (where + L": the scanner seam").c_str());
+
+            /*
+             * §6.36 again: the arrays are seeded to fixed values on both sides, so "they agree"
+             * is also what a routine that did nothing would produce. The space view must
+             * replace every speck and a menu view must replace none.
+             */
+            std::uint32_t changed = 0;
+            for (std::size_t slot = 1; slot <= count; ++slot)
+            {
+              const std::uint8_t was = static_cast<std::uint8_t>(0x31u + slot * 11u);
+              changed += (dust.x[slot] != was || dust.y[slot] != was || dust.z[slot] != was)
+                           ? 1u
+                           : 0u;
+            }
+            if (viewType == 0u)
+            {
+              Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(count), changed,
+                                              (where + L": every speck replaced").c_str());
+              replaced += changed;
+            }
+            else
+            {
+              Assert::AreEqual<std::uint32_t>(0u, changed,
+                                              (where + L": a menu keeps its field").c_str());
+            }
+
+            scannedTotal += static_cast<std::uint32_t>(scanner.scanned.size());
+            ++compared;
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(5u * 3u * 2u * 2u, compared, L"every fleet and view");
+    Assert::IsTrue(marked > 0u, L"the new field was actually drawn");
+    Assert::IsTrue(scannedTotal > 0u, L"and some ships reached the scanner");
+    Assert::IsTrue(replaced > 0u, L"and the field was actually replaced");
+    Logger::WriteMessage(("NWSTARS: " + std::to_string(compared) + " resets, "
+                          + std::to_string(scannedTotal) + " scanned, " + std::to_string(marked)
+                          + " marked bytes")
                            .c_str());
   }
 };

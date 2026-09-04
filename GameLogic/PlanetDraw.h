@@ -5,6 +5,7 @@
 #include "ShipDraw.h"
 #include "Rng.h"
 #include "ShipSlot.h"
+#include "Stardust.h"
 
 #include <array>
 #include <cstdint>
@@ -338,5 +339,55 @@ void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _dr
                      GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                      Rng& _rng, const ShipBlock& _ship, Projection& _centre,
                      std::uint8_t _type) noexcept;
+
+/*
+ * 6502: ZINF -- clear a ship's data block and give it an identity orientation.
+ *
+ * `LDY #NI%-1 / LDA #0 / .ZI1 STA INWK,Y / DEY / BPL ZI1`, then 96 into `INWK+18` and `INWK+22`
+ * and 96-with-the-sign-bit into `INWK+14`. Those three are the high bytes of `nosev_z`,
+ * `roofv_y` and `sidev_x`, so the ship comes out pointing along the axes -- and the sign on the
+ * nose is what makes it face TOWARDS the player rather than away.
+ */
+void ClearShipBlock(ShipBlock& _work) noexcept;
+
+/*
+ * 6502: nWq -- fill the whole stardust field with new specks, and draw them.
+ *
+ * `NWSTARS` is the entry, and it is two instructions: if this is not a space view, skip straight
+ * to `WPSHPS`. The three routines are one fall-through chain -- `NWSTARS` into `nWq` into
+ * `WPSHPS` into `FLFLLS` -- which is why the ledger listing them as four rows is misleading
+ * (§6.45): you cannot port the head without the tail.
+ */
+void SeedStardustField(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng,
+                       bool _carryIn) noexcept;
+
+/*
+ * 6502: WPSHPS -- rub every ship off the screen and forget both line heaps.
+ *
+ * It walks `FRIN`, copies each ship's block into `INWK`, calls `SCAN` to take it off the
+ * scanner, and clears bit 3 and bit 6 of its state byte so the drawing code knows there is
+ * nothing on screen and nothing firing. Then `LSP`, `LSX2` and `LSY2` are reset and it falls
+ * into `FLFLLS`.
+ *
+ * `SCAN` is the seam: the scanner is slice 3d's, and this is the one thing in the chain that
+ * reaches outside it.
+ */
+class BubbleEffects
+{
+public:
+  virtual ~BubbleEffects() = default;
+
+  /// 6502: SCAN -- put a ship's blip on the scanner, or take it off. It plots by EOR like
+  /// everything else, so the same call does both.
+  virtual void ScanShip(const ShipBlock& _work, std::uint8_t _type) = 0;
+};
+
+void ClearAllShips(PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
+                   BubbleEffects& _effects) noexcept;
+
+void SeedStardustAndClearShips(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng,
+                               PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
+                               BubbleEffects& _effects, std::uint8_t _viewType,
+                               bool _carryIn) noexcept;
 
 } // namespace Elite

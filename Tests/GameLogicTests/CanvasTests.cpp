@@ -208,10 +208,21 @@ public:
     {
       for (std::uint32_t x1 = 0; x1 < 256; x1 += 1)
       {
+        /*
+         * The distance varies with the coordinates rather than being pinned at 255, which is
+         * what it was until the stardust's initialiser needed this routine's exit carry.
+         *
+         * `PIXEL` has three distance branches -- a four-pixel block under 80, two pixels under
+         * 144, one above -- and a sweep that is exhaustive in x and y and constant in `ZZ`
+         * reaches exactly one of them. It is the same shape of gap as §6.52's, in a test that
+         * had "exhaustively" in its name (§6.57).
+         */
+        const std::uint8_t zz = static_cast<std::uint8_t>((x1 * 7u + y1 * 13u) & 0xFFu);
+
         Cpu6502 cpu = oracle.Fresh();
         cpu.memory[zp.x1] = static_cast<std::uint8_t>(x1);
         cpu.memory[zp.y1] = static_cast<std::uint8_t>(y1);
-        cpu.memory[zp.zz] = 255;
+        cpu.memory[zp.zz] = zz;
         cpu.a = cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
 
@@ -222,10 +233,11 @@ public:
         DrawWorkspace work;
         work.x1 = static_cast<std::uint8_t>(x1);
         work.y1 = static_cast<std::uint8_t>(y1);
-        work.zz = 255;
-        Elite::PlotRelativePixel(canvas, work);
+        work.zz = zz;
+        const bool carry = Elite::PlotRelativePixel(canvas, work);
 
         CompareScreens(cpu, zp.screen, canvas, Context(L"PIXEL2", x1, y1));
+        Assert::AreEqual(cpu.c, carry, Context(L"the exit carry", x1, y1).c_str());
       }
     }
   }

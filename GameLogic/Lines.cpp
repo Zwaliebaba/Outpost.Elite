@@ -54,7 +54,7 @@ void PlotPixel(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _x, std::uint
   _canvas.ExclusiveOr(static_cast<std::uint16_t>(cell + subRow), mask);
 }
 
-void PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept
+bool PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept
 {
   /*
    * 6502: PIXEL2. The coordinates arrive as sign-magnitude offsets from the centre of the space
@@ -77,7 +77,9 @@ void PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept
   // the top or bottom of the space view, and the routine simply returns.
   if ((_work.y1 & 0x7Fu) >= 72u)
   {
-    return;
+    // 6502: CMP #Y / BCS PX4 -- the branch was taken, so the carry it left is SET, and `PX4` is
+    // a bare `RTS`.
+    return true;
   }
 
   /*
@@ -108,6 +110,16 @@ void PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept
   const std::uint8_t y = static_cast<std::uint8_t>(73u - magnitude - (carry ? 0u : 1u));
 
   PlotPixel(_canvas, _work, x, y);
+
+  /*
+   * 6502: `PIXEL`'s exit carry, and it is exactly `ZZ >= 80`.
+   *
+   * Three of the four ways out leave it set -- `CMP #144 / BCS PX3`, `CMP #80 / BCS PX13`, and
+   * `PIXEL2`'s own off-screen `BCS PX4` -- and the fourth, the near case that plots twice, comes
+   * through `CMP #80` without branching and so leaves it clear. Nothing between there and the
+   * `RTS` touches it.
+   */
+  return _work.zz >= 80u;
 }
 
 void PlotDash(Canvas& _canvas, DrawWorkspace& _work) noexcept
