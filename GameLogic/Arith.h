@@ -3,6 +3,7 @@
 #include "EliteTypes.h"
 
 #include <cstdint>
+#include <span>
 
 namespace Elite
 {
@@ -32,22 +33,88 @@ struct MathWorkspace
   std::uint8_t t1 = 0;
   std::uint8_t u = 0;
 
+  /*
+   * 6502: CNT -- zero page 170, a counter with FOURTEEN users.
+   *
+   * `LL9` parts 6 and 8, `BLINE`, `CIRCLE2`, `PLS22`, `SUN` parts 1 and 3, `TACTICS`, `DOEXP`,
+   * `PTCLS2`, `SPIN` and `STATUS` all write it and read it back. Every one of them initialises it
+   * before reading, so nothing hands it between units and separate copies would be unobservable
+   * -- which is the argument that kept `XX2` and `K3` apart. Here it costs one field to be right
+   * instead of unobservably-not-wrong, so it lives here rather than in the first workspace that
+   * happened to need it (§6.49).
+   */
+  std::uint8_t cnt = 0;
+
+  /*
+   * 6502: TGT and CNT2 -- 168 and 171, and shared the same way `CNT` is (§6.49).
+   *
+   * `TGT` is what a walk counts up to: `PLS2` sets it to 31 for a meridian, `PL9` to 64 for a
+   * crater, `SUN` to its own, and `DOEXP` and `PTCLS2` to theirs. `CNT2` is the angle a walk is
+   * at, and `TACTICS`, `DOCKIT` and `TITLE` use it for something else entirely.
+   *
+   * They are here for the same reason and with the same argument: every user sets them before
+   * reading, so separate copies would be unobservable, and one field costs less than the proof.
+   */
+  std::uint8_t tgt = 0;
+  std::uint8_t cnt2 = 0;
+
+  /*
+   * 6502: XX(1 0) and YY(1 0) -- two sixteen-bit scratch values at zero page 93 and 95.
+   *
+   * They are here rather than with the stardust, which is where they were first put and where
+   * only their FIRST caller lives (§6.45). `EDGES`, `WPLS` and three of `SUN`'s four parts read
+   * and write the same two labels, and `SUNX` sits immediately after them at 97 -- so they are a
+   * shared coordinate pair, not a workspace one routine owns. The two users are never live at
+   * the same time, which is exactly why nothing would ever have failed.
+   */
+  std::uint8_t xx = 0;
+  std::uint8_t xxNext = 0;
+  std::uint8_t yy = 0;
+  std::uint8_t yyNext = 0;
+
   // 6502: widget -- a scratch byte the logarithm routines use to hold their first operand
   // while the index register is busy addressing a table.
   std::uint8_t widget = 0;
 
   // 6502: K, a four-byte result block that several routines fill.
   std::uint8_t k[4] = { 0, 0, 0, 0 };
+
+  /*
+   * 6502: K2 -- a SECOND four-byte block, and separate storage rather than a second use of K.
+   *
+   * `MV40` is what settles that: it holds a partial result in K2 while `MULT3` overwrites K, and
+   * then adds the two together. They are live at the same time, so folding them into one would
+   * lose the first. The original agrees -- K is at zero page 119 and K2 at 178, nowhere near each
+   * other.
+   */
+  std::uint8_t k2[4] = { 0, 0, 0, 0 };
 };
 
-/// 6502: MU11 -- (A P) = P * X, unsigned. Returns the high byte; the low byte is left in P.
-[[nodiscard]] std::uint8_t MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept;
+/*
+ * What the shift-and-add multipliers leave behind, and the carry is not incidental.
+ *
+ * Every one of them ends on a `ROR P` and neither the `DEX / BNE` above it nor the `RTS` below
+ * touches the carry, so what a caller sees is that rotate's carry out -- the low bit of P before
+ * the last shift. Three callers read it in an `ADC` or `SBC` with no `CLC`/`SEC` in between:
+ * `MVEIT` after `MLTU2`, and the stardust after `MLU1` and `MLU2`. The port returned only the
+ * byte until `MVEIT` came out one adrift in a ship's y coordinate (§6.33), and the stardust
+ * needed the same thing from a different multiplier.
+ */
+struct WideResult
+{
+  std::uint8_t high = 0;
+  bool carry = false;
+};
 
-/// 6502: MULTU -- (A P) = P * Q, unsigned. Returns the high byte, low byte left in P.
-[[nodiscard]] std::uint8_t MultiplyUnsigned(MathWorkspace& _work) noexcept;
+/// 6502: MU11 -- (A P) = P * X, unsigned. Returns the high byte and the carry; the low byte is
+/// left in P.
+[[nodiscard]] WideResult MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept;
 
-/// 6502: MLU2 -- (A P) = |A| * Q, unsigned. Returns the high byte, low byte left in P.
-[[nodiscard]] std::uint8_t MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept;
+/// 6502: MULTU -- (A P) = P * Q, unsigned.
+[[nodiscard]] WideResult MultiplyUnsigned(MathWorkspace& _work) noexcept;
+
+/// 6502: MLU2 -- (A P) = |A| * Q, unsigned. The stardust reads its carry.
+[[nodiscard]] WideResult MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /// 6502: MULT1 -- (A P) = Q * A for sign-magnitude operands. Returns the high byte, which
 /// carries the sign; the low byte is left in P.
@@ -68,6 +135,19 @@ struct AddSignedResult
 {
   std::uint8_t high = 0;
   std::uint8_t low = 0;
+
+  /*
+   * 6502: the carry, which `PLS22` reads twice and the port dropped until it did (§6.53).
+   *
+   * `ADD` has three exits and none of them clears it: the same-sign path leaves whatever
+   * `ADC T1` produced, the `BCS MU9` path leaves it SET by definition, and the negating path
+   * leaves the second `SBC U`'s. `PLS22` then does `STA T / BPL PL42 / ... / .PL42 TXA /
+   * ADC K3`, so a meridian's position on the screen depends on it.
+   *
+   * The ninth dropped flag, and the field is added rather than the signature changed because
+   * every other caller reads `high` and `low` alone.
+   */
+  bool carry = false;
 };
 
 /// 6502: ADD (with its MU8 and MU9 branches) -- (A X) = (A P) + (S R), sign-magnitude.
@@ -89,7 +169,7 @@ void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
 [[nodiscard]] std::uint8_t MultiplyScaled(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /// 6502: MLTU2 -- (A P+1 P) = (~A P) * Q, sixteen steps through the complemented multiplier.
-[[nodiscard]] std::uint8_t MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept;
+[[nodiscard]] WideResult MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /// 6502: DVID96 -- A = A / 96, keeping the sign bit. The tail TIS1 shares.
 [[nodiscard]] std::uint8_t DivideBy96(MathWorkspace& _work, std::uint8_t _a) noexcept;
@@ -111,22 +191,63 @@ void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
 // applies, because that choice falls out of a parity test rather than being a detail.
 
 /// 6502: FMLTU -- A = A * Q / 256, through the logarithm tables.
-[[nodiscard]] std::uint8_t MultiplyByLog(MathWorkspace& _work, std::uint8_t _a) noexcept;
+[[nodiscard]] WideResult MultiplyByLog(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept;
 
 /// 6502: LL28 -- R = 256 * A / Q, saturating at 255 when A is not smaller than Q. Returns the
 /// carry the routine leaves, because its callers branch on it.
 [[nodiscard]] bool DivideToR(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
+/*
+ * 6502: LL61 (with its LL84 error exit) -- (U R) = 256 * A / Q, for an A that is NOT smaller
+ * than Q (slice 3b).
+ *
+ * `LL28`'s sister, and it works by borrowing `LL28`: halve A until it is small enough, divide,
+ * then double the answer back the same number of times. The doubling is into `U`, which is why
+ * this one is sixteen bits wide where `LL28` is eight.
+ *
+ * Two ways to fail and both answer 50 rather than saturating: a zero divisor, and an overflow out
+ * of the doubling. Fifty is not a rounding of anything -- it is a value `LL9` treats as "this
+ * vertex is roughly here", and the ship still gets drawn.
+ *
+ * `S` is used as scratch for the shift count and is LEFT there. `LL28` does not touch it, which
+ * is what makes that safe, and a port that gave `LL28` a use for `S` would break this quietly.
+ */
+void DivideToUR(MathWorkspace& _work, std::uint8_t _a) noexcept;
+
+/*
+ * What `LL38` leaves behind, and the carry is part of it.
+ *
+ * The routine's own header says "C flag: set if the addition overflowed, clear otherwise", and it
+ * goes to some trouble to make that true -- the subtracting branch has an explicit `CLC` before
+ * its `RTS` that would otherwise be dead. `LL9`'s face-visibility loop reads it: a `BCS ovflw`
+ * there halves the ship's position and starts the face again. The port returned only the byte
+ * until `LL9` needed the flag, which is the third time a dropped register has come back (§6.33).
+ */
+struct SignedSum
+{
+  std::uint8_t value = 0;
+  bool carry = false;
+};
+
 /// 6502: LL38 (with its LL39 and LL40 branches) -- combines Q and R under the signs in A and S,
 /// flipping S when the result turns negative.
-[[nodiscard]] std::uint8_t CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
+[[nodiscard]] SignedSum CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /// 6502: ARCTAN -- the angle of the ratio P over Q, as a byte turn.
 [[nodiscard]] std::uint8_t Arctan(MathWorkspace& _work) noexcept;
 
-/// 6502: FMLTU2 -- A = K * sin(A) / 256, where the sine comes from SNE indexed by the low five
-/// bits of A. It sets Q and falls straight through into FMLTU, so this is that whole path.
-[[nodiscard]] std::uint8_t MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a) noexcept;
+/*
+ * 6502: FMLTU2 -- A = K * sin(A) / 256, where the sine comes from SNE indexed by the low five
+ * bits of A. It sets Q and falls straight through into FMLTU, so this is that whole path.
+ *
+ * The carry is part of the answer, and `CIRCLE2` is the caller that reads it: `JSR FMLTU2 / TAX /
+ * LDA #0 / STA T / LDA CNT / ADC #15`, with no `CLC`. `FMLTU`'s two antilog exits leave it SET
+ * and its zero exit leaves it CLEAR, so it is data-dependent and not a constant like `MULTU`'s
+ * (§6.43). The eighth dropped flag, and again the exhaustive sweep that already existed verified
+ * the wider model for the price of one line (§6.42).
+ */
+[[nodiscard]] WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a,
+                                         bool _carryIn) noexcept;
 
 /*
  * 6502: DVID4 -- an 8.8 fixed-point divide. P comes out as the whole part of A / Q, and R as
@@ -152,6 +273,75 @@ void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
  * The inventory grouped this with the state-dependent helpers and deferred it to 3a. It is not
  * state-dependent -- it takes R and Q and leaves Q -- and TT111 needs it, so it lands here.
  */
-void SquareRoot(MathWorkspace& _work) noexcept;
+[[nodiscard]] bool SquareRoot(MathWorkspace& _work) noexcept;
+
+/*
+ * 6502: MULT3 -- K(4) = (A P+1 P) * Q, a twenty-four bit magnitude by an eight bit one, signed
+ * (slice 3a).
+ *
+ * The shift-and-add is the usual one with a trick in it worth naming, because it looks like an
+ * off-by-one: the routine stores |Q| - 1 in T and then adds it with `ADC` at a point where the
+ * carry is always SET, so what actually gets added is |Q|. The subtraction and the carry cancel,
+ * and a port that "corrected" the `SBC #1` would be wrong by one on every partial product.
+ *
+ * `MVEIT` reaches this through `MV40`, the path a planet or a sun takes. The name follows
+ * `MultiplySignedToSR` (`MULT12`), because what distinguishes these from the other multipliers is
+ * where they leave the answer rather than what they do to it.
+ */
+void MultiplySignedToK(MathWorkspace& _work, std::uint8_t _a) noexcept;
+
+/*
+ * 6502: NORM -- scale the three-byte vector in XX15 to a length of 96 (slice 3a).
+ *
+ * Sum the squares, take the square root, divide each component by it. `TIDY` calls this every
+ * sixteenth iteration of the main loop to stop a ship's orientation vectors drifting out of shape
+ * as the rounding in `MVEIT` accumulates.
+ *
+ * THE ADDITIONS HAVE NO `CLC` BEFORE THEM, which is not an oversight in the original and is the
+ * one thing here a port can quietly get wrong: `LDA P / ADC Q` follows `JSR SQUA`, so whatever
+ * carry `SQUA` exits with is part of the sum. `TheNormaliserMatchesNORM` sweeps the vector space
+ * against the shipped routine, which is what settles it rather than reading the multiplier.
+ */
+void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcept;
+
+/*
+ * 6502: DVID3B -- sign-magnitude, twenty-four bits over twenty-four (slice 3b). This is the
+ * divide the whole of the projection runs through.
+ *
+ * IT RETURNS 256 TIMES THE RATIO. The upstream summary and the routine's own name both say
+ * `K(3 2 1 0) = P(2 1 0) / (S R Q)`, and that is the ratio with a scale left off: the eight-bit
+ * division at the middle of it produces `256 * A / Q`, and the shifts at the end put back the
+ * difference between the two scaling loops and nothing else. So `K = 256 * P / (S R Q)`, which is
+ * what makes it a projection -- one screen pixel is a ratio of 1/256, and a ship at z = 1 is off
+ * the screen whatever its x is. §6.36 records what it cost to find that out.
+ *
+ * The trick that makes it work with an EIGHT-bit divider is scaling. Shift the numerator left
+ * until its top byte reaches 64, counting the shifts up in Y; shift the denominator left until
+ * its top bit is set, counting those same shifts back down; divide the two top bytes with LL31's
+ * body; then shift the answer by whatever Y ended up as. Shifting both sides the same way does
+ * not change a ratio, so all the scaling has to do is keep the tally.
+ *
+ * Two things a port gets wrong by reading it as arithmetic, and one that looks like a third and
+ * is not.
+ *
+ * The inlined `LL31` runs exactly eight times because R starts at 254: the seven set bits are a
+ * counter that shifts out of the top, and the loop ends when the zero in bit 0 reaches bit 7.
+ *
+ * The high branch of that division does not compare anything. A numerator whose shift pushed a
+ * bit into the carry is nine bits wide, so it cannot be smaller than an eight-bit denominator,
+ * and the original subtracts and then forces the quotient bit with a `SEC`. Taking that bit from
+ * the subtraction's own carry instead is wrong on every call that reaches the branch.
+ *
+ * And the denominator loop LOOKS as though its shape matters -- the `DEY` is at the top and the
+ * test at the bottom, so it always runs once -- and it does not: A is `S AND %01111111` on entry,
+ * bit 7 is therefore clear, and a while-loop would enter too. The `BMI DV9` commented out above
+ * it in the original source could never have branched either. Rewriting the loop as a while is an
+ * EQUIVALENT mutation and the sweep does not catch it, which is the honest thing to say about it.
+ *
+ * Q MUST BE NON-ZERO. `DVID3B2` guarantees that with an `ORA #1` before it sets Q, and with a
+ * zero denominator the original spins forever waiting for a bit that never arrives -- so this
+ * does too, rather than inventing an answer the game has never seen.
+ */
+void DivideSignedToK(MathWorkspace& _work) noexcept;
 
 } // namespace Elite

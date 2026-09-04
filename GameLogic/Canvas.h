@@ -222,6 +222,39 @@ struct DrawWorkspace
 
   std::uint8_t t2 = 0;
   std::uint8_t r2 = 0;
+
+  /*
+   * 6502: SWAP -- did the last line come out with its ends the other way round?
+   *
+   * It is here rather than with the clipper because ONE byte at 1780 has two writers and two
+   * readers, and they do not pair up: `LL145` and `LOIN` both write it, and `BLINE` reads what
+   * `LL145` left while `WPLS2` reads what `LOIN` left. Slice 3b modelled it as the clipper's
+   * report and `LOIN` kept its own copy in a local, which agreed with the game until `WPLS2`
+   * asked `LOIN` for it (§6.46).
+   *
+   * It is 0 or 255 rather than a bool because `LOIN` writes it with `DEC` and `WPLS2` tests it
+   * with `BNE`.
+   */
+  std::uint8_t swap = 0;
+
+  /*
+   * 6502: XX15+4 and XX15+5 (slice 3b).
+   *
+   * `X1`, `Y1`, `X2` and `Y2` are not four bytes the line drawing owns -- they are the first four
+   * of `XX15`, which is SIX, and the geometry in `LL9` uses all six. `LL51` reads them as three
+   * sign-magnitude pairs; `LL145` reads them as three sixteen-bit coordinates and returns four
+   * eight-bit screen coordinates in the same place, so `XX15+1` is `x1_hi` going in and `Y1`
+   * coming out. That is a calling convention, not storage reuse: there is no point between the
+   * two meanings at which a copy could be made, so the six bytes are one workspace.
+   *
+   * They are fields rather than an array because nothing in `LL9`, `LL145` or the clipping ever
+   * indexes `XX15` by a register -- every access is `XX15+n` with a literal n. `XX1`, `XX2`,
+   * `XX3`, `XX12`, `XX16` and `XX18` are indexed and are arrays; these two are not (§6.37).
+   *
+   * The original has no separate names for them, so neither does this.
+   */
+  std::uint8_t xx15Plus4 = 0;
+  std::uint8_t xx15Plus5 = 0;
 };
 
 // ---- the pixel primitives (slice 1d-a) ------------------------------------------------------
@@ -232,7 +265,15 @@ void PlotPixel(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _x, std::uint
 
 /// 6502: PIXEL2 -- the same, for a point given in the space view's own sign-magnitude
 /// coordinates relative to the centre. Falls through into PIXEL, so this is that whole path.
-void PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+/*
+ * Returns the exit carry, which one caller reads: `nWq` fills the stardust field with
+ * `JSR PIXEL2 / DEY / BNE SAL4` and the next iteration opens with `JSR DORND`, so the generator
+ * runs on whatever the plot left (§6.57). The eleventh dropped flag.
+ *
+ * The stardust's own movers do NOT read it -- they follow the plot with `JSR DV42`, and `DVID4`
+ * opens with an `ASL` -- so they discard it explicitly rather than by accident.
+ */
+[[nodiscard]] bool PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept;
 
 /// 6502: CPIX2 -- a two-pixel dash at (X1, Y1) in the colour in COL. The second pixel can land
 /// in the next character cell, and the routine detects that from the mask rather than from x.

@@ -42,6 +42,30 @@
     <ClInclude Include="Universe.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="ShipBlueprint.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="ShipSlot.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="ShipMove.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="ShipDraw.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="LineHeap.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="Spawn.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="PlanetDraw.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="Stardust.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Market.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -161,6 +185,30 @@
     </ClCompile>
     <ClCompile Include="KeyTable.cpp">
       <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipData.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipBlueprint.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipSlot.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipMove.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipDraw.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Spawn.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="PlanetDraw.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Stardust.cpp">
+      <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Rng.cpp">
       <Filter>Kernel</Filter>

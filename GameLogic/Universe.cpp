@@ -128,9 +128,9 @@ SystemData GenerateSystemData(const SystemSeeds& _seeds) noexcept
   work.q = step.value;
 
   // 6502: JSR MULTU twice -- (A P) = P * Q, then that product times the population.
-  std::uint8_t productHigh = MultiplyUnsigned(work);
+  std::uint8_t productHigh = MultiplyUnsigned(work).high;
   work.q = data.population;
-  productHigh = MultiplyUnsigned(work);
+  productHigh = MultiplyUnsigned(work).high;
 
   // 6502: ASL P / ROL A, three times -- a multiply by eight across the sixteen-bit product.
   for (int shift = 0; shift < 3; ++shift)

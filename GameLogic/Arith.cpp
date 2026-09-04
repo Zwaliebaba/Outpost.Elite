@@ -47,7 +47,7 @@ inline void ShiftAndAddStep(std::uint8_t& _a, std::uint8_t& _low, std::uint8_t _
 
 } // namespace
 
-std::uint8_t MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept
+WideResult MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept
 {
   _work.t = static_cast<std::uint8_t>(_x - 1);
 
@@ -62,24 +62,28 @@ std::uint8_t MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept
     ShiftAndAddStep(a, _work.p, _work.t, carry);
   }
 
-  return a;
+  // The carry is the last `ROR P`'s, and three callers read it before doing anything that would
+  // set it themselves. See the note on WideResult.
+  return WideResult{ a, carry };
 }
 
-std::uint8_t MultiplyUnsigned(MathWorkspace& _work) noexcept
+WideResult MultiplyUnsigned(MathWorkspace& _work) noexcept
 {
   const std::uint8_t multiplier = _work.q;
 
   if (multiplier == 0)
   {
-    // 6502: MU1 -- the zero case returns through a different tail that clears both halves.
+    // 6502: MU1 -- `CLC / STX P / TXA / RTS`, so the zero case clears both halves AND the carry.
+    // The `CLC` is the part a port drops, and it is what stops a zero multiply looking like an
+    // overflow to the caller below it.
     _work.p = 0;
-    return 0;
+    return WideResult{ 0, false };
   }
 
   return MultiplyByX(_work, multiplier);
 }
 
-std::uint8_t MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   _work.p = static_cast<std::uint8_t>(_a & 0x7Fu);
   return MultiplyUnsigned(_work);
@@ -141,7 +145,7 @@ std::uint8_t SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept
     return 0;
   }
 
-  return MultiplyByX(_work, _a);
+  return MultiplyByX(_work, _a).high;
 }
 
 std::uint8_t Square(MathWorkspace& _work, std::uint8_t _a) noexcept
@@ -159,7 +163,9 @@ AddSignedResult AddSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
     // Signs agree, so the magnitudes simply add and the shared sign is put back on top.
     const AddResult low = AddWithCarry(_work.r, _work.p, false);
     const AddResult high = AddWithCarry(_work.s, _work.t1, low.carry);
-    return AddSignedResult{ static_cast<std::uint8_t>(high.value | _work.t), low.value };
+    // 6502: `ORA T` does not touch the carry, so what `ADC T1` produced is what the caller gets.
+    return AddSignedResult{ static_cast<std::uint8_t>(high.value | _work.t), low.value,
+                            high.carry };
   }
 
   // 6502: MU8 -- signs differ, so this is a subtraction of magnitudes that may come out
@@ -175,6 +181,9 @@ AddSignedResult AddSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
   std::uint8_t high = static_cast<std::uint8_t>(highDifference);
   borrowClear = highDifference < 0x100u;
 
+  // 6502: BCS MU9 -- taken means no borrow, and the carry it was taken on is the exit carry.
+  bool exitCarry = borrowClear;
+
   if (!borrowClear)
   {
     // 6502: the branch that turns a negative difference back into sign-magnitude form.
@@ -185,10 +194,11 @@ AddSignedResult AddSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
 
     const std::uint16_t negatedHigh = 0u - _work.u - (negated.carry ? 0u : 1u);
     high = static_cast<std::uint8_t>(static_cast<std::uint8_t>(negatedHigh) | 0x80u);
+    exitCarry = negatedHigh < 0x100u; // 6502: the second `SBC U`
   }
 
-  // 6502: MU9 -- fold in the sign the first operand arrived with.
-  return AddSignedResult{ static_cast<std::uint8_t>(high ^ _work.t), low };
+  // 6502: MU9 -- fold in the sign the first operand arrived with. `EOR T` leaves the carry.
+  return AddSignedResult{ static_cast<std::uint8_t>(high ^ _work.t), low, exitCarry };
 }
 
 AddSignedResult MultiplyAndAdd(MathWorkspace& _work, std::uint8_t _a) noexcept
@@ -249,7 +259,7 @@ std::uint8_t MultiplyScaled(MathWorkspace& _work, std::uint8_t _a) noexcept
   return static_cast<std::uint8_t>(a | _work.t);
 }
 
-std::uint8_t MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   // The multiplier arrives complemented, which turns the usual add-on-a-set-bit test into an
   // add-on-a-clear-bit one and saves the routine an instruction per step.
@@ -292,7 +302,8 @@ std::uint8_t MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept
     carry = rotatedLow.carry;
   }
 
-  return a;
+  // The carry is the one the final `ROR P` left, which is what MVEIT reads. See the header.
+  return WideResult{ a, carry };
 }
 
 std::uint8_t DivideBy96(MathWorkspace& _work, std::uint8_t _a) noexcept
@@ -435,13 +446,23 @@ std::uint8_t DivideWide(MathWorkspace& _work, std::uint8_t _a) noexcept
  * results are right about half the time, which is the worst possible failure mode.
  */
 
-std::uint8_t MultiplyByLog(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult MultiplyByLog(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept
 {
   _work.widget = _a;
 
+  /*
+   * 6502: TAX / BEQ MU3, and LDX Q / BEQ MU3again -- the two zero exits, and neither of them
+   * touches the carry. `MU3` is `LDX P / RTS` with A still zero; `MU3again` is `LDA #0 / LDX P /
+   * RTS`. So on both, the carry the caller arrived with is the carry it leaves with.
+   *
+   * That is why `_carryIn` exists and why passing the wrong one is mostly harmless: the returned
+   * BYTE is zero on either path whatever the flag was, so only a caller that reads the carry can
+   * tell. Two do -- `DOEXP` (`JSR FMLTU / ADC R`) and `CIRCLE2` through `FMLTU2` -- and the
+   * others follow the call with a `STA`.
+   */
   if (_a == 0 || _work.q == 0)
   {
-    return 0;
+    return { 0, _carryIn };
   }
 
   const AddResult low = AddWithCarry(LOG_LOW_TABLE[_a], LOG_LOW_TABLE[_work.q], false);
@@ -450,10 +471,11 @@ std::uint8_t MultiplyByLog(MathWorkspace& _work, std::uint8_t _a) noexcept
   const AddResult high = AddWithCarry(LOG_TABLE[_work.q], LOG_TABLE[_a], low.carry);
   if (!high.carry)
   {
-    return 0;
+    return { 0, false }; // 6502: BCC MU3again -- the branch is taken, so the carry is clear
   }
 
-  return useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value];
+  // 6502: the two antilog exits, reached because the BCC above was NOT taken.
+  return { useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value], true };
 }
 
 /*
@@ -506,12 +528,14 @@ bool DivideToR(MathWorkspace& _work, std::uint8_t _a) noexcept
   return DivideByLogarithms(_work, _a);
 }
 
-std::uint8_t CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
+SignedSum CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   if (((_a ^ _work.s) & 0x80u) == 0u)
   {
-    // Signs agree, so the two parts add.
-    return AddWithCarry(_work.q, _work.r, false).value;
+    // Signs agree, so the two parts add -- and this is the ONLY path that can return a set
+    // carry, which is what makes the flag mean "overflowed".
+    const AddResult sum = AddWithCarry(_work.q, _work.r, false);
+    return SignedSum{ sum.value, sum.carry };
   }
 
   // 6502: LL39 -- signs differ, so they subtract, and a borrow means the answer changed sign.
@@ -520,12 +544,18 @@ std::uint8_t CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
 
   if (difference < 0x100u)
   {
-    return result;
+    // The original's `CLC` here looks dead -- the `SBC` above it left the carry set, and nothing
+    // in this branch reads it. It is not dead: it is what stops a subtraction being reported as
+    // an overflow.
+    return SignedSum{ result, false };
   }
 
-  // 6502: LL40 -- flip the sign held in S and negate the magnitude.
+  // 6502: LL40 -- flip the sign held in S and negate the magnitude. The negation's own carry can
+  // only be set for a zero magnitude, which an underflow cannot produce, so this exit is always
+  // carry clear.
   _work.s = static_cast<std::uint8_t>(_work.s ^ 0x80u);
-  return AddWithCarry(static_cast<std::uint8_t>(result ^ 0xFFu), 1u, false).value;
+  const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(result ^ 0xFFu), 1u, false);
+  return SignedSum{ negated.value, negated.carry };
 }
 
 namespace
@@ -608,12 +638,12 @@ std::uint8_t Arctan(MathWorkspace& _work) noexcept
   return angle;
 }
 
-std::uint8_t MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept
 {
   // 6502: FMLTU2's own three instructions. It then falls through into FMLTU with K in A, so the
   // multiplicand is K and the multiplier is the sine it just put in Q.
   _work.q = SINE_TABLE[_a & 0x1Fu];
-  return MultiplyByLog(_work, _work.k[0]);
+  return MultiplyByLog(_work, _work.k[0], _carryIn);
 }
 
 std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
@@ -667,7 +697,7 @@ std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
   return _work.r;
 }
 
-void SquareRoot(MathWorkspace& _work) noexcept
+bool SquareRoot(MathWorkspace& _work) noexcept
 {
   /*
    * 6502: LL5. The radicand is (R Q); Y and X hold the running remainder, S the bits still to be
@@ -681,6 +711,7 @@ void SquareRoot(MathWorkspace& _work) noexcept
   std::uint8_t y = _work.r;
   std::uint8_t s = _work.q;
   std::uint8_t x = 0;
+  bool exitCarry = false;
   _work.q = 0;
 
   for (int round = 0; round < 8; ++round)
@@ -717,9 +748,309 @@ void SquareRoot(MathWorkspace& _work) noexcept
       s = shifted.value;
       const ShiftResult lowHalf = RotateLeftValue(y, shifted.carry);
       y = lowHalf.value;
-      x = RotateLeftValue(x, lowHalf.carry).value;
+      const ShiftResult highHalf = RotateLeftValue(x, lowHalf.carry);
+      x = highHalf.value;
+      exitCarry = highHalf.carry;
     }
   }
+
+  /*
+   * 6502: the last `ROL A` before `DEC T / BNE LL6 / RTS`, and `DEC` does not touch the carry.
+   *
+   * `SUN` reads it: `JSR LL5 / LDY Y1 / JSR DORND`, and the generator takes the carry as an
+   * operand -- so the sun's ragged edge is seeded by the last bit to fall out of the square root
+   * (§6.55). The tenth dropped flag.
+   */
+  return exitCarry;
+}
+
+void MultiplySignedToK(MathWorkspace& _work, std::uint8_t _a) noexcept
+{
+  // 6502: STA R / AND #127 / STA K+2 -- R keeps the sign, K+2 takes the magnitude.
+  _work.r = _a;
+  _work.k[2] = static_cast<std::uint8_t>(_a & 0x7Fu);
+
+  const std::uint8_t magnitude = static_cast<std::uint8_t>(_work.q & 0x7Fu);
+  if (magnitude == 0u)
+  {
+    // 6502: BEQ MU5 -- and MU5 zeroes all four bytes of K, sign included.
+    _work.k[0] = 0;
+    _work.k[1] = 0;
+    _work.k[2] = 0;
+    _work.k[3] = 0;
+    return;
+  }
+
+  // 6502: SEC / SBC #1 / STA T. See the header: the missing one comes back as the carry.
+  _work.t = static_cast<std::uint8_t>(magnitude - 1u);
+
+  /*
+   * 6502: LDA P+1 / LSR K+2 / ROR A / STA K+1 / LDA P / ROR A / STA K.
+   *
+   * One right shift of the whole twenty-four bit magnitude, which seeds the loop with the first
+   * bit already in the carry.
+   */
+  bool carry = (_work.k[2] & 1u) != 0u;
+  _work.k[2] = static_cast<std::uint8_t>(_work.k[2] >> 1);
+
+  std::uint8_t shifted = static_cast<std::uint8_t>((_work.p1 >> 1) | (carry ? 0x80u : 0u));
+  carry = (_work.p1 & 1u) != 0u;
+  _work.k[1] = shifted;
+
+  shifted = static_cast<std::uint8_t>((_work.p >> 1) | (carry ? 0x80u : 0u));
+  carry = (_work.p & 1u) != 0u;
+  _work.k[0] = shifted;
+
+  // 6502: LDA #0 / LDX #24 / .MUL2
+  std::uint8_t accumulator = 0;
+  for (int step = 0; step < 24; ++step)
+  {
+    if (carry)
+    {
+      // 6502: ADC T -- with the carry set, so this adds |Q| rather than |Q| - 1.
+      const std::uint16_t sum = static_cast<std::uint16_t>(accumulator) + _work.t + 1u;
+      accumulator = static_cast<std::uint8_t>(sum);
+      carry = sum > 0xFFu;
+    }
+
+    // 6502: ROR A / ROR K+2 / ROR K+1 / ROR K -- one shift right through all four bytes.
+    const bool intoAccumulator = carry;
+    carry = (accumulator & 1u) != 0u;
+    accumulator = static_cast<std::uint8_t>((accumulator >> 1) | (intoAccumulator ? 0x80u : 0u));
+
+    for (int byte = 2; byte >= 0; --byte)
+    {
+      const bool next = (_work.k[byte] & 1u) != 0u;
+      _work.k[byte] = static_cast<std::uint8_t>((_work.k[byte] >> 1) | (carry ? 0x80u : 0u));
+      carry = next;
+    }
+  }
+
+  // 6502: STA T / LDA R / EOR Q / AND #128 / ORA T / STA K+3 -- the sign is the two operands'.
+  _work.t = accumulator;
+  _work.k[3] = static_cast<std::uint8_t>(accumulator | ((_work.r ^ _work.q) & 0x80u));
+}
+
+void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcept
+{
+  /*
+   * 6502: LDA XX15 / JSR SQUA / STA R / LDA P / STA Q, then the same for the other two with the
+   * running sum added in. The additions are `ADC` with no `CLC`, so the carry SQUA leaves is part
+   * of them -- see the header.
+   */
+  _work.r = Square(_work, _vector[0]);
+  _work.q = _work.p;
+
+  bool carry = false;
+  for (int axis = 1; axis < 3; ++axis)
+  {
+    _work.t = Square(_work, _vector[axis]);
+
+    const std::uint16_t low = static_cast<std::uint16_t>(_work.p) + _work.q + (carry ? 1u : 0u);
+    _work.q = static_cast<std::uint8_t>(low);
+    carry = low > 0xFFu;
+
+    const std::uint16_t high = static_cast<std::uint16_t>(_work.t) + _work.r + (carry ? 1u : 0u);
+    _work.r = static_cast<std::uint8_t>(high);
+    carry = high > 0xFFu;
+  }
+
+  // 6502: JSR LL5 -- Q = sqrt(R Q).
+  SquareRoot(_work);
+
+  // 6502: LDA XX15,n / JSR TIS2 / STA XX15,n -- each component scaled to a length of 96.
+  for (int axis = 0; axis < 3; ++axis)
+  {
+    _vector[axis] = DivideByQ(_work, _vector[axis]);
+  }
+}
+
+
+void DivideSignedToK(MathWorkspace& _work) noexcept
+{
+  // P(2 1 0) is forced to at least 1, for the same reason Q is: the scaling loop below shifts
+  // until a set bit arrives, and an all-zero numerator has none to give it.
+  _work.p = static_cast<std::uint8_t>(_work.p | 0x01u);
+
+  // The sign of the answer, put aside now because the division that follows is on magnitudes.
+  _work.t = static_cast<std::uint8_t>((_work.p2 ^ _work.s) & 0x80u);
+
+  // The scale factor, counted UP by the numerator's shifts and DOWN by the denominator's, so
+  // what is left at the end is the difference -- and a byte, so it wraps rather than going
+  // negative, which is why the test below is on bit 7 and not on a comparison.
+  std::uint8_t y = 0;
+
+  std::uint8_t a = static_cast<std::uint8_t>(_work.p2 & 0x7Fu);
+
+  // 6502: DVL9 -- shift the numerator up until its top byte reaches 64.
+  //
+  // The second condition is the `BNE DVL9` at the bottom, which the upstream source calls
+  // "effectively a JMP, as Y will never be zero". It is a JMP given the `ORA #1` above, which
+  // guarantees a set bit to shift up within twenty-four steps -- but it is the loop's ONLY exit
+  // when there is not one, and a port that dropped it would hang where the original returns a
+  // wrong answer. Cheaper to keep than to argue about.
+  while (a < 64u)
+  {
+    const ShiftResult low = RotateLeftValue(_work.p, false);
+    _work.p = low.value;
+    const ShiftResult middle = RotateLeftValue(_work.p1, low.carry);
+    _work.p1 = middle.value;
+    const ShiftResult high = RotateLeftValue(a, middle.carry);
+    a = high.value;
+    ++y;
+    if (y == 0u)
+    {
+      break;
+    }
+  }
+
+  _work.p2 = a;
+
+  // 6502: DVL6 -- and the denominator up until its top BIT is set. The decrement is at the top
+  // of the loop and the test at the bottom, so this always runs at least once.
+  a = static_cast<std::uint8_t>(_work.s & 0x7Fu);
+  do
+  {
+    --y;
+    const ShiftResult low = RotateLeftValue(_work.q, false);
+    _work.q = low.value;
+    const ShiftResult middle = RotateLeftValue(_work.r, low.carry);
+    _work.r = middle.value;
+    const ShiftResult high = RotateLeftValue(a, middle.carry);
+    a = high.value;
+  } while ((a & 0x80u) == 0u);
+
+  // 6502: DV9 -- the two top bytes are now as large as they will go, so the ratio can be had
+  // from them alone.
+  _work.q = a;
+  _work.r = 254;
+  a = _work.p2;
+
+  // 6502: LL31new / LL29new -- LL31's body, inlined in the original and a loop here. R is both
+  // the answer and the counter: the eight bits shifted in push the seven set bits out, and the
+  // zero underneath them ends the loop when it reaches the top.
+  for (;;)
+  {
+    const ShiftResult shifted = RotateLeftValue(a, false);
+    a = shifted.value;
+
+    bool bit = false;
+    if (shifted.carry)
+    {
+      // The numerator has a ninth bit, so the subtraction cannot borrow and the original does
+      // not bother testing -- it subtracts and forces the quotient bit with a `SEC`.
+      a = SubtractWithCarry(a, _work.q, true).value;
+      bit = true;
+    }
+    else if (a >= _work.q)
+    {
+      a = SubtractWithCarry(a, _work.q, true).value;
+      bit = true;
+    }
+
+    const ShiftResult quotient = RotateLeft(_work.r, bit);
+    _work.r = quotient.value;
+    if (!quotient.carry)
+    {
+      break;
+    }
+  }
+
+  // 6502: LL312new -- the answer is the byte in R, and all that is left is to put it back on
+  // the scale the two loops above took it off.
+  _work.k[1] = 0;
+  _work.k[2] = 0;
+  _work.k[3] = 0;
+
+  if ((y & 0x80u) != 0u)
+  {
+    // 6502: DVL8 -- Y came out negative, so the denominator was shifted further than the
+    // numerator and the answer is scaled back UP, through all four bytes of K.
+    a = _work.r;
+    do
+    {
+      const ShiftResult low = RotateLeftValue(a, false);
+      a = low.value;
+      const ShiftResult k1 = RotateLeft(_work.k[1], low.carry);
+      _work.k[1] = k1.value;
+      const ShiftResult k2 = RotateLeft(_work.k[2], k1.carry);
+      _work.k[2] = k2.value;
+      _work.k[3] = RotateLeft(_work.k[3], k2.carry).value;
+      ++y;
+    } while (y != 0u);
+
+    _work.k[0] = a;
+
+    // The sign is ORed in here and STORED on the other two paths, because only this one can
+    // have shifted something into K+3 that is worth keeping.
+    _work.k[3] = static_cast<std::uint8_t>(_work.k[3] | _work.t);
+    return;
+  }
+
+  if (y == 0u)
+  {
+    // 6502: DV13 -- the two scalings cancelled, so R is already the answer.
+    _work.k[0] = _work.r;
+    _work.k[3] = _work.t;
+    return;
+  }
+
+  // 6502: DVL10 -- Y is positive, so the answer is scaled back DOWN. The top three bytes stay
+  // zero: nothing shifted right out of the lowest byte can reach them.
+  a = _work.r;
+  do
+  {
+    a = static_cast<std::uint8_t>(a >> 1);
+    --y;
+  } while (y != 0u);
+
+  _work.k[0] = a;
+  _work.k[3] = _work.t;
+}
+
+
+void DivideToUR(MathWorkspace& _work, std::uint8_t _a) noexcept
+{
+  // 6502: LL84 -- the divisor is zero, so there is no answer to give.
+  if (_work.q == 0u)
+  {
+    _work.r = 50;
+    _work.u = 50;
+    return;
+  }
+
+  // 6502: LL63 -- halve A until LL28 will take it. The shift happens before the test, so an A
+  // that is already smaller than Q is still halved once and the count is still one.
+  std::uint8_t shifts = 0;
+  std::uint8_t value = _a;
+  do
+  {
+    value = static_cast<std::uint8_t>(value >> 1);
+    ++shifts;
+  } while (value >= _work.q);
+
+  _work.s = shifts;
+  (void)DivideToR(_work, value);
+
+  // 6502: LL64 -- and double the answer back, through U. The sign test is on U after the rotate,
+  // so an answer that needs seventeen bits is an overflow and takes the same exit as a zero
+  // divisor does.
+  std::uint8_t doubled = _work.r;
+  for (std::uint8_t remaining = shifts; remaining != 0u; --remaining)
+  {
+    const ShiftResult shifted = RotateLeftValue(doubled, false);
+    doubled = shifted.value;
+    _work.u = RotateLeft(_work.u, shifted.carry).value;
+
+    if ((_work.u & 0x80u) != 0u)
+    {
+      _work.r = 50;
+      _work.u = 50;
+      return;
+    }
+  }
+
+  _work.r = doubled;
 }
 
 } // namespace Elite

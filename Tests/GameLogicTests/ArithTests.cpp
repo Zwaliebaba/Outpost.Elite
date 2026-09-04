@@ -112,14 +112,31 @@ public:
         MathWorkspace work;
         work.p = static_cast<std::uint8_t>(p);
         work.q = static_cast<std::uint8_t>(q);
-        const std::uint8_t high = Elite::MultiplyUnsigned(work);
+        const Elite::WideResult product = Elite::MultiplyUnsigned(work);
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", p, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, product.high, Context(L"high byte", p, q).c_str());
+
+        // The carry the final `ROR P` leaves, which the stardust reads in the very next
+        // instruction and which this port dropped until it did (§6.42).
+        Assert::AreEqual(cpu.c, product.carry, Context(L"carry", p, q).c_str());
+
+        /*
+         * And what that carry actually IS, measured on the game rather than argued from the
+         * listing: always clear (§6.43).
+         *
+         * `LSR P` shifts a zero into bit 7, and the eight `ROR P`s that follow walk it down to
+         * bit 0 and out, so the ninth shift's carry cannot be anything else whatever P and Q
+         * hold. `MU1`, the Q = 0 path, has an explicit `CLC`. So every `ADC` and `SBC` in the
+         * game that follows `MULTU` without a `CLC` is running on a zero it can rely on -- the
+         * stardust's two are the ones that matter -- and the port threading the flag through is
+         * documentation of a dependency, not a correction of a defect.
+         */
+        Assert::IsFalse(cpu.c, Context(L"the game's carry is always clear", p, q).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", p, q).c_str());
 
         // The product really is the product -- a check the oracle cannot give us, since it
         // would be agreeing with itself.
-        Assert::AreEqual<std::uint32_t>(p * q, static_cast<std::uint32_t>((high << 8) | work.p),
+        Assert::AreEqual<std::uint32_t>(p * q, static_cast<std::uint32_t>((product.high << 8) | work.p),
                                         Context(L"the 16-bit product", p, q).c_str());
       }
     }
@@ -157,9 +174,13 @@ public:
 
         MathWorkspace work;
         work.p = static_cast<std::uint8_t>(p);
-        const std::uint8_t high = Elite::MultiplyByX(work, static_cast<std::uint8_t>(x));
+        const Elite::WideResult product = Elite::MultiplyByX(work, static_cast<std::uint8_t>(x));
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", p, x).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, product.high, Context(L"high byte", p, x).c_str());
+
+        // The carry the final `ROR P` leaves, which the stardust reads in the very next
+        // instruction and which this port dropped until it did (§6.42).
+        Assert::AreEqual(cpu.c, product.carry, Context(L"carry", p, x).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", p, x).c_str());
       }
     }
@@ -265,9 +286,13 @@ public:
 
         MathWorkspace work;
         work.q = static_cast<std::uint8_t>(q);
-        const std::uint8_t high = Elite::MultiplyMagnitudeByQ(work, static_cast<std::uint8_t>(a));
+        const Elite::WideResult product = Elite::MultiplyMagnitudeByQ(work, static_cast<std::uint8_t>(a));
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, high, Context(L"high byte", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, product.high, Context(L"high byte", a, q).c_str());
+
+        // The carry the final `ROR P` leaves, which the stardust reads in the very next
+        // instruction and which this port dropped until it did (§6.42).
+        Assert::AreEqual(cpu.c, product.carry, Context(L"carry", a, q).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"low byte", a, q).c_str());
       }
     }
@@ -360,6 +385,10 @@ public:
       const std::wstring where = L" at iteration " + std::to_wstring(iteration);
       Assert::AreEqual<std::uint32_t>(cpu.a, actual.high, (L"high byte" + where).c_str());
       Assert::AreEqual<std::uint32_t>(cpu.x, actual.low, (L"low byte" + where).c_str());
+
+      // The carry too: `PLS22` reads it twice, once to place a meridian on the screen and once
+      // to hand it to `BLINE` (§6.53). None of `ADD`'s three exits clears it.
+      Assert::AreEqual(cpu.c, actual.carry, (L"carry" + where).c_str());
     }
   }
 
@@ -585,7 +614,7 @@ public:
       MathWorkspace work;
       work.p = p;
       work.q = q;
-      const std::uint8_t high = Elite::MultiplyWide(work, a);
+      const std::uint8_t high = Elite::MultiplyWide(work, a).high;
 
       const std::wstring where = L" at iteration " + std::to_wstring(iteration);
       Assert::AreEqual<std::uint32_t>(cpu.a, high, (L"high byte" + where).c_str());
@@ -774,20 +803,26 @@ public:
     {
       for (std::uint32_t q = 0; q < 256; ++q)
       {
+        // Both entry carries, because the two zero exits hand the caller's own flag straight
+        // back and `DOEXP` and `CIRCLE2` read it (§6.50).
+        const bool carryIn = ((a + q) & 1u) != 0u;
+
         cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
         cpu.a = static_cast<std::uint8_t>(a);
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
-        cpu.c = false;
+        cpu.c = carryIn;
 
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"FMLTU should return");
 
         MathWorkspace work;
         work.q = static_cast<std::uint8_t>(q);
-        const std::uint8_t result = Elite::MultiplyByLog(work, static_cast<std::uint8_t>(a));
+        const Elite::WideResult result =
+          Elite::MultiplyByLog(work, static_cast<std::uint8_t>(a), carryIn);
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"product", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, result.high, Context(L"product", a, q).c_str());
+        Assert::AreEqual(cpu.c, result.carry, Context(L"carry", a, q).c_str());
       }
     }
   }
@@ -865,11 +900,15 @@ public:
       work.s = s;
       work.q = q;
       work.r = r;
-      const std::uint8_t result = Elite::CombineSigned(work, a);
+      const Elite::SignedSum result = Elite::CombineSigned(work, a);
 
       const std::wstring where = L" at iteration " + std::to_wstring(iteration);
-      Assert::AreEqual<std::uint32_t>(cpu.a, result, (L"result" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.a, result.value, (L"result" + where).c_str());
       Assert::AreEqual<std::uint32_t>(cpu.memory[zp.s], work.s, (L"S" + where).c_str());
+
+      // The carry is the routine's documented overflow flag and `LL9` branches on it, so it is
+      // compared here rather than at the one caller that happens to read it.
+      Assert::AreEqual(cpu.c, result.carry, (L"C" + where).c_str());
     }
   }
 
@@ -927,20 +966,24 @@ public:
     {
       for (std::uint32_t kValue = 0; kValue < 256; ++kValue)
       {
+        const bool carryIn = ((a + kValue) & 1u) != 0u;
+
         cpu.memory[k] = static_cast<std::uint8_t>(kValue);
         cpu.a = static_cast<std::uint8_t>(a);
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
-        cpu.c = false;
+        cpu.c = carryIn;
 
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"FMLTU2 should return");
 
         MathWorkspace work;
         work.k[0] = static_cast<std::uint8_t>(kValue);
-        const std::uint8_t result = Elite::MultiplyKBySine(work, static_cast<std::uint8_t>(a));
+        const Elite::WideResult result =
+          Elite::MultiplyKBySine(work, static_cast<std::uint8_t>(a), carryIn);
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"product", a, kValue).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, result.high, Context(L"product", a, kValue).c_str());
+        Assert::AreEqual(cpu.c, result.carry, Context(L"carry", a, kValue).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("Q")], work.q, Context(L"Q", a, kValue).c_str());
       }
     }
@@ -1025,7 +1068,8 @@ public:
         MathWorkspace work;
         work.r = static_cast<std::uint8_t>(r);
         work.q = static_cast<std::uint8_t>(q);
-        Elite::SquareRoot(work);
+        const bool carry = Elite::SquareRoot(work);
+        Assert::AreEqual(cpu.c, carry, L"LL5's exit carry, which the sun's DORND runs on");
 
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.q], work.q, Context(L"root", r, q).c_str());
 

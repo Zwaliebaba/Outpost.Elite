@@ -208,10 +208,21 @@ public:
     {
       for (std::uint32_t x1 = 0; x1 < 256; x1 += 1)
       {
+        /*
+         * The distance varies with the coordinates rather than being pinned at 255, which is
+         * what it was until the stardust's initialiser needed this routine's exit carry.
+         *
+         * `PIXEL` has three distance branches -- a four-pixel block under 80, two pixels under
+         * 144, one above -- and a sweep that is exhaustive in x and y and constant in `ZZ`
+         * reaches exactly one of them. It is the same shape of gap as §6.52's, in a test that
+         * had "exhaustively" in its name (§6.57).
+         */
+        const std::uint8_t zz = static_cast<std::uint8_t>((x1 * 7u + y1 * 13u) & 0xFFu);
+
         Cpu6502 cpu = oracle.Fresh();
         cpu.memory[zp.x1] = static_cast<std::uint8_t>(x1);
         cpu.memory[zp.y1] = static_cast<std::uint8_t>(y1);
-        cpu.memory[zp.zz] = 255;
+        cpu.memory[zp.zz] = zz;
         cpu.a = cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
 
@@ -222,10 +233,11 @@ public:
         DrawWorkspace work;
         work.x1 = static_cast<std::uint8_t>(x1);
         work.y1 = static_cast<std::uint8_t>(y1);
-        work.zz = 255;
-        Elite::PlotRelativePixel(canvas, work);
+        work.zz = zz;
+        const bool carry = Elite::PlotRelativePixel(canvas, work);
 
         CompareScreens(cpu, zp.screen, canvas, Context(L"PIXEL2", x1, y1));
+        Assert::AreEqual(cpu.c, carry, Context(L"the exit carry", x1, y1).c_str());
       }
     }
   }
@@ -403,6 +415,86 @@ public:
     }
 
     Logger::WriteMessage(("LOIN: " + std::to_string(cases) + " lines compared byte for byte\n").c_str());
+  }
+
+  /*
+   * 6502: LOIN again, and this one exists because the grid above missed a defect for two months.
+   *
+   * The grid picks eight or nine values per axis to reach every BRANCH. That is the right way to
+   * choose a small sweep and it is not sufficient here, because this routine's state is a carry
+   * chain: whether a pixel lands one row early depends on the accumulator's phase, which depends
+   * on the start position's low byte and the slope together. A grid samples that space at
+   * sixty-odd points out of four billion, and the point it missed was a downward line whose
+   * screen pointer had reached 248 before the setup's `SBC #247` -- one line in nine of those,
+   * one pixel each (§6.47).
+   *
+   * So: four thousand lines from a fixed generator, over the whole coordinate space, compared
+   * byte for byte. Not a substitute for the grid -- it is far worse at reaching rare branches --
+   * but it covers the phase space the grid cannot, and between them they are what this routine
+   * needs.
+   */
+  TEST_METHOD(LineMatchesTheShippedRoutineOverAWideSample)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+    const OracleImage& oracle = OracleImage::Instance();
+    const Scratch zp(oracle);
+    const std::uint16_t routine = oracle.Label("LOIN");
+    const std::uint16_t y2Address = oracle.Label("Y2");
+
+    std::uint32_t bits = 0x2C6A91B7u;
+    const auto next = [&bits]() {
+      bits = bits * 1664525u + 1013904223u;
+      return static_cast<std::uint8_t>(bits >> 24);
+    };
+
+    std::uint32_t cases = 0;
+    std::uint32_t drawn = 0;
+
+    for (std::uint32_t which = 0; which < 4000u; ++which)
+    {
+      const std::uint8_t x1 = next();
+      const std::uint8_t y1 = static_cast<std::uint8_t>(next() % 144u);
+      const std::uint8_t x2 = next();
+      const std::uint8_t y2 = static_cast<std::uint8_t>(next() % 144u);
+
+      Cpu6502 cpu = oracle.Fresh();
+      cpu.memory[zp.x1] = x1;
+      cpu.memory[zp.y1] = y1;
+      cpu.memory[zp.x2] = x2;
+      cpu.memory[y2Address] = y2;
+      cpu.a = cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+
+      const auto run = cpu.CallSubroutine(routine, 200'000);
+      Assert::IsTrue(run.completed, L"LOIN should return");
+
+      Canvas canvas;
+      DrawWorkspace work;
+      work.x1 = x1;
+      work.y1 = y1;
+      work.x2 = x2;
+      work.y2 = y2;
+      Elite::DrawLine(canvas, work);
+
+      CompareScreens(cpu, zp.screen, canvas,
+                     L"LOIN (" + std::to_wstring(x1) + L"," + std::to_wstring(y1) + L") to ("
+                       + std::to_wstring(x2) + L"," + std::to_wstring(y2) + L")");
+
+      for (const std::uint8_t byte : canvas.Screen())
+      {
+        drawn += (byte != 0u) ? 1u : 0u;
+      }
+      ++cases;
+    }
+
+    Assert::AreEqual<std::uint32_t>(4000u, cases, L"every sampled line");
+    Assert::IsTrue(drawn > 0u, L"the lines were actually drawn");
+    Logger::WriteMessage(("LOIN wide: " + std::to_string(cases) + " lines, "
+                          + std::to_string(drawn) + " marked bytes\n")
+                           .c_str());
   }
 
   /// Drawing anything twice puts the screen back exactly as it was. LL9 and SUN decide what to
