@@ -86,6 +86,13 @@ jobs:
       - name: Project files match the tree
         run: python tools/check_projects.py
 
+      # The portable runner builds GameLogic and the suite and nothing else, because Outpost/ is
+      # Win32 and DirectX 12. So renaming a GameLogic type breaks the app and every Linux check
+      # still passes -- which is how `DockedShip` becoming `FlightStatus` reached the Windows job.
+      # This checks the names; only the Windows build can check the signatures.
+      - name: The app still uses names GameLogic has
+        run: python tools/check_outpost.py
+
       - name: Coverage ledger
         run: python tools/inventory.py
 
