@@ -268,7 +268,6 @@ struct FlightScreen
   std::uint8_t& view;       ///< 6502: QQ11 -- which screen is up
   std::uint8_t& spaceView;  ///< 6502: VIEW -- which way the player is looking, 0 to 3
   std::uint8_t& explosions; ///< 6502: EV
-  std::uint8_t fuel = 0;    ///< 6502: QQ14, which `DIALS` reads and nothing here writes
 };
 
 /*
