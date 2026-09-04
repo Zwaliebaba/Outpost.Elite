@@ -428,6 +428,126 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.92 A branch that skips two instructions, and a warning that is never the token it loads
+
+Part 15 warns about the energy banks like this:
+
+```
+ LDA #50
+ CMP ENERGY
+ BCC P%+6
+ ASL A
+ JSR MESS
+```
+
+`BCC` is two bytes, `ASL A` is one and `JSR MESS` is three, so **`P%+6` is past both of them**. The
+fifty is a threshold, not a message: healthy banks send nothing at all, and the token actually
+sent is only ever 100.
+
+The port read it as "fifty or a hundred, depending" — a plausible reading, because 50 and 100 are
+both real message tokens and the `ASL` looks like a choice between them. What it produces is an
+energy warning every sixteenth frame for the whole game. The oracle caught it as a missing
+*sound*: token 100's text contains character 7, which `CHPR` turns into `JSR BEEP`, so the
+comparison failed on a bell the game rang and the port did not.
+
+**Two lessons and the second is the useful one.** Counting the bytes a relative branch skips is
+not optional when the branch target is written as `P%+n`. And the bell being a seam is what made
+this visible: the port's `CHPR` had a `TextEffects::Beep` that nothing was wired to, so the sound
+fell on the floor. Wiring it to the same list the flight loop's sounds go into turned a silent
+difference into a failing assertion.
+
+### 6.91 The explosion cloud, and a carry that comes out of the line drawing
+
+`LL9` part 1 seeds a newly killed ship's explosion cloud:
+
+```
+ JSR EE51
+ LDY #1 / LDA #18 / STA (XX19),Y
+ LDY #7 / LDA (XX0),Y / LDY #2 / STA (XX19),Y
+.EE55
+ INY / JSR DORND / STA (XX19),Y / CPY #6 / BNE EE55
+```
+
+Four random bytes, and the first `DORND` opens `LDA RAND / ROL A` — on the carry `EE51` returned.
+`EE51` is the erase, and on the path that matters (a ship that was on screen last frame, which is
+every ship our laser kills) it walks the line heap through `LL155` and `LOIN`. So **the cloud's
+first byte depends on the flags the line drawing exits with**, and `LOIN` in this port returns
+nothing.
+
+Slice 3b left this behind `ShipDrawEffects::SeedExplosionCloud` and said so: "the `JSR DORND` in
+it runs on a carry this port cannot determine". Slice 3d-d-iii-b is the first caller that reaches
+it — a ship killed by the laser or by a collision passes through here on the single frame between
+being killed and being seen to explode.
+
+It stays a seam, and the flight loop's comparison **names what it excludes**: the six bytes at the
+head of a seeded cloud's heap run, and the generator on those frames. Everything else on a frame
+that kills a ship — the canvas, the commander block, the slots, the state bytes, the heap either
+side of the cloud — is still compared. Closing it means giving `LOIN` an exit carry, which is
+`Canvas.cpp`'s row and not this one.
+
+**The point worth keeping**: an unclosed seam is a hole in a comparison whether or not the
+comparison mentions it, and the difference between the two is entirely whether anyone can see the
+hole later.
+
+### 6.90 A blueprint pointer that is not reset per ship
+
+Part 4 of the flight loop loads `XX0` from the blueprint table:
+
+```
+ LDA TYPE
+ BMI MA21
+ ASL A
+ TAY
+ LDA XX21-2,Y
+ STA XX0
+ LDA XX21-1,Y
+ STA XX0+1
+```
+
+`BMI MA21` skips it for the planet and the sun, which have no blueprint. **So a body carries on
+using whatever the last real ship left in `XX0`** — and `MVEIT` reads byte 15 of it, the maximum
+speed, to clamp acceleration against.
+
+That read is not dead. `MVEIT` skips the clamp for a body on its ordinary path (`MV40` returns
+through `MV45`), but a body that is exploding or dead takes the `LDA INWK+31 / AND #&A0 / BNE
+MV30` branch at the top, misses `MV40` entirely, and falls into the clamp with the previous
+ship's maximum speed.
+
+The port had `XX0` as a local, computed per ship and zero for a body, which is neither what the
+game does nor a state it can reach: by the time the flight loop runs, something has always put a
+real blueprint there. It is loop state like `TYPE` and `XSAV`, and it now lives with them.
+
+**The general shape**: a variable written under a condition is a variable that persists when the
+condition fails, and "computed per iteration" is a stronger claim than the code makes.
+
+### 6.89 Scooping, and a carry from four shifts earlier
+
+Part 8 decides what a scooped ship is worth:
+
+```
+ LDY #0
+ LDA (XX0),Y
+ LSR A
+ LSR A
+ LSR A
+ LSR A
+ BEQ MA58
+ ADC #1
+```
+
+The four shifts take the blueprint's first byte down to its top nibble, and the fourth `LSR`
+leaves **bit 3 of the original byte** in the carry. `BEQ MA58` sits between the shift and the
+`ADC` and tests A without touching the flags. So what lands in the hold is the top nibble, plus
+one, plus a bit of the *bottom* nibble.
+
+Byte 0 of a blueprint is the ship's "debris and scooping" byte, and its two halves are read
+separately everywhere else in the game -- `SPIN` masks the low nibble for the debris count (§6.74)
+and this reads the high one. Here they meet: the low nibble's top bit shifts into an addition
+belonging to the high one.
+
+A port that wrote `(byte >> 4) + 1` agrees with the game for every blueprint whose byte 0 has bit
+3 clear, which is most of them.
+
 ### 6.88 Which piece of equipment breaks depends on whether the explosion was audible
 
 `OOPS` ends:

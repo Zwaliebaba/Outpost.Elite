@@ -192,6 +192,17 @@ void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
 void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, std::uint8_t _colour) noexcept;
 
 /*
+ * 6502: msblob -- redraw all four indicators from `NOMSL`.
+ *
+ * TWO LOOPS AND ONE COUNTER. `.ss` walks X down from four drawing black until it MEETS `NOMSL`,
+ * then falls into `.SAL8`, which carries on down the same X drawing green -- so the split point
+ * is the count and neither loop knows how many it will draw. `CPX NOMSL / BEQ SAL8` never fires
+ * for a full rail, because X starts at four and a rail holds four, so the black loop is skipped
+ * entirely; and it never fires for an empty one either, because X reaches zero first.
+ */
+void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles) noexcept;
+
+/*
  * 6502: BLACK2, RED2, YELLOW2, GREEN2 -- the missile indicator's four states, as SCREEN RAM
  * palette bytes rather than bitmap colours.
  *

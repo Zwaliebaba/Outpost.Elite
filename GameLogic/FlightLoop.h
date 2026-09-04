@@ -7,6 +7,9 @@
 #include "Controls.h"
 #include "Lasers.h"
 #include "Rng.h"
+#include "LineHeap.h"
+#include "Scanner.h"
+#include "ShipDraw.h"
 #include "ShipMove.h"
 #include "ViewChange.h"
 #include "ShipSlot.h"
@@ -162,6 +165,19 @@ public:
 };
 
 /*
+ * 6502: the ship types parts 5, 8 and 11 name that `ShipSlot.h` does not.
+ *
+ * `THG` and `CON` are two of the bomb's three exemptions -- a Thargoid and the mission ship
+ * survive it -- and `CON` is also the boundary above which a laser is halved unless it is a
+ * military one. `PLT`, `OIL`, `AST` and `SPL` are the wreckage.
+ */
+inline constexpr std::uint8_t SHIP_TYPE_ALLOY_PLATE = 4; ///< 6502: PLT
+inline constexpr std::uint8_t SHIP_TYPE_CANISTER = 5;    ///< 6502: OIL
+inline constexpr std::uint8_t SHIP_TYPE_ASTEROID = 7;    ///< 6502: AST
+inline constexpr std::uint8_t SHIP_TYPE_SPLINTER = 8;    ///< 6502: SPL
+inline constexpr std::uint8_t SHIP_TYPE_THARGOID = 29;   ///< 6502: THG
+
+/*
  * 6502: SPIN2 -- spawn `_count` ships of one type, one after another.
  *
  * `.spl BEQ oh` READS A FLAG THE INSTRUCTION ABOVE IT DID NOT SET. `STA CNT` leaves the flags
@@ -229,9 +245,10 @@ inline constexpr std::uint8_t LASER_POWER_MILITARY = 151;
  * What the flight loop reaches that phase 4 owns, plus the sound.
  *
  * It IS a `DashboardEffects`, because part 3 starts the E.C.M. through `ECBLB2` and part 16 stops
- * it through `ECMOF`, and both of those already had a seam for the SID.
+ * it through `ECMOF`, and both of those already had a seam for the SID. And it IS a
+ * `SpawnChildEffects`, because part 11's `SPIN` and `SPIN2` drop wreckage through `SFS1`.
  */
-class FlightLoopEffects : public DashboardEffects
+class FlightLoopEffects : public DashboardEffects, public SpawnChildEffects
 {
 public:
 
@@ -254,6 +271,17 @@ public:
 
   /// 6502: JSR ANGRY with A = the type -- phase 4's "that ship has noticed".
   virtual void Anger(std::uint8_t _type) = 0;
+
+  /*
+   * 6502: JSR NWSPS -- put the space station back into the bubble.
+   *
+   * It falls into `NWSHP`, which the port has, but the fourteen instructions above the fall are
+   * not a spawn: they SELF-MODIFY `XX21`, writing `spasto` or the Dodo's blueprint address into
+   * the station's entry in the pointer table so that a high-tech system gets a different station.
+   * The port's blueprint table is read-only, and making it otherwise is a decision that belongs
+   * with `TT110` -- the other caller -- rather than with the flight loop.
+   */
+  virtual void SpawnStation() = 0;
 };
 
 
@@ -281,6 +309,17 @@ struct FlightLoop
   ControlState& control;       ///< 6502: JSTX, JSTY and `auto`
   ControlOptions& options;     ///< 6502: DAMP, DJD and JSTK
   LaserBurst& burst;           ///< 6502: LASX and LASY, which `LASLI` picks and draws through
+
+  /*
+   * What the per-ship half needs and the screen does not carry: `LL9` writes the ship line heap
+   * through `XX19` and clips through `XX12`, and `MVEIT` and `LL9` each have a seam of their own.
+   */
+  LineHeap& heap;              ///< 6502: the `LS%` region, and `SLSP` inside it
+  ClipState& clip;             ///< 6502: XX12, XX13 and the clipper's own workspace
+  Projection& projection;      ///< 6502: K3 and K4 -- where the ship landed on screen
+  CompassAxes& axes;           ///< 6502: K3, which `SPS1` fills for part 9's docking check
+  ShipEffects& tactics;        ///< 6502: JSR TACTICS, from inside `MVEIT`
+  ShipDrawEffects& drawing;    ///< 6502: `LL9`'s planet and explosion seams
 
   FlightLoopEffects& effects;
 };
@@ -314,5 +353,33 @@ inline constexpr std::uint8_t MESSAGE_MISSILE_JAMMED = 201;
 void FireMissile(FlightLoop& _loop) noexcept;
 
 [[nodiscard]] LoopOutcome BeginFlightFrame(FlightLoop& _loop) noexcept;
+
+/*
+ * 6502: MA3 to `JMP MAL1` -- parts 4 to 12, once per occupied slot, and `KS1` under them.
+ *
+ * The loop is a `JMP MAL1` back edge rather than a counted loop, and `KS1` is inside it: killing
+ * a ship shuffles the slots down, so the index is NOT advanced afterwards and the slot that took
+ * the dead one's place is processed next. A port that wrote a `for` over the slots would skip
+ * every ship behind a kill.
+ *
+ * What each iteration is: copy the block into `INWK`, look up its blueprint, let the energy bomb
+ * kill it, move it, copy it back, test it for a collision, draw it, decide whether our laser hit
+ * it, and finally either kill it or write its two changed bytes back.
+ */
+[[nodiscard]] LoopOutcome MoveEveryShip(FlightLoop& _loop) noexcept;
+
+/*
+ * 6502: MA18 to `JMP STARS` -- parts 13 to 16, once per frame after the ships.
+ *
+ * Everything here is on a clock: `LDA MCNT / AND #7` recharges the shields and the banks every
+ * eighth frame, `AND #31` gives the rest of the part a sixteen-step cycle, and steps 10, 15 and
+ * 20 of that cycle are the energy warning, the docking-computer reminder and the cabin
+ * temperature. So a frame in the flight loop does one sixteenth of the housekeeping and the
+ * player never sees the seam.
+ */
+[[nodiscard]] LoopOutcome EndFlightFrame(FlightLoop& _loop) noexcept;
+
+/// 6502: `M%` from end to end -- the opening, every ship, and the tail.
+[[nodiscard]] LoopOutcome MainFlightLoop(FlightLoop& _loop) noexcept;
 
 } // namespace Elite

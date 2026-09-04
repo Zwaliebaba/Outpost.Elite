@@ -790,6 +790,14 @@ namespace
 /// Flat memory the game never touches, where the patched `MVTRIBS` counts its own arrivals.
 constexpr std::uint16_t TRUMBLE_PROBE = 0xFFF0;
 
+/// Three more of the same, for `DEATH`, `DOENTRY` and `ESCAPE` in that order.
+constexpr std::uint16_t EXIT_PROBE = 0xFFF1;
+
+/// The first byte of the arena that is heap rather than ship block -- `Mirror` owns everything
+/// below it, because in the original the two are one region and in the port they are two.
+constexpr std::uint16_t HEAP_START =
+  Elite::SHIP_BLOCK_BASE + Elite::MAX_SHIPS * Elite::SHIP_BLOCK_SIZE;
+
 /// Where the oracle keeps what the frame's opening reads and writes, beyond the shared `Where`.
 struct LoopWhere
 {
@@ -798,8 +806,9 @@ struct LoopWhere
   std::uint16_t las, lasct, lasx, lasy, msar, mstg, ecmp, moonflower;
   std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
-  std::uint16_t mvtribs, nomvetr, ma3, escape, frs1, angry, startbd, stopbd, noise;
-  std::uint16_t mainLoop;
+  std::uint16_t mvtribs, nomvetr, ma3, ma18, escape, frs1, angry, startbd, stopbd, noise;
+  std::uint16_t mainLoop, death, doentry, tactics, doexp, planet, nwsps, sfs1, noise2;
+  std::uint16_t setl1, dovdu19, slsp;
 
   explicit LoopWhere(const OracleImage& _oracle)
   {
@@ -824,6 +833,12 @@ struct LoopWhere
     frs1 = _oracle.Label("FRS1");            angry = _oracle.Label("ANGRY");
     startbd = _oracle.Label("startbd");      stopbd = _oracle.Label("stopbd");
     noise = _oracle.Label("NOISE");          mainLoop = _oracle.Label("M%");
+    ma18 = _oracle.Label("MA18");            death = _oracle.Label("DEATH");
+    doentry = _oracle.Label("DOENTRY");      tactics = _oracle.Label("TACTICS");
+    doexp = _oracle.Label("DOEXP");          planet = _oracle.Label("PLANET");
+    nwsps = _oracle.Label("NWSPS");          sfs1 = _oracle.Label("SFS1");
+    noise2 = _oracle.Label("NOISE2");        setl1 = _oracle.Label("SETL1");
+    dovdu19 = _oracle.Label("DOVDU19");      slsp = _oracle.Label("SLSP");
   }
 };
 
@@ -856,10 +871,11 @@ struct RecordingLoop final : Elite::FlightLoopEffects
   explicit RecordingLoop(std::vector<std::uint8_t>& _sounds) noexcept : sounds(_sounds) {}
 
   bool PlaySound(std::uint8_t _effect) override { sounds.push_back(_effect); return true; }
+  /// `NOISE2` is trapped at its own address, so its hits never reach `NOISE` and belong in
+  /// their own list -- putting them in `sounds` as well would double-count every explosion.
   bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain,
                         std::uint8_t _frequency) override
   {
-    sounds.push_back(_effect);
     pitched.push_back({ _effect, _sustain, _frequency });
     return true;
   }
@@ -869,6 +885,42 @@ struct RecordingLoop final : Elite::FlightLoopEffects
   void StopDockingMusic() override { ++musicStops; }
   bool SpawnAhead(std::uint8_t _type) override { spawned.push_back(_type); return spawnSucceeds; }
   void Anger(std::uint8_t _type) override { angered.push_back(_type); }
+  void SpawnStation() override { ++stationSpawns; }
+
+  bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override
+  {
+    children.push_back({ _aiFlag, _type });
+    return childSucceeds;
+  }
+
+  struct Child
+  {
+    std::uint8_t aiFlag, type;
+  };
+
+  std::vector<Child> children;
+  std::uint32_t stationSpawns = 0;
+  bool childSucceeds = true;
+};
+
+/// What `MVEIT` and `LL9` reach that this slice does not build.
+struct RecordingWorld final : Elite::ShipEffects, Elite::ShipDrawEffects
+{
+  std::vector<std::uint8_t> tactics;
+  std::uint32_t planets = 0;
+  std::uint32_t explosions = 0;
+  std::uint32_t clouds = 0;
+
+  void RunTactics(Elite::ShipBlock& _work) override { tactics.push_back(_work[32]); }
+  void DrawPlanetOrSun() override { ++planets; }
+  void DrawExplosion() override { ++explosions; }
+  void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t _address, std::uint16_t) override
+  {
+    seeded.push_back(_address);
+    ++clouds;
+  }
+
+  std::vector<std::uint16_t> seeded;
 };
 
 /// Everything one frame needs that the shared `World` does not carry.
@@ -879,6 +931,11 @@ struct Frame
   Elite::ControlOptions options;
   Elite::KeyLogger keys{};
   Elite::LaserBurst burst{};
+  Elite::LineHeap heap;
+  Elite::ClipState clip;
+  Elite::Projection projection;
+  Elite::CompassAxes axes{};
+  RecordingWorld outside;
   RecordingLoop effects{ world.effects.sounds };
 
   explicit Frame(std::uint32_t _seed)
@@ -897,6 +954,16 @@ struct Frame
     world.message.column = 9u;
     world.message.append = 1u;
     world.message.delay = 12u;
+
+    /*
+     * 6502: XX0 -- a REAL blueprint, because zero is not a state the game reaches.
+     *
+     * Part 4 leaves `XX0` alone for the planet and the sun, so a body inherits whatever the last
+     * ship put there (§6.90) -- and by the time the flight loop runs, something always has. With
+     * zero the game reads `(XX0),15` out of its own zero page and the port reads a guarded zero,
+     * which is a disagreement about an address neither would ever form.
+     */
+    world.flight.blueprint = Elite::BlueprintAddress(11u);
     world.screen.upperBitmapMode = 0xC0u;
     world.status.laserCount = 0u;
     world.status.laserPower = 0u;
@@ -989,19 +1056,136 @@ void CompareFrame(const Cpu6502& _cpu, const Frame& _frame, const LoopWhere& _lo
   }
 }
 
+
+/*
+ * A bubble the per-ship loop has something to do with: the planet, the sun, and three ships.
+ *
+ * Every coordinate high byte is `_distance`, so one number moves the whole bubble towards the
+ * player -- which is what parts 7 to 12 branch on. `Seed`'s own blocks are random, and random is
+ * exactly wrong here: a ship at a random distance is almost always too far to do anything.
+ */
+void PopulateBubble(Frame& _frame, std::uint8_t _distance, std::uint8_t _state, bool _empty)
+{
+  World& world = _frame.world;
+
+  for (std::size_t slot = 0; slot < world.bubble.slots.size(); ++slot)
+  {
+    world.bubble.slots[slot] = 0u;
+  }
+  for (std::size_t type = 0; type < world.bubble.counts.size(); ++type)
+  {
+    world.bubble.counts[type] = 0u;
+  }
+
+  if (_empty)
+  {
+    world.bubble.junk = 0u;
+    return;
+  }
+
+  const std::uint8_t TYPES[] = { 128u, 129u, 3u, 5u, 11u };
+
+  for (std::size_t slot = 0; slot < 5u; ++slot)
+  {
+    world.bubble.slots[slot] = TYPES[slot];
+    if (TYPES[slot] < 34u)
+    {
+      ++world.bubble.counts[TYPES[slot]];
+    }
+
+    Elite::ShipBlock& block = world.bubble.blocks[slot];
+    for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+    {
+      block[byte] = 0u;
+    }
+
+    block[1] = _distance;                                  // x high
+    block[4] = _distance;                                  // y high
+
+    /*
+     * The z high byte separates the ships EXCEPT at zero, where it must not: parts 7 to 12 branch
+     * on all three high bytes being zero together, so spreading them out would mean no case in
+     * the sweep ever collided with anything.
+     */
+    block[7] = (_distance == 0u) ? std::uint8_t{ 0 }
+                                 : static_cast<std::uint8_t>(_distance + slot);
+    block[14] = 20u;                                       // pitch counter
+    block[27] = 20u;                                       // speed
+    block[31] = _state;
+    block[32] = 0u;                                        // no AI, so `TACTICS` is not reached
+    block[34] = 0x0Cu;                                     // the heap pointer's high byte
+    block[35] = 60u;                                       // energy
+  }
+
+  world.bubble.junk = 0u;
+}
+
 /*
  * Run one frame on both sides and compare everything.
  *
  * The marker is 0x1D as it is in the screen tests, so "drew nothing" and "drew a zero" stay
  * different answers across the whole bitmap.
  */
+/*
+ * Which part of `M%` a comparison runs.
+ *
+ * `Opening` stops at `MA3`, which is where part 3 falls into part 4; `Ships` starts there and
+ * stops at `MA18`; `Tail` starts at `MA18` and runs to the end; `Whole` runs the lot. The three
+ * pieces are separately entered because the loop's failures localise badly otherwise -- a wrong
+ * byte in part 15 shows up as a screen difference after two hundred thousand instructions.
+ */
+enum class Reach
+{
+  Opening,
+  Ships,
+  Tail,
+  Whole,
+};
+
 void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at,
-                   const LoopWhere& _loop, const std::wstring& _context)
+                   const LoopWhere& _loop, const std::wstring& _context,
+                   Reach _reach = Reach::Opening)
 {
   Cpu6502 cpu = _oracle.Fresh();
 
-  cpu.AddTrap(_loop.ma3);
-  cpu.AddTrap(_loop.escape);
+  if (_reach == Reach::Opening)
+  {
+    cpu.AddTrap(_loop.ma3);
+  }
+  if (_reach == Reach::Opening || _reach == Reach::Ships)
+  {
+    cpu.AddTrap(_loop.ma18);
+  }
+
+  /*
+   * The three exits are PATCHED rather than trapped, and the difference matters.
+   *
+   * A trap returns by popping the stack, which is right for a `JSR`ed routine and wrong for a
+   * `JMP` that never comes back: `JMP DEATH` inside `OOPS` is one level down, so a trap there
+   * unwinds into the middle of part 10 and the frame carries on. Patching each with a jump to the
+   * stop address ends the run where the game's would end, and the `INC` in front of it is what
+   * makes which one it took observable.
+   */
+  const std::uint16_t EXITS[] = { _loop.death, _loop.doentry, _loop.escape };
+  for (std::size_t index = 0; index < 3u; ++index)
+  {
+    const std::uint16_t probe = static_cast<std::uint16_t>(EXIT_PROBE + index);
+    cpu.memory[probe] = 0u;
+    const std::uint8_t leave[] = { 0xEEu, static_cast<std::uint8_t>(probe & 0xFFu),
+                                   static_cast<std::uint8_t>(probe >> 8),
+                                   0x4Cu, 0xF9u, 0xFFu };
+    cpu.Load(EXITS[index], leave, sizeof(leave));
+  }
+
+  cpu.AddTrap(_loop.tactics);
+  cpu.AddTrap(_loop.doexp);
+  cpu.AddTrap(_loop.planet);
+  cpu.AddTrap(_loop.nwsps);
+  cpu.AddTrap(_loop.setl1);
+  cpu.AddTrap(_loop.dovdu19);
+  cpu.AddTrap(_loop.noise2);
+  cpu.AddTrap(_loop.sfs1, _frame.effects.childSucceeds ? Cpu6502::TrapExit::SetCarry
+                                                       : Cpu6502::TrapExit::ClearCarry);
   cpu.AddTrap(_loop.startbd);
   cpu.AddTrap(_loop.stopbd);
   cpu.AddTrap(_loop.angry);
@@ -1029,17 +1213,44 @@ void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at,
   Mirror(_frame.world, cpu, _at);
   MirrorFrame(_frame, cpu, _at, _loop);
 
-  const Elite::Testing::RunResult run = cpu.CallSubroutine(_loop.mainLoop, 2'000'000);
+  /*
+   * The ship line heap, which the port keeps apart from the blocks and the original does not.
+   *
+   * `LineHeap`'s arena runs from `K%` to `LS%` and the bottom of it IS the block region, which
+   * `Mirror` has just written -- so only the bytes above the last block are the heap's, and
+   * mirroring the whole arena would undo the blocks.
+   */
+  for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
+  {
+    cpu.memory[address] = _frame.heap.Read(address);
+  }
+  cpu.memory[_loop.slsp] = static_cast<std::uint8_t>(_frame.world.bubble.heapBottom & 0xFFu);
+  cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] =
+    static_cast<std::uint8_t>(_frame.world.bubble.heapBottom >> 8);
+
+  const std::uint16_t entry = (_reach == Reach::Ships)  ? _loop.ma3
+                              : (_reach == Reach::Tail) ? _loop.ma18
+                                                        : _loop.mainLoop;
+
+  const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 8'000'000);
   Assert::IsTrue(run.completed, (_context + L": M% reached an exit").c_str());
 
   Elite::FlightScreen screen = _frame.world.Screen();
-  Elite::FlightLoop loop{ screen,        _frame.keys,  _frame.control,
-                          _frame.options, _frame.burst, _frame.effects };
-  const Elite::LoopOutcome outcome = Elite::BeginFlightFrame(loop);
+  Elite::FlightLoop loop{ screen,         _frame.keys,       _frame.control, _frame.options,
+                          _frame.burst,   _frame.heap,       _frame.clip,    _frame.projection,
+                          _frame.axes,    _frame.outside,    _frame.outside, _frame.effects };
+  const Elite::LoopOutcome outcome = (_reach == Reach::Ships)  ? Elite::MoveEveryShip(loop)
+                                     : (_reach == Reach::Tail) ? Elite::EndFlightFrame(loop)
+                                     : (_reach == Reach::Whole) ? Elite::MainFlightLoop(loop)
+                                                                : Elite::BeginFlightFrame(loop);
 
   // ---- the exit ------------------------------------------------------------------------------
-  std::uint32_t reachedMa3 = 0;
+  std::uint32_t reachedEnd = 0;
   std::uint32_t escaped = 0;
+  std::uint32_t died = 0;
+  std::uint32_t docked = 0;
+  std::uint32_t stationSpawns = 0;
+  std::vector<Elite::Testing::Cpu6502::TrapHit> pitched;
   std::vector<std::uint8_t> sounds;
   std::vector<std::uint8_t> spawned;
   std::vector<std::uint8_t> angered;
@@ -1048,8 +1259,9 @@ void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at,
 
   for (const Cpu6502::TrapHit& hit : cpu.trapHits)
   {
-    if (hit.address == _loop.ma3)          { ++reachedMa3; }
-    else if (hit.address == _loop.escape)  { ++escaped; }
+    if (hit.address == _loop.ma3 || hit.address == _loop.ma18) { ++reachedEnd; }
+    else if (hit.address == _loop.nwsps)   { ++stationSpawns; }
+    else if (hit.address == _loop.noise2)  { pitched.push_back(hit); }
     else if (hit.address == _loop.noise)   { sounds.push_back(hit.y); }
     else if (hit.address == _loop.frs1)    { spawned.push_back(hit.x); }
     else if (hit.address == _loop.angry)   { angered.push_back(hit.a); }
@@ -1057,15 +1269,49 @@ void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at,
     else if (hit.address == _loop.stopbd)  { ++stops; }
   }
 
-  const bool wantEscape = (outcome == Elite::LoopOutcome::Escaped);
-  Assert::AreEqual<std::uint32_t>(wantEscape ? 1u : 0u, escaped,
+  died = cpu.memory[EXIT_PROBE];
+  docked = cpu.memory[static_cast<std::uint16_t>(EXIT_PROBE + 1u)];
+  escaped = cpu.memory[static_cast<std::uint16_t>(EXIT_PROBE + 2u)];
+
+  Assert::AreEqual<std::uint32_t>(outcome == Elite::LoopOutcome::Escaped ? 1u : 0u, escaped,
                                   (_context + L": ESCAPE taken").c_str());
-  Assert::AreEqual<std::uint32_t>(wantEscape ? 0u : 1u, reachedMa3,
-                                  (_context + L": fell into MA3").c_str());
+  Assert::AreEqual<std::uint32_t>(outcome == Elite::LoopOutcome::Died ? 1u : 0u, died,
+                                  (_context + L": DEATH taken").c_str());
+  Assert::AreEqual<std::uint32_t>(outcome == Elite::LoopOutcome::Docked ? 1u : 0u, docked,
+                                  (_context + L": DOENTRY taken").c_str());
+
+  if (_reach == Reach::Opening || _reach == Reach::Ships)
+  {
+    Assert::AreEqual<std::uint32_t>(outcome == Elite::LoopOutcome::Continued ? 1u : 0u, reachedEnd,
+                                    (_context + L": fell through to the next part -- outcome "
+                                     + std::to_wstring(static_cast<int>(outcome))).c_str());
+  }
+
+  Assert::AreEqual(stationSpawns, _frame.effects.stationSpawns,
+                   (_context + L": NWSPS calls").c_str());
+  Assert::AreEqual(pitched.size(), _frame.effects.pitched.size(),
+                   (_context + L": NOISE2 calls").c_str());
+  for (std::size_t index = 0; index < pitched.size(); ++index)
+  {
+    const std::wstring where = _context + L": NOISE2 " + std::to_wstring(index);
+    Assert::AreEqual(pitched[index].y, _frame.effects.pitched[index].effect,
+                     (where + L" effect").c_str());
+    Assert::AreEqual(pitched[index].a, _frame.effects.pitched[index].sustain,
+                     (where + L" sustain").c_str());
+    Assert::AreEqual(pitched[index].x, _frame.effects.pitched[index].frequency,
+                     (where + L" frequency").c_str());
+  }
 
   // ---- the seams -----------------------------------------------------------------------------
-  Assert::AreEqual(sounds.size(), _frame.world.effects.sounds.size(),
-                   (_context + L": sounds asked for").c_str());
+  {
+    std::wstring wanted;
+    for (const std::uint8_t effect : sounds) { wanted += std::to_wstring(effect) + L" "; }
+    std::wstring got;
+    for (const std::uint8_t effect : _frame.world.effects.sounds) { got += std::to_wstring(effect) + L" "; }
+    Assert::AreEqual(sounds.size(), _frame.world.effects.sounds.size(),
+                     (_context + L": sounds asked for -- game [" + wanted + L"] port [" + got
+                      + L"]").c_str());
+  }
   for (std::size_t index = 0; index < sounds.size(); ++index)
   {
     Assert::AreEqual(sounds[index], _frame.world.effects.sounds[index],
@@ -1095,8 +1341,58 @@ void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at,
 
   // ---- the world -----------------------------------------------------------------------------
   CompareScreens(cpu, _at.screen, _frame.world.canvas, 0x1Du, _context);
-  CompareState(cpu, _frame.world, _at, _context);
+  CompareState(cpu, _frame.world, _at, _context, _frame.outside.clouds == 0u);
   CompareFrame(cpu, _frame, _loop, _context);
+
+  /*
+   * The heap, minus what an unseeded explosion cloud owns.
+   *
+   * `LL9`'s `EE55` block writes six bytes at the head of a newly killed ship's run and four of
+   * them come from `DORND` -- on a carry that arrives out of `LOIN`, through `EE51`, and the port
+   * has no exit carry for `LOIN` to give it. So the cloud stays behind `SeedExplosionCloud`, and
+   * the six bytes it owns plus the generator are the only things this comparison leaves out
+   * (§6.91). Everything else on a frame that kills a ship is still compared.
+   */
+  auto seededHere = [&](std::uint16_t _address) {
+    for (const std::uint16_t cloud : _frame.outside.seeded)
+    {
+      if (_address >= static_cast<std::uint16_t>(cloud + 1u)
+          && _address <= static_cast<std::uint16_t>(cloud + 6u))
+      {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
+  {
+    if (seededHere(address))
+    {
+      continue;
+    }
+    Assert::AreEqual(cpu.memory[address], _frame.heap.Read(address),
+                     (_context + L": heap byte " + std::to_wstring(address)).c_str());
+  }
+
+  const std::uint16_t bottom =
+    static_cast<std::uint16_t>(cpu.memory[_loop.slsp]
+                               | (cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] << 8));
+  Assert::AreEqual<std::uint32_t>(bottom, _frame.world.bubble.heapBottom,
+                                  (_context + L": SLSP").c_str());
+
+  for (std::size_t slot = 0; slot < _frame.world.bubble.slots.size(); ++slot)
+  {
+    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.frin + slot)],
+                     _frame.world.bubble.slots[slot],
+                     (_context + L": FRIN " + std::to_wstring(slot)).c_str());
+  }
+  for (std::size_t type = 0; type < _frame.world.bubble.counts.size(); ++type)
+  {
+    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.many + type)],
+                     _frame.world.bubble.counts[type],
+                     (_context + L": MANY " + std::to_wstring(type)).c_str());
+  }
 }
 } // namespace
 
@@ -1490,6 +1786,281 @@ public:
       CompareFrames(frame, oracle, at, loop,
                     WidenText("M% (ENERGY " + std::to_string(energy) + ", firing)"));
     }
+  }
+};
+
+TEST_CLASS(TheFlightFrameShips)
+{
+public:
+  /*
+   * 6502: MA3 to `JMP MAL1` -- the per-ship loop, over bubbles that exercise each of its exits.
+   *
+   * The loop is a `JMP MAL1` back edge with the index advanced by hand, and `KS1` is inside it:
+   * killing a ship shuffles the slots down and goes round WITHOUT advancing, so the ship that
+   * took the dead one's place is processed next. Every case here has something behind a ship
+   * that leaves, because a port that wrote a `for` over the slots agrees with the game on every
+   * bubble where nothing dies.
+   */
+  TEST_METHOD(ThePerShipLoopMatchesMAL1)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    struct Case
+    {
+      const char* what;
+      std::uint8_t distance;   ///< what goes into every high byte, so "how far away"
+      std::uint8_t state;      ///< 6502: INWK+31
+      std::uint8_t laser;      ///< 6502: LAS
+      std::uint8_t bomb;       ///< 6502: BOMB
+      std::uint8_t scoops;     ///< 6502: BST
+      std::uint8_t view;       ///< 6502: QQ11
+      bool empty;
+    };
+
+    const std::vector<Case> CASES = {
+      { "an empty bubble", 0x20, 0x00, 0, 0, 0, 0, true },
+      { "three ships, all distant", 0x20, 0x00, 0, 0, 0, 0, false },
+      { "distant, with the laser on", 0x20, 0x00, 15, 0, 0, 0, false },
+      { "distant, on a chart", 0x20, 0x00, 15, 0, 0, 128, false },
+      { "right on top of us", 0x00, 0x00, 0, 0, 0, 0, false },
+      { "on top of us with scoops", 0x00, 0x00, 0, 0, 0xFF, 0, false },
+      { "on top of us, exploding", 0x00, 0x20, 0, 0, 0, 0, false },
+      { "on top of us, already dead", 0x00, 0x80, 0, 0, 0, 0, false },
+      { "the energy bomb going off", 0x20, 0x00, 0, 0xFF, 0, 0, false },
+      { "the bomb with the laser on", 0x00, 0x00, 15, 0xFF, 0, 0, false },
+      { "far enough to leave", 0xF0, 0x00, 0, 0, 0, 0, false },
+      { "a beam laser at close range", 0x00, 0x00, 143 & 0x7F, 0, 0, 0, false },
+      { "a mining laser at close range", 0x00, 0x00, 50, 0, 0, 0, false },
+      { "a military laser at close range", 0x00, 0x00, 151 & 0x7F, 0, 0, 0, false },
+    };
+
+    std::uint32_t compared = 0;
+    std::uint32_t killed = 0;
+
+    for (const Case& item : CASES)
+    {
+      for (const std::uint8_t missileArmed : { std::uint8_t{ 0 }, std::uint8_t{ 0xFF } })
+      {
+        Frame frame(0x4Du);
+        PopulateBubble(frame, item.distance, item.state, item.empty);
+        frame.world.status.laserPower = item.laser;
+        frame.world.status.missileArmed = missileArmed;
+        frame.world.commander.At(Elite::Field::EnergyBomb) = item.bomb;
+        frame.world.commander.At(Elite::Field::FuelScoops) = item.scoops;
+        frame.world.view = item.view;
+        frame.world.commander.At(Elite::Field::Missiles) = 3u;
+
+        const std::wstring where =
+          WidenText(std::string("MAL1 (") + item.what
+                    + (missileArmed != 0u ? ", missile armed)" : ")"));
+        CompareFrames(frame, oracle, at, loop, where, Reach::Ships);
+
+        std::uint32_t left = 0;
+        for (const std::uint8_t occupant : frame.world.bubble.slots)
+        {
+          left += (occupant != 0u) ? 1u : 0u;
+        }
+        killed += (!item.empty && left < 5u) ? 1u : 0u;
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(14u * 2u, compared, L"the whole sweep ran");
+    Assert::IsTrue(killed > 0u, L"some bubbles emptied");
+  }
+};
+
+TEST_CLASS(TheFlightFrameTail)
+{
+public:
+  /*
+   * 6502: MA18 to `JMP STARS` -- everything on a clock, swept over the whole clock.
+   *
+   * `MCNT AND 7` gates the shields and the banks, `AND 31` gates the station check, and steps 10,
+   * 15 and 20 of the same thirty-two are the energy warning, the docking reminder and the cabin
+   * temperature. So the counter is swept end to end rather than sampled: the parts that do
+   * nothing are as much of the routine as the parts that do.
+   */
+  TEST_METHOD(TheFrameTailMatchesMA18)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    std::uint32_t compared = 0;
+    std::uint32_t bombEnded = 0;
+
+    for (std::uint8_t counter = 0; counter < 32u; ++counter)
+    {
+      for (std::uint8_t shape = 0; shape < 4u; ++shape)
+      {
+        Frame frame(counter * 5u + shape);
+        PopulateBubble(frame, 0x20u, 0x00u, false);
+
+        frame.world.flight.mainLoopCounter = counter;
+        frame.world.status.midJump = ((shape & 1u) != 0u) ? 0xFFu : 0u;
+        frame.world.status.energy = ((shape & 2u) != 0u) ? 200u : 40u;
+        frame.world.commander.At(Elite::Field::EnergyBomb) = (counter & 1u) != 0u ? 0xC0u : 0u;
+        frame.world.commander.At(Elite::Field::EnergyUnit) = 1u;
+        frame.world.commander.At(Elite::Field::FuelScoops) = 0xFFu;
+        frame.world.status.viewLaser = 0x4Cu;
+        frame.world.status.laserCount = static_cast<std::uint8_t>(counter & 15u);
+        frame.world.status.ecmOurs = ((counter & 4u) != 0u) ? 0xFFu : 0u;
+        frame.world.status.ecmCountdown = ((counter & 8u) != 0u) ? 1u : 0u;
+
+        const std::wstring where =
+          WidenText("MA18 (MCNT " + std::to_string(counter) + ", shape "
+                    + std::to_string(shape) + ")");
+        CompareFrames(frame, oracle, at, loop, where, Reach::Tail);
+
+        bombEnded += (frame.world.commander.At(Elite::Field::EnergyBomb) == 0x80u) ? 1u : 0u;
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(32u * 4u, compared, L"the whole clock was swept");
+    Assert::IsTrue(bombEnded > 0u, L"the bomb burned down on some passes");
+  }
+
+  /*
+   * 6502: part 15's cabin temperature, at the two thresholds that do more than warm the cabin.
+   *
+   * 224 is where the fuel scoops start working and 240 is where the Trumbles die, and both are
+   * reached by flying at the SUN -- so the sun is put close and the distance swept across both.
+   */
+  TEST_METHOD(TheCabinTemperatureMatchesMA33)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    std::uint32_t compared = 0;
+    std::uint32_t scooped = 0;
+    std::uint32_t cooked = 0;
+
+    /*
+     * The distances that matter are 44 to 82, not 0 to 15.
+     *
+     * The temperature is `30 - MAS3`, and `MAS3` sums the HIGH bytes of three squares -- so a sun
+     * closer than about fifty on each axis gives zero, the subtraction carries, and every case
+     * dies before reaching the thresholds. 224 (the scoops) needs the sum between 30 and 61, and
+     * 240 (the Trumbles) between 30 and 45, which is a narrow band of distances either side of
+     * sixty.
+     */
+    for (std::uint8_t distance = 44; distance < 84u; distance = static_cast<std::uint8_t>(distance + 2u))
+    {
+      for (const std::uint8_t scoops : { std::uint8_t{ 0 }, std::uint8_t{ 0xFF } })
+      {
+        Frame frame(distance * 3u + scoops);
+        PopulateBubble(frame, 0x20u, 0x00u, false);
+
+        // The sun in slot 1 at `distance` on every axis, and no station, so part 15 measures it.
+        frame.world.bubble.slots[1] = 129u;
+        frame.world.bubble.counts[Elite::SHIP_TYPE_STATION] = 0u;
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          frame.world.bubble.blocks[1][byte] = 0u;
+        }
+        frame.world.bubble.blocks[1][1] = distance;
+        frame.world.bubble.blocks[1][4] = distance;
+        frame.world.bubble.blocks[1][7] = distance;
+
+        frame.world.flight.mainLoopCounter = 20u;
+        frame.world.status.midJump = 0u;
+        frame.world.commander.At(Elite::Field::FuelScoops) = scoops;
+        frame.world.commander.At(Elite::Field::Fuel) = 40u;
+        frame.world.fuel = 40u;
+        frame.world.commander.At(Elite::Field::Tribbles) = 0x40u;
+        frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = 0x21u;
+        frame.world.flight.delt4Next = 0xC0u;
+
+        const std::wstring where =
+          WidenText("MA33 (sun at " + std::to_string(distance)
+                    + (scoops != 0u ? ", scoops fitted)" : ", no scoops)"));
+        CompareFrames(frame, oracle, at, loop, where, Reach::Tail);
+
+        scooped += (frame.world.commander.At(Elite::Field::Fuel) > 40u) ? 1u : 0u;
+        cooked += (frame.world.sight.maskedWith.empty() ? 0u : 1u);
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(20u * 2u, compared, L"the whole sweep ran");
+    Assert::IsTrue(scooped > 0u, L"the tank filled on some passes");
+    Assert::IsTrue(cooked > 0u, L"and the Trumbles died on some");
+  }
+};
+
+TEST_CLASS(TheWholeFlightFrame)
+{
+public:
+  /*
+   * 6502: `M%` from end to end, which is what the game actually calls.
+   *
+   * The three halves are compared separately above so that a failure localises; this is here so
+   * that the JOINS between them are compared too -- the carry part 2 leaves for part 3, the slot
+   * index part 4 hands part 12, and the counter part 13 shares with part 15.
+   */
+  TEST_METHOD(TheWholeFrameMatchesM)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Where at(oracle);
+    const LoopWhere loop(oracle);
+
+    std::uint32_t compared = 0;
+
+    for (std::uint8_t counter = 0; counter < 8u; ++counter)
+    {
+      for (const std::uint8_t distance : { std::uint8_t{ 0 }, std::uint8_t{ 0x20 },
+                                           std::uint8_t{ 0xF0 } })
+      {
+        for (std::uint8_t shape = 0; shape < 4u; ++shape)
+        {
+          Frame frame(counter * 7u + distance + shape);
+          PopulateBubble(frame, distance, 0x00u, false);
+
+          frame.world.flight.mainLoopCounter = static_cast<std::uint8_t>(counter * 4u + shape);
+          frame.control.roll = static_cast<std::uint8_t>(100u + counter * 5u);
+          frame.control.pitch = static_cast<std::uint8_t>(150u - counter * 3u);
+          frame.keys[Elite::KEY_FIRE] = ((shape & 1u) != 0u) ? 0xFFu : 0u;
+          frame.keys[Elite::KEY_SPEED_UP] = ((shape & 2u) != 0u) ? 0xFFu : 0u;
+          frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] =
+            Elite::LASER_PULSE;
+          frame.world.commander.At(Elite::Field::Missiles) = 3u;
+          frame.world.commander.At(Elite::Field::EnergyUnit) = 1u;
+
+          const std::wstring where =
+            WidenText("M% whole (MCNT " + std::to_string(counter * 4u + shape) + ", distance "
+                      + std::to_string(distance) + ", shape " + std::to_string(shape) + ")");
+          CompareFrames(frame, oracle, at, loop, where, Reach::Whole);
+          ++compared;
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(8u * 3u * 4u, compared, L"the whole sweep ran");
   }
 };
 

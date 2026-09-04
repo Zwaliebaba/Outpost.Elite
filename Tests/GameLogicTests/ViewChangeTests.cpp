@@ -496,6 +496,7 @@ public:
       void SetRasterMode(std::uint8_t _mode) override { modes.push_back(_mode); }
       void SetSightColour(std::uint8_t) override { ++colours; }
       void SetSpritesEnabled(std::uint8_t _mask) override { masks.push_back(_mask); }
+      void MaskSprites(std::uint8_t) override {}
     };
 
     std::uint32_t compared = 0;
@@ -677,6 +678,7 @@ public:
       void SetRasterMode(std::uint8_t _mode) override { modes.push_back(_mode); }
       void SetSightColour(std::uint8_t) override {}
       void SetSpritesEnabled(std::uint8_t _mask) override { masks.push_back(_mask); }
+      void MaskSprites(std::uint8_t) override {}
     };
 
     std::uint32_t compared = 0;
