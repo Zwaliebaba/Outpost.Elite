@@ -197,11 +197,11 @@ void GameShell::ClearToView(std::uint8_t _view)
 
 void GameShell::ClearBottomRows()
 {
-  if (m_text == nullptr || m_printer == nullptr || m_extended == nullptr)
+  if (m_text == nullptr || m_printer == nullptr || m_extended == nullptr || m_message == nullptr)
   {
     return;
   }
-  Elite::ClearMessageRows(m_canvas, *m_printer, *m_text, *m_extended);
+  Elite::ClearMessageRows(m_canvas, *m_printer, *m_text, *m_extended, *m_message);
 }
 
 void GameShell::ClearScreen()

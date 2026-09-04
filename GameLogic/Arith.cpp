@@ -134,21 +134,22 @@ void MultiplySignedToSR(MathWorkspace& _work, std::uint8_t _a) noexcept
   _work.r = _work.p;
 }
 
-std::uint8_t SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   _work.p = _a;
 
   if (_a == 0)
   {
-    // Falls through into the same zero tail the unsigned multiply uses.
+    // 6502: MU1 -- CLC / STX P / TXA / RTS. It falls into the same zero tail the unsigned
+    // multiply uses, and that tail CLEARS the carry, which is half of why `MAS3` can read one.
     _work.p = 0;
-    return 0;
+    return { 0, false };
   }
 
-  return MultiplyByX(_work, _a).high;
+  return MultiplyByX(_work, _a);
 }
 
-std::uint8_t Square(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult Square(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   return SquareUnsigned(_work, static_cast<std::uint8_t>(_a & 0x7Fu));
 }
@@ -646,7 +647,7 @@ WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a, bool _carryIn)
   return MultiplyByLog(_work, _work.k[0], _carryIn);
 }
 
-std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
+ScaledDivision DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   // 6502: DVID4. Restoring division: shift the dividend up a bit at a time, and after each
   // shift subtract the divisor if it fits, recording whether it did as the next quotient bit.
@@ -693,8 +694,8 @@ std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
    * remainder scaled up by the same divisor. Returning only the remainder, as an eight-step
    * divide would, is not what the game does.
    */
-  (void)DivideByLogarithms(_work, remainder);
-  return _work.r;
+  const bool exitCarry = DivideByLogarithms(_work, remainder);
+  return { _work.r, exitCarry };
 }
 
 bool SquareRoot(MathWorkspace& _work) noexcept
@@ -838,13 +839,13 @@ void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcep
    * running sum added in. The additions are `ADC` with no `CLC`, so the carry SQUA leaves is part
    * of them -- see the header.
    */
-  _work.r = Square(_work, _vector[0]);
+  _work.r = Square(_work, _vector[0]).high;
   _work.q = _work.p;
 
   bool carry = false;
   for (int axis = 1; axis < 3; ++axis)
   {
-    _work.t = Square(_work, _vector[axis]);
+    _work.t = Square(_work, _vector[axis]).high;
 
     const std::uint16_t low = static_cast<std::uint16_t>(_work.p) + _work.q + (carry ? 1u : 0u);
     _work.q = static_cast<std::uint8_t>(low);

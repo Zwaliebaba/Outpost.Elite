@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Dashboard.h"
 #include "StartUp.h"
 
 #include <cstdint>
@@ -25,17 +26,10 @@ namespace Elite
  *
  * Six bytes, three to zero and three to &FF, and the six are not a group in the original: they
  * are in three different workspaces and are written by six consecutive stores that share one
- * accumulator each. The port keeps them together because the routine does.
+ * accumulator each. Five of them are `FlightStatus`, which slice 3d-b named for the seven
+ * routines that READ them rather than for this one that resets them; the sixth is `DELTA`, which
+ * is `FlightState`'s, and having it here as well was one 6502 byte in two C++ fields (§6.64).
  */
-struct DockedShip
-{
-  std::uint8_t speed = 0;               ///< 6502: DELTA
-  std::uint8_t laserTemperature = 0;    ///< 6502: GNTMP
-  std::uint8_t hyperspaceCountdown = 0; ///< 6502: QQ22+1
-  std::uint8_t forwardShield = 0;       ///< 6502: FSH
-  std::uint8_t aftShield = 0;           ///< 6502: ASH
-  std::uint8_t energy = 0;              ///< 6502: ENERGY
-};
 
 /// 6502: LDY #44 / JSR DELAY -- forty-four VERTICAL SYNCS, so 0.88 seconds on PAL and 0.73 on
 /// NTSC (§6.17). The pause is what makes the docking tunnel readable.
@@ -97,7 +91,8 @@ struct DockingResult
  * (§6.25) -- so the same routine is one call on arrival and two on a restart.
  */
 [[nodiscard]] DockingResult DockAtStation(StartUpEffects& _effects, CommanderBlock& _commander,
-                                          DockedShip& _ship, std::uint8_t& _dockedFlag,
-                                          std::uint8_t _view, bool _hyperspaceHeld) noexcept;
+                                          FlightStatus& _status, FlightState& _flight,
+                                          std::uint8_t& _dockedFlag, std::uint8_t _view,
+                                          bool _hyperspaceHeld) noexcept;
 
 } // namespace Elite

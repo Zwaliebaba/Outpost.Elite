@@ -123,6 +123,27 @@
     <ClCompile Include="PlanetDrawTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="ScannerTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="MessageTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="LaserTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="FlightLoopTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="ControlsTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="ViewChangeTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="DashboardTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="StardustTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>

@@ -76,7 +76,7 @@ struct Game
   {
     recursive.SetValueTokens(&values);
     recursive.SetCursor(&text);
-    shell.Attach(recursive, text, characters.state);
+    shell.Attach(recursive, text, characters.state, message);
     shell.AttachExtended(extended);
 
     // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
@@ -113,7 +113,8 @@ struct Game
   Elite::SystemSeeds selectedSeeds{};
   Elite::CurrentSystem current;
   Elite::MarketState market;
-  Elite::DockedShip ship;
+  Elite::FlightStatus status;
+  Elite::MessageState message; ///< 6502: DLY, de, MCH and messXC
 
   std::uint8_t crosshairX = 0;
   std::uint8_t crosshairY = 0;
@@ -141,7 +142,7 @@ void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
   {
     case Elite::KeyAction::StatusMode:
     {
-      const Elite::ShipCondition condition{ _game.dockedFlag, 0, 0, _game.ship.energy };
+      const Elite::ShipCondition condition{ _game.dockedFlag, 0, 0, _game.status.energy };
       Elite::StatusScreen(_game.trade, _game.commander, condition, _game.crosshairX, _game.crosshairY,
                           _game.selectedSeeds);
       return;
@@ -219,7 +220,7 @@ void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
 void PressKey(Game& _game, std::uint8_t _key)
 {
   Perform(_game, Elite::ActionForKey(_key, _game.dockedFlag, _game.shell.View(),
-                                     _game.ship.hyperspaceCountdown, false));
+                                     _game.status.hyperspaceCountdown, false));
 }
 
 int Run(HINSTANCE _instance)

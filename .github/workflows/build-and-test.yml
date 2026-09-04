@@ -86,6 +86,25 @@ jobs:
       - name: Project files match the tree
         run: python tools/check_projects.py
 
+      # The portable runner builds GameLogic and the suite and nothing else, because Outpost/ is
+      # Win32 and DirectX 12. So renaming a GameLogic type breaks the app and every Linux check
+      # still passes -- which is how `DockedShip` becoming `FlightStatus` reached the Windows job.
+      # This checks the names; only the Windows build can check the signatures.
+      - name: The app still uses names GameLogic has, with the right argument counts
+        run: python tools/check_outpost.py
+
+      # GitHub renders a table with the header's number of columns and drops the rest in silence,
+      # so a row that grew an extra cell on the end stops being readable without changing at all
+      # in the raw file. Thirteen inventory rows had done exactly that (§6.72).
+      - name: Design tables still render everything they hold
+        run: python tools/check_docs.py
+
+      # A tool that stops on an unknown symbol is only useful if it never meets one, and four of
+      # the build's own files used to stop this one -- each looking like a missing SYMBOLS entry,
+      # which invites somebody to invent a value for it (§6.75).
+      - name: The source resolver can read every file the build assembles
+        run: python tools/c64_source.py --check-all
+
       - name: Coverage ledger
         run: python tools/inventory.py
 

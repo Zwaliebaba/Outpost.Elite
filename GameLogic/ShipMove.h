@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Arith.h"
+#include "Canvas.h"
 #include "ShipSlot.h"
 
 #include <cstdint>
@@ -136,21 +137,17 @@ void MovePlanetOrSun(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _alpha
                      std::uint8_t _beta) noexcept;
 
 /*
- * What `MVEIT` reaches outside itself, and both are seams for the same reason the docked screens'
- * were: they belong to slices that do not exist yet.
+ * What `MVEIT` still reaches outside itself.
  *
- * `SCAN` is the scanner blip, which is slice 3d's dashboard. `TACTICS` is the combat AI, which is
- * PHASE 4. Neither appears in the plan's 3a row -- the §6.12 pass found them -- and `MVEIT` calls
- * both directly, so a port of it without them would either not compile or quietly do nothing
- * where the game does something.
+ * There were two, and `SCAN` was the other: slice 3d-a built it, so `MoveShip` now calls it
+ * directly and the seam is gone (§6.59). What is left is `TACTICS`, the combat AI, which is
+ * PHASE 4 -- and `MVEIT` calls it directly too, so a port without it would quietly do nothing
+ * where the game decides what a hostile ship does next.
  */
 class ShipEffects
 {
 public:
   virtual ~ShipEffects() = default;
-
-  /// 6502: SCAN -- draw or erase this ship's blip on the scanner. Slice 3d.
-  virtual void UpdateScanner(ShipBlock& _work) = 0;
 
   /// 6502: TACTICS -- decide what a hostile ship does next. Phase 4.
   virtual void RunTactics(ShipBlock& _work) = 0;
@@ -214,8 +211,18 @@ struct FlightState
  * rotation too -- `AND #&81 / CMP #&81` is a test for type 129 and nothing else. Everything else
  * runs the lot.
  */
-void MoveShip(ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
-              std::uint16_t _blueprint) noexcept;
+/*
+ * IT DRAWS, which is why the canvas is an argument. `MVEIT` calls `SCAN` twice -- once at `MV30`
+ * for every ship, and again at the end of `MV5` for one that is neither exploding nor dead -- so
+ * an ordinary ship's blip is EORed onto the scanner and off it again in the same call, at two
+ * different positions: the old one and the new one. That is the whole of how a blip moves.
+ *
+ * `_view` is `QQ11`, which `SCAN` reads and `MVEIT` does not: the flight loop sets it, and the
+ * port has no single home for it until 3d-d.
+ */
+void MoveShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math,
+              FlightState& _flight, ShipEffects& _effects, std::uint16_t _blueprint,
+              std::uint8_t _view) noexcept;
 
 
 /*

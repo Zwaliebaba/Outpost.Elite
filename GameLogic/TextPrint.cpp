@@ -290,8 +290,13 @@ void SetUpTextScreen(TokenPrinter& _printer, TextState& _text, ExtendedTextState
 }
 
 void ClearMessageRows(Canvas& _canvas, TokenPrinter& _printer, TextState& _text,
-                      ExtendedTextState& _extended) noexcept
+                      ExtendedTextState& _extended, MessageState& _message) noexcept
 {
+  // 6502: CLYNS -- LDA #0 / STA DLY / STA de. Whatever message was up is forgotten, which is why
+  // `MESS` can clear the screen and then test `DLY` and find it zero (§6.67).
+  _message.delay = 0;
+  _message.append = 0;
+
   // 6502: CLYNS2 -- LDA #255 / STA DTW2 / LDA #128 / STA QQ17 / LDA #21 / STA YC / LDA #1 / STA XC.
   _extended.sentenceStart = 0xFF;
   _printer.SetCaseFlags(SENTENCE_CASE);

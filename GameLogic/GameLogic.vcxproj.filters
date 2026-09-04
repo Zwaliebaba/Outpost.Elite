@@ -63,6 +63,27 @@
     <ClInclude Include="PlanetDraw.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="Scanner.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="Messages.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="Lasers.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="FlightLoop.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Controls.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="ViewChange.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Dashboard.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="Stardust.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -205,6 +226,30 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="PlanetDraw.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Scanner.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Messages.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Lasers.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="FlightLoop.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Controls.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="ViewChange.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="DashboardImage.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="Dashboard.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="Stardust.cpp">

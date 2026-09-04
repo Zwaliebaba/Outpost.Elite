@@ -924,7 +924,7 @@ void DrawSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, Math
   _state.v = at;
   _state.vNext = sign;
 
-  _math.k2[1] = SquareUnsigned(_math, _math.k[0]);
+  _math.k2[1] = SquareUnsigned(_math, _math.k[0]).high;
   _math.k2[0] = _math.p;
 
   // 6502: part 2 -- rub out the rows BELOW the sun, with last frame's centre, before any of
@@ -960,7 +960,7 @@ void DrawSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, Math
   for (;;)
   {
     // 6502: the half-width, as sqrt(K^2 - v^2).
-    _math.t = SquareUnsigned(_math, _state.v);
+    _math.t = SquareUnsigned(_math, _state.v).high;
     const SubResult widthLow = SubtractWithCarry(_math.k2[0], _math.p, true);
     _math.q = widthLow.value;
     _math.r = SubtractWithCarry(_math.k2[1], _math.t, widthLow.carry).value;
@@ -1144,8 +1144,8 @@ void SeedStardustField(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, R
 }
 
 
-void ClearAllShips(PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
-                   BubbleEffects& _effects) noexcept
+void ClearAllShips(Canvas& _canvas, DrawWorkspace& _draw, PlanetSunState& _state, Bubble& _bubble,
+                   ShipBlock& _work, FlightState& _flight, std::uint8_t _view) noexcept
 {
   // 6502: WPSHPS -- LDX #0 / .WSL1 LDA FRIN,X / BEQ WS2 / BMI WS1.
   for (std::size_t slot = 0; slot < _bubble.slots.size(); ++slot)
@@ -1166,7 +1166,12 @@ void ClearAllShips(PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
       _work[byte] = _bubble.blocks[slot][byte];
     }
 
-    _effects.ScanShip(_work, type);
+    // 6502: STA TYPE / ... / STX XSAV / JSR SCAN / LDX XSAV. Both stores are the routine's own
+    // and were invisible while the scanner was a seam: `SCAN` reads `TYPE` as a global, and
+    // `XSAV` is how the loop index survives the call.
+    _flight.type = type;
+    _flight.slot = static_cast<std::uint8_t>(slot);
+    DrawScannerBlip(_canvas, _draw, _work, type, _view);
 
     /*
      * 6502: LDY #31 / LDA (INF),Y / AND #%10100111 / STA (INF),Y.
@@ -1193,17 +1198,16 @@ void ClearAllShips(PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
 
 void SeedStardustAndClearShips(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng,
                                PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
-                               BubbleEffects& _effects, std::uint8_t _viewType,
-                               bool _carryIn) noexcept
+                               FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept
 {
-  // 6502: NWSTARS -- LDA QQ11 / BNE WPSHPS. `QQ11` is the view TYPE, zero for the space view,
-  // and a menu has no stardust to fill.
-  if (_viewType == 0u)
+  // 6502: NWSTARS -- LDA QQ11 / BNE WPSHPS. `QQ11` is the view, zero for the space view, and a
+  // menu has no stardust to fill. The same byte then decides whether `SCAN` draws anything.
+  if (_view == 0u)
   {
     SeedStardustField(_canvas, _draw, _dust, _rng, _carryIn);
   }
 
-  ClearAllShips(_state, _bubble, _work, _effects);
+  ClearAllShips(_canvas, _draw, _state, _bubble, _work, _flight, _view);
 }
 
 } // namespace Elite
