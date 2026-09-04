@@ -223,19 +223,6 @@ void DrawHorizontalLine(Canvas& _canvas, DrawWorkspace& _work) noexcept
 
 namespace
 {
-/// 6502: SBC -- subtract with borrow, where the carry flag means "no borrow" going in and out.
-struct SubResult
-{
-  std::uint8_t value = 0;
-  bool carry = false;
-};
-
-[[nodiscard]] SubResult SubtractWithCarry(std::uint8_t _a, std::uint8_t _b, bool _carryIn) noexcept
-{
-  const std::uint16_t difference = static_cast<std::uint16_t>(_a) - _b - (_carryIn ? 0u : 1u);
-  return SubResult{ static_cast<std::uint8_t>(difference), difference < 0x100u };
-}
-
 /// 6502: SC and SCH -- the screen pointer, kept as the two bytes the original keeps, because the
 /// carry between them is load-bearing (see the note above).
 struct ScreenPointer
