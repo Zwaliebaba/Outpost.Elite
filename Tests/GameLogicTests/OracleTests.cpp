@@ -69,9 +69,33 @@ public:
     }
     const OracleImage& oracle = OracleImage::Instance();
 
-    // Eleven code blocks plus the data block and the ship blueprints.
-    Assert::AreEqual<std::size_t>(13, oracle.BlockCount(), L"every assembled block should load");
+    // Eleven code blocks, the data block, the ship blueprints, and the dashboard bitmap.
+    Assert::AreEqual<std::size_t>(14, oracle.BlockCount(), L"every block should load");
     Assert::IsTrue(oracle.LabelCount() > 1900, L"the label table should hold the game and its data");
+
+    /*
+     * `DSTORE%` -- the fourteenth block, and the only one no assembly step produces.
+     *
+     * `wantdials` copies 2,240 bytes from here into the dashboard's part of the bitmap, and the
+     * image ships inside `COMLOD.bin` for the C64's own loader to place. Nothing in the modern
+     * build writes anything at &EF90, so before `Binaries.txt` carried this row the oracle held
+     * 2,240 zeros there -- which a comparison of `wantdials` would have matched exactly, on both
+     * sides, while proving nothing (plan §6.78).
+     *
+     * That is why this is asserted rather than left to the routine's own test: a blank source
+     * makes the test that would notice pass.
+     */
+    const Cpu6502 image = oracle.Fresh();
+    const std::uint16_t dashboardStore = 0xEF90u;
+    std::uint32_t nonBlank = 0;
+    for (std::uint16_t offset = 0; offset < 2240u; ++offset)
+    {
+      nonBlank += (image.memory[static_cast<std::uint16_t>(dashboardStore + offset)] != 0u) ? 1u : 0u;
+    }
+    // 761 of the 2,240 are non-zero -- the dashboard is mostly black, which is why this is a
+    // floor rather than a proportion.
+    Assert::AreEqual<std::uint32_t>(761u, nonBlank,
+                                    L"the dashboard bitmap is loaded at DSTORE%, not blank");
 
     // A spread of labels across the address space, so a half-loaded image cannot pass. The last
     // four live in the data build rather than the code blocks, which is the half that was

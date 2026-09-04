@@ -42,12 +42,18 @@ class Table:
     anybody chose.
     """
 
-    def __init__(self, _identifier: str, _label: str, _length, _file: str, _summary: str):
+    def __init__(self, _identifier: str, _label: str, _length, _file: str, _summary: str,
+                 _address: int | None = None):
         self.identifier = _identifier
         self.label = _label
         self.length = _length
         self.file = _file
         self.summary = _summary
+
+        # An explicit address, for a block that has no label because no assembly step produces it.
+        # `DSTORE%` is the case: the dashboard bitmap arrives at run time, so BeebAsm never emits
+        # a label for it and the address comes from the source's own `SCBASE + &AF90` (§6.78).
+        self.address = _address
 
     def extent(self, _image: bytearray, _labels: dict[str, int]) -> int:
         return self.length(_image, _labels) if callable(self.length) else self.length
@@ -183,6 +189,13 @@ TABLES = [
     # addresses and sharing one array would assert something the game does not (§6.63).
     Table("DASHBOARD_PIXEL_TABLE", "CTWOS", 4, "ScreenTables.cpp",
           "one aligned multicolour pixel, for the dashboard's bars"),
+    # The dashboard picture itself, which `wantdials` copies into the bitmap. Seven character rows
+    # of forty cells, eight bytes each, and no label anywhere: the image ships inside `COMLOD.bin`
+    # and the C64's loader places it at `DSTORE%` at run time, so the address is the source's own
+    # `SCBASE + &AF90` rather than something BeebAsm emitted (§6.78).
+    Table("DASHBOARD_IMAGE", "DSTORE%", 7 * 40 * 8, "DashboardImage.cpp",
+          "the dashboard picture, seven character rows of forty cells",
+          _address=0x4000 + 0xAF90),
     # ---- slice 3d-d-ii: the laser sights and the Trumbles, all three read by `SIGHT`.
     # `sightcol` is indexed as `sightcol-SPOFF%,Y` with Y between SPOFF% and SPOFF%+3, so four
     # entries -- one per laser the sights can be drawn for, and the mining laser's is last
@@ -274,9 +287,9 @@ def main() -> int:
 
     grouped: dict[str, list[tuple[Table, bytes]]] = {}
     for table in TABLES:
-        if table.label not in labels:
+        if table.address is None and table.label not in labels:
             sys.exit(f"error: label '{table.label}' is not in {LABELS.name}")
-        address = labels[table.label]
+        address = table.address if table.address is not None else labels[table.label]
         length = table.extent(image, labels)
         data = bytes(image[address : address + length])
         if len(data) != length:

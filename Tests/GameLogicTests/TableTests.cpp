@@ -45,6 +45,27 @@ std::wstring Widen(const std::string& _text)
   return std::wstring(_text.begin(), _text.end());
 }
 
+/// Compares one generated array against the bytes at an ADDRESS in the loaded game, for a block
+/// that has no label because no assembly step produces it. `DSTORE%` is the only one (§6.78).
+void CompareAgainstAddress(const char* _what, std::uint16_t _address,
+                           std::span<const std::uint8_t> _generated)
+{
+  const OracleImage& oracle = OracleImage::Instance();
+  const Elite::Testing::Cpu6502 cpu = oracle.Fresh();
+
+  for (std::size_t index = 0; index < _generated.size(); ++index)
+  {
+    const std::uint8_t expected = cpu.memory[static_cast<std::uint16_t>(_address + index)];
+    if (expected != _generated[index])
+    {
+      Assert::Fail((L"table " + Widen(_what) + L" differs at offset " + std::to_wstring(index)
+                    + L": image has " + std::to_wstring(expected) + L", generated file has "
+                    + std::to_wstring(_generated[index])
+                    + L"\nRegenerate with: python tools/extract_tables.py").c_str());
+    }
+  }
+}
+
 /// Compares one generated array against the bytes at its label in the loaded game.
 void CompareAgainstImage(const char* _label, std::span<const std::uint8_t> _generated)
 {
@@ -139,6 +160,11 @@ public:
     CompareAgainstImage("sightcol", Elite::LASER_SIGHT_COLOUR_TABLE);
     CompareAgainstImage("TRIBTA", Elite::TRUMBLE_COUNT_TABLE);
     CompareAgainstImage("TRIBMA", Elite::TRUMBLE_SPRITE_TABLE);
+
+    // 6502: DSTORE% = SCBASE + &AF90 -- no label, because the loader puts it there rather than
+    // the assembler. If `Binaries.txt` ever loses the row this compares 2,240 zeros against the
+    // generated file and fails, which is the point.
+    CompareAgainstAddress("DSTORE%", 0xEF90u, Elite::DASHBOARD_IMAGE);
   }
 
   TEST_METHOD(TheSineTableLooksLikeASineCurve)
