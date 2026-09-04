@@ -385,6 +385,10 @@ public:
       const std::wstring where = L" at iteration " + std::to_wstring(iteration);
       Assert::AreEqual<std::uint32_t>(cpu.a, actual.high, (L"high byte" + where).c_str());
       Assert::AreEqual<std::uint32_t>(cpu.x, actual.low, (L"low byte" + where).c_str());
+
+      // The carry too: `PLS22` reads it twice, once to place a meridian on the screen and once
+      // to hand it to `BLINE` (§6.53). None of `ADD`'s three exits clears it.
+      Assert::AreEqual(cpu.c, actual.carry, (L"carry" + where).c_str());
     }
   }
 

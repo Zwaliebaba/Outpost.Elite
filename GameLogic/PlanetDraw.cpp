@@ -3,6 +3,7 @@
 #include "PlanetDraw.h"
 
 #include "EliteTypes.h"
+#include "LookupTables.h"
 
 namespace Elite
 {
@@ -471,6 +472,379 @@ bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
 
   DrawBall(_canvas, _state, _draw, _geometry, _math, _clip, _centre, carry);
   return false;
+}
+
+
+AxisResult DivideAxisByZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept
+{
+  // 6502: PLS1 -- LDA INWK,X / STA P / LDA INWK+1,X / AND #%01111111 / STA P+1, then the sign.
+  _math.p = _ship[_at];
+  _math.p1 = static_cast<std::uint8_t>(_ship[_at + 1u] & 0x7Fu);
+
+  DivideByShipZ(_ship, _math, static_cast<std::uint8_t>(_ship[_at + 1u] & 0x80u));
+
+  /*
+   * 6502: LDA K / LDY K+1 / BEQ P%+4 / LDA #254.
+   *
+   * The branch skips the `LDA #254`, so a result that fits in a byte comes back as itself and
+   * anything larger SATURATES rather than wrapping. A planet close enough for the division to
+   * overflow is one whose markings run off the disc, and 254 is what keeps them there.
+   */
+  std::uint8_t value = _math.k[0];
+  if (_math.k[1] != 0u)
+  {
+    value = 254;
+  }
+
+  return { value, _math.k[3], static_cast<std::uint8_t>(_at + 2u) };
+}
+
+
+AxisResult ScaleAxisByZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept
+{
+  // 6502: PLS3 -- PLS1, then * 222/256, and X is SAVED rather than stepped because the caller
+  // wants to divide the same axis twice.
+  const AxisResult axis = DivideAxisByZ(_ship, _math, _at);
+  _math.p = axis.value;
+  _math.q = 222;
+
+  // 6502: `STX U` comes AFTER the `JSR PLS1`, and `PLS1` ends with two `INX`s -- so what is
+  // saved and handed back is the STEPPED index, not the one this call was given. `PL26` calls
+  // this twice in a row without touching X in between and gets two different axes (§6.53).
+  _math.u = axis.at;
+
+  const std::uint8_t scaled = MultiplyUnsigned(_math).high;
+
+  // 6502: LDY K+3 / BPL PL12 -- a positive axis returns as it is with a zero high byte.
+  if ((_math.k[3] & 0x80u) == 0u)
+  {
+    return { scaled, 0, _math.u };
+  }
+
+  // 6502: EOR #&FF / CLC / ADC #1 / BEQ PL12 -- and a negative one is negated into a sixteen-bit
+  // value whose high half is 255. Negating zero gives zero, which needs a high half of ZERO, and
+  // the `BEQ` is what catches it.
+  const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(scaled ^ 0xFFu), 1u, false);
+  if (negated.value == 0u)
+  {
+    return { negated.value, 0, _math.u };
+  }
+
+  return { negated.value, 0xFF, _math.u };
+}
+
+
+void SetMeridianAngle(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
+{
+  // 6502: PLS4 -- STA Q / JSR ARCTAN, then the roof vector's sign decides which way round.
+  _math.q = _a;
+  std::uint8_t angle = Arctan(_math);
+
+  // 6502: LDX INWK+14 / BMI P%+4 / EOR #%10000000 -- the branch SKIPS the flip, so it is the
+  // POSITIVE roof vector that gets it.
+  if ((_ship[14] & 0x80u) == 0u)
+  {
+    angle = static_cast<std::uint8_t>(angle ^ 0x80u);
+  }
+
+  // Two shifts: a byte turn becomes a sixty-fourth, which is what the ellipse walk counts in.
+  _math.cnt2 = static_cast<std::uint8_t>(angle >> 2);
+}
+
+
+void LoadTwoAxes(const ShipBlock& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry,
+                 std::uint8_t _at) noexcept
+{
+  // 6502: PLS5 -- two of PLS1 into the second half of the ellipse's axes.
+  AxisResult axis = DivideAxisByZ(_ship, _math, _at);
+  _math.k2[2] = axis.value;
+  _geometry.xx16[2] = axis.sign;
+
+  axis = DivideAxisByZ(_ship, _math, axis.at);
+  _math.k2[3] = axis.value;
+  _geometry.xx16[3] = axis.sign;
+}
+
+
+void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                 GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                 const Projection& _centre) noexcept
+{
+  // 6502: PLS22 -- LDX #0 / STX CNT / DEX / STX FLAG.
+  _math.cnt = 0;
+  _state.flag = 0xFF;
+
+  for (;;)
+  {
+    /*
+     * 6502: PLL4 -- the same quarter-wave table twice, a quarter-turn apart, and each product
+     * scaled by one of the ellipse's two axes. That is what makes it an ellipse rather than a
+     * circle: `K2(3 2)` is how far the meridian reaches across and `K2(1 0)` how far it reaches
+     * down, and a meridian seen edge-on has one of them at zero.
+     */
+    _math.q = SINE_TABLE[_math.cnt2 & 0x1Fu];
+    _math.r = MultiplyByLog(_math, _math.k2[2], false).high;
+    _math.k[0] = MultiplyByLog(_math, _math.k2[3], false).high;
+
+    // 6502: LDX CNT2 / CPX #33 / LDA #0 / ROR A / STA XX16+5 -- the sign for this quarter, as a
+    // bit rotated straight out of the comparison.
+    _geometry.xx16[5] = (_math.cnt2 >= 33u) ? 0x80u : 0x00u;
+    bool carry = _math.cnt2 >= 33u;
+
+    const AddResult quarter = AddWithCarry(_math.cnt2, 16u, false);
+    _math.q = SINE_TABLE[quarter.value & 0x1Fu];
+    _math.k[2] = MultiplyByLog(_math, _math.k2[1], false).high;
+    const WideResult second = MultiplyByLog(_math, _math.k2[0], false);
+    _math.p = second.high;
+
+    /*
+     * 6502: LDA CNT2 / ADC #15 / AND #63 / CMP #33 / LDA #0 / ROR A / STA XX16+4.
+     *
+     * The `ADC` runs on FMLTU's exit carry exactly as `CIRCLE2`'s does (§6.50), and the `ROR`
+     * turns the comparison straight into a sign bit: 128 when the comparison SET the carry, which
+     * is when the value reached 33. Getting that round the wrong way puts every meridian's second
+     * axis on the wrong side of the planet.
+     */
+    const AddResult stepped = AddWithCarry(_math.cnt2, 15u, second.carry);
+    _geometry.xx16[4] =
+      (static_cast<std::uint8_t>(stepped.value & 0x3Fu) >= 33u) ? 0x80u : 0x00u;
+
+    // 6502: the two `ADD`s, each combining a product with the axis sign it belongs to.
+    _math.s = static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[2]);
+    AddSignedResult sum =
+      AddSigned(_math, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[0]));
+    _math.t = sum.high;
+    std::uint8_t low = sum.low;
+    carry = sum.carry; // 6502: `STA T / BPL PL42` touches no flag, so `ADC K3` reads ADD's
+
+    // 6502: BPL PL42 -- a negative total is negated into a sixteen-bit value, the same block
+    // `CIRCLE2` has twice.
+    if ((sum.high & 0x80u) != 0u)
+    {
+      const AddResult negated =
+        AddWithCarry(static_cast<std::uint8_t>(low ^ 0xFFu), 1u, false);
+      low = negated.value;
+      const AddResult high =
+        AddWithCarry(static_cast<std::uint8_t>(sum.high ^ 0x7Fu), 0u, negated.carry);
+      _math.t = high.value;
+      carry = high.carry;
+    }
+
+    // 6502: PL42 -- the centre added on.
+    const AddResult xLow = AddWithCarry(low, _centre.x, carry);
+    _state.k6[0] = xLow.value;
+    _state.k6[1] = AddWithCarry(_math.t, _centre.x1, xLow.carry).value;
+
+    _math.r = _math.k[0];
+    _math.s = static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[3]);
+    _math.p = _math.k[2];
+    sum = AddSigned(_math, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[1]));
+    _math.t = static_cast<std::uint8_t>(sum.high ^ 0x80u);
+    low = sum.low;
+    carry = sum.carry; // 6502: `EOR #%10000000 / STA T / BPL PL43` -- again no flag is touched
+
+    if ((_math.t & 0x80u) != 0u)
+    {
+      const AddResult negated =
+        AddWithCarry(static_cast<std::uint8_t>(low ^ 0xFFu), 1u, false);
+      low = negated.value;
+      const AddResult high =
+        AddWithCarry(static_cast<std::uint8_t>(_math.t ^ 0x7Fu), 0u, negated.carry);
+      _math.t = high.value;
+      carry = high.carry;
+    }
+
+    // 6502: PL43 -- and the segment, with the y offset in X.
+    const std::uint8_t reached =
+      DrawBallLine(_canvas, _state, _draw, _geometry, _math, _clip, _centre, low, carry);
+
+    // 6502: CMP TGT / BEQ P%+4 / BCS PL40 -- the `BEQ` is what makes the last step INCLUSIVE, so
+    // a meridian reaching exactly 31 draws its final segment and a crater reaching 64 draws its.
+    if (reached != _math.tgt && reached >= _math.tgt)
+    {
+      return;
+    }
+
+    _math.cnt2 = static_cast<std::uint8_t>((_math.cnt2 + _state.stp) & 0x3Fu);
+  }
+}
+
+
+void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                     GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                     const Projection& _centre) noexcept
+{
+  // 6502: PLS2 -- LDA #31 / STA TGT, then straight into PLS22. Half a turn, because a meridian
+  // seen from outside is a semicircle and the other half is behind the planet.
+  _math.tgt = 31;
+  DrawEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
+}
+
+
+void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                      GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                      const ShipBlock& _ship, Projection& _centre, std::uint8_t _type) noexcept
+{
+  // 6502: PL9 -- rub out last frame's planet, draw this frame's outline, and only then think
+  // about the markings.
+  EraseBall(_canvas, _state, _draw);
+
+  if (DrawCircle(_canvas, _state, _draw, _geometry, _math, _clip, _centre))
+  {
+    return; // 6502: BCS PL20 -- CHKON refused it
+  }
+
+  // 6502: LDA K+1 / BEQ PL25 -- a radius that needed two bytes is a planet filling the screen,
+  // and its markings would be off it.
+  if (_math.k[1] != 0u)
+  {
+    return;
+  }
+
+  // 6502: LDA PLTOG / BEQ PL20 -- the detail switch, which nothing in this build ever writes.
+  if (_state.pltog == 0u)
+  {
+    return;
+  }
+
+  if (_type == 128u)
+  {
+    /*
+     * 6502: part 2 -- MERIDIANS. Two great circles at right angles, each drawn as a half
+     * ellipse whose axes are the planet's own orientation vectors projected onto the screen.
+     *
+     * `LDA K / CMP #6 / BCC PL20` -- under six pixels across there is nothing to draw them on.
+     */
+    if (_math.k[0] < 6u)
+    {
+      return;
+    }
+
+    // 6502: LDA INWK+14 / EOR #%10000000 / STA P / LDA INWK+20 / JSR PLS4 -- where the first
+    // meridian starts, from the roof vector against the nose.
+    _math.p = static_cast<std::uint8_t>(_ship[14] ^ 0x80u);
+    SetMeridianAngle(_ship, _math, _ship[20]);
+
+    AxisResult axis = DivideAxisByZ(_ship, _math, 9);
+    _math.k2[0] = axis.value;
+    _geometry.xx16[0] = axis.sign;
+
+    axis = DivideAxisByZ(_ship, _math, axis.at);
+    _math.k2[1] = axis.value;
+    _geometry.xx16[1] = axis.sign;
+
+    LoadTwoAxes(_ship, _math, _geometry, 15);
+    DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
+
+    // And the second meridian, which shares the first pair of axes and takes a new second pair.
+    _math.p = static_cast<std::uint8_t>(_ship[14] ^ 0x80u);
+    SetMeridianAngle(_ship, _math, _ship[26]);
+
+    LoadTwoAxes(_ship, _math, _geometry, 21);
+    DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
+    return;
+  }
+
+  /*
+   * 6502: PL26 -- a CRATER. One whole ellipse, offset from the planet's centre along its own
+   * nose vector, so it slides round the disc as the planet turns and disappears over the edge.
+   *
+   * `LDA INWK+20 / BMI PL20` -- the nose pointing away means the crater is on the far side.
+   */
+  if ((_ship[20] & 0x80u) != 0u)
+  {
+    return;
+  }
+
+  // 6502: LDX #15 / JSR PLS3 -- the offset, one axis at a time, ADDED to x and SUBTRACTED from y.
+  AxisResult offset = ScaleAxisByZ(_ship, _math, 15);
+  const AddResult acrossLow = AddWithCarry(offset.value, _centre.x, false);
+  _centre.x = acrossLow.value;
+  _centre.x1 = AddWithCarry(offset.sign, _centre.x1, acrossLow.carry).value;
+
+  offset = ScaleAxisByZ(_ship, _math, offset.at);
+  _math.p = offset.value;
+  const SubResult downLow = SubtractWithCarry(_centre.y, _math.p, true);
+  _centre.y = downLow.value;
+  _math.p = offset.sign;
+  _centre.y1 = SubtractWithCarry(_centre.y1, _math.p, downLow.carry).value;
+
+  /*
+   * 6502: four PLS1s, each HALVED before it is stored.
+   *
+   * The halving is what makes the crater smaller than the planet, and it is an `LSR A` on the
+   * magnitude alone -- the sign in Y is untouched, so a negative axis halves towards zero rather
+   * than away from it.
+   */
+  AxisResult axis = DivideAxisByZ(_ship, _math, 9);
+  _math.k2[0] = static_cast<std::uint8_t>(axis.value >> 1);
+  _geometry.xx16[0] = axis.sign;
+
+  axis = DivideAxisByZ(_ship, _math, axis.at);
+  _math.k2[1] = static_cast<std::uint8_t>(axis.value >> 1);
+  _geometry.xx16[1] = axis.sign;
+
+  axis = DivideAxisByZ(_ship, _math, 21);
+  _math.k2[2] = static_cast<std::uint8_t>(axis.value >> 1);
+  _geometry.xx16[2] = axis.sign;
+
+  axis = DivideAxisByZ(_ship, _math, axis.at);
+  _math.k2[3] = static_cast<std::uint8_t>(axis.value >> 1);
+  _geometry.xx16[3] = axis.sign;
+
+  // 6502: LDA #64 / STA TGT / LDA #0 / STA CNT2 / JMP PLS22 -- a whole turn, from zero.
+  _math.tgt = 64;
+  _math.cnt2 = 0;
+  DrawEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
+}
+
+
+void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                     GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                     const ShipBlock& _ship, Projection& _centre, std::uint8_t _type,
+                     PlanetDrawEffects& _effects) noexcept
+{
+  /*
+   * 6502: PLANET -- three rejections before any arithmetic.
+   *
+   * `LDA INWK+8 / CMP #48 / BCS PL2` is "further away than the sign byte can usefully say", and
+   * `ORA INWK+7 / BEQ PL2` is "no distance at all", which is the case `DVID3B2`'s divide cannot
+   * take. Both go to `PL2`, so a rejected planet is ERASED rather than merely skipped -- which is
+   * why flying away from one leaves no outline behind.
+   */
+  if (_ship[8] >= 48u || (_ship[8] | _ship[7]) == 0u)
+  {
+    ErasePlanetOrSun(_canvas, _state, _math, _draw, _type);
+    return;
+  }
+
+  if (Project(_ship, _math, _centre).offScreen)
+  {
+    ErasePlanetOrSun(_canvas, _state, _math, _draw, _type);
+    return;
+  }
+
+  // 6502: LDA #96 / STA P+1 / LDA #0 / STA P / JSR DVID3B2 -- the radius is 96 * 256 / z, and
+  // 96 is the planet's size in the same units everything else in the geometry uses.
+  _math.p1 = 96;
+  _math.p = 0;
+  DivideByShipZ(_ship, _math, 0);
+
+  // 6502: LDA K+1 / BEQ PL82 / LDA #248 / STA K -- a radius that overflowed a byte is clamped,
+  // and K+1 is LEFT SET, which is what `PL9` reads to skip the markings.
+  if (_math.k[1] != 0u)
+  {
+    _math.k[0] = 248;
+  }
+
+  // 6502: LDA TYPE / LSR A / BCC PL9 / JMP SUN.
+  if ((_type & 0x01u) != 0u)
+  {
+    _effects.DrawSun();
+    return;
+  }
+
+  DrawPlanetDetail(_canvas, _state, _draw, _geometry, _math, _clip, _ship, _centre, _type);
 }
 
 } // namespace Elite

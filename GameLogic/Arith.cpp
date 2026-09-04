@@ -163,7 +163,9 @@ AddSignedResult AddSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
     // Signs agree, so the magnitudes simply add and the shared sign is put back on top.
     const AddResult low = AddWithCarry(_work.r, _work.p, false);
     const AddResult high = AddWithCarry(_work.s, _work.t1, low.carry);
-    return AddSignedResult{ static_cast<std::uint8_t>(high.value | _work.t), low.value };
+    // 6502: `ORA T` does not touch the carry, so what `ADC T1` produced is what the caller gets.
+    return AddSignedResult{ static_cast<std::uint8_t>(high.value | _work.t), low.value,
+                            high.carry };
   }
 
   // 6502: MU8 -- signs differ, so this is a subtraction of magnitudes that may come out
@@ -179,6 +181,9 @@ AddSignedResult AddSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
   std::uint8_t high = static_cast<std::uint8_t>(highDifference);
   borrowClear = highDifference < 0x100u;
 
+  // 6502: BCS MU9 -- taken means no borrow, and the carry it was taken on is the exit carry.
+  bool exitCarry = borrowClear;
+
   if (!borrowClear)
   {
     // 6502: the branch that turns a negative difference back into sign-magnitude form.
@@ -189,10 +194,11 @@ AddSignedResult AddSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
 
     const std::uint16_t negatedHigh = 0u - _work.u - (negated.carry ? 0u : 1u);
     high = static_cast<std::uint8_t>(static_cast<std::uint8_t>(negatedHigh) | 0x80u);
+    exitCarry = negatedHigh < 0x100u; // 6502: the second `SBC U`
   }
 
-  // 6502: MU9 -- fold in the sign the first operand arrived with.
-  return AddSignedResult{ static_cast<std::uint8_t>(high ^ _work.t), low };
+  // 6502: MU9 -- fold in the sign the first operand arrived with. `EOR T` leaves the carry.
+  return AddSignedResult{ static_cast<std::uint8_t>(high ^ _work.t), low, exitCarry };
 }
 
 AddSignedResult MultiplyAndAdd(MathWorkspace& _work, std::uint8_t _a) noexcept

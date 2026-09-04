@@ -46,6 +46,19 @@ struct MathWorkspace
   std::uint8_t cnt = 0;
 
   /*
+   * 6502: TGT and CNT2 -- 168 and 171, and shared the same way `CNT` is (§6.49).
+   *
+   * `TGT` is what a walk counts up to: `PLS2` sets it to 31 for a meridian, `PL9` to 64 for a
+   * crater, `SUN` to its own, and `DOEXP` and `PTCLS2` to theirs. `CNT2` is the angle a walk is
+   * at, and `TACTICS`, `DOCKIT` and `TITLE` use it for something else entirely.
+   *
+   * They are here for the same reason and with the same argument: every user sets them before
+   * reading, so separate copies would be unobservable, and one field costs less than the proof.
+   */
+  std::uint8_t tgt = 0;
+  std::uint8_t cnt2 = 0;
+
+  /*
    * 6502: XX(1 0) and YY(1 0) -- two sixteen-bit scratch values at zero page 93 and 95.
    *
    * They are here rather than with the stardust, which is where they were first put and where
@@ -122,6 +135,19 @@ struct AddSignedResult
 {
   std::uint8_t high = 0;
   std::uint8_t low = 0;
+
+  /*
+   * 6502: the carry, which `PLS22` reads twice and the port dropped until it did (§6.53).
+   *
+   * `ADD` has three exits and none of them clears it: the same-sign path leaves whatever
+   * `ADC T1` produced, the `BCS MU9` path leaves it SET by definition, and the negating path
+   * leaves the second `SBC U`'s. `PLS22` then does `STA T / BPL PL42 / ... / .PL42 TXA /
+   * ADC K3`, so a meridian's position on the screen depends on it.
+   *
+   * The ninth dropped flag, and the field is added rather than the signature changed because
+   * every other caller reads `high` and `low` alone.
+   */
+  bool carry = false;
 };
 
 /// 6502: ADD (with its MU8 and MU9 branches) -- (A X) = (A P) + (S R), sign-magnitude.

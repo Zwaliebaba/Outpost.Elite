@@ -53,6 +53,7 @@ struct HeapLabels
   std::uint16_t yy = 0, t = 0, k = 0, k3 = 0, k4 = 0, p = 0;
   std::uint16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0, swap = 0, type = 0, dontclip = 0;
   std::uint16_t k5 = 0, k6 = 0, stp = 0, flag = 0, cnt = 0, xx13 = 0, xx12 = 0;
+  std::uint16_t inwk = 0, k2 = 0, xx16 = 0, tgt = 0, cnt2 = 0, pltog = 0, sun = 0;
   std::uint16_t screen = 0;
 
   explicit HeapLabels(const OracleImage& _oracle)
@@ -68,6 +69,9 @@ struct HeapLabels
     k5 = _oracle.Label("K5");   k6 = _oracle.Label("K6");   stp = _oracle.Label("STP");
     flag = _oracle.Label("FLAG"); cnt = _oracle.Label("CNT");
     xx13 = _oracle.Label("XX13"); xx12 = _oracle.Label("XX12");
+    inwk = _oracle.Label("INWK"); k2 = _oracle.Label("K2"); xx16 = _oracle.Label("XX16");
+    tgt = _oracle.Label("TGT");   cnt2 = _oracle.Label("CNT2");
+    pltog = _oracle.Label("PLTOG"); sun = _oracle.Label("SUN");
 
     const Cpu6502 cpu = _oracle.Fresh();
     screen = static_cast<std::uint16_t>((cpu.memory[_oracle.Label("ylookupl")]
@@ -793,6 +797,242 @@ public:
 
     Assert::AreEqual<std::uint32_t>(3u * 2u * 3u * 4u * 3u, compared, L"every state and entry");
     Assert::IsTrue(marked > 0u, L"the segments were actually drawn");
+  }
+};
+
+
+namespace
+{
+/// The one seam: `PLANET` reaches the sun with a `JMP`, and the sun is the next unit.
+class CountingSun : public Elite::PlanetDrawEffects
+{
+public:
+  std::uint32_t suns = 0;
+  void DrawSun() override { ++suns; }
+};
+} // namespace
+
+
+TEST_CLASS(ThePlanet)
+{
+public:
+  /*
+   * 6502: PLANET, PL9 and the PLS family -- the whole planet, run as the main loop runs it.
+   *
+   * Elite's planets have two looks and one bit of the system's tech level picks between them:
+   * type 128 gets MERIDIANS, two great circles seen at whatever angle the planet is turned to,
+   * and type 130 gets a CRATER offset along the nose vector. Both are swept, at orientations that
+   * put each meridian edge-on and face-on and that take the crater over the horizon.
+   *
+   * Compared on the whole canvas, both heaps, and every byte the chain writes: `K`, `K2`, `K3`,
+   * `K4`, `K5`, `K6`, `XX16`, `CNT`, `CNT2`, `TGT`, `STP` and `FLAG`. The heaps matter as much as
+   * the picture for the reason they always do -- the next frame erases through them.
+   */
+  TEST_METHOD(ThePlanetMatchesPLANET)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const HeapLabels at(oracle);
+    const std::uint16_t planet = oracle.Label("PLANET");
+
+    struct Placement
+    {
+      std::uint8_t z[3];
+      std::uint8_t nose, roof, side;   // the high bytes of INWK+14, +20, +26
+      const wchar_t* what;
+    };
+
+    /*
+     * The orientation vectors, and the first version of this sweep had only one of them: all
+     * positive, all small. `PLS1` masks a sign bit off, saturates at 254 and returns `K+3` --
+     * three behaviours none of which a positive small axis can show (§6.54). These are the same
+     * six bytes at four sizes and signs.
+     */
+    struct Orientation
+    {
+      std::uint8_t bytes[6];  // INWK+10, +12, +16, +18, +22, +24 -- the high halves
+      const wchar_t* what;
+    };
+
+    const std::vector<Orientation> ORIENTATIONS = {
+      { { 0x10, 0x08, 0x18, 0x28, 0x04, 0x38 }, L"small and positive" },
+      { { 0x90, 0x88, 0x18, 0x28, 0x84, 0x38 }, L"some axes negative" },
+      { { 0x7F, 0x7F, 0x7F, 0x02, 0x7F, 0x01 }, L"large enough to saturate" },
+      { { 0xFF, 0x01, 0x80, 0xFF, 0x00, 0x7F }, L"the extremes" },
+    };
+
+    /*
+     * The distances are the point of this table, and the first version of it got them wrong.
+     *
+     * A ship's z is TWENTY-FOUR bits -- `INWK+6`, `+7` and `+8` -- and the radius is
+     * `96 * 256 * 256 / z`, so `K+1` is zero only above z = 24576. Every placement in the first
+     * sweep was nearer than that, `PL9`'s `LDA K+1 / BEQ PL25` skipped the markings on all 54,
+     * and the whole-canvas comparison passed while half the unit never ran (§6.52). A planet in
+     * Elite is normally hundreds of thousands of units away.
+     */
+    const std::vector<Placement> PLACEMENTS = {
+      { { 0, 0x70, 0 }, 0x60, 0x00, 0x00, L"filling the view" },
+      { { 0, 0, 1 }, 0x60, 0x00, 0x00, L"close, level" },
+      { { 0, 0, 2 }, 0x60, 0x00, 0x00, L"mid, level" },
+      { { 0, 0, 8 }, 0x60, 0x00, 0x00, L"far, level" },
+      { { 0, 0, 24 }, 0x60, 0x00, 0x00, L"a speck, too small for meridians" },
+      // The radius is 96*256*256/z, so these three straddle `PL9`'s `CMP #6` exactly: 6, 5, 4.
+      { { 0x00, 0x00, 0x10 }, 0x60, 0x00, 0x00, L"a radius of six, the smallest with meridians" },
+      { { 0x00, 0x50, 0x12 }, 0x60, 0x00, 0x00, L"a radius of five, the largest without" },
+      { { 0x00, 0x00, 0x14 }, 0x60, 0x00, 0x00, L"a radius of four" },
+      { { 0, 0, 2 }, 0x60, 0x90, 0x00, L"its crater on the far side" },
+      { { 0, 0, 48 }, 0x60, 0x00, 0x00, L"exactly at the distance limit" },
+      { { 0, 2, 0 }, 0x60, 0x00, 0x00, L"too close for its own markings" },
+      { { 0, 0, 60 }, 0x60, 0x00, 0x00, L"beyond the distance byte" },
+      { { 0, 0, 0 }, 0x60, 0x00, 0x00, L"no distance at all" },
+      { { 0, 0, 2 }, 0x00, 0x60, 0x00, L"turned a quarter" },
+      { { 0, 0, 2 }, 0xE0, 0x00, 0x00, L"turned away" },
+      { { 0, 0, 2 }, 0x40, 0x40, 0x40, L"turned every way" },
+      { { 0, 0, 1 }, 0x7F, 0x10, 0x20, L"close and tilted" },
+    };
+
+    std::uint32_t compared = 0;
+    std::uint32_t marked = 0;
+    std::uint32_t suns = 0;
+    std::uint32_t meridians = 0;
+    std::uint32_t craters = 0;
+    std::uint32_t plain = 0;
+
+    for (const Placement& where : PLACEMENTS)
+    {
+      for (const Orientation& turned : ORIENTATIONS)
+      {
+      for (const std::uint8_t type : { 128, 129, 130 })
+      {
+        for (const std::uint8_t detail : { 0x00u, 0xFFu })
+        {
+          Cpu6502 cpu = oracle.Fresh();
+          Elite::Canvas canvas;
+          Elite::PlanetSunState state;
+          Elite::DrawWorkspace draw;
+          Elite::GeometryWorkspace geometry;
+          Elite::MathWorkspace math;
+          Elite::ClipState clip;
+          Elite::Projection centre;
+          Elite::ShipBlock ship{};
+          CountingSun effects;
+
+          // 6502: the sun is the next unit, so it is trapped on one side and counted on the
+          // other -- the same seam `LL9` has for the explosion.
+          cpu.AddTrap(at.sun);
+
+          SeedBallHeap(cpu, state, at, 0x8D14E703u, 1);
+          SeedSunHeap(cpu, state, at, 0x2C6A91B7u);
+
+          // A planet's block: a position, and three orientation vectors as (lo, hi) pairs with
+          // the magnitude in the HIGH byte -- which is §6.39's lesson, and the reason this sweep
+          // sets the high bytes rather than the low ones.
+          ship[Elite::SHIP_X_OFFSET] = 0;
+          ship[Elite::SHIP_X_OFFSET + 1] = 1;
+          ship[Elite::SHIP_Y_OFFSET] = 0;
+          ship[Elite::SHIP_Y_OFFSET + 1] = 1;
+          for (std::size_t byte = 0; byte < 3u; ++byte)
+          {
+            ship[Elite::SHIP_Z_OFFSET + byte] = where.z[byte];
+          }
+          ship[10] = turned.bytes[0]; ship[12] = turned.bytes[1]; ship[14] = where.nose;
+          ship[16] = turned.bytes[2]; ship[18] = turned.bytes[3]; ship[20] = where.roof;
+          ship[22] = turned.bytes[4]; ship[24] = turned.bytes[5]; ship[26] = where.side;
+          ship[9] = 0x20;  ship[11] = 0x30; ship[13] = 0x40;
+          ship[15] = 0x50; ship[17] = 0x60; ship[19] = 0x70;
+          ship[21] = 0x80; ship[23] = 0x90; ship[25] = 0xA0;
+
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = ship[byte];
+          }
+
+          cpu.memory[at.type] = type;
+          cpu.memory[at.pltog] = detail;
+          cpu.memory[at.yx2m1] = 143;
+          cpu.memory[at.dontclip] = 0;
+          state.pltog = detail;
+          state.yx2M1 = 143;
+          clip.dontclip = 0;
+
+          // §6.36: `TGT` is 31 only if a meridian was walked and 64 only if a crater was, so
+          // seeding it to neither is what turns "the screens agree" into "and something ran".
+          cpu.memory[at.tgt] = 200;
+          math.tgt = 200;
+
+          const Elite::Testing::RunResult run = cpu.CallSubroutine(planet, 20'000'000);
+          Assert::IsTrue(run.completed, L"PLANET returned");
+
+          Elite::DrawPlanetOrSun(canvas, state, draw, geometry, math, clip, ship, centre, type,
+                                 effects);
+
+          const std::wstring label = Widen("PLANET type=" + std::to_string(type) + " pltog="
+                                           + std::to_string(detail) + " ")
+                                     + where.what + L" / " + turned.what;
+
+          marked += CompareScreens(cpu, at.screen, canvas, label);
+          CompareHeaps(cpu, state, at, label);
+
+          const std::pair<std::uint16_t, std::uint8_t> BYTES[] = {
+            { at.k3, centre.x }, { static_cast<std::uint16_t>(at.k3 + 1), centre.x1 },
+            { at.k4, centre.y }, { static_cast<std::uint16_t>(at.k4 + 1), centre.y1 },
+            { at.stp, state.stp }, { at.flag, state.flag },
+            { at.cnt, math.cnt }, { at.cnt2, math.cnt2 }, { at.tgt, math.tgt },
+          };
+          static const wchar_t* NAMES[] = { L"K3", L"K3+1", L"K4", L"K4+1",
+                                            L"STP", L"FLAG", L"CNT", L"CNT2", L"TGT" };
+          for (std::size_t byte = 0; byte < std::size(BYTES); ++byte)
+          {
+            Assert::AreEqual(cpu.memory[BYTES[byte].first], BYTES[byte].second,
+                             (label + L": " + NAMES[byte]).c_str());
+          }
+          for (std::size_t byte = 0; byte < 4u; ++byte)
+          {
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k + byte)], math.k[byte],
+                             (label + L": K+" + std::to_wstring(byte)).c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k2 + byte)], math.k2[byte],
+                             (label + L": K2+" + std::to_wstring(byte)).c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k5 + byte)], state.k5[byte],
+                             (label + L": K5+" + std::to_wstring(byte)).c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k6 + byte)], state.k6[byte],
+                             (label + L": K6+" + std::to_wstring(byte)).c_str());
+          }
+          for (std::size_t byte = 0; byte < 6u; ++byte)
+          {
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.xx16 + byte)],
+                             geometry.xx16[byte],
+                             (label + L": XX16+" + std::to_wstring(byte)).c_str());
+          }
+
+          Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.trapHits.size()),
+                                          effects.suns, (label + L": the sun seam").c_str());
+          suns += effects.suns;
+          meridians += (math.tgt == 31u) ? 1u : 0u;
+          craters += (math.tgt == 64u) ? 1u : 0u;
+          plain += (math.tgt == 200u) ? 1u : 0u;
+          ++compared;
+        }
+      }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(17u * 4u * 3u * 2u, compared,
+                                    L"every placement, orientation, type and toggle");
+    Assert::IsTrue(marked > 0u, L"the planets were actually drawn");
+    Logger::WriteMessage(("PLANET: " + std::to_string(compared) + " planets, "
+                          + std::to_string(suns) + " suns, " + std::to_string(meridians)
+                          + " meridians, " + std::to_string(craters) + " craters, "
+                          + std::to_string(plain) + " plain, " + std::to_string(marked)
+                          + " marked bytes")
+                           .c_str());
+    Assert::IsTrue(suns > 0u, L"and the sun seam was reached");
+    Assert::IsTrue(meridians > 0u, L"some planets were drawn with meridians");
+    Assert::IsTrue(craters > 0u, L"and some with a crater");
+    Assert::IsTrue(plain > 0u, L"and some with neither");
   }
 };
 
