@@ -428,6 +428,49 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.66 The §6.12 pass on slice 3d-c, and a `BIT` that eats the wrong instruction
+
+Six routines -- `ABORT`, `ABORT2`, `me1`, `MESS`, `mes9`, `LASLI` -- and three fall-through chains
+between them, all three flagged on first read by the warning `c64_source.py` gained in §6.62:
+`ABORT` runs into `ABORT2`, and `me1` runs into `MESS` runs into `mes9`.
+
+**Everything it needs is built except one seam.** `TT27`, `DOXC`, `MT15`, `CLYNS`, `YC`, `QQ17`,
+`DTW4` and `DTW5` are phase 2's and all ported; `DORND`, `LL30` and `MSBAR` are ported; `MSTG` is
+`Bubble::missileTarget` and `NOMSL` is the commander's. `DENGY` is phase 4b's and stays a seam. The
+new state is small: `MSAR`, `DLY`, `MCH`, `de` and `messXC` for the message, `LASX` and `LASY` for
+the laser burst.
+
+**And `MESS` has a `BIT` in the wrong place.** The C64 build assembles
+
+```
+A9 10     LDA #16          \ the message row on the space view
+A6 A0     LDX QQ11
+F0 06     BEQ infrontvw
+20 D4 B3  JSR CLYNS
+A9 19     LDA #25          \ "the text row for the message if this is not a space view"
+2C 85 33  BIT &3385        \ ... which eats the STA YC that was going to store it
+A2 00     LDX #0           \ .infrontvw is the 85 33, so the branch DOES store
+```
+
+The `EQUB &2C` idiom skips the instruction it swallows, and here what it swallows is `STA YC` --
+so on the space view the branch lands on the store and the row is 16, and on any other view the
+fall-through throws the store away and the row is whatever `CLYNS` left, which is 21. The 25 is
+loaded and discarded.
+
+The upstream annotation says both halves and does not notice they contradict: `LDA #25` is
+commented "the text row for the message if this is not a space view" and the `EQUB` immediately
+below it "skip the next instruction". One of those is the intent and the other is the behaviour.
+Moving the `EQUB` one instruction earlier would give what the comments describe, which is what
+makes this look like a slip in the original rather than a trick.
+
+ADR-003 settles what the port does: reproduce it. The interest is in how it was found -- not by
+reading the listing, where the two comments read as a pair, but by disassembling the bytes at
+`MESS` because the listing's `EQUB &2C` sat somewhere the idiom does not usually put it. **The
+rule that follows: an `EQUB &2C` is a claim about the NEXT TWO BYTES, so read those bytes rather
+than the instruction the source prints after it.** `PZW` has the same idiom and puts it in the
+usual place (§6.63); the difference between the two is invisible in the listing and obvious in the
+assembly.
+
 ### 6.65 The fourteenth flag, and why two identical flags are not the same finding
 
 `DIALS` part 2 reads `LDA BETA / LDX BET1 / BEQ P%+4 / SBC #1 / JSR ADD / JSR DIL2`, and the `SBC`
