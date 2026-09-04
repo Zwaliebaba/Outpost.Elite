@@ -428,6 +428,40 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.81 A collapsed routine that was right only because half of it was missing
+
+Slice 2e ported `TT66`'s text state and left its pixels behind a seam (§6.77). The text half
+collapses two stores into one:
+
+```
+ LDA #%10000000 / STA QQ17 / STA DTW2     \ near the top
+ ...
+ LDX #1 / STX XC / STX YC / DEX / STX QQ17 \ five bytes from the end
+```
+
+`SetUpTextScreen` writes `DTW2 = 128` and `QQ17 = 0` and never puts 128 into `QQ17` at all, which
+is correct: nothing between the two stores reads it. §6.29 records the port nearly shipping the
+first reading instead.
+
+**Nothing between them reads it because the half slice 2e left out is the half that reads it.**
+The full routine prints the view's name in between, through `TT27`, which is exactly what `QQ17`
+governs. So the collapsed version was not a simplification that happened to be safe; it was safe
+only for as long as the routine stayed cut in half, and building the other half makes it wrong.
+
+Nothing broke, because the port kept both: the full `TT66` is a separate function and
+`SetUpTextScreen` still answers slice 2e's seam. But the near miss is the point — **a
+simplification justified by "nothing reads this in between" has a hidden dependency on what is
+in between**, and in a port built one slice at a time, what is in between grows.
+
+**The same slice found the smaller version of it twice more.** `ee3` prints the hyperspace
+countdown, and the port's `PrintCountdown` takes whatever sink the caller hands it: the raw
+character printer, or the one that goes through `DASC` and maintains `DTW2`. The chart code
+already passed the second; this passed the first, and the comparison caught it on `DTW2` — game
+0, port 128. And `WARP` sets `QQ11` to 1 before calling `LOOK1` **so that `LOOK1` takes a
+different branch**: the view is not changing, so the space-view path would compare X against
+`VIEW`, find them equal, and return having done nothing. One store, to make a routine go the
+other way, and `TT66` puts the byte back on the way through.
+
 ### 6.80 A loop that stops on a page, and the register it leaves behind
 
 `TTX66K` clears the bitmap as far as the dashboard:
@@ -870,7 +904,7 @@ ported and absent; the check has to be for a DEFINITION, and this pass nearly re
 |---|---|
 | **3d-d-i** ✅ | `MAS1`–`MAS4` **built 2026-09-04** in `FlightLoop.h/.cpp` (11 mutations, 11 caught), then `cntr` there and `ECMOF` in `Dashboard.h/.cpp` as `StopEcm`. `tnpr1` was **already built in slice 2c** and should never have been on this list (§6.71). `FRMIS` needs phase 4's `FRS1` and `ANGRY`, and `KS1` ends `JMP MAL1` — a jump back INTO the loop, not a call — so both move to 3d-d-iii |
 | **3d-d-ii** ✅ | **Built 2026-09-04**: `BUMP2`, `REDU2`, `DOKEY`'s flight half, `SPIN`/`SPIN2` and `SIGHT`. §6.73's pass added `SIGHT` (two thirds of it is canvas and game state, not hardware) and `BUMP2`/`REDU2` (`DOKEY`'s, not `cntr`'s). `CTRL` is one instruction falling into the key seam, with nothing to compare. **`LOOK1` and `WARP` move to 3d-d-iii** — they need `TT66`'s PIXELS, and the port has `TT66`'s text state (§6.77) |
-| **3d-d-iii-a** ◐ | **Built 2026-09-04**: the dashboard bitmap loaded at `DSTORE%` (§6.78), then `ZES1k`/`ZES2k`, `mvblockK`/`mvbllop`, `BOXS`, `BOXS2`, `BOX2`, `BLUEBAND`/`BLUEBANDS`, `zonkscanners`, `NOSPRITES`, `wantdials` and `TTX66K` in `ViewChange.h/.cpp`. **`TTX66`, `LOOK1` and `WARP` are what is left**, and what stops them is not a missing routine: every one of `TTX66`'s call targets is now built. It touches `LSP`, `QQ17`, `DTW2`, `LAS2`, `DLY`, `de`, `XC`, `YC`, `QQ22+1`, `VIEW` and the token printer, which is eighteen arguments written out — so the port needs a DECISION about grouping them before it needs more code, and pointing slice 2e's `TradeScreenEffects::ClearToView` at the result is the same decision from the other end (§6.77). `LAS2` has no home in the port at all yet; its only reader is flight loop part 16, which is 3d-d-iii-b's |
+| **3d-d-iii-a** ✅ | **Built 2026-09-04.** The dashboard bitmap loaded at `DSTORE%` (§6.78), then `ZES1k`/`ZES2k`, `mvblockK`/`mvbllop`, `BOXS`, `BOXS2`, `BOX2`, `BLUEBAND`/`BLUEBANDS`, `zonkscanners`, `NOSPRITES`, `wantdials`, `TTX66K`, and finally `TT66`/`TTX66`, `LOOK1` and `WARP` in `ViewChange.h/.cpp`. **The "eighteen arguments" question was already answered three times**: `TradeScreen`, `SaveScreen` and `GameStart` are structs of references for exactly this reason, so `FlightScreen` follows them and was never the open design decision an earlier note called it. `LAS2` and `MJ` join `FlightStatus`, which is now the per-flight bytes rather than what the dials read |
 | **3d-d-iii-b** | the sixteen loop parts themselves, with `FRMIS` and `KS1`, which by then call nothing unbuilt but phase 4 |
 
 Doing it in that order means the loop is written last, against a set of routines that have each
@@ -3283,6 +3317,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **Slice 3d-d-iii-a is complete: `TT66`, `LOOK1` and `WARP`.** The "eighteen arguments" question an earlier note called a design decision had already been answered three times in this codebase — `TradeScreen`, `SaveScreen` and `GameStart` are structs of references for exactly that reason — so `FlightScreen` follows them. Three findings. **A collapsed routine was right only because half of it was missing**: slice 2e's `SetUpTextScreen` writes `QQ17 = 0` and skips the 128, which is safe until the half that prints the view's name in between exists (§6.81). **`ee3` prints through `DASC`**, not straight to `CHPR`, and the port had the raw printer as its sink — caught on `DTW2`, game 0 and port 128. **And `WARP` sets `QQ11 = 1` to make `LOOK1` take the other branch**, because the view is not changing and the space-view path would find X equal to `VIEW` and return. `LAS2` and `MJ` land in `FlightStatus`. 268 tests green; `CHPR` is not trapped, so the printed text is compared as pixels with everything else. |
 | 2026-09-04 | **Slice 3d-d-iii-a builds the screen setup, and stops one seam short.** The dashboard bitmap loaded at `DSTORE%` first (§6.78), then `ZES1k`/`ZES2k`, `mvblockK`/`mvbllop`, `BOXS`, `BOXS2`, `BOX2`, `BLUEBAND`, `zonkscanners`, `NOSPRITES`, `wantdials` and `TTX66K`. Three findings. **The dashboard copy is 2,240 bytes and they are not the first 2,240** — `mvbllop` stores at Y and counts down to 1, so offset 2,048 is skipped and 2,240 is written, and the port read one byte past its own array until the marker caught it. **`BOX2`'s height is a data byte**: `EQUB &2C` eating its `LDX #18` is the difference between a 25-row text screen and an 18-row space view (§6.79). **And a loop that stops on a PAGE reads as one that stops on an address** — `CPX #HI(DLOC%)` — with X left where three later instructions read it (§6.80). `TTX66`, `LOOK1` and `WARP` are blocked on replacing slice 2e's screen seam, which is a phase-2 change. |
 | 2026-09-04 | **Slice 3d-d-ii, and `LOOK1` and `WARP` are not in it.** Built: `BUMP2`, `REDU2`, `DOKEY`'s flight half, `SPIN`/`SPIN2` and `SIGHT`. Four findings. **The wreckage count is not random** — `TYA / TAX` is how the 6502 writes `X = Y`, the copy goes through the accumulator, and the `AND (XX0),Y` four instructions later masks the ship TYPE rather than the byte `DORND` left there; the port had it the obvious way round and the oracle disagreed on the first blueprint whose byte 0 differed (§6.74). **`REDU2`'s clamp has a hole** that produces zero on an exact match, against its own comment, counted rather than described. **`SIGHT` is two thirds canvas and game state**, not the seam §6.69 filed it as: the sprite pointers live in screen RAM. **And `TT66` is half ported** — `LOOK1` needs its pixels and the port has its text state, so `LOOK1`, `WARP` and the 252-instruction `TTX66` chain move to 3d-d-iii (§6.77). **28 mutations, 27 caught, 1 measured equivalent** — `DELTA`'s clamp is `CMP #22 / BCC / LDA #22`, so `< 22` and `<= 22` give the same 22 at 22 and nothing can tell them apart. One of the 27 was caught by NOT TERMINATING: `cnt - 2` in a loop that stops at zero runs for ever on an odd count, the suite times out, and the harness filed the strongest possible catch as a compile error. And one survivor was a real gap rather than an equivalent — the `DOCKIT` stub only WROTE `INWK+27`, so `LDA DELTA / STA INWK+27` before the call was invisible; the real routine READS that byte, and the stub EORs it now. |
 | 2026-09-04 | **The source resolver was stricter than the assembler.** Four of the build's 627 includes stopped `c64_source.py`, each looking like a missing entry in `SYMBOLS`, and none of them was: BeebAsm identifiers may end in `%` and the word pattern did not; a macro argument has no value outside a call; and `ELIF` conditions were evaluated in branches BeebAsm never looks at, so `_EXECUTIVE` — defined only in the 6502SP builds — was demanded by a file whose C64 branch was already live. All 627 now resolve and the 623 the old tool could read produce byte-identical output; `--check-all` sweeps them in CI. **Strictness in the wrong place reads exactly like a gap in the model**, and it cost a `nosprites.asm` reported as zero instructions in a scoping run (§6.75). |
