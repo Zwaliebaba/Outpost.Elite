@@ -103,13 +103,17 @@
         condition alone, which was invisible while nothing here compiled; SaveStore includes
         SaveGame.h, so a Release build would have failed at the first include.
       -->
-      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)GameLogic;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!--
+        $(IntDir) is where FXC writes the generated shader headers (see the FxCompile items
+        below), so CanvasPresenter.cpp can include them by name.
+      -->
+      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)GameLogic;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)NeuronCore;$(SolutionDir)GameLogic;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)NeuronCore;$(SolutionDir)GameLogic;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
@@ -143,6 +147,29 @@
     <ClCompile Include="Window.cpp" />
     <ClCompile Include="CanvasPresenter.cpp" />
     <ClCompile Include="Shell.cpp" />
+  </ItemGroup>
+  <!--
+    The shaders, compiled by the BUILD rather than at run time. FXC writes each one to a C array
+    in $(IntDir) and CanvasPresenter.cpp includes it, so a typo in HLSL is a build error instead
+    of a black window on somebody's machine. Canvas.hlsli is shared by both and is not an entry
+    point, so it is carried rather than compiled.
+  -->
+  <ItemGroup>
+    <FxCompile Include="CanvasVertexShader.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <ShaderModel>5.0</ShaderModel>
+      <EntryPointName>VsMain</EntryPointName>
+      <HeaderFileOutput>$(IntDir)%(Filename).h</HeaderFileOutput>
+      <VariableName>g_%(Filename)</VariableName>
+    </FxCompile>
+    <FxCompile Include="CanvasPixelShader.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <ShaderModel>5.0</ShaderModel>
+      <EntryPointName>PsMain</EntryPointName>
+      <HeaderFileOutput>$(IntDir)%(Filename).h</HeaderFileOutput>
+      <VariableName>g_%(Filename)</VariableName>
+    </FxCompile>
+    <None Include="Canvas.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SaveStore.h" />
