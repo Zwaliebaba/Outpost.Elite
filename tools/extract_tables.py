@@ -33,12 +33,77 @@ BINARIES = REFERENCE / "Binaries.txt"
 
 
 class Table:
-    def __init__(self, _identifier: str, _label: str, _length: int, _file: str, _summary: str):
+    """One array to extract.
+
+    `_length` is normally a number, and §6.8's rule decides it: size a table from what can INDEX
+    it, not from where the next label happens to sit. Where even that is not a constant, pass a
+    callable taking (image, labels) and returning the length -- see SHIP_DATA, whose extent is the
+    end of the last ship blueprint and is therefore a property of the data rather than a number
+    anybody chose.
+    """
+
+    def __init__(self, _identifier: str, _label: str, _length, _file: str, _summary: str):
         self.identifier = _identifier
         self.label = _label
         self.length = _length
         self.file = _file
         self.summary = _summary
+
+    def extent(self, _image: bytearray, _labels: dict[str, int]) -> int:
+        return self.length(_image, _labels) if callable(self.length) else self.length
+
+
+def ship_data_extent(_image: bytearray, _labels: dict[str, int]) -> int:
+    """From XX21 to the end of the last ship blueprint.
+
+    THE BLUEPRINTS ARE ONE REGION AND NOT THIRTY-THREE ARRAYS, and the data says so rather than
+    the design preferring it. Three findings, all measured (plan §6.32):
+
+      * two blueprints -- the splinter and the Thargon -- declare MORE data in their header than
+        there is room for before the next blueprint begins, by 24 and 60 bytes. Slicing per ship
+        either truncates them or hands them their neighbour's bytes. Both are also the only two
+        with no `_EDGES` label at all, so the label set cannot arbitrate;
+      * the Asp Mk II has four bytes of slack, so the labels are not a tight partition either;
+      * the game itself has no concept of a blueprint's end. `NWSHP` puts an address in `XX0` and
+        every read is `LDA (XX0),Y`. Extent is something a port would be inventing.
+
+    So the region is extracted whole and indexed by ADDRESS, exactly as the original does, which
+    is also what makes `XX21` (the pointer table, which holds absolute addresses) usable without
+    translating anything.
+
+    The end is computed from the last blueprint's own header rather than from a label, because
+    that is the only thing that knows how long it is: 20 bytes of header, then `header[8]` bytes
+    of vertices, `4 * header[9]` bytes of edges and `header[12]` bytes of faces. That formula is
+    checked against the gap to the next blueprint for all 33 ships by `ShipDataTests`.
+    """
+    base = _labels["XX21"]
+
+    # From XX21's OWN ENTRIES and not from the SHIP_ labels, which is §6.8's rule and which this
+    # function got wrong on its first draft: it sized the region from the labels, and
+    # `ShipDataTests` caught a blueprint XX21 names that has no label at all.
+    end = base
+    for ship_type in range(1, SHIP_TYPE_COUNT + 1):
+        entry = base + 2 * (ship_type - 1)
+        blueprint = _image[entry] | (_image[entry + 1] << 8)
+        if blueprint == 0:
+            continue
+        header = _image[blueprint : blueprint + SHIP_HEADER_SIZE]
+        end = max(end, blueprint + SHIP_HEADER_SIZE + header[8] + 4 * header[9] + header[12])
+
+    return end - base
+
+
+# 6502: the blueprint header, and TWENTY bytes because that is what indexes it -- the C64 build
+# reads `(XX0),Y` for every Y from 0 to 19 and never higher (§6.8's rule, applied by counting the
+# accesses in the source rather than by trusting the gap to SHIP_x_VERTICES, which happens to
+# agree).
+SHIP_HEADER_SIZE = 20
+
+# 6502: NTY. The upstream source says it in one line -- `NTY=33:D%=&D000:E%=D%+2*NTY` -- so the
+# pointer table is 33 entries and `E%` begins immediately after it. Reading past the table gives
+# E%'s bytes as addresses, which look plausible enough to chase: entries 35, 38 and 39 come out
+# as 1, 24865 and 41120, which are zero page and the middle of two code blocks.
+SHIP_TYPE_COUNT = 33
 
 
 # What to extract. One row per array the port needs; several rows may share an output file.
@@ -100,6 +165,12 @@ TABLES = [
     # rather than by the layout, as section 6.8 requires.
     Table("KEY_TRANSLATION", "TRANTABLE", 65, "KeyTable.cpp",
           "the character TT217 returns for each internal key number"),
+    # ---- slice 3a: the ships. One region from XX21, indexed by ADDRESS rather than sliced into
+    # per-ship arrays -- `ship_data_extent` above has the three measurements that decide it. The
+    # region carries the blueprint pointer table, `E%`'s per-type default flags and all 33
+    # blueprints, because the game addresses all of them absolutely and so this port can too.
+    Table("SHIP_DATA", "XX21", ship_data_extent, "ShipData.cpp",
+          "the pointer table, E%'s defaults and all 33 ship blueprints, addressed from XX21"),
 ]
 
 
@@ -135,7 +206,7 @@ def load_image(_binaries: dict[str, int]) -> bytearray:
 def format_table(_table: Table, _bytes: bytes) -> str:
     lines = [
         f"// 6502: {_table.label} -- {_table.summary}.",
-        f"const std::array<std::uint8_t, {_table.length}> {_table.identifier} = {{",
+        f"const std::array<std::uint8_t, {len(_bytes)}> {_table.identifier} = {{",
     ]
     for offset in range(0, len(_bytes), 12):
         chunk = ", ".join(f"0x{value:02X}" for value in _bytes[offset : offset + 12])
@@ -181,11 +252,12 @@ def main() -> int:
         if table.label not in labels:
             sys.exit(f"error: label '{table.label}' is not in {LABELS.name}")
         address = labels[table.label]
-        data = bytes(image[address : address + table.length])
-        if len(data) != table.length:
+        length = table.extent(image, labels)
+        data = bytes(image[address : address + length])
+        if len(data) != length:
             sys.exit(f"error: {table.label} at {address:#06x} runs past the end of memory")
         grouped.setdefault(table.file, []).append((table, data))
-        print(f"  {table.identifier:<20} {table.label:<12} {address:#06x}  {table.length} bytes")
+        print(f"  {table.identifier:<20} {table.label:<12} {address:#06x}  {length} bytes")
 
     stale = 0
     for filename, tables in grouped.items():

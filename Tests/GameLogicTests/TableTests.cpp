@@ -89,6 +89,7 @@ public:
       return;
     }
     CompareAgainstImage("TRANTABLE", Elite::KEY_TRANSLATION);
+    CompareAgainstImage("XX21", Elite::SHIP_DATA);
   }
 
   TEST_METHOD(LogarithmTablesMatch)
