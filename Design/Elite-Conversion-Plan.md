@@ -469,6 +469,15 @@ Doing it in that order means the loop is written last, against a set of routines
 been compared to the game on their own. Written first, it would be sixteen parts and fifteen
 unported helpers at once, and a divergence anywhere in it would have 866 instructions to hide in.
 
+**And 3d-d-i already has a flag waiting.** `MAS3` sums three squares with `JSR SQUA2 / ADC R` and
+no `CLC` between them, twice over — so it reads whatever carry `SQUA2` exits with, and `SQUA2`
+runs into `MU11`, which ends on a `ROR P` like every other multiplier here. The port's
+`SquareUnsigned` returns the byte alone. That is the fifteenth, and §6.65's rule says which
+question to ask first: it lands in an `ADC`, so what matters is not whether the flag is dropped
+but whether it is ever SET — an `ADC` cannot see a clear carry, and `SQUA2` returning a set one is
+what has to be measured before the port is called wrong. `MVT3`, which `MAS1` needs, is ported;
+`SQUA2` is, and returns too little.
+
 ### 6.68 Three uncleared adds in one routine, and only two of them matter
 
 `LASLI` picks where the laser beams converge, and it does it in nine instructions with three
