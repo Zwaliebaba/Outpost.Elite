@@ -428,6 +428,27 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.65 The fourteenth flag, and why two identical flags are not the same finding
+
+`DIALS` part 2 reads `LDA BETA / LDX BET1 / BEQ P%+4 / SBC #1 / JSR ADD / JSR DIL2`, and the `SBC`
+has no `SEC`. So it runs on whatever carry `DIL2` left, and `DIL2` ends
+`LDA SC+1 / ADC #&01 / STA SC+1` on a screen-address high byte that cannot carry out. The carry is
+therefore always CLEAR, the subtraction takes two rather than one, and the pitch indicator sits a
+step further along than "BETA minus one" would put it.
+
+That is the same sentence §6.60 wrote about `SPS2`'s carry reaching `SP2`, and the two findings
+came out opposite ways round under the mutation pass. `SP2`'s `ADC #195` with the carry replaced
+by a literal `false` SURVIVES -- adding a clear carry adds nothing, so the two programs are the
+same one. This `SBC` with the carry replaced by `true` is CAUGHT, because a clear carry there
+BORROWS.
+
+So a dropped flag has two questions and the port has been running them together: *is it constant?*
+and *does the instruction that reads it care?* Working out the first is what tells you the value;
+only the second says whether the port was wrong. Fourteen flags in, the tally is worth stating
+plainly -- an `ADC` cannot see a clear carry and an `SBC` cannot ignore one, so every uncleared
+`SBC` found from here is a defect until measured otherwise, and every uncleared `ADC` is a
+question about whether the carry is ever set.
+
 ### 6.64 Knowing what a label is, and not knowing what branching to it does
 
 §6.63 found `dec27` before slice 3d-b was written and got it right: a label inside `TT26` marking
