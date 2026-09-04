@@ -428,6 +428,41 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.80 A loop that stops on a page, and the register it leaves behind
+
+`TTX66K` clears the bitmap as far as the dashboard:
+
+```
+ LDX #HI(SCBASE)
+.BOL1
+ JSR ZES1k
+ INX
+ CPX #HI(DLOC%)
+ BNE BOL1
+```
+
+`DLOC%` is &5680. The loop compares X against &56, not against &5680, so it stops one page BELOW
+the dashboard and the partial page that follows finishes the job. The port wrote the obvious
+`for (page = 0; page < DASHBOARD_BITMAP; page += 256)`, which runs one page too many because
+&1600 is still less than &1680.
+
+**And the bound is not the only thing that leaks.** X is left at &56 and three things downstream
+read it: `ZES2k` takes it as the partial page's high byte, the hand-written `STA (SC),Y` finishes
+the byte `ZES2k` cannot reach, and — on the text-screen path — `.BOL2` picks the loop straight
+back up from there. One wrong comparison moved all four.
+
+The oracle caught it on the first byte of the dashboard: game 29, port 0. Twenty-nine is the
+marker the comparison fills the screen with, and that is the whole reason it is a marker: **on a
+screen that started at zero, a byte the routine cleared and a byte it never touched are the same
+byte.** §6.39 established that for a storing routine; this is the first time it has caught a
+clearing one.
+
+The general shape is worth having: **a 6502 loop's exit VALUE is as much a part of it as its exit
+condition**, and rewriting one as a C++ `for` over a range throws the exit value away. Two
+routines in this unit depend on it — `.BOL2` continuing from X, and `wantdials`'s second copy
+continuing from the `V` and `SC` the first one left advanced — so the port passes those on at the
+call site and says so, rather than recomputing them and hoping they agree.
+
 ### 6.79 An instruction spelled as data, again, and this time it is a screen height
 
 `BOX2` draws the border. It opens:
@@ -835,7 +870,7 @@ ported and absent; the check has to be for a DEFINITION, and this pass nearly re
 |---|---|
 | **3d-d-i** ✅ | `MAS1`–`MAS4` **built 2026-09-04** in `FlightLoop.h/.cpp` (11 mutations, 11 caught), then `cntr` there and `ECMOF` in `Dashboard.h/.cpp` as `StopEcm`. `tnpr1` was **already built in slice 2c** and should never have been on this list (§6.71). `FRMIS` needs phase 4's `FRS1` and `ANGRY`, and `KS1` ends `JMP MAL1` — a jump back INTO the loop, not a call — so both move to 3d-d-iii |
 | **3d-d-ii** ✅ | **Built 2026-09-04**: `BUMP2`, `REDU2`, `DOKEY`'s flight half, `SPIN`/`SPIN2` and `SIGHT`. §6.73's pass added `SIGHT` (two thirds of it is canvas and game state, not hardware) and `BUMP2`/`REDU2` (`DOKEY`'s, not `cntr`'s). `CTRL` is one instruction falling into the key seam, with nothing to compare. **`LOOK1` and `WARP` move to 3d-d-iii** — they need `TT66`'s PIXELS, and the port has `TT66`'s text state (§6.77) |
-| **3d-d-iii-a** | `LOOK1`, `WARP` and the `TT66` chain they need — `TTX66`, `TTX66K`, `BOXS`, `BOX2`, `BOXS2`, `BLUEBAND`, `BLUEBANDS`, `wantdials`, `zonkscanners`, `NOSPRITES`, `ZES1k`, `ZES2k`, `mvblockK`: 252 instructions and 23 external targets, 14 of them ported (§6.77, §6.78). **It needs `C.CODIALS.bin` loaded at `DSTORE%` first** — the dashboard bitmap is read at run time by the loader and is in no assembled block, so the oracle's memory there is zero |
+| **3d-d-iii-a** ◐ | **Built 2026-09-04**: the dashboard bitmap loaded at `DSTORE%` (§6.78), then `ZES1k`/`ZES2k`, `mvblockK`/`mvbllop`, `BOXS`, `BOXS2`, `BOX2`, `BLUEBAND`/`BLUEBANDS`, `zonkscanners`, `NOSPRITES`, `wantdials` and `TTX66K` in `ViewChange.h/.cpp`. **`TTX66`, `LOOK1` and `WARP` are what is left**, and they are blocked on the same seam: slice 2e ported `TT66`'s text state and left its pixels behind `TradeScreenEffects::ClearToView`, so the full routine means replacing that seam with a call — a phase-2 change, not a phase-3 one (§6.77) |
 | **3d-d-iii-b** | the sixteen loop parts themselves, with `FRMIS` and `KS1`, which by then call nothing unbuilt but phase 4 |
 
 Doing it in that order means the loop is written last, against a set of routines that have each
@@ -3248,6 +3283,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **Slice 3d-d-iii-a builds the screen setup, and stops one seam short.** The dashboard bitmap loaded at `DSTORE%` first (§6.78), then `ZES1k`/`ZES2k`, `mvblockK`/`mvbllop`, `BOXS`, `BOXS2`, `BOX2`, `BLUEBAND`, `zonkscanners`, `NOSPRITES`, `wantdials` and `TTX66K`. Three findings. **The dashboard copy is 2,240 bytes and they are not the first 2,240** — `mvbllop` stores at Y and counts down to 1, so offset 2,048 is skipped and 2,240 is written, and the port read one byte past its own array until the marker caught it. **`BOX2`'s height is a data byte**: `EQUB &2C` eating its `LDX #18` is the difference between a 25-row text screen and an 18-row space view (§6.79). **And a loop that stops on a PAGE reads as one that stops on an address** — `CPX #HI(DLOC%)` — with X left where three later instructions read it (§6.80). `TTX66`, `LOOK1` and `WARP` are blocked on replacing slice 2e's screen seam, which is a phase-2 change. |
 | 2026-09-04 | **Slice 3d-d-ii, and `LOOK1` and `WARP` are not in it.** Built: `BUMP2`, `REDU2`, `DOKEY`'s flight half, `SPIN`/`SPIN2` and `SIGHT`. Four findings. **The wreckage count is not random** — `TYA / TAX` is how the 6502 writes `X = Y`, the copy goes through the accumulator, and the `AND (XX0),Y` four instructions later masks the ship TYPE rather than the byte `DORND` left there; the port had it the obvious way round and the oracle disagreed on the first blueprint whose byte 0 differed (§6.74). **`REDU2`'s clamp has a hole** that produces zero on an exact match, against its own comment, counted rather than described. **`SIGHT` is two thirds canvas and game state**, not the seam §6.69 filed it as: the sprite pointers live in screen RAM. **And `TT66` is half ported** — `LOOK1` needs its pixels and the port has its text state, so `LOOK1`, `WARP` and the 252-instruction `TTX66` chain move to 3d-d-iii (§6.77). **28 mutations, 27 caught, 1 measured equivalent** — `DELTA`'s clamp is `CMP #22 / BCC / LDA #22`, so `< 22` and `<= 22` give the same 22 at 22 and nothing can tell them apart. One of the 27 was caught by NOT TERMINATING: `cnt - 2` in a loop that stops at zero runs for ever on an odd count, the suite times out, and the harness filed the strongest possible catch as a compile error. And one survivor was a real gap rather than an equivalent — the `DOCKIT` stub only WROTE `INWK+27`, so `LDA DELTA / STA INWK+27` before the call was invisible; the real routine READS that byte, and the stub EORs it now. |
 | 2026-09-04 | **The source resolver was stricter than the assembler.** Four of the build's 627 includes stopped `c64_source.py`, each looking like a missing entry in `SYMBOLS`, and none of them was: BeebAsm identifiers may end in `%` and the word pattern did not; a macro argument has no value outside a call; and `ELIF` conditions were evaluated in branches BeebAsm never looks at, so `_EXECUTIVE` — defined only in the 6502SP builds — was demanded by a file whose C64 branch was already live. All 627 now resolve and the 623 the old tool could read produce byte-identical output; `--check-all` sweeps them in CI. **Strictness in the wrong place reads exactly like a gap in the model**, and it cost a `nosprites.asm` reported as zero instructions in a scoping run (§6.75). |
 | 2026-09-04 | **Thirteen ledger rows had been recording findings into a void.** A slice ends by appending its result to the row that scheduled it, as a new cell; `Source-Inventory.md`'s tables have four columns and thirteen rows had grown to five, six, eight — one to twenty-three. GitHub renders a table at the header's width and drops the rest in silence, so what `LL9` cost and what its mutation sweep caught has been invisible since the day it was written, in a file that reads correctly raw. Merged into the notes column with `<br><br>` between entries, and `tools/check_docs.py` now fails CI on any row wider than its header — it caught one more, in this document's own phase-3 table. **The failure mode is the absence of a reader**: everything else this port checks has a second thing to compare against, and a design document has none until someone opens it on the web (§6.72). |
