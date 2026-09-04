@@ -38,6 +38,17 @@ inline constexpr std::uint8_t SHIP_TYPE_COUNT = 33;
 inline constexpr std::uint16_t SHIP_DEFAULT_FLAGS = SHIP_DATA_BASE + 2 * SHIP_TYPE_COUNT;
 
 /*
+ * 6502: KWL% and KWH% -- what killing a ship type is worth, as a fraction and as whole kills.
+ *
+ * Derived the way the source derives them rather than written as addresses: `E%` is one byte per
+ * type and each table is one byte per type after it, so the four constants are one chain and a
+ * build with a different `NTY` moves them all together. Both are indexed from ONE, like the
+ * pointer table -- `EXNO2` reads `KWL%-1,X` with X the ship type.
+ */
+inline constexpr std::uint16_t SHIP_KILL_FRACTION = SHIP_DEFAULT_FLAGS + SHIP_TYPE_COUNT;
+inline constexpr std::uint16_t SHIP_KILL_INTEGER = SHIP_KILL_FRACTION + SHIP_TYPE_COUNT;
+
+/*
  * 6502: the blueprint header, and TWENTY bytes because that is what indexes it.
  *
  * Counted from the source rather than taken from the gap to `SHIP_x_VERTICES`: the C64 build

@@ -150,6 +150,7 @@
     <ClCompile Include="PlanetDrawTests.cpp" />
     <ClCompile Include="DashboardTests.cpp" />
     <ClCompile Include="FlightLoopTests.cpp" />
+    <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="ControlsTests.cpp" />
     <ClCompile Include="ViewChangeTests.cpp" />
     <ClCompile Include="LaserTests.cpp" />

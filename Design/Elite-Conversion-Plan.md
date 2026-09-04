@@ -428,6 +428,68 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.88 Which piece of equipment breaks depends on whether the explosion was audible
+
+`OOPS` ends:
+
+```
+ JSR EXNO3
+ JMP OUCH
+```
+
+`EXNO3` is `LDY #sfxexpl / BNE NOISE`, so it is a tail call into the sound routine, and `OUCH`
+opens `JSR DORND`, whose `ROL A` reads the carry. §6.86 established what `NOISE` leaves there:
+set when the effect took a SID voice, clear when a higher-priority sound was already holding all
+three.
+
+So the generator advances differently depending on whether the explosion was heard, and `DORND`'s
+X — which `OUCH` uses to pick **which of the twenty-two hold slots to empty** — comes out
+different. A player who loses their E.C.M. to a collision would have lost their fuel scoops
+instead if the sound system had been busier.
+
+This is §6.86's dependency reaching one call further than the laser's convergence point, and it
+is the reason the port threads the seam's answer through `TakeDamage` rather than defaulting it.
+The oracle comparison caught it as a one-byte disagreement in `RAND` on the first case where the
+banks survived a hit — the state compare, not the screen.
+
+**`OUCH` has exactly one caller and it is this one**, so the carry is not a range of possible
+values: it is always `NOISE`'s. A port could hard-code it and be right whenever the sound plays.
+The reason not to is that the two exits are a coin the hardware tosses, and hard-coding it is
+choosing a side of that coin without saying so.
+
+### 6.87 A subtraction that borrows from whichever caller arrived
+
+`OOPS` takes the damage off a shield with `LDA FSH / SBC T`, and neither of its two entries sets
+the carry first.
+
+Part 10 reaches `.MA63 JSR OOPS` two ways:
+
+```
+.MA67                          .MA58
+ LDA #1                         ASL INWK+31
+ STA DELTA                      SEC
+ LDA #5                         ROR INWK+31
+ BNE MA63                       LDA INWK+35
+                                SEC
+                                ROR A
+.MA63
+ JSR OOPS
+```
+
+`MA67` is reached by `BCC MA67` from part 9's `CMP #5`, so the carry is CLEAR — the shield loses
+one more than the damage. `MA58` ends `ROR A`, whose carry out is **bit 0 of the ship's own
+energy**, so half the time the shield loses exactly the damage and half the time one more. And
+`TACTICS` is a third caller with a third answer.
+
+The `SEC / ROR A` is deliberate arithmetic — it halves the ship's energy to get the collision
+damage — and its carry out is a by-product nobody wrote down. It is the same shape as §6.85's
+roll and pitch: a flag produced for one purpose, consumed for another, with instructions in
+between that happen not to disturb it.
+
+`LDX #0` at the top of `OOPS` is dead, incidentally: both paths that read X load it again before
+using it. The port drops it and the sweep proves it can (every shield, bank and damage
+combination, from both carries, on both shields).
+
 ### 6.86 A sound routine that answers, and the one caller that listens
 
 The frame's opening fires the laser like this:

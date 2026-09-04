@@ -836,7 +836,13 @@ struct LoopWhere
  */
 struct RecordingLoop final : Elite::FlightLoopEffects
 {
+  struct Pitched
+  {
+    std::uint8_t effect, sustain, frequency;
+  };
+
   std::vector<std::uint8_t>& sounds;
+  std::vector<Pitched> pitched;
   std::vector<std::uint8_t> stopped;
   std::vector<std::uint8_t> spawned;
   std::vector<std::uint8_t> angered;
@@ -850,6 +856,13 @@ struct RecordingLoop final : Elite::FlightLoopEffects
   explicit RecordingLoop(std::vector<std::uint8_t>& _sounds) noexcept : sounds(_sounds) {}
 
   bool PlaySound(std::uint8_t _effect) override { sounds.push_back(_effect); return true; }
+  bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain,
+                        std::uint8_t _frequency) override
+  {
+    sounds.push_back(_effect);
+    pitched.push_back({ _effect, _sustain, _frequency });
+    return true;
+  }
   void StopSound(std::uint8_t _effect) override { stopped.push_back(_effect); }
   void MoveTrumbles() override { ++trumbleMoves; }
   void StartDockingMusic() override { ++musicStarts; }
@@ -871,7 +884,6 @@ struct Frame
   explicit Frame(std::uint32_t _seed)
   {
     Seed(world, _seed);
-    world.commander.At(Elite::Field::Fuel) = world.fuel;
 
     /*
      * A message already up, and a REAL one.
@@ -903,10 +915,6 @@ void MirrorFrame(const Frame& _frame, Cpu6502& _cpu, const Where& _at, const Loo
 {
   const World& world = _frame.world;
 
-  for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
-  {
-    _cpu.memory[static_cast<std::uint16_t>(_loop.tp + index)] = world.commander.bytes[index];
-  }
   for (std::size_t slot = 0; slot < _frame.keys.size(); ++slot)
   {
     _cpu.memory[static_cast<std::uint16_t>(_loop.klo + slot)] = _frame.keys[slot];
@@ -936,8 +944,6 @@ void MirrorFrame(const Frame& _frame, Cpu6502& _cpu, const Where& _at, const Loo
   _cpu.memory[_loop.lasx] = _frame.burst.x;
   _cpu.memory[_loop.lasy] = _frame.burst.y;
 
-  _cpu.memory[_loop.mch] = world.message.token;
-  _cpu.memory[_loop.messxc] = world.message.column;
 }
 
 /// Every byte the frame's opening can write, beyond what `CompareState` already covers.

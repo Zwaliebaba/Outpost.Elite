@@ -112,6 +112,15 @@ struct ScreenState
   /// effect: flight loop part 3 drops it to %11010000 and the space view goes to standard bitmap
   /// mode for as long as the bomb burns.
   std::uint8_t upperBitmapMode = 0xC0;
+
+  /*
+   * 6502: welcome -- the border colour the raster handler cycles while the bomb burns.
+   *
+   * A table the interrupt indexes rather than a flag: `COMIRQ1` does `LDA welcome,X` and writes
+   * VIC register &21, so a non-zero first byte is what makes the background flash. `BOMBOFF`
+   * puts it back to zero and `COMIRQ1` increments it, which is the only place it grows.
+   */
+  std::uint8_t backgroundFlash = 0;
 };
 
 /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
