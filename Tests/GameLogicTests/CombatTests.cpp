@@ -104,6 +104,63 @@ public:
   }
 
   /*
+   * 6502: EXNO2's four compares, over every byte as well.
+   *
+   * Reached through the tally test only at a scatter of distances, which misses the boundaries
+   * entirely -- a sweep that never lands on eight cannot tell `CMP #8` from `CMP #9`. The tally
+   * is not compared here; the other test does that, and this one exists for the four thresholds.
+   */
+  TEST_METHOD(TheKillVolumeMatchesEXNO2)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t exno2 = oracle.Label("EXNO2");
+    const std::uint16_t noise2 = oracle.Label("NOISE2");
+    const std::uint16_t inwk = oracle.Label("INWK");
+
+    std::set<std::uint8_t> levels;
+
+    for (std::uint16_t distance = 0; distance < 256u; ++distance)
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      cpu.AddTrap(noise2);
+      cpu.AddTrap(oracle.Label("MESS"));
+      cpu.memory[static_cast<std::uint16_t>(inwk + 7u)] = static_cast<std::uint8_t>(distance);
+      cpu.x = 1u;
+
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(exno2, 400'000);
+      Assert::IsTrue(run.completed, L"EXNO2 returned");
+
+      const std::uint8_t ours = Elite::KillVolume(static_cast<std::uint8_t>(distance));
+      const std::wstring where = WidenText("EXNO2 volume(" + std::to_string(distance) + ")");
+
+      bool sounded = false;
+      for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+      {
+        if (hit.address != noise2)
+        {
+          continue;
+        }
+        sounded = true;
+        Assert::AreEqual(hit.a, ours, (where + L": sustain").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::EXPLOSION_PITCH_KILL, hit.x,
+                                       (where + L": frequency").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::SOUND_EXPLOSION, hit.y,
+                                       (where + L": effect").c_str());
+      }
+      Assert::IsTrue(sounded, (where + L": NOISE2 was reached").c_str());
+
+      levels.insert(ours);
+    }
+
+    Assert::AreEqual<std::size_t>(5u, levels.size(), L"all five volumes were reached");
+  }
+
+  /*
    * 6502: EXNO2 -- the kill tally as well as the noise.
    *
    * Every ship type against tally states chosen to straddle both carries: the fraction's, which
@@ -385,7 +442,13 @@ public:
 
     for (std::uint8_t slot = 0; slot < 26u; ++slot)
     {
-      for (const std::uint8_t toss : { std::uint8_t{ 0 }, std::uint8_t{ 0x80 } })
+      /*
+       * Three, and the middle one is the point: with `RAND+3` at zero, A and X come out EQUAL,
+       * so a port that picked the slot from `DORND`'s accumulator instead of its X would agree
+       * on every case. Three separates them while staying under 128, which is what keeps the
+       * routine from taking its `BMI out`.
+       */
+      for (const std::uint8_t toss : { std::uint8_t{ 0 }, std::uint8_t{ 3 }, std::uint8_t{ 0x80 } })
       {
         for (const std::uint8_t already : { std::uint8_t{ 0 }, std::uint8_t{ 7 } })
         {
@@ -450,7 +513,7 @@ public:
       }
     }
 
-    Assert::AreEqual<std::uint32_t>(26u * 2u * 2u * 2u * 2u, compared, L"the whole sweep ran");
+    Assert::AreEqual<std::uint32_t>(26u * 3u * 2u * 2u * 2u, compared, L"the whole sweep ran");
     Assert::IsTrue(emptied > 20u, L"every hold slot and fitting was broken at least once");
     Assert::IsTrue(suppressed > 0u, L"and a message already up suppressed the whole routine");
   }
