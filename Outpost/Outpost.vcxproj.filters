@@ -2,9 +2,22 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
+    <ClCompile Include="Main.cpp" />
+    <ClCompile Include="SaveStore.cpp" />
+    <ClCompile Include="Presentation.cpp" />
+    <ClCompile Include="KeyMap.cpp" />
+    <ClCompile Include="Window.cpp" />
+    <ClCompile Include="CanvasPresenter.cpp" />
+    <ClCompile Include="Shell.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="SaveStore.h" />
+    <ClInclude Include="Presentation.h" />
+    <ClInclude Include="KeyMap.h" />
+    <ClInclude Include="Window.h" />
+    <ClInclude Include="CanvasPresenter.h" />
+    <ClInclude Include="Shell.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Assets\Wide310x150Logo.scale-200.png">
@@ -51,6 +64,11 @@
     <None Include="packages.config">
       <Filter>Project Files</Filter>
     </None>
+    <None Include="Canvas.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="CanvasVertexShader.hlsl" />
+    <FxCompile Include="CanvasPixelShader.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="$(MSBuildThisFileDirectory)..\..\natvis\wil.natstepfilter">

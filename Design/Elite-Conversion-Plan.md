@@ -2,8 +2,25 @@
 
 **Status:** Accepted · 2026-09-02 · **revised in place** (this document is the sequence of
 record; the ADRs decide *what*, this decides *when*).
-**Owner decisions:** all five taken on 2026-09-02 and recorded in §8.
-**Phase 0 is closed**, bar slice 0e which is owner action: 0a (upstream vendored), 0b-a (the
+**Owner decisions:** all five taken on 2026-09-02, and four more on 2026-09-03. All recorded in §8.
+**Phase 2's computational content is complete and verified; what remains of it is the input
+layer and the shell.** 2a and 2b are done. 2c has its price model, its trade arithmetic, its
+market screen and `gnum`; its remaining screens are loops around the keyboard. 2d has the
+commander block, both checksums and the save format; its file I/O and name entry read the
+keyboard. **2e's decisions are settled and it still needs a Windows machine** — Risk R3 is
+answered (count cycles, and the counter is built; §6.17 explains why the question was not the one
+being asked) and its verification is split between a CI replay-hash leg and a human sign-off, but
+its criterion is that a person can play it and nothing here can launch a window.
+
+**Phase 1 is closed.** 1c-c-b built 2026-09-03: twenty of the thirty-one extended control codes
+are ported and compared against the shipped dispatch, the justification line buffer with them,
+and the three that reach the canvas stay a counted seam. §6.11 records what the drawing slices
+cost and §6.12 what the last one was hiding.
+**Phase 0 is closed**, bar slice 0e — which turned out to have been breached before it was
+written: the repository is public and has tracked `MasterFile/` since `92a3c7f`. Ruled 2026-09-03,
+after a reversal the same day: **it stays public, knowingly.** That makes the exposure an accepted
+decision rather than an unexamined default; it does not close the slice, which needs a written
+answer from the rights holders. The rest: 0a (upstream referenced, §6.9), 0b-a (the
 assembler and label map), 0c (skeleton, the 6502 interpreter), 0f (the determinism guard) are
 built; 0b-b is cancelled and 0d deferred, both by owner ruling. **Phase 1 is under way**: 1b-a
 and 1b-b have ported eighteen arithmetic routines. **The oracle is live**, which is the gate
@@ -55,12 +72,13 @@ The work is sized in [§6](#6-the-build-order); the coverage ledger is
 | `elite-build-options.asm` | 5 | `_VERSION=8` (C64), `_VARIANT=1` (GMA85 NTSC), `_MATCH_ORIGINAL_BINARIES=TRUE`, `_MAX_COMMANDER=FALSE` | Fixes which variant we port (ADR-001) |
 | `README.md` | 38 | Moxon's index of the above | — |
 
-**The include tree was absent, and is now vendored.** The `INCLUDE` paths are of the form
+**The include tree was absent, and is now referenced.** The `INCLUDE` paths are of the form
 `library/<lineage>/main/<kind>/<name>.asm` and
 `versions/c64/1-source-files/main-sources/elite-build-options.asm`, which is the layout of the
-upstream repository **`markmoxon/elite-source-code-library`**. Slice 0a cloned it to
-`Upstream/elite-source-code-library`, pinned at commit **`aa3f7ee`** (2026-09-01), and proved
-the acceptance criterion mechanically:
+upstream repository **`markmoxon/elite-source-code-library`**. Slice 0a put it at
+`Upstream/elite-source-code-library` as a **submodule** pinned at commit **`aa3f7ee`**
+(2026-09-01) — see §6.9 for why that word matters and what it cost to discover — and proved the
+acceptance criterion mechanically:
 
 | Check | Result |
 |---|---|
@@ -137,7 +155,8 @@ Tests/GameLogicTests.dll       CppUnitTest.  Cpu6502 oracle, arithmetic/token/un
 tools/                         inventory.py (coverage ledger), extract_tables.py (asm → C++ data),
                                labels.py (BeebAsm listing → label addresses), golden_diff.py, check_gamelogic.py
 MasterFile/                    the 13 masters.  Reference only.  Never compiled, never included.
-Upstream/                      the vendored upstream tree, pinned at aa3f7ee.  Never edited, never compiled.
+Upstream/                      the upstream tree as a SUBMODULE, pinned at aa3f7ee.  Never edited, never compiled.
+                               A fresh clone needs "git submodule update --init" before anything builds.
 ```
 
 ### 2.1 The seam: what `GameLogic` looks like from outside
@@ -295,13 +314,774 @@ within a phase is the recommended one; slices marked ∥ can run in parallel.
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **0a Source acquisition** ✅ **Built 2026-09-02** | Vendored `markmoxon/elite-source-code-library` at `Upstream/elite-source-code-library`, pinned at `aa3f7ee` (2026-09-01), per the owner's ruling to vendor rather than reference a sibling checkout (ADR-001 §5). | **Met.** 712/712 include paths and the font binary resolve; all 13 masters byte-for-byte identical to upstream; `tools/inventory.py --check-includes` is the standing check. |
+| **0a Source acquisition** ✅ **Built 2026-09-02 · repaired 2026-09-03** | `markmoxon/elite-source-code-library` at `Upstream/elite-source-code-library`, pinned at `aa3f7ee` (2026-09-01), per the owner's ruling to hold it here rather than reference a sibling checkout (ADR-001 §5). | **Met, and now met on a clean clone too.** 712/712 include paths and the font binary resolve; all 13 masters byte-for-byte identical to upstream; `tools/inventory.py --check-includes` is the standing check. It reported **0/712 on a fresh clone until 2026-09-03**, because the gitlink had no `.gitmodules` — see §6.9. |
 | **0b-a Label map** ✅ **Built 2026-09-03** | Build BeebAsm from source, assemble the C64 variant, and normalise its label dump and load addresses into something the oracle can read (`tools/labels.py`). | **Met.** BeebAsm 1.11 built with the VS 18 toolchain; the variant assembles to all eleven blocks; **1,782 labels** and the 11-block load map exported. The oracle now calls the shipped game by name. |
 | **0b-b Emulator measurements** ❌ **Cancelled 2026-09-03 by owner ruling** | *"You can ignore the use of VICE, no need to do a reference run."* No emulator is installed and none will be. | **Dropped, not deferred.** It was gating two things and each now has a different answer, below. |
 | **0c Repository skeleton** ✅ **Built 2026-09-02** | `AGENTS.md` written for this repository from its own `.clang-tidy`/`.clang-format`, not adapted from a sibling; `GameLogic` (static lib) and `Tests/GameLogicTests` (CppUnitTest) added to `Outpost.slnx`; `tools/inventory.py` built; `Cpu6502` written and proved. | **Met.** Debug x64 builds clean; 16 tests pass, of which 11 pin the interpreter against published 6502 behaviour and 5 are the first oracle suite. See §6.1. |
 | **0d Application shell** ⏸ **deferred to phase 2 by owner ruling, 2026-09-03** | *"Do not strip WinUI, ignore it and proceed."* The `Outpost` project is left exactly as it is, packages and all. Nothing here is done now. | Re-enters the plan at **2e**, which is the first slice that needs a window because it is the first playable build. Until then the port is game logic proved by tests, and the shell is not on the critical path. |
-| **0e Permission** | Approach the rights holders about the intent to publish (ADR-001 §5). Until it closes, nothing is pushed to a public remote. | A written answer, recorded in ADR-001 §5, and the disposition of `Upstream/` decided accordingly. |
+| **0e Permission** 🟠 **Exposure accepted; the permission itself is still open** | Approach the rights holders about the intent to publish (ADR-001 §5). ~~Until it closes, nothing is pushed to a public remote.~~ **That clause was already false when it was written** and is now gone: `Zwaliebaba/Outpost.Elite` is public — confirmed against the GitHub API rather than assumed — and `MasterFile/` has been tracked since `92a3c7f`. Those 13 files are 5,615 lines carrying "copyright D. Braben and I. Bell 1985" and Moxon's commentary copyright in their own headers. The structural mitigation did hold: `Upstream/` is a **submodule**, so the ~3,000 library files are a gitlink and not content, and no assembled binary is tracked. The exposure is the 13 masters and nothing else. | **Ruled 2026-09-03, reversing an earlier ruling the same day: the repository stays public.** The first ruling was to make it private; this one accepts the exposure knowingly instead. The value of that is that it is now a decision rather than a default — but it is an ACCEPTANCE, not a mitigation, and the slice does not close on it. **What closes 0e is a written answer from the rights holders.** Until then the position is "published knowingly, pending permission", and Risk R1 stays realised to say so. The submodule rule, the no-binaries rule and the nothing-copied-into-`GameLogic` rule all stay, because they are what keeps the decision cheap to revisit. |
 | **0f Determinism guard** ✅ **Built 2026-09-03** | `tools/check_gamelogic.py`: fails if `GameLogic` names a clock, operating-system randomness, `float`, `double`, file or registry access, or a Win32 call. Comments and string literals are stripped first, so a comment explaining the float ban does not trip the float rule. | **Met.** Passes on the tree. A planted `<chrono>` include and a `double` were both caught, and the tree was clean again afterwards. `--self-test` proves the scanner still detects six violation kinds and correctly ignores four look-alikes, so the checker itself is checked. |
+
+### 6.10 The canvas was designed from an assertion, and the assertion was wrong
+
+**Slice 1d was one slice with a big scope and a quiet assumption underneath it.** ADR-002 §4
+said the canvas is "320×200 logical pixels, one byte per pixel holding a C64 colour index".
+Nothing in the corpus derived that; it reads like a description of the output, which it is, and
+was taken for a description of the storage, which it is not. A half day of measurement before
+`Canvas.cpp` rather than after it is what this entry is arguing for.
+
+The C64 screen is a **multicolour** bitmap: 160 double-width pixels of two bits each, with the
+colours for `%01` and `%10` in a per-8×8-cell byte in screen RAM and `%11` in colour RAM. The
+drawing routines EOR whole **bytes** into it. The decisive measurement is that the C64 build of
+`PIXEL` indexes `TWOS2`, whose masks slide by one bit, so three of the eight x offsets set the
+low bit of one multicolour pixel and the high bit of the next. **There is no colour index to
+store for that write.** Plot at x = 66 and then x = 68 and the byte reads `%01111000` — three
+lit pixels in three colours, the middle one a colour neither call asked for. ADR-002 §7 carries
+the measurements; ADR-002 §4 now carries the four-plane design that replaces the clause.
+
+Three things worth carrying forward:
+
+- **The spike paid for itself twice over before any code was written.** It also answered
+  ADR-005 §1's dependency on the cancelled emulator run — the space view's placement is `0x20`
+  in `ylookup`, a four-cell left margin, and the dashboard split is `ylookup[144]` landing on
+  character row 18 — which §6.5 had missed when it counted that slice's dependents.
+- **Deriving by hand got it wrong; measuring got it right.** `celllook` starts three cells into
+  screen RAM while the bitmap's margin is four, which reads as an off-by-one. It is not: `CHPR`
+  writes the colour *after* advancing the cursor, so both land on cell `4 + XC`. The hand
+  derivation in this project's own notes said otherwise for an hour.
+- **1d is now four slices, and 1c-c has an order.** The original 1d bundled the canvas, the
+  text printer, the golden harness and the deferred control codes into one sitting, in the one
+  area where the oracle mechanism itself was new. Each of 1d-a to 1d-c ends with a byte compare
+  against the shipped bitmap.
+
+### 6.11 What phase 1's drawing slices cost, and what the oracle earned
+
+Three defects in 1d-a, none of them visible by inspection, all three found by the same thing:
+**comparing the whole screen rather than the pixel the test was about.**
+
+- `Canvas` guarded its accesses with `& (SCREEN_SIZE - 1)`. `SCREEN_SIZE` is `0x2800`, which is
+  not a power of two, so the mask silently dropped bit 11 of every address that had it and put
+  pixels eight character rows from where they belonged. A test that checked only "the expected
+  byte changed" would have passed.
+- `PIXEL2` collapsed a carry chain into a constant. There is no `CLC` before the `ADC` that
+  negates a downward offset — unlike the x half, which has one — so the carry comes from the
+  range check that just failed and the carry that `ADC` produces is what the following `SBC`
+  borrows against. The visible consequence is that y1 = 128 and y1 = 129 plot the same row.
+- `LOIN`'s steep row step ends with `SBC` and no `CLC`, unlike both shallow paths, so its borrow
+  survives into the accumulator on every iteration that crosses a character row. Dropping it
+  left the port right for 71 pixels of a 72-pixel line, with one pixel one bit out of place.
+
+All three are Risk R4's shape exactly — 6502 flag semantics leaking — and the third is the
+second time in the project that an uncleared carry has been the bug (§6.4 was the first). That is
+now a pattern worth naming: **when a routine's structure looks symmetrical and one branch is
+missing a `CLC`, the asymmetry is the behaviour.**
+
+Two other things worth carrying forward:
+
+- **`DVID4` has no `RTS`.** It falls into a second, unlabelled copy of `LL28`'s body, and both
+  of its callers get it. Checking whether a routine actually returns, before porting it as a
+  function, is now part of reading one.
+- **The corpus's own scope was wrong twice, and in the same direction.** `1b`'s "same shape as
+  the four above, now unblocked" covered two routines that read workspaces phase 1 does not
+  define, and 1d-c's `CIRCLE` family reaches the sun line heap and `LL145`'s clipping. Both are
+  moved to 3a and 3c rather than forced. A ledger row that names a routine is not evidence that
+  its dependencies were checked.
+
+### 6.12 Phase 2 has a dependency chain nobody drew, and it ends at the line buffer
+
+Slice 2a's description looked like the easiest thing in the phase. `PDESC`'s generated path is
+four instructions: seed the RNG from the system's own seed bytes, print extended token 5. The
+port of it is right and it is two lines long.
+
+It cannot be compared against the game, and the reason is a chain:
+
+**`PDESC` → the extended control codes → the justification line buffer.**
+
+Token 5 reaches **nine** control codes. Five are two-line pokes at the `DTW` state. Two route to
+printers that already exist. `MT18` builds a random pronounceable word and needs only the RNG.
+And `MT17` prints the system's name as an ADJECTIVE — which it does by writing the name into the
+justification line buffer, reading back the last character, dropping it if it is a vowel, and
+appending "IAN". `TIBEDIED` becomes `TIBEDIEDIAN`.
+
+That needs `DTW3`, `DTW5` and `BUF` — the justification machinery that slice 1c-c listed under
+"`dtw1`–`dtw6`, `dtw8`, `feed`, `dtw*` justification state" and did not build. So the honest
+shape is one slice, **1c-c-b**, containing the control codes AND the line buffer, and `PDESC`
+lands when it does.
+
+**Built 2026-09-03, and the chain was longer than that.** Two of the nine codes 1c-c-b was
+"waiting on phase 2 for" needed nothing of the sort. `MT17` and `MT18` are pure text; what they
+needed was the buffer, which was in the same slice. Code 16's self-modified operand is a *value*,
+not a dependency — the routines that patch it are the disk catalogue's, and MT16 works without
+them. Only three codes genuinely reach outside: 9, 11 and 21, for `TT66`, `NLIN4` and `CLYNS`.
+
+So the scoping note of 2026-09-03 that put nine codes out of reach was wrong on six of them, and
+wrong in a way worth naming: it counted a routine as blocked because *something* it touched had
+not been built, without asking whether that something was in the slice already. The ledger's
+failure mode in §6.12 has a mirror image — a dependency graph read too pessimistically stalls
+work as surely as one read too optimistically breaks it.
+
+**This is the fourth time in two phases that a slice's stated scope has not survived contact with
+what its routines actually read** — after `DVID3B2`/`LL51`, `CIRCLE`/`BLINE`, and `LL5` going the
+other way. The pattern is now clear enough to name: `Source-Inventory.md` is an excellent
+coverage ledger and an unreliable dependency graph, because its rows were written from what
+routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
+sittings, one pass over the ledger asking only "what does this read?" would be worth more than
+any amount of re-sequencing.
+
+### 6.31 A shader compiled at run time is a shader nobody has read
+
+The presenter's first draft built its HLSL with `D3DCompile` from a string literal, which is the
+normal thing to do and was, here, the one remaining hole in the argument this slice is built on.
+Everything else in the shell went onto the Windows CI leg precisely so that code written on a
+machine that cannot run it would at least be READ by a compiler. Twenty-five lines of HLSL sat
+outside that: nothing in the build touched them, and the first check they would ever get was a
+person launching the game and seeing a black window with an eight-digit HRESULT in a message box.
+
+So the shaders became `.hlsl` files that FXC compiles into C arrays in `$(IntDir)`, which the
+presenter includes. A typo in them is now a build error like any other. Two things fall out of it
+that were not the reason for doing it: `d3dcompiler.lib` and its `d3dcompiler_47.dll` are gone,
+which a packaged application would otherwise have had to carry; and `tools/check_projects.py`
+gained `FxCompile` and `None` to its item types, because an `.hlsl` on disk that no project names
+is not compiled by ANYTHING -- a worse version of the `.cpp` case that script already existed to
+catch.
+
+The general form is the one this slice keeps running into: **verification you cannot run is not
+verification, and the question is always what would have to be true for a machine to check this.**
+For the C++ it was a CI leg that builds the executable. For the shader it was moving it from a
+string into the build. Neither needed a display, and both found or foreclosed something.
+
+### 6.30 Two static libraries, one C++/WinRT, and thirty-one link errors nobody could have seen
+
+Building `Outpost.exe` for the first time produced no compile errors at all -- about twelve
+hundred lines of Win32 and Direct3D written on a machine that cannot run either, and the compiler
+took all of it. It failed at the LINK step, thirty-one times over:
+
+```
+GameLogic.lib(TextPrint.obj) : error LNK2038: mismatch detected for 'C++/WinRT version':
+    value '2.0.250303.5' doesn't match value '3.0.260818.1' in pch.obj
+```
+
+`Outpost` carries the `Microsoft.Windows.CppWinRT` NuGet package and therefore compiles against
+3.0; every other project takes the 2.0 that ships inside the Windows SDK. C++/WinRT emits a
+`detect_mismatch` pragma so that the linker refuses to mix them, and it is right to -- they are
+different headers with different inline definitions of the same names.
+
+**Nothing could have caught this earlier, and that is the point.** The defect has been latent
+since the projects were created: `GameLogicTests.dll` links `GameLogic.lib` and both are 2.0, so
+the suite has always been consistent with itself. The mismatch needs a binary that links the
+library built one way against objects built the other, and until this slice no such binary was
+ever produced. A CI leg that builds the executable is not a formality on top of a green suite; it
+is a different question, and the first time it was asked it found something.
+
+The fix is not to align the versions. It is that `GameLogic` and `NeuronCore` were never using
+C++/WinRT in the first place -- they inherited it from the shared precompiled header, which
+includes `winrt/Windows.Foundation.h` and does `using namespace winrt;` for the benefit of the one
+project that needs it. ADR-004 makes `GameLogic` deterministic and platform-free, and AGENTS.md §5
+calls C++/WinRT "a COM-helper sanction only", for the presentation layer's `com_ptr` and
+`check_hresult`. A static library with no COM in it emitting a version directive is a constraint
+on everything that links it, bought for nothing. So `NeuronCore.h` gained a `NEURON_NO_CPPWINRT`
+guard, and `Outpost/pch.h` is now the single place that does not define it.
+
+The general shape is worth keeping: **a dependency acquired by inheritance rather than by need
+costs nothing until something else needs a different version of it.** The shared header is a
+convenience, and the price of a convenience is paid by whoever links it.
+
+### 6.29 The routine did not end where the line did
+
+`TT66` sets the text state every docked screen is entered with, so the shell had to answer it and
+`GameLogic` had to have it. The upstream source is a BBC BASIC assembler listing with several
+instructions per numbered line, and line 9400 is the whole of `TT66` up to its last `JSR`:
+
+```
+.TT66 STAQQ11:.TTX66 JSRMT2: ... :LDA#128:STAQQ17:STADTW2: ... :LDA#1:STAXC:STAYC:JSRTTX66K
+```
+
+Read that and stop, and the answer is obvious: `QQ17 = 128`, sentence case. It is also wrong. The
+routine continues across lines 9410 and 9420, and its last five bytes are `LDX #1 / STX XC / STX
+YC / DEX / STX QQ17` -- so `QQ17` goes back to **zero**, ALL CAPS, and only `DTW2` keeps the 128.
+
+What makes this worth writing down is not the mistake but how close it came to being committed
+with a confident comment attached. The draft had a paragraph explaining that an existing comment
+in `MarketScreen.h` -- which said all caps, and was right -- had quoted the *cassette* build and
+that this build differed. It was a plausible story, it fitted the evidence available, and it was
+entirely invented. §6.20 already says a hand-built oracle can share the port's misreading; this is
+the same failure without the oracle: **a misreading plus a justification is harder to spot than a
+misreading alone**, because the justification is what a reviewer reads instead of the source.
+
+The rule that caught it is §6.20's, applied without exception: where a routine can be run, run it.
+`TT66` can -- `TTX66K` and `FLFLLS` are the only things in it that need a VIC-II, and neither
+touches a byte of text state -- so `TheScreenSeamsMatchTheShippedRoutines` traps those two, calls
+the shipped routine, and compares `XC`, `YC`, `QQ17`, `DTW1`, `DTW2` and `DTW6` against the port.
+It cost about what reading the routine a second time would have cost, and unlike reading it a
+second time it could not have agreed with the first reading.
+
+There is a smaller finding underneath it, which is why the seam was worth testing at all. The
+per-screen oracle tests set this state up **on both sides**, so a seam that got it wrong would
+agree with the game on every screen in the suite and still print every one of them in the wrong
+case. The session harness of §6.27 set `XC`, `YC` and `QQ17` from a comment and did not set `DTW1`,
+`DTW2` or `DTW6` at all. Neither was a test failure waiting to happen; both were tests that could
+not fail.
+
+### 6.28 One 6502 byte, two C++ variables
+
+`QQ17` is the capitalisation state, and the port keeps it in two places: `TokenPrinter::m_caseFlags`,
+which is the live one every printing path reads and writes, and `TextState::caseFlags`, which
+`CHPR` reads for the single value 255 ("print nothing at all"). They are one byte in the game.
+
+Nothing has gone wrong yet, because until slice 2e every caller that assigned `QQ17` was inside
+the token printer and only touched its own copy. `SetUpTextScreen` is the first routine outside it
+that holds both, and it has to assign both -- which is a rule a reader has to know rather than one
+the types enforce, and exactly the kind of rule that is obeyed until it is not.
+
+The fix is to give `TokenPrinter` a reference to the `TextState` it already has a pointer to and
+delete the duplicate, which is a change to the token printer, the character printer, every screen
+that constructs one and about a dozen tests. That is a refactor with no behavioural content, and
+doing it inside a slice whose subject is the window would mean a diff where the risky part is
+invisible among the mechanical part. It is written down here instead, with the note that the
+duplication is REAL and not a false alarm: two variables holding one byte, kept in step by
+convention.
+
+### 6.27 What a null presenter can and cannot verify
+
+Slice 2e's acceptance criterion was split on 2026-09-03: a replay through a null presenter, which
+needs no window and no GPU and therefore runs on the Ubuntu leg, plus a human sign-off on
+legibility and cadence. The first half is now built, and building it turned up the boundary
+between the two.
+
+**What it does verify** is that the pieces compose. Every routine in a docked session is compared
+against the shipped game somewhere else in the suite, one at a time; what no per-routine test can
+say is whether the market screen reads the economy the start sequence cached, whether the
+equipment shop is handed the tech level the chart selected, or whether two tonnes of food bought
+on the buy screen are two tonnes in the hold when the inventory prints it. The session test asserts
+exactly that last one: the hold goes from five tonnes to seven and the cash falls by twice the
+price the market quoted -- three routines, three tests of their own, and nothing until now that
+checked they were talking about the same tonne of food.
+
+It also does something a hash would not: it keeps a TRANSCRIPT. A hash catches drift and tells you
+nothing about what drifted; a line of each screen's output is diffable, and reading it is how you
+notice that a screen has gone blank rather than merely different.
+
+**What it cannot verify is LAYOUT**, and the reason is structural rather than an oversight. `CHPR`
+advances the cursor, and `CHPR` is the presenter -- so with a null one the cursor only moves where
+a routine moves it deliberately, through `INCYC` or `DOXC`. Every character in the transcript is
+stamped wherever that left it. The per-screen oracle tests DO compare the cursor, and can, because
+there the shipped CHPR is trapped on both sides and neither advances it; but a session driven
+through a null presenter has no cursor to compare.
+
+So layout is verified per screen and not across a session, and "is every docked screen legible" --
+the human half of the criterion -- is the only thing that covers a session's layout at all. That is
+not a gap to be closed by writing more tests here. It is what the split was for, and it is worth
+being explicit that the CI half being green is not the criterion being met.
+
+The other thing the harness is, incidentally, is a specification of the composition root. One
+object satisfies five separate seam interfaces -- `TradeScreenEffects`, `ChartEffects`,
+`LineEntryEffects`, `StartUpEffects` and `ControlCodes` -- which is what ADR-004 says the
+executable does, and this is the cheapest available check that those five declarations are
+mutually consistent. `Game.cpp` in the executable has to hold what `Session` holds.
+
+### 6.26 Being richer is not being more eligible, and DOENTRY is not the entry point
+
+Two findings, and the smaller one first because it is the reason the larger one was found at all.
+
+**`DOENTRY` is not the program's entry point.** The ledger had it beside `COLD`, `BRKBK` and
+`startup` in a row marked "Replace — the C64's NMI handling and memory banking". It is the DOCKING
+routine: "do entry" means entering the station. What it actually does is reset six flight
+variables, show the docking tunnel, pause for forty-four vertical syncs and then decide which of
+six mission briefings the player has just earned. All of the deciding is arithmetic on the
+commander block, and every one of the three things it reaches outside the slice was already a
+seam or a phase-3 routine.
+
+That is the **sixth** stale scope line this port has found, and the first that was wrong about
+what a routine IS rather than about what it needs. The previous five all had the same shape — a
+row written from what a routine is *about* — and this one is worse: it was written from the
+routine's NAME.
+
+**And the Trumbles mission compares one byte of four.** `EN4` is `LDA CASH+2 / CMP #&C4 / BCC
+EN6`. `CASH` is four bytes, most significant first, holding tenths of a credit — and this reads
+the third of them and ignores the two above it. So the condition is not "at least 5017.6
+credits". It is
+
+    (tenths >> 8) & 255 >= 196
+
+which is a band 1,536 credits wide that recurs every 6,553.6. A commander with 5,017.6 credits is
+offered the mission. One with 10,000 is not. One with 11,571.2 is again. Getting richer moves you
+in and out of eligibility, over and over, for ever.
+
+The upstream source's own comments on those three instructions say "the cash amount is less than
+&C400 (5017.6 credits)" and, four lines later, "we have at least 6553.6 credits". They disagree
+with each other, and neither describes what the code does — which is a fair reflection of how hard
+this is to see. The port has a test that walks nine cash amounts across two bands for exactly that
+reason: the obvious improvement, comparing the whole four-byte value, passes every other test in
+the file and fails that one.
+
+It is worth being explicit that this is kept rather than fixed. It is reachable, it changes
+whether a mission is offered, and ADR-001 puts fidelity first — the same ruling as the disk menu's
+stack frame in §6.21. What the port owes is not a correction but a comment, and a test that will
+fail if someone later supplies one.
+
+### 6.25 The commander's position is the current system, and the oracle had to say so
+
+Building `BR1` meant giving the port somewhere to keep "where the ship is", and the obvious answer
+— a `CurrentSystem` holding x, y, seeds, economy, tech level and government — is wrong. The test
+failed on the commander's byte 1, and the reason is a memory map: `QQ0` is `TP+1` and `QQ1` is
+`TP+2`. The ship's galactic coordinates are two bytes of the COMMANDER BLOCK. `QQ2`, `QQ28`, `tek`
+and `gov` are eighty-five bytes further on and are not.
+
+So `ping` and `jmp` — the two-line routines that move the crosshairs to the ship and back — read
+and write the commander itself, and a hyperspace jump is a change to the saved game rather than to
+a variable beside it. That is why your position survives a save, and it is invisible from either
+routine: both are four instructions with no hint of what they are addressing.
+
+A port that kept a separate copy would work until something wrote one and read the other. The
+oracle found it on the first run of the first script, which is the argument for comparing MEMORY
+rather than return values: the port and the game agreed on every number and disagreed about where
+one of them lived.
+
+Two more things `BR1` turned out to be, both of them fall-throughs the source does not mark:
+
+**The cold start resets twice.** `TT170` is `LDX #&FF / TXS / JSR RESET`, and `RESET` has no RTS —
+it runs off its end into `RES2`. Then `TT170` itself falls into `DEATH2`, which is the same three
+instructions with `JSR RES2`. So a cold start runs `RES2` twice, and it is not idempotent: it
+toggles the energy bomb off and stops the bulletin board. Collapsing the two calls would be a
+different game, and nothing at any call site says there are two.
+
+**And `BR1` does not return.** It runs off its end into `BAY`, which sets the docked flag to `&FF`
+and presses "8" on the player's behalf. Starting a game and arriving at the docking bay are one
+instruction stream — which is why the test knows the routine is finished by watching for `BAY`
+rather than for an RTS, and why proving it got there is the fall-through proved.
+
+### 6.24 A path relative to the wrong thing, and the check that should have existed
+
+The Windows leg went red on `error C1083: Cannot open source file: '..\Outpost\SaveStore.cpp'`.
+The project is at `Tests/GameLogicTests/`, and MSBuild reads an `Include` relative to the PROJECT
+rather than to the repository — so reaching `Outpost/` needs two `..`, not one. A second to make,
+four minutes of Windows CI to report, and invisible on the Linux leg, which globs its sources and
+never reads the project file at all.
+
+`tools/check_projects.py` now runs on the Ubuntu leg and resolves every `ClCompile` and
+`ClInclude` path the way MSBuild does. Writing it turned up three problems that were already in
+the tree and had nothing to do with the change that prompted it:
+
+- `GoldenCanvas.h` was in the test project's `.filters` and not in the project.
+- `SaveStore.cpp` and `SaveStore.h` were in `Outpost.vcxproj` and in neither its filters.
+- and the check for the OTHER direction — a source on disk that no project names — matters more
+  than the resolution check does. The portable runner GLOBS `GameLogic/*.cpp`. A file added to the
+  tree and forgotten in the project compiles, runs and passes on Linux, and is simply absent from
+  the Windows build: a green suite testing less than it says, with nothing anywhere to say so.
+
+The general shape is worth naming because this repository has two builds of the same sources and
+they disagree about how they find them. One globs and one enumerates. Wherever two mechanisms
+answer the same question differently, the cheap one has to check the expensive one — otherwise the
+expensive one is the only place a drift shows, and it is the one that runs least often.
+
+### 6.23 "No oracle" is not "no test", and the difference was a defect
+
+`Outpost/SaveStore.cpp` shipped with a header saying, in as many words, that nothing in it was
+covered by the suite and that this was the whole reason the seam was drawn where it is. The first
+half was true and the second was an argument that does not follow.
+
+There is no ORACLE for the file: the C64 handed the Kernal a filename and an address range, and
+this writes eighty-five bytes to a path under LocalAppData, so there is no shipped routine to
+compare it against. But the format, the checksums, the competition number and every failure path
+are already compared against shipped routines in `GameLogicTests`, and what is left on this side
+of the seam — a path and two streams — has properties worth asserting even without a routine to
+disagree with.
+
+It had gone uncompiled for a day as well, because the only machine that could build it ran Windows
+and CI does not build `Outpost.vcxproj` (it would restore the whole WinUI 3 package set to compile
+two files). The file makes exactly one Win32 call. Ten lines of `GetEnvironmentVariableW` in the
+portable runner's shim, one source added to its makefile, and one constructor taking an explicit
+root instead of reading the environment, and it compiles and runs on both legs.
+
+**The first test written against it found a defect.** `PathFor` accepted any name of letters and
+digits and refused everything else, on the argument that the name reaches it from a FILE as well
+as from the keyboard and is therefore untrusted. That argument was right and the filter was not
+sufficient: every legacy Windows device name — `CON`, `PRN`, `AUX`, `NUL`, `COM1` to `COM9`,
+`LPT1` to `LPT9` — is made of letters and digits, is seven characters or fewer, and is typeable at
+the commander name prompt. Win32 resolves such a stem to the DEVICE whatever directory precedes it
+and whatever extension follows, so a player calling themselves CON would have had their commander
+written to the console, with the write reporting success, and read back from it.
+
+The near misses matter as much as the hits and the test walks them: `COM0` and `LPT0` are not
+devices, and neither is anything with a character appended, so a rule matching a prefix would
+break four ordinary names to fix twenty-two broken ones.
+
+The rule this argues for is narrower than "test everything": **when the reason something is
+untested is that it cannot be built here, price the shim before accepting the reason.** It was ten
+lines.
+
+### 6.22 One number, two words, and a jump into the middle of the second
+
+`TT25` prints eight lines and three of them are worth writing down, because all three would pass a
+test that compared only the values it is built from.
+
+**The economy is two words out of one three-bit number, and the branch that picks them is a
+comparison against a shifted value.** `(QQ3 + 1) >> 1` comes out 0, 1, 1, 2, 2, 3, 3, 4 across the
+eight economies. Where it is 2 -- economies 3 and 4 -- the routine prints "Mainly" and jumps to
+`TT72`, which is in the MIDDLE of the code for the second word, past the `ADC` the first word
+needed. Otherwise `BCC` asks whether that shifted value is below 2, and where it is not, `SBC #5`
+folds economies 5, 6 and 7 back onto 0, 1 and 2. So "Rich", "Average" and "Poor" are three tokens
+serving six economies, and the fold is invisible unless you notice that the `BCC` reads the `CMP`'s
+carry and not the `LSR`'s -- the `LDA QQ3` between them leaves the flags alone. A port that took
+the shift's carry there gets four of the eight economies wrong, and only ever on the second word.
+
+**The inhabitants are four words, three of them optional, and the third one feeds the fourth.**
+Size, colour and appearance print only when their own index falls below the length of their table
+(3, 6 and 6); the noun always prints. But the appearance's index is STORED in `QQ19`, and the
+noun's index is `(QQ15+5 & 3) + QQ19` — so a system that loses its appearance word because the
+index came out too high still has that index folded into what its inhabitants are called. The four
+lines are one calculation with three early exits, not four independent lookups.
+
+**And the radius is assembled from two seed bytes with a constant in the middle.** The low byte is
+`QQ15+3` as it stands; the high byte is the bottom nibble of `QQ15+5` plus eleven. So every planet
+in Elite has a radius between 2,816 and 6,911 km — no gas giants, no asteroids, and the eleven is
+the only reason. It is a `CLC / ADC #11` in the middle of a line that otherwise looks like masking.
+
+The screen was in 2a's row as "cursor and canvas work", which is **the fifth stale scope line this
+port has found** (§6.12, and then the trading screens, `STATUS`, `EQSHP` and 2d's name entry). The
+pattern has not changed: the row was written from what the routine is *about* rather than from what
+it *touches*, and what it touches is a token printer, a number printer and one seam that already
+existed.
+
+Building it also produced `tools/c64_source.py`, which is overdue. The upstream library serves ten
+versions of Elite from one tree, and the scratch filter used up to now silently dropped
+`IF NOT(...)` blocks — which is how `SV1`'s `LSR SVC` and half of `DFAULT` came out missing when
+they were read by eye. The new one evaluates the conditionals against the master build's own symbol
+values and errors on a symbol it does not know rather than guessing FALSE. AGENTS.md now says to
+read routines through it.
+
+### 6.21 The disk access menu, and the stack frame nobody pops
+
+`SVE` is five options around routines slice 2d had already built one at a time, which made it look
+like assembly work. Running it whole against the port found four things, and the first is a bug in
+the shipped game that a player can hit in ordinary use.
+
+**A failed load poisons every later exit from the menu.** `LOD`'s two error paths -- `tapeerror`
+when the device refuses and `ELT2F` when the file is not a commander -- print a message, wait for
+a key, and leave by `JMP SVE`. Not by an RTS. So the menu is re-entered while `loading`'s own
+`JSR LOD` return address is still on the stack, and whatever the player does next returns *into*
+`loading`, at the three instructions that were waiting there: `JSR TRNME / SEC / RTS`.
+
+Press "5" to leave after a failed load and the game stores the name you typed over the last-saved
+commander's, then tells `TT102` that a new commander was loaded -- so `TT102` jumps to `QU5`,
+whose `DFAULT` makes that rename stick, and restarts the game instead of returning to the docking
+bay. Nothing was loaded. Save instead of leaving and the same thing happens on top of a real save.
+And the frame is pushed again on *every* failed load, so a player who fails a hundred and
+twenty-eight loads without leaving the menu runs the stack into the zero page.
+
+The port reproduces it with one flag, because `TRNME` is idempotent and N pending frames therefore
+do what one does. It is worth being explicit about why: this is not a bug the port is free to fix.
+The behaviour is reachable, it changes which screen the player ends up on, and ADR-001 puts
+fidelity first -- so it is reproduced, named in the header, and pinned by four of the twenty-one
+scripts.
+
+**Option 4 returns with the carry set, and nothing in `SVE` sets it.** The default-commander
+option ends `JSR JAMESON / JMP DFAULT`, a tail call, so what the caller sees is whatever `DFAULT`
+left -- and `DFAULT` ends on `CMP CHK3 / BNE doitagain / RTS`, taking the RTS only when the two
+agree, which is exactly when `CMP` sets the carry. The flag that tells `TT102` to restart the game
+is a side effect of a checksum test three routines away. A port that read `SVE` alone would return
+`CLC` here and be wrong.
+
+**`BPRNT`'s field width is whatever the last caller left.** `SV1` prints the competition number
+with `CLC / JSR BPRNT` and never sets `U`, which is the width. `U` is a scratch byte in zero page
+that `ZERO` does not clear. The upstream source says so in as many words, and the consequence is
+small -- the number always has ten digits, so all that varies is a leading space -- but it is
+still caller state, so the port takes a `NumberWorkspace` by reference rather than choosing a
+width. Two of the scripts vary it, and a mutation that gave `BPRNT` a fresh workspace was caught.
+
+**And bit 6 of the competition flags is not what slice 2d's comments said it was.** They read it
+as "this commander was loaded from a file"; the C64 source says `ORA #%01000000 \ Set bit 6 of A
+to denote that this is the Commodore 64 version`, in a chain where the cassette build sets bit 1
+and the Master bit 3. It is the platform stamp, and `DFAULT` sets it for the default commander
+too. Corrected in `Commander.cpp`, `SaveGame.h` and the test that repeated it.
+
+There is a fifth, smaller one that the two-commander split made visible. `GTNME`'s "you typed
+nothing, keep the name you had" path is `TR1`, and `TR1` reads `NA%` -- the LAST SAVED commander's
+name -- not `NAME`, the one being played. The two agree after any load or save and can differ
+before one. A port that collapsed the save image into the live commander (which is tempting, since
+every caller of `SVE` runs `DFAULT` immediately) gets this wrong *and* prints the menu's own
+"2. SAVE COMMANDER <name>" line under the wrong name after a failed save. The image is a
+parameter for that reason.
+
+### 6.20 A hand-built oracle can share the port's misreading
+
+Slice 2d compared `SaveCommander` against the shipped save over 221 blocks and it passed. It was
+wrong, and the test could not have found it, because the test and the code were built from the
+same reading of the same routine.
+
+**What was missing.** `SVE`'s save path writes THREE checksums into the file: `CHK3` from CHECK2,
+`CHK` from CHECK, and then -- four instructions past the competition number, sixteen further down
+-- `CHK2`, which is `CHK EOR &A9`. The port wrote the first two and stopped. A file it saved would
+load into the original with bit 7 of `COK` set: flagged as tampered by the game's own copy
+protection.
+
+**Why nothing caught it.** Three things had to line up, and they did.
+
+- `LoadCommander` only READS `CHK2`, to decide whether to set that bit. It does not fail on it, so
+  a save-then-load round trip through a port that got it wrong on both sides agreed with itself.
+- The round-trip test skipped byte 74 as "written by the save", which was true and unexamined.
+- And the comparison against the shipped routine **reproduced `SVE`'s arithmetic by hand** rather
+  than running it. Its own comment explains the choice: stepping the copy loop and the two
+  checksums directly was "less misleading than trapping six routines and hoping the remainder is
+  the same shape". That reasoning is sound, and it has a cost -- a hand-built model is written
+  from the same reading as the code, so it shares the same blind spots. Both stopped at the two
+  CHECK calls.
+
+**What found it.** Building the caller. `SaveGameTests` runs the real `SV1` up to `KERNALSETUP` --
+the first instruction that would touch hardware -- and compares the whole eighty-five-byte file.
+The first commander disagreed at byte 82.
+
+The rule this argues for: **where a routine can be run, run it.** Trapping six routines and
+comparing what is left is more work than stepping a model by hand, and it is the version that
+cannot agree with a mistake. The hand-built test is kept for its breadth -- 221 blocks against the
+new one's 67 -- and corrected, with a note pointing here.
+
+### 6.19 One print, two meanings: how MT26 answers a key it will not take
+
+The line editor is nineteen instructions and three of them are not what they look like. It is
+worth writing down because the same three shapes recur, and because a port that read any of them
+straight would be wrong in a way no test of the *characters* would catch.
+
+**There is one `JSR CHPR`, and what reaches it decides whether the key appeared or beeped.** The
+accepted path ends `STA INWK+5,Y / INY / EQUB &2C`, and `&2C` is `BIT absolute` — a three-byte
+opcode that swallows the two bytes after it, which are `LDA #7`. So an accepted character arrives
+at the print with the key still in A, and a rejected one arrives having just loaded the bell. The
+routine therefore ALWAYS prints, and a port that simply ignored a bad key would be silently
+different: the player would get no feedback where the game gives a beep.
+
+**`BCC OSW0L` after that print is a jump.** CHPR returns with the carry clear — the same exit
+slice 1c-c-b found the justification depends on — so the branch is always taken. Reading it as a
+conditional suggests a way out of the loop that does not exist, and the only ways out are RETURN
+and ESCAPE.
+
+**RETURN is stored, not just detected.** `OSW03` writes the carriage return into the buffer at
+the current length before it leaves, which is why a commander's name is eight bytes ending in 13
+rather than a length and seven characters. The save format depends on it (§6.14).
+
+Two smaller things. The accepted range is `'!'` to `'z'`, because `CMP RLINE+4 / BCS` refuses
+`RLINE+4` itself and that byte is `'{'`. And `TRNME` falls into `TR1`, so storing a typed name
+copies it straight back over the buffer it was read from — undetectable, provably, and kept for
+the reason the source gives.
+
+### 6.18 Two ways a test can be green and blind, both found on the same day
+
+Building the callers of an already-verified routine turned up a defect in the verification rather
+than in the code, and running the mutation pass that would have caught it turned up a defect in
+how the mutation pass was being run. Neither is about Elite; both are about this project's method,
+which is why they are here rather than in a commit message.
+
+**A comparison that could not see what the caller reads.** `gnum` has one exit for the
+number-building path, `OUT`, and it begins `LDA #&10 / STA COL2 / LDA R / RTS`. Neither `LDA` nor
+`STA` touches the carry, so the carry a caller gets is whichever comparison branched there — set
+for the two "too big" tests, clear for everything else. The buy screen's `JSR gnum / BCS TQ4`
+branches on exactly that bit.
+
+The port's test swept 393,216 keystrokes and matched on every one. It broke out of the run when
+the program counter reached `OUT`'s address and mapped every arrival to one outcome, so **the
+carry was never read**. A port with that bit backwards would have passed the largest sweep in the
+suite and then silently accepted purchases the original refuses.
+
+The lesson is narrower than "test more": the sweep compared everything the routine *computes* and
+nothing about *how it returns*. Exit state — the carry, the flags, where control goes — is part
+of a 6502 routine's contract as much as its output is, and a comparison that stops at the exit
+address is measuring the wrong boundary. Slice 2b's `hyp` test hit the same shape from a different
+direction, where a message printed on the wrong row was invisible to a whole-screen compare
+because the cursor was not asserted.
+
+**A mutation harness that sometimes tested nothing.** The portable runner builds with `make`,
+which compares modification times at one-second granularity. A mutate-build-run-restore cycle that
+completes inside one second can rebuild nothing and report the **unmutated** binary as passing —
+a false negative in the direction that matters, because it says a mutation survived when it was
+never compiled. One did: the twelve-key limit in `gnum`'s loop.
+
+Mutations now go through a harness that deletes the object file first. The two survivors reported
+earlier the same day were re-checked that way and both claims stand — the branch-page mutation is
+genuinely caught, and the dead page-crossing flag genuinely survives. The general point is that a
+mutation reported as SURVIVING deserves the same suspicion as a test reported as passing: it is a
+claim about a build, and the build has to have happened.
+
+### 6.17 The C64 main loop has no frame cap, so the frame rate is not a setting
+
+Risk R3 has said since the plan opened that "the original's main loop ran as fast as the machine
+allowed". That was inherited from the BBC-oriented commentary and never checked against the C64
+build, and checking it changed what the risk was asking.
+
+**The check.** `WSCAN` is the routine that waits for vertical sync. Rather than read the version
+gates — which is what got this wrong the first time — the assembled C64 binary was scanned for
+the byte pattern of a `JSR` or `JMP` to `WSCAN`'s address, and each hit resolved to the nearest
+preceding label. There are exactly three:
+
+| Caller | What it is |
+|---|---|
+| `DELAY` | the pause routine, which loops `WSCAN` N times — so its argument is a count of **frames** |
+| `TT16+7` | moving the chart crosshairs, which waits for sync to avoid tearing |
+| `FREEZE` | the pause-the-game routine |
+
+**`main_flight_loop_part_13_of_16.asm` has a `JSR WSCAN`, and the C64 is not in its version
+gate.** The gate reads `_CASSETTE_VERSION OR _DISC_FLIGHT OR _6502SP_VERSION`, and the BBC needs
+it for a palette trick the C64 does not do. So the premise is confirmed and sharpened: **the
+main loop is uncapped**, and that is why the real game visibly slows down when the screen fills
+with ships.
+
+**What that means for the port.** "What step rate should we use" has no answer in the source,
+because the original does not have a step rate — it has a loop and a processor. The rate is a
+*consequence*. So the timing model is two things, not one:
+
+- **The main loop is cycle-budgeted and free-running.** Measure what an iteration costs, divide
+  by the clock, and let it slow under load exactly as the original does. A fixed rate would be a
+  behaviour the game never had — and one that makes combat *easier* than it shipped, because the
+  slowdown is part of the difficulty.
+- **`DELAY`, `TT16` and `FREEZE` are frame-quantised** and need a vertical-sync tick. 50 Hz is
+  the default: this is a Firebird UK release, and `wscan.asm`'s own comment says the screen
+  refreshes "50 times a second (50Hz) on PAL systems, or 60 times a second (60Hz) on NTSC" —
+  the game is agnostic and the *machine* decides, so the port exposes it and defaults to PAL.
+
+The cycle counter this needed is built and lives in `Cpu6502` (Risk R3). It is validated against
+two of the game's own routines, hand-counted from the source: `TT54` at 66 cycles over 23
+instructions and `DORND` at 36 over 13, both exact. `DORND2` — one byte earlier, at the `CLC`
+that makes the entry carry-independent — costs 38, and the two-cycle difference is asserted
+rather than the totals, which is what pins the model to a known instruction.
+
+**The residual, stated rather than buried.** The counter does not price a trapped call, so any
+measurement of a routine that prints or plots is a lower bound; and it does not model the cycles
+the VIC-II steals from the processor for character and sprite fetches, which on a real C64 is a
+further 5-10%. The port will therefore run slightly fast unless that is corrected once a loop
+exists to measure. Both omissions are documented on the `cycles` field itself, where anyone
+reading a number will see them.
+
+### 6.16 One side effect, surfacing for the third time
+
+**Slice 2c, 2026-09-03.** `var` computes the economy's contribution to a price and, on its way
+out, writes zero to `AVL+16` — the availability of Alien Items. It is two instructions with
+nothing to do with the arithmetic around them, and it is how the game enforces that Alien Items
+can never be bought.
+
+This is the third slice to trip over it.
+
+- `GenerateMarket` (2c, the price model) had to reproduce it, and the port does it in the
+  generator rather than in `EconomyAdjustment` — deliberately, because the adjustment is
+  arithmetic and has no market to reach into.
+- `EconomyAdjustment` therefore does NOT do it, which is recorded in its own header.
+- And `TT167`, the market screen, works out every price through `var` — so printing the screen
+  makes Alien Items unavailable, and the seventeenth line is always a dash however much stock the
+  market was generated with. The whole-screen comparison caught it on the last character of the
+  first case: 404 of 405 matched.
+
+The lesson is not about Alien Items. It is that a side effect the port moved for good reasons has
+to be re-created at every call site the original reaches it from, and the only thing that finds
+those sites is comparing the whole output rather than the value under test. `PrintMarketScreen`
+takes its market by reference for this and nothing else.
+
+### 6.15 Two off-by-ones that cancel, and why neither may be fixed
+
+**Slice 2c, 2026-09-03.** `tnpr` decides whether a purchase fits in the hold, and it counts the
+hold **one tonne too high**. The `CPX QQ29` that chose the tonne path leaves the carry set, and
+the first `ADC` of the counting loop consumes it, so the total is always one more than the cargo
+aboard.
+
+That is not a defect, and the original's own comment says why: `CRGO` holds **two more** than the
+capacity it describes — 22 for a twenty-tonne hold — "to make the maths in tnpr slightly more
+efficient". The two off-by-ones are a matched pair. Correct either one alone and every hold in the
+game is off by a tonne, in opposite directions depending on which you touched.
+
+It is worth recording because the two constants are in different files, ported in different
+slices, a day apart, and each looks like a bug on its own. §6.14 records the `CRGO` half from the
+commander's side; this is the other end of it.
+
+A third thing the sweep found, by mutation rather than by reading: 256 tribbles weigh a tonne, so
+`tnpr` adds the HIGH byte of the tribble count — and that addition takes the carry the counting
+loop left. The carry that reaches it is the one the LAST addition produced, item 0's, not the
+running total's. So it can only be set when a single good holds most of the cargo, and a test that
+spread the tonnage across the hold never reached it: dropping the carry passed a sweep of all 256
+purchase sizes. The test now sweeps two layouts.
+
+### 6.14 What the commander block turned out to be
+
+**Slice 2d, 2026-09-03.** Three things, none of which a reading of the source gives you.
+
+- **`CRGO` is two greater than the cargo capacity it describes.** A standard hold reads 22 and
+  carries 20 tonnes; a large one reads 37 and carries 35. The original says why in a comment: it
+  makes the arithmetic in `tnpr`, which decides whether a purchase fits, "slightly more
+  efficient". A port that read the byte as the capacity would let the player carry two tonnes too
+  many, and nothing about the value looks wrong.
+
+- **`CASH` is stored most significant byte FIRST**, and it is the only multi-byte value in the
+  game that is. `TALLY`, sixty bytes further down the same block, is low byte first like
+  everything else. Both are in the save file, so a port with one convention gives the player
+  either fourteen pence or several million credits.
+
+- **`DFAULT` does not reject a bad save file, it HANGS.** `JSR CHECK / CMP CHK / BNE doitagain`
+  branches backwards, and the second checksum's failure branches to the same place — so a
+  tampered commander leaves the game spinning on a black screen. That is copy protection rather
+  than a defect. It is the one behaviour in this slice the port refuses to reproduce, because a
+  hang is not something a caller can handle; `LoadCommander` returns false instead, and a test
+  establishes that the two agree on exactly WHICH files are acceptable by running the shipped
+  routine under an instruction budget and reading "did not return" as "rejected".
+
+  The routine also does something between its two checks that is easy to miss: it sets bit 6 of
+  the competition flags always, and bit 7 when the first checksum EORed with &A9 disagrees with
+  the second stored one. So a tampered file is *remembered* rather than refused, and the
+  competition code reads the flag later.
+
+### 6.13 A shipped bug the port had to keep: the first system of a galaxy cannot be found by name
+
+**Found 2026-09-03, building slice 2b.** Elite's short-range chart has an `F` key that asks for a
+planet name and moves the crosshairs to it. `HME2` implements it by turning the justification
+buffer into a scratch pad: control code 14 starts buffering, `cpl` prints each system's name into
+`BUF` instead of onto the screen, and the typed name is compared against it backwards.
+
+The comparison is `LDA INWK+5,X / ORA #%00100000 / CMP BUF,X`. The typed character has bit 5
+FORCED ON and the buffer's is taken as it is, so a match needs `cpl` to have printed in lower
+case — which depends on `QQ17`, which `HME2` never sets.
+
+`HME2` opens by printing extended token 14, and that token ends at `CLYNS`, which sets
+`QQ17 = %10000000`: sentence case with the "a letter has been seen" bit CLEAR. So the first name
+`cpl` prints comes out as `Tibedied` rather than `tibedied`, fails on its first character, and
+**the first system of every galaxy cannot be found by typing its name**. Printing it sets the bit,
+and every system after it matches.
+
+Measured rather than reasoned: the search finds 1,022 of 1,024 across two galaxies, and the two it
+misses are the two first systems. Both halves were checked separately — that `DETOK` of the prompt
+leaves `QQ17` at `%10000000`, and that `cpl` at that value prints `Tibedied` while at `%11000000`
+it prints `tibedied`.
+
+The port reproduces it, under ADR-003: match before improving. The test asserts the miss count is
+exactly two, so a later change that "fixes" the search fails rather than silently diverging from
+the game.
+
+### 6.9 Slice 0a was not finished, and the way it failed is the interesting part
+
+**Found 2026-09-03, on a clean clone.** Slice 0a was accepted on a mechanical criterion —
+712/712 include paths resolve — and the criterion was sound. What nobody checked is that it
+still held on a machine other than the one it was written on. It did not. On a fresh clone the
+same command reported **0 of 712**, and every slice from 1a onward was unbuildable.
+
+The cause is one missing file. `Upstream/elite-source-code-library` is recorded in the index as
+a **gitlink**: mode `160000`, the commit hash `aa3f7ee`, and nothing else. That is a submodule
+entry, and a submodule entry without a `.gitmodules` to name its URL is inert — `git submodule
+update --init` answers `no submodule mapping found` and there is no other way to recover the
+content, because the repository never held it. So a clone got an empty directory where 710
+routine bodies, the font and the assembled blocks were supposed to be.
+
+`.gitmodules` now exists and names the path and the upstream URL. One `git submodule update
+--init` restores the tree, and `--check-includes` is green again.
+
+Three things worth carrying forward:
+
+- **The corpus said "vendored ... not a submodule" and the tree said otherwise.** ADR-001 §5 is
+  corrected rather than reinterpreted. This is the failure mode AGENTS.md §7 names — code and
+  `Design/` disagreeing — arriving in the one place nobody re-reads, which is the description of
+  something already accepted.
+- **An acceptance criterion that only ever ran on the author's machine has not been tested, it
+  has been demonstrated.** Everything phase 0 built is exercised on each test run and would have
+  survived; slice 0a's output is the one thing that is only touched at clone time, which is why
+  it is the one thing that broke. Anything whose accept depends on the state of the working tree
+  should be re-run from a clean clone before its slice is closed.
+- **The accident landed on the safer side of R1.** Because the content was referenced rather
+  than copied, none of the ~3,000 unlicensed files has ever entered this history. What ADR-001
+  described as reversible in one command turns out never to have needed reversing — and the
+  files that *are* committed, and would be published, are the 13 in `MasterFile/`, which §5 did
+  not mention. That is now recorded there as an owner decision, not settled by the corpus.
 
 ### 6.1 What slice 0c actually built
 
@@ -343,15 +1123,19 @@ mechanical in a way they were not this morning.
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **1a Data extraction** 🟡 **Trigonometry and logarithms built 2026-09-03; the rest pending** | `tools/extract_tables.py` emits `*.cpp` data files, **extracted from the assembled binaries by label and length rather than by parsing the assembler** — see §6.6 for why that is the cheaper and truer route. Built so far: `log`, `logL`, `antilog`, `antilogODD`, `SNE`, `ACT`. Still to extract: `QQ18`, `TKN1`/`RUPLA`/`RUGAL`/`RUTOK`, `QQ23`, `NA%`, `XX21` and the blueprints, `E%`, `KWL%`/`KWH%`, `scacol`, `TWOS`/`CTWOS`/`TWFL`/`TWFR`, the sound and tune tables, `sdump`/`cdump`, `dials`, `spritp`, the font. | **Met for what is built.** Each array is compared byte for byte against the same address range in the oracle's image, so a stale or hand-edited table fails a test. `--check` does the same from the command line. Adding a table is one row in the tool. |
+| **1a Data extraction** 🟡 **Twenty-six tables built 2026-09-03; the ship and sound data pending** | `tools/extract_tables.py` emits `*.cpp` data files, **extracted from the assembled binaries by label and length rather than by parsing the assembler** — see §6.6 for why that is the cheaper and truer route. **Built, twenty-six tables** (corrected 2026-09-03 — this row had gone stale and still listed half of them as pending, which `tools/inventory.py` cannot catch because it checks the ledger rather than this prose): the arithmetic tables `log`, `logL`, `antilog`, `antilogODD`, `SNE`, `ACT`, `TENS`; the text tables `QQ18`, `QQ16`, `TKN1`, `TKN2`, `RUTOK`, `MTIN` and the font; the drawing tables `TWOS`, `TWOS2`, `CTWOS2`, `DTWOS`, `TWFL`, `TWFR` and the four screen-address lookups `ylookupl`/`ylookuph`/`celllookl`/`celllookh`; and the game data `QQ23` and `NA2%`. **Still to extract**, and all of it belongs to phases 3 to 5 rather than being overdue: `RUPLA`/`RUGAL`, `XX21` and the ship blueprints, `E%`, `KWL%`/`KWH%`, `scacol`, the sound and tune tables, `sdump`/`cdump`, `dials`, `spritp`. | **Met for what is built.** Each array is compared byte for byte against the same address range in the oracle's image, so a stale or hand-edited table fails a test. `--check` does the same from the command line. Adding a table is one row in the tool. |
 | **1b-a Multiply and add** ✅ **Built 2026-09-03** | `MULTU`, `MU11`, `MU1`, `MULT1`, `MULT12`, `SQUA`, `SQUA2`, `MLU2`, `ADD` (with `MU8`/`MU9`) — the shift-and-add core and sign-magnitude addition. | **Met.** Every multiply compared against the shipped routine over **all 65,536 input pairs**; the addition over a 200,000-case deterministic sweep plus eleven sign-magnitude edge cases. Green in Debug and Release. See §6.3. |
 | **1b-b Multiply-accumulate and divide** ✅ **Built 2026-09-03** | `MAD`, `MU5`, `MU6`, `MULTS`, `MLTU2`, `TIS1` (with `DVID96`), `TIS2`, `DVIDT` — everything in the division and accumulate family that needs no table and no game state. | **Met.** Exhaustive where the input space is 16 bits, 150,000-case sweeps above. Green in Debug and Release. §6.4 records the one defect it caught. |
 | **1b-c State-dependent helpers** | `MULT3`, `MLS1`/`MLS2` setup, `MLU1`, `MUT1`–`MUT3`, `TAS3`, `TIS3`, `DV41`, `DV42`, `CNTR`, `BUMP2`, `REDU2`, `NORM`, `LL5`. Each reads ship slots, rotation angles, stardust arrays or the damping flag. | Land with the workspace they belong to, in slice 3a, rather than being forced into the kernel early. |
 | **1b-d Logarithm-table routines** ✅ **Built 2026-09-03** | `FMLTU`, `LL28`, `LL38`, `ARCTAN` — multiply and divide by adding logarithms, and the angle of a ratio. `DVID4`, `DVID3B2`, `FMLTU2` and `LL51` remain and are the same shape. | **Met.** All four compared against the shipped routines; the multiply, the divide and the angle **exhaustively over all 65,536 input pairs each**, the combine over a 200,000-case sweep. The divide's returned carry is compared too, because its callers branch on it. |
 | **1c-a Recursive tokens** ✅ **Built 2026-09-03** | `TT27` and everything it falls through into: `TT41`, `TT42`, `TT43`, `TT44`, `TT45`, `TT46`, `TT47`, `TT74`, `qw`, `ex` with its walk, and the case-flag state machine. Plus the `QQ18` and `QQ16` tables. | **Met.** **243 of 250 tokens compared character for character against the shipped printer, in all five capitalisation states.** The remaining 7 embed value tokens that read commander and system state; the test detects and counts those rather than skipping them silently. §6.7 explains the trap that made output comparable at all. |
 | **1c-b Extended tokens** ✅ **Built 2026-09-03** | `DETOK`, `DETOK2`, `DETOK3` and the case state they carry, plus the letter-pair, nested-token and randomised-variant paths. `TKN1`, `TKN2`, `RUTOK` and `MTIN` extracted. | **Met.** 199 of 255 tokens compared character for character in three case states, and 21 of the per-system overrides. The 56 deferred reach control codes; the tests count them. §6.8 records the two table-sizing lessons this slice taught. |
-| **1c-c Control codes and numbers** | `MT1`–`MT29` behind the control-code seam, `vowel`, `whitetext`, `feed`, the `DTW1`–`DTW8` justification behaviour; numbers (`BPRNT`, `pr2`, `pr5`, `pr6`, `TT11`). Most control codes move the cursor or clear the screen. | Lands with the canvas in 1d, which is what they drive. The seam and its tests already exist. |
-| **1d Canvas and text printing** ∥ | `Canvas` (XOR/OR pixel, `LOIN` all seven variants, `HLOIN`, `PIXEL`, `CPIX2`/`CPIX4`, `DOT`, `CIRCLE`, `CIRCLE2`, `BLINE`, `CLYNS`, `TT66`/`BOX`/`box2`), `TextPrint` (`TT26`/`CHPR` with the font, `setxc`/`setyc`, `INCYC`, the `MAG2` input colour). Golden-test harness: canvas → PNG dump + hash. | Oracle for the line routines (compare the bitmap bytes the 6502 wrote against the canvas); a golden of the title-screen frame's box and header text. |
+| **1c-c-a Numbers** ✅ **Built 2026-09-03** | `BPRNT` with `TT11`, `pr2`, `pr5`, `pr6`, and the `TENS` constant. | **Met.** 308 numbers compared **character for character** through a trap on `DASC` — every digit width against both settings of the carry that decides whether a decimal point appears — plus `TT11` swept over the sixteen-bit range and `pr2` over every byte. One defect: the `BCC` at the top skips its two decrements when the carry is *clear*, so they apply to a number that IS getting a point; reading it the other way round shifts the padding two characters and puts the point where a digit belongs. |
+| **1c-c-b Control codes** ✅ **Built 2026-09-03** | `MT1`–`MT19` behind the control-code seam, `vowel`, `whitetext`, `feed`, `DASC` and the `DTW1`–`DTW8` justification behaviour with its line buffer. | **Met, and wider than scoped.** Twenty of the codes are ported and 8, 21, 23 and 29 are *split* so the flags they set land here and only the cursor or screen half is deferred. **Corrected 2026-09-03 while scoping 2b:** `JMTB` has thirty-one reachable entries, not the twenty-one this slice first read out of it, and all ten of codes 22 to 31 are used by tokens the game prints. They are still deferred — they wait for keys, spin the title ship, or print a token under `GCNT` or `DISK` — but the note that called them meaningless was wrong, and the dispatch test now drives all thirty-one. Every code compared against the shipped dispatch in two case states — output, all seven `DTW` bytes, `QQ17` and 128 bytes of `BUF`. `DASC` compared character by character over all 256 byte values and eight justified paragraphs, plus the `DTW4` bit 6 branch that only the in-flight message printer sets and no token can reach. And **all 2,048 system descriptions now compare character for character** against `PDESC`, which is the test slice 2a could not write. Three findings: the `LSR SC+1` at `DA5` is dead, so the justification does not depend on the screen pointer it borrows; `BUF`'s ninety bytes are not enough for the game's own text, which overruns into the ship position tables; and `CHPR` returns with the carry clear, which the `SBC #30` four instructions later borrows on — so the oracle's trap had to be taught to clear it too, or the game's own text came out a character wider than the game produces. |
+| **1d-0 Canvas representation spike** ✅ **Built 2026-09-03** | Measure what the drawing code actually writes, before deciding what `Canvas` holds. `Tests/GameLogicTests/CanvasSpikeTests.cpp`. | **Met.** ADR-002 §4 amended from measurement (its new §7 carries the evidence), ADR-005 §1's orphaned screenshot dependency answered, and the `celllook` puzzle resolved. See §6.10. |
+| **1d-a Canvas and the pixel primitives** ✅ **Built 2026-09-03** | `Canvas`: the four planes of ADR-002 §4, the original's addressing (`ylookup`, `celllook`), byte-wise EOR, and `Resolve()` to 320×200 indices. Routines: `PIXEL`, `PIXEL2`, `PIX1`, `DOT`, `CPIX2`/`CPIX4`, `HLOIN`/`HLOIN2`, `LOIN` all seven variants with the `LIJT*` jump tables as a `switch`. Tables `TWOS`, `TWOS2`, `CTWOS`, `CTWOS2`, `TWFL`, `TWFR`, `DTWOS`, `ylookup`, `celllook` extracted (the rest of 1a for this area). | **Met, and the compare is the whole 0x2800 screen rather than the bitmap alone.** `PIXEL` over every x at eight distances, `PIXEL2` over all 65,536 coordinate pairs, `CPIX2`/`CPIX4` over every x in five colours, `HLOIN` over both ends across three cells, and **`LOIN` over 3,528 lines**. Three defects caught: a non-power-of-two bitmask corrupting addresses, a collapsed carry chain in `PIXEL2`, and an uncleared borrow in `LOIN`'s steep row step. See §6.11. |
+| **1d-b Text and the font** ✅ **Built 2026-09-03** | `TextPrint`: `TT26`/`CHPR` with the font, `setxc`/`setyc`/`doxc`/`doyc`, `INCYC`, `CLYNS`, the `MAG2` input colour and the cell-colour writes; `Font.cpp` extracted from `C.FONT.bin`. | **Met.** 5,376 printable characters at seven columns and four rows in two cell colours, the 31 control codes at nine cursor positions, and the `QQ17 = 255` suppression over every code — glyph, cursor and colour cell each compared. `TT66simp` ported too, which closes one of the slice's two seams; the bell is the other and belongs to phase 5. |
+| **1d-c The golden harness** ✅ **Built 2026-09-03** | `TT66simp`; the harness: `Canvas::Resolve()` → indexed PNG, `Canvas::Hash()`, `tools/golden_diff.py`. **`CIRCLE`, `CIRCLE2` and `BLINE` moved to 3c** — they reach `CHKON`, the sun line heap (`LSX2`/`LSY2`/`LSP`) and `LL145`'s clipping, none of which phase 1 defines. | **Met.** Two goldens, each checked twice: the shipped routines draw the scene into the oracle, its memory is decoded into a `Canvas`, and the two resolved images are compared **pixel for pixel** — then against a committed hash, which is what a self-comparison cannot catch. On a mismatch both images are written as PNGs and the failure names the `golden_diff.py` command (Risk R10). |
 
 ### 6.3 What slice 1b-a built
 
@@ -467,7 +1251,7 @@ is the real cost. The original's loop ran as fast as the machine allowed, and th
 follows from that rate. Nothing in the oracle answers "how many iterations per second did a real
 machine manage", because the interpreter has no notion of time.
 
-Two honest options, neither of them chosen yet because nothing needs it until slice 2e:
+Two honest options were put to the owner:
 
 - **Count cycles.** Give the interpreter a cycle count per instruction and run a main-loop
   iteration in a representative scene. Divide by the processor clock and the answer falls out,
@@ -477,8 +1261,8 @@ Two honest options, neither of them chosen yet because nothing needs it until sl
   second, expose it in configuration, and tune by feel. Cheap, and honest so long as nobody
   later describes it as measured.
 
-**Risk R3 is unchanged in substance and worse in outlook**: its mitigation used to be "measure
-it in VICE", and that mitigation is gone. The row now says so.
+**Ruled 2026-09-03: count cycles. Built the same day, and the question turned out to be a
+different one — see §6.17.**
 
 ### 6.4 What slice 1b-b built, and the defect it caught
 
@@ -507,11 +1291,11 @@ Three things that is worth noting for the slices ahead:
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **2a Universe** | Seeds and galaxy (`TT20`, `TT54`, `TT111`, `TT18`, `TT146`), system data (`TT24`, `TT25`, `cpl`, `cmn`, `ypl`, `tal`, `fwl`, `pdesc`), the Data on System screen, `jmp`/`ee3` distances. | Oracle: all 8 × 256 systems' name, economy, government, tech, population, productivity, radius and description text match. Cross-check the previous DOS port's tables as a second opinion. |
-| **2b Charts** | `TT22` long-range, `TT23` short-range, crosshairs (`TT15`, `TT14`, `TT16`, `TT103`, `TT105`, `TT123`), `hyp`/`hy6` target and `TT147`, `TT16a` find planet by name, the `F` search flow. | Goldens of both charts for Lave; crosshair movement replay. |
-| **2c Trade and equipment** | `TT151`/`var`/`GVL` prices, `TT167` market, `TT219` buy, `TT210` sell, `gnum`, `TT213` inventory, `STATUS`, `EQSHP` with `prx`, `qv`, `refund`, `hm`, cash (`LCASH`, `MCASH`, `GCASH`), `TT162`/`TT160`/`TT161` units. | Oracle on prices for all systems and all commander states in a sampled grid; goldens of each screen; a scripted buy/sell replay ends with the oracle's credit total. |
-| **2d Commander and saves** | `NA%` default commander, `JAMESON`, `CHK`/`CHK2`/`CHK3`, `sve`/`lod` replaced by `SaveBlock` (the exact original byte layout so an original C64 save imports) + `SaveStore` in the exe writing to LocalAppData; `trnme`/`gtnme` name entry; `DFAULT`/`qu5`; the `Y/N` prompts. | Round-trip test: save, load, `StateHash` identical; an original `.d64`-extracted commander file loads. |
-| **2e First playable** | `Game` top-level state (`BR1`, `BAY`, `TT170`, `DOENTRY`), key dispatch for the docked screens (`DOKEY`, `RDKEY`, `TT217`), `CanvasPresenter`, `KeyMap`, frame pacing; the title screen **without** the rotating ship (that needs LL9 — a placeholder box until 3b). | You can start a game, read every docked screen, trade, buy equipment, save and reload. Replay hash suite green across Debug/Release. |
+| **2a Universe** ✅ **Built 2026-09-03** | Seeds and galaxy (`TT20`, `TT54`, `TT111`, `TT18`, `TT146`), system data (`TT24`, `TT25`, `cpl`, `cmn`, `ypl`, `tal`, `fwl`, `pdesc`), the Data on System screen, `jmp`/`ee3` distances. | **Met for everything the screen does not need.** All 2,048 systems in all eight galaxies compared on economy, government, technology, population and productivity; all 2,048 names character for character; and — once 1c-c-b landed the control codes and the line buffer — **all 2,048 descriptions character for character** as well, which is the strongest single test in the port so far: token expansion, the randomised alternatives, the case machinery, the word wrap, the padding, `MT17`'s reach into the buffer and `MT18`'s random words all have to agree for one description to come out right. `TT111` over 864 searches; `LL5` over all 65,536 radicands. Galaxy 1 system 0 is TIBEDIED. **And the Data on System screen is built, 2026-09-03, which closes 2a.** The row above called `TT25` "cursor and canvas work" and it is neither: every line of it is a token, a number or a seed bit, and the only thing it reaches outside `GameLogic` for is `TRADEMODE` — the seam slice 2c built and four screens already use. **All 2,048 systems in all eight galaxies compared character for character with the cursor stamped, PDESC included**, so a description one random alternative adrift or a line wrapped a column early fails here. Seventeen mutations, fifteen caught and two provably equivalent. §6.22 records what the screen turned out to be. The DOS-port cross-check needs a machine this work did not run on. |
+| **2b Charts** ✅ **Built 2026-09-03** | `TT22` long-range, `TT23` short-range, crosshairs (`TT15`, `TT14`, `TT16`, `TT103`, `TT105`, `TT123`), `NLIN`/`NLIN2`/`NLIN3`/`NLIN4`, `HME2` find planet by name, `hyp`/`hy6` target selection with `hm`, `ee3` and `TT147`. **The scope line named `TT16a` as "find planet by name" and it is not** — it prints "g", for grams, on the market screen; `HME2` is the search, and it is built. | **Met, and stronger than the stated criterion.** Not goldens but whole-screen comparisons against the shipped routines: both charts for all eight galaxies (the short-range one at four home positions), 1,200 crosshairs, 1,250 crosshair moves, 112 fuel circles, and `TT123` exhaustively over all 65,536 value-and-step pairs. `HME2` compared over 1,024 searches. **The stated criterion cannot be met and should not be**: the fuel circle is `CIRCLE2` and every system's blob on the short-range chart is `SUN`, both of which keep a line heap that belongs to 3c — so a golden of either chart would be a golden of a chart with its circles missing. They are seams whose ARGUMENTS are compared instead, which pins them before the drawing exists. `hyp` was scoped out on first reading as needing commander state, and that was too pessimistic in the way §6.12 describes: the state is an INPUT, not something this slice has to own, so it arrives as a value the way the market's does and the logic is ported. All 1,024 combinations of docked, countdown, CTRL, view, fuel and crosshair position compared — every one of the six branches reached — on the text, the cursor, the countdown, the seeds saved for the jump and the screen. What genuinely remains outside is `Ghy` (the galactic hyperdrive reads the equipment you are carrying), `hyp1`/`TT18` (arrival: the market roll and the tunnel), and `MT26`'s keyboard half of the `F` flow. |
+| **2c Trade and equipment** ✅ **Built 2026-09-03** | `TT151`/`var`/`GVL` prices, `TT167` market, `TT219` buy, `TT210` sell, `gnum`, `TT213` inventory, `STATUS`, `EQSHP` with `prx`, `qv`, `refund`, `hm`, cash (`LCASH`, `MCASH`, `GCASH`), `TT162`/`TT160`/`TT161` units. | **Met for everything that is arithmetic.** Every price the game can quote — seventeen goods, eight economies, every value of the market's random byte, 34,816 in all — plus 512 generated markets. And with 2d's commander block in place, the four routines the buying and selling are built on: `LCASH`, `MCASH`, `GCASH` over every price, and `tnpr` over 86,016 capacity checks. §6.15 records what `tnpr` turned out to be. **The market screen and `gnum` are built too**: `TT167` with `TT151`, `TT152` and the unit printers, compared **character for character with the cursor stamped on every character** across all eight economies and six market randomisers — 405 characters a screen, 48 screens. Stamping the cursor is what makes it a real comparison; the characters alone would pass a port that printed every line one cell left. `gnum`'s body — one keystroke of a typed number — is compared over **393,216 keystrokes**, every value against every key at six availabilities, by stepping the shipped routine to whichever of its five exits it reaches. **`gnum`'s loop and the six state control codes landed 2026-09-03 as well.** `ReadNumber` is the loop, ported against a `KeySource` seam and compared over thirteen scripted key sequences; §6.18 records the testability defect that building it exposed. `StateTokens` closes the `ValueTokens` seam slice 1c-a opened — `csh`, `tal`, `ypl`, `cpl`, `cmn` and `fwl`, compared character for character over 72 cases — which is what every docked screen needs to print a cash or a fuel line at all. **All three market screens are built** — `TT219` (buy) over seven scripted key sequences, `TT210`/`TT213` (sell and inventory, one routine told apart by QQ11) over thirteen — each compared character for character with the cursor stamped, plus the cash, the hold, the market, the seam ordering and the random state. That is the proof the deferral was wrong: what these screens wait on is a KEY, and a key is a seam. **`STATUS` is built too** — twenty situations compared character for character, plus the case flags and the system `TT111` settled on. **And `EQSHP` closes the slice**: the equipment shop with `prx`, `qv`, `eq` and `refund`, over thirty-six scenarios, with the price table extracted from the binary like every other. **Slice 2c is complete.** |
+| **2d Commander and saves** ✅ **Built 2026-09-03** | `NA%` default commander, `JAMESON`, `CHK`/`CHK2`/`CHK3`, `sve`/`lod` replaced by `SaveBlock` (the exact original byte layout so an original C64 save imports) + `SaveStore` in the exe writing to LocalAppData; `TRNME`/`GTNME` name entry; `DFAULT`; `MT26`'s line editor. `qu5`, the `Y/N` prompts. **The 2026-09-03 note here was wrong and is corrected:** it claimed `qu5` and `yesno` have no label in the assembled C64 build. They do — `YESNO` at 33262 and `QU5` at 34988 — and the check behind the claim had looked for the lowercase spellings just after diagnosing that exact trap for `TRNME`/`GTNME`. Both are built. What the row genuinely got wrong is only the case of `trnme`/`gtnme`. | **Met for the format; the file I/O and the name entry are not built.** The seventy-seven-byte block with every field named from the assembled build, both checksums, and the save and load layout — compared against `CHECK`, `CHECK2`, `SVE`'s copy and `DFAULT` over 221 blocks (the shipped default, all-zeros, all-255, a single bit walked through all 77 bytes, and 64 pseudo-random fills). The block is held as BYTES with named offsets rather than as a struct: the save file is those bytes, so making them the storage removes the serialiser a `.d64` import could drift from. Three findings recorded in §6.14. **Re-examined 2026-09-03, and most of what was deferred is not blocked.** `MT26` — which is the line editor the name entry calls, with RETURN, ESCAPE, DELETE, a beep on a rejected character and a character range read from `RLINE` — takes its keys through `TT217`, and `TT217` is the `KeySource` seam slice 2c built and proved. `TRNME` is an eight-byte copy and `GTNME` is a copy, a token, a call to `MT26` and a length check. All three are portable against what exists today, exactly as the four trading screens turned out to be — **and were built the same day**: fourteen line scripts and four name prompts compared character for character with the cursor stamped, plus the length, the carry, the text colour and every byte of the buffer. §6.19 records what `MT26` turned out to be. **Built 2026-09-03, and the file too.** `SV1`'s whole arithmetic half compared FILE BYTE FOR BYTE against the shipped routine over sixty-seven commanders — and that comparison found `SaveCommander` had never written `CHK2`, which §6.20 records. `CommanderStore` is the seam for the two Kernal calls and `Outpost/SaveStore` implements it against LocalAppData, untested by design and by necessity. **And `SVE`'s menu dispatch closes the slice, built 2026-09-03.** Twenty-one paths through the disk access menu compared against the shipped routine running WHOLE — only the two Kernal calls, the setup around them and the control-code routines that leave the text system are stood in for, so `DETOK`, `MT26`, `GTNMEW`, `TRNME`, `BPRNT`, `CHECK`, `DFAULT`, `JAMESON` and `YESNO` are the game's own code. Every character with the cursor stamped, the keys consumed, the device traffic, both commanders byte for byte, the competition number and the carry. §6.21 records what it found: a failed load leaves `JSR LOD`'s frame on the stack, so leaving the menu afterwards resumes `loading` and renames the commander; option 4's carry comes from `DFAULT`'s last `CMP`, not from `SVE`; `BPRNT`'s field width is uninitialised; and slice 2d's own comments had bit 6 of the competition flags wrong. Twenty-one mutations, twenty-one caught after the one survivor was fixed structurally rather than labelled. **Slice 2d is complete.** |
+| **2e First playable** 🟠 **Built 2026-09-03; everything a machine without a display can check is green, and it has not yet been RUN** | `Game` top-level state (`BR1`, `BAY`, `TT170`, `DOENTRY`), key dispatch for the docked screens (`DOKEY`, `RDKEY`, `TT217`), `CanvasPresenter`, `KeyMap`, frame pacing; the title screen **without** the rotating ship (that needs LL9 — a placeholder box until 3b). | **Both owner decisions are now taken, and one of them was answered wrongly in this row until 2026-09-03.** (1) **Risk R3 is settled: count cycles, and the counter is built** — but the row used to say the choice was between measuring a rate and picking one, and §6.17 records why that was the wrong framing. The C64 main loop has no frame cap at all, so there is no rate to pick: the loop is cycle-budgeted and free-running, and a separate 50 Hz PAL vertical-sync tick serves `DELAY`, `TT16` and `FREEZE`. (2) **Verification is split, ruled 2026-09-03**: the replay-hash half runs in CI through a null presenter — no window, no GPU, so it goes on the Ubuntu leg — and "is every docked screen legible, does the cadence feel right" is a human sign-off recorded here. That is ADR-003 §3 extended rather than a new mechanism. **The key dispatch and the start sequence are built, 2026-09-03.** `TT102`'s decision half — which of eighteen labels a key press reaches — compared over **16,384 dispatches**: all 256 key codes against four values of `QQ12`, four views, the counter running and stopped, and the hyperspace key held and not. It performs nothing, because the labels it names span three phases; what a caller does with the answer is the caller's. §6.24's neighbours record what it turned out to be, and the ledger row carries the four findings. `TT170`, `BR1`, `BAY` and `DOENTRY` are built too, over a seam for each of the eight things they reach outside the slice; §6.25 and §6.26 record what they turned out to be, the second of them after the ledger turned out to have filed `DOENTRY` as the program's entry point when it is the docking routine. **Every routine 2e names in `GameLogic` is now built, and a whole docked session runs through them** — started by `TT170`, driven by `TT102`'s dispatch, through one null presenter that satisfies all five seam interfaces, with the trade arithmetic checked to flow from the buy screen to the hold to the inventory. That is the CI half of this slice's acceptance criterion. §6.27 records what it cannot check and why the other half is not a formality. What is left is the SHELL: the presenter, the key map and the frame pacing — plus `TT107`'s hyperspace countdown, which is flight state and lands with phase 3. **The shell is written and CI compiles it, 2026-09-03.** It splits in two on purpose. The half that is a DECISION rather than an API call — the sixteen-colour palette, the integer-scaled letterboxed viewport, the fixed-timestep accumulator and the Windows-key-to-C64-position map — is in `Presentation.cpp` and `KeyMap.cpp`, is covered by `ShellTests.cpp`, and runs on both CI legs; the centring property in it caught a real defect (halving a negative difference truncated towards zero, so a window narrower than the canvas clipped unevenly). The half that is Direct3D — `Window.cpp`, `CanvasPresenter.cpp`, `Shell.cpp` and the composition root in `Main.cpp` — was written without a machine to run it on, so the Windows CI leg now restores the project's NuGet packages and **builds `Outpost` unpackaged in both configurations**, which is what turns "written blind" into "a compiler has read it". Every line of it compiled first time; what failed was the LINK, on a C++/WinRT version mismatch that had been latent since the projects were created and that only a binary linking `GameLogic.lib` against `Outpost`'s objects could ever have exposed (§6.30). The shaders are compiled by the build too, rather than at run time, so nothing in the shell is unread by a compiler (§6.31). The threading question `TextPrint.h` left open is answered: a NESTED MESSAGE PUMP inside `TT217`, single-threaded, because the thing the game blocks on is the player — a game thread would need the canvas double-buffered under a mutex and an answer for a thread parked inside `NextKey` at close, and buys nothing. `TT66` and `CLYNS` were ported to answer the screen seams properly (§6.29). **What is still needed is a person at a Windows machine**: the acceptance criterion's other half is "is every docked screen legible, does the cadence feel right", and a hosted runner has no display — compiling and linking is a different question from drawing. The first thing that person should do is measure a main-loop iteration and write the number down. |
 
 ### Phase 3 — Flight and the 3D pipeline
 
@@ -577,6 +1361,27 @@ where the 6502-semantics approach leaks (Risk R4), and by 2e there is a playable
 | 4 | Presentation code | **Ignore the sibling repositories; write our own.** No `NeuronClient`; presentation lives in `Outpost.exe`. | ADR-004 §1; §2 of this document |
 | 5 | Platforms | **Left as they are** (x64, x86, ARM64 in the solution), which is not what the plan recommended. Removing platforms was not put to the owner and is not a change to make unilaterally, and keeping MSIX makes ARM64 more plausible rather than less. x64 is the platform that is built and tested; the others are unmaintained. | ADR-004 §1 |
 
+### Owner decisions — taken 2026-09-03
+
+| # | Question | Ruling | Where it landed |
+|---|---|---|---|
+| 6 | Risk R3: how is the step rate determined? | **Count cycles**, rather than pick a number and tune by feel. | Built the same day: `Cpu6502` counts cycles, `CycleTests` validates it against two hand-counted routines. R3 rewritten; **§6.17 records that the question was mis-framed** — the C64 loop has no frame cap, so the rate is a consequence, not a setting, and the model splits into a cycle-budgeted main loop plus a 50 Hz PAL vertical-sync tick. |
+| 7 | How is slice 2e verified, given it needs a window? | **Split the criterion.** The replay-hash half runs in CI through a null presenter; the legibility and feel half is a human sign-off. | ADR-003 §3; the 2e row |
+| 8 | Slice 0e: the repository is public and tracks `MasterFile/`. | **Make the repository private.** | The 0e row; Risk R1, now marked realised. |
+| 8b | …and, later the same day: is that worth doing? | **No — reversed. The repository stays public, and the exposure is accepted knowingly.** | ADR-001 §5 (recorded as a reversal, not a deletion); the 0e row; Risk R1. The engineering rules that bound the exposure to 13 files — `Upstream/` as a submodule, no assembled binaries, nothing copied into `GameLogic/` — all stay. |
+| 9 | The portable test runner that existed only in a working directory. | **Commit it and gate CI on it.** MSVC stays the authority. | ADR-004 §6; `Tests/PortableRunner/`; the `linux-tests` job |
+
+**Decision 8 was not a design question, and 8b is the one worth reading.** The pair records a
+policy this document had stated and the repository had never met, and then the owner's answer to
+what to do about it: accept it rather than mitigate it. The engineering half — `Upstream/` as a
+submodule, no assembled binaries committed, nothing lifted into `GameLogic/` — did hold, which is
+why the exposure is 13 files rather than 3,000, and it is what keeps the acceptance reversible.
+
+The distinction the corpus is careful about: **an accepted risk is not a closed one.** Risk R1
+stays realised, slice 0e stays open, and the fallback if permission is refused gets more expensive
+the longer the history is public, because a history that has been read cannot be unread. That cost
+is part of what decision 8b accepts.
+
 **Decisions 1 and 3 pull against each other and the corpus says so.** Vendoring places roughly
 3,000 unlicensed files in the tree, and publishing that tree is the largest legal exposure in
 the project. The structural mitigation is that everything not ours lives under `Upstream/` and
@@ -590,6 +1395,37 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-03 | **The executable links, and building it found a defect that had been latent since the projects were created.** Every one of the ~1200 lines of Win32 and Direct3D written blind COMPILED first time; the failure was thirty-one `LNK2038: mismatch detected for 'C++/WinRT version'` at the link step, because `Outpost` carries the CppWinRT NuGet package (3.0) and every other project takes the SDK's (2.0). `GameLogicTests.dll` had never noticed, because it and `GameLogic.lib` are both 2.0 — the mismatch needs a binary that links one against the other, and until this slice none existed. §6.30 records it, and the fix: `GameLogic` and `NeuronCore` never used C++/WinRT at all, they inherited it from the shared precompiled header, so `NEURON_NO_CPPWINRT` takes it back out and `Outpost/pch.h` is the one place that keeps it. |
+| 2026-09-03 | **Slice 2e's shell built, and the Windows CI leg now compiles the executable.** The split is the point: the palette, the viewport, the step accumulator and the key map are decisions rather than API calls, so they are in `Presentation.cpp` and `KeyMap.cpp` where the suite reaches them on both legs; Direct3D, the message pump and the composition root are the rest, and CI restores the project's packages and builds them unpackaged in Debug and Release. `TRANTABLE` is EXTRACTED rather than replaced, and the ledger said otherwise — `TT217` gives the dispatch a key NUMBER and the screens a CHARACTER, so a map straight to a character agrees with the game on the keys somebody thought to try. The blocking-`KeySource` question ADR-004 and `TextPrint.h` left open is answered: a nested message pump, single-threaded. §6.29 records a misreading of `TT66` that a confident paragraph nearly shipped, and §6.28 one 6502 byte the port keeps in two variables. |
+| 2026-09-03 | **A whole docked session runs, which is the CI half of slice 2e's acceptance criterion.** One null presenter satisfying all five seam interfaces, a scripted keyboard, and a session that starts through `TT170` and is driven by `TT102`'s dispatch into every docked screen the port has. It asserts what no per-routine test can: two tonnes of food bought on the buy screen are two tonnes in the hold when the inventory prints it, and the cash falls by twice the price the market quoted. §6.27 records what it cannot check — LAYOUT, because `CHPR` advances the cursor and `CHPR` is the presenter, so a null one has no cursor to compare. The human half of the criterion is the only thing that covers a session's layout, and this half being green is not the criterion being met. |
+| 2026-09-03 | **`DOENTRY` built, and the ledger had it filed as the program's entry point.** It is the DOCKING routine — the mission dispatcher that runs when the ship arrives at a station — which makes the sixth stale scope line and the first that was wrong about what a routine IS. 12,800 commanders docked and compared on which of seven labels each reaches. §6.26 records the finding underneath: the Trumbles mission's cash test compares ONE BYTE of a four-byte value, so eligibility is a band 1,536 credits wide recurring every 6,553.6 rather than a threshold — a player with 5,017.6 credits is offered the mission and one with 10,000 is not. The upstream source's own two comments on those three instructions disagree with each other and neither is right. Kept rather than fixed, with a test that fails if anyone supplies the correction. Eleven mutations, eleven caught. |
+| 2026-09-03 | **`TT170`, `BR1` and `BAY` built** — the start sequence, which is slice 2e's `Game` top-level state. Seven title sequences compared seam for seam with their arguments, plus every byte of state the run leaves behind, with the disk menu running for real on the "Y" branch. §6.25 records what it turned out to be: the ship's coordinates are two bytes of the COMMANDER BLOCK, which the oracle established by disagreeing with a port that kept them separately; the cold start runs `RES2` twice through two fall-throughs; the theme brackets one branch and not the other; `DFAULT` runs twice on the "Y" path; the current system is snapped to the nearest generated one before play begins; and `BR1` does not return, it runs off its end into `BAY`. Fourteen mutations, fourteen caught. |
+| 2026-09-03 | **The top-level key dispatch built** — `TT102`'s decision half, which is slice 2e's "key dispatch for the docked screens". 16,384 dispatches compared: every one of the 256 key codes against four values of `QQ12`, four views, the counter running and stopped, and the hyperspace key held and not, by stepping the shipped routine until it reaches one of nineteen addresses that ARE the answer. Launch is tested before the docked split; "H" is read from the key matrix rather than from the accumulator, so holding it discards whatever else was pressed; `QQ12` is tested two different ways in the same routine. Eight mutations, eight caught — two only after the sweep was widened to values of `QQ12` the game never writes, which is where the two tests of it disagree. |
+| 2026-09-03 | **CI went red on a project path relative to the wrong thing, and now cannot again.** `..\Outpost\SaveStore.cpp` from a project two directories down needs two `..`; MSBuild resolves an `Include` against the PROJECT. `tools/check_projects.py` runs on the Ubuntu leg and resolves every path the way MSBuild does — and also catches the reverse, a source on disk that no project names, which the portable runner's glob would compile and the Windows build would silently omit. It found three problems already in the tree. §6.24 records the shape. |
+| 2026-09-03 | **`SaveStore` compiled and tested, and it had a defect.** The file had been committed and left uncompiled because the only machine that could build it ran Windows, and its header argued that having no oracle meant having no test. Ten lines of Win32 stand-in in the portable runner's shim made both untrue. `PathFor` accepted `CON` — every legacy Windows device name is letters and digits and typeable at the commander name prompt, and Win32 resolves such a stem to the DEVICE whatever directory and extension surround it, so a player with that name would have had their commander written to the console. Five tests now cover the round trip, the names that must be refused, the near misses that must not be, the length check and the CR-terminated name. §6.23 records the argument. |
+| 2026-09-03 | **The Data on System screen built, which closes slice 2a.** All 2,048 systems in all eight galaxies compared character for character with the cursor stamped, `PDESC` included. The row had deferred `TT25` as "cursor and canvas work"; it is a token printer, a number printer and `TRADEMODE`, which is the fifth stale scope line this port has found. §6.22 records what the screen turned out to be: the economy is two words folded out of one number by a comparison whose carry comes from the `CMP` and not the `LSR`, the four species words share a scratch byte so the appearance decides the noun, and every planet's radius is between 2,816 and 6,911 km because of a `CLC / ADC #11`. Seventeen mutations, fifteen caught and two provably equivalent. Also adds `tools/c64_source.py`, which evaluates the upstream library's version conditionals instead of leaving them to be read by eye. |
+| 2026-09-03 | **`SVE`'s menu dispatch built, which closes slice 2d.** Twenty-one paths through the disk access menu compared against the shipped routine running whole — only the Kernal and the control-code routines that leave the text system stood in for — on every character with the cursor stamped, the keys consumed, the device traffic, both commanders byte for byte, the competition number and the carry. §6.21 records four findings, the first of them a bug a player can hit: a failed load leaves `JSR LOD`'s return address on the stack, so the next exit from the menu resumes `loading` — renaming the commander and telling `TT102` to restart the game when nothing was loaded. Option 4's carry comes from `DFAULT`'s last `CMP`; `BPRNT`'s field width is whatever the last caller left; and bit 6 of the competition flags is the C64 version stamp, not "loaded from a file" as slice 2d's comments had it. Twenty-one mutations, twenty-one caught. |
+| 2026-09-03 | **The save flow built, and it found a defect in slice 2d's shipped code (§6.20).** `SaveCommander` wrote two of the three checksums the original writes and never `CHK2`, so a file the port saved would load into the game flagged as tampered. Nothing caught it because `LoadCommander` only reads that byte, the round-trip test skipped it, and the comparison against the shipped routine **reproduced the arithmetic by hand and shared the same misreading**. Running the real `SV1` disagreed on the first commander. Sixty-seven commanders now compared file byte for byte, plus the competition number — a four-byte chain stored out of order folding the checksum, the competition flags, the third cash byte and the high byte of the kill tally. `LSR SVC` halves the save count rather than incrementing it. `Outpost/SaveStore` implements the store against LocalAppData. |
+| 2026-09-03 | **`MT26`, `TRNME`, `GTNME` and `TR1` built — the keyboard half of 2d.** Fourteen line scripts and four name prompts compared character for character with the cursor stamped, plus the length in Y, the carry ESCAPE sets, the text colour and every byte of the buffer. §6.19 records what the line editor turned out to be: one print serving both a typed character and the bell, by way of an `EQUB &2C` that swallows the `LDA #7` after it. Ten mutations, nine caught; the survivor — `TRNME`'s fall-through into `TR1` — is provably undetectable and labelled as such. Only the FILE now waits for 2e. |
+| 2026-09-03 | **2d's remaining scope re-examined.** ~~`qu5` and `yesno` have no label in the assembled C64 build at all~~ — **wrong, and corrected the same day**: `YESNO` is at 33262 and `QU5` at 34988. The check had looked for the lowercase spellings immediately after diagnosing that same trap for `trnme`/`gtnme`, which really were the BBC's spellings of routines the C64 calls `TRNME` and `GTNME`. Of what is really there, `MT26`, `TRNME` and `GTNME` are portable today — `MT26` reads its keys through `TT217`, which is the seam slice 2c built. Only the file itself waits for 2e, because `SVE` and `DFAULT` end at the C64 Kernal's save and load calls. That is the third stale scope line found today, after slice 1a's and slice 2c's. |
+| 2026-09-03 | **The private-repository ruling reversed: it stays public, knowingly (§8, decision 8b).** The finding that prompted the original ruling stands and the false clause is gone — slice 0e's "nothing is pushed to a public remote" had never been true. What changes is the disposition: the exposure moves from *to be mitigated* to *accepted, with a name on it*. Risk R1 stays realised and 0e stays open, because what closes it is a written answer from the rights holders and nothing else. **Also: `Outpost.exe` had no entry point at all** — the template compiles only `pch.cpp`, so building the solution failed with LNK2019 on `WinMain`. CI never saw it because it builds the test project by name. |
+| 2026-09-03 | **Slice 2c closed: the equipment shop, and a seam boundary drawn in the wrong place.** `EQSHP` with `prx`, `qv`, `eq` and `refund`, over thirty-six scenarios. The finding that mattered was not in `EQSHP` but in the three screens already built: each reset the cursor and the case flags after calling `SetUpTradeScreen`, on the reasoning that pixels are the seam's and state is the port's. That is wrong — `TRADEMODE` is `TTX66` entire, cursor and flags included — and **only a screen that redraws itself could show it**, because the other three run once from a state that happened to match. The equipment shop loops after every purchase, and its second pass printed the title in the wrong place and the wrong case. Also: no station in the game sells exactly twelve or thirteen items, because `CMP #12 / BCC / LDA #14` jumps the cap from eleven to fourteen. |
+| 2026-09-03 | **The status screen built, and a cursor move that had been missing since slice 1c-a.** Control code 9 is `LDA #21 / JSR DOXC / JMP TT73` — tab to column 21, then a colon — and the port printed the colon while leaving a comment saying the cursor move would land with the canvas. It never did, and `STATUS` is the first routine to notice: it prints four headings through that code and all of them came out at whatever column the previous line ended in. The token printer now takes an optional cursor. The rating turns out not to be a table but a shift count, so its bands double in width. |
+| 2026-09-03 | **All three market screens built, and the 2e deferral shown to be wrong.** `TT219`, `TT210` and `TT213` ported against a `KeySource` seam and compared character for character with the cursor stamped — twenty scripted scenarios between them, plus the cash, the hold, the market, the seam ordering and the random state. Findings: `dn` falls through into `dn2`, so the beep on buying comes from the cash printer; a quantity of zero skips the room check entirely; the purchase is committed before the cash is checked; the sell screen calls the line printer with printing switched OFF purely for its arithmetic, which makes **selling anything zero Alien Items' availability** — the fourth appearance of §6.16's side effect; and `TT69` falls into `TT67`, so every `JSR TT69` prints a newline as well. |
+| 2026-09-03 | **`gnum`'s loop and the six state control codes built, and two blind spots in the method found (§6.18).** `ReadNumber` against a `KeySource` seam, thirteen scripted key sequences. `StateTokens` closes the `ValueTokens` seam open since slice 1c-a: `csh`, `tal`, `ypl`, `cpl`, `cmn`, `fwl`, compared character for character over 72 cases. Two findings in the game — `ypl` swaps the seeds, prints, and swaps back, but printing twists them, so what returns is not what left; and `cmn` bypasses the case flags, which is invisible unless the test sweeps both case states. Two findings in the method — a 393,216-case sweep that could not see the carry its caller branches on, and a mutation harness that could report the unmutated binary as passing. |
+| 2026-09-03 | **Four owner decisions taken (§8), and one of them found a mis-framed risk.** *Count cycles* for R3 — built the same day, and scanning the assembled binary for `WSCAN` calls showed the C64 main loop has **no frame cap at all** (§6.17), so the rate is a consequence rather than a setting and the timing model splits in two. The counter is validated against `TT54` and `DORND` hand-counted from the source, both exact, and a mutation pass found one real gap in the branch timing. *Split 2e's criterion* between a CI replay-hash leg and a human sign-off. *Make the repository private* — recording that slice 0e's "nothing is pushed to a public remote" clause **was already false when written**, and that the fix is owner action no tool here can take. *Commit the portable test runner and gate CI on it* — ADR-004 §6, a third CI job, and the fast feedback loop stops living in one working directory. |
+| 2026-09-03 | **Phase 2's computational core built: 2a's generator and 2c's price model.** All 2,048 systems compared on every field and every name; `TT111`, `LL5`, and the whole market — 34,816 prices and 512 generated markets. `var` turned out to zero Alien Items' availability as a side effect of computing an economy adjustment. **2a's description is blocked** on a chain nobody had drawn: §6.12 records it, and it ends at the justification line buffer. **2e is not startable** without the two owner decisions ADR-005 §5 and Risk R3 defer to exactly this point. |
+| 2026-09-03 | **`gnum` built, and phase 2's boundary drawn.** One keystroke of a typed number, compared over 393,216 keystrokes by stepping the shipped routine to each of its five exits. Both carries in its multiply by ten are dead and provably so — the cap at 26 keeps every intermediate under 256 — which is the second dead carry the port has kept rather than simplified. Phase 2's computational content is now complete; what remains is the input layer, and **2e is not startable in this environment**: its criterion is that a person can play it. Its row records the two things the owner has to supply. |
+| 2026-09-03 | **Slice 2c's market screen built.** `TT167`, `TT151` and the unit printers, compared character for character with the cursor stamped on each one, over 48 screens. §6.16 records `var`'s AVL+16 store surfacing for the third time — printing the screen makes Alien Items unavailable, and the whole-screen comparison caught it on the last character of the first case. |
+| 2026-09-03 | **Slice 2c's trade arithmetic built.** `LCASH`, `MCASH`, `GCASH` and `tnpr`, the four routines buying and selling are built on, compared over 86,016 capacity checks and every price. §6.15 records the two off-by-ones that cancel — `tnpr` counts a tonne too many because a `CPX` left the carry set, and `CRGO` holds two more than the capacity it names. What is left of 2c is screens and keyboard input. |
+| 2026-09-03 | **Slice 2d's format built.** The commander block, both checksums and the save layout, compared over 221 blocks against `CHECK`, `CHECK2`, `SVE` and `DFAULT`. §6.14 records what the block turned out to be: `CRGO` is two greater than the capacity it names, `CASH` is the only big-endian value in the game, and a bad save file makes the original hang rather than complain. |
+| 2026-09-03 | **Slice 2b finished.** `hyp`'s target selection with `hm`, `ee3` and `TT147`, compared over all 1,024 combinations of its six inputs with every branch reached. Two findings: `hyp`'s range check is two tests, not one — 256 tenths or more fails on the high byte before the fuel is consulted, so a system 25.6 light years away is out of range with a full tank and says the same thing as an empty one; and `hy6` turns out to BE `dockEd`, the same routine under the cassette version's name. The scope line's `TT16a` was never the search: it prints "g" for grams. |
+| 2026-09-03 | **Slice 2b's geometry and search built.** Both charts compared whole-screen against the shipped routines across all eight galaxies, `TT123` exhaustively, and `HME2` over 1,024 searches. Three findings: the two charts map the same galaxy with additions that differ only by a `CLC` the short-range one does not have; a system's disc is sized by a carry left over from `cpl` or from its own screen row, so `AND #1 / ADC #2` yields two, three or four rather than the two-or-three it reads as; and §6.13 records a shipped bug the port keeps. `CIRCLE2` and `SUN` are seams whose arguments are compared, so the stated "golden of both charts" criterion is replaced by something stronger and honest about what 3c still owes. |
+| 2026-09-03 | **Slice 1c-c-b built, and phase 1 is closed.** Twenty of the thirty-one extended control codes, `DASC`, and the justification line buffer. `PDESC`'s 2,048 descriptions now compare character for character, which unblocks the last of slice 2a. Six of the nine codes the scoping note called blocked were not: §6.12 records the mirror image of the ledger problem — a dependency graph read too pessimistically. |
+| 2026-09-03 | **Slice 1c-c split.** The number printers (`BPRNT`, `TT11`, `pr2`, `pr5`, `pr6`) are built and compared character for character over 308 numbers. The control codes are scoped from `JMTB` read out of the binary: eleven are pure state, nine wait on `TT66`, `NLIN4` or phase-2 mission state, and building only the eleven would turn a seam that counts what it cannot do into one that ignores it. |
+| 2026-09-03 | **Slices 1a (screen half), 1b-d (completed), 1d-a, 1d-b and 1d-c built.** The screen tables and the font extracted; `FMLTU2` and `DVID4` ported; `Canvas` and the pixel primitives, `LOIN` over 3,528 lines, `CHPR` over 5,376 characters, `TT66simp`, and the golden harness with two oracle-derived goldens. Three defects caught by whole-screen comparison and recorded in §6.11. `DVID3B2`/`LL51` moved to 3a and `CIRCLE`/`CIRCLE2`/`BLINE` to 3c, both because they read workspaces phase 1 does not define. **1c-c is the only slice of phase 1 still open.** |
+| 2026-09-03 | **Slice 1d-0 built, and 1d split into 1d-a/1d-b/1d-c.** The canvas representation spike measured the shipped drawing code instead of trusting ADR-002 §4's assertion, and the assertion did not survive: the C64 build of `PIXEL` writes masks that straddle multicolour pixel boundaries, which one colour index per pixel cannot express. ADR-002 §4 is amended to the four-plane design and gains a §7 of evidence; ADR-005 §1's screenshot dependency is answered from `ylookup`; 1c-c is ordered after 1d-b. §6.10 records it. |
+| 2026-09-03 | **Slice 0a repaired.** `Upstream/elite-source-code-library` was a gitlink with no `.gitmodules`, so a fresh clone got an empty directory and `--check-includes` reported 0/712 — every slice from 1a onward unbuildable off the author's machine. `.gitmodules` added; the tree is a **submodule**, which is what it always was. ADR-001 §5's "vendored ... not a submodule" corrected, along with the `.gitignore` block that claimed the tree was committed. §6.9 records the finding, including that §5's "everything not ours lives under `Upstream/`" omits the 13 committed files in `MasterFile/`. |
 | 2026-09-02 | Opened. Inventory of `MasterFile/`, target architecture, phases 0–6, owner decisions. |
 | 2026-09-03 | **Slice 1c-b built** — the extended token system: the walkers, the case state, letter pairs, nested tokens and randomised variants, with `TKN1`, `TKN2`, `RUTOK` and `MTIN` extracted. Control codes are a declared seam and land with the canvas as slice 1c-c. §6.8 records why a table's size comes from its index range rather than from the next label. |
 | 2026-09-03 | **Slice 1c-a built** — the recursive token printer, 243 of 250 tokens compared character for character in all five capitalisation states. The oracle gained **call traps** (§6.7), which is how output becomes comparable and is what the drawing slices will use too. `QQ18` and `QQ16` extracted; `EliteConfig.h` added for the build constants. |

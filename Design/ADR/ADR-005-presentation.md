@@ -29,9 +29,15 @@ main loop that ran as fast as the scene allowed.
   XOR states inside a step (a ship's old lines erased, new ones drawn) are not shown; the
   original showed them only as flicker. Vsync on; the DXGI flip-model swap chain from
   Frontier's `GpuSwapChain`.
-- **The 256-wide space view's horizontal placement** inside the 320 bitmap and the exact
-  dashboard row split are read off the reference screenshots in slice 0b and become
-  constants in `Canvas.h`.
+- **The 256-wide space view's horizontal placement** inside the bitmap and the dashboard row
+  split. **Answered 2026-09-03, and it never needed the screenshots this clause asked for.**
+  Slice 0b-b was cancelled, and the plan's §6.5 accounted for only two of its dependents; this
+  was the third. Both numbers are in the game's own address table: `ylookup` adds `0x20` to
+  every row, which is a **four character cell left margin**, so the space view's x 0..255
+  occupies cells 4..35 of 40 (two x-units per multicolour pixel, 128 pixels of 160); and
+  `ylookup[144]` is exactly character row 18, so the **space view is rows 0..143** and the
+  dashboard starts at y 144. Measured by `CanvasSpikeTests.cpp`, and they become constants in
+  `Canvas.h`.
 
 ### §2 Sound
 

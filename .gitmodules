@@ -1,0 +1,12 @@
+# The annotated Elite source, referenced rather than copied (Design/ADR-001 section 5).
+#
+# The gitlink at Upstream/elite-source-code-library has existed since the tree was opened, but
+# it was never registered here, so a fresh clone got an empty directory and no URL to recover
+# it from -- and every one of the 712 INCLUDE paths the masters resolve against went missing
+# with it. This file is what makes "git submodule update --init" work.
+#
+# It is pinned to a commit, not a branch, so the masters and the library they include cannot
+# drift apart. Moving the pin is a deliberate act with its own commit.
+[submodule "Upstream/elite-source-code-library"]
+	path = Upstream/elite-source-code-library
+	url = https://github.com/markmoxon/elite-source-code-library.git

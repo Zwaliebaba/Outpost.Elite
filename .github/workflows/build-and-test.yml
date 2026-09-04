@@ -1,0 +1,422 @@
+# Build Debug|x64 and run the unit tests.
+#
+# Three jobs, because they need very different things and two of them can run anywhere:
+#
+#   repo-checks   the coverage ledger and the determinism guard. No compiler, no assembler,
+#                 seconds to run, and it catches the mistakes that are easiest to make.
+#   linux-tests   the same suite, the same oracle, built with g++ through the portable runner
+#                 (Tests/PortableRunner/README.md). Not an authority -- MSVC is -- but it
+#                 finishes in 34s against the windows job's 4m35s on the same commit, so a
+#                 broken push says so while that job is still locating Visual Studio.
+#   windows       the real build and the real suite, which need MSVC and the 6502 oracle. This
+#                 is the one that decides. Builds BOTH configurations and runs the suite in
+#                 Release, because the sweeps are about four times dearer unoptimised.
+#
+# THE ORACLE IS NOT OPTIONAL HERE. A machine without the assembled game skips every oracle test
+# and fails exactly one, OracleIsPresent, by design (ADR-003 section 1, Risk R9) -- so a CI run
+# that did not assemble the game would be permanently red for a reason nobody would keep reading.
+# The windows job therefore builds BeebAsm and assembles the C64 variant before it builds
+# anything of ours.
+#
+# NOTHING DERIVED FROM Upstream/ IS UPLOADED. The assembled blocks and the label map are built
+# from source this project does not own and does not distribute (ADR-001 section 5, Risk R1);
+# they live on the runner and are thrown away with it. The only artefact is the test result file.
+name: Build and test
+
+# Every branch on push, and pull requests only when they come from a fork -- where the push
+# event does not fire for this repository. Without that condition a branch with a PR open gets
+# two identical runs, which is what the first version of this file did.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      toolset:
+        description: "MSVC toolset override, e.g. v143. Empty uses the pinned v145."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The commit this project has actually built and assembled with. BeebAsm is a tool we run, not
+  # a library we link, so it is neither vendored nor committed (Design/Reference/README.md) --
+  # but an unpinned tool is an unreproducible build, so the ref is pinned here instead.
+  BEEBASM_REF: ca2cc5fd2fa3f73da3b0682ad004b2aca99840c3
+
+jobs:
+  repo-checks:
+    name: Repository checks
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Slice 0a's acceptance criterion, and the one that was only ever true on the machine that
+      # wrote it until 2026-09-03 (plan section 6.9). It is here because a fresh clone is exactly
+      # the case it failed.
+      - name: Every INCLUDE resolves
+        run: python tools/inventory.py --check-includes
+
+      # GameLogic must stay deterministic and platform-free (ADR-002, AGENTS.md section 5).
+      - name: GameLogic is deterministic
+        run: python tools/check_gamelogic.py
+
+      # The checker's own detection is checked, so a scanner that quietly stopped scanning fails.
+      - name: The determinism guard still detects violations
+        run: python tools/check_gamelogic.py --self-test
+
+      # Project paths are relative to the PROJECT, not the repository, so a file added from
+      # another directory is one `..` away from an error only a Windows runner sees. This catches
+      # that -- and a source on disk that no project names, which the portable runner's glob would
+      # compile and the Windows build would silently omit.
+      - name: Project files match the tree
+        run: python tools/check_projects.py
+
+      - name: Coverage ledger
+        run: python tools/inventory.py
+
+  # -------------------------------------------------------------------------------------------
+  # The suite on Linux, through Tests/PortableRunner. Same test files, same oracle, g++ instead
+  # of MSVC -- see that directory's README for what the runner is and, more importantly, what it
+  # is not. It is here for speed and for a second compiler's opinion, and it never overrules the
+  # windows job below.
+  # -------------------------------------------------------------------------------------------
+  linux-tests:
+    name: Suite on Ubuntu (portable runner)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    # Measured: 34s end to end with BeebAsm cached, 52s on a cold cache (BeebAsm is 18s of
+    # that). Both assemblies take under a second; the build-and-run step is 26s. The cap is far
+    # above that for the same reason the windows job's is -- a hang should cost one run, not a
+    # day of runner time.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The same pinned commit the windows job builds, so the two legs assemble the same game
+      # from the same source. The cache key carries the OS because the artefact is a native
+      # binary and the two jobs must not share one.
+      - name: Cache BeebAsm
+        id: beebasm-cache
+        uses: actions/cache@v4
+        with:
+          path: Tools-ext/beebasm/out
+          key: beebasm-${{ runner.os }}-${{ env.BEEBASM_REF }}
+
+      - name: Build BeebAsm
+        if: steps.beebasm-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/stardot/beebasm.git Tools-ext/beebasm
+          cd Tools-ext/beebasm
+          git checkout "$BEEBASM_REF"
+          mkdir -p out
+          # BeebAsm's CMakeLists exists, but compiling the sources directly is what the windows
+          # job does and it keeps the two legs saying the same thing.
+          g++ -std=c++14 -O2 -o out/beebasm src/*.cpp
+
+      - name: Assemble the reference build
+        run: python tools/labels.py --assemble
+
+      # Deliberately duplicated from the windows job. Running it on both legs is what turns
+      # "the generated tables match the binaries" into "and the two platforms assemble the same
+      # binaries" -- a divergence between GNU and MSVC BeebAsm builds would otherwise only ever
+      # be visible as an unexplained oracle failure.
+      - name: Generated tables still match the binaries
+        run: python tools/extract_tables.py --check
+
+      - name: Build and run the suite
+        run: Tests/PortableRunner/run_tests.sh
+
+  windows:
+    name: Debug x64 build and tests
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    # windows-latest carries the pinned v145 as of the first run of this workflow. The override
+    # exists for the day it does not, or for a self-hosted machine; the preflight below is what
+    # will tell you which case you are in.
+    runs-on: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
+    # Measured 2026-09-03 at 133 tests: 4m35s end to end, of which the suite itself was 3m27s --
+    # the exhaustive sweeps in an UNOPTIMISED build. The tests now run in Release for that reason;
+    # see the comment on the build steps for what that trades. (The first run of this workflow was
+    # 3m52s with 82 tests and a 1m48s suite, quoted here because it is where the 45-minute cap
+    # came from rather than as a current figure.)
+    # The cap is here so that a genuine hang costs one run rather than six hours of runner time,
+    # and it is deliberately far above the measurement rather than tight against it.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ---------------------------------------------------------------------------------------
+      # Preflight. This step exists so that a toolset mismatch says so, instead of arriving later
+      # as MSB8020 or a screenful of errors inside the STL.
+      # ---------------------------------------------------------------------------------------
+      - name: Locate Visual Studio and check the toolset
+        id: vs
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found -- this runner has no Visual Studio installer." }
+
+          $root = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          if (-not $root) { throw "No Visual Studio installation with MSBuild was found on this runner." }
+          Write-Host "Visual Studio: $root"
+
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
+          if (-not $msbuild) { throw "MSBuild.exe was not found under $root." }
+          Write-Host "MSBuild:       $msbuild"
+
+          $vstest = & $vswhere -latest -products * -find "Common7\IDE\**\vstest.console.exe" | Select-Object -First 1
+          if (-not $vstest) { throw "vstest.console.exe was not found. This runner's Visual Studio lacks the test platform." }
+          Write-Host "vstest:        $vstest"
+
+          # The C++ unit test framework is part of the VS installation, not a package, so a
+          # runner without it fails at the first #include rather than at restore.
+          $unitTest = Join-Path $root "VC\Auxiliary\VS\UnitTest\include\CppUnitTest.h"
+          if (-not (Test-Path $unitTest)) {
+            throw "CppUnitTest.h not found at $unitTest -- install the C++ testing tools component."
+          }
+          Write-Host "CppUnitTest:   $unitTest"
+
+          $requested = "${{ github.event.inputs.toolset }}"
+          if (-not $requested) { $requested = "v145" }
+
+          $installed = Get-ChildItem (Join-Path $root "VC\Tools\MSVC") -Directory -ErrorAction SilentlyContinue |
+                       ForEach-Object { $_.Name } | Sort-Object
+          Write-Host "MSVC toolsets on this runner: $($installed -join ', ')"
+
+          # v143 -> 14.3x, v144 -> 14.4x, v145 -> 14.5x.
+          $prefix = "14." + $requested.Substring(2, 1)
+          $match = $installed | Where-Object { $_.StartsWith($prefix) }
+
+          if (-not $match) {
+            Write-Host "::error::The projects pin PlatformToolset $requested and this runner has none matching $prefix.*"
+            Write-Host "::error::A hosted runner ships whatever its Visual Studio image carries, and that changes."
+            Write-Host "::error::Two ways forward, and neither is silent:"
+            Write-Host "::error::  (1) point the WINDOWS_RUNNER repository variable at a machine that has it, or"
+            Write-Host "::error::  (2) re-run this workflow from the Actions tab with the 'toolset' input set to one"
+            Write-Host "::error::      of the toolsets listed above -- which tests a DIFFERENT compiler from the one"
+            Write-Host "::error::      the project ships, and is a stopgap rather than an answer."
+            throw "PlatformToolset $requested is not installed."
+          }
+
+          "msbuild=$msbuild" >> $env:GITHUB_OUTPUT
+          "vstest=$vstest"   >> $env:GITHUB_OUTPUT
+          "vsroot=$root"     >> $env:GITHUB_OUTPUT
+          "toolset=$requested" >> $env:GITHUB_OUTPUT
+
+      # ---------------------------------------------------------------------------------------
+      # The oracle. Without it the suite is not the suite (ADR-003 section 1).
+      # ---------------------------------------------------------------------------------------
+      - name: Cache BeebAsm
+        id: beebasm-cache
+        uses: actions/cache@v4
+        with:
+          path: Tools-ext/beebasm/out
+          key: beebasm-${{ runner.os }}-${{ env.BEEBASM_REF }}-${{ steps.vs.outputs.toolset }}
+
+      - name: Build BeebAsm
+        if: steps.beebasm-cache.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          git clone https://github.com/stardot/beebasm.git Tools-ext\beebasm || exit /b 1
+          cd Tools-ext\beebasm
+          git checkout %BEEBASM_REF% || exit /b 1
+          mkdir out
+          cd out
+          call "${{ steps.vs.outputs.vsroot }}\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          rem BeebAsm's own CMakeLists is GCC-flavoured, so the sources are compiled directly.
+          rem Design/Reference/README.md carries the same command for a person doing this by hand.
+          cl /nologo /std:c++14 /EHsc /O2 /D_CRT_SECURE_NO_WARNINGS /wd4996 ..\src\*.cpp /Fe:beebasm.exe || exit /b 1
+
+      - name: Assemble the reference build
+        run: python tools/labels.py --assemble
+
+      # A one-way copy with no check goes stale. This is the same comparison TableTests makes,
+      # from the command line, and it fails if a generated file was hand-edited or regenerated
+      # against a different build (plan section 6.6).
+      - name: Generated tables still match the binaries
+        run: python tools/extract_tables.py --check
+
+      # ---------------------------------------------------------------------------------------
+      # The build. The TEST project is built rather than the solution, and that is deliberate:
+      #
+      #   * its ProjectReferences pull in GameLogic and NeuronCore, so this builds everything the
+      #     suite needs and nothing it does not;
+      #   * Outpost.vcxproj is built SEPARATELY, further down, because it needs a NuGet restore
+      #     and the test result is worth having even when the shell does not compile. Until slice
+      #     2e it was not built at all, and the reason given was that restoring the Windows App
+      #     SDK, WebView2 and the AI/ML packages to compile a project with no code in it was
+      #     minutes of fragility for nothing. That stopped being true when the shell was written;
+      #   * building the .vcxproj sidesteps whether this runner's MSBuild understands .slnx.
+      #
+      # SolutionDir is passed so the output lands at x64\Debug\ exactly as a local build puts it,
+      # which is what AGENTS.md section 6 documents and what the oracle's root walk expects.
+      # ---------------------------------------------------------------------------------------
+      # ---------------------------------------------------------------------------------------
+      # TWO BUILDS, AND THE TESTS RUN IN THE OPTIMISED ONE. Measured 2026-09-03: the same 139
+      # tests take 36.4s unoptimised and 9.4s at -O1 under g++, so the exhaustive sweeps are
+      # roughly four times dearer without an optimiser. MSVC Debug is worse again, because
+      # _ITERATOR_DEBUG_LEVEL=2 instruments every std::array index and this suite does almost
+      # nothing else -- the Windows job's test step was 3m27s of its 4m35s.
+      #
+      # So Release runs the suite and Debug is built but not run. What that trades is real and
+      # worth naming: a defect that appears only in a Debug build would not be caught HERE. Two
+      # things stand behind it -- the Debug configuration is still compiled on every push, so it
+      # cannot rot, and the Ubuntu leg runs the whole suite on every push at -O1, which is a
+      # different compiler and a different optimisation level from the one testing below.
+      #
+      # This also closes the standing "no Release leg" item: until now nothing built Release at
+      # all, and Release is the configuration the game would ship in.
+      # ---------------------------------------------------------------------------------------
+      - name: Build Debug x64
+        shell: pwsh
+        run: |
+          & "${{ steps.vs.outputs.msbuild }}" Tests\GameLogicTests\GameLogicTests.vcxproj `
+            /p:Configuration=Debug `
+            /p:Platform=x64 `
+            /p:PlatformToolset=${{ steps.vs.outputs.toolset }} `
+            /p:SolutionDir=$PWD\ `
+            /m /nologo /v:minimal `
+            /flp:logfile=build.log`;errorsonly
+          if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with $LASTEXITCODE" }
+
+      - name: Build Release x64
+        shell: pwsh
+        run: |
+          & "${{ steps.vs.outputs.msbuild }}" Tests\GameLogicTests\GameLogicTests.vcxproj `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:PlatformToolset=${{ steps.vs.outputs.toolset }} `
+            /p:SolutionDir=$PWD\ `
+            /m /nologo /v:minimal `
+            /flp:logfile=build-release.log`;errorsonly
+          if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with $LASTEXITCODE" }
+
+      # AGENTS.md section 6: build.log empty means clean. Parallel warnings scroll the real error
+      # away, so the log is the authority rather than the tail of stdout.
+      - name: Report the build logs
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($log in @("build.log", "build-release.log")) {
+            if (Test-Path $log) {
+              $text = Get-Content $log -Raw
+              if ([string]::IsNullOrWhiteSpace($text)) { Write-Host "$log is empty -- clean build." }
+              else { Write-Host "::group::$log"; Write-Host $text; Write-Host "::endgroup::" }
+            }
+          }
+
+      - name: Run the unit tests (Release)
+        shell: pwsh
+        run: |
+          & "${{ steps.vs.outputs.vstest }}" x64\Release\GameLogicTests.dll `
+            /Platform:x64 /Logger:trx`;LogFileName=GameLogicTests.trx /ResultsDirectory:TestResults
+          if ($LASTEXITCODE -ne 0) { throw "vstest reported failures" }
+
+      # ---------------------------------------------------------------------------------------
+      # The EXECUTABLE. This is the step that turns slice 2e's shell from code written without a
+      # machine to run it on into code a compiler has read.
+      #
+      # It is worth being precise about what it proves and what it does not. It proves the window,
+      # the D3D12 presenter and the composition root COMPILE AND LINK against the real Windows SDK
+      # -- which is most of what goes wrong when several hundred lines of API calls are written
+      # from documentation. It proves nothing about whether the picture is right: a hosted runner
+      # has no display, and creating a device on one is a different question from creating a
+      # window on one. That half stays with the human sign-off ADR-003 section 3 asks for.
+      #
+      # WindowsPackageType=None AND AppxPackage=false build the UNPACKAGED configuration, which
+      # skips MSIX and its signing certificate. BOTH are needed and the first run here proved it:
+      # the project's ApplicationType is "Windows Store", so AppxPackage defaults to true, and the
+      # MSIX targets refuse the pair with "Improper project configuration: WindowsPackageType is
+      # set to None, but AppxPackage is set to true" before compiling a single file. ADR-005's
+      # Option A says the project has to keep working both packaged and unpackaged; this is the
+      # half a runner can check without a certificate.
+      # ---------------------------------------------------------------------------------------
+      - name: Cache the NuGet packages
+        id: nuget-cache
+        uses: actions/cache@v4
+        with:
+          path: packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Outpost/packages.config') }}
+
+      - name: Restore the executable's NuGet packages
+        shell: pwsh
+        run: |
+          # The runner image ships the NuGet CLI; the download is the fallback for a self-hosted
+          # machine that does not, and it is the only unpinned tool in this workflow. A restore
+          # that silently did nothing surfaces later as MSB3202 from the project's
+          # EnsureNuGetPackageBuildImports target, which names a missing .props file rather than
+          # the missing restore -- so this step is deliberately loud about which nuget it used.
+          $found = Get-Command nuget -ErrorAction SilentlyContinue
+          $nuget = if ($found) { $found.Source } else { $null }
+          if (-not $nuget) {
+            Write-Host "NuGet CLI not on PATH -- downloading it."
+            $nuget = Join-Path $PWD "nuget.exe"
+            Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile $nuget
+          }
+          Write-Host "NuGet: $nuget"
+          & $nuget restore Outpost\packages.config -PackagesDirectory packages -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "nuget restore failed with $LASTEXITCODE" }
+
+      - name: Build the executable (Debug and Release)
+        shell: pwsh
+        run: |
+          foreach ($configuration in @("Debug", "Release")) {
+            & "${{ steps.vs.outputs.msbuild }}" Outpost\Outpost.vcxproj `
+              /p:Configuration=$configuration `
+              /p:Platform=x64 `
+              /p:PlatformToolset=${{ steps.vs.outputs.toolset }} `
+              /p:SolutionDir=$PWD\ `
+              /p:WindowsPackageType=None `
+              /p:AppxPackage=false `
+              /m /nologo /v:minimal `
+              /flp:logfile=build-outpost-$configuration.log`;errorsonly
+            if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for Outpost $configuration with $LASTEXITCODE" }
+          }
+
+      - name: Report the executable's build logs
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($log in @("build-outpost-Debug.log", "build-outpost-Release.log")) {
+            if (Test-Path $log) {
+              $text = Get-Content $log -Raw
+              if ([string]::IsNullOrWhiteSpace($text)) { Write-Host "$log is empty -- clean build." }
+              else { Write-Host "::group::$log"; Write-Host $text; Write-Host "::endgroup::" }
+            }
+          }
+
+      # The .trx only. Nothing under Upstream/, Design/Reference/ or Tools-ext/ leaves the runner:
+      # all of it is derived from source this project does not own (ADR-001 section 5).
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/*.trx
+          if-no-files-found: warn

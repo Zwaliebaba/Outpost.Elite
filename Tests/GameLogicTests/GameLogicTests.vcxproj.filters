@@ -18,6 +18,9 @@
     <ClInclude Include="OracleImage.h">
       <Filter>Oracle</Filter>
     </ClInclude>
+    <ClInclude Include="GoldenCanvas.h">
+      <Filter>Oracle</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -46,6 +49,81 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="ExtendedTokenTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="CanvasSpikeTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="CanvasTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="TextPrintTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="GoldenCanvas.cpp">
+      <Filter>Oracle</Filter>
+    </ClCompile>
+    <ClCompile Include="GoldenTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="NumberTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="UniverseTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketScreenTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="StateTokenTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="NameEntryTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="SaveGameTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="SystemScreenTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="SaveStoreTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedKeyTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="StartUpTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="DockingTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedSessionTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="ShellTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\SaveStore.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\Presentation.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\KeyMap.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="ChartTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="CommanderTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="CycleTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
   </ItemGroup>

@@ -21,6 +21,127 @@ void Cpu6502::Reset() noexcept
   sp = 0xFD;
   pc = 0;
   c = z = i = d = v = n = false;
+  cycles = 0;
+  m_crossedPage = false;
+}
+
+/*
+ * The documented NMOS 6502 cycle counts.
+ *
+ * Grouped by addressing mode and by what the instruction does with the address, because that is
+ * how 6502 timing is actually defined: the count is the operand fetches plus the access, and the
+ * exceptions are all one shape -- an instruction that must write cannot start writing until it
+ * knows the address is right, so it spends the extra cycle every time rather than only when the
+ * index carries.
+ *
+ * Three groups therefore look like anomalies and are not:
+ *
+ *   * absolute,X and absolute,Y READS cost 4, and 5 when the index carries into a new page.
+ *   * absolute,X and absolute,Y STORES cost 5 always. Never 4, never 6.
+ *   * read-modify-write absolute,X costs 7 always -- it reads, holds, and writes back.
+ *
+ * The same split applies to (zero page),Y: 5 for a read, 6 for a store.
+ *
+ * Anything not listed returns 0, which means every undocumented opcode. The interpreter does not
+ * execute those, and a test checks that the two sets agree -- an opcode Step ran and this did not
+ * price would be counted as free, which is the one way this table can lie quietly.
+ */
+std::uint8_t Cpu6502::BaseCycles(std::uint8_t _opcode) noexcept
+{
+  switch (_opcode)
+  {
+    // Implied and accumulator. No operand, no memory access.
+    case 0x0A: case 0x2A: case 0x4A: case 0x6A:                        // ASL/ROL/LSR/ROR A
+    case 0x18: case 0x38: case 0x58: case 0x78:                        // CLC SEC CLI SEI
+    case 0xB8: case 0xD8: case 0xF8:                                   // CLV CLD SED
+    case 0x88: case 0xC8: case 0xCA: case 0xE8:                        // DEY INY DEX INX
+    case 0xAA: case 0xA8: case 0x8A: case 0x98:                        // TAX TAY TXA TYA
+    case 0xBA: case 0x9A:                                              // TSX TXS
+    case 0xEA:                                                         // NOP
+    // Immediate. One operand byte, no memory access.
+    case 0x09: case 0x29: case 0x49: case 0x69:                        // ORA AND EOR ADC
+    case 0xA9: case 0xC9: case 0xE9:                                   // LDA CMP SBC
+    case 0xA2: case 0xA0: case 0xE0: case 0xC0:                        // LDX LDY CPX CPY
+    // Branches, NOT TAKEN. Branch() adds one for taking it and one more for crossing a page.
+    case 0x10: case 0x30: case 0x50: case 0x70:                        // BPL BMI BVC BVS
+    case 0x90: case 0xB0: case 0xD0: case 0xF0:                        // BCC BCS BNE BEQ
+      return 2;
+
+    // Zero page.
+    case 0x05: case 0x25: case 0x45: case 0x65:                        // ORA AND EOR ADC
+    case 0xA5: case 0xC5: case 0xE5:                                   // LDA CMP SBC
+    case 0xA6: case 0xA4: case 0xE4: case 0xC4: case 0x24:             // LDX LDY CPX CPY BIT
+    case 0x85: case 0x86: case 0x84:                                   // STA STX STY
+    // Stack pushes, and an absolute jump: three bus cycles each.
+    case 0x48: case 0x08:                                              // PHA PHP
+    case 0x4C:                                                         // JMP abs
+      return 3;
+
+    // Zero page indexed. The index is added in a wasted cycle and wraps within the page, so
+    // there is no crossing to pay for -- which is why these are a flat 4 for reads and writes.
+    case 0x15: case 0x35: case 0x55: case 0x75:                        // ORA AND EOR ADC
+    case 0xB5: case 0xD5: case 0xF5: case 0xB4:                        // LDA CMP SBC LDY
+    case 0x95: case 0x94:                                              // STA STY
+    case 0xB6: case 0x96:                                              // LDX STX  (zero page,Y)
+    // Absolute.
+    case 0x0D: case 0x2D: case 0x4D: case 0x6D:                        // ORA AND EOR ADC
+    case 0xAD: case 0xCD: case 0xED:                                   // LDA CMP SBC
+    case 0xAE: case 0xAC: case 0xEC: case 0xCC: case 0x2C:             // LDX LDY CPX CPY BIT
+    case 0x8D: case 0x8E: case 0x8C:                                   // STA STX STY
+    // Absolute indexed READS. One more when the index carries: see PaysPageCrossPenalty.
+    case 0x1D: case 0x3D: case 0x5D: case 0x7D:                        // ORA AND EOR ADC  abs,X
+    case 0xBD: case 0xDD: case 0xFD: case 0xBC:                        // LDA CMP SBC LDY  abs,X
+    case 0x19: case 0x39: case 0x59: case 0x79:                        // ORA AND EOR ADC  abs,Y
+    case 0xB9: case 0xD9: case 0xF9: case 0xBE:                        // LDA CMP SBC LDX  abs,Y
+    // Stack pulls: one more than a push, for the increment.
+    case 0x28: case 0x68:                                              // PLP PLA
+      return 4;
+
+    // Absolute indexed STORES. Five whether the index carries or not.
+    case 0x9D: case 0x99:                                              // STA abs,X / abs,Y
+    // (zero page),Y READS. One more when the index carries.
+    case 0x11: case 0x31: case 0x51: case 0x71:                        // ORA AND EOR ADC
+    case 0xB1: case 0xD1: case 0xF1:                                   // LDA CMP SBC
+    // Read-modify-write, zero page.
+    case 0x06: case 0x26: case 0x46: case 0x66:                        // ASL ROL LSR ROR
+    case 0xE6: case 0xC6:                                              // INC DEC
+    case 0x6C:                                                         // JMP (indirect)
+      return 5;
+
+    // (zero page,X). The pointer is read from the zero page after the index is added.
+    case 0x01: case 0x21: case 0x41: case 0x61:                        // ORA AND EOR ADC
+    case 0xA1: case 0xC1: case 0xE1: case 0x81:                        // LDA CMP SBC STA
+    case 0x91:                                                         // STA (zero page),Y
+    // Read-modify-write, zero page,X and absolute.
+    case 0x16: case 0x36: case 0x56: case 0x76: case 0xF6: case 0xD6:  // ASL ROL LSR ROR INC DEC
+    case 0x0E: case 0x2E: case 0x4E: case 0x6E: case 0xEE: case 0xCE:  // ASL ROL LSR ROR INC DEC
+    case 0x20: case 0x60: case 0x40:                                   // JSR RTS RTI
+      return 6;
+
+    // Read-modify-write, absolute,X. Seven whether the index carries or not.
+    case 0x1E: case 0x3E: case 0x5E: case 0x7E: case 0xFE: case 0xDE:  // ASL ROL LSR ROR INC DEC
+    case 0x00:                                                         // BRK
+      return 7;
+
+    default:
+      return 0;
+  }
+}
+
+bool Cpu6502::PaysPageCrossPenalty(std::uint8_t _opcode) noexcept
+{
+  switch (_opcode)
+  {
+    // absolute,X reads
+    case 0x1D: case 0x3D: case 0x5D: case 0x7D: case 0xBD: case 0xDD: case 0xFD: case 0xBC:
+    // absolute,Y reads
+    case 0x19: case 0x39: case 0x59: case 0x79: case 0xB9: case 0xD9: case 0xF9: case 0xBE:
+    // (zero page),Y reads
+    case 0x11: case 0x31: case 0x51: case 0x71: case 0xB1: case 0xD1: case 0xF1:
+      return true;
+    default:
+      return false;
+  }
 }
 
 std::uint8_t Cpu6502::StatusByte() const noexcept
@@ -105,7 +226,7 @@ std::uint16_t Cpu6502::AddrIndirectY() noexcept
 {
   const std::uint8_t base = Fetch();
   const std::uint16_t address = static_cast<std::uint16_t>(memory[base] | (memory[static_cast<std::uint8_t>(base + 1)] << 8));
-  return static_cast<std::uint16_t>(address + y);
+  return Indexed(address, y);
 }
 
 /*
@@ -192,12 +313,29 @@ void Cpu6502::Compare(std::uint8_t _register, std::uint8_t _operand) noexcept
   SetNz(static_cast<std::uint8_t>(difference));
 }
 
+/*
+ * A branch costs two cycles, three when it is taken, and four when taking it lands in a
+ * different page from the instruction after it.
+ *
+ * The page compared is the one the pc is in AFTER the offset byte has been fetched, not the one
+ * the opcode sits in. Those differ for a branch that straddles a page boundary, and getting it
+ * wrong would mis-time exactly the loops that sit at the end of a page.
+ */
 void Cpu6502::Branch(bool _condition) noexcept
 {
   const std::int8_t offset = static_cast<std::int8_t>(Fetch());
-  if (_condition)
+  if (!_condition)
   {
-    pc = static_cast<std::uint16_t>(pc + offset);
+    return;
+  }
+
+  const std::uint16_t from = pc;
+  pc = static_cast<std::uint16_t>(pc + offset);
+
+  cycles += 1u;
+  if ((from & 0xFF00u) != (pc & 0xFF00u))
+  {
+    cycles += 1u;
   }
 }
 
@@ -233,16 +371,17 @@ std::uint8_t Cpu6502::RollRight(std::uint8_t _value) noexcept
   return result;
 }
 
-void Cpu6502::AddTrap(std::uint16_t _address)
+void Cpu6502::AddTrap(std::uint16_t _address, TrapExit _exit)
 {
-  for (const std::uint16_t existing : traps)
+  for (Trap& existing : traps)
   {
-    if (existing == _address)
+    if (existing.address == _address)
     {
+      existing.exit = _exit;
       return;
     }
   }
-  traps.push_back(_address);
+  traps.push_back(Trap{ _address, _exit });
 }
 
 bool Cpu6502::Step() noexcept
@@ -251,18 +390,38 @@ bool Cpu6502::Step() noexcept
   // the routine's own RTS would have done, so the caller continues as if it had run.
   if (!traps.empty())
   {
-    for (const std::uint16_t trapped : traps)
+    for (const Trap& trapped : traps)
     {
-      if (pc == trapped)
+      if (pc == trapped.address)
       {
-        trapHits.push_back(TrapHit{ pc, a, x, y });
+        TrapHit hit{ pc, a, x, y, {} };
+        for (std::size_t slot = 0; slot < WATCH_SLOTS; ++slot)
+        {
+          hit.watched[slot] = memory[watch[slot]];
+        }
+        trapHits.push_back(hit);
         const std::uint8_t lo = Pop();
         const std::uint8_t hi = Pop();
         pc = static_cast<std::uint16_t>((lo | (hi << 8)) + 1);
+        if (trapped.exit == TrapExit::ClearCarry)
+        {
+          c = false;
+        }
         return true;
       }
     }
   }
+
+  /*
+   * Cleared defensively, and no test can catch its removal.
+   *
+   * Every opcode that consults this flag reaches it through AddrAbsoluteX, AddrAbsoluteY or
+   * AddrIndirectY, and all three write it before Step reads it -- so a stale value from the
+   * previous instruction is always overwritten and the clear is provably dead. It stays because
+   * that argument holds only while the set of penalty-paying opcodes and the set of helpers that
+   * call Indexed coincide exactly, and an addressing mode added later would break it silently.
+   */
+  m_crossedPage = false;
 
   const std::uint16_t opcodeAddress = pc;
   const std::uint8_t opcode = Fetch();
@@ -512,6 +671,17 @@ bool Cpu6502::Step() noexcept
     default:
       pc = opcodeAddress;
       return false;
+  }
+
+  /*
+   * Priced after the switch, so that an opcode this interpreter does not implement costs nothing
+   * -- it did not run. Branch() has already added its own extras by now, which is fine: this is
+   * a sum, and the order the terms arrive in does not matter.
+   */
+  cycles += BaseCycles(opcode);
+  if (m_crossedPage && PaysPageCrossPenalty(opcode))
+  {
+    cycles += 1u;
   }
 
   return true;

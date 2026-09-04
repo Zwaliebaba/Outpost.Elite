@@ -61,4 +61,102 @@ extern const std::array<std::uint8_t, 625> SYSTEM_TOKEN_TABLE;
 // 6502: MTIN -- for each token that has randomised variants, the first of them.
 extern const std::array<std::uint8_t, 38> VARIANT_BASE_TABLE;
 
+/*
+ * The screen tables (slice 1d).
+ *
+ * Every one is indexed by a value the caller has already masked, and the array length is what
+ * that mask can reach rather than the gap to the next label -- Elite overlaps its tables where
+ * the ranges allow (plan section 6.8).
+ *
+ * The two-bit multicolour pixel is the thing to keep in mind reading these: a byte is four
+ * pixels, so a mask that looks like it covers "one pixel" may cover a bit of two.
+ */
+
+// 6502: TWOS -- one pixel of a line, selected by x within the byte. LOIN part 5 reads it with
+// x AND 7. On this lineage the masks slide by one bit, so half of them straddle two multicolour
+// pixels; that is the game's behaviour, not a porting artefact (ADR-002 section 7).
+extern const std::array<std::uint8_t, 8> PIXEL_MASK_TABLE;
+
+// 6502: TWOS2 -- the mark PIXEL plots, again by x AND 7, and again bit-sliding rather than
+// pixel-aligned.
+extern const std::array<std::uint8_t, 8> DASH_MASK_TABLE;
+
+// 6502: CTWOS2 -- the multicolour-ALIGNED masks, two identical entries per pixel so that a pair
+// of x values share one. CPIX2 and SCAN read it as CTWOS2+2,X with x AND 7, which is why it runs
+// to ten entries rather than eight.
+extern const std::array<std::uint8_t, 10> MULTICOLOUR_MASK_TABLE;
+
+// 6502: DTWOS -- one aligned multicolour pixel by pixel number. Nothing in the C64 build indexes
+// it; it is here because the ledger names it and it is four bytes.
+extern const std::array<std::uint8_t, 4> DASHBOARD_MASK_TABLE;
+
+// 6502: TWFR, TWFL -- a horizontal line's end bytes: TWFR fills from x rightwards to the end of
+// the byte, TWFL fills leftwards from the start of the byte to x. Everything between is 0xFF.
+extern const std::array<std::uint8_t, 8> LINE_RIGHT_MASK_TABLE;
+extern const std::array<std::uint8_t, 8> LINE_LEFT_MASK_TABLE;
+
+// 6502: ylookupl, ylookuph -- the bitmap address of screen row y, which is
+// SCBASE + 0x20 + (y >> 3) * 320. The 0x20 is the space view's four-cell left margin.
+// Canvas computes that arithmetic directly; these are kept so a test can prove the two agree
+// for all 256 rows, and so the oracle has something to compare against.
+extern const std::array<std::uint8_t, 256> ROW_ADDRESS_LOW;
+extern const std::array<std::uint8_t, 256> ROW_ADDRESS_HIGH;
+
+// 6502: celllookl, celllookh -- the colour-cell address of a character row, which is
+// SCBASE + 0x2003 + 40 * row. The three-cell offset is not a margin: CHPR writes the colour
+// after advancing the cursor, so celllook[row] + (XC + 1) lands on cell 4 + XC, the same cell
+// the glyph went into.
+extern const std::array<std::uint8_t, 25> CELL_ADDRESS_LOW;
+extern const std::array<std::uint8_t, 25> CELL_ADDRESS_HIGH;
+
+// 6502: TENS -- the low four bytes of 10^11. The most significant byte is not here: BPRNT
+// subtracts it as an immediate 0x17, so the whole constant is 0x17_4876E800.
+extern const std::array<std::uint8_t, 4> TEN_TO_THE_ELEVENTH;
+
+// 6502: QQ23 -- the market table: base price, economy gradient, base quantity and random mask,
+// four bytes for each of the seventeen goods.
+extern const std::array<std::uint8_t, 68> MARKET_TABLE;
+
+/*
+ * 6502: PRXS -- what each piece of equipment costs, two bytes an item, low byte first, in tenths
+ * of a credit.
+ *
+ * FOURTEEN items, not the twelve the cassette version sells: the C64 build adds the military and
+ * mining lasers at the end. Entry 0 is a placeholder of 1 that EQSHP overwrites before it reads
+ * the table, because the price of fuel depends on how empty the tank is.
+ */
+extern const std::array<std::uint8_t, 28> EQUIPMENT_PRICES;
+
+// 6502: FONT -- 96 characters of eight rows, starting at space. One bit per pixel here; CHPR
+// doubles each bit into a multicolour pixel on the way to the bitmap.
+extern const std::array<std::uint8_t, 768> FONT_DATA;
+
+/*
+ * 6502: NA2% -- the commander the game starts from.
+ *
+ * Eight bytes of name and then the 77-byte data block, and thirteen more because JAMESON copies
+ * ninety-eight rather than the eighty-five the two come to. The extra bytes are copied by the
+ * game and so are extracted by the port; nothing reads them.
+ */
+extern const std::array<std::uint8_t, 98> DEFAULT_COMMANDER;
+
+/*
+ * 6502: TRANTABLE -- the character `TT217` hands back for each internal key number.
+ *
+ * The C64's keyboard produces a MATRIX POSITION, not a character, and `RDKEY` returns that
+ * position: 0 to 64, which is why `ZEKTRAN` clears sixty-five bytes of the key logger. This is
+ * the table that turns one into the other, and it is game data rather than platform policy --
+ * every routine that compares a key against `'1'` or `'Y'` or 13 is comparing against what this
+ * produced, so a shell that invented its own mapping would be playing a different game.
+ *
+ * It is worth knowing that the two halves are BOTH used. `TT102` dispatches on the raw position
+ * (`f8` is 37, not `'8'`); every docked screen reads the translated character through the
+ * `KeySource` seam. So the executable needs the position for one and this table's output for the
+ * other, from the same key press.
+ *
+ * Entry 0 is 0, which is `RDKEY`'s "no key" -- so the table's own identity for "nothing pressed"
+ * is a character the text system will not print.
+ */
+extern const std::array<std::uint8_t, 65> KEY_TRANSLATION;
+
 } // namespace Elite

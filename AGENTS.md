@@ -197,10 +197,55 @@ Repository checks:
 ```
 python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/inventory.py                     # coverage ledger: ported / pending / unaccounted
+python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted
 ```
+
+**Add a new file to its `.vcxproj` AND its `.vcxproj.filters`.** The portable runner globs the
+directory and will happily compile a file no project names; MSVC will not, so the two builds
+quietly test different things. `check_projects.py` fails on that, on a path that does not resolve
+(`Include` is relative to the PROJECT, not to the repository), and on a filters file that has
+drifted from its project.
+
+**Read a routine through `tools/c64_source.py`, not by eye.** The upstream library is one tree
+serving ten versions of Elite, and a routine's C64 form is whatever survives its `IF` / `ELIF` /
+`ELSE` / `ENDIF` conditionals -- which nest, and which include `NOT(...)` blocks that are easy to
+skim past. Porting the BBC Master's version of a routine by mistake is a real failure mode, met
+more than once here.
+
+```
+python tools/c64_source.py --code library/common/main/subroutine/tt25.asm
+```
+
+It evaluates the conditionals against the master build's own symbol values and errors on a symbol
+it does not know rather than guessing FALSE.
 
 **Report what you actually did.** "Builds clean, not run" and "builds, and the arithmetic suite
 is green against the oracle" are different claims. Never imply the second when you did the first.
+
+### CI
+
+[`.github/workflows/build-and-test.yml`](.github/workflows/build-and-test.yml) runs the same
+things on a push. Two jobs, because they need different machines:
+
+- **Repository checks** (Ubuntu, seconds): `inventory.py --check-includes`, `check_gamelogic.py`
+  and its `--self-test`, and the coverage ledger. This is the job that would have caught slice
+  0a's `.gitmodules` gap, because it starts from a fresh clone every time.
+- **Debug x64 build and tests** (Windows): builds BeebAsm at a pinned commit, assembles the
+  reference build, checks the generated tables against it, then builds
+  `Tests\GameLogicTests\GameLogicTests.vcxproj` and runs `vstest.console.exe`.
+
+Two things about that second job are deliberate and are explained in the workflow itself:
+
+- **It assembles the game before it builds ours.** A run without the oracle fails exactly one
+  test by design (Risk R9), so a CI that skipped this step would be permanently red for a reason
+  nobody would keep reading.
+- **It builds the test project, not the solution.** The project references pull in `GameLogic`
+  and `NeuronCore`; `Outpost.vcxproj` is the untouched WinUI 3 template that ADR-005 §5 defers,
+  and restoring the Windows App SDK to compile a project with no `Main.cpp` buys nothing.
+
+**Nothing derived from `Upstream/` leaves the runner.** The assembled blocks, the label map and
+BeebAsm are all built from source this project does not own (ADR-001 §5); the only artefact is
+the test result file. Do not add an upload that changes that.
 
 ---
 
