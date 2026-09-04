@@ -154,6 +154,7 @@
     <ClInclude Include="ShipBlueprint.h" />
     <ClInclude Include="ShipSlot.h" />
     <ClInclude Include="ShipMove.h" />
+    <ClInclude Include="ShipDraw.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="StateTokens.h" />
     <ClInclude Include="MarketScreen.h" />
@@ -211,6 +212,7 @@
     <ClCompile Include="ShipBlueprint.cpp" />
     <ClCompile Include="ShipSlot.cpp" />
     <ClCompile Include="ShipMove.cpp" />
+    <ClCompile Include="ShipDraw.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />

@@ -209,4 +209,37 @@ void MultiplySignedToK(MathWorkspace& _work, std::uint8_t _a) noexcept;
  */
 void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcept;
 
+/*
+ * 6502: DVID3B -- K(3 2 1 0) = P(2 1 0) / (S R Q), sign-magnitude, twenty-four bits over
+ * twenty-four (slice 3b). This is the divide the whole of the projection runs through.
+ *
+ * The trick that makes it work with an EIGHT-bit divider is scaling. Shift the numerator left
+ * until its top byte reaches 64, counting the shifts up in Y; shift the denominator left until
+ * its top bit is set, counting those same shifts back down; divide the two top bytes with LL31's
+ * body; then shift the answer by whatever Y ended up as. Shifting both sides the same way does
+ * not change a ratio, so all the scaling has to do is keep the tally.
+ *
+ * Two things a port gets wrong by reading it as arithmetic, and one that looks like a third and
+ * is not.
+ *
+ * The inlined `LL31` runs exactly eight times because R starts at 254: the seven set bits are a
+ * counter that shifts out of the top, and the loop ends when the zero in bit 0 reaches bit 7.
+ *
+ * The high branch of that division does not compare anything. A numerator whose shift pushed a
+ * bit into the carry is nine bits wide, so it cannot be smaller than an eight-bit denominator,
+ * and the original subtracts and then forces the quotient bit with a `SEC`. Taking that bit from
+ * the subtraction's own carry instead is wrong on every call that reaches the branch.
+ *
+ * And the denominator loop LOOKS as though its shape matters -- the `DEY` is at the top and the
+ * test at the bottom, so it always runs once -- and it does not: A is `S AND %01111111` on entry,
+ * bit 7 is therefore clear, and a while-loop would enter too. The `BMI DV9` commented out above
+ * it in the original source could never have branched either. Rewriting the loop as a while is an
+ * EQUIVALENT mutation and the sweep does not catch it, which is the honest thing to say about it.
+ *
+ * Q MUST BE NON-ZERO. `DVID3B2` guarantees that with an `ORA #1` before it sets Q, and with a
+ * zero denominator the original spins forever waiting for a bit that never arrives -- so this
+ * does too, rather than inventing an answer the game has never seen.
+ */
+void DivideSignedToK(MathWorkspace& _work) noexcept;
+
 } // namespace Elite
