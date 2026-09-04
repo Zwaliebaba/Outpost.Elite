@@ -34,6 +34,18 @@ struct MathWorkspace
   std::uint8_t u = 0;
 
   /*
+   * 6502: CNT -- zero page 170, a counter with FOURTEEN users.
+   *
+   * `LL9` parts 6 and 8, `BLINE`, `CIRCLE2`, `PLS22`, `SUN` parts 1 and 3, `TACTICS`, `DOEXP`,
+   * `PTCLS2`, `SPIN` and `STATUS` all write it and read it back. Every one of them initialises it
+   * before reading, so nothing hands it between units and separate copies would be unobservable
+   * -- which is the argument that kept `XX2` and `K3` apart. Here it costs one field to be right
+   * instead of unobservably-not-wrong, so it lives here rather than in the first workspace that
+   * happened to need it (§6.49).
+   */
+  std::uint8_t cnt = 0;
+
+  /*
    * 6502: XX(1 0) and YY(1 0) -- two sixteen-bit scratch values at zero page 93 and 95.
    *
    * They are here rather than with the stardust, which is where they were first put and where
@@ -153,7 +165,7 @@ void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
 // applies, because that choice falls out of a parity test rather than being a detail.
 
 /// 6502: FMLTU -- A = A * Q / 256, through the logarithm tables.
-[[nodiscard]] std::uint8_t MultiplyByLog(MathWorkspace& _work, std::uint8_t _a) noexcept;
+[[nodiscard]] WideResult MultiplyByLog(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept;
 
 /// 6502: LL28 -- R = 256 * A / Q, saturating at 255 when A is not smaller than Q. Returns the
 /// carry the routine leaves, because its callers branch on it.
@@ -198,9 +210,18 @@ struct SignedSum
 /// 6502: ARCTAN -- the angle of the ratio P over Q, as a byte turn.
 [[nodiscard]] std::uint8_t Arctan(MathWorkspace& _work) noexcept;
 
-/// 6502: FMLTU2 -- A = K * sin(A) / 256, where the sine comes from SNE indexed by the low five
-/// bits of A. It sets Q and falls straight through into FMLTU, so this is that whole path.
-[[nodiscard]] std::uint8_t MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a) noexcept;
+/*
+ * 6502: FMLTU2 -- A = K * sin(A) / 256, where the sine comes from SNE indexed by the low five
+ * bits of A. It sets Q and falls straight through into FMLTU, so this is that whole path.
+ *
+ * The carry is part of the answer, and `CIRCLE2` is the caller that reads it: `JSR FMLTU2 / TAX /
+ * LDA #0 / STA T / LDA CNT / ADC #15`, with no `CLC`. `FMLTU`'s two antilog exits leave it SET
+ * and its zero exit leaves it CLEAR, so it is data-dependent and not a constant like `MULTU`'s
+ * (§6.43). The eighth dropped flag, and again the exhaustive sweep that already existed verified
+ * the wider model for the price of one line (§6.42).
+ */
+[[nodiscard]] WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a,
+                                         bool _carryIn) noexcept;
 
 /*
  * 6502: DVID4 -- an 8.8 fixed-point divide. P comes out as the whole part of A / Q, and R as

@@ -799,20 +799,26 @@ public:
     {
       for (std::uint32_t q = 0; q < 256; ++q)
       {
+        // Both entry carries, because the two zero exits hand the caller's own flag straight
+        // back and `DOEXP` and `CIRCLE2` read it (§6.50).
+        const bool carryIn = ((a + q) & 1u) != 0u;
+
         cpu.memory[zp.q] = static_cast<std::uint8_t>(q);
         cpu.a = static_cast<std::uint8_t>(a);
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
-        cpu.c = false;
+        cpu.c = carryIn;
 
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"FMLTU should return");
 
         MathWorkspace work;
         work.q = static_cast<std::uint8_t>(q);
-        const std::uint8_t result = Elite::MultiplyByLog(work, static_cast<std::uint8_t>(a));
+        const Elite::WideResult result =
+          Elite::MultiplyByLog(work, static_cast<std::uint8_t>(a), carryIn);
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"product", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, result.high, Context(L"product", a, q).c_str());
+        Assert::AreEqual(cpu.c, result.carry, Context(L"carry", a, q).c_str());
       }
     }
   }
@@ -956,20 +962,24 @@ public:
     {
       for (std::uint32_t kValue = 0; kValue < 256; ++kValue)
       {
+        const bool carryIn = ((a + kValue) & 1u) != 0u;
+
         cpu.memory[k] = static_cast<std::uint8_t>(kValue);
         cpu.a = static_cast<std::uint8_t>(a);
         cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
-        cpu.c = false;
+        cpu.c = carryIn;
 
         const auto run = cpu.CallSubroutine(routine, 5'000);
         Assert::IsTrue(run.completed, L"FMLTU2 should return");
 
         MathWorkspace work;
         work.k[0] = static_cast<std::uint8_t>(kValue);
-        const std::uint8_t result = Elite::MultiplyKBySine(work, static_cast<std::uint8_t>(a));
+        const Elite::WideResult result =
+          Elite::MultiplyKBySine(work, static_cast<std::uint8_t>(a), carryIn);
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"product", a, kValue).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, result.high, Context(L"product", a, kValue).c_str());
+        Assert::AreEqual(cpu.c, result.carry, Context(L"carry", a, kValue).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("Q")], work.q, Context(L"Q", a, kValue).c_str());
       }
     }

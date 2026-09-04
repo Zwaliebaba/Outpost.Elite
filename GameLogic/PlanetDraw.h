@@ -69,6 +69,27 @@ struct PlanetSunState
    */
   std::uint8_t yx2M1 = 0;
 
+  /*
+   * 6502: K5, K6, STP and FLAG -- the ball's walk, and they are the planet's state rather than
+   * the arithmetic's.
+   *
+   * `K5` is the segment's start and `K6` its end, four bytes each because both coordinates are
+   * sixteen bits: a circle whose centre is off the screen still has an arc on it. `BLINE` copies
+   * `K6` into `K5` on the way out, so each segment starts where the last one ended.
+   *
+   * `STP` is the step in sixty-fourths of a turn -- 8, 4 or 2, chosen by `CIRCLE` from the
+   * radius, so a small planet is a coarser polygon and nobody can tell. `FLAG` is 255 for the
+   * first segment of a circle, which is the one that has a start but no end yet.
+   *
+   * `STP` and `LSP` are also written by `TT128`, the short-range chart's range circle, which is
+   * slice 2 and already ported: the third outward pointer this slice has found, after `dontclip`
+   * and `Yx2M1`.
+   */
+  std::array<std::uint8_t, 4> k5{};
+  std::array<std::uint8_t, 4> k6{};
+  std::uint8_t stp = 0;
+  std::uint8_t flag = 0;
+
   /// 6502: LSX2,Y and LSY2,Y -- named because the second is the first plus 256.
   [[nodiscard]] std::uint8_t BallX(std::uint8_t _at) const noexcept { return ball[_at]; }
   [[nodiscard]] std::uint8_t BallY(std::uint8_t _at) const noexcept { return ball[BALL_HEAP_SIZE + _at]; }
@@ -147,5 +168,48 @@ void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _m
  */
 [[nodiscard]] bool CircleOffScreen(const PlanetSunState& _state, MathWorkspace& _math,
                                    const Projection& _centre) noexcept;
+
+/*
+ * 6502: BLINE -- one segment of a circle: clip it, remember it, draw it.
+ *
+ * The routine is a straight line with three branches into one tail, not a loop. What makes it
+ * interesting is the HEAP FORMAT it maintains, which is the format `WPLS2` walks: a run of
+ * endpoints with 255 as a break, and a break means the pair after it is a new run's start. A
+ * segment that clips away entirely, or that comes back with an end moved, ends the run -- so a
+ * circle crossing the screen edge is stored as several polylines and erased as several.
+ *
+ * It takes X and the carry because both are operands: `TXA / ADC K4` is the first instruction,
+ * and `PLS22` reaches it with a carry `CIRCLE2` never produces.
+ *
+ * It returns the new `CNT`, which is what both callers loop on.
+ */
+[[nodiscard]] std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state,
+                                        DrawWorkspace& _draw, GeometryWorkspace& _geometry,
+                                        MathWorkspace& _math, ClipState& _clip,
+                                        const Projection& _centre, std::uint8_t _x,
+                                        bool _carryIn) noexcept;
+
+/*
+ * 6502: CIRCLE2 -- walk a whole circle, sixty-four steps at most, `STP` at a time.
+ *
+ * The two coordinates come from the same sine table a quarter-turn apart, which is how one table
+ * gives both, and each is negated for the half of the turn where it points the other way. The
+ * negation is what the `CMP #33` tests are for: 33 rather than 32 because the compare is against
+ * a count that has already been advanced.
+ */
+void DrawBall(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+              GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+              const Projection& _centre, bool _carryIn) noexcept;
+
+/*
+ * 6502: CIRCLE -- is it worth drawing, how coarse should it be, and then draw it.
+ *
+ * Returns the carry: set means `CHKON` refused it and nothing was drawn. The step is 8 for a
+ * radius under 8, 4 under 60 and 2 above -- so a planet gets 32 segments and a distant one gets
+ * 8, and the `LSR A` pair that chooses is two instructions rather than a table.
+ */
+[[nodiscard]] bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw,
+                              GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
+                              const Projection& _centre) noexcept;
 
 } // namespace Elite
