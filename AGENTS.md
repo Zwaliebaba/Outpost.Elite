@@ -199,7 +199,15 @@ python tools/inventory.py --check-includes    # every master INCLUDE resolves in
 python tools/inventory.py                     # coverage ledger: ported / pending / unaccounted
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted
 python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
+python tools/check_docs.py                    # no table row is wider than its header
 ```
+
+**`check_docs.py` exists because a Markdown table drops what it cannot fit.** GitHub renders a
+table with the header's number of columns and discards every cell past it without a word, so a
+row that has grown an extra `| ... |` on the end reads perfectly in the raw file and is missing
+its last paragraphs on the web. Thirteen rows of `Source-Inventory.md` had done that, one of them
+holding nineteen invisible cells (§6.72). **Append a slice's result INSIDE the notes column, with
+`<br><br>` between entries, never as a new cell.**
 
 **`check_outpost.py` exists because the portable runner compiles no part of `Outpost/`.** It is
 Win32 and DirectX 12, so a hosted Linux runner cannot build it -- and that leaves a whole
@@ -254,8 +262,9 @@ is green against the oracle" are different claims. Never imply the second when y
 things on a push. Two jobs, because they need different machines:
 
 - **Repository checks** (Ubuntu, seconds): `inventory.py --check-includes`, `check_gamelogic.py`
-  and its `--self-test`, and the coverage ledger. This is the job that would have caught slice
-  0a's `.gitmodules` gap, because it starts from a fresh clone every time.
+  and its `--self-test`, `check_projects.py`, `check_outpost.py`, `check_docs.py`, and the
+  coverage ledger. This is the job that would have caught slice 0a's `.gitmodules` gap, because
+  it starts from a fresh clone every time.
 - **Debug x64 build and tests** (Windows): builds BeebAsm at a pinned commit, assembles the
   reference build, checks the generated tables against it, then builds
   `Tests\GameLogicTests\GameLogicTests.vcxproj` and runs `vstest.console.exe`.
@@ -295,7 +304,8 @@ the test result file. Do not add an upload that changes that.
 - [ ] Files are PascalCase, flat, unique repo-wide including against the CRT and STL.
 - [ ] Every added/removed/moved file is in both the `.vcxproj` **and** the `.filters`.
 - [ ] `GameLogic` gained no clock, no randomness, no float, no Win32 call.
-- [ ] `Design/Source-Inventory.md` updated for anything you ported; `tools/inventory.py` run.
+- [ ] `Design/Source-Inventory.md` updated for anything you ported, INSIDE the notes column
+      rather than as a new cell; `tools/inventory.py` and `tools/check_docs.py` run.
 - [ ] It builds — Debug at minimum — and you said which configurations you actually built.
 - [ ] Tests for the layer you touched were run, and you said which, and whether the oracle was
       present.
