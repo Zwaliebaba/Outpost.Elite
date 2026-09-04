@@ -8,6 +8,7 @@
 #include "Dashboard.h"
 #include "ShipDraw.h"
 #include "ShipSlot.h"
+#include "TextPrint.h"
 
 namespace Elite
 {
@@ -162,5 +163,27 @@ void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
                    GeometryWorkspace& _geometry, ScreenState& _screen, Bubble& _bubble,
                    const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
                    Compass& _compass, SightEffects& _effects) noexcept;
+
+/*
+ * 6502: TTX66K -- clear the screen and draw whichever furniture this view wants.
+ *
+ * It takes what `wantdials` takes because on two of its paths it IS `wantdials`: `LDA QQ11 / BEQ
+ * wantSTEP / CMP #13 / BNE P%+5` tail-jumps there for the space view and for view 13, and the
+ * rest of the routine is the text screens' version of the same job.
+ *
+ * THREE SEPARATE CLEARS, in three different shapes. Screen RAM's colour bytes go first, 32 cells
+ * a row for 24 rows in steps of 40. Then the BITMAP up to `DLOC%`, page by page through `ZES1k`,
+ * with a partial page and a hand-written last byte to finish it -- the byte `ZES2k` cannot reach
+ * (see above). And then, on the text path only, the rest of the bitmap.
+ *
+ * IT ENDS BY FALLING INTO `BOX2` PAST ITS FIRST INSTRUCTION, so the border it draws is 25
+ * character rows and not 18 (§6.79). `_view` is `QQ11`, and views 2, 64 and 128 are the ones
+ * that get one band of colour cells rather than two.
+ */
+void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
+                       GeometryWorkspace& _geometry, TextState& _text, ScreenState& _screen,
+                       Bubble& _bubble, const FlightState& _flight, const FlightStatus& _status,
+                       std::uint8_t _fuel, Compass& _compass, SightEffects& _effects,
+                       std::uint8_t _view) noexcept;
 
 } // namespace Elite
