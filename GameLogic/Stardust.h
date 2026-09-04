@@ -53,16 +53,13 @@ struct Stardust
   std::uint8_t count = 0;
 
   /*
-   * 6502: XX(1 0), YY(1 0) and newzp -- the scratch the three movers work in.
+   * 6502: newzp -- zero page 186, one intermediate the side views keep across the loop body.
    *
-   * `XX` and `YY` are at 93 and 95 and are the particle's new position while it is being built;
-   * `newzp` is at 186 and holds one intermediate the side views compare against. They are here
-   * rather than in `MathWorkspace` because nothing outside the stardust reads them.
+   * `STARS2` stores the divide's quotient here and compares against it thirty instructions later,
+   * by which time nothing else still holds it. It is the only byte of the movers' scratch that is
+   * genuinely the stardust's: `XX` and `YY` looked like it and are not (§6.45), so they live in
+   * `MathWorkspace` where `EDGES` and the sun can reach them.
    */
-  std::uint8_t xx = 0;
-  std::uint8_t xxNext = 0;
-  std::uint8_t yy = 0;
-  std::uint8_t yyNext = 0;
   std::uint8_t newzp = 0;
 };
 
@@ -92,15 +89,19 @@ struct Stardust
 [[nodiscard]] std::uint8_t MultiplyScaledBy(MathWorkspace& _math, std::uint8_t _x,
                                             std::uint8_t _a) noexcept;
 
-/// 6502: MLS2 -- (S R) = XX(1 0), then `MLS1`.
+/*
+ * 6502: MLS2 -- (S R) = XX(1 0), then `MLS1`. And MUT1 and MUT2 -- R = XX, and S = XX+1 as well,
+ * then `MULT1`.
+ *
+ * These three are in this file and take no `Stardust`, which is not a contradiction. Their only
+ * callers in the whole build are `STARS1` and `STARS6`, so this is where they belong; the bytes
+ * they read are shared with the sun, so `MathWorkspace` is what they take. Where a routine lives
+ * and what it reads are separate questions and the ledger has conflated them seven times now.
+ */
 [[nodiscard]] std::uint8_t MultiplyPositionByRoll(MathWorkspace& _math, const FlightState& _flight,
-                                                  const Stardust& _dust, std::uint8_t _a) noexcept;
-
-/// 6502: MUT1 and MUT2 -- R = XX, and S = XX+1 as well, then `MULT1`.
-[[nodiscard]] std::uint8_t MultiplyPosition(MathWorkspace& _math, const Stardust& _dust,
-                                            std::uint8_t _a) noexcept;
-[[nodiscard]] std::uint8_t MultiplyPositionSigned(MathWorkspace& _math, const Stardust& _dust,
                                                   std::uint8_t _a) noexcept;
+[[nodiscard]] std::uint8_t MultiplyPosition(MathWorkspace& _math, std::uint8_t _a) noexcept;
+[[nodiscard]] std::uint8_t MultiplyPositionSigned(MathWorkspace& _math, std::uint8_t _a) noexcept;
 
 /*
  * 6502: PIX1 -- `ADD`, keep the answer as the particle's new y, and plot it.
