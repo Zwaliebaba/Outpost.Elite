@@ -1315,7 +1315,7 @@ public:
               cpu.memory[dontclip] = off;
               cpu.memory[swap] = seededSwap;
               clip.dontclip = off;
-              clip.swap = seededSwap;
+              draw.swap = seededSwap;
 
               // LL147 is entered with XX15+5 in the accumulator, which is where its only caller
               // leaves it.
@@ -1349,7 +1349,7 @@ public:
                                  (where + L": XX12+" + std::to_wstring(byte)).c_str());
               }
               Assert::AreEqual(cpu.memory[xx13], clip.xx13, (where + L": XX13").c_str());
-              Assert::AreEqual(cpu.memory[swap], clip.swap, (where + L": SWAP").c_str());
+              Assert::AreEqual(cpu.memory[swap], draw.swap, (where + L": SWAP").c_str());
               Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
               Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
               Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
@@ -1366,8 +1366,8 @@ public:
               else
               {
                 ++fitted;
-                swapped += (clip.swap != seededSwap) ? 1u : 0u;
-                untouched += (clip.xx13 == 0u && clip.swap == seededSwap) ? 1u : 0u;
+                swapped += (draw.swap != seededSwap) ? 1u : 0u;
+                untouched += (clip.xx13 == 0u && draw.swap == seededSwap) ? 1u : 0u;
               }
               ++compared;
             }

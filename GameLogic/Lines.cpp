@@ -290,6 +290,7 @@ void DrawShallowLine(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _p2, st
   if (_work.x1 >= _work.x2)
   {
     _swapped = true;
+    _work.swap = static_cast<std::uint8_t>(_work.swap - 1u); // 6502: DEC SWAP
     std::uint8_t swap = _work.x1;
     _work.x1 = _work.x2;
     _work.x2 = swap;
@@ -307,13 +308,31 @@ void DrawShallowLine(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _p2, st
   ScreenPointer sc;
   std::uint8_t y = 0;
 
+  /*
+   * The carry the address setup leaves, which is the FIRST OPERAND of the accumulator below.
+   *
+   * Between the last instruction of either setup and the loop's first `ADC Q2` there is a `TYA`,
+   * an `AND`, a `TAX`, a `BIT`, four table loads, an `LDX`, sometimes an `INX` and a `BEQ` -- and
+   * not one of them touches the carry. So whatever the setup left is what the first step adds,
+   * and on the downward path that is the carry out of `SBC #247`, which is set whenever the
+   * pointer's low byte had reached 248.
+   *
+   * The port started this at false and was right for every line whose start did not reach that,
+   * which is most of them: one pixel of one line in nine lands on a row boundary because of it
+   * (§6.47). It is the third time in this routine and the seventh in the project that an
+   * uncleared 6502 flag has been the defect.
+   */
+  bool carry = false;
+
   if (goingUp)
   {
     // 6502: the AC19 block. SC is the row plus the byte within it, Y the pixel row in the cell.
     const AddResult base = AddWithCarry(static_cast<std::uint8_t>(_work.x1 & 0xF8u),
                                         static_cast<std::uint8_t>(rowAddress & 0xFFu), false);
     sc.low = base.value;
-    sc.high = AddWithCarry(static_cast<std::uint8_t>(rowAddress >> 8), 0, base.carry).value;
+    const AddResult top = AddWithCarry(static_cast<std::uint8_t>(rowAddress >> 8), 0, base.carry);
+    sc.high = top.value;
+    carry = top.carry;
     y = static_cast<std::uint8_t>(_work.y1 & 0x07u);
   }
   else
@@ -332,7 +351,8 @@ void DrawShallowLine(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _p2, st
     {
       ++sc.high;
     }
-    if (!sc.Subtract(0xF7u, false))
+    carry = sc.Subtract(0xF7u, false);
+    if (!carry)
     {
       --sc.high;
     }
@@ -360,8 +380,6 @@ void DrawShallowLine(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _p2, st
     // pixels, because DEX wraps.
     return;
   }
-
-  bool carry = false; // 6502: the CLC at LIlog6, before either direction starts
 
   for (;;)
   {
@@ -440,6 +458,7 @@ void DrawSteepLine(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _p2, std:
   if (_work.y1 < _work.y2)
   {
     _swapped = true;
+    _work.swap = static_cast<std::uint8_t>(_work.swap - 1u); // 6502: DEC SWAP
     std::uint8_t swap = _work.x1;
     _work.x1 = _work.x2;
     _work.x2 = swap;
@@ -563,6 +582,7 @@ void DrawLine(Canvas& _canvas, DrawWorkspace& _work) noexcept
   // subtraction below has no SEC in front of it.
   std::uint8_t s2 = 0x80;
   bool swapped = false;
+  _work.swap = 0;
 
   // 6502: LI1, LI2 -- the two spans, as magnitudes. Negating with EOR #255 / ADC #1 works
   // because the branch that reaches it left carry clear.
