@@ -90,7 +90,7 @@ jobs:
       # Win32 and DirectX 12. So renaming a GameLogic type breaks the app and every Linux check
       # still passes -- which is how `DockedShip` becoming `FlightStatus` reached the Windows job.
       # This checks the names; only the Windows build can check the signatures.
-      - name: The app still uses names GameLogic has
+      - name: The app still uses names GameLogic has, with the right argument counts
         run: python tools/check_outpost.py
 
       - name: Coverage ledger
