@@ -179,4 +179,22 @@ extern const std::array<std::uint8_t, 65> KEY_TRANSLATION;
  */
 extern const std::array<std::uint8_t, 8073> SHIP_DATA;
 
+/*
+ * 6502: scacol -- what colour a ship's blip is on the scanner, by ship type (slice 3d).
+ *
+ * The colours are FOUR MULTICOLOUR PIXELS EACH and not colour numbers, which is why they read as
+ * 0x55, 0xAA, 0xFF and 0x5A: `SCAN` ANDs the entry with the pixel mask, so a "colour" here is a
+ * bit pattern that survives the AND. `RED` is %01 four times, `YELLOW` %10 four times, `GREEN`
+ * %11 four times, and `WHITE` is %01 %01 %10 %10 -- the striped blip a Thargoid gets.
+ *
+ * THREE OF THE NAMES ARE THE SAME COLOUR. `BLUE`, `CYAN` and `MAG` are all defined as `YELLOW`
+ * on this build, so the escape pod, the Cobra and the Python come out the same yellow the
+ * listing's three different names suggest they would not. Twenty-one of the thirty-four entries
+ * are 0xAA for that reason.
+ *
+ * Entry 0 is the empty slot and entry 32 is the Cougar, both zero -- a blip ANDed to nothing,
+ * which is a ship that leaves no mark. Sized by what can index it, as `MANY` is.
+ */
+extern const std::array<std::uint8_t, 34> SCANNER_COLOUR_TABLE;
+
 } // namespace Elite

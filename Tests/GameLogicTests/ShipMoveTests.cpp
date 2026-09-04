@@ -4,11 +4,13 @@
 #include "OracleImage.h"
 
 #include "Arith.h"
+#include "Canvas.h"
 #include "ShipBlueprint.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -616,21 +618,25 @@ public:
  * each pass -- and a port that was wrong by one in a byte nothing immediately reads would agree
  * for one iteration and diverge over twenty.
  *
- * `SCAN` and `TACTICS` are trapped, and counted on both sides: they belong to slice 3d and phase
- * 4, and a port that called them a different number of times would be wrong about the loop even
- * if every byte of INWK agreed.
+ * `TACTICS` is trapped and counted on both sides: it is phase 4's, and a port that ran it a
+ * different number of times would be wrong about the loop even if every byte of INWK agreed.
+ *
+ * `SCAN` IS NO LONGER TRAPPED, because slice 3d-a built it. The count it used to be asserted
+ * against is replaced by the SCREEN, which says more: `MVEIT` scans an ordinary ship twice a
+ * pass and the ship has MOVED in between, so the two blips usually land in different places and
+ * both survive the EOR. A canvas that agrees byte for byte therefore proves how many times the
+ * scanner ran, where each blip went, and what colour it was -- the count only ever proved the
+ * first.
  */
 namespace
 {
-/// Counts the two seams instead of performing them, so the comparison covers WHETHER they were
-/// reached as well as what the arithmetic did.
+/// Counts the remaining seam instead of performing it, so the comparison covers WHETHER phase
+/// 4's AI was reached as well as what the arithmetic did.
 class CountingEffects final : public Elite::ShipEffects
 {
 public:
-  void UpdateScanner(Elite::ShipBlock&) override { ++scans; }
   void RunTactics(Elite::ShipBlock&) override { ++tactics; }
 
-  std::uint32_t scans = 0;
   std::uint32_t tactics = 0;
 };
 } // namespace
@@ -648,9 +654,15 @@ public:
     const OracleImage& oracle = OracleImage::Instance();
     const std::uint16_t inwk = oracle.Label("INWK");
     const std::uint16_t mveit = oracle.Label("MVEIT");
-    const std::uint16_t scan = oracle.Label("SCAN");
     const std::uint16_t tactics = oracle.Label("TACTICS");
     const std::uint16_t xx0 = oracle.Label("XX0");
+    const std::uint16_t qq11 = oracle.Label("QQ11");
+
+    // 6502: SCBASE, which is an assembler constant rather than a label -- ylookup's first entry
+    // is it plus the space view's four-cell left margin.
+    const Cpu6502 image = oracle.Fresh();
+    const std::uint16_t screenBase = static_cast<std::uint16_t>(
+      (image.memory[oracle.Label("ylookupl")] | (image.memory[oracle.Label("ylookuph")] << 8)) - 0x20);
 
     struct Case
     {
@@ -665,34 +677,38 @@ public:
       std::uint8_t beta;
 
       /*
-       * How often each seam is reached in twenty iterations, and these ARE the behaviour rather
-       * than a side effect. Two scans a pass is the ordinary case -- `MV30` and the tail's
-       * `JMP SCAN`; one is a ship that took a short path; none is the sun.
+       * How often tactics is reached in twenty iterations, and it IS the behaviour rather than a
+       * side effect: a missile thinks every pass and everything else one pass in eight.
        */
-      std::uint32_t scans;
       std::uint32_t tactics;
     };
 
     const std::vector<Case> CASES = {
-      { "a Cobra, still, nobody turning", 11, 0, 0, 0, 0, 0, 0, 0, 40, 0 },
-      { "a Cobra under way", 11, 0, 0, 20, 0, 0, 0, 0, 40, 0 },
-      { "the player rolling", 11, 0, 0, 20, 0, 0, 12, 0, 40, 0 },
-      { "the player pitching", 11, 0, 0, 20, 0, 0, 0, 9, 40, 0 },
-      { "both, the other way", 11, 0, 0, 20, 0, 0, 0x8C, 0x89, 40, 0 },
-      { "the ship rolling too", 11, 40, 0, 20, 0, 0, 5, 3, 40, 0 },
-      { "and pitching", 11, 40, 33, 20, 0, 0, 5, 3, 40, 0 },
-      { "roll pinned at 127, which does not decay", 11, 127, 127, 20, 0, 0, 5, 3, 40, 0 },
-      { "at full speed, so the clamp bites", 11, 20, 20, 255, 0, 0, 4, 4, 40, 0 },
-      { "a HOSTILE ship, so tactics run", 11, 10, 10, 20, 0, 0x80, 4, 4, 40, 3 },
-      { "a MISSILE, which thinks every pass", 1, 10, 10, 30, 0, 0x80, 4, 4, 40, 20 },
-      { "an EXPLODING ship, which does not move", 11, 40, 40, 20, 0x20, 0x80, 6, 6, 20, 0 },
-      { "a dead one", 11, 40, 40, 20, 0x80, 0x80, 6, 6, 20, 0 },
-      { "the PLANET, which goes through MV40", 128, 0, 0, 0, 0, 0, 7, 5, 20, 0 },
-      { "the SUN, which skips the orientation", 129, 0, 0, 0, 0, 0, 7, 5, 0, 0 },
-      { "an Anaconda, whose maximum speed differs", 14, 20, 20, 200, 0, 0, 3, 3, 40, 0 },
+      { "a Cobra, still, nobody turning", 11, 0, 0, 0, 0, 0, 0, 0, 0 },
+      { "a Cobra under way", 11, 0, 0, 20, 0, 0, 0, 0, 0 },
+      { "the player rolling", 11, 0, 0, 20, 0, 0, 12, 0, 0 },
+      { "the player pitching", 11, 0, 0, 20, 0, 0, 0, 9, 0 },
+      { "both, the other way", 11, 0, 0, 20, 0, 0, 0x8C, 0x89, 0 },
+      { "the ship rolling too", 11, 40, 0, 20, 0, 0, 5, 3, 0 },
+      { "and pitching", 11, 40, 33, 20, 0, 0, 5, 3, 0 },
+      { "roll pinned at 127, which does not decay", 11, 127, 127, 20, 0, 0, 5, 3, 0 },
+      { "at full speed, so the clamp bites", 11, 20, 20, 255, 0, 0, 4, 4, 0 },
+      { "a HOSTILE ship, so tactics run", 11, 10, 10, 20, 0, 0x80, 4, 4, 3 },
+      { "a MISSILE, which thinks every pass", 1, 10, 10, 30, 0, 0x80, 4, 4, 20 },
+      { "an EXPLODING ship, which does not move", 11, 40, 40, 20, 0x20, 0x80, 6, 6, 0 },
+      { "a dead one", 11, 40, 40, 20, 0x80, 0x80, 6, 6, 0 },
+      { "the PLANET, which goes through MV40", 128, 0, 0, 0, 0, 0, 7, 5, 0 },
+      { "the SUN, which skips the orientation", 129, 0, 0, 0, 0, 0, 7, 5, 0 },
+      { "an Anaconda, whose maximum speed differs", 14, 20, 20, 200, 0, 0, 3, 3, 0 },
     };
-
     constexpr int ITERATIONS = 20;
+
+    /*
+     * §6.39's counter, because two blank screens agree: the scanner has to have DRAWN something
+     * for the comparison above to be evidence of anything, and the ships whose state byte says
+     * they are not on the scanner have to draw nothing.
+     */
+    std::uint32_t blips = 0;
 
     for (const Case& item : CASES)
     {
@@ -704,10 +720,15 @@ public:
       Elite::FlightState flight;
       CountingEffects effects;
 
-      // 6502: the two seams, trapped so the interpreter returns instead of running slice 3d's
-      // dashboard and phase 4's AI.
-      cpu.AddTrap(scan);
+      Elite::Canvas canvas;
+      Elite::DrawWorkspace draw;
+
+      // 6502: the one seam left, trapped so the interpreter returns instead of running phase 4's
+      // AI. `SCAN` runs on both sides now and the screens are compared instead (§6.61).
       cpu.AddTrap(tactics);
+
+      // 6502: QQ11 -- the space view, so `SCAN` has a dashboard to draw on.
+      cpu.memory[qq11] = 0;
 
       // A whole ship: position, orientation, speed, roll, pitch and flags, the same on both sides.
       for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
@@ -717,8 +738,18 @@ public:
         work[offset] = value;
       }
 
-      const std::uint8_t FIXED[][2] = { { 27u, item.speed }, { 28u, 0u },   { 29u, item.roll },
-                                        { 30u, item.pitch }, { 31u, item.exploding },
+      /*
+       * The position, chosen so the ship is ON the scanner rather than off the end of it: the
+       * pattern above puts bit 6 in every high byte, which `SCAN`'s `AND #%11000000` rejects, so
+       * with it the screen comparison would be a comparison of two blank screens.
+       *
+       * `_work[31]`'s bit 4 comes from the case's own `exploding` byte, so the ships that the
+       * game does not scan still are not scanned.
+       */
+      const std::uint8_t FIXED[][2] = { { 1u, 0x12u },        { 2u, 0x00u },  { 4u, 0x21u },
+                                        { 5u, 0x80u },        { 7u, 0x33u },  { 8u, 0x00u },
+                                        { 27u, item.speed },  { 28u, 0u },    { 29u, item.roll },
+                                        { 30u, item.pitch },  { 31u, static_cast<std::uint8_t>(item.exploding | 0x10u) },
                                         { 32u, item.hostile } };
       for (const auto& set : FIXED)
       {
@@ -766,7 +797,6 @@ public:
        * what makes TIDY fire on one pass in sixteen and TACTICS on one in eight rather than never
        * or always.
        */
-      std::uint32_t scans = 0;
       std::uint32_t tacticsRuns = 0;
       for (int iteration = 0; iteration < ITERATIONS; ++iteration)
       {
@@ -780,7 +810,7 @@ public:
         Assert::IsTrue(run.completed,
                        (where + L": MVEIT returned on iteration " + std::to_wstring(iteration)).c_str());
 
-        Elite::MoveShip(work, math, flight, effects, blueprint);
+        Elite::MoveShip(canvas, draw, work, math, flight, effects, blueprint, 0u);
 
         for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
         {
@@ -789,21 +819,39 @@ public:
                             + std::to_wstring(offset))
                              .c_str());
         }
+
+        /*
+         * And the screen, which is where `SCAN` went. It is compared on every iteration rather
+         * than once at the end because everything here is EOR: two errors that cancel would
+         * leave the last frame agreeing with a port that drew the blips in the wrong places.
+         */
+        const std::span<const std::uint8_t> ours = canvas.Screen();
+        for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
+        {
+          const std::uint8_t expected = cpu.memory[static_cast<std::uint16_t>(screenBase + offset)];
+          if (expected != ours[offset])
+          {
+            Assert::Fail((where + L": iteration " + std::to_wstring(iteration) + L", screen offset "
+                          + std::to_wstring(offset) + L" -- game has " + std::to_wstring(expected)
+                          + L", port has " + std::to_wstring(ours[offset]))
+                           .c_str());
+          }
+          blips += (ours[offset] != 0u) ? 1u : 0u;
+        }
       }
-      (void)scans;
       (void)tacticsRuns;
 
       /*
-       * The seam counts, which are the behaviour and not bookkeeping. An ordinary ship is scanned
-       * TWICE a pass -- once at `MV30` and once by the tail's `JMP SCAN` -- while an exploding one
-       * is scanned once and then has its "on the scanner" bit cleared instead, and the SUN is
-       * never scanned at all because `MV40` skips the first and its early return skips the second.
-       * The tactics counts are the loop spreading: a missile thinks every pass and everything else
-       * one pass in eight, which with this slot lands three times in twenty.
+       * The tactics count, which is the loop spreading: a missile thinks every pass and
+       * everything else one pass in eight, which with this slot lands three times in twenty.
        */
-      Assert::AreEqual(item.scans, effects.scans, (where + L": how often the scanner was reached").c_str());
       Assert::AreEqual(item.tactics, effects.tactics, (where + L": how often tactics ran").c_str());
     }
+
+    Assert::IsTrue(blips > 0u, L"and the scanner actually drew something to compare");
+    Logger::WriteMessage(("MVEIT: " + std::to_string(blips) + " marked scanner bytes over "
+                          + std::to_string(CASES.size()) + " ships")
+                           .c_str());
   }
 };
 

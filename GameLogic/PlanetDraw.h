@@ -4,6 +4,7 @@
 #include "Canvas.h"
 #include "ShipDraw.h"
 #include "Rng.h"
+#include "Scanner.h"
 #include "ShipSlot.h"
 #include "Stardust.h"
 
@@ -369,25 +370,22 @@ void SeedStardustField(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, R
  * nothing on screen and nothing firing. Then `LSP`, `LSX2` and `LSY2` are reset and it falls
  * into `FLFLLS`.
  *
- * `SCAN` is the seam: the scanner is slice 3d's, and this is the one thing in the chain that
- * reaches outside it.
+ * IT WRITES `TYPE` AND `XSAV` ITSELF, before each `JSR SCAN`, which is why the flight state is
+ * an argument: `SCAN` reads `TYPE` as a global and `WPSHPS` is what sets it. That was a seam
+ * until 3d-a -- `BubbleEffects::ScanShip(const ShipBlock&, std::uint8_t)`, one of the two
+ * signatures that disagreed about the same routine (§6.59) -- and the seam is gone because the
+ * scanner is built.
+ *
+ * `_view` is `QQ11`. `WPSHPS` is reachable with a chart on screen, and `SCAN` returns at once
+ * when it is, so every ship keeps whatever blip it had; the bit 3, 4 and 6 clearing below still
+ * happens. The port has no single home for `QQ11` yet -- 3d-d's flight loop is where it gets
+ * one -- so it is passed.
  */
-class BubbleEffects
-{
-public:
-  virtual ~BubbleEffects() = default;
-
-  /// 6502: SCAN -- put a ship's blip on the scanner, or take it off. It plots by EOR like
-  /// everything else, so the same call does both.
-  virtual void ScanShip(const ShipBlock& _work, std::uint8_t _type) = 0;
-};
-
-void ClearAllShips(PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
-                   BubbleEffects& _effects) noexcept;
+void ClearAllShips(Canvas& _canvas, DrawWorkspace& _draw, PlanetSunState& _state, Bubble& _bubble,
+                   ShipBlock& _work, FlightState& _flight, std::uint8_t _view) noexcept;
 
 void SeedStardustAndClearShips(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng,
                                PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
-                               BubbleEffects& _effects, std::uint8_t _viewType,
-                               bool _carryIn) noexcept;
+                               FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept;
 
 } // namespace Elite
