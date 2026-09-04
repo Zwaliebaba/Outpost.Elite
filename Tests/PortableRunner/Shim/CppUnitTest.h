@@ -59,8 +59,7 @@ inline std::string ShimNarrow(const wchar_t* _wide)
  * this exists: nearly every assertion in the suite compares std::uint8_t, and `operator<<` would
  * report an expected 10 as a line break.
  */
-template <typename T>
-inline std::string ShimShow(const T& _value)
+template <typename T> inline std::string ShimShow(const T& _value)
 {
   std::ostringstream out;
   if constexpr (sizeof(T) == 1 && !std::is_same_v<T, char>)
@@ -77,115 +76,109 @@ inline std::string ShimShow(const T& _value)
 namespace Microsoft::VisualStudio::CppUnitTestFramework
 {
 
-class Logger
-{
-public:
-  static void WriteMessage(const char* _message)
+  class Logger
   {
-    std::fputs(_message, stdout);
-    std::fputc('\n', stdout);
-  }
-};
-
-class Assert
-{
-public:
-  template <typename T>
-  static void AreEqual(const T& _expected, const T& _actual, const wchar_t* _message = nullptr)
-  {
-    if (!(_expected == _actual))
+  public:
+    static void WriteMessage(const char* _message)
     {
-      throw ShimFailure("AreEqual: expected " + ShimShow(_expected) + " actual " + ShimShow(_actual) + " -- "
-                        + ShimNarrow(_message));
+      std::fputs(_message, stdout);
+      std::fputc('\n', stdout);
     }
-  }
+  };
 
-  /*
-   * The floating-point form, which is a DIFFERENT assertion rather than a convenience: MSVC's
-   * CppUnitTest declares AreEqual(double, double, double, const wchar_t*) and compares the
-   * magnitude of the difference against the tolerance. Without it here a test that MSVC compiles
-   * does not build under this runner, which is the one thing the shim exists to prevent.
-   *
-   * Written over `double` rather than templated so that a mixed call -- an int expected against a
-   * double actual, say -- converts and compiles exactly as it does under MSVC, instead of failing
-   * to deduce T and sending the author off to write the test differently for the two runners.
-   */
-  static void AreEqual(double _expected, double _actual, double _tolerance, const wchar_t* _message = nullptr)
+  class Assert
   {
-    const double difference = _expected - _actual;
-    const double magnitude = (difference < 0.0) ? -difference : difference;
-
-    // A NaN on either side fails: every comparison against it is false, so `magnitude > tolerance`
-    // would quietly pass one. Asking whether the difference is within tolerance, rather than
-    // whether it is outside it, is what makes that the failing answer.
-    if (!(magnitude <= _tolerance))
+  public:
+    template <typename T> static void AreEqual(const T& _expected, const T& _actual, const wchar_t* _message = nullptr)
     {
-      throw ShimFailure("AreEqual: expected " + ShimShow(_expected) + " actual " + ShimShow(_actual)
-                        + " tolerance " + ShimShow(_tolerance) + " -- " + ShimNarrow(_message));
+      if (!(_expected == _actual))
+      {
+        throw ShimFailure("AreEqual: expected " + ShimShow(_expected) + " actual " + ShimShow(_actual) + " -- " + ShimNarrow(_message));
+      }
     }
-  }
 
-  static void AreEqual(float _expected, float _actual, float _tolerance, const wchar_t* _message = nullptr)
-  {
-    AreEqual(static_cast<double>(_expected), static_cast<double>(_actual), static_cast<double>(_tolerance),
-             _message);
-  }
-
-  template <typename T>
-  static void AreNotEqual(const T& _expected, const T& _actual, const wchar_t* _message = nullptr)
-  {
-    if (_expected == _actual)
+    /*
+     * The floating-point form, which is a DIFFERENT assertion rather than a convenience: MSVC's
+     * CppUnitTest declares AreEqual(double, double, double, const wchar_t*) and compares the
+     * magnitude of the difference against the tolerance. Without it here a test that MSVC compiles
+     * does not build under this runner, which is the one thing the shim exists to prevent.
+     *
+     * Written over `double` rather than templated so that a mixed call -- an int expected against a
+     * double actual, say -- converts and compiles exactly as it does under MSVC, instead of failing
+     * to deduce T and sending the author off to write the test differently for the two runners.
+     */
+    static void AreEqual(double _expected, double _actual, double _tolerance, const wchar_t* _message = nullptr)
     {
-      throw ShimFailure("AreNotEqual: both " + ShimShow(_expected) + " -- " + ShimNarrow(_message));
-    }
-  }
+      const double difference = _expected - _actual;
+      const double magnitude = (difference < 0.0) ? -difference : difference;
 
-  /*
-   * The pointer pair, which MSVC's CppUnitTest has and this shim did not.
-   *
-   * Templated on the pointee for the same reason MSVC templates them: `IsNull(p)` has to take any
-   * pointer type without the caller casting, and a `const void*` parameter would accept an
-   * integer zero as well, which is a different assertion.
-   */
-  template <typename T>
-  static void IsNull(const T* _actual, const wchar_t* _message = nullptr)
-  {
-    if (_actual != nullptr)
+      // A NaN on either side fails: every comparison against it is false, so `magnitude > tolerance`
+      // would quietly pass one. Asking whether the difference is within tolerance, rather than
+      // whether it is outside it, is what makes that the failing answer.
+      if (!(magnitude <= _tolerance))
+      {
+        throw ShimFailure("AreEqual: expected " + ShimShow(_expected) + " actual " + ShimShow(_actual) + " tolerance " +
+                          ShimShow(_tolerance) + " -- " + ShimNarrow(_message));
+      }
+    }
+
+    static void AreEqual(float _expected, float _actual, float _tolerance, const wchar_t* _message = nullptr)
     {
-      throw ShimFailure("IsNull: got a pointer -- " + ShimNarrow(_message));
+      AreEqual(static_cast<double>(_expected), static_cast<double>(_actual), static_cast<double>(_tolerance), _message);
     }
-  }
 
-  template <typename T>
-  static void IsNotNull(const T* _actual, const wchar_t* _message = nullptr)
-  {
-    if (_actual == nullptr)
+    template <typename T> static void AreNotEqual(const T& _expected, const T& _actual, const wchar_t* _message = nullptr)
     {
-      throw ShimFailure("IsNotNull: got nullptr -- " + ShimNarrow(_message));
+      if (_expected == _actual)
+      {
+        throw ShimFailure("AreNotEqual: both " + ShimShow(_expected) + " -- " + ShimNarrow(_message));
+      }
     }
-  }
 
-  static void IsTrue(bool _condition, const wchar_t* _message = nullptr)
-  {
-    if (!_condition)
+    /*
+     * The pointer pair, which MSVC's CppUnitTest has and this shim did not.
+     *
+     * Templated on the pointee for the same reason MSVC templates them: `IsNull(p)` has to take any
+     * pointer type without the caller casting, and a `const void*` parameter would accept an
+     * integer zero as well, which is a different assertion.
+     */
+    template <typename T> static void IsNull(const T* _actual, const wchar_t* _message = nullptr)
     {
-      throw ShimFailure("IsTrue -- " + ShimNarrow(_message));
+      if (_actual != nullptr)
+      {
+        throw ShimFailure("IsNull: got a pointer -- " + ShimNarrow(_message));
+      }
     }
-  }
 
-  static void IsFalse(bool _condition, const wchar_t* _message = nullptr)
-  {
-    if (_condition)
+    template <typename T> static void IsNotNull(const T* _actual, const wchar_t* _message = nullptr)
     {
-      throw ShimFailure("IsFalse -- " + ShimNarrow(_message));
+      if (_actual == nullptr)
+      {
+        throw ShimFailure("IsNotNull: got nullptr -- " + ShimNarrow(_message));
+      }
     }
-  }
 
-  [[noreturn]] static void Fail(const wchar_t* _message = nullptr)
-  {
-    throw ShimFailure("Fail -- " + ShimNarrow(_message));
-  }
-};
+    static void IsTrue(bool _condition, const wchar_t* _message = nullptr)
+    {
+      if (!_condition)
+      {
+        throw ShimFailure("IsTrue -- " + ShimNarrow(_message));
+      }
+    }
+
+    static void IsFalse(bool _condition, const wchar_t* _message = nullptr)
+    {
+      if (_condition)
+      {
+        throw ShimFailure("IsFalse -- " + ShimNarrow(_message));
+      }
+    }
+
+    [[noreturn]] static void Fail(const wchar_t* _message = nullptr)
+    {
+      throw ShimFailure("Fail -- " + ShimNarrow(_message));
+    }
+  };
 
 } // namespace Microsoft::VisualStudio::CppUnitTestFramework
 
