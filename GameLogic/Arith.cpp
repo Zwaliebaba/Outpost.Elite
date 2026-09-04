@@ -507,12 +507,14 @@ bool DivideToR(MathWorkspace& _work, std::uint8_t _a) noexcept
   return DivideByLogarithms(_work, _a);
 }
 
-std::uint8_t CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
+SignedSum CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   if (((_a ^ _work.s) & 0x80u) == 0u)
   {
-    // Signs agree, so the two parts add.
-    return AddWithCarry(_work.q, _work.r, false).value;
+    // Signs agree, so the two parts add -- and this is the ONLY path that can return a set
+    // carry, which is what makes the flag mean "overflowed".
+    const AddResult sum = AddWithCarry(_work.q, _work.r, false);
+    return SignedSum{ sum.value, sum.carry };
   }
 
   // 6502: LL39 -- signs differ, so they subtract, and a borrow means the answer changed sign.
@@ -521,12 +523,18 @@ std::uint8_t CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
 
   if (difference < 0x100u)
   {
-    return result;
+    // The original's `CLC` here looks dead -- the `SBC` above it left the carry set, and nothing
+    // in this branch reads it. It is not dead: it is what stops a subtraction being reported as
+    // an overflow.
+    return SignedSum{ result, false };
   }
 
-  // 6502: LL40 -- flip the sign held in S and negate the magnitude.
+  // 6502: LL40 -- flip the sign held in S and negate the magnitude. The negation's own carry can
+  // only be set for a zero magnitude, which an underflow cannot produce, so this exit is always
+  // carry clear.
   _work.s = static_cast<std::uint8_t>(_work.s ^ 0x80u);
-  return AddWithCarry(static_cast<std::uint8_t>(result ^ 0xFFu), 1u, false).value;
+  const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(result ^ 0xFFu), 1u, false);
+  return SignedSum{ negated.value, negated.carry };
 }
 
 namespace

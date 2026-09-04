@@ -865,11 +865,15 @@ public:
       work.s = s;
       work.q = q;
       work.r = r;
-      const std::uint8_t result = Elite::CombineSigned(work, a);
+      const Elite::SignedSum result = Elite::CombineSigned(work, a);
 
       const std::wstring where = L" at iteration " + std::to_wstring(iteration);
-      Assert::AreEqual<std::uint32_t>(cpu.a, result, (L"result" + where).c_str());
+      Assert::AreEqual<std::uint32_t>(cpu.a, result.value, (L"result" + where).c_str());
       Assert::AreEqual<std::uint32_t>(cpu.memory[zp.s], work.s, (L"S" + where).c_str());
+
+      // The carry is the routine's documented overflow flag and `LL9` branches on it, so it is
+      // compared here rather than at the one caller that happens to read it.
+      Assert::AreEqual(cpu.c, result.carry, (L"C" + where).c_str());
     }
   }
 
