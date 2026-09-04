@@ -320,7 +320,8 @@ void SetUpScreen(FlightScreen& _screen, std::uint8_t _view) noexcept
   _screen.text.row = 1u;    // 6502: STA YC
 
   SetUpScreenPixels(_screen.canvas, _screen.draw, _screen.math, _screen.geometry, _screen.text,
-                    _screen.screen, _screen.bubble, _screen.flight, _screen.status, _screen.fuel,
+                    _screen.screen, _screen.bubble, _screen.flight, _screen.status,
+                    _screen.commander.At(Field::Fuel),
                     _screen.compass, _screen.sight, _screen.view); // 6502: JSR TTX66K
 
   // 6502: LDX QQ22+1 / BEQ OLDBOX / JSR ee3 -- the hyperspace countdown outlives a screen change
@@ -407,7 +408,7 @@ void Warp(FlightScreen& _screen) noexcept
 
   if ((occupied | station | _screen.status.midJump) != 0u)
   {
-    _screen.effects.PlaySound(SOUND_BOOP); // 6502: .WA1 LDY #sfxboop / JMP NOISE
+    (void)_screen.effects.PlaySound(SOUND_BOOP); // 6502: .WA1 LDY #sfxboop / JMP NOISE
     return;
   }
 
@@ -425,7 +426,7 @@ void Warp(FlightScreen& _screen) noexcept
   {
     if (LargestAxis(_screen.bubble, 0u) < 2u)
     {
-      _screen.effects.PlaySound(SOUND_BOOP);
+      (void)_screen.effects.PlaySound(SOUND_BOOP);
       return;
     }
   }
@@ -436,7 +437,7 @@ void Warp(FlightScreen& _screen) noexcept
   {
     if (LargestAxis(_screen.bubble, 1u) < 2u)
     {
-      _screen.effects.PlaySound(SOUND_BOOP);
+      (void)_screen.effects.PlaySound(SOUND_BOOP);
       return;
     }
   }

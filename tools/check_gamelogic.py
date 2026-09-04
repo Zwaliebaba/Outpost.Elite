@@ -120,6 +120,28 @@ def strip_comments_and_strings(_text: str) -> str:
     return "".join(out)
 
 
+# Identifiers that <windows.h> defines as macros. The portable runner and CI's Ubuntu leg compile
+# GameLogic without it and never notice; the Windows leg fails to parse the line. `near` cost a red
+# CI run in slice 3d-d-iii-b -- `const bool near = ...` becomes `const bool = ...` after the
+# preprocessor, and the error names neither the macro nor the header.
+#
+# Declarations only. These words appear in prose constantly ("a ship far away", "the near case"),
+# so the pattern requires a type in front of the name, which is what a declaration looks like and
+# a sentence does not.
+WINDOWS_MACROS = {
+    "near": "a macro in <windows.h>; MSVC expands it to nothing and the declaration loses its name",
+    "far": "a macro in <windows.h>, like `near`",
+    "small": "a typedef in <rpcndr.h>, which <windows.h> pulls in",
+    "interface": "a macro in <objbase.h>, which <windows.h> pulls in",
+}
+
+DECLARATION_RE = re.compile(
+    r"\b(?:const\s+|constexpr\s+|static\s+|auto\s+|unsigned\s+|signed\s+)*"
+    r"(?:bool|char|int|short|long|float|double|auto|std::\w+|std::uint\d+_t|std::size_t|\w+::\w+)"
+    r"[\s&*]+(near|far|small|interface)\b"
+)
+
+
 def scan_text(_name: str, _text: str) -> list[str]:
     """Findings for one file's contents. Empty means clean."""
     findings: list[str] = []
@@ -136,6 +158,11 @@ def scan_text(_name: str, _text: str) -> list[str]:
             line = code.count("\n", 0, match.start()) + 1
             findings.append(f"{_name}:{line}: names '{identifier}' -- {why}")
 
+    for match in DECLARATION_RE.finditer(code):
+        name = match.group(1)
+        line = code.count("\n", 0, match.start()) + 1
+        findings.append(f"{_name}:{line}: declares '{name}' -- {WINDOWS_MACROS[name]}")
+
     return findings
 
 
@@ -148,9 +175,12 @@ def self_test() -> int:
         ("randomness", "void F() { int v = rand(); (void)v; }\n"),
         ("win32", "void F() { QueryPerformanceCounter(nullptr); }\n"),
         ("file access", "#include <fstream>\n"),
+        ("a windows macro as a name", "void F() { const bool near = true; (void)near; }\n"),
+        ("the same with a std type", "void F() { std::uint8_t small = 0; (void)small; }\n"),
     ]
     good_cases = [
         ("a comment mentioning float", "// float and double are banned here\nvoid F() { }\n"),
+        ("prose about a near miss", "// a ship near enough to hit, and one far away\nvoid F() { }\n"),
         ("a string mentioning rand", 'const char* K = "rand";\n'),
         ("ordinary integer code", "#include <cstdint>\nstd::uint8_t F() { return 1; }\n"),
         ("a name merely containing a banned word", "void FloatingHelper() { int timestamp = 0; (void)timestamp; }\n"),

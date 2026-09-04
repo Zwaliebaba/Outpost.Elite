@@ -407,6 +407,10 @@ bool Cpu6502::Step() noexcept
         {
           c = false;
         }
+        else if (trapped.exit == TrapExit::SetCarry)
+        {
+          c = true;
+        }
         return true;
       }
     }

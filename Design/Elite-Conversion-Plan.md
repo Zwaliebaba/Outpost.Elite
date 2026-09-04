@@ -428,6 +428,294 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.93 A fixture that makes two things equal cannot tell them apart
+
+Two mutation survivors in the combat routines, and neither was a defect in the port. Both were
+the same mistake in the test.
+
+**`OUCH` picks the slot to empty from `DORND`'s X, not its A.** The sweep drove the generator
+directly — `RAND = {0, slot, 0, toss}` — so that the slot would be predictable instead of hoping
+a seed landed in range, which is the right instinct and §6.75's lesson applied. But `DORND` exits
+with `A = RAND+1 + RAND+3` and `X = RAND+1`, so `RAND+3` at zero makes the two **identical**. The
+sweep ran 208 cases and every one of them would have passed with the port reading the wrong
+register. A third value of `RAND+3` — large enough to separate them, small enough to stay under
+the routine's `BMI out` — is the whole fix.
+
+**`EXNO2`'s volume thresholds were never reached at a boundary.** `EXNO`'s got an exhaustive
+sweep of all 256 distance bytes; `EXNO2`'s were only reached through the kill-tally test, whose
+distances are `type * 7`. That is 33 values and none of them is 8, 16 or 6, so 198 comparisons
+could not distinguish `CMP #8` from `CMP #9`. It has its own exhaustive sweep now.
+
+**The pattern is worth naming because it is the opposite of the usual one.** §6.39's failure was a
+fixture that supplied nothing — every orientation vector zero — and passed 396 whole-canvas
+comparisons. These two are fixtures that supplied something *too tidy*: a seed chosen for
+determinism that collapsed two registers into one, and a distance formula chosen for spread that
+happened to miss every threshold. A deterministic fixture is better than a random one, and it
+buys a new way to be wrong: **the values it makes convenient may also be the values that hide a
+difference.** Reaching a branch is not the same as distinguishing it, and only mutation testing
+tells the two apart.
+
+### 6.92 A branch that skips two instructions, and a warning that is never the token it loads
+
+Part 15 warns about the energy banks like this:
+
+```
+ LDA #50
+ CMP ENERGY
+ BCC P%+6
+ ASL A
+ JSR MESS
+```
+
+`BCC` is two bytes, `ASL A` is one and `JSR MESS` is three, so **`P%+6` is past both of them**. The
+fifty is a threshold, not a message: healthy banks send nothing at all, and the token actually
+sent is only ever 100.
+
+The port read it as "fifty or a hundred, depending" — a plausible reading, because 50 and 100 are
+both real message tokens and the `ASL` looks like a choice between them. What it produces is an
+energy warning every sixteenth frame for the whole game. The oracle caught it as a missing
+*sound*: token 100's text contains character 7, which `CHPR` turns into `JSR BEEP`, so the
+comparison failed on a bell the game rang and the port did not.
+
+**Two lessons and the second is the useful one.** Counting the bytes a relative branch skips is
+not optional when the branch target is written as `P%+n`. And the bell being a seam is what made
+this visible: the port's `CHPR` had a `TextEffects::Beep` that nothing was wired to, so the sound
+fell on the floor. Wiring it to the same list the flight loop's sounds go into turned a silent
+difference into a failing assertion.
+
+### 6.91 The explosion cloud, and a carry that comes out of the line drawing
+
+`LL9` part 1 seeds a newly killed ship's explosion cloud:
+
+```
+ JSR EE51
+ LDY #1 / LDA #18 / STA (XX19),Y
+ LDY #7 / LDA (XX0),Y / LDY #2 / STA (XX19),Y
+.EE55
+ INY / JSR DORND / STA (XX19),Y / CPY #6 / BNE EE55
+```
+
+Four random bytes, and the first `DORND` opens `LDA RAND / ROL A` — on the carry `EE51` returned.
+`EE51` is the erase, and on the path that matters (a ship that was on screen last frame, which is
+every ship our laser kills) it walks the line heap through `LL155` and `LOIN`. So **the cloud's
+first byte depends on the flags the line drawing exits with**, and `LOIN` in this port returns
+nothing.
+
+Slice 3b left this behind `ShipDrawEffects::SeedExplosionCloud` and said so: "the `JSR DORND` in
+it runs on a carry this port cannot determine". Slice 3d-d-iii-b is the first caller that reaches
+it — a ship killed by the laser or by a collision passes through here on the single frame between
+being killed and being seen to explode.
+
+It stays a seam, and the flight loop's comparison **names what it excludes**: the six bytes at the
+head of a seeded cloud's heap run, and the generator on those frames. Everything else on a frame
+that kills a ship — the canvas, the commander block, the slots, the state bytes, the heap either
+side of the cloud — is still compared. Closing it means giving `LOIN` an exit carry, which is
+`Canvas.cpp`'s row and not this one.
+
+**The point worth keeping**: an unclosed seam is a hole in a comparison whether or not the
+comparison mentions it, and the difference between the two is entirely whether anyone can see the
+hole later.
+
+### 6.90 A blueprint pointer that is not reset per ship
+
+Part 4 of the flight loop loads `XX0` from the blueprint table:
+
+```
+ LDA TYPE
+ BMI MA21
+ ASL A
+ TAY
+ LDA XX21-2,Y
+ STA XX0
+ LDA XX21-1,Y
+ STA XX0+1
+```
+
+`BMI MA21` skips it for the planet and the sun, which have no blueprint. **So a body carries on
+using whatever the last real ship left in `XX0`** — and `MVEIT` reads byte 15 of it, the maximum
+speed, to clamp acceleration against.
+
+That read is not dead. `MVEIT` skips the clamp for a body on its ordinary path (`MV40` returns
+through `MV45`), but a body that is exploding or dead takes the `LDA INWK+31 / AND #&A0 / BNE
+MV30` branch at the top, misses `MV40` entirely, and falls into the clamp with the previous
+ship's maximum speed.
+
+The port had `XX0` as a local, computed per ship and zero for a body, which is neither what the
+game does nor a state it can reach: by the time the flight loop runs, something has always put a
+real blueprint there. It is loop state like `TYPE` and `XSAV`, and it now lives with them.
+
+**The general shape**: a variable written under a condition is a variable that persists when the
+condition fails, and "computed per iteration" is a stronger claim than the code makes.
+
+### 6.89 Scooping, and a carry from four shifts earlier
+
+Part 8 decides what a scooped ship is worth:
+
+```
+ LDY #0
+ LDA (XX0),Y
+ LSR A
+ LSR A
+ LSR A
+ LSR A
+ BEQ MA58
+ ADC #1
+```
+
+The four shifts take the blueprint's first byte down to its top nibble, and the fourth `LSR`
+leaves **bit 3 of the original byte** in the carry. `BEQ MA58` sits between the shift and the
+`ADC` and tests A without touching the flags. So what lands in the hold is the top nibble, plus
+one, plus a bit of the *bottom* nibble.
+
+Byte 0 of a blueprint is the ship's "debris and scooping" byte, and its two halves are read
+separately everywhere else in the game -- `SPIN` masks the low nibble for the debris count (§6.74)
+and this reads the high one. Here they meet: the low nibble's top bit shifts into an addition
+belonging to the high one.
+
+A port that wrote `(byte >> 4) + 1` agrees with the game for every blueprint whose byte 0 has bit
+3 clear, which is most of them.
+
+### 6.88 Which piece of equipment breaks depends on whether the explosion was audible
+
+`OOPS` ends:
+
+```
+ JSR EXNO3
+ JMP OUCH
+```
+
+`EXNO3` is `LDY #sfxexpl / BNE NOISE`, so it is a tail call into the sound routine, and `OUCH`
+opens `JSR DORND`, whose `ROL A` reads the carry. §6.86 established what `NOISE` leaves there:
+set when the effect took a SID voice, clear when a higher-priority sound was already holding all
+three.
+
+So the generator advances differently depending on whether the explosion was heard, and `DORND`'s
+X — which `OUCH` uses to pick **which of the twenty-two hold slots to empty** — comes out
+different. A player who loses their E.C.M. to a collision would have lost their fuel scoops
+instead if the sound system had been busier.
+
+This is §6.86's dependency reaching one call further than the laser's convergence point, and it
+is the reason the port threads the seam's answer through `TakeDamage` rather than defaulting it.
+The oracle comparison caught it as a one-byte disagreement in `RAND` on the first case where the
+banks survived a hit — the state compare, not the screen.
+
+**`OUCH` has exactly one caller and it is this one**, so the carry is not a range of possible
+values: it is always `NOISE`'s. A port could hard-code it and be right whenever the sound plays.
+The reason not to is that the two exits are a coin the hardware tosses, and hard-coding it is
+choosing a side of that coin without saying so.
+
+### 6.87 A subtraction that borrows from whichever caller arrived
+
+`OOPS` takes the damage off a shield with `LDA FSH / SBC T`, and neither of its two entries sets
+the carry first.
+
+Part 10 reaches `.MA63 JSR OOPS` two ways:
+
+```
+.MA67                          .MA58
+ LDA #1                         ASL INWK+31
+ STA DELTA                      SEC
+ LDA #5                         ROR INWK+31
+ BNE MA63                       LDA INWK+35
+                                SEC
+                                ROR A
+.MA63
+ JSR OOPS
+```
+
+`MA67` is reached by `BCC MA67` from part 9's `CMP #5`, so the carry is CLEAR — the shield loses
+one more than the damage. `MA58` ends `ROR A`, whose carry out is **bit 0 of the ship's own
+energy**, so half the time the shield loses exactly the damage and half the time one more. And
+`TACTICS` is a third caller with a third answer.
+
+The `SEC / ROR A` is deliberate arithmetic — it halves the ship's energy to get the collision
+damage — and its carry out is a by-product nobody wrote down. It is the same shape as §6.85's
+roll and pitch: a flag produced for one purpose, consumed for another, with instructions in
+between that happen not to disturb it.
+
+`LDX #0` at the top of `OOPS` is dead, incidentally: both paths that read X load it again before
+using it. The port drops it and the sweep proves it can (every shield, bank and damage
+combination, from both carries, on both shields).
+
+### 6.86 A sound routine that answers, and the one caller that listens
+
+The frame's opening fires the laser like this:
+
+```
+.custard
+ JSR NOISE
+ JSR LASLI
+```
+
+and `LASLI` opens `JSR DORND`, whose first instruction is `ROL A` on the seed. So the laser's
+convergence point is picked from the carry `NOISE` left behind.
+
+`NOISE` has three exits and they do not agree:
+
+- the path that gives the effect a SID voice ends `CLI / SEC / RTS`;
+- `LDA SFXPR,Y / CMP SOPR,X / BCC SOUR1` leaves for a bare `RTS` with the carry CLEAR, when a
+  higher-priority sound is already playing in every voice;
+- `LDA DNOIZ / BNE SOUR1`, the very first branch, reaches that same bare `RTS` with the CALLER's
+  carry untouched — which here is whatever `CMP #Mlas` or `CMP #Armlas` last set.
+
+So the burst lands one pixel lower when the shot was heard than when it was drowned out, and
+lower again, or not, when the player has turned the sound off. **A hardware seam that returns
+nothing cannot express this**, and the port had `false` hard-coded — right only for the middle
+case, which is the rarest of the three.
+
+`PlaySound` now returns the carry. It is the only seam in the port that returns anything, and it
+earns it: exactly one of the eight calls reads the answer. The third exit stays unmodelled
+because the port has no sound-off option to reach it, and a bool would have to grow a third state
+the day one arrives.
+
+**The general shape is worth naming.** A seam is drawn where the port stops caring, and "sound"
+looks like a place the port stops caring. It is not: `NOISE` is a subroutine like any other, and
+the register it returns in is part of its contract whether or not the thing it does is audible.
+The test harness needed the same correction — `TrapExit` had `ClearCarry` for `CHPR` and nothing
+for a routine that ends `SEC`, so a trapped `NOISE` stood in for the wrong exit.
+
+### 6.85 Four or five, depending on the roll
+
+Part 2 of the flight loop turns each control rate into a sign and a magnitude. The roll's
+magnitude ends:
+
+```
+ LSR A
+ LSR A
+ CMP #8
+ BCS P%+3
+ LSR A
+ STA ALP1
+```
+
+and eleven instructions later, after two stores, a load, a `JSR cntr`, three transfers and an
+`EOR`, the pitch's magnitude begins:
+
+```
+ TYA
+ BPL P%+4
+ EOR #%11111111
+ ADC #4
+```
+
+There is no `SEC` and no `CLC` between them, and `cntr` sets no flags on any of its three paths —
+it ends `BUMP2`, `REDU2` or a bare `RTS`, and every one of those leaves the carry as it found it.
+So **the four added to the pitch is four or five, and which one depends on the roll**: on the
+compare's carry when the roll's magnitude is eight or more, and on the bit the extra `LSR`
+shifted out when it is not.
+
+The `EOR #%11111111 / ADC #4` is a negate-and-add-four written as one addition, so the carry is
+not incidental to it — it is the `+1` of the two's complement, deliberately borrowed for the
+positive branch as well. What is incidental is *where the carry comes from*. A port that wrote
+`SEC` before the `ADC`, reasoning that the negation needs it, is right for the negative branch
+and right for every roll of eight or more, and wrong for half of the rest.
+
+This is the third time an arithmetic result in this port has depended on a flag set by an
+instruction that was not doing arithmetic (§6.44's `DORND` chain and §6.79's `AND #7`), and the
+first where the two are separated by a subroutine call. **The rule that comes out of it: a `JSR`
+is not a flag barrier, and reading one as if it were is the same mistake as reading a shared exit
+label as a shared meaning (§6.84).**
+
 ### 6.84 A branch out of a sixteen-bit compare, sharing a label with four rejections
 
 `HITCH` decides whether the player's laser hit a ship. It ends:
@@ -1004,7 +1292,7 @@ ported and absent; the check has to be for a DEFINITION, and this pass nearly re
 | **3d-d-i** ✅ | `MAS1`–`MAS4` **built 2026-09-04** in `FlightLoop.h/.cpp` (11 mutations, 11 caught), then `cntr` there and `ECMOF` in `Dashboard.h/.cpp` as `StopEcm`. `tnpr1` was **already built in slice 2c** and should never have been on this list (§6.71). `FRMIS` needs phase 4's `FRS1` and `ANGRY`, and `KS1` ends `JMP MAL1` — a jump back INTO the loop, not a call — so both move to 3d-d-iii |
 | **3d-d-ii** ✅ | **Built 2026-09-04**: `BUMP2`, `REDU2`, `DOKEY`'s flight half, `SPIN`/`SPIN2` and `SIGHT`. §6.73's pass added `SIGHT` (two thirds of it is canvas and game state, not hardware) and `BUMP2`/`REDU2` (`DOKEY`'s, not `cntr`'s). `CTRL` is one instruction falling into the key seam, with nothing to compare. **`LOOK1` and `WARP` move to 3d-d-iii** — they need `TT66`'s PIXELS, and the port has `TT66`'s text state (§6.77) |
 | **3d-d-iii-a** ✅ | **Built 2026-09-04.** The dashboard bitmap loaded at `DSTORE%` (§6.78), then `ZES1k`/`ZES2k`, `mvblockK`/`mvbllop`, `BOXS`, `BOXS2`, `BOX2`, `BLUEBAND`/`BLUEBANDS`, `zonkscanners`, `NOSPRITES`, `wantdials`, `TTX66K`, and finally `TT66`/`TTX66`, `LOOK1` and `WARP` in `ViewChange.h/.cpp`. **The "eighteen arguments" question was already answered three times**: `TradeScreen`, `SaveScreen` and `GameStart` are structs of references for exactly this reason, so `FlightScreen` follows them and was never the open design decision an earlier note called it. `LAS2` and `MJ` join `FlightStatus`, which is now the per-flight bytes rather than what the dials read. **77 mutations, 76 caught, 1 measured equivalent**: `.OLDBOX`'s `LDA #1 / JSR DOYC` in `TT66` cannot change anything, because BOTH paths through `TTX66K` leave `YC` at 1 already — the wantdials tail call is reached past `LDA #1 / STA XC / STA YC`, and the text path ends `INX / STX XC / STX YC` with X at zero. Dead code in the original, and the second such find in phase 3 after `cntr`'s `REDU` (§6.71). Two more survivors turned out to be test gaps rather than equivalents and are closed: `LOOK1`'s `LQ` path never had its `STX VIEW` checked, and `WARP`'s `CMP #2` had no case at exactly two |
-| **3d-d-iii-b** | the sixteen loop parts themselves, with `FRMIS` and `KS1`, which by then call nothing unbuilt but phase 4 |
+| **3d-d-iii-b** ✅ | **Built 2026-09-04.** All sixteen parts of `M%` as `BeginFlightFrame`, `MoveEveryShip` and `EndFlightFrame`, with `MainFlightLoop` over the three, plus `FRMIS`/`FR1` and `KS1` — and eight routines the per-ship half needs that no slice had built: `EXNO`, `EXNO2`, `EXNO3`, `OOPS`, `OUCH`/`ou2`/`ou3` and `BOMBOFF` in a new `Combat.cpp`, with `msblob` in `Dashboard.cpp` because `KILLSHP`'s seam needed it. **`NWSPS` is the only seam added**: it self-modifies `XX21` to choose between a Coriolis and a Dodo, and that decision belongs with `TT110`. `KILLSHP`'s `SpawnEffects` is no longer counted — every one of its four is ported now, so the loop hands it the real thing. **97 mutations, 97 caught**, after two survivors turned out to be test gaps rather than equivalents (§6.93). Findings: the pitch reads a carry the roll left behind across a `JSR` (§6.85); `NOISE` returns a carry `LASLI` consumes (§6.86); `OOPS`'s `SBC` borrows from whichever caller arrived (§6.87); `OUCH`'s `DORND` runs on `NOISE`'s carry, so which equipment breaks depends on whether the explosion was audible (§6.88); part 8's `ADC` takes a shift's carry from four instructions earlier (§6.89); `XX0` is not reset per ship (§6.90); `LL9`'s explosion cloud stays a seam and the comparison names what it excludes (§6.91); and part 15's `BCC P%+6` skips TWO instructions, so the energy warning fires only when the banks are low (§6.92) |
 
 Doing it in that order means the loop is written last, against a set of routines that have each
 been compared to the game on their own. Written first, it would be sixteen parts and fifteen
@@ -3416,6 +3704,8 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **The flight loop is complete: all sixteen parts of `M%`, `FRMIS` and `KS1`.** `BeginFlightFrame`, `MoveEveryShip` and `EndFlightFrame` with `MainFlightLoop` over them, and eight routines the per-ship half needs that no slice had built — `EXNO`, `EXNO2`, `EXNO3`, `OOPS`, `OUCH`/`ou2`/`ou3`, `BOMBOFF` in a new `Combat.cpp`, plus `msblob`. **97 mutations, 97 caught.** Eight findings and five of them are the same shape: a flag produced for one purpose and consumed for another, with instructions in between that happen not to disturb it. The pitch reads a carry the roll left behind across a `JSR` (§6.85); `NOISE` returns a carry `LASLI`'s `DORND` rolls in, so `PlaySound` stopped being `void` (§6.86); `OOPS`'s `SBC` borrows from whichever caller arrived (§6.87); `OUCH` picks which equipment breaks from `NOISE`'s exit carry (§6.88); and part 8's `ADC` takes a shift's carry from four instructions earlier (§6.89). Two were outright defects the oracle caught: **`XX0` is not reset per ship** (§6.90), and **part 15's `BCC P%+6` skips TWO instructions**, so the energy warning fires only when the banks are low — found as a MISSING BELL, because the token's text contains character 7 and `CHPR` turns that into `JSR BEEP` (§6.92). One gap is left open and named: `LL9`'s explosion cloud stays a seam because its `DORND` runs on a carry that comes out of `LOIN`, and the comparison excludes the six bytes it owns rather than passing over them (§6.91). **And the Windows leg caught what nothing else could**: `const bool near = ...` is `const bool = ...` after `<windows.h>`, so `check_gamelogic.py` now fails on four macro names used as declarations — the slowest signal in the project moved to the fastest one. 288 tests green. |
+| 2026-09-04 | **Two mutation survivors, both in the fixture rather than the port** (§6.93). `OUCH` picks a hold slot from `DORND`'s X and the sweep had seeded the generator so that A and X came out equal, so 208 cases could not tell the two registers apart; and `EXNO2`'s volume thresholds were reached only at `type * 7`, which never lands on eight. A deterministic fixture is better than a random one and buys a new way to be wrong: the values that make it convenient may be the values that hide a difference. The opposite of §6.39, where the fixture supplied nothing at all. |
 | 2026-09-04 | **Slice 3d-d-iii-a is complete: `TT66`, `LOOK1` and `WARP`.** The "eighteen arguments" question an earlier note called a design decision had already been answered three times in this codebase — `TradeScreen`, `SaveScreen` and `GameStart` are structs of references for exactly that reason — so `FlightScreen` follows them. Three findings. **A collapsed routine was right only because half of it was missing**: slice 2e's `SetUpTextScreen` writes `QQ17 = 0` and skips the 128, which is safe until the half that prints the view's name in between exists (§6.81). **`ee3` prints through `DASC`**, not straight to `CHPR`, and the port had the raw printer as its sink — caught on `DTW2`, game 0 and port 128. **And `WARP` sets `QQ11 = 1` to make `LOOK1` take the other branch**, because the view is not changing and the space-view path would find X equal to `VIEW` and return. `LAS2` and `MJ` land in `FlightStatus`. 268 tests green; `CHPR` is not trapped, so the printed text is compared as pixels with everything else. |
 | 2026-09-04 | **Slice 3d-d-iii-a builds the screen setup, and stops one seam short.** The dashboard bitmap loaded at `DSTORE%` first (§6.78), then `ZES1k`/`ZES2k`, `mvblockK`/`mvbllop`, `BOXS`, `BOXS2`, `BOX2`, `BLUEBAND`, `zonkscanners`, `NOSPRITES`, `wantdials` and `TTX66K`. Three findings. **The dashboard copy is 2,240 bytes and they are not the first 2,240** — `mvbllop` stores at Y and counts down to 1, so offset 2,048 is skipped and 2,240 is written, and the port read one byte past its own array until the marker caught it. **`BOX2`'s height is a data byte**: `EQUB &2C` eating its `LDX #18` is the difference between a 25-row text screen and an 18-row space view (§6.79). **And a loop that stops on a PAGE reads as one that stops on an address** — `CPX #HI(DLOC%)` — with X left where three later instructions read it (§6.80). `TTX66`, `LOOK1` and `WARP` are blocked on replacing slice 2e's screen seam, which is a phase-2 change. |
 | 2026-09-04 | **Slice 3d-d-ii, and `LOOK1` and `WARP` are not in it.** Built: `BUMP2`, `REDU2`, `DOKEY`'s flight half, `SPIN`/`SPIN2` and `SIGHT`. Four findings. **The wreckage count is not random** — `TYA / TAX` is how the 6502 writes `X = Y`, the copy goes through the accumulator, and the `AND (XX0),Y` four instructions later masks the ship TYPE rather than the byte `DORND` left there; the port had it the obvious way round and the oracle disagreed on the first blueprint whose byte 0 differed (§6.74). **`REDU2`'s clamp has a hole** that produces zero on an exact match, against its own comment, counted rather than described. **`SIGHT` is two thirds canvas and game state**, not the seam §6.69 filed it as: the sprite pointers live in screen RAM. **And `TT66` is half ported** — `LOOK1` needs its pixels and the port has its text state, so `LOOK1`, `WARP` and the 252-instruction `TTX66` chain move to 3d-d-iii (§6.77). **28 mutations, 27 caught, 1 measured equivalent** — `DELTA`'s clamp is `CMP #22 / BCC / LDA #22`, so `< 22` and `<= 22` give the same 22 at 22 and nothing can tell them apart. One of the 27 was caught by NOT TERMINATING: `cnt - 2` in a loop that stops at zero runs for ever on an odd count, the suite times out, and the harness filed the strongest possible catch as a compile error. And one survivor was a real gap rather than an equivalent — the `DOCKIT` stub only WROTE `INWK+27`, so `LDA DELTA / STA INWK+27` before the call was invisible; the real routine READS that byte, and the stub EORs it now. |

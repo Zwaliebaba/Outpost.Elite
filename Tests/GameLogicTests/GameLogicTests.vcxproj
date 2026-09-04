@@ -105,6 +105,7 @@
     <ClInclude Include="Cpu6502.h" />
     <ClInclude Include="OracleImage.h" />
     <ClInclude Include="GoldenCanvas.h" />
+    <ClInclude Include="FlightWorld.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
@@ -149,6 +150,7 @@
     <ClCompile Include="PlanetDrawTests.cpp" />
     <ClCompile Include="DashboardTests.cpp" />
     <ClCompile Include="FlightLoopTests.cpp" />
+    <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="ControlsTests.cpp" />
     <ClCompile Include="ViewChangeTests.cpp" />
     <ClCompile Include="LaserTests.cpp" />

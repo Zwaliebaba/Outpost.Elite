@@ -144,10 +144,22 @@ void FillScreens(Cpu6502& _cpu, Elite::Canvas& _canvas, std::uint16_t _base, std
 /// and a port that called the wrong one would still put the bulb in the right state.
 struct RecordingSound final : Elite::DashboardEffects
 {
+  struct Pitched
+  {
+    std::uint8_t effect, sustain, frequency;
+  };
+
   std::vector<std::uint8_t> started;
   std::vector<std::uint8_t> stopped;
+  std::vector<Pitched> pitched;
 
-  void PlaySound(std::uint8_t _effect) override { started.push_back(_effect); }
+  bool PlaySound(std::uint8_t _effect) override { started.push_back(_effect); return true; }
+  bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain,
+                        std::uint8_t _frequency) override
+  {
+    pitched.push_back({ _effect, _sustain, _frequency });
+    return true;
+  }
   void StopSound(std::uint8_t _effect) override { stopped.push_back(_effect); }
 };
 } // namespace
