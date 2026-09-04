@@ -240,6 +240,12 @@ ln -sf <repo>/Design/Reference/*.txt <scratch>/mutant/Design/Reference/
 -- because the alternative is a working tree that holds deliberately broken code for half an hour
 at a time, which cannot be committed and hides any real change made while it runs.
 
+**A mutation that HANGS is caught, and a harness that reads the last line will say otherwise.**
+Turning `cnt - 1` into `cnt - 2` in a loop that stops at zero makes an odd count run for ever; the
+suite times out, no `N passed, M failed` line is printed, and a harness that looks for one reports
+a compile error. Look at what the run actually did before believing that label: a timeout is the
+strongest possible catch and the easiest to file as a tooling failure.
+
 **Read a routine through `tools/c64_source.py`, not by eye.** The upstream library is one tree
 serving ten versions of Elite, and a routine's C64 form is whatever survives its `IF` / `ELIF` /
 `ELSE` / `ENDIF` conditionals -- which nest, and which include `NOT(...)` blocks that are easy to
