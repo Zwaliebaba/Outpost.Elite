@@ -349,9 +349,13 @@ jobs:
       # has no display, and creating a device on one is a different question from creating a
       # window on one. That half stays with the human sign-off ADR-003 section 3 asks for.
       #
-      # WindowsPackageType=None builds the UNPACKAGED configuration, which skips MSIX and its
-      # signing certificate. ADR-005's Option A says the project has to keep working both packaged
-      # and unpackaged; this is the half a runner can check without a certificate.
+      # WindowsPackageType=None AND AppxPackage=false build the UNPACKAGED configuration, which
+      # skips MSIX and its signing certificate. BOTH are needed and the first run here proved it:
+      # the project's ApplicationType is "Windows Store", so AppxPackage defaults to true, and the
+      # MSIX targets refuse the pair with "Improper project configuration: WindowsPackageType is
+      # set to None, but AppxPackage is set to true" before compiling a single file. ADR-005's
+      # Option A says the project has to keep working both packaged and unpackaged; this is the
+      # half a runner can check without a certificate.
       # ---------------------------------------------------------------------------------------
       - name: Cache the NuGet packages
         id: nuget-cache
@@ -389,6 +393,7 @@ jobs:
               /p:PlatformToolset=${{ steps.vs.outputs.toolset }} `
               /p:SolutionDir=$PWD\ `
               /p:WindowsPackageType=None `
+              /p:AppxPackage=false `
               /m /nologo /v:minimal `
               /flp:logfile=build-outpost-$configuration.log`;errorsonly
             if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for Outpost $configuration with $LASTEXITCODE" }

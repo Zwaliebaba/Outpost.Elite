@@ -3,7 +3,6 @@
 #include "Window.h"
 
 #include "KeyMap.h"
-#include "Presentation.h"
 
 #include "Canvas.h"
 
@@ -47,7 +46,10 @@ void Window::Create(HINSTANCE _instance, int _scale)
 
   if (RegisterClassExW(&description) == 0)
   {
-    winrt::check_hresult(HRESULT_FROM_WIN32(GetLastError()));
+    // `throw_last_error` and not `check_hresult(HRESULT_FROM_WIN32(GetLastError()))`: the second
+    // does NOT throw when the last error happens to be zero, which is exactly the case where
+    // something has gone wrong and there is no diagnosis. This one always throws.
+    winrt::throw_last_error();
   }
 
   // The client area is the canvas at an integer scale; AdjustWindowRect turns that into the outer
@@ -58,7 +60,7 @@ void Window::Create(HINSTANCE _instance, int _scale)
   const DWORD style = WS_OVERLAPPEDWINDOW;
   if (AdjustWindowRectEx(&wanted, style, FALSE, 0) == 0)
   {
-    winrt::check_hresult(HRESULT_FROM_WIN32(GetLastError()));
+    winrt::throw_last_error();
   }
 
   m_window = CreateWindowExW(0, WINDOW_CLASS, WINDOW_TITLE, style, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -66,7 +68,7 @@ void Window::Create(HINSTANCE _instance, int _scale)
                              _instance, this);
   if (m_window == nullptr)
   {
-    winrt::check_hresult(HRESULT_FROM_WIN32(GetLastError()));
+    winrt::throw_last_error();
   }
 
   ShowWindow(m_window, SW_SHOW);

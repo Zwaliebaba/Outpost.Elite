@@ -10,6 +10,7 @@
 #include "Canvas.h"
 #include "Commander.h"
 #include "DockedKeys.h"
+#include "Docking.h"
 #include "Equipment.h"
 #include "ExtendedTokens.h"
 #include "Market.h"
