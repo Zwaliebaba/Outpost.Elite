@@ -72,6 +72,9 @@
     <ClInclude Include="Lasers.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="FlightLoop.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Dashboard.h">
       <Filter>Canvas</Filter>
     </ClInclude>
@@ -227,6 +230,9 @@
     </ClCompile>
     <ClCompile Include="Lasers.cpp">
       <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="FlightLoop.cpp">
+      <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Dashboard.cpp">
       <Filter>Canvas</Filter>
