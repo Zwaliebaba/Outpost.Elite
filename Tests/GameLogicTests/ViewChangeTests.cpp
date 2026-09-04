@@ -338,6 +338,65 @@ public:
     Assert::AreEqual<std::uint32_t>(2u * 18u * 24u, touched, L"two bands of eighteen by twenty-four");
   }
 
+
+  /*
+   * 6502: BOX2 -- the border, at both of its heights.
+   *
+   * THE HEIGHT IS A DATA BYTE. `BOX2` opens `LDX #18`, and `TTX66K` falls into it through
+   * `LDX #25 / EQUB &2C` -- `BIT abs` swallowing that `LDX`, so the fall-through keeps 25 while a
+   * `JSR BOX2` gets 18. This calls the routine both ways: at its label, and two bytes in, which
+   * is exactly where the swallowed instruction ends and what the fall-through executes (§6.79).
+   *
+   * A port that took the height from a constant would agree with the game on one screen and draw
+   * seven rows too few or too many on the other.
+   */
+  TEST_METHOD(TheBorderMatchesBOX2AtBothHeights)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t box2 = oracle.Label("BOX2");
+    const std::uint16_t t2 = oracle.Label("T2");
+    const std::uint16_t screen = ScreenBase(oracle);
+
+    struct Case
+    {
+      const char* what;
+      std::uint16_t entry;
+      std::uint8_t rows;
+      bool preset;
+    };
+
+    const std::vector<Case> CASES = {
+      { "called at its label, which loads 18", box2, Elite::BORDER_ROWS_SPACE_VIEW, false },
+      { "fallen into past the LDX, keeping 25", static_cast<std::uint16_t>(box2 + 2),
+        Elite::BORDER_ROWS_TEXT_SCREEN, true },
+      { "fallen into with something else entirely", static_cast<std::uint16_t>(box2 + 2), 7, true },
+    };
+
+    for (const Case& item : CASES)
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      Elite::Canvas canvas;
+      FillScreens(cpu, canvas, screen, 0x4Du);
+
+      cpu.memory[t2] = 0x99u;
+      cpu.x = item.preset ? item.rows : std::uint8_t{ 0xA5u };
+      Assert::IsTrue(cpu.CallSubroutine(item.entry, 60'000).completed, L"BOX2 returned");
+
+      Elite::DrawWorkspace draw;
+      draw.t2 = 0x99u;
+      Elite::DrawBorder(canvas, draw, item.rows);
+
+      const std::wstring where = Widen(std::string("BOX2 (") + item.what + ")");
+      Assert::IsTrue(CompareScreens(cpu, screen, canvas, 0x4Du, where) > 0u,
+                     (where + L": something was drawn").c_str());
+      Assert::AreEqual(cpu.memory[t2], draw.t2, (where + L": T2").c_str());
+    }
+  }
   /*
    * 6502: zonkscanners -- clear "on the scanner" on every ship in the bubble.
    *
