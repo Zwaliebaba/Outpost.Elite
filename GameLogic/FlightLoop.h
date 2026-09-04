@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "Arith.h"
+#include "Rng.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
 
@@ -84,5 +85,50 @@ namespace Elite
  */
 [[nodiscard]] std::uint8_t DampTowardsCentre(std::uint8_t _value, std::uint8_t _dockingComputer,
                                              std::uint8_t _dampingDisabled) noexcept;
+
+/// 6502: SFS1 -- phase 4's "spawn a child ship from this one", which is where the wreckage
+/// actually comes from. It is here rather than in `Spawn.h` because the only thing in this slice
+/// that calls it is `SPIN`, and `SPIN` is the flight loop's.
+class SpawnChildEffects
+{
+public:
+  virtual ~SpawnChildEffects() = default;
+
+  /// 6502: JSR SFS1 with A = the AI flag and X = the type. It returns a carry saying whether the
+  /// ship fitted; `SPIN` does not look at it, and this slice has no other caller.
+  [[nodiscard]] virtual bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) = 0;
+};
+
+/*
+ * 6502: SPIN2 -- spawn `_count` ships of one type, one after another.
+ *
+ * `.spl BEQ oh` READS A FLAG THE INSTRUCTION ABOVE IT DID NOT SET. `STA CNT` leaves the flags
+ * alone, so the `BEQ` at the top of the loop is testing whatever the CALLER left in Z -- which
+ * for `SPIN2`'s only caller is the `AND #3` two instructions earlier, and for `SPIN` is its own
+ * `AND #15`. Both happen to describe the count, which is what makes the loop look ordinary.
+ *
+ * The loop's back edge is `BNE spl+2`, which lands one instruction PAST the `BEQ`, so the test
+ * runs once on entry and never again: after that it is `DEC CNT / BNE` that decides. A port that
+ * kept the test inside the loop would agree with the game on every input and be a different
+ * routine.
+ */
+void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, std::uint8_t _type,
+                std::uint8_t _count) noexcept;
+
+/*
+ * 6502: SPIN -- a destroyed ship drops some of its cargo, or does not.
+ *
+ * Half the time nothing happens at all: `JSR DORND / BPL oh` throws the whole call away on a
+ * clear bit 7. That is the ONLY thing the roll decides.
+ *
+ * THE COUNT IS NOT RANDOM. `TYA / TAX / LDY #0 / AND (XX0),Y / AND #15` reads as "copy the type
+ * into X for `SFS1`", and it does that -- but the copy goes through A, so the `AND` that follows
+ * masks the TYPE and not the random byte `DORND` left behind. A ship of a given type against a
+ * given blueprint always drops the same amount, on the half of the calls that drop anything.
+ * The port had it the obvious way round and the oracle disagreed on the first blueprint whose
+ * byte 0 differed from the roll (§6.74).
+ */
+void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects,
+                 std::uint16_t _blueprint, std::uint8_t _type, bool _carryIn) noexcept;
 
 } // namespace Elite

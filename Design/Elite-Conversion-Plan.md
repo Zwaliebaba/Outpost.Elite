@@ -428,6 +428,42 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.74 An idiom that moves a value and leaves a copy behind
+
+`SPIN` decides what a destroyed ship drops:
+
+```
+ JSR DORND
+ BPL oh
+ TYA
+ TAX
+ LDY #0
+ AND (XX0),Y
+ AND #15
+```
+
+`TYA / TAX` is the 6502's way of writing `X = Y`, because there is no instruction that does it
+directly. Every reader knows the idiom, and the knowing is the trap: the copy goes THROUGH the
+accumulator, so by the time `AND (XX0),Y` runs, A holds the ship type and not the random number
+`DORND` put there four instructions earlier. **The count is the type masked by the blueprint. The
+roll decides only whether anything is dropped at all** — a Cobra that explodes twice drops the
+same amount both times, on the half of the explosions that drop anything.
+
+The port had it the obvious way round: roll AND blueprint AND 15. That is what the routine looks
+like it does, it is what a summary of it would say, and it is wrong. **The oracle found it on the
+first blueprint whose byte 0 disagreed with the roll** — type 9, where the game spawned nine and
+the port spawned eight.
+
+This is the fourth idiom in this port whose familiar reading is the wrong one, after §6.63's
+`EQUB &2C`, §6.64's branch to a label that is a return, and §6.66's `BIT` swallowing a `STA`. They
+have a shape in common and it is worth naming: **each is a construct whose PURPOSE is obvious and
+whose SIDE EFFECT is load-bearing.** Recognising `TYA / TAX` is what stops you reading it; the
+port that had never seen the idiom would have traced the accumulator and got it right.
+
+The sweep now asserts that at least one blueprint held the count below the type's own low nibble,
+because without that the `AND (XX0),Y` could be dropped entirely and every case would still pass
+on a build whose blueprints all have those four bits set.
+
 ### 6.73 The §6.12 pass on slice 3d-d-ii, and a ledger row with one verb for two jobs
 
 The player's controls. **203 instructions and 15 external call targets**, against 3d-d's 866 and
