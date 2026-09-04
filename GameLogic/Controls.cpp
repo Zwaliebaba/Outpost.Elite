@@ -3,6 +3,7 @@
 #include "Controls.h"
 
 #include "EliteTypes.h"
+#include "LookupTables.h"
 
 namespace Elite
 {
@@ -193,6 +194,66 @@ void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlO
 
   // 6502: .ant, and no RTS -- it falls into `DK4`, which is the docked dispatcher and not this
   // unit's. A caller of `DOKEY` gets that as well, and the call site does not say so.
+}
+
+void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const CommanderBlock& _commander,
+                     std::uint8_t& _trumbleSprites, std::uint8_t _view,
+                     SightEffects& _effects) noexcept
+{
+  _effects.SetRasterMode(0x05u); // 6502: LDA #%101 / JSR SETL1
+
+  // 6502: LDY VIEW / LDA LASER,Y / BEQ SIG3.
+  const std::uint8_t laser =
+    _commander.bytes[static_cast<std::size_t>(Field::Lasers) + _view];
+
+  if (laser != 0u)
+  {
+    /*
+     * 6502: LDY #SPOFF% / CMP #POW / BEQ SIG1 / INY / CMP #POW+128 / BEQ SIG1 / INY /
+     * CMP #Armlas / BEQ SIG1 / INY.
+     *
+     * A chain of three tests and a fall-through, which is the same "anything else is the last
+     * one" shape the status screen names lasers with -- so a laser power the game does not have
+     * gets the mining laser's sprite and the mining laser's colour rather than none.
+     */
+    std::uint8_t pointer = SPRITE_POINTER_BASE;
+    if (laser != LASER_PULSE)
+    {
+      ++pointer;
+      if (laser != LASER_BEAM)
+      {
+        ++pointer;
+        if (laser != LASER_MILITARY)
+        {
+          ++pointer;
+        }
+      }
+    }
+
+    // 6502: STY &63F8 / STY &67F8 -- the same pointer in both blocks of screen RAM.
+    _canvas.Write(SIGHT_SPRITE_CELL, pointer);
+    _canvas.Write(SIGHT_SPRITE_CELL_2, pointer);
+
+    // 6502: LDA sightcol-SPOFF%,Y / STA VIC+&27.
+    _effects.SetSightColour(
+      LASER_SIGHT_COLOUR_TABLE[static_cast<std::size_t>(pointer - SPRITE_POINTER_BASE)]);
+  }
+
+  // 6502: LDA #1 / .SIG3 STA T -- one if a laser was found, and the zero `LDA LASER,Y` left if
+  // not, which is the whole of how the sights get switched off.
+  _math.t = (laser != 0u) ? std::uint8_t{ 1u } : std::uint8_t{ 0u };
+
+  // 6502: LDA TRIBBLE+1 / AND #%01111111 / LSR A x4 / TAX.
+  const std::uint8_t population =
+    _commander.bytes[static_cast<std::size_t>(Field::Tribbles) + 1u];
+  const std::size_t index = static_cast<std::size_t>((population & 0x7Fu) >> 4u);
+
+  _trumbleSprites = TRUMBLE_COUNT_TABLE[index]; // 6502: LDA TRIBTA,X / STA TRIBCT
+
+  // 6502: LDA TRIBMA,X / ORA T / STA VIC+&15 -- the sights and the Trumbles in one byte.
+  _effects.SetSpritesEnabled(static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | _math.t));
+
+  _effects.SetRasterMode(0x04u); // 6502: LDA #%100 / JMP SETL1, a tail call
 }
 
 } // namespace Elite

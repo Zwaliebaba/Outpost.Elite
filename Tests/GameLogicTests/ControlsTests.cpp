@@ -5,11 +5,18 @@
 
 #include "Controls.h"
 
+#include "Arith.h"
+#include "Canvas.h"
+#include "Commander.h"
+#include "LookupTables.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
 
 #include <array>
 #include <cstdint>
+#include <cstring>
+#include <span>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -43,6 +50,41 @@ bool OracleMissing()
 std::wstring Widen(const std::string& _text)
 {
   return std::wstring(_text.begin(), _text.end());
+}
+
+/// The screen's base address, derived the way the game derives it: `ylookup` holds the row
+/// addresses with the four-cell left margin already added, so the base is the first row less 32.
+std::uint16_t ScreenBase(const OracleImage& _oracle)
+{
+  const Cpu6502 image = _oracle.Fresh();
+  return static_cast<std::uint16_t>(
+    (image.memory[_oracle.Label("ylookupl")] | (image.memory[_oracle.Label("ylookuph")] << 8))
+    - 0x20);
+}
+
+void FillScreens(Cpu6502& _cpu, Elite::Canvas& _canvas, std::uint16_t _base, std::uint8_t _marker)
+{
+  std::memset(&_cpu.memory[_base], _marker, Elite::Canvas::SCREEN_SIZE);
+  for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
+  {
+    _canvas.Write(offset, _marker);
+  }
+}
+
+void CompareScreens(const Cpu6502& _cpu, std::uint16_t _base, const Elite::Canvas& _canvas,
+                    const std::wstring& _context)
+{
+  const std::span<const std::uint8_t> ours = _canvas.Screen();
+  for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
+  {
+    const std::uint8_t expected = _cpu.memory[static_cast<std::uint16_t>(_base + offset)];
+    if (expected != ours[offset])
+    {
+      Assert::Fail((_context + L": screen differs at offset " + std::to_wstring(offset)
+                    + L" -- game has " + std::to_wstring(expected) + L", port has "
+                    + std::to_wstring(ours[offset])).c_str());
+    }
+  }
 }
 } // namespace
 
@@ -374,6 +416,161 @@ public:
     Assert::IsTrue(recentredByStick > 0u, L"the joystick's spring-back fired");
     Assert::IsTrue(bigRollRequests > 0u, L"the autopilot's direct write to JSTX fired");
     Assert::IsTrue(clampedSpeed > 0u, L"and its speed was clamped at 22");
+  }
+};
+
+
+TEST_CLASS(TheLaserSights)
+{
+public:
+  /*
+   * 6502: SIGHT -- the sights and the Trumbles, compared on the canvas and on both registers.
+   *
+   * THE SHIP BLUEPRINTS LIVE UNDERNEATH THE VIC-II REGISTERS. `VIC` is &D000 and so is `XX21`;
+   * the C64 banks between the chip and the RAM behind it, and the oracle's memory is flat, so
+   * `STA VIC+&27` lands on `SHIPS.bin` byte &27 -- which is inside the blueprint pointer table.
+   * That is why this uses a fresh image per case rather than one for the sweep: a run that wrote
+   * a register would corrupt the blueprints for every case after it (§6.75).
+   *
+   * It also means the two register writes can be READ BACK, which is what makes them comparable
+   * at all. The port puts them behind a seam, the oracle catches them as memory, and the two are
+   * compared against each other.
+   *
+   * `SETL1` is trapped and its two calls are checked for order as well as value: the routine
+   * brackets everything it does between %101 and %100, and a port that switched the raster mode
+   * once would agree on every byte.
+   */
+  TEST_METHOD(TheLaserSightsMatchSIGHT)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t sight = oracle.Label("SIGHT");
+    const std::uint16_t setl1 = oracle.Label("SETL1");
+    const std::uint16_t laserBase = oracle.Label("LASER");
+    const std::uint16_t view = oracle.Label("VIEW");
+    const std::uint16_t tribble = oracle.Label("TRIBBLE");
+    const std::uint16_t tribct = oracle.Label("TRIBCT");
+    const std::uint16_t t = oracle.Label("T");
+    const std::uint16_t screen = ScreenBase(oracle);
+
+    // 6502: VIC, which is &D000 -- the same address the ship blueprints load at.
+    const std::uint16_t vicColour = 0xD027u;
+    const std::uint16_t vicEnable = 0xD015u;
+
+    const std::vector<std::uint8_t> LASERS = {
+      0,                          // none fitted on this view
+      Elite::LASER_PULSE,
+      Elite::LASER_BEAM,
+      Elite::LASER_MILITARY,
+      50,                         // 6502: Mlas -- the mining laser, which nothing tests for
+      99,                         // a power the game does not have, which gets the same sprite
+    };
+    const std::vector<std::uint8_t> POPULATIONS = { 0, 0x0F, 0x10, 0x2F, 0x60, 0x70, 0x80, 0xFF };
+
+    std::uint32_t compared = 0;
+    std::set<std::uint32_t> pointers;
+    std::set<std::uint32_t> masks;
+
+    for (const std::uint8_t laser : LASERS)
+    {
+      for (std::uint8_t which = 0; which < 4u; ++which)
+      {
+        for (const std::uint8_t population : POPULATIONS)
+        {
+          Cpu6502 cpu = oracle.Fresh();
+          cpu.AddTrap(setl1);
+          Elite::Canvas canvas;
+
+          FillScreens(cpu, canvas, screen, 0x6Du);
+
+          Elite::CommanderBlock commander;
+          for (std::uint8_t slot = 0; slot < 4u; ++slot)
+          {
+            // A different laser on every other view, so a port that ignored VIEW would be caught.
+            const std::uint8_t fitted = (slot == which) ? laser : Elite::LASER_BEAM;
+            commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + slot] = fitted;
+            cpu.memory[static_cast<std::uint16_t>(laserBase + slot)] = fitted;
+          }
+
+          commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)] = 0x77u;
+          commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = population;
+          cpu.memory[tribble] = 0x77u;
+          cpu.memory[static_cast<std::uint16_t>(tribble + 1)] = population;
+
+          cpu.memory[view] = which;
+          cpu.memory[tribct] = 0x9Cu;
+          cpu.memory[t] = 0x9Cu;
+          cpu.memory[vicColour] = 0x00u;
+          cpu.memory[vicEnable] = 0x00u;
+
+          const Elite::Testing::RunResult run = cpu.CallSubroutine(sight, 5'000);
+          Assert::IsTrue(run.completed, L"SIGHT returned");
+
+          struct Recorder final : Elite::SightEffects
+          {
+            std::vector<std::uint8_t> modes;
+            std::uint8_t colour = 0;
+            std::uint32_t colours = 0;
+            std::uint8_t enabled = 0;
+
+            void SetRasterMode(std::uint8_t _mode) override { modes.push_back(_mode); }
+            void SetSightColour(std::uint8_t _colour) override { colour = _colour; ++colours; }
+            void SetSpritesEnabled(std::uint8_t _mask) override { enabled = _mask; }
+          } effects;
+
+          Elite::MathWorkspace math;
+          math.t = 0x9Cu;
+          std::uint8_t trumbleSprites = 0x9Cu;
+          Elite::DrawLaserSights(canvas, math, commander, trumbleSprites, which, effects);
+
+          const std::wstring where =
+            Widen("SIGHT(laser " + std::to_string(laser) + " on view " + std::to_string(which)
+                  + ", Trumbles " + std::to_string(population) + ")");
+
+          CompareScreens(cpu, screen, canvas, where);
+          Assert::AreEqual(cpu.memory[tribct], trumbleSprites, (where + L": TRIBCT").c_str());
+          Assert::AreEqual(cpu.memory[t], math.t, (where + L": T").c_str());
+          Assert::AreEqual(cpu.memory[vicEnable], effects.enabled, (where + L": VIC+&15").c_str());
+
+          // The colour register is only written when a laser was found, so a case with none
+          // leaves the marker rather than a colour -- and the port must not call the seam.
+          Assert::AreEqual<std::uint32_t>(laser != 0u ? 1u : 0u, effects.colours,
+                                          (where + L": how often the colour was set").c_str());
+          if (laser != 0u)
+          {
+            Assert::AreEqual(cpu.memory[vicColour], effects.colour, (where + L": VIC+&27").c_str());
+          }
+          else
+          {
+            Assert::AreEqual<std::uint32_t>(0u, cpu.memory[vicColour],
+                                            (where + L": the game left it alone too").c_str());
+          }
+
+          Assert::AreEqual<std::size_t>(2u, effects.modes.size(),
+                                        (where + L": two raster switches").c_str());
+          Assert::AreEqual<std::uint32_t>(0x05u, effects.modes[0], (where + L": the way in").c_str());
+          Assert::AreEqual<std::uint32_t>(0x04u, effects.modes[1], (where + L": and out").c_str());
+          Assert::AreEqual<std::size_t>(2u, cpu.trapHits.size(),
+                                        (where + L": the game switched twice too").c_str());
+          Assert::AreEqual<std::uint32_t>(effects.modes[0], cpu.trapHits[0].a,
+                                          (where + L": with the same mode").c_str());
+          Assert::AreEqual<std::uint32_t>(effects.modes[1], cpu.trapHits[1].a,
+                                          (where + L": and the same one back").c_str());
+
+          pointers.insert(canvas.Read(Elite::SIGHT_SPRITE_CELL));
+          masks.insert(effects.enabled);
+          ++compared;
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(6u * 4u * 8u, compared, L"the whole sweep ran");
+    Assert::IsTrue(pointers.size() >= 4u, L"every laser got its own sprite");
+    Assert::IsTrue(masks.size() >= 6u, L"and the Trumble population moved the enable mask");
   }
 };
 

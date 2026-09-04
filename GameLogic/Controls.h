@@ -3,6 +3,8 @@
 #include <array>
 #include <cstdint>
 
+#include "Canvas.h"
+#include "Commander.h"
 #include "PlanetDraw.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
@@ -150,5 +152,79 @@ public:
  */
 void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options,
                         ShipBlock& _work, FlightState& _flight, ControlEffects& _effects) noexcept;
+
+/*
+ * 6502: SPOFF% -- the sprite pointer for the first sprite definition.
+ *
+ * `(SPRITELOC% - SCBASE) / 64`, and `SPRITELOC%` is `SCBASE + &2800` on this build: the sprite
+ * definitions start exactly where the canvas ends, so the pointer is 160. The four the sights
+ * use are 160 to 163, one per laser.
+ */
+inline constexpr std::uint8_t SPRITE_POINTER_BASE = 160;
+
+/*
+ * 6502: &63F8 and &67F8 -- where sprite 0's pointer lives, in BOTH blocks of screen RAM.
+ *
+ * The last eight bytes of each 1KB block of screen RAM are the VIC-II's sprite pointers, and the
+ * game keeps two blocks in step because it flips the chip between them. So these are inside the
+ * canvas -- offsets &23F8 and &27F8 of an array the port already compares byte for byte -- and
+ * writing a sprite pointer is a canvas write like any other (§6.73).
+ */
+inline constexpr std::uint16_t SIGHT_SPRITE_CELL = Canvas::SCREEN_CELLS + 0x3F8u;
+inline constexpr std::uint16_t SIGHT_SPRITE_CELL_2 = Canvas::DASHBOARD_CELLS + 0x3F8u;
+
+/// 6502: POW, POW+128, Armlas -- the laser powers `SIGHT` tests for, in the order it tests them.
+/// `Armlas` is `INT(128.5 + 1.5*POW)`, which is 151; the mining laser is not tested for at all
+/// and gets the fourth sprite by elimination.
+inline constexpr std::uint8_t LASER_PULSE = 15;
+inline constexpr std::uint8_t LASER_BEAM = 143;
+inline constexpr std::uint8_t LASER_MILITARY = 151;
+
+/// What `SIGHT` reaches that is a VIC-II register rather than memory.
+class SightEffects
+{
+public:
+  virtual ~SightEffects() = default;
+
+  /*
+   * 6502: JSR SETL1 -- switch the raster interrupt handler's mode, which the routine does twice,
+   * bracketing everything it touches.
+   *
+   * `SETL1` is self-modifying code inside the interrupt handler itself: `SEI / STA L1M / ... /
+   * CLI`. §6.59 refused it a place in `GameLogic` for that reason and this is the seam it gets
+   * instead. The two values are %101 on the way in and %100 on the way out.
+   */
+  virtual void SetRasterMode(std::uint8_t _mode) = 0;
+
+  /// 6502: STA VIC+&27 -- sprite 0's colour, which is the sights'.
+  virtual void SetSightColour(std::uint8_t _colour) = 0;
+
+  /// 6502: STA VIC+&15 -- which of the eight sprites are switched on. Bit 0 is the sights and
+  /// bits 2 to 7 are the Trumbles, which is why the two are ORed together here rather than set
+  /// independently.
+  virtual void SetSpritesEnabled(std::uint8_t _mask) = 0;
+};
+
+/*
+ * 6502: SIGHT -- the laser sights and the Trumbles, which are the same four instructions apart.
+ *
+ * Two unrelated jobs in one routine because they share a register: bit 0 of the sprite-enable
+ * byte is the sights and bits 2 to 7 are the Trumbles, so neither can be written without the
+ * other. `T` carries the sights' bit across the Trumble arithmetic to the single `ORA` that
+ * joins them.
+ *
+ * IT IS NOT ALL HARDWARE. The two sprite-pointer writes are canvas writes and `TRIBCT` is game
+ * state; only the two VIC-II registers and `SETL1` are outside. §6.69 filed the whole routine as
+ * a seam, which would have thrown away two thirds of it and left `LOOK1` -- which falls into
+ * this -- uncomparable (§6.73).
+ *
+ * WITH NO LASER ON THIS VIEW IT WRITES NOTHING TO THE CANVAS. `LDA LASER,Y / BEQ SIG3` skips
+ * both pointers AND the colour, so the sprite keeps whatever pointer it had and is switched off
+ * instead. A port that wrote a pointer of 160 and then disabled the sprite would look the same
+ * on screen and differ on every byte.
+ */
+void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const CommanderBlock& _commander,
+                     std::uint8_t& _trumbleSprites, std::uint8_t _view,
+                     SightEffects& _effects) noexcept;
 
 } // namespace Elite
