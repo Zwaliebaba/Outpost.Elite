@@ -428,6 +428,56 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.35 Six places where a ledger row can name a routine no branch ever enters
+
+The §6.12 pass on the projection chain — `DVID3B` → `DVID3B2` → `PLS6` → `PROJ`, which is every
+pixel the space view draws — moved three routines between slices. The first two are the usual
+finding. The third is a mechanism, and it is enumerable.
+
+**`DVID3B2` is not movement code.** The ledger sends it to `Arith.cpp` and `ShipMove.cpp`, and it
+was deferred to 3a because it reads `INWK+6..8`. Reading the ship block is not the same as
+belonging beside the code that writes it: its two callers are `PLS6` here and `PLANET`/`PLS1` in
+3c, and nothing in `MVEIT`'s tree touches it. It is the two instructions that turn a general
+divide into "divide by this ship's distance", so it is built with the projection.
+
+**`PLS6` is not planet code.** The ledger groups `pls3`–`pls6` with the planet and sun drawing,
+which is 3c. `PLS3`, `PLS4` and `PLS5` really are that, and none of them falls through into
+`PLS6`; `PLS6`'s only callers in the whole game are `PROJ`'s two `JSR PLS6`, and `PROJ` is 3b. The
+row was scoped by a RANGE OF LABEL NAMES, and four consecutive names turn out not to be four
+related routines. That is a cheaper mistake to make than §6.34's and a cheaper one to find —
+`grep "JSR PLS6"` answers it — but it is a third distinct way for a row to be wrong, after "what
+it is about rather than what it touches" and "two structures with confusable names".
+
+**`PL2` is in slice 3b because of one byte, and the byte is not `PL2`'s.** `PROJ` returns an
+overflow with `BCS PL2-1`, and `PL2-1` is `PROJ`'s own `RTS` — the last byte before the next
+routine starts. `PL2` itself is `LDA TYPE / LSR A / JMP WPLS2 / JMP WPLS`, the planet and sun line
+heap eraser, which belongs with `wpls`/`wpls2` in 3c. Nothing in 3b calls it. The row named the
+routine the address arithmetic points NEAR rather than the code the branch reaches.
+
+That one generalises, and it is worth measuring rather than worrying about. The C64 build has 43
+branch or jump targets written as a label minus an offset, 33 of them distinct. Twenty-seven are
+an alternative entry point into the same source file — `MVT1-2` is one, two bytes earlier in
+`mvt1.asm` so that the caller can skip an `AND #%10000000`, and slice 3a ported both entries from
+the one row correctly. **Six are not**, and land in the file BEFORE the one that defines the label:
+
+    LASLI-1   LL10-1   PL2-1   SFS1-2   WPLS-1   ypl-1
+
+Every one of those is a row that can be placed by a routine no branch ever enters. `PL2-1` is now
+resolved. The other five are worth checking when their slices open rather than now — `LL10-1` is
+slice 3b's own and will be met on the way through `LL9`.
+
+**And one mutation the sweep does not catch, because there is nothing to catch.** `DVID3B`'s
+denominator loop puts its `DEY` at the top and its test at the bottom, and the first draft of the
+header comment called that load-bearing: a do-while, so the first shift always happens. Rewriting
+it as a while-loop passes all four sweeps. It has to: `A` is `S AND %01111111` on entry, so bit 7
+is clear and a while-loop enters too — which is also why the `BMI DV9` commented out above it in
+the upstream source could never have branched. The comment was a §6.29 in miniature, a plausible
+reading with a justification attached, and the mutation is what said so. Seventeen other mutations across the four
+routines were caught; this one is recorded as EQUIVALENT rather than as a gap, and the comment
+now says which it is. An eighteenth is neither: taking the `ORA #1` out of `DVID3B2` makes the
+port HANG rather than answer wrongly, which is what the original does too and what the header
+says it does.
+
 ### 6.34 The same name for two different things, and a slice scoped around the wrong one
 
 The §6.12 pass on slice 3b, run before any of it was written, as §6.12 asks. Three corrections,
@@ -1417,7 +1467,7 @@ Three things that is worth noting for the slices ahead:
 | Slice | Scope | Accept |
 |---|---|---|
 | **3a Ship slots and motion** | `ShipSlot`, `Bubble` (`FRIN`, `MANY`, `UNIV`, `NWSHP`, `NWS1`, `KILLSHP`, `KS1`–`KS4`, `ZINF`, `RESET`/`RES2`, `ZES1`/`ZES2`, `GINF`), `MVEIT` 1–9, `MVT1`, `MVT3`, `MVT6`, `MVS4`, `MVS5`, `MV40`, `TIDY`, `MAS1`–`MAS4`, `TAS1`–`TAS6`, `DCS1`, `ABORT`, `sightcol`. | Oracle: run `MVEIT` on a slot with sampled orientations/speeds/roll/pitch for N iterations; byte-identical `INWK`. |
-| **3b Ship drawing** | `LL9` 1–12, `LL61`, `LL62`, `LL118`, `LL120`, `LL123`, `LL129`, `LL145` 1–4 clipping, `SHPPT`, `LL5`, the ship line heap (`LSX2`/`LSY2`), `PROJ`, `PL2`. Title screen rotating ship. | Oracle: for sampled ship types and orientations the list of clipped line segments matches; golden of the title screen Cobra at frames 1, 30, 60. |
+| **3b Ship drawing** 🟠 **The projection is built, 2026-09-04** | `LL9` 1–12, `LL61`, `LL62`, `LL118`, `LL120`, `LL123`, `LL129`, `LL145` 1–4 clipping, `SHPPT`, ✅ `PROJ`, ✅ `PLS6`, ✅ `DVID3B`/`DVID3B2`, `PLUT`. Title screen rotating ship. | Oracle: for sampled ship types and orientations the list of clipped line segments matches; golden of the title screen Cobra at frames 1, 30, 60. **The scope line is now twice corrected.** §6.34 removed `LL5` (ported in phase 1) and `LSX2`/`LSY2` (3c's heap, not the ship heap). §6.35 removes `PL2` — `PROJ` reaches `PL2-1`, which is `PROJ`'s own `RTS`, and `PL2` itself erases the planet and sun heap — and adds `PLS6`, which the 3c row had grouped with the planet code by name. **`PROJ` and everything it divides through are built and swept**: 65,280 divides, 65,536 divides by a ship's z, 65,536 screen offsets across all four of `PLS6`'s exits, and 3,072 projections including the half-written case. Seventeen mutations caught, one recorded as equivalent. |
 | **3c Planet, sun, stardust** ∥ | `PLANET`, `PL9` 1–3, `PLS1`–`PLS6`, `PLS22`, `WPLS`/`WPLS2`, `WP1`, `EDGES`, `CHKON`, `PL21`, `SUN` 1–4 with its heap, `CIRCLE` uses, `STARS`, `STARS1`, `STARS2`, `STARS6`, `NWSTARS`, `FLIP`, `WPSHPS`, `FLFLLS`, `SOLAR`, `NWQ`. | Goldens of the launch view at Lave (planet + sun + stardust) at several iterations; oracle for `PLS`/`CHKON` arithmetic. |
 | **3d Flight loop and dashboard** | Main flight loop 1–16, `DIALS` 1–4, `DILX`/`DIL2`, `COMPAS`/`SP1`/`SP2`/`SPS*`, `SCAN` (sprite blips as canvas draws), `MSBAR`, `ECBLB`/`SPBLB`, `PZW`, `MESS`/`me1`/`mes9`, `LASLI`, `LAUN`/`LL164` hyperspace tunnel, `DEATH` (the "GAME OVER" fly-by), `WARP` (J), `CTRL`, `DOKEY` flight half, `SPIN`, `cargo` canisters, docking check (`ISDK` path in loop part 10–11). | Launch from Lave, fly, dock manually, hyperspace to Diso, dock. Goldens of the dashboard; replay hashes for the whole trip. |
 
@@ -1510,6 +1560,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **The projection chain built — `DVID3B`, `DVID3B2`, `PLS6`, `PROJ`** — which is every pixel the space view will draw, and three more ledger moves with it (§6.35). `DVID3B2` was filed with the movement code because it reads `INWK+6..8`; its callers are the projection and the planet drawing, and nothing in `MVEIT`'s tree touches it. `PLS6` was filed with the planet drawing because the row wrote `pls3`–`pls6` as a RANGE OF NAMES; its only callers are `PROJ`'s two. And `PL2` was in 3b because `PROJ` branches to `PL2-1`, which is `PROJ`'s own `RTS` and not `PL2` at all — the row named the routine the address arithmetic points near. That last one is enumerable rather than anecdotal: the C64 build has 43 backward label-with-offset targets, 27 of them alternative entry points into the same source file (as `MVT1-2` is, ported correctly in 3a) and **six that land in the file before the one that names them** — `LASLI-1`, `LL10-1`, `PL2-1`, `SFS1-2`, `WPLS-1`, `ypl-1`. One down, five to check as their slices open. Also recorded: a mutation the sweep does NOT catch, because the loop shape it changes is equivalent, and the header comment that had claimed otherwise. |
 | 2026-09-04 | **Slice 3b opened with its own §6.12 pass, before any of it was written.** Three corrections to the row (§6.34): `LL5`, `LL28` and `LL38` are already ported, from phase 1; the row names `LSX2`/`LSY2` as "the ship line heap" and they are the PLANET AND SUN heap, which belongs to 3c — the ship heap is the `LS%`/`SLSP` region 3a already modelled; and `LL9` jumps to `DOEXP`, a seam the row does not name. The middle one is a new shape of the pattern: not a row written from what a routine is about, but **two structures with confusable names and the row picking the wrong one**, which asking "what does this read?" cannot catch and asking "who writes this?" catches in one grep. In the other direction: `LL9`'s only external calls are `DORND` and `FMLTU`, both ported, so the hardest routine in Elite has two dependencies and both exist. |
 | 2026-09-04 | **Slice 3a's acceptance criterion met: `MVEIT` runs.** Sixteen ships for twenty iterations each with byte-identical `INWK`, plus the seam counts asserted — `SCAN` and `TACTICS` are stubs but how often each is reached is behaviour, and the sun is never scanned at all. Eight routines were ported ahead of it and every one matched first time; `MVEIT` did not, and §6.33 records the two reasons, both invisible to a single call. `BPL MV43` branches to the SUBTRACTION, so "signs agree" means subtract here and add everywhere else in the file; and the `ADC` after `JSR MLTU2` has no `CLC`, so it runs on the multiplier's exit carry, which the port was discarding. The generalisation is cheap: where a routine's output feeds back into its own input, compare a RUN and not a call. |
 | 2026-09-04 | **Phase 3 opened with the ledger pass §6.12 asked for, and the ship data extracted.** `MVEIT` reads the blueprint's maximum speed and `NWSHP` three more of its bytes, so 3a touches data the row files under 3b — §6.12's pattern for the seventh time, caught by looking this time rather than by failing. The blueprints are extracted as ONE 8,073-byte region indexed by address rather than 33 arrays, because two of them declare more data than fits before the next one begins (the splinter by 24 bytes, the Thargon by 60), those same two have no `_EDGES` label, and the game has no concept of a blueprint's end anyway. §6.32 also records the same mistake made one level up and caught by the new suite: the region was first sized from the `SHIP_` labels, and the pointer table was walked to 39 entries when it is 33 — past the end it returns `E%`'s bytes as addresses, which came out as 1, 24865 and 41120. |

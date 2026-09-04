@@ -114,6 +114,9 @@
     <ClCompile Include="ShipMoveTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="ShipDrawTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\Outpost\SaveStore.cpp">
       <Filter>Suites</Filter>
     </ClCompile>

@@ -824,4 +824,147 @@ void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcep
   }
 }
 
+
+void DivideSignedToK(MathWorkspace& _work) noexcept
+{
+  // P(2 1 0) is forced to at least 1, for the same reason Q is: the scaling loop below shifts
+  // until a set bit arrives, and an all-zero numerator has none to give it.
+  _work.p = static_cast<std::uint8_t>(_work.p | 0x01u);
+
+  // The sign of the answer, put aside now because the division that follows is on magnitudes.
+  _work.t = static_cast<std::uint8_t>((_work.p2 ^ _work.s) & 0x80u);
+
+  // The scale factor, counted UP by the numerator's shifts and DOWN by the denominator's, so
+  // what is left at the end is the difference -- and a byte, so it wraps rather than going
+  // negative, which is why the test below is on bit 7 and not on a comparison.
+  std::uint8_t y = 0;
+
+  std::uint8_t a = static_cast<std::uint8_t>(_work.p2 & 0x7Fu);
+
+  // 6502: DVL9 -- shift the numerator up until its top byte reaches 64.
+  //
+  // The second condition is the `BNE DVL9` at the bottom, which the upstream source calls
+  // "effectively a JMP, as Y will never be zero". It is a JMP given the `ORA #1` above, which
+  // guarantees a set bit to shift up within twenty-four steps -- but it is the loop's ONLY exit
+  // when there is not one, and a port that dropped it would hang where the original returns a
+  // wrong answer. Cheaper to keep than to argue about.
+  while (a < 64u)
+  {
+    const ShiftResult low = RotateLeftValue(_work.p, false);
+    _work.p = low.value;
+    const ShiftResult middle = RotateLeftValue(_work.p1, low.carry);
+    _work.p1 = middle.value;
+    const ShiftResult high = RotateLeftValue(a, middle.carry);
+    a = high.value;
+    ++y;
+    if (y == 0u)
+    {
+      break;
+    }
+  }
+
+  _work.p2 = a;
+
+  // 6502: DVL6 -- and the denominator up until its top BIT is set. The decrement is at the top
+  // of the loop and the test at the bottom, so this always runs at least once.
+  a = static_cast<std::uint8_t>(_work.s & 0x7Fu);
+  do
+  {
+    --y;
+    const ShiftResult low = RotateLeftValue(_work.q, false);
+    _work.q = low.value;
+    const ShiftResult middle = RotateLeftValue(_work.r, low.carry);
+    _work.r = middle.value;
+    const ShiftResult high = RotateLeftValue(a, middle.carry);
+    a = high.value;
+  } while ((a & 0x80u) == 0u);
+
+  // 6502: DV9 -- the two top bytes are now as large as they will go, so the ratio can be had
+  // from them alone.
+  _work.q = a;
+  _work.r = 254;
+  a = _work.p2;
+
+  // 6502: LL31new / LL29new -- LL31's body, inlined in the original and a loop here. R is both
+  // the answer and the counter: the eight bits shifted in push the seven set bits out, and the
+  // zero underneath them ends the loop when it reaches the top.
+  for (;;)
+  {
+    const ShiftResult shifted = RotateLeftValue(a, false);
+    a = shifted.value;
+
+    bool bit = false;
+    if (shifted.carry)
+    {
+      // The numerator has a ninth bit, so the subtraction cannot borrow and the original does
+      // not bother testing -- it subtracts and forces the quotient bit with a `SEC`.
+      a = SubtractWithCarry(a, _work.q, true).value;
+      bit = true;
+    }
+    else if (a >= _work.q)
+    {
+      a = SubtractWithCarry(a, _work.q, true).value;
+      bit = true;
+    }
+
+    const ShiftResult quotient = RotateLeft(_work.r, bit);
+    _work.r = quotient.value;
+    if (!quotient.carry)
+    {
+      break;
+    }
+  }
+
+  // 6502: LL312new -- the answer is the byte in R, and all that is left is to put it back on
+  // the scale the two loops above took it off.
+  _work.k[1] = 0;
+  _work.k[2] = 0;
+  _work.k[3] = 0;
+
+  if ((y & 0x80u) != 0u)
+  {
+    // 6502: DVL8 -- Y came out negative, so the denominator was shifted further than the
+    // numerator and the answer is scaled back UP, through all four bytes of K.
+    a = _work.r;
+    do
+    {
+      const ShiftResult low = RotateLeftValue(a, false);
+      a = low.value;
+      const ShiftResult k1 = RotateLeft(_work.k[1], low.carry);
+      _work.k[1] = k1.value;
+      const ShiftResult k2 = RotateLeft(_work.k[2], k1.carry);
+      _work.k[2] = k2.value;
+      _work.k[3] = RotateLeft(_work.k[3], k2.carry).value;
+      ++y;
+    } while (y != 0u);
+
+    _work.k[0] = a;
+
+    // The sign is ORed in here and STORED on the other two paths, because only this one can
+    // have shifted something into K+3 that is worth keeping.
+    _work.k[3] = static_cast<std::uint8_t>(_work.k[3] | _work.t);
+    return;
+  }
+
+  if (y == 0u)
+  {
+    // 6502: DV13 -- the two scalings cancelled, so R is already the answer.
+    _work.k[0] = _work.r;
+    _work.k[3] = _work.t;
+    return;
+  }
+
+  // 6502: DVL10 -- Y is positive, so the answer is scaled back DOWN. The top three bytes stay
+  // zero: nothing shifted right out of the lowest byte can reach them.
+  a = _work.r;
+  do
+  {
+    a = static_cast<std::uint8_t>(a >> 1);
+    --y;
+  } while (y != 0u);
+
+  _work.k[0] = a;
+  _work.k[3] = _work.t;
+}
+
 } // namespace Elite
