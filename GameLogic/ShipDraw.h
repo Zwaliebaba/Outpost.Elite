@@ -5,6 +5,7 @@
 #include "LineHeap.h"
 #include "ShipSlot.h"
 
+#include <array>
 #include <cstdint>
 
 namespace Elite
@@ -172,5 +173,42 @@ void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, const Li
  */
 void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, LineHeap& _heap,
                      MathWorkspace& _math, Projection& _screen) noexcept;
+
+/*
+ * 6502: XX16 and XX12 -- the workspace `LL9`'s geometry runs in (slice 3b).
+ *
+ * Both are sized by what indexes them and both are confirmed by the zero-page layout, which is
+ * §6.8's test passed three ways: `XX16` is at 69 and `XX0` at 87, eighteen bytes apart, and it
+ * holds three vectors of six; `XX12` is at 113 and `K` at 119, six apart, and it holds three
+ * results of two.
+ *
+ * They are arrays because registers index them -- `LDA XX16,X` and `STA XX12,Y` in `LL51` -- which
+ * is the test for whether a workspace has to be addressable at all (§6.37).
+ */
+struct GeometryWorkspace
+{
+  /// 6502: XX16 -- the ship's three orientation vectors, scaled, as magnitude and sign pairs:
+  /// sidev in 0 to 5, roofv in 6 to 11, nosev in 12 to 17.
+  std::array<std::uint8_t, 18> xx16{};
+
+  /// 6502: XX12 -- three sign-magnitude dot products, magnitude then sign.
+  std::array<std::uint8_t, 6> xx12{};
+};
+
+/*
+ * 6502: LL51 (with its `ll51` loop) -- the three dot products of `XX15` with each of `XX16`'s
+ * vectors, left in `XX12`.
+ *
+ * This is how Elite decides both what a ship looks like and which of its faces you can see. `LL9`
+ * calls it twice with the same code and different contents: from part 5 with the ship's own
+ * position and the orientation vectors, which gives the ship's position in ITS frame; and from
+ * part 6 with a vertex and the TRANSPOSED vectors, which rotates that vertex into the player's.
+ * Part 6 does the transposing itself, by swapping six pairs of bytes in `XX16` in place.
+ *
+ * Filed under `Arith.cpp` and `ShipMove.cpp` by the ledger, deferred to 3a because it reads
+ * `XX15` and `XX16`. Those exist as part of `LL9`, it is called from `LL9` and nowhere else, and
+ * it is built here (§6.37).
+ */
+void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept;
 
 } // namespace Elite
