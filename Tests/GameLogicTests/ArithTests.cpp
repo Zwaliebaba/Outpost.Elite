@@ -585,7 +585,7 @@ public:
       MathWorkspace work;
       work.p = p;
       work.q = q;
-      const std::uint8_t high = Elite::MultiplyWide(work, a);
+      const std::uint8_t high = Elite::MultiplyWide(work, a).high;
 
       const std::wstring where = L" at iteration " + std::to_wstring(iteration);
       Assert::AreEqual<std::uint32_t>(cpu.a, high, (L"high byte" + where).c_str());

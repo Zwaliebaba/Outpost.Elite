@@ -39,6 +39,16 @@ struct MathWorkspace
 
   // 6502: K, a four-byte result block that several routines fill.
   std::uint8_t k[4] = { 0, 0, 0, 0 };
+
+  /*
+   * 6502: K2 -- a SECOND four-byte block, and separate storage rather than a second use of K.
+   *
+   * `MV40` is what settles that: it holds a partial result in K2 while `MULT3` overwrites K, and
+   * then adds the two together. They are live at the same time, so folding them into one would
+   * lose the first. The original agrees -- K is at zero page 119 and K2 at 178, nowhere near each
+   * other.
+   */
+  std::uint8_t k2[4] = { 0, 0, 0, 0 };
 };
 
 /// 6502: MU11 -- (A P) = P * X, unsigned. Returns the high byte; the low byte is left in P.
@@ -89,8 +99,23 @@ void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
 /// is known to be small.
 [[nodiscard]] std::uint8_t MultiplyScaled(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
+/*
+ * What `MLTU2` leaves behind, and the carry is not incidental.
+ *
+ * The routine ends `DEX / BNE MUL7 / RTS`, and neither of those touches the carry -- so what a
+ * caller sees is the carry from the final `ROR P`. `MVEIT` reads it two instructions later in an
+ * `ADC` with no `CLC` before it, which is how it came to be part of this signature: the port
+ * returned only the byte, and twenty iterations of `MVEIT` came out one adrift in the ship's y
+ * coordinate.
+ */
+struct WideResult
+{
+  std::uint8_t high = 0;
+  bool carry = false;
+};
+
 /// 6502: MLTU2 -- (A P+1 P) = (~A P) * Q, sixteen steps through the complemented multiplier.
-[[nodiscard]] std::uint8_t MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept;
+[[nodiscard]] WideResult MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /// 6502: DVID96 -- A = A / 96, keeping the sign bit. The tail TIS1 shares.
 [[nodiscard]] std::uint8_t DivideBy96(MathWorkspace& _work, std::uint8_t _a) noexcept;

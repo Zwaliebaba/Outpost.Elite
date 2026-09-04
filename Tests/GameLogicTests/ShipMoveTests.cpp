@@ -4,6 +4,7 @@
 #include "OracleImage.h"
 
 #include "Arith.h"
+#include "ShipBlueprint.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
 
@@ -530,6 +531,279 @@ public:
                    L"the second falls through to TI1");
     Assert::IsTrue((NOSE_Z[0] & 0x60u) == 0u && (NOSE_Z[1] & 0x60u) == 0u,
                    L"and the third all the way to TI2");
+  }
+};
+
+/*
+ * 6502: MV40 -- the planet and sun path through MVEIT (slice 3a).
+ *
+ * Run by TRAPPING MV45, because MV40 is a branch of MVEIT rather than a subroutine of it: it is
+ * reached by `JMP MV40` and leaves by `JMP MV45`, so calling it and letting it run would execute
+ * MVEIT's tail as well. The trap is what makes "just this branch" a thing that can be compared.
+ */
+TEST_CLASS(MovingThePlanetAndTheSun)
+{
+public:
+  TEST_METHOD(TheWorldTurningMatchesMV40)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t alpha = oracle.Label("ALPHA");
+    const std::uint16_t beta = oracle.Label("BETA");
+    const std::uint16_t mv40 = oracle.Label("MV40");
+    const std::uint16_t mv45 = oracle.Label("MV45");
+
+    // Roll and pitch: still, gentle either way, and the extremes of the sign-magnitude range.
+    const std::vector<std::uint8_t> TURNS = { 0, 1, 3, 127, 128, 129, 131, 255 };
+
+    std::uint32_t compared = 0;
+    for (const std::uint8_t a : TURNS)
+    {
+      for (const std::uint8_t b : TURNS)
+      {
+        for (const std::uint8_t seed : EDGES)
+        {
+          Cpu6502 cpu = oracle.Fresh();
+          Elite::ShipBlock work;
+          Elite::MathWorkspace math;
+
+          // 6502: JMP MV45 -- stop there rather than running MVEIT's tail as well.
+          cpu.AddTrap(mv45);
+
+          // The nine bytes of position: three axes of three bytes each, all different.
+          for (std::uint8_t offset = 0; offset < 9u; ++offset)
+          {
+            const std::uint8_t value = static_cast<std::uint8_t>(seed ^ (offset * 0x35u));
+            cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = value;
+            work[offset] = value;
+          }
+          cpu.memory[alpha] = a;
+          cpu.memory[beta] = b;
+
+          const Elite::Testing::RunResult run = cpu.CallSubroutine(mv40);
+          Assert::IsTrue(run.completed, L"MV40 reached MV45");
+
+          Elite::MovePlanetOrSun(work, math, a, b);
+
+          const std::wstring where = Widen("MV40(alpha=" + std::to_string(a) + ", beta="
+                                           + std::to_string(b) + ", seed=" + std::to_string(seed) + ")");
+          for (std::uint8_t offset = 0; offset < 9u; ++offset)
+          {
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work[offset],
+                             (where + L": INWK+" + std::to_wstring(offset)).c_str());
+          }
+          ++compared;
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(8u * 8u * 8u, compared, L"the whole sweep ran");
+  }
+};
+
+/*
+ * 6502: MVEIT -- slice 3a's acceptance criterion, in the plan's own words: "run MVEIT on a slot
+ * with sampled orientations/speeds/roll/pitch for N iterations; byte-identical INWK".
+ *
+ * ITERATED rather than called once, because that is what the criterion asks for and because it is
+ * a different question. A single call compares one step of arithmetic; N calls compare the
+ * FEEDBACK -- the damping in the tail, the sixteenth-iteration `TIDY`, the acceleration cleared
+ * each pass -- and a port that was wrong by one in a byte nothing immediately reads would agree
+ * for one iteration and diverge over twenty.
+ *
+ * `SCAN` and `TACTICS` are trapped, and counted on both sides: they belong to slice 3d and phase
+ * 4, and a port that called them a different number of times would be wrong about the loop even
+ * if every byte of INWK agreed.
+ */
+namespace
+{
+/// Counts the two seams instead of performing them, so the comparison covers WHETHER they were
+/// reached as well as what the arithmetic did.
+class CountingEffects final : public Elite::ShipEffects
+{
+public:
+  void UpdateScanner(Elite::ShipBlock&) override { ++scans; }
+  void RunTactics(Elite::ShipBlock&) override { ++tactics; }
+
+  std::uint32_t scans = 0;
+  std::uint32_t tactics = 0;
+};
+} // namespace
+
+TEST_CLASS(MovingAShip)
+{
+public:
+  TEST_METHOD(TwentyIterationsMatchMVEIT)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t mveit = oracle.Label("MVEIT");
+    const std::uint16_t scan = oracle.Label("SCAN");
+    const std::uint16_t tactics = oracle.Label("TACTICS");
+    const std::uint16_t xx0 = oracle.Label("XX0");
+
+    struct Case
+    {
+      const char* what;
+      std::uint8_t type;
+      std::uint8_t roll;      ///< INWK+29
+      std::uint8_t pitch;     ///< INWK+30
+      std::uint8_t speed;     ///< INWK+27
+      std::uint8_t exploding; ///< INWK+31
+      std::uint8_t hostile;   ///< INWK+32
+      std::uint8_t alpha;
+      std::uint8_t beta;
+
+      /*
+       * How often each seam is reached in twenty iterations, and these ARE the behaviour rather
+       * than a side effect. Two scans a pass is the ordinary case -- `MV30` and the tail's
+       * `JMP SCAN`; one is a ship that took a short path; none is the sun.
+       */
+      std::uint32_t scans;
+      std::uint32_t tactics;
+    };
+
+    const std::vector<Case> CASES = {
+      { "a Cobra, still, nobody turning", 11, 0, 0, 0, 0, 0, 0, 0, 40, 0 },
+      { "a Cobra under way", 11, 0, 0, 20, 0, 0, 0, 0, 40, 0 },
+      { "the player rolling", 11, 0, 0, 20, 0, 0, 12, 0, 40, 0 },
+      { "the player pitching", 11, 0, 0, 20, 0, 0, 0, 9, 40, 0 },
+      { "both, the other way", 11, 0, 0, 20, 0, 0, 0x8C, 0x89, 40, 0 },
+      { "the ship rolling too", 11, 40, 0, 20, 0, 0, 5, 3, 40, 0 },
+      { "and pitching", 11, 40, 33, 20, 0, 0, 5, 3, 40, 0 },
+      { "roll pinned at 127, which does not decay", 11, 127, 127, 20, 0, 0, 5, 3, 40, 0 },
+      { "at full speed, so the clamp bites", 11, 20, 20, 255, 0, 0, 4, 4, 40, 0 },
+      { "a HOSTILE ship, so tactics run", 11, 10, 10, 20, 0, 0x80, 4, 4, 40, 3 },
+      { "a MISSILE, which thinks every pass", 1, 10, 10, 30, 0, 0x80, 4, 4, 40, 20 },
+      { "an EXPLODING ship, which does not move", 11, 40, 40, 20, 0x20, 0x80, 6, 6, 20, 0 },
+      { "a dead one", 11, 40, 40, 20, 0x80, 0x80, 6, 6, 20, 0 },
+      { "the PLANET, which goes through MV40", 128, 0, 0, 0, 0, 0, 7, 5, 20, 0 },
+      { "the SUN, which skips the orientation", 129, 0, 0, 0, 0, 0, 7, 5, 0, 0 },
+      { "an Anaconda, whose maximum speed differs", 14, 20, 20, 200, 0, 0, 3, 3, 40, 0 },
+    };
+
+    constexpr int ITERATIONS = 20;
+
+    for (const Case& item : CASES)
+    {
+      const std::wstring where = Widen(std::string("MVEIT: ") + item.what);
+
+      Cpu6502 cpu = oracle.Fresh();
+      Elite::ShipBlock work;
+      Elite::MathWorkspace math;
+      Elite::FlightState flight;
+      CountingEffects effects;
+
+      // 6502: the two seams, trapped so the interpreter returns instead of running slice 3d's
+      // dashboard and phase 4's AI.
+      cpu.AddTrap(scan);
+      cpu.AddTrap(tactics);
+
+      // A whole ship: position, orientation, speed, roll, pitch and flags, the same on both sides.
+      for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
+      {
+        const std::uint8_t value = static_cast<std::uint8_t>((offset * 0x1Du) ^ 0x41u);
+        cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = value;
+        work[offset] = value;
+      }
+
+      const std::uint8_t FIXED[][2] = { { 27u, item.speed }, { 28u, 0u },   { 29u, item.roll },
+                                        { 30u, item.pitch }, { 31u, item.exploding },
+                                        { 32u, item.hostile } };
+      for (const auto& set : FIXED)
+      {
+        cpu.memory[static_cast<std::uint16_t>(inwk + set[0])] = set[1];
+        work[set[0]] = set[1];
+      }
+
+      // The blueprint MVEIT reads its maximum speed from, in XX0 on the oracle's side.
+      const std::uint16_t blueprint =
+        Elite::BlueprintAddress((item.type & 0x80u) != 0u ? std::uint8_t{ 11 } : item.type);
+      cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
+      cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+
+      // The player's roll and pitch, in all three of the forms MVEIT reads them in.
+      flight.alpha = item.alpha;
+      flight.alp1 = static_cast<std::uint8_t>(item.alpha & 0x7Fu);
+      flight.alp2 = static_cast<std::uint8_t>(item.alpha & 0x80u);
+      flight.alp2Next = static_cast<std::uint8_t>(flight.alp2 ^ 0x80u);
+      flight.beta = item.beta;
+      flight.bet1 = static_cast<std::uint8_t>(item.beta & 0x7Fu);
+      flight.bet2 = static_cast<std::uint8_t>(item.beta & 0x80u);
+      flight.delta = 14;
+      flight.type = item.type;
+      flight.slot = 3;
+
+      const std::uint8_t NAMES[][2] = {
+        { 0u, flight.alpha }, { 1u, flight.alp1 }, { 2u, flight.alp2 }, { 3u, flight.alp2Next },
+        { 4u, flight.beta },  { 5u, flight.bet1 }, { 6u, flight.bet2 }, { 7u, flight.delta },
+      };
+      const char* LABELS[] = { "ALPHA", "ALP1", "ALP2", "", "BETA", "BET1", "BET2", "DELTA" };
+      for (const auto& named : NAMES)
+      {
+        const char* label = LABELS[named[0]];
+        if (label[0] != '\0')
+        {
+          cpu.memory[oracle.Label(label)] = named[1];
+        }
+      }
+      cpu.memory[static_cast<std::uint16_t>(oracle.Label("ALP2") + 1)] = flight.alp2Next;
+      cpu.memory[oracle.Label("TYPE")] = item.type;
+      cpu.memory[oracle.Label("XSAV")] = flight.slot;
+
+      /*
+       * N iterations, with the main loop counter advancing exactly as the game's does -- which is
+       * what makes TIDY fire on one pass in sixteen and TACTICS on one in eight rather than never
+       * or always.
+       */
+      std::uint32_t scans = 0;
+      std::uint32_t tacticsRuns = 0;
+      for (int iteration = 0; iteration < ITERATIONS; ++iteration)
+      {
+        const std::uint8_t counter = static_cast<std::uint8_t>(iteration);
+        cpu.memory[oracle.Label("MCNT")] = counter;
+        flight.mainLoopCounter = counter;
+
+        // Count the seams on the oracle's side by stepping until it returns, noting each trap.
+        cpu.a = 0;
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(mveit);
+        Assert::IsTrue(run.completed,
+                       (where + L": MVEIT returned on iteration " + std::to_wstring(iteration)).c_str());
+
+        Elite::MoveShip(work, math, flight, effects, blueprint);
+
+        for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work[offset],
+                           (where + L": iteration " + std::to_wstring(iteration) + L", INWK+"
+                            + std::to_wstring(offset))
+                             .c_str());
+        }
+      }
+      (void)scans;
+      (void)tacticsRuns;
+
+      /*
+       * The seam counts, which are the behaviour and not bookkeeping. An ordinary ship is scanned
+       * TWICE a pass -- once at `MV30` and once by the tail's `JMP SCAN` -- while an exploding one
+       * is scanned once and then has its "on the scanner" bit cleared instead, and the SUN is
+       * never scanned at all because `MV40` skips the first and its early return skips the second.
+       * The tactics counts are the loop spreading: a missile thinks every pass and everything else
+       * one pass in eight, which with this slot lands three times in twenty.
+       */
+      Assert::AreEqual(item.scans, effects.scans, (where + L": how often the scanner was reached").c_str());
+      Assert::AreEqual(item.tactics, effects.tactics, (where + L": how often tactics ran").c_str());
+    }
   }
 };
 
