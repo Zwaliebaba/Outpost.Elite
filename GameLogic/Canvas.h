@@ -10,19 +10,37 @@ namespace Elite
 /*
  * The screen, held the way the C64 held it (ADR-002 section 4).
  *
- * This is not a framebuffer of colours. The VIC-II is in MULTICOLOUR BITMAP mode: a byte of the
- * bitmap is four pixels of two bits each, and what those two bits mean depends on the 8x8 cell
- * the pixel is in --
+ * This is not a framebuffer of colours. It is VIC-II bitmap memory, and the VIC-II is in TWO
+ * MODES AT ONCE -- the screen is split by a raster interrupt, and `comirq1` reprograms register
+ * &16 halfway down.
+ *
+ * STANDARD BITMAP MODE for the upper part, which is the space view and the whole of every text
+ * view. `moonflower` is %11000000, and bit 4 -- the multicolour bit -- is CLEAR. A byte is eight
+ * pixels of one bit each:
+ *
+ *   %1  the high nibble of that cell's byte in screen RAM
+ *   %0  the low nibble of the same byte
+ *
+ * MULTICOLOUR BITMAP MODE for the lower part, and ONLY when the dashboard is on it. `wantdials`
+ * sets bit 4 of `caravanserai` and points `abraxas` at the second block of screen RAM; a text
+ * view leaves both alone, so its bottom rows are standard like the rest. A byte is then four
+ * pixels of two bits each:
  *
  *   %00  the background colour
  *   %01  the high nibble of that cell's byte in screen RAM
  *   %10  the low nibble of the same byte
  *   %11  that cell's nibble of colour RAM
  *
- * -- so "the colour of a pixel" is not something the game ever stores. It stores bits, and it
- * EORs whole bytes of them. ADR-002 section 7 has the measurement that settles this: three of
+ * GETTING THIS WRONG IS NOT SUBTLE, which is worth saying because the port did get it wrong: an
+ * 8x8 font blitted into the bitmap and then decoded as multicolour comes out as half-width
+ * stripes, because each PAIR of font bits is read as one two-bit code. Every glyph on screen was
+ * unreadable and the cause was one line in `Resolve`.
+ *
+ * Either way "the colour of a pixel" is not something the game ever stores. It stores bits, and
+ * it EORs whole bytes of them. ADR-002 section 7 has the measurement that settles this: three of
  * the eight masks PIXEL can plot set one bit of one multicolour pixel and one bit of the next,
- * which no colour-per-pixel representation can express at all.
+ * which no colour-per-pixel representation can express at all -- and PIXEL draws on the scanner,
+ * which is the part of the screen that really is multicolour.
  *
  * So the port keeps the bytes. Resolve() turns them into the 320x200 indexed image the
  * presenter uploads, and that is the only place a colour index appears.
@@ -37,15 +55,26 @@ class Canvas
 public:
   // ---- geometry, all of it measured from the game rather than assumed ----------------------
 
-  static constexpr int WIDTH = 320;  ///< the resolved image, two columns per multicolour pixel
+  /// The resolved image: one column per standard-mode pixel, and two per multicolour one, which
+  /// is what makes 320 the right width for both halves of the split screen.
+  static constexpr int WIDTH = 320;
   static constexpr int HEIGHT = 200;
   static constexpr int CELL_COLUMNS = 40;
   static constexpr int CELL_ROWS = 25;
   static constexpr int ROW_BYTES = CELL_COLUMNS * 8; ///< 320: one character row of the bitmap
 
   static constexpr std::uint16_t BITMAP_SIZE = 0x2000;
-  static constexpr std::uint16_t SPACE_CELLS = 0x2000; ///< offset of the space view's screen RAM
-  static constexpr std::uint16_t TEXT_CELLS = 0x2400;  ///< offset of the text view's screen RAM
+  /*
+   * The two blocks of screen RAM, and which is which is NOT what their addresses suggest.
+   *
+   * 6502: `zebop` is always &81, so the upper part of the screen always takes its colours from
+   * &6000 -- the space view and every text view alike. `abraxas` is &81 too until `wantdials`
+   * makes it &91, which is the ONE case that uses &6400: the dashboard. So the first block
+   * colours the game screen and the second colours the dashboard, and `celllook` -- the table
+   * CHPR writes a glyph's colour through -- indexes the first.
+   */
+  static constexpr std::uint16_t SCREEN_CELLS = 0x2000;    ///< 6502: &6000, via zebop
+  static constexpr std::uint16_t DASHBOARD_CELLS = 0x2400; ///< 6502: &6400, via abraxas = &91
   static constexpr std::uint16_t SCREEN_SIZE = 0x2800;
 
   /// 6502: the 0x20 that ylookup adds to every row -- the space view's left margin, four
@@ -72,7 +101,7 @@ public:
   /// lands on cell 4 + XC, which is where the glyph went.
   [[nodiscard]] static constexpr std::uint16_t CellRowOffset(int _row) noexcept
   {
-    return static_cast<std::uint16_t>(SPACE_CELLS + 3 + CELL_COLUMNS * _row);
+    return static_cast<std::uint16_t>(SCREEN_CELLS + 3 + CELL_COLUMNS * _row);
   }
 
   // ---- the bytes ---------------------------------------------------------------------------
@@ -128,10 +157,16 @@ public:
   [[nodiscard]] std::uint8_t Background() const noexcept { return m_background; }
   void SetBackground(std::uint8_t _colour) noexcept { m_background = _colour; }
 
-  /// Which of the two screen-RAM blocks is live. The game switches them when it moves between
-  /// the space view and a text screen; both are kept because both hold state across the switch.
-  [[nodiscard]] bool TextView() const noexcept { return m_textView; }
-  void SetTextView(bool _text) noexcept { m_textView = _text; }
+  /*
+   * 6502: DFLAG, and the `abraxas` / `caravanserai` pair it drives -- is the dashboard on screen?
+   *
+   * ONE FLAG, TWO EFFECTS, and they always move together: with the dashboard shown, character
+   * rows 18 to 24 switch to multicolour AND to the second block of screen RAM. Without it the
+   * whole screen is standard bitmap mode coloured from the first block, which is every screen
+   * this port draws today -- the dashboard is phase 3's.
+   */
+  [[nodiscard]] bool DashboardShown() const noexcept { return m_dashboardShown; }
+  void SetDashboardShown(bool _shown) noexcept { m_dashboardShown = _shown; }
 
   // ---- the seam ---------------------------------------------------------------------------
 
@@ -159,7 +194,7 @@ private:
   std::array<std::uint8_t, SCREEN_SIZE> m_screen{};
   std::array<std::uint8_t, CELL_COLUMNS * CELL_ROWS> m_colourCells{};
   std::uint8_t m_background = 0;
-  bool m_textView = false;
+  bool m_dashboardShown = false;
 };
 
 /*

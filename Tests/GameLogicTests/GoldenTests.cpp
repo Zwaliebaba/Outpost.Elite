@@ -6,6 +6,7 @@
 #include "Canvas.h"
 #include "TextPrint.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -31,6 +32,13 @@ using Elite::Testing::OracleImage;
  * The second is a committed hash. A self-comparison cannot notice a change that moved both sides
  * together -- a different resolve, a different palette walk, a canvas laid out another way -- and
  * the hash can. There are two of them and they are named for what they prove (Risk R10).
+ *
+ * BOTH HASHES WERE RE-RECORDED when the resolve was corrected from multicolour to the standard
+ * bitmap mode the game screen is really in, and that is exactly the case the second check exists
+ * for: the pixel comparisons went on passing throughout, because a decode change moves the port
+ * and the oracle together. The new pictures were looked at before the numbers were written down
+ * -- a white frame with a diagonal across it and "OUTPOST ELITE" in MAG2 purple, which is what
+ * the scene says it draws and what the old numbers had never actually shown.
  */
 namespace GameLogicTests
 {
@@ -70,12 +78,36 @@ constexpr std::uint8_t TEXT_CELL_COLOUR = 0x40;
  * otherwise. The game's value comes from cdump, the loader's colour map, which is a phase-3
  * extraction; until it lands there is no right answer to use here.
  *
- * It costs the goldens nothing. Both sides of the pixel comparison are given the same value, so
- * the bitmap is checked exactly; what is provisional is only which colour the %11 pixels come
- * out. Recording the hashes again when cdump arrives is expected, and is the one re-record that
- * will not need a visual diff to justify it.
+ * It costs the goldens nothing, and now rather less than it used to: %11 is a MULTICOLOUR code,
+ * and these scenes are drawn in the standard bitmap mode the game screen actually uses, where
+ * colour RAM is not read at all. It is still set on both sides so that the day a scene moves to
+ * the dashboard the stand-in is already where it belongs.
  */
 constexpr std::uint8_t COLOUR_RAM = 5;
+
+/// 6502: the &10 the loader fills both blocks of screen RAM with, and TTX66K refreshes -- white
+/// for a set bit, black for a clear one.
+constexpr std::uint8_t SCREEN_PALETTE = 0x10;
+
+/*
+ * Give both sides the palette plane the loader leaves behind.
+ *
+ * WITHOUT THIS A GOLDEN PROVES ALMOST NOTHING, which is worth stating because these two spent a
+ * slice in that state: a set bit takes its colour from the cell's byte in screen RAM, so with
+ * that plane left at zero every line in the scene resolves to black on black and the pixel
+ * comparison passes over an image that is uniformly empty. The bitmaps agreed; there was just no
+ * picture in them. CHPR overwrites the cells it prints into with COL2, so this is what colours
+ * everything else -- which in these scenes is the whole frame.
+ */
+void FillPalettePlane(std::array<std::uint8_t, 65536>& _memory, std::uint16_t _base, Canvas& _canvas)
+{
+  for (int cell = 0; cell < Canvas::CELL_COLUMNS * Canvas::CELL_ROWS; ++cell)
+  {
+    const std::uint16_t offset = static_cast<std::uint16_t>(Canvas::SCREEN_CELLS + cell);
+    _memory[static_cast<std::uint16_t>(_base + offset)] = SCREEN_PALETTE;
+    _canvas.Write(offset, SCREEN_PALETTE);
+  }
+}
 } // namespace
 
 TEST_CLASS(GoldenCanvases)
@@ -115,6 +147,9 @@ public:
     cpu.memory[oracle.Label("QQ17")] = 0;
     cpu.memory[oracle.Label("COL2")] = TEXT_CELL_COLOUR;
 
+    Canvas actual;
+    FillPalettePlane(cpu.memory, base, actual);
+
     for (const Line& line : frame)
     {
       cpu.memory[x1] = line.x1;
@@ -140,7 +175,6 @@ public:
     Elite::Testing::LoadScreenFromOracle(cpu.memory, base, COLOUR_RAM, expected);
 
     // ---- the port ----
-    Canvas actual;
     for (int cell = 0; cell < Canvas::CELL_COLUMNS * Canvas::CELL_ROWS; ++cell)
     {
       actual.SetCellColour(cell, COLOUR_RAM);
@@ -174,7 +208,7 @@ public:
     }
 
     Logger::WriteMessage(("golden FramedTextScreen hash = " + std::to_string(actual.Hash()) + "\n").c_str());
-    Assert::AreEqual<std::uint64_t>(10674136249106154377ull, actual.Hash(),
+    Assert::AreEqual<std::uint64_t>(6270663083276661605ull, actual.Hash(),
                                     L"the picture changed. Look at it before re-recording: run the test, open the PNG "
                                     L"the failure names, and diff it with tools/golden_diff.py (Risk R10)");
   }
@@ -195,6 +229,7 @@ public:
 
     Cpu6502 cpu = oracle.Fresh();
     Canvas actual;
+    FillPalettePlane(cpu.memory, base, actual);
     for (std::uint16_t offset = 0; offset < Canvas::BITMAP_SIZE; ++offset)
     {
       const std::uint8_t value = static_cast<std::uint8_t>(offset * 11u + 3u);
@@ -223,7 +258,7 @@ public:
     }
 
     Logger::WriteMessage(("golden ClearedScreen hash = " + std::to_string(actual.Hash()) + "\n").c_str());
-    Assert::AreEqual<std::uint64_t>(8314169527526390612ull, actual.Hash(), L"the picture changed -- see Risk R10");
+    Assert::AreEqual<std::uint64_t>(8933034668988025208ull, actual.Hash(), L"the picture changed -- see Risk R10");
   }
 };
 
