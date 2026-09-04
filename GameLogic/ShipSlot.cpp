@@ -5,6 +5,12 @@
 namespace Elite
 {
 
+  std::uint16_t BlueprintFor(const Bubble& _bubble, std::uint8_t _shipType) noexcept
+  {
+    // 6502: the table is RAM and only the station's entry is ever written into. See `Bubble`.
+    return (_shipType == SHIP_TYPE_STATION) ? _bubble.stationBlueprint : BlueprintAddress(_shipType);
+  }
+
   ShipBlock* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept
   {
     // The original has no bound here: `UNIV` is `NOSH` entries and `GINF` reads whatever the index
@@ -13,7 +19,7 @@ namespace Elite
     return (_slot < MAX_SHIPS) ? &_bubble.blocks[_slot] : nullptr;
   }
 
-  NewShip AddShip(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType) noexcept
+  NewShip AddShip(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint16_t& _blueprint) noexcept
   {
     // 6502: STA T / LDX #0 / .NWL1 LDA FRIN,X / BEQ NW1 / INX / CPX #NOSH / BCC NWL1.
     std::uint8_t slot = 0;
@@ -32,11 +38,19 @@ namespace Elite
     // 6502: LDA T / BMI NW2 -- the planet and the sun have no blueprint and no heap.
     if ((_shipType & 0x80u) == 0u)
     {
-      const std::uint16_t blueprint = BlueprintAddress(_shipType);
+      /*
+       * 6502: LDA XX21-1,Y / BEQ NW3 / STA XX0+1 / LDA XX21-2,Y / STA XX0.
+       *
+       * THE HIGH BYTE IS TESTED AND STORED BEFORE THE LOW ONE IS READ, so a refused type leaves
+       * `XX0+1` alone as well -- the `BEQ` is taken before the `STA`. And the store happens at all,
+       * which is what makes `XX0` an output of this routine rather than a local.
+       */
+      const std::uint16_t blueprint = BlueprintFor(_bubble, _shipType);
       if (blueprint == 0u)
       {
         return {}; // 6502: BEQ NW3 -- a type this build does not carry
       }
+      _blueprint = blueprint;
 
       // 6502: CPY #2*SST / BEQ NW6 -- the space station keeps no line heap of its own.
       if (_shipType != SHIP_TYPE_STATION)

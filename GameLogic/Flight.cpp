@@ -68,12 +68,12 @@ namespace Elite
     _loop.effects.StopDockingMusic(); // 6502: JSR stopbd
 
     /*
-   * 6502: LDA BOMB / BPL BOMBOK / JSR BOMBOFF / STA BOMB.
-   *
-   * `STA BOMB` stores what `BOMBOFF` left in A, which is the zero its own last instruction
-   * loaded -- so the bomb is switched off by the routine and emptied by its accumulator, and
-   * reading `STA BOMB` as "store the bomb" gets the value from the wrong routine.
-   */
+     * 6502: LDA BOMB / BPL BOMBOK / JSR BOMBOFF / STA BOMB.
+     *
+     * `STA BOMB` stores what `BOMBOFF` left in A, which is the zero its own last instruction
+     * loaded -- so the bomb is switched off by the routine and emptied by its accumulator, and
+     * reading `STA BOMB` as "store the bomb" gets the value from the wrong routine.
+     */
     if ((screen.commander.At(Field::EnergyBomb) & 0x80u) != 0u)
     {
       StopEnergyBomb(screen.screen);
@@ -88,12 +88,12 @@ namespace Elite
     screen.bubble.missileTarget = 0xFFu;
 
     /*
-   * 6502: LDA #128 / STA JSTY / STA ALP2 / STA BET2 / ASL A / STA BETA / ...
-   *
-   * AND `JSTX` IS NOT HERE. The pitch rate is re-centred and the roll rate is not, and neither is
-   * inside `ZERO`'s range -- so a launch inherits whatever roll the last flight ended on while
-   * the pitch always starts straight.
-   */
+     * 6502: LDA #128 / STA JSTY / STA ALP2 / STA BET2 / ASL A / STA BETA / ...
+     *
+     * AND `JSTX` IS NOT HERE. The pitch rate is re-centred and the roll rate is not, and neither is
+     * inside `ZERO`'s range -- so a launch inherits whatever roll the last flight ended on while
+     * the pitch always starts straight.
+     */
     _loop.control.pitch = CONTROL_CENTRE;
     screen.flight.alp2 = CONTROL_CENTRE;
     screen.flight.bet2 = CONTROL_CENTRE;
@@ -146,12 +146,12 @@ namespace Elite
     ClearBubbleState(_loop); // 6502: JSR ZERO, which leaves A at zero for the loop below
 
     /*
-   * 6502: LDX #6 / .SAL3 STA BETA,X / DEX / BPL SAL3.
-   *
-   * Seven bytes from `BETA` upwards, and in THIS build that is the pitch pair, both hyperspace
-   * counters, `ECMA` and the roll's two sign bytes -- not the text cursor the upstream comment
-   * names, which is the BBC's layout at those addresses.
-   */
+     * 6502: LDX #6 / .SAL3 STA BETA,X / DEX / BPL SAL3.
+     *
+     * Seven bytes from `BETA` upwards, and in THIS build that is the pitch pair, both hyperspace
+     * counters, `ECMA` and the roll's two sign bytes -- not the text cursor the upstream comment
+     * names, which is the BBC's layout at those addresses.
+     */
     screen.flight.beta = 0u;
     screen.flight.bet1 = 0u;
     screen.status.hyperspaceCountdown = 0u;
@@ -161,12 +161,12 @@ namespace Elite
     screen.flight.alp2 = 0u;
 
     /*
-   * 6502: TXA / STA QQ12 / LDX #2 / .REL5 STA FSH,X / DEX / BPL REL5.
-   *
-   * X is 255 because the loop above ran off its end, and that 255 does TWO jobs: it is the flag
-   * that says "docked", and it is the value the three shield and energy bytes are filled with.
-   * The second only works because a full bank happens to be 255.
-   */
+     * 6502: TXA / STA QQ12 / LDX #2 / .REL5 STA FSH,X / DEX / BPL REL5.
+     *
+     * X is 255 because the loop above ran off its end, and that 255 does TWO jobs: it is the flag
+     * that says "docked", and it is the value the three shield and energy bytes are filled with.
+     * The second only works because a full bank happens to be 255.
+     */
     _docked = 0xFFu;
     screen.status.forwardShield = 0xFFu;
     screen.status.aftShield = 0xFFu;
@@ -175,8 +175,8 @@ namespace Elite
     ResetShipAndBubble(_loop); // 6502: and no RTS -- it falls into RES2
   }
 
-  void Launch(FlightLoop& _loop, StartUpEffects& _start, std::uint8_t& _docked, std::uint8_t _crosshairX,
-              std::uint8_t _crosshairY, std::uint8_t _techLevel, SystemSeeds& _selected) noexcept
+  void Launch(FlightLoop& _loop, StartUpEffects& _start, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
+              std::uint8_t _techLevel, SystemSeeds& _selected) noexcept
   {
     LoopSpawnEffects spawning(_loop);
     FlightScreen& screen = _loop.screen;
@@ -188,27 +188,27 @@ namespace Elite
       ResetShipAndBubble(_loop);  // 6502: JSR RES2
 
       /*
-     * 6502: JSR TT111 -- for the SEEDS, not for the distance. The planet's look comes from the
-     * system's own seeds through `tek`, so a launch has to know which system it is leaving.
-     */
+       * 6502: JSR TT111 -- for the SEEDS, not for the distance. The planet's look comes from the
+       * system's own seeds through `tek`, so a launch has to know which system it is leaving.
+       */
       const NearestSystem found = FindNearestSystem(screen.commander.GalaxySeeds(), _crosshairX, _crosshairY,
                                                     screen.commander.At(Field::SystemX), screen.commander.At(Field::SystemY));
       _selected = found.seeds;
 
       /*
-     * 6502: INC INWK+8 / JSR SOS1 / LDA #128 / STA INWK+8 / INC INWK+7 / JSR NWSPS.
-     *
-     * ONE ZEROED BLOCK, TWO SPAWNS, THREE BYTES BETWEEN THEM. `ZINF` left `INWK` clear, so the
-     * planet goes in with a z sign of one -- ahead and very close -- and the station follows with
-     * the sign flipped to 128 and the high byte at one, which puts it behind and further off.
-     * The station is what you have just left, and this is where it goes.
-     */
+       * 6502: INC INWK+8 / JSR SOS1 / LDA #128 / STA INWK+8 / INC INWK+7 / JSR NWSPS.
+       *
+       * ONE ZEROED BLOCK, TWO SPAWNS, THREE BYTES BETWEEN THEM. `ZINF` left `INWK` clear, so the
+       * planet goes in with a z sign of one -- ahead and very close -- and the station follows with
+       * the sign flipped to 128 and the high byte at one, which puts it behind and further off.
+       * The station is what you have just left, and this is where it goes.
+       */
       screen.work[8] = static_cast<std::uint8_t>(screen.work[8] + 1u);
-      (void)AddPlanetOrSun(screen.bubble, screen.work, spawning, _techLevel);
+      (void)AddPlanetOrSun(screen.bubble, screen.work, spawning, _techLevel, screen.flight.blueprint);
 
       screen.work[8] = 128u;
       screen.work[7] = static_cast<std::uint8_t>(screen.work[7] + 1u);
-      _loop.effects.SpawnStation();
+      (void)AddStation(screen.bubble, screen.work, spawning, _techLevel, screen.flight.blueprint); // 6502: JSR NWSPS
 
       screen.flight.delta = LAUNCH_SPEED; // 6502: LDA #12 / STA DELTA
 

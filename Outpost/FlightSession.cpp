@@ -42,13 +42,36 @@ namespace Outpost
 
   FlightSession::FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
                                Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::CommanderBlock& _commander,
-                               Elite::Rng& _rng, Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions) noexcept
+                               Elite::Rng& _rng, Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions,
+                               std::uint8_t& _techLevel) noexcept
     : m_window(_window),
       m_canvas(_canvas),
-      m_screen{
-        _canvas,  m_draw,      m_math,     m_geometry, m_dust,  m_heaps,   m_bubble, m_work,     m_screenState,    _text, _characters.state,
-        _printer, _characters, _message,   m_flight,   _status, m_compass, _rng,     _commander, m_trumbleSprites, *this, *this,
-        _view,    m_spaceView, _explosions},
+      m_screen{_canvas,
+               m_draw,
+               m_math,
+               m_geometry,
+               m_dust,
+               m_heaps,
+               m_bubble,
+               m_work,
+               m_screenState,
+               _text,
+               _characters.state,
+               _printer,
+               _characters,
+               _message,
+               m_flight,
+               _status,
+               m_compass,
+               _rng,
+               _commander,
+               m_trumbleSprites,
+               *this,
+               *this,
+               _view,
+               m_spaceView,
+               _explosions,
+               _techLevel},
       m_loop{m_screen, m_keys, m_control, m_options, m_burst, m_heap, m_clip, m_projection, m_axes, *this, *this, *this}
   {
     /*
@@ -63,6 +86,13 @@ namespace Outpost
      */
     m_heaps.stp = LAST_CIRCLE_STEP;
     m_flight.blueprint = Elite::BlueprintAddress(Elite::SHIP_COBRA_MK3);
+
+    /*
+     * 6502: XX21+2*SST-2 -- a third byte of the same shape, and this one is not left by a previous
+     * screen at all: `BEGIN` writes it at boot and only `NWSPS` writes it afterwards. Zero is what
+     * `NWSHP` refuses, so an unseeded session would silently never build a station.
+     */
+    m_bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
   }
 
   void FlightSession::SyncVideoRegisters() noexcept
@@ -143,21 +173,6 @@ namespace Outpost
   void FlightSession::Anger(std::uint8_t _type)
   {
     (void)_type; // 6502: ANGRY. Phase 4.
-  }
-
-  void FlightSession::SpawnStation()
-  {
-    /*
-     * 6502: NWSPS -- put the space station back into the bubble on a launch.
-     *
-     * Phase 4, and it is why a launch leaves you alone in front of a planet. The fourteen
-     * instructions above its fall into `NWSHP` SELF-MODIFY `XX21`, writing the Coriolis or the
-     * Dodo's blueprint into the station's slot of the pointer table, and the port's table is
-     * read-only -- so this is a decision as well as a routine.
-     *
-     * `SSPR` stays zero as a consequence, and `SSPR` is what part 9's docking check reads, so
-     * `LoopOutcome::Docked` cannot be reached until this exists.
-     */
   }
 
   bool FlightSession::SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type)

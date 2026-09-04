@@ -14,16 +14,17 @@ namespace Elite
     /// target slot in bits 1 to 6. It is not `INWK+31`, the state byte the drawing reads.
     constexpr std::uint8_t SHIP_AI_OFFSET = 32;
 
-    /// 6502: LDY #5 / LDA (XX0),Y -- how many bytes of line heap a type needs.
-    [[nodiscard]] std::uint8_t HeapSizeFor(std::uint8_t _type) noexcept
+    /// 6502: LDY #5 / LDA (XX0),Y -- how many bytes of line heap a type needs. Through the table
+    /// as it stands rather than the assembled one, because the station's entry is written (`NWSPS`).
+    [[nodiscard]] std::uint8_t HeapSizeFor(const Bubble& _bubble, std::uint8_t _type) noexcept
     {
-      const std::uint16_t blueprint = BlueprintAddress(_type);
+      const std::uint16_t blueprint = BlueprintFor(_bubble, _type);
       return (blueprint == 0u) ? std::uint8_t{0} : ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
     }
   } // namespace
 
   void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, ShipBlock& _work, CommanderBlock& _commander,
-                SpawnEffects& _effects, std::uint8_t _slot) noexcept
+                SpawnEffects& _effects, std::uint8_t _slot, std::uint16_t& _blueprint) noexcept
   {
     // 6502: STX XX4 / LDA MSTG / CMP XX4 / BNE KS5 -- the player's missile was chasing this one,
     // so it is unlocked and the player told.
@@ -52,8 +53,11 @@ namespace Elite
       _bubble.counts[SHIP_TYPE_STATION] = 0;
       _effects.ToggleStationIndicator();
 
+      // 6502: LDA #129 / JSR NWSHP -- and `XX0` is passed rather than kept locally even though this
+      // call cannot reach the store: the type is negative, so `BMI NW2` jumps past it. Passing it
+      // is what stops the next caller of this path from inheriting the bug `NWSPS` exposed.
       _work[5] = 6;
-      (void)AddShip(_bubble, _work, 129);
+      (void)AddShip(_bubble, _work, 129, _blueprint);
       return;
     }
 
@@ -87,7 +91,7 @@ namespace Elite
      * where the next ship's heap belongs, and when the walk ends it is the new `SLSP`.
      */
     const ShipBlock& dead = _bubble.blocks[_slot];
-    const AddResult topLow = AddWithCarry(HeapSizeFor(type), dead[SHIP_HEAP_LOW_OFFSET], false);
+    const AddResult topLow = AddWithCarry(HeapSizeFor(_bubble, type), dead[SHIP_HEAP_LOW_OFFSET], false);
     const AddResult topHigh = AddWithCarry(dead[SHIP_HEAP_HIGH_OFFSET], 0u, topLow.carry);
     std::uint16_t top = static_cast<std::uint16_t>(topLow.value | (topHigh.value << 8));
 
@@ -101,7 +105,7 @@ namespace Elite
         break; // 6502: BNE P%+5 / JMP KS2 -- the end of the list
       }
 
-      const std::uint8_t size = HeapSizeFor(moved);
+      const std::uint8_t size = HeapSizeFor(_bubble, moved);
       top = static_cast<std::uint16_t>(top - size);
 
       /*
@@ -174,7 +178,8 @@ namespace Elite
     _bubble.heapBottom = top;
   }
 
-  NewShip AddPlanetOrSun(Bubble& _bubble, ShipBlock& _work, SpawnEffects& _effects, std::uint8_t _techLevel) noexcept
+  NewShip AddPlanetOrSun(Bubble& _bubble, ShipBlock& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
+                         std::uint16_t& _blueprint) noexcept
   {
     // 6502: SOS1 -- JSR msblob / LDA #127 / STA INWK+29 / STA INWK+30.
     _effects.ResetMissileIndicators();
@@ -190,7 +195,55 @@ namespace Elite
      * advanced it is.
      */
     const std::uint8_t type = static_cast<std::uint8_t>((_techLevel & 0x02u) | 0x80u);
-    return AddShip(_bubble, _work, type);
+    return AddShip(_bubble, _work, type, _blueprint);
+  }
+
+  NewShip AddStation(Bubble& _bubble, ShipBlock& _work, SpawnEffects& _effects, std::uint8_t _techLevel, std::uint16_t& _blueprint) noexcept
+  {
+    _effects.ToggleStationIndicator(); // 6502: JSR SPBLB
+
+    // 6502: LDX #%10000001 / STX INWK+32 -- the AI byte: hostile, and AI enabled.
+    _work[SHIP_AI_OFFSET] = 0x81u;
+
+    _work[30] = 0u;                // 6502: LDX #0 / STX INWK+30 -- the pitch counter
+    _work[SHIP_FLAGS_OFFSET] = 0u; // 6502: STX NEWB, which `NWSHP` ORs into rather than sets
+    _bubble.slots[1] = 0u;         // 6502: STX FRIN+1 -- and slot 1 is the SUN's
+    _work[29] = 0xFFu;             // 6502: DEX / STX INWK+29 -- the roll counter, at maximum
+
+    /*
+     * 6502: LDX #10 / JSR NwS1, three times.
+     *
+     * `NwS1` is `LDA INWK,X / EOR #%10000000 / STA INWK,X / INX / INX / RTS`, so the three calls
+     * reach 10, 12 and 14 -- the high bytes of the nose vector's three components. Flipping bit 7
+     * of each negates the vector, which turns the station to face the way you have just come.
+     */
+    for (std::uint8_t at = 10u; at <= 14u; at = static_cast<std::uint8_t>(at + 2u))
+    {
+      _work[at] = static_cast<std::uint8_t>(_work[at] ^ 0x80u);
+    }
+
+    /*
+     * 6502: LDA spasto / STA XX21+2*SST-2 ... LDA tek / CMP #10 / BCC notadodo / LDA XX21+2*DOD-2.
+     *
+     * `spasto` is the Coriolis's address, which `BEGIN` copied out of this same table at boot --
+     * so on the port's immutable region it is simply the table's own entry. The store happens
+     * UNCONDITIONALLY and is then overwritten, which matters: a station created in a low-tech
+     * system after one created in a high-tech system goes back to being a Coriolis, and a port
+     * that only wrote on the Dodo branch would leave the Dodo behind for ever.
+     */
+    _bubble.stationBlueprint = BlueprintAddress(SHIP_TYPE_STATION);
+    if (_techLevel >= STATION_DODO_TECH_LEVEL)
+    {
+      _bubble.stationBlueprint = BlueprintAddress(SHIP_TYPE_DODO);
+    }
+
+    // 6502: LDA #LO(LSO) / STA INWK+33 / LDA #HI(LSO) / STA INWK+34 -- the sun's heap, which the
+    // slot above has just been emptied of. `NWSHP` skips its own allocation for a station, so this
+    // is the pointer the block keeps.
+    _work[SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(SUN_HEAP_ADDRESS);
+    _work[SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(SUN_HEAP_ADDRESS >> 8);
+
+    return AddShip(_bubble, _work, SHIP_TYPE_STATION, _blueprint); // 6502: LDA #SST, and no RTS -- it falls in
   }
 
   void BuildSystem(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
@@ -265,7 +318,7 @@ namespace Elite
     _work[2] = offset;
     _work[5] = offset;
 
-    (void)AddPlanetOrSun(_bubble, _work, _effects, _techLevel);
+    (void)AddPlanetOrSun(_bubble, _work, _effects, _techLevel, _flight.blueprint);
 
     // 6502: the sun, from two more seed bytes, and its type is 129 rather than 128 -- the bottom
     // bit is what `PLANET` tests to send it to `SUN` instead of `PL9`.
@@ -276,7 +329,7 @@ namespace Elite
     _work[29] = 0;
     _work[30] = 0;
 
-    const NewShip sun = AddShip(_bubble, _work, 129);
+    const NewShip sun = AddShip(_bubble, _work, 129, _flight.blueprint);
 
     /*
      * 6502: and there is no `RTS`. `SOLAR` runs straight on into `NWSTARS`, so arriving in a

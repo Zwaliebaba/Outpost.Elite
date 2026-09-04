@@ -80,7 +80,7 @@ namespace
         extended(characters, recursive, rng, &shell),
         trade{recursive, characters, extended, text, shell, shell, rng},
         save{recursive, characters, extended, screen, text, shell, shell, store, numbers},
-        flight(window, canvas, text, characters, recursive, message, commander, rng, status, view, explosionCount)
+        flight(window, canvas, text, characters, recursive, message, commander, rng, status, view, explosionCount, current.techLevel)
     {
       recursive.SetValueTokens(&values);
       recursive.SetCursor(&text);
