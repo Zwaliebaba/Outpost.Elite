@@ -55,7 +55,8 @@ std::wstring Widen(const std::string& _text)
 struct Labels
 {
   std::uint16_t sc = 0, col = 0, k = 0, q = 0, r = 0, p = 0, s = 0, t1 = 0, xx12 = 0;
-  std::uint16_t mcnt = 0, flh = 0, ecma = 0, alp1 = 0, alp2 = 0, beta = 0, bet1 = 0, delta = 0;
+  std::uint16_t mcnt = 0, flh = 0, ecma = 0, ecmp = 0, alp1 = 0, alp2 = 0, beta = 0, bet1 = 0;
+  std::uint16_t delta = 0;
   std::uint16_t fsh = 0, ash = 0, energy = 0, cabtmp = 0, gntmp = 0, altit = 0, qq14 = 0;
   std::uint16_t qq11 = 0, many = 0, kPercent = 0, comx = 0, comy = 0, comc = 0, screen = 0;
 
@@ -73,6 +74,7 @@ struct Labels
     mcnt = _oracle.Label("MCNT");
     flh = _oracle.Label("FLH");
     ecma = _oracle.Label("ECMA");
+    ecmp = _oracle.Label("ECMP");
     alp1 = _oracle.Label("ALP1");
     alp2 = _oracle.Label("ALP2");
     beta = _oracle.Label("BETA");
@@ -137,6 +139,17 @@ void FillScreens(Cpu6502& _cpu, Elite::Canvas& _canvas, std::uint16_t _base, std
     _canvas.Write(offset, _marker);
   }
 }
+
+/// The sound seam, recorded in both directions -- `ECBLB2` starts the hum and `ECMOF` stops it,
+/// and a port that called the wrong one would still put the bulb in the right state.
+struct RecordingSound final : Elite::DashboardEffects
+{
+  std::vector<std::uint8_t> started;
+  std::vector<std::uint8_t> stopped;
+
+  void PlaySound(std::uint8_t _effect) override { started.push_back(_effect); }
+  void StopSound(std::uint8_t _effect) override { stopped.push_back(_effect); }
+};
 } // namespace
 
 
@@ -482,11 +495,7 @@ public:
     const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("ECBLB2"), 2'000);
     Assert::IsTrue(run.completed, L"ECBLB2 returned");
 
-    struct Recorder final : Elite::DashboardEffects
-    {
-      std::vector<std::uint8_t> sounds;
-      void PlaySound(std::uint8_t _effect) override { sounds.push_back(_effect); }
-    } effects;
+    RecordingSound effects;
 
     Elite::FlightStatus status;
     status.ecmCountdown = 0x7Bu;
@@ -494,10 +503,86 @@ public:
 
     (void)CompareScreens(cpu, at.screen, canvas, 0x00u, L"ECBLB2");
     Assert::AreEqual(cpu.memory[at.ecma], status.ecmCountdown, L"ECMA");
-    Assert::AreEqual<std::size_t>(1u, effects.sounds.size(), L"one sound was asked for");
-    Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, effects.sounds[0], L"and it is sfxecm");
+    Assert::AreEqual<std::size_t>(1u, effects.started.size(), L"one sound was asked for");
+    Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, effects.started[0], L"and it is sfxecm");
+    Assert::AreEqual<std::size_t>(0u, effects.stopped.size(), L"and none was stopped");
     Assert::AreEqual<std::size_t>(1u, cpu.trapHits.size(), L"the game asked for one too");
     Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, cpu.trapHits[0].y, L"with the same number");
+  }
+
+  /*
+   * 6502: ECMOF -- the counterpart, and the bulb is the interesting half.
+   *
+   * `ECBLB` is a toggle, so "switch the bulb off" is only true of a bulb that was on. The sweep
+   * runs both ways round: from a screen with the bulb lit, which is what the game does, and from
+   * one without it, where the routine LIGHTS the bulb -- and the port has to do the same, because
+   * matching the game means matching it where the game never goes as well.
+   *
+   * `NOISEOFF` is trapped, so `XX15+2` and the SID counters are the seam's business. What is
+   * checked here is that the game and the port both ask for `sfxecm` and both ask once.
+   */
+  TEST_METHOD(StoppingTheEcmMatchesECMOF)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const Labels at(oracle);
+
+    struct Case
+    {
+      const char* what;
+      std::uint8_t fill, ecma, ecmp;
+    };
+
+    const std::vector<Case> CASES = {
+      { "the bulb colour everywhere, ours, a full countdown", Elite::BULB_COLOUR, 0x20u, 0xFFu },
+      { "the bulb colour everywhere, ours, one pass left", Elite::BULB_COLOUR, 0x01u, 0xFFu },
+      { "the bulb colour everywhere, somebody else's E.C.M.", Elite::BULB_COLOUR, 0x11u, 0x00u },
+      { "a blank screen and nothing running", 0x00u, 0x00u, 0x00u },
+      { "a blank screen but the flags set, so the bulb LIGHTS", 0x00u, 0x20u, 0xFFu },
+      { "a screen full of something else", 0x5Au, 0x07u, 0x03u },
+    };
+
+    for (const Case& item : CASES)
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      Elite::Canvas canvas;
+
+      cpu.AddTrap(oracle.Label("NOISEOFF"));
+
+      FillScreens(cpu, canvas, at.screen, item.fill);
+      cpu.memory[at.ecma] = item.ecma;
+      cpu.memory[at.ecmp] = item.ecmp;
+
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("ECMOF"), 2'000);
+      Assert::IsTrue(run.completed, L"ECMOF returned");
+
+      RecordingSound effects;
+
+      Elite::FlightStatus status;
+      status.ecmCountdown = item.ecma;
+      status.ecmOurs = item.ecmp;
+      Elite::StopEcm(canvas, status, effects);
+
+      const std::wstring where = Widen(std::string("ECMOF (") + item.what + ")");
+
+      (void)CompareScreens(cpu, at.screen, canvas, item.fill, where);
+      Assert::AreEqual(cpu.memory[at.ecma], status.ecmCountdown, (where + L": ECMA").c_str());
+      Assert::AreEqual(cpu.memory[at.ecmp], status.ecmOurs, (where + L": ECMP").c_str());
+      Assert::AreEqual<std::uint32_t>(0u, status.ecmCountdown, (where + L": ECMA is cleared").c_str());
+      Assert::AreEqual<std::uint32_t>(0u, status.ecmOurs, (where + L": ECMP is cleared").c_str());
+
+      Assert::AreEqual<std::size_t>(0u, effects.started.size(), (where + L": nothing started").c_str());
+      Assert::AreEqual<std::size_t>(1u, effects.stopped.size(), (where + L": one sound stopped").c_str());
+      Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, effects.stopped[0],
+                                      (where + L": and it is sfxecm").c_str());
+      Assert::AreEqual<std::size_t>(1u, cpu.trapHits.size(), (where + L": the game stopped one").c_str());
+      Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, cpu.trapHits[0].y,
+                                      (where + L": with the same number").c_str());
+    }
   }
 };
 

@@ -78,4 +78,33 @@ std::uint8_t LargestShipAxis(const ShipBlock& _work, std::uint8_t _a) noexcept
   return static_cast<std::uint8_t>(_a | _work[1] | _work[4] | _work[7]);
 }
 
+std::uint8_t DampTowardsCentre(std::uint8_t _value, std::uint8_t _dockingComputer,
+                               std::uint8_t _dampingDisabled) noexcept
+{
+  // 6502: LDA auto / BNE cnt2 / LDA DAMP / BNE RE1 -- two tests, and only the second returns.
+  if (_dockingComputer == 0u && _dampingDisabled != 0u)
+  {
+    return _value;
+  }
+
+  // 6502: TXA / BPL BUMP -- below the centre, so bump up towards it. `BUMP`'s own `BNE RE1` is
+  // always taken from here, because X < 128 makes X + 1 <= 128.
+  if ((_value & 0x80u) == 0u)
+  {
+    return static_cast<std::uint8_t>(_value + 1u);
+  }
+
+  // 6502: DEX / BMI RE1 -- at or above the centre, so reduce towards it, unless that has just
+  // crossed the middle.
+  const std::uint8_t reduced = static_cast<std::uint8_t>(_value - 1u);
+  if ((reduced & 0x80u) != 0u)
+  {
+    return reduced;
+  }
+
+  // 6502: fall into `.BUMP INX` -- which only happens from X = 128, so this puts back the 128 the
+  // `DEX` took away and the value sits still.
+  return static_cast<std::uint8_t>(reduced + 1u);
+}
+
 } // namespace Elite

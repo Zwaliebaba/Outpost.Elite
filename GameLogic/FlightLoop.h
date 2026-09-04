@@ -10,12 +10,13 @@ namespace Elite
 {
 
 /*
- * The flight loop's distance helpers (slice 3d-d-i).
+ * What the flight loop calls but does not need (slice 3d-d-i).
  *
- * Four routines the loop uses to answer "how far away is that, roughly" without dividing: two
+ * Four routines the loop uses to answer "how far away is that, roughly" without dividing -- two
  * that OR sign bytes together to find the largest, one that sums three squares, and one that
- * doubles a coordinate and adds another to it. None of them needs the loop, which is why they
- * come first (§6.69).
+ * doubles a coordinate and adds another to it -- and the damping the loop applies to the
+ * controls before it reads them. None of them needs the loop, which is why they come first
+ * (§6.69).
  */
 
 /*
@@ -62,5 +63,26 @@ namespace Elite
 /// 6502: MAS4 -- the same OR as `MAS2` but over `INWK`'s high bytes rather than a slot's sign
 /// bytes, and without the mask. Four instructions, and it is here because the loop calls it.
 [[nodiscard]] std::uint8_t LargestShipAxis(const ShipBlock& _work, std::uint8_t _a) noexcept;
+
+/*
+ * 6502: cntr -- creep a centre-based control reading one step towards 128.
+ *
+ * The value runs 1 to 255 with 128 as centred, so damping is "add one below the middle, subtract
+ * one above it". Flight loop part 2 is its only caller and it calls it THREE times: twice on
+ * `JSTX`, so the roll creeps back by two per pass, and once on `JSTY`.
+ *
+ * `_dampingDisabled` is `DAMP`, which is a configuration byte the "CAPS LOCK" option toggles
+ * between 0 and &FF, and it reads backwards on purpose: NON-ZERO means the damping is switched
+ * off. `_dockingComputer` is `auto`, and it wins -- the autopilot always gets damping, whatever
+ * the player set.
+ *
+ * ITS LAST TWO INSTRUCTIONS CANNOT RUN. `.REDU DEX / BEQ BUMP` is reached only when `BUMP`'s
+ * `INX` wraps to zero, which needs X = 255 on entry to `BUMP`; but `BUMP` is entered only with
+ * X < 128 (from `BPL`) or with X = 128 (undoing the `DEX`), so the wrap never happens. The port
+ * leaves them out and the sweep proves it rather than assuming it: a trap on `REDU` records no
+ * hits across all 2,304 inputs (§6.71).
+ */
+[[nodiscard]] std::uint8_t DampTowardsCentre(std::uint8_t _value, std::uint8_t _dockingComputer,
+                                             std::uint8_t _dampingDisabled) noexcept;
 
 } // namespace Elite

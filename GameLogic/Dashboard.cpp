@@ -200,6 +200,14 @@ void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects
   ToggleEcmIndicator(_canvas);    // 6502: and no RTS -- it falls into ECBLB
 }
 
+void StopEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept
+{
+  _status.ecmCountdown = 0u;   // 6502: LDA #0 / STA ECMA
+  _status.ecmOurs = 0u;        // 6502: STA ECMP
+  ToggleEcmIndicator(_canvas); // 6502: JSR ECBLB
+  _effects.StopSound(SOUND_ECM); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
+}
+
 void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
                GeometryWorkspace& _geometry, const FlightState& _flight,
                const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,

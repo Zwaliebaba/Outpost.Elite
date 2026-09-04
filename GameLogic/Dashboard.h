@@ -63,6 +63,11 @@ inline constexpr std::uint16_t MISSILE_CELL = Canvas::DASHBOARD_CELLS + 24u * 40
  *
  * `CABTMP`, `ALTIT` and `FLH` have no writer in this slice -- flight loop part 15 sets the first
  * two and the damage flash is 3d-d's -- so 3d-b reads them and 3d-d fills them in.
+ *
+ * `ECMP` joined them in 3d-d-i and is the one field here no dial reads. It is `ECMA`'s other
+ * half -- whether the E.C.M. that is running is ours or somebody else's -- and `ECMOF` clears
+ * the pair with a single `LDA #0`, which is the shape a struct field and a reference parameter
+ * between them would have hidden. Its other writer is flight loop part 3, in 3d-d-iii.
  */
 struct FlightStatus
 {
@@ -74,6 +79,7 @@ struct FlightStatus
   std::uint8_t cabinTemperature = 0;    ///< 6502: CABTMP
   std::uint8_t altitude = 0;            ///< 6502: ALTIT
   std::uint8_t ecmCountdown = 0;        ///< 6502: ECMA
+  std::uint8_t ecmOurs = 0;             ///< 6502: ECMP
   std::uint8_t damageFlash = 0;         ///< 6502: FLH
 };
 
@@ -191,7 +197,7 @@ void ToggleEcmIndicator(Canvas& _canvas) noexcept;
 /// 6502: SPBLB -- the same for the space station bulb, seventeen cells to the right.
 void ToggleStationIndicator(Canvas& _canvas) noexcept;
 
-/// What `ECBLB2` reaches outside this slice: the sound, which is hardware.
+/// What `ECBLB2` and `ECMOF` reach outside this slice: the sound, which is hardware.
 class DashboardEffects
 {
 public:
@@ -199,6 +205,17 @@ public:
 
   /// 6502: LDY #sfxecm / JSR NOISE -- the E.C.M. hum.
   virtual void PlaySound(std::uint8_t _effect) = 0;
+
+  /*
+   * 6502: LDY #sfxecm / JMP NOISEOFF -- stop it again.
+   *
+   * `NOISEOFF` walks the three SID voices looking for the one playing this effect and runs its
+   * counter down, so it is not `PlaySound`'s inverse in any register sense: it takes the effect
+   * NUMBER and finds the voice itself. It also writes `XX15+2` as scratch, which is game
+   * workspace rather than sound state -- harmless here, because nothing `ECMOF` does afterwards
+   * reads it, and worth knowing before the seam is implemented for real.
+   */
+  virtual void StopSound(std::uint8_t _effect) = 0;
 };
 
 /// 6502: sfxecm -- the effect number `ECBLB2` asks for.
@@ -211,5 +228,20 @@ inline constexpr std::uint8_t SOUND_ECM = 9;
  * rather than something the caller does afterwards.
  */
 void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept;
+
+/*
+ * 6502: ECMOF -- stop the E.C.M.: clear both flags, put the bulb out, silence the hum.
+ *
+ * The counterpart to `StartEcm` and not its mirror image. Starting it sets `ECMA` alone and
+ * leaves `ECMP` to the caller; stopping it clears both. And `ECBLB` is a TOGGLE, so this puts
+ * the bulb out only because the bulb was lit -- called with the E.C.M. already off it lights it.
+ * The game never does that: `RES2` guards its call with `LDA ECMA / BEQ yu`, and flight loop
+ * part 16 only reaches it once the countdown has run down or the energy has run out.
+ *
+ * The byte before it is an `RTS` belonging to the routine above, which `NO3` and `SFRMIS` both
+ * branch to as a cheap return -- `BNE ECMOF-1`. Nothing to port, but it means `ECMOF` cannot be
+ * moved without breaking two routines that never mention it.
+ */
+void StopEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept;
 
 } // namespace Elite
