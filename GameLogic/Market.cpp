@@ -236,6 +236,21 @@ bool CargoFits(const CommanderBlock& _commander, std::uint8_t _item, std::uint8_
   return total < _commander.At(Field::CargoCapacity);
 }
 
+std::uint8_t ContrabandPenalty(const CommanderBlock& _commander) noexcept
+{
+  const std::size_t hold = static_cast<std::size_t>(Field::CargoHold);
+
+  // 6502: LDA QQ20+3 / CLC / ADC QQ20+6 -- slaves plus narcotics, and the `CLC` is real: this is
+  // the only addition in the routine that does not read a carry it was handed.
+  const AddResult illegal =
+    AddWithCarry(_commander.bytes[hold + 3u], _commander.bytes[hold + 6u], false);
+
+  // 6502: ASL A / ADC QQ20+10 -- the pair doubled, and the shift's carry out is read by the add.
+  const ShiftResult doubled = RotateLeftValue(illegal.value, false);
+
+  return AddWithCarry(doubled.value, _commander.bytes[hold + 10u], doubled.carry).value;
+}
+
 void PrintMarketUnits(TokenPrinter& _printer, CharacterPrinter& _characters, std::uint8_t _gradient) noexcept
 {
   // 6502: TT152 -- LDA QQ19+1 / AND #%01100000 -- two bits of the gradient, and nothing else in

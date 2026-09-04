@@ -428,6 +428,31 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.94 An effect that erases itself, and a step it does not set
+
+`HFS1` draws the eight expanding rings the game shows on a launch and on a hyperspace jump. Two
+things about it are not in the code:
+
+**It does not set `STP`.** Neither `HFS1` nor `HFS2` writes the step, and `CIRCLE2` walks its
+circle `STP` at a time — so the rings are drawn at whatever coarseness the last `CIRCLE` chose for
+the planet or the sun: 8 for a small disc, 4 for a middling one, 2 for a large one. Launching from
+a system whose planet happens to be close gives smoother rings than launching from one where it is
+far. The port's first test left `STP` at zero, `CNT` never advanced, and `CIRCLE2` ran for ever —
+forty million instructions before the budget stopped it. The game cannot reach a zero because
+`CIRCLE` is the only writer and never stores one, which makes this §6.90's shape again: **a
+variable written under a condition persists when the condition does not hold**, and here the
+condition is "some circle has been drawn since the game started".
+
+**It erases itself by being run twice.** `LSP` is set to ONE before every circle, so all eight
+rings share a single run of the ball heap rather than accumulating, and `BLINE` EORs. Drawing the
+whole effect a second time puts the screen back byte for byte. That is how the game takes the
+rings off without remembering where they were, and it is why the test asserts the second pass
+touches NOTHING — "it drew something" alone would pass for a routine that drew and left the mess
+behind.
+
+`ASL K / BCS HF8` is an exit as much as `CMP #160` is: a ring whose radius passes 128 doubles out
+of the byte and stops there, so which of the two ends a ring depends on where it started.
+
 ### 6.93 A fixture that makes two things equal cannot tell them apart
 
 Two mutation survivors in the combat routines, and neither was a defect in the port. Both were
