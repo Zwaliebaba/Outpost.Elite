@@ -850,4 +850,122 @@ public:
   }
 };
 
+
+TEST_CLASS(TheGeometryDotProducts)
+{
+public:
+  /*
+   * 6502: LL51 -- XX12(5 0) = XX15(5 0) . each of XX16's three vectors.
+   *
+   * Twenty-four input bytes, so this is swept rather than exhausted: a fixed generator walks the
+   * space, and a block of hand-picked cases pins the boundaries -- all zero, all 255, every
+   * combination of the three signs, and magnitudes either side of 128.
+   *
+   * The thing most likely to be got wrong is `S`. It is set from the FIRST product's sign and
+   * then `LL38` flips it whenever a subtraction crosses zero, so what comes out is the sign of
+   * the whole sum. A port that computed each sign independently would agree wherever the terms
+   * happen to point the same way, which is most of the space; the test counts the flips.
+   */
+  TEST_METHOD(TheDotProductsMatchLL51)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t xx15 = oracle.Label("XX15");
+    const std::uint16_t xx16 = oracle.Label("XX16");
+    const std::uint16_t xx12 = oracle.Label("XX12");
+    const std::uint16_t ll51 = oracle.Label("LL51");
+
+    // The hand-picked block first, then the generated sweep. The generator is an LCG so the
+    // sequence is the same on both runners and on every run.
+    std::vector<std::array<std::uint8_t, 24>> cases;
+
+    const std::vector<std::uint8_t> CORNERS = { 0, 1, 127, 128, 129, 255 };
+    for (const std::uint8_t value : CORNERS)
+    {
+      for (const std::uint8_t sign : { 0x00, 0x80 })
+      {
+        std::array<std::uint8_t, 24> block{};
+        for (std::size_t byte = 0; byte < 24u; ++byte)
+        {
+          block[byte] = ((byte & 1u) != 0u) ? sign : value;
+        }
+        cases.push_back(block);
+      }
+    }
+
+    std::uint32_t seed = 0x1D872B41u;
+    for (std::uint32_t sample = 0; sample < 400u; ++sample)
+    {
+      std::array<std::uint8_t, 24> block{};
+      for (std::size_t byte = 0; byte < 24u; ++byte)
+      {
+        seed = seed * 1664525u + 1013904223u;
+        block[byte] = static_cast<std::uint8_t>(seed >> 24);
+      }
+      cases.push_back(block);
+    }
+
+    std::uint32_t compared = 0;
+    std::uint32_t flipped = 0;
+    for (const std::array<std::uint8_t, 24>& block : cases)
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      Elite::DrawWorkspace draw;
+      Elite::GeometryWorkspace geometry;
+      Elite::MathWorkspace math;
+
+      // XX15 is the first six; XX16 is the eighteen after it.
+      const std::uint8_t* const vector = block.data();
+      draw.x1 = vector[0];
+      draw.y1 = vector[1];
+      draw.x2 = vector[2];
+      draw.y2 = vector[3];
+      draw.xx15Plus4 = vector[4];
+      draw.xx15Plus5 = vector[5];
+      for (std::size_t byte = 0; byte < 6u; ++byte)
+      {
+        cpu.memory[static_cast<std::uint16_t>(xx15 + byte)] = vector[byte];
+      }
+      for (std::size_t byte = 0; byte < 18u; ++byte)
+      {
+        geometry.xx16[byte] = block[6u + byte];
+        cpu.memory[static_cast<std::uint16_t>(xx16 + byte)] = block[6u + byte];
+      }
+
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(ll51, 200'000);
+      Assert::IsTrue(run.completed, L"LL51 returned");
+
+      Elite::DotProducts(draw, geometry, math);
+
+      const std::wstring where = Widen("LL51 case " + std::to_string(compared));
+      for (std::size_t byte = 0; byte < 6u; ++byte)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx12 + byte)], geometry.xx12[byte],
+                         (where + L": XX12+" + std::to_wstring(byte)).c_str());
+      }
+
+      // Did the accumulated sign end up different from the first product's? That is `LL40`
+      // having run, and it is the only way this routine's answer can change sign.
+      for (std::size_t product = 0; product < 3u; ++product)
+      {
+        const std::size_t base = product * 6u;
+        const std::uint8_t firstSign =
+          static_cast<std::uint8_t>(vector[1] ^ block[6u + base + 1u]) & 0x80u;
+        if ((geometry.xx12[product * 2u + 1u] & 0x80u) != firstSign)
+        {
+          ++flipped;
+        }
+      }
+      ++compared;
+    }
+
+    Assert::AreEqual<std::uint32_t>(412u, compared, L"the whole sweep ran");
+    Assert::IsTrue(flipped > 0u, L"a sum crossed zero and took the sign with it");
+  }
+};
+
 } // namespace GameLogicTests

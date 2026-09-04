@@ -211,4 +211,42 @@ void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, Li
   StoreLineCountAndDraw(_canvas, _draw, _heap, heap, 8);
 }
 
+
+void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+{
+  // The six bytes of XX15, as the three sign-magnitude pairs the dot product treats them as.
+  const std::uint8_t magnitude[3] = { _draw.x1, _draw.x2, _draw.xx15Plus4 };
+  const std::uint8_t sign[3] = { _draw.y1, _draw.y2, _draw.xx15Plus5 };
+
+  // Three vectors of six, and the loop in the original ends on `CMP #17 / BCC`, so it runs for
+  // X = 0, 6 and 12 and stops at 18 rather than testing a count.
+  for (std::size_t vector = 0; vector < 3u; ++vector)
+  {
+    const std::size_t base = vector * 6u;
+
+    // The first term sets S, which is the sign the whole sum is accumulated against -- `LL38`
+    // FLIPS it when a subtraction goes past zero, so what comes out at the end is the sign of the
+    // answer and not of the first product.
+    _math.q = magnitude[0];
+    const std::uint8_t first = MultiplyByLog(_math, _geometry.xx16[base]);
+    _math.t = first;
+    _math.s = static_cast<std::uint8_t>(sign[0] ^ _geometry.xx16[base + 1]);
+
+    // Q is set twice on purpose and the first is not dead: `FMLTU` reads Q as one operand and
+    // the original stores the product straight back over it. `STA Q / JSR FMLTU / STA Q`.
+    _math.q = magnitude[1];
+    _math.q = MultiplyByLog(_math, _geometry.xx16[base + 2]);
+    _math.r = _math.t;
+    _math.t = CombineSigned(_math, static_cast<std::uint8_t>(sign[1] ^ _geometry.xx16[base + 3]));
+
+    _math.q = magnitude[2];
+    _math.q = MultiplyByLog(_math, _geometry.xx16[base + 4]);
+    _math.r = _math.t;
+
+    _geometry.xx12[vector * 2u] =
+      CombineSigned(_math, static_cast<std::uint8_t>(sign[2] ^ _geometry.xx16[base + 5]));
+    _geometry.xx12[vector * 2u + 1u] = _math.s;
+  }
+}
+
 } // namespace Elite
