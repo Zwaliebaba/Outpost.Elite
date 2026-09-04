@@ -468,6 +468,23 @@ arithmetic again.
 Four of these now: `DVID4` into `LL28` (§6.11), `SOLAR` into four more routines (§6.58), `SPS1`
 into `TAS2`, and `TAS2` into `NORM`.
 
+**And `TAS2`'s loop has a second exit that cannot be taken**, which the mutation pass is what
+found. `TAL2` reads `ASL K3+9 / ROL A / BCS TA2`, then shifts the three axes, then `BCC TAL2` —
+so the loop appears to end either when the ORed high bytes overflow or when the z axis alone
+does. It cannot be the second. `A` is the OR of the three high bytes and `K3+9` is the OR of the
+three low bytes with bit 0 forced on, so the pair `(A : K3+9)` DOMINATES each axis pair
+`(hi : lo)` bit for bit, and shifting both left preserves that in the top byte. `BCS TA2` tests
+bit 7 of `A` before its shift; `BCC TAL2` tests bit 7 of `K3+7` before its shift, in the same
+iteration at the same shift count. Dominance means the first fires whenever the second would, and
+it is tested six instructions earlier — so `BCC TAL2` is a `JMP` spelled as a branch, exactly
+like `KILLSHP`'s trailing `BEQ KSL1`.
+
+The measurement is the mutation itself: with the branch deleted the whole suite still passes,
+which means it never fires across 6,464 normalisations — 5,184 `TAS2` cases, 800 reached through
+`SPS1` and `SPS4`, and 480 through `COMPAS` — and had it fired, `K3` would have diverged from the
+oracle's byte for byte. §6.43's rule again: an equivalent mutation is worth measuring rather than
+asserting, and the number is what makes the argument checkable.
+
 ### 6.61 Two seams for one routine, and what replaced their call counts
 
 §6.59 found `SCAN` behind two seams with two different signatures and said 3d would collapse them.
