@@ -56,7 +56,14 @@ float4 PsMain(Vertex input) : SV_Target
   texel = clamp(texel, int2(0, 0), int2(319, 199));
 
   uint index = CanvasTexture.Load(int3(texel, 0)) & 15u;
-  uint packed = gPalette[index >> 2][index & 3];
+
+  // The palette is sixteen root constants packed as four uint4s, so the colour of an index is
+  // one component of one of them. The component is selected with a chain of comparisons rather
+  // than with `row[index & 3]`: dynamic indexing of a VECTOR is a corner of HLSL worth not
+  // depending on, and this compiles to the same select instructions.
+  uint4 row = gPalette[index >> 2];
+  uint lane = index & 3;
+  uint packed = (lane == 0) ? row.x : ((lane == 1) ? row.y : ((lane == 2) ? row.z : row.w));
 
   return float4(float(packed & 255u), float((packed >> 8) & 255u), float((packed >> 16) & 255u), 255.0) / 255.0;
 }
@@ -75,13 +82,21 @@ winrt::com_ptr<ID3DBlob> Compile(const char* _entry, const char* _target)
                                     nullptr, _entry, _target, flags, 0, code.put(), errors.put());
   if (FAILED(result))
   {
-    // The compiler's own message is the only useful thing here, so it goes to the debugger's
-    // output before the HRESULT is thrown; an HRESULT alone says nothing about a typo in HLSL.
+    /*
+     * The compiler's own message is the only useful thing here, and it goes into the EXCEPTION
+     * rather than only to the debugger -- an HRESULT alone says nothing about a typo in HLSL, and
+     * this shader is compiled at run time, so the build cannot have caught it. `Main.cpp` shows
+     * the message, which is the difference between "a black window" and "line 31, undeclared
+     * identifier".
+     */
+    std::string message = "Compiling the canvas shader failed.";
     if (errors)
     {
-      OutputDebugStringA(static_cast<const char*>(errors->GetBufferPointer()));
+      message += "\n\n";
+      message.append(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
     }
-    winrt::check_hresult(result);
+    OutputDebugStringA(message.c_str());
+    throw winrt::hresult_error(result, winrt::to_hstring(message));
   }
   return code;
 }
