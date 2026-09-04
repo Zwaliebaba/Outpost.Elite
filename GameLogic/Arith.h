@@ -3,6 +3,7 @@
 #include "EliteTypes.h"
 
 #include <cstdint>
+#include <span>
 
 namespace Elite
 {
@@ -153,5 +154,34 @@ void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
  * state-dependent -- it takes R and Q and leaves Q -- and TT111 needs it, so it lands here.
  */
 void SquareRoot(MathWorkspace& _work) noexcept;
+
+/*
+ * 6502: MULT3 -- K(4) = (A P+1 P) * Q, a twenty-four bit magnitude by an eight bit one, signed
+ * (slice 3a).
+ *
+ * The shift-and-add is the usual one with a trick in it worth naming, because it looks like an
+ * off-by-one: the routine stores |Q| - 1 in T and then adds it with `ADC` at a point where the
+ * carry is always SET, so what actually gets added is |Q|. The subtraction and the carry cancel,
+ * and a port that "corrected" the `SBC #1` would be wrong by one on every partial product.
+ *
+ * `MVEIT` reaches this through `MV40`, the path a planet or a sun takes. The name follows
+ * `MultiplySignedToSR` (`MULT12`), because what distinguishes these from the other multipliers is
+ * where they leave the answer rather than what they do to it.
+ */
+void MultiplySignedToK(MathWorkspace& _work, std::uint8_t _a) noexcept;
+
+/*
+ * 6502: NORM -- scale the three-byte vector in XX15 to a length of 96 (slice 3a).
+ *
+ * Sum the squares, take the square root, divide each component by it. `TIDY` calls this every
+ * sixteenth iteration of the main loop to stop a ship's orientation vectors drifting out of shape
+ * as the rounding in `MVEIT` accumulates.
+ *
+ * THE ADDITIONS HAVE NO `CLC` BEFORE THEM, which is not an oversight in the original and is the
+ * one thing here a port can quietly get wrong: `LDA P / ADC Q` follows `JSR SQUA`, so whatever
+ * carry `SQUA` exits with is part of the sum. `TheNormaliserMatchesNORM` sweeps the vector space
+ * against the shipped routine, which is what settles it rather than reading the multiplier.
+ */
+void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcept;
 
 } // namespace Elite
