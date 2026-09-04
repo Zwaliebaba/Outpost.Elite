@@ -77,6 +77,15 @@ inline constexpr std::uint16_t MISSILE_CELL = Canvas::DASHBOARD_CELLS + 24u * 40
 struct FlightStatus
 {
   std::uint8_t laserTemperature = 0;    ///< 6502: GNTMP
+  /*
+   * 6502: QQ22 and QQ22+1 -- the hyperspace countdown, which is TWO bytes and one number.
+   *
+   * `QQ22+1` is what is printed and counts 15 down to 1; `QQ22` is the tick within each of those,
+   * reloaded from 5 every time the printed digit changes. The port had only the printed half
+   * because that is all `ee3` and `TT66` read; `RESET` clears both, which is what made the other
+   * one necessary.
+   */
+  std::uint8_t hyperspaceCounter = 0;   ///< 6502: QQ22
   std::uint8_t hyperspaceCountdown = 0; ///< 6502: QQ22+1
   std::uint8_t forwardShield = 0;       ///< 6502: FSH
   std::uint8_t aftShield = 0;           ///< 6502: ASH

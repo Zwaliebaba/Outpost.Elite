@@ -121,6 +121,16 @@ struct ScreenState
    * puts it back to zero and `COMIRQ1` increments it, which is the only place it grows.
    */
   std::uint8_t backgroundFlash = 0;
+
+  /*
+   * 6502: HFX -- the hyperspace effect's own flag, which the RASTER HANDLER reads.
+   *
+   * `comirq1` checks it once a frame and scrambles the screen's row addresses while it is set,
+   * which is the tearing effect a jump ends with. Nothing in `GameLogic` reads it; `ZERO` clears
+   * it and `LL164` sets it, so it is state the port has to carry even though the thing that acts
+   * on it is behind the presentation seam.
+   */
+  std::uint8_t hyperspaceEffect = 0;
 };
 
 /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
