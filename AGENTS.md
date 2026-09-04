@@ -198,14 +198,17 @@ Repository checks:
 python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/inventory.py                     # coverage ledger: ported / pending / unaccounted
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted
-python tools/check_outpost.py                 # every Elite:: name Outpost/ uses still exists
+python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
 ```
 
 **`check_outpost.py` exists because the portable runner compiles no part of `Outpost/`.** It is
 Win32 and DirectX 12, so a hosted Linux runner cannot build it -- and that leaves a whole
 executable outside every check runnable there. Renaming a `GameLogic` type breaks the app with the
 Linux suite still green, which is how `DockedShip` becoming `FlightStatus` reached the Windows job.
-The check asserts the NAMES still resolve; it cannot check a signature, and only building the app
+The check asserts the names still resolve AND that every `Elite::` call passes as many arguments
+as the declaration takes -- the second half added after the name check alone let a fifth parameter
+on `ClearMessageRows` reach the Windows job, the second break of the same afternoon through the
+same hole. It still cannot check parameter TYPES at an unchanged arity, and only building the app
 can.
 
 **Add a new file to its `.vcxproj` AND its `.vcxproj.filters`.** The portable runner globs the

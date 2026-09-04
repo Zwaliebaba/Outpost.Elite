@@ -76,7 +76,7 @@ struct Game
   {
     recursive.SetValueTokens(&values);
     recursive.SetCursor(&text);
-    shell.Attach(recursive, text, characters.state);
+    shell.Attach(recursive, text, characters.state, message);
     shell.AttachExtended(extended);
 
     // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
@@ -114,6 +114,7 @@ struct Game
   Elite::CurrentSystem current;
   Elite::MarketState market;
   Elite::FlightStatus status;
+  Elite::MessageState message; ///< 6502: DLY, de, MCH and messXC
 
   std::uint8_t crosshairX = 0;
   std::uint8_t crosshairY = 0;
