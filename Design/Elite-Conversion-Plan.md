@@ -428,6 +428,57 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.73 The §6.12 pass on slice 3d-d-ii, and a ledger row with one verb for two jobs
+
+The player's controls. **203 instructions and 15 external call targets**, against 3d-d's 866 and
+64 — an ordinary unit, and the first part of 3d-d that is.
+
+| To build | Instructions |
+|---|---|
+| `DOKEY`'s flight half | 77 |
+| `WARP` | 36 |
+| `SIGHT` | 35 |
+| `LOOK1` | 15 |
+| `SPIN`/`SPIN2` | 14 |
+| `BUMP2`/`REDU2` | 22 |
+| `CTRL` | 1 |
+
+Eight of the fifteen targets are already ported, `MAS2` and `m` among them from 3d-d-i two hours
+ago. `DOCKIT` and `SFS1` are phase 4's. `NOISE` has a seam. `RDKEY`, `SETL1` and `DOVDU19` need
+one.
+
+**`SIGHT` is half hardware and half canvas, and §6.69 filed all of it as hardware.** It writes
+`VIC+&27` and `VIC+&15`, which are the sprite colour and enable registers and are not memory at
+all. It also writes `&63F8` and `&67F8` — the sprite pointers, which live in the last eight bytes
+of each 1KB block of screen RAM, and screen RAM is inside the canvas. `SCBASE` is `&4000` and the
+canvas is `&2800` bytes, so those are offsets `&23F8` and `&27F8` of an array the port already
+has and already compares byte for byte. Both, because the VIC-II is flipped between the two
+blocks and the game keeps them in step. And it sets `TRIBCT` from `TRIBTA`, which is plain game
+state.
+
+So **the C64's laser crosshairs are a sprite** — that is why the routine looks like nothing else
+in the drawing code, and why a reader who knows the BBC version would not expect it. Two thirds
+of `SIGHT` is comparable and §6.69's seam would have thrown that away. It matters beyond `SIGHT`
+itself: `LOOK1` falls into it, so changing the view cannot be compared end to end until the
+canvas half exists.
+
+**And row 145 is a Replace row with a Port inside it.** It files `dokey`, `dk4`, `ctrl`,
+`dks4-dks5`, `dkj1` and nine more under *"Replace. The CIA keyboard-matrix scan is replaced by
+`WM_KEYDOWN`"*. That is right about the scan. It is not right about what `DOKEY` does with the
+result: 77 instructions of damping, clamping and re-centring on `JSTX` and `JSTY` that read no
+hardware, touch no CIA register and are exactly as comparable as anything else in this port. The
+row says as much in passing — *"the original polling logic in `dokey`/`ctrl` ports unchanged"* —
+and then files the whole of it under the other verb. **A row with one verb cannot describe a
+routine that does two things**, and this is the same shape as §6.45's finding that where a
+routine lives and what it reads are separate questions.
+
+Two smaller corrections in the same row. **`dkj1` is not in this build**: the file is INCLUDEd
+and every line of it is commented out, so the C64 assembles nothing from it, and the row's
+*"`dkj1` (joystick) maps to the same bits"* describes a routine that is not there. On the C64 the
+joystick is read inside `RDKEY` and `TT17`, which are the seam — so the joystick is not a porting
+question here at all. And **`CTRL` is one instruction**, `LDX #6` falling into `DKS4`: entirely
+the key seam, with nothing to compare.
+
 ### 6.72 Thirteen rows of findings nobody could read
 
 Every slice ends by appending its result to the ledger row that scheduled it, as a new cell on
@@ -480,6 +531,11 @@ zero afterwards. Two hundred and fifty-six readings by three settings of `auto` 
 `DAMP`: 2,304 calls, no hits. The trap also returns early rather than executing the two
 instructions, so an input that did reach it would fail the value comparison as well — the claim
 is checked twice, from opposite directions, and neither check is a comment.
+
+Twenty-two mutations across the two routines — both flag tests and both polarities, the sign
+test, the bump, the decrement, the undo, and for `ECMOF` each of the four things it does plus a
+bulb toggled twice, a `PlaySound` where the `StopSound` should be, and the wrong effect number.
+All twenty-two caught, no survivors and none equivalent.
 
 **A dead-code finding is worth recording even when nothing follows from it.** Elite is 24 years
 of accumulated hand assembly and this is the first unreachable instruction pair the port has
@@ -555,7 +611,7 @@ ported and absent; the check has to be for a DEFINITION, and this pass nearly re
 | | |
 |---|---|
 | **3d-d-i** ✅ | `MAS1`–`MAS4` **built 2026-09-04** in `FlightLoop.h/.cpp` (11 mutations, 11 caught), then `cntr` there and `ECMOF` in `Dashboard.h/.cpp` as `StopEcm`. `tnpr1` was **already built in slice 2c** and should never have been on this list (§6.71). `FRMIS` needs phase 4's `FRS1` and `ANGRY`, and `KS1` ends `JMP MAL1` — a jump back INTO the loop, not a call — so both move to 3d-d-iii |
-| **3d-d-ii** | `LOOK1`, `WARP`, `SPIN`/`SPIN2`, `CTRL` and `DOKEY`'s flight half — the player's controls |
+| **3d-d-ii** | `LOOK1`, `WARP`, `SPIN`/`SPIN2`, `CTRL` and `DOKEY`'s flight half — the player's controls. **§6.73's pass adds `SIGHT`** (two thirds of it is canvas and game state, not hardware) **and `BUMP2`/`REDU2`** (`DOKEY`'s, not `cntr`'s): 203 instructions, 15 external targets, 8 of them already ported |
 | **3d-d-iii** | the sixteen loop parts themselves, which by then call nothing unbuilt but phase 4 |
 
 Doing it in that order means the loop is written last, against a set of routines that have each
@@ -2969,7 +3025,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 | Date | Change |
 |---|---|
 | 2026-09-04 | **Thirteen ledger rows had been recording findings into a void.** A slice ends by appending its result to the row that scheduled it, as a new cell; `Source-Inventory.md`'s tables have four columns and thirteen rows had grown to five, six, eight — one to twenty-three. GitHub renders a table at the header's width and drops the rest in silence, so what `LL9` cost and what its mutation sweep caught has been invisible since the day it was written, in a file that reads correctly raw. Merged into the notes column with `<br><br>` between entries, and `tools/check_docs.py` now fails CI on any row wider than its header — it caught one more, in this document's own phase-3 table. **The failure mode is the absence of a reader**: everything else this port checks has a second thing to compare against, and a design document has none until someone opens it on the web (§6.72). |
-| 2026-09-04 | **Slice 3d-d-i finishes with `cntr` and `ECMOF`.** `cntr` joins the distance helpers in `FlightLoop.cpp` — flight loop part 2 is its only caller — swept exhaustively at 2,304 calls, every reading by three settings of `auto` and three of `DAMP`. **Its last two instructions cannot run**: `.REDU DEX / BEQ BUMP` needs `BUMP`'s `INX` to wrap, which needs X = 255 arriving at `BUMP`, and `BUMP` is only ever entered with X < 128 or X = 128. The port leaves them out and a trap on `REDU` armed across the whole sweep records no hits, because "this cannot run" is a claim about every input and not one the port may make on its own authority (§6.71). `ECMOF` lands in `Dashboard.cpp` as `StopEcm`, next to `ECBLB2` rather than in phase 4's `Ecm.cpp` where the ledger files it; `ECBLB` is a toggle, so the sweep runs from a lit bulb and from a dark one, where the routine lights it. **And `tnpr1` should never have been on 3d-d-i's list** — row 69 has it built in slice 2c with 86,016 checks behind it. §6.69's pass took the 3d row's word for what was outstanding instead of the ledger's word for what was done, which is §6.12's failure with the sign reversed. |
+| 2026-09-04 | **Slice 3d-d-i finishes with `cntr` and `ECMOF`.** `cntr` joins the distance helpers in `FlightLoop.cpp` — flight loop part 2 is its only caller — swept exhaustively at 2,304 calls, every reading by three settings of `auto` and three of `DAMP`; 22 mutations, 22 caught. **Its last two instructions cannot run**: `.REDU DEX / BEQ BUMP` needs `BUMP`'s `INX` to wrap, which needs X = 255 arriving at `BUMP`, and `BUMP` is only ever entered with X < 128 or X = 128. The port leaves them out and a trap on `REDU` armed across the whole sweep records no hits, because "this cannot run" is a claim about every input and not one the port may make on its own authority (§6.71). `ECMOF` lands in `Dashboard.cpp` as `StopEcm`, next to `ECBLB2` rather than in phase 4's `Ecm.cpp` where the ledger files it; `ECBLB` is a toggle, so the sweep runs from a lit bulb and from a dark one, where the routine lights it. **And `tnpr1` should never have been on 3d-d-i's list** — row 69 has it built in slice 2c with 86,016 checks behind it. §6.69's pass took the 3d row's word for what was outstanding instead of the ledger's word for what was done, which is §6.12's failure with the sign reversed. |
 | 2026-09-04 | **Slice 3d-d-i opens with the flight loop's distance helpers.** `MAS1`–`MAS4` in `FlightLoop.h/.cpp`: 24,576 cases for `MAS2` and 4,096 for `MAS4`, both exhaustive in the byte they OR into; 2,744 sums for `MAS3` with 1,030 of them saturating, reached both through `MA30` and through the final `BCC`; and 4,096 for `MAS1` over the coordinates that make its sixteen-bit doubling overflow, because that overflow is the whole reason for its third byte. 11 mutations, 11 caught. **`MAS2` is the third multi-entry routine this slice has met** after `DILX`'s four and `CLYNS`'s two, and the first where both entries are deliberate. **And two of 3d-d-i's six routines move out**: `FRMIS` needs phase 4's `FRS1` and `ANGRY`, and `KS1` ends `JMP MAL1`, which is a jump back into the loop rather than a call — neither can be compared to the game before 3d-d-iii exists. |
 | 2026-09-04 | **Slice 3d-c: messages, the missile lock and the laser.** `MESS`/`me1`/`mes9` in `Messages.h/.cpp`, `ABORT`/`ABORT2` in `Dashboard.h/.cpp`, `LASLI`/`LASLI2`/`las` in `Lasers.h/.cpp`. 84 messages, 96 missile locks and 480 shots compared on the bitmap. **`MESS` matched first time including the `EQUB &2C` that eats the `STA YC`** rather than the load above it, and a mutation that puts 25 in the row is caught — which is what turned §6.66 from a reading into a measurement. **§6.67 fixes `CLYNS`**, which the port had implemented as `CLYNS2` under `CLYNS`'s name since slice 1c, missing the two stores every real caller wants: `CLYNS2` has no callers anywhere in the library, so the two entry points were never a choice a caller makes. **§6.68 splits `LASLI`'s three uncleared `ADC`s**: the two coordinates read `DORND`'s carry and span nine rows and nine columns where `AND #7` alone gives eight, while the third cannot carry at all, so a shot costs exactly eight heat. The port's first draft said all three were data-dependent and **the coverage assertion caught the prose rather than the arithmetic** — every byte already matched the oracle. And `ABORT2`'s `STY MSAR` stores the zero `MSBAR` ended on rather than the colour it was passed, a register side effect surviving a `JSR`. |
 | 2026-09-04 | **Slice 3d-b: the dashboard.** `DIALS` 1–4 with `DIL`, `DILX` and `DIL2`, `PZW`, `MSBAR`, `ECBLB`, `ECBLB2` and `SPBLB` in `Dashboard.h/.cpp`, with `CTWOS` extracted. **`DILX` is one routine with four entry points** and three of them are byte arithmetic — `4A 4A 4A 4A` then `.DIL`, so `JSR DILX` divides by sixteen, `DILX+2` by four, `DIL-1` by two and `DIL` not at all, and all four are used; **`PZW` hides a branch in a data byte**, an `EQUB &2C` whose operands are the `LDA #RED` after it (§6.63, both checked against the assembled bytes rather than the listing). **Two defects the oracle caught, both structural.** `dec27` is not a skip but a RETURN, so the energy bars, the shields, the fuel, both temperatures, the altitude and the compass are one pass in four — §6.63 had identified the label correctly and said nothing about what branching to it does, which are different facts (§6.64). And `DLOC%` carries no left margin where `ylookup` does, so the first comparison put every dial 32 bytes right. **A §6.28 shipped since 2d is gone**: `DockedShip` held `DELTA` as `speed` while `FlightState` held it as `delta`; the struct is now `FlightStatus`, named for its readers. **Renaming it broke the Windows app with every local check green**, because the portable runner compiles no part of `Outpost/` — `tools/check_outpost.py` now asserts every `Elite::` name the app uses is declared in `GameLogic`, and says plainly that it cannot catch a signature change. **45 mutations, 44 caught, one equivalent** (`Q ^ 3` is `3 - Q` for the Q below four that reaches it). Four of the five that first survived were the dial thresholds, and they were a GAP: `DIL` compares the SHIFTED reading, so a `T1` of 14 against 13 shows only at a `DELTA` of 26 or 27. The test already compared `T1` at exit and that did not help, because `ADD` opens `STA T1` and part 2 overwrites it before `DIALS` returns — an exit-state comparison is not a substitute for a case that exercises the branch. **And mutation testing moved into a detached worktree**, because the alternative is a working tree holding deliberately broken code for half an hour at a time. |
