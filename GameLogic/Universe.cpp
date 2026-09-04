@@ -222,8 +222,8 @@ NearestSystem FindNearestSystem(const SystemSeeds& _galaxy, std::uint8_t _crossh
   work.q = sumLow.value;
   work.r = sumHigh.carry ? std::uint8_t{ 255 } : sumHigh.value;
 
-  // 6502: JSR LL5 -- Q becomes the square root of (R Q).
-  SquareRoot(work);
+  // 6502: JSR LL5 -- Q becomes the square root of (R Q). The exit carry is not read here.
+  (void)SquareRoot(work);
 
   // 6502: ASL A / ROL QQ8+1 twice -- the answer times four, as a sixteen-bit value.
   std::uint8_t distanceLow = work.q;

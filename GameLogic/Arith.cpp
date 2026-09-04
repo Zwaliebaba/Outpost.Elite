@@ -856,8 +856,8 @@ void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcep
     carry = high > 0xFFu;
   }
 
-  // 6502: JSR LL5 -- Q = sqrt(R Q).
-  SquareRoot(_work);
+  // 6502: JSR LL5 -- Q = sqrt(R Q). The exit carry is not read here.
+  (void)SquareRoot(_work);
 
   // 6502: LDA XX15,n / JSR TIS2 / STA XX15,n -- each component scaled to a length of 96.
   for (int axis = 0; axis < 3; ++axis)

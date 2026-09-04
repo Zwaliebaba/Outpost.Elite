@@ -158,8 +158,7 @@ void GameShell::Abandon()
    */
   m_presenter.Destroy();
 
-  ExitProcess(0);
-  std::terminate(); // not reached; ExitProcess does not return
+  ExitProcess(0); // does not return; the declaration is [[noreturn]] for that reason
 }
 
 // ---- the screen -------------------------------------------------------------------------------
