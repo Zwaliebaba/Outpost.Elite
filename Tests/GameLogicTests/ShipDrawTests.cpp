@@ -968,4 +968,421 @@ public:
   }
 };
 
+
+TEST_CLASS(TheSlopeArithmetic)
+{
+public:
+  /*
+   * 6502: LL129, LL120 and LL123 -- the step the line clipper walks a point along a line with.
+   *
+   * All three are swept together over the same space, because they are the same code: `LL120`
+   * and `LL123` differ only in which of the multiply and the divide `T` selects and in whether
+   * `R` comes from `x1_lo`, and both run through `LL129` first.
+   *
+   * X and Y are compared as well as the workspace, because that is where the answer is -- these
+   * return in registers and the caller uses both.
+   */
+  TEST_METHOD(TheSlopeStepsMatchLL120AndLL123)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t xx15 = oracle.Label("XX15");
+    const std::uint16_t xx12 = oracle.Label("XX12");
+    const std::uint16_t qq = oracle.Label("Q");
+    const std::uint16_t rr = oracle.Label("R");
+    const std::uint16_t ss = oracle.Label("S");
+    const std::uint16_t tt = oracle.Label("T");
+    const std::uint16_t ll129 = oracle.Label("LL129");
+    const std::uint16_t ll120 = oracle.Label("LL120");
+    const std::uint16_t ll123 = oracle.Label("LL123");
+
+    std::uint32_t compared = 0;
+    std::uint32_t negated = 0;
+    std::uint32_t multiplied = 0;
+    std::uint32_t divided = 0;
+
+    for (const std::uint8_t gradient : EDGES)
+    {
+      for (const std::uint8_t direction : { 0x00, 0x80 })
+      {
+        for (const std::uint8_t steep : { 0x00, 0xFF })
+        {
+          for (const std::uint8_t r : EDGES)
+          {
+            for (const std::uint8_t s : EDGES)
+            {
+              for (const std::uint8_t x1 : LOW)
+              {
+                // Each of the three routines gets the same starting state.
+                for (int which = 0; which < 3; ++which)
+                {
+                  Cpu6502 cpu = oracle.Fresh();
+                  Elite::DrawWorkspace draw;
+                  Elite::GeometryWorkspace geometry;
+                  Elite::MathWorkspace math;
+
+                  cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
+                  cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
+                  cpu.memory[tt] = steep;
+                  cpu.memory[rr] = r;
+                  cpu.memory[ss] = s;
+                  cpu.memory[xx15] = x1;
+                  geometry.xx12[2] = gradient;
+                  geometry.xx12[3] = direction;
+                  math.t = steep;
+                  math.r = r;
+                  math.s = s;
+                  draw.x1 = x1;
+
+                  const std::uint16_t routine =
+                    (which == 0) ? ll129 : ((which == 1) ? ll120 : ll123);
+                  const Elite::Testing::RunResult run = cpu.CallSubroutine(routine, 200'000);
+                  Assert::IsTrue(run.completed, L"the slope routine returned");
+
+                  const std::wstring where =
+                    Widen(std::string(which == 0 ? "LL129" : (which == 1 ? "LL120" : "LL123"))
+                          + "(XX12+2=" + std::to_string(gradient) + ", XX12+3="
+                          + std::to_string(direction) + ", T=" + std::to_string(steep) + ", R="
+                          + std::to_string(r) + ", S=" + std::to_string(s) + ", x1="
+                          + std::to_string(x1) + ")");
+
+                  if (which == 0)
+                  {
+                    const std::uint8_t sign = Elite::PrepareSlope(math, geometry);
+                    Assert::AreEqual(cpu.a, sign, (where + L": A").c_str());
+                  }
+                  else
+                  {
+                    const Elite::SlopeStep step = (which == 1)
+                                                    ? Elite::StepAlongX(math, geometry, draw)
+                                                    : Elite::StepAlongY(math, geometry);
+                    Assert::AreEqual(cpu.x, step.low, (where + L": X").c_str());
+                    Assert::AreEqual(cpu.y, step.high, (where + L": Y").c_str());
+
+                    if (step.low != 0u || step.high != 0u)
+                    {
+                      const bool wentNegative = (step.high & 0x80u) != 0u;
+                      negated += wentNegative ? 1u : 0u;
+                    }
+                    const bool isMultiply = (which == 1) ? (steep == 0u) : (steep != 0u);
+                    multiplied += isMultiply ? 1u : 0u;
+                    divided += isMultiply ? 0u : 1u;
+                  }
+
+                  Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
+                  Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
+                  Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
+                  ++compared;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(8u * 2u * 2u * 8u * 8u * 4u * 3u, compared,
+                                    L"the whole sweep ran");
+    Assert::IsTrue(multiplied > 0u, L"the multiply loop ran");
+    Assert::IsTrue(divided > 0u, L"the divide loop ran");
+    Assert::IsTrue(negated > 0u, L"a step came out negative");
+  }
+
+  /*
+   * 6502: LL118 -- the four clamps, one per screen edge.
+   *
+   * The sweep is chosen so that every clamp fires and so that pairs of them fire together: a
+   * point can be off the left edge AND above the screen, and the second clamp then works on the
+   * coordinate the first one moved. The counters below insist each of the four ran and that at
+   * least one point needed two of them.
+   */
+  TEST_METHOD(MovingAPointOnScreenMatchesLL118)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t xx15 = oracle.Label("XX15");
+    const std::uint16_t xx12 = oracle.Label("XX12");
+    const std::uint16_t qq = oracle.Label("Q");
+    const std::uint16_t rr = oracle.Label("R");
+    const std::uint16_t ss = oracle.Label("S");
+    const std::uint16_t tt = oracle.Label("T");
+    const std::uint16_t ll118 = oracle.Label("LL118");
+
+    const std::vector<std::uint8_t> HIGHS = { 0, 1, 0x80, 0xFF };
+    const std::vector<std::uint8_t> LOWS = { 0, 143, 144, 255 };
+    const std::vector<std::uint8_t> GRADIENTS = { 1, 64, 128, 255 };
+
+    std::uint32_t compared = 0;
+    std::uint32_t offLeft = 0;
+    std::uint32_t offRight = 0;
+    std::uint32_t above = 0;
+    std::uint32_t below = 0;
+    std::uint32_t twoClamps = 0;
+
+    for (const std::uint8_t x1Low : LOWS)
+    {
+      for (const std::uint8_t x1High : HIGHS)
+      {
+        for (const std::uint8_t y1Low : LOWS)
+        {
+          for (const std::uint8_t y1High : HIGHS)
+          {
+            for (const std::uint8_t gradient : GRADIENTS)
+            {
+              for (const std::uint8_t direction : { 0x00, 0x80 })
+              {
+                for (const std::uint8_t steep : { 0x00, 0xFF })
+                {
+                  Cpu6502 cpu = oracle.Fresh();
+                  Elite::DrawWorkspace draw;
+                  Elite::GeometryWorkspace geometry;
+                  Elite::MathWorkspace math;
+
+                  const std::uint8_t point[4] = { x1Low, x1High, y1Low, y1High };
+                  for (std::size_t byte = 0; byte < 4u; ++byte)
+                  {
+                    cpu.memory[static_cast<std::uint16_t>(xx15 + byte)] = point[byte];
+                  }
+                  draw.x1 = x1Low;
+                  draw.y1 = x1High;
+                  draw.x2 = y1Low;
+                  draw.y2 = y1High;
+
+                  cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
+                  cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
+                  cpu.memory[tt] = steep;
+                  geometry.xx12[2] = gradient;
+                  geometry.xx12[3] = direction;
+                  math.t = steep;
+
+                  const Elite::Testing::RunResult run = cpu.CallSubroutine(ll118, 200'000);
+                  Assert::IsTrue(run.completed, L"LL118 returned");
+
+                  Elite::MovePointOnScreen(draw, geometry, math);
+
+                  const std::wstring where =
+                    Widen("LL118(x1=" + std::to_string(x1Low) + "/" + std::to_string(x1High)
+                          + ", y1=" + std::to_string(y1Low) + "/" + std::to_string(y1High)
+                          + ", grad=" + std::to_string(gradient) + ", dir="
+                          + std::to_string(direction) + ", T=" + std::to_string(steep) + ")");
+
+                  const std::uint8_t ours[4] = { draw.x1, draw.y1, draw.x2, draw.y2 };
+                  for (std::size_t byte = 0; byte < 4u; ++byte)
+                  {
+                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + byte)], ours[byte],
+                                     (where + L": XX15+" + std::to_wstring(byte)).c_str());
+                  }
+                  Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
+                  Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
+                  Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
+
+                  // Which clamps the inputs asked for, decided from the inputs and not from the
+                  // port, so a port that skipped one still counts as having been asked.
+                  const bool left = (x1High & 0x80u) != 0u;
+                  const bool right = !left && x1High != 0u;
+                  const bool over = (y1High & 0x80u) != 0u;
+                  const bool under = !over && (y1High != 0u || y1Low >= 144u);
+                  offLeft += left ? 1u : 0u;
+                  offRight += right ? 1u : 0u;
+                  above += over ? 1u : 0u;
+                  below += under ? 1u : 0u;
+                  twoClamps += ((left || right) && (over || under)) ? 1u : 0u;
+                  ++compared;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(4u * 4u * 4u * 4u * 4u * 2u * 2u, compared,
+                                    L"the whole sweep ran");
+    Assert::IsTrue(offLeft > 0u, L"a point was off the left edge");
+    Assert::IsTrue(offRight > 0u, L"a point was off the right edge");
+    Assert::IsTrue(above > 0u, L"a point was above the screen");
+    Assert::IsTrue(below > 0u, L"a point was below the screen");
+    Assert::IsTrue(twoClamps > 0u, L"a point needed clamping on both axes");
+  }
+};
+
+
+TEST_CLASS(TheLineClipper)
+{
+public:
+  /*
+   * 6502: LL145 and LL147.
+   *
+   * Both entry points over the same 4,096 lines, and `SWAP` is seeded non-zero for the `LL147`
+   * runs so that the one difference between them -- that `LL147` does not clear it -- is what
+   * the comparison actually tests rather than something the sweep happens not to reach.
+   *
+   * The coordinates are chosen to sit on the boundaries rather than to be plausible: 143 and 144
+   * either side of the bottom edge, 255 and 256 either side of the right, and negatives so that
+   * the sign tests at `LL83` fire. Every one of the six outcomes is counted.
+   */
+  TEST_METHOD(ClippingALineMatchesLL145AndLL147)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t xx15 = oracle.Label("XX15");
+    const std::uint16_t xx12 = oracle.Label("XX12");
+    const std::uint16_t xx13 = oracle.Label("XX13");
+    const std::uint16_t swap = oracle.Label("SWAP");
+    const std::uint16_t dontclip = oracle.Label("dontclip");
+    const std::uint16_t qq = oracle.Label("Q");
+    const std::uint16_t rr = oracle.Label("R");
+    const std::uint16_t ss = oracle.Label("S");
+    const std::uint16_t tt = oracle.Label("T");
+    const std::uint16_t ll145 = oracle.Label("LL145");
+    const std::uint16_t ll147 = oracle.Label("LL147");
+
+    // Sixteen-bit coordinates either side of every edge the clipper knows about.
+    const std::vector<std::uint16_t> COORDINATES = { 0x0000, 0x0001, 0x008F, 0x0090,
+                                                     0x00FF, 0x0100, 0xFF80, 0xFFFF };
+
+    std::uint32_t compared = 0;
+    std::uint32_t fitted = 0;
+    std::uint32_t rejected = 0;
+    std::uint32_t swapped = 0;
+    std::uint32_t untouched = 0;
+    std::uint32_t unclipped = 0;
+
+    for (const std::uint16_t x1 : COORDINATES)
+    {
+      for (const std::uint16_t y1 : COORDINATES)
+      {
+        for (const std::uint16_t x2 : COORDINATES)
+        {
+          for (const std::uint16_t y2 : COORDINATES)
+          {
+            for (int entry = 0; entry < 2; ++entry)
+            {
+              /*
+               * Every sixteenth line is run with clipping switched off, which is what the
+               * short-range chart does through `dontclip` -- and every eighth with the flag set
+               * to 1 instead, which is NOT something the game does.
+               *
+               * `TT23` only ever writes 199 and `RES2` only ever writes 0, so a port that tested
+               * the whole byte instead of its bit 7 would agree with the game everywhere. The
+               * original is `BIT dontclip / BMI`, so the contract is the bit; 1 is in the sweep
+               * to hold the port to the contract rather than to the two values it will see.
+               */
+              const std::uint8_t off = ((compared % 16u) == 0u)   ? std::uint8_t{ 199 }
+                                       : ((compared % 8u) == 0u) ? std::uint8_t{ 1 }
+                                                                 : std::uint8_t{ 0 };
+              const std::uint8_t seededSwap = (entry == 0) ? std::uint8_t{ 0 } : std::uint8_t{ 3 };
+
+              Cpu6502 cpu = oracle.Fresh();
+              Elite::DrawWorkspace draw;
+              Elite::GeometryWorkspace geometry;
+              Elite::MathWorkspace math;
+              Elite::ClipState clip;
+
+              const std::uint8_t block[6] = {
+                static_cast<std::uint8_t>(x1), static_cast<std::uint8_t>(x1 >> 8),
+                static_cast<std::uint8_t>(y1), static_cast<std::uint8_t>(y1 >> 8),
+                static_cast<std::uint8_t>(x2), static_cast<std::uint8_t>(x2 >> 8),
+              };
+              for (std::size_t byte = 0; byte < 6u; ++byte)
+              {
+                cpu.memory[static_cast<std::uint16_t>(xx15 + byte)] = block[byte];
+              }
+              draw.x1 = block[0];
+              draw.y1 = block[1];
+              draw.x2 = block[2];
+              draw.y2 = block[3];
+              draw.xx15Plus4 = block[4];
+              draw.xx15Plus5 = block[5];
+
+              cpu.memory[xx12] = static_cast<std::uint8_t>(y2);
+              cpu.memory[static_cast<std::uint16_t>(xx12 + 1)] = static_cast<std::uint8_t>(y2 >> 8);
+              geometry.xx12[0] = static_cast<std::uint8_t>(y2);
+              geometry.xx12[1] = static_cast<std::uint8_t>(y2 >> 8);
+
+              cpu.memory[dontclip] = off;
+              cpu.memory[swap] = seededSwap;
+              clip.dontclip = off;
+              clip.swap = seededSwap;
+
+              // LL147 is entered with XX15+5 in the accumulator, which is where its only caller
+              // leaves it.
+              cpu.a = block[5];
+              const Elite::Testing::RunResult run =
+                cpu.CallSubroutine((entry == 0) ? ll145 : ll147, 400'000);
+              Assert::IsTrue(run.completed, L"the clipper returned");
+
+              const bool missed = (entry == 0)
+                                    ? Elite::ClipLine(draw, geometry, math, clip)
+                                    : Elite::ClipLineKeepingSwap(draw, geometry, math, clip, block[5]);
+
+              const std::wstring where =
+                Widen(std::string(entry == 0 ? "LL145" : "LL147") + "(x1=" + std::to_string(x1)
+                      + ", y1=" + std::to_string(y1) + ", x2=" + std::to_string(x2) + ", y2="
+                      + std::to_string(y2) + ", dontclip=" + std::to_string(off) + ")");
+
+              Assert::AreEqual(cpu.c, missed, (where + L": C").c_str());
+
+              const std::uint8_t ours[6] = { draw.x1,  draw.y1,        draw.x2,
+                                             draw.y2,  draw.xx15Plus4, draw.xx15Plus5 };
+              for (std::size_t byte = 0; byte < 6u; ++byte)
+              {
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + byte)], ours[byte],
+                                 (where + L": XX15+" + std::to_wstring(byte)).c_str());
+              }
+              for (std::size_t byte = 0; byte < 6u; ++byte)
+              {
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx12 + byte)],
+                                 geometry.xx12[byte],
+                                 (where + L": XX12+" + std::to_wstring(byte)).c_str());
+              }
+              Assert::AreEqual(cpu.memory[xx13], clip.xx13, (where + L": XX13").c_str());
+              Assert::AreEqual(cpu.memory[swap], clip.swap, (where + L": SWAP").c_str());
+              Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
+              Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
+              Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
+              Assert::AreEqual(cpu.memory[tt], math.t, (where + L": T").c_str());
+
+              if ((off & 0x80u) != 0u)
+              {
+                ++unclipped;
+              }
+              else if (missed)
+              {
+                ++rejected;
+              }
+              else
+              {
+                ++fitted;
+                swapped += (clip.swap != seededSwap) ? 1u : 0u;
+                untouched += (clip.xx13 == 0u && clip.swap == seededSwap) ? 1u : 0u;
+              }
+              ++compared;
+            }
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(8u * 8u * 8u * 8u * 2u, compared, L"the whole sweep ran");
+    Assert::IsTrue(unclipped > 0u, L"dontclip switched the clipper off");
+    Assert::IsTrue(rejected > 0u, L"a line was refused");
+    Assert::IsTrue(fitted > 0u, L"a line was clipped to fit");
+    Assert::IsTrue(swapped > 0u, L"a line came back with its ends exchanged");
+    Assert::IsTrue(untouched > 0u, L"a line was already on screen and needed nothing");
+  }
+};
+
 } // namespace GameLogicTests
