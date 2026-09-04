@@ -679,6 +679,169 @@ public:
     Assert::AreEqual<std::uint32_t>(9u, compared, L"the whole sweep ran");
     Assert::IsTrue(copies > 0u && copies < compared, L"both halves of the DFLAG test were taken");
   }
+
+
+  /*
+   * 6502: TTX66K -- the whole screen set up, for every shape of view it distinguishes.
+   *
+   * Views 0 and 13 tail-jump into `wantdials` and never reach anything below that test, so those
+   * two cases are the dashboard again through a different door. Views 2, 64 and 128 get one band
+   * of colour cells and everything else gets two. And every path ends by falling into `BOX2` past
+   * its `LDX #18`, so the border is 25 rows rather than 18 (§6.79).
+   *
+   * Three separate clears in three different shapes, and the marker is what makes them
+   * distinguishable: a byte the routine zeroed and a byte it never touched are the same thing on
+   * a screen that started at zero.
+   */
+  TEST_METHOD(TheWholeScreenMatchesTTX66K)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t ttx66k = oracle.Label("TTX66K");
+    const std::uint16_t screen = ScreenBase(oracle);
+    const std::uint16_t abraxas = oracle.Label("abraxas");
+    const std::uint16_t caravanserai = oracle.Label("caravanserai");
+    const std::uint16_t dflag = oracle.Label("DFLAG");
+    const std::uint16_t comc = oracle.Label("COMC");
+    const std::uint16_t xc = oracle.Label("XC");
+    const std::uint16_t yc = oracle.Label("YC");
+    const std::uint16_t qq11 = oracle.Label("QQ11");
+    const std::uint16_t frin = oracle.Label("FRIN");
+    const std::uint16_t kPercent = oracle.Label("K%");
+    const std::uint16_t many = oracle.Label("MANY");
+    const std::uint16_t comx = oracle.Label("COMX");
+    const std::uint16_t comy = oracle.Label("COMY");
+    const std::uint16_t t2 = oracle.Label("T2");
+    const std::uint16_t mcnt = oracle.Label("MCNT");
+
+    struct Recorder final : Elite::SightEffects
+    {
+      std::vector<std::uint8_t> modes;
+      std::vector<std::uint8_t> masks;
+      void SetRasterMode(std::uint8_t _mode) override { modes.push_back(_mode); }
+      void SetSightColour(std::uint8_t) override {}
+      void SetSpritesEnabled(std::uint8_t _mask) override { masks.push_back(_mask); }
+    };
+
+    std::uint32_t compared = 0;
+    std::uint32_t dashboards = 0;
+    std::uint32_t oneBand = 0;
+
+    for (const std::uint8_t view : { std::uint8_t{ 0 }, std::uint8_t{ 1 }, std::uint8_t{ 2 },
+                                     std::uint8_t{ 6 }, std::uint8_t{ 13 }, std::uint8_t{ 64 },
+                                     std::uint8_t{ 128 }, std::uint8_t{ 255 } })
+    {
+      for (const std::uint8_t already : { std::uint8_t{ 0 }, std::uint8_t{ 0xFF } })
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        Elite::Canvas canvas;
+        cpu.AddTrap(oracle.Label("SETL1"));
+
+        FillScreens(cpu, canvas, screen, 0x1Du);
+
+        cpu.memory[qq11] = view;
+        cpu.memory[dflag] = already;
+        cpu.memory[abraxas] = 0x33u;
+        cpu.memory[caravanserai] = 0x44u;
+        cpu.memory[comc] = 0x55u;
+        cpu.memory[xc] = 0x66u;
+        cpu.memory[yc] = 0x77u;
+        cpu.memory[t2] = 0x88u;
+        cpu.memory[mcnt] = 0u;
+        cpu.memory[comx] = 0xC3u;
+        cpu.memory[comy] = 0x9Cu;
+
+        Elite::Bubble bubble;
+        bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
+        cpu.memory[static_cast<std::uint16_t>(many + Elite::SHIP_TYPE_STATION)] = 1u;
+
+        const std::uint8_t TYPES[] = { 3u, 5u };
+        for (std::size_t slot = 0; slot < 2u; ++slot)
+        {
+          bubble.slots[slot] = TYPES[slot];
+          cpu.memory[static_cast<std::uint16_t>(frin + slot)] = TYPES[slot];
+        }
+
+        std::uint32_t state = 0x2B91D6C5u ^ (view * 0x9E3779B9u) ^ already;
+        for (std::size_t slot = 0; slot < 2u; ++slot)
+        {
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            state = state * 1103515245u + 12345u;
+            const std::uint8_t value =
+              (byte == 31u) ? 0xFFu : static_cast<std::uint8_t>(state >> 17);
+            bubble.blocks[slot][byte] = value;
+            cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE
+                                                  + byte)] = value;
+          }
+        }
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(ttx66k, 400'000);
+        Assert::IsTrue(run.completed, L"TTX66K returned");
+
+        Elite::DrawWorkspace draw;
+        Elite::MathWorkspace math;
+        Elite::GeometryWorkspace geometry;
+        Elite::TextState textState;
+        Elite::ScreenState screenState;
+        Elite::Compass compass{ 0xC3u, 0x9Cu, 0x55u };
+        Elite::FlightState flight;
+        Elite::FlightStatus status;
+        Recorder effects;
+
+        screenState.colourBank = 0x33u;
+        screenState.bitmapMode = 0x44u;
+        screenState.dashboardShown = already;
+        textState.column = 0x66u;
+        textState.row = 0x77u;
+        draw.t2 = 0x88u;
+
+        Elite::SetUpScreenPixels(canvas, draw, math, geometry, textState, screenState, bubble,
+                                 flight, status, 0u, compass, effects, view);
+
+        const std::wstring where =
+          Widen("TTX66K(QQ11 " + std::to_string(view) + ", DFLAG " + std::to_string(already) + ")");
+
+        Assert::IsTrue(CompareScreens(cpu, screen, canvas, 0x1Du, where) > 0u,
+                       (where + L": something was drawn").c_str());
+        Assert::AreEqual(cpu.memory[abraxas], screenState.colourBank, (where + L": abraxas").c_str());
+        Assert::AreEqual(cpu.memory[caravanserai], screenState.bitmapMode,
+                         (where + L": caravanserai").c_str());
+        Assert::AreEqual(cpu.memory[dflag], screenState.dashboardShown, (where + L": DFLAG").c_str());
+        Assert::AreEqual(cpu.memory[comc], compass.colour, (where + L": COMC").c_str());
+        Assert::AreEqual(cpu.memory[xc], textState.column, (where + L": XC").c_str());
+        Assert::AreEqual(cpu.memory[yc], textState.row, (where + L": YC").c_str());
+        Assert::AreEqual(cpu.memory[t2], draw.t2, (where + L": T2").c_str());
+
+        for (std::size_t slot = 0; slot < 2u; ++slot)
+        {
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            const std::uint16_t address =
+              static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte);
+            Assert::AreEqual(cpu.memory[address], bubble.blocks[slot][byte],
+                             (where + L": K% slot " + std::to_wstring(slot) + L" byte "
+                              + std::to_wstring(byte)).c_str());
+          }
+        }
+
+        Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.modes.size(),
+                                      (where + L": the same number of raster switches").c_str());
+
+        dashboards += (view == 0u || view == 13u) ? 1u : 0u;
+        oneBand += (view == 2u || view == 64u || view == 128u) ? 1u : 0u;
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(8u * 2u, compared, L"the whole sweep ran");
+    Assert::IsTrue(dashboards > 0u, L"the tail call into wantdials was taken");
+    Assert::IsTrue(oneBand > 0u, L"and the one-band views were covered");
+  }
 };
 
 } // namespace GameLogicTests

@@ -183,4 +183,105 @@ void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
   _screen.dashboardShown = 0xFFu; // 6502: LDA #&FF / STA DFLAG
 }
 
+void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
+                       GeometryWorkspace& _geometry, TextState& _text, ScreenState& _screen,
+                       Bubble& _bubble, const FlightState& _flight, const FlightStatus& _status,
+                       std::uint8_t _fuel, Compass& _compass, SightEffects& _effects,
+                       std::uint8_t _view) noexcept
+{
+  /*
+   * 6502: LDA #&04 / STA SC / LDA #&60 / STA SC+1 / LDX #24 / .BOL3 LDA #&10 / LDY #31 /
+   * .BOL4 STA (SC),Y / DEY / BPL BOL4 / SC += 40 / DEX / BNE BOL3.
+   *
+   * The colour bytes, not the bitmap: `&6004` is the first block of screen RAM, four cells in,
+   * which is where the left margin ends. Thirty-two cells a row for twenty-four rows, in steps of
+   * forty -- so the four cells either side keep whatever they had.
+   */
+  std::uint16_t cell = static_cast<std::uint16_t>(Canvas::SCREEN_CELLS + 4u);
+  for (std::uint8_t row = 24u; row != 0u; --row)
+  {
+    for (int offset = 31; offset >= 0; --offset)
+    {
+      _canvas.Write(static_cast<std::uint16_t>(cell + offset), TEXT_COLOUR_WHITE);
+    }
+    cell = static_cast<std::uint16_t>(cell + 40u);
+  }
+
+  /*
+   * 6502: LDX #HI(SCBASE) / .BOL1 JSR ZES1k / INX / CPX #HI(DLOC%) / BNE BOL1 -- the bitmap, as
+   * far as the dashboard.
+   *
+   * THE COMPARE IS AGAINST THE PAGE AND NOT THE ADDRESS. `DLOC%` is &5680, so the loop stops when
+   * X reaches &56 and leaves it there -- which is where the partial page below starts AND where
+   * the text screen's second loop picks up. A port that ran to `DLOC%` itself would zero one page
+   * too many here and start the second loop one page too late.
+   */
+  std::uint16_t page = 0;
+  const std::uint16_t dashboardPage = static_cast<std::uint16_t>(DASHBOARD_BITMAP & 0xFF00u);
+  for (; page < dashboardPage; page = static_cast<std::uint16_t>(page + 256u))
+  {
+    ZeroWholePage(_canvas, page);
+  }
+
+  // 6502: LDY #LO(DLOC%)-1 / JSR ZES2k / STA (SC),Y -- the partial page, and then by hand the one
+  // byte `ZES2k` walks past because it stops at zero rather than through it.
+  ZeroPageDown(_canvas, page, static_cast<std::uint8_t>((DASHBOARD_BITMAP & 0xFFu) - 1u));
+  _canvas.Write(page, 0u);
+
+  _text.column = 1u; // 6502: LDA #1 / STA XC
+  _text.row = 1u;    // 6502: STA YC
+
+  // 6502: LDA QQ11 / BEQ wantSTEP / CMP #13 / BNE P%+5 / .wantSTEP JMP wantdials -- a tail call,
+  // so the space view and view 13 never reach anything below this.
+  if (_view == 0u || _view == 13u)
+  {
+    ShowDashboard(_canvas, _draw, _math, _geometry, _screen, _bubble, _flight, _status, _fuel,
+                  _compass, _effects);
+    return;
+  }
+
+  _screen.colourBank = 0x81u;  // 6502: LDA #&81 / STA abraxas -- screen RAM at &6000
+  _screen.bitmapMode = 0xC0u;  // 6502: LDA #%11000000 / STA caravanserai
+
+  // 6502: .BOL2 JSR ZES1k / INX / CPX #HI(SCBASE)+&20 / BNE BOL2 -- and X is still where the
+  // first loop left it, so this clears the dashboard's part of the bitmap as well.
+  for (; page < Canvas::SCREEN_CELLS; page = static_cast<std::uint16_t>(page + 256u))
+  {
+    ZeroWholePage(_canvas, page);
+  }
+
+  _compass.colour = 0u;           // 6502: LDX #0 / STX COMC
+  _screen.dashboardShown = 0u;    // 6502: STX DFLAG
+  _text.column = 1u;              // 6502: INX / STX XC
+  _text.row = 1u;                 // 6502: STX YC
+
+  DrawColourBands(_canvas);       // 6502: JSR BLUEBAND
+  ForgetScannerBlips(_bubble);    // 6502: JSR zonkscanners
+  HideAllSprites(_effects);       // 6502: JSR NOSPRITES
+
+  // 6502: LDY #31 / LDA #&70 / .BOL5 STA &6004,Y / DEY / BPL BOL5 -- the top row's colour band.
+  for (int offset = 31; offset >= 0; --offset)
+  {
+    _canvas.Write(static_cast<std::uint16_t>(Canvas::SCREEN_CELLS + 4u + offset), 0x70u);
+  }
+
+  // 6502: LDX QQ11 / CPX #2 / BEQ BOX / CPX #64 / BEQ BOX / CPX #128 / BEQ BOX -- three views
+  // stop at one band; everything else gets the second one two rows down.
+  if (_view != 2u && _view != 64u && _view != 128u)
+  {
+    for (int offset = 31; offset >= 0; --offset)
+    {
+      _canvas.Write(static_cast<std::uint16_t>(Canvas::SCREEN_CELLS + 0x54u + offset), 0x70u);
+    }
+  }
+
+  DrawScreenRule(_canvas, _draw, 199u); // 6502: .BOX LDX #199 / JSR BOXS
+
+  _canvas.Write(0x1F1Fu, 0xFFu); // 6502: LDA #&FF / STA SCBASE+&1F1F
+
+  // 6502: LDX #25 / EQUB &2C -- and the `&2C` eats `BOX2`'s own `LDX #18`, so the border is the
+  // whole screen's height rather than the space view's (§6.79).
+  DrawBorder(_canvas, _draw, BORDER_ROWS_TEXT_SCREEN);
+}
+
 } // namespace Elite
