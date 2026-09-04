@@ -207,12 +207,12 @@ NearestSystem FindNearestSystem(const SystemSeeds& _galaxy, std::uint8_t _crossh
    * search just used. dx is squared whole; dy is HALVED first, then squared.
    */
   MathWorkspace work;
-  const std::uint8_t high = SquareUnsigned(work, AbsoluteDifference(best.x, _currentX));
+  const std::uint8_t high = SquareUnsigned(work, AbsoluteDifference(best.x, _currentX)).high;
   const std::uint8_t squaredHigh = high;
   const std::uint8_t squaredLow = work.p;
 
   const std::uint8_t halfDy = static_cast<std::uint8_t>(AbsoluteDifference(best.y, _currentY) >> 1);
-  const std::uint8_t secondHigh = SquareUnsigned(work, halfDy);
+  const std::uint8_t secondHigh = SquareUnsigned(work, halfDy).high;
 
   // 6502: CLC / ADC K / STA Q / PLA / ADC K+1 / BCC / LDA #255 -- the sum saturates rather than
   // wrapping, because a distance that wrapped would read as very close indeed.

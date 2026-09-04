@@ -123,11 +123,23 @@ struct WideResult
 /// 6502: MULT12 -- (S R) = Q * A, sign-magnitude. The result is left in the workspace.
 void MultiplySignedToSR(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
-/// 6502: SQUA2 -- (A P) = A * A for an A already known to be positive.
-[[nodiscard]] std::uint8_t SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
+/*
+ * 6502: SQUA2 -- (A P) = A * A for an A already known to be positive.
+ *
+ * Returns the carry, because `MAS3` reads it: it sums three squares with `JSR SQUA2 / ADC R` and
+ * no `CLC` between them, twice over. The fifteenth dropped flag -- and it is ALWAYS CLEAR, over
+ * every input either entry point can be given, which the exhaustive sweep asserts rather than
+ * argues. `MU1`, taken when A is zero, opens `CLC`; `MU11` ends on a `ROR P` that never carries
+ * out for a square.
+ *
+ * So `MAS3` was already right before this was modelled: an `ADC` cannot see a clear carry, which
+ * is §6.65's question answered the harmless way. `DVID4`'s carry is the same shape (§6.60);
+ * `DIL2`'s is not, because there it lands in an `SBC` (§6.70).
+ */
+[[nodiscard]] WideResult SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
-/// 6502: SQUA -- (A P) = |A| * |A|, clearing the sign bit first.
-[[nodiscard]] std::uint8_t Square(MathWorkspace& _work, std::uint8_t _a) noexcept;
+/// 6502: SQUA -- (A P) = |A| * |A|, clearing the sign bit first. Carries the same flag.
+[[nodiscard]] WideResult Square(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /// What the sign-magnitude addition hands back: the original returns the high byte in A and
 /// the low byte in X, and callers use both.
