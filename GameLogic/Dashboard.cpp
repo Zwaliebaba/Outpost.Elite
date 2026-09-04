@@ -223,9 +223,13 @@ void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
    *
    * `SBC #1` HAS NO `SEC`, so it runs on the carry `DIL2` left -- and `DIL2` ends
    * `LDA SC+1 / ADC #&01 / STA SC+1` on a screen-address high byte, which cannot carry out. So
-   * the carry is always CLEAR and the pitch indicator is offset by TWO rather than by one. The
-   * fourteenth uncleared flag, and like the thirteenth it is constant and still not ignorable
-   * (§6.64).
+   * the carry is always CLEAR and the pitch indicator is offset by TWO rather than by one.
+   *
+   * The fourteenth uncleared flag, and UNLIKE the thirteenth it is load-bearing: `SP2`'s
+   * `ADC #195` could not see an always-clear carry and this `SBC` borrows because of it, so the
+   * mutation that assumes a set carry moves the indicator and the mutation that assumed one in
+   * `SP2` was equivalent. Constant does not mean invisible, and which of the two it is depends on
+   * the instruction rather than on the flag (§6.65).
    */
   std::uint8_t pitch = _flight.beta;
   if (_flight.bet1 != 0u)
