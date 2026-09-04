@@ -421,4 +421,116 @@ public:
   }
 };
 
+/*
+ * 6502: TIDY, and the TIS3 it is the only caller of (slice 3a).
+ *
+ * `MVEIT` runs this on one ship every sixteenth iteration to undo the drift that `MVS4` and
+ * `MVS5` accumulate. The sweep is chosen to reach all THREE of its shapes: it divides by whichever
+ * component of the nose vector is large enough, and a port that always took the first branch
+ * would be right until a ship pointed down an axis.
+ */
+TEST_CLASS(TidyingAShipsOrientation)
+{
+public:
+  TEST_METHOD(TheWholeRoutineMatchesTIDY)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t inwk = oracle.Label("INWK");
+    const std::uint16_t tidy = oracle.Label("TIDY");
+
+    /*
+     * Nose vectors chosen for the branch, not for plausibility: a large first component takes the
+     * main path, a small first and large second takes TI1, and two small ones take TI2 -- which
+     * is a ship pointing very nearly along its own z axis.
+     */
+    struct Case
+    {
+      const char* what;
+      std::uint8_t nose[3];
+    };
+
+    const std::vector<Case> CASES = {
+      { "pointing along x", { 96, 0, 0 } },
+      { "pointing along y (TI1)", { 0, 96, 0 } },
+      { "pointing along z (TI2)", { 0, 0, 96 } },
+      { "x small, y large (TI1)", { 16, 96, 31 } },
+      { "x and y small (TI2)", { 8, 16, 96 } },
+      { "a general direction", { 60, 45, 30 } },
+      { "negative components", { 0xE0, 0xA0, 0x90 } },
+      { "one component at the AND #&60 boundary", { 32, 40, 50 } },
+      { "one just below it", { 31, 96, 20 } },
+      { "all three at the maximum", { 127, 127, 127 } },
+      { "all three negative maxima", { 255, 255, 255 } },
+      { "everything zero", { 0, 0, 0 } },
+    };
+
+    std::uint32_t compared = 0;
+    for (const Case& item : CASES)
+    {
+      for (const std::uint8_t roofSeed : { std::uint8_t{ 0 }, std::uint8_t{ 40 }, std::uint8_t{ 200 } })
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        Elite::ShipBlock work;
+
+        // The whole orientation area, INWK+9 to INWK+26, so the low bytes the routine clears are
+        // non-zero going in and the clearing is visible rather than assumed.
+        for (std::uint8_t offset = 9; offset <= 26u; ++offset)
+        {
+          const std::uint8_t value = static_cast<std::uint8_t>(roofSeed ^ (offset * 0x11u));
+          cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = value;
+          work[offset] = value;
+        }
+
+        // The nose vector's high bytes are what select the branch.
+        for (int axis = 0; axis < 3; ++axis)
+        {
+          const std::uint8_t at = static_cast<std::uint8_t>(10u + axis * 2);
+          cpu.memory[static_cast<std::uint16_t>(inwk + at)] = item.nose[axis];
+          work[at] = item.nose[axis];
+        }
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(tidy);
+        Assert::IsTrue(run.completed, L"TIDY returned");
+
+        Elite::MathWorkspace math;
+        Elite::TidyOrientation(work, math);
+
+        const std::wstring where =
+          Widen(std::string("TIDY: ") + item.what + ", roof seed " + std::to_string(roofSeed));
+        for (std::uint8_t offset = 9; offset <= 26u; ++offset)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work[offset],
+                           (where + L": INWK+" + std::to_wstring(offset)).c_str());
+        }
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(12u * 3u, compared, L"the whole sweep ran");
+  }
+
+  /*
+   * And the branch coverage, stated rather than hoped for: all three of TIDY's shapes are reached
+   * by the cases above. Without this the suite could be green with two of them never exercised.
+   */
+  TEST_METHOD(AllThreeOfTidysShapesAreReached)
+  {
+    const std::uint8_t NOSE_X[] = { 96, 0, 0 };
+    const std::uint8_t NOSE_Y[] = { 0, 96, 0 };
+    const std::uint8_t NOSE_Z[] = { 0, 0, 96 };
+
+    // 6502: AND #&60 -- the test each branch turns on.
+    Assert::IsTrue((NOSE_X[0] & 0x60u) != 0u, L"the first case takes the main path");
+    Assert::IsTrue((NOSE_Y[0] & 0x60u) == 0u && (NOSE_Y[1] & 0x60u) != 0u,
+                   L"the second falls through to TI1");
+    Assert::IsTrue((NOSE_Z[0] & 0x60u) == 0u && (NOSE_Z[1] & 0x60u) == 0u,
+                   L"and the third all the way to TI2");
+  }
+};
+
 } // namespace GameLogicTests

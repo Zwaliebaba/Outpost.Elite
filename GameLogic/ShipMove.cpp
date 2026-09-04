@@ -2,6 +2,8 @@
 
 #include "ShipMove.h"
 
+#include <array>
+
 namespace Elite
 {
 
@@ -255,6 +257,113 @@ void RotateCoordinatePair(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _
   // the second half read the value the first half had not yet replaced.
   _work[_x] = _math.k[0];
   _work[_x + 1u] = _math.k[1];
+}
+
+
+std::uint8_t OrientationComponent(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _a,
+                                  std::uint8_t _x, std::uint8_t _y) noexcept
+{
+  // 6502: STA P+2 -- the third index is parked in P+2 and read back as Y further down.
+  _math.p2 = _a;
+
+  // 6502: LDA INWK+10,X / STA Q / LDA INWK+16,X / JSR MULT12 -- (S R) = the first product.
+  _math.q = _work[10u + _x];
+  MultiplySignedToSR(_math, _work[16u + _x]);
+
+  // 6502: LDX INWK+10,Y / STX Q / LDA INWK+16,Y / JSR MAD -- (A X) = the second, plus the first.
+  _math.q = _work[10u + _y];
+  const AddSignedResult sum = MultiplyAndAdd(_math, _work[16u + _y]);
+
+  // 6502: STX P / LDY P+2 / LDX INWK+10,Y / STX Q / EOR #128, then the fall-through into DVIDT.
+  _math.p = sum.low;
+  _math.q = _work[10u + _math.p2];
+
+  return DivideWide(_math, static_cast<std::uint8_t>(sum.high ^ 0x80u));
+}
+
+namespace
+{
+/// 6502: LDA INWK+n / STA XX15 ... / JSR NORM / ... -- normalise one of the three vectors in
+/// place. `NORM` works on XX15, so the six bytes go out and the three high ones come back.
+void NormaliseVector(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _at) noexcept
+{
+  std::array<std::uint8_t, 3> vector = { _work[_at], _work[_at + 2u], _work[_at + 4u] };
+  Normalise(_math, vector);
+  _work[_at] = vector[0];
+  _work[_at + 2u] = vector[1];
+  _work[_at + 4u] = vector[2];
+}
+
+/// 6502: AND #&60 -- is this component big enough to divide by? Bits 5 and 6 of the magnitude,
+/// so anything below 32 fails and the routine picks a different axis.
+[[nodiscard]] bool BigEnoughToDivideBy(std::uint8_t _component) noexcept
+{
+  return (_component & 0x60u) != 0u;
+}
+} // namespace
+
+void TidyOrientation(ShipBlock& _work, MathWorkspace& _math) noexcept
+{
+  // 6502: the nose vector, at INWK+10 / +12 / +14.
+  NormaliseVector(_work, _math, 10u);
+
+  /*
+   * 6502: LDY #4 / LDA XX15 / AND #&60 / BEQ TI1 ... -- recompute ONE component of the roof
+   * vector from the other two, dividing by whichever component of the nose vector is largest.
+   *
+   * The three branches write to INWK+16, +18 or +20 and pass different index triples, and the
+   * indices are what select the axes. Y is 4 on the first path because it was loaded before the
+   * test; `TI2` reaches its own by `TYA`, which is why the value survives that far.
+   */
+  if (BigEnoughToDivideBy(_work[10u]))
+  {
+    _work[16u] = OrientationComponent(_work, _math, 0, 2, 4);
+  }
+  else if (BigEnoughToDivideBy(_work[12u]))
+  {
+    // 6502: TI1 -- TAX makes X the 0 the accumulator held, and A is 2.
+    _work[18u] = OrientationComponent(_work, _math, 2, 0, 4);
+  }
+  else
+  {
+    // 6502: TI2 -- TYA puts the 4 into A, and Y becomes 2.
+    _work[20u] = OrientationComponent(_work, _math, 4, 0, 2);
+  }
+
+  // 6502: TI3 -- the roof vector, now that it has been rebuilt.
+  NormaliseVector(_work, _math, 16u);
+
+  /*
+   * 6502: the side vector as the CROSS PRODUCT of the other two, one component at a time. Each is
+   * `MULT12` then `TIS1` then `EOR #128`, and Q is set ONCE before the first of the three -- so
+   * the second and third run on whatever Q the routines before them left, which is reproduced by
+   * calling them in the same order on the same workspace rather than by reasoning about it.
+   */
+  _math.q = _work[12u];
+  MultiplySignedToSR(_math, _work[20u]);
+  _work[22u] = static_cast<std::uint8_t>(MultiplyAddDivide96(_math, _work[18u], _work[14u]) ^ 0x80u);
+
+  MultiplySignedToSR(_math, _work[16u]);
+  _work[24u] = static_cast<std::uint8_t>(MultiplyAddDivide96(_math, _work[20u], _work[10u]) ^ 0x80u);
+
+  MultiplySignedToSR(_math, _work[18u]);
+  _work[26u] = static_cast<std::uint8_t>(MultiplyAddDivide96(_math, _work[16u], _work[12u]) ^ 0x80u);
+
+  /*
+   * 6502: LDA #0 / LDX #14 / .TIL1 STA INWK+9,X / DEX / DEX / BPL TIL1.
+   *
+   * The LOW bytes of the vectors, zeroed -- the fractional part is what the rounding was
+   * accumulating in, and throwing it away is the point of the whole routine.
+   *
+   * IT STOPS AT INWK+23, not at INWK+25. X counts down in twos from 14 and the loop ends when it
+   * goes negative, which is eight stores covering the nose and roof vectors and only the first
+   * two thirds of the side one. INWK+25 keeps whatever it had. That looks like an off-by-one and
+   * is reproduced rather than tidied, because the oracle says it is what the game does.
+   */
+  for (int offset = 14; offset >= 0; offset -= 2)
+  {
+    _work[9u + static_cast<std::uint8_t>(offset)] = 0;
+  }
 }
 
 } // namespace Elite
