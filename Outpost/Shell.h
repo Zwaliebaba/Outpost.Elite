@@ -17,6 +17,8 @@
 namespace Outpost
 {
 
+  class FlightSession;
+
   /*
    * Everything the game reaches for outside `GameLogic`, answered once (slice 2e).
    *
@@ -32,10 +34,10 @@ namespace Outpost
    * independent statements of what a routine needs, satisfied by one thing.
    *
    * WHAT IS HONESTLY MISSING, and it is said here rather than left to be discovered while playing.
-   * Phase 3 owns the flight model, the dashboard and the ship renderer; phase 5 owns sound. Every
-   * method whose body is a comment saying so is a routine that exists in the game and does not
-   * exist here yet, and the ones a player would notice -- the title ship, the docking tunnel, the
-   * border box -- are the reason 2e's acceptance is a DOCKED game rather than a complete one.
+   * Phase 4 owns the docking tunnel and the rotating title ship; phase 5 owns sound. Every method
+   * whose body is a comment saying so is a routine that exists in the game and does not exist here
+   * yet. Three that WERE such comments no longer are: `RESET`, `RES2` and `msblob` are ported, and
+   * the shell forwards them to `FlightSession` rather than approximating them (§6.73).
    */
   class GameShell final : public Elite::TradeScreenEffects,
                           public Elite::ChartEffects,
@@ -46,10 +48,11 @@ namespace Outpost
                           public Elite::KeySource
   {
   public:
-    GameShell(Window& _window, CanvasPresenter& _presenter, Elite::Canvas& _canvas) noexcept
+    GameShell(Window& _window, CanvasPresenter& _presenter, Elite::Canvas& _canvas, std::uint8_t& _view) noexcept
       : m_window(_window),
         m_presenter(_presenter),
-        m_canvas(_canvas)
+        m_canvas(_canvas),
+        m_view(_view)
     {
     }
 
@@ -120,8 +123,8 @@ namespace Outpost
     void Beep() override;
     void ClearScreen() override;
 
-    /// 6502: QQ11 -- which screen is showing. The shell owns it because `TT66` is the only thing
-    /// that writes it and `TT66` is a seam.
+    /// 6502: QQ11 -- which screen is showing. See `m_view`: the byte is the composition root's,
+    /// because the flight half writes it too.
     [[nodiscard]] std::uint8_t View() const noexcept
     {
       return m_view;
@@ -132,6 +135,20 @@ namespace Outpost
     void AttachExtended(Elite::ExtendedTokenPrinter& _extendedPrinter) noexcept
     {
       m_extendedPrinter = &_extendedPrinter;
+    }
+
+    /*
+     * The flight world, for `RESET`, `RES2` and the raster handler.
+     *
+     * The start sequence reaches both resets through this object and both of them are ported now,
+     * so what was a stub is a forward (§6.73 again: a seam scoped before the thing behind it
+     * existed). `QQ12` comes with them because `RESET` writes it, and it belongs to the composition
+     * root rather than to either half -- the docked dispatch reads it on every key.
+     */
+    void AttachFlight(FlightSession& _flight, std::uint8_t& _dockedFlag) noexcept
+    {
+      m_flight = &_flight;
+      m_dockedFlag = &_dockedFlag;
     }
 
   private:
@@ -147,8 +164,17 @@ namespace Outpost
     Elite::ExtendedTextState* m_extended = nullptr;
     Elite::MessageState* m_message = nullptr;
     Elite::ExtendedTokenPrinter* m_extendedPrinter = nullptr;
+    FlightSession* m_flight = nullptr;
+    std::uint8_t* m_dockedFlag = nullptr;
 
-    std::uint8_t m_view = 0; ///< 6502: QQ11
+    /*
+     * 6502: QQ11 -- which screen is showing, and it is a REFERENCE because both halves write it.
+     *
+     * The shell owned the byte while `TT66` was the only writer, and slice 3d-d-iii-b gave the
+     * flight loop `ChangeView`, `TT110` and the whole of `FlightScreen`, all of which write the
+     * same address. Two copies would have agreed until the first launch.
+     */
+    std::uint8_t& m_view;
   };
 
 } // namespace Outpost
