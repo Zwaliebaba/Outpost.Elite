@@ -159,6 +159,7 @@
     <ClInclude Include="Stardust.h" />
     <ClInclude Include="PlanetDraw.h" />
     <ClInclude Include="Dashboard.h" />
+    <ClInclude Include="Messages.h" />
     <ClInclude Include="Scanner.h" />
     <ClInclude Include="Spawn.h" />
     <ClInclude Include="Market.h" />
@@ -222,6 +223,7 @@
     <ClCompile Include="Stardust.cpp" />
     <ClCompile Include="PlanetDraw.cpp" />
     <ClCompile Include="Dashboard.cpp" />
+    <ClCompile Include="Messages.cpp" />
     <ClCompile Include="Scanner.cpp" />
     <ClCompile Include="Spawn.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
