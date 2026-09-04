@@ -267,10 +267,11 @@ jobs:
       #
       #   * its ProjectReferences pull in GameLogic and NeuronCore, so this builds everything the
       #     suite needs and nothing it does not;
-      #   * Outpost.vcxproj is the untouched WinUI 3 / MSIX template (ADR-005 section 5 defers it
-      #     to phase 2). Building it would restore the Windows App SDK, WebView2 and the AI/ML
-      #     packages to compile a project that has no Main.cpp -- minutes of fragility for a
-      #     project with no code in it yet;
+      #   * Outpost.vcxproj is built SEPARATELY, further down, because it needs a NuGet restore
+      #     and the test result is worth having even when the shell does not compile. Until slice
+      #     2e it was not built at all, and the reason given was that restoring the Windows App
+      #     SDK, WebView2 and the AI/ML packages to compile a project with no code in it was
+      #     minutes of fragility for nothing. That stopped being true when the shell was written;
       #   * building the .vcxproj sidesteps whether this runner's MSBuild understands .slnx.
       #
       # SolutionDir is passed so the output lands at x64\Debug\ exactly as a local build puts it,
@@ -336,6 +337,74 @@ jobs:
           & "${{ steps.vs.outputs.vstest }}" x64\Release\GameLogicTests.dll `
             /Platform:x64 /Logger:trx`;LogFileName=GameLogicTests.trx /ResultsDirectory:TestResults
           if ($LASTEXITCODE -ne 0) { throw "vstest reported failures" }
+
+      # ---------------------------------------------------------------------------------------
+      # The EXECUTABLE. This is the step that turns slice 2e's shell from code written without a
+      # machine to run it on into code a compiler has read.
+      #
+      # It is worth being precise about what it proves and what it does not. It proves the window,
+      # the D3D12 presenter and the composition root COMPILE AND LINK against the real Windows SDK
+      # -- which is most of what goes wrong when several hundred lines of API calls are written
+      # from documentation. It proves nothing about whether the picture is right: a hosted runner
+      # has no display, and creating a device on one is a different question from creating a
+      # window on one. That half stays with the human sign-off ADR-003 section 3 asks for.
+      #
+      # WindowsPackageType=None builds the UNPACKAGED configuration, which skips MSIX and its
+      # signing certificate. ADR-005's Option A says the project has to keep working both packaged
+      # and unpackaged; this is the half a runner can check without a certificate.
+      # ---------------------------------------------------------------------------------------
+      - name: Cache the NuGet packages
+        id: nuget-cache
+        uses: actions/cache@v4
+        with:
+          path: packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Outpost/packages.config') }}
+
+      - name: Restore the executable's NuGet packages
+        shell: pwsh
+        run: |
+          # The runner image ships the NuGet CLI; the download is the fallback for a self-hosted
+          # machine that does not, and it is the only unpinned tool in this workflow. A restore
+          # that silently did nothing surfaces later as MSB3202 from the project's
+          # EnsureNuGetPackageBuildImports target, which names a missing .props file rather than
+          # the missing restore -- so this step is deliberately loud about which nuget it used.
+          $found = Get-Command nuget -ErrorAction SilentlyContinue
+          $nuget = if ($found) { $found.Source } else { $null }
+          if (-not $nuget) {
+            Write-Host "NuGet CLI not on PATH -- downloading it."
+            $nuget = Join-Path $PWD "nuget.exe"
+            Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile $nuget
+          }
+          Write-Host "NuGet: $nuget"
+          & $nuget restore Outpost\packages.config -PackagesDirectory packages -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "nuget restore failed with $LASTEXITCODE" }
+
+      - name: Build the executable (Debug and Release)
+        shell: pwsh
+        run: |
+          foreach ($configuration in @("Debug", "Release")) {
+            & "${{ steps.vs.outputs.msbuild }}" Outpost\Outpost.vcxproj `
+              /p:Configuration=$configuration `
+              /p:Platform=x64 `
+              /p:PlatformToolset=${{ steps.vs.outputs.toolset }} `
+              /p:SolutionDir=$PWD\ `
+              /p:WindowsPackageType=None `
+              /m /nologo /v:minimal `
+              /flp:logfile=build-outpost-$configuration.log`;errorsonly
+            if ($LASTEXITCODE -ne 0) { throw "MSBuild failed for Outpost $configuration with $LASTEXITCODE" }
+          }
+
+      - name: Report the executable's build logs
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($log in @("build-outpost-Debug.log", "build-outpost-Release.log")) {
+            if (Test-Path $log) {
+              $text = Get-Content $log -Raw
+              if ([string]::IsNullOrWhiteSpace($text)) { Write-Host "$log is empty -- clean build." }
+              else { Write-Host "::group::$log"; Write-Host $text; Write-Host "::endgroup::" }
+            }
+          }
 
       # The .trx only. Nothing under Upstream/, Design/Reference/ or Tools-ext/ leaves the runner:
       # all of it is derived from source this project does not own (ADR-001 section 5).

@@ -418,3 +418,7 @@ Design/Reference/Labels.txt
 Design/Reference/Binaries.txt
 Design/Reference/labels-*.txt
 Design/Reference/compile-*.txt
+
+# The executable's NuGet packages, restored by the build (Outpost/packages.config).
+packages/
+nuget.exe
