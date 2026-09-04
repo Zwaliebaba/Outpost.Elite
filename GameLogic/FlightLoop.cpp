@@ -3,6 +3,7 @@
 #include "FlightLoop.h"
 
 #include "EliteTypes.h"
+#include "ShipBlueprint.h"
 
 namespace Elite
 {
@@ -105,6 +106,53 @@ std::uint8_t DampTowardsCentre(std::uint8_t _value, std::uint8_t _dockingCompute
   // 6502: fall into `.BUMP INX` -- which only happens from X = 128, so this puts back the 128 the
   // `DEX` took away and the value sits still.
   return static_cast<std::uint8_t>(reduced + 1u);
+}
+
+void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, std::uint8_t _type,
+                std::uint8_t _count) noexcept
+{
+  _math.cnt = _count; // 6502: .SPIN2 STA CNT, which sets no flags
+
+  // 6502: .spl BEQ oh -- on the caller's Z flag, which every caller has just set from the count.
+  if (_count == 0u)
+  {
+    return;
+  }
+
+  for (;;)
+  {
+    (void)_effects.SpawnChild(0u, _type); // 6502: LDA #0 / JSR SFS1
+
+    _math.cnt = static_cast<std::uint8_t>(_math.cnt - 1u); // 6502: DEC CNT
+    if (_math.cnt == 0u)                                   // 6502: BNE spl+2
+    {
+      return;
+    }
+  }
+}
+
+void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects,
+                 std::uint16_t _blueprint, std::uint8_t _type, bool _carryIn) noexcept
+{
+  // 6502: JSR DORND / BPL oh -- and nothing else in the routine looks at the roll's low bits
+  // except as a count, so half of all calls do nothing.
+  const RngResult roll = _rng.Next(_carryIn);
+  if ((roll.value & 0x80u) == 0u)
+  {
+    return;
+  }
+
+  /*
+   * 6502: TYA / TAX / LDY #0 / AND (XX0),Y / AND #15.
+   *
+   * `TYA / TAX` reads as "copy Y into X", and it is -- but it goes THROUGH A, and the `AND` two
+   * instructions later reads that A rather than the random number `DORND` left there. So the
+   * count is the ship TYPE masked by the blueprint's first byte; the roll decides only whether
+   * anything is dropped at all. The oracle caught the port doing it the obvious way (§6.74).
+   */
+  const std::uint8_t capped = static_cast<std::uint8_t>(_type & ShipByte(_blueprint) & 0x0Fu);
+
+  SpawnItems(_math, _effects, _type, capped); // 6502: and it falls into SPIN2
 }
 
 } // namespace Elite

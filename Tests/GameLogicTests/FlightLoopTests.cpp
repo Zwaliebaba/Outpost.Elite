@@ -5,11 +5,15 @@
 
 #include "Arith.h"
 #include "FlightLoop.h"
+#include "Rng.h"
+#include "ShipBlueprint.h"
 #include "ShipSlot.h"
 
+#include <array>
 #include <cstdint>
 #include <set>
 #include <string>
+#include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::Testing::Cpu6502;
@@ -369,6 +373,178 @@ public:
     Assert::IsTrue(moved > 0u, L"some readings were damped");
     Assert::IsTrue(stood > 0u, L"and some were not");
     Assert::AreEqual<std::size_t>(0u, cpu.trapHits.size(), L"REDU was never reached");
+  }
+
+  /*
+   * 6502: SPIN and SPIN2 -- the wreckage a destroyed ship leaves, and the loop that places it.
+   *
+   * `SFS1` is trapped, so what is compared is how many times the game asks for a child ship and
+   * with what -- which is the whole of what these two routines decide. The trap also keeps the
+   * ship slots out of it: `SFS1` would fill the bubble on the first case and then start failing,
+   * and a routine that ignores its carry would look identical either way.
+   *
+   * `SPIN2` IS ENTERED WITH A FLAG, not just a value. `STA CNT` sets nothing, so the `BEQ` at the
+   * top of its loop reads the caller's Z -- and this sets `cpu.z` from the count on purpose, to
+   * match what every real caller has just done with an `AND`. Setting it the other way is the one
+   * input the port cannot reproduce, because it takes the count and infers the flag.
+   *
+   * The blueprint sweep is what makes `SPIN` worth testing at all: byte 0 caps the count, so a
+   * port that dropped the `AND (XX0),Y` would still pass on any ship whose byte 0 has all four
+   * low bits set. Every type this build carries is swept, and the assertion at the end is that
+   * they did not all behave the same way.
+   */
+  TEST_METHOD(TheWreckageMatchesSPINAndSPIN2)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t spin = oracle.Label("SPIN");
+    const std::uint16_t spin2 = oracle.Label("SPIN2");
+    const std::uint16_t sfs1 = oracle.Label("SFS1");
+    const std::uint16_t cnt = oracle.Label("CNT");
+    const std::uint16_t xx0 = oracle.Label("XX0");
+    const std::uint16_t rand = oracle.Label("RAND");
+
+    struct Recorder final : Elite::SpawnChildEffects
+    {
+      std::vector<std::uint8_t> flags;
+      std::vector<std::uint8_t> types;
+      bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override
+      {
+        flags.push_back(_aiFlag);
+        types.push_back(_type);
+        return false; // `SFS1`'s carry, which a trap leaves clear and `SPIN` ignores
+      }
+    };
+
+    Cpu6502 cpu = oracle.Fresh();
+    cpu.AddTrap(sfs1);
+
+    // ---- SPIN2 on its own --------------------------------------------------------------------
+    std::uint32_t placed = 0;
+    for (std::uint32_t count = 0; count < 256; ++count)
+    {
+      for (const std::uint8_t type : { std::uint8_t{ 3 }, std::uint8_t{ 5 }, std::uint8_t{ 17 } })
+      {
+        cpu.ClearTrapHits();
+        cpu.memory[cnt] = 0xEEu;
+        cpu.a = static_cast<std::uint8_t>(count);
+        cpu.x = type;
+        cpu.z = (count == 0u); // what the caller's own `AND` has just left behind
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(spin2, 20'000);
+        Assert::IsTrue(run.completed, L"SPIN2 returned");
+
+        Recorder effects;
+        Elite::MathWorkspace math;
+        math.cnt = 0xEEu;
+        Elite::SpawnItems(math, effects, type, static_cast<std::uint8_t>(count));
+
+        const std::wstring where =
+          Widen("SPIN2(count " + std::to_string(count) + ", type " + std::to_string(type) + ")");
+
+        Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.types.size(),
+                                      (where + L": how many were spawned").c_str());
+        for (std::size_t hit = 0; hit < cpu.trapHits.size(); ++hit)
+        {
+          Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit],
+                           (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
+          Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit],
+                           (where + L": the type of #" + std::to_wstring(hit)).c_str());
+        }
+        Assert::AreEqual(cpu.memory[cnt], math.cnt, (where + L": CNT").c_str());
+
+        placed += static_cast<std::uint32_t>(cpu.trapHits.size());
+      }
+    }
+    Assert::IsTrue(placed > 0u, L"SPIN2 actually spawned things");
+
+    // ---- SPIN, over every blueprint this build carries ----------------------------------------
+    std::set<std::size_t> counts;
+    std::uint32_t rolled = 0;
+    std::uint32_t refused = 0;
+    std::uint32_t cappedByBlueprint = 0;
+
+    for (std::uint8_t type = 1; type <= Elite::SHIP_TYPE_COUNT; ++type)
+    {
+      const std::uint16_t blueprint = Elite::BlueprintAddress(type);
+      if (blueprint == 0u)
+      {
+        continue;
+      }
+
+      for (std::uint32_t seed = 0; seed < 12; ++seed)
+      {
+        for (const bool carry : { false, true })
+        {
+          std::array<std::uint8_t, 4> bytes{};
+          std::uint32_t state = 0x1F3A55C7u ^ (seed * 0x9E3779B9u) ^ (type * 131u);
+          for (std::size_t byte = 0; byte < bytes.size(); ++byte)
+          {
+            state = state * 1103515245u + 12345u;
+            bytes[byte] = static_cast<std::uint8_t>(state >> 19);
+            cpu.memory[static_cast<std::uint16_t>(rand + byte)] = bytes[byte];
+          }
+
+          cpu.ClearTrapHits();
+          cpu.memory[cnt] = 0xEEu;
+          cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
+          cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] =
+            static_cast<std::uint8_t>(blueprint >> 8);
+          cpu.y = type;
+          cpu.c = carry;
+
+          const Elite::Testing::RunResult run = cpu.CallSubroutine(spin, 20'000);
+          Assert::IsTrue(run.completed, L"SPIN returned");
+
+          Recorder effects;
+          Elite::MathWorkspace math;
+          math.cnt = 0xEEu;
+          Elite::Rng rng;
+          rng.SetState(bytes);
+          Elite::SpawnDebris(rng, math, effects, blueprint, type, carry);
+
+          const std::wstring where =
+            Widen("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed)
+                  + ", carry " + std::to_string(carry ? 1 : 0) + ")");
+
+          Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.types.size(),
+                                        (where + L": how many were spawned").c_str());
+          for (std::size_t hit = 0; hit < cpu.trapHits.size(); ++hit)
+          {
+            Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit],
+                             (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
+            Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit],
+                             (where + L": the type of #" + std::to_wstring(hit)).c_str());
+          }
+          Assert::AreEqual(cpu.memory[cnt], math.cnt, (where + L": CNT").c_str());
+          for (std::size_t byte = 0; byte < bytes.size(); ++byte)
+          {
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
+                             (where + L": RAND+" + std::to_wstring(byte)).c_str());
+          }
+
+          counts.insert(cpu.trapHits.size());
+          rolled += cpu.trapHits.empty() ? 0u : 1u;
+          refused += cpu.trapHits.empty() ? 1u : 0u;
+          if (!cpu.trapHits.empty() && cpu.trapHits.size() != (type & 0x0Fu))
+          {
+            ++cappedByBlueprint;
+          }
+        }
+      }
+    }
+
+    Assert::IsTrue(rolled > 0u, L"some rolls dropped cargo");
+    Assert::IsTrue(refused > 0u, L"and some dropped none");
+    Assert::IsTrue(counts.size() > 3u, L"and the blueprints did not all cap it the same way");
+
+    // Without this the `AND (XX0),Y` could be dropped entirely and the sweep would still pass on
+    // any build whose blueprints all have the low nibble of byte 0 set.
+    Assert::IsTrue(cappedByBlueprint > 0u, L"and at least one blueprint held the count down");
   }
 };
 
