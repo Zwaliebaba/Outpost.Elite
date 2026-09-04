@@ -33,6 +33,39 @@ inline constexpr std::uint8_t SHIP_BLOCK_SIZE = 37;
 inline constexpr std::uint8_t MAX_SHIPS = 10;
 
 /*
+ * 6502: K% and LS% -- where the blocks and the ship line heap live, and why the port needs the
+ * ADDRESSES rather than just the storage.
+ *
+ * `NWSHP` refuses to create a ship when the line heap it would need runs down into the block it
+ * is about to write, and it decides that by comparing two addresses: the new heap bottom against
+ * `INF`, the slot's own address. The blocks grow UP from `K%` and the heap grows DOWN from `LS%`,
+ * so the check is real and reachable -- a bubble full of complex ships runs out of heap before it
+ * runs out of slots.
+ *
+ * A port that kept only an array and an index would have nothing to compare and would create
+ * ships the original refuses. So the addresses are kept as arithmetic on the side, the storage
+ * stays an array, and `SlotAddress` is the bridge.
+ */
+inline constexpr std::uint16_t SHIP_BLOCK_BASE = 0xF900; ///< 6502: K%
+inline constexpr std::uint16_t SHIP_HEAP_TOP = 0xFFC0;   ///< 6502: LS%, where SLSP starts
+
+/// 6502: NEWB is at zero page 45 and INWK at 9, so NEWB IS INWK+36 -- the last byte of the block,
+/// and the reason NI% is thirty-seven rather than the thirty-six the workspace looks.
+inline constexpr std::uint8_t SHIP_FLAGS_OFFSET = 36;
+
+/// 6502: the offsets NWSHP writes before the block is copied into its slot.
+inline constexpr std::uint8_t SHIP_HEAP_LOW_OFFSET = 33;  ///< 6502: INWK+33 / INWK+34, the ship's
+inline constexpr std::uint8_t SHIP_HEAP_HIGH_OFFSET = 34; ///< own heap pointer
+inline constexpr std::uint8_t SHIP_ENERGY_OFFSET = 35;    ///< 6502: INWK+35, from blueprint byte 14
+inline constexpr std::uint8_t SHIP_MISSILES_OFFSET = 31;  ///< 6502: INWK+31, blueprint byte 19 AND 7
+
+/// 6502: the ship types NWSHP and KILLSHP single out by name.
+inline constexpr std::uint8_t SHIP_TYPE_STATION = 2;  ///< 6502: SST -- skips the heap allocation
+inline constexpr std::uint8_t SHIP_TYPE_HERMIT = 15;  ///< 6502: HER -- counts as junk despite its type
+inline constexpr std::uint8_t JUNK_TYPE_FIRST = 3;    ///< 6502: JL = ESC
+inline constexpr std::uint8_t JUNK_TYPE_LIMIT = 11;   ///< 6502: JH = SHU+2, exclusive
+
+/*
  * 6502: INWK, and one entry of K% -- a single ship, as thirty-seven bytes.
  *
  * BYTES AND NOT FIELDS, deliberately. The original addresses this block by offset from three
@@ -82,7 +115,19 @@ struct Bubble
   /// 6502: JUNK -- cargo canisters, escape pods and the rest, counted together as well as
   /// separately, because the tactics code asks "is any of this worth shooting at".
   std::uint8_t junk = 0;
+
+  /// 6502: SLSP -- the bottom of the ship line heap, which grows DOWN from LS%. It is bubble
+  /// state rather than drawing state: `NWSHP` moves it and `KILLSHP` moves it back, and what
+  /// lives between it and LS% is slice 3b's.
+  std::uint16_t heapBottom = SHIP_HEAP_TOP;
 };
+
+/// 6502: what GINF computes -- the ADDRESS of slot X's block, which is what `NWSHP` compares the
+/// heap against. The blocks are an array here; this is the address the original would have used.
+[[nodiscard]] constexpr std::uint16_t SlotAddress(std::uint8_t _slot) noexcept
+{
+  return static_cast<std::uint16_t>(SHIP_BLOCK_BASE + _slot * SHIP_BLOCK_SIZE);
+}
 
 /*
  * 6502: GINF -- the address of slot X's data block.
@@ -93,5 +138,35 @@ struct Bubble
  * that asked for slot 10 in the original would read past `UNIV`.
  */
 [[nodiscard]] ShipBlock* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept;
+
+/// What `NWSHP` left behind: whether the ship was created, and where.
+struct NewShip
+{
+  bool created = false;   ///< 6502: the carry -- SET on success, CLEAR on either refusal
+  std::uint8_t slot = 0;
+};
+
+/*
+ * 6502: NWSHP -- put the ship in `_work` into a free slot.
+ *
+ * TWO WAYS TO FAIL and they are different: no free slot, or no room in the ship line heap. Both
+ * return with the carry clear, and the second is the interesting one -- it reads byte 5 of the
+ * blueprint, takes that much off `SLSP`, and refuses if what is left would run down into the
+ * block it is about to write. A bubble full of Anacondas runs out of heap before it runs out of
+ * slots, so this is reachable rather than defensive.
+ *
+ * THE SECOND SUBTRACTION HAS NO `SEC`, and the original says so -- the `\SEC` in the source is
+ * commented out. `LDA INWK+33 / SBC INF` runs on whatever carry the `SBC #0` above it left, so
+ * the comparison is carry-dependent by construction. In practice that carry is always set,
+ * because SLSP's high byte is never small enough for the first subtraction to borrow out of it;
+ * the port reproduces the chain rather than assuming that, and the oracle sweep is what says so.
+ *
+ * A NEGATIVE TYPE skips all of it. The planet and the sun are types 128 and 129, they have no
+ * blueprint and no heap, and `BMI NW2` takes them straight to the bookkeeping.
+ *
+ * `NEWB` is not a parameter because it is not a separate byte: it is `_work[36]`, the last byte
+ * of the block, which the routine ORs into and then copies along with everything else.
+ */
+[[nodiscard]] NewShip AddShip(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType) noexcept;
 
 } // namespace Elite
