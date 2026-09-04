@@ -148,6 +148,7 @@
     <ClCompile Include="StardustTests.cpp" />
     <ClCompile Include="PlanetDrawTests.cpp" />
     <ClCompile Include="DashboardTests.cpp" />
+    <ClCompile Include="FlightLoopTests.cpp" />
     <ClCompile Include="LaserTests.cpp" />
     <ClCompile Include="MessageTests.cpp" />
     <ClCompile Include="ScannerTests.cpp" />
