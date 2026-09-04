@@ -107,7 +107,7 @@ private:
   static constexpr std::size_t MAX_QUEUED_KEYS = 16;
 
   /// 6502: KEYLOOK is 65 bytes, one per internal key number, which is also TRANTABLE's extent.
-  static constexpr std::size_t KEY_COUNT = 65;
+  static constexpr std::uint8_t KEY_COUNT = 65;
 
   HWND m_window = nullptr;
   HINSTANCE m_instance = nullptr;

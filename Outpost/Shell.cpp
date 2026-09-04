@@ -25,6 +25,59 @@ constexpr std::uint8_t MT8_COLUMN = 6;
 
 /// 6502: MT9 -- LDA #1 / JSR DOXC / JMP TT66, and STA does not touch A, so TT66 gets the 1 too.
 constexpr std::uint8_t MT9_VIEW = 1;
+
+/*
+ * Where the title ship would be, until `LL9` exists (slice 3b).
+ *
+ * The plan's 2e row asks for "the title screen WITHOUT the rotating ship -- a placeholder box
+ * until 3b", and a box is what this is. It is centred in the space view and its size follows the
+ * distance the way the real projection would, because that is the one thing about it that can be
+ * right: `LL9` divides by z, so a Cobra settling at 210 is small and an Adder at 48 fills the
+ * screen, and a placeholder of a fixed size would make the two title screens look identical when
+ * the game means them to look nothing alike.
+ */
+constexpr std::uint8_t SPACE_VIEW_CENTRE_X = 128;
+constexpr std::uint8_t SPACE_VIEW_CENTRE_Y = Elite::Canvas::SPACE_VIEW_HEIGHT / 2;
+constexpr int PLACEHOLDER_PROJECTION = 6000; ///< half-width times distance, so 28 for the Cobra
+constexpr int PLACEHOLDER_MIN_HALF_WIDTH = 16;
+constexpr int PLACEHOLDER_MAX_HALF_WIDTH = 100;
+
+/// The row the title's prompt is printed on: below the box and still inside the space view,
+/// whose last character row is 17 (`DLOC%` puts the dashboard at 18).
+constexpr std::uint8_t TITLE_PROMPT_ROW = 17;
+
+void DrawPlaceholderShip(Elite::Canvas& _canvas, std::uint8_t _distance) noexcept
+{
+  int halfWidth = (_distance > 0) ? (PLACEHOLDER_PROJECTION / _distance) : PLACEHOLDER_MAX_HALF_WIDTH;
+  halfWidth = (halfWidth < PLACEHOLDER_MIN_HALF_WIDTH) ? PLACEHOLDER_MIN_HALF_WIDTH : halfWidth;
+  halfWidth = (halfWidth > PLACEHOLDER_MAX_HALF_WIDTH) ? PLACEHOLDER_MAX_HALF_WIDTH : halfWidth;
+  const int halfHeight = halfWidth / 2;
+
+  const std::uint8_t left = static_cast<std::uint8_t>(SPACE_VIEW_CENTRE_X - halfWidth);
+  const std::uint8_t right = static_cast<std::uint8_t>(SPACE_VIEW_CENTRE_X + halfWidth);
+  const std::uint8_t top = static_cast<std::uint8_t>(SPACE_VIEW_CENTRE_Y - halfHeight);
+  const std::uint8_t bottom = static_cast<std::uint8_t>(SPACE_VIEW_CENTRE_Y + halfHeight);
+
+  // 6502: LOIN, four times. The line routine alternates between each cell's two colours as it
+  // goes, which is why the box comes out striped rather than flat -- and that is the real
+  // renderer's behaviour, not an artefact of the placeholder.
+  const std::uint8_t corners[4][4] = {
+    { left, top, right, top },
+    { right, top, right, bottom },
+    { right, bottom, left, bottom },
+    { left, bottom, left, top },
+  };
+
+  Elite::DrawWorkspace work;
+  for (const auto& side : corners)
+  {
+    work.x1 = side[0];
+    work.y1 = side[1];
+    work.x2 = side[2];
+    work.y2 = side[3];
+    Elite::DrawLine(_canvas, work);
+  }
+}
 } // namespace
 
 bool GameShell::Turn()
@@ -206,14 +259,15 @@ std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipT
    * is `LL9` and lands in slice 3b. The plan's 2e row names that omission, and it is the reason
    * this slice's acceptance is a docked game rather than a finished front end.
    */
-  (void)_shipType;
-  (void)_distance;
+  (void)_shipType; // 6502: the ship BLUEPRINT, which needs the ship data slice 3a extracts.
 
   ClearToView(0);
+  DrawPlaceholderShip(m_canvas, _distance);
 
   if (m_extendedPrinter != nullptr && m_text != nullptr)
   {
-    m_text->row = MT23_ROW;
+    // 6502: LDA #3 / JSR DOXC, and the prompt goes under the ship rather than over it.
+    m_text->row = TITLE_PROMPT_ROW;
     m_text->column = Elite::TITLE_PROMPT_COLUMN;
     m_extendedPrinter->Print(_token);
   }

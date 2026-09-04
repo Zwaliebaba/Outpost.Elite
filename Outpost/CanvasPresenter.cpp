@@ -329,7 +329,7 @@ void CanvasPresenter::Create(HWND _window)
   m_fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
   if (m_fenceEvent == nullptr)
   {
-    winrt::check_hresult(HRESULT_FROM_WIN32(GetLastError()));
+    winrt::throw_last_error();
   }
 
   m_palette = PaletteAsRgba();
