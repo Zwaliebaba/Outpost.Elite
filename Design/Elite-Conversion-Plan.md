@@ -428,6 +428,48 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.64 Knowing what a label is, and not knowing what branching to it does
+
+§6.63 found `dec27` before slice 3d-b was written and got it right: a label inside `TT26` marking
+that routine's own `RTS`, borrowed as a branch target, "not a routine, not a port, one line". Then
+the slice was written with `LDA MCNT / AND #3 / BNE dec27` ported as *skip the energy bars and
+carry on*, and the first oracle comparison failed on the second case.
+
+**It returns from `DIALS`.** So three passes in four draw the speed, the roll and the pitch and
+stop there, and the energy bars, the shields, the fuel, both temperatures, the altitude AND the
+compass are all one pass in four. Five sixths of the dashboard, redrawn at a quarter of the rate
+the port had it.
+
+The lesson is narrower and more useful than "read the source". Identifying a borrowed `RTS` tells
+you what the *label* is; it does not tell you what *branching to it* does, and those are different
+facts. `BNE somewhere` reads as flow control within a routine whatever `somewhere` turns out to
+be, so the note that resolves the label has to say what the branch does with it — "`dec27` is an
+`RTS`" is a fact about a byte, and "this `BNE` is an early return" is the fact the port needed.
+The §6.12 pass now records the second wherever it records the first.
+
+**And `DLOC%` has no left margin.** `ylookup` adds 32 bytes to every row -- four character cells,
+the space view's margin -- and `Canvas::RowOffset` reproduces it. `DLOC%` is written out as
+`SCBASE + 18*8*40` directly, so the dashboard starts four cells further left than a row of the
+space view does. The port added the margin to both and put every dial 32 bytes to the right. Two
+address bases in one screen, only one of which carries the margin, and nothing names the
+difference.
+
+**The slice also removed a §6.28 that had been shipped since 2d.** `DockedShip` held `DELTA` as
+`speed` while `FlightState` held it as `delta` -- one 6502 byte in two C++ fields, in a struct
+named for `DOENTRY`, which resets it, rather than for the seven routines that read it. It is
+`FlightStatus` now, in `Dashboard.h`, with `CABTMP`, `ALTIT`, `ECMA` and `FLH` added and `DELTA`
+gone. The sixth appearance, and the first found by needing the state rather than by a test.
+
+**Renaming it broke the Windows app, and nothing local could tell.** `Outpost/Main.cpp` used
+`DockedShip`; the portable runner builds `GameLogic` and the suite and nothing else, because
+`Outpost/` is Win32 and DirectX 12. So every check here passed and the first sign was a red
+Windows job. `tools/check_outpost.py` now reads every `Elite::Name` the app mentions and asserts
+it is DECLARED in `GameLogic/*.h` -- declared rather than mentioned, because the comment recording
+the rename would otherwise have satisfied it. It cannot catch a signature change, and says so:
+only compiling the app finds those, and that needs a Windows machine. **The gap is structural and
+worth naming: this port has a whole executable that no hosted check compiles**, and it is where
+the acceptance goldens live too.
+
 ### 6.63 The §6.12 pass on slice 3d-b, and a routine with four entry points
 
 Nine routines and a table. Four findings, and all four were checked against the ASSEMBLED bytes
@@ -644,7 +686,7 @@ port stops checking.
 | | |
 |---|---|
 | **3d-a** 🟢 | `SCAN`, `COMPAS`, `DOT`, `SP1`/`SP2`, `SPS1`–`SPS4`, `TAS2`, `scacol` — **built 2026-09-04** in `Scanner.h/.cpp`, 44 mutations with 42 caught and two measured equivalents. `TAS2` was not in the list and is not optional: `SPS1` falls into it and `SPS4` jumps to it, and it falls into `NORM` (§6.62). Both seams gone (§6.61). |
-| **3d-b** | `DIALS` 1–4, `DILX`/`DIL2`, `MSBAR`, `ECBLB`/`ECBLB2`/`SPBLB`, `PZW`, `CTWOS` — the dashboard proper |
+| **3d-b** 🟢 | `DIALS` 1–4, `DIL`/`DILX`/`DIL2`, `MSBAR`, `ECBLB`/`ECBLB2`/`SPBLB`, `PZW`, `CTWOS` — **built 2026-09-04** in `Dashboard.h/.cpp`. `DILX` is one routine with four entry points and three of them are shift counts (§6.63); `dec27` is an early RETURN and five sixths of the dashboard is one pass in four (§6.64). |
 | **3d-c** | `MESS`/`me1`/`mes9`, `ABORT`/`ABORT2`, `LASLI` — the rest of 3c's seams |
 | **3d-d** | the sixteen flight-loop parts with `LOOK1`, `KS1`, `WARP`, `SPIN`, `CTRL`, `cntr`, `U%`, the `DOKEY` flight half and the docking check |
 | **3d-e** | `LAUN`/`LL164` and `DEATH` — the two set pieces |
@@ -2657,6 +2699,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **Slice 3d-b: the dashboard.** `DIALS` 1–4 with `DIL`, `DILX` and `DIL2`, `PZW`, `MSBAR`, `ECBLB`, `ECBLB2` and `SPBLB` in `Dashboard.h/.cpp`, with `CTWOS` extracted. **`DILX` is one routine with four entry points** and three of them are byte arithmetic — `4A 4A 4A 4A` then `.DIL`, so `JSR DILX` divides by sixteen, `DILX+2` by four, `DIL-1` by two and `DIL` not at all, and all four are used; **`PZW` hides a branch in a data byte**, an `EQUB &2C` whose operands are the `LDA #RED` after it (§6.63, both checked against the assembled bytes rather than the listing). **Two defects the oracle caught, both structural.** `dec27` is not a skip but a RETURN, so the energy bars, the shields, the fuel, both temperatures, the altitude and the compass are one pass in four — §6.63 had identified the label correctly and said nothing about what branching to it does, which are different facts (§6.64). And `DLOC%` carries no left margin where `ylookup` does, so the first comparison put every dial 32 bytes right. **A §6.28 shipped since 2d is gone**: `DockedShip` held `DELTA` as `speed` while `FlightState` held it as `delta`; the struct is now `FlightStatus`, named for its readers. **Renaming it broke the Windows app with every local check green**, because the portable runner compiles no part of `Outpost/` — `tools/check_outpost.py` now asserts every `Elite::` name the app uses is declared in `GameLogic`, and says plainly that it cannot catch a signature change. |
 | 2026-09-04 | **Slice 3d-a: the scanner and the compass.** `SCAN`, `COMPAS`, `DOT`, `SP1`/`SP2`, `SPS1`–`SPS4` and `TAS2` in `Scanner.h/.cpp`, with `scacol` extracted. 16,384 blips compared on the whole bitmap — every depth and height the range check admits, both signs of each, and the three shapes of stick measured from the marks rather than worked out from the inputs — plus 128 positions across, all 34 ship types, all four guards, 65,536 compass positions and 1,728 normalisations, and **44 mutations with 42 caught**. **Three findings.** `TAS2` has no `RTS`: it falls into `NORM`, so the vector it produces is scaled to a length of 96 and not the seven-bit one its instruction stream shows — and §6.11 made "does it return?" a rule two months ago, so the fix went into `c64_source.py`, which now names the next include whenever a file's last instruction is not an `RTS` or a `JMP` (§6.62). `DVID4`'s exit carry is read by `SP2` through `SPS2` in an `ADC` and an `SBC` with nothing between: the thirteenth dropped flag, always clear for a divisor of twenty, and always clear is exactly why `156 - T` had to become `155 - T` (§6.60). And closing `SCAN`'s two seams deleted a class, gave `MoveShip` a `Canvas`, and replaced two call counts with two screen comparisons — one of which was blank on both sides until the fixture put the ship where `SCAN` would draw it, §6.39's shape again (§6.61). **Both survivors are measured equivalents rather than gaps**, and they are the same kind of thing seen twice: `TAS2`'s `BCC TAL2` is a `JMP` spelled as a branch, because the ORed operands it is compared against dominate it bit for bit; and `SP2`'s `ADC #195` cannot see a carry that is always clear, while the `SBC T` twelve instructions later can, because there a clear carry borrows. |
 | 2026-09-04 | **Slice 3d opened with its §6.12 pass, before any of it was written, and the row turned out to be a slice and a half.** 45 source files and 210 external labels against 3c's 36, so it is now split into 3d-a … 3d-e with the units ordered so each rests on the last. **The row names sixteen files this build does not have** — `mainloop_part_N` where the C64 includes `main_flight_loop_part_N_of_16`, and `spblb` where it takes `spblb-dobulb.asm` — which is cosmetic in a row and not in a script: a pass driven by the row's own names finds nothing for seventeen of the forty-five files and reports a much smaller slice than there is. **Twelve prerequisites the row does not name**, among them `cntr`, deferred out of phase 1 with row 94's seven and never picked back up — the second time that row has stranded something. **`SETL1` is not game logic**: `SEI / STA L1M / ... / CLI`, self-modifying code inside a raster interrupt handler, and a pass that only asks "is this ported?" would have scheduled it. **And `SCAN` sits behind two seams with two different signatures** — `ShipEffects::UpdateScanner(ShipBlock&)` and `BubbleEffects::ScanShip(const ShipBlock&, std::uint8_t)` — disagreeing about whether the type is an argument and whether the block is mutable. §6.28's shape a fifth time and the first in the SEAMS rather than the state, which is where a port stops checking. |
 | 2026-09-04 | **The bubble, and slice 3c is complete.** `KILLSHP` with `KS1`–`KS4`, `SOS1` and `SOLAR`. `KILLSHP` does not release heap space, it RELOCATES: every ship above the dead one moves down a slot and its line heap down by the dead ship's size, so the region stays packed with no free list. 136 kills compared on the slot list, all ten blocks, the type counts, the junk count, `SLSP` and the **whole line heap**, plus `TP`, `TALLY` and three seams; 5 systems for `SOLAR`. **§6.58 has three findings, each one a different way of being wrong.** `SSPR` is `MANY+SST` — one byte with two names, in the ORIGINAL this time rather than introduced by the port, which is why nothing ever sets `SSPR` when a station is created. `SOLAR` has no `RTS`: it falls into `NWSTARS`, `nWq`, `WPSHPS` and `FLFLLS`, so **five ledger rows are one fall-through** and arriving in a system fills the stardust and clears the ships as part of the same call — caught because the generator's state moved on the oracle side and not the port's. And `LSR FIST / JSR ZINF / ... / ADC #3` means **the planet's distance depends on whether the player's bounty was odd**: the twelfth uncleared flag, and the first to be a shift rather than a call. The checklist is now two lines: before porting a routine, read the instruction after every `JSR`, and read the instruction after every shift. |
