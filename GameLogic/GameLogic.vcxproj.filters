@@ -63,6 +63,9 @@
     <ClInclude Include="PlanetDraw.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="Scanner.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="Stardust.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -205,6 +208,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="PlanetDraw.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Scanner.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="Stardust.cpp">

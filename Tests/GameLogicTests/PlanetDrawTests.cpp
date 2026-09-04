@@ -1208,21 +1208,6 @@ public:
 };
 
 
-namespace
-{
-/// 6502: SCAN -- the scanner is slice 3d's, so `WPSHPS` reaches it through a seam that records
-/// what it was asked to do.
-class RecordingScanner : public Elite::BubbleEffects
-{
-public:
-  std::vector<std::pair<std::uint8_t, std::uint8_t>> scanned; // slot type, state byte
-  void ScanShip(const Elite::ShipBlock& _work, std::uint8_t _type) override
-  {
-    scanned.emplace_back(_type, _work[Elite::SHIP_STATE_OFFSET]);
-  }
-};
-} // namespace
-
 
 TEST_CLASS(TheBubbleReset)
 {
@@ -1264,8 +1249,12 @@ public:
    *
    * The stardust half is compared on the whole canvas, all six arrays and the generator's four
    * state bytes, because each speck's first random byte runs on the carry the PREVIOUS speck's
-   * plot left. The ship half is compared on every slot's state byte and on the scanner seam,
+   * plot left. The ship half is compared on every slot's state byte and on the SCANNER ITSELF,
    * because `WPSHPS` masks the byte in the SLOT and leaves the copy in `INWK` alone.
+   *
+   * `SCAN` was a seam here until slice 3d-a built it, and the seam's recording is replaced by the
+   * canvas comparison that was already running -- so the blips are now compared where they land
+   * rather than counted where they were asked for (§6.61).
    */
   TEST_METHOD(TheFieldAndTheShipsAreResetTheSameWay)
   {
@@ -1277,7 +1266,6 @@ public:
     const OracleImage& oracle = OracleImage::Instance();
     const HeapLabels at(oracle);
     const std::uint16_t nwstars = oracle.Label("NWSTARS");
-    const std::uint16_t scan = oracle.Label("SCAN");
     const std::uint16_t rand = oracle.Label("RAND");
     const std::uint16_t frin = oracle.Label("FRIN");
     const std::uint16_t kPercent = oracle.Label("K%");
@@ -1312,10 +1300,7 @@ public:
             Elite::PlanetSunState state;
             Elite::Bubble bubble;
             Elite::ShipBlock work{};
-            RecordingScanner scanner;
-
-            // 6502: SCAN is slice 3d's, so it is trapped on one side and recorded on the other.
-            cpu.AddTrap(scan);
+            Elite::FlightState flight;
 
             SeedSunHeap(cpu, state, at, 0x2C6A91B7u);
             SeedBallHeap(cpu, state, at, 0x8D14E703u, 40);
@@ -1366,7 +1351,7 @@ public:
             const Elite::Testing::RunResult run = cpu.CallSubroutine(nwstars, 200'000);
             Assert::IsTrue(run.completed, L"NWSTARS returned");
 
-            Elite::SeedStardustAndClearShips(canvas, draw, dust, rng, state, bubble, work, scanner,
+            Elite::SeedStardustAndClearShips(canvas, draw, dust, rng, state, bubble, work, flight,
                                              viewType, carryIn);
 
             const std::wstring where =
@@ -1409,8 +1394,12 @@ public:
                                (where + L": INWK+" + std::to_wstring(byte)).c_str());
             }
 
-            Assert::AreEqual<std::size_t>(cpu.trapHits.size(), scanner.scanned.size(),
-                                          (where + L": the scanner seam").c_str());
+            // 6502: STA TYPE / STX XSAV -- the two globals `WPSHPS` writes for `SCAN`, and
+            // they are left holding the LAST ship the loop reached.
+            Assert::AreEqual(cpu.memory[oracle.Label("TYPE")], flight.type,
+                             (where + L": TYPE after the walk").c_str());
+            Assert::AreEqual(cpu.memory[oracle.Label("XSAV")], flight.slot,
+                             (where + L": XSAV after the walk").c_str());
 
             /*
              * §6.36 again: the arrays are seeded to fixed values on both sides, so "they agree"
@@ -1437,7 +1426,17 @@ public:
                                               (where + L": a menu keeps its field").c_str());
             }
 
-            scannedTotal += static_cast<std::uint32_t>(scanner.scanned.size());
+            /*
+             * And that the blips actually landed, which the seam count used to stand in for.
+             * The scanner lives below row 146, so anything set down there came from `SCAN`.
+             */
+            const std::span<const std::uint8_t> plotted = canvas.Screen();
+            for (std::uint16_t offset = Elite::Canvas::RowOffset(146);
+                 offset < Elite::Canvas::BITMAP_SIZE; ++offset)
+            {
+              scannedTotal += (plotted[offset] != 0u) ? 1u : 0u;
+            }
+
             ++compared;
           }
         }
@@ -1446,7 +1445,7 @@ public:
 
     Assert::AreEqual<std::uint32_t>(5u * 3u * 2u * 2u, compared, L"every fleet and view");
     Assert::IsTrue(marked > 0u, L"the new field was actually drawn");
-    Assert::IsTrue(scannedTotal > 0u, L"and some ships reached the scanner");
+    Assert::IsTrue(scannedTotal > 0u, L"and some blips were actually drawn on the scanner");
     Assert::IsTrue(replaced > 0u, L"and the field was actually replaced");
     Logger::WriteMessage(("NWSTARS: " + std::to_string(compared) + " resets, "
                           + std::to_string(scannedTotal) + " scanned, " + std::to_string(marked)

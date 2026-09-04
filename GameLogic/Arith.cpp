@@ -646,7 +646,7 @@ WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a, bool _carryIn)
   return MultiplyByLog(_work, _work.k[0], _carryIn);
 }
 
-std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
+ScaledDivision DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   // 6502: DVID4. Restoring division: shift the dividend up a bit at a time, and after each
   // shift subtract the divisor if it fits, recording whether it did as the next quotient bit.
@@ -693,8 +693,8 @@ std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
    * remainder scaled up by the same divisor. Returning only the remainder, as an eight-step
    * divide would, is not what the game does.
    */
-  (void)DivideByLogarithms(_work, remainder);
-  return _work.r;
+  const bool exitCarry = DivideByLogarithms(_work, remainder);
+  return { _work.r, exitCarry };
 }
 
 bool SquareRoot(MathWorkspace& _work) noexcept

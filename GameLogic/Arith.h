@@ -249,6 +249,14 @@ struct SignedSum
 [[nodiscard]] WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a,
                                          bool _carryIn) noexcept;
 
+/// What `DVID4` leaves: `R`, and the carry `SPS2` passes on to `SP2` (§6.60). `P` is in the
+/// workspace, as the original leaves it.
+struct ScaledDivision
+{
+  std::uint8_t r = 0;
+  bool carry = false;
+};
+
 /*
  * 6502: DVID4 -- an 8.8 fixed-point divide. P comes out as the whole part of A / Q, and R as
  * the fraction: eight steps of restoring division, then -- because the routine has no RTS of
@@ -256,12 +264,18 @@ struct SignedSum
  *
  * Both halves are the routine. Its two callers in the shipped game JSR to the top and return
  * from the bottom of the code it falls into, so a port that stopped after the division would be
- * a different routine that happens to share a name. Returns R.
+ * a different routine that happens to share a name.
+ *
+ * THE EXIT CARRY IS THE LOGARITHM DIVIDE'S, and only the saturating exit sets it. The eight
+ * division steps cannot leave it set: `ASL A / STA P` puts a zero in P's bit 0, and eight
+ * `ROL P`s later that zero is what comes out -- so the carry at the fall-through is always
+ * clear, and what a caller sees is `LL222` or nothing. `SPS2` hands it to an `ADC #195` and an
+ * `SBC T` with no `CLC` or `SEC` between, which is the thirteenth dropped flag (§6.60).
  *
  * The shipped C64 build unrolls the eight steps rather than looping; that changes nothing about
  * the result, which is why this reads as a loop.
  */
-[[nodiscard]] std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept;
+[[nodiscard]] ScaledDivision DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /*
  * 6502: LL5 -- Q = square root of (R Q), by the schoolbook bitwise method.

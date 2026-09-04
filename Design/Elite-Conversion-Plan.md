@@ -428,6 +428,106 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.62 A routine that ends in the middle of itself
+
+`TAS2` turns three coordinates into a direction: shift `K3`'s three sixteen-bit magnitudes left
+together until the largest fills its high byte, then halve each high byte and put the sign back on
+top. Thirty-four instructions, one loop, nothing to argue about. The port was written from
+`tools/c64_source.py --code`, which prints the instruction stream and nothing else, and the
+instruction stream ends `STA XX15+2`.
+
+**It ends there because the next instruction is in another file.** `TAS2` has no `RTS`. It runs
+straight on into `NORM`, which sums the squares of the three bytes it just wrote, takes the square
+root and divides each of them by it — so what `TAS2` produces is not a direction with seven bits
+of magnitude, it is that vector scaled to a length of 96, and everything downstream reads the
+normalised one.
+
+**§6.11 already made this a rule** — "checking whether a routine actually returns, before porting
+it as a function, is now part of reading one" — and it was written about `DVID4`, which falls into
+`LL28`'s body. So this is not a new lesson; it is the rule failing in the one place it is hardest
+to apply, and that is worth more than the finding. A file is a plausible unit. It has a name, a
+header comment, one entry label and a tidy end, and the tool that reads it prints exactly what is
+in it. Nothing in the output of `--code` distinguishes a routine that ends from a routine that
+stops.
+
+So the fix is in the tool rather than in the discipline. `c64_source.py` now reads the master
+file's include list and says, at the bottom of any file whose last instruction is not `RTS`, `RTI`,
+`JMP` or `BRK`, which file the build assembles next. It reports six of the eleven routines this
+slice touched, including three the port had already got right by accident of reading carefully.
+`KILLSHP` is the interesting false positive: it ends `TYA / BNE KSL3 / BEQ KSL1`, and the `BEQ` is
+unconditional in practice because the `TYA` above it set the flag — so the tool says "when the
+branch is not taken" and leaves the judgement where it belongs.
+
+**The failure had a shape worth recognising on its own.** The first sweep compared `K3` byte for
+byte and then `XX15` byte for byte, in that order, and `K3` PASSED on every case while `XX15`
+failed on the first. Arithmetic that is wrong is wrong in the state it computes; this was right in
+all of it and wrong only in what came after. *The inputs and the working agree, the output does
+not* is what a fall-through looks like from a test, and it is worth checking before reading the
+arithmetic again.
+
+Four of these now: `DVID4` into `LL28` (§6.11), `SOLAR` into four more routines (§6.58), `SPS1`
+into `TAS2`, and `TAS2` into `NORM`.
+
+### 6.61 Two seams for one routine, and what replaced their call counts
+
+§6.59 found `SCAN` behind two seams with two different signatures and said 3d would collapse them.
+It did, and closing them turned out to be the more interesting half.
+
+**Both are gone.** `MoveShip` and `ClearAllShips` call `DrawScannerBlip` directly, which cost
+`MoveShip` three arguments — a `Canvas`, a `DrawWorkspace` and `QQ11` — and that is the point:
+`MVEIT` DRAWS, and a signature that hid it was hiding something true. `BubbleEffects` had only the
+one method, so it disappeared with it and `SpawnEffects` stopped deriving from a class that no
+longer existed.
+
+**`WPSHPS` writes two globals the seam had swallowed.** `STA TYPE` before each call and
+`STX XSAV` around it — the first because `SCAN` reads `TYPE` as a global rather than taking it,
+the second because the loop index has to survive the call. The seam took the type as an argument
+and wrote neither, so the port left `TYPE` holding whatever the flight loop had last put there.
+Both are asserted after the walk now.
+
+**And the counts they were asserted against were weaker than what replaced them.** Both tests
+counted how often the seam was reached, which is what you can measure when the routine does not
+exist. With it built, the SCREEN says more: `MVEIT` scans an ordinary ship twice a pass and the
+ship has usually moved far enough in between that the two blips land in different places, so both
+survive the EOR. A canvas that agrees byte for byte proves the count, the positions and the colour
+together; the count only ever proved the first.
+
+Making that comparison non-vacuous took one change to the fixture. `MVEIT`'s twenty-iteration test
+fills `INWK` with `(offset * 0x1D) ^ 0x41`, which puts bit 6 in every coordinate high byte — and
+`SCAN`'s `AND #%11000000` rejects exactly that, so the two screens would have agreed by both being
+blank. §6.39's shape one slice later, and the same fix: put the ship where the routine under test
+will do something.
+
+**The `SOLAR` test never looked at the screen at all.** It compares the bubble, the heap, the
+commander, `INWK` and the generator state — and `SOLAR` falls through into `nWq`, which plots
+twelve specks, and `WPSHPS`, which scans the fleet. Neither was compared, and the test had a
+`Canvas` in scope the whole time. It is compared now and it passes; the finding is that it was
+green without being asked.
+
+### 6.60 The thirteenth dropped flag, and why a constant one still has to be modelled
+
+`SPS2` divides a coordinate by twenty to get its position on the compass, and `SP2` then does
+`TXA / ADC #195` and `LDA #156 / SBC T` with no `CLC` or `SEC` between the call and the
+arithmetic. So `DVID4`'s exit carry lands in both, and the port was returning `R` alone.
+
+**What the flag is.** `DVID4` has four exits and three of them leave the carry CLEAR. The eight
+division steps cannot set it: `ASL A / STA P` puts a zero in `P`'s bit 0, and after eight `ROL P`s
+that zero is what comes out — so the carry at the fall-through into `LL28`'s body is always clear
+and what a caller sees is the logarithm divide's. That is set on the saturating exit (`LL222`,
+which pins `R` at 255) and clear on the other three.
+
+**And for `SPS2` it is always clear**, provably: a restoring division leaves a remainder smaller
+than its divisor, `SPS2` fixes the divisor at twenty, and the saturation test is `A >= Q`. So
+`ADC #195` always adds 195 with nothing extra, and `SBC T` always borrows — 156 comes out as 155.
+
+Which raises whether it is worth modelling at all, and it is, for a reason that is not
+faithfulness in the abstract. The port had `156 - T` before the flag was threaded, and that is
+wrong by one for every compass position in the game. Working out that the flag is constant is
+exactly the work that tells you WHICH constant, and a port that skipped the flag skipped that too.
+The exhaustive `DVID4` sweep already existed, so widening the model cost one assertion line
+(§6.42's pattern for the fourth time), and `SPS2`'s own sweep asserts the flag is clear on all 512
+cases rather than assuming it.
+
 ### 6.59 The §6.12 pass on slice 3d, and a row that is a slice and a half
 
 Run before any of 3d is written, as every slice since §6.34 has been. This one is different in
@@ -477,7 +577,7 @@ port stops checking.
 
 | | |
 |---|---|
-| **3d-a** | `SCAN`, `COMPAS`, `DOT`, `SP1`/`SP2`, `SPS1`–`SPS4`, `scacol` — closes the seam two ported routines already reach, and needs nothing that is not built |
+| **3d-a** 🟢 | `SCAN`, `COMPAS`, `DOT`, `SP1`/`SP2`, `SPS1`–`SPS4`, `TAS2`, `scacol` — **built 2026-09-04** in `Scanner.h/.cpp`. `TAS2` was not in the list and is not optional: `SPS1` falls into it and `SPS4` jumps to it, and it falls into `NORM` (§6.62). Both seams gone (§6.61). |
 | **3d-b** | `DIALS` 1–4, `DILX`/`DIL2`, `MSBAR`, `ECBLB`/`ECBLB2`/`SPBLB`, `PZW`, `CTWOS` — the dashboard proper |
 | **3d-c** | `MESS`/`me1`/`mes9`, `ABORT`/`ABORT2`, `LASLI` — the rest of 3c's seams |
 | **3d-d** | the sixteen flight-loop parts with `LOOK1`, `KS1`, `WARP`, `SPIN`, `CTRL`, `cntr`, `U%`, the `DOKEY` flight half and the docking check |
@@ -485,6 +585,14 @@ port stops checking.
 
 3d-a first because `SCAN` is buildable today: it rests on `CPIX4` and `CTWOS2`, both ported, and
 one table that needs extracting.
+
+**What 3d-a cost, against that estimate.** The table extracted as expected and `CPIX4` needed one
+change — it now hands back the cursor it leaves in `SC`, `Y` and `X`, which `SCAN` walks on from.
+The three things the pass did not see: `TAS2` and `NORM` are part of the compass chain and neither
+is in the row (§6.62); `DVID4`'s exit carry is read by `SP2` through `SPS2`, so a slice-3a routine
+had to be widened to build a slice-3d one (§6.60); and closing the two seams changed `MoveShip`'s
+signature and deleted a class (§6.61). A dependency pass that asks "what does this call?" finds
+none of those, because none of them is a call.
 
 ### 6.58 One byte with two names, five routines with one exit, and a bounty that moves a planet
 
@@ -2483,6 +2591,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **Slice 3d-a: the scanner and the compass.** `SCAN`, `COMPAS`, `DOT`, `SP1`/`SP2`, `SPS1`–`SPS4` and `TAS2` in `Scanner.h/.cpp`, with `scacol` extracted. 16,384 blips compared on the whole bitmap — every depth and height the range check admits, both signs of each, and the three shapes of stick measured from the marks rather than worked out from the inputs — plus 128 positions across, all 34 ship types, all four guards, 65,536 compass positions and 1,728 normalisations. **Three findings.** `TAS2` has no `RTS`: it falls into `NORM`, so the vector it produces is scaled to a length of 96 and not the seven-bit one its instruction stream shows — and §6.11 made "does it return?" a rule two months ago, so the fix went into `c64_source.py`, which now names the next include whenever a file's last instruction is not an `RTS` or a `JMP` (§6.62). `DVID4`'s exit carry is read by `SP2` through `SPS2` in an `ADC` and an `SBC` with nothing between: the thirteenth dropped flag, always clear for a divisor of twenty, and always clear is exactly why `156 - T` had to become `155 - T` (§6.60). And closing `SCAN`'s two seams deleted a class, gave `MoveShip` a `Canvas`, and replaced two call counts with two screen comparisons — one of which was blank on both sides until the fixture put the ship where `SCAN` would draw it, §6.39's shape again (§6.61). |
 | 2026-09-04 | **Slice 3d opened with its §6.12 pass, before any of it was written, and the row turned out to be a slice and a half.** 45 source files and 210 external labels against 3c's 36, so it is now split into 3d-a … 3d-e with the units ordered so each rests on the last. **The row names sixteen files this build does not have** — `mainloop_part_N` where the C64 includes `main_flight_loop_part_N_of_16`, and `spblb` where it takes `spblb-dobulb.asm` — which is cosmetic in a row and not in a script: a pass driven by the row's own names finds nothing for seventeen of the forty-five files and reports a much smaller slice than there is. **Twelve prerequisites the row does not name**, among them `cntr`, deferred out of phase 1 with row 94's seven and never picked back up — the second time that row has stranded something. **`SETL1` is not game logic**: `SEI / STA L1M / ... / CLI`, self-modifying code inside a raster interrupt handler, and a pass that only asks "is this ported?" would have scheduled it. **And `SCAN` sits behind two seams with two different signatures** — `ShipEffects::UpdateScanner(ShipBlock&)` and `BubbleEffects::ScanShip(const ShipBlock&, std::uint8_t)` — disagreeing about whether the type is an argument and whether the block is mutable. §6.28's shape a fifth time and the first in the SEAMS rather than the state, which is where a port stops checking. |
 | 2026-09-04 | **The bubble, and slice 3c is complete.** `KILLSHP` with `KS1`–`KS4`, `SOS1` and `SOLAR`. `KILLSHP` does not release heap space, it RELOCATES: every ship above the dead one moves down a slot and its line heap down by the dead ship's size, so the region stays packed with no free list. 136 kills compared on the slot list, all ten blocks, the type counts, the junk count, `SLSP` and the **whole line heap**, plus `TP`, `TALLY` and three seams; 5 systems for `SOLAR`. **§6.58 has three findings, each one a different way of being wrong.** `SSPR` is `MANY+SST` — one byte with two names, in the ORIGINAL this time rather than introduced by the port, which is why nothing ever sets `SSPR` when a station is created. `SOLAR` has no `RTS`: it falls into `NWSTARS`, `nWq`, `WPSHPS` and `FLFLLS`, so **five ledger rows are one fall-through** and arriving in a system fills the stardust and clears the ships as part of the same call — caught because the generator's state moved on the oracle side and not the port's. And `LSR FIST / JSR ZINF / ... / ADC #3` means **the planet's distance depends on whether the player's bounty was odd**: the twelfth uncleared flag, and the first to be a shift rather than a call. The checklist is now two lines: before porting a routine, read the instruction after every `JSR`, and read the instruction after every shift. |
 | 2026-09-04 | **`ZINF`, and the four-row chain `NWSTARS` heads.** `NWSTARS` is two instructions falling into `nWq`, which falls into `WPSHPS`, which falls into `FLFLLS` — four rows in the ledger and one routine in the build, which is why §6.45 flagged it when scoping rather than after. 60 resets over five fleets, three view types, both particle counts and both entry carries, compared on the whole canvas, all three stardust arrays, every slot's state byte, both line heaps, the generator's four bytes and the scanner seam. **§6.57 is the finding**, and it is about a test rather than a routine. `nWq` calls `DORND` three times and `PIXEL2` once per speck with no `CLC` anywhere, so each speck's first random byte runs on the carry the PREVIOUS speck's plot left — the eleventh dropped flag, and `PIXEL`'s exit carry turns out to be exactly `ZZ >= 80`. Verifying that model meant looking at phase 1's sweep for `PIXEL2`, which covers **all 65,536 coordinate pairs** and pinned `ZZ` at 255 for every one of them: genuinely exhaustive in x and y, and constant in the byte the routine branches on, so two of its three distance cases had never run. One line fixed it. The question to ask of any sweep is not whether it is exhaustive but **exhaustive in which dimension** — a sweep over what a routine is ABOUT can still be constant in what it BRANCHES on. |

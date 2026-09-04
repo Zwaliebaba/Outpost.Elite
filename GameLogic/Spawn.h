@@ -25,12 +25,12 @@ namespace Elite
  * type counts, the junk count, and any missile locked on a slot above the dead one.
  */
 
-/// What `KILLSHP` and `SOLAR` reach outside this slice. It carries `BubbleEffects` because
-/// `SOLAR` falls all the way through into `WPSHPS`, which needs the scanner.
-class SpawnEffects : public BubbleEffects
+/// What `KILLSHP` and `SOLAR` reach outside this slice. Everything left in it is dashboard
+/// state that slice 3d-b and 3d-c own; the scanner was here too until 3d-a built it (§6.59).
+class SpawnEffects
 {
 public:
-  ~SpawnEffects() override = default;
+  virtual ~SpawnEffects() = default;
 
   /// 6502: ABORT -- unlock the player's missile and put its indicator back to green. The missile
   /// display is the dashboard's, which is slice 3d.
@@ -93,8 +93,8 @@ void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, ShipBloc
  */
 void BuildSystem(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, PlanetSunState& _state,
                  Bubble& _bubble, ShipBlock& _work, CommanderBlock& _commander, Rng& _rng,
-                 SpawnEffects& _effects, std::uint8_t _techLevel,
-                 const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _viewType,
+                 FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
+                 const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _view,
                  bool _carryIn) noexcept;
 
 } // namespace Elite

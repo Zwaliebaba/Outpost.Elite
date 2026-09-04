@@ -12,6 +12,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -48,12 +49,11 @@ std::wstring Widen(const std::string& _text)
   return std::wstring(_text.begin(), _text.end());
 }
 
-/// The three things `KILLSHP` and `SOLAR` reach outside this slice, recorded rather than run.
+/// The four things `KILLSHP` and `SOLAR` still reach outside this slice, recorded rather than
+/// run. `SCAN` was a fifth until slice 3d-a built it (§6.61).
 class RecordingEffects : public Elite::SpawnEffects
 {
 public:
-  std::uint32_t scans = 0;
-  void ScanShip(const Elite::ShipBlock&, std::uint8_t) override { ++scans; }
   std::vector<std::uint8_t> aborts;
   std::vector<std::uint8_t> messages;
   std::uint32_t stationBlobs = 0;
@@ -364,6 +364,12 @@ public:
     const SpawnLabels at(oracle);
     const std::uint16_t solar = oracle.Label("SOLAR");
 
+    // 6502: SCBASE -- an assembler constant, so it is derived from ylookup's first entry, which
+    // is it plus the space view's four-cell left margin.
+    const Cpu6502 image = oracle.Fresh();
+    const std::uint16_t screenBase = static_cast<std::uint16_t>(
+      (image.memory[oracle.Label("ylookupl")] | (image.memory[oracle.Label("ylookuph")] << 8)) - 0x20);
+
     struct System
     {
       std::array<std::uint8_t, 6> seeds;
@@ -397,6 +403,7 @@ public:
 
     std::uint32_t compared = 0;
     std::uint32_t bred = 0;
+    std::uint32_t drawn = 0;
 
     for (const System& system : SYSTEMS)
     {
@@ -406,6 +413,7 @@ public:
       Elite::ShipBlock work{};
       Elite::CommanderBlock commander;
       RecordingEffects effects;
+      Elite::FlightState flight;
       Elite::Rng rng;
       Elite::Canvas canvas;
       Elite::DrawWorkspace draw;
@@ -454,10 +462,29 @@ public:
       const Elite::Testing::RunResult run = cpu.CallSubroutine(solar, 400'000);
       Assert::IsTrue(run.completed, L"SOLAR returned");
 
-      Elite::BuildSystem(canvas, draw, dust, state, bubble, work, commander, rng, effects,
+      Elite::BuildSystem(canvas, draw, dust, state, bubble, work, commander, rng, flight, effects,
                          system.techLevel, system.seeds, 0, system.carryIn);
 
       const std::wstring where = std::wstring(L"SOLAR ") + system.what;
+
+      /*
+       * The screen, which `SOLAR` reaches through `nWq` and `SCAN` and which this test did not
+       * look at until 3d-a. `nWq` plots twelve specks and `WPSHPS` scans whatever the bubble
+       * held, so a port that got either wrong agreed with the game on every byte this test used
+       * to compare.
+       */
+      const std::span<const std::uint8_t> ours = canvas.Screen();
+      for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
+      {
+        const std::uint8_t expected = cpu.memory[static_cast<std::uint16_t>(screenBase + offset)];
+        if (expected != ours[offset])
+        {
+          Assert::Fail((where + L": screen offset " + std::to_wstring(offset) + L" -- game has "
+                        + std::to_wstring(expected) + L", port has " + std::to_wstring(ours[offset]))
+                         .c_str());
+        }
+        drawn += (ours[offset] != 0u) ? 1u : 0u;
+      }
 
       CompareBubble(cpu, bubble, heap, at, where);
       Assert::AreEqual(cpu.memory[at.tribble], commander.bytes[tribble],
@@ -489,8 +516,10 @@ public:
 
     Assert::AreEqual<std::uint32_t>(7u, compared, L"every system");
     Assert::IsTrue(bred > 0u, L"and some of them had Trumbles breed");
+    Assert::IsTrue(drawn > 0u, L"and the stardust was actually plotted");
     Logger::WriteMessage(("SOLAR: " + std::to_string(compared) + " systems, "
-                          + std::to_string(bred) + " with Trumbles")
+                          + std::to_string(bred) + " with Trumbles, "
+                          + std::to_string(drawn) + " marked bytes")
                            .c_str());
   }
 };

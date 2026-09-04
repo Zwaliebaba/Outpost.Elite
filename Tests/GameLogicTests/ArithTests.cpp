@@ -1024,11 +1024,15 @@ public:
 
         MathWorkspace work;
         work.q = static_cast<std::uint8_t>(q);
-        const std::uint8_t result = Elite::DivideAndScale(work, static_cast<std::uint8_t>(a));
+        const Elite::ScaledDivision result = Elite::DivideAndScale(work, static_cast<std::uint8_t>(a));
 
-        Assert::AreEqual<std::uint32_t>(cpu.a, result, Context(L"returned value", a, q).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.a, result.r, Context(L"returned value", a, q).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.p], work.p, Context(L"quotient", a, q).c_str());
         Assert::AreEqual<std::uint32_t>(cpu.memory[zp.r], work.r, Context(L"R", a, q).c_str());
+
+        // 6502: the exit carry, which `SPS2` hands to `SP2`'s `ADC #195` and `SBC T` (§6.60).
+        // The sweep was already exhaustive, so widening the model cost this one line.
+        Assert::AreEqual(cpu.c, result.carry, Context(L"exit carry", a, q).c_str());
       }
     }
   }

@@ -122,7 +122,7 @@ bool PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept
   return _work.zz >= 80u;
 }
 
-void PlotDash(Canvas& _canvas, DrawWorkspace& _work) noexcept
+CellCursor PlotDash(Canvas& _canvas, DrawWorkspace& _work) noexcept
 {
   const std::uint16_t cell = static_cast<std::uint16_t>(Canvas::RowOffset(_work.y1) + (_work.x1 & 0xF8u));
   const std::uint8_t subRow = static_cast<std::uint8_t>(_work.y1 & 0x07u);
@@ -144,15 +144,19 @@ void PlotDash(Canvas& _canvas, DrawWorkspace& _work) noexcept
   const std::uint16_t secondCell = ((second & 0x80u) != 0u) ? static_cast<std::uint16_t>(cell + 8u) : cell;
 
   _canvas.ExclusiveOr(static_cast<std::uint16_t>(secondCell + subRow), static_cast<std::uint8_t>(second & _work.col));
+
+  // 6502: SC(1 0), Y and X as the routine leaves them -- and SC is the WRAPPED cell when the
+  // second pixel crossed, because that is the byte the last `STA (SC),Y` wrote through.
+  return CellCursor{ secondCell, subRow, index };
 }
 
-void PlotBlock(Canvas& _canvas, DrawWorkspace& _work) noexcept
+CellCursor PlotBlock(Canvas& _canvas, DrawWorkspace& _work) noexcept
 {
   // 6502: CPIX4 -- one dash, then DEC Y1 and fall through into CPIX2 for the row above. Y1 is
   // left decremented, and callers see that.
-  PlotDash(_canvas, _work);
+  (void)PlotDash(_canvas, _work);
   _work.y1 = static_cast<std::uint8_t>(_work.y1 - 1u);
-  PlotDash(_canvas, _work);
+  return PlotDash(_canvas, _work);
 }
 
 void DrawHorizontalLine(Canvas& _canvas, DrawWorkspace& _work) noexcept

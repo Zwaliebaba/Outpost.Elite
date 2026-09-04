@@ -205,8 +205,8 @@ NewShip AddPlanetOrSun(Bubble& _bubble, ShipBlock& _work, SpawnEffects& _effects
 
 void BuildSystem(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, PlanetSunState& _state,
                  Bubble& _bubble, ShipBlock& _work, CommanderBlock& _commander, Rng& _rng,
-                 SpawnEffects& _effects, std::uint8_t _techLevel,
-                 const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _viewType,
+                 FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
+                 const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _view,
                  bool _carryIn) noexcept
 {
   const std::size_t tribble = static_cast<std::size_t>(Field::Tribbles);
@@ -301,8 +301,8 @@ void BuildSystem(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, PlanetS
    * The carry `NWSHP` returns is what `nWq`'s first `DORND` runs on -- SET when the sun was
    * created, which it always is, and clear only if the bubble had no room for it.
    */
-  SeedStardustAndClearShips(_canvas, _draw, _dust, _rng, _state, _bubble, _work, _effects,
-                            _viewType, sun.created);
+  SeedStardustAndClearShips(_canvas, _draw, _dust, _rng, _state, _bubble, _work, _flight, _view,
+                            sun.created);
 }
 
 } // namespace Elite

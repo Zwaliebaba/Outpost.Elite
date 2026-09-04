@@ -171,6 +171,12 @@ TABLES = [
     # blueprints, because the game addresses all of them absolutely and so this port can too.
     Table("SHIP_DATA", "XX21", ship_data_extent, "ShipData.cpp",
           "the pointer table, E%'s defaults and all 33 ship blueprints, addressed from XX21"),
+    # ---- slice 3d: the scanner. Indexed by ship TYPE, so it is sized the way `MANY` is --
+    # SHIP_TYPE_COUNT + 1, keeping entry 0 so the index is the type rather than the type minus
+    # one. The listing's Cougar is the last entry a type can reach; the CYAN and the EQUD after
+    # it are past the end of what anything indexes and so are not extracted.
+    Table("SCANNER_COLOUR_TABLE", "scacol", SHIP_TYPE_COUNT + 1, "ScreenTables.cpp",
+          "the colour a ship's blip is drawn in, by ship type"),
 ]
 
 

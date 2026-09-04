@@ -134,6 +134,7 @@ public:
     CompareAgainstImage("celllookl", Elite::CELL_ADDRESS_LOW);
     CompareAgainstImage("celllookh", Elite::CELL_ADDRESS_HIGH);
     CompareAgainstImage("FONT", Elite::FONT_DATA);
+    CompareAgainstImage("scacol", Elite::SCANNER_COLOUR_TABLE);
   }
 
   TEST_METHOD(TheSineTableLooksLikeASineCurve)

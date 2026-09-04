@@ -11,6 +11,11 @@ you end up porting the BBC Master's version of a routine by mistake, so this eva
 Paths are relative to Upstream/elite-source-code-library/ or to the repository root, and `--code`
 drops comments and blank lines so what is left is the instruction stream.
 
+It also says when a file's last instruction is not an `RTS` or a `JMP`, and names the file the
+build assembles next. That is the one thing a single file cannot tell you and the one that costs
+most to miss: `TAS2` ends `STA XX15+2` and runs straight on into `NORM`, so a port that stopped
+where the file does was a different routine that happened to share a name (§6.62).
+
 The symbol values come from the master build (`_VERSION = 8`, `_VARIANT = 1`) and from the
 definitions at the top of MasterFile/elite-source.asm.  An unknown symbol is an error rather than
 a silent FALSE: guessing there is exactly the mistake this exists to prevent.
@@ -149,6 +154,47 @@ def resolve(_argument: str) -> Path:
     sys.exit(f"error: {_argument} not found under {UPSTREAM} or {REPO}")
 
 
+# What ends an instruction stream. Anything else at the bottom of a file means the routine keeps
+# going in the next INCLUDE, which the file itself gives no sign of (§6.62).
+TERMINATORS = ("RTS", "RTI", "JMP", "BRK")
+
+MASTER = REPO / "MasterFile" / "elite-source.asm"
+INCLUDE_RE = re.compile(r'^\s*INCLUDE\s+"([^"]+)"', re.IGNORECASE)
+
+
+def next_include(_path: Path) -> str | None:
+    """The file the C64 build assembles immediately after this one, if it assembles it at all."""
+    try:
+        includes = [
+            match.group(1)
+            for match in (INCLUDE_RE.match(line) for line in filter_file(MASTER, True))
+            if match
+        ]
+    except SystemExit:  # pragma: no cover -- a master file that will not parse is a bigger problem
+        return None
+
+    try:
+        name = str(_path.relative_to(UPSTREAM))
+    except ValueError:
+        return None
+
+    for index, include in enumerate(includes):
+        if include.replace("\\", "/") == name.replace("\\", "/") and index + 1 < len(includes):
+            return includes[index + 1]
+    return None
+
+
+def falls_through(_lines: list[str]) -> str | None:
+    """The last instruction, when it is not one that ends a routine."""
+    for line in reversed(_lines):
+        text = line.split("\\", 1)[0].strip()
+        if not text or text.startswith("."):
+            continue
+        opcode = text.split()[0].upper()
+        return None if opcode in TERMINATORS else text
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("paths", nargs="+", help="library files, relative to the upstream tree or the repository")
@@ -159,8 +205,29 @@ def main() -> int:
         path = resolve(argument)
         if len(arguments.paths) > 1:
             print(f"{'' if index == 0 else chr(10)}=== {path.relative_to(REPO)}")
-        for line in filter_file(path, arguments.code):
+        lines = filter_file(path, arguments.code)
+        for line in lines:
             print(line)
+
+        # The one thing a single file cannot tell you: whether the routine ends here. §6.11 made
+        # "does it actually return?" part of reading a routine, and §6.62 is what it costs when
+        # the answer is in a different file -- `TAS2`'s last instruction is `STA XX15+2` and its
+        # next one is the first of `NORM`.
+        last = falls_through(filter_file(path, True))
+        if last is not None:
+            following = next_include(path)
+            branch = last.split()[0].upper() in (
+                "BCC", "BCS", "BEQ", "BMI", "BNE", "BPL", "BVC", "BVS",
+            )
+            if branch:
+                print(f"\n\\ FALLS THROUGH when `{last}` is not taken -- and a branch on a flag the")
+                print("\\ instruction above it just set can be unconditional in practice, so read it.")
+            else:
+                print(f"\n\\ FALLS THROUGH -- the last instruction is `{last}`, not an RTS or a JMP.")
+            if following:
+                print(f"\\ Execution continues into {following} -- that routine is part of this one.")
+            else:
+                print("\\ This build does not INCLUDE the file, so what follows is whatever links next.")
     return 0
 
 
