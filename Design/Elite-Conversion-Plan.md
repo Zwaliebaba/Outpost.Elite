@@ -428,6 +428,94 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.44 Three views, three routines, and the six instructions that route between them
+
+The stardust is the whole of Elite's sense of motion — twelve specks in a box, moved and redrawn
+every frame — and the temptation on reading it is to see one routine written out three times with
+the signs changed. `STARS1` and `STARS6` are 100 instructions each and about eighty of them are
+the same eighty. They are not the same routine.
+
+Five things differ between the front view and the rear, and only the first two are what
+"backwards" predicts: the position steps subtract where the front view adds, and the distance
+grows rather than shrinking. The other three are not derivable from the direction of travel at
+all. The coordinates are computed in the opposite order (x then y, against y then x). The roll's
+two sign bytes are **swapped**, so `STARS6` opens with `EOR ALP2` where `STARS1` opens with
+`EOR ALP2+1`. And the pitch step multiplies by the negated x, where `STARS1` — through the
+`STA Q / JSR MUT2` pair, which leaves `A` holding what it has just stored — squares its own scale
+factor instead. The kill tests differ too: three in the front view, on x, y and distance, and two
+in the rear, on y and distance only, with different thresholds.
+
+A port written as "STARS1 with a sign parameter" would agree with the game on a stationary
+player, disagree subtly under roll, and be unrecoverably adrift after a few seconds of flight.
+Both routines are written out here for that reason (ADR-003), and eleven mutations of `STARS6`
+against `STARS1`'s shape are all caught.
+
+The routing between the three is six instructions and one of them matters:
+
+    .STARS  LDX VIEW / BEQ STARS1 / DEX / BNE ST11 / JMP STARS6 / .ST11 JMP STARS2
+
+`STARS2` is entered with the view **already decremented**, so its own `CPX #2` is comparing
+against the left view rather than against 2 as a view number. Read the two routines apart — which
+is how a ledger row invites you to read them, one line each — and `RAT` comes out inverted, the
+left view slides the way the right view should, and every screen still looks like stardust. The
+port models `MoveStardustSideways` as taking the real view and doing `static_cast<std::uint8_t>(
+_view - 1u) >= 2u`, and `TheDispatcherMatchesSTARS` runs all four views through `STARS` itself so
+that the `DEX` is observable rather than argued about.
+
+`STARS2` also has side effects the other two do not. `ST2` turns `ALPHA`, `ALP2` and `BET2` over
+on the way in and back on the way out, and recomputes `ALP2+1` and `BET2+1` as exact complements
+whether or not they went in that way, leaving `RAT` and `RAT2` behind it. A whole call is very
+nearly a no-op on the flight state and not quite one, which is why `FlightState` is taken by
+non-const reference here and by const reference in the other two, and why seven flight bytes are
+compared alongside the canvas and the field.
+
+### 6.43 An always-clear flag, measured rather than argued
+
+§6.42 widened three multipliers to return their exit carry because the stardust reads it in the
+very next instruction. Mutation testing then produced a result worth keeping: replacing that
+carry with a hard `false` in both movers changes **no output at all**, on 280 frames of whole-
+canvas comparison per view.
+
+The reason is structural. `MU11` is `LSR P` followed by eight `ROR P`, and `LSR` shifts a zero
+into bit 7 — so that zero walks down one place per rotate and falls out of the ninth shift as the
+carry, whatever `P` and `Q` hold. `MU1`, the `Q = 0` path, has an explicit `CLC`. `MULTU`'s exit
+carry is therefore always clear, and every `ADC` and `SBC` in the game that follows it without a
+`CLC` is running on a zero it can rely on.
+
+That argument is a paragraph of reasoning about a listing, which §6.29 is the standing warning
+about, so it is not what the project rests on: the exhaustive sweep now asserts `IsFalse` on the
+**oracle's** carry over all 65,536 pairs. The property is measured on the game.
+
+Two things follow. The widening stays — it documents a dependency correctly and costs nothing,
+and the same field on `MLTU2` is not constant (§6.33 was a real defect). And the two surviving
+mutations are recorded as **equivalent**, with the measurement that makes them so, rather than as
+gaps: a mutation that cannot change behaviour is not a hole in a test, and calling one a hole is
+how a suite grows assertions that measure nothing.
+
+### 6.42 A dropped exit carry, for the fourth and fifth time
+
+Building the stardust needed `LL38`'s carry and `MLU1`/`MLU2`'s, neither of which the port
+returned. `LL9`'s face loop does `JSR LL38 / BCS ovflw`, and the stardust does
+`JSR MLU1 / STA YY+1 / LDA P / ADC SYL,Y` — no `CLC` in either, because the flag is an operand.
+
+`CombineSigned` now returns `SignedSum{value, carry}` and `MultiplyByX`, `MultiplyUnsigned` and
+`MultiplyMagnitudeByQ` return `WideResult{high, carry}`. In every case the fix was cheap because
+phase 1 had already built an **exhaustive** sweep for the routine: adding a carry assertion to a
+loop that already runs all 65,536 pairs turns "I think this is right" into a measurement for the
+price of one line, and all four passed on the first run.
+
+That is the argument for exhaustive sweeps where the input space allows one, and it is a
+different argument from the usual one. Their value is not only what they catch on the day. It is
+that when the model of a routine has to be **widened** two months later, the sweep that already
+exists verifies the wider model for free — and the alternative, writing a fresh test for a flag
+nobody has needed until now, is exactly the work that gets skipped.
+
+This is now the fifth and sixth time an uncleared 6502 flag has been the defect (§6.4, §6.11
+twice, §6.33, and these). The rule §6.11 named still holds and is worth restating in its
+strongest form: **on the 6502 a flag is an operand.** A routine's return value is every flag its
+callers read, and the way to find out which those are is to look at the instruction after each
+`JSR` — not at the routine.
+
 ### 6.41 A ✅ is one mark for a whole row, and one of them was not true
 
 Scoping 3c turned up a routine the ledger says is ported and that does not exist. `PIX1` sits in a
@@ -1782,7 +1870,7 @@ Three things that is worth noting for the slices ahead:
 |---|---|---|
 | **3a Ship slots and motion** | `ShipSlot`, `Bubble` (`FRIN`, `MANY`, `UNIV`, `NWSHP`, `NWS1`, `KILLSHP`, `KS1`–`KS4`, `ZINF`, `RESET`/`RES2`, `ZES1`/`ZES2`, `GINF`), `MVEIT` 1–9, `MVT1`, `MVT3`, `MVT6`, `MVS4`, `MVS5`, `MV40`, `TIDY`, `MAS1`–`MAS4`, `TAS1`–`TAS6`, `DCS1`, `ABORT`, `sightcol`. | Oracle: run `MVEIT` on a slot with sampled orientations/speeds/roll/pitch for N iterations; byte-identical `INWK`. |
 | **3b Ship drawing** 🟢 **Built 2026-09-04** | ✅ `LL9` 1–12, ✅ `LL61`, ✅ `LL62`, `LL118`, `LL120`, `LL123`, `LL129`, ✅ `LL145`/`LL147` 1–4 with ✅ `LL118`, ✅ `LL120`, ✅ `LL123`, ✅ `LL129`, ✅ `SHPPT`, ✅ `LL51`, ✅ `PROJ`, ✅ `PLS6`, ✅ `DVID3B`/`DVID3B2`, ✅ `PLUT`. Title screen rotating ship. | Oracle: for sampled ship types and orientations the list of clipped line segments matches; golden of the title screen Cobra at frames 1, 30, 60. **The scope line is now twice corrected.** §6.34 removed `LL5` (ported in phase 1) and `LSX2`/`LSY2` (3c's heap, not the ship heap). §6.35 removes `PL2` — `PROJ` reaches `PL2-1`, which is `PROJ`'s own `RTS`, and `PL2` itself erases the planet and sun heap — and adds `PLS6`, which the 3c row had grouped with the planet code by name. **`PROJ` and everything it divides through are built and swept**: 65,280 divides, 65,536 divides by a ship's z, 65,536 screen offsets across all four of `PLS6`'s exits, and 3,072 projections including the half-written case. **The ship line heap and the three routines that read it followed the same day**: `LL155`, `LL81`, `EE51` and `SHPPT`, compared on the whole canvas rather than on a byte, and `SHPPT` compared as a SEQUENCE because it reads a coordinate the previous projection left behind. Twenty-nine mutations caught across the two units, two equivalent. §6.36 is the one finding that came from a coverage assertion rather than from a comparison. **The clipper followed**: `LL145`/`LL147` with `LL118`, `LL120`, `LL123` and `LL129`, 32,768 comparisons across the three suites, one defect (`LL122`'s entry shift is outside its loop) and two ledger findings in §6.38 — `LL145` reads slice 2's `dontclip`, and `XX13`'s documented values are the BBC's, not this build's. **`LL9` itself went in last and matched first time**: 1,683 ships — every type in fifteen placements and three orientations — compared on the whole canvas, the whole heap, `INWK`, the `K%` bytes, `XX2` and `XX3`. The one divergence was the `XX2`/`K3` overlap §6.37 predicted, settled by counting rather than arguing. §6.39 is the finding: the FIRST version of that test passed 396 whole-canvas comparisons while every orientation vector it supplied was zero. `PLUT` closed the slice, and it belongs in `ShipMove.cpp` — the sixth home the ledger had filed by what a routine is NEAR rather than by what it does. **What is left of 3b is the half a hosted runner cannot do**: the golden of the title screen's rotating Cobra at frames 1, 30 and 60, which needs a person at a Windows machine, as 2e's does. |
-| **3c Planet, sun, stardust** ∥ | `PLANET`, `PL9` 1–3, `PLS1`–`PLS6`, `PLS22`, `WPLS`/`WPLS2`, `WP1`, `EDGES`, `CHKON`, `PL21`, `SUN` 1–4 with its heap, `CIRCLE`, `CIRCLE2`, `BLINE`, `SOS1`, `STARS`, `STARS1`, `STARS2`, `STARS6`, `NWSTARS`, `FLIP`, `WPSHPS`, `FLFLLS`, `SOLAR`, `NWQ` — **and the twelve prerequisites §6.40 found the row missing**: `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41` and `DV42` from row 94, `HLOIN2` from row 116, `ZINF` from row 44, and `BLINE`/`CIRCLE`/`CIRCLE2` from row 117. The seven in row 94 were deferred out of phase 1 because they read state that did not exist; `INWK` and `ALP1` arrived with 3a and the stardust arrays are this slice's own, so the reason has expired. | Goldens of the launch view at Lave (planet + sun + stardust) at several iterations; oracle for `PLS`/`CHKON` arithmetic. |
+| **3c Planet, sun, stardust** 🟡 **The stardust is built 2026-09-04; the planet and the sun remain** | `PLANET`, `PL9` 1–3, `PLS1`–`PLS6`, `PLS22`, `WPLS`/`WPLS2`, `WP1`, `EDGES`, `CHKON`, `PL21`, `SUN` 1–4 with its heap, `CIRCLE`, `CIRCLE2`, `BLINE`, `SOS1`, ✅ `STARS`, ✅ `STARS1`, ✅ `STARS2`, ✅ `STARS6`, `NWSTARS`, ✅ `FLIP`, `WPSHPS`, `FLFLLS`, `SOLAR`, `NWQ` — **and the twelve prerequisites §6.40 found the row missing**: `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41` and `DV42` from row 94, `HLOIN2` from row 116, `ZINF` from row 44, and `BLINE`/`CIRCLE`/`CIRCLE2` from row 117. The seven in row 94 were deferred out of phase 1 because they read state that did not exist; `INWK` and `ALP1` arrived with 3a and the stardust arrays are this slice's own, so the reason has expired. **Seven of the twelve are built**: `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41` and `DV42` went in with the stardust, and `PIX1` — which §6.41 found marked ported and absent — with them. `HLOIN2`, `ZINF`, `BLINE`, `CIRCLE` and `CIRCLE2` remain. | Goldens of the launch view at Lave (planet + sun + stardust) at several iterations; oracle for `PLS`/`CHKON` arithmetic. | **The stardust unit is complete, 2026-09-04.** Six parallel arrays, seven wrappers, `PIX1`, `FLIP`, all three movers and the dispatcher: 280 frames per view compared on the whole canvas, all six arrays, the generator's state and — for the side views — seven flight bytes and `newzp`. Thirty of thirty real mutations caught, two equivalent and measured (§6.43). Three findings: the three views are three routines and not one with a sign (§6.44), the `DEX` in `STARS`'s six-instruction dispatch means `STARS2` compares against the LEFT view rather than against 2, and `MLU1`/`MLU2`/`LL38` needed their exit carries returned (§6.42) — the fifth and sixth time an uncleared flag has been the defect. **What remains of 3c is the planet and the sun**, plus `NWSTARS` and the five prerequisites above. |
 | **3d Flight loop and dashboard** | Main flight loop 1–16, `DIALS` 1–4, `DILX`/`DIL2`, `COMPAS`/`SP1`/`SP2`/`SPS*`, `SCAN` (sprite blips as canvas draws), `MSBAR`, `ECBLB`/`SPBLB`, `PZW`, `MESS`/`me1`/`mes9`, `LASLI`, `LAUN`/`LL164` hyperspace tunnel, `DEATH` (the "GAME OVER" fly-by), `WARP` (J), `CTRL`, `DOKEY` flight half, `SPIN`, `cargo` canisters, docking check (`ISDK` path in loop part 10–11). | Launch from Lave, fly, dock manually, hyperspace to Diso, dock. Goldens of the dashboard; replay hashes for the whole trip. |
 
 ### Phase 4 — Combat and a living universe
@@ -1874,6 +1962,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **The stardust is built — three views, three routines, and slice 3c is a third done.** The six parallel arrays, the seven wrappers §6.40 found missing from the row, `PIX1` (which §6.41 found marked ported and absent), `FLIP`, `STARS1`, `STARS2`, `STARS6` and the dispatcher. 280 frames per view compared against the shipped game on the whole canvas, all six arrays, the generator's four state bytes and — for the side views — seven flight bytes and `newzp`; four CONSECUTIVE frames per case, because a mover's output is the next frame's input (§6.33). Thirty of thirty real mutations caught. **§6.44 is the finding**: `STARS1` and `STARS6` share about eighty of their hundred instructions and are still two routines, not one with a sign — the coordinates are computed in the opposite order, the roll's two sign bytes are swapped, and the pitch multiplies by the negated x where the front view squares its own scale factor. Only the subtractions and the growing distance follow from "backwards". With them, the `DEX` in `STARS`'s six-instruction dispatch: `STARS2` is entered with the view already decremented, so its `CPX #2` compares against the LEFT view, and a port that reads the two routines apart comes out mirrored. **§6.42**: `LL38`'s and `MLU1`/`MLU2`'s exit carries were being dropped, the fifth and sixth time an uncleared 6502 flag has been the defect — and each was verified for the price of one line, because phase 1's sweeps for those routines are exhaustive and already run every input. **§6.43**: two mutations survived, and rather than being written off, the property that makes them equivalent — `MULTU` leaves carry clear for every one of the 65,536 input pairs, because `LSR P` shifts a zero in and eight `ROR P`s walk it out — is now asserted on the ORACLE. A mutation that cannot change behaviour is not a hole in a test. Two further mutations were real gaps: one field of twelve specks never lands on `STARS2`'s `room == newzp`, so the sweep now runs five. |
 | 2026-09-04 | **Slice 3c opened with its §6.12 pass, before any of it was written.** Its complete external surface is thirty-six labels; twenty-four are ported, five belong to other slices, and **twelve are prerequisites that do not exist and the row names one of them**. Seven come from row 94 — `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41`, `DV42`, which `STARS1`, `STARS2` and `STARS6` multiply and divide through — and all seven were deferred out of phase 1 with the same sentence about state that did not exist yet. That state arrived with 3a. **A deferral reason is not a schedule**, and nothing put them back on one; it is the same shape as the six homes filed by adjacency, one level up. The other five are `HLOIN2` (row 116, which `SUN` and `WPLS` draw through), `ZINF` (row 44, which `SOLAR` clears a block with) and `BLINE`/`CIRCLE`/`CIRCLE2` (row 117). The useful half: the closure stops there — what those twelve reach is either in 3c's row already or ported — so the slice is thirteen routines wider than its row and not one routine deeper. **And the pass found a ✅ that was not true** (§6.41): `PIX1` sits in a row marked ported and does not exist in `GameLogic/`. It needs `SYL`, which did not exist in slice 1d-a, so it was skipped — and nothing noticed, because `tools/inventory.py` reconciles include files against rows and the ✅ is one mark for all of a row's labels. `STARS1`, `STARS2` and `STARS6` all call it. Four more labels with their own include files sit in ✅ rows with no marker — `setxc`, `setyc` and their `doxc`/`doyc` companions, and `tnpr1` — and are recorded as unconfirmed rather than claimed either way. |
 | 2026-09-04 | **Slice 3b is complete.** `PLUT` was the last of it, and it goes to `ShipMove.cpp` rather than to the drawing where the ledger files it: it is a transform of `INWK` in the same family as `MVS4` and `MVS5`, the source's own category for it is Flight, and its caller is the main flight loop. That is the **sixth** home this ledger got wrong, all for the same reason — a routine filed by what it sits NEXT TO in the source rather than by what it does. `DVID3B2`, `PLS6`, `PL2`, `LL51`, `LL61` and now `PLUT`. Worth saying plainly for phase 4's planning: the ledger is a reliable coverage list and an unreliable map, and every slice so far has had to correct it before writing a line. |
 | 2026-09-04 | **`LL9` is ported — the hardest routine in Elite, and slice 3b is complete but for `PLUT`.** 1,683 ships compared against the shipped game on the entire canvas, the entire line heap, `INWK`, the two bytes written into `K%` through `INF`, the face flags and every projected vertex. It matched first time apart from the `XX2`/`K3` aliasing §6.37 predicted — and that is settled by a measurement, not an argument: **no blueprint of the thirty-three names a face index that `EE29` or `EE30` does not write**, so a stale flag cannot be read at all. **§6.39 is the finding worth keeping**: the first version of the test passed 396 whole-canvas comparisons while every orientation vector it supplied was exactly zero, because Elite stores them as (lo, hi) pairs with the magnitude in the HIGH byte. It drew 17 wireframes where the corrected data draws 940. A whole-canvas comparison against the shipped game is not evidence that the routine under test did anything. Mutation testing then found three more paths unreached and the placements were extended until they were, with two of the three shown reachable by counting the blueprints first. |

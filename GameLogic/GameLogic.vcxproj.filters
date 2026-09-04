@@ -57,6 +57,9 @@
     <ClInclude Include="LineHeap.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="Stardust.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Market.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -191,6 +194,9 @@
     </ClCompile>
     <ClCompile Include="ShipDraw.cpp">
       <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Stardust.cpp">
+      <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Rng.cpp">
       <Filter>Kernel</Filter>

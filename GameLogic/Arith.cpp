@@ -47,7 +47,7 @@ inline void ShiftAndAddStep(std::uint8_t& _a, std::uint8_t& _low, std::uint8_t _
 
 } // namespace
 
-std::uint8_t MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept
+WideResult MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept
 {
   _work.t = static_cast<std::uint8_t>(_x - 1);
 
@@ -62,24 +62,28 @@ std::uint8_t MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept
     ShiftAndAddStep(a, _work.p, _work.t, carry);
   }
 
-  return a;
+  // The carry is the last `ROR P`'s, and three callers read it before doing anything that would
+  // set it themselves. See the note on WideResult.
+  return WideResult{ a, carry };
 }
 
-std::uint8_t MultiplyUnsigned(MathWorkspace& _work) noexcept
+WideResult MultiplyUnsigned(MathWorkspace& _work) noexcept
 {
   const std::uint8_t multiplier = _work.q;
 
   if (multiplier == 0)
   {
-    // 6502: MU1 -- the zero case returns through a different tail that clears both halves.
+    // 6502: MU1 -- `CLC / STX P / TXA / RTS`, so the zero case clears both halves AND the carry.
+    // The `CLC` is the part a port drops, and it is what stops a zero multiply looking like an
+    // overflow to the caller below it.
     _work.p = 0;
-    return 0;
+    return WideResult{ 0, false };
   }
 
   return MultiplyByX(_work, multiplier);
 }
 
-std::uint8_t MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept
+WideResult MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept
 {
   _work.p = static_cast<std::uint8_t>(_a & 0x7Fu);
   return MultiplyUnsigned(_work);
@@ -141,7 +145,7 @@ std::uint8_t SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept
     return 0;
   }
 
-  return MultiplyByX(_work, _a);
+  return MultiplyByX(_work, _a).high;
 }
 
 std::uint8_t Square(MathWorkspace& _work, std::uint8_t _a) noexcept

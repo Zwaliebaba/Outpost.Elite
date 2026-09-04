@@ -156,6 +156,7 @@
     <ClInclude Include="ShipMove.h" />
     <ClInclude Include="ShipDraw.h" />
     <ClInclude Include="LineHeap.h" />
+    <ClInclude Include="Stardust.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="StateTokens.h" />
     <ClInclude Include="MarketScreen.h" />
@@ -214,6 +215,7 @@
     <ClCompile Include="ShipSlot.cpp" />
     <ClCompile Include="ShipMove.cpp" />
     <ClCompile Include="ShipDraw.cpp" />
+    <ClCompile Include="Stardust.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />
