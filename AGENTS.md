@@ -130,7 +130,7 @@ GameLogicTests.dll        references GameLogic and NeuronCore
 
 [`.clang-format`](.clang-format) is the authority; [`.editorconfig`](.editorconfig) repeats only
 what an editor needs before the first save. The shape: **Allman braces, 2-space indent, 140
-columns, no tabs, `namespace` contents not indented, pointer binds left** (`std::uint8_t* _dst`).
+columns, no tabs, `namespace` contents indented, pointer binds left** (`std::uint8_t* _dst`).
 
 Include order is **not** sorted automatically and is grouped by hand: `pch.h` first, then
 Windows headers, then SDK headers, then project headers, then the standard library.

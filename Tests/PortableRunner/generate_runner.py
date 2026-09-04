@@ -26,8 +26,14 @@ import sys
 from pathlib import Path
 
 # Line-anchored, because a mention of TEST_METHOD inside a comment or a string is not a test and
-# the ones that exist are all indented declarations at the start of a line.
-CLASS_RE = re.compile(r"^TEST_CLASS\((\w+)\)", re.M)
+# the ones that exist are all declarations at the start of a line.
+#
+# BOTH allow leading whitespace, and `TEST_CLASS` did not until the tree moved to
+# `NamespaceIndentation: All`: every suite is inside `namespace GameLogicTests`, so every
+# `TEST_CLASS` gained two spaces and the generator found nothing at all. It said so rather than
+# generating an empty runner, which is the one reason the change cost minutes instead of a
+# green build with no tests in it.
+CLASS_RE = re.compile(r"^\s*TEST_CLASS\((\w+)\)", re.M)
 METHOD_RE = re.compile(r"^\s*TEST_METHOD\((\w+)\)", re.M)
 
 # The namespace the suites declare. Every test file in Tests/GameLogicTests/ opens it, so the
