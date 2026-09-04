@@ -109,6 +109,9 @@ struct RecordingSight final : Elite::SightEffects
   void SetRasterMode(std::uint8_t _mode) override { modes.push_back(_mode); }
   void SetSightColour(std::uint8_t _colour) override { colours.push_back(_colour); }
   void SetSpritesEnabled(std::uint8_t _mask) override { masks.push_back(_mask); }
+  void MaskSprites(std::uint8_t _mask) override { maskedWith.push_back(_mask); }
+
+  std::vector<std::uint8_t> maskedWith;
 };
 
 struct RecordingView final : Elite::ViewEffects
@@ -129,6 +132,8 @@ struct RecordingView final : Elite::ViewEffects
  */
 struct World
 {
+  RecordingView effects; ///< first, because the character printer's bell records into its list
+
   Elite::Canvas canvas;
   Elite::DrawWorkspace draw;
   Elite::MathWorkspace math;
@@ -149,7 +154,29 @@ struct World
    * stream and leave the pixels they produce out of the whole-canvas compare that everything else
    * here is checked by.
    */
-  Elite::TextPrinter glyphs{ canvas, text };
+  /*
+   * `CHPR`'s two seams, wired to the sound list.
+   *
+   * Character 7 rings the bell, which is `JSR BEEP` and so `NOISE` -- and the flight loop prints
+   * a token that contains one, so a comparison that let the bell fall on the floor would count
+   * one sound fewer than the game on every energy warning.
+   */
+  struct Chars final : Elite::TextEffects
+  {
+    std::vector<std::uint8_t>& sounds;
+    std::uint32_t cleared = 0;
+
+    explicit Chars(std::vector<std::uint8_t>& _sounds) noexcept : sounds(_sounds) {}
+
+    void Beep() override { sounds.push_back(SOUND_BEEP_EFFECT); }
+    void ClearScreen() override { ++cleared; }
+  };
+
+  /// 6502: sfxbeep -- what `BEEP` asks `NOISE` for.
+  static constexpr std::uint8_t SOUND_BEEP_EFFECT = 5;
+
+  Chars chars{ effects.sounds };
+  Elite::TextPrinter glyphs{ canvas, text, &chars };
   Elite::CharacterPrinter characters{ glyphs };
   Elite::TokenPrinter printer{ characters };
   Elite::MessageState message;
@@ -163,7 +190,6 @@ struct World
   std::uint8_t trumbles = 0;
 
   RecordingSight sight;
-  RecordingView effects;
 
   std::uint8_t view = 0;
   std::uint8_t spaceView = 0;
@@ -286,7 +312,7 @@ struct Where
   std::uint16_t dtw3, dtw4, dtw5, dtw8;
   std::uint16_t dly, de, las2, qq22, viewByte, qq11, mj, junk, ev, rand;
   std::uint16_t abraxas, caravanserai, dflag, comx, comy, comc, t2;
-  std::uint16_t delta, alp1, alp2, beta, bet1, energy, fsh, ash, qq14;
+  std::uint16_t delta, alp1, alp2, beta, bet1, energy, fsh, ash, qq14, xx0;
   std::uint16_t cabtmp, gntmp, altit, mcnt, flh, ecma, laser, tribble, tribct;
   std::uint16_t tp, mch, messxc, screen;
 
@@ -318,6 +344,7 @@ struct Where
     beta = _oracle.Label("BETA");        bet1 = _oracle.Label("BET1");
     energy = _oracle.Label("ENERGY");    fsh = _oracle.Label("FSH");
     ash = _oracle.Label("ASH");          qq14 = _oracle.Label("QQ14");
+    xx0 = _oracle.Label("XX0");
     cabtmp = _oracle.Label("CABTMP");    gntmp = _oracle.Label("GNTMP");
     altit = _oracle.Label("ALTIT");      mcnt = _oracle.Label("MCNT");
     flh = _oracle.Label("FLH");          ecma = _oracle.Label("ECMA");
@@ -416,6 +443,9 @@ inline void Mirror(const World& _world, Cpu6502& _cpu, const Where& _at)
   _cpu.memory[_at.beta] = _world.flight.beta;
   _cpu.memory[_at.bet1] = _world.flight.bet1;
   _cpu.memory[_at.mcnt] = _world.flight.mainLoopCounter;
+  _cpu.memory[_at.xx0] = static_cast<std::uint8_t>(_world.flight.blueprint & 0xFFu);
+  _cpu.memory[static_cast<std::uint16_t>(_at.xx0 + 1u)] =
+    static_cast<std::uint8_t>(_world.flight.blueprint >> 8);
 
   _cpu.memory[_at.energy] = _world.status.energy;
   _cpu.memory[_at.fsh] = _world.status.forwardShield;
@@ -430,9 +460,9 @@ inline void Mirror(const World& _world, Cpu6502& _cpu, const Where& _at)
 
 /// Compare every byte of state the screen routines can touch.
 inline void CompareState(const Cpu6502& _cpu, const World& _world, const Where& _at,
-                  const std::wstring& _context)
+                  const std::wstring& _context, bool _compareRng = true)
 {
-  auto same = [&](std::uint16_t _address, std::uint8_t _ours, const wchar_t* _name) {
+  auto same = [&](std::uint16_t _address, std::uint8_t _ours, const std::wstring& _name) {
     Assert::AreEqual(_cpu.memory[_address], _ours, (_context + L": " + _name).c_str());
   };
 
@@ -450,6 +480,9 @@ inline void CompareState(const Cpu6502& _cpu, const World& _world, const Where& 
   same(_at.qq11, _world.view, L"QQ11");
   same(_at.ev, _world.explosions, L"EV");
   same(_at.mcnt, _world.flight.mainLoopCounter, L"MCNT");
+  same(_at.xx0, static_cast<std::uint8_t>(_world.flight.blueprint & 0xFFu), L"XX0");
+  same(static_cast<std::uint16_t>(_at.xx0 + 1u),
+       static_cast<std::uint8_t>(_world.flight.blueprint >> 8), L"XX0+1");
   same(_at.abraxas, _world.screen.colourBank, L"abraxas");
   same(_at.caravanserai, _world.screen.bitmapMode, L"caravanserai");
   same(_at.dflag, _world.screen.dashboardShown, L"DFLAG");
@@ -466,7 +499,8 @@ inline void CompareState(const Cpu6502& _cpu, const World& _world, const Where& 
     for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
     {
       same(static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte),
-           _world.bubble.blocks[slot][byte], L"K%");
+           _world.bubble.blocks[slot][byte],
+           L"K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte));
     }
   }
   for (std::size_t index = 0; index < _world.dust.x.size(); ++index)
@@ -475,9 +509,18 @@ inline void CompareState(const Cpu6502& _cpu, const World& _world, const Where& 
     same(static_cast<std::uint16_t>(_at.sy + index), _world.dust.y[index], L"SY");
     same(static_cast<std::uint16_t>(_at.sz + index), _world.dust.z[index], L"SZ");
   }
-  for (std::size_t index = 0; index < 4u; ++index)
+  /*
+   * The generator is compared unless the caller says otherwise, and the one caller that says
+   * otherwise is the flight loop on a frame that seeds an explosion cloud: `LL9`'s `EE55` block
+   * makes four `DORND` calls on a carry that comes out of `LOIN` through `EE51`, and `LOIN` does
+   * not return its flags yet (§6.91).
+   */
+  if (_compareRng)
   {
-    same(static_cast<std::uint16_t>(_at.rand + index), _world.rng.State()[index], L"RAND");
+    for (std::size_t index = 0; index < 4u; ++index)
+    {
+      same(static_cast<std::uint16_t>(_at.rand + index), _world.rng.State()[index], L"RAND");
+    }
   }
 }
 

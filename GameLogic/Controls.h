@@ -203,6 +203,18 @@ public:
   /// bits 2 to 7 are the Trumbles, which is why the two are ORed together here rather than set
   /// independently.
   virtual void SetSpritesEnabled(std::uint8_t _mask) = 0;
+
+  /*
+   * 6502: LDA VIC+&15 / AND #%00000011 / STA VIC+&15 -- and this one READS the register first.
+   *
+   * The flight loop's part 15 switches every sprite off but the lowest two when the cabin gets
+   * hot enough to kill the Trumbles, and it does it as a read-modify-write rather than by
+   * computing the new value: it does not know how many Trumbles are showing. So it cannot be
+   * expressed as `SetSpritesEnabled` -- the port has no copy of the register to AND against --
+   * and it is a second method rather than a getter, because a getter would invite a port to
+   * compute what the hardware is holding.
+   */
+  virtual void MaskSprites(std::uint8_t _mask) = 0;
 };
 
 /*
