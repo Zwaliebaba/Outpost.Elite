@@ -51,14 +51,31 @@ struct MathWorkspace
   std::uint8_t k2[4] = { 0, 0, 0, 0 };
 };
 
-/// 6502: MU11 -- (A P) = P * X, unsigned. Returns the high byte; the low byte is left in P.
-[[nodiscard]] std::uint8_t MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept;
+/*
+ * What the shift-and-add multipliers leave behind, and the carry is not incidental.
+ *
+ * Every one of them ends on a `ROR P` and neither the `DEX / BNE` above it nor the `RTS` below
+ * touches the carry, so what a caller sees is that rotate's carry out -- the low bit of P before
+ * the last shift. Three callers read it in an `ADC` or `SBC` with no `CLC`/`SEC` in between:
+ * `MVEIT` after `MLTU2`, and the stardust after `MLU1` and `MLU2`. The port returned only the
+ * byte until `MVEIT` came out one adrift in a ship's y coordinate (§6.33), and the stardust
+ * needed the same thing from a different multiplier.
+ */
+struct WideResult
+{
+  std::uint8_t high = 0;
+  bool carry = false;
+};
 
-/// 6502: MULTU -- (A P) = P * Q, unsigned. Returns the high byte, low byte left in P.
-[[nodiscard]] std::uint8_t MultiplyUnsigned(MathWorkspace& _work) noexcept;
+/// 6502: MU11 -- (A P) = P * X, unsigned. Returns the high byte and the carry; the low byte is
+/// left in P.
+[[nodiscard]] WideResult MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept;
 
-/// 6502: MLU2 -- (A P) = |A| * Q, unsigned. Returns the high byte, low byte left in P.
-[[nodiscard]] std::uint8_t MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept;
+/// 6502: MULTU -- (A P) = P * Q, unsigned.
+[[nodiscard]] WideResult MultiplyUnsigned(MathWorkspace& _work) noexcept;
+
+/// 6502: MLU2 -- (A P) = |A| * Q, unsigned. The stardust reads its carry.
+[[nodiscard]] WideResult MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept;
 
 /// 6502: MULT1 -- (A P) = Q * A for sign-magnitude operands. Returns the high byte, which
 /// carries the sign; the low byte is left in P.
@@ -98,21 +115,6 @@ void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
 /// remaining three are shifted through, which divides the result down. Used where one operand
 /// is known to be small.
 [[nodiscard]] std::uint8_t MultiplyScaled(MathWorkspace& _work, std::uint8_t _a) noexcept;
-
-/*
- * What `MLTU2` leaves behind, and the carry is not incidental.
- *
- * The routine ends `DEX / BNE MUL7 / RTS`, and neither of those touches the carry -- so what a
- * caller sees is the carry from the final `ROR P`. `MVEIT` reads it two instructions later in an
- * `ADC` with no `CLC` before it, which is how it came to be part of this signature: the port
- * returned only the byte, and twenty iterations of `MVEIT` came out one adrift in the ship's y
- * coordinate.
- */
-struct WideResult
-{
-  std::uint8_t high = 0;
-  bool carry = false;
-};
 
 /// 6502: MLTU2 -- (A P+1 P) = (~A P) * Q, sixteen steps through the complemented multiplier.
 [[nodiscard]] WideResult MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept;

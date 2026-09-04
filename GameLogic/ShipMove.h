@@ -174,7 +174,13 @@ struct FlightState
   std::uint8_t beta = 0;    ///< 6502: BETA -- pitch, signed
   std::uint8_t bet1 = 0;    ///< 6502: BET1 -- its magnitude
   std::uint8_t bet2 = 0;    ///< 6502: BET2 -- its sign
+  std::uint8_t bet2Next = 0;///< 6502: BET2+1 -- flipped, which the stardust uses as ALP2+1 is used
   std::uint8_t delta = 0;   ///< 6502: DELTA -- the player's speed
+
+  /// 6502: DELT4(1 0) -- the speed times four, as sixteen bits. The stardust subtracts it from
+  /// every particle's z on every frame, which is what makes the stars stream past.
+  std::uint8_t delt4 = 0;
+  std::uint8_t delt4Next = 0;
 
   /// 6502: MCNT and XSAV -- the main loop counter and the slot being moved. `MVEIT` uses their
   /// EOR to spread expensive work across iterations, so that `TIDY` runs on one ship every
