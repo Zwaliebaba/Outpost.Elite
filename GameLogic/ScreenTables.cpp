@@ -120,4 +120,9 @@ const std::array<std::uint8_t, 34> SCANNER_COLOUR_TABLE = {
   0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x5A, 0xAA, 0xAA, 0x00, 0xAA,
 };
 
+// 6502: CTWOS -- one aligned multicolour pixel, for the dashboard's bars.
+const std::array<std::uint8_t, 4> DASHBOARD_PIXEL_TABLE = {
+  0xC0, 0x30, 0x0C, 0x03,
+};
+
 } // namespace Elite

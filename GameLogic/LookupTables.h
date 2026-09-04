@@ -90,6 +90,17 @@ extern const std::array<std::uint8_t, 10> MULTICOLOUR_MASK_TABLE;
 // it; it is here because the ledger names it and it is four bytes.
 extern const std::array<std::uint8_t, 4> DASHBOARD_MASK_TABLE;
 
+/*
+ * 6502: CTWOS -- the same four masks again, at a different address, and this is the one the
+ * dashboard reads (slice 3d-b).
+ *
+ * `DIL2` indexes it with a bar position below four, which is what sizes it; the listing carries a
+ * fifth byte past that, a repeat of the first, which nothing can reach. It holds the same values
+ * as `DTWOS` and is extracted separately anyway: two labels at two addresses are two tables, and
+ * one array shared between them would be the port asserting something the game does not (§6.63).
+ */
+extern const std::array<std::uint8_t, 4> DASHBOARD_PIXEL_TABLE;
+
 // 6502: TWFR, TWFL -- a horizontal line's end bytes: TWFR fills from x rightwards to the end of
 // the byte, TWFL fills leftwards from the start of the byte to x. Everything between is 0xFF.
 extern const std::array<std::uint8_t, 8> LINE_RIGHT_MASK_TABLE;

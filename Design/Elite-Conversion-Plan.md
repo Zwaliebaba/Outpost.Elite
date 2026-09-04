@@ -428,6 +428,48 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.63 The §6.12 pass on slice 3d-b, and a routine with four entry points
+
+Nine routines and a table. Four findings, and all four were checked against the ASSEMBLED bytes
+rather than the listing, because two of them are things a listing does not show.
+
+**`DILX` is one routine with FOUR entry points, and three of them are byte arithmetic.** It
+assembles to `4A 4A 4A 4A` — four `LSR A` — with `.DIL` at `DILX+4`, so an entry point is a shift
+count: `JSR DILX` divides the reading by sixteen, `JSR DILX+2` by four, `JSR DIL-1` by two, and
+`JSR DIL` not at all. All four are used. Part 4 calls the first two for the shields, the
+temperatures and the altitude; part 1 calls `DIL-1` for the speed; part 3 calls `DIL` for the
+energy bars. A port that treats `DILX` as one function gets three of its seven callers wrong, and
+gets them wrong by a factor of two or four rather than by a bit — and `DIL-1` is the one that
+would survive review, because it reads like a typo.
+
+**`PZW` hides a branch in a data byte.** It assembles to `... F0 02 8A 2C A9 55`: `BEQ +2`, `TXA`,
+then `2C` — `BIT abs`, whose two operand bytes ARE the `A9 55` (`LDA #RED`) that follows it. So
+falling into it skips the load and returning through the branch performs it. One instruction
+spelled as data, and the two paths differ only in whether `A` ends up holding `X`. The port models
+it as the if/else it is; the note is that a port written from a disassembly would emit a read of
+`$55A9` and be right for the wrong reason.
+
+**`dec27` is an `RTS`.** §6.59 listed it as one of the twelve prerequisites the 3d row was
+missing. It is a label inside `TT26` marking that routine's own `RTS`, and `DIALS` part 3 branches
+to it to return early — the energy bars are redrawn on one pass in four and that is how the other
+three leave. Not a routine, not a port, one line. The same shape as §6.35's `PL2-1`, and the
+second time the ledger has counted a borrowed `RTS` as work.
+
+**And `CTWOS` is not `DTWOS`, but on this build it may as well be.** Four masks the C64 build can
+index — `DIL2` reads `CTWOS,X` with X below four, which is what §6.8 sizes it by — and its first
+four bytes are the four `DTWOS` already carries. Two labels, two addresses, one set of values, so
+they are extracted separately: a port that shared one array would be asserting something about the
+game that the game does not say.
+
+**The open question is where the readings live**, and it is a §6.28 in the making rather than one
+already made. `FSH`, `ASH`, `ENERGY` and `GNTMP` exist in the port inside `DockedShip` — a struct
+named for `DOENTRY`, which RESETS them, rather than for the dashboard, which reads them — and
+`DELTA` is in there AND in `FlightState`. `ALTIT`, `CABTMP`, `ECMA` and `FLH` exist nowhere.
+`XX12` exists as `GeometryWorkspace::xx12`, six bytes of `LL51` dot products, and `DIALS` part 3
+uses the same four zero-page bytes for the energy bars. So 3d-b is where the live flight state has
+to become one thing instead of two, and the answer is a rename plus a deletion rather than a new
+struct — the port should not end this slice with three homes for `DELTA`.
+
 ### 6.62 A routine that ends in the middle of itself
 
 `TAS2` turns three coordinates into a direction: shift `K3`'s three sixteen-bit magnitudes left

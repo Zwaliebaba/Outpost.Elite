@@ -277,7 +277,7 @@ struct Session
   Elite::SystemSeeds selectedSeeds{};
   Elite::CurrentSystem current;
   Elite::MarketState market;
-  Elite::DockedShip ship;
+  Elite::FlightStatus status;
 
   std::uint8_t crosshairX = 0;
   std::uint8_t crosshairY = 0;
@@ -302,7 +302,7 @@ struct Session
 std::string PressKey(Session& _game, std::uint8_t _key)
 {
   const Elite::KeyOutcome outcome =
-    Elite::ActionForKey(_key, _game.dockedFlag, _game.view, _game.ship.hyperspaceCountdown, false);
+    Elite::ActionForKey(_key, _game.dockedFlag, _game.view, _game.status.hyperspaceCountdown, false);
 
   _game.sink.Reset();
 
@@ -310,7 +310,7 @@ std::string PressKey(Session& _game, std::uint8_t _key)
   {
     case Elite::KeyAction::StatusMode:
     {
-      const Elite::ShipCondition condition{ _game.dockedFlag, 0, 0, _game.ship.energy };
+      const Elite::ShipCondition condition{ _game.dockedFlag, 0, 0, _game.status.energy };
       Elite::StatusScreen(_game.trade, _game.commander, condition, _game.crosshairX, _game.crosshairY,
                           _game.selectedSeeds);
       return "status";

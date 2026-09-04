@@ -303,16 +303,17 @@ public:
 
     // ---- the port ----------------------------------------------------------------------------
     RecordingEffects effects;
-    Elite::DockedShip ship;
-    ship.speed = 0x5C;
-    ship.laserTemperature = 0x5C;
-    ship.hyperspaceCountdown = 0x5C;
-    ship.forwardShield = 0x5C;
-    ship.aftShield = 0x5C;
-    ship.energy = 0x5C;
+    Elite::FlightStatus status;
+    Elite::FlightState flight;
+    flight.delta = 0x5C;
+    status.laserTemperature = 0x5C;
+    status.hyperspaceCountdown = 0x5C;
+    status.forwardShield = 0x5C;
+    status.aftShield = 0x5C;
+    status.energy = 0x5C;
     std::uint8_t dockedFlag = 0;
 
-    const Elite::DockingResult result = Elite::DockAtStation(effects, commander, ship, dockedFlag, 0, false);
+    const Elite::DockingResult result = Elite::DockAtStation(effects, commander, status, flight, dockedFlag, 0, false);
 
     Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome),
                      L"this commander earns no briefing");
@@ -337,13 +338,13 @@ public:
     Assert::AreEqual(frames, effects.frames, L"how long the pause is");
     Assert::AreEqual<std::uint8_t>(Elite::DOCKING_PAUSE_FRAMES, frames, L"forty-four vertical syncs");
 
-    Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], ship.speed, L"DELTA");
-    Assert::AreEqual(cpu.memory[oracle.Label("GNTMP")], ship.laserTemperature, L"GNTMP");
+    Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], flight.delta, L"DELTA");
+    Assert::AreEqual(cpu.memory[oracle.Label("GNTMP")], status.laserTemperature, L"GNTMP");
     Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ22") + 1)],
-                     ship.hyperspaceCountdown, L"QQ22+1");
-    Assert::AreEqual(cpu.memory[oracle.Label("FSH")], ship.forwardShield, L"FSH");
-    Assert::AreEqual(cpu.memory[oracle.Label("ASH")], ship.aftShield, L"ASH");
-    Assert::AreEqual(cpu.memory[oracle.Label("ENERGY")], ship.energy, L"ENERGY");
+                     status.hyperspaceCountdown, L"QQ22+1");
+    Assert::AreEqual(cpu.memory[oracle.Label("FSH")], status.forwardShield, L"FSH");
+    Assert::AreEqual(cpu.memory[oracle.Label("ASH")], status.aftShield, L"ASH");
+    Assert::AreEqual(cpu.memory[oracle.Label("ENERGY")], status.energy, L"ENERGY");
 
     // 6502: BAY's own stores, which the JMP tail reaches.
     Assert::AreEqual<std::uint8_t>(0xFF, dockedFlag, L"BAY sets the docked flag");
@@ -366,10 +367,11 @@ public:
     earner.At(Elite::Field::GalaxyNumber) = 0;
     earner.SetCash(0);
 
-    Elite::DockedShip earnerShip;
+    Elite::FlightStatus earnerStatus;
+    Elite::FlightState earnerFlight;
     std::uint8_t earnerDocked = 0;
     const Elite::DockingResult briefing =
-      Elite::DockAtStation(briefed, earner, earnerShip, earnerDocked, 0, false);
+      Elite::DockAtStation(briefed, earner, earnerStatus, earnerFlight, earnerDocked, 0, false);
 
     Assert::AreEqual(static_cast<int>(DockingOutcome::BriefMission1), static_cast<int>(briefing.outcome),
                      L"this commander has earned the Constrictor mission");
@@ -385,7 +387,7 @@ public:
 
     // The state above the dispatch is reset either way -- the shields and the pause are not the
     // mission's business.
-    Assert::AreEqual<std::uint8_t>(0xFF, earnerShip.energy, L"the energy banks are recharged anyway");
+    Assert::AreEqual<std::uint8_t>(0xFF, earnerStatus.energy, L"the energy banks are recharged anyway");
     Assert::AreEqual<std::uint8_t>(Elite::DOCKING_PAUSE_FRAMES, briefed.frames,
                                    L"and the pause happens anyway");
   }
