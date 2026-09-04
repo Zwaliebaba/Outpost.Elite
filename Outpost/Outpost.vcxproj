@@ -140,11 +140,17 @@
     <ClCompile Include="SaveStore.cpp" />
     <ClCompile Include="Presentation.cpp" />
     <ClCompile Include="KeyMap.cpp" />
+    <ClCompile Include="Window.cpp" />
+    <ClCompile Include="CanvasPresenter.cpp" />
+    <ClCompile Include="Shell.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SaveStore.h" />
     <ClInclude Include="Presentation.h" />
     <ClInclude Include="KeyMap.h" />
+    <ClInclude Include="Window.h" />
+    <ClInclude Include="CanvasPresenter.h" />
+    <ClInclude Include="Shell.h" />
   </ItemGroup>
   <!--
     SaveStore implements Elite::CommanderStore, so the executable needs GameLogic. This is the
