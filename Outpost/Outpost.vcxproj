@@ -147,6 +147,7 @@
     <ClCompile Include="Window.cpp" />
     <ClCompile Include="CanvasPresenter.cpp" />
     <ClCompile Include="Shell.cpp" />
+    <ClCompile Include="FlightSession.cpp" />
   </ItemGroup>
   <!--
     The shaders, compiled by the BUILD rather than at run time. FXC writes each one to a C array
@@ -178,6 +179,7 @@
     <ClInclude Include="Window.h" />
     <ClInclude Include="CanvasPresenter.h" />
     <ClInclude Include="Shell.h" />
+    <ClInclude Include="FlightSession.h" />
   </ItemGroup>
   <!--
     SaveStore implements Elite::CommanderStore, so the executable needs GameLogic. This is the
