@@ -428,6 +428,44 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.34 The same name for two different things, and a slice scoped around the wrong one
+
+The §6.12 pass on slice 3b, run before any of it was written, as §6.12 asks. Three corrections,
+and the middle one is a shape the pattern has not taken before.
+
+**`LL5` is already ported.** The 3b row lists it as scope; it is the square root, phase 1 built it
+for `TT111`, and `Arith.cpp` has carried it since. The row over-scopes rather than under-scopes,
+which is the milder failure but still means the slice looks bigger than it is. `LL28` and `LL38`
+are in the same position — named in the pipeline, ported in phase 1.
+
+**The row names the wrong line heap.** It says *"the ship line heap (`LSX2`/`LSY2`)"*, and those
+are two different things:
+
+- The SHIP line heap is per ship, lives in the region below `LS%`, is allocated by `NWSHP` from
+  `SLSP` and is pointed at by `INWK+33/34`. Slice 3a modelled it, because `NWSHP` refuses a ship
+  when it runs out.
+- `LSX2` and `LSY2` are the PLANET AND SUN line heap, with `LSP` as their pointer, written by
+  `WPLS2` and the sun's own drawing. The plan puts those in **3c**, not 3b.
+
+So the row names 3c's heap while describing 3a's, and does not name the one 3b actually uses.
+Nothing was broken by this — it was found by looking — but a slice planned from it would have
+budgeted for the wrong data structure.
+
+This is worth separating from §6.12's usual finding. That one is *"the row was written from what
+a routine is about rather than what it touches"*. This one is **two structures with confusable
+names, and the row picked the wrong one** — which no amount of asking "what does this read?"
+catches, because the answer is a name that exists and is real. What catches it is asking who
+WRITES the thing, which is a different question and took one grep.
+
+**`LL9` jumps to `DOEXP`**, the explosion, which the ledger files under `Explosion.cpp` and the 3b
+row does not mention. A seam rather than a surprise, and now named before it is reached.
+
+And one finding in the other direction, worth recording because it makes the slice cheaper than
+it looks: **`LL9` is almost self-contained.** Its only calls outside itself are `DORND` and
+`FMLTU`, both ported, plus that one jump. The dozen `LL` labels the row lists are its own parts.
+A routine with the reputation of being the hardest thing in Elite turns out to have two external
+dependencies, and both already exist.
+
 ### 6.33 Two defects one call could not have found
 
 `MVEIT` is slice 3a's acceptance criterion and the plan wrote it as *"run `MVEIT` on a slot with
@@ -1472,6 +1510,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **Slice 3b opened with its own §6.12 pass, before any of it was written.** Three corrections to the row (§6.34): `LL5`, `LL28` and `LL38` are already ported, from phase 1; the row names `LSX2`/`LSY2` as "the ship line heap" and they are the PLANET AND SUN heap, which belongs to 3c — the ship heap is the `LS%`/`SLSP` region 3a already modelled; and `LL9` jumps to `DOEXP`, a seam the row does not name. The middle one is a new shape of the pattern: not a row written from what a routine is about, but **two structures with confusable names and the row picking the wrong one**, which asking "what does this read?" cannot catch and asking "who writes this?" catches in one grep. In the other direction: `LL9`'s only external calls are `DORND` and `FMLTU`, both ported, so the hardest routine in Elite has two dependencies and both exist. |
 | 2026-09-04 | **Slice 3a's acceptance criterion met: `MVEIT` runs.** Sixteen ships for twenty iterations each with byte-identical `INWK`, plus the seam counts asserted — `SCAN` and `TACTICS` are stubs but how often each is reached is behaviour, and the sun is never scanned at all. Eight routines were ported ahead of it and every one matched first time; `MVEIT` did not, and §6.33 records the two reasons, both invisible to a single call. `BPL MV43` branches to the SUBTRACTION, so "signs agree" means subtract here and add everywhere else in the file; and the `ADC` after `JSR MLTU2` has no `CLC`, so it runs on the multiplier's exit carry, which the port was discarding. The generalisation is cheap: where a routine's output feeds back into its own input, compare a RUN and not a call. |
 | 2026-09-04 | **Phase 3 opened with the ledger pass §6.12 asked for, and the ship data extracted.** `MVEIT` reads the blueprint's maximum speed and `NWSHP` three more of its bytes, so 3a touches data the row files under 3b — §6.12's pattern for the seventh time, caught by looking this time rather than by failing. The blueprints are extracted as ONE 8,073-byte region indexed by address rather than 33 arrays, because two of them declare more data than fits before the next one begins (the splinter by 24 bytes, the Thargon by 60), those same two have no `_EDGES` label, and the game has no concept of a blueprint's end anyway. §6.32 also records the same mistake made one level up and caught by the new suite: the region was first sized from the `SHIP_` labels, and the pointer table was walked to 39 entries when it is 33 — past the end it returns `E%`'s bytes as addresses, which came out as 1, 24865 and 41120. |
 | 2026-09-03 | **The executable links, and building it found a defect that had been latent since the projects were created.** Every one of the ~1200 lines of Win32 and Direct3D written blind COMPILED first time; the failure was thirty-one `LNK2038: mismatch detected for 'C++/WinRT version'` at the link step, because `Outpost` carries the CppWinRT NuGet package (3.0) and every other project takes the SDK's (2.0). `GameLogicTests.dll` had never noticed, because it and `GameLogic.lib` are both 2.0 — the mismatch needs a binary that links one against the other, and until this slice none existed. §6.30 records it, and the fix: `GameLogic` and `NeuronCore` never used C++/WinRT at all, they inherited it from the shared precompiled header, so `NEURON_NO_CPPWINRT` takes it back out and `Outpost/pch.h` is the one place that keeps it. |
