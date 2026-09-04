@@ -428,6 +428,68 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.68 Three uncleared adds in one routine, and only two of them matter
+
+`LASLI` picks where the laser beams converge, and it does it in nine instructions with three
+`ADC`s and no `CLC` anywhere:
+
+```
+ JSR DORND / AND #7 / ADC #Y-4 / STA LASY
+ JSR DORND / AND #7 / ADC #X-4 / STA LASX
+ LDA GNTMP / ADC #8 / STA GNTMP
+```
+
+`AND` does not touch the carry, so the first `ADC` adds `DORND`'s exit carry, the second adds the
+second `DORND`'s, and the third adds whatever the second `ADC` produced. §6.65's split says to ask
+of each one whether it is constant, and here the answer differs within a single routine.
+
+**The two coordinates are data-dependent.** The generator decides the carry, so the convergence
+point spans NINE rows and nine columns where `AND #7` alone would give eight. That is how the
+sweep proves it -- count the distinct values, and a ninth can only have come from a carry in.
+
+**The third cannot be set.** `AND #7` plus 124 plus at most one is 132, which does not carry out
+of a byte, so `LDA GNTMP / ADC #8` always adds exactly eight and a shot costs exactly eight heat.
+
+The port's first draft said all three were data-dependent and the comment said the heat was "eight
+or nine depending on where the beam landed". The test asserted that, and **failed** -- the
+coverage counter caught the port's own prose rather than its arithmetic, which is a use for one
+that had not come up before. Every byte the routine writes already matched the oracle; what was
+wrong was the explanation, and only a claim stated as an assertion could have been.
+
+**`ABORT2` has a register side effect surviving a `JSR`.** `STX MSTG / LDX NOMSL / JSR MSBAR /
+STY MSAR` -- and Y at that last store is the ZERO `MSBAR` ended on, not the colour the caller
+passed in. So every call clears "the missile is seeking a lock" whatever colour it sets the light
+to. Slice 3d-b's `MSBAR` test asserted the `LDY #0` because it was there; this is the caller that
+turns that assertion into a requirement.
+
+**And `MESS`'s `DTW4` bit 6 is unobservable for every input the game gives it.** Bit 6 suppresses
+the flush a form feed would cause, and dropping it survives the sweep. That is a measurement and
+not a shrug: only recursive tokens 4, 65, 95, 126 and 132 contain a form feed, and the six tokens
+the game sends `MESS` are 0, 40, 100, 101, 116 and 120. A caller that sent one of the five would
+tell the two apart, and the game has none.
+
+### 6.67 A function named for one entry point that implemented another
+
+`CLYNS` clears the bottom three text rows. It opens `LDA #0 / STA DLY / STA de` and then falls
+into `CLYNS2`, which does the clearing. The port's `ClearMessageRows` is `CLYNS2`'s body under
+`CLYNS`'s name, and the header said why: "DLY and `de` are the message-delay counters and are
+flight state, so they are not here."
+
+That was true when it was written and it was still the wrong call. **`CLYNS2` has no callers.** It
+is a label inside `clyns.asm` and nothing in the library -- any version, not just this one --
+branches to it. So the two entry points are not a choice a caller makes; every caller wants the
+stores, and a routine that omits them is not either entry point.
+
+It went unnoticed because the omitted bytes had nowhere to go. Slice 3d-c gives them one, and
+`MESS` is what needs them: it calls `CLYNS` and then tests `DLY`, and a stale `DLY` sends it
+through `me1` to erase a message that is no longer there. So the defect had a caller waiting two
+slices away.
+
+**The shape to watch for: a routine ported from a label that is not its entry point.** It is not
+the same mistake as §6.62's fall-through, which is a routine that ends later than it looks; this
+is one that starts later than it looks, and the tell is the same -- a label in the middle of an
+instruction stream is not a boundary just because it has a name.
+
 ### 6.66 The §6.12 pass on slice 3d-c, and a `BIT` that eats the wrong instruction
 
 Six routines -- `ABORT`, `ABORT2`, `me1`, `MESS`, `mes9`, `LASLI` -- and three fall-through chains
