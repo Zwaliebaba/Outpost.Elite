@@ -697,7 +697,7 @@ std::uint8_t DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
   return _work.r;
 }
 
-void SquareRoot(MathWorkspace& _work) noexcept
+bool SquareRoot(MathWorkspace& _work) noexcept
 {
   /*
    * 6502: LL5. The radicand is (R Q); Y and X hold the running remainder, S the bits still to be
@@ -711,6 +711,7 @@ void SquareRoot(MathWorkspace& _work) noexcept
   std::uint8_t y = _work.r;
   std::uint8_t s = _work.q;
   std::uint8_t x = 0;
+  bool exitCarry = false;
   _work.q = 0;
 
   for (int round = 0; round < 8; ++round)
@@ -747,9 +748,20 @@ void SquareRoot(MathWorkspace& _work) noexcept
       s = shifted.value;
       const ShiftResult lowHalf = RotateLeftValue(y, shifted.carry);
       y = lowHalf.value;
-      x = RotateLeftValue(x, lowHalf.carry).value;
+      const ShiftResult highHalf = RotateLeftValue(x, lowHalf.carry);
+      x = highHalf.value;
+      exitCarry = highHalf.carry;
     }
   }
+
+  /*
+   * 6502: the last `ROL A` before `DEC T / BNE LL6 / RTS`, and `DEC` does not touch the carry.
+   *
+   * `SUN` reads it: `JSR LL5 / LDY Y1 / JSR DORND`, and the generator takes the carry as an
+   * operand -- so the sun's ragged edge is seeded by the last bit to fall out of the square root
+   * (§6.55). The tenth dropped flag.
+   */
+  return exitCarry;
 }
 
 void MultiplySignedToK(MathWorkspace& _work, std::uint8_t _a) noexcept

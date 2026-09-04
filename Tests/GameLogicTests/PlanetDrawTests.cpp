@@ -801,18 +801,6 @@ public:
 };
 
 
-namespace
-{
-/// The one seam: `PLANET` reaches the sun with a `JMP`, and the sun is the next unit.
-class CountingSun : public Elite::PlanetDrawEffects
-{
-public:
-  std::uint32_t suns = 0;
-  void DrawSun() override { ++suns; }
-};
-} // namespace
-
-
 TEST_CLASS(ThePlanet)
 {
 public:
@@ -919,11 +907,16 @@ public:
           Elite::ClipState clip;
           Elite::Projection centre;
           Elite::ShipBlock ship{};
-          CountingSun effects;
+          Elite::Rng rng;
 
-          // 6502: the sun is the next unit, so it is trapped on one side and counted on the
-          // other -- the same seam `LL9` has for the explosion.
-          cpu.AddTrap(at.sun);
+          // The sun draws for real now, and its ragged edge comes from `DORND` -- so the
+          // generator is part of the comparison, seeded identically on both sides.
+          const std::array<std::uint8_t, 4> seed = { 0x49, 0x2B, 0x71, 0xC3 };
+          for (std::size_t byte = 0; byte < 4u; ++byte)
+          {
+            cpu.memory[static_cast<std::uint16_t>(oracle.Label("RAND") + byte)] = seed[byte];
+          }
+          rng.SetState(seed);
 
           SeedBallHeap(cpu, state, at, 0x8D14E703u, 1);
           SeedSunHeap(cpu, state, at, 0x2C6A91B7u);
@@ -967,8 +960,8 @@ public:
           const Elite::Testing::RunResult run = cpu.CallSubroutine(planet, 20'000'000);
           Assert::IsTrue(run.completed, L"PLANET returned");
 
-          Elite::DrawPlanetOrSun(canvas, state, draw, geometry, math, clip, ship, centre, type,
-                                 effects);
+          Elite::DrawPlanetOrSun(canvas, state, draw, geometry, math, clip, rng, ship, centre,
+                                 type);
 
           const std::wstring label = Widen("PLANET type=" + std::to_string(type) + " pltog="
                                            + std::to_string(detail) + " ")
@@ -1008,9 +1001,13 @@ public:
                              (label + L": XX16+" + std::to_wstring(byte)).c_str());
           }
 
-          Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.trapHits.size()),
-                                          effects.suns, (label + L": the sun seam").c_str());
-          suns += effects.suns;
+          for (std::size_t byte = 0; byte < 4u; ++byte)
+          {
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("RAND") + byte)],
+                             rng.State()[byte],
+                             (label + L": RAND+" + std::to_wstring(byte)).c_str());
+          }
+          suns += (type == 129u) ? 1u : 0u;
           meridians += (math.tgt == 31u) ? 1u : 0u;
           craters += (math.tgt == 64u) ? 1u : 0u;
           plain += (math.tgt == 200u) ? 1u : 0u;
@@ -1033,6 +1030,178 @@ public:
     Assert::IsTrue(meridians > 0u, L"some planets were drawn with meridians");
     Assert::IsTrue(craters > 0u, L"and some with a crater");
     Assert::IsTrue(plain > 0u, L"and some with neither");
+  }
+};
+
+
+TEST_CLASS(TheSun)
+{
+public:
+  /*
+   * 6502: SUN, run as the main loop runs it -- several frames in a row with the sun moving.
+   *
+   * One call exercises only `PLF11`, the path for a row that had nothing on it. The routine's
+   * whole design is the other path: for each row it holds LAST frame's half-width and THIS
+   * frame's, clips both -- against last frame's centre and this frame's respectively -- and draws
+   * only the two slivers that differ. A sun drifting across the screen therefore costs two short
+   * lines per row instead of two long ones, and that is only visible over consecutive frames
+   * (§6.33).
+   *
+   * `SUNX` is the old centre and `K3` the new one, and the routine ends by copying one into the
+   * other -- so the comparison has to include it or the next frame's arithmetic is untested.
+   */
+  TEST_METHOD(TheSunMatchesSUN)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const HeapLabels at(oracle);
+    const std::uint16_t sun = oracle.Label("SUN");
+    const std::uint16_t rand = oracle.Label("RAND");
+
+    struct Drift
+    {
+      std::uint16_t x, y;
+      std::int8_t dx, dy;
+      std::uint8_t radius, grow;
+      const wchar_t* what;
+    };
+
+    const std::vector<Drift> DRIFTS = {
+      { 128, 72, 0, 0, 40, 0, L"still" },
+      { 128, 72, 9, 0, 40, 0, L"drifting across" },
+      { 128, 72, 0, 7, 40, 0, L"drifting down" },
+      { 128, 72, 5, 5, 20, 6, L"coming closer" },
+      { 128, 72, -6, -3, 100, 0, L"large and drifting back" },
+      { 30, 20, 4, 4, 96, 0, L"off the top left corner" },
+      { 250, 130, -4, 2, 96, 0, L"off the bottom right" },
+      { 128, 72, 0, 0, 8, 0, L"a smooth speck" },
+      { 128, 72, 0, 0, 200, 0, L"filling the screen" },
+
+      /*
+       * `SUN`'s first thirty instructions are all about WHERE the centre is relative to the
+       * screen, and a table of suns comfortably on it reaches none of them: the negation for a
+       * centre below the bottom row, the clamp for one further than a byte above the top, the
+       * exactly-on-the-bottom-row case, and the saturation when a half-width plus its ragged
+       * bits passes 255. Six more drifts, one per branch (§6.56).
+       */
+      { 128, 200, 0, 0, 96, 0, L"centred below the screen" },
+      { 128, 0xFF00u, 0, 0, 96, 0, L"centred far above it" },
+      { 128, 143, 0, 0, 60, 0, L"centred exactly on the bottom row" },
+      { 128, 72, 0, 0, 255, 0, L"wide enough to saturate" },
+      { 0xFF80u, 72, 6, 0, 96, 0, L"off the left edge entirely" },
+      { 128, 30, 3, 3, 30, 0, L"its bottom edge on row zero" },
+
+      /*
+       * And five more, each worked out from a branch rather than guessed at. `CHKON` has to
+       * accept every one of them, which is what makes them awkward: a centre off the screen is
+       * only reachable when the radius is large enough for the edge to come back on.
+       */
+      { 128, 0, 0, 0, 0, 0, L"a radius of nothing on row zero" },
+      { 128, 0xFF8Fu, 0, 0, 120, 0, L"centred a whole byte above the screen" },
+      { 20, 72, 100, 0, 30, 0, L"jumping clear of where it was" },
+      { 0x0110u, 72, 0, 0, 60, 0, L"centred off the right edge, its own edge on screen" },
+      { 128, 110, 5, -8, 25, 0, L"climbing, so its old rows are above the new ones" },
+    };
+
+    std::uint32_t compared = 0;
+    std::uint32_t marked = 0;
+    std::uint32_t redrawn = 0;
+
+    for (const Drift& drift : DRIFTS)
+    {
+      Cpu6502 cpu = oracle.Fresh();
+      Elite::Canvas canvas;
+      Elite::PlanetSunState state;
+      Elite::DrawWorkspace draw;
+      Elite::MathWorkspace math;
+      Elite::Projection centre;
+      Elite::Rng rng;
+
+      SeedSunHeap(cpu, state, at, 0x2C6A91B7u);
+      SeedBallHeap(cpu, state, at, 0x8D14E703u, 1);
+      state.sun[0] = 0xFF;
+      cpu.memory[at.lso] = 0xFF;
+
+      const std::array<std::uint8_t, 4> seed = { 0x71, 0xC3, 0x49, 0x2B };
+      for (std::size_t byte = 0; byte < 4u; ++byte)
+      {
+        cpu.memory[static_cast<std::uint16_t>(rand + byte)] = seed[byte];
+      }
+      rng.SetState(seed);
+
+      state.sunX = static_cast<std::uint8_t>(drift.x);
+      state.sunXNext = static_cast<std::uint8_t>(drift.x >> 8);
+      cpu.memory[at.sunx] = state.sunX;
+      cpu.memory[static_cast<std::uint16_t>(at.sunx + 1)] = state.sunXNext;
+
+      state.yx2M1 = 143;
+      cpu.memory[at.yx2m1] = 143;
+
+      std::uint16_t x = drift.x;
+      std::uint16_t y = drift.y;
+      std::uint8_t radius = drift.radius;
+
+      // Four frames, because the second is the first one this routine can do its real work on.
+      for (int frame = 0; frame < 4; ++frame)
+      {
+        centre.x = static_cast<std::uint8_t>(x);
+        centre.x1 = static_cast<std::uint8_t>(x >> 8);
+        centre.y = static_cast<std::uint8_t>(y);
+        centre.y1 = static_cast<std::uint8_t>(y >> 8);
+        math.k[0] = radius;
+
+        cpu.memory[at.k3] = centre.x;
+        cpu.memory[static_cast<std::uint16_t>(at.k3 + 1)] = centre.x1;
+        cpu.memory[at.k4] = centre.y;
+        cpu.memory[static_cast<std::uint16_t>(at.k4 + 1)] = centre.y1;
+        cpu.memory[at.k] = radius;
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(sun, 20'000'000);
+        Assert::IsTrue(run.completed, L"SUN returned");
+
+        Elite::DrawSun(canvas, state, draw, math, rng, centre);
+
+        const std::wstring label = std::wstring(drift.what) + Widen(" frame="
+                                                                   + std::to_string(frame));
+        marked += CompareScreens(cpu, at.screen, canvas, label);
+        CompareHeaps(cpu, state, at, label);
+
+        Assert::AreEqual(cpu.memory[at.sunx], state.sunX, (label + L": SUNX").c_str());
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.sunx + 1)], state.sunXNext,
+                         (label + L": SUNX+1").c_str());
+        Assert::AreEqual(cpu.memory[at.cnt], math.cnt, (label + L": CNT").c_str());
+        Assert::AreEqual(cpu.memory[at.tgt], math.tgt, (label + L": TGT").c_str());
+        for (std::size_t byte = 0; byte < 4u; ++byte)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
+                           (label + L": RAND+" + std::to_wstring(byte)).c_str());
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k2 + byte)], math.k2[byte],
+                           (label + L": K2+" + std::to_wstring(byte)).c_str());
+        }
+
+        // A frame that found something already on the heap is one that took the difference path.
+        if (frame > 0)
+        {
+          ++redrawn;
+        }
+
+        x = static_cast<std::uint16_t>(x + drift.dx);
+        y = static_cast<std::uint16_t>(y + drift.dy);
+        radius = static_cast<std::uint8_t>(radius + drift.grow);
+        ++compared;
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(20u * 4u, compared, L"every drift, four frames each");
+    Assert::IsTrue(marked > 0u, L"the sun was actually drawn");
+    Assert::IsTrue(redrawn > 0u, L"and redrawn over itself");
+    Logger::WriteMessage(("SUN: " + std::to_string(compared) + " frames, "
+                          + std::to_string(marked) + " marked bytes")
+                           .c_str());
   }
 };
 
