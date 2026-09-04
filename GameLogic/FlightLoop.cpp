@@ -1369,11 +1369,13 @@ LoopOutcome EndFlightFrame(FlightLoop& _loop) noexcept
       }
 
       // 6502: INX / LDY #9 / JSR MAS1 / BNE MA23S, and twice more at (3, 11) and (6, 13).
-      const bool near = DoubleAndAddCoordinate(screen.work, screen.math, 9u, 0u) == 0u
-                        && DoubleAndAddCoordinate(screen.work, screen.math, 11u, 3u) == 0u
-                        && DoubleAndAddCoordinate(screen.work, screen.math, 13u, 6u) == 0u;
+      // The `&&`s short-circuit and have to: each `MAS1` DOUBLES the coordinate it reads, in
+      // place, so a second call after a non-zero answer would move the planet twice.
+      const bool ahead = DoubleAndAddCoordinate(screen.work, screen.math, 9u, 0u) == 0u
+                         && DoubleAndAddCoordinate(screen.work, screen.math, 11u, 3u) == 0u
+                         && DoubleAndAddCoordinate(screen.work, screen.math, 13u, 6u) == 0u;
 
-      if (near && WithinRange(screen.work, STATION_SPAWN_RANGE))
+      if (ahead && WithinRange(screen.work, STATION_SPAWN_RANGE))
       {
         EraseSun(screen.canvas, screen.heaps, screen.math, screen.draw); // 6502: JSR WPLS
         _loop.effects.SpawnStation();                                    // 6502: JSR NWSPS
