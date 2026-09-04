@@ -99,6 +99,12 @@ jobs:
       - name: Design tables still render everything they hold
         run: python tools/check_docs.py
 
+      # A tool that stops on an unknown symbol is only useful if it never meets one, and four of
+      # the build's own files used to stop this one -- each looking like a missing SYMBOLS entry,
+      # which invites somebody to invent a value for it (§6.75).
+      - name: The source resolver can read every file the build assembles
+        run: python tools/c64_source.py --check-all
+
       - name: Coverage ledger
         run: python tools/inventory.py
 
