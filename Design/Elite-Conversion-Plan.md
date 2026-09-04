@@ -428,6 +428,76 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.37 The §6.12 pass on `LL9`, and four workspace sizes the layout settles exactly
+
+Run before `LL9` is written, as §6.12 asks. `LL9` is twelve parts, and two of them are already
+built — part 1's `EE51` and the whole of part 12 — so what is left is parts 2 to 11 with `LL51`,
+`LL61`, `LL62`, `LL145`'s four parts, `LL118`, `LL120`, `LL123` and `LL129`.
+
+**What it reaches outside itself, completely.** Twelve labels: `DORND`, `FMLTU`, `LL28`, `LL30`
+and `LL38` (all ported in phase 1 or 1d), `SHPPT` and `LL30` (built this sitting), `LL145` and
+`LL147`, `LL61` and `LL62` (this slice), and `PLANET` and `DOEXP` — two tail jumps into 3c and
+the explosion, which the ledger already files elsewhere. So the hardest routine in Elite has
+exactly two dependencies that are neither its own parts nor already built, and both are in its own
+slice. §6.34 said this from a smaller sample and it holds up.
+
+**A caller list built from `JSR` and `JMP` alone is wrong.** The first version of that analysis
+reported `LL62` as having no callers anywhere in the C64 build, which would have made it dead code
+and a candidate for a *Drop* row. It is reached by `BMI LL62` from part 8. A 6502 routine's callers
+are its branches as much as its jumps, and a two-byte relative branch into another routine is
+normal here rather than exotic — the same source has `BCS PL2-1`, `BMI DV9` and `BEQ LL41`. Any
+scoping grep in this repository has to include the eight branch mnemonics or it will under-scope.
+
+**`LL51` is not arithmetic, and not movement.** The ledger has it beside `dvid3b2` in row 98,
+deferred to 3a because it reads `XX15` and `XX16`. Those exist now, and they exist *as part of
+`LL9`* — `LL51` is called from parts 5 and 6 and from nowhere else in the game. It goes to
+`ShipDraw.cpp` with them. That is the same correction §6.35 made to `DVID3B2` one row earlier, and
+it is the second time one row's deferral reason ("it reads a workspace that does not exist yet")
+survived into a home that the reason never justified.
+
+**`LL147` is `LL145`'s other entry point**, in the same source file, and `LL9` calls one from part 9
+and the other from part 10. The row covers the file, so coverage is fine and the *behaviour* is
+two routines; and `LL145` has a second caller outside this slice entirely — `BLINE`, the planet's
+ball line, which is 3c. 3b builds it, 3c uses it, and 3c's row should not schedule it again.
+
+**Four workspace sizes, each confirmed three ways.** §6.8 says size a table from what indexes it.
+Here the zero-page layout agrees exactly, which is worth recording because it is the first time
+all three measurements have lined up without argument:
+
+| Workspace | Indexed by | Bytes | Next label |
+|---|---|---|---|
+| `XX2` (face visibility) | a NIBBLE, and the largest face count of the 33 blueprints is 15 | 16 | `XX16` at 69, and `XX2` is at 53 |
+| `XX16` (scaled orientation) | three vectors of six | 18 | `XX0` at 87, and `XX16` is at 69 |
+| `XX15` (the geometry vector) | six, as three sign-magnitude pairs | 6 | `XX12` at 113, and `XX15` is at 107 |
+| `XX12` (the dot products) | three results of two bytes | 6 | `K` at 119, and `XX12` is at 113 |
+
+`XX3`, the projected-vertex heap, is the one that does not resolve so neatly: it is at **256**,
+which is the stack page, and it is indexed by a whole byte out of the edge data with offsets up to
+`+3`. So 259 bytes are reachable and the top of what it can address is where the 6502's own stack
+is living. The port has no stack there and the game never fills more than 148 bytes of it (37
+vertices, the Anaconda), but the size is a decision to take when it is written rather than one the
+layout hands over.
+
+**And two names that really are the same bytes.** `XX2` spans 53 to 68; `K3` is 53 and 54, `K4` is
+67 and 68. The face visibility flags sit exactly on top of the projected screen position. They are
+never live together — `SHPPT` is a `JMP` out of part 2, long before `EE30` fills `XX2` — but this
+is §6.34 inverted: there, two names that looked like one thing were two, and here two names that
+look like two things are one. A port that has separated them (this one has) must not then assume
+they are independent; where the original relies on the overlap, the port has to make the copy
+explicit and say why.
+
+**One decision left open, deliberately.** `XX15` is six bytes to the geometry and four to the line
+drawing, and they are the same six: `X1`, `Y1`, `X2`, `Y2` are `XX15` to `XX15+3`. `LL9` uses it
+both ways within one call — part 8 stores a screen coordinate into `XX15(1 0)`, part 10 loads a
+vertex pair into all six and `LL147` clips them back down to four. So `DrawWorkspace` and the
+geometry vector are one workspace, and the port currently has only the first four bytes of it. The
+choice is between adding two bytes and letting the geometry address `DrawWorkspace` as six, or
+keeping two structures and copying between them at every vertex. The first is what the original
+does; the second is what the port's existing field names make easy, and it puts a copy in the
+hottest loop in the game where a divergence could hide. The recommendation is the first, and the
+cost is that `x1`/`y1`/`x2`/`y2` stop being plain fields — which is a rename across `Lines.cpp`,
+`Charts.cpp` and their suites, and belongs in its own commit before `LL9` rather than inside it.
+
 ### 6.36 A test that agreed with the game on every case and exercised one branch
 
 The first `SHPPT` suite ran twelve ship positions through the shipped routine and through the
