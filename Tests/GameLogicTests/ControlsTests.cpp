@@ -442,7 +442,7 @@ public:
    * the C64 banks between the chip and the RAM behind it, and the oracle's memory is flat, so
    * `STA VIC+&27` lands on `SHIPS.bin` byte &27 -- which is inside the blueprint pointer table.
    * That is why this uses a fresh image per case rather than one for the sweep: a run that wrote
-   * a register would corrupt the blueprints for every case after it (§6.75).
+   * a register would corrupt the blueprints for every case after it (§6.76).
    *
    * It also means the two register writes can be READ BACK, which is what makes them comparable
    * at all. The port puts them behind a seam, the oracle catches them as memory, and the two are
