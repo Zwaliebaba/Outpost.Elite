@@ -428,6 +428,37 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.41 A ✅ is one mark for a whole row, and one of them was not true
+
+Scoping 3c turned up a routine the ledger says is ported and that does not exist. `PIX1` sits in a
+row marked ✅ — *"`hloin`, `pixel`, `pixel2`, `pix1`, `cpix4`, `cpix2-cpixk` … Ported 2026-09-03
+(slice 1d-a)"* — and there is no `PIX1` anywhere in `GameLogic/`. The row's own notes give the
+test for each of the other five and none for it, which is the tell.
+
+It is not a hard routine: `JSR ADD / STA YY+1 / TXA / STA SYL,Y`, falling into `PIXEL2`. What it
+needs is `SYL`, the stardust's y fractions, which did not exist in slice 1d-a — so it was quietly
+skipped, and nothing noticed, because **`tools/inventory.py` reconciles include FILES against rows
+and the ✅ is a human claim about all of a row's labels at once.** A row can carry six labels and
+five ports and still pass every check in the repository.
+
+Found by asking a different question: for every label that has its own include file and sits in a
+✅ row, does anything in `GameLogic/` mention it? That turns up thirteen, of which most are
+artefacts — the `_part_N_of_M` names, extracted data, `qw` (two instructions inside `TT27`, which
+is ported), and `mls1`, whose row already says honestly that only its `MULTS` body was done.
+`PIX1` is the one confirmed gap, and it matters because `STARS1`, `STARS2` and `STARS6` all call
+it.
+
+**Four are unresolved and are recorded rather than claimed either way**: `setxc`, `setyc`,
+`setxc-doxc`, `setyc-doyc` and `tnpr1` each have their own include file, sit in a ✅ row, and have
+no marker. Each is two or three instructions and each is plausibly folded into a neighbour, which
+is legitimate — but "plausibly" is what this project's method exists to avoid, and confirming them
+means reading five call sites rather than guessing. That is a job of its own.
+
+The tooling question this raises is the same shape as the one already open on `tools/inventory.py`
+— it matches only `//\s*6502:` line comments and misses 292 block-comment markers. Both are
+judgements about what the ledger COUNTS rather than bugs, and both belong in a change of their own
+rather than in the middle of a slice.
+
 ### 6.40 The §6.12 pass on slice 3c: twelve prerequisites, eleven unnamed
 
 Run before any of 3c is written. The slice is the planet, the sun and the stardust — thirty-six
@@ -1843,7 +1874,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
-| 2026-09-04 | **Slice 3c opened with its §6.12 pass, before any of it was written.** Its complete external surface is thirty-six labels; twenty-four are ported, five belong to other slices, and **twelve are prerequisites that do not exist and the row names one of them**. Seven come from row 94 — `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41`, `DV42`, which `STARS1`, `STARS2` and `STARS6` multiply and divide through — and all seven were deferred out of phase 1 with the same sentence about state that did not exist yet. That state arrived with 3a. **A deferral reason is not a schedule**, and nothing put them back on one; it is the same shape as the six homes filed by adjacency, one level up. The other five are `HLOIN2` (row 116, which `SUN` and `WPLS` draw through), `ZINF` (row 44, which `SOLAR` clears a block with) and `BLINE`/`CIRCLE`/`CIRCLE2` (row 117). The useful half: the closure stops there — what those twelve reach is either in 3c's row already or ported — so the slice is thirteen routines wider than its row and not one routine deeper. |
+| 2026-09-04 | **Slice 3c opened with its §6.12 pass, before any of it was written.** Its complete external surface is thirty-six labels; twenty-four are ported, five belong to other slices, and **twelve are prerequisites that do not exist and the row names one of them**. Seven come from row 94 — `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41`, `DV42`, which `STARS1`, `STARS2` and `STARS6` multiply and divide through — and all seven were deferred out of phase 1 with the same sentence about state that did not exist yet. That state arrived with 3a. **A deferral reason is not a schedule**, and nothing put them back on one; it is the same shape as the six homes filed by adjacency, one level up. The other five are `HLOIN2` (row 116, which `SUN` and `WPLS` draw through), `ZINF` (row 44, which `SOLAR` clears a block with) and `BLINE`/`CIRCLE`/`CIRCLE2` (row 117). The useful half: the closure stops there — what those twelve reach is either in 3c's row already or ported — so the slice is thirteen routines wider than its row and not one routine deeper. **And the pass found a ✅ that was not true** (§6.41): `PIX1` sits in a row marked ported and does not exist in `GameLogic/`. It needs `SYL`, which did not exist in slice 1d-a, so it was skipped — and nothing noticed, because `tools/inventory.py` reconciles include files against rows and the ✅ is one mark for all of a row's labels. `STARS1`, `STARS2` and `STARS6` all call it. Four more labels with their own include files sit in ✅ rows with no marker — `setxc`, `setyc` and their `doxc`/`doyc` companions, and `tnpr1` — and are recorded as unconfirmed rather than claimed either way. |
 | 2026-09-04 | **Slice 3b is complete.** `PLUT` was the last of it, and it goes to `ShipMove.cpp` rather than to the drawing where the ledger files it: it is a transform of `INWK` in the same family as `MVS4` and `MVS5`, the source's own category for it is Flight, and its caller is the main flight loop. That is the **sixth** home this ledger got wrong, all for the same reason — a routine filed by what it sits NEXT TO in the source rather than by what it does. `DVID3B2`, `PLS6`, `PL2`, `LL51`, `LL61` and now `PLUT`. Worth saying plainly for phase 4's planning: the ledger is a reliable coverage list and an unreliable map, and every slice so far has had to correct it before writing a line. |
 | 2026-09-04 | **`LL9` is ported — the hardest routine in Elite, and slice 3b is complete but for `PLUT`.** 1,683 ships compared against the shipped game on the entire canvas, the entire line heap, `INWK`, the two bytes written into `K%` through `INF`, the face flags and every projected vertex. It matched first time apart from the `XX2`/`K3` aliasing §6.37 predicted — and that is settled by a measurement, not an argument: **no blueprint of the thirty-three names a face index that `EE29` or `EE30` does not write**, so a stale flag cannot be read at all. **§6.39 is the finding worth keeping**: the first version of the test passed 396 whole-canvas comparisons while every orientation vector it supplied was exactly zero, because Elite stores them as (lo, hi) pairs with the magnitude in the HIGH byte. It drew 17 wireframes where the corrected data draws 940. A whole-canvas comparison against the shipped game is not evidence that the routine under test did anything. Mutation testing then found three more paths unreached and the placements were extended until they were, with two of the three shown reachable by counting the blueprints first. |
 | 2026-09-04 | **The line clipper, and `LL51`** — `LL145`/`LL147`, `LL118`, `LL120`, `LL123`, `LL129` and the dot products `LL9`'s geometry runs on. 32,768 comparisons in three suites; one defect, in `LL122`, whose entry shift sits outside its loop so a multiplier of zero still gets two shifts (§6.38). Two ledger findings with it. **`LL145` reads `dontclip`**, which `TT23` sets to 199 so the short-range chart can use the whole screen — §6.12's pattern pointing OUTWARD for the first time, at a slice-2 routine that is already ported and does not write it yet. And **`XX13`'s documented values are the BBC's**: 0, 95 and 191 in the header, 0, 143 and 71 in this build, because `Y` is 72 rather than 96. The mechanism survives — bit 7 is set in 143 as it is in 191 — so a port written from the header would branch correctly and clamp to the wrong row. The upstream prose is the authority for what a value means; the resolved source is the authority for the value. |
