@@ -551,6 +551,30 @@ public:
       { "energy on a bank boundary", 10, 0, 0, 0, 0, 64, 100, 100, 20, 10, 10, 10, 0 },
       { "energy just under one", 10, 0, 0, 0, 0, 63, 100, 100, 20, 10, 10, 10, 0 },
       { "altitude at its threshold", 10, 0, 0, 0, 0, 100, 100, 100, 20, 10, 10, 240, 0 },
+
+      /*
+       * The threshold boundaries, and each is one step either side rather than near it, because
+       * `DIL` compares the SHIFTED reading and the shift is different for every dial. A mutation
+       * that moved `T1` from 14 to 13 survived a table without these: the speed bar shifts once,
+       * so only a DELTA of 26 or 27 tells the two apart.
+       *
+       * AND THE `T1` ASSERTION BELOW DOES NOT COVER THIS, which is the part worth remembering.
+       * It looked as though it would -- part 1 stores 14 and the test compares the byte -- but
+       * `ADD` opens `STA T1`, so part 2's two calls overwrite it before `DIALS` returns. An
+       * exit-state comparison is not a substitute for a case that exercises the branch, because
+       * something later in the same routine can overwrite the state you were relying on.
+       *
+       * The altitude is the exception and the last case says so: `ALTIT` is shifted four times,
+       * so the value can never reach 240 and the threshold has no drawable effect at all. What
+       * catches a change to it is the stored `T1`, which nothing overwrites afterwards.
+       */
+      { "speed one below the danger threshold", 26, 0, 0, 0, 0, 100, 100, 100, 20, 10, 10, 10, 0 },
+      { "speed exactly at it", 28, 0, 0, 0, 0, 100, 100, 100, 20, 10, 10, 10, 0 },
+      { "temperatures one below theirs", 10, 0, 0, 0, 0, 100, 100, 100, 20, 160, 160, 10, 0 },
+      { "temperatures exactly at theirs", 10, 0, 0, 0, 0, 100, 100, 100, 20, 176, 176, 10, 0 },
+      { "an energy bar one below its threshold", 10, 0, 0, 0, 0, 8, 100, 100, 20, 10, 10, 10, 0 },
+      { "an energy bar exactly at it", 10, 0, 0, 0, 0, 12, 100, 100, 20, 10, 10, 10, 0 },
+      { "the altitude above its own, which cannot happen", 10, 0, 0, 0, 0, 100, 100, 100, 20, 10, 10, 255, 0 },
     };
 
     Cpu6502 cpu = oracle.Fresh();
