@@ -450,6 +450,14 @@ there**: `SHIPS.bin` runs out at &EF8C, three bytes short, and `DSTORE%` is fill
 LOADER from `CODIALS.bin` — a file named only in a comment in `elite-loader.asm` and INCBINed
 nowhere.
 
+**And the 2,240 bytes are not the first 2,240.** `mvbllop` is entered with Y = &C0 and stores at
+Y before counting DOWN, stopping when Y reaches zero — so its page contributes offsets &C0 down
+to 1, not 0 to &BF. The copy therefore covers 0 to 2,047 and 2,049 to 2,240: **a hole at 2,048
+and one byte past the end of seven character rows.** Both of those bytes are zero in the image, so
+nothing shows, and neither is invisible to a byte-for-byte comparison — the port's array is 2,241
+bytes for that reason and its test asserts the hole rather than describing it. The port had the
+obvious reading (`data() + 2048` for 192 bytes) and it read one byte off the end of the array.
+
 So a comparison of `wantdials` written today would copy zeros in the oracle and zeros in the
 port, agree perfectly, and prove nothing about the one thing the routine exists to do.
 
@@ -460,10 +468,18 @@ loaded &18 bytes into the loader's own output, ships inside `COMLOD.bin`, and re
 because the loader puts it there at run time. `C.CODIALS.bin` itself is 2,248 bytes with its last
 eight zero.
 
-**The first task of this unit is therefore not a routine.** It is to establish which 2,240 bytes
-of that file the game ends up copying, load them at `DSTORE%` in `Binaries.txt`, and give the port
-the same bytes as data the way `Font.cpp` holds the font — with a test that fails if `DSTORE%` is
+**The first task of this unit is therefore not a routine.** It is to establish which bytes of that
+file the game ends up copying, load them at `DSTORE%` in `Binaries.txt`, and give the port the
+same bytes as data the way `Font.cpp` holds the font — with a test that fails if `DSTORE%` is
 blank, because a blank one is what makes the comparison silently vacuous.
+
+Which bytes is settled by rendering them: decoding the file's first 2,240 as seven character rows
+of forty cells produces the dashboard with `FS`/`AS`/`FU`/`CT`/`LT`/`AL` down the left,
+`SP`/`RL`/`DC` and 1 to 4 down the right, the scanner's ellipse in the middle and ELITE along the
+bottom, aligned to the cell grid — which a load offset would have broken. **That is a
+comparison against a picture rather than against a number**, and it is the only kind available
+when the thing being placed is an image and the evidence for where it goes is a line of BBC BASIC
+in a 1980s build script.
 
 **This is the first thing the port has needed that the assembled build does not contain.** Every
 table so far came out of the image, by label, because everything so far was assembled into it —
