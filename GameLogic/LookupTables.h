@@ -238,16 +238,22 @@ extern const std::array<std::uint8_t, 8> TRUMBLE_SPRITE_TABLE;
 /*
  * 6502: DSTORE% -- the dashboard picture, which `wantdials` copies into the bitmap.
  *
- * Seven character rows of forty cells at eight bytes each. The labels, the bar frames, the
- * scanner's ellipse and the word ELITE are all in here as pixels: the game draws only what
- * MOVES, and this is everything that does not.
+ * Seven character rows of forty cells at eight bytes each is 2,240, and this is 2,241. The
+ * labels, the bar frames, the scanner's ellipse and the word ELITE are all in here as pixels:
+ * the game draws only what MOVES, and this is everything that does not.
+ *
+ * THE COPY IS 2,240 BYTES AND THEY ARE NOT THE FIRST 2,240. `wantdials` copies eight whole pages
+ * and then re-enters the copier at `mvbllop` with Y = &C0, and that entry stores at Y and counts
+ * DOWN to 1 -- so the last byte it reaches is offset 2,240 and the byte at offset 2,048 is never
+ * touched at all. Both happen to be zero, so the hole and the overrun are invisible on screen and
+ * neither is invisible to a byte-for-byte comparison.
  *
  * THE ONLY TABLE HERE THAT NO ASSEMBLY STEP PRODUCES. The image ships inside `COMLOD.bin` and
  * the C64's own loader places it at `DSTORE%`, so BeebAsm never emits a label for it and the
  * address comes from the source's `SCBASE + &AF90`. Before `Binaries.txt` carried the row, the
- * oracle held 2,240 zeros there — and a comparison of `wantdials` would have copied blanks on
- * both sides and agreed (§6.78).
+ * oracle held zeros there — and a comparison of `wantdials` would have copied blanks on both
+ * sides and agreed (§6.78).
  */
-extern const std::array<std::uint8_t, 2240> DASHBOARD_IMAGE;
+extern const std::array<std::uint8_t, 2241> DASHBOARD_IMAGE;
 
 } // namespace Elite

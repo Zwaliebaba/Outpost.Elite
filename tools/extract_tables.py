@@ -189,12 +189,16 @@ TABLES = [
     # addresses and sharing one array would assert something the game does not (§6.63).
     Table("DASHBOARD_PIXEL_TABLE", "CTWOS", 4, "ScreenTables.cpp",
           "one aligned multicolour pixel, for the dashboard's bars"),
-    # The dashboard picture itself, which `wantdials` copies into the bitmap. Seven character rows
-    # of forty cells, eight bytes each, and no label anywhere: the image ships inside `COMLOD.bin`
-    # and the C64's loader places it at `DSTORE%` at run time, so the address is the source's own
-    # `SCBASE + &AF90` rather than something BeebAsm emitted (§6.78).
-    Table("DASHBOARD_IMAGE", "DSTORE%", 7 * 40 * 8, "DashboardImage.cpp",
-          "the dashboard picture, seven character rows of forty cells",
+    # The dashboard picture itself, which `wantdials` copies into the bitmap. No label anywhere:
+    # the image ships inside `COMLOD.bin` and the C64's loader places it at `DSTORE%` at run time,
+    # so the address is the source's own `SCBASE + &AF90` rather than something BeebAsm emitted.
+    #
+    # 2,241 AND NOT 2,240. `wantdials` copies eight whole pages and then re-enters `mvblockK` at
+    # `mvbllop` with Y = &C0, and that entry stores at Y and counts DOWN to 1 -- so the last byte
+    # it touches is offset &900, which is 2,240, and the byte at 2,048 is never touched at all.
+    # 2,240 bytes are copied and they are not the first 2,240 (§6.78).
+    Table("DASHBOARD_IMAGE", "DSTORE%", 7 * 40 * 8 + 1, "DashboardImage.cpp",
+          "the dashboard picture, sized by the last byte the copy reaches",
           _address=0x4000 + 0xAF90),
     # ---- slice 3d-d-ii: the laser sights and the Trumbles, all three read by `SIGHT`.
     # `sightcol` is indexed as `sightcol-SPOFF%,Y` with Y between SPOFF% and SPOFF%+3, so four
