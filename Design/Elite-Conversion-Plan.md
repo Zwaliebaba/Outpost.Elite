@@ -428,6 +428,48 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.32 The ship blueprints cannot be thirty-three arrays, and the data says so three ways
+
+Phase 3 opened with §6.12's own instruction — one pass over the ledger asking only "what does
+this read?" — and it paid immediately. The 3a row lists the motion and slot routines and does not
+mention the ship blueprints; the ledger files them under 3b, because that is what they are ABOUT.
+But `MVEIT` reads byte 15 of the blueprint on every iteration to clamp acceleration against the
+ship's maximum speed, and `NWSHP` reads bytes 5, 14 and 19 before the ship exists at all. 3a
+touches them, so 3a cannot be compared against the shipped game without them. That is §6.12's
+pattern for the seventh time, and the first time it was caught by looking rather than by failing.
+
+Extracting them then turned up why they cannot be thirty-three arrays, and the reasons are
+measured rather than argued:
+
+- **Two blueprints overrun their neighbour.** A blueprint's length is its own header: twenty
+  bytes, then `(XX0),8` bytes of vertices, four times `(XX0),9` of edges and `(XX0),12` of faces.
+  For thirty of the thirty-three that is exactly the distance to the next blueprint. The splinter
+  claims 24 bytes more than it has room for and the Thargon 60, so their tails are read out of the
+  ship that follows. Slicing per ship truncates them.
+- **The labels cannot arbitrate**, because those same two are the only blueprints in the build
+  with no `SHIP_x_EDGES` label at all. A third, the Asp Mk II, has four bytes of slack, so the
+  labels are not a tight partition either.
+- **The game has no concept of a blueprint's end.** `NWSHP` puts an address in `XX0` and every
+  read is `LDA (XX0),Y`. Extent is something a port would be inventing.
+
+So the region is extracted whole — `XX21`, `E%` and all 33 blueprints, 8,073 bytes from `&D000` —
+and indexed by address, which is what the original does and what makes the pointer table usable
+without translating anything.
+
+**Then the same mistake happened again, one level up.** The extraction sized the region from the
+`SHIP_` labels, immediately after concluding the labels are unreliable, and the first run of
+`ShipDataTests` failed on a blueprint `XX21` names that has no label. Chasing it found three
+entries pointing at 1, 24865 and 41120 — zero page and the middle of two code blocks. They are not
+blueprints: the pointer table is 33 entries, not the 39 the walk assumed, and past the end it
+returns `E%`'s default-flag bytes as addresses. The upstream source says so in one line,
+`NTY=33:D%=&D000:E%=D%+2*NTY`, which settles the table's length, the region's base and where `E%`
+begins, all three.
+
+The lesson is the sharper form of §6.8's rule. "Size a table from what indexes it" is not just
+about the table's END: **the INDEX has an extent too, and a walk that runs past it does not
+fault.** It returns whatever is next, and here what is next was plausible enough to send the
+search after a missing blueprint instead of a wrong bound.
+
 ### 6.31 A shader compiled at run time is a shader nobody has read
 
 The presenter's first draft built its HLSL with `D3DCompile` from a string literal, which is the
@@ -1395,6 +1437,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **Phase 3 opened with the ledger pass §6.12 asked for, and the ship data extracted.** `MVEIT` reads the blueprint's maximum speed and `NWSHP` three more of its bytes, so 3a touches data the row files under 3b — §6.12's pattern for the seventh time, caught by looking this time rather than by failing. The blueprints are extracted as ONE 8,073-byte region indexed by address rather than 33 arrays, because two of them declare more data than fits before the next one begins (the splinter by 24 bytes, the Thargon by 60), those same two have no `_EDGES` label, and the game has no concept of a blueprint's end anyway. §6.32 also records the same mistake made one level up and caught by the new suite: the region was first sized from the `SHIP_` labels, and the pointer table was walked to 39 entries when it is 33 — past the end it returns `E%`'s bytes as addresses, which came out as 1, 24865 and 41120. |
 | 2026-09-03 | **The executable links, and building it found a defect that had been latent since the projects were created.** Every one of the ~1200 lines of Win32 and Direct3D written blind COMPILED first time; the failure was thirty-one `LNK2038: mismatch detected for 'C++/WinRT version'` at the link step, because `Outpost` carries the CppWinRT NuGet package (3.0) and every other project takes the SDK's (2.0). `GameLogicTests.dll` had never noticed, because it and `GameLogic.lib` are both 2.0 — the mismatch needs a binary that links one against the other, and until this slice none existed. §6.30 records it, and the fix: `GameLogic` and `NeuronCore` never used C++/WinRT at all, they inherited it from the shared precompiled header, so `NEURON_NO_CPPWINRT` takes it back out and `Outpost/pch.h` is the one place that keeps it. |
 | 2026-09-03 | **Slice 2e's shell built, and the Windows CI leg now compiles the executable.** The split is the point: the palette, the viewport, the step accumulator and the key map are decisions rather than API calls, so they are in `Presentation.cpp` and `KeyMap.cpp` where the suite reaches them on both legs; Direct3D, the message pump and the composition root are the rest, and CI restores the project's packages and builds them unpackaged in Debug and Release. `TRANTABLE` is EXTRACTED rather than replaced, and the ledger said otherwise — `TT217` gives the dispatch a key NUMBER and the screens a CHARACTER, so a map straight to a character agrees with the game on the keys somebody thought to try. The blocking-`KeySource` question ADR-004 and `TextPrint.h` left open is answered: a nested message pump, single-threaded. §6.29 records a misreading of `TT66` that a confident paragraph nearly shipped, and §6.28 one 6502 byte the port keeps in two variables. |
 | 2026-09-03 | **A whole docked session runs, which is the CI half of slice 2e's acceptance criterion.** One null presenter satisfying all five seam interfaces, a scripted keyboard, and a session that starts through `TT170` and is driven by `TT102`'s dispatch into every docked screen the port has. It asserts what no per-routine test can: two tonnes of food bought on the buy screen are two tonnes in the hold when the inventory prints it, and the cash falls by twice the price the market quoted. §6.27 records what it cannot check — LAYOUT, because `CHPR` advances the cursor and `CHPR` is the presenter, so a null one has no cursor to compare. The human half of the criterion is the only thing that covers a session's layout, and this half being green is not the criterion being met. |

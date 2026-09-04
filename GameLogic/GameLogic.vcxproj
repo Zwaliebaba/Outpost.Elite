@@ -151,6 +151,7 @@
     <ClInclude Include="Canvas.h" />
     <ClInclude Include="TextPrint.h" />
     <ClInclude Include="Universe.h" />
+    <ClInclude Include="ShipBlueprint.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="StateTokens.h" />
     <ClInclude Include="MarketScreen.h" />
@@ -204,6 +205,8 @@
     <ClCompile Include="MarketTable.cpp" />
     <ClCompile Include="EquipmentTable.cpp" />
     <ClCompile Include="KeyTable.cpp" />
+    <ClCompile Include="ShipData.cpp" />
+    <ClCompile Include="ShipBlueprint.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />

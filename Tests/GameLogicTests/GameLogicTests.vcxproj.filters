@@ -108,6 +108,9 @@
     <ClCompile Include="ShellTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="ShipDataTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\Outpost\SaveStore.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
