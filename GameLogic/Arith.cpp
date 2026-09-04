@@ -722,4 +722,105 @@ void SquareRoot(MathWorkspace& _work) noexcept
   }
 }
 
+void MultiplySignedToK(MathWorkspace& _work, std::uint8_t _a) noexcept
+{
+  // 6502: STA R / AND #127 / STA K+2 -- R keeps the sign, K+2 takes the magnitude.
+  _work.r = _a;
+  _work.k[2] = static_cast<std::uint8_t>(_a & 0x7Fu);
+
+  const std::uint8_t magnitude = static_cast<std::uint8_t>(_work.q & 0x7Fu);
+  if (magnitude == 0u)
+  {
+    // 6502: BEQ MU5 -- and MU5 zeroes all four bytes of K, sign included.
+    _work.k[0] = 0;
+    _work.k[1] = 0;
+    _work.k[2] = 0;
+    _work.k[3] = 0;
+    return;
+  }
+
+  // 6502: SEC / SBC #1 / STA T. See the header: the missing one comes back as the carry.
+  _work.t = static_cast<std::uint8_t>(magnitude - 1u);
+
+  /*
+   * 6502: LDA P+1 / LSR K+2 / ROR A / STA K+1 / LDA P / ROR A / STA K.
+   *
+   * One right shift of the whole twenty-four bit magnitude, which seeds the loop with the first
+   * bit already in the carry.
+   */
+  bool carry = (_work.k[2] & 1u) != 0u;
+  _work.k[2] = static_cast<std::uint8_t>(_work.k[2] >> 1);
+
+  std::uint8_t shifted = static_cast<std::uint8_t>((_work.p1 >> 1) | (carry ? 0x80u : 0u));
+  carry = (_work.p1 & 1u) != 0u;
+  _work.k[1] = shifted;
+
+  shifted = static_cast<std::uint8_t>((_work.p >> 1) | (carry ? 0x80u : 0u));
+  carry = (_work.p & 1u) != 0u;
+  _work.k[0] = shifted;
+
+  // 6502: LDA #0 / LDX #24 / .MUL2
+  std::uint8_t accumulator = 0;
+  for (int step = 0; step < 24; ++step)
+  {
+    if (carry)
+    {
+      // 6502: ADC T -- with the carry set, so this adds |Q| rather than |Q| - 1.
+      const std::uint16_t sum = static_cast<std::uint16_t>(accumulator) + _work.t + 1u;
+      accumulator = static_cast<std::uint8_t>(sum);
+      carry = sum > 0xFFu;
+    }
+
+    // 6502: ROR A / ROR K+2 / ROR K+1 / ROR K -- one shift right through all four bytes.
+    const bool intoAccumulator = carry;
+    carry = (accumulator & 1u) != 0u;
+    accumulator = static_cast<std::uint8_t>((accumulator >> 1) | (intoAccumulator ? 0x80u : 0u));
+
+    for (int byte = 2; byte >= 0; --byte)
+    {
+      const bool next = (_work.k[byte] & 1u) != 0u;
+      _work.k[byte] = static_cast<std::uint8_t>((_work.k[byte] >> 1) | (carry ? 0x80u : 0u));
+      carry = next;
+    }
+  }
+
+  // 6502: STA T / LDA R / EOR Q / AND #128 / ORA T / STA K+3 -- the sign is the two operands'.
+  _work.t = accumulator;
+  _work.k[3] = static_cast<std::uint8_t>(accumulator | ((_work.r ^ _work.q) & 0x80u));
+}
+
+void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcept
+{
+  /*
+   * 6502: LDA XX15 / JSR SQUA / STA R / LDA P / STA Q, then the same for the other two with the
+   * running sum added in. The additions are `ADC` with no `CLC`, so the carry SQUA leaves is part
+   * of them -- see the header.
+   */
+  _work.r = Square(_work, _vector[0]);
+  _work.q = _work.p;
+
+  bool carry = false;
+  for (int axis = 1; axis < 3; ++axis)
+  {
+    _work.t = Square(_work, _vector[axis]);
+
+    const std::uint16_t low = static_cast<std::uint16_t>(_work.p) + _work.q + (carry ? 1u : 0u);
+    _work.q = static_cast<std::uint8_t>(low);
+    carry = low > 0xFFu;
+
+    const std::uint16_t high = static_cast<std::uint16_t>(_work.t) + _work.r + (carry ? 1u : 0u);
+    _work.r = static_cast<std::uint8_t>(high);
+    carry = high > 0xFFu;
+  }
+
+  // 6502: JSR LL5 -- Q = sqrt(R Q).
+  SquareRoot(_work);
+
+  // 6502: LDA XX15,n / JSR TIS2 / STA XX15,n -- each component scaled to a length of 96.
+  for (int axis = 0; axis < 3; ++axis)
+  {
+    _vector[axis] = DivideByQ(_work, _vector[axis]);
+  }
+}
+
 } // namespace Elite

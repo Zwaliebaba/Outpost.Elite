@@ -3,11 +3,13 @@
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
+#include "Arith.h"
 #include "LookupTables.h"
 #include "ShipBlueprint.h"
 
 #include <algorithm>
 #include <cstdint>
+#include <array>
 #include <set>
 #include <string>
 #include <vector>
@@ -224,6 +226,131 @@ public:
                                     L"E% is where the constant says");
     Assert::AreEqual(cpu.memory[oracle.Label("E%")], Elite::ShipByte(Elite::SHIP_DEFAULT_FLAGS),
                      L"and reads back through the region");
+  }
+};
+
+/*
+ * The two arithmetic routines 3a needs and phase 1 does not have.
+ *
+ * `TIDY` calls `NORM` every sixteenth iteration of the main loop to stop a ship's orientation
+ * vectors drifting out of shape as `MVEIT`'s rounding accumulates, and `MV40` -- the path a
+ * planet or a sun takes through `MVEIT` -- reaches `MULT3`. Neither appears in the plan's 3a row,
+ * which is the same §6.12 omission as the blueprints.
+ */
+TEST_CLASS(TheMotionArithmetic)
+{
+public:
+  /*
+   * 6502: NORM, over a sweep of vectors.
+   *
+   * The sweep is deliberately coarse and deliberately includes the awkward values rather than
+   * being random: zero (which makes the square root zero and the division degenerate), the
+   * sign-magnitude boundary at 128, and the largest components, because those are where a port
+   * that got the carry wrong differs and the middle of the range is where it agrees.
+   */
+  TEST_METHOD(TheNormaliserMatchesNORM)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t xx15 = oracle.Label("XX15");
+    const std::uint16_t norm = oracle.Label("NORM");
+
+    const std::uint8_t VALUES[] = { 0, 1, 2, 31, 32, 63, 96, 127, 128, 129, 160, 200, 254, 255 };
+
+    std::uint32_t compared = 0;
+    for (const std::uint8_t x : VALUES)
+    {
+      for (const std::uint8_t y : VALUES)
+      {
+        for (const std::uint8_t z : VALUES)
+        {
+          Cpu6502 cpu = oracle.Fresh();
+          cpu.memory[xx15] = x;
+          cpu.memory[static_cast<std::uint16_t>(xx15 + 1)] = y;
+          cpu.memory[static_cast<std::uint16_t>(xx15 + 2)] = z;
+
+          const Elite::Testing::RunResult run = cpu.CallSubroutine(norm);
+          Assert::IsTrue(run.completed, L"NORM returned");
+
+          std::array<std::uint8_t, 3> vector = { x, y, z };
+          Elite::MathWorkspace work;
+          Elite::Normalise(work, vector);
+
+          const std::wstring where = Widen("NORM(" + std::to_string(x) + ", " + std::to_string(y)
+                                           + ", " + std::to_string(z) + ")");
+          Assert::AreEqual(cpu.memory[xx15], vector[0], (where + L": x").c_str());
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + 1)], vector[1],
+                           (where + L": y").c_str());
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + 2)], vector[2],
+                           (where + L": z").c_str());
+          ++compared;
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(14u * 14u * 14u, compared, L"the whole sweep ran");
+  }
+
+  /// 6502: MULT3 -- K(4) = (A P+1 P) * Q, over a sweep that includes the zero divisor MU5 exits on.
+  TEST_METHOD(TheWideMultiplyMatchesMULT3)
+  {
+    if (OracleMissing())
+    {
+      return;
+    }
+
+    const OracleImage& oracle = OracleImage::Instance();
+    const std::uint16_t mult3 = oracle.Label("MULT3");
+    const std::uint16_t pp = oracle.Label("P");
+    const std::uint16_t qq = oracle.Label("Q");
+    const std::uint16_t kk = oracle.Label("K");
+
+    const std::uint8_t VALUES[] = { 0, 1, 3, 64, 127, 128, 129, 200, 255 };
+
+    std::uint32_t compared = 0;
+    for (const std::uint8_t a : VALUES)
+    {
+      for (const std::uint8_t p1 : VALUES)
+      {
+        for (const std::uint8_t p0 : VALUES)
+        {
+          for (const std::uint8_t q : VALUES)
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            cpu.memory[pp] = p0;
+            cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
+            cpu.memory[qq] = q;
+            cpu.a = a;
+
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(mult3);
+            Assert::IsTrue(run.completed, L"MULT3 returned");
+
+            Elite::MathWorkspace work;
+            work.p = p0;
+            work.p1 = p1;
+            work.q = q;
+            Elite::MultiplySignedToK(work, a);
+
+            const std::wstring where =
+              Widen("MULT3(" + std::to_string(a) + " " + std::to_string(p1) + " "
+                    + std::to_string(p0) + " * " + std::to_string(q) + ")");
+            for (int byte = 0; byte < 4; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)],
+                               work.k[byte],
+                               (where + L": K+" + std::to_wstring(byte)).c_str());
+            }
+            ++compared;
+          }
+        }
+      }
+    }
+
+    Assert::AreEqual<std::uint32_t>(9u * 9u * 9u * 9u, compared, L"the whole sweep ran");
   }
 };
 
