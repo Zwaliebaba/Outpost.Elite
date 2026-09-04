@@ -105,8 +105,13 @@ void DrawColourBands(Canvas& _canvas) noexcept;
 struct ScreenState
 {
   std::uint8_t colourBank = 0x81;  ///< 6502: abraxas
-  std::uint8_t bitmapMode = 0xC0;  ///< 6502: caravanserai
+  std::uint8_t bitmapMode = 0xC0;  ///< 6502: caravanserai -- the LOWER half of the screen
   std::uint8_t dashboardShown = 0; ///< 6502: DFLAG
+
+  /// 6502: moonflower -- `caravanserai`'s twin for the upper half, and the energy bomb's whole
+  /// effect: flight loop part 3 drops it to %11010000 and the space view goes to standard bitmap
+  /// mode for as long as the bomb burns.
+  std::uint8_t upperBitmapMode = 0xC0;
 };
 
 /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the

@@ -4,8 +4,10 @@
 
 #include "Arith.h"
 #include "Dashboard.h"
+#include "Controls.h"
 #include "Rng.h"
 #include "ShipMove.h"
+#include "ViewChange.h"
 #include "ShipSlot.h"
 
 namespace Elite
@@ -189,5 +191,102 @@ void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, std::uint8_t 
  */
 void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects,
                  std::uint16_t _blueprint, std::uint8_t _type, bool _carryIn) noexcept;
+
+/*
+ * 6502: KY12 to KY20 -- the flight keys the loop reads that `DOKEY` does not.
+ *
+ * The same key logger, indexed by the same internal key numbers (§6.73). `DOKEY` handles the six
+ * that steer; these are the ones that do something.
+ */
+inline constexpr std::size_t KEY_ENERGY_BOMB = 3;   ///< 6502: KY12 -- Tab
+inline constexpr std::size_t KEY_ESCAPE_POD = 7;    ///< 6502: KY13 -- Escape
+inline constexpr std::size_t KEY_ARM_MISSILE = 42;  ///< 6502: KY14 -- "T"
+inline constexpr std::size_t KEY_UNARM_MISSILE = 34;///< 6502: KY15 -- "U"
+inline constexpr std::size_t KEY_FIRE_MISSILE = 28; ///< 6502: KY16 -- "M"
+inline constexpr std::size_t KEY_ECM = 50;          ///< 6502: KY17 -- "E"
+inline constexpr std::size_t KEY_WARP = 30;         ///< 6502: KY18 -- "J"
+inline constexpr std::size_t KEY_DOCKING_COMPUTER = 44; ///< 6502: KY19 -- "C"
+inline constexpr std::size_t KEY_CANCEL_DOCKING = 23;   ///< 6502: KY20 -- "P"
+
+/// 6502: the sound effects the flight loop asks for, from the block at the top of the source.
+inline constexpr std::uint8_t SOUND_PULSE_LASER = 0;    ///< 6502: sfxplas
+inline constexpr std::uint8_t SOUND_BEAM_LASER = 10;    ///< 6502: sfxblas
+inline constexpr std::uint8_t SOUND_MILITARY_LASER = 11;///< 6502: sfxalas
+inline constexpr std::uint8_t SOUND_MINING_LASER = 12;  ///< 6502: sfxmlas
+inline constexpr std::uint8_t SOUND_ENERGY_BOMB = 13;   ///< 6502: sfxbomb
+inline constexpr std::uint8_t SOUND_MISSILE = 4;        ///< 6502: sfxwhosh
+
+/// 6502: the bitmap mode the energy bomb switches the upper half of the screen to.
+inline constexpr std::uint8_t BOMB_BITMAP_MODE = 0xD0;
+
+/// 6502: Mlas and Armlas -- the two laser powers the sound picker tests for by name. The third
+/// test is `BMI`, on bit 7, which is what makes a beam laser a beam laser.
+inline constexpr std::uint8_t LASER_POWER_MINING = 50;
+inline constexpr std::uint8_t LASER_POWER_MILITARY = 151;
+
+/// What the flight loop reaches that phase 4 owns, plus the sound.
+class FlightLoopEffects
+{
+public:
+  virtual ~FlightLoopEffects() = default;
+
+  /*
+   * 6502: JMP MVTRIBS, which ends `JMP NOMVETR`.
+   *
+   * A CALL WRITTEN AS TWO JUMPS. Part 1 jumps out and `MVTRIBS` jumps back to the label part 2
+   * begins at, so reading the first as the end of the frame loses fifteen parts of work on every
+   * frame with a Trumble aboard (§6.82).
+   */
+  virtual void MoveTrumbles() = 0;
+
+  /// 6502: JSR NOISE / JMP NOISE -- the SID, which is hardware.
+  virtual void PlaySound(std::uint8_t _effect) = 0;
+
+  /// 6502: JSR startbd and JSR stopbd -- the docking music, which is a second interrupt handler.
+  virtual void StartDockingMusic() = 0;
+  virtual void StopDockingMusic() = 0;
+};
+
+/*
+ * 6502: M% and the fifteen parts after it -- how a frame in space ends.
+ *
+ * Three of its jumps leave and three do not, and telling them apart is the routine's whole shape
+ * (§6.82). The three that leave are `JMP DOENTRY`, `JMP DEATH` and `JMP ESCAPE`, none of which
+ * returns -- so the port hands back an outcome the way `TT102`'s dispatch hands back a label.
+ */
+enum class LoopOutcome : std::uint8_t
+{
+  Continued, ///< the frame finished; the loop goes round again
+  Docked,    ///< 6502: JMP DOENTRY, from part 9's docking check
+  Died,      ///< 6502: JMP DEATH, from part 9 or part 15
+  Escaped,   ///< 6502: JMP ESCAPE, from part 3's escape pod
+};
+
+/// Everything the flight loop works on that `FlightScreen` does not already carry.
+struct FlightLoop
+{
+  FlightScreen& screen;
+
+  KeyLogger& keys;             ///< 6502: KLO
+  ControlState& control;       ///< 6502: JSTX, JSTY and `auto`
+  ControlOptions& options;     ///< 6502: DAMP, DJD and JSTK
+
+  FlightLoopEffects& effects;
+};
+
+/*
+ * 6502: M% to `MA3` -- the head of a frame: the seed, the Trumbles, the controls and the keys.
+ *
+ * IT SEEDS THE RANDOM NUMBER GENERATOR FROM THE PLANET. `LDA K% / STA RAND` puts the planet's own
+ * x low byte into the first byte of `RAND` on every single frame, so the sequence is stirred by
+ * where the planet is -- which is itself a function of everything the player has done. Elite's
+ * randomness is not a generator left running; it is a generator being pushed.
+ *
+ * AND THE PITCH READS A CARRY THE ROLL LEFT BEHIND. The roll's magnitude ends `CMP #8 / BCS P%+3
+ * / LSR A`, and the pitch's begins `EOR #%11111111 / ADC #4` with no `SEC` or `CLC` between them
+ * -- and `cntr` touches no flags on any of its three paths. So the four added to the pitch is
+ * four or five depending on the low bit of the roll (§6.85).
+ */
+[[nodiscard]] LoopOutcome BeginFlightFrame(FlightLoop& _loop) noexcept;
 
 } // namespace Elite

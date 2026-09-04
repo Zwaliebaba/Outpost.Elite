@@ -2,6 +2,8 @@
 
 #include "Lasers.h"
 
+#include "FlightLoop.h"
+
 #include "EliteTypes.h"
 
 namespace Elite
@@ -50,7 +52,7 @@ bool DrawLaserLines(Canvas& _canvas, DrawWorkspace& _draw, const LaserBurst& _bu
 }
 
 bool FireLaser(Canvas& _canvas, DrawWorkspace& _draw, Rng& _rng, LaserBurst& _burst,
-               FlightStatus& _status, LaserEffects& _effects, std::uint8_t _view,
+               FlightStatus& _status, std::uint8_t _view,
                bool _carryIn) noexcept
 {
   /*
@@ -81,7 +83,8 @@ bool FireLaser(Canvas& _canvas, DrawWorkspace& _draw, Rng& _rng, LaserBurst& _bu
    */
   _status.laserTemperature = AddWithCarry(_status.laserTemperature, LASER_HEAT_PER_SHOT, x.carry).value;
 
-  _effects.DrainEnergy(); // 6502: JSR DENGY -- phase 4b's
+  // 6502: JSR DENGY -- built in 3d-d-iii-b, so this is no longer a seam.
+  (void)DrainEnergy(_status);
 
   // 6502: and no RTS -- LASLI runs straight on into LASLI2.
   return DrawLaserLines(_canvas, _draw, _burst, _view);

@@ -94,6 +94,18 @@ struct FlightStatus
   /// 6502: MJ -- non-zero in witchspace. `WARP` refuses to work while it is set, which is why
   /// you cannot skip past a Thargoid ambush.
   std::uint8_t midJump = 0;
+
+  /*
+   * 6502: LAS, LASCT and MSAR -- what the guns and the missile are doing this frame.
+   *
+   * `LAS` is the power of the shot being fired right now and is cleared at the top of every pass;
+   * `LASCT` is the pulse laser's countdown, which is why a pulse laser cannot be held down; `MSAR`
+   * says the missile is armed and looking for a lock. All three arrived with the flight loop in
+   * 3d-d-iii-b for the same reason `LAS2` and `MJ` did: one byte, one writer, one reader.
+   */
+  std::uint8_t laserPower = 0;   ///< 6502: LAS
+  std::uint8_t laserCount = 0;   ///< 6502: LASCT
+  std::uint8_t missileArmed = 0; ///< 6502: MSAR
 };
 
 /// What `PZW` hands back: the original returns one colour in A and another in X, and both of its
@@ -180,10 +192,16 @@ void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math,
 void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, std::uint8_t _colour) noexcept;
 
 /*
- * 6502: RED2, YELLOW2, GREEN2 -- the missile indicator's four states, as SCREEN RAM palette
- * bytes rather than bitmap colours. Black is no missile at all.
+ * 6502: BLACK2, RED2, YELLOW2, GREEN2 -- the missile indicator's four states, as SCREEN RAM
+ * palette bytes rather than bitmap colours.
+ *
+ * `MISSILE_NONE` WAS ZERO HERE UNTIL 3d-d-iii-b, and zero is not a colour the game ever passes:
+ * `BLACK2` is &B7, and `msblob` uses it for every indicator above `NOMSL` while `FRMIS` uses it
+ * for the missile that has just left. Nothing was wrong downstream -- `MSBAR` writes whatever
+ * byte it is given and the port matched the game on that byte -- but the NAME claimed to be a
+ * value the game uses and was not one.
  */
-inline constexpr std::uint8_t MISSILE_NONE = 0x00;
+inline constexpr std::uint8_t MISSILE_NONE = 0xB7;    ///< 6502: BLACK2 -- no missile in this slot
 inline constexpr std::uint8_t MISSILE_LOCKED = 0x27;  ///< 6502: RED2 -- armed and locked
 inline constexpr std::uint8_t MISSILE_ARMED = 0x87;   ///< 6502: YELLOW2 -- armed, seeking
 inline constexpr std::uint8_t MISSILE_READY = 0x57;   ///< 6502: GREEN2 -- unarmed
