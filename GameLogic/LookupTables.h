@@ -208,4 +208,31 @@ extern const std::array<std::uint8_t, 8073> SHIP_DATA;
  */
 extern const std::array<std::uint8_t, 34> SCANNER_COLOUR_TABLE;
 
+/*
+ * 6502: sightcol -- the colour of the laser sights, by which laser is fitted.
+ *
+ * A colour NUMBER here rather than a bit pattern, unlike the scanner table above it, because the
+ * sights are a sprite and this goes straight into the VIC-II's sprite colour register.
+ *
+ * Indexed as `sightcol-SPOFF%,Y` with Y the sprite pointer the routine has just chosen, so the
+ * table is walked in the same order the four `CMP`s test: pulse, beam, military, and then
+ * anything else, which is the mining laser by elimination rather than by name. Pulse and beam
+ * are both 7, so two of the four entries are indistinguishable in play.
+ */
+extern const std::array<std::uint8_t, 4> LASER_SIGHT_COLOUR_TABLE;
+
+/*
+ * 6502: TRIBTA and TRIBMA -- the Trumble population, turned into sprites.
+ *
+ * `SIGHT` masks the high byte of the count to `AND #%01111111` and shifts it right four times, so
+ * the index is 0 to 7 and both tables have eight entries. `TRIBTA` is how many sprites that many
+ * Trumbles are worth and `TRIBMA` is which of the eight VIC-II sprites to switch on for it.
+ *
+ * BOTH END ON A REPEAT. Entries 6 and 7 are identical in each, so a hold with 112 Trumbles looks
+ * exactly like one with 255 of them: the population saturates rather than wrapping round to
+ * nothing, which is what the table is for.
+ */
+extern const std::array<std::uint8_t, 8> TRUMBLE_COUNT_TABLE;
+extern const std::array<std::uint8_t, 8> TRUMBLE_SPRITE_TABLE;
+
 } // namespace Elite

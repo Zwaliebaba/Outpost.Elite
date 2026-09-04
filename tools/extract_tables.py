@@ -183,6 +183,19 @@ TABLES = [
     # addresses and sharing one array would assert something the game does not (§6.63).
     Table("DASHBOARD_PIXEL_TABLE", "CTWOS", 4, "ScreenTables.cpp",
           "one aligned multicolour pixel, for the dashboard's bars"),
+    # ---- slice 3d-d-ii: the laser sights and the Trumbles, all three read by `SIGHT`.
+    # `sightcol` is indexed as `sightcol-SPOFF%,Y` with Y between SPOFF% and SPOFF%+3, so four
+    # entries -- one per laser the sights can be drawn for, and the mining laser's is last
+    # because it is the "anything else" case rather than because it is a mining laser.
+    Table("LASER_SIGHT_COLOUR_TABLE", "sightcol", 4, "ScreenTables.cpp",
+          "the colour of the laser sights, by laser type"),
+    # `TRIBBLE+1` is masked to `AND #%01111111` and then shifted right four times, so X is
+    # between 0 and 7 and both tables are eight entries. Both end on a repeated last value,
+    # which is what makes the population saturate rather than wrap.
+    Table("TRUMBLE_COUNT_TABLE", "TRIBTA", 8, "ScreenTables.cpp",
+          "how many Trumble sprites to show, by population"),
+    Table("TRUMBLE_SPRITE_TABLE", "TRIBMA", 8, "ScreenTables.cpp",
+          "which sprites to enable for that many Trumbles"),
 ]
 
 

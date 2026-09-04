@@ -136,6 +136,9 @@ public:
     CompareAgainstImage("FONT", Elite::FONT_DATA);
     CompareAgainstImage("scacol", Elite::SCANNER_COLOUR_TABLE);
     CompareAgainstImage("CTWOS", Elite::DASHBOARD_PIXEL_TABLE);
+    CompareAgainstImage("sightcol", Elite::LASER_SIGHT_COLOUR_TABLE);
+    CompareAgainstImage("TRIBTA", Elite::TRUMBLE_COUNT_TABLE);
+    CompareAgainstImage("TRIBMA", Elite::TRUMBLE_SPRITE_TABLE);
   }
 
   TEST_METHOD(TheSineTableLooksLikeASineCurve)
