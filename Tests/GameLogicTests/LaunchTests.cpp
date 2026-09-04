@@ -5,11 +5,14 @@
 #include "OracleImage.h"
 
 #include "Commander.h"
+#include "Flight.h"
+#include "FlightLoop.h"
 #include "Market.h"
 #include "PlanetDraw.h"
 #include "ShipDraw.h"
 
 #include <cstdint>
+#include <vector>
 #include <string>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -191,6 +194,481 @@ namespace GameLogicTests
           }
         }
       }
+    }
+  };
+
+  namespace
+  {
+    /*
+     * The two seams the launch path still has, and nothing else.
+     *
+     * `LAUN` is the docking tunnel -- a sequence of expanding circles drawn over the docked
+     * screen, which needs the frame timing the executable owns -- and `NWSPS` self-modifies
+     * `XX21` to choose between a Coriolis and a Dodo. Everything else `TT110` reaches is ported
+     * and runs for real on both sides, which is what makes a whole-bitmap compare worth doing.
+     */
+    struct RecordingStart final : Elite::StartUpEffects
+    {
+      std::uint32_t tunnels = 0;
+
+      void ResetUniverse() override {}
+      void ResetShip() override {}
+      void ClearKeyLogger() override {}
+      void StartTheme() override {}
+      void StopTheme() override {}
+      void ResetMissileIndicators() override {}
+      void ShowDockingTunnel() override
+      {
+        ++tunnels;
+      }
+      void WaitFrames(std::uint8_t) override {}
+
+      std::uint8_t ShowTitleScreen(std::uint8_t, std::uint8_t, std::uint8_t) override
+      {
+        return 0;
+      }
+    };
+
+    struct RecordingLaunch final : Elite::FlightLoopEffects
+    {
+      std::vector<std::uint8_t> sounds;
+      std::uint32_t musicStops = 0;
+      std::uint32_t stationSpawns = 0;
+
+      bool PlaySound(std::uint8_t _effect) override
+      {
+        sounds.push_back(_effect);
+        return true;
+      }
+      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t, std::uint8_t) override
+      {
+        sounds.push_back(_effect);
+        return true;
+      }
+      void StopSound(std::uint8_t) override {}
+      void MoveTrumbles() override {}
+      void StartDockingMusic() override {}
+      void StopDockingMusic() override
+      {
+        ++musicStops;
+      }
+      bool SpawnAhead(std::uint8_t) override
+      {
+        return true;
+      }
+      void Anger(std::uint8_t) override {}
+      void SpawnStation() override
+      {
+        ++stationSpawns;
+      }
+      bool SpawnChild(std::uint8_t, std::uint8_t) override
+      {
+        return true;
+      }
+    };
+
+    struct RecordingOutside final : Elite::ShipEffects, Elite::ShipDrawEffects
+    {
+      void RunTactics(Elite::ShipBlock&) override {}
+      void DrawPlanetOrSun() override {}
+      void DrawExplosion() override {}
+      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
+    };
+
+    /// Everything the launch works on, and the oracle's memory beside it.
+    struct Leaving
+    {
+      World world;
+      Elite::ControlState control;
+      Elite::ControlOptions options;
+      Elite::KeyLogger keys{};
+      Elite::LaserBurst burst{};
+      Elite::LineHeap heap;
+      Elite::ClipState clip;
+      Elite::Projection projection;
+      Elite::CompassAxes axes{};
+      RecordingOutside outside;
+      RecordingLaunch effects;
+      RecordingStart start;
+    };
+
+    /// The bytes `RES2`, `RESET` and `TT110` write that the shared `Where` does not name.
+    struct LaunchWhere
+    {
+      std::uint16_t nostm, lsx2, lsy2, mstg, jstx, jsty, alp2Next, bet2, bet2Next;
+      std::uint16_t col2, dontclip, yx2m1, slsp, bomb, qq12, qq22, hfx, autoByte;
+      std::uint16_t inwk, fist, tek, stp, res2, reset, tt110, laun, nwsps, stopbd, noise;
+
+      explicit LaunchWhere(const OracleImage& _oracle)
+      {
+        nostm = _oracle.Label("NOSTM");
+        lsx2 = _oracle.Label("LSX2");
+        lsy2 = _oracle.Label("LSY2");
+        mstg = _oracle.Label("MSTG");
+        jstx = _oracle.Label("JSTX");
+        jsty = _oracle.Label("JSTY");
+        alp2Next = static_cast<std::uint16_t>(_oracle.Label("ALP2") + 1u);
+        bet2 = _oracle.Label("BET2");
+        bet2Next = static_cast<std::uint16_t>(_oracle.Label("BET2") + 1u);
+        col2 = _oracle.Label("COL2");
+        dontclip = _oracle.Label("dontclip");
+        yx2m1 = _oracle.Label("Yx2M1");
+        slsp = _oracle.Label("SLSP");
+        bomb = _oracle.Label("BOMB");
+        qq12 = _oracle.Label("QQ12");
+        qq22 = _oracle.Label("QQ22");
+        hfx = _oracle.Label("HFX");
+        autoByte = _oracle.Label("auto");
+        inwk = _oracle.Label("INWK");
+        fist = _oracle.Label("FIST");
+        tek = _oracle.Label("tek");
+        stp = _oracle.Label("STP");
+        res2 = _oracle.Label("RES2");
+        reset = _oracle.Label("RESET");
+        tt110 = _oracle.Label("TT110");
+        laun = _oracle.Label("LAUN");
+        nwsps = _oracle.Label("NWSPS");
+        stopbd = _oracle.Label("stopbd");
+        noise = _oracle.Label("NOISE");
+      }
+    };
+
+    /// A world with something in every byte the reset is supposed to clear.
+    void Occupy(Leaving& _leaving, std::uint32_t _seed)
+    {
+      World& world = _leaving.world;
+      Seed(world, _seed);
+
+      world.commander.At(Elite::Field::Fuel) = world.fuel;
+      world.message.token = 101u;
+      world.message.column = 9u;
+      world.message.append = 1u;
+      world.message.delay = 12u;
+      world.flight.blueprint = Elite::BlueprintAddress(11u);
+
+      world.bubble.heapBottom = static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 64u);
+      world.heaps.yx2M1 = 199u;
+      world.heaps.lsp = 0x20u;
+      world.status.ecmCountdown = 20u;
+      world.status.ecmOurs = 0xFFu;
+      world.status.hyperspaceCounter = 5u;
+      world.status.hyperspaceCountdown = 9u;
+      world.screen.hyperspaceEffect = 0xFFu;
+      world.trumbles = 0x5Au;
+      world.spaceView = 2u;
+      world.explosions = 0x66u;
+
+      _leaving.control.roll = 200u;
+      _leaving.control.pitch = 40u;
+      _leaving.control.dockingComputer = 0xFFu;
+      _leaving.clip.dontclip = 0x80u;
+      world.heaps.stp = 4u; // what the short-range chart's fuel circle leaves behind
+    }
+
+    /// Send everything `Mirror` does not, and everything the launch reads.
+    void MirrorLeaving(const Leaving& _leaving, Cpu6502& _cpu, const Where& _at, const LaunchWhere& _to, std::uint8_t _docked,
+                       std::uint8_t _techLevel)
+    {
+      const World& world = _leaving.world;
+
+      _cpu.memory[_to.nostm] = world.dust.count;
+      _cpu.memory[_to.mstg] = world.bubble.missileTarget;
+      _cpu.memory[_to.jstx] = _leaving.control.roll;
+      _cpu.memory[_to.jsty] = _leaving.control.pitch;
+      _cpu.memory[_to.autoByte] = _leaving.control.dockingComputer;
+      _cpu.memory[_to.alp2Next] = world.flight.alp2Next;
+      _cpu.memory[_to.bet2] = world.flight.bet2;
+      _cpu.memory[_to.bet2Next] = world.flight.bet2Next;
+      _cpu.memory[_to.col2] = world.text.cellColour;
+      _cpu.memory[_to.dontclip] = _leaving.clip.dontclip;
+      _cpu.memory[_to.yx2m1] = world.heaps.yx2M1;
+      _cpu.memory[_to.qq22] = world.status.hyperspaceCounter;
+      _cpu.memory[_to.hfx] = world.screen.hyperspaceEffect;
+      _cpu.memory[_to.qq12] = _docked;
+      _cpu.memory[_to.tek] = _techLevel;
+
+      /*
+       * 6502: STP -- and `TT110` does not set it either (§6.94, §6.95).
+       *
+       * `HFS1` needs a step to advance `CNT` with, `RES2` does not provide one, and the only
+       * writer in the whole game is `CIRCLE` -- which the docked screens reach exactly once, in
+       * the short-range chart's fuel radius. A four is what the chart leaves.
+       */
+      _cpu.memory[_to.stp] = world.heaps.stp;
+
+      _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(world.bubble.heapBottom & 0xFFu);
+      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(world.bubble.heapBottom >> 8);
+
+      for (std::size_t index = 0; index < Elite::BALL_HEAP_SIZE * 2u; ++index)
+      {
+        _cpu.memory[static_cast<std::uint16_t>(_to.lsx2 + index)] = world.heaps.ball[index];
+      }
+      for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+      {
+        _cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)] = world.work[byte];
+      }
+    }
+
+    /// Compare the same.
+    void CompareLeaving(const Cpu6502& _cpu, const Leaving& _leaving, const LaunchWhere& _to, std::uint8_t _docked,
+                        const std::wstring& _context)
+    {
+      const World& world = _leaving.world;
+
+      auto same = [&](std::uint16_t _address, std::uint8_t _ours, const std::wstring& _name)
+      { Assert::AreEqual(_cpu.memory[_address], _ours, (_context + L": " + _name).c_str()); };
+
+      same(_to.nostm, world.dust.count, L"NOSTM");
+      same(_to.mstg, world.bubble.missileTarget, L"MSTG");
+      same(_to.jstx, _leaving.control.roll, L"JSTX");
+      same(_to.jsty, _leaving.control.pitch, L"JSTY");
+      same(_to.autoByte, _leaving.control.dockingComputer, L"auto");
+      same(_to.alp2Next, world.flight.alp2Next, L"ALP2+1");
+      same(_to.bet2, world.flight.bet2, L"BET2");
+      same(_to.bet2Next, world.flight.bet2Next, L"BET2+1");
+      same(_to.col2, world.text.cellColour, L"COL2");
+      same(_to.dontclip, _leaving.clip.dontclip, L"dontclip");
+      same(_to.yx2m1, world.heaps.yx2M1, L"Yx2M1");
+      same(_to.qq22, world.status.hyperspaceCounter, L"QQ22");
+      same(_to.hfx, world.screen.hyperspaceEffect, L"HFX");
+      same(_to.qq12, _docked, L"QQ12");
+      same(_to.bomb, world.commander.At(Elite::Field::EnergyBomb), L"BOMB");
+      same(_to.fist, world.commander.At(Elite::Field::LegalStatus), L"FIST");
+
+      const std::uint16_t bottom =
+        static_cast<std::uint16_t>(_cpu.memory[_to.slsp] | (_cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] << 8));
+      Assert::AreEqual<std::uint32_t>(bottom, world.bubble.heapBottom, (_context + L": SLSP").c_str());
+
+      for (std::size_t index = 0; index < Elite::BALL_HEAP_SIZE * 2u; ++index)
+      {
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_to.lsx2 + index)], world.heaps.ball[index],
+                         (_context + L": ball heap byte " + std::to_wstring(index)).c_str());
+      }
+      for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+      {
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)], world.work[byte],
+                         (_context + L": INWK byte " + std::to_wstring(byte)).c_str());
+      }
+    }
+  } // namespace
+
+  TEST_CLASS(TheResets)
+  {
+  public:
+    /*
+     * 6502: RES2 -- fifty instructions, and it was a seam until this slice.
+     *
+     * Everything in it is compared: the stardust count, both halves of the ball heap, the missile
+     * lock, the two rate bytes it re-centres and the four it zeroes, the text colour, the clip
+     * extent, the heap pointer and the whole of `INWK` -- because it falls into `ZINF`. The bulb
+     * and the E.C.M. are swept both ways round, because `SPBLB` is a TOGGLE and `ECMOF` is only
+     * reached when the E.C.M. is running.
+     */
+    TEST_METHOD(TheShipResetMatchesRES2)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LaunchWhere to(oracle);
+
+      std::uint32_t compared = 0;
+      std::uint32_t bulbs = 0;
+      std::uint32_t bombs = 0;
+
+      for (std::uint8_t shape = 0; shape < 8u; ++shape)
+      {
+        Leaving leaving;
+        Occupy(leaving, shape * 17u + 3u);
+
+        leaving.world.bubble.counts[Elite::SHIP_TYPE_STATION] = ((shape & 1u) != 0u) ? 1u : 0u;
+        leaving.world.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
+        leaving.world.commander.At(Elite::Field::EnergyBomb) = ((shape & 4u) != 0u) ? 0xC0u : 0x40u;
+
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.AddTrap(to.stopbd);
+        cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
+        FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
+        Mirror(leaving.world, cpu, at);
+        MirrorLeaving(leaving, cpu, at, to, 0xFFu, 7u);
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(to.res2, 2'000'000);
+        Assert::IsTrue(run.completed, L"RES2 returned");
+
+        Elite::FlightScreen screen = leaving.world.Screen();
+        Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
+                               leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+        Elite::ResetShipAndBubble(loop);
+
+        const std::wstring where = WidenText("RES2 (shape " + std::to_string(shape) + ")");
+
+        CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
+        CompareState(cpu, leaving.world, at, where);
+        CompareLeaving(cpu, leaving, to, 0xFFu, where);
+
+        Assert::AreEqual<std::uint32_t>(1u, leaving.effects.musicStops, (where + L": stopbd").c_str());
+
+        bulbs += ((shape & 1u) != 0u) ? 1u : 0u;
+        bombs += ((shape & 4u) != 0u) ? 1u : 0u;
+        ++compared;
+      }
+
+      Assert::AreEqual<std::uint32_t>(8u, compared, L"the whole sweep ran");
+      Assert::IsTrue(bulbs > 0u, L"the station bulb was lit on some passes");
+      Assert::IsTrue(bombs > 0u, L"and the energy bomb was burning on some");
+    }
+
+    /*
+     * 6502: RESET -- and the 255 it fills the shields with is a loop counter that ran off the end.
+     *
+     * The shields and `QQ12` are compared together because they are the same byte: a port that
+     * set "docked" to 1 and the banks to 255 separately would agree with the game on both and be
+     * a different routine.
+     */
+    TEST_METHOD(TheGameResetMatchesRESET)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LaunchWhere to(oracle);
+
+      for (std::uint8_t shape = 0; shape < 4u; ++shape)
+      {
+        Leaving leaving;
+        Occupy(leaving, shape * 31u + 11u);
+
+        leaving.world.bubble.counts[Elite::SHIP_TYPE_STATION] = ((shape & 1u) != 0u) ? 1u : 0u;
+        leaving.world.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
+
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.AddTrap(to.stopbd);
+        cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
+        FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
+        Mirror(leaving.world, cpu, at);
+        MirrorLeaving(leaving, cpu, at, to, 0u, 7u);
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(to.reset, 2'000'000);
+        Assert::IsTrue(run.completed, L"RESET returned");
+
+        Elite::FlightScreen screen = leaving.world.Screen();
+        Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
+                               leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+
+        std::uint8_t docked = 0;
+        Elite::ResetGame(loop, docked);
+
+        const std::wstring where = WidenText("RESET (shape " + std::to_string(shape) + ")");
+
+        CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
+        CompareState(cpu, leaving.world, at, where);
+        CompareLeaving(cpu, leaving, to, docked, where);
+
+        Assert::AreEqual<std::uint8_t>(0xFFu, docked, (where + L": QQ12 is the loop's leftover").c_str());
+        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.world.status.forwardShield, (where + L": FSH").c_str());
+        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.world.status.aftShield, (where + L": ASH").c_str());
+        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.world.status.energy, (where + L": ENERGY").c_str());
+      }
+    }
+  };
+
+  TEST_CLASS(TheLaunch)
+  {
+  public:
+    /*
+     * 6502: TT110 -- both of its paths, and the refusal is the interesting one.
+     *
+     * `LDX QQ12 / BEQ NLUNCH` means the key works in flight and does nothing there but change the
+     * view, so a port that launched whenever "1" was pressed would put a second planet in the
+     * bubble every time. The tech level is swept because it is what `SOS1` turns into the
+     * planet's type, and the hold because the fine is ORed into `FIST` on the way out.
+     */
+    TEST_METHOD(TheLaunchMatchesTT110)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LaunchWhere to(oracle);
+
+      std::uint32_t launched = 0;
+      std::uint32_t refused = 0;
+
+      for (const std::uint8_t docked : {std::uint8_t{0}, std::uint8_t{0xFF}})
+      {
+        for (const std::uint8_t techLevel : {std::uint8_t{0}, std::uint8_t{2}, std::uint8_t{7}})
+        {
+          for (const std::uint8_t contraband : {std::uint8_t{0}, std::uint8_t{5}})
+          {
+            Leaving leaving;
+            Occupy(leaving, docked + techLevel * 7u + contraband);
+
+            const std::size_t hold = static_cast<std::size_t>(Elite::Field::CargoHold);
+            leaving.world.commander.bytes[hold + 3u] = contraband;
+            leaving.world.commander.bytes[hold + 10u] = contraband;
+            leaving.world.commander.At(Elite::Field::LegalStatus) = 2u;
+            leaving.world.commander.At(Elite::Field::EnergyBomb) = 0x40u;
+            leaving.world.view = 1u;
+
+            Cpu6502 cpu = oracle.Fresh();
+            cpu.AddTrap(to.stopbd);
+            cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
+            cpu.AddTrap(to.laun);
+            cpu.AddTrap(to.nwsps);
+            cpu.AddTrap(oracle.Label("SETL1"));
+            cpu.AddTrap(oracle.Label("DOVDU19"));
+            FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
+            Mirror(leaving.world, cpu, at);
+            MirrorLeaving(leaving, cpu, at, to, docked, techLevel);
+
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(to.tt110, 8'000'000);
+            Assert::IsTrue(run.completed, L"TT110 returned");
+
+            Elite::FlightScreen screen = leaving.world.Screen();
+            Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
+                                   leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+
+            std::uint8_t flag = docked;
+            Elite::SystemSeeds selected{};
+            Elite::Launch(loop, leaving.start, flag, leaving.world.commander.At(Elite::Field::SystemX),
+                          leaving.world.commander.At(Elite::Field::SystemY), techLevel, selected);
+
+            const std::wstring where = WidenText("TT110 (" + std::string(docked != 0u ? "docked" : "in flight") + ", tek " +
+                                                 std::to_string(techLevel) + ", contraband " + std::to_string(contraband) + ")");
+
+            CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
+            CompareState(cpu, leaving.world, at, where);
+            CompareLeaving(cpu, leaving, to, flag, where);
+
+            std::uint32_t tunnels = 0;
+            std::uint32_t stations = 0;
+            for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+            {
+              tunnels += (hit.address == to.laun) ? 1u : 0u;
+              stations += (hit.address == to.nwsps) ? 1u : 0u;
+            }
+
+            Assert::AreEqual(tunnels, leaving.start.tunnels, (where + L": LAUN").c_str());
+            Assert::AreEqual(stations, leaving.effects.stationSpawns, (where + L": NWSPS").c_str());
+            Assert::AreEqual<std::uint8_t>(0u, flag, (where + L": QQ12 is cleared on both paths").c_str());
+
+            launched += (docked != 0u) ? 1u : 0u;
+            refused += (docked == 0u) ? 1u : 0u;
+          }
+        }
+      }
+
+      Assert::IsTrue(launched > 0u, L"some cases launched");
+      Assert::IsTrue(refused > 0u, L"and some were refused");
     }
   };
 

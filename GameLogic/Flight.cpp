@@ -175,9 +175,10 @@ namespace Elite
     ResetShipAndBubble(_loop); // 6502: and no RTS -- it falls into RES2
   }
 
-  void Launch(FlightLoop& _loop, StartUpEffects& _start, SpawnEffects& _spawn, std::uint8_t& _docked, std::uint8_t _crosshairX,
+  void Launch(FlightLoop& _loop, StartUpEffects& _start, std::uint8_t& _docked, std::uint8_t _crosshairX,
               std::uint8_t _crosshairY, std::uint8_t _techLevel, SystemSeeds& _selected) noexcept
   {
+    LoopSpawnEffects spawning(_loop);
     FlightScreen& screen = _loop.screen;
 
     // 6502: LDX QQ12 / BEQ NLUNCH -- pressing "1" in flight does nothing but change the view.
@@ -203,7 +204,7 @@ namespace Elite
      * The station is what you have just left, and this is where it goes.
      */
       screen.work[8] = static_cast<std::uint8_t>(screen.work[8] + 1u);
-      (void)AddPlanetOrSun(screen.bubble, screen.work, _spawn, _techLevel);
+      (void)AddPlanetOrSun(screen.bubble, screen.work, spawning, _techLevel);
 
       screen.work[8] = 128u;
       screen.work[7] = static_cast<std::uint8_t>(screen.work[7] + 1u);

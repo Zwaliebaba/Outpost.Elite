@@ -73,7 +73,7 @@ namespace Elite
  * contraband fine is ORed into `FIST` on the way out, so leaving is what levies it rather than
  * being scanned.
  */
-  void Launch(FlightLoop& _loop, StartUpEffects& _start, SpawnEffects& _spawn, std::uint8_t& _docked, std::uint8_t _crosshairX,
+  void Launch(FlightLoop& _loop, StartUpEffects& _start, std::uint8_t& _docked, std::uint8_t _crosshairX,
               std::uint8_t _crosshairY, std::uint8_t _techLevel, SystemSeeds& _selected) noexcept;
 
 } // namespace Elite
