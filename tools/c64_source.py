@@ -184,6 +184,11 @@ def next_include(_path: Path) -> str | None:
     return None
 
 
+# Data directives, which end a variable rather than a routine. A table has no `RTS` and needs no
+# warning; `ctwos.asm` ending `EQUB %11000000` is the table finishing, not execution continuing.
+DIRECTIVES = ("EQUB", "EQUW", "EQUD", "EQUS", "SKIP", "ORG", "INCBIN", "=")
+
+
 def falls_through(_lines: list[str]) -> str | None:
     """The last instruction, when it is not one that ends a routine."""
     for line in reversed(_lines):
@@ -191,7 +196,9 @@ def falls_through(_lines: list[str]) -> str | None:
         if not text or text.startswith("."):
             continue
         opcode = text.split()[0].upper()
-        return None if opcode in TERMINATORS else text
+        if opcode in TERMINATORS or opcode in DIRECTIVES:
+            return None
+        return text
     return None
 
 
