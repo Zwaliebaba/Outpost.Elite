@@ -156,9 +156,17 @@ void GameShell::ClearToView(std::uint8_t _view)
     return;
   }
 
-  // 6502: TTX66K's text-area clear. The port has TT66simp, which is the same 32 cells of rows 1
-  // to 23; the dashboard, the sprites, the border box and the colour bands are phase 3's, so a
-  // cleared screen here has no border yet.
+  /*
+   * 6502: TTX66K's palette fill and then its text-area clear.
+   *
+   * The fill comes FIRST because that is the order TTX66K does it in, and it has to happen at all
+   * because the bitmap holds two-bit codes rather than colours: without a palette byte behind each
+   * cell every code resolves to colour 0, and the screen draws black on black. The port has
+   * TT66simp for the clear itself, which is the same 32 cells of rows 1 to 23; the dashboard, the
+   * sprites, the border box and the colour bands are phase 3's, so a cleared screen here has no
+   * border yet.
+   */
+  Elite::ResetCellColours(m_canvas);
   Elite::ClearTextArea(m_canvas, *m_text);
   Elite::SetUpTextScreen(*m_printer, *m_text, *m_extended);
 }
@@ -229,12 +237,20 @@ void GameShell::ClearKeyLogger()
 
 void GameShell::ResetUniverse()
 {
-  // 6502: RESET, which falls into RES2. The ship slots and the stardust are phase 3's.
+  // 6502: RESET, which falls into RES2. The ship slots and the stardust are phase 3's, so what
+  // is left of RESET here is the fall-through itself.
+  ResetShip();
 }
 
 void GameShell::ResetShip()
 {
-  // 6502: RES2. Same.
+  // 6502: RES2 -- LDA #&10 / STA COL2, "switch the text colour to white". The ship slots, the
+  // stardust and dontclip are phase 3's; the text colour is not, and a screen printed without it
+  // is printed in black on black.
+  if (m_text != nullptr)
+  {
+    m_text->cellColour = Elite::TEXT_COLOUR_WHITE;
+  }
 }
 
 void GameShell::StartTheme()
