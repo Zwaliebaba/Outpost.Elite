@@ -234,8 +234,20 @@ class DashboardEffects
 public:
   virtual ~DashboardEffects() = default;
 
-  /// 6502: LDY #sfxecm / JSR NOISE -- the E.C.M. hum.
-  virtual void PlaySound(std::uint8_t _effect) = 0;
+  /*
+   * 6502: LDY #sfxecm / JSR NOISE -- the E.C.M. hum.
+   *
+   * RETURNS `NOISE`'s CARRY, because one caller reads it. The routine ends `SEC / RTS` on the
+   * path that gives the effect a SID voice, and reaches `SOUR1`'s bare `RTS` with the carry
+   * CLEAR when a higher-priority sound is already playing in all three -- and the flight loop's
+   * `JSR NOISE / JSR LASLI` runs `DORND` on whichever it left, so the laser burst lands a pixel
+   * further down when the shot was heard than when it was drowned out (§6.86).
+   *
+   * `NOISE` has a third exit the seam cannot express: with `DNOIZ` set the very first branch
+   * leaves for `SOUR1` with the caller's own carry untouched. The port has no sound-off option
+   * to reach it, so a bool is complete for what is modelled and would not be if one arrived.
+   */
+  virtual bool PlaySound(std::uint8_t _effect) = 0;
 
   /*
    * 6502: LDY #sfxecm / JMP NOISEOFF -- stop it again.

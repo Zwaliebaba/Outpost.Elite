@@ -428,6 +428,85 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.86 A sound routine that answers, and the one caller that listens
+
+The frame's opening fires the laser like this:
+
+```
+.custard
+ JSR NOISE
+ JSR LASLI
+```
+
+and `LASLI` opens `JSR DORND`, whose first instruction is `ROL A` on the seed. So the laser's
+convergence point is picked from the carry `NOISE` left behind.
+
+`NOISE` has three exits and they do not agree:
+
+- the path that gives the effect a SID voice ends `CLI / SEC / RTS`;
+- `LDA SFXPR,Y / CMP SOPR,X / BCC SOUR1` leaves for a bare `RTS` with the carry CLEAR, when a
+  higher-priority sound is already playing in every voice;
+- `LDA DNOIZ / BNE SOUR1`, the very first branch, reaches that same bare `RTS` with the CALLER's
+  carry untouched — which here is whatever `CMP #Mlas` or `CMP #Armlas` last set.
+
+So the burst lands one pixel lower when the shot was heard than when it was drowned out, and
+lower again, or not, when the player has turned the sound off. **A hardware seam that returns
+nothing cannot express this**, and the port had `false` hard-coded — right only for the middle
+case, which is the rarest of the three.
+
+`PlaySound` now returns the carry. It is the only seam in the port that returns anything, and it
+earns it: exactly one of the eight calls reads the answer. The third exit stays unmodelled
+because the port has no sound-off option to reach it, and a bool would have to grow a third state
+the day one arrives.
+
+**The general shape is worth naming.** A seam is drawn where the port stops caring, and "sound"
+looks like a place the port stops caring. It is not: `NOISE` is a subroutine like any other, and
+the register it returns in is part of its contract whether or not the thing it does is audible.
+The test harness needed the same correction — `TrapExit` had `ClearCarry` for `CHPR` and nothing
+for a routine that ends `SEC`, so a trapped `NOISE` stood in for the wrong exit.
+
+### 6.85 Four or five, depending on the roll
+
+Part 2 of the flight loop turns each control rate into a sign and a magnitude. The roll's
+magnitude ends:
+
+```
+ LSR A
+ LSR A
+ CMP #8
+ BCS P%+3
+ LSR A
+ STA ALP1
+```
+
+and eleven instructions later, after two stores, a load, a `JSR cntr`, three transfers and an
+`EOR`, the pitch's magnitude begins:
+
+```
+ TYA
+ BPL P%+4
+ EOR #%11111111
+ ADC #4
+```
+
+There is no `SEC` and no `CLC` between them, and `cntr` sets no flags on any of its three paths —
+it ends `BUMP2`, `REDU2` or a bare `RTS`, and every one of those leaves the carry as it found it.
+So **the four added to the pitch is four or five, and which one depends on the roll**: on the
+compare's carry when the roll's magnitude is eight or more, and on the bit the extra `LSR`
+shifted out when it is not.
+
+The `EOR #%11111111 / ADC #4` is a negate-and-add-four written as one addition, so the carry is
+not incidental to it — it is the `+1` of the two's complement, deliberately borrowed for the
+positive branch as well. What is incidental is *where the carry comes from*. A port that wrote
+`SEC` before the `ADC`, reasoning that the negation needs it, is right for the negative branch
+and right for every roll of eight or more, and wrong for half of the rest.
+
+This is the third time an arithmetic result in this port has depended on a flag set by an
+instruction that was not doing arithmetic (§6.44's `DORND` chain and §6.79's `AND #7`), and the
+first where the two are separated by a subroutine call. **The rule that comes out of it: a `JSR`
+is not a flag barrier, and reading one as if it were is the same mistake as reading a shared exit
+label as a shared meaning (§6.84).**
+
 ### 6.84 A branch out of a sixteen-bit compare, sharing a label with four rejections
 
 `HITCH` decides whether the player's laser hit a ship. It ends:

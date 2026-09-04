@@ -2,12 +2,15 @@
 
 #include "Lasers.h"
 
-#include "FlightLoop.h"
+#include "Dashboard.h"
 
 #include "EliteTypes.h"
 
 namespace Elite
 {
+
+/// 6502: DENGY -- declared here rather than through `FlightLoop.h`, which includes this file.
+[[nodiscard]] bool DrainEnergy(FlightStatus& _status) noexcept;
 
 namespace
 {

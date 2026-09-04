@@ -21,6 +21,9 @@
     <ClInclude Include="GoldenCanvas.h">
       <Filter>Oracle</Filter>
     </ClInclude>
+    <ClInclude Include="FlightWorld.h">
+      <Filter>Oracle</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />

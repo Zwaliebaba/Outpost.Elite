@@ -175,6 +175,7 @@ public:
   {
     Unchanged,  ///< leave the flags as the caller had them
     ClearCarry, ///< the routine ends CLC
+    SetCarry,   ///< the routine ends SEC -- `NOISE` does, on the path that takes a voice
   };
 
   struct Trap

@@ -206,7 +206,8 @@ public:
   virtual void SetPalette(std::uint8_t _colour) = 0;
 
   /// 6502: LDY #sfxboop / JMP NOISE -- the refusal noise `WARP` makes when it will not warp.
-  virtual void PlaySound(std::uint8_t _effect) = 0;
+  /// Returns the carry, as `DashboardEffects::PlaySound` does; `WARP` tail-calls and drops it.
+  virtual bool PlaySound(std::uint8_t _effect) = 0;
 };
 
 /// 6502: sfxboop -- the effect number `WARP` asks for when it refuses.
@@ -248,7 +249,8 @@ struct FlightScreen
   Compass& compass;
   Rng& rng;
 
-  const CommanderBlock& commander;  ///< 6502: TP, for the LASER bytes `SIGHT` reads
+  CommanderBlock& commander;        ///< 6502: TP -- `SIGHT` only reads it, the flight loop
+                                    ///< writes `NOMSL`, `QQ14`, `QQ20`, `FIST` and `BOMB`
   std::uint8_t& trumbleSprites;     ///< 6502: TRIBCT
 
   SightEffects& sight;

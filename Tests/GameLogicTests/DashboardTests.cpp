@@ -147,7 +147,7 @@ struct RecordingSound final : Elite::DashboardEffects
   std::vector<std::uint8_t> started;
   std::vector<std::uint8_t> stopped;
 
-  void PlaySound(std::uint8_t _effect) override { started.push_back(_effect); }
+  bool PlaySound(std::uint8_t _effect) override { started.push_back(_effect); return true; }
   void StopSound(std::uint8_t _effect) override { stopped.push_back(_effect); }
 };
 } // namespace
