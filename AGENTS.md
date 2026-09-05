@@ -203,6 +203,10 @@ and always run.
 
 Repository checks:
 
+**Run them with `python tools/check_all.py`**, which runs all nine in CI's order and takes no
+arguments. Do not retype the list into a loop: that is how a push went red on 2026-09-05 with the
+one check that would have caught it left out (§6.127). What it runs:
+
 ```
 python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/inventory.py --strict            # coverage ledger: every master-level include has a row

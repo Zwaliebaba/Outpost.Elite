@@ -451,6 +451,31 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.127 The check that would have caught it, and the list it fell off
+
+`Tactics.cpp` declared a local called `far`. On the Ubuntu leg that is an ordinary identifier; on
+Windows it is a MACRO from `<windows.h>`, so MSVC expanded it and the declaration became
+`const unsigned char = ...` -- `error C2513: no variable declared before '='`. Both CI jobs went
+red, the repository checks and the Windows build, on one cause.
+
+**And `check_gamelogic.py` catches exactly this.** It has looked for `near` and `far` since slice
+0f, it named the file and the line, and it is in `AGENTS.md`'s list of eight. The reason it did not
+run before the push is that the list was RETYPED from memory into a shell loop, and one entry --
+`check_gamelogic.py` without `--self-test`, which is the one that matters here -- was left out. The
+self-test variant ran and passed, which made the omission invisible: a check whose name is a prefix
+of another check's is a check you can lose without noticing.
+
+This is §6.123's own argument turned back on the checks themselves, about two hours after it was
+written. A rule a person retypes is a rule a person gets wrong, and the fix is the same shape:
+`tools/check_all.py` runs all nine in CI's order, takes no arguments so that nothing can be
+skipped, and prints the whole output of anything that fails rather than its last line. AGENTS.md
+now points at that rather than at a list.
+
+**The cost was one CI cycle and it should have been none.** The two Windows-only failures before
+this one (§6.116, §6.123) were things no local check could see; this one was seen, reported, and
+not read. That is a worse failure than either of them, and it is worth writing down precisely
+because the tooling was already right.
+
 ### 6.125 The AI, the autopilot, and a byte the source itself gave up on
 
 Slice 4a-c is `TACTICS`'s seven parts and `DOCKIT` built as one unit, because §6.122 established
@@ -4901,6 +4926,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **A red build from a check that already existed** (§6.127). `Tactics.cpp` declared a local called `far`, which is a `<windows.h>` macro, so MSVC turned the declaration into a syntax error and both CI jobs failed on one cause. `check_gamelogic.py` has caught `near` and `far` since slice 0f and it named the file and the line -- it simply was not run, because the list of eight checks was retyped into a shell loop and the entry whose name is a PREFIX of another entry's was lost. `tools/check_all.py` now runs all nine in CI's order and takes no arguments, and AGENTS.md points at it rather than at a list. §6.123's argument, turned back on the checks themselves. |
 | 2026-09-05 | **Slice 4a-c: the ships fight back** (§6.125). `TACTICS`'s seven parts and `DOCKIT` as one unit, with the death path threaded out of `MVEIT` per §6.122 and observed false on eight of 92 cases. **`K3+10` is settled**: the upstream commentary says "I have no idea what K3+10 contains", and the port can close it mechanically -- `K3` is `SKIP 0` over `XX2`'s fourteen bytes, `DOCKIT` is the only reader and `LL9` the only writer, so whether an NPC finishes docking depends on the visibility of the eleventh face of the last ship drawn. Two defects the oracle found: `DOCKIT` calls `TA2` and then the WHOLE of `TAS2` again over the same `K3`, which the port had transcribed as one call, and six of ten `DORND` carries come from compares several instructions earlier. The carries were measured by stepping the interpreter rather than derived by eye -- §6.118's instrument used as a first resort. |
 | 2026-09-05 | **Three mutations walked through slice 4a-b's sweep and none of them was the port** (§6.124). One generator seed, so the carry `SFS1` rotates into byte 29 never varied; a ramp of test data that never reaches 128, so `SFS2`'s sign-magnitude amount was always positive; and a `NEWB` byte whose ramp value already had the bit `ANGRY` sets, so the OR was a no-op. All three are §6.93 again, and all three came from the same convenience -- generated ramps are systematically wrong about signs and about bits that happen to be set. The sweeps now name the values a routine branches on and assert the answer came out both ways rather than counting cases. |
 | 2026-09-05 | **The third Windows-only compile error, and the first one a check can stop** (§6.123). `Tactics.cpp` was green on Ubuntu, green on all 321 tests and green on every repository check, and failed the Windows build with C1010: its first line was its own header rather than `pch.h`. With `/Yu` MSVC discards everything above that line, so the rule is "the FIRST line is pch.h", which is a rule a script can read off disk -- `tools/check_projects.py` now checks it for every source in every project built with precompiled headers, proved by deleting the line and watching the check name the file. The corollary to §6.116: when a Windows-only failure is a build rule rather than a type disagreement, write the rule into a check before fixing the file. |
