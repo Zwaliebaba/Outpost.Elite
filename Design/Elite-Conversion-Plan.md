@@ -713,7 +713,8 @@ already met it.
 **One survivor is provably equivalent.** `TA11` skips the roll when `INWK+29` doubled is 32 or
 more, and moving that to 31 changes nothing: the value tested is a LEFT SHIFT, so it is always even
 and can never equal 31. Recorded rather than chased, with the proof, the way §6.43 and §6.48 record
-theirs.
+theirs. **§6.131 turns this one-off into a rule** and finds that a second survivor here was the same
+no-op, and that the third was pointing at a branch the fixture had made unreachable.
 
 **The rule this leaves.** §6.93 said a fixture that makes two things equal cannot tell them apart,
 and §6.124 said a generated ramp is systematically wrong about signs and about bits that happen to
