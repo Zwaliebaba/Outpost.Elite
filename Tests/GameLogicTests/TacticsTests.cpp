@@ -1090,6 +1090,19 @@ namespace GameLogicTests
          * so, by giving the nose the opposite sign to the position.
          */
         std::uint8_t shipNoseX, shipNoseY, shipNoseZ;
+
+        /*
+         * AND THE STATION'S ROOF, which is the other half of `PH32`'s roll test.
+         *
+         * `TN11` dots the ship's SIDE vector with this, and both were constants: the side comes
+         * from the seeding ramp and the roof was set to one value for every case. So the dot
+         * product took ONE value -- 6 after the shift, in all 332 cases that reached it -- the
+         * `CMP #66` was false every time and `TN11` never executed at all (§6.132). Defaulted to
+         * what the sweep used, so the rows above keep their behaviour and only the ladder varies.
+         */
+        std::uint8_t roofX = 0x08u;
+        std::uint8_t roofY = 0x60u;
+        std::uint8_t roofZ = 0x08u;
       };
 
       const Approach APPROACHES[] = {
@@ -1171,6 +1184,22 @@ namespace GameLogicTests
           {
             ladder.push_back({"down the z slot", offX, sign, offY, sign, 0x40u, 0u, 0x08u, 0x08u, 0x60u, 0x08u, 0x08u, 0xE0u});
           }
+        }
+      }
+
+      /*
+       * A ROOF LADDER, because `PH32`'s roll test had one input and therefore one answer.
+       *
+       * `TN11` dots the ship's SIDE vector -- fixed at (&E0, &08, &60) by the seeding ramp -- with
+       * the STATION'S ROOF, which was also fixed. Walking the roof from perpendicular to the side
+       * round to aligned with it sweeps the dot product across the constant `DOCKIT` compares it
+       * against, and that is the only way the branch can be reached at all.
+       */
+      for (const std::uint8_t roofX : {0x08u, 0x28u, 0x48u, 0x60u, 0x88u, 0xA8u, 0xC8u, 0xE0u})
+      {
+        for (const std::uint8_t roofZ : {0x08u, 0x30u, 0x60u, 0xB0u, 0xE0u})
+        {
+          ladder.push_back({"roof ladder", 0x02u, 0u, 0x02u, 0u, 0x40u, 0u, 0x08u, 0x08u, 0x60u, 0x08u, 0x08u, 0xE0u, roofX, 0x10u, roofZ});
         }
       }
 
@@ -1276,8 +1305,9 @@ namespace GameLogicTests
             world.world.work[10] = approach.shipNoseX;
             world.world.work[12] = approach.shipNoseY;
             world.world.work[14] = approach.shipNoseZ;
-            world.world.bubble.blocks[1][16] = 0x08u;
-            world.world.bubble.blocks[1][18] = 0x60u;
+            world.world.bubble.blocks[1][16] = approach.roofX;
+            world.world.bubble.blocks[1][18] = approach.roofY;
+            world.world.bubble.blocks[1][20] = approach.roofZ;
 
             world.world.flight.type = type;
 

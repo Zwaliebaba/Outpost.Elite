@@ -451,6 +451,35 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.132 The third dead branch, and what the three of them have in common
+
+Correcting the shifted thresholds (§6.131) left one survivor, `dock-66`, and it was the same story a
+third time. `PH32` ends `DOCKIT` by asking whether the station's roof lines up with the ship's side
+-- `TAS4` dots the two -- and rolls hard through `TN11` when it does not. Instrumenting it gave ONE
+value, 6 after the shift, in all 332 cases that reached it. The `CMP #66` was false every time, so
+`TN11` had never executed: not the threshold, the whole branch.
+
+The cause was in the fixture's oldest layer. Both inputs to that dot product were constants. The
+ship's side vector comes from the seeding ramp, which gives every ship the same orientation, and the
+station's roof was set once for the whole sweep. Two constants dotted together is one number however
+many approaches are tried, and 1,644 cases measured it 332 times.
+
+The roof is now per-approach with the old value as its default, so nothing above it changed, and a
+ladder walks it from perpendicular to the ship's side round to aligned. The dot product now takes 29
+distinct values from 0 to 144, lands on 66 exactly, and `TN11` runs. The port agreed with the
+shipped routine everywhere, so again the finding is coverage rather than a defect.
+
+**The three of them together are one pattern, and it is worth naming.** `PH3`'s x test was always
+true, `PH3`'s y test never ran, and `PH32`'s roll test had one input. In each case a fixture held
+something FIXED that the routine branches on -- the station's nose down +x, then the ship's side and
+the station's roof -- and in each case the sweep looked healthy from the outside: hundreds of cases,
+all passing, comparing dozens of bytes against the oracle. §6.126 said the counter should be
+distinct ANSWERS rather than cases. This sharpens it: the counter should be **distinct answers per
+BRANCH**, because a sweep can produce many outcomes overall while a particular test inside it sees
+one value forever. The three ladders here were each found the same way -- probe the comparison,
+print what reaches it, and look at how many numbers come back. That took minutes each and it is the
+first thing to do to a surviving threshold mutation, before reasoning about the port at all.
+
 ### 6.131 A mutation that could not fail, and the branch it was hiding
 
 §6.126 was about a sweep that could not reach what it was swept over. This is the mirror: a
@@ -5173,6 +5202,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The third dead branch in `DOCKIT`, and the pattern the three share** (§6.132). `PH32`'s roll test dots the ship's SIDE vector with the station's ROOF, and both were constants -- the side from the seeding ramp, the roof set once for the whole sweep -- so the dot product took ONE value, 6, in all 332 cases that reached it, and `TN11` had never executed at all. The roof is per-approach now with the old value as its default, and a ladder walks it from perpendicular to aligned: 29 distinct values, 66 among them. With `PH3`'s two tests this makes three branches that a healthy-looking sweep of 1,644 oracle-compared cases could not see, all because a fixture held fixed something the routine branches on. The counter is not distinct answers but **distinct answers per branch**, and probing the comparison is the first move on a surviving threshold, not the last. |
 | 2026-09-05 | **A mutation that could not fail** (§6.131). `ASL A / CMP #n` compares an always-EVEN value, so for an even `n` the mutation to `n-1` is the same predicate and can never be caught -- two of slice 4a-c's three shifted thresholds moved that way and were counted as survivors when they were arithmetic no-ops. On a shifted comparison a threshold must move by two. Correcting the third, which did move up, found the branch underneath: `PH3`'s x test was TRUE in all eleven hundred cases and the y test below it never ran, because reaching `PH3` needs the ship in front of the slot and every approach pointed the slot down +x, which makes a small x component impossible by construction. A slot pointing down +z makes both small; both ladders now cross 12 exactly and the fine approach reaches `PH32`. The port agreed on every newly reached case. 1,140 cases to 1,644. |
 | 2026-09-05 | **Two parallel tracks met on one file, and the merge was the easy half** (§6.130). Phases 4 and 5 conflicted only on the revision log's newest rows, which is what a newest-first log is for. The two real findings were downstream of it: §6.126's `[[nodiscard]]` carries produced six warnings, and the compiler was right about all six -- four production sites discard the flag correctly and now say so, and the two in the tests were the `MVT3` and `VCSUB` sweeps ignoring the very thing the slice had just made load-bearing, so both assert it now. And `inventory.py --strict` went red on twelve ported files because a bulk edit put each ✅ one position right, INSIDE the previous label's backticks, which turns every affected label into one that names no file. §6.120 for the third time. |
 | 2026-09-05 | **Phase 5, both slices** (§6.129). `SoundEffects` and `Music` in `GameLogic`, the sound workspace and the music variables as structs, the tables extracted (`SFXPR` at 136 bytes for `HYPNOISE`'s bit-7 read), and the interrupt's SID half as a tick that emits register writes. `Cpu6502` gained an in-order store log and the fixture enters `COMIRQ1` as an interrupt, so the comparison is on every SID write of every frame -- 4,160 effect frames and 4,000 music interrupts -- rather than on the registers' final state. `SidSynth` and `SoundOutput` in the executable: a per-cycle 6581 without its filter, played through XAudio2 with the interrupt run off the device's queue depth. Ledger row 164 corrected -- the "nine tune blocks" are the raster interrupt's VIC-II tables. ADR-005 §2 amended: no `offsetSamples`. Left for 4d and 4e: the Trumble chatter and the option keys. |
