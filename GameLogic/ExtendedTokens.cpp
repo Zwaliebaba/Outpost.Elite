@@ -578,12 +578,19 @@ namespace Elite
       }
       return;
 
+    case 22:
     case 23:
     case 29:
       /*
        * 6502: MT23 and MT29 -- move to row 10 or row 6, switch to white text, then fall into
        * MT13. They are one routine with two entry points, and the entry that sets the row is
        * skipped by a BIT, the same trick MT1 and MT2 use.
+       *
+       * TWENTY-TWO IS HERE BECAUSE `PAUSE` FALLS INTO MT23 (slice 4d-b). The routine ends
+       * `JSR LL9` and the next instruction is MT23's `LDA #10`, so a briefing's `{22}` sets the
+       * case flags as surely as a `{23}` does -- and the port had it under `default`, which set
+       * neither. Everything after the first page of the Constrictor briefing would have printed
+       * in the wrong case.
        *
        * WHITETEXT between them is an RTS in this version; the C64's text is one colour. So all
        * that is left besides the cursor move is MT13's pair of stores, which land here.

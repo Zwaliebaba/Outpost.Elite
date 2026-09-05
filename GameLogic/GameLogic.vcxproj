@@ -177,6 +177,7 @@
     <ClInclude Include="SoundEffects.h" />
     <ClInclude Include="Music.h" />
     <ClInclude Include="Market.h" />
+    <ClInclude Include="Missions.h" />
     <ClInclude Include="StateTokens.h" />
     <ClInclude Include="MarketScreen.h" />
     <ClInclude Include="Equipment.h" />
@@ -216,6 +217,7 @@
     <ClCompile Include="TextPrint.cpp" />
     <ClCompile Include="Universe.cpp" />
     <ClCompile Include="Market.cpp" />
+    <ClCompile Include="Missions.cpp" />
     <ClCompile Include="StateTokens.cpp" />
     <ClCompile Include="MarketScreen.cpp" />
     <ClCompile Include="Equipment.cpp" />
