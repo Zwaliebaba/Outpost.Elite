@@ -165,6 +165,25 @@ namespace Outpost
 
   void Window::PressKey(WPARAM _virtualKey, bool _down) noexcept
   {
+    /*
+     * The chart's crosshairs first, because an arrow key is TWO C64 keys and only one of them is
+     * the binding below.
+     *
+     * `TT17` reads one cursor key per axis and takes the direction from SHIFT (`KeyMap.h`), so an
+     * arrow puts its axis key into the logger and, for two of the four, a shift with it. Both are
+     * held state and neither is a key PRESS: the queue below is what `TT102` dispatches on, and
+     * the crosshairs are moved from the logger by the frame rather than by an event.
+     */
+    const CursorKeys cursor = CursorKeysFor(static_cast<int>(_virtualKey));
+    if (cursor.axis != NO_KEY && cursor.axis < KEY_COUNT)
+    {
+      m_held[cursor.axis] = _down;
+    }
+    if (cursor.shift != NO_KEY && cursor.shift < KEY_COUNT)
+    {
+      m_held[cursor.shift] = _down;
+    }
+
     const std::uint8_t key = C64KeyFor(static_cast<int>(_virtualKey));
     if (key == NO_KEY || key >= KEY_COUNT)
     {

@@ -329,7 +329,7 @@ namespace Elite
    * rather than something the caller does afterwards.
    */
   /// `_carryIn` because `ECBLB2` touches no flag on its way to `NOISE`, so what the sound sees
-  /// is what this routine was called with (§6.115).
+  /// is what this routine was called with (§6.118).
   void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects, bool _carryIn) noexcept;
 
   /*

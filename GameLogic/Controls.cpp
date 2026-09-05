@@ -50,6 +50,37 @@ namespace Elite
     return ((reduced & 0x80u) != 0u) ? Recentre(reduced, _recentreDisabled) : reduced;
   }
 
+  CrosshairStep ReadCrosshairKeys(const KeyLogger& _keys) noexcept
+  {
+    // 6502: LDA KLO+&31 / ORA KLO+&C -- either SHIFT, and the entries are &FF while held, so the
+    // OR turns the step from 1 into &FF, which is -1.
+    const std::uint8_t shifted = static_cast<std::uint8_t>(_keys[KEY_SHIFT_LEFT] | _keys[KEY_SHIFT_RIGHT]);
+
+    // 6502: BIT KLO+&3F / BPL P%+4 / ASL A / ASL A -- RETURN held is four times the step, and the
+    // test is on bit 7 because that is what the scan writes.
+    const bool fast = (_keys[KEY_CROSSHAIR_FAST] & 0x80u) != 0u;
+
+    auto step = [fast](std::uint8_t _value) noexcept { return fast ? static_cast<std::uint8_t>(_value << 2u) : _value; };
+
+    CrosshairStep moved;
+
+    // 6502: LDA KLO+&3E / BEQ noxmove / LDA #1 / ORA ... -- nothing held leaves A as the zero the
+    // load produced, which is why the branch goes to the shift with A already right.
+    moved.x = step((_keys[KEY_CURSOR_X] != 0u) ? static_cast<std::uint8_t>(1u | shifted) : std::uint8_t{0});
+
+    /*
+     * 6502: LDA KLO+&39 / BEQ noymove / LDA #1 / ORA ... / EOR #%11111110.
+     *
+     * The `EOR` is INSIDE the branch, so it runs only when the key is held: a released key falls
+     * to `noymove` with A = 0 and stays zero, while a held one becomes &FF or 1. Applying it to the
+     * zero as well -- which is what writing this as one expression invites -- would move the
+     * crosshairs by &FE every pass with nothing pressed.
+     */
+    moved.y = step((_keys[KEY_CURSOR_Y] != 0u) ? static_cast<std::uint8_t>((1u | shifted) ^ 0xFEu) : std::uint8_t{0});
+
+    return moved;
+  }
+
   void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, ShipBlock& _work, FlightState& _flight,
                           ControlEffects& _effects) noexcept
   {

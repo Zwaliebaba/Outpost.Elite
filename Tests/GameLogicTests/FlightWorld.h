@@ -242,7 +242,7 @@ namespace GameLogicTests
       void Beep() override
       {
         sounds.push_back(SOUND_BEEP_EFFECT);
-        carries.push_back(0u); // `BEEP` is `LDY #sfxbeep / JMP NOISE`: the carry is CHPR's (§6.115)
+        carries.push_back(0u); // `BEEP` is `LDY #sfxbeep / JMP NOISE`: the carry is CHPR's (§6.118)
       }
       void ClearScreen() override
       {
