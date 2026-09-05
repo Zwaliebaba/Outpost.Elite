@@ -10,6 +10,7 @@
 
 #include "Canvas.h"
 #include "Commander.h"
+#include "Dashboard.h"
 #include "DockedKeys.h"
 #include "Docking.h"
 #include "Equipment.h"
@@ -228,6 +229,50 @@ namespace
   }
 
   /*
+   * 6502: the head of `MLOOP` -- main game loop part 5's two countdowns, before anything else.
+   *
+   * BOTH ARE COOLING AND NEITHER WAS PORTED. `GNTMP` is the laser temperature the LT dial reads and
+   * `LASCT` is the pulse laser's own countdown, and the two together are why a gun works at all:
+   * part 3 of the flight loop refuses to fire while `LASCT` is non-zero and jams the gun for good at
+   * a `GNTMP` of 242. Both are written by firing and this is the only place either comes down, so
+   * without it a pulse laser fires exactly once per flight and the LT bar only ever rises.
+   *
+   * `LASCT` FALLS BY TWO AND NOT BY ONE -- `DEX / BEQ P%+3 / DEX / STX LASCT`, where the branch
+   * skips the second `DEX` so it stops at zero rather than wrapping past it. `GNTMP` falls by one.
+   *
+   * They are ABOVE part 5's `LDA QQ11` gate, so they run on a docked pass as well as a flying one,
+   * and both loops call this for that reason rather than only the one that has a laser.
+   */
+  void CoolTheGuns(Elite::FlightStatus& _status) noexcept
+  {
+    // 6502: LDX GNTMP / BEQ EE20 / DEC GNTMP.
+    if (_status.laserTemperature != 0u)
+    {
+      _status.laserTemperature = static_cast<std::uint8_t>(_status.laserTemperature - 1u);
+    }
+
+    // 6502: LDX LASCT / BEQ NOLASCT / DEX / BEQ P%+3 / DEX / STX LASCT.
+    if (_status.laserCount != 0u)
+    {
+      std::uint8_t left = static_cast<std::uint8_t>(_status.laserCount - 1u);
+      if (left != 0u)
+      {
+        left = static_cast<std::uint8_t>(left - 1u);
+      }
+      _status.laserCount = left;
+    }
+  }
+
+  /*
+   * 6502: FRCE -- the main loop entered with a key already "pressed".
+   *
+   * Declared ahead of `Perform` because `BAY2` forces one, and `BAY2` is reached from inside two of
+   * the actions `Perform` performs. The recursion is one level deep and cannot be more: the key it
+   * forces is f9, and the Inventory screen forces nothing.
+   */
+  void PressKey(Game& _game, std::uint8_t _key);
+
+  /*
    * One key, and whatever screen it reaches.
    *
    * 6502: what `TT102` does with the label it chose. The dispatch itself is `ActionForKey`, which
@@ -280,10 +325,34 @@ namespace
 
     case Elite::KeyAction::BuyCargo:
       Elite::BuyScreen(_game.trade, _game.commander, _game.market, _game.current.economy, false);
+
+      /*
+       * 6502: BAY2 -- LDA #f9 / JMP FRCE, and the screen reaches it BOTH ways out. A letter gets
+       * there through gnum's `CMP #10 / BCS BAY2`; the seventeenth item gets there through TT222's
+       * `LDA QQ29 / CMP #17 / BCS BAY2`. There is no third exit, which is why this is unconditional.
+       *
+       * `BuyScreen` returns for both rather than jumping, because BAY2 is the DISPATCH'S and the
+       * dispatch is here. Without this the port left the buy screen on the display after a cancel,
+       * so the letter key looked dead when it had in fact done exactly what the original does.
+       *
+       * It forces a KEY rather than performing the action, because FRCE is entered with a key and
+       * lets TT102 decide again -- so cancelling out of a purchase goes down the same path as
+       * pressing "9", rather than down a second one that happens to agree today.
+       */
+      PressKey(_game, Elite::KEY_INVENTORY);
       return;
 
     case Elite::KeyAction::SellCargo:
       Elite::ListCargo(_game.trade, _game.commander, _game.market, _game.current.economy, Elite::SELL_CARGO_VIEW);
+
+      /*
+       * 6502: TT212's `JSR dn2 / JMP BAY2` -- and only the beep is the screen's.
+       *
+       * `ListCargo` already makes it, on the exit that runs out of items and not on the one a letter
+       * takes; that asymmetry is the original's and stays inside the screen. What is left for the
+       * dispatch is the jump, and both exits share it.
+       */
+      PressKey(_game, Elite::KEY_INVENTORY);
       return;
 
     case Elite::KeyAction::Inventory:
@@ -565,6 +634,34 @@ namespace
         return;
       }
 
+      // 6502: the two `DEC`s at the top of `MLOOP`, which the flight loop falls into.
+      CoolTheGuns(_game.status);
+
+      /*
+       * 6502: main game loop part 5 -- `LDA QQ11 / BNE P%+5 / JSR DIALS`, EVERY PASS.
+       *
+       * The dials were drawn in one place only, `ShowDashboard`'s `JSR DIALS`, which is the copy
+       * `wantdials` makes when the dashboard first arrives as a picture with every bar empty. That
+       * is the ONE-OFF, and the port had mistaken it for the whole of it: the speed, roll and dive
+       * bars redrew when the view changed and never again, so a ship being flown had a dashboard
+       * that was accurate at the moment it appeared and frozen from then on.
+       *
+       * The gate is the C64 build's own and not a guard invented here: `QQ11` non-zero is a chart
+       * or a trading screen, and only the space view has a dashboard under it. It sits AFTER the
+       * frame and BEFORE `TT17`, where part 5 puts it, because `DIALS` reads what the frame just
+       * wrote -- drawing it first would show the previous frame's speed.
+       *
+       * `DIALS` is a redraw and not a tick: part 3's energy bars run one pass in four off `MCNT`,
+       * and that counter is the flight loop's, so the four-pass cycle comes out of `M%` rather than
+       * out of how often this is called.
+       */
+      Elite::FlightScreen& dashboard = _game.flight.Screen();
+      if (dashboard.view == 0u)
+      {
+        Elite::DrawDials(dashboard.canvas, dashboard.draw, dashboard.math, dashboard.geometry, dashboard.flight, dashboard.status,
+                         dashboard.commander.At(Elite::Field::Fuel), dashboard.compass, dashboard.bubble);
+      }
+
       /*
        * 6502: and then `MLOOP`'s second half, which the flight loop falls into -- `JSR TT17` and
        * `TT102`, once per frame and AFTER it.
@@ -684,6 +781,10 @@ namespace
 
         for (int pass = 0; pass < docked.steps; ++pass)
         {
+          // 6502: MLOOP's head, which a docked pass reaches too -- the gate below it is what is
+          // about the space view, not these.
+          CoolTheGuns(game->status);
+
           game->crosshairStep = Elite::ScanFlightControls(game->flight.Loop(), game->flight, game->view);
 
           std::uint8_t key = 0;
