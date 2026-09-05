@@ -480,9 +480,18 @@ namespace Elite
      * `LDA FRIN+4 / BEQ D1` is the condition, so this fills slots 0 to 4 -- five pieces, not four,
      * and the loop tests the slot AFTER creating one.
      */
+    /*
+     * The carry `Ze` rotates into its first `DORND`. On the first pass it is what `ex` left, and
+     * that is always CLEAR: every character goes out through `CHPR`, which ends `CLC / RTS`, and
+     * nothing on the way back from the last one to `.D1` touches the flag. On every later pass it
+     * is what the `JSR DORND` at the bottom of the loop left in its last `ADC`, because `AND`,
+     * `LDY`, `STA (INF),Y`, `LDA` and `BEQ` leave it alone (§6.117).
+     */
+    bool carry = false;
+
     do
     {
-      const RngResult roll = SeedDebris(screen.work, screen.rng); // 6502: JSR Ze
+      const RngResult roll = SeedDebris(screen.work, screen.rng, carry); // 6502: JSR Ze
 
       screen.work[0] = static_cast<std::uint8_t>(roll.value >> 2); // 6502: LSR A / LSR A / STA INWK
 
@@ -526,15 +535,18 @@ namespace Elite
       const bool plate = (roll.previous & 1u) != 0u;
       const std::uint8_t type = plate ? SHIP_TYPE_ALLOY_PLATE : SHIP_TYPE_CANISTER;
 
-      const NewShip made = AddDebris(screen.bubble, screen.work, type, screen.flight.delta, screen.flight.blueprint);
+      // 6502: JSR fq1 -- and the carry it takes into its `ROL A` is the one `BCC D3` just tested.
+      const NewShip made = AddDebris(screen.bubble, screen.work, type, screen.flight.delta, plate, screen.flight.blueprint);
 
       // 6502: JSR DORND / AND #%10000000 / LDY #31 / STA (INF),Y -- half the wreckage is already
-      // dead, which is what makes some of it explode as it goes past.
-      const RngResult state = screen.rng.Next(false);
+      // dead, which is what makes some of it explode as it goes past. The carry it rotates in is
+      // `NWSHP`'s answer: `SEC / RTS` for a ship made, `CLC / RTS` for one refused.
+      const RngResult state = screen.rng.Next(made.created);
       if (made.created)
       {
         screen.bubble.blocks[made.slot][31] = static_cast<std::uint8_t>(state.value & 0x80u);
       }
+      carry = state.carry;
     } while (screen.bubble.slots[DEATH_DEBRIS_SLOT] == 0u);
   }
 

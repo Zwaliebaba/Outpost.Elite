@@ -42,6 +42,27 @@ main loop that ran as fast as the scene allowed.
   per frame. Which one a routine is, is measured with `Cpu6502`'s cycle counter and not judged
   (§6.109). Vsync on; the DXGI flip-model swap chain from
   Frontier's `GpuSwapChain`.
+- **OPEN DECISION — the sprite overlay, recorded 2026-09-05.** This section describes a 320×200
+  indexed texture and nothing above it, and the C64 drew eight hardware sprites above it: the
+  laser crosshairs, the Trumbles, and nothing else the game uses. `SIGHT` is ported and writes
+  the sprite pointers and colour; no code composites them, so the crosshairs do not appear (plan
+  §6.100). Two things make this a decision rather than a slice. `SPRITE.bin` is a fourth assembly
+  that `tools/labels.py` does not build, so the oracle holds no sprite data; and there is no
+  oracle for a COMPOSITED image at all — the game never rendered one into memory — so this would
+  be the first drawing in the port with nothing to compare against beyond the sprite bytes
+  themselves. The choice is where compositing lives: in `Canvas::Resolve` (`GameLogic`, testable
+  on both CI legs, and the sprite data extractable and byte-checked like every other table) or in
+  the presenter (`Outpost/`, Windows-only, checked by nothing this repository can run). The
+  recommendation is the canvas; the ruling is the owner's.
+- **OPEN ITEM — the VIC-II effects the game drives through the raster handler, recorded 2026-09-05.**
+  `moonflower` (the energy bomb drops the upper half to standard bitmap mode), `welcome` (the border
+  colour it cycles while the bomb runs) and `HFX` (the hyperspace tearing, `DOHFX`) are ordinary
+  bytes in `ScreenState` that `FlightSession::SyncVideoRegisters` carries and `Canvas::Resolve` has
+  no model for (plan §6.98). They were a finding and not a decision until this line: a player of
+  the shipped game sees the bomb and the jump, and a player of the port sees neither. The choice is
+  the sprites' choice -- model them in the canvas, where a test can see them, or in the presenter,
+  where nothing can -- and the recommendation is the same. What is NOT open is whether they exist
+  (plan §6.120).
 - **The 256-wide space view's horizontal placement** inside the bitmap and the dashboard row
   split. **Answered 2026-09-03, and it never needed the screenshots this clause asked for.**
   Slice 0b-b was cancelled, and the plan's §6.5 accounted for only two of its dependents; this

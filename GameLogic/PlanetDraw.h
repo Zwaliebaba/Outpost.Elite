@@ -74,12 +74,15 @@ namespace Elite
     std::uint8_t yx2M1 = 0;
 
     /*
-     * 6502: PLTOG -- whether the planet gets its detail drawn, and it has ONE reader and NO WRITER.
+     * 6502: PLTOG -- whether the planet gets its detail drawn: craters and meridians, or a circle.
      *
-     * `PL9` reads it and nothing in the whole C64 build stores to it. Other versions toggle it from
-     * a key; this one takes whatever the loader left in the byte at 7439 and keeps it for the life
-     * of the game. So it is initialised from the image rather than defaulted here, and a port that
-     * assumed "off" would draw featureless planets for ever.
+     * `PL9` is its one reader. Its one WRITER is the pause screen: `DKS3` walks the configuration
+     * block as `DAMP,Y` against the key table `TGINT`, and offset 9 is this byte behind the "P"
+     * key -- an indexed store, which is why an earlier version of this comment, written from a
+     * search for `STA PLTOG`, said the byte had no writer at all (§6.120). The pause screen is not
+     * ported yet (slice 4e), so for now the byte holds whatever the loader left at 7439 and is
+     * initialised from the image rather than defaulted here: a port that assumed "off" would draw
+     * featureless planets for ever.
      */
     std::uint8_t pltog = 0;
 

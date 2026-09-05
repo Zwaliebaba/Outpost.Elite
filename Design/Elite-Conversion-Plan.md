@@ -108,16 +108,30 @@ hardware in them.
 
 ### 1.2 What the solution contains today
 
-- `Outpost.slnx` with two projects and three platforms (x64, x86, ARM64).
-- `NeuronCore/` — static library, C++20, v145. Two headers: `NeuronCore.h` (the shared PCH
-  content: STL, Win32, Winsock, C++/WinRT base) and `Debug.h` (`DebugTrace`, `Fatal`,
-  `ASSERT` family). Nothing else yet.
-- `Outpost/` — a **WinUI 3 / Windows App SDK 2.4 desktop app template**, MSIX single-project
-  packaged, C++/WinRT 3.0, with `packages.config` pulling WebView2, AI/ML, Widgets, Search and
-  DWrite packages. It has `pch.h/.cpp` and assets only: no `Main.cpp`, no XAML page. It
-  references `NeuronCore`. ADR-005 recommends replacing this shell (owner decision, §8).
-- `.clang-format`, `.clang-tidy`, `.editorconfig` — copied from Outpost.Frontier. They cite an
-  `AGENTS.md` and a `Build/` folder that do not exist here yet.
+Rewritten 2026-09-05; what it said on 2026-09-02 is preserved in the history and was true then.
+
+- `Outpost.slnx` with four projects: `NeuronCore`, `GameLogic`, `GameLogicTests` and `Outpost`.
+- `NeuronCore/` — the foundation static library: the shared precompiled-header content and
+  `Debug.h`. No game semantics, and no C++/WinRT in the two libraries that never used it.
+- `GameLogic/` — **the port**, namespace `Elite`: 52 translation units, deterministic and
+  platform-free, guarded by `tools/check_gamelogic.py`. Everything phases 0 to 3 name is here —
+  the arithmetic kernel, the text system, the universe, every docked screen, the ship slots and
+  motion, `LL9` and the clipper, the planet, sun and stardust, all sixteen parts of the flight
+  loop, the dashboard, the launch and the two tunnels, the title screen and the death screen —
+  each compared against the shipped routine. Phase 4's tactics, explosions and spawning rules and
+  phase 5's sound are the stubs on its effects interfaces, listed in `Outpost/FlightSession.h`.
+- `Outpost/` — the executable: a raw Win32 window, a D3D12 flip-model presenter for the indexed
+  canvas, the key map, the commander store, `FlightSession` (the flight world and its six seams)
+  and `GameShell` (the docked world's seven), and the composition root in `Main.cpp` with both of
+  the original's outer loops. It builds unpackaged on CI; MSIX stays and WinUI 3 is ignored
+  rather than stripped (ADR-005 §5, owner ruling). It launches, flies, docks and dies.
+- `Tests/GameLogicTests/` — 313 tests: the 6502 interpreter with its cycle counter, the oracle
+  fixture over the assembled game and the loader, and the suites. `Tests/PortableRunner/` runs
+  the same suite under g++ in about a minute.
+- `tools/` — the label map and table extractors, `c64_source.py`, and the nine repository checks
+  CI runs on every push.
+- `Design/Reference/` holds the generated oracle inputs and is gitignored; `Upstream/` is the
+  annotated source library as a submodule, pinned.
 
 ### 1.3 What the sibling repositories give us
 
@@ -319,7 +333,7 @@ Slices are small enough to land in one sitting each and every one ends with some
 runs or a test that is green. "Accept" is what has to be true to close the slice. The order
 within a phase is the recommended one; slices marked ∥ can run in parallel.
 
-### Phase 0 — Foundations (nothing ported yet)
+### Phase 0 — Foundations ✅ (all but 0e's permission)
 
 | Slice | Scope | Accept |
 |---|---|---|
@@ -437,6 +451,97 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.120 The ledger was complete to a reader, a hundred files short to the tool, and one of the hundred was a screen
+
+`tools/inventory.py --strict` has existed since slice 0c with a docstring saying it was "not usable
+until the ledger is complete; it is what CI runs at the end of a phase". Phase 3 ended on
+2026-09-05, so it was run. **101 of the 710 master-level includes had no row.**
+
+**Ninety-one of them were notation.** The ledger names a multi-part routine once --
+`mveit_part_1_of_9` … `part_9_of_9` -- and a numbered family as a range -- `bdro1`–`bdro15`,
+`ks1`–`ks4`, `lijt1`–`lijt8`, `dtw1`–`dtw6` -- and the matcher read backtick groups and nothing
+between them, so every part but the first and every number but the ends was unaccounted. Both
+shorthands are now expanded by the tool and written down in its docstring and in the ledger's
+header, which is the right fix: the notation is what a reader wants, and a tool that cannot read
+it is the thing to change.
+
+**Ten were real, and four of those were ported.** `crlf` (control code 9, `TT27`'s tab-and-colon),
+`tt128` (the short-range chart's range circle, on screen since 2b), `ttx110` (`hyp`'s space-view
+branch), and `BRBR` with `brkd` (the BRK handler and its flag, replaced rather than ported) are
+assembled by this build and had been named by no row since the ledger opened. The other five are
+one routine under the wrong spelling: `LOIN` parts 1, 2, 5, 6 and 7 are files called
+`loin_part_N_of_7-loinq_part_N_of_7`, and the row had them under the BBC's plain stem. Four of the
+five real omissions carry `// 6502:` markers in `GameLogic/`, so "ported and not in the ledger" was
+computable on any day since 2026-09-03 and nobody computed it, because the tool's own text said the
+mode could not be used. **CI runs `--strict` from this commit.**
+
+**Then the reading, which no tool does.** With every file named, the rows were read against what
+the C64 build assembles -- the 77 C64-only routines and 90 C64-only variables one summary line at a
+time -- and against the phase 4 and 5 scope lines. Everything the build has is in a row, and almost
+everything a player can see is in a slice: tactics, explosions, spawning, witchspace, galactic
+hyperspace, missions, Trumbles, effects, music, the loader, the disk menu. Two things were not.
+
+**`DK4` is the pause screen, and the ledger had it filed under "Replace" in the keyboard row.**
+`DOKEY` falls into it on every frame, docked or flying: INST/DEL freezes the game, CLR/HOME resumes
+it, and while frozen `DKS3` walks the configuration block against the key table `TGINT` -- damping
+(RUN/STOP), auto-recentre (A), the author names and manual mis-jump (X), flashing bars (F), reverse
+joystick Y (Y), reverse both (J), keyboard or joystick (K), docking music (M), the media (D),
+planetary detail (P), and behind `PATG` the docking-music permission (C), the docking tune (E) and
+sounds during music (B) -- with two keys for the sound and one that quits to the title through
+`DEATH2`. Thirteen settings a player changes, and no slice in phases 2 to 5 named the screen that
+changes them, because the row's verb was about the CIA scan and the scan is genuinely replaced.
+**It is slice 4e now.** One consequence was already in the port: `PlanetDraw.h` said `PLTOG` "has
+ONE reader and NO WRITER", from a search for `STA PLTOG`; the writer is `STA DAMP,Y` with Y = 9,
+and an indexed store does not contain the label it stores to. Two comments in `Controls.h` had the
+BBC's `DAMP-&40,X` indexing and said the title screen does the toggling; both corrected.
+
+**And three bytes the presenter has no model for.** §6.98 recorded `moonflower`, `welcome` and
+`HFX` -- the energy bomb's bitmap-mode drop and border flash, and the hyperspace tearing -- as
+ordinary bytes in `ScreenState` that `FlightSession` carries and does not show. They were in a
+finding and in no decision: ADR-005 §1 listed the sprite overlay as its open item and not these, so
+a reader of the ADRs would not know the bomb has a visible effect. They are an ADR-005 §1 open
+item now, beside the sprites.
+
+**What "no features missing" means after this.** File-level completeness is enforced: 710 of 710,
+on every push. Feature-level completeness is a reading and stays one; this section is that
+reading's record, and its residue is slice 4e and the ADR-005 item. The 583 files the master-level
+includes pull in beneath them -- the `zp`, `wp` and `up` fields, the option, sound and music
+variable blocks, the binaries -- are covered by their parents' rows and were read for anything a
+parent hides; the C64-specific option bytes (`MUDOCK`, `MUFOR`, `MUPLA`, `MUSILLY`, `MUTOK`,
+`PLTOG`) are 4e's and 5b's, and nothing else was.
+
+### 6.119 A mutation run that cannot fail, and the worktree that made it
+
+The mutation harness runs the suite in a detached worktree so that a mutant never touches the tree
+being worked on (AGENTS.md §6). `git worktree add` creates the submodule path
+`Upstream/elite-source-code-library` as an EMPTY DIRECTORY -- a gitlink is a commit reference, not
+files -- and `Design/Reference/` is gitignored, so a fresh worktree has neither the annotated source
+nor the label map. `OracleIsPresent` then fails on every run, the suite is red before any mutation
+is applied, and a harness that reads "not `0 failed`" as "caught" reports every mutant caught.
+
+**That is Risk R9 -- "the oracle is silently absent" -- realised in the tooling rather than on a
+developer's machine.** R9's mitigation was that a missing oracle LOGS and the suite stays honest,
+and it does: the log said so on every one of the runs. Nobody read the log, because the tally was
+the thing being read, and a tally of 41 of 41 looks like success.
+
+**It was found by a mutant that could not have been caught.** `tt110-nopacing` removes the frame
+between hyperspace rings; nothing in the tests of the day observed pacing, so "caught" was
+impossible, and a result that cannot be true is the one kind of result that gets a run re-read. The
+TITLE tally, produced in the same worktree the same day, was re-run against a verified-green
+baseline and fell from 41 of 41 to 31 of 42 (the 3d-d-vii row); the eleven survivors are test gaps
+and are recorded there. The launch tunnel's 18 of 18 and DEATH's tally were produced after the rule
+below and are the first two it covers. Tallies recorded before this finding are not re-run here;
+the row that carries one carries it as it was measured, and this section is the caveat beside it.
+
+**The rule, now in four places.** Replace the empty directory with a symlink to the main tree's
+submodule -- and re-make it after every `git checkout -f`, which puts the empty directory back --
+and PROVE THE BASELINE GREEN before trusting a tally: a run that does not print `N passed, 0
+failed` on the unmutated tree has measured nothing. AGENTS.md §6 has the recipe, ADR-003 §4 the
+principle (the oracle must be present in every tree a judgement is made in), the runner's README
+the failure mode, and R9 the realisation. **A harness that treats "the suite failed" as "the
+mutant was caught" is right only when the baseline is green, and that is the assertion the harness
+now makes first.**
+
 ### 6.118 The carry is not a seam's problem, it is a chain, and the port models none of it
 
 §6.99 said the fix for `bool PlaySound(std::uint8_t)` was `bool PlaySound(std::uint8_t, bool)` and
@@ -536,6 +641,40 @@ deliberately not, and `DEATH2` was already wired as the death exit's `RES2` then
 sequence spawns five pieces of wreckage rather than four -- `LDA FRIN+4 / BEQ D1` tests the slot
 after filling one -- and half of them arrive already dead, because `DORND / AND #%10000000` goes
 straight into byte 31.
+
+**Three more, found when the scene was compared on every byte rather than on the types.** The first
+version of `TheDeathSceneMatchesDEATH` compared `FRIN` -- five slots, five types -- and passed.
+Comparing the five `K%` blocks byte for byte found the port one random step off on the fifth piece,
+and the diagnosis is three carries the port had not modelled, none of them the one the upstream
+comment names:
+
+- **`fq1` is `LDA DELTA / ROL A / STA INWK+27`, and its comment says "double DELTA speed (i.e.
+  6)".** `ROL` rotates the carry into bit 0, and nothing between `BCC D3` and the `ROL` touches the
+  flag, so the carry is the plate-or-canister bit: a plate flies at `2 * DELTA + 1` and a canister
+  at `2 * DELTA`. The comment's "6" is the BBC's `DELTA` of 3 doubled; on this build `DELTA` is 12
+  by then (the `ASL` above), so 24 or 25. Fifth documentation error in the routine.
+- **`Ze`'s first `DORND` rotates in the carry it was called with, and its second does not.** The
+  first is whatever `.D1` was reached with: on the first pass the `CLC / RTS` every character
+  leaves in `CHPR`, on every later pass the carry the previous piece's `JSR DORND` left in its last
+  `ADC`, because `AND`, `LDY`, `STA (INF),Y`, `LDA` and `BEQ` do not touch it. The second is the
+  interesting one: `Ze` ends `STA INWK+32` and FALLS THROUGH, and what it falls into is `DORND2` --
+  `CLC` -- one label before `DORND`. So the `CMP #245 / ROL A` above it, which shifts bit 7 of X
+  into the carry, decides nothing. The port's first fix modelled the `ROL`'s carry and diverged
+  EARLIER; `c64_source.py` had said "execution continues into `dornd.asm`", which is the file and
+  not the label, and the file begins with the `CLC`. **The tool names the file; the label at the
+  top of the file is still the reader's to check.**
+- **The byte-31 `DORND` after `fq1` takes `NWSHP`'s answer** -- `SEC / RTS` for a ship made, `CLC /
+  RTS` for one refused -- because `fq1` is `JMP NWSHP` and nothing runs between the two.
+
+And a sixth documentation error, in `U%`: `LDA #0 / LDY #56 / .DKL3 STA KLO,Y / DEY / BNE DKL3 /
+STA KL`. The upstream comment on `KL` calls it "byte #0 of the key logger", which it is on the BBC,
+where `KL` and `KLO` are one table. On the C64 `KL` is a separate byte at &441 that `DK4` writes
+`thiskey` into and NOTHING reads, so the loop clears `KLO+1` to `KLO+56` and the store after it
+clears dead memory. The port had cleared `KLO+0` for it; `TheFlightKeysClearLikeUPercent` fills all
+sixty-five bytes and compares all sixty-five, and byte 0 is now asserted untouched. **Six comments
+describing another machine in one routine and its four helpers**, and the whole-block comparison is
+what found the last three: a test that compares the type of a ship and not its block is a test that
+passes when the ship is wrong.
 
 ### 6.116 The Ubuntu leg is not a compiler check, and it has now let two through
 
@@ -2527,7 +2666,7 @@ port stops checking.
 | **3d-b** 🟢 | `DIALS` 1–4, `DIL`/`DILX`/`DIL2`, `MSBAR`, `ECBLB`/`ECBLB2`/`SPBLB`, `PZW`, `CTWOS` — **built 2026-09-04** in `Dashboard.h/.cpp`, 45 mutations with 44 caught and one equivalent. `DILX` is one routine with four entry points and three of them are shift counts (§6.63); `dec27` is an early RETURN and five sixths of the dashboard is one pass in four (§6.64); and the fourteenth flag is the first that an `SBC` reads rather than an `ADC` (§6.65). |
 | **3d-c** 🟢 | `MESS`/`me1`/`mes9`, `ABORT`/`ABORT2`, `LASLI`/`LASLI2`/`las` — **built 2026-09-04** in `Messages.h/.cpp`, `Lasers.h/.cpp` and `Dashboard.h/.cpp`. Fixed `CLYNS`, which had been `CLYNS2` under its name since 1c (§6.67), and settled which of `LASLI`'s three uncleared adds matter (§6.68). |
 | **3d-d** | the sixteen flight-loop parts with `LOOK1`, `KS1`, `WARP`, `SPIN`, `CTRL`, `cntr`, `U%`, the `DOKEY` flight half and the docking check — **866 instructions and 64 call targets, so §6.69 splits it again into 3d-d-i, ii and iii**, and adds `MAS1`–`MAS4`, `FRMIS`, `ECMOF` and `tnpr1`, which the row does not name |
-| **3d-e** ✅ | ✅ `LAUN`, ✅ `HFS2`, ✅ `LL164`, ✅ `DEATH` -- the two set pieces, both built. **The tunnels are built: `LAUN` 2026-09-05 (§6.109) and `LL164` the same day.** `HFS2` is split out of the launch so both step sizes are reachable from one body -- the two entry points differ by a noise and a constant, which is what `HFS2` taking `A` says. `LL164` compared against the shipped routine over three values of `QQ11` on the whole bitmap, the step, the DELAY, the two `NOISE` calls and the one `NOISE2`; **nothing calls it yet**, because `MJP` and `TT18` are both 4c. **`DEATH` is built 2026-09-05 and closes phase 3.** `BOX`, `U%`, `Ze` and `fq1` go in with it; `DET1` does NOT, because on this build it is one byte -- `&60`, a bare `RTS` -- and `DEATH2` was already the death exit's `RES2` then `BR1` (§6.25). Three findings in one routine (§6.117): **`DET1` is empty, so the death screen clears to view 224 rather than the 6 the comment names**, a byte `RES2` left and nothing meant to set, read off the oracle rather than derived; **`ASL DELTA / ASL DELTA` multiplies where its comment says divide**, so the wreckage flies past at 12 and not 0; and the debris loop makes FIVE pieces, not four, because `LDA FRIN+4 / BEQ D1` tests the slot after filling one. Wired at the app's death exit, so dying now shows the sequence instead of restarting immediately. |
+| **3d-e** ✅ | ✅ `LAUN`, ✅ `HFS2`, ✅ `LL164`, ✅ `DEATH` -- the two set pieces, both built. **The tunnels are built: `LAUN` 2026-09-05 (§6.109) and `LL164` the same day.** `HFS2` is split out of the launch so both step sizes are reachable from one body -- the two entry points differ by a noise and a constant, which is what `HFS2` taking `A` says. `LL164` compared against the shipped routine over three values of `QQ11` on the whole bitmap, the step, the DELAY, the two `NOISE` calls and the one `NOISE2`; **nothing calls it yet**, because `MJP` and `TT18` are both 4c. **`DEATH` is built 2026-09-05 and closes phase 3.** `BOX`, `U%`, `Ze` and `fq1` go in with it; `DET1` does NOT, because on this build it is one byte -- `&60`, a bare `RTS` -- and `DEATH2` was already the death exit's `RES2` then `BR1` (§6.25). Three findings in one routine (§6.117): **`DET1` is empty, so the death screen clears to view 224 rather than the 6 the comment names**, a byte `RES2` left and nothing meant to set, read off the oracle rather than derived; **`ASL DELTA / ASL DELTA` multiplies where its comment says divide**, so the wreckage flies past at 12 and not 0; and the debris loop makes FIVE pieces, not four, because `LDA FRIN+4 / BEQ D1` tests the slot after filling one. Wired at the app's death exit, so dying now shows the sequence instead of restarting immediately. **And three carries more, 2026-09-05** (§6.117): `fq1`'s `ROL A`, `Ze`'s first `DORND` (its second is `DORND2`, a `CLC`), and the byte-31 `DORND` that takes `NWSHP`'s answer -- found by comparing all five `K%` blocks byte for byte rather than `FRIN` alone; `U%` no longer clears `KLO+0`. |
 
 3d-a first because `SCAN` is buildable today: it rests on `CPIX4` and `CTWOS2`, both ported, and
 one table that needs extracting.
@@ -4261,7 +4400,7 @@ can now call any of 1,782 labels in the shipped binary with chosen inputs and re
 memory. That is the instrument the whole plan is built on, and phases 1 through 4 are now
 mechanical in a way they were not this morning.
 
-### Phase 1 — Kernel (no screen needed; oracle-driven throughout)
+### Phase 1 — Kernel ✅ (no screen needed; oracle-driven throughout)
 
 | Slice | Scope | Accept |
 |---|---|---|
@@ -4429,7 +4568,7 @@ Three things that is worth noting for the slices ahead:
 - **The comment now says why the carry threads**, so the next person to read the loop does not
   quietly simplify it back.
 
-### Phase 2 — The docked game (playable without flight)
+### Phase 2 — The docked game ✅ (playable without flight; signed off 2026-09-05)
 
 | Slice | Scope | Accept |
 |---|---|---|
@@ -4439,7 +4578,7 @@ Three things that is worth noting for the slices ahead:
 | **2d Commander and saves** ✅ **Built 2026-09-03** | `NA%` default commander, `JAMESON`, `CHK`/`CHK2`/`CHK3`, `sve`/`lod` replaced by `SaveBlock` (the exact original byte layout so an original C64 save imports) + `SaveStore` in the exe writing to LocalAppData; `TRNME`/`GTNME` name entry; `DFAULT`; `MT26`'s line editor. `qu5`, the `Y/N` prompts. **The 2026-09-03 note here was wrong and is corrected:** it claimed `qu5` and `yesno` have no label in the assembled C64 build. They do — `YESNO` at 33262 and `QU5` at 34988 — and the check behind the claim had looked for the lowercase spellings just after diagnosing that exact trap for `TRNME`/`GTNME`. Both are built. What the row genuinely got wrong is only the case of `trnme`/`gtnme`. | **Met for the format; the file I/O and the name entry are not built.** The seventy-seven-byte block with every field named from the assembled build, both checksums, and the save and load layout — compared against `CHECK`, `CHECK2`, `SVE`'s copy and `DFAULT` over 221 blocks (the shipped default, all-zeros, all-255, a single bit walked through all 77 bytes, and 64 pseudo-random fills). The block is held as BYTES with named offsets rather than as a struct: the save file is those bytes, so making them the storage removes the serialiser a `.d64` import could drift from. Three findings recorded in §6.14. **Re-examined 2026-09-03, and most of what was deferred is not blocked.** `MT26` — which is the line editor the name entry calls, with RETURN, ESCAPE, DELETE, a beep on a rejected character and a character range read from `RLINE` — takes its keys through `TT217`, and `TT217` is the `KeySource` seam slice 2c built and proved. `TRNME` is an eight-byte copy and `GTNME` is a copy, a token, a call to `MT26` and a length check. All three are portable against what exists today, exactly as the four trading screens turned out to be — **and were built the same day**: fourteen line scripts and four name prompts compared character for character with the cursor stamped, plus the length, the carry, the text colour and every byte of the buffer. §6.19 records what `MT26` turned out to be. **Built 2026-09-03, and the file too.** `SV1`'s whole arithmetic half compared FILE BYTE FOR BYTE against the shipped routine over sixty-seven commanders — and that comparison found `SaveCommander` had never written `CHK2`, which §6.20 records. `CommanderStore` is the seam for the two Kernal calls and `Outpost/SaveStore` implements it against LocalAppData, untested by design and by necessity. **And `SVE`'s menu dispatch closes the slice, built 2026-09-03.** Twenty-one paths through the disk access menu compared against the shipped routine running WHOLE — only the two Kernal calls, the setup around them and the control-code routines that leave the text system are stood in for, so `DETOK`, `MT26`, `GTNMEW`, `TRNME`, `BPRNT`, `CHECK`, `DFAULT`, `JAMESON` and `YESNO` are the game's own code. Every character with the cursor stamped, the keys consumed, the device traffic, both commanders byte for byte, the competition number and the carry. §6.21 records what it found: a failed load leaves `JSR LOD`'s frame on the stack, so leaving the menu afterwards resumes `loading` and renames the commander; option 4's carry comes from `DFAULT`'s last `CMP`, not from `SVE`; `BPRNT`'s field width is uninitialised; and slice 2d's own comments had bit 6 of the competition flags wrong. Twenty-one mutations, twenty-one caught after the one survivor was fixed structurally rather than labelled. **Slice 2d is complete.** |
 | **2e First playable** ✅ **Built 2026-09-03; run, signed off and measured 2026-09-05** | `Game` top-level state (`BR1`, `BAY`, `TT170`, `DOENTRY`), key dispatch for the docked screens (`DOKEY`, `RDKEY`, `TT217`), `CanvasPresenter`, `KeyMap`, frame pacing; the title screen **without** the rotating ship (that needs LL9 — a placeholder box until 3b). | **Both owner decisions are now taken, and one of them was answered wrongly in this row until 2026-09-03.** (1) **Risk R3 is settled: count cycles, and the counter is built** — but the row used to say the choice was between measuring a rate and picking one, and §6.17 records why that was the wrong framing. The C64 main loop has no frame cap at all, so there is no rate to pick: the loop is cycle-budgeted and free-running, and a separate 50 Hz PAL vertical-sync tick serves `DELAY`, `TT16` and `FREEZE`. (2) **Verification is split, ruled 2026-09-03**: the replay-hash half runs in CI through a null presenter — no window, no GPU, so it goes on the Ubuntu leg — and "is every docked screen legible, does the cadence feel right" is a human sign-off recorded here. That is ADR-003 §3 extended rather than a new mechanism. **The key dispatch and the start sequence are built, 2026-09-03.** `TT102`'s decision half — which of eighteen labels a key press reaches — compared over **16,384 dispatches**: all 256 key codes against four values of `QQ12`, four views, the counter running and stopped, and the hyperspace key held and not. It performs nothing, because the labels it names span three phases; what a caller does with the answer is the caller's. §6.24's neighbours record what it turned out to be, and the ledger row carries the four findings. `TT170`, `BR1`, `BAY` and `DOENTRY` are built too, over a seam for each of the eight things they reach outside the slice; §6.25 and §6.26 record what they turned out to be, the second of them after the ledger turned out to have filed `DOENTRY` as the program's entry point when it is the docking routine. **Every routine 2e names in `GameLogic` is now built, and a whole docked session runs through them** — started by `TT170`, driven by `TT102`'s dispatch, through one null presenter that satisfies all five seam interfaces, with the trade arithmetic checked to flow from the buy screen to the hold to the inventory. That is the CI half of this slice's acceptance criterion. §6.27 records what it cannot check and why the other half is not a formality. What is left is the SHELL: the presenter, the key map and the frame pacing — plus `TT107`'s hyperspace countdown, which is flight state and lands with phase 3. **The shell is written and CI compiles it, 2026-09-03.** It splits in two on purpose. The half that is a DECISION rather than an API call — the sixteen-colour palette, the integer-scaled letterboxed viewport, the fixed-timestep accumulator and the Windows-key-to-C64-position map — is in `Presentation.cpp` and `KeyMap.cpp`, is covered by `ShellTests.cpp`, and runs on both CI legs; the centring property in it caught a real defect (halving a negative difference truncated towards zero, so a window narrower than the canvas clipped unevenly). The half that is Direct3D — `Window.cpp`, `CanvasPresenter.cpp`, `Shell.cpp` and the composition root in `Main.cpp` — was written without a machine to run it on, so the Windows CI leg now restores the project's NuGet packages and **builds `Outpost` unpackaged in both configurations**, which is what turns "written blind" into "a compiler has read it". Every line of it compiled first time; what failed was the LINK, on a C++/WinRT version mismatch that had been latent since the projects were created and that only a binary linking `GameLogic.lib` against `Outpost`'s objects could ever have exposed (§6.30). The shaders are compiled by the build too, rather than at run time, so nothing in the shell is unread by a compiler (§6.31). The threading question `TextPrint.h` left open is answered: a NESTED MESSAGE PUMP inside `TT217`, single-threaded, because the thing the game blocks on is the player — a game thread would need the canvas double-buffered under a mutex and an answer for a thread parked inside `NextKey` at close, and buys nothing. `TT66` and `CLYNS` were ported to answer the screen seams properly (§6.29). **What is still needed is a person at a Windows machine**: the acceptance criterion's other half is "is every docked screen legible, does the cadence feel right", and a hosted runner has no display — compiling and linking is a different question from drawing. The first thing that person should do is measure a main-loop iteration and write the number down. <br><br>**SIGNED OFF 2026-09-05 by the owner, and only the half a person can sign off.** Every docked screen is legible and the cadence is right, run on the owner's Windows machine. That is the human half ADR-003 §3 asks for and it is now given. **AND THE OTHER HALF IS NOW CLOSED TOO (§6.114).** It read "measure a main-loop iteration and write the number down", and it stayed open through §6.110 -- which measured the TITLE loop and said in as many words that the flight loop was not measured. §6.114 measured the flight loop and replaced the NTSC-refresh constant with a cost model, which is what §6.17 asked for six months earlier. **Slice 2e is complete**, and Risk R3 is retired: the instrument exists and has now been pointed at both loops. |
 
-### Phase 3 — Flight and the 3D pipeline
+### Phase 3 — Flight and the 3D pipeline ✅ (complete 2026-09-05)
 
 | Slice | Scope | Accept |
 |---|---|---|
@@ -4456,6 +4595,7 @@ Three things that is worth noting for the slices ahead:
 | **4b Explosions and death** ∥ | `DOEXP`, `EXLOOK`, `PTCLS2`, `SOS1`, `DEATH2`, the escape pod, `BAD`/`FAROF`/`FAROF2`, `SHD`/`DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle. |
 | **4c Main game loop** | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds. |
 | **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps. |
+| **4e Pause screen** — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows. |
 
 ### Phase 5 — Sound and music
 
@@ -4480,13 +4620,16 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 
 | Phase | Slices | Sittings | Notes |
 |---|---|---|---|
-| 0 | 6 | 4–6 | 0a and 0c are done; 0b needs BeebAsm installed |
-| 1 | 4 | 6–9 | mostly mechanical once the oracle harness pattern exists |
-| 2 | 5 | 8–12 | the text screens are many but shallow |
-| 3 | 4 | 10–15 | `LL9` and `MVEIT` are the densest code in the game |
-| 4 | 4 | 8–12 | tactics is long but well documented |
-| 5 | 2 | 4–7 | the synthesiser is the unknown |
-| **Total** | **23** | **40–60** | before modernisation |
+| 0 | 6 | 4–6 | ✅ done except 0e's permission, which is open by owner acceptance (R1) |
+| 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
+| 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
+| 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
+| 4 | 5 | 8–12 | not started; tactics is long but well documented; 4e (the pause screen) added 2026-09-05 (§6.120) |
+| 5 | 2 | 4–7 | not started; the synthesiser is the unknown |
+| **Total** | **24** | **40–60** | before modernisation |
+
+Phases 0 to 3 took four days rather than the twenty-eight to forty-two sittings estimated, which
+says more about what a sitting turned out to be than about the estimate.
 
 The curve front-loads risk: by the end of phase 1 the oracle has either proven itself or shown
 where the 6502-semantics approach leaks (Risk R4), and by 2e there is a playable build.
@@ -4537,6 +4680,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **DEATH's three carries, the strict ledger, the pause screen, and the documentation pass** (§6.117, §6.119, §6.120). Comparing the death scene's five `K%` blocks byte for byte instead of `FRIN` found the port one random step off on the fifth piece: `fq1`'s `ROL A` takes the plate-or-canister carry, `Ze`'s first `DORND` takes the previous piece's, and its second is `DORND2` -- a `CLC` -- so the `ROL` before it decides nothing; `U%`'s `STA KL` is a dead byte on this build and `KLO+0` is no longer cleared. **`tools/inventory.py --strict` is green for the first time and CI runs it**: 101 of 710 files had no row, ninety-one by notation the tool now expands and ten real, four of them ported. Reading the build against the phases found the PAUSE SCREEN in no slice -- `DK4`, thirteen toggles behind `TGINT`, the only writer of `PLTOG` -- which is slice 4e now, and the energy bomb's and hyperspace's VIC-II effects in no ADR, which are ADR-005 §1's second open item. §6.119 records the mutation worktree whose empty submodule made every mutant read as caught, and the baseline rule that now stands in four places. The documentation pass brought `Design/README.md`, the risk register (R3 closed, R9 realised, R11 validated), ADR-003 §4, ADR-005 §1, the reference and runner READMEs, AGENTS.md and the plan's §1.2 to the tree as it is: 313 tests, nine checks, phases 0 to 3 built. |
 | 2026-09-05 | **The charts, F1 and F2** (§6.115). They were refused in the dispatch and the refusal had gone stale: `TT22` and `TT23` were ported and oracle-compared, and `ChartShapes` -- the fuel circle and the system discs -- said in its own comment that it was a seam only "until" slice 3c existed. Slice 3c landed in September. `FlightSession` implements it over `CIRCLE2` and `SUN`, and what was really missing was the KEYBOARD: `TT17`'s chart path (ported now, all 32 combinations of its five key-logger entries compared against the shipped routine), `TT102` reached every pass rather than on a key event, and those passes paced -- 165 crosshair steps a second otherwise. The arrows aim on a chart and steer in flight, so the scan drops the steering keys while a chart is up; that rule is the port's own and is marked as such. **Up presses no shift and down presses one**, because `TT17`'s `EOR #%11111110` makes the unshifted key step `QQ10` negative -- found by pressing the key, not by reading the code. `D`, `F` and hyperspace stay refused, and `F` is named as the nearest: `MT26` is ported and has nowhere to put the name yet. |
 | 2026-09-05 | **`DEATH`, and phase 3 is complete.** The death screen with `BOX`, `U%`, `Ze` and `fq1` -- and `DET1` deliberately NOT, because on this build it is one byte. Three findings in one routine (§6.117), all of them the source describing a different machine. **`DET1` is a bare `RTS`**, so the `LDX #24` before it goes nowhere and the A the comment says it sets to 6 is whatever `RES2` left -- **224**, measured off the oracle because nothing meant to put it there. **`ASL DELTA` twice MULTIPLIES** where its comment says "divide by 4", so the wreckage flies past at 12 rather than stopped. And the debris loop makes **five** pieces, not four: `LDA FRIN+4 / BEQ D1` tests the slot after filling one, and half of them arrive already dead. The rate is the point -- three documentation errors in one routine, after §6.109 found `HFS2`'s two step sizes swapped against its own code: **every time this port has trusted a comment over an instruction it has been wrong.** Wired at the app's death exit. 308 tests green. |
 | 2026-09-05 | **The hyperspace tunnel, and phase 3 down to one routine.** `LL164` is five instructions once `HFS2` exists, so `HFS2` is split out of the launch and both step sizes come from one body -- 8 for the launch, 4 for the jump, which is what `HFS2` taking `A` was always saying. `HYPNOISE` goes with it: two sounds, one vertical sync and a third effect at +128, which is `NOISE`'s layering entry rather than a separate routine. Compared against the shipped `LL164` over three values of `QQ11` on the whole bitmap, the step, the `DELAY`, the two `NOISE` calls and the one `NOISE2`. The pacing seam is renamed `ShowFrame`, because `HYPNOISE`'s one-frame `DELAY` wants exactly what the per-circle pacing wants. **Nothing calls `LL164` yet** -- `MJP` and `TT18` are both 4c. **Slice 2e closes** on §6.114's flight-loop measurement, and **3a's built marker is added**, which had been missing since 3b depended on it. What is left of phase 3 is `DEATH`, and it is a slice: `DET1`, `BOX`, `Ze`, `fq1`, `U%` and `DEATH2` are none of them ported. 307 tests green. |
