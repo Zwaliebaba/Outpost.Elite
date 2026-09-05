@@ -4,7 +4,9 @@
 #include "OracleImage.h"
 
 #include "Canvas.h"
+#include "Controls.h"
 #include "DockedKeys.h"
+#include "FlightLoop.h"
 #include "KeyMap.h"
 #include "LookupTables.h"
 #include "ExtendedTokens.h"
@@ -454,6 +456,11 @@ namespace GameLogicTests
      * somebody thought to try, and quietly disagreed on the rest. Mapping to the C64's MATRIX
      * POSITION and letting `TRANTABLE` do the translation means there is only one table, and it is
      * the game's.
+     *
+     * The flight keys are in here too, and their characters are the ODD-LOOKING half of the list:
+     * the up arrow types "X" and the comma types "/", because those are the C64 keys the positions
+     * belong to. That is the map working, not the map wrong -- the same key steers in the space
+     * view and types in the line editor, exactly as it does on the original.
      */
     TEST_METHOD(EveryBoundKeyTranslatesToWhatTheScreensCompareAgainst)
     {
@@ -465,10 +472,46 @@ namespace GameLogicTests
       };
 
       const std::vector<Expected> CASES = {
-        {0x31, '1', "1"}, {0x32, '2', "2"},     {0x33, '3', "3"},      {0x34, '4', "4"},     {0x35, '5', "5"},
-        {0x36, '6', "6"}, {0x37, '7', "7"},     {0x38, '8', "8"},      {0x39, '9', "9"},     {0x44, 'D', "D"},
-        {0x46, 'F', "F"}, {0x48, 'H', "H"},     {0x4F, 'O', "O"},      {0x59, 'Y', "Y"},     {0x4E, 'N', "N"},
-        {0xC0, '@', "@"}, {0x0D, 13, "RETURN"}, {0x08, 127, "DELETE"}, {0x1B, 27, "ESCAPE"},
+        // The number row, which is what `gnum` and the line editor read as digits.
+        {0x31, '1', "1"},
+        {0x32, '2', "2"},
+        {0x33, '3', "3"},
+        {0x34, '4', "4"},
+        {0x35, '5', "5"},
+        {0x36, '6', "6"},
+        {0x37, '7', "7"},
+        {0x38, '8', "8"},
+        {0x39, '9', "9"},
+
+        // The letters, every one of which is the letter the C64 key carries.
+        {0x41, 'A', "A -- fire"},
+        {0x43, 'C', "C -- docking computer"},
+        {0x44, 'D', "D"},
+        {0x45, 'E', "E -- E.C.M."},
+        {0x46, 'F', "F"},
+        {0x48, 'H', "H"},
+        {0x4A, 'J', "J -- in-system jump"},
+        {0x4D, 'M', "M -- fire missile"},
+        {0x4E, 'N', "N"},
+        {0x4F, 'O', "O"},
+        {0x50, 'P', "P -- cancel docking"},
+        {0x54, 'T', "T -- target missile"},
+        {0x55, 'U', "U -- unarm missile"},
+        {0x59, 'Y', "Y"},
+
+        // The steering keys, whose characters are the C64 keys they stand in for.
+        {0x25, ',', "Left -- the C64's \"<\""},
+        {0x27, '.', "Right -- the C64's \">\""},
+        {0x26, 'X', "Up -- the C64's \"X\""},
+        {0x28, 'S', "Down -- the C64's \"S\""},
+        {0xBE, ' ', "period -- the C64's Space"},
+        {0xBC, '/', "comma -- the C64's \"?\""},
+        {0x09, 2, "Tab -- the C64's Commodore key"},
+
+        {0xC0, '@', "@"},
+        {0x0D, 13, "RETURN"},
+        {0x08, 127, "DELETE"},
+        {0x1B, 27, "ESCAPE"},
       };
 
       for (const Expected& item : CASES)
@@ -487,6 +530,9 @@ namespace GameLogicTests
      * translated character would find that no docked screen key worked, and one that handed the
      * screens the position would find that nothing typed appeared. Both directions are asserted
      * from the same binding.
+     *
+     * The function keys are the new layout and the digits are the aliases they kept, so each of the
+     * six screens is asserted twice from two different Windows keys.
      */
     TEST_METHOD(TheDispatchSeesThePositionAndTheScreensSeeTheCharacter)
     {
@@ -498,16 +544,24 @@ namespace GameLogicTests
       };
 
       const std::vector<Expected> CASES = {
-        {0x38, Elite::KeyAction::StatusMode, "8 -- status"},
-        {0x37, Elite::KeyAction::MarketPrice, "7 -- market"},
+        {0x70, Elite::KeyAction::LongRangeChart, "F1 -- Galactic Chart"},
+        {0x71, Elite::KeyAction::ShortRangeChart, "F2 -- local chart"},
+        {0x72, Elite::KeyAction::DataOnSystem, "F3 -- data on system"},
+        {0x73, Elite::KeyAction::MarketPrice, "F4 -- market prices"},
+        {0x74, Elite::KeyAction::StatusMode, "F5 -- status"},
+        {0x75, Elite::KeyAction::Inventory, "F6 -- inventory"},
+        {0x76, Elite::KeyAction::Launch, "F7 -- launch and the forward view"},
+
+        {0x34, Elite::KeyAction::LongRangeChart, "4 -- F1's digit"},
+        {0x35, Elite::KeyAction::ShortRangeChart, "5 -- F2's digit"},
+        {0x36, Elite::KeyAction::DataOnSystem, "6 -- F3's digit"},
+        {0x37, Elite::KeyAction::MarketPrice, "7 -- F4's digit"},
+        {0x38, Elite::KeyAction::StatusMode, "8 -- F5's digit"},
+        {0x39, Elite::KeyAction::Inventory, "9 -- F6's digit"},
+
         {0x31, Elite::KeyAction::BuyCargo, "1 -- buy"},
         {0x32, Elite::KeyAction::SellCargo, "2 -- sell"},
         {0x33, Elite::KeyAction::EquipShip, "3 -- equip"},
-        {0x34, Elite::KeyAction::LongRangeChart, "4 -- long-range chart"},
-        {0x35, Elite::KeyAction::ShortRangeChart, "5 -- short-range chart"},
-        {0x36, Elite::KeyAction::DataOnSystem, "6 -- data on system"},
-        {0x39, Elite::KeyAction::Inventory, "9 -- inventory"},
-        {0x70, Elite::KeyAction::Launch, "F1 -- launch"},
         {0xC0, Elite::KeyAction::DiskAccess, "@ -- disk menu"},
       };
 
@@ -525,8 +579,8 @@ namespace GameLogicTests
         Assert::AreNotEqual(c64, character, (where + L": the position and the character differ").c_str());
       }
 
-      // The three views, which are the flight half of the same table.
-      for (const auto& item : {std::pair{0x72, Elite::VIEW_REAR}, std::pair{0x74, Elite::VIEW_LEFT}, std::pair{0x76, Elite::VIEW_RIGHT}})
+      // The three view changes, which are the flight half of the same table.
+      for (const auto& item : {std::pair{0x77, Elite::VIEW_REAR}, std::pair{0x78, Elite::VIEW_LEFT}, std::pair{0x79, Elite::VIEW_RIGHT}})
       {
         const Elite::KeyOutcome outcome = Elite::ActionForKey(Outpost::C64KeyFor(item.first), 0x00, 0, 0, false);
         Assert::AreEqual(static_cast<int>(Elite::KeyAction::ChangeView), static_cast<int>(outcome.action),
@@ -535,11 +589,73 @@ namespace GameLogicTests
       }
     }
 
-    /// No key is bound twice, in either direction, and nothing is bound to "no key".
-    TEST_METHOD(TheMapIsOneToOne)
+    /*
+     * Every key the flight loop and `DOKEY` watch has a Windows key that reaches it.
+     *
+     * This is the test the gap needed. `KeyMap` shipped with the docked half of the map and a
+     * comment saying the flight controls would be read from `KYTB` "in phase 3"; phase 3 landed,
+     * `Controls.h` and `FlightLoop.h` named all sixteen positions, and not one of them was ever
+     * bound -- so the ship could not be steered, the lasers could not be fired and the map still
+     * passed its own tests, because nothing asserted the other direction.
+     */
+    TEST_METHOD(EveryFlightControlHasAKey)
     {
+      struct Expected
+      {
+        std::uint8_t c64Key;
+        const char* what;
+      };
+
+      const std::vector<Expected> CONTROLS = {
+        {Elite::KEY_SLOW_DOWN, "KY1 -- slow down"},
+        {Elite::KEY_SPEED_UP, "KY2 -- speed up"},
+        {Elite::KEY_ROLL_LEFT, "KY3 -- roll left"},
+        {Elite::KEY_ROLL_RIGHT, "KY4 -- roll right"},
+        {Elite::KEY_PITCH_UP, "KY5 -- climb"},
+        {Elite::KEY_PITCH_DOWN, "KY6 -- dive"},
+        {Elite::KEY_FIRE, "KY7 -- fire lasers"},
+        {Elite::KEY_ENERGY_BOMB, "KY12 -- energy bomb"},
+        {Elite::KEY_ESCAPE_POD, "KY13 -- escape capsule"},
+        {Elite::KEY_ARM_MISSILE, "KY14 -- target missile"},
+        {Elite::KEY_UNARM_MISSILE, "KY15 -- unarm missile"},
+        {Elite::KEY_FIRE_MISSILE, "KY16 -- fire missile"},
+        {Elite::KEY_ECM, "KY17 -- E.C.M."},
+        {Elite::KEY_WARP, "KY18 -- in-system jump"},
+        {Elite::KEY_DOCKING_COMPUTER, "KY19 -- docking computer on"},
+        {Elite::KEY_CANCEL_DOCKING, "KY20 -- docking computer off"},
+      };
+
+      for (const Expected& item : CONTROLS)
+      {
+        bool bound = false;
+        for (int index = 0; index < Outpost::BindingCount(); ++index)
+        {
+          bound = bound || (Outpost::Bindings()[index].c64Key == item.c64Key);
+        }
+        Assert::IsTrue(bound, (Widen(std::string("no Windows key reaches ") + item.what)).c_str());
+      }
+    }
+
+    /*
+     * No Windows key is bound twice, nothing is bound to "no key", and the C64 keys that ARE bound
+     * twice are exactly the six the new layout moved to the function keys.
+     *
+     * The map used to be one-to-one in both directions and this is where that stopped. Moving the
+     * six information screens to F1 to F6 could not take the digits with them -- `gnum` reads a
+     * quantity as the CHARACTER the position translates to, so "4" has to keep position 53 -- and a
+     * second Windows key for the same position is the cheapest way to have both. The set is named
+     * rather than merely permitted, so that a seventh alias is a failure and not a shrug.
+     */
+    TEST_METHOD(OnlyTheSixMovedScreensAreBoundTwice)
+    {
+      const std::set<std::uint8_t> ALLOWED_ALIASES = {
+        Elite::KEY_LONG_RANGE,   Elite::KEY_SHORT_RANGE, Elite::KEY_DATA_ON_SYSTEM,
+        Elite::KEY_MARKET_PRICE, Elite::KEY_STATUS,      Elite::KEY_INVENTORY,
+      };
+
       std::set<int> virtualKeys;
       std::set<std::uint8_t> c64Keys;
+      std::set<std::uint8_t> aliased;
 
       for (int index = 0; index < Outpost::BindingCount(); ++index)
       {
@@ -549,8 +665,16 @@ namespace GameLogicTests
         Assert::AreNotEqual<std::uint8_t>(Outpost::NO_KEY, binding.c64Key, (where + L" must not map to nothing").c_str());
         Assert::IsTrue(binding.c64Key < Elite::KEY_TRANSLATION.size(), (where + L" must be a position the hardware can report").c_str());
         Assert::IsTrue(virtualKeys.insert(binding.virtualKey).second, (where + L": that Windows key is already bound").c_str());
-        Assert::IsTrue(c64Keys.insert(binding.c64Key).second, (where + L": that C64 key is already bound").c_str());
+
+        if (!c64Keys.insert(binding.c64Key).second)
+        {
+          Assert::IsTrue(ALLOWED_ALIASES.count(binding.c64Key) == 1,
+                         (where + L": that C64 key is already bound, and is not one of the six that may be").c_str());
+          Assert::IsTrue(aliased.insert(binding.c64Key).second, (where + L": three Windows keys for one C64 key").c_str());
+        }
       }
+
+      Assert::AreEqual(ALLOWED_ALIASES.size(), aliased.size(), L"every allowed alias is actually used");
 
       Assert::AreEqual<std::uint8_t>(Outpost::NO_KEY, Outpost::C64KeyFor(0x5A), L"Z is not bound");
       Assert::AreEqual<std::uint8_t>(0, Outpost::CharacterFor(Outpost::NO_KEY), L"and nothing pressed translates to nothing printable");
