@@ -134,9 +134,8 @@ namespace GameLogicTests
             bank.sprites.velocityX[0] = velocity.first;
             bank.sprites.velocityXHigh[0] = velocity.second;
             bank.sprites.coordinateXHigh[0] = high;
-            bank.sprites.coordinates[0] = static_cast<std::uint8_t>(low);
-            bank.sprites.coordinates[1] = 0x80u;
-            bank.sprites.coordinateMsb = static_cast<std::uint8_t>(high != 0u ? 0x04u : 0x00u);
+            bank.video.x[Elite::FIRST_TRUMBLE_SPRITE] = static_cast<std::uint16_t>((high << 8) | low);
+            bank.video.y[Elite::FIRST_TRUMBLE_SPRITE] = 0x80u;
             bank.seed = quiet;
 
             const std::wstring where = WidenText("MVTRIBS x " + std::to_string(high) + ":" + std::to_string(low) + " by " +
@@ -203,9 +202,9 @@ namespace GameLogicTests
             bank.sprites.velocityX[0] = velocity.first;
             bank.sprites.velocityXHigh[0] = velocity.second;
             bank.sprites.coordinateXHigh[0] = static_cast<std::uint8_t>(high);
-            bank.sprites.coordinates[0] = low;
-            bank.sprites.coordinates[1] = 0x60u;
-            bank.sprites.coordinateMsb = 0x03u;
+            bank.video.x[Elite::FIRST_TRUMBLE_SPRITE] = low;
+            bank.video.y[Elite::FIRST_TRUMBLE_SPRITE] = 0x60u;
+            bank.sharedEntry = 0x03u;
             bank.seed = quiet;
 
             const std::wstring where = WidenText("MVTRIBS sign (TRIBXH " + std::to_string(high) + ", low " + std::to_string(low) + ", by " +
@@ -245,8 +244,8 @@ namespace GameLogicTests
           Bank bank;
           bank.count = 1u;
           bank.sprites.velocityX[1] = velocity;
-          bank.sprites.coordinates[0] = 0x40u;
-          bank.sprites.coordinates[1] = static_cast<std::uint8_t>(row);
+          bank.video.x[Elite::FIRST_TRUMBLE_SPRITE] = 0x40u;
+          bank.video.y[Elite::FIRST_TRUMBLE_SPRITE] = static_cast<std::uint8_t>(row);
           bank.seed = quiet;
 
           const std::wstring where = WidenText("MVTRIBS y " + std::to_string(row) + " by " + std::to_string(velocity));
@@ -328,9 +327,15 @@ namespace GameLogicTests
           {
             Bank bank;
             bank.count = Elite::TRUMBLE_SPRITE_MAX;
-            bank.sprites.coordinateMsb = entry;
+            bank.sharedEntry = entry;
             bank.sprites.coordinateXHigh[sprite * 2u] = high;
-            bank.sprites.coordinates[sprite * 2u] = 0x30u;
+            for (std::size_t other = Elite::FIRST_TRUMBLE_SPRITE; other < Elite::SPRITE_COUNT; ++other)
+            {
+              // Every OTHER Trumble's ninth bit set, so a mask read one entry out of step clears
+              // somebody else's and the comparison sees it.
+              bank.video.x[other] = static_cast<std::uint16_t>(0x100u | (0x30u + 0x10u * other));
+            }
+            bank.video.x[sprite + Elite::FIRST_TRUMBLE_SPRITE] = static_cast<std::uint16_t>((high << 8) | 0x30u);
             bank.sprites.velocityX[sprite * 2u] = 0x01u;
             bank.seed = quiet;
 
@@ -385,10 +390,22 @@ namespace GameLogicTests
     }
 
   private:
-    /// One starting state for both sides: the sprite bank, the generator, and nothing else.
+    /// One starting state for both sides: the sprite bank, the registers, the generator, nothing
+    /// else. `video` is where the coordinates live, because that is where the game keeps them.
     struct Bank
     {
       Elite::TrumbleSprites sprites;
+      Elite::VideoState video{};
+
+      /*
+       * 6502: bits 0 and 1 of VIC+&10 -- the laser sights' and the explosion's ninth x bits.
+       *
+       * They have no counterpart in `VideoState` for THIS comparison, because the port's x for
+       * those two sprites is written by other routines and this one must not disturb it. Seeding
+       * them on the oracle's side and asserting they come back unchanged is what shows that.
+       */
+      std::uint8_t sharedEntry = 0;
+
       std::uint8_t count = 0;
       std::array<std::uint8_t, 4> seed{0x11u, 0x22u, 0x33u, 0x44u};
     };
@@ -443,11 +460,11 @@ namespace GameLogicTests
         bank.sprites.velocityXHigh[index] = static_cast<std::uint8_t>((at & 1u) != 0u ? 0x00u : 0xFFu);
         bank.sprites.coordinateXHigh[index] = static_cast<std::uint8_t>(at & 1u);
       }
-      for (std::size_t index = 0; index < Elite::TRUMBLE_COORDINATE_COUNT; ++index)
+      for (std::size_t sprite = 0; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
-        bank.sprites.coordinates[index] = static_cast<std::uint8_t>(0x11u * (index + 1u) + _salt);
+        bank.video.x[sprite] = static_cast<std::uint16_t>((0x11u * (sprite + 1u) + _salt) & 0x1FFu);
+        bank.video.y[sprite] = static_cast<std::uint8_t>(0x23u * (sprite + 1u) + _salt);
       }
-      bank.sprites.coordinateMsb = static_cast<std::uint8_t>(0xA5u ^ _salt);
       bank.seed = {static_cast<std::uint8_t>(_salt + 1u), static_cast<std::uint8_t>(_salt * 7u), 0x9Cu,
                    static_cast<std::uint8_t>(_salt ^ 0x5Au)};
       return bank;
@@ -489,11 +506,24 @@ namespace GameLogicTests
         cpu.memory[static_cast<std::uint16_t>(tribvxh + index)] = _bank.sprites.velocityXHigh[index];
         cpu.memory[static_cast<std::uint16_t>(tribxh + index)] = _bank.sprites.coordinateXHigh[index];
       }
-      for (std::size_t index = 0; index < Elite::TRUMBLE_COORDINATE_COUNT; ++index)
+      /*
+       * The whole x that `VideoState` holds, split back into the pair of registers the game reads:
+       * the low eight bits per sprite and the ninth in the byte all eight share. Only the six
+       * Trumble sprites are seeded -- `MVTRIBS` reads no others, and the two below them belong to
+       * the laser sights and the explosion.
+       */
+      std::uint8_t shared = 0;
+      for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
-        cpu.memory[static_cast<std::uint16_t>(vic + 4u + index)] = _bank.sprites.coordinates[index];
+        const std::uint16_t at = static_cast<std::uint16_t>(vic + 2u * sprite);
+        cpu.memory[at] = static_cast<std::uint8_t>(_bank.video.x[sprite] & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(at + 1u)] = _bank.video.y[sprite];
+        if ((_bank.video.x[sprite] & 0x100u) != 0u)
+        {
+          shared = static_cast<std::uint8_t>(shared | (1u << sprite));
+        }
       }
-      cpu.memory[static_cast<std::uint16_t>(vic + 0x10u)] = _bank.sprites.coordinateMsb;
+      cpu.memory[static_cast<std::uint16_t>(vic + 0x10u)] = static_cast<std::uint8_t>(shared | _bank.sharedEntry);
       for (std::size_t index = 0; index < 4u; ++index)
       {
         cpu.memory[static_cast<std::uint16_t>(rand + index)] = _bank.seed[index];
@@ -507,7 +537,7 @@ namespace GameLogicTests
       _bank.sprites.count = _bank.count;
 
       RasterLog log;
-      Elite::MoveTrumbleSprites(_bank.sprites, rng, _counter, log);
+      Elite::MoveTrumbleSprites(_bank.sprites, _bank.video, rng, _counter, log);
 
       for (std::size_t index = 0; index < Elite::TRUMBLE_VELOCITY_COUNT; ++index)
       {
@@ -520,14 +550,21 @@ namespace GameLogicTests
                          (at + L": TRIBXH").c_str());
       }
 
-      for (std::size_t index = 0; index < Elite::TRUMBLE_COORDINATE_COUNT; ++index)
+      /*
+       * The registers, joined back up the way they were split. The ninth bit is compared through
+       * the whole x rather than on its own, which is the honest shape: the port has no byte
+       * corresponding to VIC+&10, so asserting on one would be asserting about a fiction. What the
+       * two OTHER bits of that register do is checked separately, by `TheSpriteBitsAreThisSpritesOnly`.
+       */
+      const std::uint8_t theirShared = cpu.memory[static_cast<std::uint16_t>(vic + 0x10u)];
+      for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
-        const std::wstring at = _where + L" [" + std::to_wstring(index) + L"]";
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(vic + 4u + index)], _bank.sprites.coordinates[index],
-                         (at + L": VIC+&04").c_str());
+        const std::uint16_t at = static_cast<std::uint16_t>(vic + 2u * sprite);
+        const std::wstring where = _where + L" [sprite " + std::to_wstring(sprite) + L"]";
+        const std::uint16_t theirX = static_cast<std::uint16_t>(cpu.memory[at] | (((theirShared >> sprite) & 1u) != 0u ? 0x100u : 0u));
+        Assert::AreEqual(theirX, _bank.video.x[sprite], (where + L": sprite x").c_str());
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at + 1u)], _bank.video.y[sprite], (where + L": sprite y").c_str());
       }
-
-      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(vic + 0x10u)], _bank.sprites.coordinateMsb, (_where + L": VIC+&10").c_str());
       Assert::AreEqual(cpu.memory[tribct], _bank.sprites.count, (_where + L": TRIBCT").c_str());
 
       // 6502: RAND -- the generator, which is the only thing this routine changes that is not a

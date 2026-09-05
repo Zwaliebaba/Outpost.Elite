@@ -284,14 +284,20 @@
         "RAM, and `TheSignTestReadsBitSeven` is that pass: all 256 starting values, which is where",
         "the two bits disagree.",
         "",
-        "`tr-msb-or` is a PROVABLE EQUIVALENT and is recorded as one. See its note."
+        "`tr-msb-or` is a PROVABLE EQUIVALENT and is recorded as one. See its note.",
+        "",
+        "REWRITTEN 2026-09-05 when main's sprite work landed. `SPMASK` is no longer ported --",
+        "`VideoState` gives each sprite a whole sixteen-bit x, so the pair of masks that clear and",
+        "set one sprite's bit in a shared register have nothing to mask -- and `tr-spritebit` and",
+        "`tr-msb-or` went with it. `tr-sprite-index` and `tr-ninth-bit` cover the store that",
+        "replaced them."
       ],
       "mutants": [
         {
           "id": "tr-selftest",
           "file": "GameLogic/Trumbles.cpp",
-          "find": "    _sprites.coordinates[at + 1u] = AddWithCarry(_sprites.coordinates[at + 1u], _sprites.velocityX[at + 1u], false).value;",
-          "replace": "    _sprites.coordinates[at + 1u] = AddWithCarry(_sprites.coordinates[at + 1u], 0u, false).value;",
+          "find": "    _video.y[sprite] = AddWithCarry(_video.y[sprite], _sprites.velocityX[at + 1u], false).value;",
+          "replace": "    _video.y[sprite] = AddWithCarry(_video.y[sprite], 0u, false).value;",
           "expect": "caught",
           "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Dropping the y velocity leaves every Trumble on the row it started on, and TheYWrapMatchesMVTRIBS compares 768 rows against the shipped routine. Its job is to prove this run OBSERVES a catch; a run in which it survives is a run whose every other answer is worthless (Risk R13, plan section 6.119). Keep it first and never delete it.",
           "selftest": true
@@ -361,20 +367,20 @@
           "note": "`LDA #&48 / STA T` -- where a Trumble that walked off the left edge reappears. &48 rather than &50 is not arbitrary: at &150 the very next test would decide it had gone off the RIGHT edge and send it to zero, so this mutation makes the sprite teleport to the left edge instead of the right one."
         },
         {
-          "id": "tr-spritebit",
+          "id": "tr-sprite-index",
           "file": "GameLogic/Trumbles.cpp",
-          "find": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at] & _sprites.coordinateMsb);",
-          "replace": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at + 1u] & _sprites.coordinateMsb);",
+          "find": "    const std::size_t sprite = static_cast<std::size_t>(turn) + FIRST_TRUMBLE_SPRITE;",
+          "replace": "    const std::size_t sprite = static_cast<std::size_t>(turn);",
           "expect": "caught",
-          "note": "`SPMASK,Y` against `SPMASK+1,Y` -- the table alternates clear-mask and set-mask, so reading one entry on clears every OTHER sprite's ninth x bit and leaves this one's alone. TheSpriteBitsAreThisSpritesOnly enters the register with all eight bits set for exactly this."
+          "note": "The Trumbles are VIC-II sprites 2 to 7, not 0 to 5 -- sprites 0 and 1 are the laser sights and the explosion. Dropping the offset moves the wrong two sprites and leaves the top two Trumbles still, which the whole-register comparison sees on the first case."
         },
         {
-          "id": "tr-msb-or",
+          "id": "tr-ninth-bit",
           "file": "GameLogic/Trumbles.cpp",
-          "find": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at + 1u] | _sprites.coordinateMsb);",
-          "replace": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at + 1u] ^ _sprites.coordinateMsb);",
-          "expect": "equivalent",
-          "note": "`ORA VIC+&10` against an EOR, and the two are provably the same here. `SPMASK+1,Y` has exactly one bit set, and the routine's first act was to AND that same bit OUT of the register -- so the bit is known to be zero when this runs, and setting a zero bit and flipping a zero bit are the same operation. Every other bit is untouched by both. SURVIVED on the first run and was checked rather than recorded as a gap; it stays here so that a run exercises the equivalent path, and it must never come back caught."
+          "find": "    _video.x[sprite] = static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | coordinateLow);",
+          "replace": "    _video.x[sprite] = static_cast<std::uint16_t>(coordinateLow);",
+          "expect": "caught",
+          "note": "The ninth x bit, dropped on the way into the register. This is the store that REPLACED `ORA SPMASK+1,Y / STA VIC+&10`: `VideoState` holds a whole sixteen-bit x, so the read-modify-write of a shared byte became one write, and this is the mutant that proves the second half of it is still there. A sprite past column 255 would sit on the left of the screen instead."
         }
       ]
     }

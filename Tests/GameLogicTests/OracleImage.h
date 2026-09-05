@@ -42,6 +42,9 @@ namespace Elite::Testing
      */
     static const OracleImage& LoaderInstance();
 
+    /// The sprite definitions' own image -- `elite-sprites.asm` at &7C3A (ADR-005 section 1).
+    static const OracleImage& SpriteInstance();
+
     [[nodiscard]] bool Available() const noexcept
     {
       return m_available;

@@ -115,6 +115,9 @@
     <ClInclude Include="Controls.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="VideoState.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="ViewChange.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -318,6 +321,12 @@
     </ClCompile>
     <ClCompile Include="Controls.cpp">
       <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoState.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="SpriteData.cpp">
+      <Filter>Generated Data</Filter>
     </ClCompile>
     <ClCompile Include="ViewChange.cpp">
       <Filter>Universe</Filter>

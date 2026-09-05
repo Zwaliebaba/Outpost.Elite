@@ -295,6 +295,16 @@ namespace Elite
      */
     TrumbleSprites& trumbles;
 
+    /*
+     * 6502: the VIC-II sprite registers, which `MVTRIBS` READS and not only writes.
+     *
+     * Every other route into them is a write-only seam, which is what `VideoState.h` says they
+     * should be -- a getter would invite a port to compute what the hardware holds. `MVTRIBS` is
+     * the exception the design allows for rather than a hole in it: it loads a sprite's x back out
+     * of the register, adds a velocity to it and stores it again, so the register IS its input.
+     */
+    VideoState& video;
+
     SightEffects& sight;
     ViewEffects& effects;
 

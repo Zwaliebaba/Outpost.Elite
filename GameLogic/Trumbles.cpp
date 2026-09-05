@@ -9,7 +9,8 @@
 namespace Elite
 {
 
-  void MoveTrumbleSprites(TrumbleSprites& _sprites, Rng& _rng, std::uint8_t _mainLoopCounter, SightEffects& _effects) noexcept
+  void MoveTrumbleSprites(TrumbleSprites& _sprites, VideoState& _video, Rng& _rng, std::uint8_t _mainLoopCounter,
+                          SightEffects& _effects) noexcept
   {
     /*
      * 6502: LDA MCNT / AND #7 / CMP TRIBCT / BCC P%+5 / JMP NOMVETR.
@@ -24,8 +25,10 @@ namespace Elite
       return;
     }
 
-    // 6502: ASL A / TAY -- and Y indexes all four of the arrays below, at two bytes a Trumble.
+    // 6502: ASL A / TAY -- and Y indexes the three RAM tables at two bytes a Trumble, while the
+    // sprite it steers is Y/2 + 2, because sprites 0 and 1 belong to other slices.
     const std::size_t at = static_cast<std::size_t>(turn) * 2u;
+    const std::size_t sprite = static_cast<std::size_t>(turn) + FIRST_TRUMBLE_SPRITE;
 
     // 6502: LDA #%101 / JSR SETL1 -- the video chip's registers, mapped in.
     _effects.SetRasterMode(TRUMBLE_RASTER_IO);
@@ -56,9 +59,14 @@ namespace Elite
       _sprites.velocityX[at + 1u] = TRUMBLE_DIRECTION_TABLE[yDirection];
     }
 
-    // 6502: .MVTR1 LDA SPMASK,Y / AND VIC+&10 / STA VIC+&10 -- this sprite's ninth bit goes out
-    // now and comes back at the end only if the new coordinate needs it.
-    _sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at] & _sprites.coordinateMsb);
+    /*
+     * 6502: .MVTR1 LDA SPMASK,Y / AND VIC+&10 / STA VIC+&10 -- and there is no line for it here.
+     *
+     * The mask clears this sprite's ninth x bit out of the register the eight of them share, so
+     * that the code below can put it back only if the new coordinate needs it. `VideoState` gives
+     * each sprite a whole x (ADR-005 section 1), so the bit is not shared and there is nothing to
+     * clear: the store at the bottom writes both halves at once.
+     */
 
     /*
      * 6502: LDA VIC+5,Y / CLC / ADC TRIBVX+1,Y / STA VIC+5,Y.
@@ -67,10 +75,12 @@ namespace Elite
      * whether the addition overflows, so Trumbles that move off the top or bottom of the screen
      * simply reappear on the opposite side".
      */
-    _sprites.coordinates[at + 1u] = AddWithCarry(_sprites.coordinates[at + 1u], _sprites.velocityX[at + 1u], false).value;
+    _video.y[sprite] = AddWithCarry(_video.y[sprite], _sprites.velocityX[at + 1u], false).value;
 
-    // 6502: CLC / LDA VIC+4,Y / ADC TRIBVX,Y / STA T -- the low byte of the x calculation.
-    const AddResult low = AddWithCarry(_sprites.coordinates[at], _sprites.velocityX[at], false);
+    // 6502: CLC / LDA VIC+4,Y / ADC TRIBVX,Y / STA T -- the low byte, and it READS the register
+    // back, which is why this takes a `VideoState` and not a write-only seam.
+    const std::uint8_t previousLow = static_cast<std::uint8_t>(_video.x[sprite] & 0xFFu);
+    const AddResult low = AddWithCarry(previousLow, _sprites.velocityX[at], false);
     std::uint8_t coordinateLow = low.value;
 
     // 6502: LDA TRIBXH,Y / ADC TRIBVXH,Y -- and the high byte, on the low byte's carry.
@@ -105,26 +115,19 @@ namespace Elite
       coordinateLow = 0u;
     }
 
-    // 6502: .oktrib STA TRIBXH,Y.
+    // 6502: .oktrib STA TRIBXH,Y -- the shadow the game keeps because the shared register cannot
+    // be read back one sprite at a time.
     _sprites.coordinateXHigh[at] = high;
 
     /*
-     * 6502: BEQ NOHIBIT / LDA SPMASK+1,Y / ORA VIC+&10 / SEI / STA VIC+&10.
+     * 6502: BEQ NOHIBIT / LDA SPMASK+1,Y / ORA VIC+&10 / SEI / STA VIC+&10 / .NOHIBIT LDA T /
+     * STA VIC+4,Y / CLI -- the ninth bit and the low eight, which are one store here.
      *
-     * `STA` leaves the flags alone, so the `BEQ` is reading the flags of whichever `LDA` or `AND`
-     * put the value in A -- all three of which set Z from the same byte that has just been stored.
-     * So it is "if the ninth bit is zero", and the bit is already clear in the register from the
-     * `AND` at the top.
-     *
-     * The `SEI`/`CLI` pair is not modelled: the port has no raster interrupt racing this write.
+     * The `SEI`/`CLI` pair around the shared register is not modelled: it is there because a
+     * raster interrupt could read VIC+&10 between the load and the store, and nothing in the port
+     * races this.
      */
-    if (high != 0u)
-    {
-      _sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at + 1u] | _sprites.coordinateMsb);
-    }
-
-    // 6502: .NOHIBIT LDA T / STA VIC+4,Y / CLI.
-    _sprites.coordinates[at] = coordinateLow;
+    _video.x[sprite] = static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | coordinateLow);
 
     // 6502: LDA #%100 / JSR SETL1 / JMP NOMVETR -- the registers mapped back out, and the jump
     // back into the flight loop that makes this a call written as two jumps (§6.82).
