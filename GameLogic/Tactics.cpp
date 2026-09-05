@@ -716,15 +716,19 @@ namespace Elite
     /*
      * ---- part 4: is it an Anaconda, is it scared, has it lost its nerve ------------------------
      *
-     * 6502: LDA TYPE / CMP #MSL / BNE P%+5 / JMP TA20 -- a missile that got here (through `TN4`)
-     * skips everything below and goes straight to the steering with its vector REVERSED.
+     * 6502: LDA TYPE / CMP #MSL / BNE P%+5 / JMP TA20, AND THE PORT HAS NO LINE FOR IT.
+     *
+     * In the original a missile reaches part 4 by falling out of `TN4` and `TA19`, and this test
+     * is what sends it to `TA20`. The port does not arrive here that way: every branch of part 1's
+     * missile block returns, and the two that would have fallen through call
+     * `SteerMissileTowardsTarget`, which is `TA19` AND this branch inlined -- see its comment.
+     *
+     * So a copy of `TA20` stood here as well, and it was unreachable. `tools/mutate.py` is what
+     * said so: `ta20-eor` flipped the `EOR #%10000000` in this copy and nothing in a 1,800-case
+     * sweep noticed, because no missile has ever reached this line (plan §6.152). Removed rather
+     * than left, because dead code no mutation can reach is exactly what a surviving mutant is
+     * for finding.
      */
-    if (type == SHIP_TYPE_MISSILE)
-    {
-      NegateVector(screen.draw); // 6502: .TA20 JSR TAS6
-      SteerTowards(_loop, static_cast<std::uint8_t>(math.cnt ^ 0x80u));
-      return true;
-    }
 
     // 6502: CMP #ANA / BNE TN7 / JSR DORND / CMP #200 / BCC TN7 -- an Anaconda spawns its escort.
     bool anacondaFellThrough = false;
