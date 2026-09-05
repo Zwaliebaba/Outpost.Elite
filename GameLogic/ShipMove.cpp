@@ -74,7 +74,7 @@ namespace Elite
     _work[_x + 2u] = static_cast<std::uint8_t>((high.value & 0x7Fu) | _math.t);
   }
 
-  void AddShipCoordinateToK(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x) noexcept
+  bool AddShipCoordinateToK(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x) noexcept
   {
     // 6502: LDA K+3 / STA S / AND #128 / STA T / EOR INWK+2,X / BMI MV13.
     _math.s = _math.k[3];
@@ -91,7 +91,7 @@ namespace Elite
 
       const AddResult high = AddWithCarry(_math.k[3], _work[_x + 2u], middle.carry);
       _math.k[3] = static_cast<std::uint8_t>((high.value & 0x7Fu) | _math.t);
-      return;
+      return high.carry; // 6502: the `ADC`'s, which `AND` and `ORA` leave alone
     }
 
     // 6502: MV13 -- LDA S / AND #127 / STA S, then subtract the other way round.
@@ -108,7 +108,7 @@ namespace Elite
 
     if (high.carry)
     {
-      return; // 6502: BCS MV14
+      return true; // 6502: BCS MV14 -- taken means the carry is set by definition
     }
 
     low = SubtractWithCarry(1, _math.k[1], false);
@@ -119,6 +119,7 @@ namespace Elite
 
     high = SubtractWithCarry(0, _math.k[3], middle.carry);
     _math.k[3] = static_cast<std::uint8_t>((high.value & 0x7Fu) | _math.t);
+    return high.carry;
   }
 
   std::uint8_t AddShipCoordinateToP(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x) noexcept
