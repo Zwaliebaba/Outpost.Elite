@@ -47,6 +47,9 @@ namespace Elite
    */
   inline constexpr std::size_t OPTION_PATG = 2;
 
+  /// 6502: MUTOK is `DAMP+7` -- the eighth of the thirteen, and the one `MUTOKCH` watches.
+  inline constexpr std::size_t OPTION_MUTOK = 7;
+
   /// The thirteen bytes `DKS3` walks, in the order `TGINT` names them. Never reordered.
   using OptionBlock = std::array<std::uint8_t*, OPTION_COUNT>;
 
@@ -70,5 +73,70 @@ namespace Elite
 
   /// 6502: LDY #20 / JSR DELAY -- what one toggle costs, and it is per toggle and not per pass.
   inline constexpr std::uint8_t TOGGLE_DELAY_FRAMES = 20;
+
+  /*
+   * 6502: MUTOKCH -- what happens when the docking-music switch is the one that just moved.
+   *
+   * `STA MUTOKOLD / EOR #&FF / AND auto / BMI april16`, and then it FALLS INTO `stopbd`. So
+   * switching the music ON (`MUTOK` clear) while the docking computer is flying starts it
+   * immediately, and everything else stops it -- and "stops it" goes through `stopbd`, which for
+   * a FORCED setting starts it again instead. Two of the thirteen toggles have an effect the
+   * moment they are pressed rather than the next time something reads them.
+   */
+  enum class MusicChange : std::uint8_t
+  {
+    None,     ///< `MUTOK` did not move, so `MUTOKCH` was not called
+    StartNow, ///< 6502: BMI april16 -- switched on with the computer flying
+    Stop,     ///< 6502: the fall-through into `stopbd`, which may start it again if `MUFOR` is set
+  };
+
+  /*
+   * 6502: LDA MUTOK / CMP MUTOKOLD / BEQ P%+5 / JSR MUTOKCH.
+   *
+   * `MUTOKOLD` is how the routine notices, and it is written by `MUTOKCH` itself -- so the
+   * comparison is against what the LAST pass saw and not against what the option was before the
+   * key. Returns what the caller should do to the player, because the music belongs to phase 5.
+   */
+  [[nodiscard]] MusicChange NoteMusicSwitch(std::uint8_t _mutok, std::uint8_t& _mutokOld, std::uint8_t _dockingComputer) noexcept;
+
+  /// What the pause screen decided about the key just pressed.
+  enum class PauseOutcome : std::uint8_t
+  {
+    Paused,  ///< 6502: BNE FREEZE -- still frozen, go round again
+    Resumed, ///< 6502: CPX #&0D -- CLR/HOME, and `DK2`'s `RTS`
+    Quit,    ///< 6502: CPX #&07 / JMP DEATH2 -- and it does not come back
+  };
+
+  /// 6502: CPX #&40 -- the key `DK4` freezes on, which is what `DOKEY` falls into and the port has
+  /// never followed (`Controls.cpp` says so in a comment).
+  inline constexpr std::uint8_t PAUSE_KEY = 0x40;
+
+  /// 6502: CPX #&0D, CPX #&07, CPX #&02 and CPX #&33 -- resume, quit, and the two sound keys.
+  inline constexpr std::uint8_t RESUME_KEY = 0x0D;
+  inline constexpr std::uint8_t QUIT_KEY = 0x07;
+  inline constexpr std::uint8_t SOUND_OFF_KEY = 0x02;
+  inline constexpr std::uint8_t SOUND_ON_KEY = 0x33;
+
+  /// What one pass round `FREEZE` did, which is a toggle or two and then a decision.
+  struct PausePass
+  {
+    PauseOutcome outcome = PauseOutcome::Paused;
+    MusicChange music = MusicChange::None;
+    std::uint8_t delayFrames = 0; ///< twenty per toggle that flipped
+  };
+
+  /*
+   * 6502: FREEZE -- one pass round the pause loop, for the key that was read.
+   *
+   * The original blocks: `JSR WSCAN / JSR RDKEY` and then round again until CLR/HOME. A port
+   * cannot block, so this is ONE pass and the executable owns the loop -- the same shape as
+   * `RunLoopTail`'s frames and for the same reason.
+   *
+   * `STX DNOIZ` with X still holding the key is the joke worth keeping: pressing "2" stores TWO in
+   * the sound flag rather than a true, because the routine never loads a value. Any non-zero
+   * disables sound, so the byte the game leaves there is the key code itself.
+   */
+  [[nodiscard]] PausePass PressPauseKey(const OptionBlock& _options, std::uint8_t& _soundDisabled, std::uint8_t& _mutokOld,
+                                        std::uint8_t _dockingComputer, std::uint8_t _key) noexcept;
 
 } // namespace Elite

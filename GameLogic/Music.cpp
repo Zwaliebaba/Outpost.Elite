@@ -214,10 +214,16 @@ namespace Elite
         return;
       }
 
-      BeginTune(_music, _log);
-      _music.playing = 0xFFu;
+      StartDockingMusicNow(_music, _log); // 6502: the fall-through into `april16`
     }
   } // namespace
+
+  void StartDockingMusicNow(MusicPlayer& _music, SidWriteLog& _log) noexcept
+  {
+    // 6502: .april16 LDA #%101 / JSR SETL1 / JSR BDENTRY / LDA #&FF / STA MUPLA.
+    BeginTune(_music, _log);
+    _music.playing = 0xFFu;
+  }
 
   void StartDockingMusic(MusicPlayer& _music, SidWriteLog& _log) noexcept
   {

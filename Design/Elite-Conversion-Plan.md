@@ -451,6 +451,57 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.139 Slice 4e: thirteen switches whose only definition is where they sit
+
+The pause screen is `DK4`, `FREEZE` and `DKS3`, and the whole of it turns on one fact: `DKS3` is
+`CMP TGINT,Y / LDA DAMP,Y / EOR #&FF / STA DAMP,Y`, so entry Y of the key table and the byte Y after
+`DAMP` are one pair. **Nowhere in the game is there any other statement of which key toggles which
+option.** The relationship is the assembler's layout and nothing else.
+
+`TGINT` is extracted from the assembled binary and byte-checked like every other table, which
+settles the count from both ends: `DAMP` to `MUSILLY` is thirteen bytes and `TGINT` is thirteen
+entries. The port does not hold those bytes contiguously -- they are spread across six headers --
+and moving them would touch eighty-seven call sites to buy an invariant a sweep can establish
+instead. So the block is thirteen POINTERS in the assembler's order, and the order is verified the
+only way an ordering can be: all 256 key codes pressed at every one of the thirteen positions,
+3,328 cases, the whole run compared. A pointer in the wrong slot fails on the first key that reaches
+it. Exactly thirteen keys match, which also proves the table has no repeats.
+
+**`EOR #&FF` and not `EOR #1`, and the readers are why.** Half the game tests these bytes with
+`AND`, which a 1 satisfies, and `BIT PATG / BPL` tests bit 7, which it does not -- and that `BIT` is
+what opens the second loop. A port that stored a 1 would silently hide three music toggles while
+every other option kept working.
+
+**`PATG` is the third of the ten it gates.** The byte that decides whether the last three switches
+can be reached is itself two places into the same run, so pressing its key inside the loop changes
+what the rest of the same pass can do. That is the third unrelated job that byte has; §6.121 has the
+other two.
+
+**`STX DNOIZ`, with X still holding the key.** Pressing "2" stores TWO in the sound flag, because
+the routine never loads a value -- every reader tests it for non-zero, so what the game leaves there
+is the key code. The port stores the same two, because the byte is in the commander file. Its
+partner four instructions later, `LDA #0 / STA DNOIZ`, does load one.
+
+**`april16` is not `startbd` with a test disabled.** `MUTOKCH` jumps into the middle of the music
+starter, past the `MUDOCK` choice between the two tunes, past the `STA value5` that records where
+the tune begins, and past all three of the checks on `MUPLA`, `MUFOR` and `MUTOK`. So switching the
+docking music back on while the computer is flying restarts whatever tune was last selected, from
+wherever the pointer was left, even if one is already playing. It is exposed as its own entry rather
+than as a flag -- which is the opposite of what §6.136 did for `hyp1+3`, and the difference is that
+there the two entries really were one `JSR` apart.
+
+**And the fixture bug that looked like a port bug.** `MUTOKOLD` was seeded to zero with `MUTOK` at
+&88, so `MUTOKCH` fired on every key -- a state the game cannot be in, because `MUTOKCH` writes that
+byte every time it runs and the two differ for exactly one pass after the switch moves. With it
+firing constantly, its excursion through `stopbd` and `startbd` did `LDX #HI(musicstart)` on every
+pass, and the `CPX #&07` and `CPX #&0D` below it were reading a register the music player had
+overwritten: the quit key stopped working. §6.95's rule, and it cost a trap log to find.
+
+That clobber is real and survives the fix: on the one pass where the music switch does move, the
+original's quit and resume tests DO look at a byte `startbd` left behind. The sweep reads the
+oracle's own X rather than assuming it is the key, so the port agreeing there is measured rather
+than lucky.
+
 ### 6.138 Two of three fixes that were recorded and never made
 
 §6.128 read three reports from the player's chair -- a letter key that looked dead on the buy
@@ -5530,6 +5581,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Slice 4e: thirteen switches whose only definition is where they sit** (§6.139). `DKS3` pairs entry Y of `TGINT` with the byte Y after `DAMP` and nothing else in the game says which key toggles which option, so `TGINT` is extracted and byte-checked and the port's thirteen POINTERS are verified by pressing all 256 keys at all thirteen positions -- 3,328 cases, and exactly thirteen match. `EOR #&FF` and not `EOR #1`, because `BIT PATG / BPL` tests bit 7 and a 1 would hide three music toggles. `STX DNOIZ` stores the KEY CODE in the sound flag. `april16` is exposed as its own entry because `MUTOKCH` jumps past five decisions, not one. And a fixture that seeded `MUTOKOLD` inconsistently made `MUTOKCH` fire every pass, whose excursion clobbers X -- so the quit key stopped working and it looked like a port bug (§6.95 again). |
 | 2026-09-05 | **Two of §6.128's three fixes were recorded and never made** (§6.138). Auditing what that section said it had placed in `Main.cpp` by hand found `DrawDials` still with one caller and nothing anywhere cooling `GNTMP` or `LASCT`: the dials still only moved on a screen change and the laser still never cooled. The commit carrying §6.128 touches `Main.cpp` once, for sound. **The cause is the shape** -- 65 instructions of game logic held as fragments to be transcribed into the executable, owned by nothing in `GameLogic`, compared by nothing, so nothing could go red. `RunLoopTail` is the whole routine now, in `GameLoop.cpp` (renamed from `Spawner.cpp` per §6.121), compared over 52 cases and six outcomes. Four more carries, a `DEX / BEQ P%+3 / DEX` that cannot pass zero, and Trumbles that grow by a CARRY rather than an increment. A plan section is not evidence that code exists. |
 | 2026-09-05 | **§6.134's dependency pass checked one direction, and two rows were mis-sized** (§6.137). Starting 4c-c found `NWSPS` already built -- in slice 3d-d-iii-b, with `NwS1`, the sun's eviction and the Dodo switch, compared against the shipped routine over tech levels straddling ten. **Slice 4c-c has no work in it.** The claim that `FlightSession` stubs it, repeated in §6.134, the 4c row and two commit messages, was wrong: `FlightSession.h` says the opposite. And 4c-d is seven instructions and an audit, not 71 -- §6.128 placed fourteen of part 5 by hand already and thirty-four of the rest are Trumbles, which are slice 4d's. The pass asked what 4c CALLS that the port lacks; it never asked what 4c's own scope line names that the port already has, which is the cheaper question and a grep. |
 | 2026-09-05 | **Slice 4c-b: the jump** (§6.136). `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` in `Hyperspace.cpp`, which answers the `JumpOutcome::Galactic` slice 2d left open and the hyperspace `Main.cpp` refuses by name. Five findings, and three of them are bytes that come from somewhere else: **`QQ2` and `QQ28` describe different systems** (the seeds from `safehouse`, the cache from whatever the last `TT111` left), **`TT111` SNAPS the crosshairs** so `jmp` stores the snapped pair, and **`MJ` is 255** because `ZINF`'s loop counter runs past zero three routines away from the `STY`. `ptg` is `ORA #1`, the mirror of §6.126's idiom; `BEQ zZ+1` executes the operand of `LDA #96` as an `RTS`; the witchspace roll's carry is provably set because both of `HFS2`'s exits set it; and `TT18` has FOUR exits, not three -- `BNE TT114` jumps out to the chart rather than returning. Also removed: an `ArriveAtSystem` the port had invented in `Ghy`, which does not stock the new galaxy's market. |
