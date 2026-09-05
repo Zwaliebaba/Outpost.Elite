@@ -1,3 +1,5 @@
+#include "pch.h"
+
 #include "Tactics.h"
 
 #include "ShipMove.h"
