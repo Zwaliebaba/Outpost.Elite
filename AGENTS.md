@@ -295,6 +295,18 @@ Four things the tool does that a hand run kept getting wrong, so that reading th
   one when you add a unit; `--check` fails if a unit has none.
 - **It builds HEAD, not your working tree**, and says so when something selected is uncommitted.
 
+**Closing a survivor: three questions, in this order.** §6.132's method is "probe the comparison,
+print what reaches it, count the distinct values" and it closes most of them. When it does not, ask
+the other two before concluding the mutant is equivalent. **Does what this line writes reach the
+comparison at all?** `kill-rotate` survived every ladder because `TALLY` was neither pushed into the
+interpreter nor read back out, and no amount of coverage fixes a value nobody looks at. **And is
+the code PAST the branch reached both ways?** `msl-16` was landed on exactly and still survived,
+because the branch it opens reads a bit that no target in the fixture had set. Then: **a survivor
+that outlives a round of ladder-building deserves more attention than a fresh one, not less.** The
+easy explanations are used up, and what is left is a hole in the comparison or a hole in the port.
+Twelve of the ship AI's thirteen were the sweep and the thirteenth was a defect, and it was the last
+one closed (plan §6.152, §6.153).
+
 What it does NOT do is recover the tallies already published. Those mutants are gone; the fifteen
 survivors §6.125 named are in the file because their names pinned them, and the rest stay
 unreproducible. R13 is open on that half.
