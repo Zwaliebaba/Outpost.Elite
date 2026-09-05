@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "FlightWorld.h"
 #include "OracleImage.h"
 
 #include "Commander.h"
@@ -31,16 +32,8 @@ namespace GameLogicTests
 
   namespace
   {
-    bool OracleMissing()
-    {
-      const OracleImage& oracle = OracleImage::Instance();
-      if (oracle.Available())
-      {
-        return false;
-      }
-      Logger::WriteMessage(("SKIPPED -- oracle absent: " + oracle.Reason()).c_str());
-      return true;
-    }
+    // `OracleMissing` is `FlightWorld.h`'s, which this file now includes for `World` -- one copy
+    // rather than two identical ones, since the tunnel made a whole flight world an argument here.
 
     std::wstring Widen(const std::string& _text)
     {
@@ -96,10 +89,13 @@ namespace GameLogicTests
       {
         seams.push_back("msblob");
       }
-      void ShowDockingTunnel() override
+      /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
+      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
       {
-        seams.push_back("LAUN");
+        (void)_keys;
+        return {true, 0u};
       }
+
       void WaitFrames(std::uint8_t _frames) override
       {
         seams.push_back("DELAY");
@@ -326,28 +322,49 @@ namespace GameLogicTests
       Assert::IsTrue(reachedBay, L"DOENTRY should run off its dispatch into BAY");
 
       // ---- the port ----------------------------------------------------------------------------
+      /*
+       * A whole world rather than three loose blocks, because `DOENTRY` draws the tunnel now.
+       *
+       * `LAUN` is ported (§6.109), so `DockAtStation` takes the screen it draws on instead of the
+       * commander, the status and the flight state separately -- all three were already inside
+       * `FlightScreen`, and passing them twice was a redundancy waiting to diverge. The oracle
+       * keeps its `LAUN` trap: this test compares the DISPATCH and the six stores, and the tunnel
+       * changes neither. The drawing itself is compared in `LaunchTests`.
+       */
       RecordingEffects effects;
-      Elite::FlightStatus status;
-      Elite::FlightState flight;
-      flight.delta = 0x5C;
-      status.laserTemperature = 0x5C;
-      status.hyperspaceCountdown = 0x5C;
-      status.forwardShield = 0x5C;
-      status.aftShield = 0x5C;
-      status.energy = 0x5C;
+      World world;
+      Elite::ClipState clip;
+      world.commander = commander;
+      world.flight.delta = 0x5C;
+      world.status.laserTemperature = 0x5C;
+      world.status.hyperspaceCountdown = 0x5C;
+      world.status.forwardShield = 0x5C;
+      world.status.aftShield = 0x5C;
+      world.status.energy = 0x5C;
       std::uint8_t dockedFlag = 0;
 
-      const Elite::DockingResult result = Elite::DockAtStation(effects, commander, status, flight, dockedFlag, 0, false);
+      Elite::FlightScreen screen = world.Screen();
+      const Elite::DockingResult result = Elite::DockAtStation(effects, screen, clip, nullptr, dockedFlag, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome), L"this commander earns no briefing");
 
-      // 6502: JSR RES2 / JSR LAUN / ... / LDY #44 / JSR DELAY, in that order.
-      const std::vector<std::string> EXPECTED = {"RES2", "LAUN", "DELAY"};
+      // 6502: JSR RES2 / JSR LAUN / ... / LDY #44 / JSR DELAY, in that order -- and `LAUN` is not
+      // in this list any more because it is not a seam any more.
+      const std::vector<std::string> EXPECTED = {"RES2", "DELAY"};
       Assert::AreEqual(EXPECTED.size(), effects.seams.size(), L"how many seams arriving reaches");
       for (std::size_t index = 0; index < EXPECTED.size(); ++index)
       {
         Assert::AreEqual(EXPECTED[index], effects.seams[index], (L"seam " + std::to_wstring(index)).c_str());
       }
+
+      /*
+       * 6502: JSR LAUN -- and the seam list above can no longer say it happened, because it is not
+       * a seam. What it leaves behind says so instead: the step it stores and the noise it makes.
+       * Without this, deleting the call from `DOENTRY` would pass every other assertion here.
+       */
+      Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, world.heaps.stp, L"LAUN stored the step");
+      Assert::AreEqual<std::size_t>(1u, world.effects.sounds.size(), L"LAUN made one noise");
+      Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, world.effects.sounds.front(), L"and it is sfxwhosh");
 
       std::uint8_t frames = 0;
       for (const Cpu6502::TrapHit& hit : cpu.trapHits)
@@ -360,12 +377,12 @@ namespace GameLogicTests
       Assert::AreEqual(frames, effects.frames, L"how long the pause is");
       Assert::AreEqual<std::uint8_t>(Elite::DOCKING_PAUSE_FRAMES, frames, L"forty-four vertical syncs");
 
-      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], flight.delta, L"DELTA");
-      Assert::AreEqual(cpu.memory[oracle.Label("GNTMP")], status.laserTemperature, L"GNTMP");
-      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ22") + 1)], status.hyperspaceCountdown, L"QQ22+1");
-      Assert::AreEqual(cpu.memory[oracle.Label("FSH")], status.forwardShield, L"FSH");
-      Assert::AreEqual(cpu.memory[oracle.Label("ASH")], status.aftShield, L"ASH");
-      Assert::AreEqual(cpu.memory[oracle.Label("ENERGY")], status.energy, L"ENERGY");
+      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], world.flight.delta, L"DELTA");
+      Assert::AreEqual(cpu.memory[oracle.Label("GNTMP")], world.status.laserTemperature, L"GNTMP");
+      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ22") + 1)], world.status.hyperspaceCountdown, L"QQ22+1");
+      Assert::AreEqual(cpu.memory[oracle.Label("FSH")], world.status.forwardShield, L"FSH");
+      Assert::AreEqual(cpu.memory[oracle.Label("ASH")], world.status.aftShield, L"ASH");
+      Assert::AreEqual(cpu.memory[oracle.Label("ENERGY")], world.status.energy, L"ENERGY");
 
       // 6502: BAY's own stores, which the JMP tail reaches.
       Assert::AreEqual<std::uint8_t>(0xFF, dockedFlag, L"BAY sets the docked flag");
@@ -388,10 +405,12 @@ namespace GameLogicTests
       earner.At(Elite::Field::GalaxyNumber) = 0;
       earner.SetCash(0);
 
-      Elite::FlightStatus earnerStatus;
-      Elite::FlightState earnerFlight;
+      World earnerWorld;
+      Elite::ClipState earnerClip;
+      earnerWorld.commander = earner;
       std::uint8_t earnerDocked = 0;
-      const Elite::DockingResult briefing = Elite::DockAtStation(briefed, earner, earnerStatus, earnerFlight, earnerDocked, 0, false);
+      Elite::FlightScreen earnerScreen = earnerWorld.Screen();
+      const Elite::DockingResult briefing = Elite::DockAtStation(briefed, earnerScreen, earnerClip, nullptr, earnerDocked, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::BriefMission1), static_cast<int>(briefing.outcome),
                        L"this commander has earned the Constrictor mission");
@@ -405,7 +424,7 @@ namespace GameLogicTests
 
       // The state above the dispatch is reset either way -- the shields and the pause are not the
       // mission's business.
-      Assert::AreEqual<std::uint8_t>(0xFF, earnerStatus.energy, L"the energy banks are recharged anyway");
+      Assert::AreEqual<std::uint8_t>(0xFF, earnerWorld.status.energy, L"the energy banks are recharged anyway");
       Assert::AreEqual<std::uint8_t>(Elite::DOCKING_PAUSE_FRAMES, briefed.frames, L"and the pause happens anyway");
     }
     /*

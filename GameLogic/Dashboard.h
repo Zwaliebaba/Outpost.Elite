@@ -77,6 +77,20 @@ namespace Elite
   struct FlightStatus
   {
     std::uint8_t laserTemperature = 0; ///< 6502: GNTMP
+
+    /*
+     * 6502: MULIE -- "this `RESET` came from the title screen", and nothing in `GameLogic` reads it.
+     *
+     * `TITLE` sets it, calls `RESET`, and clears it again; the only reader in the whole build is
+     * `stopbd`, whose first two instructions are `BIT MULIE / BMI itsoff` -- so the guard exists to
+     * stop the title screen's reset from silencing the music it has just started. `stopbd` is
+     * phase 5's, which leaves this a byte the port carries and does not act on, the same shape as
+     * `ScreenState::hyperspaceEffect`.
+     *
+     * It is here rather than nowhere because §6.101 was a store the port dropped for exactly the
+     * reason it could have been dropped here: nothing that exists yet reads it.
+     */
+    std::uint8_t titleReset = 0;
     /*
      * 6502: QQ22 and QQ22+1 -- the hyperspace countdown, which is TWO bytes and one number.
      *

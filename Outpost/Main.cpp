@@ -249,7 +249,7 @@ namespace
        * `_selected` comes back written: the launch runs `TT111` for the SEEDS rather than for the
        * distance, because the planet's appearance is generated from the system you are leaving.
        */
-      Elite::Launch(_game.flight.Loop(), _game.shell, _game.dockedFlag, _game.crosshairX, _game.crosshairY, _game.current.techLevel,
+      Elite::Launch(_game.flight.Loop(), &_game.shell, _game.dockedFlag, _game.crosshairX, _game.crosshairY, _game.current.techLevel,
                     _game.selectedSeeds);
       return;
 
@@ -305,8 +305,8 @@ namespace
        * is here anyway because the routine is built and the alternative is a hole that looks like
        * a decision.
        */
-      const Elite::DockingResult arrival =
-        Elite::DockAtStation(_game.shell, _game.commander, _game.status, _game.flight.Screen().flight, _game.dockedFlag, _game.view, false);
+      const Elite::DockingResult arrival = Elite::DockAtStation(_game.shell, _game.flight.Screen(), _game.flight.Loop().clip, &_game.shell,
+                                                                _game.dockedFlag, _game.view, false);
 
       // 6502: JMP BAY, which every one of the seven exits eventually reaches -- directly on the
       // `EN6` path, and after a briefing on the other six. The briefings are phase 4's, so the

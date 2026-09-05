@@ -240,6 +240,34 @@ namespace Elite
                 ClipState& _clip, const Projection& _centre, bool _carryIn) noexcept;
 
   /*
+   * What a tunnel needs from the platform, which is a display that is still there while it draws.
+   *
+   * THE C64'S SCREEN IS LIVE AND THIS ONE IS NOT. The VIC-II scans the bitmap out continuously, so
+   * `HFS2` did not have to ask to be seen: the player watches each circle appear as the 6502 plots
+   * it, and the whole effect is an animation without a single instruction spent on making it one.
+   * A canvas is only seen when something presents it, and `Launch` runs start to finish between
+   * two presents -- so the port drew all eight rings and cleared them again with nothing in
+   * between, and the effect was invisible rather than fast (§6.109).
+   *
+   * ONE FRAME PER CIRCLE, AND THAT IS MEASURED RATHER THAN CHOSEN. `HFS1` at `STP` 8 costs 483,905
+   * cycles for its thirty-four circles -- 14,232 each, against the 17,095 an NTSC frame has -- so a
+   * circle is 0.83 of a frame and the smallest honest unit to hold is one. The whole effect is
+   * about half a second, which is why it cannot be treated as ADR-005 section 1's "intermediate
+   * state inside a step": it is not a step, it is thirty-four of them.
+   *
+   * A null pacing draws the effect at once, which is what a comparison against the oracle wants:
+   * the 6502 has no present either, and the two sides must agree on PIXELS and not on time.
+   */
+  class TunnelEffects
+  {
+  public:
+    virtual ~TunnelEffects() = default;
+
+    /// One circle has been drawn. Show it, and let a frame pass before the next one goes over it.
+    virtual void ShowCircle() = 0;
+  };
+
+  /*
    * 6502: HFL1 -- one ring of the hyperspace effect, expanding until it leaves the screen.
    *
    * `LSP` is set to 1 before EVERY circle, which is what makes the ring erase itself: the heap is
@@ -251,7 +279,7 @@ namespace Elite
    * carry and stops there, so the loop ends on whichever comes first.
    */
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                          ClipState& _clip, const Projection& _centre, std::uint8_t _index) noexcept;
+                          ClipState& _clip, const Projection& _centre, std::uint8_t _index, TunnelEffects* _pacing) noexcept;
 
   /*
    * 6502: HFS1 -- the whole effect, eight rings from the centre of the space view.
@@ -260,7 +288,7 @@ namespace Elite
    * around the crosshairs whatever the ship is doing. `XX4` counts the eight.
    */
   void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry,
-                           MathWorkspace& _math, ClipState& _clip) noexcept;
+                           MathWorkspace& _math, ClipState& _clip, TunnelEffects* _pacing) noexcept;
 
   /*
    * 6502: CIRCLE -- is it worth drawing, how coarse should it be, and then draw it.
