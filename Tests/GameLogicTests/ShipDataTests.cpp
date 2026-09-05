@@ -353,6 +353,10 @@ namespace GameLogicTests
         Cpu6502 cpu = oracle.Fresh();
         Elite::Bubble bubble;
 
+        // 6502: XX21+2*SST-2 -- the entry `NWSPS` writes and `NWSHP` reads. The oracle's copy is
+        // the assembled one, so the port's has to be too or the station case refuses the ship.
+        bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+
         // The same starting bubble on both sides: `occupied` slots holding a Viper.
         for (std::uint8_t filled = 0; filled < item.occupied; ++filled)
         {
@@ -378,7 +382,8 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(nwshp);
         Assert::IsTrue(run.completed, (where + L": NWSHP returned").c_str());
 
-        const Elite::NewShip created = Elite::AddShip(bubble, work, item.type);
+        std::uint16_t blueprint = 0; // 6502: XX0, which NWSHP writes
+        const Elite::NewShip created = Elite::AddShip(bubble, work, item.type, blueprint);
 
         // The carry is the answer, and both refusals clear it.
         Assert::AreEqual(cpu.c, created.created, (where + L": whether the ship was created").c_str());

@@ -240,6 +240,29 @@ namespace Elite
                 ClipState& _clip, const Projection& _centre, bool _carryIn) noexcept;
 
   /*
+   * 6502: HFL1 -- one ring of the hyperspace effect, expanding until it leaves the screen.
+   *
+   * `LSP` is set to 1 before EVERY circle, which is what makes the ring erase itself: the heap is
+   * rewound so the next `CIRCLE2` overwrites the same run, and each circle is EORed over the
+   * last. The radius starts at `(_index AND 7) + 8` and doubles, so the eight rings are eight
+   * different starting sizes crossing the screen at eight different times.
+   *
+   * `ASL K / BCS HF8` is the exit as much as `CMP #160` is: a radius past 128 doubles into the
+   * carry and stops there, so the loop ends on whichever comes first.
+   */
+  void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+                          ClipState& _clip, const Projection& _centre, std::uint8_t _index) noexcept;
+
+  /*
+   * 6502: HFS1 -- the whole effect, eight rings from the centre of the space view.
+   *
+   * `K3` and `K4` are set to the view centre and their high bytes cleared, so the rings are drawn
+   * around the crosshairs whatever the ship is doing. `XX4` counts the eight.
+   */
+  void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry,
+                           MathWorkspace& _math, ClipState& _clip) noexcept;
+
+  /*
    * 6502: CIRCLE -- is it worth drawing, how coarse should it be, and then draw it.
    *
    * Returns the carry: set means `CHKON` refused it and nothing was drawn. The step is 8 for a

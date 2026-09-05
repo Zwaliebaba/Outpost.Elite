@@ -119,6 +119,16 @@ namespace Elite
      * puts it back to zero and `COMIRQ1` increments it, which is the only place it grows.
      */
     std::uint8_t backgroundFlash = 0;
+
+    /*
+     * 6502: HFX -- the hyperspace effect's own flag, which the RASTER HANDLER reads.
+     *
+     * `comirq1` checks it once a frame and scrambles the screen's row addresses while it is set,
+     * which is the tearing a jump ends with. Nothing in `GameLogic` reads it; `ZERO` clears it
+     * and `LL164` sets it, so it is state the port has to carry even though the thing that acts
+     * on it is behind the presentation seam.
+     */
+    std::uint8_t hyperspaceEffect = 0;
   };
 
   /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
@@ -263,6 +273,16 @@ namespace Elite
     std::uint8_t& view;       ///< 6502: QQ11 -- which screen is up
     std::uint8_t& spaceView;  ///< 6502: VIEW -- which way the player is looking, 0 to 3
     std::uint8_t& explosions; ///< 6502: EV
+
+    /*
+     * 6502: tek -- the current system's tech level, which the flight loop READS.
+     *
+     * Here because part 14 spawns the station and `NWSPS` picks a Coriolis or a Dodo by this byte.
+     * It belongs to the docked half -- `CurrentSystem` carries it and arriving writes it -- so this
+     * is a reference to that byte and not a second copy of it, the same arrangement as `QQ11` and
+     * the commander block.
+     */
+    std::uint8_t& techLevel;
   };
 
   /*

@@ -780,7 +780,7 @@ namespace GameLogicTests
       std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
       std::uint16_t mvtribs, nomvetr, ma3, ma18, escape, frs1, angry, startbd, stopbd, noise;
-      std::uint16_t mainLoop, death, doentry, tactics, doexp, planet, nwsps, sfs1, noise2;
+      std::uint16_t mainLoop, death, doentry, tactics, doexp, planet, sfs1, noise2;
       std::uint16_t setl1, dovdu19, slsp;
 
       explicit LoopWhere(const OracleImage& _oracle)
@@ -827,7 +827,6 @@ namespace GameLogicTests
         tactics = _oracle.Label("TACTICS");
         doexp = _oracle.Label("DOEXP");
         planet = _oracle.Label("PLANET");
-        nwsps = _oracle.Label("NWSPS");
         sfs1 = _oracle.Label("SFS1");
         noise2 = _oracle.Label("NOISE2");
         setl1 = _oracle.Label("SETL1");
@@ -904,11 +903,6 @@ namespace GameLogicTests
       {
         angered.push_back(_type);
       }
-      void SpawnStation() override
-      {
-        ++stationSpawns;
-      }
-
       bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override
       {
         children.push_back({_aiFlag, _type});
@@ -921,7 +915,6 @@ namespace GameLogicTests
       };
 
       std::vector<Child> children;
-      std::uint32_t stationSpawns = 0;
       bool childSucceeds = true;
     };
 
@@ -1203,7 +1196,6 @@ namespace GameLogicTests
       cpu.AddTrap(_loop.tactics);
       cpu.AddTrap(_loop.doexp);
       cpu.AddTrap(_loop.planet);
-      cpu.AddTrap(_loop.nwsps);
       cpu.AddTrap(_loop.setl1);
       cpu.AddTrap(_loop.dovdu19);
       cpu.AddTrap(_loop.noise2);
@@ -1264,7 +1256,6 @@ namespace GameLogicTests
       std::uint32_t escaped = 0;
       std::uint32_t died = 0;
       std::uint32_t docked = 0;
-      std::uint32_t stationSpawns = 0;
       std::vector<Elite::Testing::Cpu6502::TrapHit> pitched;
       std::vector<std::uint8_t> sounds;
       std::vector<std::uint8_t> spawned;
@@ -1277,10 +1268,6 @@ namespace GameLogicTests
         if (hit.address == _loop.ma3 || hit.address == _loop.ma18)
         {
           ++reachedEnd;
-        }
-        else if (hit.address == _loop.nwsps)
-        {
-          ++stationSpawns;
         }
         else if (hit.address == _loop.noise2)
         {
@@ -1323,7 +1310,6 @@ namespace GameLogicTests
           (_context + L": fell through to the next part -- outcome " + std::to_wstring(static_cast<int>(outcome))).c_str());
       }
 
-      Assert::AreEqual(stationSpawns, _frame.effects.stationSpawns, (_context + L": NWSPS calls").c_str());
       Assert::AreEqual(pitched.size(), _frame.effects.pitched.size(), (_context + L": NOISE2 calls").c_str());
       for (std::size_t index = 0; index < pitched.size(); ++index)
       {

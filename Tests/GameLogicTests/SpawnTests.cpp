@@ -197,6 +197,168 @@ namespace GameLogicTests
     }
   } // namespace
 
+  /*
+   * 6502: NWSPS -- and it is three separate things wearing one label.
+   *
+   * A SPAWN, a SELF-MODIFICATION of the blueprint pointer table, and a quiet eviction of the sun.
+   * The sweep has to reach all three or it proves the easy one: the tech levels straddle ten from
+   * both sides so the Dodo branch and the Coriolis store are each taken, the bubble starts with a
+   * sun in slot 1 so its removal is visible, and the table entry starts as the DODO on some passes
+   * so that the unconditional `LDA spasto / STA XX21+2*SST-2` is observable -- a port that only
+   * wrote on the Dodo branch would agree everywhere except there.
+   */
+  TEST_CLASS(TheStationSpawn)
+  {
+  public:
+    TEST_METHOD(TheStationMatchesNWSPS)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const SpawnLabels at(oracle);
+      const std::uint16_t nwsps = oracle.Label("NWSPS");
+      const std::uint16_t spblb = oracle.Label("SPBLB");
+      const std::uint16_t spasto = oracle.Label("spasto");
+      const std::uint16_t xx21Station = static_cast<std::uint16_t>(oracle.Label("XX21") + 2u * Elite::SHIP_TYPE_STATION - 2u);
+
+      const std::uint16_t coriolis = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+      const std::uint16_t dodo = Elite::BlueprintAddress(Elite::SHIP_TYPE_DODO);
+      Assert::AreNotEqual(coriolis, dodo, L"the two stations are different blueprints");
+
+      /// A sun in slot 1, because `NWSPS` empties that slot without going near `KILLSHP`.
+      const std::vector<std::vector<std::uint8_t>> FLEETS = {
+        {128u, 129u},
+        {128u, 129u, 16u, 19u},
+        {128u, 129u, 16u, 19u, 20u, 21u, 22u, 23u, 24u, 25u},
+      };
+
+      std::uint32_t compared = 0;
+      std::uint32_t created = 0;
+      std::uint32_t refused = 0;
+      std::uint32_t dodos = 0;
+
+      for (const std::vector<std::uint8_t>& fleet : FLEETS)
+      {
+        for (const std::uint8_t techLevel :
+             {std::uint8_t{0}, std::uint8_t{5}, std::uint8_t{9}, std::uint8_t{10}, std::uint8_t{11}, std::uint8_t{15}})
+        {
+          for (const std::uint16_t standing : {coriolis, dodo})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            cpu.AddTrap(spblb);
+
+            Elite::Bubble bubble;
+            Elite::LineHeap heap;
+            RecordingEffects effects;
+
+            SeedBubble(cpu, bubble, heap, at, fleet);
+
+            // 6502: INWK -- a recognisable block, so that `NwS1`'s three flips and the heap pointer
+            // are compared against something rather than against zeroes.
+            Elite::ShipBlock work{};
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              const std::uint8_t value = static_cast<std::uint8_t>(0x13u + byte * 7u);
+              work[byte] = value;
+              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = value;
+            }
+
+            cpu.memory[at.tek] = techLevel;
+
+            // 6502: BEGIN's copy, which `OracleImage::Fresh()` has never run -- see `FlightWorld.h`.
+            cpu.memory[spasto] = static_cast<std::uint8_t>(coriolis & 0xFFu);
+            cpu.memory[static_cast<std::uint16_t>(spasto + 1u)] = static_cast<std::uint8_t>(coriolis >> 8);
+
+            bubble.stationBlueprint = standing;
+            cpu.memory[xx21Station] = static_cast<std::uint8_t>(standing & 0xFFu);
+            cpu.memory[static_cast<std::uint16_t>(xx21Station + 1u)] = static_cast<std::uint8_t>(standing >> 8);
+
+            // 6502: XX0 -- the last ship's blueprint, which `NWSHP` overwrites with the station's.
+            std::uint16_t blueprint = Elite::BlueprintAddress(11u);
+            cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
+            cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = static_cast<std::uint8_t>(blueprint >> 8);
+
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(nwsps, 400'000);
+            Assert::IsTrue(run.completed, L"NWSPS returned");
+
+            const Elite::NewShip station = Elite::AddStation(bubble, work, effects, techLevel, blueprint);
+
+            const std::wstring where = Widen("NWSPS (slots " + std::to_string(fleet.size()) + ", tek " + std::to_string(techLevel) +
+                                             ", table " + (standing == dodo ? "Dodo" : "Coriolis") + ")");
+
+            CompareBubble(cpu, bubble, heap, at, where);
+
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                               (where + L": INWK+" + std::to_wstring(byte)).c_str());
+            }
+
+            Assert::AreEqual(cpu.memory[at.xx0], static_cast<std::uint8_t>(blueprint & 0xFFu), (where + L": XX0").c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)], static_cast<std::uint8_t>(blueprint >> 8),
+                             (where + L": XX0+1").c_str());
+
+            Assert::AreEqual(cpu.memory[xx21Station], static_cast<std::uint8_t>(bubble.stationBlueprint & 0xFFu),
+                             (where + L": XX21+2*SST-2").c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx21Station + 1u)],
+                             static_cast<std::uint8_t>(bubble.stationBlueprint >> 8), (where + L": XX21+2*SST-1").c_str());
+
+            Assert::AreEqual(cpu.c, station.created, (where + L": the carry").c_str());
+            Assert::AreEqual<std::uint32_t>(1u, effects.stationBlobs, (where + L": SPBLB").c_str());
+
+            std::uint32_t bulbs = 0;
+            for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+            {
+              bulbs += (hit.address == spblb) ? 1u : 0u;
+            }
+            Assert::AreEqual<std::uint32_t>(bulbs, effects.stationBlobs, (where + L": SPBLB calls").c_str());
+
+            /*
+             * THE SUN IS GONE, and the station is standing in its place.
+             *
+             * `STX FRIN+1` empties slot 1 -- the sun's -- and `NWSHP`'s scan for a free slot then
+             * finds that same slot and puts the station in it. So the assertion is not "slot 1 is
+             * empty" (the port's first version said that and was wrong): it is that no slot holds
+             * a sun any more. `CompareBubble` has already checked the list byte for byte; this says
+             * out loud what those bytes mean.
+             */
+            for (std::size_t slot = 0; slot < bubble.slots.size(); ++slot)
+            {
+              Assert::AreNotEqual<std::uint8_t>(129u, bubble.slots[slot],
+                                                (where + L": the sun is evicted, slot " + std::to_wstring(slot)).c_str());
+            }
+
+            created += station.created ? 1u : 0u;
+            refused += station.created ? 0u : 1u;
+            dodos += (bubble.stationBlueprint == dodo) ? 1u : 0u;
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(36u, compared, L"the whole sweep ran");
+      Assert::IsTrue(dodos > 0u, L"some systems got a Dodo");
+
+      /*
+       * NWSPS CANNOT FAIL, and the sweep proves it rather than assuming it.
+       *
+       * `NWSHP` has two refusals -- no free slot, and no room in the line heap -- and this routine
+       * is unreachable by both. It EMPTIES slot 1 before asking for one, so the scan always finds
+       * at least that; and `CPY #2*SST / BEQ NW6` skips the heap allocation for a station, so the
+       * arena is never consulted. The third fleet here fills all ten slots and still succeeds.
+       */
+      Assert::AreEqual(compared, created, L"every spawn succeeded, including from a full bubble");
+      Assert::AreEqual<std::uint32_t>(0u, refused, L"and none was refused");
+
+      Logger::WriteMessage(("NWSPS: " + std::to_string(compared) + " spawns, " + std::to_string(created) + " created, " +
+                            std::to_string(dodos) + " of them Dodos\n")
+                             .c_str());
+    }
+  };
+
   TEST_CLASS(TheBubbleKill)
   {
   public:
@@ -246,6 +408,9 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             Elite::Bubble bubble;
+            // 6502: XX21+2*SST-2 -- the entry `NWSPS` writes, which `KILLSHP` reads back through
+            // byte 5 when it shuffles a station's slot down. Zero would make the port read nothing.
+            bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
             Elite::LineHeap heap;
             Elite::PlanetSunState state;
             Elite::ShipBlock work{};
@@ -307,7 +472,10 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(killshp, 400'000);
             Assert::IsTrue(run.completed, L"KILLSHP returned");
 
-            Elite::KillShip(bubble, heap, state, work, commander, effects, static_cast<std::uint8_t>(victim));
+            // 6502: XX0 -- the caller's, and the same value the oracle was given above. `KS4`'s sun
+            // is a negative type, so `NWSHP` takes `BMI NW2` and nothing writes it back.
+            std::uint16_t xx0 = blueprint;
+            Elite::KillShip(bubble, heap, state, work, commander, effects, static_cast<std::uint8_t>(victim), xx0);
 
             const std::wstring where = Widen("KILLSHP fleet=" + std::to_string(fleet.size()) + " victim=" + std::to_string(victim) +
                                              " locked=" + std::to_string(locked));
@@ -401,6 +569,7 @@ namespace GameLogicTests
       {
         Cpu6502 cpu = oracle.Fresh();
         Elite::Bubble bubble;
+        bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
         Elite::LineHeap heap;
         Elite::ShipBlock work{};
         Elite::CommanderBlock commander;
