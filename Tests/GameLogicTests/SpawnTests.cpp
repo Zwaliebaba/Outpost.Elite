@@ -8,6 +8,7 @@
 #include "Stardust.h"
 #include "ShipBlueprint.h"
 #include "ShipSlot.h"
+#include "Rng.h"
 #include "Spawn.h"
 
 #include <array>
@@ -679,6 +680,101 @@ namespace GameLogicTests
       Logger::WriteMessage(("SOLAR: " + std::to_string(compared) + " systems, " + std::to_string(bred) + " with Trumbles, " +
                             std::to_string(drawn) + " marked bytes")
                              .c_str());
+    }
+  };
+
+  /*
+   * 6502: Ze -- the debris block, on its own rather than through `DEATH`.
+   *
+   * IT IS HERE BECAUSE `DEATH` HIDES HALF OF IT. Two mutations walked through the death-scene
+   * comparison: the distance `Ze` writes into `INWK+1`, `INWK+4` and `INWK+7`, which `DEATH`'s own
+   * loop zeroes four instructions later, and the `CMP #245` whose carry becomes the AI flag, which
+   * a five-piece scene reaches with five random bytes and never with 245. Neither is dead code --
+   * `Ze` has four callers and three of them are phase 4 (`GTHG` and main game loop parts 3 and 4),
+   * so both bytes are load-bearing somewhere the port has not got to yet (§6.121).
+   *
+   * The generator is set directly rather than run forward, which is what makes 245 reachable: the
+   * byte the compare reads is the PREVIOUS call's, so it is `RAND+1` on entry.
+   */
+  TEST_CLASS(TheDebrisBlock)
+  {
+  public:
+    TEST_METHOD(TheDebrisBlockMatchesZe)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const SpawnLabels at(oracle);
+      const std::uint16_t ze = oracle.Label("Ze");
+
+      // 244, 245 and 246 are the compare's two sides and the boundary itself.
+      const std::uint8_t PREVIOUS[] = {0u, 1u, 128u, 244u, 245u, 246u, 255u};
+      const std::uint8_t OTHERS[] = {0u, 0x5Au, 0xFFu};
+
+      Cpu6502 cpu = oracle.Fresh();
+      std::uint32_t compared = 0;
+      std::uint32_t aggressive = 0;
+
+      for (const std::uint8_t previous : PREVIOUS)
+      {
+        for (const std::uint8_t other : OTHERS)
+        {
+          for (const bool carryIn : {false, true})
+          {
+            const std::array<std::uint8_t, 4> seed = {other, previous, static_cast<std::uint8_t>(other ^ 0x33u),
+                                                      static_cast<std::uint8_t>(previous ^ 0x0Fu)};
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
+            }
+
+            // Junk in every byte, so a block `ZINF` failed to clear would show.
+            Elite::ShipBlock work{};
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              work[byte] = static_cast<std::uint8_t>(0xA0u + byte);
+              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = work[byte];
+            }
+
+            cpu.c = carryIn;
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(ze, 20'000);
+            Assert::IsTrue(run.completed, L"Ze returned");
+
+            Elite::Rng rng;
+            rng.SetState(seed);
+            const Elite::RngResult got = Elite::SeedDebris(work, rng, carryIn);
+
+            const std::wstring where = Widen("Ze previous " + std::to_string(previous) + " other " + std::to_string(other) +
+                                             (carryIn ? " C=1" : " C=0"));
+
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                               (where + L": INWK+" + std::to_wstring(byte)).c_str());
+            }
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + byte)], rng.State()[byte],
+                               (where + L": RAND+" + std::to_wstring(byte)).c_str());
+            }
+
+            // 6502: the fall-through into `DORND2`, so what comes back is A and X of the SECOND
+            // call -- and its carry is cleared by that label rather than rotated in.
+            Assert::AreEqual(cpu.a, got.value, (where + L": A").c_str());
+            Assert::AreEqual(cpu.x, got.previous, (where + L": X").c_str());
+
+            aggressive += ((work[32] & 1u) != 0u) ? 1u : 0u;
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(7u * 3u * 2u, compared, L"the whole sweep ran");
+      Assert::IsTrue(aggressive > 0u, L"and the CMP #245 was crossed on the set side");
+      Assert::IsTrue(aggressive < compared, L"and on the clear side");
     }
   };
 
