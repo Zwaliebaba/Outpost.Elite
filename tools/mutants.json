@@ -404,7 +404,11 @@
         "sweep rather than debt. `mi-release` needed a keyboard that starts with a key DOWN;",
         "`mi-mt9-view` needed a token that is not 216; `mi-pause2-loop` needed a scan count that does",
         "not wrap -- and the mutant itself was replaced, because `if (x) continue;` at the top of a",
-        "`for(;;)` and `while (x) {}` are the same loop, so the first version could not have failed."
+        "`for(;;)` and `while (x) {}` are the same loop, so the first version could not have failed.",
+        "",
+        "SECOND RUN, 2026-09-05, with 4d-c's thirteen added: 25 mutants, 22 caught, 3 survived, and all",
+        "three are recorded equivalents. `mi-mt9-view` became one: it was written as a defect and the",
+        "run proved the defect had no effect, because `TT66` writes the same `XC` twice on its own."
       ],
       "mutants": [
         {
@@ -501,8 +505,8 @@
           "file": "GameLogic/Missions.cpp",
           "find": "      m_text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
           "replace": "      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
-          "expect": "caught",
-          "note": "MT9's column store, which the port did not have until this slice. `LDA #1 / JSR DOXC / JMP TT66` is one load serving two purposes, because `STA` does not touch the accumulator. SURVIVED the first run: the only token that reaches code 9 is 216, and it follows the `{9}` with an `{8}`, which moves the cursor to column 6 and hides the difference. Closed by `TheNewViewMatchesMT9`, which runs the code itself from a cursor at column 29."
+          "expect": "equivalent",
+          "note": "MT9's column store, DROPPED -- and it makes no difference, which is not what this mutant was written to show. `LDA #1 / JSR DOXC / JMP TT66` is one load serving as a column and a view, and the port had only the view; adding the store is faithful and is what the routine does. But `TT66` sets `XC` to 1 ITSELF, twice -- once near the top and again at `.tt66 LDX #1 / STX XC / STX YC` -- and nothing between `DOXC` and `TT66` reads the byte, because `JMP TT66` is the next instruction. So the `DOXC` is DEAD, and the port was accidentally right for two slices. Recorded as an equivalent, with the store kept: it is the FIFTH piece of dead code found in the original, after `cntr`'s `REDU`, `.OLDBOX`'s cursor store, `MAS2`'s second entry and `TITLE`'s `LDA MCNT / AND #3`. It must never come back caught -- if it does, something has stopped writing `XC` in `TT66`."
         },
         {
           "id": "mi-tp-set",

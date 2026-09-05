@@ -407,7 +407,12 @@ namespace Outpost
       return;
 
     case 9:
-      // 6502: MT9, likewise -- the view is all that can be done without a world (see ClearToView).
+      /*
+       * 6502: MT9, likewise. `DOXC` is `STA XC / RTS` and `TT66` gets the same 1 as its view.
+       *
+       * On the full path the column store is dead, because `TT66` writes `XC` itself; here there
+       * is no `TT66` to run (see `ClearToView`), so it is the only part of the code that happens.
+       */
       if (m_text != nullptr)
       {
         m_text->column = Elite::MT9_COLUMN_AND_VIEW;
