@@ -115,4 +115,63 @@ namespace Outpost
 
   [[nodiscard]] StepPlan PlanSteps(double _elapsedSeconds, double _accumulatedSeconds, double _stepsPerSecond) noexcept;
 
+  /*
+   * How long one turn of the title screen's ship takes on the machine it was written for.
+   *
+   * `TITLE` HAS NO FRAME CAP. §6.17's scan found `WSCAN` -- the wait for vertical sync -- called
+   * from `DELAY`, `TT16+7` and `FREEZE`, and from nowhere else. `TLL2` runs `MVEIT` and `LL9` and
+   * goes straight round again, so the ship turns at whatever rate a 6510 can get through those two
+   * and the rate is a CONSEQUENCE rather than a setting. Tie it to the display instead -- one turn
+   * per present, which is what the shell did -- and the ship spins seven times too fast on a 60 Hz
+   * panel and twenty times on a 165 Hz one (§6.110).
+   *
+   * AND IT IS NOT ONE NUMBER, because the cost is not one number. `LL9` draws a distant ship as a
+   * single dot and a near one as a full wireframe of increasingly long lines, so a turn costs four
+   * figures at the start of the ship's approach and six at the end. A single rate picked from the
+   * settled cost is right for the ninety percent of the time a player spends watching a ship that
+   * has arrived, and makes the arrival itself take eleven seconds instead of four and a half.
+   *
+   * SO IT IS A MEASURED CURVE, indexed by the byte `TLL2` itself walks. These are the costs
+   * `CycleTests::TheTitleScreensLoopCostsWhatItCosts` reads off the shipped `MVEIT` and `LL9` with
+   * the ship state `TITLE` sets up, for the Cobra at `BR1`'s distance:
+   *
+   *     INWK+7    cycles     what LL9 is drawing
+   *     96..56    15,600     one dot
+   *     48        59,400     a small wireframe, 18 lines
+   *     16        58,000     the same, holding
+   *     8         81,700     22 lines, and getting longer
+   *     1        121,276     25 lines across the middle of the screen
+   *
+   * WHAT IT IS NOT is a general cost model, and the difference matters. §6.17's other half asks for
+   * the FLIGHT loop to be cycle-budgeted and free-running, which needs the cost of an arbitrary
+   * frame with an arbitrary number of ships in it; this is one routine's cost with one ship in it,
+   * measured rather than modelled, and it stops where the measurement stops. The second title
+   * screen's Adder is a different ship at a different distance and is paced by the Cobra's curve,
+   * which is wrong by however much the two differ -- and still nearer than a display refresh.
+   *
+   * It is biased slightly FAST, because the counter does not model the cycles the VIC-II steals
+   * from the processor, which on a real machine is a further 5-10%.
+   */
+  struct TitleTurnCost
+  {
+    std::uint8_t distanceHigh; ///< 6502: INWK+7, which `TLL2` walks from 96 down to 1
+    std::uint32_t cycles;      ///< what one turn costs there, measured against the shipped routines
+  };
+
+  inline constexpr std::array<TitleTurnCost, 5> TITLE_TURN_COSTS = {{
+    {96, 15'600},
+    {56, 15'600},
+    {48, 59'400},
+    {16, 58'000},
+    {1, 121'276},
+  }};
+
+  /// 6502: the 6510's clock on the NTSC machine this build is for -- 1,022,727 Hz. The PAL one is
+  /// 985,248, and choosing between them is the same decision `FLIGHT_STEPS_PER_SECOND` makes.
+  inline constexpr double NTSC_CLOCK_HZ = 1'022'727.0;
+
+  /// How long a turn of the title ship should take with the ship `_distanceHigh` away, in seconds.
+  /// Linear between the measured points, flat outside them.
+  [[nodiscard]] double TitleTurnSeconds(std::uint8_t _distanceHigh) noexcept;
+
 } // namespace Outpost

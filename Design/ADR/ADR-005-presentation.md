@@ -78,6 +78,17 @@ main loop that ran as fast as the scene allowed.
   1 MHz 6510) needs a cost model of the original loop and is a phase-6 item if anyone wants it.
   Risk R3 owns the uncertainty here.
 
+- **The title screen is the exception, and it is cycle-budgeted. Added 2026-09-05.** `TITLE`
+  is not driven by the vertical sync — §6.17's scan found `WSCAN` called from `DELAY`,
+  `TT16+7` and `FREEZE` and nowhere else — so its ship turns at whatever rate a 6510 gets
+  through `MVEIT` and `LL9`, and a fixed rate is the wrong shape of answer. `TitleTurnSeconds`
+  interpolates a table of measured costs, indexed by how far away the ship still is: 15,600
+  cycles a turn while `LL9` is drawing a dot and 121,276 when it is drawing the settled
+  wireframe, read off the shipped routines by `CycleTests`. **That is Risk R3's mitigation in
+  use rather than merely built**, and it is deliberately narrow: one routine, one ship, and it
+  says so where the numbers are. The flight loop stays on a fixed rate until somebody measures
+  the same way for an arbitrary frame (§6.110).
+
 ### §4 Input
 
 - `Window` (written here, `Outpost/`) produces the per-frame key table; `KeyMap` maps

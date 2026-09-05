@@ -437,6 +437,65 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.110 The title ship span at the monitor's rate, and Risk R3 finally got used
+
+The rotating ship arrived with `TITLE` and span twenty times too fast. The routine was right; the
+pacing was the display's.
+
+**`TLL2` HAS NO FRAME CAP AND THE PORT GAVE IT ONE.** §6.17 established that the C64 build calls
+`WSCAN` from `DELAY`, `TT16+7` and `FREEZE` and from nowhere else — and `TITLE` is not one of
+them. It runs `MVEIT` and `LL9` and goes straight back round, so the ship turns at whatever rate a
+6510 gets through those two. The shell ran one turn per PRESENT, which is a frame cap at the
+display's refresh: 60 turns a second on one machine, 165 on the one this was found on.
+
+**So the cycle counter was used for what it was built for.** Risk R3's mitigation has existed
+since 2026-09-03 and had never priced anything but its own test programs.
+`CycleTests::TheTitleScreensLoopCostsWhatItCosts` sets up the ship state `TITLE` sets up, runs the
+shipped `MVEIT` and `LL9` against the oracle, and adds the cycles:
+
+| `INWK+7` | cycles a turn | what `LL9` draws | turns a second |
+|---|---|---|---|
+| 96 … 56 | 15,600 | one dot | 65.4 |
+| 48 | 59,400 | 18 lines | 17.2 |
+| 16 | 58,000 | 14 lines | 17.6 |
+| 8 | 81,700 | 22 lines | 12.5 |
+| 1 | 121,276 | 25 lines across the middle of the screen | 8.4 |
+
+**THE ANSWER IS A CURVE AND NOT A NUMBER, and finding that out was the useful part.** The obvious
+fix — measure the settled cost, pace at 8.4 turns a second — is right for the ninety percent of
+the time a player spends watching a ship that has arrived, and makes the arrival itself take
+eleven seconds instead of four and a half, because `LL9` draws a distant ship as a single dot and
+that costs an eighth of what the wireframe does. The port had it that way for one build and the
+ship visibly crawled in. `TitleTurnSeconds` interpolates the table above, indexed by `INWK+7` —
+the same byte `TLL2` walks down — so the port slows down as the ship gets bigger for the same
+reason the original does.
+
+**AND THE CURVE IS NOT MONOTONIC, which the obvious test asserts that it is.** A turn costs what
+`LL9` does that turn, and that depends on the ship's ORIENTATION as much as on its distance: 18
+lines at a distance of 48 and 14 at a distance of 16, so the middle of the approach comes out two
+percent cheaper closer in. The first version of the pacing test asserted that a turn never gets
+cheaper as the ship nears and failed at 47 — on the data, not on the code. The table is left
+unsmoothed and the test asserts the trend across the three regimes instead, because two percent of
+wobble in the middle is not what the pacing depends on and pretending the measurement is tidier
+than it is would be the more expensive lie.
+
+**What it is not.** It is one routine's cost with one ship in it, so the second title screen's
+Adder is paced by the Cobra's curve; and §6.17's other half — the FLIGHT loop, cycle-budgeted and
+free-running — still is not built, which is why `FLIGHT_STEPS_PER_SECOND` is still a constant. The
+measurement is also biased fast by the 5-10% of cycles the VIC-II steals and the counter does not
+model. All three are written down where the numbers are, because a measurement whose limits are
+not stated beside it gets read as a fact.
+
+**And it is verified on the screen rather than only in a test.** Fourteen captures of the running
+game 33 ms apart show the ship changing three times: one turn per 120 ms, which is 8.3 a second
+against the oracle's 8.4.
+
+**`near` and `far` are still macros after `<windows.h>`**, which cost two compile errors here —
+`const TitleTurnCost& near = ...` is a declaration with no name. AGENTS.md §6 records the same
+trap taking down a CI leg with `const bool near`; this is the second and third time, and the
+lesson is narrower than "avoid short names": the Windows SDK owns a handful of ordinary English
+words, and two of them are exactly what you reach for when interpolating between two points.
+
 ### 6.109 Everything drawn, nothing seen: an animation with no display to run on
 
 `LAUN` was a stub, so a launch cut straight to the rings. That was known and written down. What
@@ -4179,6 +4238,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The title ship span at the monitor's rate** (§6.110). `TITLE` has no `WSCAN` in it, so the ship turns at whatever rate a 6510 gets through `MVEIT` and `LL9` -- and the shell ran one turn per PRESENT, which is 165 a second on the machine this was found on against the original's 8. **Risk R3's cycle counter was used for its purpose for the first time**: `CycleTests` runs the shipped routines over `TITLE`'s own ship state and prices a turn at 121,276 cycles settled and 15,600 while the ship is still a dot. **The answer is a curve, not a number** -- pacing at the settled rate alone makes the ship's arrival take eleven seconds instead of four and a half, because a distant ship is drawn as a dot and costs an eighth as much -- so `TitleTurnSeconds` interpolates the measured table, indexed by the same `INWK+7` the loop walks down. Verified on screen as well as in a test: 14 captures 33 ms apart show one turn per 120 ms, 8.3 a second against the oracle's 8.4. `near` and `far` are still `<windows.h>` macros, for the second and third time. |
 | 2026-09-05 | **The launch tunnel: `LAUN` and `HFS2`, and a display for them to run on.** The last seam on the launch path goes, and `DOENTRY` gets the tunnel it never had -- `ShowDockingTunnel` was scoped in 2e before the ball line heap existed, 3c built it, and nothing revisited the stub, which is §6.73 for the eighth time. `DockAtStation` takes the screen it draws on instead of the commander, the status and the flight state separately; all three were inside `FlightScreen` already. **18 mutations, 18 caught.** One finding, and it is the port's rather than the original's (§6.109): **the rings were ported, called, compared byte for byte against the shipped game -- and invisible**, because `Launch` runs start to finish between two presents and `LOOK1` clears the screen at the end of it. The C64's display is live and never had to be asked; this one does. `TunnelEffects` is the seam for the frame the VIC-II was giving the routine for free, and **one frame per circle is measured rather than chosen** -- 483,905 cycles over thirty-four circles is 14,232 each against an NTSC frame's 17,095, so the tunnel is half a second and ADR-005 §1's "intermediate states inside a step" does not reach it. `LAUN` also turns out to write the `STP` that §6.94 said the path had no writer for and §6.95 seeded a value for, so the app's seeded 4 stops being load-bearing. The oracle now runs `LAUN` in the `TT110` comparison, which needed §6.108's `NOSPRITES` trap for the second time. 301 tests green. |
 | 2026-09-05 | **The title screen's ship rotates: `TITLE` is ported.** The placeholder box had outlived its reason by two slices -- `LL9` landed in 3b and `AddShip` became public for `NWSPS` -- and nothing revisited the seam, which is §6.73 for the sixth time. `PATG` joins `ControlOptions`, `MULIE` joins `FlightStatus`, and `RDKEY` gains a second seam because `TITLE`'s loop is the only thing standing between two drawn frames while the flight loop's is not. 48 title screens compared on the whole canvas, the whole ship block, the flight state, `JSTK`, `MULIE` and the returned key. **41 mutations, 41 caught.** Three findings. **The key you dismiss the title screen with is how the game asks which input device you have** (§6.106) -- `JSTK` is &FF before the loop and only the non-fire exit runs the `INC` that clears it; the ship also FLIES TOWARDS you, so the distance argument is the z low byte and the placeholder had been sized off the wrong byte by a factor of 256. **The port returned the wrong kind of key** (§6.107): `BR1` compares `thiskey`, the key NUMBER, and the shell returned the character, so "Y" could never open the disk menu -- a one-line defect that survived slice 2e's whole acceptance pass. **And the oracle has flat memory while the C64 banks** (§6.108): `XX21` is at &D000 and so is the VIC-II, so `NOSPRITES`'s one `STA VIC+&15` zeroes the Cobra's blueprint pointer and the shipped game refuses to create the ship. Latent in every comparison since 3b, and invisible until one run drew a screen and then made a ship. 295 tests green. |
 | 2026-09-05 | **The dashboard was three cells out, and only the colours could say so** (§6.105). §6.78 placed `C.CODIALS.bin` at `DSTORE%` rather than at the `DSTORE% + &18` the original build script names, on the grounds that the file's first byte renders as a dashboard aligned to the cell grid. It does -- `&18` is three character cells, so both answers do, and the wrong one puts every label three cells from its box. Nothing in the suite could see it: `wantdials` was compared against the shipped game, and the shipped game copies from wherever the image is, so **both sides read the same misplaced bytes**. The colour map settles it by counting ink that resolves to black -- 18.5% at `DSTORE%`, 8.4% at `DSTORE% + &18`, the minimum over every shift from -8 to +8 cells -- and at that offset FS, AS, FU, CT, LT, AL, SP, RL, DC and 1 to 4 each sit in their own box. `ViewChangeTests` now asserts the invisible-ink fraction and the 24 leading zeros the loader's gap leaves. |

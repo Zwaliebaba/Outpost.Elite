@@ -356,6 +356,60 @@ namespace GameLogicTests
     }
 
     /*
+     * The title ship's pace, which is a MEASUREMENT the shell reads rather than a rate it picks.
+     *
+     * `TITLE` has no `WSCAN` in it (§6.17), so the ship turns at whatever rate a 6510 gets through
+     * `MVEIT` and `LL9` -- and that is not one rate, because `LL9` draws a distant ship as a dot
+     * and a near one as a wireframe of long lines. The numbers come from
+     * `CycleTests::TheTitleScreensLoopCostsWhatItCosts`, which runs the shipped routines and adds
+     * the cycles up; this checks the curve through them behaves, which is the half a cycle count
+     * cannot check for itself.
+     */
+    TEST_METHOD(TheTitleShipIsPacedByWhatATurnCosts)
+    {
+      // The two ends, straight off the measurement: a dot at the start and a full wireframe at the
+      // distance the ship settles at.
+      Assert::AreEqual(15'600.0 / Outpost::NTSC_CLOCK_HZ, Outpost::TitleTurnSeconds(96), 1e-9, L"a dot, 96 away");
+      Assert::AreEqual(121'276.0 / Outpost::NTSC_CLOCK_HZ, Outpost::TitleTurnSeconds(1), 1e-9, L"a wireframe, settled");
+
+      // 8.4 turns a second settled and 65 while it is still a dot -- which is the whole point, and
+      // the reason a single rate would make the ship's arrival take eleven seconds instead of four.
+      Assert::AreEqual(8.43, 1.0 / Outpost::TitleTurnSeconds(1), 0.05, L"settled: 8.4 turns a second");
+      Assert::AreEqual(65.6, 1.0 / Outpost::TitleTurnSeconds(96), 0.5, L"approaching: 65 turns a second");
+
+      /*
+       * THE CURVE IS NOT MONOTONIC AND THE TABLE IS NOT SMOOTHED, which is worth an assertion of
+       * its own because the obvious test is the wrong one. A turn costs what `LL9` does that turn,
+       * and that depends on the ship's ORIENTATION as much as its distance: the measurement has
+       * 59,400 cycles for 18 lines at a distance of 48 and 58,000 for 14 at a distance of 16, so
+       * the middle of the approach wobbles by a couple of percent in the wrong direction. Asserting
+       * that a turn never gets cheaper closer in fails at 47, on the data rather than on the code.
+       *
+       * So what is asserted is the trend across the three regimes -- dot, wireframe, and a
+       * wireframe filling the screen -- and that every distance in between is bounded by the two
+       * ends. That is what the pacing depends on; two percent of wobble in the middle is not.
+       */
+      const double dot = Outpost::TitleTurnSeconds(96);
+      const double wireframe = Outpost::TitleTurnSeconds(32);
+      const double settled = Outpost::TitleTurnSeconds(1);
+
+      Assert::IsTrue(dot < wireframe, L"a dot is cheaper than a wireframe");
+      Assert::IsTrue(wireframe < settled, L"and a wireframe than one across the middle of the screen");
+
+      for (int distance = 96; distance >= 1; --distance)
+      {
+        const double seconds = Outpost::TitleTurnSeconds(static_cast<std::uint8_t>(distance));
+        Assert::IsTrue(seconds >= dot - 1e-12, (L"never cheaper than a dot, at " + std::to_wstring(distance)).c_str());
+        Assert::IsTrue(seconds <= settled + 1e-12, (L"never dearer than the settled ship, at " + std::to_wstring(distance)).c_str());
+      }
+
+      // Outside the table it holds rather than extrapolating: `TITLE` starts the ship at 96 and
+      // stops it at 1, so neither of these can happen -- and neither should run off the end.
+      Assert::AreEqual(Outpost::TitleTurnSeconds(96), Outpost::TitleTurnSeconds(255), 1e-12, L"beyond the table's far end");
+      Assert::AreEqual(Outpost::TitleTurnSeconds(1), Outpost::TitleTurnSeconds(0), 1e-12, L"and beyond its near one");
+    }
+
+    /*
      * ADR-005 section 3: a fixed timestep, and steps are never SILENTLY skipped or doubled.
      *
      * The clamp is the part worth testing hardest. A breakpoint or a closed laptop lid leaves the

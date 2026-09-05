@@ -107,4 +107,44 @@ namespace Outpost
     return plan;
   }
 
+  double TitleTurnSeconds(std::uint8_t _distanceHigh) noexcept
+  {
+    /*
+     * The table is in descending order of distance and the walk goes with it, so the first entry
+     * the argument is at or above is the far side of the pair it falls between. Outside the table
+     * the cost is flat: nothing calls this with a distance above 96, because `TITLE` starts there,
+     * and 1 is where the ship stops.
+     */
+    const TitleTurnCost* above = &TITLE_TURN_COSTS.front();
+
+    for (const TitleTurnCost& point : TITLE_TURN_COSTS)
+    {
+      if (_distanceHigh >= point.distanceHigh)
+      {
+        break;
+      }
+      above = &point;
+    }
+
+    double cycles = static_cast<double>(above->cycles);
+
+    /*
+     * The pair `_distanceHigh` falls between, if it falls between two at all.
+     *
+     * `above` and `below` rather than the obvious `far` and `near`: both of those are still MACROS
+     * after `<windows.h>`, so `const TitleTurnCost& near = ...` compiles as a declaration with no
+     * name. AGENTS.md section 6 records the same trap costing a CI leg with `bool near`.
+     */
+    const std::size_t index = static_cast<std::size_t>(above - TITLE_TURN_COSTS.data());
+    if (index + 1 < TITLE_TURN_COSTS.size() && _distanceHigh < above->distanceHigh)
+    {
+      const TitleTurnCost& below = TITLE_TURN_COSTS[index + 1];
+      const double span = static_cast<double>(above->distanceHigh - below.distanceHigh);
+      const double along = static_cast<double>(above->distanceHigh - _distanceHigh) / span;
+      cycles = static_cast<double>(above->cycles) + along * (static_cast<double>(below.cycles) - static_cast<double>(above->cycles));
+    }
+
+    return cycles / NTSC_CLOCK_HZ;
+  }
+
 } // namespace Outpost
