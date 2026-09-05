@@ -2,6 +2,8 @@
 
 #include "FlightSession.h"
 
+#include "DockedKeys.h"
+
 #include "ShipBlueprint.h"
 
 namespace Outpost
@@ -288,8 +290,63 @@ namespace Outpost
       }
     }
 
+    /*
+     * AND THE STEERING KEYS GO ON A CHART, which is the port's rule and NOT `RDKEY`'s.
+     *
+     * On a C64 the two sets never collide: `<`, `>`, `X` and `S` steer and the cursor keys move the
+     * crosshairs, so `RDKEY` has no reason to drop the steering entries and does not. This port's
+     * map is a modern one (ADR-005 §4) and the arrows do both jobs, so one of them has to give way
+     * while a chart is up -- and it is the steering, because a chart is the one screen where the
+     * arrows are what you aim with. The alternative is a ship that rolls while you read the map.
+     *
+     * It is here rather than in `KeyMap` because this is where the game itself sorts keys by view,
+     * one statement above; and it is marked as the port's own so nobody looks for it in `RDKEY`.
+     */
+    if (Elite::IsChartView(m_screen.view))
+    {
+      for (const std::size_t index : {Elite::KEY_ROLL_LEFT, Elite::KEY_ROLL_RIGHT, Elite::KEY_PITCH_UP, Elite::KEY_PITCH_DOWN})
+      {
+        _keys[index] = 0u;
+      }
+    }
+
     m_rasterMode = RASTER_MODE_NORMAL; // 6502: LDA #%100 / JSR SETL1
     return answer;
+  }
+
+  void FlightSession::DrawRangeCircle(const Elite::RangeCircle& _circle)
+  {
+    /*
+     * 6502: TT128 -- STA K3 / STA K4 / STX K3+1 / STX K4+1 / INX / STX LSP / LDX #2 / STX STP /
+     * JMP CIRCLE2.
+     *
+     * `LSP` goes to ONE rather than to zero: the ball heap's first byte is not a line, so an empty
+     * heap is a pointer of 1 and a `LSP` of 0 would make `BLINE`'s first segment overwrite it.
+     */
+    m_heaps.lsp = 1u;
+    m_heaps.stp = _circle.step;
+    m_math.k[0] = _circle.radius;
+
+    const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
+    Elite::DrawBall(m_canvas, m_heaps, m_draw, m_geometry, m_math, m_clip, centre, false);
+  }
+
+  void FlightSession::DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius)
+  {
+    /*
+     * 6502: TT23's ee1 -- JSR FLFLLS / JSR SUN / JSR FLFLLS.
+     *
+     * The sun is drawn and then FORGOTTEN, twice over: the heap is cleared before so that `SUN`
+     * has nothing to erase, and cleared after so that the next disc does not rub this one out. A
+     * chart's discs are the one place the game draws suns it never intends to move.
+     */
+    Elite::ClearSunHeap(m_heaps);
+
+    m_math.k[0] = _radius;
+    const Elite::Projection centre{_x, 0u, _y, 0u};
+    Elite::DrawSun(m_canvas, m_heaps, m_draw, m_math, m_screen.rng, centre);
+
+    Elite::ClearSunHeap(m_heaps);
   }
 
   void FlightSession::RunDockingComputer(Elite::ShipBlock& _work)

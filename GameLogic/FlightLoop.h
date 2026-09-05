@@ -416,12 +416,15 @@ namespace Elite
    * `TT102` takes the one key that was pressed. `M%` then reads the logger at the top of the next
    * frame, which is why the controls are scanned at the end of a frame rather than the start.
    *
-   * WHAT IS PORTED IS THE SPACE-VIEW PATH, which is `LDA QQ11 / BNE TT17afterall / JSR DOKEY /
-   * TXA / RTS`. The other path calls `DOKEY` too and then turns the four steering keys into the
-   * chart crosshairs' movement, and the charts are phase 4's -- so it is refused here rather than
-   * approximated, and this returns nothing because the port's `TT102` takes its key from the
-   * window's queue rather than from `thiskey`.
+   * BOTH PATHS ARE HERE. `LDA QQ11 / BNE TT17afterall` chooses between them and they differ in
+   * what they hand back rather than in what they do: the space view's returns `thiskey` alone, and
+   * a chart's returns `thiskey` with the crosshair steps in X and Y. The port's `TT102` takes its
+   * key from the window's queue, so what is left to return is the steps -- zero on both axes off a
+   * chart, because the cursor keys are read only when one is showing.
+   *
+   * The joystick half of `TT17afterall` is not ported: `JSTK` is zero for a keyboard player from
+   * the moment the title screen is dismissed with a key, and this build has no joystick.
    */
-  void ScanFlightControls(FlightLoop& _loop, ControlEffects& _effects) noexcept;
+  [[nodiscard]] CrosshairStep ScanFlightControls(FlightLoop& _loop, ControlEffects& _effects, std::uint8_t _view) noexcept;
 
 } // namespace Elite

@@ -3,6 +3,7 @@
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
+#include "Charts.h"
 #include "Controls.h"
 
 #include "Arith.h"
@@ -592,6 +593,95 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint32_t>(6u * 4u * 8u, compared, L"the whole sweep ran");
       Assert::IsTrue(pointers.size() >= 4u, L"every laser got its own sprite");
       Assert::IsTrue(masks.size() >= 6u, L"and the Trumble population moved the enable mask");
+    }
+
+    /*
+     * 6502: TT17's `TJ1` path -- the crosshair steps, against the shipped routine.
+     *
+     * EXHAUSTIVE IN THE ONLY DIMENSION IT HAS. Five key-logger entries decide the answer -- the two
+     * cursor keys, the two SHIFTs and RETURN -- so all thirty-two combinations of them are the
+     * whole input space, and X and Y coming back are the whole output.
+     *
+     * `TT17` calls `DOKEY` first and that is left to run: with `auto` at zero its docking-computer
+     * half is skipped, and what remains touches `JSTX` and `JSTY` rather than anything read here.
+     * `JSTK` is zero because a keyboard player's is -- the title screen sets it the moment you
+     * dismiss it with a key -- and that is what sends the routine down `TJ1` rather than into the
+     * joystick path.
+     */
+    TEST_METHOD(TheCrosshairKeysMatchTT17)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t tt17 = oracle.Label("TT17");
+      const std::uint16_t klo = oracle.Label("KLO");
+      const std::uint16_t inwk = oracle.Label("INWK");
+      const std::uint16_t qq11 = oracle.Label("QQ11");
+      const std::uint16_t jstk = oracle.Label("JSTK");
+      const std::uint16_t autoPilot = oracle.Label("auto");
+
+      const std::size_t WATCHED[] = {
+        Elite::KEY_CURSOR_X, Elite::KEY_CURSOR_Y, Elite::KEY_SHIFT_LEFT, Elite::KEY_SHIFT_RIGHT, Elite::KEY_CROSSHAIR_FAST,
+      };
+
+      std::uint32_t moved = 0;
+
+      for (std::uint32_t held = 0; held < 32u; ++held)
+      {
+        Cpu6502 cpu = oracle.Fresh();
+
+        Elite::KeyLogger keys{};
+        for (std::size_t index = 0; index < 5u; ++index)
+        {
+          keys[WATCHED[index]] = ((held & (1u << index)) != 0u) ? 0xFFu : 0u;
+        }
+
+        for (std::size_t slot = 0; slot < keys.size(); ++slot)
+        {
+          cpu.memory[static_cast<std::uint16_t>(klo + slot)] = keys[slot];
+        }
+
+        // A chart is showing, nothing is flying the ship, and the player is on the keyboard.
+        cpu.memory[qq11] = Elite::LONG_RANGE_CHART_VIEW;
+        cpu.memory[jstk] = 0u;
+        cpu.memory[autoPilot] = 0u;
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = 0u;
+        }
+
+        /*
+         * `RDKEY` IS TRAPPED, and finding out why cost a failing assertion. `TT17` calls `DOKEY`,
+         * `DOKEY` opens with `JSR RDKEY`, and `RDKEY` walks the CIA -- which in a flat 64 KB image
+         * is whatever bytes happen to sit at the I/O addresses. It clears the logger and fills it
+         * from that garbage, so the first run of this test compared the port against a keyboard
+         * with keys held down that nothing had pressed. The port answers the same call with
+         * `ControlEffects::ScanKeyboard`, so trapping it is the comparison's own seam rather than a
+         * convenience.
+         */
+        cpu.AddTrap(oracle.Label("RDKEY"));
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(tt17, 20'000);
+        Assert::IsTrue(run.completed, L"TT17 returned");
+
+        const Elite::CrosshairStep step = Elite::ReadCrosshairKeys(keys);
+
+        const std::wstring where =
+          Widen("TT17(cursor x " + std::to_string((held & 1u) != 0u) + ", cursor y " + std::to_string((held & 2u) != 0u) + ", shift " +
+                std::to_string((held & 12u) != 0u) + ", return " + std::to_string((held & 16u) != 0u) + ")");
+
+        Assert::AreEqual<std::uint32_t>(cpu.x, step.x, (where + L": X").c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.y, step.y, (where + L": Y").c_str());
+
+        moved += (step.x != 0u || step.y != 0u) ? 1u : 0u;
+      }
+
+      // Two thirds of the sweep press a cursor key, and a sweep where nothing ever moved would
+      // agree with the game about doing nothing -- §6.36's rule, applied to a five-bit input.
+      Assert::AreEqual<std::uint32_t>(24u, moved, L"the cases that press a cursor key all moved");
     }
   };
 
