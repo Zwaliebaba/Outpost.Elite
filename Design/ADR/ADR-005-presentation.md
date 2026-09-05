@@ -27,7 +27,20 @@ main loop that ran as fast as the scene allowed.
   aspect option is phase 6.
 - **Presentation of a step.** The executable presents the canvas once per `Step`. Intermediate
   XOR states inside a step (a ship's old lines erased, new ones drawn) are not shown; the
-  original showed them only as flicker. Vsync on; the DXGI flip-model swap chain from
+  original showed them only as flicker.
+
+- **Except where the original drew for longer than a frame, and the test is the cycle count.**
+  Amended 2026-09-05, after the launch tunnel was found invisible. The clause above was written
+  about a ship's old lines being erased before its new ones are drawn, and it does not reach an
+  effect the original spent half a second on: `HFS1` costs 483,905 cycles for its thirty-four
+  circles, 14,232 each against the 17,095 an NTSC frame has, and `TT110` runs it twice. The C64
+  never had to ask to be seen — the VIC-II scans the bitmap out continuously, so a long routine
+  is an animation for free — and a canvas is seen only when something presents it, so a routine
+  like this needs a seam that presents while it draws. `Elite::TunnelEffects` is the first, at one
+  frame per circle. **The rule:** a state that lives for less than a frame is flicker and is not
+  shown; a state the original held for many frames is the effect, and the port owes it a present
+  per frame. Which one a routine is, is measured with `Cpu6502`'s cycle counter and not judged
+  (§6.109). Vsync on; the DXGI flip-model swap chain from
   Frontier's `GpuSwapChain`.
 - **The 256-wide space view's horizontal placement** inside the bitmap and the dashboard row
   split. **Answered 2026-09-03, and it never needed the screenshots this clause asked for.**

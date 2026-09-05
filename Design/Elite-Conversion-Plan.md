@@ -437,6 +437,61 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.109 Everything drawn, nothing seen: an animation with no display to run on
+
+`LAUN` was a stub, so a launch cut straight to the rings. That was known and written down. What
+was not is that **the rings were invisible too** -- ported since 2026-09-04, called on every
+launch, compared against the shipped game byte for byte, and never once shown to a player.
+
+`TT110` calls `HFS1`, draws eight rings into the canvas, and then calls `LOOK1`, which clears the
+screen. The whole routine runs inside one key dispatch, and nothing on that path presents. So the
+effect was drawn and wiped between two frames, and the port's own comment said it was fine: *"they
+erase themselves because `LOOK1` below clears the screen anyway"*. That sentence is true of the
+6502 and false of this program, and the difference is not in either routine.
+
+**THE C64 NEVER ASKED TO BE SEEN.** The VIC-II scans the bitmap out continuously, so a routine that
+draws for half a second is an animation whether or not it means to be; the player watches each
+circle appear as the processor plots it. A canvas is a buffer, and a buffer is seen when something
+presents it. Every drawing routine ported so far has been called from inside a loop that presents
+once per iteration, so the question never came up -- and the first routine that draws for longer
+than one frame produced a correct picture that nobody could look at.
+
+**HOW LONG IS "LONGER THAN ONE FRAME" IS A MEASUREMENT, AND `Cpu6502` HAS COUNTED CYCLES SINCE
+2026-09-03.** `HFS1` at `STP` 8 costs **483,905 cycles**. The ring starting at radius 8 doubles to
+16, 32, 64 and 128 before the `ASL` carries out of the byte, the one at 9 does the same, and the
+six from 10 to 15 stop one circle earlier because they cross 160 first: **thirty-four circles**,
+14,232 cycles each, against the 17,095 an NTSC frame has -- and the VIC-II steals some of those, so
+the real figure is closer to a frame still. **One frame per circle**, and the whole tunnel is about
+half a second. `TT110` runs the effect twice, so a launch is roughly a second of animation that the
+port was rendering in zero frames.
+
+That number is also the answer to whether ADR-005 §1 covers this. It says the executable presents
+once per step and that *"intermediate XOR states inside a step are not shown; the original showed
+them only as flicker"*. The launch tunnel is not an intermediate state and it is not flicker: it is
+thirty-four states the original showed on purpose, and the clause was written about a ship's old
+lines being erased before its new ones are drawn. **The rule that distinguishes them is the cycle
+count**: a state that exists for less than a frame is flicker, and a state that exists for
+twenty-eight of them is the effect.
+
+**WHAT THE MISSING ROUTINE WAS HIDING.** `LAUN` is four instructions and two of them matter here.
+`LDA #8` falls into `HFS2`'s `STA STP` -- so **`LAUN` is the writer of `STP` that §6.94 said the
+launch path did not have**, and §6.95's seeded 4 in the app's constructor was working around a
+routine that had not been written rather than a gap in the original. The port had also been drawing
+the rings at whatever step was left over, which is the wrong shape as well as invisible. And
+`LDA QQ11 / PHA / ... / PLA / STA QQ11` around the `TT66` is what lets the tunnel be drawn over a
+docked screen without the game losing track of which screen it is on.
+
+The upstream disagrees with itself about the step, and the code wins: `HFS2`'s header says "4 for
+launch, 8 for hyperspace", the instruction in `LAUN` is `LDA #8`, and the comment beside that
+instruction says 8 and explains why. Two documentation errors found in the same routine.
+
+**And the seam was the eighth of its kind.** `ShowDockingTunnel` was scoped in 2e because the ball
+line heap did not exist; 3c built it; nothing revisited the stub. §6.73's pattern does not need
+restating, but the count does: eight seams so far have outlived their reason, and not one of them
+announced it. The thing that finally found this one was a person launching and seeing nothing --
+which is the same instrument that found §6.104 and §6.107, and it is still the only instrument
+this project has for "the pixels are right and the screen is wrong".
+
 ### 6.108 The oracle has flat memory, and the ship data lives under the VIC-II
 
 The first `TITLE` comparison failed because **the shipped game drew no ship at all**. `NWSHP`
@@ -1712,6 +1767,7 @@ ported and absent; the check has to be for a DEFINITION, and this pass nearly re
 | **3d-d-v** ✅ | **The `Outpost/` wiring, 2026-09-04** — the half no hosted runner can compile. `FlightSession` owns the flight world and answers the six seam interfaces the flight code reaches through; `Main.cpp` gets the second outer loop `FRCE`'s `LDA QQ12 / BEQ` chooses between, so `PlanSteps` finally has the caller it was written for; `KeyAction::Launch` and `ChangeView` are dispatched rather than refused; `DEATH2` and `DOENTRY` are wired at the loop's two reachable exits. `QQ11` moves out of the shell, because both halves write it. Four findings: `ClearToView`'s 2e seam had to go and its going exposed a title-screen bug only the real `TT66` could show (§6.97); the raster handler is a frame of work with nowhere to live, and it belongs on every present rather than on every screen change (§6.98); `bool PlaySound` cannot express the carry §6.88 measured (§6.99); and the honest inventory of what a launch shows — including one gap that is the PRESENTER's, since nothing in the plan owns sprite rendering (§6.100). Verified by `check_outpost.py`, by compiling every `Elite::` call it makes against the real headers, and by nothing else: **it needs a person at a Windows machine**, as 2e, 3b and 3c do |
 | **3d-d-vi** ✅ | **`NWSPS` and `NwS1`, 2026-09-04** -- the routine 3d-d-iii-b left behind a seam, and the seam is gone. What unblocked it was a measurement rather than a design: `STA XX21` appears seven times in the whole library and four are these, so the game writes ONE entry of the pointer table and `Bubble::stationBlueprint` is the model. **28 mutations, 28 caught.** Findings: `NWSPS` evicts the sun AND takes its line heap, and cannot fail, and self-modifies the table (§6.103); `NWSHP` writes `XX0` and the port had dropped the store, invisible for three slices because every caller so far had a negative type (§6.101); and the oracle image has never run `BEGIN`, so `spasto` still held `&8888` and the fixture has to do `BEGIN`'s two loads -- §6.95's rule pointing at the ORACLE rather than the port (§6.102). `tek` joins `FlightScreen`, because part 14 reads it. `LoopOutcome::Docked` is reachable at last: `SSPR` is `MANY+SST` and only this sets it |
 | **3d-d-vii** ✅ | **`TITLE`, 2026-09-05, 41 mutations and 41 caught** -- the rotating title ship, which the app had been drawing as a box since 2e. It goes in `Flight.cpp` rather than `StartUp.cpp`, filed by what it touches for the seventh time: it resets the universe, creates a ship, moves it and draws it. `PATG` and `MULIE` join the port; `RDKEY` gains a second seam, and the reason it is two rather than one is that the flight loop presents around its scan and the title loop cannot. Findings: the dismissing key configures the joystick and the ship flies towards you (§6.106); the shell returned a character where `BR1` compares a key number, so the disk menu was unreachable (§6.107); and the interpreter's flat memory puts `XX21` under the VIC-II, which had been silently zeroing a blueprint pointer in every screen comparison since 3b (§6.108) |
+| **3d-d-viii** ✅ | **`LAUN` and `HFS2`, 2026-09-05, 18 mutations and 18 caught** -- the launch tunnel, and the last seam on the launch path. It goes in `Flight.cpp` beside the launch that calls it, filed by what it touches for the eighth time: a noise, a step, a `TT66` and the rings. `DOENTRY` gets a tunnel it never had, and `DockAtStation` loses three arguments that were inside `FlightScreen` already. One finding, and it is the port's rather than the original's: **the rings had been ported, called and compared for a day and were invisible the whole time** (§6.109) -- a canvas is seen when something presents it, `Launch` presents nothing, and `LOOK1` clears the screen on the way out. `TunnelEffects` is the seam for the frame the VIC-II gave the routine for free, at one frame per circle because `HFS1` costs 483,905 cycles over thirty-four of them. `LAUN` is also the `STP` writer §6.94 said did not exist |
 
 Doing it in that order means the loop is written last, against a set of routines that have each
 been compared to the game on their own. Written first, it would be sixteen parts and fifteen
@@ -4123,6 +4179,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The launch tunnel: `LAUN` and `HFS2`, and a display for them to run on.** The last seam on the launch path goes, and `DOENTRY` gets the tunnel it never had -- `ShowDockingTunnel` was scoped in 2e before the ball line heap existed, 3c built it, and nothing revisited the stub, which is §6.73 for the eighth time. `DockAtStation` takes the screen it draws on instead of the commander, the status and the flight state separately; all three were inside `FlightScreen` already. **18 mutations, 18 caught.** One finding, and it is the port's rather than the original's (§6.109): **the rings were ported, called, compared byte for byte against the shipped game -- and invisible**, because `Launch` runs start to finish between two presents and `LOOK1` clears the screen at the end of it. The C64's display is live and never had to be asked; this one does. `TunnelEffects` is the seam for the frame the VIC-II was giving the routine for free, and **one frame per circle is measured rather than chosen** -- 483,905 cycles over thirty-four circles is 14,232 each against an NTSC frame's 17,095, so the tunnel is half a second and ADR-005 §1's "intermediate states inside a step" does not reach it. `LAUN` also turns out to write the `STP` that §6.94 said the path had no writer for and §6.95 seeded a value for, so the app's seeded 4 stops being load-bearing. The oracle now runs `LAUN` in the `TT110` comparison, which needed §6.108's `NOSPRITES` trap for the second time. 301 tests green. |
 | 2026-09-05 | **The title screen's ship rotates: `TITLE` is ported.** The placeholder box had outlived its reason by two slices -- `LL9` landed in 3b and `AddShip` became public for `NWSPS` -- and nothing revisited the seam, which is §6.73 for the sixth time. `PATG` joins `ControlOptions`, `MULIE` joins `FlightStatus`, and `RDKEY` gains a second seam because `TITLE`'s loop is the only thing standing between two drawn frames while the flight loop's is not. 48 title screens compared on the whole canvas, the whole ship block, the flight state, `JSTK`, `MULIE` and the returned key. **41 mutations, 41 caught.** Three findings. **The key you dismiss the title screen with is how the game asks which input device you have** (§6.106) -- `JSTK` is &FF before the loop and only the non-fire exit runs the `INC` that clears it; the ship also FLIES TOWARDS you, so the distance argument is the z low byte and the placeholder had been sized off the wrong byte by a factor of 256. **The port returned the wrong kind of key** (§6.107): `BR1` compares `thiskey`, the key NUMBER, and the shell returned the character, so "Y" could never open the disk menu -- a one-line defect that survived slice 2e's whole acceptance pass. **And the oracle has flat memory while the C64 banks** (§6.108): `XX21` is at &D000 and so is the VIC-II, so `NOSPRITES`'s one `STA VIC+&15` zeroes the Cobra's blueprint pointer and the shipped game refuses to create the ship. Latent in every comparison since 3b, and invisible until one run drew a screen and then made a ship. 295 tests green. |
 | 2026-09-05 | **The dashboard was three cells out, and only the colours could say so** (§6.105). §6.78 placed `C.CODIALS.bin` at `DSTORE%` rather than at the `DSTORE% + &18` the original build script names, on the grounds that the file's first byte renders as a dashboard aligned to the cell grid. It does -- `&18` is three character cells, so both answers do, and the wrong one puts every label three cells from its box. Nothing in the suite could see it: `wantdials` was compared against the shipped game, and the shipped game copies from wherever the image is, so **both sides read the same misplaced bytes**. The colour map settles it by counting ink that resolves to black -- 18.5% at `DSTORE%`, 8.4% at `DSTORE% + &18`, the minimum over every shift from -8 to +8 cells -- and at that offset FS, AS, FU, CT, LT, AL, SP, RL, DC and 1 to 4 each sit in their own box. `ViewChangeTests` now asserts the invisible-ink fraction and the 24 leading zeros the loader's gap leaves. |
 | 2026-09-05 | **The screen had no colours, because the port had no loader** (§6.104). The title screen drew a box, a prompt and one green square, and nothing was wrong with any routine that drew it: colour on the C64 lives in screen RAM and colour RAM, the game writes bits and hardly ever writes palettes, and everything else was coloured before the game started -- by the loader, whose seven parts the ledger drops. Their CODE is still dropped; the STATE parts 5 and 6 leave behind is reproduced in `LoaderScreen.cpp` and called once by the composition root, so the dashboard, the border box and the dials are visible for the first time. `sdump` and `cdump` are extracted with them, and they are **the first tables from an image that is not the game's** -- the loader assembles over the screen bitmap, so it gets a 64 KB space of its own that the oracle never loads. The test that would have caught it asserts on what `Resolve` produces rather than on the planes, which is ADR-002 §4's lesson for the second time. |
