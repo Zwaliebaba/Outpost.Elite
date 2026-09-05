@@ -451,6 +451,37 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.124 Three mutations that walked through a green sweep, and none of them was the port
+
+Slice 4a-b's first mutation run caught 24 of 28. All three survivors were the FIXTURE, and each was
+a different way of writing a sweep that cannot see the thing it is sweeping.
+
+**One seed.** `SFS1` ends its cargo branch `LDA #&FF / ROR A / STA INWK+29`, and the carry it
+rotates in is the `ASL A` two instructions earlier -- bit 7 of the random byte. The sweep set the
+generator to one state, so that bit had one value in all 90 cases, and a port that rotated in a
+constant agreed on every one of them. Four seeds now, and the test asserts byte 29 came out with
+bit 7 both set and clear rather than trusting that it did.
+
+**A ramp with no negative numbers.** `SFS2` moves a station's child along the station's own axes,
+and the amount is sign-magnitude: `ASL A` pushes the sign into the carry and `MVT1` reads it.
+`SeedBubble` fills a ship block with `0x21 + slot * 17 + byte * 5`, which is monotonic and never
+reaches 128, so every nose vector in the sweep was positive and dropping the sign entirely changed
+nothing. The three nose bytes are now set explicitly, one of each sign.
+
+**A bit that was already set.** `ANGRY`'s `AN2` does `ORA #%00000100` on the station's `NEWB`
+byte, and the same ramp gives slot 1 byte 36 the value &84 -- which already has bit 2. So the OR
+was a no-op in every case and a mutation that skipped `AN2` altogether passed. The bit is cleared
+before each case now, and the test asserts the station ended up angry on some cases and calm on
+others.
+
+**The shared shape.** All three are §6.93's finding again -- "a fixture that makes two things equal
+cannot tell them apart" -- and all three come from the same convenience: a generated ramp of test
+data is easy to write, easy to compare, and systematically wrong about SIGNS and about BITS THAT
+HAPPEN TO BE SET. A ramp is a fine default for the bytes a routine only copies. For the bytes a
+routine BRANCHES on, the sweep has to name the values, and the test has to count that it reached
+both sides. Every coverage assertion added here is of that second kind: not "the sweep ran N
+cases" but "the answer came out both ways".
+
 ### 6.123 The third Windows-only compile error, and the first one a check can stop
 
 `Tactics.cpp` compiled on the Ubuntu leg, passed all 321 tests, passed every repository check, and
@@ -4714,7 +4745,7 @@ Three things that is worth noting for the slices ahead:
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **4a Tactics** — **scoped 2026-09-05 into 4a-a … 4a-d (§6.121); two of the four are built** | `TACTICS` 1–7, `DOCKIT`, ✅ `ANGRY`, `FR1`, ✅ `FRS1`, `FRMIS`, `SFRMIS`, ✅ `SFS1`/✅ `SFS2` spawning from ships, `HITCH`, `OOPS`, `EXNO*`, `ECMOF`, ✅ `SESCP`, `bomboff` / energy bomb. **Plus the six prerequisites the row never named** (§6.121): ✅ `TAS1`, ✅ `VCSUB`/✅ `VCSU1`, ✅ `TAS3`/✅ `TAS4`, ✅ `TAS6` and ✅ `DCS1` — the vectors both `TACTICS` and `DOCKIT` are written on, none of them buildable before slice 3a put `MVT3` and the ship blocks in place. `OOPS`, `EXNO*`, `ECMOF` and `bomboff` were built with the flight loop in 3d-d-iii-b and are ✅ already; `HITCH` and `FRMIS` likewise. | Oracle for `TACTICS` decisions on sampled states (they consume `DORND`, so seed-locked); a replay: launch, get attacked, win.<br><br>**4a-a is built, 2026-09-05** — the six vectors in a new `Tactics.h/.cpp`, compared against the shipped routines on every byte they write over sweeps that cross each sign test. **17 mutations, 17 caught**, and two of them are the `JSR P%+3` reading: running the body once and running it three times are both caught, so "twice" is measured rather than believed.<br><br>**4a-b is built, 2026-09-05** — `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`, compared on the WHOLE bubble (slots, all ten blocks, the type counts, the junk count, `SLSP` and the line heap) rather than on the ship they build. **Three seams in `FlightSession` are answered**: `SpawnAhead`, `SpawnChild` and `Anger` had been refusing since 3d-d-v, and a fired missile now leaves the rail. Four carries found (§6.121), one of which the port had wrong and only the generator's state could show. |
+| **4a Tactics** — **scoped 2026-09-05 into 4a-a … 4a-d (§6.121); two of the four are built** | `TACTICS` 1–7, `DOCKIT`, ✅ `ANGRY`, `FR1`, ✅ `FRS1`, `FRMIS`, `SFRMIS`, ✅ `SFS1`/✅ `SFS2` spawning from ships, `HITCH`, `OOPS`, `EXNO*`, `ECMOF`, ✅ `SESCP`, `bomboff` / energy bomb. **Plus the six prerequisites the row never named** (§6.121): ✅ `TAS1`, ✅ `VCSUB`/✅ `VCSU1`, ✅ `TAS3`/✅ `TAS4`, ✅ `TAS6` and ✅ `DCS1` — the vectors both `TACTICS` and `DOCKIT` are written on, none of them buildable before slice 3a put `MVT3` and the ship blocks in place. `OOPS`, `EXNO*`, `ECMOF` and `bomboff` were built with the flight loop in 3d-d-iii-b and are ✅ already; `HITCH` and `FRMIS` likewise. | Oracle for `TACTICS` decisions on sampled states (they consume `DORND`, so seed-locked); a replay: launch, get attacked, win.<br><br>**4a-a is built, 2026-09-05** — the six vectors in a new `Tactics.h/.cpp`, compared against the shipped routines on every byte they write over sweeps that cross each sign test. **17 mutations, 17 caught**, and two of them are the `JSR P%+3` reading: running the body once and running it three times are both caught, so "twice" is measured rather than believed.<br><br>**4a-b is built, 2026-09-05, 28 mutations and 28 caught** — `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`, compared on the WHOLE bubble (slots, all ten blocks, the type counts, the junk count, `SLSP` and the line heap) rather than on the ship they build. **Three seams in `FlightSession` are answered**: `SpawnAhead`, `SpawnChild` and `Anger` had been refusing since 3d-d-v, and a fired missile now leaves the rail. Four carries found (§6.121), one of which the port had wrong and only the generator's state could show. The first run caught 24 of 28 and all three survivors were the SWEEP -- one generator seed, a ramp of test data with no negative numbers, and a flag bit the fixture had already set (§6.124). |
 | **4b Explosions and death** ∥ | `DOEXP`, `EXLOOK`, `PTCLS2`, `SOS1`, `DEATH2`, the escape pod, `BAD`/`FAROF`/`FAROF2`, `SHD`/`DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle. |
 | **4c Main game loop** | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds. |
 | **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps. |
@@ -4725,7 +4756,7 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 | Sub-slice | Scope | State |
 |---|---|---|
 | **4a-a** ✅ | `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6`, `DCS1` — the vectors, in `Tactics.h/.cpp` | **Built 2026-09-05**, 17 mutations and 17 caught |
-| **4a-b** ✅ | `FRS1`, `SESCP`, `SFS1`, `SFS2`, `ANGRY` — a ship arriving from inside the bubble, and the three `FlightSession` seams they answer | **Built 2026-09-05**, compared on the whole bubble |
+| **4a-b** ✅ | `FRS1`, `SESCP`, `SFS1`, `SFS2`, `ANGRY` — a ship arriving from inside the bubble, and the three `FlightSession` seams they answer | **Built 2026-09-05**, compared on the whole bubble. **28 mutations, 28 caught** — after three survivors turned out to be the fixture rather than the port (§6.124) |
 | **4a-c** | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | not started; **scoped and dependency-checked 2026-09-05**, §6.122 |
 
 ### Phase 5 — Sound and music
@@ -4811,6 +4842,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Three mutations walked through slice 4a-b's sweep and none of them was the port** (§6.124). One generator seed, so the carry `SFS1` rotates into byte 29 never varied; a ramp of test data that never reaches 128, so `SFS2`'s sign-magnitude amount was always positive; and a `NEWB` byte whose ramp value already had the bit `ANGRY` sets, so the OR was a no-op. All three are §6.93 again, and all three came from the same convenience -- generated ramps are systematically wrong about signs and about bits that happen to be set. The sweeps now name the values a routine branches on and assert the answer came out both ways rather than counting cases. |
 | 2026-09-05 | **The third Windows-only compile error, and the first one a check can stop** (§6.123). `Tactics.cpp` was green on Ubuntu, green on all 321 tests and green on every repository check, and failed the Windows build with C1010: its first line was its own header rather than `pch.h`. With `/Yu` MSVC discards everything above that line, so the rule is "the FIRST line is pch.h", which is a rule a script can read off disk -- `tools/check_projects.py` now checks it for every source in every project built with precompiled headers, proved by deleting the line and watching the check name the file. The corollary to §6.116: when a Windows-only failure is a build rule rather than a type disagreement, write the rule into a check before fixing the file. |
 | 2026-09-05 | **Slice 4a-c re-scoped before a line of it was written** (§6.122). The plan had `TACTICS` and `DOCKIT` as two slices in that order; the dependency pass says they are one graph, because `DOCKIT` jumps into `TACTICS` part 7 for its steering and part 3 for its refusal while `TACTICS` jumps to `DOCKIT`. Neither can be compared against the shipped code without the other. The same pass found that `TACTICS` can kill the player -- three paths reach `OOPS`, which ends `JMP DEATH` -- and that `ShipEffects::RunTactics` returns `void`, so the port has no way to turn that into `LoopOutcome::Died`; `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip`. Written down before the AI rather than found half way through it. |
 | 2026-09-05 | **Phase 4 opens: slices 4a-a and 4a-b** (§6.121). The six vector routines `TACTICS` and `DOCKIT` are built on -- `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6` and `DCS1`, none of which the 4a scope line named -- then the five that put a ship into the bubble from inside it, `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`. **Three `FlightSession` seams are answered** and a fired missile leaves the rail for the first time. **`DCS1` calls itself** with `JSR P%+3` so its body runs twice, which is where the header's "times four" comes from, and both the once and the thrice mutation are caught. Four carries, one of them a defect the port had: `SFS1`'s `DORND` runs with the carry set by the `CMP #PLT` above it, and the only byte that disagreed was the generator's own state. `FRS1` reaches the same `fq1` as `DEATH` and its carry is bit 7 of `MSTG`, so an unlocked missile is one unit faster than a locked one; `ANGRY` tests the type in A and then the flight loop's `TYPE`, which are different bytes. `K3Block` and the five cargo type numbers move to where the ship table is, because a name that records which routine asked first stops being true when a second one asks. **31 of 35 DEATH mutations caught**, the three survivors closed or proved equivalent: a direct `Ze` sweep now crosses `CMP #245` and compares the distance bytes `DEATH` overwrites, and `death-view6` is provably equivalent because `TTX66`'s only read of the view is `BNE`. |
