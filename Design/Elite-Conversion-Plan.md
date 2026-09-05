@@ -451,6 +451,43 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.122 Two slices that are one routine, and a death the port has nowhere to put
+
+Slice 4a was scoped into four on 2026-09-05 (§6.121) and the last two of them do not exist.
+
+**`TACTICS` AND `DOCKIT` ARE ONE GRAPH.** The plan had `TACTICS` as 4a-c and `DOCKIT` as 4a-d, in
+that order, because `TACTICS` part 3 ends `JMP DOCKIT`. It does -- and `DOCKIT` ends `JMP TA151`,
+which is in `TACTICS` part 7, and takes its "no station here" exit through `JMP GOPL`, which is in
+`TACTICS` part 3. The autopilot is not a routine the AI calls: it is an alternative FRONT END on
+the AI's tail, and the shared half is the whole of the steering -- `TA151`, `TA152`, `TA15`,
+`TA11`, `TA12`, `TA6`, `TA9`, `TA10`. Either both are built together or neither can be compared
+against the shipped code, because neither returns without running the other's instructions. The
+two rows are one row.
+
+That is the eleventh time this port has filed something by where it was first mentioned rather
+than by what it touches (§6.73), and the first time the mis-filing was in the plan's own slice
+table rather than in the ledger.
+
+**AND `TACTICS` CAN KILL THE PLAYER, WHICH THE PORT'S SEAM CANNOT SAY.** Three of its paths reach
+`OOPS`: a missile going off next to us (`LDA #250`), a collision (`LDA #80`, twice), and a hit
+from a ship's own laser in part 6. `OOPS` ends `JMP DEATH` when the energy banks are gone, and
+`DEATH` never returns -- it abandons the 6502 stack and runs the death sequence, so `TACTICS`,
+`MVEIT` and the flight loop all simply stop existing as far as the machine is concerned.
+
+The port cannot do that. `ShipEffects::RunTactics(ShipBlock&)` returns `void`, `MoveShip` calls it
+from the middle of `MVEIT`, and the flight loop turns a death into `LoopOutcome::Died` -- which is
+the right model, and there is no path from the seam to it. `TakeDamage` already has the shape the
+fix needs (it returns `false` for `JMP DEATH` and flight loop part 15 propagates it), so the answer
+is almost certainly to give `RunTactics` the same `bool` and thread it out through `MoveShip` and
+`MoveEveryShip`. It is a change to two signatures in already-verified code and it is NOT a
+transcription, which is why it is written down here before the AI is written rather than discovered
+half way through it.
+
+**What this leaves.** Slices 4a-a and 4a-b are built and verified; the remaining unit is `TACTICS`
+parts 1 to 7 with `DOCKIT`, `SFRMIS` and the death-path signature change, as one slice rather than
+two. Its scope line, its acceptance criterion and its dependency on the missing `SFRMIS` are in the
+4a sub-slice table above.
+
 ### 6.121 Six routines that were only arithmetic, and four carries nobody had counted
 
 Slice 4a opens phase 4, and the first thing it needed was not an AI: it was the six vector routines
@@ -4662,8 +4699,7 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 |---|---|---|
 | **4a-a** ✅ | `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6`, `DCS1` — the vectors, in `Tactics.h/.cpp` | **Built 2026-09-05**, 17 mutations and 17 caught |
 | **4a-b** ✅ | `FRS1`, `SESCP`, `SFS1`, `SFS2`, `ANGRY` — a ship arriving from inside the bubble, and the three `FlightSession` seams they answer | **Built 2026-09-05**, compared on the whole bubble |
-| **4a-c** | `TACTICS` 1–7 with `TA151`, `TA152`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6` — the AI itself, and the one routine in phase 4 that consumes `DORND` on every pass | not started |
-| **4a-d** | `DOCKIT` with `GOPL` and `PH22` — the docking computer, which `DOKEY` already presses keys for (`ControlEffects::RunDockingComputer`) | not started |
+| **4a-c** | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | not started; **scoped and dependency-checked 2026-09-05**, §6.122 |
 
 ### Phase 5 — Sound and music
 
@@ -4748,6 +4784,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Slice 4a-c re-scoped before a line of it was written** (§6.122). The plan had `TACTICS` and `DOCKIT` as two slices in that order; the dependency pass says they are one graph, because `DOCKIT` jumps into `TACTICS` part 7 for its steering and part 3 for its refusal while `TACTICS` jumps to `DOCKIT`. Neither can be compared against the shipped code without the other. The same pass found that `TACTICS` can kill the player -- three paths reach `OOPS`, which ends `JMP DEATH` -- and that `ShipEffects::RunTactics` returns `void`, so the port has no way to turn that into `LoopOutcome::Died`; `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip`. Written down before the AI rather than found half way through it. |
 | 2026-09-05 | **Phase 4 opens: slices 4a-a and 4a-b** (§6.121). The six vector routines `TACTICS` and `DOCKIT` are built on -- `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6` and `DCS1`, none of which the 4a scope line named -- then the five that put a ship into the bubble from inside it, `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`. **Three `FlightSession` seams are answered** and a fired missile leaves the rail for the first time. **`DCS1` calls itself** with `JSR P%+3` so its body runs twice, which is where the header's "times four" comes from, and both the once and the thrice mutation are caught. Four carries, one of them a defect the port had: `SFS1`'s `DORND` runs with the carry set by the `CMP #PLT` above it, and the only byte that disagreed was the generator's own state. `FRS1` reaches the same `fq1` as `DEATH` and its carry is bit 7 of `MSTG`, so an unlocked missile is one unit faster than a locked one; `ANGRY` tests the type in A and then the flight loop's `TYPE`, which are different bytes. `K3Block` and the five cargo type numbers move to where the ship table is, because a name that records which routine asked first stops being true when a second one asks. **31 of 35 DEATH mutations caught**, the three survivors closed or proved equivalent: a direct `Ze` sweep now crosses `CMP #245` and compares the distance bytes `DEATH` overwrites, and `death-view6` is provably equivalent because `TTX66`'s only read of the view is `BNE`. |
 | 2026-09-05 | **DEATH's three carries, the strict ledger, the pause screen, and the documentation pass** (§6.117, §6.119, §6.120). Comparing the death scene's five `K%` blocks byte for byte instead of `FRIN` found the port one random step off on the fifth piece: `fq1`'s `ROL A` takes the plate-or-canister carry, `Ze`'s first `DORND` takes the previous piece's, and its second is `DORND2` -- a `CLC` -- so the `ROL` before it decides nothing; `U%`'s `STA KL` is a dead byte on this build and `KLO+0` is no longer cleared. **`tools/inventory.py --strict` is green for the first time and CI runs it**: 101 of 710 files had no row, ninety-one by notation the tool now expands and ten real, four of them ported. Reading the build against the phases found the PAUSE SCREEN in no slice -- `DK4`, thirteen toggles behind `TGINT`, the only writer of `PLTOG` -- which is slice 4e now, and the energy bomb's and hyperspace's VIC-II effects in no ADR, which are ADR-005 §1's second open item. §6.119 records the mutation worktree whose empty submodule made every mutant read as caught, and the baseline rule that now stands in four places. The documentation pass brought `Design/README.md`, the risk register (R3 closed, R9 realised, R11 validated), ADR-003 §4, ADR-005 §1, the reference and runner READMEs, AGENTS.md and the plan's §1.2 to the tree as it is: 313 tests, nine checks, phases 0 to 3 built. |
 | 2026-09-05 | **The charts, F1 and F2** (§6.115). They were refused in the dispatch and the refusal had gone stale: `TT22` and `TT23` were ported and oracle-compared, and `ChartShapes` -- the fuel circle and the system discs -- said in its own comment that it was a seam only "until" slice 3c existed. Slice 3c landed in September. `FlightSession` implements it over `CIRCLE2` and `SUN`, and what was really missing was the KEYBOARD: `TT17`'s chart path (ported now, all 32 combinations of its five key-logger entries compared against the shipped routine), `TT102` reached every pass rather than on a key event, and those passes paced -- 165 crosshair steps a second otherwise. The arrows aim on a chart and steer in flight, so the scan drops the steering keys while a chart is up; that rule is the port's own and is marked as such. **Up presses no shift and down presses one**, because `TT17`'s `EOR #%11111110` makes the unshifted key step `QQ10` negative -- found by pressing the key, not by reading the code. `D`, `F` and hyperspace stay refused, and `F` is named as the nearest: `MT26` is ported and has nowhere to put the name yet. |
