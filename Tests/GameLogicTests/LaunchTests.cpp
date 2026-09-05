@@ -464,6 +464,13 @@ namespace GameLogicTests
       RecordingOutside outside;
       RecordingLaunch effects;
       RecordingStart start;
+
+      // 6502: LSO -- `NWSPS` hands the station the sun's heap, and this launch creates one, so the
+      // arena has to be lent that window or the station's lines go nowhere (§6.112).
+      Leaving()
+      {
+        world.LendSunHeap(heap);
+      }
     };
 
     /// The bytes `RES2`, `RESET` and `TT110` write that the shared `Where` does not name.

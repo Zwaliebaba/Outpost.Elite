@@ -214,7 +214,7 @@ namespace Elite
      * 6502: ECBLB2 -- `LDA #32 / STA ECMA / LDY #sfxecm / JSR NOISE`, and NOT ONE OF THOSE TOUCHES
      * THE CARRY. So the flag `NOISE` sees is the one this routine was CALLED with, which is why it
      * is an argument and not a constant: the pass-through §6.99 found at the seam runs through the
-     * routine above it too (§6.111).
+     * routine above it too (§6.115).
      */
     _status.ecmCountdown = 32u;                    // 6502: LDA #32 / STA ECMA
     (void)_effects.PlaySound(SOUND_ECM, _carryIn); // 6502: LDY #sfxecm / JSR NOISE

@@ -5,6 +5,7 @@
 #include "OracleImage.h"
 
 #include "Arith.h"
+#include "Flight.h"
 #include "FlightLoop.h"
 #include "Rng.h"
 #include "Dashboard.h"
@@ -972,6 +973,9 @@ namespace GameLogicTests
       {
         Seed(world, _seed);
 
+        // 6502: LSO -- the station draws into the SUN's heap, which lives in the world (§6.112).
+        world.LendSunHeap(heap);
+
         /*
          * A message already up, and a REAL one.
          *
@@ -1355,7 +1359,7 @@ namespace GameLogicTests
       for (std::size_t index = 0; index < soundCarries.size() && index < _frame.world.effects.soundCarries.size(); ++index)
       {
         /*
-         * ONLY THE LASER SOUNDS ARE COMPARED, and the exclusion is named rather than quiet (§6.111).
+         * ONLY THE LASER SOUNDS ARE COMPARED, and the exclusion is named rather than quiet (§6.115).
          *
          * The four laser effects are the ones whose carry the port DERIVES: `.custard` is reached
          * from a `CMP`, so the flag is the laser power measured against `Mlas` or `Armlas`, and
@@ -1365,7 +1369,7 @@ namespace GameLogicTests
          * those would be fitting a constant to whatever this fixture happens to produce.
          *
          * Excluded the way §6.91 excludes the explosion cloud's six bytes: in the open, by name,
-         * with the reason beside it. What is left of the gap is §6.111.
+         * with the reason beside it. What is left of the gap is §6.115.
          */
         const bool derived =
           index < sounds.size() && (sounds[index] == 0u || sounds[index] == 10u || sounds[index] == 11u || sounds[index] == 12u);
@@ -2091,6 +2095,217 @@ namespace GameLogicTests
       }
 
       Assert::AreEqual<std::uint32_t>(8u * 3u * 4u, compared, L"the whole sweep ran");
+    }
+
+    /*
+     * The station you have just left is still there when you look back (§6.112).
+     *
+     * `TT110` spawns two ships: the planet ahead and the station BEHIND, at `INWK+7` = 1 with the
+     * z sign set, which is 256 units back. Nothing in the loop is supposed to take it away -- part
+     * 14 only ever ADDS one -- so a launch followed by a few frames should leave it in the bubble,
+     * moving away as the ship pulls out.
+     *
+     * This is a whole-loop test rather than a routine comparison because that is where the fault
+     * was: every routine on the path agreed with the shipped game one at a time.
+     */
+    TEST_METHOD(TheStationSurvivesTheLaunch)
+    {
+      Frame frame(4242u);
+
+      // A clean bubble, because the launch builds its own: `RES2` empties it and then the two
+      // spawns fill it, and a fixture's fleet would be a third thing that is not the game's.
+      frame.world.bubble.slots.fill(0u);
+      frame.world.bubble.counts.fill(0u);
+      frame.world.bubble.junk = 0u;
+      frame.world.view = 0u;
+      frame.world.spaceView = 0u;
+
+      Elite::FlightScreen screen = frame.world.Screen();
+      Elite::FlightLoop loop{screen,     frame.keys,       frame.control, frame.options, frame.burst,   frame.heap,
+                             frame.clip, frame.projection, frame.axes,    frame.outside, frame.outside, frame.effects};
+
+      std::uint8_t docked = 0xFFu;
+      Elite::SystemSeeds selected{};
+      Elite::Launch(loop, nullptr, docked, frame.world.commander.At(Elite::Field::SystemX), frame.world.commander.At(Elite::Field::SystemY),
+                    5u, selected);
+
+      Assert::AreEqual<std::uint32_t>(1u, frame.world.bubble.counts[Elite::SHIP_TYPE_STATION],
+                                      L"the launch leaves the station in the bubble");
+
+      // 6502: LOOK1, which the launch ends with -- the front view, and `QQ11` back to zero.
+      frame.world.view = 0u;
+
+      // 6502: LOOK1 with X = 1 -- the rear view, which is where a station you have just left is.
+      frame.world.spaceView = 1u;
+
+      for (int pass = 0; pass < 40; ++pass)
+      {
+        const Elite::LoopOutcome outcome = Elite::MainFlightLoop(loop);
+        Assert::IsTrue(outcome == Elite::LoopOutcome::Continued,
+                       (L"frame " + std::to_wstring(pass) + L" should not end the flight").c_str());
+
+        Assert::AreEqual<std::uint32_t>(1u, frame.world.bubble.counts[Elite::SHIP_TYPE_STATION],
+                                        (L"the station is still there after " + std::to_wstring(pass + 1) + L" frames").c_str());
+      }
+
+      /*
+       * AND IT IS ON THE SCREEN, which is the half that was actually broken (§6.112).
+       *
+       * `NWSPS` points the station's heap at `LSO` -- the SUN's -- and the port keeps that region
+       * in a different object from the ship arena, so every line the station drew was written out
+       * of range and dropped. Byte 31 still said "drawn", the bubble still held it, the scanner
+       * still counted it, and the rear view was empty. So this asserts the LINES: a station in the
+       * heap it was given, and pixels on the canvas from drawing them.
+       */
+      const std::uint16_t heapAt = Elite::ShipHeapAddress(frame.world.bubble.blocks[1]);
+      Assert::AreEqual<std::uint32_t>(Elite::SUN_HEAP_ADDRESS, heapAt, L"the station draws through the sun's heap");
+      Assert::IsTrue(frame.heap.Read(heapAt) > 1u, L"and the heap holds the lines it last drew");
+
+      std::size_t lit = 0;
+      for (int y = 0; y < Elite::Canvas::SPACE_VIEW_HEIGHT; ++y)
+      {
+        for (int column = 0; column < Elite::Canvas::CELL_COLUMNS; ++column)
+        {
+          lit +=
+            (frame.world.canvas.Read(static_cast<std::uint16_t>(y / 8 * Elite::Canvas::ROW_BYTES + column * 8 + (y % 8))) != 0u) ? 1u : 0u;
+        }
+      }
+      Assert::IsTrue(lit > 20u, L"and the space view has the station drawn in it");
+    }
+
+    /*
+     * What a flight frame COSTS, which is what decides how fast the game runs (§6.114).
+     *
+     * §6.17 established that the C64's main loop has no frame cap: `WSCAN` is called from `DELAY`,
+     * `TT16+7` and `FREEZE` and from nowhere else, and `main_flight_loop_part_13_of_16`'s `JSR
+     * WSCAN` is inside a version gate the C64 is not in. So the game runs `M%` as fast as a 6510
+     * gets round it, and "how fast does Elite run" is a question about cycles rather than about
+     * refresh rates. §6.17 asked for the measurement in as many words -- "Measure what an iteration
+     * costs, divide by the clock" -- and until this it had never been taken: the port ran the loop
+     * at the NTSC vertical refresh, which is four to six times too fast.
+     *
+     * THE TRAPS ARE THE ONES THAT ARE REALLY OUTSIDE, and no others. A trapped call costs nothing
+     * (`CycleTests::ATrappedCallCostsNothing`), so trapping `PLANET` or `TACTICS` -- as the
+     * comparison runs do, because their effects are seams -- would leave out the planet's drawing
+     * and every ship's thinking, which is most of a frame. Here only the sound and the VIC-II
+     * registers are trapped, and everything the 6510 would have computed is computed.
+     *
+     * The measurement is a lower bound all the same, for the two reasons the `cycles` field
+     * documents: the trapped sound calls are free here and cost the machine something, and the
+     * VIC-II steals 5-10% of the cycles for its own fetches, which is not modelled.
+     */
+    TEST_METHOD(TheFlightFrameCostsWhatItCosts)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+
+      struct Scene
+      {
+        std::uint32_t seed;
+        std::size_t ships; ///< how many of `Seed`'s fleet to keep, past the planet and the sun
+        const char* what;
+      };
+
+      /*
+       * Three scenes, and the FOURTH is missing for a reason worth writing down: `Seed`'s third
+       * slot is a space STATION, and `TACTICS` is trapped in every comparison in this file because
+       * its effects are a seam. Untrapped -- which a cost measurement needs it to be, since a
+       * trapped call costs nothing -- the station's own thinking does not come back inside forty
+       * million instructions. So the crowded end of the range is not measured here, and the port's
+       * rate is derived from what is (§6.114).
+       */
+      const Scene SCENES[] = {
+        {11u, 0u, "an empty bubble"},
+        {23u, 1u, "one ship"},
+        {37u, 2u, "two ships"},
+      };
+
+      for (const Scene& scene : SCENES)
+      {
+        Frame frame(scene.seed);
+
+        // `Seed` fills the first three slots; anything past the scene's count goes, and the list's
+        // terminator moves with it -- `FRIN`'s zero is what makes it a list.
+        for (std::size_t slot = scene.ships; slot < 3u; ++slot)
+        {
+          frame.world.bubble.slots[slot] = 0u;
+        }
+
+        Cpu6502 cpu = oracle.Fresh();
+
+        /*
+         * The three exits are patched to stop the run, as `CompareFrames` does and for its reason:
+         * `JMP DEATH` never comes back, so a frame that takes one would run off into the death
+         * sequence and never return. A scene that ends the flight is not a frame to time.
+         */
+        const std::uint16_t EXITS[] = {loop.death, loop.doentry, loop.escape};
+        for (const std::uint16_t exit : EXITS)
+        {
+          const std::uint8_t leave[] = {0x4Cu, 0xF9u, 0xFFu};
+          cpu.Load(exit, leave, sizeof(leave));
+        }
+
+        // Sound and the VIC-II only: everything that draws or thinks runs for real.
+        cpu.AddTrap(loop.setl1);
+        cpu.AddTrap(loop.dovdu19);
+        cpu.AddTrap(loop.noise2);
+        cpu.AddTrap(loop.startbd);
+        cpu.AddTrap(loop.stopbd);
+        cpu.AddTrap(loop.noise, Cpu6502::TrapExit::SetCarry);
+
+        FillScreens(cpu, frame.world.canvas, at.screen, 0x1Du);
+        Mirror(frame.world, cpu, at);
+        MirrorFrame(frame, cpu, at, loop);
+
+        for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
+        {
+          cpu.memory[address] = frame.heap.Read(address);
+        }
+        cpu.memory[loop.slsp] = static_cast<std::uint8_t>(frame.world.bubble.heapBottom & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(loop.slsp + 1u)] = static_cast<std::uint8_t>(frame.world.bubble.heapBottom >> 8);
+
+        const std::uint64_t before = cpu.cycles;
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(loop.mainLoop, 40'000'000);
+        Assert::IsTrue(run.completed, WidenText(std::string("M% returned for ") + scene.what).c_str());
+
+        const std::uint64_t cost = cpu.cycles - before;
+
+        /*
+         * And how much was DRAWN, because that is what a cost model would be indexed by: every
+         * ship's heap holds the lines it last put on screen, four bytes each after the count.
+         */
+        std::uint32_t lines = 0;
+        for (std::size_t slot = 0; slot < scene.ships; ++slot)
+        {
+          const std::uint16_t block = static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE);
+          const std::uint16_t heapAt = static_cast<std::uint16_t>(cpu.memory[static_cast<std::uint16_t>(block + 33u)] |
+                                                                  (cpu.memory[static_cast<std::uint16_t>(block + 34u)] << 8));
+          const std::uint8_t used = cpu.memory[heapAt];
+          lines += (used > 1u) ? ((used - 1u) / 4u) : 0u;
+        }
+
+        Logger::WriteMessage((std::string("flight frame, ") + scene.what + ": " + std::to_string(cost) + " cycles, " +
+                              std::to_string(lines) + " ship lines, " + std::to_string(1022727.0 / static_cast<double>(cost)) +
+                              " frames a second")
+                               .c_str());
+
+        /*
+         * The bound is what the port's rate is derived from, and it is wide for the same reason the
+         * title screen's is: this is a MEASUREMENT, and narrowing it turns any upstream change into
+         * a failing test with nothing wrong. What it asserts is the order -- tens of thousands of
+         * cycles a frame, which is tens of frames a second and not sixty.
+         */
+        Assert::IsTrue(cost > 10'000u && cost < 400'000u, (L"a flight frame cost " + std::to_wstring(cost) +
+                                                           L" cycles, which is outside the range "
+                                                           L"Outpost::FLIGHT_FRAME_COSTS was derived from")
+                                                            .c_str());
+      }
     }
   };
 
