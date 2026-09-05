@@ -118,7 +118,7 @@ namespace Outpost
 
     // ---- Elite::ShipEffects and Elite::ShipDrawEffects ------------------------------------------
 
-    void RunTactics(Elite::ShipBlock& _work) override;
+    [[nodiscard]] bool RunTactics(Elite::ShipBlock& _work) override;
     void DrawPlanetOrSun() override;
     void DrawExplosion() override;
     void SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint) override;

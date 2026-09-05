@@ -110,6 +110,16 @@ namespace Elite
   inline constexpr std::uint8_t SHIP_TYPE_ESCAPE_POD = 3;
   inline constexpr std::uint8_t SHIP_TYPE_COBRA_MK3 = 11;
 
+  /// 6502: SHU, ANA, COPS, SH3, WRM and TGL -- the six `TACTICS` names when it decides what a
+  /// station launches, what an Anaconda escorts itself with, and what a rock hermit turns into.
+  /// `SHU + 1` is the Transporter, which the source never names and which `TA1` counts.
+  inline constexpr std::uint8_t SHIP_TYPE_SHUTTLE = 9;
+  inline constexpr std::uint8_t SHIP_TYPE_ANACONDA = 14;
+  inline constexpr std::uint8_t SHIP_TYPE_VIPER = 16;
+  inline constexpr std::uint8_t SHIP_TYPE_SIDEWINDER = 17;
+  inline constexpr std::uint8_t SHIP_TYPE_WORM = 23;
+  inline constexpr std::uint8_t SHIP_TYPE_THARGON = 30;
+
   /*
    * 6502: INWK, and one entry of K% -- a single ship, as thirty-seven bytes.
    *

@@ -143,8 +143,20 @@ namespace Elite
   public:
     virtual ~ShipEffects() = default;
 
-    /// 6502: TACTICS -- decide what a hostile ship does next. Phase 4.
-    virtual void RunTactics(ShipBlock& _work) = 0;
+    /*
+     * 6502: TACTICS -- decide what a hostile ship does next.
+     *
+     * IT ANSWERS WHETHER THE PLAYER IS STILL ALIVE, and that is not decoration. Three of the AI's
+     * paths reach `OOPS` -- a missile going off beside us, a collision, and a ship's own laser --
+     * and `OOPS` ends `JMP DEATH` when the energy banks are gone. On the 6502 that never returns:
+     * it abandons the stack, so `TACTICS`, `MVEIT` and the whole flight loop simply stop. The port
+     * has no equivalent, so the answer is carried back out instead, through `MoveShip` to
+     * `MoveEveryShip`, which turns it into `LoopOutcome::Died` -- the same shape `TakeDamage`
+     * already uses for flight loop part 15 (§6.122).
+     *
+     * False means the player died and the caller must stop the frame.
+     */
+    [[nodiscard]] virtual bool RunTactics(ShipBlock& _work) = 0;
   };
 
   /*
@@ -225,8 +237,8 @@ namespace Elite
    * `_view` is `QQ11`, which `SCAN` reads and `MVEIT` does not: the flight loop sets it, and the
    * port has no single home for it until 3d-d.
    */
-  void MoveShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
-                std::uint16_t _blueprint, std::uint8_t _view) noexcept;
+  [[nodiscard]] bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math, FlightState& _flight,
+                              ShipEffects& _effects, std::uint16_t _blueprint, std::uint8_t _view) noexcept;
 
   /*
    * 6502: PLUT and PU1 -- flip a ship's axes for the view the player is looking through.

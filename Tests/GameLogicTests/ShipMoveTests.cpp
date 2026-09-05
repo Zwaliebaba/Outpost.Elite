@@ -621,9 +621,10 @@ namespace GameLogicTests
     class CountingEffects final : public Elite::ShipEffects
     {
     public:
-      void RunTactics(Elite::ShipBlock&) override
+      bool RunTactics(Elite::ShipBlock&) override
       {
         ++tactics;
+        return true;
       }
 
       std::uint32_t tactics = 0;
@@ -804,7 +805,8 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(mveit);
           Assert::IsTrue(run.completed, (where + L": MVEIT returned on iteration " + std::to_wstring(iteration)).c_str());
 
-          Elite::MoveShip(canvas, draw, work, math, flight, effects, blueprint, 0u);
+          Assert::IsTrue(Elite::MoveShip(canvas, draw, work, math, flight, effects, blueprint, 0u),
+                         L"MVEIT does not kill the player when the tactics double does not");
 
           for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
           {

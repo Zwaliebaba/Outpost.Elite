@@ -1,18 +1,23 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "FlightWorld.h"
 #include "OracleImage.h"
 
 #include "Arith.h"
 #include "Canvas.h"
 #include "Scanner.h"
+#include "ShipBlueprint.h"
+#include "ShipDraw.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
 #include "Tactics.h"
 
 #include <array>
 #include <cstdint>
+#include <set>
 #include <string>
+#include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::Testing::Cpu6502;
@@ -36,29 +41,36 @@ namespace GameLogicTests
 
   namespace
   {
-    bool OracleMissing()
-    {
-      const OracleImage& oracle = OracleImage::Instance();
-      if (oracle.Available())
-      {
-        return false;
-      }
-      Logger::WriteMessage(("SKIPPED -- oracle absent: " + oracle.Reason()).c_str());
-      return true;
-    }
-
-    std::wstring Widen(const std::string& _text)
-    {
-      return std::wstring(_text.begin(), _text.end());
-    }
+    // `OracleMissing` and `Widen` come from FlightWorld.h, which this file needs for `World`.
 
     struct Labels
     {
       std::uint16_t inwk = 0, k3 = 0, kPercent = 0, v = 0, x1 = 0, y1 = 0, x2 = 0;
       std::uint16_t q = 0, r = 0, s = 0, u = 0, k = 0;
+      std::uint16_t frin = 0, many = 0, rand = 0, inf = 0, xx0 = 0, type = 0, ecma = 0, fist = 0, slsp = 0;
+      std::uint16_t cnt = 0, cnt2 = 0, rat = 0, rat2 = 0, junk = 0;
+      std::uint16_t energy = 0, fsh = 0, ash = 0, dly = 0;
 
       explicit Labels(const OracleImage& _oracle)
       {
+        frin = _oracle.Label("FRIN");
+        many = _oracle.Label("MANY");
+        rand = _oracle.Label("RAND");
+        inf = _oracle.Label("INF");
+        xx0 = _oracle.Label("XX0");
+        type = _oracle.Label("TYPE");
+        ecma = _oracle.Label("ECMA");
+        fist = _oracle.Label("FIST");
+        slsp = _oracle.Label("SLSP");
+        energy = _oracle.Label("ENERGY");
+        fsh = _oracle.Label("FSH");
+        ash = _oracle.Label("ASH");
+        dly = _oracle.Label("DLY");
+        cnt = _oracle.Label("CNT");
+        cnt2 = _oracle.Label("CNT2");
+        rat = _oracle.Label("RAT");
+        rat2 = _oracle.Label("RAT2");
+        junk = _oracle.Label("JUNK");
         inwk = _oracle.Label("INWK");
         k3 = _oracle.Label("K3");
         kPercent = _oracle.Label("K%");
@@ -182,8 +194,8 @@ namespace GameLogicTests
               Elite::MathWorkspace math;
               Elite::SubtractShipAxes(theirs, mine, axes, math);
 
-              const std::wstring where = Widen("VCSUB mine " + std::to_string(mineHigh) + "/" + std::to_string(mineSign) + " theirs " +
-                                               std::to_string(theirHigh) + "/" + std::to_string(theirSign));
+              const std::wstring where = WidenText("VCSUB mine " + std::to_string(mineHigh) + "/" + std::to_string(mineSign) + " theirs " +
+                                                   std::to_string(theirHigh) + "/" + std::to_string(theirSign));
               CompareAxes(cpu, at, axes, where);
 
               // 6502: K+1 to K+3 -- the scratch `TAS1` leaves behind, which `TACTICS` does not read
@@ -266,8 +278,8 @@ namespace GameLogicTests
                 math.s = 0x5Au;
                 const Elite::AddSignedResult got = Elite::DotProductWithShip(block, draw, math, which);
 
-                const std::wstring where = Widen(std::string(station != 0 ? "TAS4" : "TAS3") + " vector " + std::to_string(which) + " (" +
-                                                 std::to_string(vx) + "," + std::to_string(vy) + "," + std::to_string(sx) + ")");
+                const std::wstring where = WidenText(std::string(station != 0 ? "TAS4" : "TAS3") + " vector " + std::to_string(which) +
+                                                     " (" + std::to_string(vx) + "," + std::to_string(vy) + "," + std::to_string(sx) + ")");
                 Assert::AreEqual(cpu.a, got.high, (where + L": A").c_str());
                 Assert::AreEqual(cpu.x, got.low, (where + L": X").c_str());
                 Assert::AreEqual(cpu.memory[at.q], math.q, (where + L": Q").c_str());
@@ -317,7 +329,7 @@ namespace GameLogicTests
             draw.x2 = z;
             Elite::NegateVector(draw);
 
-            const std::wstring where = Widen("TAS6 " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z));
+            const std::wstring where = WidenText("TAS6 " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z));
             Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": XX15").c_str());
             Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": XX15+1").c_str());
             Assert::AreEqual(cpu.memory[at.x2], draw.x2, (where + L": XX15+2").c_str());
@@ -385,8 +397,8 @@ namespace GameLogicTests
               bubble.blocks[1] = station;
               Elite::OffsetDockingPosition(bubble, axes);
 
-              const std::wstring where = Widen("DCS1 nose " + std::to_string(nose) + " K3 " + std::to_string(low) + "/" +
-                                               std::to_string(high) + "/" + std::to_string(sign));
+              const std::wstring where = WidenText("DCS1 nose " + std::to_string(nose) + " K3 " + std::to_string(low) + "/" +
+                                                   std::to_string(high) + "/" + std::to_string(sign));
               CompareAxes(cpu, at, axes, where);
               ++compared;
             }
@@ -477,8 +489,8 @@ namespace GameLogicTests
               flight.type = loopType;
               Elite::Anger(bubble, flight, SLOT, called);
 
-              const std::wstring where = Widen("ANGRY NEWB " + std::to_string(newb) + " AI " + std::to_string(ai) + " TYPE " +
-                                               std::to_string(loopType) + " called " + std::to_string(called));
+              const std::wstring where = WidenText("ANGRY NEWB " + std::to_string(newb) + " AI " + std::to_string(ai) + " TYPE " +
+                                                   std::to_string(loopType) + " called " + std::to_string(called));
               for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
               {
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
@@ -500,6 +512,452 @@ namespace GameLogicTests
       // 6502: AN2 -- both answers, so a routine that never angered the station would be visible.
       Assert::IsTrue(angered > 0u, L"the station was angered on some cases");
       Assert::IsTrue(angered < compared, L"and left alone on others");
+    }
+  };
+
+  /*
+   * Slice 4a-c: the AI and the autopilot, which are one routine (§6.122).
+   *
+   * `TACTICS` is 330 instructions of branching over state that lives in nine different places, and
+   * the only comparison worth making is the whole of it: the ship block, the bubble, the generator,
+   * the flight state, the commander and the screen, after running the shipped routine and the port
+   * from IDENTICAL starting conditions. Anything narrower would pass on the branch it happened to
+   * take.
+   *
+   * THE SEAMS ARE TRAPPED RATHER THAN IMPLEMENTED. `OOPS`, `EXNO2`, `EXNO3`, `ECBLB2`, `NOISE` and
+   * `MESS` are ported and reachable, but they touch the dashboard, the sound and the screen, and
+   * running them inside a 6502 interpreter that has no dashboard would compare the wrong thing.
+   * Each is trapped and COUNTED, and the counts are compared -- so a port that took the same branch
+   * for a different reason still fails.
+   */
+  namespace
+  {
+    /*
+     * The seams `TACTICS` reaches, counted rather than run.
+     *
+     * `OOPS`, `EXNO2`, `EXNO3`, `ECBLB2`, `NOISE` and `MESS` are all ported, and all of them draw
+     * or make a noise. Running them inside the interpreter would compare a dashboard the fixture
+     * does not have, so both sides are trapped and counted and the COUNTS are what agree.
+     */
+    struct CountingEffects final : Elite::FlightLoopEffects, Elite::ShipEffects, Elite::ShipDrawEffects
+    {
+      std::vector<std::uint8_t> sounds;
+      std::vector<std::uint8_t> spawned;
+      std::uint32_t trumbleMoves = 0;
+
+      bool PlaySound(std::uint8_t _effect, bool) override
+      {
+        sounds.push_back(_effect);
+        return true;
+      }
+      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t, std::uint8_t) override
+      {
+        sounds.push_back(_effect);
+        return true;
+      }
+      void StopSound(std::uint8_t) override {}
+      void MoveTrumbles() override
+      {
+        ++trumbleMoves;
+      }
+      void StartDockingMusic() override {}
+      void StopDockingMusic() override {}
+      bool SpawnAhead(std::uint8_t) override
+      {
+        return false;
+      }
+      void Anger(std::uint8_t) override {}
+      bool SpawnChild(std::uint8_t, std::uint8_t _type) override
+      {
+        spawned.push_back(_type);
+        return true;
+      }
+      bool RunTactics(Elite::ShipBlock&) override
+      {
+        return true;
+      }
+      void DrawPlanetOrSun() override {}
+      void DrawExplosion() override {}
+      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
+    };
+
+    /// Everything a `TACTICS` case has to put into both machines before it can be compared.
+    struct Universe
+    {
+      World world;
+      Elite::ControlState control;
+      Elite::ControlOptions options;
+      Elite::KeyLogger keys{};
+      Elite::LaserBurst burst{};
+      Elite::LineHeap heap;
+      Elite::ClipState clip;
+      Elite::Projection projection;
+      Elite::K3Block axes{};
+      CountingEffects effects;
+
+      std::array<std::uint8_t, 4> seed{};
+      std::uint8_t ecm = 0;
+      std::uint8_t legal = 0;
+      std::uint8_t slot = 2;
+    };
+
+    /*
+     * A bubble the AI can think about: the planet in slot 0, the station or the sun in slot 1, the
+     * ship under test in slot 2, and a Cobra in slot 3 for a missile to chase.
+     *
+     * The positions are close enough that `MAS4` does not fold everything into "too far away",
+     * because a sweep in which every ship is out of range compares one branch twenty times.
+     */
+    /*
+     * The geometries a case is run through.
+     *
+     * ONE POSITION IS NOT ENOUGH and a mutation said so: `CNT2` is the cone `TACTICS` throttles
+     * back inside, and with a single relative position the nose dot product never landed on it, so
+     * changing 22 to 23 agreed everywhere (§6.126). These five put the ship in front, behind,
+     * above, off to one side and nearly touching.
+     */
+    struct Geometry
+    {
+      const char* what;
+      std::uint8_t x, xSign, y, ySign, z, zSign;
+    };
+
+    constexpr Geometry GEOMETRIES[] = {{"ahead", 0x20u, 0x00u, 0x10u, 0x00u, 0x28u, 0x00u},
+                                       {"behind", 0x20u, 0x80u, 0x10u, 0x00u, 0x28u, 0x80u},
+                                       {"above", 0x08u, 0x00u, 0x60u, 0x00u, 0x18u, 0x00u},
+                                       {"beside", 0x70u, 0x80u, 0x04u, 0x00u, 0x0Cu, 0x00u},
+                                       {"nearly touching", 0x01u, 0x00u, 0x01u, 0x80u, 0x02u, 0x00u}};
+
+    void SeedTacticsUniverse(Cpu6502& _cpu, Universe& _world, const Labels& _at, std::uint8_t _type, std::uint8_t _stations,
+                             std::uint8_t _thargoids, const Geometry& _where)
+    {
+      (void)_cpu;
+      const std::uint8_t FLEET[] = {128u, 2u, 0u, 11u};
+
+      for (std::size_t slot = 0; slot < 4u; ++slot)
+      {
+        const std::uint8_t type = (slot == 2u) ? _type : FLEET[slot];
+        _world.world.bubble.slots[slot] = type;
+
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          _world.world.bubble.blocks[slot][byte] = static_cast<std::uint8_t>(0x09u + slot * 5u + byte * 3u);
+        }
+
+        // The ship under test goes where the case asks; the others are spread around it so that a
+        // missile's target and the station are somewhere distinct.
+        const bool subject = (slot == 2u);
+        _world.world.bubble.blocks[slot][0] = subject ? _where.x : static_cast<std::uint8_t>(0x20u + slot);
+        _world.world.bubble.blocks[slot][1] = 0u;
+        _world.world.bubble.blocks[slot][2] = subject ? _where.xSign : static_cast<std::uint8_t>((slot & 1u) != 0u ? 0x80u : 0x00u);
+        _world.world.bubble.blocks[slot][3] = subject ? _where.y : static_cast<std::uint8_t>(0x30u + slot);
+        _world.world.bubble.blocks[slot][4] = 0u;
+        _world.world.bubble.blocks[slot][5] = subject ? _where.ySign : std::uint8_t{0u};
+        _world.world.bubble.blocks[slot][6] = subject ? _where.z : static_cast<std::uint8_t>(0x28u + slot);
+        _world.world.bubble.blocks[slot][7] = 0u;
+        _world.world.bubble.blocks[slot][8] = subject ? _where.zSign : std::uint8_t{0u};
+
+        // A believable orientation: nose along z, roof along y, side along x, with signs mixed.
+        _world.world.bubble.blocks[slot][10] = 0x60u;
+        _world.world.bubble.blocks[slot][12] = 0x10u;
+        _world.world.bubble.blocks[slot][14] = 0xE0u;
+        _world.world.bubble.blocks[slot][16] = 0x20u;
+        _world.world.bubble.blocks[slot][18] = 0x60u;
+        _world.world.bubble.blocks[slot][20] = 0x08u;
+        _world.world.bubble.blocks[slot][22] = 0xE0u;
+        _world.world.bubble.blocks[slot][24] = 0x08u;
+        _world.world.bubble.blocks[slot][26] = 0x60u;
+
+        _world.world.bubble.blocks[slot][27] = 12u; // speed
+        _world.world.bubble.blocks[slot][28] = 0u;  // acceleration
+        _world.world.bubble.blocks[slot][29] = 0u;  // roll
+        _world.world.bubble.blocks[slot][30] = 0u;  // pitch
+        _world.world.bubble.blocks[slot][31] = 0u;
+        _world.world.bubble.blocks[slot][33] = 0u;
+        _world.world.bubble.blocks[slot][34] = 0u;
+        _world.world.bubble.blocks[slot][35] = 20u;
+        _world.world.bubble.blocks[slot][36] = 0u;
+      }
+
+      _world.world.bubble.counts[Elite::SHIP_TYPE_STATION] = _stations;
+      _world.world.bubble.counts[Elite::SHIP_TYPE_THARGOID] = _thargoids;
+      _world.world.bubble.counts[Elite::SHIP_TYPE_COBRA_MK3] = 1u;
+      _world.world.bubble.heapBottom = Elite::SHIP_HEAP_TOP;
+
+      _world.world.work = _world.world.bubble.blocks[2];
+      _world.world.flight.type = _type;
+      _world.world.flight.slot = 2u;
+      _world.world.flight.blueprint = Elite::BlueprintAddress(_type == 0u ? std::uint8_t{11u} : _type);
+      _world.world.flight.mainLoopCounter = 0u;
+
+      // 6502: XX2 -- the face visibility of the last ship drawn, which `DOCKIT` reads as `K3+10`.
+      for (std::size_t face = 0; face < _world.world.geometry.xx2.size(); ++face)
+      {
+        _world.world.geometry.xx2[face] = 0u;
+      }
+    }
+
+    /// The same bytes into the interpreter's memory, at the addresses the original uses.
+    void PushTacticsUniverse(Cpu6502& _cpu, Universe& _world, const Labels& _at)
+    {
+      for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+      {
+        _cpu.memory[static_cast<std::uint16_t>(_at.frin + slot)] = _world.world.bubble.slots[slot];
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] =
+            _world.world.bubble.blocks[slot][byte];
+        }
+      }
+      for (std::size_t type = 0; type < _world.world.bubble.counts.size(); ++type)
+      {
+        _cpu.memory[static_cast<std::uint16_t>(_at.many + type)] = _world.world.bubble.counts[type];
+      }
+      for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+      {
+        _cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)] = _world.world.work[byte];
+      }
+      // ONE PLACE sets the generator on both sides, because a sweep whose two machines start from
+      // different random state compares nothing at all -- which is how this test first failed.
+      _world.world.rng.SetState(_world.seed);
+      for (std::size_t byte = 0; byte < 4u; ++byte)
+      {
+        _cpu.memory[static_cast<std::uint16_t>(_at.rand + byte)] = _world.seed[byte];
+      }
+      for (std::size_t face = 0; face < _world.world.geometry.xx2.size() && face < 14u; ++face)
+      {
+        _cpu.memory[static_cast<std::uint16_t>(_at.k3 + face)] = _world.world.geometry.xx2[face];
+      }
+
+      const std::uint16_t block = static_cast<std::uint16_t>(_at.kPercent + _world.slot * Elite::SHIP_BLOCK_SIZE);
+      _cpu.memory[_at.inf] = static_cast<std::uint8_t>(block);
+      _cpu.memory[static_cast<std::uint16_t>(_at.inf + 1)] = static_cast<std::uint8_t>(block >> 8u);
+      _cpu.memory[_at.xx0] = static_cast<std::uint8_t>(_world.world.flight.blueprint);
+      _cpu.memory[static_cast<std::uint16_t>(_at.xx0 + 1)] = static_cast<std::uint8_t>(_world.world.flight.blueprint >> 8u);
+      _cpu.memory[_at.type] = _world.world.flight.type;
+      _cpu.memory[_at.ecma] = _world.ecm;
+      _cpu.memory[_at.fist] = _world.legal;
+      _cpu.memory[_at.energy] = _world.world.status.energy;
+      _cpu.memory[_at.fsh] = _world.world.status.forwardShield;
+      _cpu.memory[_at.ash] = _world.world.status.aftShield;
+      _cpu.memory[_at.dly] = 0u;
+      _cpu.memory[_at.slsp] = static_cast<std::uint8_t>(Elite::SHIP_HEAP_TOP);
+      _cpu.memory[static_cast<std::uint16_t>(_at.slsp + 1)] = static_cast<std::uint8_t>(Elite::SHIP_HEAP_TOP >> 8u);
+    }
+
+    /*
+     * Everything either machine could have touched, compared.
+     *
+     * The ship block is the obvious half and the rest is the half that catches a port which took
+     * the right branch for the wrong reason: the whole bubble (a spawn), the generator (how many
+     * rolls were consumed and with which carry), the four steering bytes, and the seam counts.
+     */
+    void CompareTacticsUniverse(const Cpu6502& _cpu, const Universe& _world, const Labels& _at, const std::wstring& _where)
+    {
+      for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+      {
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)], _world.world.work[byte],
+                         (_where + L": INWK+" + std::to_wstring(byte)).c_str());
+      }
+      for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+      {
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.frin + slot)], _world.world.bubble.slots[slot],
+                         (_where + L": FRIN+" + std::to_wstring(slot)).c_str());
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
+                           _world.world.bubble.blocks[slot][byte],
+                           (_where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
+        }
+      }
+      for (std::size_t type = 0; type < _world.world.bubble.counts.size(); ++type)
+      {
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.many + type)], _world.world.bubble.counts[type],
+                         (_where + L": MANY+" + std::to_wstring(type)).c_str());
+      }
+      for (std::size_t byte = 0; byte < 4u; ++byte)
+      {
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.rand + byte)], _world.world.rng.State()[byte],
+                         (_where + L": RAND+" + std::to_wstring(byte)).c_str());
+      }
+
+      Assert::AreEqual(_cpu.memory[_at.rat], _world.world.flight.rat, (_where + L": RAT").c_str());
+      Assert::AreEqual(_cpu.memory[_at.rat2], _world.world.flight.rat2, (_where + L": RAT2").c_str());
+      Assert::AreEqual(_cpu.memory[_at.junk], _world.world.bubble.junk, (_where + L": JUNK").c_str());
+
+      // What `OOPS` spends, which is the half of a collision that a seam count cannot show.
+      Assert::AreEqual(_cpu.memory[_at.energy], _world.world.status.energy, (_where + L": ENERGY").c_str());
+      Assert::AreEqual(_cpu.memory[_at.fsh], _world.world.status.forwardShield, (_where + L": FSH").c_str());
+      Assert::AreEqual(_cpu.memory[_at.ash], _world.world.status.aftShield, (_where + L": ASH").c_str());
+    }
+  } // namespace
+
+  TEST_CLASS(TheShipAi)
+  {
+  public:
+    /*
+     * 6502: TACTICS, over the branches a sweep can reach without a screen.
+     *
+     * The cases are chosen by BRANCH rather than by volume: a missile with each of its three
+     * outcomes, a station with and without its hostile bit, a rock hermit on both sides of its
+     * roll, a Thargon with and without its Thargoid, a trader, a bounty hunter under and over the
+     * legal threshold, a docking ship, and an ordinary pirate at four energy levels. Each runs the
+     * shipped routine and the port from the same bytes and compares everything either could touch.
+     */
+    TEST_METHOD(TheAiMatchesTACTICS)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Labels at(oracle);
+      const std::uint16_t tactics = oracle.Label("TACTICS");
+
+      struct Case
+      {
+        const char* what;
+        std::uint8_t type;
+        std::uint8_t ai;    ///< 6502: INWK+32
+        std::uint8_t newb;  ///< 6502: INWK+36
+        std::uint8_t state; ///< 6502: INWK+31
+        std::uint8_t energy;
+        std::uint8_t ecm;
+        std::uint8_t legal;
+        std::uint8_t stationCount;
+        std::uint8_t thargoidCount;
+
+        /// The PLAYER's banks, not the ship's. Low values are how `OOPS` reaches `JMP DEATH`, which
+        /// is the whole reason `RunTactics` answers a `bool` (§6.122).
+        std::uint8_t banks;
+      };
+
+      const Case CASES[] = {
+        {"a missile chasing us", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a missile chasing us with an ECM running", 1u, 0xC0u, 0u, 0u, 20u, 1u, 0u, 0u, 0u, 255u},
+        {"a missile chasing a ship", 1u, 0x86u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a missile chasing the station", 1u, 0x82u, 0u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
+        {"a calm station", 2u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
+        {"an angry station", 2u, 0xFFu, 0x04u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
+        {"a rock hermit", 15u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a lone Thargon", 30u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a Thargon with its Thargoid", 30u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 0u, 1u, 255u},
+        {"a trader", 11u, 0xC1u, 0x01u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a clean bounty hunter", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a bounty hunter and an offender", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 60u, 0u, 0u, 255u},
+        {"a ship on its way in to dock", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
+        {"a ship docking with no station", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a hostile pirate", 11u, 0xC1u, 0x04u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a hostile pirate with missiles", 11u, 0xC1u, 0x04u, 0x03u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a wounded pirate", 11u, 0xC1u, 0x04u, 0u, 2u, 0u, 0u, 0u, 0u, 255u},
+        {"a pirate near a station", 11u, 0xC9u, 0x0Cu, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
+        {"an Anaconda", 14u, 0xC1u, 0x04u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a Thargoid with Thargons to launch", 29u, 0xC1u, 0x04u, 0x03u, 20u, 0u, 0u, 0u, 0u, 255u},
+
+        // The fatal cases: a missile arriving on empty banks, and a collision on nearly empty
+        // ones. Without these the `bool` §6.122 added is never once observed to be false.
+        {"a missile arriving on empty banks", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 0u},
+        {"a missile arriving on a sliver", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 4u},
+        {"a missile arriving on half banks", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 128u},
+      };
+
+      // Four generator states, because half of `TACTICS` is `DORND` and one seed reaches one
+      // branch of each roll (§6.124).
+      const std::array<std::array<std::uint8_t, 4>, 4> SEEDS = {
+        {{0x31u, 0xF5u, 0x7Au, 0x0Cu}, {0x11u, 0x22u, 0x33u, 0x44u}, {0xFEu, 0xC3u, 0x09u, 0x5Du}, {0x80u, 0x7Fu, 0xFFu, 0x01u}}};
+
+      std::uint32_t compared = 0;
+      std::uint32_t died = 0;
+      std::set<std::string> reached;
+
+      for (const Case& one : CASES)
+      {
+        for (const std::array<std::uint8_t, 4>& seed : SEEDS)
+        {
+          for (const Geometry& where : GEOMETRIES)
+          {
+            Cpu6502 cpu = oracle.Fresh();
+
+            /*
+           * WHAT IS TRAPPED AND WHAT IS NOT.
+           *
+           * The sound and the two drawing routines are trapped, because the port reaches them
+           * through seams and a 6502 interpreter with no dashboard would compare the wrong thing:
+           * `NOISE`, `NOISE2`, `MESS` and `ECBLB2`. Their effects -- the message state, the ECM
+           * countdown and the canvas -- are NAMED EXCLUSIONS from the comparison below.
+           *
+           * `OOPS`, `EXNO2` and `EXNO3` are NOT trapped. They are ported, they are arithmetic on
+           * the shields and the energy banks, and running them on both sides is what makes a
+           * collision comparable rather than merely counted.
+           *
+           * `DEATH` is trapped and is the point of the case: §6.122 gave `RunTactics` a `bool` so
+           * that `JMP DEATH` could come back out, and the assertion below is that the port answers
+           * false exactly when the shipped routine reaches that label.
+           */
+            const std::uint16_t death = oracle.Label("DEATH");
+            for (const std::uint16_t seam :
+                 {oracle.Label("NOISE"), oracle.Label("NOISE2"), oracle.Label("MESS"), oracle.Label("ECBLB2"), death})
+            {
+              cpu.AddTrap(seam);
+            }
+
+            Universe world;
+            SeedTacticsUniverse(cpu, world, at, one.type, one.stationCount, one.thargoidCount, where);
+
+            // The player's banks, which decide whether `OOPS` returns or jumps to `DEATH`.
+            world.world.status.energy = one.banks;
+            world.world.status.forwardShield = one.banks;
+            world.world.status.aftShield = one.banks;
+
+            world.world.work[31] = one.state;
+            world.world.work[32] = one.ai;
+            world.world.work[35] = one.energy;
+            world.world.work[36] = one.newb;
+            world.world.bubble.blocks[2] = world.world.work;
+            world.seed = seed;
+            world.ecm = one.ecm;
+            world.legal = one.legal;
+
+            PushTacticsUniverse(cpu, world, at);
+
+            cpu.x = one.type;
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(tactics, 400'000);
+            Assert::IsTrue(run.completed, L"TACTICS returned");
+
+            // The port, from the same bytes, through the same seams.
+            world.world.status.ecmCountdown = one.ecm;
+            world.world.commander.At(Elite::Field::LegalStatus) = one.legal;
+
+            Elite::FlightScreen screen = world.world.Screen();
+            Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
+                                   world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+            const bool survived = Elite::RunTactics(loop, world.slot);
+
+            const std::wstring context =
+              WidenText(std::string("TACTICS: ") + one.what + " " + where.what + " seed " + std::to_string(seed[0]));
+
+            // 6502: JMP DEATH, which never returns -- so the shipped routine reaching that label and
+            // the port answering false are the same event (§6.122).
+            bool reachedDeath = false;
+            for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+            {
+              reachedDeath = reachedDeath || (hit.address == death);
+            }
+            Assert::AreEqual(!reachedDeath, survived, (context + L": the player lived or did not").c_str());
+            died += reachedDeath ? 1u : 0u;
+
+            CompareTacticsUniverse(cpu, world, at, context);
+            reached.insert(std::string(one.what) + "/" + where.what);
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(23u * 4u * 5u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::size_t>(23u * 5u, reached.size(), L"and every case is distinct");
+      Assert::IsTrue(died > 0u, L"and the player died on some of them, so the bool is observed false");
+      Logger::WriteMessage(("TACTICS: " + std::to_string(compared) + " cases, " + std::to_string(died) + " of them fatal").c_str());
     }
   };
 

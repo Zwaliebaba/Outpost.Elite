@@ -4,6 +4,7 @@
 #include "Canvas.h"
 #include "EliteTypes.h"
 #include "Scanner.h"
+#include "FlightLoop.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
 
@@ -140,5 +141,74 @@ namespace Elite
    * original does (§6.121).
    */
   void Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, std::uint8_t _type) noexcept;
+
+  // ---- slice 4a-c: the AI, and the autopilot that shares its tail ------------------------------
+
+  /// 6502: LDA #3 / STA RAT / LDA #4 / STA RAT2 / LDA #22 / STA CNT2 -- the turn rates and the
+  /// firing cone `TACTICS` flies by. `DOCKIT` overwrites all three with 3, 6 and 29: an autopilot
+  /// turns no faster but lines up twice as tightly and forgives a wider angle.
+  inline constexpr std::uint8_t TACTICS_RAT = 3;
+  inline constexpr std::uint8_t TACTICS_RAT2 = 4;
+  inline constexpr std::uint8_t TACTICS_CNT2 = 22;
+  inline constexpr std::uint8_t DOCKING_RAT2 = 6;
+  inline constexpr std::uint8_t DOCKING_CNT2 = 29;
+
+  /// 6502: sfxelas and sfxelas2 -- the two halves of being hit by a laser, played back to back.
+  inline constexpr std::uint8_t SOUND_HIT_BY_LASER = 1;
+  inline constexpr std::uint8_t SOUND_HIT_BY_LASER_2 = 15;
+
+  /// 6502: LDA #80 / JSR OOPS and LDA #250 / JMP OOPS -- a collision and a missile going off.
+  inline constexpr std::uint8_t COLLISION_DAMAGE = 80;
+  inline constexpr std::uint8_t MISSILE_DAMAGE = 250;
+
+  /// 6502: LDA #%11110001 -- the AI byte a station gives the ship it launches, and
+  /// `LDX #%00100100` the `NEWB` a rock hermit gives the pirate it turns into.
+  inline constexpr std::uint8_t STATION_LAUNCH_AI = 0xF1;
+  inline constexpr std::uint8_t HERMIT_PIRATE_NEWB = 0x24;
+
+  /// 6502: CPX #4 / BCS TA22 -- a station launches Vipers until there are four of them.
+  inline constexpr std::uint8_t MAXIMUM_POLICE = 4;
+
+  /// 6502: CPX #50 / BCS TA22 and CPX #40 / BCC TN2 -- a trader runs from a random byte under 50,
+  /// and a bounty hunter only turns on you once your legal status passes 40.
+  inline constexpr std::uint8_t TRADER_FLEE_ROLL = 50;
+  inline constexpr std::uint8_t BOUNTY_HUNTER_FIST = 40;
+
+  /// 6502: LDA #120 / JSR MESS -- "INCOMING MISSILE", which `SFRMIS` prints and `FRMIS` does not:
+  /// the player's own launch is silent because the player pressed the key.
+  inline constexpr std::uint8_t MESSAGE_INCOMING_MISSILE = 120;
+
+  /*
+   * 6502: TACTICS, all seven parts -- what a ship decides to do with the frame it was just moved
+   * through. Returns FALSE when the player died, which is §6.122's answer to `OOPS`'s `JMP DEATH`.
+   *
+   * SEVEN PARTS AND ONE ROUTINE. The upstream splits it by page and the joins are fall-throughs:
+   * part 2 runs into part 3 at `TA21`, part 3 into part 4 at `TA19`, part 4 into part 5 at `ta3`,
+   * part 5 into part 6 at `TA3`, and part 6 into part 7 at `TA4`. Reading any part as a routine of
+   * its own is §6.62's mistake, and part 1 is not the beginning: `TACTICS` is in part 2 and part 1
+   * holds `TA18`, the missile's own logic, which part 2 branches back to.
+   *
+   * `MVEIT` calls it for one ship in eight and for a missile every pass, which is the whole reason
+   * a missile is frightening and a Krait is not.
+   */
+  [[nodiscard]] bool RunTactics(FlightLoop& _loop, std::uint8_t _slot) noexcept;
+
+  /*
+   * 6502: DOCKIT -- the docking computer, and it is the SAME TAIL as the AI.
+   *
+   * The plan had this as a slice of its own after `TACTICS` and the two cannot be split: `DOCKIT`
+   * ends `JMP TA151` and refuses through `JMP GOPL`, both inside `TACTICS`, while `TACTICS` part 3
+   * ends `JMP DOCKIT` (§6.122). What it adds in front of the shared steering is an approach --
+   * refuse unless the station is here, take the vector to it, then choose between four cases by two
+   * dot products and a distance.
+   *
+   * IT ENDS BY READING A BYTE NOBODY GAVE IT. `LDA K3+10` decides whether the ship has finished
+   * docking, and the upstream comment says in as many words "I have no idea what K3+10 contains".
+   * The port can settle it: `K3` is `SKIP 0` -- it has no storage of its own -- and it names the
+   * first byte of `XX2`, which is `SKIP 14` and is `LL9`'s face-visibility array. So byte 10 is the
+   * visibility of the ELEVENTH FACE OF THE LAST SHIP DRAWN, and whether an NPC completes its
+   * docking depends on it (§6.125).
+   */
+  [[nodiscard]] bool RunDockingComputer(FlightLoop& _loop, std::uint8_t _slot) noexcept;
 
 } // namespace Elite

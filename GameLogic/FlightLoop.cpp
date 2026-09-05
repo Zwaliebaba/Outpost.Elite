@@ -859,8 +859,18 @@ namespace Elite
         }
       }
 
-      // 6502: .MA21 JSR MVEIT / LDY #NI%-1 / .MAL3 LDA INWK,Y / STA (INF),Y / DEY / BPL MAL3.
-      MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, screen.flight.blueprint, screen.view);
+      /*
+       * 6502: .MA21 JSR MVEIT / LDY #NI%-1 / .MAL3 LDA INWK,Y / STA (INF),Y / DEY / BPL MAL3.
+       *
+       * The block is written back BEFORE the death is acted on, because the original writes it
+       * back only on the path that survives -- `JMP DEATH` from inside `TACTICS` never reaches
+       * `MAL3` -- and `DEATH` calls `RES2`, which clears the bubble anyway (§6.122).
+       */
+      if (!MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, screen.flight.blueprint,
+                    screen.view))
+      {
+        return LoopOutcome::Died;
+      }
       block = screen.work;
 
       /*

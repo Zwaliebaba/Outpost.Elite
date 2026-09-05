@@ -210,9 +210,12 @@ namespace Outpost
 
   // ---- the ships ----------------------------------------------------------------------------------
 
-  void FlightSession::RunTactics(Elite::ShipBlock& _work)
+  bool FlightSession::RunTactics(Elite::ShipBlock& _work)
   {
-    (void)_work; // 6502: TACTICS, all seven parts. Phase 4 -- nothing in the bubble fights back.
+    // 6502: JSR TACTICS from `MVEIT`'s `MV26`, with `INF` at the slot being moved -- which is
+    // `XSAV`, the byte the loop keeps for exactly this.
+    (void)_work;
+    return Elite::RunTactics(m_loop, m_flight.slot);
   }
 
   void FlightSession::DrawPlanetOrSun()
@@ -356,11 +359,18 @@ namespace Outpost
   void FlightSession::RunDockingComputer(Elite::ShipBlock& _work)
   {
     /*
-     * 6502: DOCKIT -- phase 4's autopilot. It steers by writing `INWK+27` to `INWK+30`, which
-     * `DOKEY` then turns into synthetic key presses; leaving the block alone is therefore "the
-     * autopilot asked for nothing", and the ship flies straight rather than erratically.
+     * 6502: JSR DOCKIT from `DOKEY`'s `auton` path.
+     *
+     * It steers by writing `INWK+27` to `INWK+30`, which `DOKEY` then turns into synthetic key
+     * presses -- so the autopilot flies the ship through the same key logger the player uses, and
+     * nothing downstream can tell them apart.
+     *
+     * `auton` has already built the block this reads: `ZINF`, a nose vector, and `STA TYPE` with
+     * &E0, which is the NEGATIVE type `DOCKIT` tests for to know it is flying the player's ship
+     * rather than an NPC's. Slot 0 is what `INF` points at on that path.
      */
     (void)_work;
+    (void)Elite::RunDockingComputer(m_loop, 0u);
   }
 
   // ---- the VIC-II ----------------------------------------------------------------------------------

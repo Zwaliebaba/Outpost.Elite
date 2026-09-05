@@ -543,7 +543,10 @@ namespace GameLogicTests
 
     struct RecordingOutside final : Elite::ShipEffects, Elite::ShipDrawEffects
     {
-      void RunTactics(Elite::ShipBlock&) override {}
+      bool RunTactics(Elite::ShipBlock&) override
+      {
+        return true;
+      }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
       void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}

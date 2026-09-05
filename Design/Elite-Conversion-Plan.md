@@ -451,6 +451,65 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.125 The AI, the autopilot, and a byte the source itself gave up on
+
+Slice 4a-c is `TACTICS`'s seven parts and `DOCKIT` built as one unit, because §6.122 established
+they are one graph. Four things came out of it that the reading alone would not have.
+
+**`K3+10` IS `XX2+10`, AND THE UPSTREAM COMMENTARY SAYS SO IN THE FORM OF A SHRUG.** `DOCKIT`'s
+last decision -- whether an NPC ship has finished docking, which is bit 7 of `NEWB`, which is "take
+this out of the bubble" -- is guarded by `LDA K3+10 / BNE TNRTS`. The annotation reads: *"I have to
+say I have no idea what K3+10 contains, as it isn't mentioned anywhere in the whole codebase apart
+from here, but it does share a location with XX2+10... as to what this means, that's not yet
+clear."* The port can close it, mechanically:
+
+- `K3` is declared `SKIP 0`. It has no storage of its own; it is a NAME for an address.
+- `XX2` is declared `SKIP 14` at that same address, and is `LL9`'s face-visibility array.
+- Across the whole assembled build, the only reader of that byte under the name `K3` is this
+  instruction, and the only writers are `LL9` parts 4, 5 and 10 through `XX2,X`.
+
+So the byte is **the visibility of the eleventh face of the last ship drawn**, and whether a ship
+completes its docking depends on it. `ShipDraw.h` has said since slice 3b that the port keeps `K3`
+and `XX2` in different objects and that "nothing may assume that means they are independent" --
+this is the routine that does not, and it reads `GeometryWorkspace::xx2` because that is where the
+memory is. §6.112 is what happens when a port keeps two aliases apart and then forgets.
+
+**A `JSR` I read and did not transcribe.** `DOCKIT` runs `JSR TA2 / LDA Q / STA K / JSR TAS2` --
+the tail of `TAS2` to build a unit vector, the length it computed saved into `K`, and then the
+WHOLE of `TAS2` over the same `K3` again. The second call re-runs the shifting loop, so the vector
+the approach decisions are made from is not the vector the distance came from. The port had the
+first call and not the second, and every approach came out on the wrong branch; the docking case
+disagreed on `INWK+27` and nothing else, which is the signature of a routine that took the right
+shape down the wrong path.
+
+**Ten calls to `DORND`, and every one of them rotates a carry the caller set with a compare.** Six
+of the ten take the carry from a `CPX` or `CMP` several instructions earlier -- `CPX #SST` for a
+station's launch roll, `CPX #HER` for a rock hermit's, `CPX #TGL` for the roll at `TA14`, `CMP
+#ANA`, `CMP #200`, `CMP #230` -- and two of them depend on WHICH ENTRANCE the code came in
+through: `TN7` is reached both from the type compare and from the Anaconda's own roll falling
+through, and `ta3` is reached both by `BCC` (carry clear) and by falling out of the escape-pod test
+(carry set). Deriving these by eye is how a port ends up plausible and wrong, so they were
+MEASURED: the interpreter was stepped, the carry recorded at every `DORND` entry, and the port
+written to match. §6.118 built the instrument; this is the first slice where the instrument was
+used as a first resort rather than after a failure.
+
+**And the arithmetic is not what its names suggest, twice.** `LDA #&FF ... ASL A / STA INWK+28` is
+a DECELERATION and the byte is signed, so `ASL` turns minus one into minus two rather than doubling
+anything -- a missile sheds speed twice as fast as a ship, which is how it turns tightly enough to
+come back for a second pass. And `LDA #2 / ROR A` in `DOCKIT`'s fine approach produces a ONE with
+the carry above it, so the roll is always magnitude one and all the folding of three sign bits
+above it decides is the direction.
+
+**What the comparison is, and what it is not.** 92 cases over 23 situations and four generator
+seeds, each running the shipped routine and the port from identical bytes and comparing the ship
+block, the whole bubble, the type counts, the generator, `RAT`, `RAT2`, `JUNK` and the player's
+three energy banks. `OOPS`, `EXNO2` and `EXNO3` run for real on both sides, because they are
+arithmetic on those banks; `NOISE`, `NOISE2`, `MESS` and `ECBLB2` are trapped, and the message
+state, the ECM countdown and the canvas are named exclusions. `DEATH` is trapped and is the point:
+eight of the 92 cases are fatal, and the assertion is that the port answers false exactly when the
+shipped routine reaches that label -- which is the contract §6.122 invented and could not test
+until there was an AI to reach it.
+
 ### 6.124 Three mutations that walked through a green sweep, and none of them was the port
 
 Slice 4a-b's first mutation run caught 24 of 28. All three survivors were the FIXTURE, and each was
@@ -4757,7 +4816,7 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 |---|---|---|
 | **4a-a** ✅ | `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6`, `DCS1` — the vectors, in `Tactics.h/.cpp` | **Built 2026-09-05**, 17 mutations and 17 caught |
 | **4a-b** ✅ | `FRS1`, `SESCP`, `SFS1`, `SFS2`, `ANGRY` — a ship arriving from inside the bubble, and the three `FlightSession` seams they answer | **Built 2026-09-05**, compared on the whole bubble. **28 mutations, 28 caught** — after three survivors turned out to be the fixture rather than the port (§6.124) |
-| **4a-c** | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | not started; **scoped and dependency-checked 2026-09-05**, §6.122 |
+| **4a-c** ✅ | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | **Built 2026-09-05** (§6.125). 92 cases over 23 situations and four generator seeds, each comparing the ship block, the whole bubble, the counts, the generator, `RAT`/`RAT2`/`JUNK` and the player's energy banks against the shipped routine. `DEATH` is trapped and eight cases are fatal, so §6.122's `bool` is observed false rather than merely declared. Two defects only the oracle could find: a `JSR TAS2` transcribed as absent, and six of ten `DORND` carries. |
 
 ### Phase 5 — Sound and music
 
@@ -4842,6 +4901,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Slice 4a-c: the ships fight back** (§6.125). `TACTICS`'s seven parts and `DOCKIT` as one unit, with the death path threaded out of `MVEIT` per §6.122 and observed false on eight of 92 cases. **`K3+10` is settled**: the upstream commentary says "I have no idea what K3+10 contains", and the port can close it mechanically -- `K3` is `SKIP 0` over `XX2`'s fourteen bytes, `DOCKIT` is the only reader and `LL9` the only writer, so whether an NPC finishes docking depends on the visibility of the eleventh face of the last ship drawn. Two defects the oracle found: `DOCKIT` calls `TA2` and then the WHOLE of `TAS2` again over the same `K3`, which the port had transcribed as one call, and six of ten `DORND` carries come from compares several instructions earlier. The carries were measured by stepping the interpreter rather than derived by eye -- §6.118's instrument used as a first resort. |
 | 2026-09-05 | **Three mutations walked through slice 4a-b's sweep and none of them was the port** (§6.124). One generator seed, so the carry `SFS1` rotates into byte 29 never varied; a ramp of test data that never reaches 128, so `SFS2`'s sign-magnitude amount was always positive; and a `NEWB` byte whose ramp value already had the bit `ANGRY` sets, so the OR was a no-op. All three are §6.93 again, and all three came from the same convenience -- generated ramps are systematically wrong about signs and about bits that happen to be set. The sweeps now name the values a routine branches on and assert the answer came out both ways rather than counting cases. |
 | 2026-09-05 | **The third Windows-only compile error, and the first one a check can stop** (§6.123). `Tactics.cpp` was green on Ubuntu, green on all 321 tests and green on every repository check, and failed the Windows build with C1010: its first line was its own header rather than `pch.h`. With `/Yu` MSVC discards everything above that line, so the rule is "the FIRST line is pch.h", which is a rule a script can read off disk -- `tools/check_projects.py` now checks it for every source in every project built with precompiled headers, proved by deleting the line and watching the check name the file. The corollary to §6.116: when a Windows-only failure is a build rule rather than a type disagreement, write the rule into a check before fixing the file. |
 | 2026-09-05 | **Slice 4a-c re-scoped before a line of it was written** (§6.122). The plan had `TACTICS` and `DOCKIT` as two slices in that order; the dependency pass says they are one graph, because `DOCKIT` jumps into `TACTICS` part 7 for its steering and part 3 for its refusal while `TACTICS` jumps to `DOCKIT`. Neither can be compared against the shipped code without the other. The same pass found that `TACTICS` can kill the player -- three paths reach `OOPS`, which ends `JMP DEATH` -- and that `ShipEffects::RunTactics` returns `void`, so the port has no way to turn that into `LoopOutcome::Died`; `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip`. Written down before the AI rather than found half way through it. |
