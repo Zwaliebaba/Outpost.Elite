@@ -451,6 +451,45 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.142 Slice 4b-a: the last of the three jumps out of the loop
+
+`ESCAPE` is built, and with it `LoopOutcome::Escaped` -- which the flight loop has returned since
+slice 3d-d and `Main.cpp` has refused ever since. §6.82 named the three jumps that leave `M%` and do
+not come back; `DOENTRY` and `DEATH` were wired in phase 3 and this was the third.
+
+**`DEATH2` was already there.** Six instructions, two of them a stack reset a port does not need,
+and the other four are `JSR RES2` and a fall into `BR1` -- which the death path in `Main.cpp` has
+done since §6.117. §6.141 scoped it as work; it was not. That is the FOURTH scope-line entry this
+phase to turn out already built, and the pattern is now well enough established to state as a rule:
+**the backward pass has to check every label in a scope line, not just the ones that look big.**
+
+**Three things `ESCAPE` hides.**
+
+194 is loaded once and used three times: `STA INWK+30` makes it the pitch, `LSR A / STA INWK+32`
+makes 97 the AI byte, and `.ESL1 ... DEC INWK+32 / BNE ESL1` counts the animation down through that
+same byte. The abandoned ship's AI setting drains to zero as it flies away, and the number of frames
+it flies for is half its pitch.
+
+`FRS1` does not take a speed. It reads `DELTA` and rotates it with `MSTG`'s bit 7 -- `LDA DELTA /
+ROL A / STA INWK+27` -- so the ship leaves at twice the speed you were doing, plus one if no missile
+was locked. And `RES2` has just set `DELTA` to 3, so the answer is always 6 or 7 whatever you were
+doing when you punched out. The port passed a zero and the oracle disagreed on the first case.
+
+`LL9` writes back to the slot `FRS1` filled, through `INF`. The port handed it slot 0 and the oracle
+disagreed about the PLANET's speed byte -- `LL9`'s bookkeeping had been going into the wrong ship.
+
+**And a branch that cannot be taken.** `JSR FRS1 / BCS ES1 / LDX #CYL2 / JSR FRS1` is "if the Cobra
+does not fit, leave a PIRATE Cobra behind instead". It never happens: `RES2` empties the bubble four
+instructions earlier, so there is always a free slot and always heap. A ten-ship fleet was put in
+the sweep to reach it and `RES2` wiped it first. Dead for the same kind of reason as part 1's `CMP
+#HER / BEQ TT100` (§6.135) -- not because the code is wrong but because something three calls up
+guarantees the test -- and transcribed anyway, with the proof recorded so the next reader does not
+have to redo it.
+
+**The carry into the Trumble roll is `SCAN`'s, and it is SET.** Nothing between them touches the
+flag. Measured with §6.118's instrument rather than derived, because `SCAN` has several exits and
+the arithmetic near them is a screen address rather than anything this routine can reason about.
+
 ### 6.141 Slice 4b scoped, and a routine that does not exist
 
 The dependency pass, both directions this time (§6.137).
@@ -474,7 +513,7 @@ found for `DORND2`. Nothing blocks the slice.
 
 | | Scope | C64 instructions | How it is checked |
 |---|---|---|---|
-| **4b-a** | `DEATH2` and `ESCAPE` — the two that close outcomes the flight loop already returns | 48 | The whole world against the oracle, and the escape pod's animation is 97 frames of `MVEIT` and `LL9` that have to agree on every one |
+| **4b-a** ✅ | `ESCAPE`, and `DEATH2` — which turned out to be already built (§6.142) | 42 | **Built 2026-09-05.** The whole world against the oracle over six cases, including the ninety-seven frames of `MVEIT` and `LL9`. Wired: `LoopOutcome::Escaped` was refused from slice 3d-d until now |
 | **4b-b** | `DOEXP` and `PTCLS2` — the explosion cloud, with `EX4`, `EXS1`, `PTCLS`, `PTCLS2S`, `EX42` and `EXL52` inside them | 311 | The canvas, byte for byte, over a whole explosion; the cloud is `DORND`-driven so it is exact rather than statistical |
 
 **What 4b-a closes.** `LoopOutcome::Escaped` has been returned by the flight loop since 3d-d and
@@ -5669,6 +5708,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 | Date | Change |
 |---|---|
 | 2026-09-05 | **A second copy of `QQ2` blanked the status screen** (§6.140). `Game` held the current system's seeds twice; the printer read the copy nobody wrote at the cold start. Deleted, printer bound to `current.seeds`. §6.28's rule, applied to the composition root. |
+| 2026-09-05 | **Slice 4b-a: the last of the three jumps out of `M%`** (§6.142). `ESCAPE` built and wired, so `LoopOutcome::Escaped` is answered after being refused since 3d-d. `DEATH2` turned out to be already done -- the fourth scope-line entry this phase to be built already, which makes the rule plain: the backward pass has to check EVERY label, not the big ones. Three things the routine hides: 194 is the pitch AND, halved, both the AI byte and the frame count the loop decrements; `FRS1` takes `DELTA` rotated with `MSTG`'s bit 7 rather than a speed, so the ship always leaves at 6 or 7 because `RES2` has just set `DELTA` to 3; and `LL9` writes back to the slot `FRS1` filled, which the port had as slot 0 -- the planet. The pirate-Cobra fallback is dead code, because `RES2` empties the bubble first. |
 | 2026-09-05 | **Slice 4b scoped, and `EXLOOK` does not exist** (§6.141). The backward pass found six of its eleven labels already built -- `SOS1` in 3c, `BAD` in 2b, `FAROF`, `FAROF2`, `SHD` and `DENGY` in 3d -- and `EXLOOK` nowhere in the upstream library at all, in any version, nor in the assembled build. The third scope-line error this phase, and the same cause as §6.137's two. The forward pass is clean: all twenty-one call targets are built or are entry points inside the two files. Scoped into 4b-a (`DEATH2` and `ESCAPE`, 48 instructions, which closes the last of the three jumps that leave `M%`) and 4b-b (`DOEXP` and `PTCLS2`, 311). |
 | 2026-09-05 | **Slice 4e: thirteen switches whose only definition is where they sit** (§6.139). `DKS3` pairs entry Y of `TGINT` with the byte Y after `DAMP` and nothing else in the game says which key toggles which option, so `TGINT` is extracted and byte-checked and the port's thirteen POINTERS are verified by pressing all 256 keys at all thirteen positions -- 3,328 cases, and exactly thirteen match. `EOR #&FF` and not `EOR #1`, because `BIT PATG / BPL` tests bit 7 and a 1 would hide three music toggles. `STX DNOIZ` stores the KEY CODE in the sound flag. `april16` is exposed as its own entry because `MUTOKCH` jumps past five decisions, not one. And a fixture that seeded `MUTOKOLD` inconsistently made `MUTOKCH` fire every pass, whose excursion clobbers X -- so the quit key stopped working and it looked like a port bug (§6.95 again). |
 | 2026-09-05 | **Two of §6.128's three fixes were recorded and never made** (§6.138). Auditing what that section said it had placed in `Main.cpp` by hand found `DrawDials` still with one caller and nothing anywhere cooling `GNTMP` or `LASCT`: the dials still only moved on a screen change and the laser still never cooled. The commit carrying §6.128 touches `Main.cpp` once, for sound. **The cause is the shape** -- 65 instructions of game logic held as fragments to be transcribed into the executable, owned by nothing in `GameLogic`, compared by nothing, so nothing could go red. `RunLoopTail` is the whole routine now, in `GameLoop.cpp` (renamed from `Spawner.cpp` per §6.121), compared over 52 cases and six outcomes. Four more carries, a `DEX / BEQ P%+3 / DEX` that cannot pass zero, and Trumbles that grow by a CARRY rather than an increment. A plan section is not evidence that code exists. |
