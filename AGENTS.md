@@ -206,7 +206,7 @@ Repository checks:
 ```
 python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/inventory.py --strict            # coverage ledger: every master-level include has a row
-python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted
+python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted; pch.h is every source's first line
 python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
 python tools/check_docs.py                    # no table row is wider than its header
 python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations

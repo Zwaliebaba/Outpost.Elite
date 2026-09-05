@@ -451,6 +451,33 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.123 The third Windows-only compile error, and the first one a check can stop
+
+`Tactics.cpp` compiled on the Ubuntu leg, passed all 321 tests, passed every repository check, and
+broke the Windows build with `error C1010: unexpected end of file while looking for precompiled
+header`. Its first line was `#include "Tactics.h"` and MSVC wanted `#include "pch.h"`.
+
+**This is §6.116's finding for the third time**, and the pattern is now clear enough to name: the
+two legs do not disagree about the LANGUAGE, they disagree about the BUILD. `const` on a return
+type (the first), `std::vector<bool>`'s proxy in `Assert::AreEqual` (the second, §6.116) and now
+the precompiled header are all things g++ has no opinion about because the Makefile does not use
+`/Yu`. A permissive leg is not a leg that accepts wrong code; it is a leg that is not asked the
+question.
+
+**And unlike the first two, this one is mechanically checkable.** With `<PrecompiledHeader>Use`
+MSVC DISCARDS every line above the `#include "pch.h"` and fails if there is none -- so the rule is
+not "the file includes pch.h" but "the file's first line is pch.h", and that is a rule a script can
+read off disk. `tools/check_projects.py` reads it now, for every `.cpp` in every project built with
+`/Yu`, and it was proved by deleting the line and watching the check name the file. The two earlier
+Windows-only errors were type-system disagreements and had no such rule; this one had, and nobody
+had written it down.
+
+**The cost was one CI cycle**, which is the cheapest this class of defect has been: §6.116's cost
+two, and the first cost a day. The lesson recorded there stands -- MSVC is the authority and a
+green Ubuntu leg is not a green build -- with a corollary. **When a Windows-only failure turns out
+to be a build RULE rather than a type disagreement, write the rule into a check before fixing the
+file**, because the next new source file will be written by someone who has never seen C1010.
+
 ### 6.122 Two slices that are one routine, and a death the port has nowhere to put
 
 Slice 4a was scoped into four on 2026-09-05 (§6.121) and the last two of them do not exist.
@@ -4784,6 +4811,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The third Windows-only compile error, and the first one a check can stop** (§6.123). `Tactics.cpp` was green on Ubuntu, green on all 321 tests and green on every repository check, and failed the Windows build with C1010: its first line was its own header rather than `pch.h`. With `/Yu` MSVC discards everything above that line, so the rule is "the FIRST line is pch.h", which is a rule a script can read off disk -- `tools/check_projects.py` now checks it for every source in every project built with precompiled headers, proved by deleting the line and watching the check name the file. The corollary to §6.116: when a Windows-only failure is a build rule rather than a type disagreement, write the rule into a check before fixing the file. |
 | 2026-09-05 | **Slice 4a-c re-scoped before a line of it was written** (§6.122). The plan had `TACTICS` and `DOCKIT` as two slices in that order; the dependency pass says they are one graph, because `DOCKIT` jumps into `TACTICS` part 7 for its steering and part 3 for its refusal while `TACTICS` jumps to `DOCKIT`. Neither can be compared against the shipped code without the other. The same pass found that `TACTICS` can kill the player -- three paths reach `OOPS`, which ends `JMP DEATH` -- and that `ShipEffects::RunTactics` returns `void`, so the port has no way to turn that into `LoopOutcome::Died`; `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip`. Written down before the AI rather than found half way through it. |
 | 2026-09-05 | **Phase 4 opens: slices 4a-a and 4a-b** (§6.121). The six vector routines `TACTICS` and `DOCKIT` are built on -- `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6` and `DCS1`, none of which the 4a scope line named -- then the five that put a ship into the bubble from inside it, `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`. **Three `FlightSession` seams are answered** and a fired missile leaves the rail for the first time. **`DCS1` calls itself** with `JSR P%+3` so its body runs twice, which is where the header's "times four" comes from, and both the once and the thrice mutation are caught. Four carries, one of them a defect the port had: `SFS1`'s `DORND` runs with the carry set by the `CMP #PLT` above it, and the only byte that disagreed was the generator's own state. `FRS1` reaches the same `fq1` as `DEATH` and its carry is bit 7 of `MSTG`, so an unlocked missile is one unit faster than a locked one; `ANGRY` tests the type in A and then the flight loop's `TYPE`, which are different bytes. `K3Block` and the five cargo type numbers move to where the ship table is, because a name that records which routine asked first stops being true when a second one asks. **31 of 35 DEATH mutations caught**, the three survivors closed or proved equivalent: a direct `Ze` sweep now crosses `CMP #245` and compares the distance bytes `DEATH` overwrites, and `death-view6` is provably equivalent because `TTX66`'s only read of the view is `BNE`. |
 | 2026-09-05 | **DEATH's three carries, the strict ledger, the pause screen, and the documentation pass** (§6.117, §6.119, §6.120). Comparing the death scene's five `K%` blocks byte for byte instead of `FRIN` found the port one random step off on the fifth piece: `fq1`'s `ROL A` takes the plate-or-canister carry, `Ze`'s first `DORND` takes the previous piece's, and its second is `DORND2` -- a `CLC` -- so the `ROL` before it decides nothing; `U%`'s `STA KL` is a dead byte on this build and `KLO+0` is no longer cleared. **`tools/inventory.py --strict` is green for the first time and CI runs it**: 101 of 710 files had no row, ninety-one by notation the tool now expands and ten real, four of them ported. Reading the build against the phases found the PAUSE SCREEN in no slice -- `DK4`, thirteen toggles behind `TGINT`, the only writer of `PLTOG` -- which is slice 4e now, and the energy bomb's and hyperspace's VIC-II effects in no ADR, which are ADR-005 §1's second open item. §6.119 records the mutation worktree whose empty submodule made every mutant read as caught, and the baseline rule that now stands in four places. The documentation pass brought `Design/README.md`, the risk register (R3 closed, R9 realised, R11 validated), ADR-003 §4, ADR-005 §1, the reference and runner READMEs, AGENTS.md and the plan's §1.2 to the tree as it is: 313 tests, nine checks, phases 0 to 3 built. |

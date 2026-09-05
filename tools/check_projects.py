@@ -64,6 +64,37 @@ def resolve(_project: Path, _include: str) -> Path:
     return (_project.parent / _include.replace("\\", "/")).resolve()
 
 
+def precompiled_header_first() -> list[str]:
+    """Every .cpp in a project built with /Yu opens with `#include "pch.h"`.
+
+    MSVC's precompiled headers are not an optimisation you can leave out: with `<PrecompiledHeader>
+    Use</PrecompiledHeader>` the compiler DISCARDS everything before the `#include "pch.h"` line and
+    fails with C1010 if the file has none.  g++ has no such rule, so a new source file without it
+    compiles on the Ubuntu leg and breaks the Windows build -- which is what happened to
+    `Tactics.cpp` on 2026-09-05, the third Windows-only compile error to reach CI through the
+    permissive leg (plan section 6.116, section 6.123).
+
+    The first line is what is checked and not merely the presence of the include, because that is
+    what MSVC requires: an include above it is silently thrown away.
+    """
+    problems: list[str] = []
+    for project, _owned in PROJECTS:
+        text = (REPO / project).read_text(encoding="utf-8", errors="replace")
+        if "<PrecompiledHeader>Use</PrecompiledHeader>" not in text:
+            continue
+        directory = (REPO / project).parent
+        for source in sorted(directory.glob("*.cpp")):
+            first = ""
+            for line in source.read_text(encoding="utf-8", errors="replace").splitlines():
+                if line.strip():
+                    first = line.strip()
+                    break
+            if first != '#include "pch.h"':
+                problems.append(f"{source.relative_to(REPO)}: first line is {first!r}, and MSVC needs"
+                                ' \'#include "pch.h"\' -- it discards everything above it (C1010)')
+    return problems
+
+
 def main() -> int:
     failures: list[str] = []
     checked = 0
@@ -109,6 +140,8 @@ def main() -> int:
                 failures.append(f"{filters.name}: \"{include}\" is filtered and the project does not"
                                 " build it")
 
+    failures.extend(precompiled_header_first())
+
     print(f"projects          {len(PROJECTS)}")
     print(f"item entries      {checked}")
     for line in failures:
@@ -116,7 +149,8 @@ def main() -> int:
     if failures:
         print(f"FAIL  {len(failures)} project problem(s)")
         return 1
-    print("OK    every project path resolves, every source is named, filters agree")
+    print("OK    every project path resolves, every source is named, filters agree,")
+    print("      and every precompiled-header source includes pch.h first")
     return 0
 
 
