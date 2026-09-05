@@ -451,6 +451,48 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.130 Two tracks, one branch, and the two things that survived the merge
+
+Phases 4 and 5 ran in parallel and met on one file. `Design/Elite-Conversion-Plan.md` conflicted on
+the revision log's newest rows and nowhere else, which is the outcome the newest-first log was meant
+to produce: two tracks appending at the same point collide in a three-line block rather than
+anywhere in the 5,000 lines below it. The section bodies -- §6.126 through §6.129 -- merged with no
+overlap at all, because each track had taken its numbers from a range the other had not reached.
+That is luck rather than design, and the cheap insurance is for a track to claim its section numbers
+in its first commit rather than its last.
+
+What the merge did NOT catch is the more useful half.
+
+**Six `-Wunused-result` warnings, four of which are the right answer stated badly.** §6.126 put
+`[[nodiscard]]` on `AddShipCoordinateToK`, `SubtractShipAxis`, `SubtractShipAxes` and
+`SubtractStationAxes`, because the carry those routines exit with is `TACTICS`'s input at `TA64` and
+losing it was a defect. The attribute did exactly what it is for: it named every site that throws
+the flag away. Four of them are correct -- `MVT1` reads `K+3` and stores, and `MV40` and `MVS4` run
+more arithmetic over the result -- and they now say so with `static_cast<void>` and a reason,
+because a warning that is always present is a warning nobody reads. The other two were in the tests,
+and there the discard was the bug: the `MVT3` sweep compares all four bytes of `K` over 12,288 cases
+and the `VCSUB` sweep compares `K3`, `K+1`–`K+3` and `U` over 144, and neither looked at the flag
+that had just been made part of the contract. Both assert it now. The general form: when a return
+value becomes load-bearing, the compiler can find every caller, but only the *tests* that ignored it
+were wrong to.
+
+**The ledger's tick markers are prose, and prose broke the tool again.** `inventory.py --strict`
+went red on twelve library files with no ledger row, and all twelve are ported -- `BDlab4` through
+`BDlab7` are in `Music.cpp` and the seven `sfx*` tables and the sound workspace are in
+`SoundTables.cpp` and `SoundEffects.h`. What actually happened is that a bulk edit adding ✅ markers
+put each tick one position to the right, inside the *previous* label's backticks: `` `sfxatk✅ ` ``
+rather than ``✅ `sfxatk` ``. The parser reads backtick groups, so every one of those became a label
+that names no file, and the file it should have named went unaccounted. The range form failed the
+same way -- `RANGE_RE` wants two backtick groups joined by a dash and nothing else, so
+``✅ `bdlab3`–✅ `bdlab8` `` stopped expanding and took `bdlab4` to `bdlab7` with it.
+
+This is §6.120 for the third time: the ledger is read by a tool and written by a person, the
+decoration is not checked, and a decoration that lands one character off is indistinguishable from a
+missing row. The fix here was editorial, but the lasting one is smaller than it looks -- a check that
+no backtick group contains a ✅ would have caught this in the commit that made it, and it is three
+lines. Filed against the next documentation sitting rather than done here, because the failing check
+already names the twelve files and the repair took a minute.
+
 ### 6.129 The sound has two halves, and only one of them can be heard
 
 Phase 5 was ported in one sitting, both slices, and what made that possible is that the C64's
@@ -5088,6 +5130,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Two parallel tracks met on one file, and the merge was the easy half** (§6.130). Phases 4 and 5 conflicted only on the revision log's newest rows, which is what a newest-first log is for. The two real findings were downstream of it: §6.126's `[[nodiscard]]` carries produced six warnings, and the compiler was right about all six -- four production sites discard the flag correctly and now say so, and the two in the tests were the `MVT3` and `VCSUB` sweeps ignoring the very thing the slice had just made load-bearing, so both assert it now. And `inventory.py --strict` went red on twelve ported files because a bulk edit put each ✅ one position right, INSIDE the previous label's backticks, which turns every affected label into one that names no file. §6.120 for the third time. |
 | 2026-09-05 | **Phase 5, both slices** (§6.129). `SoundEffects` and `Music` in `GameLogic`, the sound workspace and the music variables as structs, the tables extracted (`SFXPR` at 136 bytes for `HYPNOISE`'s bit-7 read), and the interrupt's SID half as a tick that emits register writes. `Cpu6502` gained an in-order store log and the fixture enters `COMIRQ1` as an interrupt, so the comparison is on every SID write of every frame -- 4,160 effect frames and 4,000 music interrupts -- rather than on the registers' final state. `SidSynth` and `SoundOutput` in the executable: a per-cycle 6581 without its filter, played through XAudio2 with the interrupt run off the device's queue depth. Ledger row 164 corrected -- the "nine tune blocks" are the raster interrupt's VIC-II tables. ADR-005 §2 amended: no `offsetSamples`. Left for 4d and 4e: the Trumble chatter and the option keys. |
 | 2026-09-05 | **The outer loop was missing `MLOOP`'s head** (§6.128). Three player reports -- a letter key that looked dead on the buy screen, dials that never moved, a laser that fired once -- were one omission: `BAY2`'s forced "9", part 5's `JSR DIALS`, and the two cooling countdowns on `GNTMP` and `LASCT` were not in `Main.cpp`. All three are, and the pattern joins §6.111 and §6.115: a swept routine that nothing reached. |
 | 2026-09-05 | **A red build from a check that already existed** (§6.127). `Tactics.cpp` declared a local called `far`, which is a `<windows.h>` macro, so MSVC turned the declaration into a syntax error and both CI jobs failed on one cause. `check_gamelogic.py` has caught `near` and `far` since slice 0f and it named the file and the line -- it simply was not run, because the list of eight checks was retyped into a shell loop and the entry whose name is a PREFIX of another entry's was lost. `tools/check_all.py` now runs all nine in CI's order and takes no arguments, and AGENTS.md points at it rather than at a list. §6.123's argument, turned back on the checks themselves. |

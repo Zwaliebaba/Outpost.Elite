@@ -192,7 +192,7 @@ namespace GameLogicTests
               Assert::IsTrue(run.completed, L"VCSUB returned");
 
               Elite::MathWorkspace math;
-              Elite::SubtractShipAxes(theirs, mine, axes, math);
+              const bool carry = Elite::SubtractShipAxes(theirs, mine, axes, math);
 
               const std::wstring where = WidenText("VCSUB mine " + std::to_string(mineHigh) + "/" + std::to_string(mineSign) + " theirs " +
                                                    std::to_string(theirHigh) + "/" + std::to_string(theirSign));
@@ -206,6 +206,11 @@ namespace GameLogicTests
                                  (where + L": K+" + std::to_wstring(byte)).c_str());
               }
               Assert::AreEqual(cpu.memory[at.u], math.u, (where + L": U").c_str());
+
+              // The carry the LAST of the three `MVT3`s exits with. Nothing between here and the
+              // `DORND` at `TA64` touches the flag, so it is `TACTICS`'s input and not scratch
+              // (§6.126).
+              Assert::AreEqual(cpu.c, carry, (where + L": carry").c_str());
               ++compared;
             }
           }

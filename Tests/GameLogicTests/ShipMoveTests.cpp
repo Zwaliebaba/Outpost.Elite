@@ -176,7 +176,7 @@ namespace GameLogicTests
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvt3);
                 Assert::IsTrue(run.completed, L"MVT3 returned");
 
-                Elite::AddShipCoordinateToK(work, math, axis);
+                const bool carry = Elite::AddShipCoordinateToK(work, math, axis);
 
                 const std::wstring where = Widen("MVT3(K=" + std::to_string(k1) + "/" + std::to_string(k2) + "/" + std::to_string(k3) +
                                                  ", x=" + std::to_string(axis) + ")");
@@ -185,6 +185,12 @@ namespace GameLogicTests
                   Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], math.k[byte],
                                    (where + L": K+" + std::to_wstring(byte)).c_str());
                 }
+
+                // The exit carry, which is the `ADC`'s on one path, SET on the second and the final
+                // `SBC`'s on the third. `VCSUB`'s last call leaves it standing out to `TA64`, so it
+                // is part of the contract and belongs in the sweep rather than in the caller
+                // (§6.126).
+                Assert::AreEqual(cpu.c, carry, (where + L": carry").c_str());
                 ++compared;
               }
             }
