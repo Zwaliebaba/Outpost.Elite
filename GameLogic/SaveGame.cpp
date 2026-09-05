@@ -186,7 +186,7 @@ namespace Elite
 
   DiskMenuResult DiskAccessMenu(SaveScreen& _screen, CommanderBlock& _block, std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name,
                                 std::span<std::uint8_t, COMMANDER_FILE_SIZE> _image, std::span<std::uint8_t> _buffer,
-                                bool& _useDisk) noexcept
+                                std::uint8_t& _useDisk) noexcept
   {
     /*
      * 6502: RLINE, which is a global in the original and a local here.
@@ -385,7 +385,10 @@ namespace Elite
       // the redisplay is the point: control code 31 in the menu names the media it is not using.
       if (key == DISK_MENU_MEDIA)
       {
-        _useDisk = !_useDisk;
+        // 6502: EOR #&FF -- the same all-eight-bits flip the pause screen's `DKS3` does, and
+        // the reason `DISK` is a BYTE and not a bool: it is one of the thirteen toggles, and a
+        // bool cannot hold the &FF the indexed store writes (§6.139).
+        _useDisk = static_cast<std::uint8_t>(_useDisk ^ 0xFFu);
         continue;
       }
 

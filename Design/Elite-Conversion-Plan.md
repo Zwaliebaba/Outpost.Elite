@@ -497,6 +497,30 @@ firing constantly, its excursion through `stopbd` and `startbd` did `LDX #HI(mus
 pass, and the `CPX #&07` and `CPX #&0D` below it were reading a register the music player had
 overwritten: the quit key stopped working. §6.95's rule, and it cost a trap log to find.
 
+**Two of the thirteen are read by nothing else in the port.** `JSTGY` and `JSTE` are the joystick's
+y-inversion and its enable, and the flight controls read `JSTK` for both. They are in the block
+anyway, because leaving them out would shift every option after them by two and the "D" key would
+switch the music instead of the disk. A run has to be the length the run is.
+
+**And `DISK` was a `bool`.** It is one of the thirteen, so `DKS3` writes &FF into it with an indexed
+store, and a bool cannot hold that -- the byte in the commander file would have been a 1. Changed to
+a byte, which also turned `SaveGame`'s `_useDisk = !_useDisk` back into the `EOR #&FF` it is
+modelling. Twelve call sites, and the suite stayed green through all of them.
+
+**And one thing 4e does NOT unlock, which this section nearly claimed it did.** The galactic
+hyperdrive has been built and unreachable since §6.136, and three comments said it was waiting for
+this slice to read `CTRL`. It is not: `hyp` reaches `Ghy` through `JSR CTRL`, which is the Ctrl
+MODIFIER, and `Window` and `KeyMap` deliver C64 matrix positions -- Ctrl is not one of them. The
+pause screen reads keys, not modifiers, and finishing it changes nothing here. Caught by checking
+the claim before pushing it, which is §6.138's lesson turned on the sitting that wrote it.
+
+**The freeze is a state and not a loop.** The original does not return until CLR/HOME; a windowed
+program has to keep pumping messages, so the loop is turned inside out -- one function per key,
+called instead of the flight pass while a `paused` flag is set. The same trade `PlanSteps` makes for
+the frame rate, and the test's stop address makes the same distinction: the sweep runs exactly ONE
+pass, because letting it loop toggles the same option over and over and an even number of passes
+leaves it looking untouched.
+
 That clobber is real and survives the fix: on the one pass where the music switch does move, the
 original's quit and resume tests DO look at a byte `startbd` left behind. The sweep reads the
 oracle's own X rather than assuming it is the key, so the port agreeing there is measured rather
@@ -560,7 +584,8 @@ the two bytes the countdown needs -- `safehouse` and `QQ8` -- which it had never
 nothing had ever been able to start a jump.
 
 **One thing is built and deliberately unreachable.** `hyp` reaches `Ghy` through `JSR CTRL / BMI
-Ghy`, and `CTRL` is a keyboard read this port has no answer for until slice 4e's pause screen. So
+Ghy`, and `CTRL` is a MODIFIER rather than a key: `Window` and `KeyMap` deliver C64 matrix
+positions and Ctrl is not one of them. So
 the galactic hyperdrive is ported, compared against the shipped routine over both answers to the
 drive test (§6.136), and cannot be invoked. The case is written out in the dispatch rather than left
 off, so that adding the key read is one line and not a search -- and `Main.cpp`'s header says so, in
@@ -5484,7 +5509,7 @@ Three things that is worth noting for the slices ahead:
 | **4b Explosions and death** ∥ | `DOEXP`, `EXLOOK`, `PTCLS2`, `SOS1`, `DEATH2`, the escape pod, `BAD`/`FAROF`/`FAROF2`, `SHD`/`DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle. |
 | **4c Main game loop** | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds.<br><br>**Scoped 2026-09-05 into 4c-a … 4c-d (§6.134), and the dependency pass came back EMPTY**: of 111 distinct call targets across its fourteen routines, 46 are already ported, 16 belong to platforms the C64 build never assembles, and the rest are entry points inside 4c's own files. The only unported routine it calls is `GTHG`, which is in its own scope, and every state byte the spawner branches on is modelled. Unlike 4a (§6.121) this row named its routines accurately. 414 instructions of new code, more than `TACTICS`. |
 | **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps. |
-| **4e Pause screen** — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows. |
+| **4e Pause screen** — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows.<br><br>**Built 2026-09-05** (§6.139). `TGINT` extracted and byte-checked; `DKS3` swept over all 256 keys at all thirteen positions (3,328 cases, exactly thirteen matches); the two loops over both answers to `PATG`; `FREEZE` over 1,024 cases reading the outcome from the oracle's own X, because `MUTOKCH` clobbers it. `april16` exposed as its own music entry. `DISK` changed from a bool to the byte it is. Wired into the outer loop as a state rather than a loop, which is what `DOKEY`'s fall into `DK4` has needed since slice 3d. |
 
 Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: nothing above can be compared before the thing below it exists.
 
@@ -5525,7 +5550,7 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **in progress**: 4a is built (4a-a, 4a-b and 4a-c, the last of which absorbed 4a-d per §6.122), and **4c is COMPLETE** — 4c-a and 4c-b built, 4c-c found already done in phase 3 (§6.137), 4c-d built and wired (§6.138). The spawner fills the bubble, the AI steers what it puts there, and hyperspace works. 4b, 4d and 4e are not started; the galactic drive is built but needs 4e to read its key |
+| 4 | 5 | 8–12 | **in progress**: 4a, 4c and 4e are built and wired. 4c-c turned out to have been done in phase 3 (§6.137). **4b (explosions and death) and 4d (missions and Trumbles) remain.** The galactic hyperdrive, built in 4c-b, is still unreachable — and NOT because of 4e: `hyp` reaches `Ghy` through `JSR CTRL`, and Ctrl is a modifier that `Window` and `KeyMap` do not report, because they deliver C64 matrix positions. That is a `KeyMap` change and it belongs to whoever revisits input |
 | 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
 | **Total** | **24** | **40–60** | before modernisation |
 
