@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "FlightSession.h"
+#include "SoundOutput.h"
 
 #include "Tactics.h"
 
@@ -54,9 +55,12 @@ namespace Outpost
   FlightSession::FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
                                Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::CommanderBlock& _commander,
                                Elite::Rng& _rng, Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions,
-                               std::uint8_t& _techLevel) noexcept
+                               std::uint8_t& _techLevel, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music, SoundOutput& _audio) noexcept
     : m_window(_window),
       m_canvas(_canvas),
+      m_sound(_sound),
+      m_music(_music),
+      m_audio(_audio),
       m_screen{_canvas,
                m_draw,
                m_math,
@@ -127,39 +131,25 @@ namespace Outpost
   bool FlightSession::PlaySound(std::uint8_t _effect, bool _carryIn)
   {
     /*
-     * 6502: NOISE. Phase 5 owns the SID.
+     * 6502: NOISE, for real (slice 5a).
      *
-     * THE SEAM CAN NOW EXPRESS ALL THREE ANSWERS AND THIS BUILD STILL GIVES ONE OF THEM (§6.99).
-     * `NOISE` ends `SEC / RTS` when a voice took the effect; with sound switched off (`DNOIZ`) it
-     * branches to `SOUR1`, a bare `RTS`, so the carry passes through unchanged. §6.88 is what
-     * makes the difference observable: `EXNO3` tail-calls `NOISE` and `OUCH`'s `DORND` runs on the
-     * carry, so which piece of equipment an explosion breaks depends on whether it got a voice.
-     *
-     * A SOUNDING BUILD IS WHAT THIS ANSWERS, and that is a choice rather than a placeholder. The
-     * game ships with `DNOIZ` zero, so "a voice took it" is what an unmodified machine does; a
-     * port with no SID that answered `_carryIn` would be modelling a player who had turned sound
-     * OFF, which is a different game and one the oracle comparisons are not run against. When
-     * phase 5 lands, this reads `DNOIZ` and the third answer becomes reachable -- and the seam no
-     * longer has to change to allow it, which is the whole point of taking the argument now.
+     * The seam took its carry argument before there was anything to hand it to (§6.99, §6.118), and
+     * this is the day that paid off: the three answers `NOISE` gives are the port's now, and nothing
+     * above this line had to change to receive them.
      */
-    (void)_effect;
-    (void)_carryIn;
-    return true;
+    return Elite::PlaySoundEffect(m_sound, _effect, _carryIn);
   }
 
   bool FlightSession::PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency)
   {
-    // 6502: NOISE2 -- `NOISE` with the sustain and frequency supplied rather than read from the
-    // effect's table. Same answer, same reason.
-    (void)_effect;
-    (void)_sustain;
-    (void)_frequency;
-    return true;
+    // 6502: NOISE2. Its callers -- EXNO and EXNO2 -- reach it by JMP and their own callers drop the
+    // carry, so the entry carry is not observable here and false is what the seam's contract says.
+    return Elite::PlaySoundEffectPitched(m_sound, _effect, _sustain, _frequency, false);
   }
 
   void FlightSession::StopSound(std::uint8_t _effect)
   {
-    (void)_effect; // 6502: NOISEOFF. Phase 5.
+    Elite::StopSoundEffect(m_sound, _effect); // 6502: NOISEOFF
   }
 
   void FlightSession::MoveTrumbles()
@@ -170,12 +160,14 @@ namespace Outpost
 
   void FlightSession::StartDockingMusic()
   {
-    // 6502: startbd -- a second interrupt handler. Phase 5.
+    // 6502: startbd -- BDENTRY's writes go to the output's direct log, ahead of the next interrupt.
+    Elite::StartDockingMusic(m_music, m_audio.Direct());
   }
 
   void FlightSession::StopDockingMusic()
   {
-    // 6502: stopbd. Phase 5.
+    // 6502: stopbd -- which reads MULIE, the title screen's bracket around its RESET.
+    Elite::StopDockingMusic(m_music, m_screen.status.titleReset, m_sound, m_audio.Direct());
   }
 
   // ---- the bubble ---------------------------------------------------------------------------------

@@ -88,6 +88,16 @@ main loop that ran as fast as the scene allowed.
   stream selecting recorded samples captured from VICE. The seam is the event stream, so the
   fallback changes one file.
 
+**Amended 2026-09-05 (slices 5a and 5b, plan §6.129).** The event is `SidWrite { reg; value; }` and there is no
+`offsetSamples`: the C64 writes the chip from ONE raster interrupt per frame, so every write in a
+frame has the same offset and the field would carry nothing. The unit of emission is the frame --
+`RunSoundInterrupt` fills a `SidWriteLog` per call -- and the executable applies a frame's writes
+and then renders 17,095 cycles of chip for it. The interrupt is clocked off the audio device's queue
+depth rather than off the display or the wall clock, because the device consumes samples at exactly
+the rate they are rendered for. `SidSynth` is per-cycle and integer, with sync and ring modulation
+and without the filter; "Frontier's `AudioDevice`" above does not exist in this tree and
+`SoundOutput` talks to XAudio2 directly.
+
 ### §3 Timing
 
 - The original's main loop had no fixed period. Slice 0b measures its iteration rate in VICE

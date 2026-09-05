@@ -4,6 +4,10 @@
 
 #include "FlightSession.h"
 #include "Presentation.h"
+#include "SoundOutput.h"
+
+#include "Music.h"
+#include "SoundEffects.h"
 
 #include "Flight.h"
 #include "KeyMap.h"
@@ -47,6 +51,18 @@ namespace Outpost
     if (m_flight != nullptr)
     {
       m_flight->SyncVideoRegisters();
+    }
+
+    /*
+     * 6502: COMIRQ1's SID half, as many times as the audio device is short a frame.
+     *
+     * Before the present rather than after, because the present is what blocks: the frames rendered
+     * here are what the device plays while this thread waits on the display, and a queue filled
+     * afterwards would be a frame later than it needs to be.
+     */
+    if (m_audio != nullptr && m_sound != nullptr && m_music != nullptr)
+    {
+      m_audio->Pump(*m_sound, *m_music);
     }
 
     if (!m_window.Pump())
@@ -174,8 +190,11 @@ namespace Outpost
 
   void GameShell::Beep()
   {
-    // 6502: BEEP. Phase 5 owns the SID; until then a refused key is silent, which is the one
-    // stubbed effect a player is most likely to notice.
+    // 6502: BEEP -- and every caller on this side (dn2, R5, DK4) drops the carry it returns.
+    if (m_sound != nullptr)
+    {
+      (void)Elite::Beep(*m_sound, false);
+    }
   }
 
   void GameShell::ResetMissileIndicators()
@@ -253,12 +272,21 @@ namespace Outpost
 
   void GameShell::StartTheme()
   {
-    // 6502: startat. Phase 5.
+    // 6502: startat -- and BDENTRY's writes to the chip go through the output's direct log, so they
+    // land before the interrupt's next frame rather than being lost to it.
+    if (m_music != nullptr && m_audio != nullptr)
+    {
+      Elite::StartTheme(*m_music, m_audio->Direct());
+    }
   }
 
   void GameShell::StopTheme()
   {
-    // 6502: stopat. Phase 5.
+    // 6502: stopat.
+    if (m_music != nullptr && m_sound != nullptr && m_audio != nullptr)
+    {
+      Elite::StopMusic(*m_music, *m_sound, m_audio->Direct());
+    }
   }
 
   void GameShell::ShowFrame()

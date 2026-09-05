@@ -168,6 +168,8 @@
     <ClInclude Include="Scanner.h" />
     <ClInclude Include="Tactics.h" />
     <ClInclude Include="Spawn.h" />
+    <ClInclude Include="SoundEffects.h" />
+    <ClInclude Include="Music.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="StateTokens.h" />
     <ClInclude Include="MarketScreen.h" />
@@ -227,6 +229,7 @@
     <ClCompile Include="EquipmentTable.cpp" />
     <ClCompile Include="KeyTable.cpp" />
     <ClCompile Include="ShipData.cpp" />
+    <ClCompile Include="SoundTables.cpp" />
     <ClCompile Include="ShipBlueprint.cpp" />
     <ClCompile Include="ShipSlot.cpp" />
     <ClCompile Include="ShipMove.cpp" />
@@ -243,6 +246,8 @@
     <ClCompile Include="Scanner.cpp" />
     <ClCompile Include="Tactics.cpp" />
     <ClCompile Include="Spawn.cpp" />
+    <ClCompile Include="SoundEffects.cpp" />
+    <ClCompile Include="Music.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />
