@@ -7,7 +7,7 @@
 #include "Commander.h"
 #include "LineHeap.h"
 #include "ShipSlot.h"
-#include "Spawner.h"
+#include "GameLoop.h"
 #include "StartUp.h"
 
 #include <array>
@@ -37,7 +37,7 @@ namespace GameLogicTests
    * up with a different generator state even when the bubble happens to look the same -- which is
    * why `RAND` is compared as carefully as the ships are (§6.121).
    */
-  TEST_CLASS(TheSpawner)
+  TEST_CLASS(TheMainGameLoop)
   {
     struct Labels
     {
@@ -158,6 +158,132 @@ namespace GameLogicTests
     }
 
   public:
+    /*
+     * 6502: MLOOP -- part 5, run from its second instruction to `TT17`.
+     *
+     * NOT FROM THE FIRST, because the first two are `LDX #&FF / TXS`: the stack reset that six
+     * `JMP`s into this label make necessary and a port whose calls are calls does not need. Running
+     * them under `CallSubroutine` would throw away the return address the interpreter pushed.
+     *
+     * The sweep is over what the routine branches on and nothing else -- the two countdowns, the
+     * view, the author-names option, the Trumble population and the cabin temperature -- and the
+     * whole world is compared, because `DIALS` draws. What it exists to catch is the shape §6.138
+     * found: three player-visible behaviours that were transcribed into the executable by hand, two
+     * of which were never actually there.
+     */
+    TEST_METHOD(TheLoopTailMatchesMLOOP)
+    {
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where where(oracle);
+      const std::uint16_t mloop = static_cast<std::uint16_t>(oracle.Label("MLOOP") + 3u);
+      const std::uint16_t tt17 = oracle.Label("TT17");
+      const std::uint16_t patg = oracle.Label("PATG");
+      const std::uint16_t tribble = oracle.Label("TRIBBLE");
+
+      struct Case
+      {
+        std::uint8_t laser, count, view, authors, tribbleLow, tribbleHigh, cabin;
+      };
+
+      const Case CASES[] = {
+        {0u, 0u, 0u, 0u, 0u, 0u, 30u},      // nothing to do at all
+        {1u, 1u, 0u, 0u, 0u, 0u, 30u},      // both countdowns land exactly on zero
+        {40u, 2u, 0u, 0u, 0u, 0u, 30u},     // an even countdown steps through zero
+        {40u, 5u, 0u, 0u, 0u, 0u, 30u},     // an odd one stops on it
+        {40u, 5u, 1u, 0u, 0u, 0u, 30u},     // a docked screen: no dials, and the delay is asked for
+        {40u, 5u, 1u, 0xFFu, 0u, 0u, 30u},  // the option on, so no delay
+        {40u, 5u, 128u, 0u, 0u, 0u, 30u},   // the short-range chart
+        {0u, 0u, 0u, 0u, 200u, 1u, 30u},    // Trumbles that can breed and squeak
+        {0u, 0u, 0u, 0u, 255u, 1u, 30u},    // and a low byte about to wrap
+        {0u, 0u, 0u, 0u, 200u, 127u, 30u},  // the high byte at its clamp
+        {0u, 0u, 0u, 0u, 200u, 20u, 240u},  // a hot cabin: they burn instead of squeaking
+        {0u, 0u, 1u, 0u, 100u, 8u, 224u},   // exactly on the temperature the routine reads twice
+        {0u, 0u, 0u, 0u, 200u, 127u, 240u}, // a hot cabin and the most Trumbles the byte can hold,
+                                            // which is what makes the BURNING sound reachable at all
+      };
+
+      std::uint32_t compared = 0;
+      std::set<std::string> outcomes;
+
+      for (const Case& one : CASES)
+      {
+        for (const std::array<std::uint8_t, 4> seed :
+             {std::array<std::uint8_t, 4>{0x21u, 0x84u, 0x5Fu, 0xC0u}, std::array<std::uint8_t, 4>{0xDDu, 0x0Eu, 0xB7u, 0x39u}})
+        {
+          for (const std::uint8_t carryIn : {std::uint8_t{0}, std::uint8_t{1}})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            for (const char* seam : {"NOISE", "NOISE2", "MESS", "WSCAN", "DELAY"})
+            {
+              std::uint16_t address = 0;
+              if (oracle.TryLabel(seam, address))
+              {
+                cpu.AddTrap(address);
+              }
+            }
+
+            LoopWorld world;
+            Seed(world.world, 3u);
+            world.world.status.laserTemperature = one.laser;
+            world.world.status.laserCount = one.count;
+            world.world.status.cabinTemperature = one.cabin;
+            world.world.view = one.view;
+            world.world.commander.At(Elite::Field::Tribbles) = one.tribbleLow;
+            world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)) = one.tribbleHigh;
+
+            Mirror(world.world, cpu, where);
+            cpu.memory[patg] = one.authors;
+            cpu.memory[tribble] = one.tribbleLow;
+            cpu.memory[static_cast<std::uint16_t>(tribble + 1u)] = one.tribbleHigh;
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              cpu.memory[static_cast<std::uint16_t>(where.rand + byte)] = seed[byte];
+            }
+            cpu.c = carryIn != 0u;
+
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(mloop, 4'000'000, tt17);
+            Assert::IsTrue(run.completed, L"MLOOP reached TT17");
+
+            Elite::FlightScreen screen = world.world.Screen();
+            Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
+                                   world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+            screen.rng.SetState(seed);
+
+            const std::uint8_t frames = Elite::RunLoopTail(loop, world.world.commander, one.authors, carryIn != 0u);
+
+            const std::wstring context =
+              WidenText("MLOOP laser " + std::to_string(one.laser) + " lasct " + std::to_string(one.count) + " view " +
+                        std::to_string(one.view) + " trib " + std::to_string(one.tribbleHigh) + " cab " + std::to_string(one.cabin) +
+                        " seed " + std::to_string(seed[0]) + " carry " + std::to_string(carryIn));
+
+            CompareState(cpu, world.world, where, context);
+            Assert::AreEqual(cpu.memory[tribble], world.world.commander.At(Elite::Field::Tribbles), (context + L": TRIBBLE").c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tribble + 1u)],
+                             world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)),
+                             (context + L": TRIBBLE+1").c_str());
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(where.rand + byte)], screen.rng.State()[byte],
+                               (context + L": RAND+" + std::to_wstring(byte)).c_str());
+            }
+
+            outcomes.insert(std::to_string(frames) + "/" + std::to_string(world.world.status.laserCount) + "/" +
+                            std::to_string(world.effects.sounds.size()) + "/" +
+                            (world.effects.sustains.empty() ? std::string("-") : std::to_string(world.effects.sustains.front())));
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(13u * 2u * 2u, compared, L"the whole sweep ran");
+      std::string reached;
+      for (const std::string& one : outcomes)
+      {
+        reached += one + " ";
+      }
+      Logger::WriteMessage(("MLOOP: " + std::to_string(compared) + " cases, outcomes (frames/LASCT/sounds/sustain) " + reached).c_str());
+      Assert::IsTrue(outcomes.size() >= 6u, L"and the countdowns, the delay, the squeak AND the burn were reached");
+    }
     /*
      * 6502: THERE -- galaxy 2 at (144, 33), and the answer comes back in the CARRY.
      *

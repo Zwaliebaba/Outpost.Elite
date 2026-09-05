@@ -1,12 +1,14 @@
 #include "pch.h"
 
-#include "Spawner.h"
+#include "GameLoop.h"
 
 #include "Arith.h"
 #include "EliteTypes.h"
 #include "PlanetDraw.h"
 #include "Market.h"
+#include "Dashboard.h"
 #include "Spawn.h"
+#include "SoundEffects.h"
 
 namespace Elite
 {
@@ -26,6 +28,175 @@ namespace Elite
     }
 
   } // namespace
+
+  std::uint8_t RunLoopTail(FlightLoop& _loop, CommanderBlock& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept
+  {
+    std::uint8_t requestedFrames = 0;
+    FlightScreen& screen = _loop.screen;
+    bool carry = _carryIn;
+
+    // 6502: LDX GNTMP / BEQ EE20 / DEC GNTMP -- the laser cools by one every pass, docked or
+    // flying, because this is above the `QQ11` gate below.
+    if (screen.status.laserTemperature != 0u)
+    {
+      --screen.status.laserTemperature;
+    }
+
+    /*
+     * 6502: .EE20 LDX LASCT / BEQ NOLASCT / DEX / BEQ P%+3 / DEX / STX LASCT.
+     *
+     * TWO at a time, and the `BEQ P%+3` is why it never passes zero: one `DEX` lands on it and the
+     * branch skips the second. So an odd countdown stops at zero and an even one steps through it,
+     * and a port that subtracted two would go negative on the odd values.
+     */
+    if (screen.status.laserCount != 0u)
+    {
+      std::uint8_t count = static_cast<std::uint8_t>(screen.status.laserCount - 1u);
+      if (count != 0u)
+      {
+        --count;
+      }
+      screen.status.laserCount = count;
+    }
+
+    // 6502: .NOLASCT LDA QQ11 / BNE P%+5 / JSR DIALS -- every pass on the space view, which is what
+    // makes the speed, roll and pitch indicators move at all.
+    if (screen.view == 0u)
+    {
+      DrawDials(screen.canvas, screen.draw, screen.math, screen.geometry, screen.flight, screen.status, _commander.At(Field::Fuel),
+                screen.compass, screen.bubble);
+
+      /*
+       * AND `DIALS` COMES BACK WITH THE CARRY CLEAR, which is what the breeding roll below rotates
+       * in on this path. Measured with §6.118's instrument -- stopped at `plus13` with the flag set
+       * on entry and clear on entry, and it is clear both times -- rather than derived, because
+       * `DIALS` is four parts and ends `JMP COMPAS`. Recorded as a measurement and not a proof.
+       */
+      carry = false;
+    }
+
+    /*
+     * 6502: LDA QQ11 / BEQ plus13 / AND PATG / LSR A / BCS plus13 / LDY #2 / JSR DELAY.
+     *
+     * A frame of delay on the DOCKED screens only, and only with the author-names option OFF --
+     * `LSR A` puts bit 0 of `QQ11 AND PATG` into the carry, and `BCS` skips the delay when it is
+     * set. The option is one bit doing two unrelated jobs (§6.121's shape), and this is the second:
+     * it also gates five of the spawner's tests.
+     */
+    if (screen.view != 0u) // 6502: LDA QQ11 / BEQ plus13
+    {
+      /*
+       * 6502: AND PATG / LSR A / BCS plus13 -- and the `LSR` is BOTH the test and the carry the
+       * roll below rotates in. Bit 0 of the view ANDed with the option: set and the delay is
+       * skipped and the flag arrives set, clear and the pass waits two frames and the flag arrives
+       * clear. One instruction doing the branch and the argument, which is why the option byte has
+       * to be passed rather than a bool -- `AND PATG` is a byte operation and only bit 0 survives.
+       */
+      carry = (static_cast<std::uint8_t>(screen.view & _authorNames) & 1u) != 0u;
+      if (!carry)
+      {
+        requestedFrames = LOOP_DELAY_FRAMES; // 6502: LDY #2 / JSR DELAY
+      }
+    }
+
+    /*
+     * 6502: .plus13 LDA TRIBBLE+1 / BEQ nobabies / JSR DORND / CMP #220 / LDA TRIBBLE / ADC #0 /
+     * STA TRIBBLE / BCC nobabies / INC TRIBBLE+1 / BPL nobabies / DEC TRIBBLE+1.
+     *
+     * They breed only when there is already more than a byte of them, and the increment is a CARRY
+     * rather than an addition: `CMP #220` sets it for 36 values in 256, `ADC #0` adds that one bit
+     * to the low byte, and the high byte only moves when the low byte wraps. So the population
+     * grows by one about one pass in seven, and `BPL nobabies / DEC TRIBBLE+1` clamps the high byte
+     * at 127 by undoing the increment that would have set bit 7.
+     */
+    std::uint8_t tribbleLow = _commander.At(Field::Tribbles);
+    std::uint8_t tribbleHigh = _commander.At(static_cast<Field>(static_cast<int>(Field::Tribbles) + 1));
+
+    if (tribbleHigh != 0u)
+    {
+      const RngResult roll = screen.rng.Next(carry);
+      carry = roll.value >= TRUMBLE_BREED_ROLL; // 6502: CMP #220
+
+      const AddResult grown = AddWithCarry(tribbleLow, 0u, carry);
+      tribbleLow = grown.value;
+      carry = grown.carry;
+
+      if (carry) // 6502: BCC nobabies
+      {
+        ++tribbleHigh;
+        if ((tribbleHigh & 0x80u) != 0u) // 6502: BPL nobabies
+        {
+          --tribbleHigh;
+        }
+      }
+
+      _commander.At(Field::Tribbles) = tribbleLow;
+      _commander.At(static_cast<Field>(static_cast<int>(Field::Tribbles) + 1)) = tribbleHigh;
+    }
+
+    /*
+     * 6502: .nobabies LDA TRIBBLE+1 / BEQ NOSQUEEK / STA T / LDA CABTMP / CMP #224 / BCS P%+4 /
+     * ASL T / JSR DORND / CMP T / BCS NOSQUEEK.
+     *
+     * How often they squeak scales with how many there are -- `T` is the high byte, DOUBLED unless
+     * the cabin is hot -- and `BCS P%+4` steps over the two-byte `ASL T`, so a cabin at 224 or
+     * above halves the rate. That is the same threshold the burning uses below, and the routine
+     * reads it twice rather than remembering it.
+     */
+    if (tribbleHigh == 0u)
+    {
+      return requestedFrames;
+    }
+
+    std::uint8_t threshold = tribbleHigh;
+
+    /*
+     * 6502: LDA CABTMP / CMP #224 / BCS P%+4 / ASL T -- and BOTH of those set the carry the roll
+     * below rotates in. A hot cabin takes the branch and arrives with the compare's flag SET; a
+     * cool one runs the `ASL` and arrives with bit 7 of the Trumble count instead. Two paths, two
+     * different sources, and the port had the breeding block's flag standing on both.
+     */
+    carry = screen.status.cabinTemperature >= TRUMBLE_BURN_TEMPERATURE; // 6502: CMP #224
+    if (!carry)
+    {
+      const ShiftResult doubled = RotateLeftValue(threshold, false); // 6502: ASL T
+      threshold = doubled.value;
+      carry = doubled.carry;
+    }
+
+    const RngResult squeak = screen.rng.Next(carry);
+    carry = squeak.value >= threshold; // 6502: CMP T
+    if (carry)
+    {
+      return requestedFrames; // 6502: BCS NOSQUEEK
+    }
+
+    /*
+     * 6502: JSR DORND / ORA #64 / TAX / LDA #&80 / LDY CABTMP / CPY #224 / BCC burnthebastards /
+     * TXA / AND #15 / TAX / LDA #&F1.
+     *
+     * Two different noises from one path. A normal squeak is a frequency with bit 6 forced and a
+     * sustain of &80; a cabin at 224 or above takes the frequency down to four bits and the sustain
+     * to &F1, which is the sound of them dying. The `TAX` / `TXA` round trip is there because A is
+     * needed for the sustain in between.
+     */
+    // 6502: JSR DORND -- and `CMP T` above left the carry CLEAR, because a set one would have
+    // taken the `BCS` and returned. So this roll always rotates in a zero.
+    const RngResult voice = screen.rng.Next(carry);
+    std::uint8_t frequency = static_cast<std::uint8_t>(voice.value | 0x40u);
+    std::uint8_t sustain = 0x80u;
+
+    if (screen.status.cabinTemperature >= TRUMBLE_BURN_TEMPERATURE)
+    {
+      frequency = static_cast<std::uint8_t>(frequency & 0x0Fu);
+      sustain = 0xF1u;
+    }
+
+    // 6502: LDY #sfxtrib / JSR NOISE2, and then `.NOSQUEEK JSR TT17` -- which is the caller's, the
+    // way the launch below part 4 is.
+    static_cast<void>(_loop.effects.PlaySoundPitched(SOUND_TRUMBLES, sustain, frequency));
+    return requestedFrames;
+  }
 
   bool AtConstrictorSystem(const CommanderBlock& _commander) noexcept
   {
