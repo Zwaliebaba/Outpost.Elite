@@ -261,7 +261,7 @@ namespace Outpost
     // 6502: stopat. Phase 5.
   }
 
-  void GameShell::ShowCircle()
+  void GameShell::ShowFrame()
   {
     /*
      * One circle of a launch or hyperspace tunnel has been drawn; show it and let a frame pass.

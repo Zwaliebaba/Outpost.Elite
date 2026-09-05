@@ -263,8 +263,15 @@ namespace Elite
   public:
     virtual ~TunnelEffects() = default;
 
-    /// One circle has been drawn. Show it, and let a frame pass before the next one goes over it.
-    virtual void ShowCircle() = 0;
+    /*
+     * One frame's worth of drawing is done: show it, and let one vertical sync pass.
+     *
+     * Named for the FRAME and not for the circle, because two routines want it. `HFL2` calls it
+     * after every circle, which is the pacing §6.109 measured; and `HYPNOISE` calls it once for
+     * its `LDY #1 / JSR DELAY`, which is the same thing the same length -- `DELAY` counts vertical
+     * syncs and this is one.
+     */
+    virtual void ShowFrame() = 0;
   };
 
   /*

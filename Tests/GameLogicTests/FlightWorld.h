@@ -158,6 +158,44 @@ namespace GameLogicTests
    * message counters, the laser, the stardust and the dashboard -- and building it twice per test
    * method would be the same eighteen arguments in a different disguise.
    */
+  /*
+   * 6502: the three seams `NOISE`, `NOISE2` and `NOISEOFF` sit behind, recorded rather than played.
+   *
+   * Separate from `RecordingView`, which answers `LOOK1`'s and `WARP`'s single `PlaySound`: this is
+   * the whole sound interface, and `HYPNOISE` is the first routine in the port that needs the
+   * pitched entry as well as the plain one.
+   */
+  struct RecordingDashboard final : Elite::DashboardEffects
+  {
+    struct Pitched
+    {
+      std::uint8_t effect;
+      std::uint8_t sustain;
+      std::uint8_t frequency;
+    };
+
+    std::vector<std::uint8_t> sounds;
+    std::vector<std::uint8_t> carries;
+    std::vector<Pitched> pitched;
+    std::vector<std::uint8_t> stopped;
+
+    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
+    {
+      sounds.push_back(_effect);
+      carries.push_back(_carryIn ? 1u : 0u);
+      return true;
+    }
+    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
+    {
+      pitched.push_back({_effect, _sustain, _frequency});
+      return true;
+    }
+    void StopSound(std::uint8_t _effect) override
+    {
+      stopped.push_back(_effect);
+    }
+  };
+
   struct World
   {
     RecordingView effects; ///< first, because the character printer's bell records into its list
@@ -252,6 +290,7 @@ namespace GameLogicTests
     std::uint8_t trumbles = 0;
 
     RecordingSight sight;
+    RecordingDashboard dashboard;
 
     std::uint8_t view = 0;
     std::uint8_t spaceView = 0;
