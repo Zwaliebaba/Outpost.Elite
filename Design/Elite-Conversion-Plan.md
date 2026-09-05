@@ -50,10 +50,10 @@ ideas:
 The work is sized in [§6](#6-the-build-order); the coverage ledger is
 [Source-Inventory.md](Source-Inventory.md).
 
-**Where it stands, 2026-09-05.** Phases 0, 1, 2, 3 and 5 are complete and phase 4 is complete but
-for slice 4d (missions and Trumbles) — twenty-five of the twenty-six slices, with 0b-b cancelled and
-0e open by owner acceptance rather than unbuilt. The executable launches, flies, fights, docks and
-dies. [§1.2](#12-what-the-solution-contains-today) is the inventory of what that means in files, and
+**Where it stands, 2026-09-05.** Phases 0 to 5 are complete — all twenty-six slices, with 0b-b
+cancelled and 0e open by owner acceptance rather than unbuilt. Slice 4d closed phase 4 and with it
+the last unbuilt slice before phase 6. The executable launches, flies, fights, docks, takes a
+mission briefing and dies. [§1.2](#12-what-the-solution-contains-today) is the inventory of what that means in files, and
 it also lists what is left.
 
 ---
@@ -128,7 +128,8 @@ is preserved in the history and was true then.
   screen — and so is almost all of phases 4 and 5: the ship AI and the autopilot, the explosion
   cloud, the main game loop with its spawning rules, hyperspace and witchspace, the escape pod,
   the pause screen's thirteen toggles, and the sound effects and music players. Each is compared
-  against the shipped routine. **What is not here is slice 4d** — the missions and the Trumbles.
+  against the shipped routine, **and slice 4d closed the phase**: the three missions, their
+  briefings, and the Trumbles that wander the dashboard.
 - `Outpost/` — the executable: a raw Win32 window, a D3D12 flip-model presenter for the indexed
   canvas, the key map, the commander store, `FlightSession` (the flight world and its eight
   effects interfaces) and `GameShell` (the docked world's eight), and the composition root in
@@ -145,11 +146,11 @@ is preserved in the history and was true then.
 - `Design/Reference/` holds the generated oracle inputs and is gitignored; `Upstream/` is the
   annotated source library as a submodule, pinned.
 
-**What is left, in one place.** Slice 4d (missions and Trumbles) is the only unbuilt slice before
-phase 6. Beside it stand three pieces of recorded debt: the fifteen mutation survivors in the ship
-AI's sweep (§6.125, and §6.132 has the method that closes them), the `VideoState` and `SPRITE.bin`
-work that ADR-005 §1's closed decision turned out to need (§6.133), and R13's unreproducible
-tallies. None blocks 4d.
+**What is left, in one place.** Nothing before phase 6 is unbuilt. What stands beside it is two
+pieces of recorded debt: the thirteen mutation survivors in the ship AI's sweep — measured rather
+than named (§6.125, §6.147), and §6.132 has the method that closes them — and R13's unreproducible
+tallies, which are gone rather than open. ADR-005 §1's `VideoState` and `SPRITE.bin` work (§6.133)
+is done.
 
 ### 1.3 What the sibling repositories give us
 
@@ -470,6 +471,139 @@ coverage ledger and an unreliable dependency graph, because its rows were writte
 routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
+
+### 6.151 The seven missions, and three pieces of bit arithmetic that an `ORA` would get wrong
+
+Slice 4d-c, and with it phase 4. Six of the seven missions are eleven instructions of state each:
+bits in `TP`, sometimes money, and a tail call into `BRP`, which prints an extended token and jumps
+to the docking bay. `BRIEF` is the seventh and it draws.
+
+**THE COMPARISON IS THE WHOLE COMMANDER BLOCK AND NOT THE FLAG.** Three of the six move something
+besides `TP`: `DEBRIEF` pays 5,000 credits through `MCASH`, `DEBRIEF2` sets `ENGY` to the navy's
+energy unit and adds 256 kill points, and `TBRIEF` spends 50,000 tenths and increments `TRIBBLE`.
+A sweep that watched `TP` alone would agree with a port that paid nothing, so all 108 bytes are
+compared from sixteen starting values of `TP`.
+
+**THREE PLACES WHERE THE SHIFTS AND MASKS ARE NOT AN `ORA` IN DISGUISE.** `BRIEF`'s
+`LSR TP / SEC / ROL TP` really is `ORA #1` written for someone who preferred shifts, and it is the
+only one of the three that is. `DEBRIEF`'s `LSR TP / ASL TP` clears bit 0 and LEAVES BIT 1, which is
+what takes mission 1's pair from `%11` to `%10` — finished and paid, and never offered again;
+clearing both would read as never started. And `BRIEF3`'s `AND #%11110000 / ORA #%00001010` clears
+mission 1 entirely on the way past: collecting the Thargoid plans forgets that the Constrictor ever
+happened. A port that only ORed would agree from every state whose low nibble was already zero,
+which is why the sweep walks sixteen of them.
+
+**AN ORIGINAL BUG, PORTED (ADR-001 §6).** `TBRIEF` calls `LCASH` to take 5,000 credits and does not
+test the carry: `INC TRIBBLE` follows unconditionally, and `LCASH` puts the money back when it
+cannot afford the spend. `DOENTRY` mostly prevents the state by refusing to offer the mission below
+a cash threshold — but that test reads ONE BYTE of a four-byte value (§2e's finding), so the band
+recurs every 6,553.6 credits, and a commander inside a poor band is offered a free Trumble. The
+sweep runs both halves and asserts sixteen paid for and sixteen not.
+
+**`BRIEF` HAS TWO LOOPS AND ONE COUNTER, AND THE COUNTER IS DEAD IN THE SECOND.** The first turns
+the Constrictor on the spot for sixty-four frames; the second moves it away — `INC INWK+6` twice a
+frame, tested after each, so it recedes two units a frame and can exit on either half — and up one
+row a frame to a ceiling. `DEC MCNT` is in both loops and only the first branches on it, so `MCNT`
+comes out of the routine at whatever the second left. That is compared as state, because it is the
+only place a port that stopped decrementing would show.
+
+Compared on the whole screen over roughly two hundred frames of `LL9` and `MVEIT`, plus `INWK`, the
+ship line heap, the bubble, `MCNT` and the commander block. Wired into `DOENTRY`'s dispatch, which
+had been taking the tail the seven exits share and skipping the six briefings.
+
+**TWO FIXTURE FINDINGS, BOTH OF WHICH COST AN HOUR.** `NWSHP` allocates the new ship's line heap
+from `SLSP`, which the shared `Mirror` does not send — so the Constrictor's heap pointer came out
+sixty-four bytes apart and nothing else disagreed. And the scripted `RDKEY` is now table-driven with
+a counter that cannot wrap: the counting stub it replaced could not express "a key is already held",
+which is the state `PAUSE`'s first loop exists for, and its counter WRAPPED, so a routine that
+scanned 257 times left the same byte behind as one that scanned once. A test comparing scan counts
+was therefore comparing two numbers that happened to agree, and that is why three of §6.150's
+mutants survived their first run.
+
+### 6.150 A briefing is not a screen, and nine control codes were arithmetic nobody could reach
+
+Slice 4d-b. Elite has no mission-briefing screen. Token 10 is a paragraph like any other, printed by
+the same `DETOK` that prints a system description, and what makes it a briefing is that four of the
+control codes inside it stop and wait: `{25}` prints "INCOMING MESSAGE" and pauses two seconds,
+`{22}` spins the Constrictor until a key is pressed, `{24}` waits without a ship, and `{27}` and
+`{28}` name a captain and a planet from the galaxy number.
+
+**THE DISPATCH MOVED OUT OF THE EXECUTABLE, AND TWO OF ITS NINE CASES WERE WRONG.** It lived in
+`Outpost/Shell.cpp` because every one of those codes needed something `GameLogic` did not have: a
+canvas to clear, a keyboard to wait on, a galaxy number. All three arrived slices ago — `TT66` in
+3d, `RDKEY`'s seam in 3b, the commander block in 2d — and what was left behind was nine cases of
+arithmetic that no test could reach. **`MT9` was not moving the cursor**: `LDA #1 / JSR DOXC /
+JMP TT66` is one load serving as a column AND a view, because `STA` does not touch the accumulator,
+so a briefing page opened at whatever column the previous one had left. **`MT23` and `MT29` were
+moving it when the game does not**: `DOYC` is `STA YC / RTS` and neither entry point touches `XC`.
+
+**CODE 22 FALLS INTO MT23.** `PAUSE` ends `JSR LL9` and the next instruction is MT23's `LDA #10`, so
+a briefing's `{22}` moves to row 10 and forces lower case exactly as a `{23}` does. The port had 22
+under `default`, which set neither — everything after the first page of the Constrictor briefing
+would have printed in the wrong case.
+
+**TWO FINDINGS IN THE ORIGINAL.** `PAS1` puts the briefing ship at `z_hi` = **2** and the upstream
+comment says 1: the Master and Apple versions load 1 and the comment travelled, so the Constrictor
+sits twice as far away and half the size as a port trusting the comment would draw it.
+`tools/c64_source.py` is what stops that (AGENTS §6) and it is the second time this corpus has been
+saved by it. And **MT27 and MT28 overlap and run off the end of the names**: 217 + `GCNT` and
+220 + `GCNT`, so galaxy 3's captain is galaxy 0's planet, and above galaxy 2 both walk into the
+Thargoid-plans briefing. The mission is only offered in the first galaxies, so it is the game's
+shape rather than a defect — the sweep compares the token NUMBER for all eight galaxies and the
+printed text for the five where the token is still prose.
+
+**AND ONE FINDING ABOUT THE FIXTURE THAT IS REALLY ABOUT THE GAME.** `LL9` writes a ship's lines
+through `(XX19),Y`, so a ship whose heap pointer is zero draws itself over ZERO PAGE — and `INWK` is
+at &0009, so the ship overwrites its own position while it is being drawn. Sixteen bytes of
+disagreement, all of them the fixture's fault for leaving a pointer `NWSHP` would have filled in.
+`GCNT` is the other: it is `TP+15`, INSIDE the commander block, so a fixture that pokes the label
+before mirroring the block has it overwritten a line later, and every galaxy was silently compared
+against galaxy zero's token until the two character streams were dumped side by side.
+
+### 6.149 The Trumbles' coordinates live in the video chip and nowhere else
+
+Slice 4d-a. `MVTRIBS` moves one Trumble sprite per frame, chosen by the main loop counter, and the
+five other files that already knew about Trumbles knew about the NUMBER of them: the breeding at
+`plus13`, the squeak at `NOSQUEEK`, the cooking at `nokilltr`, the hold's inventory line and
+`SOLAR`'s repopulation. This is the half that has a position.
+
+**THE REGISTERS ARE THE ONLY COPY.** `MVTRIBS` reads `VIC+&04+Y`, adds a velocity to it and writes
+it straight back; there is no shadow of it in RAM. So a port that kept the sprite coordinates
+outside `GameLogic` would have nothing to add a velocity to — which is why this routine takes a
+`VideoState` where every other register write in the port goes through a write-only seam. `SETL1`
+still goes through one, because it is memory banking rather than a register and nothing can read it.
+
+**THE TWO `DORND` CALLS HAVE DIFFERENT CARRIES.** The first takes the `ASL A` two instructions above
+it, which cannot carry out of a value below eight; the second takes `CMP #235`, which set the carry
+on the way past. The generator reads C (§6.118), so a port that passed the same flag to both is
+wrong on the y axis about half the time and leaves the whole sequence one state adrift — and nothing
+on screen would say so. `RAND` is what says so.
+
+**`SPMASK` IS NOT PORTED AND THE ABSENCE IS THE POINT.** Its twelve bytes are a pair of masks per
+sprite for clearing and setting that sprite's ninth x bit in the register all eight share, and they
+exist because the ninth bit is shared. `VideoState` gives each sprite a whole sixteen-bit x
+(ADR-005 §1), so the read-modify-write became one store, and the two forms are equivalent because
+the masks are correct: clearing a bit and setting it back cannot touch another sprite's. The table
+was extracted, used, and then removed when main's sprite compositor landed mid-slice.
+
+**`TRIBCT` ABOVE SIX WALKS OFF THE END OF THAT TABLE.** Twelve bytes are followed immediately by
+`MVTRIBS`'s own first instruction, so a count of seven would AND the shared register with an opcode
+and then write "sprite 8's" x coordinate, which is that register. Unreachable — `TRIBTA` saturates
+at six — and the sweep stops at six rather than comparing two kinds of nonsense.
+
+**NOTHING IN THE LIBRARY INITIALISES `TRIBXH`, `TRIBVX` OR `TRIBVXH`.** `MVTRIBS` is their only
+writer and `RES2` does not clear them, so the first Trumble to appear starts with an arbitrary
+velocity and an arbitrary ninth x bit, from whatever the loader left at &0511. That is not a
+curiosity: restricted to the 0 and 1 that `MVTRIBS` writes back, the high byte of the x calculation
+can only come out as 0, 1, 2 or &FF, and &FF has bit 6 set as well as bit 7 — so a mutation moving
+`BPL`'s test to bit 6 answered identically everywhere a tidy sweep looked. The sweep over all 256
+starting values is the first pass after a Trumble appears, and it catches it.
+
+**AND THE SPRITE REGISTERS ARE THE SHIP BLUEPRINT TABLE** in the oracle's flat image: `VIC` is
+&D000 and so is `XX21` (§6.108). Moving a Trumble there overwrites the blueprint pointers for ship
+types 3 to 9 on one side of a comparison and nothing on the other, so `FlightWorld` mirrors those
+registers only for a fixture that says it means to move a sprite — which is also a promise that the
+frame will stop before any ship is drawn.
 
 ### 6.147 Three pieces of debt, and the tool that found its own first defect in a headline
 
@@ -5976,11 +6110,13 @@ Three things that is worth noting for the slices ahead:
 | **3c Planet, sun, stardust** ✅ **Built 2026-09-04, accepted 2026-09-05** | `PLANET`, `PL9` 1–3, `PLS1`–`PLS6`, `PLS22`, `WPLS`/`WPLS2`, `WP1`, `EDGES`, `CHKON`, `PL21`, `SUN` 1–4 with its heap, `CIRCLE`, `CIRCLE2`, `BLINE`, `SOS1`, ✅ `STARS`, ✅ `STARS1`, ✅ `STARS2`, ✅ `STARS6`, `NWSTARS`, ✅ `FLIP`, `WPSHPS`, `FLFLLS`, `SOLAR`, `NWQ` — **and the twelve prerequisites §6.40 found the row missing**: `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41` and `DV42` from row 94, `HLOIN2` from row 116, `ZINF` from row 44, and `BLINE`/`CIRCLE`/`CIRCLE2` from row 117. The seven in row 94 were deferred out of phase 1 because they read state that did not exist; `INWK` and `ALP1` arrived with 3a and the stardust arrays are this slice's own, so the reason has expired. **Seven of the twelve are built**: `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41` and `DV42` went in with the stardust, and `PIX1` — which §6.41 found marked ported and absent — with them. `HLOIN2`, `ZINF`, `BLINE`, `CIRCLE` and `CIRCLE2` remain. | Goldens of the launch view at Lave (planet + sun + stardust) at several iterations; oracle for `PLS`/`CHKON` arithmetic.<br><br>**The stardust unit is complete, 2026-09-04.** Six parallel arrays, seven wrappers, `PIX1`, `FLIP`, all three movers and the dispatcher: 280 frames per view compared on the whole canvas, all six arrays, the generator's state and — for the side views — seven flight bytes and `newzp`. Thirty of thirty real mutations caught, two equivalent and measured (§6.43). Three findings: the three views are three routines and not one with a sign (§6.44), the `DEX` in `STARS`'s six-instruction dispatch means `STARS2` compares against the LEFT view rather than against 2, and `MLU1`/`MLU2`/`LL38` needed their exit carries returned (§6.42) — the fifth and sixth time an uncleared flag has been the defect. **Slice 3c is complete.** Its acceptance criterion — goldens of the launch view at Lave — needs a person at a Windows machine, as 2e's and 3b's do.<br><br>**The planet and sun line heaps followed the same day**: `LSO`/`LSX`, `LSX2`/`LSY2` and `LSP`, with `EDGES`, `HLOIN2`, `FLFLLS`, `WP1`, `WPLS`, `WPLS2`, `PL2`, `CHKON` and `PL21`. Both sizes come from the layout rather than from an estimate, and the two ball arrays are one block because `BLINE` indexes across their join. 27 of 27 mutations caught, after three survivors turned out to be gaps rather than equivalents (§6.48). **The two defects it found were both in already-shipped slices**: `SWAP` is one byte with two writers and the port had it as `LL145`'s return value, so `WPLS2` could not ask `LOIN` (§6.46); and `LOIN`'s downward setup ends `SBC #247`, whose borrow its accumulator reads twelve instructions later — dropped since 1d-a, one pixel of one line in nine, and invisible to a 3,528-case sweep chosen to reach every branch (§6.47). A four-thousand-line sample now runs beside that grid, and the mutation test confirms the grid alone still misses it. <br><br>**SIGNED OFF 2026-09-05 by the owner**: the launch view at Lave -- planet, sun and stardust -- is right on screen. **A look rather than a golden**, as 3b's is, with the same consequence: no stored capture, so a regression in the planet's crater or the sun's haze would reach `main` unnoticed by CI. The oracle half of the criterion (`PLS`/`CHKON` arithmetic) was already met and is unaffected. |
 | **3d Flight loop and dashboard** — **scoped 2026-09-04 into 3d-a … 3d-e (§6.59); the row is a slice and a half** | Main flight loop 1–16 (`main_flight_loop_part_N_of_16`, NOT `mainloop_part_N`), `DIALS` 1–4, `DILX`/`DIL2`, `COMPAS`/`SP1`/`SP2`/`SPS*`, `SCAN` (sprite blips as canvas draws), `MSBAR`, `ECBLB`/`ECBLB2`/`SPBLB` (in `spblb-dobulb.asm`), `PZW`, `MESS`/`me1`/`mes9`, `LASLI`, `LAUN`/`LL164` hyperspace tunnel, `DEATH` (the "GAME OVER" fly-by), `WARP` (J), `CTRL`, `DOKEY` flight half, `SPIN`, `cargo` canisters, docking check (`ISDK` path in loop part 10–11). **Plus the twelve prerequisites §6.59 found the row missing**: `ABORT`/`ABORT2`, `DOT`, `KS1`, `LOOK1`, `CTWOS`, `scacol`, `cntr` (deferred out of phase 1 with row 94's seven), `U%`, `BOX`, `dec27` and `tnpr1`. `SETL1` is NOT one of them: it is self-modifying code inside a raster interrupt handler and belongs behind a seam like the sound, not in `GameLogic`. | Launch from Lave, fly, dock manually, hyperspace to Diso, dock. Goldens of the dashboard; replay hashes for the whole trip. |
 
-### Phase 4 — Combat and a living universe ✅ **but for 4d** (2026-09-05)
+### Phase 4 — Combat and a living universe ✅ (2026-09-05)
 
-4a, 4b, 4c and 4e are built and compared against the shipped code. **4d — missions and Trumbles —
-is the one slice left**, and it is the only unbuilt slice anywhere before phase 6. The debt 4a
-carries is fifteen mutation survivors in the ship AI's sweep, named individually in its row.
+All five slices are built and compared against the shipped code. **4d closed the phase**, and with
+it the last unbuilt slice anywhere before phase 6: twenty-six of the twenty-six are built, with 0b-b
+cancelled and 0e open by owner acceptance rather than by anything unwritten. The debt 4a carries is
+thirteen mutation survivors in the ship AI's sweep — measured rather than named, by
+`python tools/mutate.py --unit tactics` (§6.147).
 
 
 | Slice | Scope | Accept |
@@ -5988,7 +6124,7 @@ carries is fifteen mutation survivors in the ship AI's sweep, named individually
 | **4a Tactics** ✅ — **scoped 2026-09-05 into 4a-a … 4a-d (§6.121), and 4a-d turned out to be part of 4a-c: `DOCKIT` and `TACTICS` are one graph (§6.122). All built** | `TACTICS` 1–7, `DOCKIT`, ✅ `ANGRY`, `FR1`, ✅ `FRS1`, `FRMIS`, `SFRMIS`, ✅ `SFS1`/✅ `SFS2` spawning from ships, `HITCH`, `OOPS`, `EXNO*`, `ECMOF`, ✅ `SESCP`, `bomboff` / energy bomb. **Plus the six prerequisites the row never named** (§6.121): ✅ `TAS1`, ✅ `VCSUB`/✅ `VCSU1`, ✅ `TAS3`/✅ `TAS4`, ✅ `TAS6` and ✅ `DCS1` — the vectors both `TACTICS` and `DOCKIT` are written on, none of them buildable before slice 3a put `MVT3` and the ship blocks in place. `OOPS`, `EXNO*`, `ECMOF` and `bomboff` were built with the flight loop in 3d-d-iii-b and are ✅ already; `HITCH` and `FRMIS` likewise. | Oracle for `TACTICS` decisions on sampled states (they consume `DORND`, so seed-locked); a replay: launch, get attacked, win.<br><br>**4a-a is built, 2026-09-05** — the six vectors in a new `Tactics.h/.cpp`, compared against the shipped routines on every byte they write over sweeps that cross each sign test. **17 mutations, 17 caught**, and two of them are the `JSR P%+3` reading: running the body once and running it three times are both caught, so "twice" is measured rather than believed.<br><br>**4a-b is built, 2026-09-05, 28 mutations and 28 caught** — `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`, compared on the WHOLE bubble (slots, all ten blocks, the type counts, the junk count, `SLSP` and the line heap) rather than on the ship they build. **Three seams in `FlightSession` are answered**: `SpawnAhead`, `SpawnChild` and `Anger` had been refusing since 3d-d-v, and a fired missile now leaves the rail. Four carries found (§6.121), one of which the port had wrong and only the generator's state could show. The first run caught 24 of 28 and all three survivors were the SWEEP -- one generator seed, a ramp of test data with no negative numbers, and a flag bit the fixture had already set (§6.124). |
 | **4b Explosions and death** ✅ ∥ | ✅ `DOEXP`, ✅ `EXLOOK`, ✅ `PTCLS2`, ✅ `SOS1`, ✅ `DEATH2`, ✅ the escape pod, ✅ `BAD`/✅ `FAROF`/✅ `FAROF2`, ✅ `SHD`/✅ `DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle.<br><br>**Scoped 2026-09-05 into 4b-a and 4b-b (§6.141).** Six of the eleven labels were already built in phases 2 and 3. What is left is `DOEXP` (192 instructions), `PTCLS2` (119), `ESCAPE` (42) and `DEATH2` (6). The forward pass is clean: every external call target is built and the rest are entry points inside the two files.<br><br>**§6.141 also reported that `EXLOOK` "is not in this game at all", and that was wrong (§6.144).** It is INCLUDEd from the master tree at `library/master/main/variable/exlook.asm`, `PTCLS2` reads it, and it is in `Labels.txt` at 31143. The dependency pass had searched `library/c64/` and concluded from its silence.<br><br>**Both sub-slices built 2026-09-05.** The accept is met and then some: not a golden of an explosion sequence but the WHOLE CANVAS over 126 explosion frames and 420 clouds, plus the heap, `INWK`, the generator, ten workspace bytes and the seven registers the burst seam writes. `SHD`/`DENGY` were compared with the flight loop in 3d. |
 | **4c Main game loop** ✅ | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds.<br><br>**Scoped 2026-09-05 into 4c-a … 4c-d (§6.134), and the dependency pass came back EMPTY**: of 111 distinct call targets across its fourteen routines, 46 are already ported, 16 belong to platforms the C64 build never assembles, and the rest are entry points inside 4c's own files. The only unported routine it calls is `GTHG`, which is in its own scope, and every state byte the spawner branches on is modelled. Unlike 4a (§6.121) this row named its routines accurately. 414 instructions of new code, more than `TACTICS`. |
-| **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps. |
+| **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps.<br><br>**Scoped 2026-09-05 into 4d-a, 4d-b and 4d-c, and all three are built.** The dependency pass came back with one surprise and it was in the other direction: `MVTRIBS` needed nothing unbuilt, and the BRIEFINGS needed nine control codes that were sitting in `Outpost/Shell.cpp` as arithmetic no test could reach — two of them wrong.<br><br>**4d-a is built (§6.149)**: `MVTRIBS`, `TRIBDIR`, `TRIBDIRH` and the sprite bank in a new `Trumbles.h/.cpp`, compared on the whole bank over 1,792 counter/count pairs, 1,536 x positions, 768 y positions, 3,072 sign cases and 1,536 direction rolls. The two `DORND` calls have different carries; `SPMASK` is not ported because `VideoState` unshares the ninth bit; nothing in the library initialises `TRIBXH`. 11 mutations, 10 caught and one a proved equivalent.<br><br>**4d-b is built (§6.150)**: `PAUSE`, `PAS1`, `PAUSE2`, `BRIS`, `MT9`, `MT27`, `MT28` and the dispatch, in `Missions.h/.cpp`. `MT9` was not moving the cursor, `MT23`/`MT29` were moving it when the game does not, and code 22 falls into MT23 so a briefing printed in the wrong case after its first page. `PAS1` puts the ship at z_hi = 2 where the upstream comment says 1. 12 mutations, 12 caught after three first-run survivors were closed.<br><br>**4d-c is built (§6.151)**: the seven missions, compared on the whole commander block from sixteen values of `TP`, and `BRIEF` on the whole screen over ~200 frames. `BRIEF3`'s `AND` forgets mission 1; `DEBRIEF`'s shift pair leaves bit 1; `TBRIEF` gives a Trumble to a commander who cannot pay for it (ADR-001 §6). Wired into `DOENTRY`'s dispatch. 26 mutations, 24 caught and two proved equivalents. |
 | **4e Pause screen** ✅ — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows.<br><br>**Built 2026-09-05** (§6.139). `TGINT` extracted and byte-checked; `DKS3` swept over all 256 keys at all thirteen positions (3,328 cases, exactly thirteen matches); the two loops over both answers to `PATG`; `FREEZE` over 1,024 cases reading the outcome from the oracle's own X, because `MUTOKCH` clobbers it. `april16` exposed as its own music entry. `DISK` changed from a bool to the byte it is. Wired into the outer loop as a state rather than a loop, which is what `DOKEY`'s fall into `DK4` has needed since slice 3d. |
 
 Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: nothing above can be compared before the thing below it exists.
@@ -6032,13 +6168,13 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **all but 4d**: 4a, 4b, 4c and 4e are built and wired. 4c-c turned out to have been done in phase 3 (§6.137). **4d (missions and Trumbles) remains.** The galactic hyperdrive is **reachable as of 2026-09-05** (§6.147): this row used to say Ctrl was a modifier `Window` and `KeyMap` could not report, and `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 like any other key. What stays open beside 4d is 4a-c's mutation survivors in the ship AI's sweep, now RUNNABLE and MEASURED — `python tools/mutate.py --unit tactics` gives 16 mutants, 3 caught, 13 survived, so the debt is thirteen and not the fifteen §6.125 named (§6.147) — with §6.132's method to close them |
+| 4 | 5 | 8–12 | **all five built and wired.** 4c-c turned out to have been done in phase 3 (§6.137), and **4d closed the phase on 2026-09-05** in three sub-slices: the Trumble sprites (§6.149), the control codes a briefing is made of (§6.150) and the seven missions themselves (§6.151). The galactic hyperdrive is **reachable as of 2026-09-05** (§6.147): this row used to say Ctrl was a modifier `Window` and `KeyMap` could not report, and `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 like any other key. What stays open is 4a-c's mutation survivors in the ship AI's sweep, RUNNABLE and MEASURED — `python tools/mutate.py --unit tactics` gives 16 mutants, 3 caught, 13 survived, so the debt is thirteen and not the fifteen §6.125 named (§6.147) — with §6.132's method to close them |
 | 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
-| **Total** | **26** | **40–60** | before modernisation. **The count was 24 until 2026-09-05** and was simply stale: 4e was added by §6.120 and phase 0's 0b had been counted as one slice in one place and two in another. Twenty-five of the twenty-six are built; the twenty-sixth is 4d. 0b-b was cancelled and 0e is open by owner acceptance rather than unbuilt |
+| **Total** | **26** | **40–60** | before modernisation. **The count was 24 until 2026-09-05** and was simply stale: 4e was added by §6.120 and phase 0's 0b had been counted as one slice in one place and two in another. ALL TWENTY-SIX ARE BUILT as of 2026-09-05, 4d last. 0b-b was cancelled and 0e is open by owner acceptance rather than unbuilt |
 
 Phases 0 to 3 took four days rather than the twenty-eight to forty-two sittings estimated, which
 says more about what a sitting turned out to be than about the estimate. Phases 4 and 5 then landed
-inside the fourth day, on two tracks in parallel, leaving one slice of twenty-four unbuilt.
+inside the fourth day, on two tracks in parallel, and 4d closed the last of them the same day.
 
 **The estimate was wrong in a way worth naming, because it will be wrong the same way again.** It
 sized the work by how much 6502 there was to port, and that turned out to be the cheap part: a
@@ -6098,6 +6234,9 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Slice 4d-c: the seven missions, and phase 4 closes** (§6.151). Six of them are eleven instructions of state each, so the comparison is the WHOLE commander block from sixteen values of `TP` rather than the flag: `DEBRIEF` pays 5,000 credits, `DEBRIEF2` sets `ENGY` and adds 256 kills to the tally's high byte. **Three pieces of bit arithmetic that an `ORA` would get wrong**: `BRIEF3`'s `AND` forgets mission 1 on the way to setting mission 2, `DEBRIEF`'s `LSR`/`ASL` leaves bit 1 standing so the pair reads as finished and paid, and `TBRIEF` sets bit 4 before it asks. **An original bug ported** (ADR-001 §6): `TBRIEF` never tests `LCASH`'s carry, so a commander who cannot afford a Trumble gets one. `BRIEF` compared on the whole screen over ~200 frames, with `MCNT` as state because the counter is dead in the second loop. Wired into `DOENTRY`'s dispatch. |
+| 2026-09-05 | **Slice 4d-b: a briefing is not a screen** (§6.150). Token 10 is a paragraph; what makes it a briefing is that four control codes inside it stop and wait. **The dispatch for nine of them lived in `Outpost/Shell.cpp` as arithmetic no test could reach, and two cases were wrong**: `MT9` was not moving the cursor (one `LDA #1` is a column AND a view) and `MT23`/`MT29` were moving it when `DOYC` is `STA YC / RTS`. **Code 22 falls into MT23**, so a briefing printed in the wrong case after its first page. `PAS1` puts the ship at z_hi = 2 where the upstream comment says 1 -- the Master's value, travelled. MT27 and MT28 overlap and run off the end of the names. |
+| 2026-09-05 | **Slice 4d-a: the Trumbles' coordinates live in the video chip and nowhere else** (§6.149). `MVTRIBS` reads a sprite register, adds a velocity and writes it back, so the registers are its INPUT -- which is why it takes a `VideoState` where every other register write goes through a write-only seam. **The two `DORND` calls have different carries** and only `RAND` can say so. **`SPMASK` is not ported**: `VideoState` unshares the ninth x bit, so the read-modify-write became a store. **Nothing initialises `TRIBXH`**, so the first Trumble starts with an arbitrary velocity -- which is also what tells `BPL` from a test of bit 6. The `MoveTrumbles` seam is deleted rather than answered, §6.73's pattern for the ninth time. |
 | 2026-09-05 | **Three pieces of debt cleared, and two of them were smaller than recorded** (§6.147). **The galactic hyperdrive is reachable**: `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 and not the modifier three comments said the seam could not carry -- one row in `BINDINGS` and two `false` literals. The test runs the shipped `CTRL` over all 65 entries and asserts exactly one answers. **Risk R13's tooling is built**: `tools/mutants.json` holds the mutants per unit and `tools/mutate.py` runs them against a proven-green baseline, with a timeout counted as a catch, a non-unique `find` refused, and a worktree with no symlinks in it; `--check` is a repository check. It does NOT recover the published tallies, so R13 stays open on that half. **`tools/check_counts.py` is the check §6.145 asked for**: a live number carries a `<!--count:name-->` marker and is compared against the tree, while the journal's history is left alone -- and its first run found that `MasterFile/` holds twelve masters and 5,577 lines, not the "13 master files, 5,615 lines" that opens `Design/README.md` and titles §1.1. Thirteen is right for the licence exposure and wrong for the source; both are marked now. |
 | 2026-09-05 | **`main` merged in, and the dangerous half merged cleanly** (§6.146). Two conflicts, both comments. What applied without complaint was the other track's `CoolTheGuns` and `DrawDials` in `Main.cpp` -- correct against the 6502, and the same fourteen instructions slice 4c-d had already put inside `RunLoopTail`, which `Advance` calls three statements later on the same `FlightScreen`. The merged file would have cooled `GNTMP` twice a frame, stepped `LASCT` by up to four, and drawn the dials twice, with nothing going red. The duplicate in `Advance` is removed; the call in the DOCKED pass is kept, because that one is not a duplicate -- the countdowns are above part 5's `QQ11` gate and the docked loop runs no part of `RunLoopTail`. `CoolTheGuns` moved into `GameLogic` so there is one copy reachable from both loops. Still open and now written down: a docked pass runs neither the author-names delay nor the Trumble breeding, and the original does. |
 | 2026-09-05 | **The documentation pass** (§6.145). Every `.md` in the tree read against the tree. The ADRs held — none had been overtaken by the code — and every number and status in them had not. **The slice count was wrong in the headline**: §7 totalled 24 while its own rows added to 26. **ADR-003 contradicted itself**, telling a reader to point an `Oracle.json` at the binaries in two sections while its §1 records that the file was dropped in slice 0b-a. **ADR-002 and ADR-003 were still "Proposed"** after twenty-five slices were built on them; both are Accepted with the evidence named. **ADR-001 §6 had one row and no rule for what belongs in it**; the rule is now written (a behaviour a PLAYER can observe) and the two that qualify are recorded. **ADR-004 §5 listed five scripts of eleven**, missing four of the nine CI checks. **Risk R13 added**: the mutation tallies are the corpus's strongest evidence and none of them can be re-run, which §6.119 already demonstrated the hard way. `Design/README.md`, the runner README (re-measured: 64s cold, 21s warm at 348 tests), the reference README (the `SPRITE.bin` gap), AGENTS.md and the plan's §0, §1.2, §3 and §7 brought to the tree as it is. The rule: prose about a decision ages well and a number beside it ages badly and in silence, so the next check to write is one that reads the counts out of the tree. |
