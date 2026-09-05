@@ -437,4 +437,117 @@ namespace Elite
     }
   }
 
+  void Die(FlightLoop& _loop, DashboardEffects& _sound) noexcept
+  {
+    FlightScreen& screen = _loop.screen;
+
+    // 6502: JSR EXNO3 -- `LDY #sfxexpl / BNE NOISE`, and the carry is whatever killed us.
+    (void)_sound.PlaySound(SOUND_EXPLOSION, false);
+
+    ResetShipAndBubble(_loop); // 6502: JSR RES2
+
+    // 6502: ASL DELTA / ASL DELTA -- and the upstream comment says "divide by 4", which is the
+    // BBC's `LSR`. This build SHIFTS LEFT twice, so the speed is multiplied (§6.117).
+    screen.flight.delta = static_cast<std::uint8_t>(screen.flight.delta << 2);
+
+    /*
+     * 6502: LDX #24 / JSR DET1 / JSR TT66.
+     *
+     * `DET1` is a bare `RTS` here, so the `LDX #24` goes nowhere and A is NOT set to 6 -- what
+     * `TT66` gets is whatever `RES2` left in it (§6.117). `DEATH_VIEW` is that byte, measured.
+     */
+    SetUpScreen(screen, DEATH_VIEW);
+
+    // 6502: JSR BOX -- the SAME border again, and `BOX2` EORs, so drawing it twice rubs it out.
+    DrawFullBorder(screen.canvas, screen.draw);
+
+    // 6502: LDA #0 / STA SCBASE+&1F1F / STA SCBASE+&118 -- the two bytes `BOX` STORES instead of
+    // EORing, which a second pass therefore cannot remove.
+    screen.canvas.Write(BOTTOM_RIGHT_CORNER, 0u);
+    screen.canvas.Write(BORDER_TOP_RIGHT, 0u);
+
+    // 6502: JSR nWq -- a whole new stardust field over the cleared screen.
+    SeedStardustField(screen.canvas, screen.draw, screen.dust, screen.rng, false);
+
+    // 6502: LDA #12 / JSR DOYC / JSR DOXC -- the cursor, then the sign.
+    screen.text.row = GAME_OVER_ROW;
+    screen.text.column = GAME_OVER_COLUMN;
+    screen.printer.PrintPhrase(GAME_OVER_TOKEN); // 6502: LDA #146 / JSR ex
+
+    /*
+     * 6502: .D1 -- spawn wreckage until the fifth slot is taken.
+     *
+     * `LDA FRIN+4 / BEQ D1` is the condition, so this fills slots 0 to 4 -- five pieces, not four,
+     * and the loop tests the slot AFTER creating one.
+     */
+    do
+    {
+      const RngResult roll = SeedDebris(screen.work, screen.rng); // 6502: JSR Ze
+
+      screen.work[0] = static_cast<std::uint8_t>(roll.value >> 2); // 6502: LSR A / LSR A / STA INWK
+
+      // 6502: LDY #0 / STY QQ11 / STY INWK+1 / STY INWK+4 / STY INWK+7 / STY INWK+32.
+      screen.view = 0u;
+      screen.work[1] = 0u;
+      screen.work[4] = 0u;
+      screen.work[7] = 0u;
+      screen.work[32] = 0u;
+
+      // 6502: DEY / STY MCNT -- 255, so every timer-based call in the loop is stopped.
+      screen.flight.mainLoopCounter = 0xFFu;
+
+      // 6502: EOR #%00101010 / STA INWK+3 / ORA #%01010000 / STA INWK+6.
+      const std::uint8_t flipped = static_cast<std::uint8_t>(screen.work[0] ^ 0x2Au);
+      screen.work[3] = flipped;
+      screen.work[6] = static_cast<std::uint8_t>(flipped | 0x50u);
+
+      // 6502: TXA / AND #%10001111 / STA INWK+29 -- a gentle roll, sign kept.
+      screen.work[29] = static_cast<std::uint8_t>(roll.previous & 0x8Fu);
+
+      screen.status.laserCount = DEATH_FRAMES; // 6502: LDY #64 / STY LASCT
+
+      // 6502: SEC / ROR A / AND #%10000111 / STA INWK+30 -- and the `A` is the roll byte above,
+      // not the random one: `TXA` left it there.
+      const std::uint8_t pitched = static_cast<std::uint8_t>((screen.work[29] >> 1) | 0x80u);
+      screen.work[30] = static_cast<std::uint8_t>(pitched & 0x87u);
+
+      /*
+       * 6502: LDX #OIL / LDA XX21-1+2*PLT / BEQ D3 / BCC D3 / DEX.
+       *
+       * The load has no brackets, so it reads the byte AT `XX21 + 7` rather than through it --
+       * always &D0, never zero, so the `BEQ` is dead and only the carry decides. That carry is
+       * `Ze`'s last `DORND`, so it is a coin flip between a canister and an alloy plate.
+       */
+      const std::uint8_t type = roll.carry ? SHIP_TYPE_ALLOY_PLATE : SHIP_TYPE_CANISTER;
+
+      const NewShip made = AddDebris(screen.bubble, screen.work, type, screen.flight.delta, screen.flight.blueprint);
+
+      // 6502: JSR DORND / AND #%10000000 / LDY #31 / STA (INF),Y -- half the wreckage is already
+      // dead, which is what makes some of it explode as it goes past.
+      const RngResult state = screen.rng.Next(false);
+      if (made.created)
+      {
+        screen.bubble.blocks[made.slot][31] = static_cast<std::uint8_t>(state.value & 0x80u);
+      }
+    } while (screen.bubble.slots[DEATH_DEBRIS_SLOT] == 0u);
+
+    ClearFlightKeys(_loop.keys); // 6502: JSR U%
+
+    // 6502: STA DELTA -- and A is the zero `U%` left in it, so we stop dead.
+    screen.flight.delta = 0u;
+
+    // 6502: JSR M% / JSR NOSPRITES / .D2 JSR M% / DEC LASCT / BNE D2.
+    (void)MainFlightLoop(_loop);
+    HideAllSprites(screen.sight);
+
+    do
+    {
+      (void)MainFlightLoop(_loop);
+      screen.status.laserCount = static_cast<std::uint8_t>(screen.status.laserCount - 1u);
+    } while (screen.status.laserCount != 0u);
+
+    // 6502: LDX #31 / JSR DET1 / JMP DEATH2 -- the first is a bare RTS and the second is the
+    // caller's own death exit, which `Main.cpp` already wires as `RES2` then `BR1` (§6.25).
+  }
+
 } // namespace Elite

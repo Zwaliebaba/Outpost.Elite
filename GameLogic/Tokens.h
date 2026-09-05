@@ -60,6 +60,16 @@ namespace Elite
     void Print(std::uint8_t _token) noexcept;
 
     /*
+     * 6502: ex -- walk the table to a RECURSIVE token's text and print it, character by character.
+     *
+     * Public because `DEATH` calls it directly: `LDA #146 / JSR ex` prints "{all caps}GAME OVER"
+     * without going through `TT27`'s dispatch, which would read 146 as something else entirely.
+     * It was private until the death screen needed it, which is the routine being reachable
+     * catching up with the routine existing.
+     */
+    void PrintPhrase(std::uint8_t _token) noexcept;
+
+    /*
      * The value-token seam, settable after construction.
      *
      * It has to be, because the thing that answers those tokens needs a TokenPrinter of its own --
@@ -103,9 +113,6 @@ namespace Elite
 
     /// 6502: TT43 -- a letter pair, or a recursive token when the value is high enough.
     void PrintLetterPair(std::uint8_t _token) noexcept;
-
-    /// 6502: ex -- walk the table to the token's text and print it, character by character.
-    void PrintPhrase(std::uint8_t _token) noexcept;
 
     TextSink& m_sink;
     ValueTokens* m_values = nullptr;

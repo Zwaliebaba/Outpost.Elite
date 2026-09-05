@@ -342,4 +342,40 @@ namespace Elite
     SeedStardustAndClearShips(_canvas, _draw, _dust, _rng, _state, _bubble, _work, _flight, _view, sun.created);
   }
 
+  RngResult SeedDebris(ShipBlock& _work, Rng& _rng) noexcept
+  {
+    ClearShipBlock(_work); // 6502: JSR ZINF
+
+    const RngResult first = _rng.Next(false); // 6502: JSR DORND
+
+    // 6502: STA T1 / AND #%10000000 / STA INWK+2 -- the x sign, and `T1` is dead here: nothing
+    // between this and the `RTS` reads it.
+    _work[2] = static_cast<std::uint8_t>(first.value & 0x80u);
+
+    // 6502: TXA / AND #%10000000 / STA INWK+5 -- and X is the PREVIOUS random byte, not this one.
+    _work[5] = static_cast<std::uint8_t>(first.previous & 0x80u);
+
+    // 6502: LDA #25 / STA INWK+1 / STA INWK+4 / STA INWK+7 -- one distance in all three axes.
+    _work[1] = DEBRIS_DISTANCE;
+    _work[4] = DEBRIS_DISTANCE;
+    _work[7] = DEBRIS_DISTANCE;
+
+    // 6502: TXA / CMP #245 / ROL A / ORA #%11000000 / STA INWK+32.
+    const bool aggressive = first.previous >= DEBRIS_AI_THRESHOLD;
+    const std::uint8_t rolled = static_cast<std::uint8_t>((first.previous << 1) | (aggressive ? 1u : 0u));
+    _work[32] = static_cast<std::uint8_t>(rolled | 0xC0u);
+
+    // 6502: and no RTS -- it falls into `DORND`, whose answer is what the caller reads.
+    return _rng.Next(false);
+  }
+
+  NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed, std::uint16_t& _blueprint) noexcept
+  {
+    _work[14] = DEBRIS_ORIENTATION;                                    // 6502: LDA #&60 / STA INWK+14
+    _work[22] = static_cast<std::uint8_t>(DEBRIS_ORIENTATION | 0x80u); // 6502: ORA #128 / STA INWK+22
+    _work[27] = static_cast<std::uint8_t>(_speed << 1);                // 6502: LDA DELTA / ROL A / STA INWK+27
+
+    return AddShip(_bubble, _work, _shipType, _blueprint); // 6502: TXA / JMP NWSHP
+  }
+
 } // namespace Elite

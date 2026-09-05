@@ -107,6 +107,20 @@ namespace Elite
    */
   using KeyLogger = std::array<std::uint8_t, 65>;
 
+  /*
+   * 6502: U% -- clear the flight keys, which is NOT `ZEKTRAN` however much it looks like one.
+   *
+   * `LDA #0 / LDY #56 / .DKL3 STA KLO,Y / DEY / BNE DKL3 / STA KL`. It walks DOWN to one and then
+   * stores at zero separately, so it clears 0 to 56 -- and `ZEKTRAN` clears all sixty-five. The
+   * eight it leaves alone are the ones above `KY20`, and `DEATH` is the only caller: the keys are
+   * wiped before the death sequence runs the flight loop, so nothing the player was holding when
+   * they died steers the wreckage.
+   */
+  /// 6502: LDY #56 -- the highest index `U%` clears, so it clears fifty-seven bytes of sixty-five.
+  inline constexpr std::size_t FLIGHT_KEYS_CLEARED = 56;
+
+  void ClearFlightKeys(KeyLogger& _keys) noexcept;
+
   /// 6502: KY1 to KY7 -- offsets of the flight keys within `KLO`, which are their key numbers.
   inline constexpr std::size_t KEY_SLOW_DOWN = 9;   ///< 6502: KY1 -- "?"
   inline constexpr std::size_t KEY_SPEED_UP = 4;    ///< 6502: KY2 -- Space

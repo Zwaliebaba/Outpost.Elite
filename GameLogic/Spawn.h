@@ -128,4 +128,39 @@ namespace Elite
                    CommanderBlock& _commander, Rng& _rng, FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
                    const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _view, bool _carryIn) noexcept;
 
+  /*
+   * 6502: Ze -- a ship block for the death sequence's debris, and it ends in a SECOND `DORND`.
+   *
+   * `ZINF` clears the block, one random byte gives the x and y SIGNS and the `INWK+32` AI byte,
+   * and 25 goes into all three high bytes so the wreckage starts at a fixed distance in a random
+   * direction. Then it falls into `DORND` again -- so what comes back is a fresh random pair, and
+   * `DEATH` uses it for the pitch, the roll and the type.
+   *
+   * `CMP #245 / ROL A` is the trick worth naming: the compare puts "was the byte at least 245" in
+   * the carry and the `ROL` shifts it into bit 0, so one byte in eleven gets its AI flag set --
+   * `ORA #%11000000` then makes the rest of it hostile and slow.
+   */
+  /// 6502: LDA #25 -- the high byte the debris starts at in all three axes, so it appears at one
+  /// distance in a random direction rather than at a random distance.
+  inline constexpr std::uint8_t DEBRIS_DISTANCE = 25;
+
+  /// 6502: CMP #245 -- the compare whose CARRY becomes bit 0 of the AI byte, so roughly one
+  /// wreck in eleven gets its flag set.
+  inline constexpr std::uint8_t DEBRIS_AI_THRESHOLD = 245;
+
+  /// 6502: LDA #&60 -- the orientation `fq1` gives every piece: nose along z, side along x.
+  inline constexpr std::uint8_t DEBRIS_ORIENTATION = 0x60;
+
+  [[nodiscard]] RngResult SeedDebris(ShipBlock& _work, Rng& _rng) noexcept;
+
+  /*
+   * 6502: fq1 -- point a ship along the z axis, give it the player's speed, and create it.
+   *
+   * `INWK+14 = &60` is the nose vector's z, `INWK+22 = &60 OR 128` the side vector's x with its
+   * sign set, and `INWK+27` is `DELTA` rolled left -- twice the player's speed, because the
+   * wreckage is going the other way. `TXA / JMP NWSHP` makes the type the caller's X.
+   */
+  [[nodiscard]] NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed,
+                                  std::uint16_t& _blueprint) noexcept;
+
 } // namespace Elite
