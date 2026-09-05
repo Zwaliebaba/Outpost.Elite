@@ -48,8 +48,15 @@ namespace Elite
   /// NTSC (§6.17).
   inline constexpr std::uint8_t INCOMING_MESSAGE_FRAMES = 100;
 
-  /// 6502: LDA #1 / JSR DOXC / JMP TT66 -- MT9's column and its view, which are the same byte:
-  /// `STA` does not touch A, so `TT66` is entered with the 1 that `DOXC` was given.
+  /*
+   * 6502: LDA #1 / JSR DOXC / JMP TT66 -- MT9's column and its view, which are the same byte:
+   * `STA` does not touch A, so `TT66` is entered with the 1 that `DOXC` was given.
+   *
+   * THE `DOXC` IS DEAD AND IS PORTED ANYWAY. `TT66` sets `XC` to 1 itself, twice, and `JMP TT66` is
+   * the next instruction, so nothing can read what `DOXC` wrote. The port went two slices without
+   * the store and was right by accident; `mi-mt9-view` is the mutant that found that out, and it
+   * is recorded as an equivalent rather than as a catch.
+   */
   inline constexpr std::uint8_t MT9_COLUMN_AND_VIEW = 1;
 
   /// 6502: MT23's `LDA #10` and MT29's `LDA #6` -- the row each moves to, and the ONLY thing they

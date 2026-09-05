@@ -163,7 +163,9 @@ namespace Elite
        * 6502: MT9 -- LDA #1 / JSR DOXC / JMP TT66.
        *
        * ONE `LDA #1` DOES BOTH. `DOXC` is `STA XC / RTS` and `STA` does not touch the accumulator,
-       * so the byte that became the column is still in A when `TT66` reads it as the view.
+       * so the byte that became the column is still in A when `TT66` reads it as the view -- and
+       * the column store is DEAD, because `TT66` writes the same `XC` on its own. Ported because
+       * the routine does it, not because anything can see it.
        */
       m_text.column = MT9_COLUMN_AND_VIEW;
       SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);

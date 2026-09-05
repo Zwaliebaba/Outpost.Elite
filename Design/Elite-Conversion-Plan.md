@@ -528,14 +528,27 @@ control codes inside it stop and wait: `{25}` prints "INCOMING MESSAGE" and paus
 `{22}` spins the Constrictor until a key is pressed, `{24}` waits without a ship, and `{27}` and
 `{28}` name a captain and a planet from the galaxy number.
 
-**THE DISPATCH MOVED OUT OF THE EXECUTABLE, AND TWO OF ITS NINE CASES WERE WRONG.** It lived in
+**THE DISPATCH MOVED OUT OF THE EXECUTABLE, AND ONE OF ITS NINE CASES WAS WRONG.** It lived in
 `Outpost/Shell.cpp` because every one of those codes needed something `GameLogic` did not have: a
 canvas to clear, a keyboard to wait on, a galaxy number. All three arrived slices ago — `TT66` in
 3d, `RDKEY`'s seam in 3b, the commander block in 2d — and what was left behind was nine cases of
-arithmetic that no test could reach. **`MT9` was not moving the cursor**: `LDA #1 / JSR DOXC /
-JMP TT66` is one load serving as a column AND a view, because `STA` does not touch the accumulator,
-so a briefing page opened at whatever column the previous one had left. **`MT23` and `MT29` were
-moving it when the game does not**: `DOYC` is `STA YC / RTS` and neither entry point touches `XC`.
+arithmetic that no test could reach. **`MT23` and `MT29` were moving the cursor when the game does
+not**: `DOYC` is `STA YC / RTS` and neither entry point touches `XC`, so a briefing that moves to
+row 10 keeps whatever column it was printing at — which is what the tokens are written for.
+
+**AND `MT9`'S MISSING COLUMN STORE TURNED OUT NOT TO MATTER, WHICH THE MUTATION RUN FOUND AND THE
+READING DID NOT.** `LDA #1 / JSR DOXC / JMP TT66` is one load serving as a column AND a view,
+because `STA` does not touch the accumulator; the port had the view and not the store, and adding it
+is faithful. But `TT66` sets `XC` to 1 itself, twice — once near the top and again at
+`.tt66 LDX #1 / STX XC / STX YC` — and `JMP TT66` is the very next instruction after the `DOXC`, so
+nothing can read the byte in between. The `DOXC` is DEAD, the port was accidentally right for two
+slices, and `mi-mt9-view` is recorded as an equivalent rather than as a catch. That is the fifth
+piece of dead code found in the original, after `cntr`'s `REDU`, `.OLDBOX`'s cursor store, `MAS2`'s
+second entry and `TITLE`'s `LDA MCNT / AND #3`.
+
+This is what the tool is for. The claim "the port was not moving the cursor and a briefing page
+opened in the wrong column" was written from the source, was reasonable, and was wrong — and nothing
+short of changing the line and running the suite would have said so.
 
 **CODE 22 FALLS INTO MT23.** `PAUSE` ends `JSR LL9` and the next instruction is MT23's `LDA #10`, so
 a briefing's `{22}` moves to row 10 and forces lower case exactly as a `{23}` does. The port had 22
@@ -6235,7 +6248,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 | Date | Change |
 |---|---|
 | 2026-09-05 | **Slice 4d-c: the seven missions, and phase 4 closes** (§6.151). Six of them are eleven instructions of state each, so the comparison is the WHOLE commander block from sixteen values of `TP` rather than the flag: `DEBRIEF` pays 5,000 credits, `DEBRIEF2` sets `ENGY` and adds 256 kills to the tally's high byte. **Three pieces of bit arithmetic that an `ORA` would get wrong**: `BRIEF3`'s `AND` forgets mission 1 on the way to setting mission 2, `DEBRIEF`'s `LSR`/`ASL` leaves bit 1 standing so the pair reads as finished and paid, and `TBRIEF` sets bit 4 before it asks. **An original bug ported** (ADR-001 §6): `TBRIEF` never tests `LCASH`'s carry, so a commander who cannot afford a Trumble gets one. `BRIEF` compared on the whole screen over ~200 frames, with `MCNT` as state because the counter is dead in the second loop. Wired into `DOENTRY`'s dispatch. |
-| 2026-09-05 | **Slice 4d-b: a briefing is not a screen** (§6.150). Token 10 is a paragraph; what makes it a briefing is that four control codes inside it stop and wait. **The dispatch for nine of them lived in `Outpost/Shell.cpp` as arithmetic no test could reach, and two cases were wrong**: `MT9` was not moving the cursor (one `LDA #1` is a column AND a view) and `MT23`/`MT29` were moving it when `DOYC` is `STA YC / RTS`. **Code 22 falls into MT23**, so a briefing printed in the wrong case after its first page. `PAS1` puts the ship at z_hi = 2 where the upstream comment says 1 -- the Master's value, travelled. MT27 and MT28 overlap and run off the end of the names. |
+| 2026-09-05 | **Slice 4d-b: a briefing is not a screen** (§6.150). Token 10 is a paragraph; what makes it a briefing is that four control codes inside it stop and wait. **The dispatch for nine of them lived in `Outpost/Shell.cpp` as arithmetic no test could reach**, and `MT23`/`MT29` were moving the cursor when `DOYC` is `STA YC / RTS` and neither touches `XC`. `MT9`'s missing column store looked like a second defect and is not: `TT66` writes the same `XC` twice on its own, so the `DOXC` is dead and the mutation run is what said so. **Code 22 falls into MT23**, so a briefing printed in the wrong case after its first page. `PAS1` puts the ship at z_hi = 2 where the upstream comment says 1 -- the Master's value, travelled. MT27 and MT28 overlap and run off the end of the names. |
 | 2026-09-05 | **Slice 4d-a: the Trumbles' coordinates live in the video chip and nowhere else** (§6.149). `MVTRIBS` reads a sprite register, adds a velocity and writes it back, so the registers are its INPUT -- which is why it takes a `VideoState` where every other register write goes through a write-only seam. **The two `DORND` calls have different carries** and only `RAND` can say so. **`SPMASK` is not ported**: `VideoState` unshares the ninth x bit, so the read-modify-write became a store. **Nothing initialises `TRIBXH`**, so the first Trumble starts with an arbitrary velocity -- which is also what tells `BPL` from a test of bit 6. The `MoveTrumbles` seam is deleted rather than answered, §6.73's pattern for the ninth time. |
 | 2026-09-05 | **Three pieces of debt cleared, and two of them were smaller than recorded** (§6.147). **The galactic hyperdrive is reachable**: `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 and not the modifier three comments said the seam could not carry -- one row in `BINDINGS` and two `false` literals. The test runs the shipped `CTRL` over all 65 entries and asserts exactly one answers. **Risk R13's tooling is built**: `tools/mutants.json` holds the mutants per unit and `tools/mutate.py` runs them against a proven-green baseline, with a timeout counted as a catch, a non-unique `find` refused, and a worktree with no symlinks in it; `--check` is a repository check. It does NOT recover the published tallies, so R13 stays open on that half. **`tools/check_counts.py` is the check §6.145 asked for**: a live number carries a `<!--count:name-->` marker and is compared against the tree, while the journal's history is left alone -- and its first run found that `MasterFile/` holds twelve masters and 5,577 lines, not the "13 master files, 5,615 lines" that opens `Design/README.md` and titles §1.1. Thirteen is right for the licence exposure and wrong for the source; both are marked now. |
 | 2026-09-05 | **`main` merged in, and the dangerous half merged cleanly** (§6.146). Two conflicts, both comments. What applied without complaint was the other track's `CoolTheGuns` and `DrawDials` in `Main.cpp` -- correct against the 6502, and the same fourteen instructions slice 4c-d had already put inside `RunLoopTail`, which `Advance` calls three statements later on the same `FlightScreen`. The merged file would have cooled `GNTMP` twice a frame, stepped `LASCT` by up to four, and drawn the dials twice, with nothing going red. The duplicate in `Advance` is removed; the call in the DOCKED pass is kept, because that one is not a duplicate -- the countdowns are above part 5's `QQ11` gate and the docked loop runs no part of `RunLoopTail`. `CoolTheGuns` moved into `GameLogic` so there is one copy reachable from both loops. Still open and now written down: a docked pass runs neither the author-names delay nor the Trumble breeding, and the original does. |
