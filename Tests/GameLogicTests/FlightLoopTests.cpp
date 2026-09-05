@@ -853,7 +853,7 @@ namespace GameLogicTests
 
       /// The world's carry list, not this object's: the 6502 has ONE `NOISE` and the port reaches
       /// it through two interfaces, so a comparison against one list needs both to write to it.
-      std::vector<bool>& soundCarries;
+      std::vector<std::uint8_t>& soundCarries;
       std::vector<Pitched> pitched;
       std::vector<std::uint8_t> stopped;
       std::vector<std::uint8_t> spawned;
@@ -865,7 +865,7 @@ namespace GameLogicTests
       /// What `FRS1` answers -- carry set for "there was room", clear for a full bubble.
       bool spawnSucceeds = true;
 
-      RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<bool>& _carries) noexcept
+      RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries) noexcept
         : sounds(_sounds),
           soundCarries(_carries)
       {
@@ -874,7 +874,7 @@ namespace GameLogicTests
       bool PlaySound(std::uint8_t _effect, bool _carryIn) override
       {
         sounds.push_back(_effect);
-        soundCarries.push_back(_carryIn);
+        soundCarries.push_back(_carryIn ? 1u : 0u);
         return true;
       }
       /// `NOISE2` is trapped at its own address, so its hits never reach `NOISE` and belong in
@@ -1264,7 +1264,7 @@ namespace GameLogicTests
       std::uint32_t docked = 0;
       std::vector<Elite::Testing::Cpu6502::TrapHit> pitched;
       std::vector<std::uint8_t> sounds;
-      std::vector<bool> soundCarries;
+      std::vector<std::uint8_t> soundCarries;
       std::vector<std::uint8_t> spawned;
       std::vector<std::uint8_t> angered;
       std::uint32_t starts = 0;
@@ -1283,7 +1283,7 @@ namespace GameLogicTests
         else if (hit.address == _loop.noise)
         {
           sounds.push_back(hit.y);
-          soundCarries.push_back(hit.carry);
+          soundCarries.push_back(hit.carry ? 1u : 0u);
         }
         else if (hit.address == _loop.frs1)
         {
