@@ -1070,7 +1070,7 @@ namespace GameLogicTests
         {0x58u, 0x6Du, 0xDEu, 0xD8u}, ///< the pitch `CMP #250` reads 249
         {0x7Au, 0xFCu, 0x2Cu, 0x84u}, ///< and reads 255, which is the only way past it to `ORA #104`
         {0x0Cu, 0x87u, 0x21u, 0x89u}, ///< a missile's `CMP #16` reads 16
-        {0x33u, 0x99u, 0x24u, 0x99u}, ///< 254 past `CMP #250`, and then an EVEN operand for `ORA #104`
+        {0x6Au, 0xE1u, 0x53u, 0x38u}, ///< 252 past `CMP #250`, and then an EVEN operand for `ORA #104`
       }};
 
       std::uint32_t compared = 0;
