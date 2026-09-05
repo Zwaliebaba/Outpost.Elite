@@ -271,9 +271,25 @@ namespace GameLogicTests
     struct Codes final : Elite::ControlCodes
     {
       std::vector<std::uint8_t> ran;
+
+      /*
+       * A real handler to pass the code on to, when a suite has one (slice 4d-b).
+       *
+       * `MissionCodes` is `GameLogic`'s answer to nine of these and a mission suite needs it bound
+       * to the SAME printer the fixture built, which is a knot: the handler needs a `MissionScreen`
+       * and the screen needs the printer. Forwarding unties it -- the printer keeps this object and
+       * this object gains the handler afterwards -- and the recording carries on either way, so the
+       * suites that assert the list is empty are unaffected.
+       */
+      Elite::ControlCodes* to = nullptr;
+
       void Run(std::uint8_t _code) override
       {
         ran.push_back(_code);
+        if (to != nullptr)
+        {
+          to->Run(_code);
+        }
       }
     };
 

@@ -383,6 +383,121 @@
           "note": "The ninth x bit, dropped on the way into the register. This is the store that REPLACED `ORA SPMASK+1,Y / STA VIC+&10`: `VideoState` holds a whole sixteen-bit x, so the read-modify-write of a shared byte became one write, and this is the mutant that proves the second half of it is still there. A sprite past column 255 would sit on the left of the screen instead."
         }
       ]
+    },
+    {
+      "name": "missions",
+      "slice": "4d-b",
+      "filter": [
+        "TheMissionText"
+      ],
+      "tests": 5,
+      "note": [
+        "The four control codes a mission briefing is made of (plan section 6.149).",
+        "",
+        "TWO OF THESE ARE ABOUT A FALL-THROUGH. `PAUSE` ends `JSR LL9` and the next instruction is",
+        "MT23's `LDA #10`, so a briefing's `{22}` moves the cursor to row 10 and forces lower case as",
+        "surely as a `{23}` does. The port splits that across two objects -- the row is the seam's and",
+        "the two case flags are the text system's -- and the mutants below take one half away each."
+      ],
+      "mutants": [
+        {
+          "id": "mi-selftest",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    screen.work[7] = BRIEFING_SHIP_DISTANCE;",
+          "replace": "    screen.work[7] = 0u;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Putting the briefing ship at z_hi = 0 rather than 2 draws it at a two-hundredth of the distance, which the whole-canvas comparison in TheBriefingShipMatchesPAS1 cannot miss. Keep it first and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "mi-distance",
+          "file": "GameLogic/Missions.h",
+          "find": "  inline constexpr std::uint8_t BRIEFING_SHIP_DISTANCE = 2;",
+          "replace": "  inline constexpr std::uint8_t BRIEFING_SHIP_DISTANCE = 1;",
+          "expect": "caught",
+          "note": "The byte the upstream comment gets wrong. `PAS1` on this build is `LDA #2 / STA INWK+7`; the Master and Apple versions load 1 and the comment was written for those. A port that trusted the comment would put the Constrictor at half the distance and twice the size, and this is the mutant that says so."
+        },
+        {
+          "id": "mi-height",
+          "file": "GameLogic/Missions.h",
+          "find": "  inline constexpr std::uint8_t BRIEFING_SHIP_HEIGHT = 80;",
+          "replace": "  inline constexpr std::uint8_t BRIEFING_SHIP_HEIGHT = 79;",
+          "expect": "caught",
+          "note": "`conhieght`, which the source calls the size of a gap and which is really the ship's y coordinate. One row out is a whole-canvas difference."
+        },
+        {
+          "id": "mi-release",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    while (ShowBriefingShip(_mission).key != 0u)\n    {\n    }\n",
+          "replace": "",
+          "expect": "caught",
+          "note": "The FIRST of PAUSE's two loops, dropped. `JSR PAS1 / BNE PAUSE` waits for the player to LET GO of the key that turned the previous page; without it one keystroke dismisses every remaining page of a briefing in a single frame. Caught by the scan count rather than by the pixels, which is why that count is asserted."
+        },
+        {
+          "id": "mi-erase",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    screen.work[31] = 0u;",
+          "replace": "    screen.work[31] = 0xFFu;",
+          "expect": "caught",
+          "note": "`LDA #0 / STA INWK+31` -- the ship stops being drawn, so the `LL9` after the screen change has nothing to rub out. Leaving the flags set makes that `LL9` erase lines the cleared screen no longer has."
+        },
+        {
+          "id": "mi-mt23-row",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    screen.text.row = MT23_ROW;",
+          "replace": "    screen.text.row = MT29_ROW;",
+          "expect": "caught",
+          "note": "The row PAUSE's fall-through moves to. MT23 loads 10 and MT29 loads 6, and the `EQUB &2C` between them is what makes the two one routine -- so this is the mutant that proves the port fell through into the right entry point."
+        },
+        {
+          "id": "mi-pause2-loop",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      if (_mission.effects.ScanTitleKeys(_mission.keys).key != 0u)\n      {\n        continue;\n      }",
+          "replace": "      while (_mission.effects.ScanTitleKeys(_mission.keys).key != 0u)\n      {\n      }",
+          "expect": "caught",
+          "note": "PAUSE2's `BEQ PAUSE2` goes back to the TOP of the routine and not to the scan above it, so a failed attempt re-checks for a release it has already had. Turning the outer loop into an inner one costs one scan per attempt, which is the only thing a routine that draws nothing can be measured by."
+        },
+        {
+          "id": "mi-captain",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    PrintMissionToken(m_mission.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN, m_galaxy);",
+          "replace": "    PrintMissionToken(m_mission.tokens, (_code == 27) ? MISSION_PLANET_TOKEN : MISSION_CAPTAIN_TOKEN, m_galaxy);",
+          "expect": "caught",
+          "note": "MT27 and MT28 swapped. The two ranges are three apart and OVERLAP, so galaxy 3's captain is galaxy 0's planet -- which means a swap is invisible for exactly one pair of inputs and visible for the rest. The sweep covers all eight galaxies of both."
+        },
+        {
+          "id": "mi-galaxy",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _tokens.Print(AddWithCarry(_base, _galaxy, false).value);",
+          "replace": "    _tokens.Print(_base);",
+          "expect": "caught",
+          "note": "`CLC / ADC GCNT` dropped, so every galaxy gets galaxy zero's captain. This is what the fixture itself did for an afternoon, by poking `GCNT` before `Mirror` overwrote it with the commander block -- `GCNT` is `TP+15`."
+        },
+        {
+          "id": "mi-brief-token",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _mission.tokens.Print(INCOMING_MESSAGE_TOKEN);",
+          "replace": "    _mission.tokens.Print(215u);",
+          "expect": "caught",
+          "note": "The token `BRIS` prints. 216 is INCOMING MESSAGE and 215 is a carriage return, so this is the mutant for a briefing that opens on a blank screen."
+        },
+        {
+          "id": "mi-brief-frames",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _mission.effects.WaitFrames(INCOMING_MESSAGE_FRAMES);",
+          "replace": "    _mission.effects.WaitFrames(50u);",
+          "expect": "caught",
+          "note": "`LDY #100 / JMP DELAY` -- two seconds on PAL. Compared as a number rather than as elapsed time, because neither side has a raster."
+        },
+        {
+          "id": "mi-mt9-view",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      m_text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
+          "replace": "      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
+          "expect": "caught",
+          "note": "MT9's column store, which the port did not have until this slice. `LDA #1 / JSR DOXC / JMP TT66` is one load serving two purposes, because `STA` does not touch the accumulator -- so a port that read it as a view alone opened every briefing page at whatever column the previous one left behind."
+        }
+      ]
     }
   ]
 }

@@ -104,6 +104,7 @@ namespace
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, dockedFlag);
       shell.AttachVideo(flight.Video()); // ADR-005 §1 -- the sprites composite in Resolve
+      shell.AttachGalaxy(commander.At(Elite::Field::GalaxyNumber)); // 6502: GCNT, for MT27 and MT28
       shell.AttachSound(audio, sound, music);
 
       // 6502: DTW2 -- the extended printer starts between sentences, which is what the first

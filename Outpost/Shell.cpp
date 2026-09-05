@@ -22,20 +22,6 @@ namespace Outpost
     /// 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.
     constexpr std::uint8_t BEEP_PAUSE_FRAMES = 50;
 
-    /// 6502: BRIS -- LDA #216 / JSR DETOK / LDY #100 / JMP DELAY.
-    constexpr std::uint8_t BRIEFING_TOKEN = 216;
-    constexpr std::uint8_t BRIEFING_FRAMES = 100;
-
-    /// 6502: MT23 and MT29 -- the two rows they move to before falling into MT13.
-    constexpr std::uint8_t MT23_ROW = 10;
-    constexpr std::uint8_t MT29_ROW = 6;
-
-    /// 6502: MT8 -- LDA #6 / JSR DOXC.
-    constexpr std::uint8_t MT8_COLUMN = 6;
-
-    /// 6502: MT9 -- LDA #1 / JSR DOXC / JMP TT66, and STA does not touch A, so TT66 gets the 1 too.
-    constexpr std::uint8_t MT9_VIEW = 1;
-
   } // namespace
 
   bool GameShell::Turn()
@@ -385,64 +371,63 @@ namespace Outpost
 
   void GameShell::Run(std::uint8_t _code)
   {
+    /*
+     * 6502: DT3 and the `JMTB` jump table, minus what the text system keeps for itself.
+     *
+     * NINE OF THESE MOVED INTO `GameLogic` in slice 4d-b. `MissionCodes` answers 8, 9, 22, 23, 24,
+     * 25, 27, 28 and 29 -- everything a mission briefing contains -- and this is the outer switch
+     * for the two that are not its: `CLYNS`, which belongs to the docked screens, and the codes
+     * nothing answers yet. What is left here is the null checks, because a control code can be
+     * printed before there is a flight session to run it on.
+     */
+    if (m_flight != nullptr && m_extendedPrinter != nullptr && m_text != nullptr && m_galaxy != nullptr)
+    {
+      Elite::FlightLoop& loop = m_flight->Loop();
+      Elite::MissionScreen mission{loop, *this, *m_extendedPrinter, loop.keys, m_briefingSlot};
+      Elite::MissionCodes codes{mission, *m_text, *m_galaxy};
+      if (codes.RunMissionCode(_code))
+      {
+        return;
+      }
+    }
+
     switch (_code)
     {
     case 8:
-      // 6502: MT8 -- LDA #6 / JSR DOXC. The DTW2 store is the printer's and is already done.
+      /*
+       * 6502: MT8 -- LDA #6 / JSR DOXC, answered here only when there is no flight session.
+       *
+       * The docked screens print tokens before the world is built, and this is the one code among
+       * them that a screen with no world can still honour: it is a number into a byte.
+       */
       if (m_text != nullptr)
       {
-        m_text->column = MT8_COLUMN;
+        m_text->column = Elite::MT8_COLUMN;
       }
       return;
 
     case 9:
-      // 6502: MT9 -- LDA #1 / JSR DOXC / JMP TT66.
-      ClearToView(MT9_VIEW);
+      // 6502: MT9, likewise -- the view is all that can be done without a world (see ClearToView).
+      if (m_text != nullptr)
+      {
+        m_text->column = Elite::MT9_COLUMN_AND_VIEW;
+      }
+      ClearToView(Elite::MT9_COLUMN_AND_VIEW);
       return;
 
     case 21:
-      // 6502: CLYNS. The two flags are the printer's and are already set.
+      // 6502: CLYNS -- the bottom rows, which belong to the docked screens rather than to a
+      // mission. The two flags it sets are the printer's and are already set.
       ClearBottomRows();
-      return;
-
-    case 23:
-    case 29:
-      // 6502: MT23 and MT29 -- one routine, two entries, and the row is the only difference.
-      // WHITETEXT is an RTS in this build, and MT13's stores are the printer's.
-      if (m_text != nullptr)
-      {
-        m_text->row = (_code == 23) ? MT23_ROW : MT29_ROW;
-        m_text->column = 1;
-      }
-      return;
-
-    case 22:
-    case 24:
-      /*
-       * 6502: PAUSE and PAUSE2 -- spin the title ship and wait for a key. The ship is `LL9` and
-       * is phase 3b's; the WAIT is not, and doing it is the difference between a briefing screen
-       * a player can dismiss and one the game runs straight past.
-       */
-      (void)NextKey();
-      return;
-
-    case 25:
-      // 6502: BRIS -- LDA #216 / JSR DETOK / LDY #100 / JMP DELAY.
-      if (m_extendedPrinter != nullptr)
-      {
-        m_extendedPrinter->Print(BRIEFING_TOKEN);
-      }
-      WaitFrames(BRIEFING_FRAMES);
       return;
 
     default:
       /*
        * 11 (`NLIN4`, a rule across the screen) is phase 3's, with the border box it belongs to.
        *
-       * 26 (`MT26`, read a line) and 27, 28, 30, 31 (tokens under `GCNT` and `DISK`) are reached
-       * only from the MISSION briefings, which are phase 4. `MT26` is ported and could be called
-       * from here; what it has no answer for yet is whose buffer the line goes into, and the
-       * mission that reads it is the thing that would say.
+       * 26 (`MT26`, read a line) and 30, 31 (`FILEPR` and `OTHERFILEPR`, tokens under `DISK`) are
+       * what is left. `MT26` is ported and could be called from here; what it has no answer for
+       * yet is whose buffer the line goes into, and no token a mission prints contains one.
        */
       return;
     }
