@@ -209,6 +209,30 @@ namespace Elite
       SteerTowards(_loop, nose.high); // 6502: .ttt JMP TA152
     }
 
+    /*
+     * 6502: .TN4 / .TA19 as PART 1 reaches them -- and part 1 is only ever a missile.
+     *
+     * `TN4` copies the ship's own position into `K3`, `TA19` normalises it and takes the nose dot
+     * product, and then the code FALLS INTO PART 4, whose first act is `LDA TYPE / CMP #MSL /
+     * BNE P%+5 / JMP TA20`. So a missile does not steer along that vector: `TA20` turns it round
+     * with `TAS6` and flips the sign of `CNT` first, because a missile closes on its target rather
+     * than facing it.
+     *
+     * The port jumped from `TA19` straight to the steering at both of part 1's rejoins, which is
+     * two instructions of part 4 skipped, and it only became visible once the test fixture stopped
+     * handing the geometry a zero-length vector (§6.126).
+     */
+    void SteerMissileTowardsTarget(FlightLoop& _loop) noexcept
+    {
+      FlightScreen& screen = _loop.screen;
+
+      NormaliseAxes(_loop.axes, screen.draw, screen.math); // 6502: .TA19 JSR TAS2
+      const AddSignedResult nose = DotProductWithShip(screen.work, screen.draw, screen.math, ORIENTATION_NOSE);
+
+      NegateVector(screen.draw); // 6502: .TA20 JSR TAS6, reached through part 4's `CMP #MSL`
+      SteerTowards(_loop, static_cast<std::uint8_t>(nose.high ^ 0x80u));
+    }
+
     /// 6502: .GOPL -- give up on the station and steer at the PLANET instead.
     void AimAtPlanet(FlightLoop& _loop) noexcept
     {
@@ -237,7 +261,7 @@ namespace Elite
 
   } // namespace
 
-  void SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math, std::uint8_t _at) noexcept
+  bool SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math, std::uint8_t _at) noexcept
   {
     // 6502: LDA (V),Y / EOR #%10000000 / STA K+3 -- the other object's sign, negated.
     _math.k[3] = static_cast<std::uint8_t>(_other[_at + 2u] ^ 0x80u);
@@ -248,26 +272,31 @@ namespace Elite
 
     // 6502: STY U / LDX U / JSR MVT3 -- K = K + INWK+X, so K is now this ship minus the other.
     _math.u = _at;
-    AddShipCoordinateToK(_work, _math, _at);
+    const bool carry = AddShipCoordinateToK(_work, _math, _at);
 
     // 6502: STA K3+2,X, and the A it stores is the sign byte `MVT3` left in the register.
     _axes[_at + 2u] = _math.k[3];
     _axes[_at + 1u] = _math.k[2];
     _axes[_at] = _math.k[1];
+
+    // 6502: `LDY`, `LDA` and `STA` leave the flag alone, so what `MVT3` exited with is what the
+    // caller gets.
+    return carry;
   }
 
-  void SubtractShipAxes(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept
+  bool SubtractShipAxes(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept
   {
-    // 6502: LDY #2 / JSR TAS1 / LDY #5 / JSR TAS1 / LDY #8, and the last one is a fall-through.
-    SubtractShipAxis(_other, _work, _axes, _math, 0u);
-    SubtractShipAxis(_other, _work, _axes, _math, 3u);
-    SubtractShipAxis(_other, _work, _axes, _math, 6u);
+    // 6502: LDY #2 / JSR TAS1 / LDY #5 / JSR TAS1 / LDY #8, and the last one is a fall-through, so
+    // the carry the third leaves is the routine's.
+    (void)SubtractShipAxis(_other, _work, _axes, _math, 0u);
+    (void)SubtractShipAxis(_other, _work, _axes, _math, 3u);
+    return SubtractShipAxis(_other, _work, _axes, _math, 6u);
   }
 
-  void SubtractStationAxes(const Bubble& _bubble, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept
+  bool SubtractStationAxes(const Bubble& _bubble, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept
   {
     // 6502: LDA #LO(K%+NI%) / STA V / LDA #HI(K%+NI%), and then straight into `VCSUB`.
-    SubtractShipAxes(_bubble.blocks[1], _work, _axes, _math);
+    return SubtractShipAxes(_bubble.blocks[1], _work, _axes, _math);
   }
 
   AddSignedResult DotProductWithShip(const ShipBlock& _block, const DrawWorkspace& _draw, MathWorkspace& _math, std::uint8_t _at) noexcept
@@ -394,10 +423,8 @@ namespace Elite
               axes[byte] = work[byte];
             }
 
-            // 6502: .TA19 JSR TAS2 / LDY #10 / JSR TAS3 / STA CNT, and then the whole of part 7.
-            NormaliseAxes(axes, screen.draw, math);
-            const AddSignedResult nose = DotProductWithShip(work, screen.draw, math, ORIENTATION_NOSE);
-            SteerTowards(_loop, nose.high);
+            // 6502: .TA19, and then part 4 -- which sends a missile to `TA20`.
+            SteerMissileTowardsTarget(_loop);
             return true;
           }
 
@@ -411,7 +438,7 @@ namespace Elite
         // 6502: LSR A / TAX / LDA UNIV,X / STA V / LDA UNIV+1,X / JSR VCSUB -- the missile's TARGET
         // slot, out of the AI byte it has been carrying since `FRS1` doubled `MSTG` into it.
         const std::uint8_t target = static_cast<std::uint8_t>((work[32] & 0x7Fu) >> 1u);
-        SubtractShipAxes(screen.bubble.blocks[target], work, axes, math);
+        const bool vectorCarry = SubtractShipAxes(screen.bubble.blocks[target], work, axes, math);
 
         /*
          * 6502: LDA K3+2 / ORA K3+5 / ORA K3+8 / AND #%01111111 / ORA K3+1 / ORA K3+4 / ORA K3+7 /
@@ -426,22 +453,29 @@ namespace Elite
         {
           // 6502: .TA64 JSR DORND / CMP #16 / BCS TA19S -- one time in sixteen the missile checks
           // whether its target still has an ECM, and the rest of the time it just steers.
-          const RngResult roll = screen.rng.Next(false);
+          // 6502: .TA64 JSR DORND -- and the carry is the one `VCSUB`'s last `MVT3` exited with,
+          // seven instructions of `ORA` and `AND` earlier, none of which touches the flag (§6.126).
+          const RngResult roll = screen.rng.Next(vectorCarry);
           if (roll.value < 16u)
           {
-            // 6502: .M32 LDY #32 / LDA (V),Y / LSR A / BCS P%+5 / JMP ECBLB2 -- bit 0 of the
-            // target's AI byte is "it has an ECM", and setting it off is the target's doing.
-            if ((screen.bubble.blocks[target][32] & 1u) == 0u)
+            /*
+             * 6502: .M32 LDY #32 / LDA (V),Y / LSR A / BCS P%+5 / .TA19S JMP TA19 / JMP ECBLB2.
+             *
+             * `BCS P%+5` skips a THREE-byte instruction, so a SET bit 0 -- "this ship has an ECM"
+             * -- skips the jump to the steering and lands on the jump to `ECBLB2`. The port had the
+             * test the other way round, so a missile set off the ECM of every target that did not
+             * have one and steered at the ones that did (§6.126).
+             */
+            if ((screen.bubble.blocks[target][32] & 1u) != 0u)
             {
               StartEcm(screen.canvas, screen.status, _loop.effects, false);
               return true;
             }
           }
 
-          // 6502: JMP TA19 -- steer at the target, whose vector `VCSUB` has just left in `K3`.
-          NormaliseAxes(axes, screen.draw, math);
-          const AddSignedResult nose = DotProductWithShip(work, screen.draw, math, ORIENTATION_NOSE);
-          SteerTowards(_loop, nose.high);
+          // 6502: JMP TA19 -- steer at the target, whose vector `VCSUB` has just left in `K3`, and
+          // then part 4 again: this is a missile, so `TA20`.
+          SteerMissileTowardsTarget(_loop);
           return true;
         }
 
@@ -922,7 +956,7 @@ namespace Elite
       return true;
     }
 
-    SubtractStationAxes(screen.bubble, work, axes, math); // 6502: JSR VCSU1
+    (void)SubtractStationAxes(screen.bubble, work, axes, math); // 6502: JSR VCSU1
 
     // 6502: LDA K3+2 / ORA K3+5 / ORA K3+8 / AND #%01111111 / BNE GOPLS -- any axis whose HIGH
     // byte has magnitude at all means the station is far away, and the sign is masked off because
@@ -991,7 +1025,7 @@ namespace Elite
        * rather than four. Then `TAS6` turns the vector round, because `TA151` steers along `XX15`
        * and what has been computed is the direction FROM the ship TO the point.
        */
-      SubtractStationAxes(screen.bubble, work, axes, math);
+      (void)SubtractStationAxes(screen.bubble, work, axes, math);
       OffsetDockingPosition(screen.bubble, axes);
       OffsetDockingPosition(screen.bubble, axes);
       NormaliseAxes(axes, screen.draw, math);

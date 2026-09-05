@@ -40,7 +40,10 @@ namespace Elite
    * added, and the answer stays in K. `MV40` -- the planet and sun path through `MVEIT` -- is what
    * reaches it.
    */
-  void AddShipCoordinateToK(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x) noexcept;
+  /// Returns the carry `MVT3` exits with, which is the `ADC`'s on one path, SET on the second, and
+  /// the final `SBC`'s on the third. `VCSUB`'s last call leaves it standing all the way out to
+  /// `TACTICS`, where the `DORND` at `TA64` rotates it in (§6.126).
+  [[nodiscard]] bool AddShipCoordinateToK(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x) noexcept;
 
   /*
    * 6502: MVT6 -- (P+1 P+2) = (P+1 P+2) + INWK+X(2), and the sign comes back in A.

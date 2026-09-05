@@ -44,7 +44,8 @@ namespace Elite
    *
    * `LDY U` after the call restores Y for a caller that wants it, and no caller in this build does.
    */
-  void SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math, std::uint8_t _at) noexcept;
+  [[nodiscard]] bool SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math,
+                                      std::uint8_t _at) noexcept;
 
   /*
    * 6502: VCSUB -- all three axes, so `K3` becomes the vector FROM the other object TO this ship.
@@ -55,10 +56,12 @@ namespace Elite
    * the AI target's slot and can be any ship in the bubble; that is why this takes a block and not
    * a bubble.
    */
-  void SubtractShipAxes(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
+  /// Returns the carry the LAST of the three `MVT3`s exits with, which `TACTICS` rotates into the
+  /// `DORND` at `TA64`: nothing between the two touches the flag (§6.126).
+  [[nodiscard]] bool SubtractShipAxes(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
 
   /// 6502: VCSU1 -- `VCSUB` with `V` pointing at `K%+NI%`, which is where `NWSPS` puts the station.
-  void SubtractStationAxes(const Bubble& _bubble, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
+  [[nodiscard]] bool SubtractStationAxes(const Bubble& _bubble, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
 
   /*
    * 6502: TAS3 and TAS4 -- the dot product of `XX15` with one of a ship's orientation vectors.
