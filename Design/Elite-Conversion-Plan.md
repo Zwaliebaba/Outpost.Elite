@@ -298,9 +298,18 @@ cannot be defined by the oracle, and it is called out as Risk R3.
 ### 5.4 Input
 
 `Window` (from Frontier) produces a key-state table; `KeyMap` in the executable turns virtual
-keys into `Elite::InputFrame` bits using the original C64 key assignments as the default map
-(`f0`–`f9`, `DINT`, `FINT`, `HINT`, `OINT`, `YINT` and the flight keys in `KYTB`). Remapping is a
-modernisation item.
+keys into `Elite::InputFrame` bits. Remapping is a modernisation item.
+
+**The default map is a modern PC layout, changed 2026-09-05; ADR-005 §4 is the decision and
+carries the reasoning.** Arrows steer, `,` and `.` set speed, `A` fires, the secondary flight
+controls keep their C64 letters (TAB for the energy bomb and ESCAPE for the escape capsule), the
+six information screens are F1–F6 and the four views are F7–F10. This paragraph used to say the
+default was "the original C64 key assignments (`f0`–`f9`, `DINT`, `FINT`, `HINT`, `OINT`, `YINT`
+and the flight keys in `KYTB`)", and **the last five words could never have been carried out**:
+`KYTB` is the BBC Micro's table and the upstream file says in as many words that the C64 build
+does not use it. The C64's flight keys are the `KY1`–`KY7` and `KY12`–`KY20` positions inside
+`KEYLOOK`, and none of the sixteen was bound until this change — a gap slice 2e's own tests could
+not see, because they asserted only that what WAS bound translated correctly.
 
 ---
 

@@ -68,11 +68,34 @@ main loop that ran as fast as the scene allowed.
 ### §4 Input
 
 - `Window` (written here, `Outpost/`) produces the per-frame key table; `KeyMap` maps
-  virtual keys to `Elite::InputFrame` bits. The default map is the C64's: the function keys
+  virtual keys to `Elite::InputFrame` bits. Remapping and gamepad are phase 6.
+
+- **The default map is a modern PC layout, not the C64's. Amended 2026-09-05; what it said
+  before is below.** The arrow keys steer (roll left/right, climb/dive), `,` and `.` set speed,
+  `A` fires, the secondary flight controls keep their C64 letters (`T`, `U`, `M`, `E`, `J`,
+  `C`, `P`) with TAB for the energy bomb and ESCAPE for the escape capsule, the six information
+  screens are F1–F6, and the four views — front, rear, left, right, the first of which is also
+  launch — are F7–F10. The `DINT`/`FINT`/`HINT`/`OINT`/`YINT` letter keys and `@` are unchanged.
+
+- **The map is therefore many-to-one, and that is a consequence rather than a convenience.**
+  `gnum` and the line editor read a key as the CHARACTER `TRANTABLE` gives its position, so the
+  number row cannot be unbound to free the digits for the function keys: "4" keeps position 53
+  and F1 is given the same one. The cost is stated once here so nobody files it as a bug — 4–9
+  still reach their screens from `TT102`, because `TT102` compares the POSITION and any key that
+  can type a "4" is a key that opens the Galactic Chart. Separating the two needs a second table
+  chosen by the current view, which is a phase-6 remapping question and not this decision.
+
+- **What it said before, kept as the record:** "The default map is the C64's: the function keys
   `f0`–`f9` as documented in the masters (F1 launch, 1–9 the docked screens, F3/F5/F7 the
   views), the `DINT`/`FINT`/`HINT`/`OINT`/`YINT` letter keys, and the flight keys, whose exact
-  set is read from the `KYTB` table in slice 1a rather than assumed here. Remapping and gamepad
-  are phase 6.
+  set is read from the `KYTB` table in slice 1a rather than assumed here." Two things made that
+  wrong. `KYTB` **is not used by the C64 build at all** — the upstream file says so in as many
+  words, and the flight keys are the `KY1`–`KY7` and `KY12`–`KY20` positions inside `KEYLOOK` —
+  so the sentence deferred to a table that was never going to answer it, and the flight half of
+  the map was still unbound after phase 3 had named every one of those positions. And the C64's
+  own arrangement (roll on `<`/`>`, pitch on `X`/`S`, speed on Space and `?`) is a keyboard
+  layout rather than a game rule: ADR-001's fidelity requirement is about what the machine
+  COMPUTES, and which physical key reaches `KEYLOOK+17` is not part of it.
 - The original polls key state each iteration and also reads single keys with a wait in the
   docked screens (`RDKEY`, `TT217`); the port's `InputFrame` carries both level and edge bits so
   both idioms port unchanged (plan §2.1).
