@@ -425,6 +425,7 @@ namespace GameLogicTests
 
       Cpu6502 cpu = oracle.Fresh();
       std::uint32_t compared = 0;
+      std::uint32_t angered = 0;
 
       for (const std::uint8_t newb : NEWBS)
       {
@@ -446,6 +447,14 @@ namespace GameLogicTests
               }
               bubble.blocks[SLOT][32] = ai;
               bubble.blocks[SLOT][36] = newb;
+
+              /*
+               * THE STATION'S HOSTILE BIT STARTS CLEAR, and the first version of this sweep did
+               * not clear it. `SeedBubble`'s ramp gives slot 1 byte 36 the value &84, which
+               * already has bit 2 set, so `AN2`'s `ORA #%00000100` changed nothing and a mutation
+               * that skipped `AN2` altogether agreed on every case (§6.124).
+               */
+              bubble.blocks[1][36] = static_cast<std::uint8_t>(bubble.blocks[1][36] & ~Elite::NEWB_HOSTILE);
 
               for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
               {
@@ -479,6 +488,7 @@ namespace GameLogicTests
                                    (where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
                 }
               }
+              angered += ((bubble.blocks[1][36] & Elite::NEWB_HOSTILE) != 0u) ? 1u : 0u;
               ++compared;
             }
           }
@@ -486,6 +496,10 @@ namespace GameLogicTests
       }
 
       Assert::AreEqual<std::uint32_t>(5u * 5u * 6u * 3u, compared, L"the whole sweep ran");
+
+      // 6502: AN2 -- both answers, so a routine that never angered the station would be visible.
+      Assert::IsTrue(angered > 0u, L"the station was angered on some cases");
+      Assert::IsTrue(angered < compared, L"and left alone on others");
     }
   };
 
