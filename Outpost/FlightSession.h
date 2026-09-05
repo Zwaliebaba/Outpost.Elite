@@ -121,6 +121,16 @@ namespace Outpost
     void DrawExplosion() override;
     void SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint) override;
 
+    /*
+     * 6502: RDKEY, once, into whichever logger the caller owns.
+     *
+     * Public because `GameShell` needs it for the title screen and `ControlEffects::ScanKeyboard`
+     * needs it for the flight loop, and they must be the same scan: two implementations of `RDKEY`
+     * is §6.59's mistake, and the difference between the two callers is the PRESENT around it
+     * rather than anything in here.
+     */
+    [[nodiscard]] Elite::TitleKey ScanMatrix(Elite::KeyLogger& _keys) noexcept;
+
     // ---- Elite::ControlEffects ------------------------------------------------------------------
 
     void ScanKeyboard() override;

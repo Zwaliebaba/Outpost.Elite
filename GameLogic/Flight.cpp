@@ -229,4 +229,138 @@ namespace Elite
     ChangeView(screen, 0u);
   }
 
+  std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance) noexcept
+  {
+    FlightLoop& loop = _title.loop;
+    FlightScreen& screen = loop.screen;
+
+    // 6502: STY distaway / PHA / STX TYPE. The distance and the token are arguments here; `TYPE`
+    // is a real byte and `NWSHP` below reads it back.
+    screen.flight.type = _shipType;
+
+    /*
+     * 6502: LDA #&FF / STA MULIE / JSR RESET / LDA #0 / STA MULIE.
+     *
+     * The bracket is what keeps the theme playing. `RESET` is reached from the title screen with
+     * the music already started, and `stopbd` opens `BIT MULIE / BMI itsoff` -- so the flag is how
+     * one caller of `RESET` gets a different sound from every other.
+     */
+    screen.status.titleReset = 0xFFu;
+    ResetGame(loop, _title.dockedFlag);
+    screen.status.titleReset = 0u;
+
+    _title.effects.ClearKeyLogger();          // 6502: JSR ZEKTRAN
+    screen.effects.SetPalette(TITLE_PALETTE); // 6502: LDA #32 / JSR DOVDU19
+
+    SetUpScreen(screen, TITLE_CLEAR_VIEW); // 6502: LDA #13 / JSR TT66
+    screen.view = 0u;                      // 6502: LDA #0 / STA QQ11
+
+    /*
+     * 6502: LDA #96 / STA INWK+14 / LDA #96 / STA INWK+7 / LDX #127 / STX INWK+29 / STX INWK+30.
+     *
+     * `INWK+14` is the nose vector's z high byte, which `RES2`'s `ZINF` has just set to 96 WITH the
+     * sign bit; writing 96 again clears that bit, so the ship faces away from the player rather
+     * than towards them. The two 127s are the roll and pitch counters at maximum, and they are the
+     * whole of why it turns: `MVEIT` steps the orientation by them on every frame.
+     */
+    screen.work[14] = TITLE_START_DISTANCE;
+    screen.work[7] = TITLE_START_DISTANCE;
+    screen.work[29] = TITLE_SPIN;
+    screen.work[30] = TITLE_SPIN;
+
+    // 6502: INX / STX QQ17 -- 128, which is sentence case, and it is what the prompt prints in.
+    screen.printer.SetCaseFlags(0x80u);
+    screen.text.caseFlags = 0x80u;
+
+    // 6502: LDA TYPE / JSR NWSHP. The slot is kept because `LL9` needs the ship's block in `K%` as
+    // well as the copy in `INWK` -- part 1 writes two bytes straight through `INF`.
+    const NewShip created = AddShip(screen.bubble, screen.work, _shipType, screen.flight.blueprint);
+    const std::uint8_t slot = created.created ? created.slot : std::uint8_t{0};
+
+    screen.text.column = 6u;                               // 6502: LDA #6 / JSR DOXC
+    PrintThenNewline(screen.printer, TITLE_HEADING_TOKEN); // 6502: LDA #30 / JSR plf
+    screen.sink.Put(10u);                                  // 6502: LDA #10 / JSR TT26
+    screen.text.column = 6u;                               // 6502: LDA #6 / JSR DOXC
+
+    // 6502: LDA PATG / BEQ awe / LDA #13 / JSR DETOK -- the credits, and the byte that shows them
+    // also changes what the main game loop spawns.
+    if (_title.options.authorNames != 0u)
+    {
+      _title.tokens.Print(TITLE_AUTHORS_TOKEN);
+    }
+
+    /*
+     * 6502: LDA brkd / BEQ BRBR2 -- and the branch it guards is REPLACED rather than omitted.
+     *
+     * `brkd` counts BRKs and the message it prints is read through `(&FD),Y`, a pointer the BRK
+     * handler leaves behind. That handler is row 32's -- the C64's NMI vectors and Kernal setup,
+     * which the ledger marks Replace and this port has no equivalent for -- so `brkd` is zero for
+     * the life of the process and the branch is not reachable rather than not written.
+     */
+
+    // 6502: .BRBR2 LDY #0 / STY DELTA / STY JSTK.
+    screen.flight.delta = 0u;
+    _title.options.joystick = 0u;
+
+    screen.text.row = TITLE_PROMPT_ROW;     // 6502: LDA #15 / STA YC
+    screen.text.column = TITLE_PROMPT_LEFT; // 6502: LDA #1 / STA XC
+    _title.tokens.Print(_token);            // 6502: PLA / JSR DETOK -- the caller's own token
+
+    screen.text.column = 3u;                 // 6502: LDA #3 / JSR DOXC
+    _title.tokens.Print(TITLE_BYLINE_TOKEN); // 6502: LDA #12 / JSR DETOK
+
+    screen.math.cnt2 = TITLE_CNT2;              // 6502: LDA #12 / STA CNT2
+    screen.flight.mainLoopCounter = TITLE_MCNT; // 6502: LDA #5 / STA MCNT
+    _title.options.joystick = 0xFFu;            // 6502: LDA #&FF / STA JSTK
+
+    for (;;)
+    {
+      // 6502: .TLL2 LDA INWK+7 / CMP #1 / BEQ TL1 / DEC INWK+7 -- the ship closes and then holds.
+      if (screen.work[7] != 1u)
+      {
+        screen.work[7] = static_cast<std::uint8_t>(screen.work[7] - 1u);
+      }
+
+      // 6502: .TL1 JSR MVEIT.
+      MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, screen.flight.blueprint, screen.view);
+
+      /*
+       * 6502: LDX distaway / STX INWK+6 / LDA MCNT / AND #3 / LDA #0 / STA INWK / STA INWK+3.
+       *
+       * Three stores that undo what `MVEIT` just did to the position, so the ship turns on the
+       * spot: the z low byte goes back to the caller's distance and both coordinate low bytes to
+       * zero. The `LDA MCNT / AND #3` between them is DEAD -- `LDA #0` overwrites the accumulator
+       * before anything can read it.
+       */
+      screen.work[6] = _distance;
+      screen.work[0] = 0u;
+      screen.work[3] = 0u;
+
+      // 6502: JSR LL9.
+      DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
+               screen.bubble.blocks[slot], loop.heap, screen.flight.blueprint, screen.flight.type, loop.drawing);
+
+      // 6502: JSR RDKEY / DEC MCNT.
+      const TitleKey scan = _title.effects.ScanTitleKeys(_title.keys);
+      screen.flight.mainLoopCounter = static_cast<std::uint8_t>(screen.flight.mainLoopCounter - 1u);
+
+      /*
+       * 6502: BIT KY7 / BMI TL3 / BCC TLL2 / INC JSTK.
+       *
+       * Fire returns with `JSTK` still &FF; any other key runs the `INC` first and leaves it zero.
+       * The prompt reads as a choice of two equal ways to continue and is actually the joystick
+       * question.
+       */
+      if ((_title.keys[KEY_FIRE] & 0x80u) != 0u)
+      {
+        return scan.key;
+      }
+      if (scan.pressed)
+      {
+        _title.options.joystick = static_cast<std::uint8_t>(_title.options.joystick + 1u);
+        return scan.key;
+      }
+    }
+  }
+
 } // namespace Elite

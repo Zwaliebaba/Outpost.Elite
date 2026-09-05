@@ -115,6 +115,7 @@ namespace Outpost
     void StartTheme() override;
     void StopTheme() override;
     void ShowDockingTunnel() override;
+    [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override;
     [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance) override;
 
     // ---- Elite::ControlCodes and Elite::TextEffects ---------------------------------------------

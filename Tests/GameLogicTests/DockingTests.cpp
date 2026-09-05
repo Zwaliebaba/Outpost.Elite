@@ -96,6 +96,13 @@ namespace GameLogicTests
       {
         seams.push_back("msblob");
       }
+      /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
+      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
+      {
+        (void)_keys;
+        return {true, 0u};
+      }
+
       void ShowDockingTunnel() override
       {
         seams.push_back("LAUN");

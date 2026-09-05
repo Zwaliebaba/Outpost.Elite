@@ -121,6 +121,13 @@ namespace GameLogicTests
       }
 
       // Reached by DOENTRY rather than by the start sequence, so neither script here should see one.
+      /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
+      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
+      {
+        (void)_keys;
+        return {true, 0u};
+      }
+
       void ShowDockingTunnel() override
       {
         seams.push_back({"LAUN", 0, 0, 0});

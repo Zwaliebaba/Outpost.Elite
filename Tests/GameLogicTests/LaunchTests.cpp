@@ -217,6 +217,33 @@ namespace GameLogicTests
       void StartTheme() override {}
       void StopTheme() override {}
       void ResetMissileIndicators() override {}
+      /*
+       * 6502: JSR RDKEY inside `TLL2` -- scripted, because the loop it drives is key-driven and
+       * nothing else decides how many frames the title screen runs for.
+       *
+       * `quiet` passes answer "no key"; the one after it answers `key`, and sets `KY7` first when
+       * `fire` is on so that the loop takes `BMI TL3` instead of `INC JSTK`. The oracle is driven
+       * by a stub written over `RDKEY` that counts the same way.
+       */
+      std::uint32_t quiet = 0;
+      std::uint8_t key = 0;
+      bool fire = false;
+      std::uint32_t scans = 0;
+
+      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
+      {
+        ++scans;
+        if (scans <= quiet)
+        {
+          return {};
+        }
+        if (fire)
+        {
+          _keys[Elite::KEY_FIRE] = 0xFFu;
+        }
+        return {true, key};
+      }
+
       void ShowDockingTunnel() override
       {
         ++tunnels;
@@ -662,6 +689,179 @@ namespace GameLogicTests
 
       Assert::IsTrue(launched > 0u, L"some cases launched");
       Assert::IsTrue(refused > 0u, L"and some were refused");
+    }
+  };
+
+  /*
+   * 6502: TITLE -- the title screen, its rotating ship, and the key that dismisses it.
+   *
+   * THE ORACLE'S `RDKEY` IS PATCHED RATHER THAN TRAPPED, because the loop is key-driven and a trap
+   * gives one answer for ever: `ClearCarry` never leaves `TLL2` and `SetCarry` leaves it after one
+   * frame, and one frame does not show a ship rotating. The eleven bytes below are a counted
+   * `RDKEY` -- `DEC` a counter, `BNE` to `CLC / RTS`, otherwise `LDA #key / SEC / RTS` -- and the
+   * counter lives inside the stub so that nothing else in the compared memory moves.
+   */
+  TEST_CLASS(TheTitleScreen)
+  {
+  public:
+    TEST_METHOD(TheTitleMatchesTITLE)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LaunchWhere to(oracle);
+      const std::uint16_t title = oracle.Label("TITLE");
+      const std::uint16_t rdkey = oracle.Label("RDKEY");
+      const std::uint16_t jstk = oracle.Label("JSTK");
+      const std::uint16_t patg = oracle.Label("PATG");
+      const std::uint16_t mulie = oracle.Label("MULIE");
+      const std::uint16_t keylook = oracle.Label("KEYLOOK");
+
+      std::uint32_t compared = 0;
+      std::uint32_t dismissed = 0;
+      std::uint32_t fired = 0;
+
+      for (const std::uint8_t shipType : {Elite::SHIP_COBRA_MK3, Elite::SHIP_ADDER})
+      {
+        for (const std::uint8_t distance : {Elite::TITLE_COBRA_DISTANCE, Elite::TITLE_ADDER_DISTANCE})
+        {
+          for (const std::uint32_t frames : {std::uint32_t{1}, std::uint32_t{4}, std::uint32_t{30}})
+          {
+            for (const bool fire : {false, true})
+            {
+              for (const std::uint8_t authors : {std::uint8_t{0}, std::uint8_t{0xFF}})
+              {
+                Leaving leaving;
+                Occupy(leaving, shipType * 13u + distance + frames + (fire ? 1u : 0u) + authors);
+
+                leaving.options.authorNames = authors;
+                leaving.start.quiet = frames - 1u;
+                leaving.start.key = 0x27u; // 6502: thiskey -- "Y", which is what `BR1` tests for
+                leaving.start.fire = fire;
+
+                Cpu6502 cpu = oracle.Fresh();
+                cpu.AddTrap(oracle.Label("SETL1"));
+                cpu.AddTrap(oracle.Label("DOVDU19"));
+
+                /*
+                 * `NOSPRITES` IS TRAPPED, AND NOT BECAUSE IT IS A SEAM (§6.106).
+                 *
+                 * `XX21` is at &D000, which on a C64 is also where the VIC-II registers are: the
+                 * ship data lives in RAM UNDER the I/O area and the game banks between them. The
+                 * interpreter has flat memory and cannot, so `NOSPRITES`'s `STA VIC+&15` lands on
+                 * `XX21+21` -- the high byte of ship type 11's blueprint pointer -- and zeroes it.
+                 * `NWSHP` then reads a zero entry and refuses the ship, which is how this test
+                 * first failed: the shipped game drew no Cobra at all.
+                 *
+                 * The port writes those registers through `SightEffects` and touches no memory, so
+                 * trapping the routine is what makes the two sides agree rather than a convenience.
+                 */
+                cpu.AddTrap(oracle.Label("NOSPRITES"));
+                cpu.AddTrap(to.stopbd);
+                cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
+
+                /*
+                 * The counted `RDKEY`, written over the real one.
+                 *
+                 * IT HAS TO WRITE `KY7` ITSELF. `TITLE` calls `ZEKTRAN` before the loop, so a fire
+                 * key set up by the fixture is cleared before the loop ever reads it -- the press
+                 * has to arrive from inside the scan, which is where a real press would arrive.
+                 *
+                 *    0  CE lo hi   DEC counter
+                 *    3  D0 09      BNE quiet
+                 *    5  A9 ff      LDA #(fire ? &FF : 0)
+                 *    7  8D lo hi   STA KY7
+                 *   10  A9 kk      LDA #key
+                 *   12  38         SEC
+                 *   13  60         RTS
+                 *   14  18  quiet: CLC
+                 *   15  60         RTS
+                 *   16  nn         counter
+                 */
+                const std::uint16_t counter = static_cast<std::uint16_t>(rdkey + 16u);
+                const std::uint16_t ky7 = static_cast<std::uint16_t>(keylook + Elite::KEY_FIRE);
+                const std::uint8_t stub[17] = {0xCEu,
+                                               static_cast<std::uint8_t>(counter & 0xFFu),
+                                               static_cast<std::uint8_t>(counter >> 8),
+                                               0xD0u,
+                                               0x09u,
+                                               0xA9u,
+                                               fire ? std::uint8_t{0xFFu} : std::uint8_t{0u},
+                                               0x8Du,
+                                               static_cast<std::uint8_t>(ky7 & 0xFFu),
+                                               static_cast<std::uint8_t>(ky7 >> 8),
+                                               0xA9u,
+                                               leaving.start.key,
+                                               0x38u,
+                                               0x60u,
+                                               0x18u,
+                                               0x60u,
+                                               static_cast<std::uint8_t>(frames)};
+                cpu.Load(rdkey, stub, sizeof(stub));
+
+                FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
+                Mirror(leaving.world, cpu, at);
+                MirrorLeaving(leaving, cpu, at, to, 0xFFu);
+                cpu.memory[patg] = authors;
+
+                cpu.a = Elite::TITLE_START_TOKEN;
+                cpu.x = shipType;
+                cpu.y = distance;
+                const Elite::Testing::RunResult run = cpu.CallSubroutine(title, 20'000'000);
+                Assert::IsTrue(run.completed, L"TITLE returned");
+
+                Elite::FlightScreen screen = leaving.world.Screen();
+                Elite::FlightLoop loop{screen,        leaving.keys,    leaving.control, leaving.options,
+                                       leaving.burst, leaving.heap,    leaving.clip,    leaving.projection,
+                                       leaving.axes,  leaving.outside, leaving.outside, leaving.effects};
+
+                std::uint8_t flag = 0xFFu;
+                Elite::TitleScreen titleScreen{loop, leaving.start, leaving.world.extendedPrinter, leaving.options, leaving.keys, flag};
+                const std::uint8_t answer = Elite::ShowTitleShip(titleScreen, Elite::TITLE_START_TOKEN, shipType, distance);
+
+                const std::wstring where =
+                  WidenText("TITLE (ship " + std::to_string(shipType) + ", distance " + std::to_string(distance) + ", " +
+                            std::to_string(frames) + " frames, " + (fire ? "fire" : "key") + ", PATG " + std::to_string(authors) + ")");
+
+                /*
+                 * The block and the flags BEFORE the pixels, on purpose: a divergence in `INWK` and
+                 * one in the bitmap have the same symptom through `CompareScreens` and completely
+                 * different causes, and the cheaper assertion should be the one that fires.
+                 */
+                for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+                {
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.inwk + byte)], leaving.world.work[byte],
+                                   (where + L": INWK+" + std::to_wstring(byte)).c_str());
+                }
+
+                Assert::AreEqual(cpu.a, answer, (where + L": thiskey").c_str());
+                Assert::IsTrue(leaving.world.codes.ran.empty(), (where + L": no token reached a control code").c_str());
+
+                CompareState(cpu, leaving.world, at, where);
+                CompareLeaving(cpu, leaving, to, flag, where);
+                CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
+
+                Assert::AreEqual(cpu.memory[jstk], leaving.options.joystick, (where + L": JSTK").c_str());
+                Assert::AreEqual(cpu.memory[mulie], leaving.world.status.titleReset, (where + L": MULIE").c_str());
+
+                dismissed += fire ? 0u : 1u;
+                fired += fire ? 1u : 0u;
+                ++compared;
+              }
+            }
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(48u, compared, L"the whole sweep ran");
+      Assert::IsTrue(dismissed > 0u && fired > 0u, L"both ways out of the loop were taken");
+
+      Logger::WriteMessage(
+        ("TITLE: " + std::to_string(compared) + " title screens compared, " + std::to_string(fired) + " dismissed with fire\n").c_str());
     }
   };
 
