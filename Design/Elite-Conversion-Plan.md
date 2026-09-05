@@ -451,6 +451,98 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.140 One byte, two variables, and a screen that was blank from the start
+
+The status screen's "Present System" line was empty at the cold start and stayed empty until the
+first hyperspace jump. Reported from the player's chair, and the shape is §6.28's exactly: `Game`
+in `Main.cpp` held `QQ2` twice -- `currentSeeds`, which the token printer was bound to, and
+`current.seeds`, which the start sequence's `likeTT112` copy and every arrival write. One caller,
+the hyperspace path, copied the second into the first by hand; nothing else did, and the printer
+read six zeros, which `cpl` prints as nothing because a zero letter-pair index is "skip".
+
+The fix is to delete the copy and bind the printer to the byte, which is what §6.28 said in the
+first place. The "Hyperspace System" line on the same screenshot read Diso rather than Lave, and
+that is not a bug: the default commander is at (20, 173), the cold start's `TT111` finds Lave, and
+Diso is what the crosshairs had been moved to on a chart. One thing noticed on the way and left
+alone: `StateTokens::PrintCurrentSystem`'s comment says printing a name twists the seeds, and
+`cpl` backs `QQ15` up to `QQ19` and restores it -- the port restores too, so the code is right and
+the comment is not. It is not this change's line to touch.
+
+### 6.139 Slice 4e: thirteen switches whose only definition is where they sit
+
+The pause screen is `DK4`, `FREEZE` and `DKS3`, and the whole of it turns on one fact: `DKS3` is
+`CMP TGINT,Y / LDA DAMP,Y / EOR #&FF / STA DAMP,Y`, so entry Y of the key table and the byte Y after
+`DAMP` are one pair. **Nowhere in the game is there any other statement of which key toggles which
+option.** The relationship is the assembler's layout and nothing else.
+
+`TGINT` is extracted from the assembled binary and byte-checked like every other table, which
+settles the count from both ends: `DAMP` to `MUSILLY` is thirteen bytes and `TGINT` is thirteen
+entries. The port does not hold those bytes contiguously -- they are spread across six headers --
+and moving them would touch eighty-seven call sites to buy an invariant a sweep can establish
+instead. So the block is thirteen POINTERS in the assembler's order, and the order is verified the
+only way an ordering can be: all 256 key codes pressed at every one of the thirteen positions,
+3,328 cases, the whole run compared. A pointer in the wrong slot fails on the first key that reaches
+it. Exactly thirteen keys match, which also proves the table has no repeats.
+
+**`EOR #&FF` and not `EOR #1`, and the readers are why.** Half the game tests these bytes with
+`AND`, which a 1 satisfies, and `BIT PATG / BPL` tests bit 7, which it does not -- and that `BIT` is
+what opens the second loop. A port that stored a 1 would silently hide three music toggles while
+every other option kept working.
+
+**`PATG` is the third of the ten it gates.** The byte that decides whether the last three switches
+can be reached is itself two places into the same run, so pressing its key inside the loop changes
+what the rest of the same pass can do. That is the third unrelated job that byte has; §6.121 has the
+other two.
+
+**`STX DNOIZ`, with X still holding the key.** Pressing "2" stores TWO in the sound flag, because
+the routine never loads a value -- every reader tests it for non-zero, so what the game leaves there
+is the key code. The port stores the same two, because the byte is in the commander file. Its
+partner four instructions later, `LDA #0 / STA DNOIZ`, does load one.
+
+**`april16` is not `startbd` with a test disabled.** `MUTOKCH` jumps into the middle of the music
+starter, past the `MUDOCK` choice between the two tunes, past the `STA value5` that records where
+the tune begins, and past all three of the checks on `MUPLA`, `MUFOR` and `MUTOK`. So switching the
+docking music back on while the computer is flying restarts whatever tune was last selected, from
+wherever the pointer was left, even if one is already playing. It is exposed as its own entry rather
+than as a flag -- which is the opposite of what §6.136 did for `hyp1+3`, and the difference is that
+there the two entries really were one `JSR` apart.
+
+**And the fixture bug that looked like a port bug.** `MUTOKOLD` was seeded to zero with `MUTOK` at
+&88, so `MUTOKCH` fired on every key -- a state the game cannot be in, because `MUTOKCH` writes that
+byte every time it runs and the two differ for exactly one pass after the switch moves. With it
+firing constantly, its excursion through `stopbd` and `startbd` did `LDX #HI(musicstart)` on every
+pass, and the `CPX #&07` and `CPX #&0D` below it were reading a register the music player had
+overwritten: the quit key stopped working. §6.95's rule, and it cost a trap log to find.
+
+**Two of the thirteen are read by nothing else in the port.** `JSTGY` and `JSTE` are the joystick's
+y-inversion and its enable, and the flight controls read `JSTK` for both. They are in the block
+anyway, because leaving them out would shift every option after them by two and the "D" key would
+switch the music instead of the disk. A run has to be the length the run is.
+
+**And `DISK` was a `bool`.** It is one of the thirteen, so `DKS3` writes &FF into it with an indexed
+store, and a bool cannot hold that -- the byte in the commander file would have been a 1. Changed to
+a byte, which also turned `SaveGame`'s `_useDisk = !_useDisk` back into the `EOR #&FF` it is
+modelling. Twelve call sites, and the suite stayed green through all of them.
+
+**And one thing 4e does NOT unlock, which this section nearly claimed it did.** The galactic
+hyperdrive has been built and unreachable since §6.136, and three comments said it was waiting for
+this slice to read `CTRL`. It is not: `hyp` reaches `Ghy` through `JSR CTRL`, which is the Ctrl
+MODIFIER, and `Window` and `KeyMap` deliver C64 matrix positions -- Ctrl is not one of them. The
+pause screen reads keys, not modifiers, and finishing it changes nothing here. Caught by checking
+the claim before pushing it, which is §6.138's lesson turned on the sitting that wrote it.
+
+**The freeze is a state and not a loop.** The original does not return until CLR/HOME; a windowed
+program has to keep pumping messages, so the loop is turned inside out -- one function per key,
+called instead of the flight pass while a `paused` flag is set. The same trade `PlanSteps` makes for
+the frame rate, and the test's stop address makes the same distinction: the sweep runs exactly ONE
+pass, because letting it loop toggles the same option over and over and an even number of passes
+leaves it looking untouched.
+
+That clobber is real and survives the fix: on the one pass where the music switch does move, the
+original's quit and resume tests DO look at a byte `startbd` left behind. The sweep reads the
+oracle's own X rather than assuming it is the key, so the port agreeing there is measured rather
+than lucky.
+
 ### 6.138 Two of three fixes that were recorded and never made
 
 §6.128 read three reports from the player's chair -- a letter key that looked dead on the buy
@@ -509,7 +601,8 @@ the two bytes the countdown needs -- `safehouse` and `QQ8` -- which it had never
 nothing had ever been able to start a jump.
 
 **One thing is built and deliberately unreachable.** `hyp` reaches `Ghy` through `JSR CTRL / BMI
-Ghy`, and `CTRL` is a keyboard read this port has no answer for until slice 4e's pause screen. So
+Ghy`, and `CTRL` is a MODIFIER rather than a key: `Window` and `KeyMap` deliver C64 matrix
+positions and Ctrl is not one of them. So
 the galactic hyperdrive is ported, compared against the shipped routine over both answers to the
 drive test (§6.136), and cannot be invoked. The case is written out in the dispatch rather than left
 off, so that adding the key read is one line and not a search -- and `Main.cpp`'s header says so, in
@@ -520,6 +613,14 @@ other end: **a plan section is not evidence that code exists.** When a slice's r
 done by hand in an executable, the audit is not optional and it is a grep. Anything the port owns
 has a sweep; anything transcribed into `Outpost/` has nothing, which is the argument ADR-005 §1's
 ruling turned on the sprites (§6.133) and it applies to game logic with far more force.
+
+**Correction, 2026-09-05, on merging the two tracks.** It was not two of three: on this branch
+NONE of §6.128's three edits to `Main.cpp` survived, the forced "9" included -- the merged dispatch
+returned from `BuyCargo` and `SellCargo` with nothing after them. The edits were made, built and
+run in the other session; what was committed from that working tree carried only the sound wiring,
+and the loss was upstream of the commit rather than in it. Two of the three are better off for it,
+because `RunLoopTail` is a swept function where the originals were hand transcription. The third
+is re-applied here, in the dispatch, as the forced key it was.
 
 ### 6.137 A dependency pass that checked the wrong direction, and two rows it mis-sized
 
@@ -887,23 +988,6 @@ missing row. The fix here was editorial, but the lasting one is smaller than it 
 no backtick group contains a ✅ would have caught this in the commit that made it, and it is three
 lines. Filed against the next documentation sitting rather than done here, because the failing check
 already names the twelve files and the repair took a minute.
-
-### 6.130 One byte, two variables, and a screen that was blank from the start
-
-The status screen's "Present System" line was empty at the cold start and stayed empty until the
-first hyperspace jump. Reported from the player's chair, and the shape is §6.28's exactly: `Game`
-in `Main.cpp` held `QQ2` twice -- `currentSeeds`, which the token printer was bound to, and
-`current.seeds`, which the start sequence's `likeTT112` copy and every arrival write. One caller,
-the hyperspace path, copied the second into the first by hand; nothing else did, and the printer
-read six zeros, which `cpl` prints as nothing because a zero letter-pair index is "skip".
-
-The fix is to delete the copy and bind the printer to the byte, which is what §6.28 said in the
-first place. The "Hyperspace System" line on the same screenshot read Diso rather than Lave, and
-that is not a bug: the default commander is at (20, 173), the cold start's `TT111` finds Lave, and
-Diso is what the crosshairs had been moved to on a chart. One thing noticed on the way and left
-alone: `StateTokens::PrintCurrentSystem`'s comment says printing a name twists the seeds, and
-`cpl` backs `QQ15` up to `QQ19` and restores it -- the port restores too, so the code is right and
-the comment is not. It is not this change's line to touch.
 
 ### 6.129 The sound has two halves, and only one of them can be heard
 
@@ -5450,7 +5534,7 @@ Three things that is worth noting for the slices ahead:
 | **4b Explosions and death** ∥ | `DOEXP`, `EXLOOK`, `PTCLS2`, `SOS1`, `DEATH2`, the escape pod, `BAD`/`FAROF`/`FAROF2`, `SHD`/`DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle. |
 | **4c Main game loop** | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds.<br><br>**Scoped 2026-09-05 into 4c-a … 4c-d (§6.134), and the dependency pass came back EMPTY**: of 111 distinct call targets across its fourteen routines, 46 are already ported, 16 belong to platforms the C64 build never assembles, and the rest are entry points inside 4c's own files. The only unported routine it calls is `GTHG`, which is in its own scope, and every state byte the spawner branches on is modelled. Unlike 4a (§6.121) this row named its routines accurately. 414 instructions of new code, more than `TACTICS`. |
 | **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps. |
-| **4e Pause screen** — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows. |
+| **4e Pause screen** — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows.<br><br>**Built 2026-09-05** (§6.139). `TGINT` extracted and byte-checked; `DKS3` swept over all 256 keys at all thirteen positions (3,328 cases, exactly thirteen matches); the two loops over both answers to `PATG`; `FREEZE` over 1,024 cases reading the outcome from the oracle's own X, because `MUTOKCH` clobbers it. `april16` exposed as its own music entry. `DISK` changed from a bool to the byte it is. Wired into the outer loop as a state rather than a loop, which is what `DOKEY`'s fall into `DK4` has needed since slice 3d. |
 
 Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: nothing above can be compared before the thing below it exists.
 
@@ -5491,7 +5575,7 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **in progress**: 4a is built (4a-a, 4a-b and 4a-c, the last of which absorbed 4a-d per §6.122), and **4c is COMPLETE** — 4c-a and 4c-b built, 4c-c found already done in phase 3 (§6.137), 4c-d built and wired (§6.138). The spawner fills the bubble, the AI steers what it puts there, and hyperspace works. 4b, 4d and 4e are not started; the galactic drive is built but needs 4e to read its key |
+| 4 | 5 | 8–12 | **in progress**: 4a, 4c and 4e are built and wired. 4c-c turned out to have been done in phase 3 (§6.137). **4b (explosions and death) and 4d (missions and Trumbles) remain.** The galactic hyperdrive, built in 4c-b, is still unreachable — and NOT because of 4e: `hyp` reaches `Ghy` through `JSR CTRL`, and Ctrl is a modifier that `Window` and `KeyMap` do not report, because they deliver C64 matrix positions. That is a `KeyMap` change and it belongs to whoever revisits input |
 | 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
 | **Total** | **24** | **40–60** | before modernisation |
 
@@ -5547,7 +5631,8 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
-| 2026-09-05 | **A second copy of `QQ2` blanked the status screen** (§6.130). `Game` held the current system's seeds twice; the printer read the copy nobody wrote at the cold start. Deleted, printer bound to `current.seeds`. §6.28's rule, applied to the composition root. |
+| 2026-09-05 | **A second copy of `QQ2` blanked the status screen** (§6.140). `Game` held the current system's seeds twice; the printer read the copy nobody wrote at the cold start. Deleted, printer bound to `current.seeds`. §6.28's rule, applied to the composition root. |
+| 2026-09-05 | **Slice 4e: thirteen switches whose only definition is where they sit** (§6.139). `DKS3` pairs entry Y of `TGINT` with the byte Y after `DAMP` and nothing else in the game says which key toggles which option, so `TGINT` is extracted and byte-checked and the port's thirteen POINTERS are verified by pressing all 256 keys at all thirteen positions -- 3,328 cases, and exactly thirteen match. `EOR #&FF` and not `EOR #1`, because `BIT PATG / BPL` tests bit 7 and a 1 would hide three music toggles. `STX DNOIZ` stores the KEY CODE in the sound flag. `april16` is exposed as its own entry because `MUTOKCH` jumps past five decisions, not one. And a fixture that seeded `MUTOKOLD` inconsistently made `MUTOKCH` fire every pass, whose excursion clobbers X -- so the quit key stopped working and it looked like a port bug (§6.95 again). |
 | 2026-09-05 | **Two of §6.128's three fixes were recorded and never made** (§6.138). Auditing what that section said it had placed in `Main.cpp` by hand found `DrawDials` still with one caller and nothing anywhere cooling `GNTMP` or `LASCT`: the dials still only moved on a screen change and the laser still never cooled. The commit carrying §6.128 touches `Main.cpp` once, for sound. **The cause is the shape** -- 65 instructions of game logic held as fragments to be transcribed into the executable, owned by nothing in `GameLogic`, compared by nothing, so nothing could go red. `RunLoopTail` is the whole routine now, in `GameLoop.cpp` (renamed from `Spawner.cpp` per §6.121), compared over 52 cases and six outcomes. Four more carries, a `DEX / BEQ P%+3 / DEX` that cannot pass zero, and Trumbles that grow by a CARRY rather than an increment. A plan section is not evidence that code exists. |
 | 2026-09-05 | **§6.134's dependency pass checked one direction, and two rows were mis-sized** (§6.137). Starting 4c-c found `NWSPS` already built -- in slice 3d-d-iii-b, with `NwS1`, the sun's eviction and the Dodo switch, compared against the shipped routine over tech levels straddling ten. **Slice 4c-c has no work in it.** The claim that `FlightSession` stubs it, repeated in §6.134, the 4c row and two commit messages, was wrong: `FlightSession.h` says the opposite. And 4c-d is seven instructions and an audit, not 71 -- §6.128 placed fourteen of part 5 by hand already and thirty-four of the rest are Trumbles, which are slice 4d's. The pass asked what 4c CALLS that the port lacks; it never asked what 4c's own scope line names that the port already has, which is the cheaper question and a grep. |
 | 2026-09-05 | **Slice 4c-b: the jump** (§6.136). `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` in `Hyperspace.cpp`, which answers the `JumpOutcome::Galactic` slice 2d left open and the hyperspace `Main.cpp` refuses by name. Five findings, and three of them are bytes that come from somewhere else: **`QQ2` and `QQ28` describe different systems** (the seeds from `safehouse`, the cache from whatever the last `TT111` left), **`TT111` SNAPS the crosshairs** so `jmp` stores the snapped pair, and **`MJ` is 255** because `ZINF`'s loop counter runs past zero three routines away from the `STY`. `ptg` is `ORA #1`, the mirror of §6.126's idiom; `BEQ zZ+1` executes the operand of `LDA #96` as an `RTS`; the witchspace roll's carry is provably set because both of `HFS2`'s exits set it; and `TT18` has FOUR exits, not three -- `BNE TT114` jumps out to the chart rather than returning. Also removed: an `ArriveAtSystem` the port had invented in `Ghy`, which does not stock the new galaxy's market. |

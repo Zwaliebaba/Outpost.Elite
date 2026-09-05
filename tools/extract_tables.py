@@ -271,6 +271,8 @@ TABLES = [
     # index it, so it is 136 bytes and the last 120 of them are seven other tables and some code.
     Table("EFFECT_PRIORITY_TABLE", "SFXPR", 136, "SoundTables.cpp",
           "the priority of each effect, and 120 bytes more that one caller can reach"),
+    Table("OPTION_KEY_TABLE", "TGINT", 13, "OptionTables.cpp",
+          "the key each configuration toggle answers to, in the order `DKS3` walks `DAMP`"),
     Table("EFFECT_COUNT_TABLE", "SFXCNT", 16, "SoundTables.cpp", "how many interrupts each effect lasts"),
     Table("EFFECT_FREQUENCY_TABLE", "SFXFQ", 16, "SoundTables.cpp", "the starting frequency, in SOFRQ's units"),
     Table("EFFECT_CONTROL_TABLE", "SFXCR", 16, "SoundTables.cpp", "the voice control register: waveform and gate"),

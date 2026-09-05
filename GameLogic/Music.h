@@ -115,6 +115,21 @@ namespace Elite
    */
   void StartDockingMusic(MusicPlayer& _music, SidWriteLog& _log) noexcept;
 
+  /*
+   * 6502: april16 -- start it NOW, with none of the checks above it.
+   *
+   * `MUTOKCH` jumps here rather than calling `startbd`, and the difference is five instructions'
+   * worth of decision: `april16` skips the `MUDOCK` choice between the two tunes, the `STA value5`
+   * that records where the tune starts, and the tests on `MUPLA`, `MUFOR` and `MUTOK`. So turning
+   * the docking music back on while the computer is flying you in restarts WHATEVER TUNE WAS LAST
+   * SELECTED, from wherever `value5` was left, and does it even if one is already playing.
+   *
+   * It is a separate entry and not a flag on `StartDockingMusic` because it is not that routine
+   * with a test disabled -- it is the last four instructions of it (§6.136's `hyp1+3` was the same
+   * question and went the other way, because there the difference really was one `JSR`).
+   */
+  void StartDockingMusicNow(MusicPlayer& _music, SidWriteLog& _log) noexcept;
+
   /// 6502: startat -- the title theme, through the same `startat2` and so the same checks.
   void StartTheme(MusicPlayer& _music, SidWriteLog& _log) noexcept;
 

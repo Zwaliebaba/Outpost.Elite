@@ -23,6 +23,7 @@
 #include "Market.h"
 #include "MarketScreen.h"
 #include "Music.h"
+#include "PauseScreen.h"
 #include "Rng.h"
 #include "SaveGame.h"
 #include "SoundEffects.h"
@@ -65,7 +66,8 @@
  * `Perform` rather than defaulted so that adding one is a compiler error here.
  *
  * The galactic drive is built and UNREACHABLE: `hyp` reaches `Ghy` through `JSR CTRL / BMI Ghy`,
- * and `CTRL` is a keyboard read this port has no answer for until slice 4e. The case is written out
+ * and `CTRL` is a MODIFIER, which `Window` and `KeyMap` do not report -- they deliver matrix
+ * positions, and Ctrl is not one. The case is written out
  * so that adding the read is a one-line change rather than a search.
  */
 namespace
@@ -152,12 +154,12 @@ namespace
     std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
     std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
     std::array<std::uint8_t, 16> buffer{};
-    bool useDisk = false;
+    std::uint8_t useDisk = 0;
 
     /*
      * 6502: QQ15 and QQ2 -- the selected system's seeds, and the current system's inside `current`.
      *
-     * THERE WAS A SECOND COPY OF QQ2 HERE, and it is gone (§6.130). The token printer was bound to
+     * THERE WAS A SECOND COPY OF QQ2 HERE, and it is gone (§6.140). The token printer was bound to
      * it and the start sequence wrote the other one, so the status screen's "Present System" was
      * blank from the cold start until the first hyperspace jump, which was the one path that copied
      * across. `current.seeds` is the byte; the printer reads it directly.
@@ -193,6 +195,33 @@ namespace
      */
     Elite::SystemSeeds jumpTarget{};
     std::uint16_t jumpDistance = 0;
+
+    /*
+     * 6502: DK4's `CPX #&40 / BNE DK2` -- and the frozen state it leaves behind.
+     *
+     * The original does not have this byte: it FREEZES, in a loop that reads the keyboard and does
+     * not return until CLR/HOME. A windowed program cannot stop pumping messages, so the freeze is
+     * a state the outer loop is in rather than a loop inside it -- which is the same trade
+     * `PlanSteps` makes for the frame rate (ADR-005 §3).
+     */
+    bool paused = false;
+
+    /*
+     * 6502: JSTGY and JSTE -- two of the thirteen that NOTHING ELSE IN THE PORT READS.
+     *
+     * They are the joystick's y-inversion and its enable, and the flight controls read `JSTK` for
+     * both. They are here because `DKS3` walks a contiguous run and the run is thirteen long: a
+     * port that left them out would shift every option after them by two, and the "D" key would
+     * switch the music instead of the disk.
+     */
+    std::uint8_t joystickGeometry = 0;
+    std::uint8_t joystickEnabled = 0;
+
+    /// 6502: MUTOKOLD -- what `MUTOKCH` saw last, which is how it notices the switch moving.
+    std::uint8_t musicSwitchWas = 0;
+
+    /// 6502: DNOIZ -- non-zero disables the sound, and the pause screen stores the KEY CODE in it.
+    std::uint8_t soundDisabled = 0;
 
     // ---- the screens ------------------------------------------------------------------------------
     Elite::StateTokens values;
@@ -234,6 +263,37 @@ namespace
   }
 
   /*
+   * 6502: DAMP through MUSILLY -- the thirteen configuration bytes, in the assembler's order.
+   *
+   * THE ORDER IS THE ONLY DEFINITION THERE IS of which key toggles which option (§6.139), so this
+   * function is the whole of the port's statement of it and `TheTogglesMatchDKS3` is what proves
+   * the statement right. Six of the thirteen live in structs that other slices own, which is why
+   * this is pointers rather than a struct of its own: making them contiguous would touch
+   * eighty-seven call sites to buy what a sweep already establishes.
+   */
+  [[nodiscard]] Elite::OptionBlock OptionsOf(Game& _game)
+  {
+    Elite::ControlOptions& controls = _game.flight.Loop().options;
+    Elite::MusicOptions& music = _game.music.options;
+
+    return Elite::OptionBlock{
+      &controls.dampingDisabled,          // 6502: DAMP
+      &controls.recentreDisabled,         // 6502: DJD
+      &controls.authorNames,              // 6502: PATG
+      &_game.status.damageFlash,          // 6502: FLH
+      &_game.joystickGeometry,            // 6502: JSTGY
+      &_game.joystickEnabled,             // 6502: JSTE
+      &controls.joystick,                 // 6502: JSTK
+      &music.dockingMusicOff,             // 6502: MUTOK
+      &_game.useDisk,                     // 6502: DISK
+      &_game.flight.Screen().heaps.pltog, // 6502: PLTOG
+      &music.dockingMusicForced,          // 6502: MUFOR
+      &music.dockingPlaysTheme,           // 6502: MUDOCK
+      &music.effectsDuringMusic,          // 6502: MUSILLY
+    };
+  }
+
+  /*
    * 6502: QQ12, QQ22, QQ8 and safehouse -- what `hyp` and `TT18` read besides the chart.
    *
    * Built here rather than held as a member for the reason `ChartOf` is: the bytes belong to the
@@ -245,7 +305,7 @@ namespace
     jump.docked = _game.dockedFlag;
     jump.countdown = _game.status.hyperspaceCountdown;
     jump.distance = _game.jumpDistance;
-    jump.controlHeld = false; // 6502: JSR CTRL -- the galactic drive's key, which slice 4e reads
+    jump.controlHeld = false; // 6502: JSR CTRL -- a modifier `Window` does not report (§6.139)
     jump.target = _game.jumpTarget;
     return jump;
   }
@@ -295,6 +355,15 @@ namespace
    * actions that need phase 4 are refused rather than silently ignored -- a game that did nothing
    * for the hyperspace key would look exactly like one that had wired it up.
    */
+  /*
+   * 6502: FRCE -- the main loop entered with a key already "pressed".
+   *
+   * Declared ahead of `Perform` because `BAY2` forces one, and `BAY2` is reached from inside two of
+   * the actions `Perform` performs. The recursion is one level deep and cannot be more: the key it
+   * forces is f9, and the Inventory screen forces nothing.
+   */
+  void PressKey(Game& _game, std::uint8_t _key);
+
   void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
   {
     switch (_outcome.action)
@@ -340,10 +409,30 @@ namespace
 
     case Elite::KeyAction::BuyCargo:
       Elite::BuyScreen(_game.trade, _game.commander, _game.market, _game.current.economy, false);
+
+      /*
+       * 6502: BAY2 -- LDA #f9 / JMP FRCE, and the screen reaches it BOTH ways out. A letter gets
+       * there through gnum's `CMP #10 / BCS BAY2`; the seventeenth item gets there through TT222's
+       * `LDA QQ29 / CMP #17 / BCS BAY2`. There is no third exit, which is why this is unconditional.
+       *
+       * `BuyScreen` returns for both rather than jumping, because BAY2 is the DISPATCH'S and the
+       * dispatch is here. Without it the buy screen stays on the display after a cancel, so the
+       * letter key looks dead when it has done exactly what the original does (§6.128, §6.140).
+       *
+       * It forces a KEY rather than performing the action, because FRCE is entered with a key and
+       * lets TT102 decide again -- so cancelling out of a purchase goes down the same path as
+       * pressing "9", rather than down a second one that happens to agree today.
+       */
+      PressKey(_game, Elite::KEY_INVENTORY);
       return;
 
     case Elite::KeyAction::SellCargo:
       Elite::ListCargo(_game.trade, _game.commander, _game.market, _game.current.economy, Elite::SELL_CARGO_VIEW);
+
+      // 6502: TT212's `JSR dn2 / JMP BAY2` -- the beep is the screen's (`ListCargo` makes it on the
+      // exit that runs out of items, not on the letter's); the jump is the dispatch's, and both
+      // exits share it.
+      PressKey(_game, Elite::KEY_INVENTORY);
       return;
 
     case Elite::KeyAction::Inventory:
@@ -532,7 +621,7 @@ namespace
       /*
        * 6502: Ghy -- and it is reached by `hyp`'s `JSR CTRL / BMI Ghy`, which this port cannot ask
        * for yet: `CTRL` is a keyboard read and `JumpOf` hands `hyp` a `controlHeld` of false. So
-       * the galactic drive is BUILT (slice 4c-b) and unreachable until slice 4e reads the key, and
+       * the galactic drive is BUILT (slice 4c-b) and unreachable until the window reports Ctrl, and
        * the case is written out rather than left off so that adding the read is a one-line change.
        */
       if (decided == Elite::JumpOutcome::Galactic)
@@ -752,8 +841,72 @@ namespace
       std::uint8_t key = 0;
       if (_game.window.TakeKey(key))
       {
+        /*
+         * 6502: `DOKEY` FALLS INTO `DK4`, which the port has never followed -- `Controls.cpp` says
+         * so in a comment and slice 4e is what answers it. `CPX #&40 / BNE DK2`: the pause key
+         * freezes the game and everything else carries on to the dispatch.
+         */
+        if (key == Elite::PAUSE_KEY)
+        {
+          _game.paused = true;
+          return;
+        }
+
         PressKey(_game, key);
       }
+    }
+  }
+
+  /*
+   * 6502: FREEZE -- the loop the game is in while it is paused, one pass per key.
+   *
+   * The original does not return until CLR/HOME and reads the keyboard itself. A windowed program
+   * has to keep pumping messages, so the loop is turned inside out: this is called instead of
+   * `Advance` while `paused` is set, and each key the window delivers is one pass round `FREEZE`.
+   * Nothing is drawn and nothing moves, which is what freezing is.
+   */
+  void AdvancePaused(Game& _game)
+  {
+    std::uint8_t key = 0;
+    if (!_game.window.TakeKey(key))
+    {
+      return;
+    }
+
+    const Elite::PausePass pass =
+      Elite::PressPauseKey(OptionsOf(_game), _game.soundDisabled, _game.musicSwitchWas, _game.flight.Loop().control.dockingComputer, key);
+
+    /*
+     * 6502: JSR MUTOKCH -- the music is phase 5's, and this is the seam it reaches through. The
+     * `Stop` answer goes through `stopbd`, which starts the music again when `MUFOR` is set, so
+     * the two answers are not "on" and "off" -- they are "start it now" and "ask `stopbd`".
+     */
+    if (pass.music == Elite::MusicChange::StartNow)
+    {
+      Elite::StartDockingMusicNow(_game.music, _game.audio.Direct());
+    }
+    else if (pass.music == Elite::MusicChange::Stop)
+    {
+      Elite::StopDockingMusic(_game.music, _game.flight.Loop().screen.status.titleReset, _game.sound, _game.audio.Direct());
+    }
+
+    /*
+     * The twenty frames per toggle are DROPPED, and saying so is better than pretending. `JSR
+     * DELAY` is there to stop one key press flipping a switch twenty times while the player holds
+     * it; this loop is driven by key EVENTS from the window, which repeat at the system's rate and
+     * not at the frame's, so the debounce the delay provides is already there.
+     */
+    static_cast<void>(pass.delayFrames);
+
+    if (pass.outcome == Elite::PauseOutcome::Resumed)
+    {
+      _game.paused = false; // 6502: CPX #&0D -- and `DK2`'s `RTS`
+    }
+    else if (pass.outcome == Elite::PauseOutcome::Quit)
+    {
+      // 6502: CPX #&07 / JMP DEATH2 -- which does not come back, so neither does the pause.
+      _game.paused = false;
+      Leave(_game, Elite::LoopOutcome::Died);
     }
   }
 
@@ -818,6 +971,19 @@ namespace
       const auto now = std::chrono::steady_clock::now();
       const double elapsed = std::chrono::duration<double>(now - last).count();
       last = now;
+
+      /*
+       * 6502: FREEZE -- and it comes FIRST, because a frozen game is frozen in both halves.
+       *
+       * `DK4` is reached from `DOKEY`, which the flight loop calls, so the pause key is a flight
+       * key; but what `FREEZE` does is refuse to return, and the docked loop cannot run while it
+       * is refusing either. One test above both halves is what that shape becomes here.
+       */
+      if (game->paused)
+      {
+        AdvancePaused(*game);
+        continue;
+      }
 
       if (game->dockedFlag != 0)
       {

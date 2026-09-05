@@ -32,6 +32,16 @@ namespace Elite
   extern const std::array<std::uint8_t, 256> ANTILOG_ODD_TABLE;
 
   // 6502: SNE -- a quarter turn of sine, scaled to a byte.
+  /*
+   * 6502: TGINT -- the key each of the pause screen's thirteen toggles answers to.
+   *
+   * ITS ORDER IS THE ONLY THING THAT DEFINES THE OPTION BLOCK. `DKS3` is `CMP TGINT,Y / LDA DAMP,Y
+   * / EOR #&FF / STA DAMP,Y`, so entry Y here and the byte Y after `DAMP` are one pair, and the
+   * assembler's layout is the whole of the relationship. `DAMP` is at &1D06 and `MUSILLY` at
+   * &1D12, which is thirteen bytes, and this table is thirteen entries: that is the check.
+   */
+  extern const std::array<std::uint8_t, 13> OPTION_KEY_TABLE;
+
   extern const std::array<std::uint8_t, 32> SINE_TABLE;
 
   // 6502: ACT -- arctangent, indexed by a ratio the caller has already reduced.
