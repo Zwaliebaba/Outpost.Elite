@@ -6,7 +6,9 @@
 #include "EliteTypes.h"
 #include "PlanetDraw.h"
 #include "Market.h"
+#include "Charts.h"
 #include "Dashboard.h"
+#include "Messages.h"
 #include "Spawn.h"
 #include "SoundEffects.h"
 
@@ -28,6 +30,51 @@ namespace Elite
     }
 
   } // namespace
+
+  LoopHead RunLoopHead(FlightLoop& _loop, ChartEffects& _rows) noexcept
+  {
+    FlightScreen& screen = _loop.screen;
+
+    /*
+     * 6502: DEC DLY / BEQ me2 / BPL me3 / INC DLY.
+     *
+     * The `INC` is what stops it wrapping: `DLY` at zero decrements to 255, which is negative, so
+     * the `BPL` falls through and the increment puts it back. Only a `DLY` of exactly 1 reaches
+     * `me2`.
+     */
+    const std::uint8_t delayed = static_cast<std::uint8_t>(screen.message.delay - 1u);
+    screen.message.delay = delayed;
+
+    if (delayed == 0u)
+    {
+      // 6502: .me2 LDA QQ11 / BNE clynsneed.
+      if (screen.view != 0u)
+      {
+        _rows.ClearBottomRows(); // 6502: JSR CLYNS -- a text screen's message is in the bottom rows
+      }
+      else
+      {
+        /*
+         * 6502: LDA MCH / JSR MESS / LDA #0 / STA DLY.
+         *
+         * Sending the SAME token again is what erases it: the printer EORs, so the second print of
+         * a message rubs out the first. And `MESS` sets `DLY` to twenty, which is why the `LDA #0 /
+         * STA DLY` after it is not redundant -- it undoes what the call just did.
+         */
+        ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, screen.message.token, screen.view);
+        screen.message.delay = 0u;
+      }
+    }
+    else if ((delayed & 0x80u) != 0u)
+    {
+      screen.message.delay = static_cast<std::uint8_t>(delayed + 1u); // 6502: INC DLY
+    }
+
+    // 6502: .me3 DEC MCNT / BEQ P%+5 / .ytq JMP MLOOP -- and this is the ONE PASS IN 256 that
+    // reaches everything slice 4c-a built.
+    --screen.flight.mainLoopCounter;
+    return screen.flight.mainLoopCounter == 0u ? LoopHead::Spawn : LoopHead::SkipSpawning;
+  }
 
   std::uint8_t RunLoopTail(FlightLoop& _loop, CommanderBlock& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept
   {
