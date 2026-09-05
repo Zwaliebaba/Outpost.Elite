@@ -165,6 +165,9 @@
     <ClCompile Include="ControlsTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="VideoStateTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="ViewChangeTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>

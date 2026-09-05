@@ -182,6 +182,19 @@ namespace Elite::Testing
     return instance;
   }
 
+  /*
+   * The sprite definitions, from a fourth assembly and a third image.
+   *
+   * `elite-sprites.asm` saves 448 bytes at &7C3A and no build of the GAME assembles it -- the
+   * LOADER copies it to `SPRITELOC%` at run time. It gets its own image for the same reason the
+   * loader does: it belongs nowhere near the addresses the oracle's routines run at.
+   */
+  const OracleImage& OracleImage::SpriteInstance()
+  {
+    static const OracleImage instance("SpriteLabels.txt", "SpriteBinaries.txt");
+    return instance;
+  }
+
   bool OracleImage::TryLabel(const std::string& _name, std::uint16_t& _outAddress) const
   {
     const auto found = m_labels.find(_name);

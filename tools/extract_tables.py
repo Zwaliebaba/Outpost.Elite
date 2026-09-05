@@ -38,8 +38,15 @@ BINARIES = REFERENCE / "Binaries.txt"
 LOADER_LABELS = REFERENCE / "LoaderLabels.txt"
 LOADER_BINARIES = REFERENCE / "LoaderBinaries.txt"
 
+# And the sprite definitions, a third image for the same reason and a different address:
+# `elite-sprites.asm` assembles at &7C3A and the LOADER copies its 448 bytes to SPRITELOC%.
+# One table comes out of it.
+SPRITE_LABELS = REFERENCE / "SpriteLabels.txt"
+SPRITE_BINARIES = REFERENCE / "SpriteBinaries.txt"
+
 GAME = "game"
 LOADER = "loader"
+SPRITES = "sprites"
 
 
 class Table:
@@ -262,6 +269,21 @@ TABLES = [
     Table("DASHBOARD_COLOUR_RAM", "cdump", 280, "ScreenTables.cpp",
           "colour RAM for the same rows, which is where multicolour %11 comes from",
           _source=LOADER),
+    # ---- the sprite definitions, from the fourth assembly (ADR-005 section 1) ------------------
+    #
+    # SEVEN definitions of 64 bytes, and the count is what INDEXES them (section 6.8): a sprite
+    # pointer selects one 64-byte block, the loader sets pointers SPOFF%+0 to SPOFF%+6, and
+    # nothing in the game ever forms a higher one. 448 bytes is also exactly what the master
+    # saves, so the two agree.
+    #
+    # Their order is the loader's: 0-3 are the laser sights for a pulse, beam, military and
+    # mining laser, 4 is the explosion cloud, and 5 and 6 are the two Trumbles. The first five
+    # are `SPRITE2` -- one bit per pixel, 24 across -- and the last two are `SPRITE4`, two bits
+    # per pixel and 12 across. `SpriteData.cpp` carries the bytes; `VideoState.h` carries which
+    # of them is hi-res, because that is a fact about the DEFINITIONS and not about the registers.
+    Table("SPRITE_DEFINITIONS", "spritp", 448, "SpriteData.cpp",
+          "seven 64-byte sprite definitions: four laser sights, the explosion cloud, two Trumbles",
+          _source=SPRITES),
     # ---- slice 5a: the sound effects. Sixteen of everything, because the effect number is what
     # indexes all eight tables -- EXCEPT the priority table, which one caller indexes with bit 7
     # set: `HYPNOISE` calls `NOISE` with Y = sfxhyp1 + 128 = 135, and `LDA SFXPR,Y / LSR A / BCS`
@@ -378,9 +400,10 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="verify the generated files are current, do not rewrite")
     args = parser.parse_args()
 
-    labels = {GAME: read_table(LABELS), LOADER: read_table(LOADER_LABELS)}
-    images = {GAME: load_image(read_table(BINARIES)), LOADER: load_image(read_table(LOADER_BINARIES))}
-    names = {GAME: LABELS.name, LOADER: LOADER_LABELS.name}
+    labels = {GAME: read_table(LABELS), LOADER: read_table(LOADER_LABELS), SPRITES: read_table(SPRITE_LABELS)}
+    images = {GAME: load_image(read_table(BINARIES)), LOADER: load_image(read_table(LOADER_BINARIES)),
+              SPRITES: load_image(read_table(SPRITE_BINARIES))}
+    names = {GAME: LABELS.name, LOADER: LOADER_LABELS.name, SPRITES: SPRITE_LABELS.name}
 
     grouped: dict[str, list[tuple[Table, bytes]]] = {}
     for table in TABLES:

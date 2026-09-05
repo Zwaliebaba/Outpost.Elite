@@ -153,6 +153,7 @@
     <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="LaunchTests.cpp" />
     <ClCompile Include="ControlsTests.cpp" />
+    <ClCompile Include="VideoStateTests.cpp" />
     <ClCompile Include="ViewChangeTests.cpp" />
     <ClCompile Include="LaserTests.cpp" />
     <ClCompile Include="MessageTests.cpp" />

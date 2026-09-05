@@ -69,6 +69,20 @@ ASSEMBLIES = [
 # test ever load.
 LOADER_ASSEMBLY = ("loader", "versions/c64/1-source-files/main-sources/elite-loader.asm")
 
+# And a FOURTH, kept out of the oracle image for the same reason and a different address.
+#
+# `elite-sprites.asm` is 84 lines and produces 448 bytes: `spritp`, the seven sprite definitions
+# -- four laser sights, the explosion cloud, and two Trumbles facing opposite ways. The game never
+# assembles them; the LOADER copies them into place at `SPRITELOC%`, which is `SCBASE + &2800` and
+# therefore one byte past the end of everything `Canvas` models.
+#
+# It gets its own reference pair because `CODE% = &7C3A`, which is nowhere near either of the
+# other two images and has no business in the oracle. What it buys is that the seven definitions
+# become a generated table `extract_tables.py --check` compares byte for byte against the
+# assembler's own output -- which is the ONE part of the sprite overlay that can be verified
+# against the original at all (ADR-005 section 1).
+SPRITE_ASSEMBLY = ("sprites", "versions/c64/1-source-files/main-sources/elite-sprites.asm")
+
 # Where the oracle loads blocks from, and what `Binaries.txt`'s first column is relative to.
 ASSEMBLED = UPSTREAM / "versions" / "c64" / "3-assembled-output"
 
@@ -79,13 +93,23 @@ BINARIES_OUT = REFERENCE / "Binaries.txt"
 LOADER_LABELS_OUT = REFERENCE / "LoaderLabels.txt"
 LOADER_BINARIES_OUT = REFERENCE / "LoaderBinaries.txt"
 
+# The same again for the sprite definitions.
+SPRITE_LABELS_OUT = REFERENCE / "SpriteLabels.txt"
+SPRITE_BINARIES_OUT = REFERENCE / "SpriteBinaries.txt"
+
 # 'NAME':1234L  --  the trailing L is Python 2 long syntax and is not always present.
 LABEL_RE = re.compile(r"'([^']+)'\s*:\s*(\d+)L?")
 
 # The load address is on the S.<name> line and the actual filename on the line after it, and
 # the two do not agree ("S.C.WORDS" saves "WORDS.bin"), so they are read as a pair rather than
 # by guessing a filename from the printed name.
-SAVE_RE = re.compile(r"^S\.\S+\s+&([0-9A-Fa-f]+)\s+&[0-9A-Fa-f]+.*\r?\n\s*Saving file '([^']+)'", re.MULTILINE)
+#
+# THE SECOND ADDRESS IS OPTIONAL, because the four masters do not all print the same thing. Most
+# print start, end, exec and reload -- "S.C.COMLOD &4000  &865B  &4000  &4000" -- while
+# `elite-sprites.asm` prints the start and then a literal length: "S.C.SPRITE &7C3A  +1C0".
+# Requiring two addresses matched nothing at all for that one, and the miss surfaced three steps
+# later as "no saved blocks found in the compile logs", which names neither the file nor the line.
+SAVE_RE = re.compile(r"^S\.\S+\s+&([0-9A-Fa-f]+)(?:\s+&[0-9A-Fa-f]+)?.*\r?\n\s*Saving file '([^']+)'", re.MULTILINE)
 
 
 def raw_labels_path(_which: str) -> Path:
@@ -110,7 +134,7 @@ def assemble() -> int:
 
     REFERENCE.mkdir(parents=True, exist_ok=True)
 
-    for which, source in ASSEMBLIES + [LOADER_ASSEMBLY]:
+    for which, source in ASSEMBLIES + [LOADER_ASSEMBLY, SPRITE_ASSEMBLY]:
         command = [str(beebasm), "-i", source, "-v", "-d", "-labels", str(raw_labels_path(which))]
         print(f"assembling {which}: {source}")
         completed = subprocess.run(command, cwd=UPSTREAM, capture_output=True, text=True)
@@ -119,7 +143,7 @@ def assemble() -> int:
             print(f"FAIL  BeebAsm exited {completed.returncode}; see {compile_log_path(which)}")
             return completed.returncode
 
-    print("OK    all three assemblies written")
+    print("OK    all four assemblies written")
     return 0
 
 
@@ -251,6 +275,10 @@ def main() -> int:
     loaderLabels = parse_labels([LOADER_ASSEMBLY])
     loaderBinaries = parse_binaries([LOADER_ASSEMBLY], _runtime=False)
 
+    # And the sprite definitions, apart for the same reason: CODE% = &7C3A.
+    spriteLabels = parse_labels([SPRITE_ASSEMBLY])
+    spriteBinaries = parse_binaries([SPRITE_ASSEMBLY], _runtime=False)
+
     REFERENCE.mkdir(parents=True, exist_ok=True)
 
     write_labels(LABELS_OUT, labels)
@@ -258,10 +286,15 @@ def main() -> int:
     write_labels(LOADER_LABELS_OUT, loaderLabels)
     write_binaries(LOADER_BINARIES_OUT, loaderBinaries)
 
+    write_labels(SPRITE_LABELS_OUT, spriteLabels)
+    write_binaries(SPRITE_BINARIES_OUT, spriteBinaries)
+
     print(f"labels    {len(labels)} -> {LABELS_OUT.relative_to(REPO)}")
     print(f"binaries  {len(binaries)} -> {BINARIES_OUT.relative_to(REPO)}")
     print(f"loader    {len(loaderLabels)} labels, {len(loaderBinaries)} block(s) -> "
           f"{LOADER_LABELS_OUT.relative_to(REPO)}")
+    print(f"sprites   {len(spriteLabels)} labels, {len(spriteBinaries)} block(s) -> "
+          f"{SPRITE_LABELS_OUT.relative_to(REPO)}")
     lowest = min(start for _name, start in binaries)
     highest = max(start for _name, start in binaries)
     print(f"span      first block loads at {lowest:#06x}, last at {highest:#06x}")
@@ -272,6 +305,8 @@ def main() -> int:
     for probe in ("sdump", "cdump"):
         if probe not in loaderLabels:
             print(f"WARN  expected loader label {probe} is missing")
+    if "spritp" not in spriteLabels:
+        print("WARN  expected sprite label spritp is missing")
     return 0
 
 
