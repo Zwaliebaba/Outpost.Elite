@@ -65,7 +65,12 @@ main loop that ran as fast as the scene allowed.
   takes only the canvas, and the sprite state is not in it. The pointers are (they are canvas
   writes at `SIGHT_SPRITE_CELL`, compared byte for byte already), but the enable mask, the colour
   and the raster mode are `SightEffects` — a WRITE-ONLY seam out to the presenter — and the Trumble
-  positions `MVTRIBS` writes are not modelled at all. So this needs the register state to become
+  positions `MVTRIBS` writes are not modelled at all. **There are now TWO such write-only seams
+  rather than one**: `ExplosionEffects`, added by slice 4b-b for `PTCLS2`'s burst sprite, carries
+  the sprite-expand registers and sprite 1's nine-bit position and enable bit the same way
+  (§6.144). Its test compares the ARGUMENTS against the shipped code's registers, read-modify-writes
+  included, which is as far as a seam can be verified and is the pattern `VideoState` should keep.
+  So this needs the register state to become
   DATA that `GameLogic` owns and both `Resolve` and the presenter read: an explicit `VideoState`
   struct, not a getter on `SightEffects`. The reason it must not be a getter is already written on
   `MaskSprites`: a getter invites a port to compute what the hardware is holding.

@@ -94,6 +94,7 @@ essay — the source is vendored and a reader can go and read it.
 | `GameLogic/` | **The port.** Namespace `Elite`. Deterministic, no window, no GPU, no audio device, no clock, no file system, no float. Draws into an in-memory canvas and emits sound events. | Yes |
 | `Outpost/` | The executable: composition root, window, D3D12 canvas presenter, SID synthesiser, key map, save store. The only project that knows both the game and the platform. | Yes |
 | `Tests/GameLogicTests/` | MSVC CppUnitTest DLL: the 6502 interpreter, the oracle fixture, and the suites. | Yes |
+| `Tests/PortableRunner/` | The same suite under g++: three shim headers, a generator and a shell script. Compiles the test files unmodified — see its own README. | Yes |
 | `Design/` | ADRs, the conversion plan, the source inventory, the risk register. | Yes — see §7 |
 | `MasterFile/` | The 13 annotated master `.asm` files. **Reference only** — never compiled, never on an include path. | **No** |
 | `Upstream/` | The vendored upstream source tree, pinned by commit. **Not ours.** | **No — never edit, never reformat** |
@@ -295,12 +296,12 @@ patience:
 - **Repository checks** (Ubuntu, ~10s): every checker listed above except `extract_tables`. This
   is the job that would have caught slice 0a's `.gitmodules` gap, because it starts from a fresh
   clone every time.
-- **Suite on Ubuntu (portable runner)** (Ubuntu, ~70s): builds BeebAsm at the pinned commit (cached
+- **Suite on Ubuntu (portable runner)** (Ubuntu, ~85s): builds BeebAsm at the pinned commit (cached
   across runs), assembles the reference build, checks the generated tables, then builds and runs
   the whole suite through `Tests/PortableRunner/`. Not the authority (ADR-004 §1) — it is here so a
   broken push says so in a minute rather than five, and because a second compiler catches what the
   first tolerates. It is also more permissive than MSVC in ways nothing measures (§6.116).
-- **Debug x64 build and tests** (Windows, ~4.5 min): builds BeebAsm with `cl`, assembles the
+- **Debug x64 build and tests** (Windows, ~5 min): builds BeebAsm with `cl`, assembles the
   reference build, checks the tables, builds `Tests\GameLogicTests\GameLogicTests.vcxproj` in
   Debug and Release, runs the suite in Release (the exhaustive sweeps are four times dearer
   unoptimised), then restores the executable's NuGet packages and **builds `Outpost.vcxproj`

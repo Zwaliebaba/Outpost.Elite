@@ -1,7 +1,10 @@
 # ADR-002 — Numeric Model: 8-bit Semantics Preserved Exactly
 
-**Status:** Proposed · 2026-09-02 · **§4 amended 2026-09-03** (the canvas representation, from
-measurement rather than assertion — see §7)
+**Status:** **Accepted** · 2026-09-02 · **§4 amended 2026-09-03** (the canvas representation, from
+measurement rather than assertion — see §7) · **moved from Proposed to Accepted 2026-09-05.** The
+model has been the port's whole basis for twenty-three slices and has not needed a second amendment:
+every divergence found in that time was a routine transcribed wrongly, never the numeric model
+being unable to express what the 6502 did.
 **Depends on:** ADR-001 (fidelity)
 **Feeds:** ADR-003 (the oracle only works if this holds), every `GameLogic` file
 

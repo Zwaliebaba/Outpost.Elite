@@ -1,12 +1,16 @@
 # Design/ — Outpost: Elite
 
-**Status:** opened 2026-09-02. **Phases 0 to 3 are built as of 2026-09-05**: the kernel, the
-whole docked game, and flight with its 3D pipeline are ported and compared against the assembled
-original, and the executable launches, flies, docks and dies. Phase 4 (combat and a living
-universe) and phase 5 (sound) are not started; the sprite overlay is an open decision (ADR-005 §1,
-plan §6.100), and the pause screen with its thirteen option toggles was in no slice until 4e was added (plan §6.120). **A fresh clone needs `git submodule update --init` and
-`python tools/labels.py --assemble`** before the oracle tests mean anything
-(Elite-Conversion-Plan.md §6.9, Risk R9).
+**Status:** opened 2026-09-02. **Phases 0, 1, 2, 3 and 5 are built as of 2026-09-05**, and phase 4
+is built but for one slice: the kernel, the whole docked game, flight with its 3D pipeline, the
+sound and music, the ship AI and the autopilot, the explosions, the main game loop with hyperspace
+and the spawning rules, and the pause screen with its thirteen option toggles are all ported and
+compared against the assembled original. The executable launches, flies, fights, docks and dies.
+**What is left is slice 4d** — the missions and the Trumbles — plus two pieces of recorded debt:
+fifteen mutation survivors in the ship AI's sweep (plan §6.125, §6.132) and the `VideoState` work
+that ADR-005 §1's closed decision turned out to need (plan §6.133). **A fresh clone needs
+`git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **348 tests** and CI runs **nine
+repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
