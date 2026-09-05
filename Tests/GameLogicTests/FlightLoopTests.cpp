@@ -906,8 +906,9 @@ namespace GameLogicTests
         spawned.push_back(_type);
         return spawnSucceeds;
       }
-      void Anger(std::uint8_t _type) override
+      void Anger(std::uint8_t _slot, std::uint8_t _type) override
       {
+        (void)_slot; // the oracle's trap records A, which is the type; the slot is INF's and not compared here
         angered.push_back(_type);
       }
       bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override

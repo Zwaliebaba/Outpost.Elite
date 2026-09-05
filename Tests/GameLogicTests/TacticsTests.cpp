@@ -571,7 +571,7 @@ namespace GameLogicTests
       {
         return false;
       }
-      void Anger(std::uint8_t) override {}
+      void Anger(std::uint8_t, std::uint8_t) override {}
       bool SpawnChild(std::uint8_t, std::uint8_t _type) override
       {
         spawned.push_back(_type);
