@@ -2,6 +2,7 @@
 
 #include "Commander.h"
 #include "Dashboard.h"
+#include "FlightLoop.h"
 #include "Rng.h"
 #include "ShipSlot.h"
 #include "StartUp.h"
@@ -12,7 +13,12 @@ namespace Elite
 {
 
   /*
-   * The main game loop's spawning rules -- parts 1 to 4 of six, and `GTHG` (slice 4c-a).
+   * The main game loop's non-flight half -- parts 1 to 6 (slices 4c-a and 4c-d).
+   *
+   * The file was `Spawner` while it held only parts 1 to 4, and §6.121's rule caught up with it
+   * when part 5 arrived: a name that records which routine asked first stops being true when a
+   * second one asks. What is here is `MLOOP` and everything it falls through, which is the half of
+   * the loop that is not `M%`.
    *
    * This is what makes the universe a universe. `TACTICS` (slice 4a-c) decides what a ship already
    * in the bubble does; nothing before this slice put one there over time, so every ship the AI has
@@ -48,6 +54,36 @@ namespace Elite
    */
 
   /*
+   * 6502: MLOOP -- main game loop part 5, which is the loop's own housekeeping (slice 4c-d).
+   *
+   * SIXTY-FIVE INSTRUCTIONS, AND THE PORT HAD FOURTEEN OF THEM PLACED BY HAND. §6.128 read three
+   * player reports -- a dead letter key on the buy screen, dials that never moved, a laser that
+   * fired once -- diagnosed all three as this routine being absent, and recorded that all three
+   * were fixed. Auditing it for this slice found that only the FIRST had been: `DrawDials` still
+   * had one caller, the one-off fill on a screen change, and nothing anywhere cooled `GNTMP` or
+   * counted `LASCT` down. Transcribing fragments of a routine into an executable is how two of
+   * three went missing without anything going red, which is why the whole of it is here instead
+   * (§6.138).
+   *
+   * `LDX #&FF / TXS` is not ported: it resets the 6502's stack because six paths reach here by
+   * `JMP` rather than by returning, and a port whose calls are calls has nothing to reset.
+   *
+   * THE TRUMBLES ARE IN IT, and they belong to slice 4d. They are here anyway, because they are in
+   * this routine and splitting it would mean inventing an entry point the original does not have
+   * -- the same argument parts 1 to 4 settled. What 4d owns is the sprites and `MVTRIBS`; the
+   * breeding arithmetic and the squeak are `MLOOP`'s.
+   */
+  /*
+   * Returns the VERTICAL SYNCS the pass asks to wait for, which is 0 or 2.
+   *
+   * `JSR DELAY` is a hardware wait and `check_gamelogic.py` forbids `GameLogic` a clock, so the
+   * frames are counted back to the executable rather than slept through here. That is the same
+   * decision ADR-005 §3 made for the loop as a whole: the game says how long, the platform decides
+   * how to spend it.
+   */
+  [[nodiscard]] std::uint8_t RunLoopTail(FlightLoop& _loop, CommanderBlock& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept;
+
+  /*
    * 6502: CYL2, COU and PACK -- the three ship types the spawner names that no earlier slice did.
    *
    * `PACK` is not a type of its own: the source says `PACK = SH3`, so the pack hunters are the
@@ -56,6 +92,18 @@ namespace Elite
   inline constexpr std::uint8_t SHIP_TYPE_COBRA_PIRATE = 24;                 ///< 6502: CYL2
   inline constexpr std::uint8_t SHIP_TYPE_COUGAR = 32;                       ///< 6502: COU
   inline constexpr std::uint8_t SHIP_TYPE_PACK_FIRST = SHIP_TYPE_SIDEWINDER; ///< 6502: PACK = SH3
+
+  /// 6502: LDY #2 / JSR DELAY -- two vertical syncs on a docked screen with the author-names
+  /// option off, which is the only frame cap anywhere in the main loop (§6.17).
+  inline constexpr std::uint8_t LOOP_DELAY_FRAMES = 2;
+
+  /// 6502: CMP #220 -- the roll a Trumble breeds on, which is a CARRY added to the low byte and
+  /// not an increment: 36 values in 256, so the population grows about one pass in seven.
+  inline constexpr std::uint8_t TRUMBLE_BREED_ROLL = 220;
+
+  /// 6502: CMP #224 -- read twice, and it does two things: above it the squeak comes half as often
+  /// and it is the sound of them burning rather than of them squeaking.
+  inline constexpr std::uint8_t TRUMBLE_BURN_TEMPERATURE = 224;
 
   /// 6502: LDA #38 / STA INWK+7 -- the z high byte every ship spawned by part 2 starts at, which
   /// is why traders and canisters always appear at the same distance in a random direction.

@@ -167,7 +167,7 @@
     <ClInclude Include="Messages.h" />
     <ClInclude Include="Scanner.h" />
     <ClInclude Include="Hyperspace.h" />
-    <ClInclude Include="Spawner.h" />
+    <ClInclude Include="GameLoop.h" />
     <ClInclude Include="Tactics.h" />
     <ClInclude Include="Spawn.h" />
     <ClInclude Include="SoundEffects.h" />
@@ -247,7 +247,7 @@
     <ClCompile Include="Messages.cpp" />
     <ClCompile Include="Scanner.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
-    <ClCompile Include="Spawner.cpp" />
+    <ClCompile Include="GameLoop.cpp" />
     <ClCompile Include="Tactics.cpp" />
     <ClCompile Include="Spawn.cpp" />
     <ClCompile Include="SoundEffects.cpp" />

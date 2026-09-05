@@ -451,6 +451,51 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.138 Two of three fixes that were recorded and never made
+
+§6.128 read three reports from the player's chair -- a letter key that looked dead on the buy
+screen, dials that never moved, a laser that fired once -- diagnosed all three as main game loop
+part 5 being absent from the outer loop, and recorded that all three were now in `Main.cpp`.
+Auditing that for slice 4c-d, which §6.137 had just re-sized to "the frame-rate option and an audit
+of what was placed by hand", found that **only the first was ever done**.
+
+`DrawDials` still had exactly one caller -- `wantdials`' one-off fill on a screen change -- so the
+dials still only moved when the screen changed. Nothing anywhere decremented `GNTMP` or `LASCT`, so
+the laser still never cooled. The commit that carries §6.128 touches `Main.cpp` in one place and it
+is the sound wiring. The section describes work that was not done, in the past tense.
+
+**The cause is the shape, not the sitting.** Part 5 is 65 instructions of ordinary game logic --
+two countdowns, a call to `DIALS`, a frame-rate option, and the Trumbles breeding and squeaking --
+and the plan had it as fragments to be transcribed into the executable by hand. Nothing in
+`GameLogic` owned it, so nothing compared it against the shipped routine, so nothing could go red
+when two thirds of it failed to appear. Every other routine in this port is a function with a sweep
+behind it; this one was three sentences in a plan.
+
+So it is a function now, whole: `RunLoopTail` in `GameLoop.cpp` (the file was `Spawner.cpp` until
+part 5 arrived and §6.121's rule caught up with it), compared against the shipped routine from
+`MLOOP+3` to `TT17` over 52 cases -- six distinct outcomes, and the two that matter are the ones
+that were missing. **`LDX #&FF / TXS` is the only thing not ported**: it resets the 6502's stack
+because six `JMP`s reach this label, and a port whose calls are calls has nothing to reset.
+
+**Four carries, in a routine nobody would expect to have any.** `DIALS` comes back with the flag
+CLEAR and the breeding roll rotates that in; on the docked path the flag is instead bit 0 of `QQ11
+AND PATG`, because `LSR A` is the branch test AND the argument; `CMP #224` and `ASL T` each feed the
+squeak roll on their own path; and the second squeak roll always gets a zero, because a one would
+have taken the `BCS` and returned. §6.135 found nine of these in parts 1 to 4 and §6.136 found nine
+more in the jump. They are not a property of hard routines -- they are a property of the 6502.
+
+**And two things worth naming for their own sake.** The pulse countdown is `DEX / BEQ P%+3 / DEX`,
+which is minus two that CANNOT pass zero: one `DEX` lands on the branch and it skips the other, so
+an odd count stops at zero and an even one steps through it. And the Trumbles do not increment --
+`CMP #220 / LDA TRIBBLE / ADC #0` adds the compare's CARRY to the low byte, so the population grows
+by one about one pass in seven and the high byte only moves when the low byte wraps.
+
+**The rule.** §6.137 said to check the port rather than the prose. This is the same lesson from the
+other end: **a plan section is not evidence that code exists.** When a slice's record says work was
+done by hand in an executable, the audit is not optional and it is a grep. Anything the port owns
+has a sweep; anything transcribed into `Outpost/` has nothing, which is the argument ADR-005 §1's
+ruling turned on the sprites (§6.133) and it applies to game logic with far more force.
+
 ### 6.137 A dependency pass that checked the wrong direction, and two rows it mis-sized
 
 §6.134 recorded that slice 4c's dependency pass "came back empty" and scoped the slice into four
@@ -5460,6 +5505,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Two of §6.128's three fixes were recorded and never made** (§6.138). Auditing what that section said it had placed in `Main.cpp` by hand found `DrawDials` still with one caller and nothing anywhere cooling `GNTMP` or `LASCT`: the dials still only moved on a screen change and the laser still never cooled. The commit carrying §6.128 touches `Main.cpp` once, for sound. **The cause is the shape** -- 65 instructions of game logic held as fragments to be transcribed into the executable, owned by nothing in `GameLogic`, compared by nothing, so nothing could go red. `RunLoopTail` is the whole routine now, in `GameLoop.cpp` (renamed from `Spawner.cpp` per §6.121), compared over 52 cases and six outcomes. Four more carries, a `DEX / BEQ P%+3 / DEX` that cannot pass zero, and Trumbles that grow by a CARRY rather than an increment. A plan section is not evidence that code exists. |
 | 2026-09-05 | **§6.134's dependency pass checked one direction, and two rows were mis-sized** (§6.137). Starting 4c-c found `NWSPS` already built -- in slice 3d-d-iii-b, with `NwS1`, the sun's eviction and the Dodo switch, compared against the shipped routine over tech levels straddling ten. **Slice 4c-c has no work in it.** The claim that `FlightSession` stubs it, repeated in §6.134, the 4c row and two commit messages, was wrong: `FlightSession.h` says the opposite. And 4c-d is seven instructions and an audit, not 71 -- §6.128 placed fourteen of part 5 by hand already and thirty-four of the rest are Trumbles, which are slice 4d's. The pass asked what 4c CALLS that the port lacks; it never asked what 4c's own scope line names that the port already has, which is the cheaper question and a grep. |
 | 2026-09-05 | **Slice 4c-b: the jump** (§6.136). `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` in `Hyperspace.cpp`, which answers the `JumpOutcome::Galactic` slice 2d left open and the hyperspace `Main.cpp` refuses by name. Five findings, and three of them are bytes that come from somewhere else: **`QQ2` and `QQ28` describe different systems** (the seeds from `safehouse`, the cache from whatever the last `TT111` left), **`TT111` SNAPS the crosshairs** so `jmp` stores the snapped pair, and **`MJ` is 255** because `ZINF`'s loop counter runs past zero three routines away from the `STY`. `ptg` is `ORA #1`, the mirror of §6.126's idiom; `BEQ zZ+1` executes the operand of `LDA #96` as an `RTS`; the witchspace roll's carry is provably set because both of `HFS2`'s exits set it; and `TT18` has FOUR exits, not three -- `BNE TT114` jumps out to the chart rather than returning. Also removed: an `ArriveAtSystem` the port had invented in `Ghy`, which does not stock the new galaxy's market. |
 | 2026-09-05 | **Slice 4c-a: the universe fills itself** (§6.135). Main game loop parts 1 to 4 in `Spawner.cpp` as one function, because all four fall through and none returns. **`MLOOP` is the label on part 5**, so the six `JMP MLOOP`s and the pirate loop's fall-through are one exit and not two -- the first version of the header had an enum for a branch the original does not have. **Nine carries come from compares rather than from `DORND`**, worse than §6.125's six, and the port had six wrong until the oracle found them: a carry that is wrong changes every roll after it, so `RAND` catches it even when the bubble agrees. `THERE` answers in the carry via `BEQ THEX+1`; `.nodo AND #2` runs on the roll on one path and on the ORed AI byte on the other; and part 1's `BEQ TT100` is dead because `CYL+2` cannot reach `HER`. 136 cases, 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG` -- whose `JMP NWSHP` means it reports the Thargon's answer, so a bubble that takes the mothership and refuses the escort reports failure. |

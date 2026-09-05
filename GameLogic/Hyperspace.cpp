@@ -5,7 +5,7 @@
 #include "Flight.h"
 #include "Messages.h"
 #include "Spawn.h"
-#include "Spawner.h"
+#include "GameLoop.h"
 #include "ViewChange.h"
 
 namespace Elite

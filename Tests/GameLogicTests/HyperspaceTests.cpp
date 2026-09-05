@@ -76,62 +76,6 @@ namespace GameLogicTests
       }
     };
 
-    /*
-     * What `MJP` and `Ghy` reach outside the world: sounds, the trumbles and the AI, none of which
-     * this slice decides. Counted rather than ignored, because `LL164` makes a noise and a
-     * comparison that dropped it would agree with a port that had lost the hyperspace sound.
-     */
-    struct Recording final : Elite::FlightLoopEffects, Elite::ShipEffects, Elite::ShipDrawEffects
-    {
-      std::vector<std::uint8_t> sounds;
-
-      bool PlaySound(std::uint8_t _effect, bool) override
-      {
-        sounds.push_back(_effect);
-        return true;
-      }
-      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t, std::uint8_t) override
-      {
-        sounds.push_back(_effect);
-        return true;
-      }
-      void StopSound(std::uint8_t) override {}
-      void MoveTrumbles() override {}
-      void StartDockingMusic() override {}
-      void StopDockingMusic() override {}
-      bool SpawnAhead(std::uint8_t) override
-      {
-        return false;
-      }
-      void Anger(std::uint8_t) override {}
-      bool SpawnChild(std::uint8_t, std::uint8_t) override
-      {
-        return true;
-      }
-      bool RunTactics(Elite::ShipBlock&) override
-      {
-        return true;
-      }
-      void DrawPlanetOrSun() override {}
-      void DrawExplosion() override {}
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
-    };
-
-    /// The port's side of a case: the whole flight world plus the pieces `FlightLoop` needs.
-    struct Universe
-    {
-      World world;
-      Elite::ControlState control;
-      Elite::ControlOptions options;
-      Elite::KeyLogger keys{};
-      Elite::LaserBurst burst{};
-      Elite::LineHeap heap;
-      Elite::ClipState clip;
-      Elite::Projection projection;
-      Elite::K3Block axes{};
-      Recording effects;
-    };
-
   public:
     /*
      * 6502: TT18 -- the jump itself, from the fuel to whichever of three ends it reaches.
@@ -186,7 +130,7 @@ namespace GameLogicTests
                 }
               }
 
-              Universe world;
+              LoopWorld world;
               Seed(world.world, 5u);
               world.world.commander.At(Elite::Field::Fuel) = fuel;
               world.world.view = view;
@@ -338,7 +282,7 @@ namespace GameLogicTests
               }
             }
 
-            Universe world;
+            LoopWorld world;
             Seed(world.world, seedIndex);
             world.world.commander.At(Elite::Field::GalacticDrive) = fitted;
             world.world.commander.At(Elite::Field::GalaxyNumber) = galaxy;
@@ -441,7 +385,7 @@ namespace GameLogicTests
         {
           Cpu6502 cpu = oracle.Fresh();
 
-          Universe world;
+          LoopWorld world;
           Seed(world.world, seedIndex);
           world.world.commander.At(Elite::Field::SystemY) = systemY;
           world.world.status.midJump = 0u;
