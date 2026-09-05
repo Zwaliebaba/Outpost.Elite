@@ -1,0 +1,484 @@
+#include "pch.h"
+
+#include "Cpu6502.h"
+#include "FlightWorld.h"
+#include "OracleImage.h"
+
+#include "Commander.h"
+#include "LineHeap.h"
+#include "ShipSlot.h"
+#include "Spawner.h"
+#include "StartUp.h"
+
+#include <array>
+#include <set>
+#include <string>
+#include <vector>
+
+using namespace Microsoft::VisualStudio::CppUnitTestFramework;
+using Elite::Testing::Cpu6502;
+using Elite::Testing::OracleImage;
+
+namespace GameLogicTests
+{
+
+  /*
+   * Slice 4c-a: main game loop parts 1 to 4, which is everything that arrives in the bubble on its
+   * own -- traders, asteroids, canisters, police, bounty hunters, Thargoids and packs of pirates.
+   *
+   * WHERE THE COMPARISON STARTS AND STOPS is the whole design of this fixture. The spawning is not
+   * a subroutine: it begins three bytes past `ytq`, in the middle of part 2 and after the flight
+   * loop `TT100` opens with, and it never returns -- every path ends at `MLOOP`, which is the label
+   * on part 5. So the oracle is run from `ytq+3` with `MLOOP` as its stop address, and what is
+   * compared is the state both sides are left holding.
+   *
+   * EVERY DECISION IS A `DORND`, so this is exact rather than statistical. Seeding `RAND` on both
+   * sides makes the sequence of rolls identical, and a port that took one branch differently ends
+   * up with a different generator state even when the bubble happens to look the same -- which is
+   * why `RAND` is compared as carefully as the ships are (§6.121).
+   */
+  TEST_CLASS(TheSpawner)
+  {
+    struct Labels
+    {
+      std::uint16_t entry = 0, mloop = 0, gthg = 0, there = 0;
+      std::uint16_t frin = 0, kPercent = 0, many = 0, junk = 0, slsp = 0;
+      std::uint16_t inwk = 0, rand = 0, xx0 = 0;
+      std::uint16_t mj = 0, ev = 0, tp = 0, gov = 0, fist = 0, qq20 = 0;
+      std::uint16_t gcnt = 0, qq0 = 0, qq1 = 0;
+
+      explicit Labels(const OracleImage& _oracle)
+      {
+        // 6502: `.ytq JMP MLOOP` is three bytes, and the `LDA MJ` after it is where the spawning
+        // begins. There is no label on it because nothing jumps to it -- part 2 falls in.
+        entry = static_cast<std::uint16_t>(_oracle.Label("ytq") + 3u);
+        mloop = _oracle.Label("MLOOP");
+        gthg = _oracle.Label("GTHG");
+        there = _oracle.Label("THERE");
+        frin = _oracle.Label("FRIN");
+        kPercent = _oracle.Label("K%");
+        many = _oracle.Label("MANY");
+        junk = _oracle.Label("JUNK");
+        slsp = _oracle.Label("SLSP");
+        inwk = _oracle.Label("INWK");
+        rand = _oracle.Label("RAND");
+        xx0 = _oracle.Label("XX0");
+        mj = _oracle.Label("MJ");
+        ev = _oracle.Label("EV");
+        tp = _oracle.Label("TP");
+        gov = _oracle.Label("gov");
+        fist = _oracle.Label("FIST");
+        qq20 = _oracle.Label("QQ20");
+        gcnt = _oracle.Label("GCNT");
+        qq0 = _oracle.Label("QQ0");
+        qq1 = _oracle.Label("QQ1");
+      }
+    };
+
+    /// One bubble into both sides, with each ship's line heap carved off the top the way `NWSHP`
+    /// carves it -- otherwise the first spawn's heap check compares against nothing.
+    static void SeedBubble(Cpu6502& _cpu, Elite::Bubble& _bubble, Elite::LineHeap& _heap, const Labels& _at,
+                           const std::vector<std::uint8_t>& _fleet)
+    {
+      std::uint16_t heapAt = Elite::SHIP_HEAP_TOP;
+
+      for (std::size_t slot = 0; slot < _fleet.size() && slot < Elite::MAX_SHIPS; ++slot)
+      {
+        const std::uint8_t type = _fleet[slot];
+        _bubble.slots[slot] = type;
+        _cpu.memory[static_cast<std::uint16_t>(_at.frin + slot)] = type;
+
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          const std::uint8_t value = static_cast<std::uint8_t>(0x21u + slot * 17u + byte * 5u);
+          _bubble.blocks[slot][byte] = value;
+          _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
+        }
+
+        const std::uint16_t blueprint = Elite::BlueprintAddress(type);
+        const std::uint8_t size = (blueprint == 0u) ? std::uint8_t{0} : Elite::ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
+        heapAt = static_cast<std::uint16_t>(heapAt - size);
+
+        _bubble.blocks[slot][Elite::SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(heapAt);
+        _bubble.blocks[slot][Elite::SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(heapAt >> 8);
+        _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + Elite::SHIP_HEAP_LOW_OFFSET)] =
+          static_cast<std::uint8_t>(heapAt);
+        _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + Elite::SHIP_HEAP_HIGH_OFFSET)] =
+          static_cast<std::uint8_t>(heapAt >> 8);
+
+        for (std::uint16_t byte = 0; byte < size; ++byte)
+        {
+          const std::uint8_t value = static_cast<std::uint8_t>(0x40u + slot * 23u + byte);
+          _heap.Write(static_cast<std::uint16_t>(heapAt + byte), value);
+          _cpu.memory[static_cast<std::uint16_t>(heapAt + byte)] = value;
+        }
+
+        if (type != 0u && type < _bubble.counts.size())
+        {
+          ++_bubble.counts[type];
+          ++_cpu.memory[static_cast<std::uint16_t>(_at.many + type)];
+        }
+      }
+
+      _bubble.heapBottom = heapAt;
+      _cpu.memory[_at.slsp] = static_cast<std::uint8_t>(heapAt);
+      _cpu.memory[static_cast<std::uint16_t>(_at.slsp + 1)] = static_cast<std::uint8_t>(heapAt >> 8);
+    }
+
+    static void CompareBubble(const Cpu6502& _cpu, const Elite::Bubble& _bubble, const Elite::LineHeap& _heap, const Labels& _at,
+                              const std::wstring& _where)
+    {
+      for (std::size_t slot = 0; slot < _bubble.slots.size(); ++slot)
+      {
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.frin + slot)], _bubble.slots[slot],
+                         (_where + L": FRIN+" + std::to_wstring(slot)).c_str());
+      }
+      for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+      {
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
+                           _bubble.blocks[slot][byte], (_where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
+        }
+      }
+      for (std::size_t type = 0; type < _bubble.counts.size(); ++type)
+      {
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.many + type)], _bubble.counts[type],
+                         (_where + L": MANY+" + std::to_wstring(type)).c_str());
+      }
+      Assert::AreEqual(_cpu.memory[_at.junk], _bubble.junk, (_where + L": JUNK").c_str());
+      Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(_cpu.memory[_at.slsp] | (_cpu.memory[_at.slsp + 1] << 8)),
+                                      _bubble.heapBottom, (_where + L": SLSP").c_str());
+
+      constexpr std::uint16_t LINES_START = static_cast<std::uint16_t>(Elite::SHIP_BLOCK_BASE + Elite::MAX_SHIPS * Elite::SHIP_BLOCK_SIZE);
+      for (std::uint16_t address = LINES_START; address < Elite::LineHeap::TOP; ++address)
+      {
+        Assert::AreEqual(_cpu.memory[address], _heap.Read(address), (_where + L": the heap at " + std::to_wstring(address)).c_str());
+      }
+    }
+
+  public:
+    /*
+     * 6502: THERE -- galaxy 2 at (144, 33), and the answer comes back in the CARRY.
+     *
+     * Swept over every galaxy and a grid of coordinates that includes the exact one, because the
+     * routine's shape -- `BEQ THEX+1` landing on the `RTS` past the `CLC` -- means the true answer
+     * is a flag the compare happened to leave rather than a value the routine computed.
+     */
+    TEST_METHOD(TheConstrictorSystemMatchesTHERE)
+    {
+      const OracleImage& oracle = OracleImage::Instance();
+      const Labels at(oracle);
+
+      std::uint32_t compared = 0;
+      std::uint32_t agreed = 0;
+
+      for (std::uint8_t galaxy = 0; galaxy < 8u; ++galaxy)
+      {
+        for (const std::uint8_t x : {std::uint8_t{0}, std::uint8_t{143}, std::uint8_t{144}, std::uint8_t{145}, std::uint8_t{255}})
+        {
+          for (const std::uint8_t y : {std::uint8_t{0}, std::uint8_t{32}, std::uint8_t{33}, std::uint8_t{34}, std::uint8_t{255}})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            cpu.memory[at.gcnt] = galaxy;
+            cpu.memory[at.qq0] = x;
+            cpu.memory[at.qq1] = y;
+
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(at.there);
+            Assert::IsTrue(run.completed, L"THERE returned");
+
+            Elite::CommanderBlock commander{};
+            commander.At(Elite::Field::GalaxyNumber) = galaxy;
+            commander.At(Elite::Field::SystemX) = x;
+            commander.At(Elite::Field::SystemY) = y;
+
+            const bool ours = Elite::AtConstrictorSystem(commander);
+            const std::wstring where = L"THERE(" + std::to_wstring(galaxy) + L"," + std::to_wstring(x) + L"," + std::to_wstring(y) + L")";
+            Assert::AreEqual(cpu.c, ours, where.c_str());
+
+            if (ours)
+            {
+              ++agreed;
+            }
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(8u * 5u * 5u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::uint32_t>(1u, agreed, L"and exactly one system in it is the Constrictor's");
+    }
+
+    /*
+     * 6502: GTHG -- the Thargoid and its Thargon, which is the only pair the game spawns together.
+     *
+     * Swept over bubbles with room for both, room for one, and room for neither, because the
+     * routine's `JMP NWSHP` means it reports the THARGON's answer: a bubble that takes the
+     * mothership and refuses the escort comes back saying it failed, and one that is full comes
+     * back the same way. Only the bubble can tell those apart, so the bubble is what is compared.
+     */
+    TEST_METHOD(TheThargoidPairMatchesGTHG)
+    {
+      const OracleImage& oracle = OracleImage::Instance();
+      const Labels at(oracle);
+
+      const std::vector<std::uint8_t> FLEETS[] = {
+        {},
+        {128u, 129u},
+        {128u, 129u, 11u, 11u, 11u},
+        {128u, 129u, 11u, 11u, 11u, 11u, 11u, 11u, 11u},      // one slot left: the escort is refused
+        {128u, 129u, 11u, 11u, 11u, 11u, 11u, 11u, 11u, 11u}, // no slot at all
+        {128u, 129u, 14u, 14u, 14u, 14u, 14u, 14u, 14u, 14u}, // Anacondas: the heap runs out first
+      };
+
+      std::uint32_t compared = 0;
+      std::set<std::string> outcomes;
+
+      for (const std::vector<std::uint8_t>& fleet : FLEETS)
+      {
+        for (const std::array<std::uint8_t, 4> seed :
+             {std::array<std::uint8_t, 4>{0x11u, 0x22u, 0x33u, 0x44u}, std::array<std::uint8_t, 4>{0xC7u, 0x05u, 0x9Au, 0x2Eu}})
+        {
+          for (const std::uint8_t carryIn : {std::uint8_t{0}, std::uint8_t{1}})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+
+            Elite::Bubble bubble;
+            Elite::LineHeap heap;
+            SeedBubble(cpu, bubble, heap, at, fleet);
+
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
+            }
+            Elite::Rng rng;
+            rng.SetState(seed);
+
+            Elite::ShipBlock work{};
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              const std::uint8_t value = static_cast<std::uint8_t>(0x55u + byte * 3u);
+              work[byte] = value;
+              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = value;
+            }
+
+            std::uint16_t blueprint = 0x4321u;
+            cpu.memory[at.xx0] = 0x21u;
+            cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = 0x43u;
+
+            cpu.c = carryIn != 0u;
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(at.gthg, 200'000);
+            Assert::IsTrue(run.completed, L"GTHG returned");
+
+            const Elite::NewShip made = Elite::SpawnThargoidPair(bubble, work, rng, blueprint, carryIn != 0u);
+
+            const std::wstring where = WidenText("GTHG: " + std::to_string(fleet.size()) + " ships, seed " + std::to_string(seed[0]) +
+                                                 ", carry " + std::to_string(carryIn));
+
+            CompareBubble(cpu, bubble, heap, at, where);
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                               (where + L": INWK+" + std::to_wstring(byte)).c_str());
+            }
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + byte)], rng.State()[byte],
+                               (where + L": RAND+" + std::to_wstring(byte)).c_str());
+            }
+
+            // The carry `GTHG` exits with, which is the THARGON's and not the Thargoid's.
+            Assert::AreEqual(cpu.c, made.created, (where + L": the exit carry").c_str());
+
+            outcomes.insert(std::to_string(bubble.counts[Elite::SHIP_TYPE_THARGOID]) + "/" +
+                            std::to_string(bubble.counts[Elite::SHIP_TYPE_THARGON]) + "/" + std::to_string(made.created ? 1 : 0));
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(6u * 2u * 2u, compared, L"the whole sweep ran");
+      /*
+       * Three answers, and the middle one is the point: a bubble with one slot free takes the
+       * mothership, refuses the Thargon, and `GTHG` reports FAILURE because the answer it hands
+       * back is the second `NWSHP`'s. Observed rather than asserted from the source.
+       */
+      Assert::IsTrue(outcomes.size() >= 3u, L"and both, one and neither of the pair were reached");
+    }
+
+    /*
+     * Main game loop parts 1 to 4, from `ytq+3` to `MLOOP`, against the shipped routine.
+     *
+     * The state swept is what the four parts branch on and nothing else: the generator, because
+     * every decision is a `DORND`; `MJ`, which stops the whole thing; the junk count and the
+     * station, which are part 2's and part 3's gates; the government, which is part 4's; the
+     * contraband and the legal status, which set the threshold a policeman is rolled against; the
+     * mission byte, which is the Thargoid's and the Constrictor's; and `EV`, the rate limiter that
+     * decides whether part 4 runs at all.
+     *
+     * WHAT IS COMPARED is the whole bubble -- the slot list, all ten blocks, the type counts, the
+     * junk count, `SLSP` and the line heap -- plus `INWK`, `EV`, `XX0` and the generator's four
+     * bytes, which is slice 4a-b's standard (§6.121). A spawn that landed in the right slot with
+     * the wrong block, or the right block from the wrong number of rolls, fails on one of those.
+     */
+    TEST_METHOD(TheSpawningMatchesTheMainGameLoop)
+    {
+      const OracleImage& oracle = OracleImage::Instance();
+      const Labels at(oracle);
+
+      struct Situation
+      {
+        const char* what;
+        std::vector<std::uint8_t> fleet;
+        std::uint8_t junk, government, mission, legal, contraband, encounters, witchspace;
+        std::uint8_t galaxy, systemX, systemY;
+      };
+
+      const Situation SITUATIONS[] = {
+        {"empty and lawless", {}, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"empty, corporate state", {}, 0u, 7u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"empty, feudal", {}, 0u, 3u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"a station in range", {128u, 129u, 2u}, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"junk everywhere", {128u, 129u, 5u, 5u, 5u}, 3u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"one canister", {128u, 129u, 5u}, 1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"a Viper already here", {128u, 129u, 16u}, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"carrying slaves", {128u, 129u}, 0u, 0u, 0u, 0u, 40u, 0u, 0u, 0u, 0u, 0u},
+        {"an offender carrying slaves", {128u, 129u}, 0u, 0u, 0u, 30u, 40u, 0u, 0u, 0u, 0u, 0u},
+        {"a fugitive", {128u, 129u}, 0u, 2u, 0u, 200u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"in witchspace", {128u, 129u}, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 0u, 0u, 0u},
+        {"mission 1 hunting", {128u, 129u}, 0u, 0u, 0x08u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"mission 1 at stage 1", {128u, 129u}, 0u, 0u, 0x01u, 0u, 0u, 0u, 0u, 1u, 144u, 33u},
+        {"at the Constrictor, no mission", {128u, 129u}, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 144u, 33u},
+        {"at the Constrictor, already found", {128u, 129u, 31u}, 0u, 0u, 0x01u, 0u, 0u, 0u, 0u, 1u, 144u, 33u},
+        {"the encounter counter spent", {128u, 129u}, 0u, 0u, 0u, 0u, 0u, 3u, 0u, 0u, 0u, 0u},
+        {"a busy bubble", {128u, 129u, 11u, 17u, 5u, 7u}, 2u, 1u, 0u, 10u, 5u, 0u, 0u, 0u, 0u, 0u},
+      };
+
+      // Four generator states, because one seed exercises one path through a routine that is all
+      // rolls -- the lesson of section 6.124.
+      const std::array<std::uint8_t, 4> SEEDS[] = {
+        {0x00u, 0x00u, 0x00u, 0x00u},
+        {0x9Cu, 0x17u, 0x4Bu, 0xE3u},
+        {0xFFu, 0xFEu, 0x01u, 0x80u},
+        {0x2Au, 0x7Fu, 0xC3u, 0x11u},
+      };
+
+      std::uint32_t compared = 0;
+      std::set<std::string> outcomes;
+
+      for (const Situation& one : SITUATIONS)
+      {
+        for (const std::array<std::uint8_t, 4>& seed : SEEDS)
+        {
+          for (const std::uint8_t carryIn : {std::uint8_t{0}, std::uint8_t{1}})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+
+            Elite::Bubble bubble;
+            Elite::LineHeap heap;
+            SeedBubble(cpu, bubble, heap, at, one.fleet);
+
+            bubble.junk = one.junk;
+            cpu.memory[at.junk] = one.junk;
+
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
+            }
+            Elite::Rng rng;
+            rng.SetState(seed);
+
+            cpu.memory[at.mj] = one.witchspace;
+            cpu.memory[at.ev] = one.encounters;
+            cpu.memory[at.gov] = one.government;
+            cpu.memory[at.tp] = one.mission;
+            cpu.memory[at.fist] = one.legal;
+            cpu.memory[at.gcnt] = one.galaxy;
+            cpu.memory[at.qq0] = one.systemX;
+            cpu.memory[at.qq1] = one.systemY;
+
+            // 6502: QQ20+3, +6 and +10 -- slaves, narcotics and firearms, which are the three
+            // slots `BAD` reads and the only cargo that matters here.
+            cpu.memory[static_cast<std::uint16_t>(at.qq20 + 3u)] = one.contraband;
+            cpu.memory[static_cast<std::uint16_t>(at.qq20 + 6u)] = static_cast<std::uint8_t>(one.contraband / 2u);
+            cpu.memory[static_cast<std::uint16_t>(at.qq20 + 10u)] = static_cast<std::uint8_t>(one.contraband / 4u);
+
+            Elite::ShipBlock work{};
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              const std::uint8_t value = static_cast<std::uint8_t>(0x13u + byte * 7u);
+              work[byte] = value;
+              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = value;
+            }
+
+            std::uint16_t blueprint = 0x1234u;
+            cpu.memory[at.xx0] = 0x34u;
+            cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = 0x12u;
+
+            cpu.c = carryIn != 0u;
+
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(at.entry, 400'000, at.mloop);
+            Assert::IsTrue(run.completed, L"the spawner reached MLOOP");
+
+            Elite::CommanderBlock commander{};
+            commander.At(Elite::Field::GalaxyNumber) = one.galaxy;
+            commander.At(Elite::Field::SystemX) = one.systemX;
+            commander.At(Elite::Field::SystemY) = one.systemY;
+            commander.At(Elite::Field::MissionProgress) = one.mission;
+            commander.At(Elite::Field::LegalStatus) = one.legal;
+            commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + 3)) = one.contraband;
+            commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + 6)) =
+              static_cast<std::uint8_t>(one.contraband / 2u);
+            commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + 10)) =
+              static_cast<std::uint8_t>(one.contraband / 4u);
+
+            Elite::CurrentSystem current;
+            current.government = one.government;
+
+            Elite::FlightStatus status;
+            status.midJump = one.witchspace;
+
+            std::uint8_t encounters = one.encounters;
+
+            Elite::RunSpawning(bubble, work, rng, commander, current, status, encounters, blueprint, carryIn != 0u);
+
+            const std::wstring where =
+              WidenText(std::string("spawn: ") + one.what + " seed " + std::to_string(seed[0]) + " carry " + std::to_string(carryIn));
+
+            CompareBubble(cpu, bubble, heap, at, where);
+
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                               (where + L": INWK+" + std::to_wstring(byte)).c_str());
+            }
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + byte)], rng.State()[byte],
+                               (where + L": RAND+" + std::to_wstring(byte)).c_str());
+            }
+            Assert::AreEqual(cpu.memory[at.ev], encounters, (where + L": EV").c_str());
+            Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.xx0] | (cpu.memory[at.xx0 + 1] << 8)), blueprint,
+                                            (where + L": XX0").c_str());
+
+            // What arrived, measured from the bubble rather than from the inputs -- section 6.132's
+            // counter, so a sweep that only ever spawns nothing cannot look healthy.
+            std::string arrived;
+            for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+            {
+              arrived += std::to_string(bubble.slots[slot]) + ",";
+            }
+            outcomes.insert(arrived);
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(17u * 4u * 2u, compared, L"the whole sweep ran");
+      Assert::IsTrue(outcomes.size() >= 10u, L"and it reached at least ten different bubbles");
+      Logger::WriteMessage(
+        ("spawner: " + std::to_string(compared) + " cases, " + std::to_string(outcomes.size()) + " distinct bubbles").c_str());
+    }
+  };
+
+} // namespace GameLogicTests

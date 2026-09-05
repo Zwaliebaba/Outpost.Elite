@@ -451,6 +451,61 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.135 Slice 4c-a: the universe fills itself, and nine carries said where
+
+Main game loop parts 1 to 4 are built, in `Spawner.cpp`, as ONE function -- every part falls
+through into the next and not one of them returns, so splitting them would mean inventing entry
+points the original does not have (§6.122's lesson, applied without having to relearn it). This is
+what makes the game a game: `TACTICS` decides what a ship in the bubble does, and until now every
+ship it had ever steered was created by a test.
+
+**The first thing this slice got wrong was an enum.** Six paths through the four parts end
+`JMP MLOOP` and a seventh falls out of the pirate loop, which reads like two outcomes a caller has
+to tell apart -- and the first version of the header had a `SpawnOutcome` for it. It is one
+outcome. `MLOOP` is not the top of the loop; it is the LABEL ON PART 5, three instructions of stack
+reset at the head of the laser cooling. The jump and the fall-through arrive at the same
+instruction, and all the jump adds is `LDX #&FF / TXS` discarding return addresses the port does
+not have. A port that believed the enum would have given `Main.cpp` a branch the original has no
+trace of. Reading the label table settled it in one line; reasoning from the part numbers would
+never have.
+
+**Nine carries, and the port had six of them wrong.** §6.125 found that six of `TACTICS`'s ten
+`DORND` calls rotate in a flag set by a compare several instructions earlier rather than the one
+the generator returned. This routine is worse: `CMP #35`, `CMP #3`, `ASL A` on `BAD`'s answer,
+`CMP T`, `CMP #%00001000`, `CMP #200`, `CMP gov`, `CMP #100` and `LSR A` in the Constrictor block
+all overwrite the flag before the next roll reads it, and `NWSHP` returns one of its own that the
+pirate loop's next pass rotates in. The oracle found them one at a time -- an AI byte two apart in
+an empty bubble, then a generator state one step off at the Constrictor's system -- because a
+carry that is wrong changes the ENTIRE sequence of rolls after it, so the comparison on `RAND`
+catches it even when the bubble happens to agree.
+
+**Two idioms worth naming.**
+
+`THERE` answers in the CARRY and not in A: `BEQ THEX+1` lands on the `RTS` one byte past the `CLC`,
+so a match returns the flag the equal compare set and every other path runs the `CLC`. And the
+flag survives -- the `LSR A` below it is what the `DORND` in `NOCON` eventually rotates in, so
+`THERE`'s answer is load-bearing twice.
+
+`.nodo AND #2` runs on TWO DIFFERENT QUANTITIES. Reached by `BMI nodo` it is the `DORND` byte;
+reached by falling through it is `INWK+32` after `LDA INWK+32 / ORA #%11000000`, because those
+instructions replaced A. The type of the trader that arrives depends on which. The port had it as
+the roll on both paths and the oracle disagreed about a Cobra in an empty bubble.
+
+**And one branch that cannot be taken.** Part 1 ends `AND #2 / ADC #CYL / CMP #HER / BEQ TT100`.
+`CYL` is 11 and the `AND` leaves 0 or 2, so the type is 11 to 14 and `HER` is 15: the branch back
+to the top of the loop is dead on this build. It is transcribed rather than dropped, because what
+makes it dead is two constants this version happens to choose and a reader who found it missing
+would have to prove that again.
+
+**What it is compared against.** 136 cases -- seventeen situations, four generator states and both
+entry carries -- run from `ytq+3` to `MLOOP` and compared on the whole bubble (slot list, all ten
+blocks, type counts, junk, `SLSP`, the line heap), plus `INWK`, `EV`, `XX0` and the generator. 50
+distinct bubbles came back, which is §6.132's counter rather than a case count. `THERE` is swept
+over every galaxy and a coordinate grid that straddles the exact system, 200 cases with exactly one
+match. `GTHG` is swept over bubbles with room for both, one and neither, and the middle one is the
+finding: its `JMP NWSHP` means it reports the THARGON's answer, so a bubble that takes the
+mothership and refuses the escort comes back saying it FAILED. Observed, not assumed.
+
 ### 6.134 Slice 4c scoped, and a dependency pass that came back empty
 
 §6.122 established that a large slice gets a dependency pass before a line of it is written, because
@@ -485,7 +540,7 @@ than `TACTICS` was.
 
 | | Scope | C64 instructions | How it is checked |
 |---|---|---|---|
-| **4c-a** | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates | 199 | Spawn decisions against the shipped routine over seeded generator states, comparing the WHOLE bubble as slice 4a-b does; the generator is the input, so this is exactly reproducible |
+| **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates | 199 | Spawn decisions against the shipped routine over seeded generator states, comparing the WHOLE bubble as slice 4a-b does; the generator is the input, so this is exactly reproducible. **136 cases, 50 distinct bubbles**, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than from the generator and the port had six wrong; `MLOOP` turned out to be the label on part 5, so the routine has one exit and not two |
 | **4c-b** | `TT18`, `hyp1`, `MJP`, `ghy` — the jump, witchspace, and the galactic hyperdrive | 111 | Fuel, system, seeds and the witchspace flag against the oracle; `MJP`'s Thargoid ambush shares 4c-a's comparison |
 | **4c-c** | `NWSPS` and the Coriolis/Dodo switch by tech level | 33 | The station's block byte for byte, both station types, across the tech level the switch turns on |
 | **4c-d** | Main game loop parts 5 and 6 and the loop's tail, reconciled against what §6.128 already put in `Main.cpp` by hand | 71 | The counters and the dashboard calls per pass; part of this exists and the pass is as much audit as port |
@@ -5301,6 +5356,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Slice 4c-a: the universe fills itself** (§6.135). Main game loop parts 1 to 4 in `Spawner.cpp` as one function, because all four fall through and none returns. **`MLOOP` is the label on part 5**, so the six `JMP MLOOP`s and the pirate loop's fall-through are one exit and not two -- the first version of the header had an enum for a branch the original does not have. **Nine carries come from compares rather than from `DORND`**, worse than §6.125's six, and the port had six wrong until the oracle found them: a carry that is wrong changes every roll after it, so `RAND` catches it even when the bubble agrees. `THERE` answers in the carry via `BEQ THEX+1`; `.nodo AND #2` runs on the roll on one path and on the ORed AI byte on the other; and part 1's `BEQ TT100` is dead because `CYL+2` cannot reach `HER`. 136 cases, 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG` -- whose `JMP NWSHP` means it reports the Thargon's answer, so a bubble that takes the mothership and refuses the escort reports failure. |
 | 2026-09-05 | **Slice 4c scoped, and its dependency pass came back empty** (§6.134). Fourteen routines making 111 distinct calls: 46 targets already in the port, 16 belonging to platforms the C64 build never assembles, and the rest entry points inside 4c's own files. **The only unported routine 4c calls is `GTHG`, which is in 4c.** Every state byte the spawner branches on is modelled. That is the opposite of §6.121's result for 4a and the contrast is the finding: 4a's row was written from what routines are about, 4c's from what they touch. Scoped into 4c-a (the spawner, 199 instructions), 4c-b (hyperspace and witchspace, 111), 4c-c (station placement, 33) and 4c-d (the loop's tail, 71, as much audit as port). |
 | 2026-09-05 | **ADR-005's two open presentation items closed** (§6.133). The sprite overlay and the VIC-II raster effects both composite in `Canvas::Resolve`, which is what the ADR recommended -- but its reasoning ("the canvas because `GameLogic` is testable") does not hold: compositing has no oracle wherever it lives, so that argument would justify moving any untestable thing into `GameLogic`. The reason that holds is that `Resolve` is ALREADY the un-oracled "what you would see" layer downstream of the bytes the oracle compares, and `moonflower` changes how those bytes DECODE rather than overlaying them. The work the items missed is that most of the sprite state is a write-only seam: it has to become a `VideoState` the port owns. `SPRITE.bin` as a fourth assembly is the prerequisite, and the blit rule is recorded as unverifiable rather than glossed. |
 | 2026-09-05 | **The third dead branch in `DOCKIT`, and the pattern the three share** (§6.132). `PH32`'s roll test dots the ship's SIDE vector with the station's ROOF, and both were constants -- the side from the seeding ramp, the roof set once for the whole sweep -- so the dot product took ONE value, 6, in all 332 cases that reached it, and `TN11` had never executed at all. The roof is per-approach now with the old value as its default, and a ladder walks it from perpendicular to aligned: 29 distinct values, 66 among them. With `PH3`'s two tests this makes three branches that a healthy-looking sweep of 1,644 oracle-compared cases could not see, all because a fixture held fixed something the routine branches on. The counter is not distinct answers but **distinct answers per branch**, and probing the comparison is the first move on a surviving threshold, not the last. |
