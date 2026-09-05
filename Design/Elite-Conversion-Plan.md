@@ -451,6 +451,69 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.136 Slice 4c-b: the jump, and two bytes that come from somewhere else entirely
+
+`TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` are built, in `Hyperspace.cpp`. `hyp` decided WHETHER to jump
+back in slice 2d and left `JumpOutcome::Galactic` for something that did not exist; `Main.cpp` has
+listed hyperspace among the actions it refuses BY NAME since phase 3, so that building it would
+produce a compiler error rather than a silent omission. Both are answered.
+
+**`QQ2` and `QQ28` do not describe the same system, and nothing in `hyp1` says so.** The six seed
+bytes are copied from `safehouse` -- what the countdown saved when the player pressed the key --
+while the economy, tech level and government come from `QQ3`, `QQ5` and `QQ4`, which are whatever
+the LAST `TT111` happened to leave. In a game played through `hyp` they agree, because the same
+`TT111` filled both. The port derived the cache from the seeds it had just copied, which is the
+obvious reading, and disagreed with the oracle about the economy at the first crosshair position
+tried. `QQ3` to `QQ5` are now a parameter, because that is what they are: memory the routine reads
+and does not write.
+
+**`TT111` snaps the crosshairs, and two routines depend on it.** It ends `STA QQ10 / STA QQ9` -- the
+crosshairs move onto the system it found -- so the `jmp` three instructions later stores the SNAPPED
+pair into `QQ0` and `QQ1`, not the pair the caller was holding. Twenty is not a system; it is merely
+near one. `Ghy` depends on the same thing for the opposite reason: it sets the crosshairs to 96,96,
+then calls `TT111`, and what ends up in `QQ9` is the system nearest the middle of the galaxy.
+
+**`MJ` is 255, and no instruction in `MJP` says that either.** `STY MJ` stores whatever Y held;
+`RES2` falls into `ZINF`; `ZINF`'s clearing loop ends `DEY / BPL ZI1`, so Y is &FF. Three routines
+away from the store. Everything in the game tests `MJ` for non-zero, so a port that wrote 1 would
+play identically and would still be wrong in the commander file and in every comparison.
+
+**`ptg` is `ORA #1`.** `LSR COK / SEC / ROL COK`: the shifts cancel, the `SEC` forces bit 0, and bit
+7 survives the round trip. The exact mirror of the `ASL / SEC / ROR` that §6.126 found mis-ported
+twice, one bit the other way. Swept over all 256 byte values rather than read, because the whole
+claim is about the seven bits that come back unchanged.
+
+**`BEQ zZ+1` executes an operand.** `Ghy` opens `LDX GHYP / BEQ zZ+1`, and `zZ` is `LDA #96` --
+`A9 60` -- so `zZ+1` is the &60, which is `RTS`. With no drive fitted the branch lands in the middle
+of an instruction and returns. There is no code at `zZ+1`; there is an argument being executed.
+
+**And one thing `Ghy` does not do.** The port had it stocking the new galaxy's market, on the
+reasoning that arriving somewhere ought to. It does not: it ends `JSR MESS` and falls into `jmp`,
+and the economy, tech level, government and market still describe the galaxy you left until the
+countdown it just started runs out and `TT18` arrives properly. Removed before it shipped -- the
+routine wins over the reasoning.
+
+**The carry into the witchspace roll, proved rather than measured.** `JSR DORND / CMP #253 / BCS
+MJP` rotates in a flag that comes from two different places: the fuel `SBC` on the chart path, which
+skips the tunnel, and `LL164` on the space path. `LL164` ALWAYS returns with the carry set, and the
+proof is in `HFS2`'s two exits -- `ASL K / BCS HF8` is taken only with it set, and the fall-through
+past `CMP #160 / BCC HFL2` is reached only when that branch is NOT taken, which is also only with it
+set. Both roads out carry a one. §6.118's instrument confirmed it; the argument is what makes it
+true for every input rather than for the ones tried.
+
+**Four exits, not three.** `TT18` ends in `BNE RTS111` (return, nothing drawn), `BNE TT114` (JUMP
+OUT to the chart's own redraw) and the fall-through past `INC QQ11` (the launch). The port had the
+first two as one outcome; the oracle disagreed about the generator on the short-range chart, because
+the original had gone off to draw it. `JumpResult` has four values now.
+
+**What it is compared against.** `hyp1` over both entry points -- itself and `hyp1+3` -- six
+crosshair positions and two generator states, comparing `QQ2`, `QQ28`, `tek`, `gov`, `EV`, `QQ0`,
+`QQ1`, the whole market and the generator. `MJP` run whole on both sides, screen included, over
+twelve cases, every one ending with `MJ` at 255, three specks of dust and four Thargoids. `ptg` over
+all 256 values of `COK`. `Ghy` over both answers to the drive test, three galaxies and two worlds.
+`TT18` over four generator states, three fuel levels, three distances and four views -- 144 cases --
+stopped at `TT110` because that is where the routine ends.
+
 ### 6.135 Slice 4c-a: the universe fills itself, and nine carries said where
 
 Main game loop parts 1 to 4 are built, in `Spawner.cpp`, as ONE function -- every part falls
@@ -541,7 +604,7 @@ than `TACTICS` was.
 | | Scope | C64 instructions | How it is checked |
 |---|---|---|---|
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates | 199 | Spawn decisions against the shipped routine over seeded generator states, comparing the WHOLE bubble as slice 4a-b does; the generator is the input, so this is exactly reproducible. **136 cases, 50 distinct bubbles**, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than from the generator and the port had six wrong; `MLOOP` turned out to be the label on part 5, so the routine has one exit and not two |
-| **4c-b** | `TT18`, `hyp1`, `MJP`, `ghy` — the jump, witchspace, and the galactic hyperdrive | 111 | Fuel, system, seeds and the witchspace flag against the oracle; `MJP`'s Thargoid ambush shares 4c-a's comparison |
+| **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive, in `Hyperspace.cpp`. This is what `Main.cpp` refuses by name and what slice 2d's `JumpOutcome::Galactic` was waiting for | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` run whole on both sides, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them — `QQ28` from the last `TT111` rather than from the seeds beside it, `QQ0` from crosshairs `TT111` snapped, and `MJ` from `ZINF`'s loop counter — and `TT18` turned out to have four exits rather than three |
 | **4c-c** | `NWSPS` and the Coriolis/Dodo switch by tech level | 33 | The station's block byte for byte, both station types, across the tech level the switch turns on |
 | **4c-d** | Main game loop parts 5 and 6 and the loop's tail, reconciled against what §6.128 already put in `Main.cpp` by hand | 71 | The counters and the dashboard calls per pass; part of this exists and the pass is as much audit as port |
 
@@ -5356,6 +5419,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Slice 4c-b: the jump** (§6.136). `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` in `Hyperspace.cpp`, which answers the `JumpOutcome::Galactic` slice 2d left open and the hyperspace `Main.cpp` refuses by name. Five findings, and three of them are bytes that come from somewhere else: **`QQ2` and `QQ28` describe different systems** (the seeds from `safehouse`, the cache from whatever the last `TT111` left), **`TT111` SNAPS the crosshairs** so `jmp` stores the snapped pair, and **`MJ` is 255** because `ZINF`'s loop counter runs past zero three routines away from the `STY`. `ptg` is `ORA #1`, the mirror of §6.126's idiom; `BEQ zZ+1` executes the operand of `LDA #96` as an `RTS`; the witchspace roll's carry is provably set because both of `HFS2`'s exits set it; and `TT18` has FOUR exits, not three -- `BNE TT114` jumps out to the chart rather than returning. Also removed: an `ArriveAtSystem` the port had invented in `Ghy`, which does not stock the new galaxy's market. |
 | 2026-09-05 | **Slice 4c-a: the universe fills itself** (§6.135). Main game loop parts 1 to 4 in `Spawner.cpp` as one function, because all four fall through and none returns. **`MLOOP` is the label on part 5**, so the six `JMP MLOOP`s and the pirate loop's fall-through are one exit and not two -- the first version of the header had an enum for a branch the original does not have. **Nine carries come from compares rather than from `DORND`**, worse than §6.125's six, and the port had six wrong until the oracle found them: a carry that is wrong changes every roll after it, so `RAND` catches it even when the bubble agrees. `THERE` answers in the carry via `BEQ THEX+1`; `.nodo AND #2` runs on the roll on one path and on the ORed AI byte on the other; and part 1's `BEQ TT100` is dead because `CYL+2` cannot reach `HER`. 136 cases, 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG` -- whose `JMP NWSHP` means it reports the Thargon's answer, so a bubble that takes the mothership and refuses the escort reports failure. |
 | 2026-09-05 | **Slice 4c scoped, and its dependency pass came back empty** (§6.134). Fourteen routines making 111 distinct calls: 46 targets already in the port, 16 belonging to platforms the C64 build never assembles, and the rest entry points inside 4c's own files. **The only unported routine 4c calls is `GTHG`, which is in 4c.** Every state byte the spawner branches on is modelled. That is the opposite of §6.121's result for 4a and the contrast is the finding: 4a's row was written from what routines are about, 4c's from what they touch. Scoped into 4c-a (the spawner, 199 instructions), 4c-b (hyperspace and witchspace, 111), 4c-c (station placement, 33) and 4c-d (the loop's tail, 71, as much audit as port). |
 | 2026-09-05 | **ADR-005's two open presentation items closed** (§6.133). The sprite overlay and the VIC-II raster effects both composite in `Canvas::Resolve`, which is what the ADR recommended -- but its reasoning ("the canvas because `GameLogic` is testable") does not hold: compositing has no oracle wherever it lives, so that argument would justify moving any untestable thing into `GameLogic`. The reason that holds is that `Resolve` is ALREADY the un-oracled "what you would see" layer downstream of the bytes the oracle compares, and `moonflower` changes how those bytes DECODE rather than overlaying them. The work the items missed is that most of the sprite state is a write-only seam: it has to become a `VideoState` the port owns. `SPRITE.bin` as a fourth assembly is the prerequisite, and the blit rule is recorded as unverifiable rather than glossed. |
