@@ -65,10 +65,23 @@ namespace GameLogicTests
       }
     }
 
-    /// Compares one generated array against the bytes at its label in the loaded game.
-    void CompareAgainstImage(const char* _label, std::span<const std::uint8_t> _generated)
+    bool LoaderMissing()
     {
-      const OracleImage& oracle = OracleImage::Instance();
+      const OracleImage& loader = OracleImage::LoaderInstance();
+      if (loader.Available())
+      {
+        return false;
+      }
+      Logger::WriteMessage(("SKIPPED -- assembled loader absent: " + loader.Reason()).c_str());
+      return true;
+    }
+
+    /// Compares one generated array against the bytes at its label in a loaded image -- the game's
+    /// by default, and the loader's for the two tables that come out of `COMLOD`.
+    void CompareAgainstImage(const char* _label, std::span<const std::uint8_t> _generated,
+                             const OracleImage& _image = OracleImage::Instance())
+    {
+      const OracleImage& oracle = _image;
 
       std::uint16_t address = 0;
       Assert::IsTrue(oracle.TryLabel(_label, address), (L"missing label " + Widen(_label)).c_str());
@@ -163,6 +176,26 @@ namespace GameLogicTests
       // the assembler. If `Binaries.txt` ever loses the row this compares 2,240 zeros against the
       // generated file and fails, which is the point.
       CompareAgainstAddress("DSTORE%", 0xEF90u, Elite::DASHBOARD_IMAGE);
+    }
+
+    /*
+     * 6502: sdump and cdump -- the dashboard's colours, out of the assembled LOADER.
+     *
+     * The only two tables in the port that come from a different image, and they have to: the
+     * loader assembles to &4000, over the game's screen bitmap, so it is built into a space of its
+     * own that the oracle never loads (see `OracleImage::LoaderInstance`). Everything else about
+     * the comparison is the same -- 280 bytes at a label, against the bytes the port ships.
+     */
+    TEST_METHOD(TheDashboardColourTablesMatch)
+    {
+      if (LoaderMissing())
+      {
+        return;
+      }
+
+      const OracleImage& loader = OracleImage::LoaderInstance();
+      CompareAgainstImage("sdump", Elite::DASHBOARD_SCREEN_COLOURS, loader);
+      CompareAgainstImage("cdump", Elite::DASHBOARD_COLOUR_RAM, loader);
     }
 
     TEST_METHOD(TheSineTableLooksLikeASineCurve)

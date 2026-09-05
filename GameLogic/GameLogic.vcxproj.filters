@@ -36,6 +36,9 @@
     <ClInclude Include="Canvas.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="LoaderScreen.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="TextPrint.h">
       <Filter>Text</Filter>
     </ClInclude>
@@ -151,6 +154,9 @@
       <Filter>Kernel</Filter>
     </ClCompile>
     <ClCompile Include="Canvas.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="LoaderScreen.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="Lines.cpp">
