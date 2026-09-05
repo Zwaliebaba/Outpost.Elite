@@ -244,6 +244,22 @@ TABLES = [
           "how many Trumble sprites to show, by population"),
     Table("TRUMBLE_SPRITE_TABLE", "TRIBMA", 8, "ScreenTables.cpp",
           "which sprites to enable for that many Trumbles"),
+    # ---- slice 4d: what `MVTRIBS` moves the sprites BY, and the register bits it moves them in.
+    #
+    # `TRIBDIR` and `TRIBDIRH` are indexed `LDA TRIBDIR,X` after `AND #3`, so four entries each,
+    # and the pair is one 16-bit table split across two: (TRIBDIRH TRIBDIR) is 0, 1, -1 and 0.
+    # The repeat is the point -- two of four directions are "do not move", so a Trumble stands
+    # still half the time on each axis.
+    Table("TRUMBLE_DIRECTION_TABLE", "TRIBDIR", 4, "ScreenTables.cpp",
+          "the low byte of the four directions a Trumble sprite can move in"),
+    Table("TRUMBLE_DIRECTION_HIGH_TABLE", "TRIBDIRH", 4, "ScreenTables.cpp",
+          "the high byte of the same four, which makes the second of them negative"),
+    # `SPMASK,Y` and `SPMASK+1,Y` with Y = 2 * Trumble number and the Trumble number below six,
+    # so the highest byte read is `SPMASK+11` -- twelve entries, sized by what indexes them
+    # (§6.8's rule) rather than by the gap to the next label. They come in pairs: clear this
+    # sprite's bit in VIC+&10, then set it.
+    Table("TRUMBLE_SPRITE_BIT_TABLE", "SPMASK", 12, "ScreenTables.cpp",
+          "VIC+&10 masks for the ninth x bit of the six Trumble sprites, clear then set"),
     # ---- the loader: the colours the dashboard and the border box are drawn in.
     #
     # These two are the only things the port takes from `elite-loader.asm`, whose CODE is not

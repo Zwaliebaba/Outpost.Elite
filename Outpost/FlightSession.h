@@ -115,7 +115,6 @@ namespace Outpost
     bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override;
     void StopSound(std::uint8_t _effect) override;
 
-    void MoveTrumbles() override;
     void StartDockingMusic() override;
     void StopDockingMusic() override;
     [[nodiscard]] bool SpawnAhead(std::uint8_t _type) override;
@@ -194,7 +193,9 @@ namespace Outpost
     Elite::ScreenState m_screenState;
     Elite::FlightState m_flight;
     Elite::Compass m_compass;
-    std::uint8_t m_trumbleSprites = 0; ///< 6502: TRIBCT
+    /// 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and the six sprites' coordinate registers. `SIGHT`
+    /// writes the count, `MVTRIBS` walks the rest, and `SyncVideoRegisters` is what shows them.
+    Elite::TrumbleSprites m_trumbles;
     std::uint8_t m_spaceView = 0;      ///< 6502: VIEW -- which way the player is looking
 
     Elite::KeyLogger m_keys{}; ///< 6502: KLO

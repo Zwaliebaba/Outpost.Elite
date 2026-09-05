@@ -303,11 +303,17 @@ namespace Elite
     seed[0] = screen.bubble.blocks[0][0];
     screen.rng.SetState(seed);
 
-    // 6502: LDA TRIBCT / BEQ NOMVETR / JMP MVTRIBS -- and `MVTRIBS` jumps back to `NOMVETR`, so
-    // this is a call written as two jumps (§6.82).
-    if (screen.trumbleSprites != 0u)
+    /*
+     * 6502: LDA TRIBCT / BEQ NOMVETR / JMP MVTRIBS -- and `MVTRIBS` jumps back to `NOMVETR`, so
+     * this is a call written as two jumps (§6.82).
+     *
+     * `MoveTrumbles` was a seam here until slice 4d-a, for the same reason five others were: the
+     * routine on the other side did not exist. It does now, and the seam is deleted rather than
+     * answered, which is §6.73 for the ninth time.
+     */
+    if (screen.trumbles.count != 0u)
     {
-      _loop.effects.MoveTrumbles();
+      MoveTrumbleSprites(screen.trumbles, screen.rng, screen.flight.mainLoopCounter, screen.sight);
     }
 
     // ---- part 2: the roll ------------------------------------------------------------------------

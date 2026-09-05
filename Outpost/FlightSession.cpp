@@ -80,7 +80,7 @@ namespace Outpost
                m_compass,
                _rng,
                _commander,
-               m_trumbleSprites,
+               m_trumbles,
                *this,
                *this,
                _view,
@@ -150,12 +150,6 @@ namespace Outpost
   void FlightSession::StopSound(std::uint8_t _effect)
   {
     Elite::StopSoundEffect(m_sound, _effect); // 6502: NOISEOFF
-  }
-
-  void FlightSession::MoveTrumbles()
-  {
-    // 6502: MVTRIBS -- and it is a CALL written as two jumps (§6.82), so a frame with Trumbles
-    // aboard still runs its other fifteen parts. Phase 4 owns the Trumbles themselves.
   }
 
   void FlightSession::StartDockingMusic()

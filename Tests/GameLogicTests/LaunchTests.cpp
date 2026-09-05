@@ -524,7 +524,6 @@ namespace GameLogicTests
         return true;
       }
       void StopSound(std::uint8_t) override {}
-      void MoveTrumbles() override {}
       void StartDockingMusic() override {}
       void StopDockingMusic() override
       {
@@ -635,7 +634,7 @@ namespace GameLogicTests
       world.status.hyperspaceCounter = 5u;
       world.status.hyperspaceCountdown = 9u;
       world.screen.hyperspaceEffect = 0xFFu;
-      world.trumbles = 0x5Au;
+      world.trumbles.count = 0x5Au;
       world.spaceView = 2u;
       world.explosions = 0x66u;
 

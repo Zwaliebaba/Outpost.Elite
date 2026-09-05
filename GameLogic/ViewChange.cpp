@@ -365,7 +365,7 @@ namespace Elite
       _screen.spaceView = _to;  // 6502: .LQ STX VIEW
       SetUpScreen(_screen, 0u); // 6502: JSR TT66, with A zero, so it becomes the space view
 
-      DrawLaserSights(_screen.canvas, _screen.math, _screen.commander, _screen.trumbleSprites, _screen.spaceView,
+      DrawLaserSights(_screen.canvas, _screen.math, _screen.commander, _screen.trumbles, _screen.spaceView,
                       _screen.sight); // 6502: JSR SIGHT
 
       // 6502: JMP NWSTARS -- a whole new field, because there was no space view to keep.
@@ -391,7 +391,7 @@ namespace Elite
     // 6502: JSR WPSHPS, and then it falls into SIGHT.
     ClearAllShips(_screen.canvas, _screen.draw, _screen.heaps, _screen.bubble, _screen.work, _screen.flight, _screen.view);
 
-    DrawLaserSights(_screen.canvas, _screen.math, _screen.commander, _screen.trumbleSprites, _screen.spaceView, _screen.sight);
+    DrawLaserSights(_screen.canvas, _screen.math, _screen.commander, _screen.trumbles, _screen.spaceView, _screen.sight);
   }
 
   void Warp(FlightScreen& _screen) noexcept
