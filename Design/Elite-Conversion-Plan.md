@@ -451,6 +451,48 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.131 A mutation that could not fail, and the branch it was hiding
+
+§6.126 was about a sweep that could not reach what it was swept over. This is the mirror: a
+mutation that could not distinguish anything, and the reason is arithmetic rather than fixtures.
+
+`ASL A / CMP #n / BCS` compares the SHIFTED accumulator, and a left-shifted byte always has bit 0
+clear. So the value under test is even, and for an even threshold `n`, `>= n-1` and `>= n` are the
+same predicate -- `n-1` is odd, nothing can equal it, and the smallest even value at or above it is
+`n` itself. Mutating such a constant DOWN by one is an equivalent mutant every time. Three of slice
+4a-c's mutations were on shifted comparisons and two of them moved down: `dock-66` and `steer-32`
+could not have failed whatever the sweep contained, and counting them as survivors said the tests
+were weak when the mutations were malformed. The rule is small enough to state once: on a shifted
+comparison a threshold mutation must move by TWO, because one magnitude step is two units.
+
+The C64 build has five of these. Four are in `Tactics.cpp` -- `TA11`'s `CMP #32` on the roll
+counter, `PH3`'s two `CMP #12`s on the x and y components, and `TN11`'s `CMP #66` on the roll dot
+product -- and the fifth is `DVL3`, the division loop inside `DVID96`, whose `CMP #96` runs on the
+same always-even value. All five are ported, and the same reading applies to all five.
+
+**What the correction found.** The third mutation, `dock-12x`, moved UP, which is a real change --
+`>= 13` folds to `>= 14`, one magnitude step. It survived, and the reason turned out to be worth
+more than the mutation. Instrumenting the port and counting what reaches `PH3`'s x test gave nine
+distinct values, the smallest 96 after the shift: the test was TRUE in every case that got there,
+and the y test below it never executed once in eleven hundred cases.
+
+That is structural and not bad luck. `XX15` at `PH3` is the unit vector from the station to the
+ship, and reaching `PH3` at all requires the ship to be IN FRONT OF THE SLOT -- a large component
+along the station's nose. Every approach in the fixture pointed that nose down +x, so `XX15`'s x
+component was large BY CONSTRUCTION and `|ship_x| < 6` was unreachable. Pointing the slot down +z
+instead makes "in front of it" a direction whose x and y are both small, and two ladders then walk
+each across the boundary. Both now take the value 12 exactly, on both sides, and the fine approach
+falls through to `PH32` for the first time.
+
+The port agreed with the shipped routine on every one of the newly reached cases, so there is no
+defect here -- but the branch had never been compared, and "no defect" is a measurement now rather
+than an assumption. The sweep went from 1,140 cases to 1,644.
+
+The general lesson is the one §6.124 and §6.126 keep circling from different sides: a green
+mutation score means the mutations were adequate, which is a claim about the mutations. Here two of
+them were arithmetic no-ops and a third was pointing at a branch the fixture had made unreachable,
+and all three read as "the tests are weak" until the arithmetic was worked out.
+
 ### 6.130 Two tracks, one branch, and the two things that survived the merge
 
 Phases 4 and 5 ran in parallel and met on one file. `Design/Elite-Conversion-Plan.md` conflicted on
@@ -5130,6 +5172,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **A mutation that could not fail** (§6.131). `ASL A / CMP #n` compares an always-EVEN value, so for an even `n` the mutation to `n-1` is the same predicate and can never be caught -- two of slice 4a-c's three shifted thresholds moved that way and were counted as survivors when they were arithmetic no-ops. On a shifted comparison a threshold must move by two. Correcting the third, which did move up, found the branch underneath: `PH3`'s x test was TRUE in all eleven hundred cases and the y test below it never ran, because reaching `PH3` needs the ship in front of the slot and every approach pointed the slot down +x, which makes a small x component impossible by construction. A slot pointing down +z makes both small; both ladders now cross 12 exactly and the fine approach reaches `PH32`. The port agreed on every newly reached case. 1,140 cases to 1,644. |
 | 2026-09-05 | **Two parallel tracks met on one file, and the merge was the easy half** (§6.130). Phases 4 and 5 conflicted only on the revision log's newest rows, which is what a newest-first log is for. The two real findings were downstream of it: §6.126's `[[nodiscard]]` carries produced six warnings, and the compiler was right about all six -- four production sites discard the flag correctly and now say so, and the two in the tests were the `MVT3` and `VCSUB` sweeps ignoring the very thing the slice had just made load-bearing, so both assert it now. And `inventory.py --strict` went red on twelve ported files because a bulk edit put each ✅ one position right, INSIDE the previous label's backticks, which turns every affected label into one that names no file. §6.120 for the third time. |
 | 2026-09-05 | **Phase 5, both slices** (§6.129). `SoundEffects` and `Music` in `GameLogic`, the sound workspace and the music variables as structs, the tables extracted (`SFXPR` at 136 bytes for `HYPNOISE`'s bit-7 read), and the interrupt's SID half as a tick that emits register writes. `Cpu6502` gained an in-order store log and the fixture enters `COMIRQ1` as an interrupt, so the comparison is on every SID write of every frame -- 4,160 effect frames and 4,000 music interrupts -- rather than on the registers' final state. `SidSynth` and `SoundOutput` in the executable: a per-cycle 6581 without its filter, played through XAudio2 with the interrupt run off the device's queue depth. Ledger row 164 corrected -- the "nine tune blocks" are the raster interrupt's VIC-II tables. ADR-005 §2 amended: no `offsetSamples`. Left for 4d and 4e: the Trumble chatter and the option keys. |
 | 2026-09-05 | **The outer loop was missing `MLOOP`'s head** (§6.128). Three player reports -- a letter key that looked dead on the buy screen, dials that never moved, a laser that fired once -- were one omission: `BAY2`'s forced "9", part 5's `JSR DIALS`, and the two cooling countdowns on `GNTMP` and `LASCT` were not in `Main.cpp`. All three are, and the pattern joins §6.111 and §6.115: a swept routine that nothing reached. |

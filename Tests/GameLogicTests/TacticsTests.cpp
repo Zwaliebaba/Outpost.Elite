@@ -1149,6 +1149,31 @@ namespace GameLogicTests
         }
       }
 
+      /*
+       * A SLOT POINTING ALONG Z, which is the only shape that reaches `PH3`'s own two tests.
+       *
+       * `PH3` asks `|XX15| < 6` on the x component and then on the y, and `XX15` is the unit vector
+       * from the station to the ship. Reaching `PH3` at all needs the ship IN FRONT OF THE SLOT,
+       * which is a large component along the station's nose -- so with every row above pointing the
+       * nose down +x, `XX15`'s x component was never smaller than 48 and the x test was true in
+       * every case that got there. Instrumenting the port says so exactly: nine distinct values
+       * reached it, the smallest 96 after the shift, and the y test below it NEVER RAN AT ALL.
+       *
+       * Pointing the slot down +z instead makes "in front of it" a direction whose x and y are both
+       * small, and then the two ladders below walk each of them across 6. The ship's nose points
+       * back down -z so the `CMP #&A2` gate still opens.
+       */
+      for (const std::uint8_t offX : {0x00u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u, 0x0Au, 0x14u})
+      {
+        for (const std::uint8_t offY : {0x00u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x0Au})
+        {
+          for (const std::uint8_t sign : {0x00u, 0x80u})
+          {
+            ladder.push_back({"down the z slot", offX, sign, offY, sign, 0x40u, 0u, 0x08u, 0x08u, 0x60u, 0x08u, 0x08u, 0xE0u});
+          }
+        }
+      }
+
       const std::uint8_t TYPES[] = {11u, 0xE0u}; // an NPC, and `auton`'s negative type
 
       /*
