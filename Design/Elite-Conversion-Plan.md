@@ -451,6 +451,54 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.133 Two presentation decisions closed, and the argument that was nearly right
+
+ADR-005 §1 has carried two open items since 2026-09-05: where the sprite overlay composites (the
+laser crosshairs and the Trumbles) and where the VIC-II raster effects live (`moonflower`'s bitmap
+mode for the energy bomb, `welcome`'s border cycling, `HFX`'s hyperspace tearing). Both are now
+settled the way the ADR recommended -- in `Canvas::Resolve` -- but the recommendation's own
+reasoning does not survive being pushed on, and the replacement matters because it changes what the
+work actually is.
+
+**The argument the ADR gave.** Put compositing in the canvas because `GameLogic` is testable on both
+CI legs, while the presenter is Windows-only and checked by nothing this repository can run.
+
+**Why that is weaker than it looks.** Compositing has no oracle wherever it lives. The game never
+rendered a composited image into memory, so there is nothing to compare a composited image against.
+Moving the code into `GameLogic` makes it RUNNABLE under test; it does not make it VERIFIED. Taken
+at face value the argument would justify moving any untestable thing into `GameLogic` on the grounds
+that `GameLogic` is where tests are, which is backwards.
+
+**The reason that does hold.** `Canvas` keeps the game's BYTES, laid out exactly as the original's
+memory, and those are what the oracle compares -- untouched by this decision either way. `Resolve()`
+is already the un-oracled "what a person would see" layer sitting downstream of them: it already
+turns the multicolour bitmap, screen RAM and colour RAM into indices, already has no byte-level
+oracle, and is already covered by golden hashes and by assertions on hand-worked cases. Sprites are
+the same kind of transformation over the same inputs, and `moonflower` is not even an overlay -- it
+changes how the same bytes DECODE, so putting it in the presenter would mean decoding the bitmap
+twice in two languages. The canvas wins because the layer already exists, not because tests live
+there.
+
+**What the open items missed, and what makes this a design change rather than a slice.** `Resolve`
+takes only the canvas, and most of the sprite state is not in it. The pointers are -- they are canvas
+writes at `SIGHT_SPRITE_CELL`, compared byte for byte since §6.73 -- but the enable mask, the colour
+and the raster mode are `SightEffects`, which is a WRITE-ONLY seam out to the presenter, and the
+Trumble positions `MVTRIBS` writes are not modelled at all. So the work is to make that register
+state DATA the port owns: a `VideoState` struct that `GameLogic` holds and both `Resolve` and the
+presenter read. Explicitly not a getter on `SightEffects`, for the reason already written on
+`MaskSprites` -- a getter invites a port to compute what the hardware is holding.
+
+**One prerequisite, worth doing on its own.** `SPRITE.bin` is a fourth assembly `tools/labels.py`
+does not build: 84 lines of source, 448 bytes, seven definitions. Added on the `LOADER_ASSEMBLY`
+pattern it becomes byte-checked by `extract_tables.py --check` like every other table, which is the
+one part of this that CAN be verified against the original and currently is not.
+
+**And what stays unverified, recorded rather than glossed.** The blit rule -- sprite-over-bitmap
+priority, the multicolour sprite bit pairs, the x-expand flag. Documented VIC-II behaviour, small,
+and the first drawing in this port with nothing to compare against. The honest mitigation is a
+golden hash plus one hand-checked screenshot in the shape slice 2e already established, and saying
+so is better than a coverage number that would not mean anything.
+
 ### 6.132 The third dead branch, and what the three of them have in common
 
 Correcting the shifted thresholds (§6.131) left one survivor, `dock-66`, and it was the same story a
@@ -5146,8 +5194,8 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **started 2026-09-05**: 4a-a and 4a-b built, 4a-c (`TACTICS`) and 4a-d (`DOCKIT`) next; 4e (the pause screen) added the same day (§6.120) |
-| 5 | 2 | 4–7 | not started; the synthesiser is the unknown |
+| 4 | 5 | 8–12 | **in progress**: 4a is built (4a-a, 4a-b and 4a-c, the last of which absorbed 4a-d per §6.122). 4b, 4c, 4d and 4e are not started. **4c is the critical path** — `Main.cpp` still refuses hyperspace and the charts by name and `FlightSession` still stubs `NWSPS`, so nothing populates the bubble that `TACTICS` steers |
+| 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
 | **Total** | **24** | **40–60** | before modernisation |
 
 Phases 0 to 3 took four days rather than the twenty-eight to forty-two sittings estimated, which
@@ -5202,6 +5250,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **ADR-005's two open presentation items closed** (§6.133). The sprite overlay and the VIC-II raster effects both composite in `Canvas::Resolve`, which is what the ADR recommended -- but its reasoning ("the canvas because `GameLogic` is testable") does not hold: compositing has no oracle wherever it lives, so that argument would justify moving any untestable thing into `GameLogic`. The reason that holds is that `Resolve` is ALREADY the un-oracled "what you would see" layer downstream of the bytes the oracle compares, and `moonflower` changes how those bytes DECODE rather than overlaying them. The work the items missed is that most of the sprite state is a write-only seam: it has to become a `VideoState` the port owns. `SPRITE.bin` as a fourth assembly is the prerequisite, and the blit rule is recorded as unverifiable rather than glossed. |
 | 2026-09-05 | **The third dead branch in `DOCKIT`, and the pattern the three share** (§6.132). `PH32`'s roll test dots the ship's SIDE vector with the station's ROOF, and both were constants -- the side from the seeding ramp, the roof set once for the whole sweep -- so the dot product took ONE value, 6, in all 332 cases that reached it, and `TN11` had never executed at all. The roof is per-approach now with the old value as its default, and a ladder walks it from perpendicular to aligned: 29 distinct values, 66 among them. With `PH3`'s two tests this makes three branches that a healthy-looking sweep of 1,644 oracle-compared cases could not see, all because a fixture held fixed something the routine branches on. The counter is not distinct answers but **distinct answers per branch**, and probing the comparison is the first move on a surviving threshold, not the last. |
 | 2026-09-05 | **A mutation that could not fail** (§6.131). `ASL A / CMP #n` compares an always-EVEN value, so for an even `n` the mutation to `n-1` is the same predicate and can never be caught -- two of slice 4a-c's three shifted thresholds moved that way and were counted as survivors when they were arithmetic no-ops. On a shifted comparison a threshold must move by two. Correcting the third, which did move up, found the branch underneath: `PH3`'s x test was TRUE in all eleven hundred cases and the y test below it never ran, because reaching `PH3` needs the ship in front of the slot and every approach pointed the slot down +x, which makes a small x component impossible by construction. A slot pointing down +z makes both small; both ladders now cross 12 exactly and the fine approach reaches `PH32`. The port agreed on every newly reached case. 1,140 cases to 1,644. |
 | 2026-09-05 | **Two parallel tracks met on one file, and the merge was the easy half** (§6.130). Phases 4 and 5 conflicted only on the revision log's newest rows, which is what a newest-first log is for. The two real findings were downstream of it: §6.126's `[[nodiscard]]` carries produced six warnings, and the compiler was right about all six -- four production sites discard the flag correctly and now say so, and the two in the tests were the `MVT3` and `VCSUB` sweeps ignoring the very thing the slice had just made load-bearing, so both assert it now. And `inventory.py --strict` went red on twelve ported files because a bulk edit put each ✅ one position right, INSIDE the previous label's backticks, which turns every affected label into one that names no file. §6.120 for the third time. |
