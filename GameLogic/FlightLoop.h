@@ -243,15 +243,6 @@ namespace Elite
   class FlightLoopEffects : public DashboardEffects, public SpawnChildEffects
   {
   public:
-    /*
-     * 6502: JMP MVTRIBS, which ends `JMP NOMVETR`.
-     *
-     * A CALL WRITTEN AS TWO JUMPS. Part 1 jumps out and `MVTRIBS` jumps back to the label part 2
-     * begins at, so reading the first as the end of the frame loses fifteen parts of work on every
-     * frame with a Trumble aboard (§6.82).
-     */
-    virtual void MoveTrumbles() = 0;
-
     /// 6502: JSR startbd and JSR stopbd -- the docking music, which is a second interrupt handler.
     virtual void StartDockingMusic() = 0;
     virtual void StopDockingMusic() = 0;

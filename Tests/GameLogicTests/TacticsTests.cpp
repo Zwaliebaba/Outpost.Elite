@@ -548,7 +548,6 @@ namespace GameLogicTests
     {
       std::vector<std::uint8_t> sounds;
       std::vector<std::uint8_t> spawned;
-      std::uint32_t trumbleMoves = 0;
 
       bool PlaySound(std::uint8_t _effect, bool) override
       {
@@ -561,10 +560,6 @@ namespace GameLogicTests
         return true;
       }
       void StopSound(std::uint8_t) override {}
-      void MoveTrumbles() override
-      {
-        ++trumbleMoves;
-      }
       void StartDockingMusic() override {}
       void StopDockingMusic() override {}
       bool SpawnAhead(std::uint8_t) override

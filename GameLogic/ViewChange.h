@@ -13,6 +13,7 @@
 #include "Stardust.h"
 #include "TextPrint.h"
 #include "Tokens.h"
+#include "Trumbles.h"
 
 namespace Elite
 {
@@ -282,9 +283,17 @@ namespace Elite
     Compass& compass;
     Rng& rng;
 
-    CommanderBlock& commander;    ///< 6502: TP -- `SIGHT` only reads it, the flight loop
-                                  ///< writes `NOMSL`, `QQ14`, `QQ20`, `FIST` and `BOMB`
-    std::uint8_t& trumbleSprites; ///< 6502: TRIBCT
+    CommanderBlock& commander; ///< 6502: TP -- `SIGHT` only reads it, the flight loop
+                               ///< writes `NOMSL`, `QQ14`, `QQ20`, `FIST` and `BOMB`
+    /*
+     * 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and the six sprites they steer.
+     *
+     * ONE FIELD RATHER THAN TWO because `TRIBCT` is what indexes the rest: `SIGHT` writes the
+     * count and `MVTRIBS` reads it to decide which sprite this frame moves. It was a bare
+     * `std::uint8_t&` while nothing moved them (slice 3d), which is the same shape `K3Block` had
+     * before a second routine asked for it (§6.121).
+     */
+    TrumbleSprites& trumbles;
 
     SightEffects& sight;
     ViewEffects& effects;

@@ -246,6 +246,35 @@ namespace Elite
   extern const std::array<std::uint8_t, 8> TRUMBLE_SPRITE_TABLE;
 
   /*
+   * 6502: TRIBDIR and TRIBDIRH -- the four directions `MVTRIBS` picks between, as a 16-bit pair.
+   *
+   * Four entries because `AND #3` is what indexes them, and the two tables are one 16-bit table
+   * split across a low half and a high half: (TRIBDIRH TRIBDIR) reads 0, 1, -1, 0.
+   *
+   * TWO OF THE FOUR ARE THE SAME, and that is the whole design. A Trumble stands still on an axis
+   * half the time, drifts one way a quarter of the time and the other way the remaining quarter,
+   * which is what makes six sprites wander rather than march. The y axis uses the LOW table alone,
+   * so its -1 is &FF as an eight-bit value and the sprite wraps round the screen instead of
+   * clamping -- the source says so in as many words.
+   */
+  extern const std::array<std::uint8_t, 4> TRUMBLE_DIRECTION_TABLE;
+  extern const std::array<std::uint8_t, 4> TRUMBLE_DIRECTION_HIGH_TABLE;
+
+  /*
+   * 6502: SPMASK -- the ninth bit of each Trumble sprite's x coordinate, as a pair of masks.
+   *
+   * Sprite x coordinates are nine bits on the VIC-II: eight in the sprite's own register and the
+   * ninth in a bit of VIC+&10 shared by all eight sprites. So moving one sprite sideways is a
+   * read-modify-write of a byte the other seven also live in, and the table is what says which
+   * bit is whose: entry 2n clears Trumble n's bit and entry 2n+1 sets it.
+   *
+   * TWELVE ENTRIES, sized by what indexes them (§6.8). Y is twice the Trumble number and the
+   * number is below six, so `SPMASK+1,Y` reaches offset 11 and no further. The first pair belongs
+   * to sprite 2, not sprite 0: sprites 0 and 1 are the laser sights and the explosion.
+   */
+  extern const std::array<std::uint8_t, 12> TRUMBLE_SPRITE_BIT_TABLE;
+
+  /*
    * 6502: DSTORE% -- the dashboard picture, which `wantdials` copies into the bitmap.
    *
    * Seven character rows of forty cells at eight bytes each is 2,240, and this is 2,241. The

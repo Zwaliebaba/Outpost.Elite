@@ -288,7 +288,22 @@ namespace GameLogicTests
     Elite::ExtendedTokenPrinter extendedPrinter{characters, printer, rng, &codes};
 
     Elite::CommanderBlock commander;
-    std::uint8_t trumbles = 0;
+
+    /// 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and VIC+&04 to VIC+&10 -- the sprite bank slice 4d-a
+    /// gave a home. It was the bare count while nothing moved them.
+    Elite::TrumbleSprites trumbles;
+
+    /*
+     * Whether the Trumbles' COORDINATE REGISTERS are mirrored into the oracle and compared back.
+     *
+     * Off by default, and the reason is `Where::vic`: those registers are `XX21` in a flat image,
+     * so mirroring them overwrites the blueprint pointers for ship types 3 to 9 on one side of the
+     * comparison and nothing on the other. A fixture turns this on when it intends `MVTRIBS` to
+     * run, which is also a promise that the frame stops before any ship is drawn. `TRIBCT` and the
+     * three velocity tables are real RAM and are always mirrored, so a fixture that only wants to
+     * see the count written leaves this alone.
+     */
+    bool spriteRegistersAreOurs = false;
 
     RecordingSight sight;
     RecordingDashboard dashboard;
@@ -354,7 +369,6 @@ namespace GameLogicTests
       return true;
     }
     void StopSound(std::uint8_t) override {}
-    void MoveTrumbles() override {}
     void StartDockingMusic() override {}
     void StopDockingMusic() override {}
     bool SpawnAhead(std::uint8_t) override
@@ -458,7 +472,7 @@ namespace GameLogicTests
     _world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 3u] = Elite::LASER_MILITARY;
     _world.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)] = 0x40u;
     _world.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = 0x21u;
-    _world.trumbles = 0x5Au;
+    _world.trumbles.count = 0x5Au;
 
     _world.rng.SetState({0x11u, 0x22u, 0x33u, 0x44u});
 
@@ -508,6 +522,7 @@ namespace GameLogicTests
     std::uint16_t abraxas, caravanserai, dflag, comx, comy, comc, t2;
     std::uint16_t delta, alp1, alp2, beta, bet1, energy, fsh, ash, qq14, xx0;
     std::uint16_t cabtmp, gntmp, altit, mcnt, flh, ecma, laser, tribble, tribct;
+    std::uint16_t tribvx, tribvxh, tribxh, vic; ///< 6502: the Trumble sprite bank, slice 4d-a
     std::uint16_t tp, mch, messxc, screen;
     std::uint16_t tek, xx21Station, spasto; ///< 6502: tek, XX21+2*SST-2, and BEGIN's saved copy of it
 
@@ -574,6 +589,22 @@ namespace GameLogicTests
       laser = _oracle.Label("LASER");
       tribble = _oracle.Label("TRIBBLE");
       tribct = _oracle.Label("TRIBCT");
+      tribvx = _oracle.Label("TRIBVX");
+      tribvxh = _oracle.Label("TRIBVXH");
+      tribxh = _oracle.Label("TRIBXH");
+
+      /*
+       * 6502: VIC, which the source sets to &D000 -- and in a flat image that is `XX21`, the ship
+       * blueprint pointer table (§6.108).
+       *
+       * So writing a Trumble sprite's x coordinate in the oracle overwrites the blueprint pointers
+       * for ship types 3 to 9. On the real machine `SETL1` banks the video chip in over that RAM
+       * and the table is untouched; there is no bank here, so a comparison that runs `MVTRIBS` and
+       * then draws a ship is comparing against a corrupted table. Every fixture that gives a frame
+       * Trumbles has to stop before the ships are drawn, and `TheControlRatesMatchM` -- the only
+       * one that does -- runs the frame's HEAD.
+       */
+      vic = _oracle.Label("XX21");
       tp = _oracle.Label("TP");
       mch = _oracle.Label("MCH");
       messxc = _oracle.Label("messXC");
@@ -631,7 +662,24 @@ namespace GameLogicTests
      * zeroes against whatever the shipped block happens to hold.
      */
     block(_at.tp, _world.commander.bytes.data(), Elite::COMMANDER_BLOCK_SIZE);
-    _cpu.memory[_at.tribct] = _world.trumbles;
+    /*
+     * The Trumble sprite bank, and the last two lines of it are CONDITIONAL (slice 4d-a).
+     *
+     * `TRIBCT`, `TRIBVX`, `TRIBVXH` and `TRIBXH` are ordinary RAM at &0510 and are always mirrored.
+     * The COORDINATES are not: they are VIC-II registers, and in a flat image the VIC-II is `XX21`
+     * (§6.108) -- so writing them writes the blueprint pointers for ship types 3 to 9, and a frame
+     * that then draws a ship reads a blueprint the port never corrupted. `spriteRegistersAreOurs`
+     * is the fixture saying it means to move a sprite and will not draw a ship afterwards.
+     */
+    _cpu.memory[_at.tribct] = _world.trumbles.count;
+    block(_at.tribvx, _world.trumbles.velocityX.data(), _world.trumbles.velocityX.size());
+    block(_at.tribvxh, _world.trumbles.velocityXHigh.data(), _world.trumbles.velocityXHigh.size());
+    block(_at.tribxh, _world.trumbles.coordinateXHigh.data(), _world.trumbles.coordinateXHigh.size());
+    if (_world.spriteRegistersAreOurs)
+    {
+      block(static_cast<std::uint16_t>(_at.vic + 4u), _world.trumbles.coordinates.data(), _world.trumbles.coordinates.size());
+      _cpu.memory[static_cast<std::uint16_t>(_at.vic + 0x10u)] = _world.trumbles.coordinateMsb;
+    }
 
     const std::array<std::uint8_t, 4> seed = _world.rng.State();
     block(_at.rand, seed.data(), seed.size());
@@ -745,7 +793,24 @@ namespace GameLogicTests
     same(_at.caravanserai, _world.screen.bitmapMode, L"caravanserai");
     same(_at.dflag, _world.screen.dashboardShown, L"DFLAG");
     same(_at.comc, _world.compass.colour, L"COMC");
-    same(_at.tribct, _world.trumbles, L"TRIBCT");
+    same(_at.tribct, _world.trumbles.count, L"TRIBCT");
+    for (std::size_t index = 0; index < _world.trumbles.velocityX.size(); ++index)
+    {
+      const std::uint16_t offset = static_cast<std::uint16_t>(index);
+      same(static_cast<std::uint16_t>(_at.tribvx + offset), _world.trumbles.velocityX[index], L"TRIBVX");
+      same(static_cast<std::uint16_t>(_at.tribvxh + offset), _world.trumbles.velocityXHigh[index], L"TRIBVXH");
+      same(static_cast<std::uint16_t>(_at.tribxh + offset), _world.trumbles.coordinateXHigh[index], L"TRIBXH");
+    }
+    if (_world.spriteRegistersAreOurs)
+    {
+      // Compared only where they were mirrored, and for the same reason: unless a fixture has
+      // claimed them these addresses hold `XX21` on one side and sprite registers on the other.
+      for (std::size_t index = 0; index < _world.trumbles.coordinates.size(); ++index)
+      {
+        same(static_cast<std::uint16_t>(_at.vic + 4u + index), _world.trumbles.coordinates[index], L"VIC+&04");
+      }
+      same(static_cast<std::uint16_t>(_at.vic + 0x10u), _world.trumbles.coordinateMsb, L"VIC+&10");
+    }
     same(_at.nostm, _world.dust.count, L"NOSTM");
     same(_at.tek, _world.techLevel, L"tek");
 

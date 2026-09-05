@@ -106,7 +106,7 @@ namespace Elite
     screen.flight.alp2Next = 0u;
     screen.flight.bet2Next = 0u;
     screen.flight.mainLoopCounter = 0u;
-    screen.trumbleSprites = 0u;
+    screen.trumbles.count = 0u;
 
     // 6502: LDA #3 / STA DELTA / STA ALPHA / STA ALP1 -- one load, three meanings.
     screen.flight.delta = LAUNCH_ROLL;

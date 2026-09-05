@@ -129,6 +129,27 @@ namespace Elite
     0x00, 0x04, 0x0C, 0x1C, 0x3C, 0x7C, 0xFC, 0xFC,
   };
 
+  // 6502: TRIBDIR -- the low byte of the four directions a Trumble sprite can move in.
+  const std::array<std::uint8_t, 4> TRUMBLE_DIRECTION_TABLE = {
+    0x00,
+    0x01,
+    0xFF,
+    0x00,
+  };
+
+  // 6502: TRIBDIRH -- the high byte of the same four, which makes the second of them negative.
+  const std::array<std::uint8_t, 4> TRUMBLE_DIRECTION_HIGH_TABLE = {
+    0x00,
+    0x00,
+    0xFF,
+    0x00,
+  };
+
+  // 6502: SPMASK -- VIC+&10 masks for the ninth x bit of the six Trumble sprites, clear then set.
+  const std::array<std::uint8_t, 12> TRUMBLE_SPRITE_BIT_TABLE = {
+    0xFB, 0x04, 0xF7, 0x08, 0xEF, 0x10, 0xDF, 0x20, 0xBF, 0x40, 0x7F, 0x80,
+  };
+
   // 6502: sdump -- screen RAM for the dashboard's seven rows: %01 in the high nibble, %10 in the low.
   const std::array<std::uint8_t, 280> DASHBOARD_SCREEN_COLOURS = {
     0x00, 0x00, 0x00, 0x07, 0x17, 0x17, 0x74, 0x74, 0x74, 0x74, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27,

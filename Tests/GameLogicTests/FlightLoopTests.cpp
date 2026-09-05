@@ -762,10 +762,8 @@ namespace GameLogicTests
    */
   namespace
   {
-    /// Flat memory the game never touches, where the patched `MVTRIBS` counts its own arrivals.
-    constexpr std::uint16_t TRUMBLE_PROBE = 0xFFF0;
-
-    /// Three more of the same, for `DEATH`, `DOENTRY` and `ESCAPE` in that order.
+    /// Flat memory the game never touches, where a patched exit counts its own arrivals. Three of
+    /// them, for `DEATH`, `DOENTRY` and `ESCAPE` in that order.
     constexpr std::uint16_t EXIT_PROBE = 0xFFF1;
 
     /// The first byte of the arena that is heap rather than ship block -- `Mirror` owns everything
@@ -780,7 +778,7 @@ namespace GameLogicTests
       std::uint16_t las, lasct, lasx, lasy, msar, mstg, ecmp, moonflower;
       std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
-      std::uint16_t mvtribs, nomvetr, ma3, ma18, escape, frs1, angry, startbd, stopbd, noise;
+      std::uint16_t ma3, ma18, escape, frs1, angry, startbd, stopbd, noise;
       std::uint16_t mainLoop, death, doentry, tactics, doexp, planet, sfs1, noise2;
       std::uint16_t setl1, dovdu19, slsp;
 
@@ -812,8 +810,6 @@ namespace GameLogicTests
         gntmp = _oracle.Label("GNTMP");
         energy = _oracle.Label("ENERGY");
 
-        mvtribs = _oracle.Label("MVTRIBS");
-        nomvetr = _oracle.Label("NOMVETR");
         ma3 = _oracle.Label("MA3");
         escape = _oracle.Label("ESCAPE");
         frs1 = _oracle.Label("FRS1");
@@ -859,7 +855,6 @@ namespace GameLogicTests
       std::vector<std::uint8_t> stopped;
       std::vector<std::uint8_t> spawned;
       std::vector<std::uint8_t> angered;
-      std::uint32_t trumbleMoves = 0;
       std::uint32_t musicStarts = 0;
       std::uint32_t musicStops = 0;
 
@@ -888,10 +883,6 @@ namespace GameLogicTests
       void StopSound(std::uint8_t _effect) override
       {
         stopped.push_back(_effect);
-      }
-      void MoveTrumbles() override
-      {
-        ++trumbleMoves;
       }
       void StartDockingMusic() override
       {
@@ -974,6 +965,19 @@ namespace GameLogicTests
       explicit Frame(std::uint32_t _seed)
       {
         Seed(world, _seed);
+
+        /*
+         * 6502: TRIBCT -- ZERO here, and `Seed` leaves it at 90 (slice 4d-a).
+         *
+         * `MVTRIBS` writes the six Trumble sprites' coordinate registers, and in the oracle's flat
+         * image those registers ARE `XX21`, the ship blueprint pointer table (§6.108). On the real
+         * machine `SETL1` banks the video chip in over that RAM and the table survives; there is no
+         * bank here, so a frame that moves a Trumble and then draws a ship reads a corrupted
+         * blueprint on one side of the comparison and a good one on the other. Every fixture that
+         * wants Trumbles has to stop before the ships, and `TheControlRatesMatchM` is the one that
+         * does.
+         */
+        world.trumbles.count = 0u;
 
         // 6502: LSO -- the station draws into the SUN's heap, which lives in the world (§6.112).
         world.LendSunHeap(heap);
@@ -1222,15 +1226,21 @@ namespace GameLogicTests
       cpu.AddTrap(_loop.noise, Cpu6502::TrapExit::SetCarry);
 
       /*
-       * `MVTRIBS` is entered by `JMP` and leaves by `JMP NOMVETR`, so it is patched rather than
-       * trapped: a trap's RTS would pop the fake return address and end the run mid-frame. The `INC`
-       * in front of the jump back is what makes "it was reached" observable at all -- without it the
-       * oracle's side of the comparison would only be the branch the port itself takes.
+       * `MVTRIBS` USED TO BE PATCHED OUT HERE and is not any more (slice 4d-a).
+       *
+       * It was replaced by `INC probe / JMP NOMVETR` while the port had a seam where the routine
+       * should be -- entered by `JMP` and leaving by `JMP NOMVETR`, it cannot be trapped, because a
+       * trap's `RTS` would pop the fake return address and end the run mid-frame. The port runs the
+       * real routine now, and the real routine takes a random number, so leaving the patch in place
+       * would put the two generators one call apart on every frame with a Trumble aboard. What
+       * replaces the probe is the sprite bank in `Mirror` and `CompareState`, which says more:
+       * whether it was reached AND what it did.
+       *
+       * A FRAME WITH TRUMBLES ABOARD MUST NOT REACH THE SHIPS. The sprite registers are `XX21` in a
+       * flat image (`Where::vic`), so `MVTRIBS` overwrites the blueprint pointers for types 3 to 9
+       * on the oracle's side and on nobody else's. `TheControlRatesMatchM` is the only fixture that
+       * sets `TRIBCT`, and it runs the frame's head.
        */
-      cpu.memory[TRUMBLE_PROBE] = 0u;
-      const std::uint8_t back[] = {0xEEu, static_cast<std::uint8_t>(TRUMBLE_PROBE & 0xFFu), static_cast<std::uint8_t>(TRUMBLE_PROBE >> 8),
-                                   0x4Cu, static_cast<std::uint8_t>(_loop.nomvetr & 0xFFu), static_cast<std::uint8_t>(_loop.nomvetr >> 8)};
-      cpu.Load(_loop.mvtribs, back, sizeof(back));
 
       FillScreens(cpu, _frame.world.canvas, _at.screen, 0x1Du);
       Mirror(_frame.world, cpu, _at);
@@ -1403,7 +1413,6 @@ namespace GameLogicTests
 
       Assert::AreEqual(starts, _frame.effects.musicStarts, (_context + L": startbd").c_str());
       Assert::AreEqual(stops, _frame.effects.musicStops, (_context + L": stopbd").c_str());
-      Assert::AreEqual<std::uint32_t>(cpu.memory[TRUMBLE_PROBE], _frame.effects.trumbleMoves, (_context + L": MVTRIBS").c_str());
 
       // ---- the world -----------------------------------------------------------------------------
       CompareScreens(cpu, _at.screen, _frame.world.canvas, 0x1Du, _context);
@@ -1497,13 +1506,22 @@ namespace GameLogicTests
             frame.control.pitch = pitch;
             frame.options.dampingDisabled = ((mode & 1u) != 0u) ? 0xFFu : 0u;
             frame.control.dockingComputer = ((mode & 2u) != 0u) ? 0xFFu : 0u;
-            frame.world.trumbles = ((roll & 1u) != 0u) ? 0u : 3u;
+            /*
+             * 6502: TRIBCT -- half the sweep carries Trumbles and half does not, so part 1's
+             * `LDA TRIBCT / BEQ NOMVETR` is exercised both ways. With three of them showing and
+             * `MCNT` at zero, `MVTRIBS` moves sprite 0 and takes a random number for it, which is
+             * why the generator's state is part of what `CompareState` checks.
+             */
+            frame.world.spriteRegistersAreOurs = true;
+            frame.world.trumbles.count = ((roll & 1u) != 0u) ? 0u : 3u;
+            frame.world.trumbles.coordinates = {0x20u, 0x30u, 0x40u, 0x50u, 0x60u, 0x70u, 0x80u, 0x90u, 0xA0u, 0xB0u, 0xC0u, 0xD0u};
+            frame.world.trumbles.coordinateMsb = 0x03u; // the sights' and the explosion's bits, which are not this routine's
 
             const std::wstring where =
               WidenText("M% (JSTX " + std::to_string(roll) + ", JSTY " + std::to_string(pitch) + ", mode " + std::to_string(mode) + ")");
             CompareFrames(frame, oracle, at, loop, where);
 
-            moved += frame.effects.trumbleMoves;
+            moved += (frame.world.trumbles.count != 0u) ? 1u : 0u;
             ++compared;
           }
         }

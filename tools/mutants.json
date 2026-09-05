@@ -32,12 +32,15 @@
     "the tests, and a recorded survivor that starts being caught is debt that has been paid and",
     "should be written down as paid."
   ],
-
   "units": [
     {
       "name": "tactics",
       "slice": "4a-c",
-      "filter": ["TheTacticsVectors", "TheShipAi", "TheDockingComputer"],
+      "filter": [
+        "TheTacticsVectors",
+        "TheShipAi",
+        "TheDockingComputer"
+      ],
       "tests": 7,
       "note": [
         "The ship AI and the autopilot (plan section 6.125). The docking half is closed -- every",
@@ -201,11 +204,12 @@
         }
       ]
     },
-
     {
       "name": "hyperspace",
       "slice": "4c-b",
-      "filter": ["TheJump"],
+      "filter": [
+        "TheJump"
+      ],
       "tests": 6,
       "note": [
         "The jump, witchspace and the galactic hyperdrive (plan section 6.136). Seeded with three",
@@ -250,6 +254,115 @@
           "replace": "screen.commander.At(Field::Fuel) = fuel.carry ? fuel.value : std::uint8_t{0u};",
           "expect": "equivalent",
           "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made."
+        }
+      ]
+    },
+    {
+      "name": "trumbles",
+      "slice": "4d-a",
+      "filter": [
+        "TheTrumbles"
+      ],
+      "tests": 6,
+      "note": [
+        "MVTRIBS and the six Trumble sprites (plan section 6.148). Ten mutants, written with the",
+        "slice rather than reconstructed from a name, so this unit is a measurement from its first",
+        "run rather than a test of a reconstruction.",
+        "",
+        "The two that matter most are `tr-carry2` and `tr-carry1`. The routine takes two random",
+        "numbers with DIFFERENT carries -- the first clear because an `ASL A` on a value below eight",
+        "cannot carry, the second set because `CMP #235` set it on the way past -- and the generator",
+        "reads C. Neither shows on screen; both move the whole sequence."
+      ],
+      "mutants": [
+        {
+          "id": "tr-selftest",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "    _sprites.coordinates[at + 1u] = AddWithCarry(_sprites.coordinates[at + 1u], _sprites.velocityX[at + 1u], false).value;",
+          "replace": "    _sprites.coordinates[at + 1u] = AddWithCarry(_sprites.coordinates[at + 1u], 0u, false).value;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Dropping the y velocity leaves every Trumble on the row it started on, and TheYWrapMatchesMVTRIBS compares 768 rows against the shipped routine. Its job is to prove this run OBSERVES a catch; a run in which it survives is a run whose every other answer is worthless (Risk R13, plan section 6.119). Keep it first and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "tr-carry2",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "const RngResult driftRoll = _rng.Next(true);",
+          "replace": "const RngResult driftRoll = _rng.Next(false);",
+          "expect": "caught",
+          "note": "The SECOND DORND's carry, which `CMP #235` set on the way past. Wrong here and the y velocity is drawn from a different entry of TRIBDIR about half the time AND the generator ends one state adrift, so the next frame's roll is wrong too. Nothing on screen would say so; TheDirectionChoiceMatchesMVTRIBS compares RAND."
+        },
+        {
+          "id": "tr-carry1",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "const RngResult turnRoll = _rng.Next(false);",
+          "replace": "const RngResult turnRoll = _rng.Next(true);",
+          "expect": "caught",
+          "note": "The FIRST DORND's carry, which is the `ASL A` two instructions above -- clear, because A is at most 7. The mirror image of tr-carry2 and it fails on the same comparison."
+        },
+        {
+          "id": "tr-turn",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "if (turn >= _sprites.count)",
+          "replace": "if (turn > _sprites.count)",
+          "expect": "caught",
+          "note": "`CMP TRIBCT / BCC` -- the pass on which the counter EQUALS the count must not move anything. Off by one and a hold with three Trumbles moves a fourth sprite that is not showing."
+        },
+        {
+          "id": "tr-mask",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "TRUMBLE_TURN_MASK",
+          "replace": "TRUMBLE_TURN_MASK - 1u",
+          "expect": "caught",
+          "note": "`AND #7` -- with three left it counts to three instead of seven, so a Trumble moves every fourth frame rather than every eighth and the sixth one never moves at all."
+        },
+        {
+          "id": "tr-235",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "if (turnRoll.value >= TRUMBLE_TURN_ROLL)",
+          "replace": "if (turnRoll.value > TRUMBLE_TURN_ROLL)",
+          "expect": "caught",
+          "note": "`CMP #235 / BCC MVTR1` -- the boundary itself. Told apart only by a seed that rolls exactly 235, and the direction sweep tries 256 seeds against six sprites."
+        },
+        {
+          "id": "tr-rightedge",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "coordinateLow >= TRUMBLE_RIGHT_EDGE_LIMIT",
+          "replace": "coordinateLow > TRUMBLE_RIGHT_EDGE_LIMIT",
+          "expect": "caught",
+          "note": "`CMP #&50 / BCC oktrib` -- &150 exactly is off the right edge and &14F is not. The x sweep walks all 256 low bytes, so the boundary is in it by construction."
+        },
+        {
+          "id": "tr-leftsign",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "if ((high & 0x80u) != 0u)",
+          "replace": "if ((high & 0x40u) != 0u)",
+          "expect": "caught",
+          "note": "`BPL nominus` reads bit 7 and nothing else. Bit 6 answers the same for &FF, which is the only value the left wrap actually produces -- so this is caught by what the ADC can leave rather than by the wrap."
+        },
+        {
+          "id": "tr-leftlow",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "coordinateLow = TRUMBLE_RIGHT_EDGE_LOW;",
+          "replace": "coordinateLow = TRUMBLE_RIGHT_EDGE_LIMIT;",
+          "expect": "caught",
+          "note": "`LDA #&48 / STA T` -- where a Trumble that walked off the left edge reappears. &48 rather than &50 is not arbitrary: at &150 the very next test would decide it had gone off the RIGHT edge and send it to zero, so this mutation makes the sprite teleport to the left edge instead of the right one."
+        },
+        {
+          "id": "tr-spritebit",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at] & _sprites.coordinateMsb);",
+          "replace": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at + 1u] & _sprites.coordinateMsb);",
+          "expect": "caught",
+          "note": "`SPMASK,Y` against `SPMASK+1,Y` -- the table alternates clear-mask and set-mask, so reading one entry on clears every OTHER sprite's ninth x bit and leaves this one's alone. TheSpriteBitsAreThisSpritesOnly enters the register with all eight bits set for exactly this."
+        },
+        {
+          "id": "tr-msb-or",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at + 1u] | _sprites.coordinateMsb);",
+          "replace": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at + 1u] ^ _sprites.coordinateMsb);",
+          "expect": "caught",
+          "note": "`ORA VIC+&10` against an EOR. The bit was cleared at the top of the routine, so setting it with an EOR gives the same answer for THIS sprite -- what it does not give is the same answer for the other seven, whose bits it flips."
         }
       ]
     }

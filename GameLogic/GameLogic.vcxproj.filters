@@ -106,6 +106,9 @@
     <ClInclude Include="Tactics.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Trumbles.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Flight.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -305,6 +308,9 @@
       <Filter>Tables</Filter>
     </ClCompile>
     <ClCompile Include="Tactics.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Trumbles.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Flight.cpp">
