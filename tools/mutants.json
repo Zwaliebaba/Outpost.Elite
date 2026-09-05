@@ -263,7 +263,7 @@
       "filter": [
         "TheTrumbles"
       ],
-      "tests": 7,
+      "tests": 8,
       "note": [
         "MVTRIBS and the six Trumble sprites (plan section 6.148). Ten mutants, written with the",
         "slice rather than reconstructed from a name, so this unit is a measurement from its first",
@@ -272,7 +272,19 @@
         "The two that matter most are `tr-carry2` and `tr-carry1`. The routine takes two random",
         "numbers with DIFFERENT carries -- the first clear because an `ASL A` on a value below eight",
         "cannot carry, the second set because `CMP #235` set it on the way past -- and the generator",
-        "reads C. Neither shows on screen; both move the whole sequence."
+        "reads C. Neither shows on screen; both move the whole sequence.",
+        "",
+        "FIRST RUN, 2026-09-05, on the portable leg with a green 355-test baseline: 11 mutants, 9",
+        "caught and 2 survived. Both survivors were answered rather than recorded as debt.",
+        "",
+        "`tr-leftsign` was a GAP and is closed: restricted to the 0 and 1 that MVTRIBS writes back,",
+        "the high byte of the x calculation can only come out as 0, 1, 2 or &FF, and &FF has every",
+        "bit set -- so bit 6 answers exactly as bit 7 does. Nothing in the library initialises",
+        "TRIBXH, TRIBVX or TRIBVXH, so the first pass after a Trumble appears reads uninitialised",
+        "RAM, and `TheSignTestReadsBitSeven` is that pass: all 256 starting values, which is where",
+        "the two bits disagree.",
+        "",
+        "`tr-msb-or` is a PROVABLE EQUIVALENT and is recorded as one. See its note."
       ],
       "mutants": [
         {
@@ -338,7 +350,7 @@
           "find": "if ((high & 0x80u) != 0u)",
           "replace": "if ((high & 0x40u) != 0u)",
           "expect": "caught",
-          "note": "`BPL nominus` reads bit 7 and nothing else. Bit 6 answers the same for &FF, which is the only value the left wrap actually produces -- so this is caught by what the ADC can leave rather than by the wrap."
+          "note": "`BPL nominus` reads bit 7 and nothing else. SURVIVED on the first run, because within the 0 and 1 that MVTRIBS writes back to TRIBXH the high byte can only be 0, 1, 2 or &FF and &FF has bit 6 set as well. Closed by `TheSignTestReadsBitSeven`, which sweeps all 256 starting values of TRIBXH -- not an invented state, because nothing in the game initialises that byte and the first pass reads whatever the loader left."
         },
         {
           "id": "tr-leftlow",
@@ -361,8 +373,8 @@
           "file": "GameLogic/Trumbles.cpp",
           "find": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at + 1u] | _sprites.coordinateMsb);",
           "replace": "_sprites.coordinateMsb = static_cast<std::uint8_t>(TRUMBLE_SPRITE_BIT_TABLE[at + 1u] ^ _sprites.coordinateMsb);",
-          "expect": "caught",
-          "note": "`ORA VIC+&10` against an EOR. The bit was cleared at the top of the routine, so setting it with an EOR gives the same answer for THIS sprite -- what it does not give is the same answer for the other seven, whose bits it flips."
+          "expect": "equivalent",
+          "note": "`ORA VIC+&10` against an EOR, and the two are provably the same here. `SPMASK+1,Y` has exactly one bit set, and the routine's first act was to AND that same bit OUT of the register -- so the bit is known to be zero when this runs, and setting a zero bit and flipping a zero bit are the same operation. Every other bit is untouched by both. SURVIVED on the first run and was checked rather than recorded as a gap; it stays here so that a run exercises the equivalent path, and it must never come back caught."
         }
       ]
     }

@@ -162,6 +162,64 @@ namespace GameLogicTests
     }
 
     /*
+     * 6502: BPL nominus -- the sign test, over every value the byte it reads can hold.
+     *
+     * NOTHING IN THE GAME INITIALISES `TRIBXH`. `MVTRIBS` is the only routine in the whole library
+     * that touches it, `TRIBVX` or `TRIBVXH` -- `RES2` does not clear them and neither does the
+     * loader's own setup -- so on the first pass after a Trumble appears, all three hold whatever
+     * was left at &0511 upwards. The first Trumble therefore starts with an arbitrary velocity and
+     * an arbitrary ninth x bit, and this sweep is that first pass: all 256 starting values against
+     * the three velocities and four low bytes.
+     *
+     * It is also what tells `BPL` from a test of any other bit. Restricted to the 0 and 1 that
+     * `MVTRIBS` itself writes back, the high byte can only come out as 0, 1, 2 or &FF, and &FF has
+     * every bit set -- so bit 6 answers exactly as bit 7 does and a mutation moving the test is
+     * invisible. It is visible here, on the values only an uninitialised byte can produce.
+     */
+    TEST_METHOD(TheSignTestReadsBitSeven)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const std::array<std::pair<std::uint8_t, std::uint8_t>, 3> VELOCITIES = {
+        std::pair<std::uint8_t, std::uint8_t>{0x00u, 0x00u},
+        std::pair<std::uint8_t, std::uint8_t>{0x01u, 0x00u},
+        std::pair<std::uint8_t, std::uint8_t>{0xFFu, 0xFFu},
+      };
+
+      const std::array<std::uint8_t, 4> quiet = QuietSeed();
+      std::uint32_t compared = 0;
+
+      for (const std::pair<std::uint8_t, std::uint8_t>& velocity : VELOCITIES)
+      {
+        for (const std::uint8_t low : {std::uint8_t{0x00u}, std::uint8_t{0x4Fu}, std::uint8_t{0x50u}, std::uint8_t{0xFFu}})
+        {
+          for (std::uint32_t high = 0; high < 256u; ++high)
+          {
+            Bank bank;
+            bank.count = 1u;
+            bank.sprites.velocityX[0] = velocity.first;
+            bank.sprites.velocityXHigh[0] = velocity.second;
+            bank.sprites.coordinateXHigh[0] = static_cast<std::uint8_t>(high);
+            bank.sprites.coordinates[0] = low;
+            bank.sprites.coordinates[1] = 0x60u;
+            bank.sprites.coordinateMsb = 0x03u;
+            bank.seed = quiet;
+
+            const std::wstring where = WidenText("MVTRIBS sign (TRIBXH " + std::to_string(high) + ", low " + std::to_string(low) + ", by " +
+                                                 std::to_string(velocity.second) + ":" + std::to_string(velocity.first) + ")");
+            Compare(bank, 0u, where);
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(3u * 4u * 256u, compared, L"the whole sweep ran");
+    }
+
+    /*
      * 6502: the y calculation, `LDA VIC+5,Y / CLC / ADC TRIBVX+1,Y / STA VIC+5,Y`.
      *
      * Every starting row against the three velocities, and the point of the sweep is what is NOT
