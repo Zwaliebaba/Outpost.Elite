@@ -61,7 +61,7 @@ namespace Elite
    * back to just a sun.
    */
   void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, ShipBlock& _work, CommanderBlock& _commander,
-                SpawnEffects& _effects, std::uint8_t _slot) noexcept;
+                SpawnEffects& _effects, std::uint8_t _slot, std::uint16_t& _blueprint) noexcept;
 
   /*
    * 6502: SOS1 -- put the system's planet or sun into the bubble.
@@ -71,7 +71,41 @@ namespace Elite
    * crater (§6.53's other half). The 127s in `INWK+29` and `INWK+30` are the maximum roll and
    * pitch counters, which is what makes a planet rotate.
    */
-  [[nodiscard]] NewShip AddPlanetOrSun(Bubble& _bubble, ShipBlock& _work, SpawnEffects& _effects, std::uint8_t _techLevel) noexcept;
+  [[nodiscard]] NewShip AddPlanetOrSun(Bubble& _bubble, ShipBlock& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
+                                       std::uint16_t& _blueprint) noexcept;
+
+  /// 6502: DOD -- the Dodo station's ship type, which is the last blueprint this build carries.
+  /// Measured rather than counted: entry 33 of the pointer table is 60973, and `SHIP_DODO` is at
+  /// 60973 in the assembled image.
+  inline constexpr std::uint8_t SHIP_TYPE_DODO = 33;
+
+  /// 6502: LDA tek / CMP #10 / BCC notadodo -- a system this advanced has a Dodo, not a Coriolis.
+  inline constexpr std::uint8_t STATION_DODO_TECH_LEVEL = 10;
+
+  /// 6502: LDA #LO(LSO) / STA INWK+33 -- `LSO`, the SUN's line heap, handed to the station.
+  inline constexpr std::uint16_t SUN_HEAP_ADDRESS = 1408;
+
+  /*
+   * 6502: NWSPS -- put the space station into the bubble, and NwS1 with it.
+   *
+   * IT TAKES THE SUN'S PLACE AND THE SUN'S MEMORY, which is two separate instructions doing one
+   * thing. `STX FRIN+1` with X at zero empties slot 1 -- the sun's -- without going anywhere near
+   * `KILLSHP`; and `LDA #LO(LSO) / STA INWK+33` points the station's line heap at `LSO`, which is
+   * the sun's 200-byte heap. `NWSHP` then skips its own allocation for a station (`CPY #2*SST /
+   * BEQ NW6`), so the pointer survives. That is why you never see a station and a sun at once, and
+   * why part 14 calls `WPLS` to erase the sun immediately before calling this.
+   *
+   * AND IT SELF-MODIFIES THE BLUEPRINT TABLE. `spasto` holds the Coriolis's address, saved by
+   * `BEGIN` before anything could change it; this writes that back into the table's station entry
+   * and then overwrites it with the Dodo's for a tech level of ten or more. `Bubble` carries the
+   * entry; see its declaration for why one field rather than a copy of the table.
+   *
+   * `NwS1` is six instructions called three times with X at 10, 12 and 14, and each call flips bit
+   * 7 and steps X by two -- so what it negates is the three HIGH bytes of the nose vector, turning
+   * the station round to face the player it has just let go.
+   */
+  [[nodiscard]] NewShip AddStation(Bubble& _bubble, ShipBlock& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
+                                   std::uint16_t& _blueprint) noexcept;
 
   /*
    * 6502: SOLAR -- build the system: a sun, a planet, and however many Trumbles have bred.

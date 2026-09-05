@@ -175,7 +175,40 @@ namespace Elite
     /// state rather than drawing state: `NWSHP` moves it and `KILLSHP` moves it back, and what
     /// lives between it and LS% is slice 3b's.
     std::uint16_t heapBottom = SHIP_HEAP_TOP;
+
+    /*
+     * 6502: XX21+2*SST-2 and XX21+2*SST-1 -- the space station's entry in the blueprint pointer
+     * table, and THE ONLY BYTES OF THAT TABLE THE GAME EVER WRITES.
+     *
+     * `XX21` is at &D000, the first 66 bytes of the ship data region, and the port holds that
+     * region as a `const` array because nothing writes it -- which was true until `NWSPS`, whose
+     * fourteen instructions above the fall into `NWSHP` are a SELF-MODIFICATION: they store either
+     * the Coriolis's address or the Dodo's into this entry, and everything downstream then reads
+     * the table normally. A grep of the whole build for `STA XX21` finds those four stores and
+     * nothing else, which is what makes one field the right model rather than a mutable copy of
+     * the table: the port would be modelling writes the game does not make.
+     *
+     * `spasto` needs no field of its own. `BEGIN` copies this entry into it at boot, before
+     * anything can have changed it, so `spasto` is permanently the Coriolis's address -- which is
+     * what `BlueprintAddress(SHIP_TYPE_STATION)` returns from the immutable region.
+     *
+     * IT MUST BE SEEDED, and zero is not a value the game can hold here: a zero entry in `XX21`
+     * means "this build does not carry that type" and `NWSHP` refuses the ship. So an unseeded
+     * bubble refuses to create a station rather than creating a wrong one, which is §6.95's rule
+     * applied to a second byte -- the flight world has to be built in a state the game could be in.
+     */
+    std::uint16_t stationBlueprint = 0;
   };
+
+  /*
+   * 6502: LDA XX21-2,Y / LDA XX21-1,Y -- a blueprint address out of the table AS IT STANDS.
+   *
+   * The difference from `BlueprintAddress` is one ship type. Everything but the station reads the
+   * assembled region, which is `const`; the station reads whatever the last `NWSPS` put in the
+   * table, because that is where the Coriolis and the Dodo differ. Both of the routines that index
+   * the table by type -- `NWSHP` and the flight loop's part 4 -- go through here for that reason.
+   */
+  [[nodiscard]] std::uint16_t BlueprintFor(const Bubble& _bubble, std::uint8_t _shipType) noexcept;
 
   /// 6502: what GINF computes -- the ADDRESS of slot X's block, which is what `NWSHP` compares the
   /// heap against. The blocks are an array here; this is the address the original would have used.
@@ -221,7 +254,13 @@ namespace Elite
    *
    * `NEWB` is not a parameter because it is not a separate byte: it is `_work[36]`, the last byte
    * of the block, which the routine ORs into and then copies along with everything else.
+   *
+   * `XX0` IS A PARAMETER, and it is one because the routine WRITES it: `LDA XX21-1,Y / STA XX0+1 /
+   * LDA XX21-2,Y / STA XX0` is how the new ship's blueprint becomes the current one. The port had
+   * it as a local for as long as the only caller was `SOS1`, whose types are all negative and take
+   * the `BMI NW2` path past those stores -- so the omission could not be seen until `NWSPS` created
+   * a real ship. The oracle caught it on the first frame that spawned a station.
    */
-  [[nodiscard]] NewShip AddShip(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType) noexcept;
+  [[nodiscard]] NewShip AddShip(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint16_t& _blueprint) noexcept;
 
 } // namespace Elite

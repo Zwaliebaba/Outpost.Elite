@@ -2,6 +2,7 @@
 
 #include "Shell.h"
 
+#include "FlightSession.h"
 #include "KeyMap.h"
 
 namespace Outpost
@@ -59,6 +60,19 @@ namespace Outpost
     constexpr std::uint8_t TITLE_PROMPT_ROW = 15;
     constexpr std::uint8_t TITLE_PROMPT_COLUMN = 1;
 
+    /*
+     * 6502: TITLE's `LDA #13 / JSR TT66 / LDA #0 / STA QQ11` -- and it is TWO different values on
+     * purpose.
+     *
+     * `TTX66K` tail-jumps to `wantdials` for view 0 AND for view 13, so both get the dashboard and
+     * the pixels come out the same either way. What differs is the text: `TT66` prints the view's
+     * NAME when `QQ11` is zero, and the title screen has no view name. So the clear is asked for as
+     * 13 and the byte is dropped to 0 immediately after, which is what everything drawn on top of
+     * it then reads. Calling `TT66` with 0 puts "FRONT VIEW" across the top of the title screen.
+     */
+    constexpr std::uint8_t TITLE_CLEAR_VIEW = 13;
+    constexpr std::uint8_t TITLE_VIEW = 0;
+
     void DrawPlaceholderShip(Elite::Canvas& _canvas, std::uint8_t _distance) noexcept
     {
       int halfWidth = (_distance > 0) ? (PLACEHOLDER_PROJECTION / _distance) : PLACEHOLDER_MAX_HALF_WIDTH;
@@ -95,6 +109,19 @@ namespace Outpost
 
   bool GameShell::Turn()
   {
+    /*
+     * 6502: comirq1 -- the raster interrupt, which runs whether or not the game is doing anything.
+     *
+     * It is HERE and not in the outer loop because `WaitFrames` and `NextKey` present too, and both
+     * of those are reached from inside ported routines. A frame is a frame however the game got to
+     * it, and putting the handler anywhere else would leave the screen mode stale for exactly the
+     * frames a player is looking hardest at -- a `DELAY` and a "press any key".
+     */
+    if (m_flight != nullptr)
+    {
+      m_flight->SyncVideoRegisters();
+    }
+
     if (!m_window.Pump())
     {
       return false;
@@ -172,26 +199,28 @@ namespace Outpost
 
   void GameShell::ClearToView(std::uint8_t _view)
   {
-    m_view = _view; // 6502: STA QQ11
-
-    if (m_text == nullptr || m_printer == nullptr || m_extended == nullptr)
+    /*
+     * 6502: TT66 -- the whole routine, since slice 3d-d-iii-a.
+     *
+     * This was three calls and an apology for as long as the dashboard, the sprites, the border and
+     * the colour bands were phase 3's (§6.77): a palette fill, a text-area clear and `SetUpTextScreen`
+     * for the text state. All four exist now, `SetUpScreen` is compared against the shipped `TT66`
+     * on the whole canvas over six views including text ones, and §6.81 says in as many words that
+     * the 2e version was correct only because the half it left out was the half that observes the
+     * intermediate `QQ17`. So the approximation goes and the routine runs.
+     *
+     * IT FIXES A LEAK THE FLIGHT HALF WOULD OTHERWISE HAVE OPENED. `wantdials` points `abraxas` at
+     * the dashboard's block of screen RAM and puts the lower rows into multicolour; `TTX66K`'s text
+     * path puts both back. A docked screen reached through the old three calls after a launch would
+     * have kept the flight settings and drawn its bottom seven rows as multicolour nonsense.
+     */
+    if (m_flight == nullptr)
     {
+      m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the world
       return;
     }
 
-    /*
-     * 6502: TTX66K's palette fill and then its text-area clear.
-     *
-     * The fill comes FIRST because that is the order TTX66K does it in, and it has to happen at all
-     * because the bitmap holds two-bit codes rather than colours: without a palette byte behind each
-     * cell every code resolves to colour 0, and the screen draws black on black. The port has
-     * TT66simp for the clear itself, which is the same 32 cells of rows 1 to 23; the dashboard, the
-     * sprites, the border box and the colour bands are phase 3's, so a cleared screen here has no
-     * border yet.
-     */
-    Elite::ResetCellColours(m_canvas);
-    Elite::ClearTextArea(m_canvas, *m_text);
-    Elite::SetUpTextScreen(*m_printer, *m_text, *m_extended);
+    Elite::SetUpScreen(m_flight->Screen(), _view);
   }
 
   void GameShell::ClearBottomRows()
@@ -224,7 +253,14 @@ namespace Outpost
 
   void GameShell::ResetMissileIndicators()
   {
-    // 6502: msblob. The dashboard is phase 3's.
+    // 6502: msblob -- ported in slice 3d-d-iii-b, because `KILLSHP`'s seam needed it, so this is a
+    // forward rather than a stub. `NOMSL` is the commander's, which is why the count is passed
+    // rather than read: the routine draws as many blocks as the ship still carries.
+    if (m_flight != nullptr)
+    {
+      const Elite::FlightScreen& screen = m_flight->Screen();
+      Elite::ResetMissileIndicators(m_canvas, screen.commander.At(Elite::Field::Missiles));
+    }
   }
 
   // ---- waiting and the keyboard ------------------------------------------------------------------
@@ -260,19 +296,31 @@ namespace Outpost
 
   void GameShell::ResetUniverse()
   {
-    // 6502: RESET, which falls into RES2. The ship slots and the stardust are phase 3's, so what
-    // is left of RESET here is the fall-through itself.
-    ResetShip();
+    // 6502: RESET, and it falls into RES2 rather than calling it -- which is why the port's
+    // `ResetGame` ends with `ResetShipAndBubble` and this does not call `ResetShip` as well.
+    if (m_flight != nullptr && m_dockedFlag != nullptr)
+    {
+      Elite::ResetGame(m_flight->Loop(), *m_dockedFlag);
+    }
   }
 
   void GameShell::ResetShip()
   {
-    // 6502: RES2 -- LDA #&10 / STA COL2, "switch the text colour to white". The ship slots, the
-    // stardust and dontclip are phase 3's; the text colour is not, and a screen printed without it
-    // is printed in black on black.
-    if (m_text != nullptr)
+    /*
+     * 6502: RES2 -- the ship, both line heaps, the dashboard state and the stardust.
+     *
+     * This was the shell's own approximation of one instruction of it (`LDA #&10 / STA COL2`) for
+     * as long as the stardust, the heaps and the dashboard were phase 3's. All three exist, so the
+     * seam is gone and the routine runs: §6.73's rule, which is that a seam scoped before the thing
+     * behind it existed has to be revisited once it does.
+     *
+     * It is NOT idempotent, and the cold start calls it twice (§6.25) -- once through `RESET`'s
+     * fall-through and once through `DEATH2`'s. The port reproduces both calls rather than
+     * collapsing them.
+     */
+    if (m_flight != nullptr)
     {
-      m_text->cellColour = Elite::TEXT_COLOUR_WHITE;
+      Elite::ResetShipAndBubble(m_flight->Loop());
     }
   }
 
@@ -288,7 +336,9 @@ namespace Outpost
 
   void GameShell::ShowDockingTunnel()
   {
-    // 6502: LAUN -- expanding circles. Phase 3c owns the line heap they are drawn through.
+    // 6502: LAUN -- the expanding circles a launch and an arrival both open with. The ball line
+    // heap it draws through has existed since slice 3c; `LAUN` itself has not been ported, and it
+    // is the reason a launch cuts straight to the rings.
   }
 
   std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance)
@@ -300,7 +350,8 @@ namespace Outpost
      */
     (void)_shipType; // 6502: the ship BLUEPRINT, which needs the ship data slice 3a extracts.
 
-    ClearToView(0);
+    ClearToView(TITLE_CLEAR_VIEW); // 6502: LDA #13 / JSR TT66
+    m_view = TITLE_VIEW;           // 6502: LDA #0 / STA QQ11
     DrawPlaceholderShip(m_canvas, _distance);
 
     if (m_extendedPrinter != nullptr && m_text != nullptr)

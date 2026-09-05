@@ -9,6 +9,7 @@
 #include "Rng.h"
 #include "LineHeap.h"
 #include "Scanner.h"
+#include "Spawn.h"
 #include "ShipDraw.h"
 #include "ShipMove.h"
 #include "ViewChange.h"
@@ -264,18 +265,18 @@ namespace Elite
 
     /// 6502: JSR ANGRY with A = the type -- phase 4's "that ship has noticed".
     virtual void Anger(std::uint8_t _type) = 0;
-
-    /*
-     * 6502: JSR NWSPS -- put the space station back into the bubble.
-     *
-     * It falls into `NWSHP`, which the port has, but the fourteen instructions above the fall are
-     * not a spawn: they SELF-MODIFY `XX21`, writing `spasto` or the Dodo's blueprint address into
-     * the station's entry in the pointer table so that a high-tech system gets a different station.
-     * The port's blueprint table is read-only, and making it otherwise is a decision that belongs
-     * with `TT110` -- the other caller -- rather than with the flight loop.
-     */
-    virtual void SpawnStation() = 0;
   };
+
+  /*
+   * `NWSPS` WAS A SEAM HERE AND IS NOT ANY MORE.
+   *
+   * Slice 3d-d-iii-b left it behind one because the fourteen instructions above its fall into
+   * `NWSHP` self-modify `XX21`, and the port's blueprint region is `const` -- so what it needed was
+   * a decision about where the mutable entry lives, not a transcription. `Bubble::stationBlueprint`
+   * is that decision, and it is measured rather than guessed: `NWSPS` is the ONLY writer of the
+   * table in the whole build, and it writes one entry. `Spawn.h` has the routine now, and both
+   * callers -- part 14 and `TT110` -- run it for real. §6.73 for the fourth time.
+   */
 
   /*
    * 6502: M% and the fifteen parts after it -- how a frame in space ends.
@@ -343,6 +344,32 @@ namespace Elite
    * names -- so what gets angry is the ship being shot at, not the missile.
    */
   void FireMissile(FlightLoop& _loop) noexcept;
+
+  /*
+   * 6502: what `KILLSHP` and `SOS1` call, wired to the routines the port already has.
+   *
+   * `SpawnEffects` was a seam when `Spawn.cpp` was written, because the dashboard and the message
+   * printer did not exist yet. All four of its calls are ported now, so anything holding a
+   * `FlightLoop` can hand the real thing over instead of counting calls it could make for real
+   * (§6.73's rule, applied forwards). It is here rather than in a .cpp because both the flight
+   * loop and the launch need it.
+   */
+  class LoopSpawnEffects final : public SpawnEffects
+  {
+  public:
+    explicit LoopSpawnEffects(FlightLoop& _loop) noexcept
+      : m_loop(_loop)
+    {
+    }
+
+    void AbortMissile(std::uint8_t _colour) override;
+    void ShowMessage(std::uint8_t _token) override;
+    void ToggleStationIndicator() override;
+    void ResetMissileIndicators() override;
+
+  private:
+    FlightLoop& m_loop;
+  };
 
   [[nodiscard]] LoopOutcome BeginFlightFrame(FlightLoop& _loop) noexcept;
 

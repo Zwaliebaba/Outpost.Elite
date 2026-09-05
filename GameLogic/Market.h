@@ -130,6 +130,21 @@ namespace Elite
   [[nodiscard]] bool CargoFits(const CommanderBlock& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept;
 
   /*
+   * 6502: BAD -- what the hold is worth in trouble, from three of its seventeen slots.
+   *
+   * `LDA QQ20+3 / CLC / ADC QQ20+6 / ASL A / ADC QQ20+10`: slaves and narcotics together,
+   * DOUBLED, and then firearms at face value. So a tonne of slaves costs twice what a tonne of
+   * firearms does, and the doubling is a shift of the sum rather than two multiplications --
+   * which also means it wraps at 128 rather than saturating, and a hold with 128 tonnes of
+   * narcotics in it would come out innocent. The hold cannot carry that much, so the wrap is
+   * unreachable.
+   *
+   * `TT110` ORs the answer into `FIST` on every launch, so the fine is levied by leaving the
+   * station rather than by being scanned.
+   */
+  [[nodiscard]] std::uint8_t ContrabandPenalty(const CommanderBlock& _commander) noexcept;
+
+  /*
    * 6502: TT152 -- the units an item is sold in, from two bits of its own gradient byte.
    *
    * Three answers and they are not laid out alike. Tonnes print "t" and a space; grams print "g"

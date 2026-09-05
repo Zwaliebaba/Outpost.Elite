@@ -428,6 +428,262 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.103 One label, three routines, and a table that turns out to be RAM
+
+`NWSPS` reads as "put the space station in the bubble". It is that, and two other things, and the
+two others are what a port gets wrong.
+
+**IT EVICTS THE SUN, AND THEN TAKES ITS MEMORY.** `STX FRIN+1` with X at zero empties slot 1 --
+the sun's -- without going anywhere near `KILLSHP`; six instructions later `LDA #LO(LSO) / STA
+INWK+33` points the station's line heap at `LSO`, which is the sun's own 200-byte heap. `NWSHP`
+then skips its allocation for a station (`CPY #2*SST / BEQ NW6`), so that pointer is what the block
+keeps. That is why you never see a station and a sun at once, and why the flight loop's part 14
+calls `WPLS` to rub the sun off the screen in the instruction before this. Two stores, six
+instructions apart, doing one thing.
+
+**AND IT CANNOT FAIL.** `NWSHP` has two refusals -- no free slot, no room in the heap -- and this
+routine is unreachable by both, because it frees a slot before asking for one and the station skips
+the heap. The sweep proves it rather than asserting it: the third fleet fills all ten slots and the
+station still lands, in the slot the sun has just vacated.
+
+**AND `XX21` IS RAM.** The fourteen instructions above the fall into `NWSHP` write either `spasto`
+or the Dodo's address into the pointer table's station entry, and everything downstream then reads
+the table normally -- so a high-tech system's station is a different shape without any routine
+downstream knowing. Slice 3d-d-iii-b left the whole thing behind a seam for exactly this reason:
+the port holds the 8,073-byte ship data region as `const`.
+
+The decision that unblocked it was a measurement rather than an argument. `STA XX21` appears seven
+times in the whole upstream library and four of them are these; the other three are the BBC disc
+loader, which this build does not assemble. **So the game writes one entry of that table and no
+other**, and `Bubble::stationBlueprint` is the model -- one field, not a mutable copy of a
+sixty-six-byte table the port would then be maintaining against writes that never happen. Three
+call sites read the table by type and all three now go through `BlueprintFor`.
+
+`spasto` needs no field at all, which follows from the same measurement: `BEGIN` copies the
+Coriolis's entry into it at boot and nothing writes it afterwards, so on an immutable region
+`BlueprintAddress(SHIP_TYPE_STATION)` **is** `spasto`, permanently.
+
+### 6.102 The oracle image has not booted, and one byte says so
+
+The first `NWSPS` comparison failed on `XX0`, with the shipped game holding `&8888`.
+
+`&8888` is not an address. It is the literal in `spasto`'s declaration -- `EQUW &8888`, with the
+comment "this variable is set by routine BEGIN" -- and `BEGIN` is startup code that runs once when
+the game loads. `OracleImage::Fresh()` loads the assembled blocks and calls a routine; it does not
+boot the machine. So the oracle's `spasto` still held the placeholder, `NWSPS` dutifully copied the
+placeholder into the blueprint table, and `NWSHP` set `XX0` to it.
+
+This is §6.95's rule with the arrow reversed. That finding said the PORT must be constructed in a
+state the game could be in; this one says the ORACLE must be too. Both sides of a comparison are
+fixtures, and an assembled binary is not the same thing as a running machine -- it is a machine
+before `BEGIN`, before the loader, with every "set at startup" variable still holding whatever the
+assembler put there. The port had never noticed because nothing it compared had read such a byte.
+
+The fix is two lines in `Mirror`: do what `BEGIN` does. What is worth carrying is the question --
+**which variables does this routine read that something OUTSIDE the comparison wrote?** -- because
+the answer is not always in the routine's own source, and three slices have now been caught by it
+(`STP`, `XX0`, `spasto`).
+
+### 6.101 A store the port dropped because nothing could see it
+
+`NWSHP` ends its blueprint lookup with `LDA XX21-1,Y / BEQ NW3 / STA XX0+1 / LDA XX21-2,Y / STA
+XX0`. The port read the entry into a local and used it; the two stores were dropped.
+
+That was invisible for three slices, and provably so. `NWSHP`'s only caller in the port was `SOS1`,
+which creates the planet and the sun -- types 128 and 130 and 129, all negative, all of which take
+`LDA T / BMI NW2` straight past the stores. So the port and the game agreed on every call anyone
+had made. `NWSPS` is the first caller with a positive type, and the oracle disagreed on the first
+frame that spawned a station.
+
+`XX0` is now a parameter of `AddShip` rather than a local, threaded through `AddPlanetOrSun`,
+`AddStation` and `KillShip` -- including the two paths that provably cannot reach the store, because
+"provably cannot reach it" is the reasoning that dropped it in the first place.
+
+It is the third defect of this shape in the project (§6.90's `XX0` again, and §6.47's borrow):
+**a routine writes a global that its current callers happen not to read.** The pattern that finds
+them is not inspection, it is a caller that did not exist yet.
+
+### 6.100 What the app can show the first time it flies, and what it cannot
+
+The `Outpost/` wiring is written, and the honest inventory of a launch is worth having in one
+place rather than spread across seven stub comments.
+
+**What runs, and is compared against the shipped game:** all sixteen parts of `M%`; the controls
+(`DOKEY`'s flight half over a real key logger); the stardust in all four views; the whole
+dashboard, border and colour bands through `TT66`; `LL9` for every ship in the bubble; and
+`PL9`/`SUN` for the planet, which is the thing a player actually looks at. `TT110` runs end to
+end: the fine, the seeds, the planet, the rings, the view change.
+
+**What is a stub, and why:** `TACTICS` and `DOCKIT` (phase 4) mean nothing in the bubble fights or
+flies itself. `NWSPS` (phase 4) means the station is not put back on a launch — so there is
+nothing to dock with, and `LoopOutcome::Docked` is unreachable even though `DOENTRY` is built and
+wired. `FRS1`, `SFS1` and `ANGRY` mean a fired missile never appears and a dying ship drops no
+wreckage. `DOEXP` means a ship that explodes vanishes. `LAUN` means a launch cuts straight to the
+rings. The SID is phase 5, so it is silent.
+
+**And one gap is the PRESENTER's rather than a missing routine.** The laser sights and the
+Trumbles are VIC-II *sprites*. `SIGHT` is ported and writes the sprite pointers into screen RAM
+and the colour into a register the session holds, and `CanvasPresenter` resolves the bitmap, both
+blocks of screen RAM and the background — and no sprite overlay. So the crosshairs do not appear,
+and that is the first thing a player will notice. It is filed here rather than in a stub comment
+because no slice in the plan owns it: ADR-005 §1 describes a 320x200 indexed texture, and eight
+hardware sprites over the top of it is a design decision nobody has taken yet.
+
+### 6.99 A seam that cannot express the flag the finding said mattered
+
+§6.88 measured that `OUCH`'s `DORND` runs on the carry `NOISE` left, so which piece of equipment an
+explosion breaks depends on whether the explosion got a SID voice. The seam the port gives the
+sound is `bool PlaySound(std::uint8_t)`.
+
+That is one bit out, and it is the wrong bit. `NOISE` ends `SEC / RTS` when a voice took the
+effect. With sound switched off — `DNOIZ` non-zero, which is a title-screen toggle the player owns
+— it branches to `SOUR1`, and `SOUR1` **is a bare `RTS`**: the carry that comes back is the carry
+that went in, unchanged, because `LDA DNOIZ / BNE SOUR1` touches neither flag. So `NOISE` has three
+answers (set, clear, unchanged) and the seam has two, and the third is the one a silent build
+gives on every call.
+
+The app returns `true`, which is what a sounding build answers, and says so where it does it. The
+fix is not a different constant: it is `bool PlaySound(std::uint8_t, bool _carryIn)`, and it should
+land with phase 5 rather than before it, because phase 5 is what makes the distinction real. What
+is worth carrying now is the shape of the mistake — **a seam designed from what a routine DOES
+loses what it PASSES THROUGH**, and the pass-through is only visible from the caller. §6.86 and
+§6.88 both found the caller reading it; neither found the seam unable to supply it.
+
+### 6.98 The raster interrupt is a frame of work with nowhere to live
+
+`comirq1` runs fifty or sixty times a second whatever the game is doing, and reads five bytes the
+port carries: `abraxas` and `caravanserai` (which block of screen RAM colours the lower rows, and
+whether they are multicolour), `moonflower` (the upper half's bitmap mode, which the energy bomb
+drops), `welcome` (the border colour it cycles) and `HFX` (the hyperspace tearing). Every one of
+them is an ordinary byte in `ScreenState` — §6.73's question answered the other way round, because
+what makes them hardware is the handler that reads them, not the stores that write them.
+
+`Canvas` has **one boolean** for the first pair, no writer for it anywhere in `GameLogic`, and no
+model at all for the other three. That is not an oversight in `Canvas`: `DashboardShown` is what
+`Resolve` needs, and the pair always move together.
+
+So the wire between them is the app's, and the place it belongs is decided by the same argument
+that decided `SETL1`'s seam: **the handler runs on every frame, so the sync belongs on every
+present**, which is `GameShell::Turn` and not the outer loop. `WaitFrames` and `NextKey` present
+too, from inside ported routines, and those are exactly the frames a player is looking hardest
+at — a `DELAY` and a "press any key". Putting it in the loop would leave the mode stale for them.
+
+The other three stay carried and not shown. A bomb that does not flash the border is a smaller lie
+than a border flashed by a table the port has not extracted.
+
+### 6.97 A seam that outlived its reason, and a bug only the real routine could expose
+
+Slice 2e left `TradeScreenEffects::ClearToView` as three calls — a palette fill, a text-area clear
+and `SetUpTextScreen` — because the dashboard, the sprites, the border and the colour bands were
+phase 3's (§6.77). All four exist. §6.81 had already recorded that the collapsed version was
+correct *only because the half slice 2e left out was the half that observes the intermediate
+`QQ17`*, which is a caveat with an expiry date on it. This is the expiry: `ClearToView` is now
+`Elite::SetUpScreen`, the whole of `TT66`, compared against the shipped routine on the whole canvas
+over six views including text ones.
+
+**It was not a tidy-up. It was a bug the flight half would have created.** `wantdials` points
+`abraxas` at the dashboard's block of screen RAM and puts the lower rows into multicolour;
+`TTX66K`'s text path puts both back, and the three-call approximation did neither. A market screen
+reached after a launch would have drawn its bottom seven rows as multicolour nonsense — and the
+approximation would have been *fine* for as long as nothing else ever wrote those two bytes, which
+was true right up until this change.
+
+**And swapping it in exposed a second one immediately.** `TITLE` opens `LDA #13 / JSR TT66 / LDA #0
+/ STA QQ11`, and the port's title screen called `ClearToView(0)`. Views 0 and 13 both tail-jump to
+`wantdials`, so *the pixels are identical* and the approximation could not tell them apart. `TT66`
+can: it prints the view's NAME when `QQ11` is zero. Calling it with 0 puts "FRONT VIEW" across the
+top of the title screen. The game asks for 13 and drops the byte to 0 immediately afterwards, for
+exactly this reason, and the port now does the same.
+
+That is the third instance in two slices of one pattern (§6.73, and `RES2` in this change): **a
+seam scoped before the thing behind it existed is a port waiting to be written, and the seam does
+not announce when its reason expires.** The rule this suggests is cheap — when a slice lands, grep
+the seams for the routines it built — and it would have found all three.
+
+Two of `TITLE`'s own instructions are still not ported and are named here rather than left to be
+found: its `JSR RESET` at the top (bracketed by `MULIE`, which the port has no equivalent for) and
+its `STX QQ17` with X = 128, which is what puts the prompt into sentence case rather than capitals.
+Both are inside the `ShowTitleScreen` seam, so no comparison sees them.
+
+### 6.96 A generated-file check that was also a formatting check
+
+`extract_tables.py --check` compared the whole text of thirteen generated files against what the
+generator would write. That is not what it was for. The day the tree moved to
+`NamespaceIndentation: All`, a whole-tree format pass edited the generated files like any other,
+and the check reported **thirteen stale tables whose numbers were perfectly correct** — on both CI
+legs, on a commit that had changed nothing but whitespace.
+
+The obvious fix is to make the generator emit the formatted layout, and it is the wrong one twice
+over. Shelling out to clang-format needs the formatter on `PATH` in every job that runs the
+check, and the Windows runner does not have it there. Hand-matching the formatter's output is
+worse: clang-format's braced-list rules depend on the list's length and its trailing comma, so
+"indent everything by two" reproduces some arrays and not others, and the generator would have to
+be re-tuned every time the config changed.
+
+**The check now compares the bytes and not the text.** Every `0x..` literal in the file, in order,
+against the bytes the binaries give — so a reformat is invisible and a wrong number is not. It
+gives up noticing an edited comment, which is exactly right: a comment is not data, and the
+formatter is allowed to rewrite one.
+
+The general point is about what a check is *for*. This one was written when the generated files
+were the only thing that wrote them, and comparing the text was a cheap, exact proxy for
+comparing the data. The proxy held until a second writer appeared. **A check whose subject and
+whose method differ will eventually report on the method** — and the tell was that its failure
+message ("out of date -- run without --check") described a fix that would have made the files
+worse.
+
+### 6.95 The launch depends on a byte nothing on the way to it writes
+
+§6.94 established that `HFS1` does not set `STP`, and that `CIRCLE2` cannot terminate without one:
+`BLINE` advances `CNT` by `STP` and the loop exits on `CNT >= 65`, so a zero step is an infinite
+loop and not a degenerate circle.
+
+`TT110` calls `HFS1`. `RES2`, which `TT110` calls first, does not set `STP` either. **And the only
+writer of `STP` in the whole build is `CIRCLE`** — reached from the planet, the sun, and the
+short-range chart's fuel radius. None of those runs while docked except the chart, and the chart
+is a key the player need not press.
+
+So the path from a cold start to the first launch does not write `STP`, and in the assembled
+image the byte at 172 is zero. Whether the real machine hangs on it depends entirely on what the
+loader leaves in the zero page, which is outside the assembled binaries and outside what this port
+can know.
+
+**The port reproduces the loop rather than guarding it** (ADR-003), and the comparison seeds `STP`
+with the 4 the fuel circle leaves. What is worth recording is not the hazard but its shape: this
+is the third variable in two slices — after `XX0` (§6.90) and `STP` itself (§6.94) — whose value
+at a call site comes from **whichever earlier screen the player happened to visit**. Elite's
+zero page is not a set of variables with owners; it is a scratchpad, and a routine's inputs
+include everything that ran before it.
+
+The practical consequence for the port is a rule for the app: the flight world must be
+constructed with these bytes at values some earlier screen would have left, not at zero. A
+default-constructed `PlanetSunState` is a state the game cannot be in.
+
+### 6.94 An effect that erases itself, and a step it does not set
+
+`HFS1` draws the eight expanding rings the game shows on a launch and on a hyperspace jump. Two
+things about it are not in the code:
+
+**It does not set `STP`.** Neither `HFS1` nor `HFS2` writes the step, and `CIRCLE2` walks its
+circle `STP` at a time — so the rings are drawn at whatever coarseness the last `CIRCLE` chose for
+the planet or the sun: 8 for a small disc, 4 for a middling one, 2 for a large one. Launching from
+a system whose planet happens to be close gives smoother rings than launching from one where it is
+far. The port's first test left `STP` at zero, `CNT` never advanced, and `CIRCLE2` ran for ever —
+forty million instructions before the budget stopped it. The game cannot reach a zero because
+`CIRCLE` is the only writer and never stores one, which makes this §6.90's shape again: **a
+variable written under a condition persists when the condition does not hold**, and here the
+condition is "some circle has been drawn since the game started".
+
+**It erases itself by being run twice.** `LSP` is set to ONE before every circle, so all eight
+rings share a single run of the ball heap rather than accumulating, and `BLINE` EORs. Drawing the
+whole effect a second time puts the screen back byte for byte. That is how the game takes the
+rings off without remembering where they were, and it is why the test asserts the second pass
+touches NOTHING — "it drew something" alone would pass for a routine that drew and left the mess
+behind.
+
+`ASL K / BCS HF8` is an exit as much as `CMP #160` is: a ring whose radius passes 128 doubles out
+of the byte and stops there, so which of the two ends a ring depends on where it started.
+
 ### 6.93 A fixture that makes two things equal cannot tell them apart
 
 Two mutation survivors in the combat routines, and neither was a defect in the port. Both were
@@ -1293,6 +1549,9 @@ ported and absent; the check has to be for a DEFINITION, and this pass nearly re
 | **3d-d-ii** ✅ | **Built 2026-09-04**: `BUMP2`, `REDU2`, `DOKEY`'s flight half, `SPIN`/`SPIN2` and `SIGHT`. §6.73's pass added `SIGHT` (two thirds of it is canvas and game state, not hardware) and `BUMP2`/`REDU2` (`DOKEY`'s, not `cntr`'s). `CTRL` is one instruction falling into the key seam, with nothing to compare. **`LOOK1` and `WARP` move to 3d-d-iii** — they need `TT66`'s PIXELS, and the port has `TT66`'s text state (§6.77) |
 | **3d-d-iii-a** ✅ | **Built 2026-09-04.** The dashboard bitmap loaded at `DSTORE%` (§6.78), then `ZES1k`/`ZES2k`, `mvblockK`/`mvbllop`, `BOXS`, `BOXS2`, `BOX2`, `BLUEBAND`/`BLUEBANDS`, `zonkscanners`, `NOSPRITES`, `wantdials`, `TTX66K`, and finally `TT66`/`TTX66`, `LOOK1` and `WARP` in `ViewChange.h/.cpp`. **The "eighteen arguments" question was already answered three times**: `TradeScreen`, `SaveScreen` and `GameStart` are structs of references for exactly this reason, so `FlightScreen` follows them and was never the open design decision an earlier note called it. `LAS2` and `MJ` join `FlightStatus`, which is now the per-flight bytes rather than what the dials read. **77 mutations, 76 caught, 1 measured equivalent**: `.OLDBOX`'s `LDA #1 / JSR DOYC` in `TT66` cannot change anything, because BOTH paths through `TTX66K` leave `YC` at 1 already — the wantdials tail call is reached past `LDA #1 / STA XC / STA YC`, and the text path ends `INX / STX XC / STX YC` with X at zero. Dead code in the original, and the second such find in phase 3 after `cntr`'s `REDU` (§6.71). Two more survivors turned out to be test gaps rather than equivalents and are closed: `LOOK1`'s `LQ` path never had its `STX VIEW` checked, and `WARP`'s `CMP #2` had no case at exactly two |
 | **3d-d-iii-b** ✅ | **Built 2026-09-04.** All sixteen parts of `M%` as `BeginFlightFrame`, `MoveEveryShip` and `EndFlightFrame`, with `MainFlightLoop` over the three, plus `FRMIS`/`FR1` and `KS1` — and eight routines the per-ship half needs that no slice had built: `EXNO`, `EXNO2`, `EXNO3`, `OOPS`, `OUCH`/`ou2`/`ou3` and `BOMBOFF` in a new `Combat.cpp`, with `msblob` in `Dashboard.cpp` because `KILLSHP`'s seam needed it. **`NWSPS` is the only seam added**: it self-modifies `XX21` to choose between a Coriolis and a Dodo, and that decision belongs with `TT110`. `KILLSHP`'s `SpawnEffects` is no longer counted — every one of its four is ported now, so the loop hands it the real thing. **97 mutations, 97 caught**, after two survivors turned out to be test gaps rather than equivalents (§6.93). Findings: the pitch reads a carry the roll left behind across a `JSR` (§6.85); `NOISE` returns a carry `LASLI` consumes (§6.86); `OOPS`'s `SBC` borrows from whichever caller arrived (§6.87); `OUCH`'s `DORND` runs on `NOISE`'s carry, so which equipment breaks depends on whether the explosion was audible (§6.88); part 8's `ADC` takes a shift's carry from four instructions earlier (§6.89); `XX0` is not reset per ship (§6.90); `LL9`'s explosion cloud stays a seam and the comparison names what it excludes (§6.91); and part 15's `BCC P%+6` skips TWO instructions, so the energy warning fires only when the banks are low (§6.92) |
+| **3d-d-iv** ✅ | **Built 2026-09-04**, and it is the slice that makes the loop reachable: `ZERO`, `RESET`, `RES2` and `TT110` in a new `Flight.h/.cpp`, with `BAD` in `Market.cpp` and `HFS1`/`HFL1` in `PlanetDraw.cpp`. **`RES2` stops being a seam** — it was scoped before the stardust, the line heaps and the dashboard existed and every one of them exists now (§6.73 a third time), so `StartUpEffects::ResetShip` is a forward rather than an approximation. Same for `SpawnEffects`, which `TT110` hands the real thing. **44 mutations, 44 caught.** Two findings: the rings ERASE THEMSELVES by being drawn twice, and `HFS1` does not set the step they are drawn at (§6.94); and nothing on the path from a cold start to the first launch writes `STP` at all, which makes a default-constructed `PlanetSunState` a state the game cannot be in (§6.95) |
+| **3d-d-v** ✅ | **The `Outpost/` wiring, 2026-09-04** — the half no hosted runner can compile. `FlightSession` owns the flight world and answers the six seam interfaces the flight code reaches through; `Main.cpp` gets the second outer loop `FRCE`'s `LDA QQ12 / BEQ` chooses between, so `PlanSteps` finally has the caller it was written for; `KeyAction::Launch` and `ChangeView` are dispatched rather than refused; `DEATH2` and `DOENTRY` are wired at the loop's two reachable exits. `QQ11` moves out of the shell, because both halves write it. Four findings: `ClearToView`'s 2e seam had to go and its going exposed a title-screen bug only the real `TT66` could show (§6.97); the raster handler is a frame of work with nowhere to live, and it belongs on every present rather than on every screen change (§6.98); `bool PlaySound` cannot express the carry §6.88 measured (§6.99); and the honest inventory of what a launch shows — including one gap that is the PRESENTER's, since nothing in the plan owns sprite rendering (§6.100). Verified by `check_outpost.py`, by compiling every `Elite::` call it makes against the real headers, and by nothing else: **it needs a person at a Windows machine**, as 2e, 3b and 3c do |
+| **3d-d-vi** ✅ | **`NWSPS` and `NwS1`, 2026-09-04** -- the routine 3d-d-iii-b left behind a seam, and the seam is gone. What unblocked it was a measurement rather than a design: `STA XX21` appears seven times in the whole library and four are these, so the game writes ONE entry of the pointer table and `Bubble::stationBlueprint` is the model. **28 mutations, 28 caught.** Findings: `NWSPS` evicts the sun AND takes its line heap, and cannot fail, and self-modifies the table (§6.103); `NWSHP` writes `XX0` and the port had dropped the store, invisible for three slices because every caller so far had a negative type (§6.101); and the oracle image has never run `BEGIN`, so `spasto` still held `&8888` and the fixture has to do `BEGIN`'s two loads -- §6.95's rule pointing at the ORACLE rather than the port (§6.102). `tek` joins `FlightScreen`, because part 14 reads it. `LoopOutcome::Docked` is reachable at last: `SSPR` is `MANY+SST` and only this sets it |
 
 Doing it in that order means the loop is written last, against a set of routines that have each
 been compared to the game on their own. Written first, it would be sixteen parts and fifteen
@@ -3704,6 +3963,9 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-04 | **The station goes back in the bubble: `NWSPS` and `NwS1`.** The last seam on the launch path, and it opened because of a measurement rather than an argument -- `STA XX21` appears seven times in the whole upstream library and four of them are this routine, so the pointer table has exactly one mutable entry and `Bubble::stationBlueprint` is the model. **28 mutations, 28 caught.** Three findings. **One label, three routines** (§6.103): it evicts the sun from slot 1 and then hands the station the sun's line heap six instructions later, it cannot fail because it frees a slot before asking for one, and it self-modifies the blueprint table so a high-tech system gets a Dodo. **`NWSHP` writes `XX0` and the port had dropped the store** (§6.101) -- invisible for three slices, because every caller so far created a planet or a sun and those types take `BMI NW2` straight past it; the first caller with a positive type disagreed on the first frame. **And the oracle image has never booted** (§6.102): `spasto` is `EQUW &8888` until `BEGIN` overwrites it, `Fresh()` does not run `BEGIN`, so the shipped game spawned a station whose blueprint was the placeholder. That is §6.95's rule with the arrow reversed -- both sides of a comparison are fixtures, and an assembled binary is a machine before startup. `tek` joins `FlightScreen`; `LoopOutcome::Docked` is reachable for the first time. 294 tests green. |
+| 2026-09-04 | **The app can fly: the `Outpost/` wiring.** `FlightSession` owns the flight world and answers the six interfaces the flight code reaches through; `Main.cpp` grows the second outer loop `FRCE` chooses between, so `PlanSteps` has the caller it was written for at last; `KeyAction::Launch` and `ChangeView` are dispatched rather than refused; `DEATH2` and `DOENTRY` are wired at the loop's two reachable exits. `QQ11` leaves the shell because both halves write it. Four findings. **A seam outlived its reason and its going exposed a bug** — `ClearToView`'s three-call approximation is now the whole of `TT66`, which fixes a screen-mode leak the flight half would have opened AND revealed that the title screen must clear to view 13 and then store 0, because views 0 and 13 draw the same pixels and only one of them prints "FRONT VIEW" (§6.97). **The raster interrupt is a frame of work with nowhere to live**, and it belongs on every present rather than on every screen change, because `WaitFrames` and `NextKey` present too (§6.98). **`bool PlaySound` cannot express the flag §6.88 measured**: `NOISE` has three answers and the seam has two, and the third is the one a silent build gives (§6.99). And §6.100 is the honest inventory of a launch — including the gap that is the PRESENTER's, since `SIGHT` is ported and the laser sights are VIC-II sprites nothing renders. Verified by `check_outpost.py` and by compiling every `Elite::` call it makes against the real headers; **the rest needs a person at a Windows machine**, as 2e, 3b and 3c do. 293 tests green. |
+| 2026-09-04 | **The launch path: `ZERO`, `RESET`, `RES2`, `TT110`, `BAD` and `HFS1`.** 44 mutations, 44 caught. `RES2` and `SpawnEffects` stop being seams — both were scoped before the things behind them existed, which is §6.73 a third and fourth time. Two findings, and both are about a byte's value coming from somewhere the caller cannot see: the hyperspace rings ERASE THEMSELVES by being drawn twice and are drawn at whatever step the last circle chose (§6.94), and **nothing on the path from a cold start to the first launch writes that step at all** — `CIRCLE` is its only writer in the whole build, and `CIRCLE2` cannot terminate on a zero. The rule that falls out is one the app now follows: a default-constructed flight world is a state the game cannot be in (§6.95). |
 | 2026-09-04 | **The flight loop is complete: all sixteen parts of `M%`, `FRMIS` and `KS1`.** `BeginFlightFrame`, `MoveEveryShip` and `EndFlightFrame` with `MainFlightLoop` over them, and eight routines the per-ship half needs that no slice had built — `EXNO`, `EXNO2`, `EXNO3`, `OOPS`, `OUCH`/`ou2`/`ou3`, `BOMBOFF` in a new `Combat.cpp`, plus `msblob`. **97 mutations, 97 caught.** Eight findings and five of them are the same shape: a flag produced for one purpose and consumed for another, with instructions in between that happen not to disturb it. The pitch reads a carry the roll left behind across a `JSR` (§6.85); `NOISE` returns a carry `LASLI`'s `DORND` rolls in, so `PlaySound` stopped being `void` (§6.86); `OOPS`'s `SBC` borrows from whichever caller arrived (§6.87); `OUCH` picks which equipment breaks from `NOISE`'s exit carry (§6.88); and part 8's `ADC` takes a shift's carry from four instructions earlier (§6.89). Two were outright defects the oracle caught: **`XX0` is not reset per ship** (§6.90), and **part 15's `BCC P%+6` skips TWO instructions**, so the energy warning fires only when the banks are low — found as a MISSING BELL, because the token's text contains character 7 and `CHPR` turns that into `JSR BEEP` (§6.92). One gap is left open and named: `LL9`'s explosion cloud stays a seam because its `DORND` runs on a carry that comes out of `LOIN`, and the comparison excludes the six bytes it owns rather than passing over them (§6.91). **And the Windows leg caught what nothing else could**: `const bool near = ...` is `const bool = ...` after `<windows.h>`, so `check_gamelogic.py` now fails on four macro names used as declarations — the slowest signal in the project moved to the fastest one. 288 tests green. |
 | 2026-09-04 | **Two mutation survivors, both in the fixture rather than the port** (§6.93). `OUCH` picks a hold slot from `DORND`'s X and the sweep had seeded the generator so that A and X came out equal, so 208 cases could not tell the two registers apart; and `EXNO2`'s volume thresholds were reached only at `type * 7`, which never lands on eight. A deterministic fixture is better than a random one and buys a new way to be wrong: the values that make it convenient may be the values that hide a difference. The opposite of §6.39, where the fixture supplied nothing at all. |
 | 2026-09-04 | **Slice 3d-d-iii-a is complete: `TT66`, `LOOK1` and `WARP`.** The "eighteen arguments" question an earlier note called a design decision had already been answered three times in this codebase — `TradeScreen`, `SaveScreen` and `GameStart` are structs of references for exactly that reason — so `FlightScreen` follows them. Three findings. **A collapsed routine was right only because half of it was missing**: slice 2e's `SetUpTextScreen` writes `QQ17 = 0` and skips the 128, which is safe until the half that prints the view's name in between exists (§6.81). **`ee3` prints through `DASC`**, not straight to `CHPR`, and the port had the raw printer as its sink — caught on `DTW2`, game 0 and port 128. **And `WARP` sets `QQ11 = 1` to make `LOOK1` take the other branch**, because the view is not changing and the space-view path would find X equal to `VIEW` and return. `LAS2` and `MJ` land in `FlightStatus`. 268 tests green; `CHPR` is not trapped, so the printed text is compared as pixels with everything else. |

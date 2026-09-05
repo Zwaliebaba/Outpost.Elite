@@ -180,6 +180,7 @@
     <ClInclude Include="Charts.h" />
     <ClInclude Include="Commander.h" />
     <ClInclude Include="Combat.h" />
+    <ClInclude Include="Flight.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Rng.h" />
     <ClInclude Include="Tokens.h" />
@@ -217,6 +218,7 @@
     <ClCompile Include="Charts.cpp" />
     <ClCompile Include="Commander.cpp" />
     <ClCompile Include="Combat.cpp" />
+    <ClCompile Include="Flight.cpp" />
     <ClCompile Include="CommanderTable.cpp" />
     <ClCompile Include="MarketTable.cpp" />
     <ClCompile Include="EquipmentTable.cpp" />
