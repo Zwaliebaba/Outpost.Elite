@@ -348,6 +348,15 @@ namespace
   }
 
   /*
+   * 6502: FRCE -- the main loop entered with a key already "pressed".
+   *
+   * Declared ahead of `Perform` because `BAY2` forces one, and `BAY2` is reached from inside two of
+   * the actions `Perform` performs. The recursion is one level deep and cannot be more: the key it
+   * forces is f9, and the Inventory screen forces nothing.
+   */
+  void PressKey(Game& _game, std::uint8_t _key);
+
+  /*
    * One key, and whatever screen it reaches.
    *
    * 6502: what `TT102` does with the label it chose. The dispatch itself is `ActionForKey`, which
@@ -429,9 +438,13 @@ namespace
     case Elite::KeyAction::SellCargo:
       Elite::ListCargo(_game.trade, _game.commander, _game.market, _game.current.economy, Elite::SELL_CARGO_VIEW);
 
-      // 6502: TT212's `JSR dn2 / JMP BAY2` -- the beep is the screen's (`ListCargo` makes it on the
-      // exit that runs out of items, not on the letter's); the jump is the dispatch's, and both
-      // exits share it.
+      /*
+       * 6502: TT212's `JSR dn2 / JMP BAY2` -- and only the beep is the screen's.
+       *
+       * `ListCargo` already makes it, on the exit that runs out of items and not on the one a letter
+       * takes; that asymmetry is the original's and stays inside the screen. What is left for the
+       * dispatch is the jump, and both exits share it (§6.128, §6.140).
+       */
       PressKey(_game, Elite::KEY_INVENTORY);
       return;
 
@@ -1025,6 +1038,19 @@ namespace
 
         for (int pass = 0; pass < docked.steps; ++pass)
         {
+          /*
+           * 6502: MLOOP's head, which a docked pass reaches too -- the two countdowns sit ABOVE
+           * part 5's `LDA QQ11` gate, and everything below it is about the space view.
+           *
+           * It is `Elite::CoolTheGuns` and not a copy here: `RunLoopTail` runs the same function on
+           * a flying pass, so the arithmetic has one home (§6.146). What a docked pass still does
+           * NOT run is the REST of part 5 -- the author-names delay and the Trumble breeding, both
+           * of which the original reaches while docked. That is a gap this merge did not create and
+           * does not close; it needs `RunLoopTail`'s frame count plumbed into the docked pace, which
+           * is slice 4d's neighbourhood rather than a merge's.
+           */
+          Elite::CoolTheGuns(game->status);
+
           game->crosshairStep = Elite::ScanFlightControls(game->flight.Loop(), game->flight, game->view);
 
           std::uint8_t key = 0;

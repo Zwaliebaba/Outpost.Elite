@@ -471,6 +471,52 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.146 The merge whose dangerous part was the half that merged cleanly
+
+`main` moved to `eb345f5` ("Dashboard fixes") while this branch was on 4b-b, and the pull request
+went `dirty`. Git reported **two** conflicts and both were comments -- the same finding written
+twice, once here with its §6.128 and §6.140 references and once on the other track in its own words.
+Thirty seconds of work.
+
+**Everything that mattered merged cleanly, and it was wrong.** The other track's commit added three
+things to `Main.cpp`: a `CoolTheGuns` helper carrying `MLOOP`'s two countdowns, a call to it in the
+flight `Advance`, and a `DrawDials` call under a `QQ11` gate. All three are correct against the
+6502. All three are also **what slice 4c-d put inside `RunLoopTail` two days earlier** (§6.138) --
+`Advance` calls that function three statements further down, and `FlightSession::Loop().screen` is
+`Screen()`, the same object. So the merged file cooled `GNTMP` twice per frame, stepped `LASCT` down
+by up to four rather than two, and drew the dials twice. Nothing would have gone red: the suite
+tests `RunLoopTail`, not `Main.cpp`, and a laser that cools at double speed is a game that plays
+slightly wrong.
+
+The two branch points explain it exactly and neither track did anything careless. §6.128 read three
+player reports -- a dead letter key on the buy screen, dials that never moved, a laser that fired
+once -- and both tracks then fixed the same three, one by transcribing the fragments into the
+executable and one by porting the whole of part 5 into `GameLogic`. §6.138 had already written down
+why the first of those is a mistake ("transcribing fragments of a routine into an executable is how
+two of three went missing without anything going red"). This is that same sentence arriving from
+outside rather than from the past.
+
+**What the resolution keeps, and the one thing it does not throw away.** The duplicate in `Advance`
+is gone. The call in the DOCKED pass is not, because it is not a duplicate: `MLOOP`'s two countdowns
+sit ABOVE part 5's `LDA QQ11` gate, a docked pass reaches them, and the docked loop does not call
+`RunLoopTail` at all. That is a real gap the other track found and this branch had not. So
+`CoolTheGuns` moved into `GameLogic/GameLoop.cpp`, `RunLoopTail` calls it, and the docked loop calls
+`Elite::CoolTheGuns` -- **one copy of the arithmetic, reachable from both loops**, which is what
+§6.34's trap asks for and what a second transcription in the executable would have defeated a third
+time.
+
+**And the gap that stays open, recorded rather than quietly closed.** A docked pass still does not
+run the REST of part 5 -- the author-names delay and the Trumble breeding -- and the original does.
+Closing it means plumbing `RunLoopTail`'s returned frame count into the docked pace and deciding
+what `screen.view` means on a docked pass, which is slice 4d's neighbourhood and not a merge's.
+
+**The rule.** A conflict marker is the easy case: git has already found it and a human is already
+looking. What costs is the change that applies without complaint onto code that has moved
+underneath it — and the place to look for it is wherever the two branches were fixing the same
+report, because that is precisely where both will have touched the same behaviour in different
+files. On a merge from a parallel track, read what merged cleanly in the files the other side
+touched, not only what did not.
+
 ### 6.145 The documentation pass, and six things that had quietly stopped being true
 
 Every `.md` in the tree read against the tree, the second such pass (§6.120 was the first, three
@@ -5911,6 +5957,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **`main` merged in, and the dangerous half merged cleanly** (§6.146). Two conflicts, both comments. What applied without complaint was the other track's `CoolTheGuns` and `DrawDials` in `Main.cpp` -- correct against the 6502, and the same fourteen instructions slice 4c-d had already put inside `RunLoopTail`, which `Advance` calls three statements later on the same `FlightScreen`. The merged file would have cooled `GNTMP` twice a frame, stepped `LASCT` by up to four, and drawn the dials twice, with nothing going red. The duplicate in `Advance` is removed; the call in the DOCKED pass is kept, because that one is not a duplicate -- the countdowns are above part 5's `QQ11` gate and the docked loop runs no part of `RunLoopTail`. `CoolTheGuns` moved into `GameLogic` so there is one copy reachable from both loops. Still open and now written down: a docked pass runs neither the author-names delay nor the Trumble breeding, and the original does. |
 | 2026-09-05 | **The documentation pass** (§6.145). Every `.md` in the tree read against the tree. The ADRs held — none had been overtaken by the code — and every number and status in them had not. **The slice count was wrong in the headline**: §7 totalled 24 while its own rows added to 26. **ADR-003 contradicted itself**, telling a reader to point an `Oracle.json` at the binaries in two sections while its §1 records that the file was dropped in slice 0b-a. **ADR-002 and ADR-003 were still "Proposed"** after twenty-five slices were built on them; both are Accepted with the evidence named. **ADR-001 §6 had one row and no rule for what belongs in it**; the rule is now written (a behaviour a PLAYER can observe) and the two that qualify are recorded. **ADR-004 §5 listed five scripts of eleven**, missing four of the nine CI checks. **Risk R13 added**: the mutation tallies are the corpus's strongest evidence and none of them can be re-run, which §6.119 already demonstrated the hard way. `Design/README.md`, the runner README (re-measured: 64s cold, 21s warm at 348 tests), the reference README (the `SPRITE.bin` gap), AGENTS.md and the plan's §0, §1.2, §3 and §7 brought to the tree as it is. The rule: prose about a decision ages well and a number beside it ages badly and in silence, so the next check to write is one that reads the counts out of the tree. |
 | 2026-09-05 | **Slice 4b-b: the explosion cloud** (§6.144). `DOEXP`, `PTCLS`, `PTCLS2` and `EXS1` in `Explosion.cpp`, compared on the whole canvas over 126 frames and 420 clouds plus 2,880 `EXS1` offsets; the burst sprite is a seam and the test turns its recorded arguments back into the seven registers the original writes, read-modify-writes included. **The cloud ages by four or by five** -- the `ADC #4` takes the carry from the `CMP #32` that asked whether the ship was far away, so a distant explosion is a fifth shorter and the upstream comment says only "add 4". **`FMLTU` clobbers `P`** through the `STX P` it preserves X with, which the port had never modelled and a one-byte comparison found; nothing in the shipped build reads `P` after an `FMLTU`, so it is invisible to the game and `EXS1` -- the one caller that can prove what X held -- now writes it. **`exlook` exists**, contradicting §6.141: it is INCLUDEd from the master tree and is in `Labels.txt`, so a label's absence from the directory you expected is not its absence from the build. `PTCLS` and `PTCLS2` are one body with an insert. The `EE55` seam is narrowed to ONE unknown carry, because `CPY #6` pins the other three. Two coverage corrections in the slice's own tests, both §6.132's lesson: the `EXS1` sweep had one answer per seed, and the burst's four refusals needed a ladder of vertex layouts rather than a cloud in the middle of the view. |
 | 2026-09-05 | **Slice 4b-a: the last of the three jumps out of `M%`** (§6.143). `ESCAPE` built and wired, so `LoopOutcome::Escaped` is answered after being refused since 3d-d. `DEATH2` turned out to be already done -- the fourth scope-line entry this phase to be built already, which makes the rule plain: the backward pass has to check EVERY label, not the big ones. Three things the routine hides: 194 is the pitch AND, halved, both the AI byte and the frame count the loop decrements; `FRS1` takes `DELTA` rotated with `MSTG`'s bit 7 rather than a speed, so the ship always leaves at 6 or 7 because `RES2` has just set `DELTA` to 3; and `LL9` writes back to the slot `FRS1` filled, which the port had as slot 0 -- the planet. The pirate-Cobra fallback is dead code, because `RES2` empties the bubble first. |

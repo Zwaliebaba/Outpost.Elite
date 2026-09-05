@@ -81,6 +81,27 @@ namespace Elite
   [[nodiscard]] LoopHead RunLoopHead(FlightLoop& _loop, ChartEffects& _rows) noexcept;
 
   /*
+   * 6502: MLOOP's first six instructions and `EE20` -- the two countdowns, before the `QQ11` gate.
+   *
+   * BOTH ARE COOLING. `GNTMP` is the laser temperature the LT dial reads and `LASCT` is the pulse
+   * laser's own countdown, and the two together are why a gun works at all: part 3 of the flight
+   * loop refuses to fire while `LASCT` is non-zero and jams the gun for good at a `GNTMP` of 242.
+   * Both are written by firing and this is the only place either comes down, so without it a pulse
+   * laser fires exactly once per flight and the LT bar only ever rises.
+   *
+   * `LASCT` FALLS BY TWO AND NOT BY ONE -- `DEX / BEQ P%+3 / DEX / STX LASCT`, where the branch
+   * skips the second `DEX`, so an odd countdown stops at zero and an even one steps through it. A
+   * port that subtracted two would go negative on the odd values.
+   *
+   * It is named and exported rather than left inside `RunLoopTail` because it is ABOVE part 5's
+   * `LDA QQ11` gate: a DOCKED pass runs these two and nothing else in the routine, and the docked
+   * loop in `Main.cpp` has no other way to reach them. `RunLoopTail` calls it too, so there is one
+   * copy of the arithmetic and not two -- which is the whole of §6.34's trap, and the merge that
+   * prompted this had a second transcription of it in the executable (§6.146).
+   */
+  void CoolTheGuns(FlightStatus& _status) noexcept;
+
+  /*
    * 6502: MLOOP -- main game loop part 5, which is the loop's own housekeeping (slice 4c-d).
    *
    * SIXTY-FIVE INSTRUCTIONS, AND THE PORT HAD FOURTEEN OF THEM PLACED BY HAND. §6.128 read three
