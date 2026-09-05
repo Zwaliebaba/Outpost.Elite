@@ -53,6 +53,29 @@ namespace Elite
     std::uint8_t fuel = 0;
   };
 
+  /*
+   * 6502: TT22's `LDA #64 / JSR TT66` and TT23's `LDA #128 / JSR TT66` -- what `QQ11` becomes.
+   *
+   * The two charts are told apart by BIT 7 everywhere in this file, so the numbers are not
+   * arbitrary: `ShortRange` is one `AND #%10000000`, and `IsChartView` in `DockedKeys.h` is the
+   * `AND #%11000000` that catches both.
+   */
+  inline constexpr std::uint8_t LONG_RANGE_CHART_VIEW = 64;
+  inline constexpr std::uint8_t SHORT_RANGE_CHART_VIEW = 128;
+
+  /*
+   * 6502: TT23's opening `LDA #199 / STA Yx2M1 / STA dontclip`, and the `LDA #0 / STA dontclip /
+   * LDA #2*Y-1 / STA Yx2M1` it ends with.
+   *
+   * The short-range chart draws system discs down to the bottom of the screen, so it lifts the
+   * clipper's limits for the length of the routine and puts them back afterwards. Both bytes live
+   * with the drawing rather than with the chart -- `Yx2M1` in `PlanetSunState` and `dontclip` in
+   * `ClipState` -- which is why they are the CALLER's to set here (§6.45). Only the 199 is named
+   * here: what it goes back to is `SPACE_VIEW_BOTTOM` in `ShipDraw.h`, which is the same `2*Y-1`
+   * the clipper already had a name for.
+   */
+  inline constexpr std::uint8_t CHART_SCREEN_BOTTOM = 199;
+
   /// 6502: QQ19 -- a crosshair's centre and half-width.
   struct Crosshairs
   {

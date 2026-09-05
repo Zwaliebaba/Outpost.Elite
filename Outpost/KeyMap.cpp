@@ -148,6 +148,47 @@ namespace Outpost
       {0x1B, Elite::KEY_ESCAPE_POD, "ESCAPE -- escape capsule, and 27 for the line editor"}, // VK_ESCAPE, 6502: KY13
     };
 
+    /*
+     * The chart crosshairs, and this is the one place a PC key stands for TWO C64 keys.
+     *
+     * THE C64 HAS ONE CURSOR KEY PER AXIS. `TT17` reads "cursor left/right" and "cursor up/down"
+     * and takes the DIRECTION from whether a SHIFT is held -- two keys and a modifier where a PC
+     * has four arrows. So each arrow maps to its axis key, and the two that need the other
+     * direction press SHIFT as well; the game reads exactly the five entries it always did.
+     *
+     * THE SAME FOUR KEYS STEER IN FLIGHT, which is not a conflict on the C64 because there it is
+     * `<`, `>`, `X` and `S` that steer and the cursor keys are the chart's alone. Here one key has
+     * both jobs, and `FlightSession::ScanKeyboard` is where they are told apart: with a chart
+     * showing it drops the steering entries, so the arrows aim rather than roll. That rule is the
+     * port's own and is marked as such where it lives.
+     *
+     * RETURN is the accelerator and is already bound for the line editor, at the same position
+     * `TT17` reads -- so holding it moves the crosshairs four at a time, exactly as it does on a
+     * C64, for no extra binding at all.
+     *
+     * AND THE Y PAIR IS THE OTHER WAY ROUND FROM THE X PAIR, which looks like a slip and is not.
+     * `TT17` ends the y axis with `EOR #%11111110`, so the UNSHIFTED key steps `QQ10` by -1 and
+     * the shifted one by +1 -- and `QQ10` grows DOWNWARDS on both charts, because a system's screen
+     * row is its y halved. Unshifted therefore moves the crosshairs UP the screen, and the arrow
+     * that means "up" to a player is the one that must not press shift. Measured on the chart
+     * rather than reasoned about: the first version had them the obvious way round and the
+     * crosshairs went the wrong way.
+     */
+    struct CursorBinding
+    {
+      int virtualKey = 0;
+      std::uint8_t axis = NO_KEY;  ///< 6502: KLO+&3E or KLO+&39
+      std::uint8_t shift = NO_KEY; ///< 6502: KLO+&31, pressed for the reverse direction
+      const char* what = "";
+    };
+
+    constexpr CursorBinding CURSORS[] = {
+      {0x27, Elite::KEY_CURSOR_X, NO_KEY, "Right -- crosshairs right"},              // VK_RIGHT
+      {0x25, Elite::KEY_CURSOR_X, Elite::KEY_SHIFT_LEFT, "Left -- crosshairs left"}, // VK_LEFT
+      {0x26, Elite::KEY_CURSOR_Y, NO_KEY, "Up -- crosshairs up"},                    // VK_UP
+      {0x28, Elite::KEY_CURSOR_Y, Elite::KEY_SHIFT_LEFT, "Down -- crosshairs down"}, // VK_DOWN
+    };
+
     constexpr int BINDING_COUNT = static_cast<int>(sizeof(BINDINGS) / sizeof(BINDINGS[0]));
   } // namespace
 
@@ -171,6 +212,18 @@ namespace Outpost
       }
     }
     return NO_KEY;
+  }
+
+  CursorKeys CursorKeysFor(int _virtualKey) noexcept
+  {
+    for (const CursorBinding& binding : CURSORS)
+    {
+      if (binding.virtualKey == _virtualKey)
+      {
+        return {binding.axis, binding.shift};
+      }
+    }
+    return {};
   }
 
   std::uint8_t CharacterFor(std::uint8_t _c64Key) noexcept

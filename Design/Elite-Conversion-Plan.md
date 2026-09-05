@@ -437,6 +437,58 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.115 The charts were finished and unreachable, and the seam said so in its own comment
+
+F1 and F2 did nothing. That was deliberate — `Perform` lists the charts among the actions it
+refuses, spelled out rather than defaulted "so that adding a phase-4 screen is a compiler error
+here instead of a key that does nothing" — and it had stopped being true.
+
+**THE SEAM CARRIED ITS OWN EXPIRY DATE.** `ChartShapes` is the fuel circle and the system discs,
+and its comment reads: *"Both draw by walking a line heap so that the next frame can erase exactly
+what the last one drew, and that heap is the flight model's (slice 3c). **Until it exists** the
+charts hand their arguments here instead."* Slice 3c landed in September. `CIRCLE2` is `DrawBall`
+and `SUN` is `DrawSun`, both ported, both drawing through heaps `FlightSession` already owned; the
+only thing missing was somebody implementing two methods. §6.73's pattern for the fifth and sixth
+time in a day, and the clearest case yet: the note said what would make it stale and nothing
+re-read the note.
+
+**WHAT WAS ACTUALLY MISSING was the keyboard, and it was missing in three different ways.**
+
+`TT17`'s CHART path had not been ported — §6.111 took the space-view half that morning and left
+the other, which is where the crosshair steps come from. It is `TJ1`: one cursor key per AXIS with
+SHIFT choosing the direction, RETURN multiplying the step by four, and an `EOR #%11111110` on the
+y axis that makes the unshifted key step `QQ10` NEGATIVE. Thirty-two combinations of five key-logger
+entries is the whole input space, and all thirty-two are compared against the shipped routine.
+
+`TT102` had to be reached EVERY PASS and was reached only on a key event. The crosshairs move
+while a key is HELD, and the dispatch reads that through `TT17`'s X and Y rather than through the
+key it was handed — so `ActionForKey`'s fall-through turns a pass with no key at all into
+`MoveCrosshairs`. The docked loop now does what `MLOOP` does: scan, then dispatch whatever
+`thiskey` is, including nothing.
+
+And the passes had to be PACED, which is §6.114 one screen further on: a pass per present is 165
+crosshair steps a second. `MLOOP`'s docked pass ends in a jump to whichever screen the key chose,
+so it cannot be timed the way a flight frame was; the flight frame's empty-bubble cost stands in,
+and that is a floor rather than a measurement because a docked pass draws no ships.
+
+**THE ARROW KEYS DO TWO JOBS AND THE C64'S DID NOT.** There, `<`, `>`, `X` and `S` steer and the
+cursor keys aim, so no key ever means both. This port's map is a modern one (ADR-005 §4) and the
+arrows are the obvious thing to aim with, so one job has to give way: `ScanKeyboard` drops the
+steering entries while a chart is up. That rule is the PORT'S and is marked as such where it
+lives, one statement below the view-dependent clearing that `RDKEY` really does.
+
+**And the vertical pair is asymmetric on purpose.** Up presses no shift and down presses one,
+which is the opposite of left and right, because of that `EOR`: unshifted steps `QQ10` by -1 and
+`QQ10` grows downwards on both charts. The first version had them the symmetric way round and the
+crosshairs went the wrong way on screen — found by pressing the key, not by reading the code, and
+now asserted so that nobody tidies the table into symmetry.
+
+**A trap that had to be added to make the comparison mean anything.** `TT17` calls `DOKEY` and
+`DOKEY` opens with `JSR RDKEY`, which walks the CIA — and in a flat 64 KB image the CIA is whatever
+bytes happen to sit at those addresses. The first run of the new test compared the port against a
+keyboard with keys held that nothing had pressed. Trapping `RDKEY` is not a convenience: it is the
+same seam the port answers with `ControlEffects::ScanKeyboard`.
+
 ### 6.114 The flight loop ran at the refresh rate, and §6.17 had said not to for six months
 
 Everything in flight moved four to five times too fast: the station spinning, the ships closing,
@@ -4354,6 +4406,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The charts, F1 and F2** (§6.115). They were refused in the dispatch and the refusal had gone stale: `TT22` and `TT23` were ported and oracle-compared, and `ChartShapes` -- the fuel circle and the system discs -- said in its own comment that it was a seam only "until" slice 3c existed. Slice 3c landed in September. `FlightSession` implements it over `CIRCLE2` and `SUN`, and what was really missing was the KEYBOARD: `TT17`'s chart path (ported now, all 32 combinations of its five key-logger entries compared against the shipped routine), `TT102` reached every pass rather than on a key event, and those passes paced -- 165 crosshair steps a second otherwise. The arrows aim on a chart and steer in flight, so the scan drops the steering keys while a chart is up; that rule is the port's own and is marked as such. **Up presses no shift and down presses one**, because `TT17`'s `EOR #%11111110` makes the unshifted key step `QQ10` negative -- found by pressing the key, not by reading the code. `D`, `F` and hyperspace stay refused, and `F` is named as the nearest: `MT26` is ported and has nowhere to put the name yet. |
 | 2026-09-05 | **The flight loop ran at the refresh rate, and §6.17 had said not to** (§6.114). Everything in flight moved four to five times too fast. §6.17 established in September that the C64's main loop has no `WSCAN` in it and asked for the loop to be **cycle-budgeted and free-running** -- "a fixed rate would be a behaviour the game never had" -- and the port shipped a fixed rate at the NTSC vertical refresh anyway. The measurement is taken now: the shipped `M%`, mirrored into the oracle with `PLANET` and `TACTICS` untrapped, costs 47,784 cycles with an empty bubble and about 81,000 with ships in it -- **21.4 and 12.6 frames a second, against 59.826**. `FlightFrameSeconds` is two measured bands rather than a curve, for §6.110's reason: the two ship scenes sit 7% either side of one number and the difference is what the ships are, not how many. The crowded end is unmeasured, because `TACTICS` untrapped does not return for a station -- so a fight is paced at the one-ship cost and is really slower. Four faults in a day (§§6.110-6.114), all in the executable, none in a ported routine, and every one found by a person looking at the screen: **the oracle proves what the port computes and nothing yet proves what it does**. |
 | 2026-09-05 | **The station drew into the sun's heap and the port kept the two apart** (§6.112). The space station was invisible from the moment you launched -- in the bubble, moved by the loop, drawn by `LL9`, and with byte 31 saying so. `NWSPS` points the station at `LSO`, the SUN's line heap (§6.58 recorded it when the routine was ported), and in this port those 200 bytes live in `PlanetSunState` while `LineHeap` is the arena from `K%` to `LS%` -- so the station's pointer landed between two objects and every line it drew was **written out of range and dropped by a bounds check documented as harmless**. The heap now takes a window onto the sun's bytes, which is what the machine always had. The oracle comparisons DO compare `LSO` and passed anyway, because neither side wrote there: two sets of zeros agreeing, §6.36's shape a fourth time. |
 | 2026-09-05 | **`DOKEY` was ported, swept, green, and called by nothing** (§6.111). No flight control worked in the app -- not the arrows, the speed keys or the missile keys -- because the key LOGGER was never filled. The C64 has its own `TT17` (`LDA QQ11 / BNE TT17afterall / JSR DOKEY`) and the common one, which is what you get by asking for the common path by name, is three instructions with no scan in it; the port read the decoy. `Main.cpp`'s own comment has described both of the frame's keyboard reads since slice 2e and the code did one of them: a seam wired at one end, with `FlightSession::ScanKeyboard` implemented and `ReadFlightControls` called by nothing but its test. **No check in this project finds ported-tested-and-unreachable**, and `check_outpost.py` cannot: a routine the app never calls is not a name it uses. |
