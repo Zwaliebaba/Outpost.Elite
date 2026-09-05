@@ -109,6 +109,10 @@
       -->
       <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)GameLogic;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <Link>
+      <!-- XAudio2 for the SID's output (ADR-005 section 2); pre-approved as part of the Windows SDK. -->
+      <AdditionalDependencies>xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
@@ -148,6 +152,8 @@
     <ClCompile Include="CanvasPresenter.cpp" />
     <ClCompile Include="Shell.cpp" />
     <ClCompile Include="FlightSession.cpp" />
+    <ClCompile Include="SidSynth.cpp" />
+    <ClCompile Include="SoundOutput.cpp" />
   </ItemGroup>
   <!--
     The shaders, compiled by the BUILD rather than at run time. FXC writes each one to a C array
@@ -180,6 +186,8 @@
     <ClInclude Include="CanvasPresenter.h" />
     <ClInclude Include="Shell.h" />
     <ClInclude Include="FlightSession.h" />
+    <ClInclude Include="SidSynth.h" />
+    <ClInclude Include="SoundOutput.h" />
   </ItemGroup>
   <!--
     SaveStore implements Elite::CommanderStore, so the executable needs GameLogic. This is the
