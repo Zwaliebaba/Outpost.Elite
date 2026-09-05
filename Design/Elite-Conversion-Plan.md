@@ -146,11 +146,12 @@ is preserved in the history and was true then.
 - `Design/Reference/` holds the generated oracle inputs and is gitignored; `Upstream/` is the
   annotated source library as a submodule, pinned.
 
-**What is left, in one place.** Nothing before phase 6 is unbuilt. What stands beside it is two
-pieces of recorded debt: the thirteen mutation survivors in the ship AI's sweep — measured rather
-than named (§6.125, §6.147), and §6.132 has the method that closes them — and R13's unreproducible
-tallies, which are gone rather than open. ADR-005 §1's `VideoState` and `SPRITE.bin` work (§6.133)
-is done.
+**What is left, in one place.** Nothing before phase 6 is unbuilt, and **there is no recorded
+mutation debt anywhere in the corpus**: the ship AI's thirteen survivors are closed (§6.152,
+§6.153), the last of them a real defect in `TA7`, and R13's unreproducible tallies are gone rather
+than open. ADR-005 §1's `VideoState` and `SPRITE.bin` work (§6.133) is done. What stands beside the
+code is the three acceptance goldens that need a person at a Windows machine (2e, 3b, 3c) and
+slice 0e's owner acceptance.
 
 ### 1.3 What the sibling repositories give us
 
@@ -472,6 +473,84 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.153 The last four, and the survivor that was a defect after all
+
+§6.152 closed nine of the thirteen and finished with a sentence that has not survived the other
+four: *"none was a defect in the port."* One of them was. **The tactics unit is now 16 mutants, 16
+caught, none equivalent**, and the four that took a second sitting are four different reasons a
+mutant outlives the first round of ladder-building.
+
+**`ta-104`: LANDING ON A BRANCH IS NOT LANDING ON THE VALUE PAST IT.** §6.152's seed search found a
+seed that reads 255 at `CMP #250`, which is the six-in-256 branch guarding `JSR DORND / ORA #104`.
+The probe then said that in 7,326 cases exactly ONE number ever reached the `ORA` — 125 — and 125
+is odd, so `ORA #104` and `ORA #105` produce the same byte. The search had asked for the branch and
+not for what is inside it. Asking for both is a two-roll constraint: the roll at `TN7` at least 250
+AND the next roll even.
+
+**And the first seed that satisfied it was still wrong, in a way worth keeping.** It was searched
+against the DORND ordinal the old landing seed had used — the THIRD roll — which is where an
+Anaconda's `TN7` sits, because an Anaconda spends a roll of its own on `CMP #200` first. But that
+roll has to come in UNDER 200 or the Anaconda launches its escorts and returns, and the new seed
+read 203 there. For every other ship in the sweep `TN7` is the SECOND roll. Modelling `DORND` in
+twenty lines of Python and checking the model against eleven observed values before trusting it is
+what made this cheap; the fix was to search at ordinal two.
+
+**`msl-16`: THE THRESHOLD WAS LANDED ON AND THE BRANCH PAST IT WAS NOT.** §6.152 added a seed that
+reads exactly 16 at `TA64`'s `CMP #16`, so the mutant that moves it to 17 enters the ECM check the
+original steers past. Inside that check is `LDA (V),Y / LSR A / BCS`, reading bit 0 of the TARGET's
+`INWK+32` — and `SeedTacticsUniverse` fills byte 32 with `9 + slot*5 + 96`, which is odd only in
+slot 0. The two missile cases chased slots 3 and 1. So the mutant entered the branch, found no ECM,
+and left it by the same exit as the original in all 360 cases. A missile chasing slot 0 reaches the
+other exit. **This is §6.152's third rule applied one level deeper**: distinct answers per branch,
+whether the branch is reachable — and then the same two questions again about the code inside it.
+
+**`kill-rotate`: THE HOLE WAS IN THE COMPARISON, NOT IN THE FIXTURE.** `TA87` hands `EXNO2` the
+target's slot halved, and `EXNO2` adds `KWL%-1,X` and `KWH%-1,X` to the kill tally. The mutant drops
+the halve, so slot 3 becomes 6 — an escape pod's 16 hundredths against a boulder's 6. Both were
+computed correctly by both machines and neither was ever looked at: `TALLY` and `TALLYL` were
+neither pushed into the interpreter nor read back out. Every ladder in the world would have left
+this mutant alive. **A surviving mutant on a line whose output is not in the comparison is not a
+coverage gap and probing the comparison will not find it** — the question to ask first is not "what
+reaches this line" but "where does what this line writes end up", and the answer here was nowhere.
+
+**`ta-half`: A DEFECT, AND A PAIR OF LABELS THAT DIFFER ONLY IN CASE.** `TA7` reads the blueprint's
+maximum energy and compares it twice:
+
+```
+.TA7
+ LDY #14
+ LDA (XX0),Y
+ LSR A
+ CMP INWK+35
+ BCC TA3        \ CAPITAL -- part SIX, the laser test
+ LSR A
+ LSR A
+ CMP INWK+35
+ BCC ta3        \ lower case -- part FIVE, the missile launch
+```
+
+`TA3` and `ta3` are two different labels in the same routine, eleven instructions apart, and they
+are two different parts of `TACTICS`. **A ship with more than half its energy jumps clean over part
+five and never launches a missile.** The port ran both branches into part five, so a healthy ship
+could fire one — and spend the `DORND` that decides it, which moves the generator for everything
+downstream.
+
+**It hid behind two coincidences at once.** Every energy case in the fixture had `INWK+31` zero, so
+part five returned at its first instruction whichever way the branch went; and even with missiles,
+the mutant's quartered threshold only disagrees with the halved one in the band between a quarter
+and a half of maximum, where the original's own second compare (an EIGHTH, not a quarter — the two
+extra `LSR`s are from the halved value) sends it to part five anyway. Three cases now straddle it:
+a third of maximum, just under half, and well above. The middle one kills the mutant; the last one
+fails against the oracle without the fix, which is how the defect announced itself.
+
+**What the second sitting says.** The first nine survivors were all the sweep, and §6.152 drew the
+obvious conclusion from nine out of nine. The tenth was the port. **A survivor that outlives a round
+of ladder-building is worth more attention than the round before it, not less** — the easy
+explanations are used up, and what is left is either a hole in the comparison or a hole in the port.
+Both were here. The running tally across the corpus is unchanged in shape — the mutation tool still
+finds far more fixture problems than porting ones — but "none was a defect" is now a sentence to
+distrust before the last survivor is closed rather than after the first.
+
 ### 6.152 Thirteen survivors, and three different ways for a sweep to be blind
 
 The one piece of recorded debt: thirteen mutants in the ship AI's sweep that nothing caught,
@@ -523,10 +602,11 @@ no duplicate at all.
 §6.132 sharpened that to distinct answers per BRANCH. This adds a third: **distinct answers per
 branch, and whether the branch is reachable at all.** Four of the thirteen were unreached code, not
 unlanded thresholds, and the probe told the two apart in seconds where reasoning about the port
-would not have. It also says something about surviving mutants as a class — thirteen of them, and
-none was a defect in the port. That is the third slice running where the mutation tool found a
-fixture problem rather than a porting one, which is worth knowing before the next tally is read as
-a statement about the code.
+would not have. It also looked, at this point, as though surviving mutants were a class — nine
+closed and none a defect in the port, the third slice running where the mutation tool found a
+fixture problem rather than a porting one. **§6.153 closed the other four and one of them was a
+defect**, so read the paragraph above as what nine out of thirteen suggested rather than as what
+thirteen showed.
 
 ### 6.151 The seven missions, and three pieces of bit arithmetic that an `ORA` would get wrong
 
@@ -6183,9 +6263,10 @@ Three things that is worth noting for the slices ahead:
 
 All five slices are built and compared against the shipped code. **4d closed the phase**, and with
 it the last unbuilt slice anywhere before phase 6: twenty-six of the twenty-six are built, with 0b-b
-cancelled and 0e open by owner acceptance rather than by anything unwritten. The debt 4a carries is
-thirteen mutation survivors in the ship AI's sweep — measured rather than named, by
-`python tools/mutate.py --unit tactics` (§6.147).
+cancelled and 0e open by owner acceptance rather than by anything unwritten. **4a carries no debt
+either**: the thirteen mutation survivors in the ship AI's sweep are closed, and the last one was a
+defect — `TA7`'s first `BCC` goes to part SIX, so a ship above half energy never launches a missile
+(§6.152, §6.153). `python tools/mutate.py --unit tactics` is 16 of 16.
 
 
 | Slice | Scope | Accept |
@@ -6202,7 +6283,7 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 |---|---|---|
 | **4a-a** ✅ | `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6`, `DCS1` — the vectors, in `Tactics.h/.cpp` | **Built 2026-09-05**, 17 mutations and 17 caught |
 | **4a-b** ✅ | `FRS1`, `SESCP`, `SFS1`, `SFS2`, `ANGRY` — a ship arriving from inside the bubble, and the three `FlightSession` seams they answer | **Built 2026-09-05**, compared on the whole bubble. **28 mutations, 28 caught** — after three survivors turned out to be the fixture rather than the port (§6.124) |
-| **4a-c** ✅ | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | **Built 2026-09-05** (§6.125). 92 cases over 23 situations and four generator seeds, each comparing the ship block, the whole bubble, the counts, the generator, `RAT`/`RAT2`/`JUNK` and the player's energy banks against the shipped routine. `DEATH` is trapped and eight cases are fatal, so §6.122's `bool` is observed false rather than merely declared. Two defects only the oracle could find: a `JSR TAS2` transcribed as absent, and six of ten `DORND` carries.<br><br>**79 mutations, 59 caught, 4 not applicable, 2026-09-05.** The docking half is closed: every `dock-*` and `steer-*` mutation is caught after §6.131 and §6.132 found three branches its sweep could not reach and two mutations that could not fail. **The AI half is not.** Fifteen survivors remain, all in `TheAiMatchesTACTICS` -- `ta-253`, `ta-240`, `ta-ana200`, `ta-250`, `ta-104`, `ta-half`, `ta-230`, `ta3-ecm`, `ta7-three`, `ta20-eor`, `msl-16`, `msl-82`, `msl-bit5`, `msl-kill` and `kill-rotate` -- and they are the same shape as the docking ones were: thresholds the geometry table never lands on. The method that closed the others applies unchanged (§6.132): probe the comparison, count what reaches it, add a ladder. Recorded as debt rather than left implicit, because a slice reported as built with a green suite and fifteen live mutations is exactly the state §6.126 warns about.<br><br>**Re-measured 2026-09-05 and the number came down** (§6.147). The fifteen names are now mutants in `tools/mutants.json` and `python tools/mutate.py --unit tactics` runs them: **16 mutants, 3 caught, 13 survived** against a green 348-test baseline. Thirteen survive as recorded; `ta7-three` and `msl-kill` are caught, and because the original hand edits are gone nothing can say whether those two reconstructions missed or that debt never existed. **The debt is thirteen, and for the first time it is a command rather than a claim.** |
+| **4a-c** ✅ | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | **Built 2026-09-05** (§6.125). 92 cases over 23 situations and four generator seeds, each comparing the ship block, the whole bubble, the counts, the generator, `RAT`/`RAT2`/`JUNK` and the player's energy banks against the shipped routine. `DEATH` is trapped and eight cases are fatal, so §6.122's `bool` is observed false rather than merely declared. Two defects only the oracle could find: a `JSR TAS2` transcribed as absent, and six of ten `DORND` carries.<br><br>**79 mutations, 59 caught, 4 not applicable, 2026-09-05.** The docking half is closed: every `dock-*` and `steer-*` mutation is caught after §6.131 and §6.132 found three branches its sweep could not reach and two mutations that could not fail. **The AI half is not.** Fifteen survivors remain, all in `TheAiMatchesTACTICS` -- `ta-253`, `ta-240`, `ta-ana200`, `ta-250`, `ta-104`, `ta-half`, `ta-230`, `ta3-ecm`, `ta7-three`, `ta20-eor`, `msl-16`, `msl-82`, `msl-bit5`, `msl-kill` and `kill-rotate` -- and they are the same shape as the docking ones were: thresholds the geometry table never lands on. The method that closed the others applies unchanged (§6.132): probe the comparison, count what reaches it, add a ladder. Recorded as debt rather than left implicit, because a slice reported as built with a green suite and fifteen live mutations is exactly the state §6.126 warns about.<br><br>**Re-measured 2026-09-05 and the number came down** (§6.147). The fifteen names are now mutants in `tools/mutants.json` and `python tools/mutate.py --unit tactics` runs them: **16 mutants, 3 caught, 13 survived** against a green 348-test baseline. Thirteen survive as recorded; `ta7-three` and `msl-kill` are caught, and because the original hand edits are gone nothing can say whether those two reconstructions missed or that debt never existed. **The debt is thirteen, and for the first time it is a command rather than a claim.**<br><br>**And the thirteen are closed the same day: 16 mutants, 16 caught, none equivalent** (§6.152, §6.153). Nine fell to §6.132's method — six seeds that land on the thresholds `DORND` never reached, and five cases that put a missile at its target so the last third of part 1 runs for the first time. `ta20-eor` was not a coverage gap at all: the port had `TA20` written out twice and the second copy was unreachable, so it was deleted. The last four took a second sitting and one of them is **a defect**: `TA7`'s two energy compares branch to `TA3` and `ta3`, which differ only in case and are parts SIX and FIVE, so a ship above half its blueprint energy jumps clean over the missile launch. The port ran both into part five. `kill-rotate` was a hole in the COMPARISON rather than in the fixture — `TALLY` was never pushed or read back, so what `EXNO2` scores was invisible. The sweep is now 37 cases × 11 seeds × 18 geometries = 7,326 comparisons. |
 | **4b-a** ✅ | `ESCAPE` and `DEATH2` — the escape pod, and the third of the three jumps that leave `M%`. 42 instructions | **Built 2026-09-05** (§6.143). The whole world against the oracle over six cases, including the ninety-seven frames of `MVEIT` and `LL9` the pod flies through. `DEATH2` was already built. Three things the routine hides: 194 is the pitch AND, halved, both the AI byte and the frame count the loop decrements; `FRS1` takes `DELTA` rotated with `MSTG`'s bit 7 rather than a speed; and the pirate-Cobra fallback is dead code, because `RES2` empties the bubble first |
 | **4b-b** ✅ | `DOEXP`, `PTCLS`, `PTCLS2` and `EXS1` — the explosion cloud. 311 instructions | **Built 2026-09-05** (§6.144). 126 frames and 420 clouds on the whole canvas, the whole heap, `INWK`, the generator, ten workspace bytes and the seven registers the burst seam writes; 2,880 `EXS1` offsets separately. The cloud ages by four or by five depending on distance, which the upstream comment does not say; `FMLTU` clobbers `P` and the port had never modelled it; `exlook` exists after all |
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates. 199 C64 instructions | **Built 2026-09-05** (§6.135). 136 cases from `ytq+3` to `MLOOP` over seventeen situations, four generator states and both entry carries, compared on the whole bubble, `INWK`, `EV`, `XX0` and the generator; 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than the generator and the port had six wrong; `MLOOP` is the label on part 5, so the routine has one exit and not two |
@@ -6237,7 +6318,7 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **all five built and wired.** 4c-c turned out to have been done in phase 3 (§6.137), and **4d closed the phase on 2026-09-05** in three sub-slices: the Trumble sprites (§6.149), the control codes a briefing is made of (§6.150) and the seven missions themselves (§6.151). The galactic hyperdrive is **reachable as of 2026-09-05** (§6.147): this row used to say Ctrl was a modifier `Window` and `KeyMap` could not report, and `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 like any other key. What stays open is 4a-c's mutation survivors in the ship AI's sweep, RUNNABLE and MEASURED — `python tools/mutate.py --unit tactics` gives 16 mutants, 3 caught, 13 survived, so the debt is thirteen and not the fifteen §6.125 named (§6.147) — with §6.132's method to close them |
+| 4 | 5 | 8–12 | **all five built and wired.** 4c-c turned out to have been done in phase 3 (§6.137), and **4d closed the phase on 2026-09-05** in three sub-slices: the Trumble sprites (§6.149), the control codes a briefing is made of (§6.150) and the seven missions themselves (§6.151). The galactic hyperdrive is **reachable as of 2026-09-05** (§6.147): this row used to say Ctrl was a modifier `Window` and `KeyMap` could not report, and `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 like any other key. 4a-c's mutation survivors are CLOSED as of the same day — `python tools/mutate.py --unit tactics` gives 16 of 16, and the thirteenth was a defect in `TA7` rather than a gap in the sweep (§6.152, §6.153) |
 | 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
 | **Total** | **26** | **40–60** | before modernisation. **The count was 24 until 2026-09-05** and was simply stale: 4e was added by §6.120 and phase 0's 0b had been counted as one slice in one place and two in another. ALL TWENTY-SIX ARE BUILT as of 2026-09-05, 4d last. 0b-b was cancelled and 0e is open by owner acceptance rather than unbuilt |
 
@@ -6303,6 +6384,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The last four survivors, and the thirteenth was a defect** (§6.153). §6.152 closed nine and concluded that none of the thirteen was a defect in the port; the other four say otherwise. **`ta-half` is a real one.** `TA7`'s two energy compares branch to `TA3` and `ta3` — the same five letters in different case, and parts SIX and FIVE of `TACTICS` — so a ship with more than half its blueprint energy jumps clean over the missile launch. The port ran both into part five, and it hid behind two coincidences at once: every energy case in the fixture had `INWK+31` zero, so part five returned at its first instruction either way. **`kill-rotate` was a hole in the COMPARISON, not the fixture** — `TALLY` and `TALLYL` were neither pushed nor read back, so what `EXNO2` scores was invisible and no ladder would ever have caught it. **`msl-16` was landed on and the branch past it was not**: the ECM check reads bit 0 of the target's `INWK+32` and only slot 0's is odd. **`ta-104` needed a two-roll seed** — at least 250 at `TN7` and then an EVEN operand — and the first one searched used the Anaconda's roll ordinal, which is unreachable because an Anaconda that rolls 200 or more launches its escorts and returns. 16 of 16, none equivalent, 7,326 comparisons. The rule: a survivor that outlives a round of ladder-building deserves MORE attention than a fresh one, because the easy explanations are used up. |
 | 2026-09-05 | **The thirteen survivors in the ship AI's sweep are closed** (§6.152). §6.132's probe on all thirteen comparisons at once: the port was right every time and the sweep was blind in three ways. **Six thresholds were never stood on** -- four seeds gave four values at each and none was the constant -- and six seeds found by searching 1,024 land on them; an affine seed family made it worse first, giving rolls whose bit 1 was always set so two constants were unreachable rather than unlucky. **The missile's arrival had never run**: everything past `BNE TA64` needs the target within 256 units and the fixture spread the fleet out. **`TA7`'s half-energy test and `ta3`'s ECM test had one input each.** And **`ta20-eor` was not a coverage gap**: the port had `TA20` written out twice and the mutant named the copy in part 4, which no missile can reach. Removed. The sweep is 5,940 cases against 1,800. |
 | 2026-09-05 | **Slice 4d-c: the seven missions, and phase 4 closes** (§6.151). Six of them are eleven instructions of state each, so the comparison is the WHOLE commander block from sixteen values of `TP` rather than the flag: `DEBRIEF` pays 5,000 credits, `DEBRIEF2` sets `ENGY` and adds 256 kills to the tally's high byte. **Three pieces of bit arithmetic that an `ORA` would get wrong**: `BRIEF3`'s `AND` forgets mission 1 on the way to setting mission 2, `DEBRIEF`'s `LSR`/`ASL` leaves bit 1 standing so the pair reads as finished and paid, and `TBRIEF` sets bit 4 before it asks. **An original bug ported** (ADR-001 §6): `TBRIEF` never tests `LCASH`'s carry, so a commander who cannot afford a Trumble gets one. `BRIEF` compared on the whole screen over ~200 frames, with `MCNT` as state because the counter is dead in the second loop. Wired into `DOENTRY`'s dispatch. |
 | 2026-09-05 | **Slice 4d-b: a briefing is not a screen** (§6.150). Token 10 is a paragraph; what makes it a briefing is that four control codes inside it stop and wait. **The dispatch for nine of them lived in `Outpost/Shell.cpp` as arithmetic no test could reach**, and `MT23`/`MT29` were moving the cursor when `DOYC` is `STA YC / RTS` and neither touches `XC`. `MT9`'s missing column store looked like a second defect and is not: `TT66` writes the same `XC` twice on its own, so the `DOXC` is dead and the mutation run is what said so. **Code 22 falls into MT23**, so a briefing printed in the wrong case after its first page. `PAS1` puts the ship at z_hi = 2 where the upstream comment says 1 -- the Master's value, travelled. MT27 and MT28 overlap and run off the end of the names. |
