@@ -1220,6 +1220,54 @@ namespace GameLogicTests
         colours += used ? 1u : 0u;
       }
       Assert::IsTrue(colours >= 4u, L"and it is drawn in more than one colour");
+
+      /*
+       * INK YOU CANNOT SEE IS A PLACEMENT ERROR, and it is the only thing that could catch §6.105.
+       *
+       * The dashboard picture is placed by an address nothing assembles, and for a month it was
+       * placed three character cells out. No comparison against the shipped game could see that --
+       * `wantdials` copies from wherever the image is, so both sides read the same misplaced bytes
+       * -- and three cells of shift still renders as a dashboard. What it does NOT do is line up
+       * with `sdump` and `cdump`, which give every cell its own palette: ink lands where the
+       * palette says black, and disappears.
+       *
+       * So this counts the lit pixels (%01, %10, %11) below the split that resolve to colour zero.
+       * At the shipped alignment it is 18.5% of them and at the right one 8.4%, which is the
+       * minimum over every shift from -8 to +8 cells; the threshold sits between the two rather
+       * than at either, because the dials drawn on top move the exact figure a little.
+       */
+      std::size_t ink = 0;
+      std::size_t hidden = 0;
+      const std::span<const std::uint8_t> planes = world.canvas.Screen();
+
+      for (int cellRow = Elite::Canvas::DASHBOARD_CELL_ROW; cellRow < Elite::Canvas::CELL_ROWS; ++cellRow)
+      {
+        for (int column = 0; column < Elite::Canvas::CELL_COLUMNS; ++column)
+        {
+          const int cell = cellRow * Elite::Canvas::CELL_COLUMNS + column;
+          const std::uint8_t cellByte = planes[Elite::Canvas::DASHBOARD_CELLS + cell];
+          const std::uint8_t palette[4] = {0u, static_cast<std::uint8_t>(cellByte >> 4), static_cast<std::uint8_t>(cellByte & 0x0Fu),
+                                           static_cast<std::uint8_t>(world.canvas.CellColour(cell) & 0x0Fu)};
+
+          for (int sub = 0; sub < 8; ++sub)
+          {
+            const std::uint8_t bits = planes[cellRow * Elite::Canvas::ROW_BYTES + column * 8 + sub];
+            for (int pixel = 0; pixel < 4; ++pixel)
+            {
+              const std::uint8_t code = static_cast<std::uint8_t>((bits >> (6 - 2 * pixel)) & 0x03u);
+              if (code != 0u)
+              {
+                ++ink;
+                hidden += (palette[code] == 0u) ? 1u : 0u;
+              }
+            }
+          }
+        }
+      }
+
+      Assert::IsTrue(ink > 1000u, L"there is ink on the dashboard to judge");
+      Logger::WriteMessage(("dashboard ink: " + std::to_string(hidden) + " of " + std::to_string(ink) + " invisible").c_str());
+      Assert::IsTrue(hidden * 100u < ink * 12u, L"the picture lines up with the colour map");
     }
   };
 
