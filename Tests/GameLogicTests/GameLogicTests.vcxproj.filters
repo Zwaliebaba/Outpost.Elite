@@ -138,6 +138,9 @@
     <ClCompile Include="GameLoopTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="PauseScreenTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="TacticsTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
