@@ -845,6 +845,67 @@ namespace GameLogicTests
   };
 
   /*
+   * A LAUNCH PACES BOTH OF ITS TUNNELS, and only a mutation could have asked for this test.
+   *
+   * `TT110` draws the effect twice: once inside `LAUN`, over the docked screen, and once through
+   * `HFS1` after the bubble has been rebuilt. Every oracle comparison here passes a null pacing,
+   * because the 6502 has no present and the two sides must agree on pixels rather than on time --
+   * so replacing the FIRST call's argument with `nullptr` changed no pixel, failed no assertion,
+   * and quietly put half of §6.109 back: the tunnel instantly, the rings paced. Nothing in the
+   * suite could see it. This is what sees it.
+   *
+   * Sixty-eight is thirty-four twice, and thirty-four is what `ThePacingIsOneFramePerCircle`
+   * derives from the doubling: five circles each from the rings starting at radius 8 and 9,
+   * four from each of the six starting at 10 to 15.
+   */
+  TEST_CLASS(TheLaunchPacing)
+  {
+  public:
+    TEST_METHOD(ALaunchPacesBothOfItsTunnels)
+    {
+      struct Counting final : Elite::TunnelEffects
+      {
+        std::uint32_t circles = 0;
+        void ShowCircle() override
+        {
+          ++circles;
+        }
+      };
+
+      Leaving leaving;
+      Occupy(leaving, 0x4Du);
+      leaving.world.view = 1u;
+
+      Elite::FlightScreen screen = leaving.world.Screen();
+      Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
+                             leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+
+      Counting counting;
+      std::uint8_t flag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
+      Elite::SystemSeeds selected{};
+      Elite::Launch(loop, &counting, flag, leaving.world.commander.At(Elite::Field::SystemX),
+                    leaving.world.commander.At(Elite::Field::SystemY), 7u, selected);
+
+      Assert::AreEqual<std::uint32_t>(68u, counting.circles, L"both tunnels are paced, not just the second");
+
+      // And the refusal path draws nothing at all, so it asks the platform for nothing either.
+      Leaving flying;
+      Occupy(flying, 0x4Du);
+      Elite::FlightScreen flyingScreen = flying.world.Screen();
+      Elite::FlightLoop flyingLoop{flyingScreen, flying.keys,       flying.control, flying.options, flying.burst,   flying.heap,
+                                   flying.clip,  flying.projection, flying.axes,    flying.outside, flying.outside, flying.effects};
+
+      Counting none;
+      std::uint8_t inFlight = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
+      Elite::SystemSeeds ignored{};
+      Elite::Launch(flyingLoop, &none, inFlight, flying.world.commander.At(Elite::Field::SystemX),
+                    flying.world.commander.At(Elite::Field::SystemY), 7u, ignored);
+
+      Assert::AreEqual<std::uint32_t>(0u, none.circles, L"pressing 1 in flight is a view change and draws no tunnel");
+    }
+  };
+
+  /*
    * 6502: TITLE -- the title screen, its rotating ship, and the key that dismisses it.
    *
    * THE ORACLE'S `RDKEY` IS PATCHED RATHER THAN TRAPPED, because the loop is key-driven and a trap
