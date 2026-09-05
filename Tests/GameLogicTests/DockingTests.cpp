@@ -335,6 +335,16 @@ namespace GameLogicTests
       World world;
       Elite::ClipState clip;
       world.commander = commander;
+
+      /*
+       * §6.95, and it is this fixture's job as much as the app's: a default-constructed flight
+       * world is a state the game cannot be in. `STP` defaults to zero, `CIRCLE2` walks a circle
+       * `STP` at a time and cannot terminate on a zero, and `DOENTRY` draws circles now -- so
+       * without a step the game could have left, a port that DROPPED `LAUN`'s store would hang
+       * this test rather than fail it. Four is what a middling planet's disc leaves behind.
+       */
+      world.heaps.stp = 4u;
+
       world.flight.delta = 0x5C;
       world.status.laserTemperature = 0x5C;
       world.status.hyperspaceCountdown = 0x5C;
@@ -408,6 +418,7 @@ namespace GameLogicTests
       World earnerWorld;
       Elite::ClipState earnerClip;
       earnerWorld.commander = earner;
+      earnerWorld.heaps.stp = 4u; // §6.95, as above
       std::uint8_t earnerDocked = 0;
       Elite::FlightScreen earnerScreen = earnerWorld.Screen();
       const Elite::DockingResult briefing = Elite::DockAtStation(briefed, earnerScreen, earnerClip, nullptr, earnerDocked, 0, false);
