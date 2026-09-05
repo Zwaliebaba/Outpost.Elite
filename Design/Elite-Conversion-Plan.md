@@ -437,7 +437,7 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
-### 6.106 The oracle has flat memory, and the ship data lives under the VIC-II
+### 6.107 The oracle has flat memory, and the ship data lives under the VIC-II
 
 The first `TITLE` comparison failed because **the shipped game drew no ship at all**. `NWSHP`
 refused, `FRIN` stayed empty, `SLSP` never moved — and the reason was four addresses away from
@@ -462,7 +462,7 @@ shipped game and one thing in the interpreter**, so any oracle run that both tou
 data from that page needs the I/O writes trapped. §6.102 said an assembled binary is a machine
 before startup; this says it is also a machine with no banking.
 
-### 6.105 A prompt that could not be answered
+### 6.106 A prompt that could not be answered
 
 `BR1` asks "LOAD NEW COMMANDER (Y/N)?" and tests the answer with `CMP #YINT`, where `YINT` is 39 —
 the C64's internal key NUMBER for "Y". `TITLE` returns `thiskey`, which is that number, because
@@ -477,7 +477,7 @@ once, seen nothing happen, and had no way to tell a wrong constant from a screen
 built yet. The defect was found by porting `TITLE` and reading what it returns — not by using the
 program. **A stub that returns a plausible value hides the contract it is standing in for.**
 
-### 6.104 The title screen asks a question it does not appear to ask
+### 6.105 The title screen asks a question it does not appear to ask
 
 `TITLE` prints "PRESS FIRE OR SPACE, COMMANDER." and the two answers are not equivalent. The loop
 ends:
@@ -501,6 +501,46 @@ the wrong byte by a factor of 256.
 
 **And `LDA MCNT / AND #3` is dead.** The next instruction is `LDA #0`. Fourth piece of dead code
 found in the original, after `cntr`'s `REDU`, `.OLDBOX`'s cursor store and `TT66`'s `DOYC`.
+### 6.104 Everything drawn, nothing visible: the port had no loader
+
+The title screen showed a box, a line of text and one small green square near the bottom left. It
+was not a drawing bug. Every routine involved was already compared against the shipped game and
+every one of them was right.
+
+**COLOUR ON THE C64 IS NOT IN THE BITMAP.** The bitmap says which of a cell's colours a pixel
+takes; the colours themselves live in screen RAM and colour RAM, one palette per 8x8 cell. The
+game writes bits and almost never writes palettes — `CHPR` colours the cell it prints into,
+`msblob` colours the missile blocks, `BLUEBAND` lays two bands, and that is close to the whole
+list. Everything else was coloured **before the game started**, by the loader.
+
+So `wantdials` copied all 2,240 bytes of the dashboard picture into the bitmap, `BOX2` drew the
+border box down cells 3 and 36, `DIALS` drew all seven dials, and with colour memory left at zero
+every one of them was black ink on black paper. The one thing that showed was the missile
+indicator — the only dashboard cell whose palette the GAME writes.
+
+**The port's ledger had already decided this was fine, and it was half right.** §3 of the
+inventory drops all seven loader parts as "memory moves, decryption, VIC-II bank and mode setup",
+which is true of their code and not of their effect. Parts 5 and 6 do one thing the game depends
+on and cannot do for itself: they fill both blocks of screen RAM and all of colour RAM. That is
+not code to port, it is a STATE to reproduce, and `SetUpLoaderScreen` reproduces it — 20 lines and
+two extracted tables, called once by the composition root.
+
+**The check that would have caught it is §6.5's, one step further on.** The goldens compare the
+port's canvas against the oracle's memory, and both were correct: the same bits in the same
+places. What neither side held was the colour memory, because the oracle image has never run the
+loader any more than the port had — §6.102's finding again, in the half of the machine that is not
+the CPU. `ViewChangeTests` now asserts on what `Resolve` PRODUCES for a title screen: the border
+box is yellow and the dashboard is more than one colour. A test that compares only the planes
+cannot see a black screen, which is the same lesson as the multicolour decode in ADR-002 §4 and
+the second time this project has learnt it.
+
+**And the two tables come from an image that is not the game's.** `elite-loader.asm` assembles to
+`CODE% = &4000`, which is the game's own screen bitmap: loading COMLOD into the oracle would start
+every drawing comparison on a screen full of loader code. So `tools/labels.py` assembles it into a
+space of its own — `LoaderLabels.txt` and `LoaderBinaries.txt`, which nothing but the extractor and
+one test method ever reads. `sdump` and `cdump` are 280 bytes each, which is what `mvsm` copies and
+what seven character rows of forty cells come to; the gap to the next label is 288, so §6.8's rule
+and the layout disagree by eight bytes here and the rule wins.
 
 ### 6.103 One label, three routines, and a table that turns out to be RAM
 
@@ -1626,7 +1666,7 @@ ported and absent; the check has to be for a DEFINITION, and this pass nearly re
 | **3d-d-iv** ✅ | **Built 2026-09-04**, and it is the slice that makes the loop reachable: `ZERO`, `RESET`, `RES2` and `TT110` in a new `Flight.h/.cpp`, with `BAD` in `Market.cpp` and `HFS1`/`HFL1` in `PlanetDraw.cpp`. **`RES2` stops being a seam** — it was scoped before the stardust, the line heaps and the dashboard existed and every one of them exists now (§6.73 a third time), so `StartUpEffects::ResetShip` is a forward rather than an approximation. Same for `SpawnEffects`, which `TT110` hands the real thing. **44 mutations, 44 caught.** Two findings: the rings ERASE THEMSELVES by being drawn twice, and `HFS1` does not set the step they are drawn at (§6.94); and nothing on the path from a cold start to the first launch writes `STP` at all, which makes a default-constructed `PlanetSunState` a state the game cannot be in (§6.95) |
 | **3d-d-v** ✅ | **The `Outpost/` wiring, 2026-09-04** — the half no hosted runner can compile. `FlightSession` owns the flight world and answers the six seam interfaces the flight code reaches through; `Main.cpp` gets the second outer loop `FRCE`'s `LDA QQ12 / BEQ` chooses between, so `PlanSteps` finally has the caller it was written for; `KeyAction::Launch` and `ChangeView` are dispatched rather than refused; `DEATH2` and `DOENTRY` are wired at the loop's two reachable exits. `QQ11` moves out of the shell, because both halves write it. Four findings: `ClearToView`'s 2e seam had to go and its going exposed a title-screen bug only the real `TT66` could show (§6.97); the raster handler is a frame of work with nowhere to live, and it belongs on every present rather than on every screen change (§6.98); `bool PlaySound` cannot express the carry §6.88 measured (§6.99); and the honest inventory of what a launch shows — including one gap that is the PRESENTER's, since nothing in the plan owns sprite rendering (§6.100). Verified by `check_outpost.py`, by compiling every `Elite::` call it makes against the real headers, and by nothing else: **it needs a person at a Windows machine**, as 2e, 3b and 3c do |
 | **3d-d-vi** ✅ | **`NWSPS` and `NwS1`, 2026-09-04** -- the routine 3d-d-iii-b left behind a seam, and the seam is gone. What unblocked it was a measurement rather than a design: `STA XX21` appears seven times in the whole library and four are these, so the game writes ONE entry of the pointer table and `Bubble::stationBlueprint` is the model. **28 mutations, 28 caught.** Findings: `NWSPS` evicts the sun AND takes its line heap, and cannot fail, and self-modifies the table (§6.103); `NWSHP` writes `XX0` and the port had dropped the store, invisible for three slices because every caller so far had a negative type (§6.101); and the oracle image has never run `BEGIN`, so `spasto` still held `&8888` and the fixture has to do `BEGIN`'s two loads -- §6.95's rule pointing at the ORACLE rather than the port (§6.102). `tek` joins `FlightScreen`, because part 14 reads it. `LoopOutcome::Docked` is reachable at last: `SSPR` is `MANY+SST` and only this sets it |
-| **3d-d-vii** ✅ | **`TITLE`, 2026-09-05, 41 mutations and 41 caught** -- the rotating title ship, which the app had been drawing as a box since 2e. It goes in `Flight.cpp` rather than `StartUp.cpp`, filed by what it touches for the seventh time: it resets the universe, creates a ship, moves it and draws it. `PATG` and `MULIE` join the port; `RDKEY` gains a second seam, and the reason it is two rather than one is that the flight loop presents around its scan and the title loop cannot. Findings: the dismissing key configures the joystick and the ship flies towards you (§6.104); the shell returned a character where `BR1` compares a key number, so the disk menu was unreachable (§6.105); and the interpreter's flat memory puts `XX21` under the VIC-II, which had been silently zeroing a blueprint pointer in every screen comparison since 3b (§6.106) |
+| **3d-d-vii** ✅ | **`TITLE`, 2026-09-05, 41 mutations and 41 caught** -- the rotating title ship, which the app had been drawing as a box since 2e. It goes in `Flight.cpp` rather than `StartUp.cpp`, filed by what it touches for the seventh time: it resets the universe, creates a ship, moves it and draws it. `PATG` and `MULIE` join the port; `RDKEY` gains a second seam, and the reason it is two rather than one is that the flight loop presents around its scan and the title loop cannot. Findings: the dismissing key configures the joystick and the ship flies towards you (§6.105); the shell returned a character where `BR1` compares a key number, so the disk menu was unreachable (§6.106); and the interpreter's flat memory puts `XX21` under the VIC-II, which had been silently zeroing a blueprint pointer in every screen comparison since 3b (§6.107) |
 
 Doing it in that order means the loop is written last, against a set of routines that have each
 been compared to the game on their own. Written first, it would be sixteen parts and fifteen
@@ -4038,7 +4078,8 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
-| 2026-09-05 | **The title screen's ship rotates: `TITLE` is ported.** The placeholder box had outlived its reason by two slices -- `LL9` landed in 3b and `AddShip` became public for `NWSPS` -- and nothing revisited the seam, which is §6.73 for the sixth time. `PATG` joins `ControlOptions`, `MULIE` joins `FlightStatus`, and `RDKEY` gains a second seam because `TITLE`'s loop is the only thing standing between two drawn frames while the flight loop's is not. 48 title screens compared on the whole canvas, the whole ship block, the flight state, `JSTK`, `MULIE` and the returned key. **41 mutations, 41 caught.** Three findings. **The key you dismiss the title screen with is how the game asks which input device you have** (§6.104) -- `JSTK` is &FF before the loop and only the non-fire exit runs the `INC` that clears it; the ship also FLIES TOWARDS you, so the distance argument is the z low byte and the placeholder had been sized off the wrong byte by a factor of 256. **The port returned the wrong kind of key** (§6.105): `BR1` compares `thiskey`, the key NUMBER, and the shell returned the character, so "Y" could never open the disk menu -- a one-line defect that survived slice 2e's whole acceptance pass. **And the oracle has flat memory while the C64 banks** (§6.106): `XX21` is at &D000 and so is the VIC-II, so `NOSPRITES`'s one `STA VIC+&15` zeroes the Cobra's blueprint pointer and the shipped game refuses to create the ship. Latent in every comparison since 3b, and invisible until one run drew a screen and then made a ship. 295 tests green. |
+| 2026-09-05 | **The title screen's ship rotates: `TITLE` is ported.** The placeholder box had outlived its reason by two slices -- `LL9` landed in 3b and `AddShip` became public for `NWSPS` -- and nothing revisited the seam, which is §6.73 for the sixth time. `PATG` joins `ControlOptions`, `MULIE` joins `FlightStatus`, and `RDKEY` gains a second seam because `TITLE`'s loop is the only thing standing between two drawn frames while the flight loop's is not. 48 title screens compared on the whole canvas, the whole ship block, the flight state, `JSTK`, `MULIE` and the returned key. **41 mutations, 41 caught.** Three findings. **The key you dismiss the title screen with is how the game asks which input device you have** (§6.105) -- `JSTK` is &FF before the loop and only the non-fire exit runs the `INC` that clears it; the ship also FLIES TOWARDS you, so the distance argument is the z low byte and the placeholder had been sized off the wrong byte by a factor of 256. **The port returned the wrong kind of key** (§6.106): `BR1` compares `thiskey`, the key NUMBER, and the shell returned the character, so "Y" could never open the disk menu -- a one-line defect that survived slice 2e's whole acceptance pass. **And the oracle has flat memory while the C64 banks** (§6.107): `XX21` is at &D000 and so is the VIC-II, so `NOSPRITES`'s one `STA VIC+&15` zeroes the Cobra's blueprint pointer and the shipped game refuses to create the ship. Latent in every comparison since 3b, and invisible until one run drew a screen and then made a ship. 295 tests green. |
+| 2026-09-05 | **The screen had no colours, because the port had no loader** (§6.104). The title screen drew a box, a prompt and one green square, and nothing was wrong with any routine that drew it: colour on the C64 lives in screen RAM and colour RAM, the game writes bits and hardly ever writes palettes, and everything else was coloured before the game started -- by the loader, whose seven parts the ledger drops. Their CODE is still dropped; the STATE parts 5 and 6 leave behind is reproduced in `LoaderScreen.cpp` and called once by the composition root, so the dashboard, the border box and the dials are visible for the first time. `sdump` and `cdump` are extracted with them, and they are **the first tables from an image that is not the game's** -- the loader assembles over the screen bitmap, so it gets a 64 KB space of its own that the oracle never loads. The test that would have caught it asserts on what `Resolve` produces rather than on the planes, which is ADR-002 §4's lesson for the second time. |
 | 2026-09-04 | **The station goes back in the bubble: `NWSPS` and `NwS1`.** The last seam on the launch path, and it opened because of a measurement rather than an argument -- `STA XX21` appears seven times in the whole upstream library and four of them are this routine, so the pointer table has exactly one mutable entry and `Bubble::stationBlueprint` is the model. **28 mutations, 28 caught.** Three findings. **One label, three routines** (§6.103): it evicts the sun from slot 1 and then hands the station the sun's line heap six instructions later, it cannot fail because it frees a slot before asking for one, and it self-modifies the blueprint table so a high-tech system gets a Dodo. **`NWSHP` writes `XX0` and the port had dropped the store** (§6.101) -- invisible for three slices, because every caller so far created a planet or a sun and those types take `BMI NW2` straight past it; the first caller with a positive type disagreed on the first frame. **And the oracle image has never booted** (§6.102): `spasto` is `EQUW &8888` until `BEGIN` overwrites it, `Fresh()` does not run `BEGIN`, so the shipped game spawned a station whose blueprint was the placeholder. That is §6.95's rule with the arrow reversed -- both sides of a comparison are fixtures, and an assembled binary is a machine before startup. `tek` joins `FlightScreen`; `LoopOutcome::Docked` is reachable for the first time. 294 tests green. |
 | 2026-09-04 | **The app can fly: the `Outpost/` wiring.** `FlightSession` owns the flight world and answers the six interfaces the flight code reaches through; `Main.cpp` grows the second outer loop `FRCE` chooses between, so `PlanSteps` has the caller it was written for at last; `KeyAction::Launch` and `ChangeView` are dispatched rather than refused; `DEATH2` and `DOENTRY` are wired at the loop's two reachable exits. `QQ11` leaves the shell because both halves write it. Four findings. **A seam outlived its reason and its going exposed a bug** — `ClearToView`'s three-call approximation is now the whole of `TT66`, which fixes a screen-mode leak the flight half would have opened AND revealed that the title screen must clear to view 13 and then store 0, because views 0 and 13 draw the same pixels and only one of them prints "FRONT VIEW" (§6.97). **The raster interrupt is a frame of work with nowhere to live**, and it belongs on every present rather than on every screen change, because `WaitFrames` and `NextKey` present too (§6.98). **`bool PlaySound` cannot express the flag §6.88 measured**: `NOISE` has three answers and the seam has two, and the third is the one a silent build gives (§6.99). And §6.100 is the honest inventory of a launch — including the gap that is the PRESENTER's, since `SIGHT` is ported and the laser sights are VIC-II sprites nothing renders. Verified by `check_outpost.py` and by compiling every `Elite::` call it makes against the real headers; **the rest needs a person at a Windows machine**, as 2e, 3b and 3c do. 293 tests green. |
 | 2026-09-04 | **The launch path: `ZERO`, `RESET`, `RES2`, `TT110`, `BAD` and `HFS1`.** 44 mutations, 44 caught. `RES2` and `SpawnEffects` stop being seams — both were scoped before the things behind them existed, which is §6.73 a third and fourth time. Two findings, and both are about a byte's value coming from somewhere the caller cannot see: the hyperspace rings ERASE THEMSELVES by being drawn twice and are drawn at whatever step the last circle chose (§6.94), and **nothing on the path from a cold start to the first launch writes that step at all** — `CIRCLE` is its only writer in the whole build, and `CIRCLE2` cannot terminate on a zero. The rule that falls out is one the app now follows: a default-constructed flight world is a state the game cannot be in (§6.95). |

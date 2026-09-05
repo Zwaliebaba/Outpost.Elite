@@ -296,7 +296,7 @@ namespace Outpost
      * IT RETURNS `thiskey`, THE KEY NUMBER, and that is the fix as much as the ship is. `BR1`
      * compares the answer against 39 -- the internal number for "Y" -- and this used to return
      * `NextKey()`, which is the CHARACTER. 89 never equals 39, so the disk menu could not be opened
-     * from the title screen at all (§6.105).
+     * from the title screen at all (§6.106).
      */
     if (m_flight == nullptr || m_extendedPrinter == nullptr || m_dockedFlag == nullptr)
     {

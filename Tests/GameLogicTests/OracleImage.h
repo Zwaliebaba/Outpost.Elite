@@ -32,6 +32,16 @@ namespace Elite::Testing
     /// Loads on first use. Cheap afterwards, and never throws.
     static const OracleImage& Instance();
 
+    /*
+     * The assembled LOADER, which is a separate 64 KB space and not part of the game's.
+     *
+     * `COMLOD` loads at &4000 -- the game's screen bitmap -- so the two can never be in one image:
+     * putting the loader into the oracle would start every drawing comparison on a screen full of
+     * loader code. It carries two things this port needs and nothing else does, `sdump` and
+     * `cdump`, so `TableTests` is its only caller.
+     */
+    static const OracleImage& LoaderInstance();
+
     [[nodiscard]] bool Available() const noexcept
     {
       return m_available;
@@ -63,7 +73,7 @@ namespace Elite::Testing
     }
 
   private:
-    OracleImage();
+    OracleImage(const char* _labelsFile, const char* _binariesFile);
 
     bool m_available = false;
     std::string m_reason;

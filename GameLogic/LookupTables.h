@@ -256,4 +256,30 @@ namespace Elite
    */
   extern const std::array<std::uint8_t, 2241> DASHBOARD_IMAGE;
 
+  /*
+   * 6502: sdump and cdump -- the colours that dashboard picture is drawn IN.
+   *
+   * `DASHBOARD_IMAGE` above is bits, and bits have no colour: what the VIC-II makes of them comes
+   * from screen RAM and colour RAM, and these two are what the C64's loader fills those with
+   * before the game starts. Leave them out and `wantdials` still copies all 2,240 bytes, all seven
+   * rows still land exactly where they belong, and the whole dashboard is black on black.
+   *
+   * THE THREE OF THEM ARE ONE PICTURE. The dashboard is the only part of the screen in multicolour
+   * bitmap mode, where a PAIR of bits chooses between four colours: %00 the background register,
+   * %01 the high nibble of `sdump`'s byte for that cell, %10 its low nibble, and %11 the low
+   * nibble of `cdump`'s. So &27 in `sdump` with &0D in `cdump` is a cell whose three ink colours
+   * are dark grey, red and light green -- the scanner -- and it takes both tables to say that.
+   *
+   * 280 BYTES, WHICH IS SEVEN ROWS OF FORTY, and `mvsm` copies them to offset &2D0 of each: 18 *
+   * 40, the first cell of character row 18, which is where the dashboard starts. The next label is
+   * 288 bytes on, so the eight bytes between are not part of either table (§6.8).
+   *
+   * These are the only two things this port takes out of `elite-loader.asm`, whose code is not
+   * ported. They are also the only two extracted from a different 64 KB image: the loader loads at
+   * &4000, over the game's own screen bitmap, so it is assembled into a space of its own that the
+   * oracle never sees.
+   */
+  extern const std::array<std::uint8_t, 280> DASHBOARD_SCREEN_COLOURS;
+  extern const std::array<std::uint8_t, 280> DASHBOARD_COLOUR_RAM;
+
 } // namespace Elite

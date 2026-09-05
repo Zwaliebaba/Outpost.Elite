@@ -149,6 +149,7 @@
     <ClInclude Include="ExtendedTokens.h" />
     <ClInclude Include="LookupTables.h" />
     <ClInclude Include="Canvas.h" />
+    <ClInclude Include="LoaderScreen.h" />
     <ClInclude Include="TextPrint.h" />
     <ClInclude Include="Universe.h" />
     <ClInclude Include="ShipBlueprint.h" />
@@ -201,6 +202,7 @@
     <ClCompile Include="ScreenTables.cpp" />
     <ClCompile Include="Font.cpp" />
     <ClCompile Include="Canvas.cpp" />
+    <ClCompile Include="LoaderScreen.cpp" />
     <ClCompile Include="Lines.cpp" />
     <ClCompile Include="TextPrint.cpp" />
     <ClCompile Include="Universe.cpp" />
