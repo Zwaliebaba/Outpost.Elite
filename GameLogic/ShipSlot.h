@@ -92,6 +92,25 @@ namespace Elite
   inline constexpr std::uint8_t JUNK_TYPE_LIMIT = 11;       ///< 6502: JH = SHU+2, exclusive
 
   /*
+   * 6502: the wreckage, and the two the energy bomb cannot touch.
+   *
+   * `PLT` to `SPL` is a RANGE and is used as one: `SFS1` gives a random tumble to everything from
+   * the plate to the splinter and to nothing else, so the four numbers being consecutive is part of
+   * the behaviour rather than an accident of the table. `THG` and `CON` are two of the bomb's three
+   * exemptions, and `CON` is also the boundary above which a laser is halved unless it is military.
+   */
+  inline constexpr std::uint8_t SHIP_TYPE_ALLOY_PLATE = 4; ///< 6502: PLT
+  inline constexpr std::uint8_t SHIP_TYPE_CANISTER = 5;    ///< 6502: OIL
+  inline constexpr std::uint8_t SHIP_TYPE_ASTEROID = 7;    ///< 6502: AST
+  inline constexpr std::uint8_t SHIP_TYPE_SPLINTER = 8;    ///< 6502: SPL
+  inline constexpr std::uint8_t SHIP_TYPE_THARGOID = 29;   ///< 6502: THG
+
+  /// 6502: ESC and CYL. `ESC` is `JL`, the bottom of the junk range, and `CYL` is the boundary
+  /// `ANGRY` compares `TYPE` against -- everything below it is wreckage, a missile or a station.
+  inline constexpr std::uint8_t SHIP_TYPE_ESCAPE_POD = 3;
+  inline constexpr std::uint8_t SHIP_TYPE_COBRA_MK3 = 11;
+
+  /*
    * 6502: INWK, and one entry of K% -- a single ship, as thirty-seven bytes.
    *
    * BYTES AND NOT FIELDS, deliberately. The original addresses this block by offset from three

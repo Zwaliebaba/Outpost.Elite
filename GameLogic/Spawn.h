@@ -174,4 +174,72 @@ namespace Elite
   [[nodiscard]] NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed, bool _carryIn,
                                   std::uint16_t& _blueprint) noexcept;
 
+  // ---- slice 4a-b: putting a ship into the bubble from inside the bubble ------------------------
+
+  /// 6502: LDA #28 / STA INWK+3 / LSR A / STA INWK+6 -- twenty-eight units to the right and
+  /// fourteen ahead, which is where a fired missile appears.
+  inline constexpr std::uint8_t SPAWN_AHEAD_X = 28;
+  inline constexpr std::uint8_t SPAWN_AHEAD_Z = 14;
+
+  /// 6502: LDA #%11111110 -- the AI byte `SESCP` and `SFRMIS` hand `SFS1`: hostile, aggression 15,
+  /// and bit 0 clear so it has no target yet.
+  inline constexpr std::uint8_t SPAWN_CHILD_AI = 0xFE;
+
+  /// 6502: LDA #32 / STA INWK+27 -- the speed a station's child leaves at, which is why a Viper
+  /// launched from a Coriolis is already moving when you see it.
+  inline constexpr std::uint8_t STATION_CHILD_SPEED = 32;
+
+  /*
+   * 6502: FRS1 -- put a ship 28 to the right and 14 ahead of us, pointing away.
+   *
+   * `ZINF` then four stores then a FALL INTO `fq1`, which is `AddDebris` above: the same three
+   * bytes of orientation and the same `ROL A` on the speed. So the carry that `ROL` rotates in has
+   * a second source, and it is as unobvious as `DEATH`'s: `LDA MSTG / ASL A / ORA #%10000000 /
+   * STA INWK+32` leaves the carry holding BIT 7 OF THE MISSILE TARGET, and neither the `ORA` nor
+   * the `STA` touches it (§6.121). `MSTG` is 255 when nothing is locked on, so an unlocked missile
+   * launches one unit faster than a locked one.
+   *
+   * The answer is `NWSHP`'s carry: clear means the bubble was full, and `FRMIS` shows "MISSILE
+   * JAMMED" rather than spending the missile.
+   */
+  [[nodiscard]] NewShip SpawnShipAhead(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed,
+                                       std::uint8_t _missileTarget, std::uint16_t& _blueprint) noexcept;
+
+  /*
+   * 6502: SFS2 -- move a ship along one axis by twice A, sign and all.
+   *
+   * Five instructions, and the first four are `TAS7`'s opening exactly: `ASL A` doubles and pushes
+   * the sign into the carry, `LDA #0 / ROR A` catches it. Then `JMP MVT1` rather than `TAS7`'s own
+   * arithmetic, so this one adds to a SHIP COORDINATE where that one adds to `K3`.
+   */
+  void MoveShipAlongAxis(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _amount, std::uint8_t _axis) noexcept;
+
+  /*
+   * 6502: SFS1 -- spawn a child from the ship in slot `_parent`: wreckage, a Viper out of a
+   * station, an escape pod, a missile fired at us.
+   *
+   * IT SWAPS `INWK` OUT AND BACK. The new ship is built in the caller's own workspace, so the
+   * routine copies `INWK` into `XX3`, loads the PARENT's block over it, edits that, calls `NWSHP`
+   * and copies `XX3` back -- and `XX0` and `INF` are pushed and pulled around the same call. That
+   * is not tidiness: `SFS1`'s callers are `TACTICS` and the flight loop, both of which are in the
+   * middle of working on `INWK` when they call it.
+   *
+   * Three edits, and each is a different kind of ship. A STATION's child comes out of the slot
+   * rather than the middle: three `SFS2` calls push it along the station's own nose, roof and side
+   * vectors, at speed 32. Anything from an alloy plate to a splinter -- the cargo range -- gets a
+   * random spin and a random speed of at most 15. Everything else takes the parent's position
+   * unchanged, and every one of them gets `_aiFlag` in `INWK+32` and bit 0 of `INWK+29` cleared.
+   *
+   * `SESCP` is this routine entered two bytes early with the escape pod's type already in X, and
+   * `SFRMIS` enters at `SFS1-2` -- the `LDA #%11111110` -- so all three share one body and differ
+   * only in what they arrive holding.
+   */
+  [[nodiscard]] NewShip SpawnChildShip(Bubble& _bubble, ShipBlock& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
+                                       std::uint8_t _parentType, std::uint8_t _aiFlag, std::uint8_t _shipType,
+                                       std::uint16_t& _blueprint) noexcept;
+
+  /// 6502: SESCP -- `SFS1` with the escape pod's type and the standard AI byte already loaded.
+  [[nodiscard]] NewShip SpawnEscapePod(Bubble& _bubble, ShipBlock& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
+                                       std::uint8_t _parentType, std::uint16_t& _blueprint) noexcept;
+
 } // namespace Elite

@@ -451,6 +451,65 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.121 Six routines that were only arithmetic, and four carries nobody had counted
+
+Slice 4a opens phase 4, and the first thing it needed was not an AI: it was the six vector routines
+`TACTICS` and `DOCKIT` are written on top of, none of which any earlier slice had reason to build.
+`TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6` and `DCS1` are pure sign-magnitude arithmetic over a
+ship block, which makes them the strongest kind of thing to compare and the easiest to get subtly
+wrong -- and this port has been wrong about a sign-magnitude carry six times already (§6.42, §6.53,
+§6.68, §6.87, §6.117 twice).
+
+**`DCS1` CALLS ITSELF, AND THE HEADER'S ARITHMETIC ONLY WORKS IF YOU NOTICE.** Its first
+instruction is `JSR P%+3` -- the address three bytes on, which is the instruction after the `JSR`.
+So the body runs as a subroutine, returns into its own first instruction, and runs again. Each pass
+subtracts the station's nose vector DOUBLED; the header says the routine subtracts it times four,
+and the four comes from the call. A port that read the `JSR` as anything else would place the ideal
+docking point half as far in front of the slot, and the docking computer would still dock -- just
+along a different approach. Two mutations settle it rather than the reading: making the loop run
+once and making it run three times are both caught by the shipped routine.
+
+**And the header is wrong about which axis.** Its third line reads `K3(8 7 6) = K3(8 7 6) -
+nosev_x_hi * 4`; the instruction reads `K%+NI%+14`, which is nosev_z_hi. A copy-paste, harmless
+because the code is what the port follows, and the seventh upstream comment this port has had to
+disagree with.
+
+**Then slice 4a-b, and four carries.** `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY` are how a ship
+arrives from inside the bubble, and three seams in `FlightSession` -- `SpawnAhead`, `SpawnChild`
+and `Anger` -- had been answering "no room" and "nothing happens" since slice 3d-d-v. All three are
+answered now, and each one turned up a flag:
+
+- **`FRS1` falls into `fq1`**, the same routine `DEATH` reaches (§6.117), so its `ROL A` on the
+  speed rotates in whatever the caller left. Here it is `LDA MSTG / ASL A`, which pushes BIT 7 OF
+  THE MISSILE TARGET into the carry. `MSTG` is 255 when nothing is locked on, so an unlocked
+  missile launches one unit faster than a locked one. Neither the `ORA` nor the `STA` between them
+  touches the flag.
+- **`SFS1`'s `JSR DORND` runs with the carry SET, always.** Reaching it means `CMP #PLT` did not
+  borrow -- that is exactly what the `BCC NOIL` above tested -- and the `PHA` between them leaves
+  flags alone. The port had a clear carry there, and the ONLY byte that disagreed was the
+  generator's own state: every field the routine writes was identical. A test that compared the
+  new ship and not `RAND` would have passed.
+- **`SFS1`'s `LDA #&FF / ROR A`** rotates in the `ASL A` from four instructions earlier, so the new
+  ship's pitch counter carries bit 7 of the random byte that set its roll.
+- **`ANGRY` reads two different type bytes** and the reader has to notice: it opens `CMP #SST` on
+  the type in A, and eleven instructions later does `LDA TYPE / CMP #CYL` on the flight loop's
+  global. `FRMIS` calls it with the target's type in A and whatever the loop last moved in `TYPE`,
+  so which ships turn hostile after a missile lock depends on loop state the caller never set.
+
+**A fixture that overlapped the thing it was comparing.** The `FRS1` sweep needed a full bubble to
+reach `NWSHP`'s refusal, and ten Cobras is what a full bubble looks like -- except that
+`SeedBubble` carves each ship's line heap off the top of the arena, and ten Cobras' worth of heap
+reaches down over `K%` itself. The comparison then failed on a ship block the fixture had
+overwritten. Ten canisters fill the same ten slots with a fraction of the heap. §6.93's lesson
+again: a fixture that cannot distinguish two things is worse than a smaller one that can.
+
+**And the ledger's names moved twice.** `CompassAxes` was `K3` under a name only one of its callers
+justified, and phase 4 has three; it is `K3Block` now. `SHIP_TYPE_ALLOY_PLATE` and the other four
+cargo types lived in `FlightLoop.h` because part 5 was the first routine to want them, and
+`Spawn.cpp` sits under the flight loop and cannot include it; they are in `ShipSlot.h` with the
+rest of the ship table. Neither is a design change. Both are the same observation: a name that
+records which routine asked first stops being true as soon as a second one asks.
+
 ### 6.120 The ledger was complete to a reader, a hundred files short to the tool, and one of the hundred was a screen
 
 `tools/inventory.py --strict` has existed since slice 0c with a docstring saying it was "not usable
@@ -4591,11 +4650,20 @@ Three things that is worth noting for the slices ahead:
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **4a Tactics** | `TACTICS` 1–7, `DOCKIT`, `ANGRY`, `FR1`, `FRS1`, `FRMIS`, `SFRMIS`, `SFS1`/`SFS2` spawning from ships, `HITCH`, `OOPS`, `EXNO*`, `ECMOF`, `SESCP`, `bomboff` / energy bomb. | Oracle for `TACTICS` decisions on sampled states (they consume `DORND`, so seed-locked); a replay: launch, get attacked, win. |
+| **4a Tactics** — **scoped 2026-09-05 into 4a-a … 4a-d (§6.121); two of the four are built** | `TACTICS` 1–7, `DOCKIT`, ✅ `ANGRY`, `FR1`, ✅ `FRS1`, `FRMIS`, `SFRMIS`, ✅ `SFS1`/✅ `SFS2` spawning from ships, `HITCH`, `OOPS`, `EXNO*`, `ECMOF`, ✅ `SESCP`, `bomboff` / energy bomb. **Plus the six prerequisites the row never named** (§6.121): ✅ `TAS1`, ✅ `VCSUB`/✅ `VCSU1`, ✅ `TAS3`/✅ `TAS4`, ✅ `TAS6` and ✅ `DCS1` — the vectors both `TACTICS` and `DOCKIT` are written on, none of them buildable before slice 3a put `MVT3` and the ship blocks in place. `OOPS`, `EXNO*`, `ECMOF` and `bomboff` were built with the flight loop in 3d-d-iii-b and are ✅ already; `HITCH` and `FRMIS` likewise. | Oracle for `TACTICS` decisions on sampled states (they consume `DORND`, so seed-locked); a replay: launch, get attacked, win.<br><br>**4a-a is built, 2026-09-05** — the six vectors in a new `Tactics.h/.cpp`, compared against the shipped routines on every byte they write over sweeps that cross each sign test. **17 mutations, 17 caught**, and two of them are the `JSR P%+3` reading: running the body once and running it three times are both caught, so "twice" is measured rather than believed.<br><br>**4a-b is built, 2026-09-05** — `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`, compared on the WHOLE bubble (slots, all ten blocks, the type counts, the junk count, `SLSP` and the line heap) rather than on the ship they build. **Three seams in `FlightSession` are answered**: `SpawnAhead`, `SpawnChild` and `Anger` had been refusing since 3d-d-v, and a fired missile now leaves the rail. Four carries found (§6.121), one of which the port had wrong and only the generator's state could show. |
 | **4b Explosions and death** ∥ | `DOEXP`, `EXLOOK`, `PTCLS2`, `SOS1`, `DEATH2`, the escape pod, `BAD`/`FAROF`/`FAROF2`, `SHD`/`DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle. |
 | **4c Main game loop** | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds. |
 | **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps. |
 | **4e Pause screen** — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows. |
+
+Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: nothing above can be compared before the thing below it exists.
+
+| Sub-slice | Scope | State |
+|---|---|---|
+| **4a-a** ✅ | `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6`, `DCS1` — the vectors, in `Tactics.h/.cpp` | **Built 2026-09-05**, 17 mutations and 17 caught |
+| **4a-b** ✅ | `FRS1`, `SESCP`, `SFS1`, `SFS2`, `ANGRY` — a ship arriving from inside the bubble, and the three `FlightSession` seams they answer | **Built 2026-09-05**, compared on the whole bubble |
+| **4a-c** | `TACTICS` 1–7 with `TA151`, `TA152`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6` — the AI itself, and the one routine in phase 4 that consumes `DORND` on every pass | not started |
+| **4a-d** | `DOCKIT` with `GOPL` and `PH22` — the docking computer, which `DOKEY` already presses keys for (`ControlEffects::RunDockingComputer`) | not started |
 
 ### Phase 5 — Sound and music
 
@@ -4624,7 +4692,7 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | not started; tactics is long but well documented; 4e (the pause screen) added 2026-09-05 (§6.120) |
+| 4 | 5 | 8–12 | **started 2026-09-05**: 4a-a and 4a-b built, 4a-c (`TACTICS`) and 4a-d (`DOCKIT`) next; 4e (the pause screen) added the same day (§6.120) |
 | 5 | 2 | 4–7 | not started; the synthesiser is the unknown |
 | **Total** | **24** | **40–60** | before modernisation |
 
@@ -4680,6 +4748,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Phase 4 opens: slices 4a-a and 4a-b** (§6.121). The six vector routines `TACTICS` and `DOCKIT` are built on -- `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6` and `DCS1`, none of which the 4a scope line named -- then the five that put a ship into the bubble from inside it, `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`. **Three `FlightSession` seams are answered** and a fired missile leaves the rail for the first time. **`DCS1` calls itself** with `JSR P%+3` so its body runs twice, which is where the header's "times four" comes from, and both the once and the thrice mutation are caught. Four carries, one of them a defect the port had: `SFS1`'s `DORND` runs with the carry set by the `CMP #PLT` above it, and the only byte that disagreed was the generator's own state. `FRS1` reaches the same `fq1` as `DEATH` and its carry is bit 7 of `MSTG`, so an unlocked missile is one unit faster than a locked one; `ANGRY` tests the type in A and then the flight loop's `TYPE`, which are different bytes. `K3Block` and the five cargo type numbers move to where the ship table is, because a name that records which routine asked first stops being true when a second one asks. **31 of 35 DEATH mutations caught**, the three survivors closed or proved equivalent: a direct `Ze` sweep now crosses `CMP #245` and compares the distance bytes `DEATH` overwrites, and `death-view6` is provably equivalent because `TTX66`'s only read of the view is `BNE`. |
 | 2026-09-05 | **DEATH's three carries, the strict ledger, the pause screen, and the documentation pass** (§6.117, §6.119, §6.120). Comparing the death scene's five `K%` blocks byte for byte instead of `FRIN` found the port one random step off on the fifth piece: `fq1`'s `ROL A` takes the plate-or-canister carry, `Ze`'s first `DORND` takes the previous piece's, and its second is `DORND2` -- a `CLC` -- so the `ROL` before it decides nothing; `U%`'s `STA KL` is a dead byte on this build and `KLO+0` is no longer cleared. **`tools/inventory.py --strict` is green for the first time and CI runs it**: 101 of 710 files had no row, ninety-one by notation the tool now expands and ten real, four of them ported. Reading the build against the phases found the PAUSE SCREEN in no slice -- `DK4`, thirteen toggles behind `TGINT`, the only writer of `PLTOG` -- which is slice 4e now, and the energy bomb's and hyperspace's VIC-II effects in no ADR, which are ADR-005 §1's second open item. §6.119 records the mutation worktree whose empty submodule made every mutant read as caught, and the baseline rule that now stands in four places. The documentation pass brought `Design/README.md`, the risk register (R3 closed, R9 realised, R11 validated), ADR-003 §4, ADR-005 §1, the reference and runner READMEs, AGENTS.md and the plan's §1.2 to the tree as it is: 313 tests, nine checks, phases 0 to 3 built. |
 | 2026-09-05 | **The charts, F1 and F2** (§6.115). They were refused in the dispatch and the refusal had gone stale: `TT22` and `TT23` were ported and oracle-compared, and `ChartShapes` -- the fuel circle and the system discs -- said in its own comment that it was a seam only "until" slice 3c existed. Slice 3c landed in September. `FlightSession` implements it over `CIRCLE2` and `SUN`, and what was really missing was the KEYBOARD: `TT17`'s chart path (ported now, all 32 combinations of its five key-logger entries compared against the shipped routine), `TT102` reached every pass rather than on a key event, and those passes paced -- 165 crosshair steps a second otherwise. The arrows aim on a chart and steer in flight, so the scan drops the steering keys while a chart is up; that rule is the port's own and is marked as such. **Up presses no shift and down presses one**, because `TT17`'s `EOR #%11111110` makes the unshifted key step `QQ10` negative -- found by pressing the key, not by reading the code. `D`, `F` and hyperspace stay refused, and `F` is named as the nearest: `MT26` is ported and has nowhere to put the name yet. |
 | 2026-09-05 | **`DEATH`, and phase 3 is complete.** The death screen with `BOX`, `U%`, `Ze` and `fq1` -- and `DET1` deliberately NOT, because on this build it is one byte. Three findings in one routine (§6.117), all of them the source describing a different machine. **`DET1` is a bare `RTS`**, so the `LDX #24` before it goes nowhere and the A the comment says it sets to 6 is whatever `RES2` left -- **224**, measured off the oracle because nothing meant to put it there. **`ASL DELTA` twice MULTIPLIES** where its comment says "divide by 4", so the wreckage flies past at 12 rather than stopped. And the debris loop makes **five** pieces, not four: `LDA FRIN+4 / BEQ D1` tests the slot after filling one, and half of them arrive already dead. The rate is the point -- three documentation errors in one routine, after §6.109 found `HFS2`'s two step sizes swapped against its own code: **every time this port has trusted a comment over an instruction it has been wrong.** Wired at the app's death exit. 308 tests green. |

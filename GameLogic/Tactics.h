@@ -4,6 +4,7 @@
 #include "Canvas.h"
 #include "EliteTypes.h"
 #include "Scanner.h"
+#include "ShipMove.h"
 #include "ShipSlot.h"
 
 #include <cstdint>
@@ -42,8 +43,7 @@ namespace Elite
    *
    * `LDY U` after the call restores Y for a caller that wants it, and no caller in this build does.
    */
-  void SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math,
-                        std::uint8_t _at) noexcept;
+  void SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math, std::uint8_t _at) noexcept;
 
   /*
    * 6502: VCSUB -- all three axes, so `K3` becomes the vector FROM the other object TO this ship.
@@ -117,5 +117,28 @@ namespace Elite
   inline constexpr std::uint8_t ORIENTATION_NOSE = 10;
   inline constexpr std::uint8_t ORIENTATION_ROOF = 16;
   inline constexpr std::uint8_t ORIENTATION_SIDE = 22;
+
+  /// 6502: LDA #2 / STA (INF),Y with Y = 28, then `ASL A` and Y = 30 -- accelerate by two and dive
+  /// at four, and the four is the two doubled rather than a second constant.
+  inline constexpr std::uint8_t ANGRY_ACCELERATION = 2;
+
+  /// 6502: bit 5 of NEWB -- "this ship is on the station's side", so hitting it angers the station
+  /// as well; and bit 2, which is the hostile flag `ANGRY` sets.
+  inline constexpr std::uint8_t NEWB_STATION_ALLY = 0x20;
+  inline constexpr std::uint8_t NEWB_HOSTILE = 0x04;
+
+  /*
+   * 6502: ANGRY -- tell the ship in slot `_slot` that we just hit it.
+   *
+   * FOUR THINGS AND A TRAP. It makes the station hostile if the ship was the station or was one of
+   * its own (`NEWB` bit 5); it turns the ship's AI on, but ONLY if the AI byte was already
+   * non-zero, so a cargo canister stays a cargo canister; it accelerates and dives it; and it sets
+   * the ship's own hostile bit -- but that last test reads `TYPE`, the flight loop's global, and
+   * not the type this routine was called with. `FRMIS` calls it with the TARGET's type in A and
+   * whatever the loop last moved in `TYPE`, so which ships turn hostile after a missile lock
+   * depends on loop state the caller never set. The port keeps both bytes separate because the
+   * original does (§6.121).
+   */
+  void Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, std::uint8_t _type) noexcept;
 
 } // namespace Elite
