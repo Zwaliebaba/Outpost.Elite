@@ -7,7 +7,7 @@ reversed to public-and-accepted. Review at the end of each phase. A
 risk that fires is marked **🔥 realised** with what happened — the useful part of a register is
 the record of which guesses were right.
 
-**Reviewed 2026-09-05, with phases 0, 1, 2, 3 and 5 built and phase 4 built but for slice 4d.**
+**Reviewed 2026-09-05, with phases 0 to 5 built: slice 4d closed phase 4 and with it every slice before phase 6.**
 Two closed (R2, R3), five realised and recorded (R1, R4, R5, R9, R11), two met (R10, R12). R6 is
 open on evidence rather than on work: the sound PLAYERS are oracle-exact and the synthesiser has
 never been listened to beside the machine. **R5 changed shape rather than closing** — see its row.

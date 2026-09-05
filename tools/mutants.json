@@ -391,7 +391,7 @@
         "TheMissionText",
         "TheMissions"
       ],
-      "tests": 5,
+      "tests": 9,
       "note": [
         "The four control codes a mission briefing is made of (plan section 6.149).",
         "",
