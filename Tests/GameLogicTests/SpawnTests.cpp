@@ -8,6 +8,7 @@
 #include "Stardust.h"
 #include "ShipBlueprint.h"
 #include "ShipSlot.h"
+#include "Rng.h"
 #include "Spawn.h"
 
 #include <array>
@@ -679,6 +680,359 @@ namespace GameLogicTests
       Logger::WriteMessage(("SOLAR: " + std::to_string(compared) + " systems, " + std::to_string(bred) + " with Trumbles, " +
                             std::to_string(drawn) + " marked bytes")
                              .c_str());
+    }
+  };
+
+  /*
+   * 6502: Ze -- the debris block, on its own rather than through `DEATH`.
+   *
+   * IT IS HERE BECAUSE `DEATH` HIDES HALF OF IT. Two mutations walked through the death-scene
+   * comparison: the distance `Ze` writes into `INWK+1`, `INWK+4` and `INWK+7`, which `DEATH`'s own
+   * loop zeroes four instructions later, and the `CMP #245` whose carry becomes the AI flag, which
+   * a five-piece scene reaches with five random bytes and never with 245. Neither is dead code --
+   * `Ze` has four callers and three of them are phase 4 (`GTHG` and main game loop parts 3 and 4),
+   * so both bytes are load-bearing somewhere the port has not got to yet (§6.121).
+   *
+   * The generator is set directly rather than run forward, which is what makes 245 reachable: the
+   * byte the compare reads is the PREVIOUS call's, so it is `RAND+1` on entry.
+   */
+  TEST_CLASS(TheDebrisBlock)
+  {
+  public:
+    TEST_METHOD(TheDebrisBlockMatchesZe)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const SpawnLabels at(oracle);
+      const std::uint16_t ze = oracle.Label("Ze");
+
+      // 244, 245 and 246 are the compare's two sides and the boundary itself.
+      const std::uint8_t PREVIOUS[] = {0u, 1u, 128u, 244u, 245u, 246u, 255u};
+      const std::uint8_t OTHERS[] = {0u, 0x5Au, 0xFFu};
+
+      Cpu6502 cpu = oracle.Fresh();
+      std::uint32_t compared = 0;
+      std::uint32_t aggressive = 0;
+
+      for (const std::uint8_t previous : PREVIOUS)
+      {
+        for (const std::uint8_t other : OTHERS)
+        {
+          for (const bool carryIn : {false, true})
+          {
+            const std::array<std::uint8_t, 4> seed = {other, previous, static_cast<std::uint8_t>(other ^ 0x33u),
+                                                      static_cast<std::uint8_t>(previous ^ 0x0Fu)};
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
+            }
+
+            // Junk in every byte, so a block `ZINF` failed to clear would show.
+            Elite::ShipBlock work{};
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              work[byte] = static_cast<std::uint8_t>(0xA0u + byte);
+              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = work[byte];
+            }
+
+            cpu.c = carryIn;
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(ze, 20'000);
+            Assert::IsTrue(run.completed, L"Ze returned");
+
+            Elite::Rng rng;
+            rng.SetState(seed);
+            const Elite::RngResult got = Elite::SeedDebris(work, rng, carryIn);
+
+            const std::wstring where =
+              Widen("Ze previous " + std::to_string(previous) + " other " + std::to_string(other) + (carryIn ? " C=1" : " C=0"));
+
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                               (where + L": INWK+" + std::to_wstring(byte)).c_str());
+            }
+            for (std::size_t byte = 0; byte < 4u; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + byte)], rng.State()[byte],
+                               (where + L": RAND+" + std::to_wstring(byte)).c_str());
+            }
+
+            // 6502: the fall-through into `DORND2`, so what comes back is A and X of the SECOND
+            // call -- and its carry is cleared by that label rather than rotated in.
+            Assert::AreEqual(cpu.a, got.value, (where + L": A").c_str());
+            Assert::AreEqual(cpu.x, got.previous, (where + L": X").c_str());
+
+            aggressive += ((work[32] & 1u) != 0u) ? 1u : 0u;
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(7u * 3u * 2u, compared, L"the whole sweep ran");
+      Assert::IsTrue(aggressive > 0u, L"and the CMP #245 was crossed on the set side");
+      Assert::IsTrue(aggressive < compared, L"and on the clear side");
+    }
+  };
+
+  /*
+   * Slice 4a-b: the three ways a ship arrives from inside the bubble.
+   *
+   * `FRS1` puts one in front of us, `SFS1` drops one out of another ship, and `SESCP` is `SFS1`
+   * entered two bytes early. All three end in `NWSHP`, so all three are compared on the WHOLE
+   * bubble -- the slot list, all ten blocks, the type counts, the junk count, `SLSP` and the line
+   * heap -- rather than on the block they built. A spawn that fills in the right ship and leaves
+   * the heap pointer wrong is the failure that matters, and only the arena can show it.
+   */
+  TEST_CLASS(TheChildSpawns)
+  {
+  public:
+    /*
+     * 6502: FRS1, and the `fq1` it falls into.
+     *
+     * The sweep crosses `MSTG`'s bit 7 in both directions, because that bit is the carry `fq1`
+     * rotates into the speed (§6.121) and it is invisible in every other byte. 255 is what `MSTG`
+     * holds with no lock, so the common case is the one where the carry is SET.
+     */
+    TEST_METHOD(TheShipAheadMatchesFRS1)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const SpawnLabels at(oracle);
+      const std::uint16_t frs1 = oracle.Label("FRS1");
+      const std::uint16_t mstg = oracle.Label("MSTG");
+      const std::uint16_t delta = oracle.Label("DELTA");
+
+      const std::uint8_t TARGETS[] = {0u, 1u, 3u, 0x7Fu, 0x80u, 0xC0u, 0xFFu};
+      const std::uint8_t SPEEDS[] = {0u, 1u, 12u, 27u, 0xFFu};
+      const std::vector<std::vector<std::uint8_t>> FLEETS = {
+        {},
+        {Elite::SHIP_TYPE_COBRA_MK3},
+        // Full, so `NWSHP` must refuse -- and CANISTERS rather than Cobras, because `SeedBubble`
+        // carves each ship's heap off the top and ten Cobras' worth reaches down over `K%`
+        // itself. A fixture that overlaps the thing it is comparing proves nothing.
+        {5u, 5u, 5u, 5u, 5u, 5u, 5u, 5u, 5u, 5u},
+      };
+
+      std::uint32_t compared = 0;
+      std::uint32_t refused = 0;
+
+      for (const std::uint8_t target : TARGETS)
+      {
+        for (const std::uint8_t speed : SPEEDS)
+        {
+          for (const std::vector<std::uint8_t>& fleet : FLEETS)
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            Elite::Bubble bubble;
+            Elite::LineHeap heap;
+            SeedBubble(cpu, bubble, heap, at, fleet);
+
+            cpu.memory[mstg] = target;
+            cpu.memory[delta] = speed;
+
+            Elite::ShipBlock work{};
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              work[byte] = static_cast<std::uint8_t>(0xB0u + byte);
+              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = work[byte];
+            }
+
+            std::uint16_t blueprint = 0x1234u;
+            cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint);
+            cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+
+            cpu.x = Elite::SHIP_TYPE_MISSILE;
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(frs1, 200'000);
+            Assert::IsTrue(run.completed, L"FRS1 returned");
+
+            const Elite::NewShip made = Elite::SpawnShipAhead(bubble, work, Elite::SHIP_TYPE_MISSILE, speed, target, blueprint);
+
+            const std::wstring where =
+              Widen("FRS1 MSTG " + std::to_string(target) + " DELTA " + std::to_string(speed) + " fleet " + std::to_string(fleet.size()));
+            CompareBubble(cpu, bubble, heap, at, where);
+
+            for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                               (where + L": INWK+" + std::to_wstring(byte)).c_str());
+            }
+
+            // 6502: the carry `NWSHP` returns -- SET when the ship went in, CLEAR when it did not.
+            Assert::AreEqual(cpu.c, made.created, (where + L": the carry").c_str());
+            refused += made.created ? 0u : 1u;
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(7u * 5u * 3u, compared, L"the whole sweep ran");
+      Assert::IsTrue(refused > 0u, L"and a full bubble refused at least once");
+    }
+
+    /*
+     * 6502: SFS1 and SESCP.
+     *
+     * Four things have to be crossed and the sweep crosses all four: the parent being a STATION
+     * (which moves the child out along three axes at speed 32) or not, the new type being inside
+     * the cargo range (which gives it a random tumble) or outside it, the bubble having room or
+     * not, and the generator, whose two bytes land in different fields.
+     *
+     * `INWK` is compared afterwards as carefully as the bubble is, because the routine's whole
+     * shape is a save and a restore around `NWSHP`: a port that forgot the restore would build the
+     * right ship and hand its caller a workspace full of the child.
+     */
+    TEST_METHOD(TheChildMatchesSFS1)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const SpawnLabels at(oracle);
+      const std::uint16_t sfs1 = oracle.Label("SFS1");
+      const std::uint16_t sescp = oracle.Label("SESCP");
+      const std::uint16_t typeAt = oracle.Label("TYPE");
+      const std::uint16_t xx3 = oracle.Label("XX3");
+
+      const std::uint8_t PARENTS[] = {Elite::SHIP_TYPE_STATION, Elite::SHIP_TYPE_COBRA_MK3, Elite::SHIP_TYPE_ASTEROID};
+
+      /*
+       * FOUR SEEDS, AND THE REASON IS A SURVIVING MUTATION. `SFS1` ends the cargo branch with
+       * `LDA #&FF / ROR A`, whose carry is the `ASL A` two instructions earlier -- bit 7 of the
+       * random byte. With one seed that bit never changes, so a port that rotated in a constant
+       * agreed on every case. These four put both values into byte 29 (§6.124).
+       */
+      const std::array<std::array<std::uint8_t, 4>, 4> SEEDS = {
+        {{0x31u, 0xF5u, 0x7Au, 0x0Cu}, {0x11u, 0x22u, 0x33u, 0x44u}, {0x9Cu, 0x4Eu, 0x07u, 0xB3u}, {0xFFu, 0x01u, 0x80u, 0x7Fu}}};
+      const std::uint8_t CHILDREN[] = {Elite::SHIP_TYPE_ALLOY_PLATE, Elite::SHIP_TYPE_CANISTER, Elite::SHIP_TYPE_SPLINTER,
+                                       Elite::SHIP_TYPE_MISSILE, Elite::SHIP_TYPE_COBRA_MK3};
+      const std::uint8_t FLAGS[] = {0u, Elite::SPAWN_CHILD_AI, 0xA5u};
+
+      std::uint32_t compared = 0;
+      std::uint32_t tumbled = 0;
+      std::uint32_t pitchSet = 0;
+      std::uint32_t pitchClear = 0;
+
+      for (const std::uint8_t parentType : PARENTS)
+      {
+        for (const std::uint8_t childType : CHILDREN)
+        {
+          for (const std::uint8_t flag : FLAGS)
+          {
+            for (int escapePod = 0; escapePod < 2; ++escapePod)
+            {
+              for (const std::array<std::uint8_t, 4>& seed : SEEDS)
+              {
+                Cpu6502 cpu = oracle.Fresh();
+                Elite::Bubble bubble;
+                Elite::LineHeap heap;
+                SeedBubble(cpu, bubble, heap, at, {Elite::SHIP_TYPE_COBRA_MK3, parentType});
+
+                /*
+               * The station's nose vector with its signs BOTH WAYS, because `SFS2` reads them as
+               * sign-magnitude and `SeedBubble`'s ramp is all positive: a mutation that dropped
+               * the sign entirely survived the first version of this sweep (§6.124).
+               */
+                bubble.blocks[1][10] = 0x60u;
+                bubble.blocks[1][12] = 0xE0u;
+                bubble.blocks[1][14] = 0x1Fu;
+                for (const std::size_t byte : {std::size_t{10}, std::size_t{12}, std::size_t{14}})
+                {
+                  cpu.memory[static_cast<std::uint16_t>(at.kPercent + Elite::SHIP_BLOCK_SIZE + byte)] = bubble.blocks[1][byte];
+                }
+
+                constexpr std::uint8_t PARENT_SLOT = 1;
+                const std::uint16_t parentBlock = static_cast<std::uint16_t>(at.kPercent + PARENT_SLOT * Elite::SHIP_BLOCK_SIZE);
+                cpu.memory[at.inf] = static_cast<std::uint8_t>(parentBlock);
+                cpu.memory[static_cast<std::uint16_t>(at.inf + 1)] = static_cast<std::uint8_t>(parentBlock >> 8);
+                cpu.memory[typeAt] = parentType;
+
+                for (std::size_t byte = 0; byte < 4u; ++byte)
+                {
+                  cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
+                }
+                Elite::Rng rng;
+                rng.SetState(seed);
+
+                Elite::ShipBlock work{};
+                for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+                {
+                  work[byte] = static_cast<std::uint8_t>(0xC0u + byte);
+                  cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = work[byte];
+                  cpu.memory[static_cast<std::uint16_t>(xx3 + byte)] = 0x5Au;
+                }
+
+                std::uint16_t blueprint = 0x1234u;
+                cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint);
+                cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+
+                Elite::MathWorkspace math;
+                Elite::NewShip made{};
+                std::wstring where;
+
+                if (escapePod != 0)
+                {
+                  const Elite::Testing::RunResult run = cpu.CallSubroutine(sescp, 200'000);
+                  Assert::IsTrue(run.completed, L"SESCP returned");
+                  made = Elite::SpawnEscapePod(bubble, work, rng, math, PARENT_SLOT, parentType, blueprint);
+                  where = Widen("SESCP parent " + std::to_string(parentType));
+                }
+                else
+                {
+                  cpu.a = flag;
+                  cpu.x = childType;
+                  const Elite::Testing::RunResult run = cpu.CallSubroutine(sfs1, 200'000);
+                  Assert::IsTrue(run.completed, L"SFS1 returned");
+                  made = Elite::SpawnChildShip(bubble, work, rng, math, PARENT_SLOT, parentType, flag, childType, blueprint);
+                  where = Widen("SFS1 parent " + std::to_string(parentType) + " child " + std::to_string(childType) + " flag " +
+                                std::to_string(flag));
+                }
+
+                CompareBubble(cpu, bubble, heap, at, where);
+
+                for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+                {
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                                   (where + L": INWK+" + std::to_wstring(byte)).c_str());
+                }
+                for (std::size_t byte = 0; byte < 4u; ++byte)
+                {
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + byte)], rng.State()[byte],
+                                   (where + L": RAND+" + std::to_wstring(byte)).c_str());
+                }
+
+                Assert::AreEqual(cpu.c, made.created, (where + L": the carry").c_str());
+                Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.xx0] | (cpu.memory[at.xx0 + 1] << 8)), blueprint,
+                                                (where + L": XX0 put back").c_str());
+
+                tumbled += (childType >= Elite::SHIP_TYPE_ALLOY_PLATE && childType <= Elite::SHIP_TYPE_SPLINTER) ? 1u : 0u;
+                if (made.created)
+                {
+                  pitchSet += ((bubble.blocks[made.slot][29] & 0x80u) != 0u) ? 1u : 0u;
+                  pitchClear += ((bubble.blocks[made.slot][29] & 0x80u) == 0u) ? 1u : 0u;
+                }
+                ++compared;
+              }
+            }
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(3u * 5u * 3u * 2u * 4u, compared, L"the whole sweep ran");
+      Assert::IsTrue(tumbled > 0u, L"and the cargo range was reached");
+
+      // 6502: LDA #&FF / ROR A -- both answers, so the carry it rotates in is observable.
+      Assert::IsTrue(pitchSet > 0u, L"and byte 29 came out with bit 7 set");
+      Assert::IsTrue(pitchClear > 0u, L"and with it clear");
     }
   };
 

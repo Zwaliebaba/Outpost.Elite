@@ -24,6 +24,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 /// Distinct from every exception the code under test might throw, so the runner can tell a
 /// failed assertion from a genuine crash in the port.
@@ -89,8 +90,23 @@ namespace Microsoft::VisualStudio::CppUnitTestFramework
   class Assert
   {
   public:
+    /*
+     * MSVC REJECTS WHAT THIS WOULD HAPPILY COMPARE, and the gap is invisible from here (§6.116).
+     *
+     * The real `Assert::AreEqual` resolves `ToString<T>` and static-asserts when there is none, so
+     * a type this shim stringifies through a stream is not necessarily a type the Windows leg will
+     * accept. `std::vector<bool>` is the trap that found it: it is bit-packed, `operator[]` returns
+     * a PROXY rather than a `bool`, and the proxy is what `T` deduces to -- so a comparison that
+     * built and passed on Ubuntu failed MSVC with C2338 and cost a red CI run.
+     *
+     * This does not mirror MSVC's whole `ToString` set, which would be a guess. It rejects the one
+     * case that has actually bitten, by name, where the fix is to store `std::uint8_t` instead.
+     */
     template <typename T> static void AreEqual(const T& _expected, const T& _actual, const wchar_t* _message = nullptr)
     {
+      static_assert(!std::is_same_v<std::remove_cvref_t<T>, std::vector<bool>::reference>,
+                    "std::vector<bool>'s proxy has no MSVC ToString: store std::uint8_t and compare that (section 6.116).");
+
       if (!(_expected == _actual))
       {
         throw ShimFailure("AreEqual: expected " + ShimShow(_expected) + " actual " + ShimShow(_actual) + " -- " + ShimNarrow(_message));

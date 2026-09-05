@@ -22,16 +22,20 @@ namespace Elite
    */
 
   /*
-   * 6502: DAMP, DJD and JSTK -- three of the configuration bytes the title screen toggles.
+   * 6502: DAMP, DJD and JSTK -- three of the configuration bytes the PAUSE screen toggles.
    *
-   * `DKS3` toggles a byte between 0 and &FF with `EOR #&FF`, and indexes the block as `DAMP-&40,X`
-   * from the key code, which is why they are adjacent in memory and in that order. TWO OF THE THREE
-   * READ BACKWARDS: `DAMP` non-zero means damping is OFF and `DJD` non-zero means auto-recentre is
-   * OFF, because the options are phrased as the thing being disabled. `JSTK` is the plain way round.
+   * `DKS3` toggles a byte between 0 and &FF with `EOR #&FF`. On this build it walks the block as
+   * `DAMP,Y` and compares the key against `TGINT,Y`, a table of key codes in block order -- the
+   * `DAMP-&40,X` of the BBC, indexed straight from the key code, is what an earlier version of this
+   * comment described, and it is not here. The screen that does the walking is `DK4`, which `DOKEY`
+   * falls into every frame, and it is not ported yet (slice 4e, §6.120). TWO OF THE THREE READ
+   * BACKWARDS: `DAMP` non-zero means damping is OFF and `DJD` non-zero means auto-recentre is OFF,
+   * because the options are phrased as the thing being disabled. `JSTK` is the plain way round.
    *
-   * The block holds three more the port keeps elsewhere -- `DNOIZ` is the sound's, `FLH` is
-   * `FlightStatus`'s damage flash, and `JSTGY` inverts the joystick's Y axis, which on the C64 is
-   * read inside `RDKEY` and so never reaches `GameLogic`.
+   * The block holds ten more the port keeps elsewhere or not yet -- `DNOIZ` is the sound's, `FLH`
+   * is `FlightStatus`'s damage flash, `JSTGY` inverts the joystick's Y axis (read inside `RDKEY`,
+   * so it never reaches `GameLogic`), `PLTOG` is `PlanetSunState`'s, and the music's five wait for
+   * phase 5.
    */
   struct ControlOptions
   {
@@ -47,8 +51,8 @@ namespace Elite
      * on also changes what the universe puts in front of you. One configuration byte, two
      * unrelated effects, and only one of them is what its name says.
      *
-     * It is in this block because the block is what it is: `DKS3` toggles `DAMP-&40,X` from the
-     * key code, so these four are adjacent in memory because they are adjacent on the keyboard.
+     * It is in this block because the block is what it is: `DKS3` toggles `DAMP,Y` for the key
+     * `TGINT,Y` names, so the block's order is the key table's order and nothing else.
      */
     std::uint8_t authorNames = 0;
   };
@@ -106,6 +110,27 @@ namespace Elite
    * is why this is not an input parameter.
    */
   using KeyLogger = std::array<std::uint8_t, 65>;
+
+  /*
+   * 6502: U% -- clear the flight keys, which is NOT `ZEKTRAN` however much it looks like one.
+   *
+   * `LDA #0 / LDY #56 / .DKL3 STA KLO,Y / DEY / BNE DKL3 / STA KL`. It walks DOWN to one, so it
+   * clears `KLO+1` to `KLO+56` -- fifty-six bytes of sixty-five, and `ZEKTRAN` clears the lot.
+   * The nine it leaves alone are `KLO+0` and the eight above `KY20`. `DEATH` is the only caller:
+   * the keys are wiped before the death sequence runs the flight loop, so nothing the player was
+   * holding when they died steers the wreckage.
+   *
+   * THE `STA KL` AFTER THE LOOP IS NOT `KLO+0`. On the BBC `KL` and `KLO` are the same table, so
+   * the store is the loop's missing zeroth byte; on the C64 `KL` is a separate byte at &441 that
+   * `DK4` writes `thiskey` into and NOTHING reads, so the store clears dead memory and the port
+   * has no byte to clear for it (§6.117). The first version of this routine cleared `KLO+0` for
+   * it, which the shipped game does not.
+   */
+  /// 6502: LDY #56 -- the highest index `U%` clears; the lowest is 1, because `DEY / BNE` stops
+  /// before zero.
+  inline constexpr std::size_t FLIGHT_KEYS_CLEARED = 56;
+
+  void ClearFlightKeys(KeyLogger& _keys) noexcept;
 
   /// 6502: KY1 to KY7 -- offsets of the flight keys within `KLO`, which are their key numbers.
   inline constexpr std::size_t KEY_SLOW_DOWN = 9;   ///< 6502: KY1 -- "?"

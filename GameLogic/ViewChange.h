@@ -155,11 +155,29 @@ namespace Elite
    */
   void DrawBorder(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _rows) noexcept;
 
+  /*
+   * 6502: BOX -- the whole-screen border, which is `BOX2` with a floor under it.
+   *
+   * `LDX #199 / JSR BOXS` rules a line across the bottom pixel row, `STA SCBASE+&1F1F` puts the
+   * byte the rule cannot reach into the bottom right corner, and then `LDX #25 / EQUB &2C` falls
+   * into `BOX2` -- the same `BIT abs` trick §6.79 records, so the border gets 25 rows and not 18.
+   *
+   * `TT66` does not call this; `DEATH` does, once, over the screen `TT66` has just cleared.
+   */
+  void DrawFullBorder(Canvas& _canvas, DrawWorkspace& _draw) noexcept;
+
   /// 6502: LDX #18 -- what a `JSR BOX2` gets, which is the space view's height in character rows.
   inline constexpr std::uint8_t BORDER_ROWS_SPACE_VIEW = 18;
 
   /// 6502: LDX #25 -- what falling through from `TTX66K` keeps, which is the whole screen.
   inline constexpr std::uint8_t BORDER_ROWS_TEXT_SCREEN = 25;
+
+  /// 6502: LDX #199 -- the bottom pixel row, which `BOX` rules across before it draws the edges.
+  inline constexpr std::uint8_t BOTTOM_RULE_ROW = 199;
+
+  /// 6502: SCBASE+&1F1F -- the bottom right byte, which `BOXS` leaves out because `HLOIN` draws
+  /// x 0 to 255 and the screen is 320 wide.
+  inline constexpr std::uint16_t BOTTOM_RIGHT_CORNER = 0x1F1F;
 
   /*
    * 6502: zonkscanners -- clear bit 4 of byte 31 in every ship in the bubble.
@@ -220,8 +238,9 @@ namespace Elite
     virtual void SetPalette(std::uint8_t _colour) = 0;
 
     /// 6502: LDY #sfxboop / JMP NOISE -- the refusal noise `WARP` makes when it will not warp.
-    /// Returns the carry, as `DashboardEffects::PlaySound` does; `WARP` tail-calls and drops it.
-    virtual bool PlaySound(std::uint8_t _effect) = 0;
+    /// Takes and returns the carry, as `DashboardEffects::PlaySound` does and for the reason
+    /// written out there (§6.99); `WARP` tail-calls and drops both, so its `_carryIn` is false.
+    virtual bool PlaySound(std::uint8_t _effect, bool _carryIn) = 0;
   };
 
   /// 6502: sfxboop -- the effect number `WARP` asks for when it refuses.

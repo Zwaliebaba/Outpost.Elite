@@ -142,6 +142,7 @@ namespace GameLogicTests
       {
         return;
       }
+      CompareAgainstImage("TGINT", Elite::OPTION_KEY_TABLE);
       CompareAgainstImage("SNE", Elite::SINE_TABLE);
       CompareAgainstImage("ACT", Elite::ARCTAN_TABLE);
     }
@@ -201,6 +202,30 @@ namespace GameLogicTests
      * own that the oracle never loads (see `OracleImage::LoaderInstance`). Everything else about
      * the comparison is the same -- 280 bytes at a label, against the bytes the port ships.
      */
+    /// 6502: the sixteen sound effects' eight tables, SEVENS, and the two tunes as one region.
+    TEST_METHOD(TheSoundTablesMatch)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+      CompareAgainstImage("SFXPR", Elite::EFFECT_PRIORITY_TABLE);
+      CompareAgainstImage("SFXCNT", Elite::EFFECT_COUNT_TABLE);
+      CompareAgainstImage("SFXFQ", Elite::EFFECT_FREQUENCY_TABLE);
+      CompareAgainstImage("SFXCR", Elite::EFFECT_CONTROL_TABLE);
+      CompareAgainstImage("SFXATK", Elite::EFFECT_ATTACK_TABLE);
+      CompareAgainstImage("SFXSUS", Elite::EFFECT_SUSTAIN_TABLE);
+      CompareAgainstImage("SFXFRCH", Elite::EFFECT_FREQUENCY_CHANGE_TABLE);
+      CompareAgainstImage("SFXVCH", Elite::EFFECT_VOLUME_RATE_TABLE);
+      CompareAgainstImage("SEVENS", Elite::SEVENS_TABLE);
+      CompareAgainstImage("musicstart", Elite::MUSIC_DATA);
+
+      // The theme's offset is derived from the two INCBINs' sizes; the label says where it really is.
+      const OracleImage& oracle = OracleImage::Instance();
+      Assert::AreEqual<int>(oracle.Label("THEME") - 1 - oracle.Label("musicstart"), Elite::MUSIC_THEME_OFFSET,
+                            L"THEME-1 as an offset from musicstart");
+    }
+
     TEST_METHOD(TheDashboardColourTablesMatch)
     {
       if (LoaderMissing())

@@ -7,6 +7,7 @@
 #include "Charts.h"
 #include "Controls.h"
 #include "Dashboard.h"
+#include "Explosion.h"
 #include "ExtendedTokens.h"
 #include "Flight.h"
 #include "FlightLoop.h"
@@ -23,11 +24,14 @@
 #include "TextPrint.h"
 #include "Tokens.h"
 #include "ViewChange.h"
+#include "Music.h"
+#include "SoundEffects.h"
 
 #include <cstdint>
 
 namespace Outpost
 {
+  class SoundOutput;
 
   /*
    * The world a flight happens in, and the six seams the flight code reaches through.
@@ -65,13 +69,15 @@ namespace Outpost
                               public Elite::ShipDrawEffects,
                               public Elite::ControlEffects,
                               public Elite::SightEffects,
+                              public Elite::ExplosionEffects,
                               public Elite::ViewEffects,
                               public Elite::ChartShapes
   {
   public:
     FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
                   Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::CommanderBlock& _commander, Elite::Rng& _rng,
-                  Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions, std::uint8_t& _techLevel) noexcept;
+                  Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions, std::uint8_t& _techLevel,
+                  Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music, SoundOutput& _audio) noexcept;
 
     FlightSession(const FlightSession&) = delete;
     FlightSession& operator=(const FlightSession&) = delete;
@@ -105,7 +111,7 @@ namespace Outpost
 
     // ---- Elite::FlightLoopEffects, and Elite::DashboardEffects under it -------------------------
 
-    bool PlaySound(std::uint8_t _effect) override;
+    bool PlaySound(std::uint8_t _effect, bool _carryIn) override;
     bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override;
     void StopSound(std::uint8_t _effect) override;
 
@@ -113,12 +119,12 @@ namespace Outpost
     void StartDockingMusic() override;
     void StopDockingMusic() override;
     [[nodiscard]] bool SpawnAhead(std::uint8_t _type) override;
-    void Anger(std::uint8_t _type) override;
+    void Anger(std::uint8_t _slot, std::uint8_t _type) override;
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override;
 
     // ---- Elite::ShipEffects and Elite::ShipDrawEffects ------------------------------------------
 
-    void RunTactics(Elite::ShipBlock& _work) override;
+    [[nodiscard]] bool RunTactics(Elite::ShipBlock& _work) override;
     void DrawPlanetOrSun() override;
     void DrawExplosion() override;
     void SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint) override;
@@ -151,15 +157,28 @@ namespace Outpost
 
     // ---- Elite::SightEffects and Elite::ViewEffects ----------------------------------------------
 
+    /// `SetRasterMode` is `Elite::ExplosionEffects`'s as well as `SightEffects`'s -- one `SETL1` in
+    /// the game, one method here, and one override satisfying both interfaces.
     void SetRasterMode(std::uint8_t _mode) override;
     void SetSightColour(std::uint8_t _colour) override;
     void SetSpritesEnabled(std::uint8_t _mask) override;
     void MaskSprites(std::uint8_t _mask) override;
     void SetPalette(std::uint8_t _colour) override;
 
+    // ---- Elite::ExplosionEffects ----------------------------------------------------------------
+
+    void SetSpriteExpansion(std::uint8_t _mask) override;
+    void ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y) override;
+
   private:
     Window& m_window;
     Elite::Canvas& m_canvas;
+
+    /// 6502: the sound buffer, the music player and the chip they write -- the composition root's,
+    /// because the docked half beeps and starts the theme through the shell.
+    Elite::SoundBuffer& m_sound;
+    Elite::MusicPlayer& m_music;
+    SoundOutput& m_audio;
 
     // ---- the flight world -------------------------------------------------------------------------
 
@@ -186,7 +205,7 @@ namespace Outpost
     Elite::LineHeap m_heap;
     Elite::ClipState m_clip;
     Elite::Projection m_projection;
-    Elite::CompassAxes m_axes{};
+    Elite::K3Block m_axes{};
 
     /*
      * 6502: VIC+&15 and VIC+&27 -- the sprite enable mask and sprite 0's colour.
@@ -198,6 +217,18 @@ namespace Outpost
     std::uint8_t m_spriteMask = 0;
     std::uint8_t m_spriteColour = 0;
     std::uint8_t m_rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote into the handler
+
+    /*
+     * 6502: VIC+&17, VIC+&1D, VIC+&2, VIC+&3 and the ninth x bit in VIC+&10 -- the explosion
+     * burst, which is sprite 1 (slice 4b-b).
+     *
+     * Held for the same reason as the three above, and the read-modify-writes are performed here
+     * because they are the hardware's: `ShowExplosionSprite` takes the whole nine-bit x and this is
+     * what splits it. `Canvas::Resolve` does not draw sprites yet, so nothing reads any of it.
+     */
+    std::uint8_t m_spriteExpansion = 0;
+    std::uint16_t m_burstX = 0;
+    std::uint8_t m_burstY = 0;
 
     /// The two aggregates the ported routines take, over everything above and everything borrowed.
     /// Declared last because every reference in them is bound at construction.

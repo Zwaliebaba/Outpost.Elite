@@ -120,6 +120,9 @@
     <ClCompile Include="ShipDrawTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="SoundTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="SpawnTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
@@ -127,6 +130,21 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="ScannerTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="HyperspaceTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="ExplosionTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="GameLoopTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="PauseScreenTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="TacticsTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="MessageTests.cpp">

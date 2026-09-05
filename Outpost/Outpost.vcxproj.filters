@@ -10,6 +10,8 @@
     <ClCompile Include="CanvasPresenter.cpp" />
     <ClCompile Include="Shell.cpp" />
     <ClCompile Include="FlightSession.cpp" />
+    <ClCompile Include="SidSynth.cpp" />
+    <ClCompile Include="SoundOutput.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -20,6 +22,8 @@
     <ClInclude Include="CanvasPresenter.h" />
     <ClInclude Include="Shell.h" />
     <ClInclude Include="FlightSession.h" />
+    <ClInclude Include="SidSynth.h" />
+    <ClInclude Include="SoundOutput.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Assets\Wide310x150Logo.scale-200.png">

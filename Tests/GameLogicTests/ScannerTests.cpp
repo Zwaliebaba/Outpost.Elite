@@ -496,7 +496,7 @@ namespace GameLogicTests
             const std::uint8_t highs[3] = {x, y, z};
             for (int variant = 0; variant < 3; ++variant)
             {
-              Elite::CompassAxes axes{};
+              Elite::K3Block axes{};
               for (int axis = 0; axis < 3; ++axis)
               {
                 const std::size_t base = static_cast<std::size_t>(axis) * 3u;
@@ -617,7 +617,7 @@ namespace GameLogicTests
       for (std::uint32_t seed = 0; seed < 400; ++seed)
       {
         Elite::Bubble bubble;
-        Elite::CompassAxes axes{};
+        Elite::K3Block axes{};
 
         // A deterministic spread of nine-byte positions, including the ones with the sign bit set
         // and the ones whose sign byte carries seven more bits of magnitude.
@@ -680,7 +680,7 @@ namespace GameLogicTests
       for (std::uint32_t seed = 0; seed < 400; ++seed)
       {
         Elite::Bubble bubble;
-        Elite::CompassAxes axes{};
+        Elite::K3Block axes{};
 
         std::uint32_t state = 0x77A31D05u ^ (seed * 0x85EBCA6Bu);
         for (std::size_t slot = 0; slot < 2u; ++slot)

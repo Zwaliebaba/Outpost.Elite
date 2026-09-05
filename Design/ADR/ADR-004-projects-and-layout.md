@@ -99,11 +99,21 @@ separately rather than treating them as errors.
 
 | Script | Job | Status |
 |---|---|---|
-| `inventory.py` | `--check-includes` resolves every master include against `Upstream/`; the default report reconciles the ledger with the `// 6502:` markers; `--strict` fails on an unaccounted file | **Built** (slice 0c) |
+| `inventory.py` | `--check-includes` resolves every master include against `Upstream/`; the default report reconciles the ledger with the `// 6502:` markers; `--strict` fails on an unaccounted file | **Built** (slice 0c); `--strict` green and in CI since 2026-09-05 (plan §6.120) |
 | `labels.py` | Assembles the C64 variant and normalises BeebAsm's label dump and load addresses into `Design/Reference/Labels.txt` and `Binaries.txt` | **Built** (slice 0b-a) |
-| `extract_tables.py` | upstream `.asm` and `C.FONT.bin` → the generated `.cpp` data | slice 1a |
-| `golden_diff.py` | expected versus actual canvas → diff image | slice 1d |
+| `extract_tables.py` | upstream `.asm` and the assembled binaries → the generated `.cpp` data tables; `--check` re-derives all of them and fails on a byte that differs | **Built** (slice 1a); `--check` in CI |
+| `golden_diff.py` | expected versus actual canvas → a diff image plus the differing rows and columns | **Built** (slice 1d) |
 | `check_gamelogic.py` | Fails if `GameLogic` grows a clock, randomness, a float, file or registry access, or a Win32 call. Strips comments and string literals first, and `--self-test` checks the checker | **Built** (slice 0f) |
+| `check_projects.py` | Every `.vcxproj` path resolves, nothing on disk is unlisted, the `.filters` has not drifted from its project, and `pch.h` is every source's first line | **Built**; in CI |
+| `check_outpost.py` | Every `Elite::` name the executable calls still exists, with the right arity — the one check that reaches `Outpost/`, which the portable runner does not compile | **Built**; in CI |
+| `check_docs.py` | No Markdown table row is wider than its header, because GitHub silently drops the cells that do not fit | **Built**; in CI |
+| `c64_source.py` | Prints a routine's C64 form by evaluating the upstream `IF`/`ELIF`/`ENDIF` conditionals against this build's symbols, and annotates fall-throughs; `--check-all` reads every file the build assembles | **Built**; in CI |
+| `check_all.py` | Runs the nine repository checks in CI's order, so a local run cannot leave one out. Nine CHECKS from seven scripts — `inventory.py` contributes `--check-includes` and `--strict`, and `check_gamelogic.py` its own `--self-test`; `labels.py` and `golden_diff.py` are tools rather than checks and are not in it | **Built** (plan §6.127) |
+
+**What is deliberately absent, so nobody assumes otherwise: there is no mutation tooling.** The
+method is in `AGENTS.md` §6 and the mutants are hand edits in a detached worktree, which means no
+tally in this corpus can be re-run (Risk R13). A `tools/mutate.py` holding the mutant list per unit
+as data is the highest-value script still missing.
 
 One script lives outside `tools/`: `Tests/PortableRunner/generate_runner.py`, because it is
 useless without the shim headers beside it and moving it would split one mechanism across two

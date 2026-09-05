@@ -30,7 +30,9 @@ namespace Elite
     // doubling cannot overflow: it widens instead.
     _math.k[3] = RotateRight(0u, high.carry).value;
 
-    AddShipCoordinateToK(_work, _math, _to); // 6502: JSR MVT3
+    // The exit carry is live only on `VCSUB`'s path out to `TA64` (§6.126). `MVT1` reads `K+3`
+    // and stores, so the flag dies here.
+    static_cast<void>(AddShipCoordinateToK(_work, _math, _to)); // 6502: JSR MVT3
 
     // 6502: STA INWK+2,X -- and A is `K+3`, because every path through `MVT3` ends `STA K+3`.
     _work[static_cast<std::size_t>(_to) + 2u] = _math.k[3];
@@ -273,9 +275,10 @@ namespace Elite
       return;
     }
 
-    // 6502: LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY -- the TARGET's type, not the missile's.
+    // 6502: LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY -- the TARGET's slot and type, not the
+    // missile's.
     const std::uint8_t target = screen.bubble.missileTarget;
-    _loop.effects.Anger(screen.bubble.slots[target]);
+    _loop.effects.Anger(target, screen.bubble.slots[target]);
 
     // 6502: LDY #BLACK2 / JSR ABORT -- the lock is gone and so is the indicator.
     AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.At(Field::Missiles), MISSILE_NONE);
@@ -283,7 +286,7 @@ namespace Elite
     // 6502: DEC NOMSL -- one fewer on the rail.
     screen.commander.At(Field::Missiles) = static_cast<std::uint8_t>(screen.commander.At(Field::Missiles) - 1u);
 
-    (void)_loop.effects.PlaySound(SOUND_MISSILE); // 6502: LDY #sfxwhosh / JMP NOISE
+    (void)_loop.effects.PlaySound(SOUND_MISSILE, false); // 6502: LDY #sfxwhosh / JMP NOISE
   }
 
   LoopOutcome BeginFlightFrame(FlightLoop& _loop) noexcept
@@ -414,8 +417,8 @@ namespace Elite
     if ((_loop.keys[KEY_UNARM_MISSILE] & commander.At(Field::Missiles)) != 0u)
     {
       AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, commander.At(Field::Missiles), MISSILE_READY);
-      (void)_loop.effects.PlaySound(SOUND_BOOP); // 6502: LDY #sfxboop / JSR NOISE
-      screen.status.missileArmed = 0u;           // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
+      (void)_loop.effects.PlaySound(SOUND_BOOP, false); // 6502: LDY #sfxboop / JSR NOISE
+      screen.status.missileArmed = 0u;                  // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
     }
 
     /*
@@ -466,7 +469,7 @@ namespace Elite
           // 6502: LDY #%11010000 / STY moonflower -- the upper half of the screen changes mode, and
           // that IS the effect: no drawing is involved.
           screen.screen.upperBitmapMode = BOMB_BITMAP_MODE;
-          (void)_loop.effects.PlaySound(SOUND_ENERGY_BOMB);
+          (void)_loop.effects.PlaySound(SOUND_ENERGY_BOMB, false);
         }
       }
 
@@ -495,7 +498,16 @@ namespace Elite
       if ((_loop.keys[KEY_ECM] & commander.At(Field::Ecm)) != 0u && screen.status.ecmCountdown == 0u)
       {
         screen.status.ecmOurs = static_cast<std::uint8_t>(screen.status.ecmOurs - 1u);
-        StartEcm(screen.canvas, screen.status, _loop.effects);
+        /*
+         * 6502: DEC ECMP / JSR ECBLB2, and the carry handed on is NOT KNOWN HERE (§6.118).
+         *
+         * `DEC`, `LDA`, `AND` and `BEQ` above this all leave the carry alone, so the flag that
+         * reaches `NOISE` was set somewhere further back in the frame -- possibly inside `WARP`,
+         * three instructions earlier, which this port calls through a seam. The port models no
+         * carry across the flight loop, so false is what it can honestly supply, and the sound
+         * comparison excludes this effect by name rather than pretending to agree.
+         */
+        StartEcm(screen.canvas, screen.status, _loop.effects, false);
       }
     }
 
@@ -571,9 +583,18 @@ namespace Elite
       sound = SOUND_MINING_LASER;
     }
 
-    // 6502: .custard JSR NOISE -- and `LASLI` opens `JSR DORND`, whose `ROL A` reads the carry
-    // this leaves, so the sound's own outcome shifts the burst by a pixel (§6.86).
-    const bool heard = _loop.effects.PlaySound(sound);
+    /*
+     * 6502: .custard JSR NOISE -- and `LASLI` opens `JSR DORND`, whose `ROL A` reads the carry
+     * this leaves, so the sound's own outcome shifts the burst by a pixel (§6.86).
+     *
+     * THE CARRY GOING IN IS A COMPARISON'S, and both paths to `.custard` come off a `CMP`: the
+     * beam half arrives through `CMP #Armlas` and the rest through `CMP #Mlas`, so it is the
+     * laser power measured against whichever constant that branch tested. Nothing between the
+     * compare and the call touches the flag -- `LDY` does not, and neither does the `EQUB &2C`
+     * that swallows one of the loads. A silent build hands this straight back (§6.99).
+     */
+    const bool carryIn = ((fitted & 0x80u) != 0u) ? (fitted >= LASER_POWER_MILITARY) : (fitted >= LASER_POWER_MINING);
+    const bool heard = _loop.effects.PlaySound(sound, carryIn);
 
     // 6502: JSR LASLI -- the burst itself, which draws and heats the gun.
     (void)FireLaser(screen.canvas, screen.draw, screen.rng, _loop.burst, screen.status, screen.view, heard);
@@ -841,8 +862,18 @@ namespace Elite
         }
       }
 
-      // 6502: .MA21 JSR MVEIT / LDY #NI%-1 / .MAL3 LDA INWK,Y / STA (INF),Y / DEY / BPL MAL3.
-      MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, screen.flight.blueprint, screen.view);
+      /*
+       * 6502: .MA21 JSR MVEIT / LDY #NI%-1 / .MAL3 LDA INWK,Y / STA (INF),Y / DEY / BPL MAL3.
+       *
+       * The block is written back BEFORE the death is acted on, because the original writes it
+       * back only on the path that survives -- `JMP DEATH` from inside `TACTICS` never reaches
+       * `MAL3` -- and `DEATH` calls `RES2`, which clears the bubble anyway (§6.122).
+       */
+      if (!MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, screen.flight.blueprint,
+                    screen.view))
+      {
+        return LoopOutcome::Died;
+      }
       block = screen.work;
 
       /*
@@ -1008,7 +1039,9 @@ namespace Elite
        */
       if (holdFull)
       {
-        (void)_loop.effects.PlaySound(SOUND_EXPLOSION);                // 6502: .MA59 JSR EXNO3
+        // 6502: .MA59 JSR EXNO3 -- and the carry is SET, because `BCS MA59` in part 8 is the
+        // only way here: a full hold is exactly the carry the capacity test leaves.
+        (void)_loop.effects.PlaySound(SOUND_EXPLOSION, true);
         screen.work[SHIP_STATE] = MarkKilled(screen.work[SHIP_STATE]); // 6502: .MA60
         // 6502: .MA61 BNE MA26 -- and `ROR` has just set bit 7, so it always branches.
       }
@@ -1036,7 +1069,13 @@ namespace Elite
         {
           return LoopOutcome::Died;
         }
-        (void)_loop.effects.PlaySound(SOUND_EXPLOSION);
+        /*
+         * 6502: .MA63 JSR OOPS / JSR EXNO3 -- and the carry into `EXNO3` is the one `OOPS` left.
+         *
+         * `OOPS` ends `ADC ENERGY / STA ENERGY / BEQ / BCS`, and reaching here at all means the
+         * `BCS` was taken, so it is SET. Nothing between the two calls touches the flag.
+         */
+        (void)_loop.effects.PlaySound(SOUND_EXPLOSION, true);
       }
 
       /*
@@ -1064,7 +1103,7 @@ namespace Elite
           // missile locks onto whatever the sights are on, and the indicator turns red.
           if (screen.status.missileArmed != 0u)
           {
-            (void)_loop.effects.PlaySound(SOUND_BEEP);
+            (void)_loop.effects.PlaySound(SOUND_BEEP, false);
             SetMissileTarget(screen.canvas, screen.bubble, screen.status.missileArmed, commander.At(Field::Missiles), screen.flight.slot,
                              MISSILE_LOCKED);
           }
@@ -1078,8 +1117,9 @@ namespace Elite
               screen.work[SHIP_ENERGY] = hit.energy; // 6502: .MA14 STA INWK+35
             }
 
-            // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too.
-            _loop.effects.Anger(type);
+            // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too. INF
+            // is this ship's block here, the one the loop is on, so the slot is XSAV's.
+            _loop.effects.Anger(screen.flight.slot, type);
           }
         }
       }

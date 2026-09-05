@@ -202,7 +202,21 @@ namespace Elite
   // These read the tables in LookupTables.h and are exact about which of the two inverse tables
   // applies, because that choice falls out of a parity test rather than being a detail.
 
-  /// 6502: FMLTU -- A = A * Q / 256, through the logarithm tables.
+  /*
+   * 6502: FMLTU -- A = A * Q / 256, through the logarithm tables.
+   *
+   * IT CLOBBERS `P`. The routine opens `STX P` and every one of its four exits ends `LDX P`, so it
+   * preserves the caller's X by parking it in `P` -- and `P` keeps that register value afterwards.
+   * A port that does not model registers cannot say what X was, so this leaves `_work.p` alone and
+   * the fact is written here rather than lost.
+   *
+   * Nothing in the shipped build reads `P` after an `FMLTU` without writing it first: the six
+   * callers are `MVEIT` part 3, `CIRCLE2` through `FMLTU2`, `LL51`, `PLS22`, `LL9` part 5 and
+   * `EXS1`, and of those only `PLS22` mentions `P` at all -- twice, both `STA P`. So the stale byte
+   * is invisible to the game, and it stopped being invisible to the PORT the moment slice 4b-b
+   * compared `P` after `PTCLS` (§6.144). `EXS1` is the one call site that can prove what X was --
+   * the generator's previous byte, two instructions earlier -- and it writes `P` itself.
+   */
   [[nodiscard]] WideResult MultiplyByLog(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept;
 
   /// 6502: LL28 -- R = 256 * A / Q, saturating at 255 when A is not smaller than Q. Returns the

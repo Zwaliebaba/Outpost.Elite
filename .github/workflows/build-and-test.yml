@@ -105,8 +105,11 @@ jobs:
       - name: The source resolver can read every file the build assembles
         run: python tools/c64_source.py --check-all
 
+      # Strict since 2026-09-05: every master-level include has a ledger row, or the push fails.
+      # The mode had waited three days for the ledger to be complete and the ledger had waited for
+      # the mode to be run; 101 files had no row when it first was (plan section 6.120).
       - name: Coverage ledger
-        run: python tools/inventory.py
+        run: python tools/inventory.py --strict
 
   # -------------------------------------------------------------------------------------------
   # The suite on Linux, through Tests/PortableRunner. Same test files, same oracle, g++ instead

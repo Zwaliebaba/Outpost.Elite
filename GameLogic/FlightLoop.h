@@ -161,17 +161,14 @@ namespace Elite
   };
 
   /*
-   * 6502: the ship types parts 5, 8 and 11 name that `ShipSlot.h` does not.
+   * WHAT USED TO BE HERE: `PLT`, `OIL`, `AST`, `SPL` and `THG`, added by slice 3d-d-iii-b under a
+   * comment saying they were "the ship types parts 5, 8 and 11 name that `ShipSlot.h` does not".
    *
-   * `THG` and `CON` are two of the bomb's three exemptions -- a Thargoid and the mission ship
-   * survive it -- and `CON` is also the boundary above which a laser is halved unless it is a
-   * military one. `PLT`, `OIL`, `AST` and `SPL` are the wreckage.
+   * They moved to `ShipSlot.h` on 2026-09-05, beside `MSL`, `SST` and the junk range, because
+   * slice 4a needs the cargo four from `Spawn.cpp` -- which sits UNDER the flight loop and cannot
+   * include it. A type number is a property of the ship table, not of the routine that first
+   * happened to want one (§6.121).
    */
-  inline constexpr std::uint8_t SHIP_TYPE_ALLOY_PLATE = 4; ///< 6502: PLT
-  inline constexpr std::uint8_t SHIP_TYPE_CANISTER = 5;    ///< 6502: OIL
-  inline constexpr std::uint8_t SHIP_TYPE_ASTEROID = 7;    ///< 6502: AST
-  inline constexpr std::uint8_t SHIP_TYPE_SPLINTER = 8;    ///< 6502: SPL
-  inline constexpr std::uint8_t SHIP_TYPE_THARGOID = 29;   ///< 6502: THG
 
   /*
    * 6502: SPIN2 -- spawn `_count` ships of one type, one after another.
@@ -263,8 +260,17 @@ namespace Elite
     /// says whether it fitted, and `FRMIS` gives up when it did not.
     [[nodiscard]] virtual bool SpawnAhead(std::uint8_t _type) = 0;
 
-    /// 6502: JSR ANGRY with A = the type -- phase 4's "that ship has noticed".
-    virtual void Anger(std::uint8_t _type) = 0;
+    /*
+     * 6502: JSR ANGRY with A = the type and INF pointing at the ship -- "that ship has noticed".
+     *
+     * THE SLOT IS AN ARGUMENT BECAUSE THE TWO CALLERS POINT `INF` AT DIFFERENT SHIPS. Part 3 fires a
+     * missile and angers its TARGET: `LDX MSTG / JSR GINF` first, so INF is the locked ship's block.
+     * Part 11 angers the ship OUR LASER has just hit, and there INF is the ship the loop is on --
+     * `XSAV`'s slot -- with nothing locked at all in the common case. A seam that took only the type
+     * had to guess which, guessed `MSTG`, and read block 255 the first time a laser landed without
+     * a missile lock (§6.142).
+     */
+    virtual void Anger(std::uint8_t _slot, std::uint8_t _type) = 0;
   };
 
   /*
@@ -310,7 +316,7 @@ namespace Elite
     LineHeap& heap;           ///< 6502: the `LS%` region, and `SLSP` inside it
     ClipState& clip;          ///< 6502: XX12, XX13 and the clipper's own workspace
     Projection& projection;   ///< 6502: K3 and K4 -- where the ship landed on screen
-    CompassAxes& axes;        ///< 6502: K3, which `SPS1` fills for part 9's docking check
+    K3Block& axes;            ///< 6502: K3, which `SPS1` fills for part 9's docking check
     ShipEffects& tactics;     ///< 6502: JSR TACTICS, from inside `MVEIT`
     ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
 

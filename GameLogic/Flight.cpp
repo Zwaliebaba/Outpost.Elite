@@ -2,6 +2,8 @@
 
 #include "Flight.h"
 
+#include "Scanner.h"
+
 #include "Combat.h"
 #include "Market.h"
 #include "PlanetDraw.h"
@@ -179,7 +181,7 @@ namespace Elite
   {
     // 6502: .LAUN LDY #sfxwhosh / JSR NOISE -- and the carry it returns is dropped, because the
     // next instruction is a load. §6.99's third answer costs nothing here.
-    (void)_screen.effects.PlaySound(SOUND_MISSILE);
+    (void)_screen.effects.PlaySound(SOUND_MISSILE, false);
 
     // 6502: LDA #8 -- and `HFS2`'s first instruction, `STA STP`, is what receives it. This is the
     // only writer of the step on the launch path, and its absence is what §6.95 was working around.
@@ -193,12 +195,54 @@ namespace Elite
      * showing the docked screen -- which is exactly right, because the caller has not finished
      * leaving it yet.
      */
+    DrawTunnel(_screen, _clip, LAUNCH_TUNNEL_STEP, _pacing);
+  }
+
+  void DrawTunnel(FlightScreen& _screen, ClipState& _clip, std::uint8_t _step, TunnelEffects* _pacing) noexcept
+  {
+    // 6502: .HFS2 STA STP -- the only writer of the step on either tunnel's path, which is the
+    // other half of §6.94's answer.
+    _screen.heaps.stp = _step;
+
+    /*
+     * 6502: LDA QQ11 / PHA / LDA #0 / JSR TT66 / PLA / STA QQ11.
+     *
+     * The screen is cleared to a space view and the view type is then PUT BACK to whatever the
+     * caller had. So the tunnel is drawn on a blank space view while the game still believes it is
+     * showing the docked screen -- which is exactly right, because the caller has not finished
+     * leaving it yet.
+     */
     const std::uint8_t saved = _screen.view;
     SetUpScreen(_screen, 0u);
     _screen.view = saved;
 
     // 6502: falls into HFS1.
     DrawHyperspaceRings(_screen.canvas, _screen.heaps, _screen.draw, _screen.geometry, _screen.math, _clip, _pacing);
+  }
+
+  void DrawHyperspaceTunnel(FlightScreen& _screen, ClipState& _clip, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
+  {
+    /*
+     * 6502: .HYPNOISE -- LDY #sfxhyp1 / LDA #&F5 / LDX #240 / JSR NOISE2, then `sfxwhosh` through
+     * `NOISE`, then one frame of `DELAY`, then `sfxhyp1 + 128`.
+     *
+     * The last one is `NOISE`'s LAYERING entry: bit 7 of the effect number means "do not check
+     * whether it is already playing", so the second hyperspace sound stacks on the first rather
+     * than replacing it. That bit is the argument, not a separate routine.
+     */
+    (void)_sound.PlaySoundPitched(SOUND_HYPERSPACE, HYPERSPACE_SUSTAIN, HYPERSPACE_FREQUENCY);
+    (void)_sound.PlaySound(SOUND_MISSILE, false);
+
+    // 6502: LDY #1 / JSR DELAY -- one vertical sync, which is what the pacing object holds for.
+    if (_pacing != nullptr)
+    {
+      _pacing->ShowFrame();
+    }
+
+    (void)_sound.PlaySound(static_cast<std::uint8_t>(SOUND_HYPERSPACE + 128u), false);
+
+    // 6502: LDA #4 / JSR HFS2 / RTS.
+    DrawTunnel(_screen, _clip, HYPERSPACE_TUNNEL_STEP, _pacing);
   }
 
   void Launch(FlightLoop& _loop, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
@@ -353,8 +397,16 @@ namespace Elite
         screen.work[7] = static_cast<std::uint8_t>(screen.work[7] - 1u);
       }
 
-      // 6502: .TL1 JSR MVEIT.
-      MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, screen.flight.blueprint, screen.view);
+      /*
+       * 6502: .TL1 JSR MVEIT.
+       *
+       * The answer is discarded and saying so is the point: `MVEIT` only reaches `TACTICS` for a
+       * ship whose `INWK+32` has bit 7 set, and `TITLE` builds its ship with `ZINF` and then sets
+       * byte 32 to nothing. So the AI cannot run here and cannot kill anybody, and there is no
+       * player to kill -- the title screen has no energy banks (§6.122).
+       */
+      (void)MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, screen.flight.blueprint,
+                     screen.view);
 
       /*
        * 6502: LDX distaway / STX INWK+6 / LDA MCNT / AND #3 / LDA #0 / STA INWK / STA INWK+3.
@@ -393,6 +445,241 @@ namespace Elite
         return scan.key;
       }
     }
+  }
+
+  void PrepareDeathScene(FlightLoop& _loop, DashboardEffects& _sound) noexcept
+  {
+    FlightScreen& screen = _loop.screen;
+
+    // 6502: JSR EXNO3 -- `LDY #sfxexpl / BNE NOISE`, and the carry is whatever killed us.
+    (void)_sound.PlaySound(SOUND_EXPLOSION, false);
+
+    ResetShipAndBubble(_loop); // 6502: JSR RES2
+
+    // 6502: ASL DELTA / ASL DELTA -- and the upstream comment says "divide by 4", which is the
+    // BBC's `LSR`. This build SHIFTS LEFT twice, so the speed is multiplied (§6.117).
+    screen.flight.delta = static_cast<std::uint8_t>(screen.flight.delta << 2);
+
+    /*
+     * 6502: LDX #24 / JSR DET1 / JSR TT66.
+     *
+     * `DET1` is a bare `RTS` here, so the `LDX #24` goes nowhere and A is NOT set to 6 -- what
+     * `TT66` gets is whatever `RES2` left in it (§6.117). `DEATH_VIEW` is that byte, measured.
+     */
+    SetUpScreen(screen, DEATH_VIEW);
+
+    // 6502: JSR BOX -- the SAME border again, and `BOX2` EORs, so drawing it twice rubs it out.
+    DrawFullBorder(screen.canvas, screen.draw);
+
+    // 6502: LDA #0 / STA SCBASE+&1F1F / STA SCBASE+&118 -- the two bytes `BOX` STORES instead of
+    // EORing, which a second pass therefore cannot remove.
+    screen.canvas.Write(BOTTOM_RIGHT_CORNER, 0u);
+    screen.canvas.Write(BORDER_TOP_RIGHT, 0u);
+
+    // 6502: JSR nWq -- a whole new stardust field over the cleared screen.
+    SeedStardustField(screen.canvas, screen.draw, screen.dust, screen.rng, false);
+
+    // 6502: LDA #12 / JSR DOYC / JSR DOXC -- the cursor, then the sign.
+    screen.text.row = GAME_OVER_ROW;
+    screen.text.column = GAME_OVER_COLUMN;
+    screen.printer.PrintPhrase(GAME_OVER_TOKEN); // 6502: LDA #146 / JSR ex
+
+    /*
+     * 6502: .D1 -- spawn wreckage until the fifth slot is taken.
+     *
+     * `LDA FRIN+4 / BEQ D1` is the condition, so this fills slots 0 to 4 -- five pieces, not four,
+     * and the loop tests the slot AFTER creating one.
+     */
+    /*
+     * The carry `Ze` rotates into its first `DORND`. On the first pass it is what `ex` left, and
+     * that is always CLEAR: every character goes out through `CHPR`, which ends `CLC / RTS`, and
+     * nothing on the way back from the last one to `.D1` touches the flag. On every later pass it
+     * is what the `JSR DORND` at the bottom of the loop left in its last `ADC`, because `AND`,
+     * `LDY`, `STA (INF),Y`, `LDA` and `BEQ` leave it alone (§6.117).
+     */
+    bool carry = false;
+
+    do
+    {
+      const RngResult roll = SeedDebris(screen.work, screen.rng, carry); // 6502: JSR Ze
+
+      screen.work[0] = static_cast<std::uint8_t>(roll.value >> 2); // 6502: LSR A / LSR A / STA INWK
+
+      // 6502: LDY #0 / STY QQ11 / STY INWK+1 / STY INWK+4 / STY INWK+7 / STY INWK+32.
+      screen.view = 0u;
+      screen.work[1] = 0u;
+      screen.work[4] = 0u;
+      screen.work[7] = 0u;
+      screen.work[32] = 0u;
+
+      // 6502: DEY / STY MCNT -- 255, so every timer-based call in the loop is stopped.
+      screen.flight.mainLoopCounter = 0xFFu;
+
+      // 6502: EOR #%00101010 / STA INWK+3 / ORA #%01010000 / STA INWK+6.
+      const std::uint8_t flipped = static_cast<std::uint8_t>(screen.work[0] ^ 0x2Au);
+      screen.work[3] = flipped;
+      screen.work[6] = static_cast<std::uint8_t>(flipped | 0x50u);
+
+      // 6502: TXA / AND #%10001111 / STA INWK+29 -- a gentle roll, sign kept.
+      screen.work[29] = static_cast<std::uint8_t>(roll.previous & 0x8Fu);
+
+      screen.status.laserCount = DEATH_FRAMES; // 6502: LDY #64 / STY LASCT
+
+      // 6502: SEC / ROR A / AND #%10000111 / STA INWK+30 -- and the `A` is the roll byte above,
+      // not the random one: `TXA` left it there.
+      const std::uint8_t pitched = static_cast<std::uint8_t>((screen.work[29] >> 1) | 0x80u);
+      screen.work[30] = static_cast<std::uint8_t>(pitched & 0x87u);
+
+      /*
+       * 6502: LDX #OIL / LDA XX21-1+2*PLT / BEQ D3 / BCC D3 / DEX.
+       *
+       * The load has no brackets, so it reads the byte AT `XX21 + 7` rather than through it --
+       * always &D0, never zero, so the `BEQ` is dead and only the carry decides.
+       *
+       * AND THAT CARRY IS NOT `Ze`'S, whatever the upstream comment says ("which will be random
+       * following the above call to Ze"). `SEC / ROR A` sits between them, four instructions up:
+       * the `ROR` shifts A right and puts A's OLD BIT 0 into the carry, and A there is the roll
+       * counter, `X AND %10001111`. So the wreckage is a plate when the random X was odd, which is
+       * random but is a different random number from the one the comment names (§6.117).
+       */
+      const bool plate = (roll.previous & 1u) != 0u;
+      const std::uint8_t type = plate ? SHIP_TYPE_ALLOY_PLATE : SHIP_TYPE_CANISTER;
+
+      // 6502: JSR fq1 -- and the carry it takes into its `ROL A` is the one `BCC D3` just tested.
+      const NewShip made = AddDebris(screen.bubble, screen.work, type, screen.flight.delta, plate, screen.flight.blueprint);
+
+      // 6502: JSR DORND / AND #%10000000 / LDY #31 / STA (INF),Y -- half the wreckage is already
+      // dead, which is what makes some of it explode as it goes past. The carry it rotates in is
+      // `NWSHP`'s answer: `SEC / RTS` for a ship made, `CLC / RTS` for one refused.
+      const RngResult state = screen.rng.Next(made.created);
+      if (made.created)
+      {
+        screen.bubble.blocks[made.slot][31] = static_cast<std::uint8_t>(state.value & 0x80u);
+      }
+      carry = state.carry;
+    } while (screen.bubble.slots[DEATH_DEBRIS_SLOT] == 0u);
+  }
+
+  void Die(FlightLoop& _loop, DashboardEffects& _sound) noexcept
+  {
+    FlightScreen& screen = _loop.screen;
+
+    PrepareDeathScene(_loop, _sound);
+
+    ClearFlightKeys(_loop.keys); // 6502: JSR U%
+
+    // 6502: STA DELTA -- and A is the zero `U%` left in it, so we stop dead.
+    screen.flight.delta = 0u;
+
+    // 6502: JSR M% / JSR NOSPRITES / .D2 JSR M% / DEC LASCT / BNE D2.
+    (void)MainFlightLoop(_loop);
+    HideAllSprites(screen.sight);
+
+    do
+    {
+      (void)MainFlightLoop(_loop);
+      screen.status.laserCount = static_cast<std::uint8_t>(screen.status.laserCount - 1u);
+    } while (screen.status.laserCount != 0u);
+
+    // 6502: LDX #31 / JSR DET1 / JMP DEATH2 -- the first is a bare RTS and the second is the
+    // caller's own death exit, which `Main.cpp` already wires as `RES2` then `BR1` (§6.25).
+  }
+
+  void AbandonShip(FlightLoop& _loop, std::uint8_t& _fuel) noexcept
+  {
+    FlightScreen& screen = _loop.screen;
+
+    ResetShipAndBubble(_loop); // 6502: JSR RES2
+
+    /*
+     * 6502: LDX #CYL / STX TYPE / JSR FRS1 / BCS ES1 / LDX #CYL2 / JSR FRS1.
+     *
+     * `BCS` takes the SUCCESS, so the second call is the FAILURE path: the bubble had no room for a
+     * Cobra and gets a pirate Cobra instead. Two different blueprints, and the one you get is
+     * decided by how full the bubble was when you punched out.
+     */
+    screen.flight.type = SHIP_TYPE_COBRA_MK3;
+    /*
+     * `FRS1` takes `DELTA` and `MSTG` rather than a speed: `LDA DELTA / ROL A / STA INWK+27`, with
+     * the carry `MSTG`'s bit 7 (§6.121). So the abandoned ship leaves at TWICE the speed you were
+     * doing, plus one if no missile was locked -- and `RES2` has just set `DELTA` to 3, so it is
+     * always 6 or 7 whatever you were doing when you punched out.
+     */
+    NewShip abandoned = SpawnShipAhead(screen.bubble, screen.work, SHIP_TYPE_COBRA_MK3, screen.flight.delta, screen.bubble.missileTarget,
+                                       screen.flight.blueprint);
+    if (!abandoned.created)
+    {
+      abandoned = SpawnShipAhead(screen.bubble, screen.work, SHIP_TYPE_COBRA_PIRATE, screen.flight.delta, screen.bubble.missileTarget,
+                                 screen.flight.blueprint);
+    }
+
+    /*
+     * 6502: .ES1 LDA #8 / STA INWK+27 / LDA #194 / STA INWK+30 / LSR A / STA INWK+32.
+     *
+     * 194 is the pitch and 97 is both the AI byte and the number of frames below, because the loop
+     * counts down through `INWK+32` itself.
+     */
+    screen.work[27] = ESCAPE_SPEED;
+    screen.work[30] = ESCAPE_PITCH;
+    screen.work[32] = static_cast<std::uint8_t>(ESCAPE_PITCH >> 1u);
+
+    // 6502: .ESL1 JSR MVEIT / JSR LL9 / DEC INWK+32 / BNE ESL1 -- and the death path `MVEIT` can
+    // reach is unreachable here, because the ship flying away is not shooting at anybody.
+    while (screen.work[32] != 0u)
+    {
+      static_cast<void>(
+        MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, screen.flight.blueprint, screen.view));
+      /*
+       * 6502: JSR LL9 -- and the SLOT it writes back to is the one `FRS1` just filled, through
+       * `INF`. Handing it slot 0 would have `LL9` writing its bookkeeping into the PLANET, which
+       * is what the port did until the oracle disagreed about the planet's speed byte.
+       */
+      DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work,
+               screen.bubble.blocks[abandoned.slot], _loop.heap, screen.flight.blueprint, screen.flight.type, _loop.drawing);
+      --screen.work[32];
+    }
+
+    // 6502: JSR SCAN -- and it is drawn ONCE, after the loop, so the blip the animation left
+    // on the scanner is erased rather than added to. `SCAN` is an EOR.
+    DrawScannerBlip(screen.canvas, screen.draw, screen.work, screen.flight.type, screen.view);
+
+    // 6502: LDA #0 / LDX #16 / .ESL2 STA QQ20,X / DEX / BPL ESL2 -- SEVENTEEN bytes, because the
+    // loop runs from 16 down THROUGH zero.
+    for (std::size_t item = 0; item < MARKET_ITEM_COUNT; ++item)
+    {
+      screen.commander.At(static_cast<Field>(static_cast<int>(Field::CargoHold) + static_cast<int>(item))) = 0u;
+    }
+
+    screen.commander.At(Field::LegalStatus) = 0u; // 6502: STA FIST -- a clean record
+    screen.commander.At(Field::EscapePod) = 0u;   // 6502: STA ESCP -- and the pod is spent
+
+    /*
+     * 6502: LDA TRIBBLE / ORA TRIBBLE+1 / BEQ nosurviv / JSR DORND / AND #7 / ORA #1 / STA TRIBBLE
+     * / LDA #0 / STA TRIBBLE+1.
+     *
+     * `ORA #1` is what stops the population reaching zero: one to eight survive, never none, so
+     * abandoning ship never clears them. The high byte is zeroed, which is the whole of the mercy.
+     */
+    const std::uint8_t low = screen.commander.At(Field::Tribbles);
+    const std::uint8_t high = screen.commander.At(static_cast<Field>(static_cast<int>(Field::Tribbles) + 1));
+
+    if (static_cast<std::uint8_t>(low | high) != 0u)
+    {
+      /*
+       * 6502: JSR DORND -- and it rotates in a SET carry, which `SCAN` left. Nothing between the
+       * two touches the flag: `LDA #0 / LDX #16`, the `.ESL2` store loop, `STA FIST`, `STA ESCP`,
+       * `LDA TRIBBLE / ORA TRIBBLE+1 / BEQ` are all carry-blind. Measured with §6.118's instrument
+       * rather than derived, because `SCAN` has several exits and the arithmetic near them is a
+       * screen address rather than anything this routine can reason about.
+       */
+      const RngResult survivors = screen.rng.Next(true);
+      screen.commander.At(Field::Tribbles) = static_cast<std::uint8_t>((survivors.value & 7u) | 1u);
+      screen.commander.At(static_cast<Field>(static_cast<int>(Field::Tribbles) + 1)) = 0u;
+    }
+
+    // 6502: .nosurviv LDA #70 / STA QQ14 / JMP GOIN -- seven light years, and the docking is the
+    // caller's, the way every `JMP` out of a routine has been.
+    _fuel = ESCAPE_FUEL;
   }
 
 } // namespace Elite

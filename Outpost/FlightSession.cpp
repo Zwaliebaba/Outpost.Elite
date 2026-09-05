@@ -1,6 +1,9 @@
 #include "pch.h"
 
 #include "FlightSession.h"
+#include "SoundOutput.h"
+
+#include "Tactics.h"
 
 #include "DockedKeys.h"
 
@@ -52,9 +55,12 @@ namespace Outpost
   FlightSession::FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
                                Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::CommanderBlock& _commander,
                                Elite::Rng& _rng, Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions,
-                               std::uint8_t& _techLevel) noexcept
+                               std::uint8_t& _techLevel, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music, SoundOutput& _audio) noexcept
     : m_window(_window),
       m_canvas(_canvas),
+      m_sound(_sound),
+      m_music(_music),
+      m_audio(_audio),
       m_screen{_canvas,
                m_draw,
                m_math,
@@ -122,40 +128,28 @@ namespace Outpost
 
   // ---- the sound ----------------------------------------------------------------------------------
 
-  bool FlightSession::PlaySound(std::uint8_t _effect)
+  bool FlightSession::PlaySound(std::uint8_t _effect, bool _carryIn)
   {
     /*
-     * 6502: NOISE. Phase 5 owns the SID.
+     * 6502: NOISE, for real (slice 5a).
      *
-     * IT RETURNS THE ANSWER A SOUNDING BUILD GIVES, not the one a silent one does, and the two are
-     * different in a way the caller can see. `NOISE` ends `SEC / RTS` when a voice took the effect;
-     * with sound switched off (`DNOIZ`) it branches to `SOUR1`, which is a bare `RTS`, so the carry
-     * passes through unchanged from the caller. §6.88 is what makes that observable: `EXNO3` tail-
-     * calls `NOISE` and `OUCH`'s `DORND` runs on the carry, so which piece of equipment an
-     * explosion breaks depends on whether the explosion got a voice.
-     *
-     * The seam is a `bool` with no carry IN, so it cannot express the pass-through even if this
-     * wanted to. Answering "a voice took it" is the answer the game gives whenever sound is on,
-     * which is what phase 5 will make true; answering the other way would make a silent build
-     * diverge from the oracle the tests compare against.
+     * The seam took its carry argument before there was anything to hand it to (§6.99, §6.118), and
+     * this is the day that paid off: the three answers `NOISE` gives are the port's now, and nothing
+     * above this line had to change to receive them.
      */
-    (void)_effect;
-    return true;
+    return Elite::PlaySoundEffect(m_sound, _effect, _carryIn);
   }
 
   bool FlightSession::PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency)
   {
-    // 6502: NOISE2 -- `NOISE` with the sustain and frequency supplied rather than read from the
-    // effect's table. Same answer, same reason.
-    (void)_effect;
-    (void)_sustain;
-    (void)_frequency;
-    return true;
+    // 6502: NOISE2. Its callers -- EXNO and EXNO2 -- reach it by JMP and their own callers drop the
+    // carry, so the entry carry is not observable here and false is what the seam's contract says.
+    return Elite::PlaySoundEffectPitched(m_sound, _effect, _sustain, _frequency, false);
   }
 
   void FlightSession::StopSound(std::uint8_t _effect)
   {
-    (void)_effect; // 6502: NOISEOFF. Phase 5.
+    Elite::StopSoundEffect(m_sound, _effect); // 6502: NOISEOFF
   }
 
   void FlightSession::MoveTrumbles()
@@ -166,49 +160,53 @@ namespace Outpost
 
   void FlightSession::StartDockingMusic()
   {
-    // 6502: startbd -- a second interrupt handler. Phase 5.
+    // 6502: startbd -- BDENTRY's writes go to the output's direct log, ahead of the next interrupt.
+    Elite::StartDockingMusic(m_music, m_audio.Direct());
   }
 
   void FlightSession::StopDockingMusic()
   {
-    // 6502: stopbd. Phase 5.
+    // 6502: stopbd -- which reads MULIE, the title screen's bracket around its RESET.
+    Elite::StopDockingMusic(m_music, m_screen.status.titleReset, m_sound, m_audio.Direct());
   }
 
   // ---- the bubble ---------------------------------------------------------------------------------
 
+  /*
+   * 6502: FRS1, ANGRY and SFS1 -- three seams answered by slice 4a-b, 2026-09-05.
+   *
+   * All three were stubs that said "phase 4", and each had a comment explaining which answer an
+   * empty implementation must give so that its caller stayed honest. Those answers are gone now,
+   * and the routines behind them are compared against the shipped game byte for byte. What is
+   * still missing is not the spawning: it is `TACTICS`, so a ship that `Anger` makes hostile has
+   * nothing to do about it yet.
+   */
   bool FlightSession::SpawnAhead(std::uint8_t _type)
   {
-    /*
-     * 6502: FRS1 -- put a ship right in front of us, and answer with the carry.
-     *
-     * Phase 4. It answers CLEAR, which is "the bubble was full": `FRMIS` reads that as a jammed
-     * missile and says so, which is a refusal the player can see rather than a missile that leaves
-     * and never arrives. Answering "it fitted" would spend the missile and spawn nothing.
-     */
-    (void)_type;
-    return false;
+    return Elite::SpawnShipAhead(m_bubble, m_work, _type, m_flight.delta, m_bubble.missileTarget, m_flight.blueprint).created;
   }
 
-  void FlightSession::Anger(std::uint8_t _type)
+  void FlightSession::Anger(std::uint8_t _slot, std::uint8_t _type)
   {
-    (void)_type; // 6502: ANGRY. Phase 4.
+    // 6502: ANGRY on the block INF points at -- and which block that is, the caller says (§6.142).
+    Elite::Anger(m_bubble, m_flight, _slot, _type);
   }
 
   bool FlightSession::SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type)
   {
-    // 6502: SFS1 -- drop a piece of wreckage where a ship just died. Phase 4, and it answers
-    // "there was no room", which is what an empty implementation must say: `SPIN` gives up on a
-    // clear carry and a set one would have the caller believe a splinter is out there.
-    (void)_aiFlag;
-    (void)_type;
-    return false;
+    // 6502: SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.
+    return Elite::SpawnChildShip(m_bubble, m_work, m_screen.rng, m_math, m_flight.slot, m_flight.type, _aiFlag, _type, m_flight.blueprint)
+      .created;
   }
 
   // ---- the ships ----------------------------------------------------------------------------------
 
-  void FlightSession::RunTactics(Elite::ShipBlock& _work)
+  bool FlightSession::RunTactics(Elite::ShipBlock& _work)
   {
-    (void)_work; // 6502: TACTICS, all seven parts. Phase 4 -- nothing in the bubble fights back.
+    // 6502: JSR TACTICS from `MVEIT`'s `MV26`, with `INF` at the slot being moved -- which is
+    // `XSAV`, the byte the loop keeps for exactly this.
+    (void)_work;
+    return Elite::RunTactics(m_loop, m_flight.slot);
   }
 
   void FlightSession::DrawPlanetOrSun()
@@ -220,8 +218,10 @@ namespace Outpost
 
   void FlightSession::DrawExplosion()
   {
-    // 6502: DOEXP -- redraw the cloud, which is how it is erased as well as how it appears. Phase
-    // 4, so a ship that explodes leaves the screen instead of blooming.
+    // 6502: LL14's JMP DOEXP -- age the cloud by one frame and draw it, which is how the last
+    // frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
+    // vertices `LL9` part 8 projected, which `DOEXP` copies onto the ship's line heap.
+    Elite::DrawExplosionCloud(m_canvas, m_draw, m_math, m_screen.rng, m_work, m_heap, m_geometry, m_bubble, *this);
   }
 
   void FlightSession::SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint)
@@ -352,11 +352,18 @@ namespace Outpost
   void FlightSession::RunDockingComputer(Elite::ShipBlock& _work)
   {
     /*
-     * 6502: DOCKIT -- phase 4's autopilot. It steers by writing `INWK+27` to `INWK+30`, which
-     * `DOKEY` then turns into synthetic key presses; leaving the block alone is therefore "the
-     * autopilot asked for nothing", and the ship flies straight rather than erratically.
+     * 6502: JSR DOCKIT from `DOKEY`'s `auton` path.
+     *
+     * It steers by writing `INWK+27` to `INWK+30`, which `DOKEY` then turns into synthetic key
+     * presses -- so the autopilot flies the ship through the same key logger the player uses, and
+     * nothing downstream can tell them apart.
+     *
+     * `auton` has already built the block this reads: `ZINF`, a nose vector, and `STA TYPE` with
+     * &E0, which is the NEGATIVE type `DOCKIT` tests for to know it is flying the player's ship
+     * rather than an NPC's. Slot 0 is what `INF` points at on that path.
      */
     (void)_work;
+    (void)Elite::RunDockingComputer(m_loop, 0u);
   }
 
   // ---- the VIC-II ----------------------------------------------------------------------------------
@@ -376,6 +383,28 @@ namespace Outpost
   void FlightSession::SetSpritesEnabled(std::uint8_t _mask)
   {
     m_spriteMask = _mask; // 6502: STA VIC+&15
+  }
+
+  void FlightSession::SetSpriteExpansion(std::uint8_t _mask)
+  {
+    // 6502: STA VIC+&17 / STA VIC+&1D -- the same byte into both, so a sprite is double size in
+    // both directions or in neither.
+    m_spriteExpansion = _mask;
+  }
+
+  void FlightSession::ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y)
+  {
+    /*
+     * 6502: STX VIC+&2 / STY VIC+&3, the ninth x bit into bit 1 of VIC+&10, and bit 1 of VIC+&15
+     * to switch sprite 1 on.
+     *
+     * The nine-bit x arrives whole and is split here rather than in `GameLogic`, because the split
+     * is the register layout's and not the game's -- the original spells it `ORA exlook,X` over a
+     * two-byte table whose only job is to shift a 0 or 1 left one place.
+     */
+    m_burstX = _x;
+    m_burstY = _y;
+    m_spriteMask = static_cast<std::uint8_t>(m_spriteMask | 0x02u);
   }
 
   void FlightSession::MaskSprites(std::uint8_t _mask)

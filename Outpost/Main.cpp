@@ -6,22 +6,27 @@
 #include "Presentation.h"
 #include "SaveStore.h"
 #include "Shell.h"
+#include "SoundOutput.h"
 #include "Window.h"
 
 #include "Canvas.h"
 #include "Commander.h"
-#include "Dashboard.h"
 #include "DockedKeys.h"
 #include "Docking.h"
 #include "Equipment.h"
 #include "ExtendedTokens.h"
 #include "Flight.h"
 #include "FlightLoop.h"
+#include "GameLoop.h"
+#include "Hyperspace.h"
 #include "LoaderScreen.h"
 #include "Market.h"
 #include "MarketScreen.h"
+#include "Music.h"
+#include "PauseScreen.h"
 #include "Rng.h"
 #include "SaveGame.h"
+#include "SoundEffects.h"
 #include "StartUp.h"
 #include "StateTokens.h"
 #include "StatusScreen.h"
@@ -55,8 +60,15 @@
  * between them, exactly as `FRCE`'s `LDA QQ12 / BEQ` does, and `PlanSteps` -- the fixed-timestep
  * accumulator ADR-005 section 3 asks for -- finally has the caller it was written for.
  *
- * WHAT IS STILL REFUSED is hyperspace and the charts, which are phase 4's, and they are listed by
- * name in `Perform` rather than defaulted so that adding one is a compiler error here.
+ * HYPERSPACE IS NO LONGER REFUSED. `hyp` starts the countdown, `CountdownOnly` spends it and calls
+ * `TT18`, and an arrival ends in the launch the original falls through to (slices 4c-b and 4c-d).
+ * What is still refused is `ShowDistance` and `SearchBySystemName`, and they are listed by name in
+ * `Perform` rather than defaulted so that adding one is a compiler error here.
+ *
+ * The galactic drive is built and UNREACHABLE: `hyp` reaches `Ghy` through `JSR CTRL / BMI Ghy`,
+ * and `CTRL` is a MODIFIER, which `Window` and `KeyMap` do not report -- they deliver matrix
+ * positions, and Ctrl is not one. The case is written out
+ * so that adding the read is a one-line change rather than a search.
  */
 namespace
 {
@@ -78,17 +90,19 @@ namespace
         screen(canvas, text, &shell),
         characters(screen),
         recursive(characters),
-        values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
+        values(recursive, text, commander, name, current.seeds, selectedSeeds, false),
         extended(characters, recursive, rng, &shell),
         trade{recursive, characters, extended, text, shell, shell, rng},
         save{recursive, characters, extended, screen, text, shell, shell, store, numbers},
-        flight(window, canvas, text, characters, recursive, message, commander, rng, status, view, explosionCount, current.techLevel)
+        flight(window, canvas, text, characters, recursive, message, commander, rng, status, view, explosionCount, current.techLevel, sound,
+               music, audio)
     {
       recursive.SetValueTokens(&values);
       recursive.SetCursor(&text);
       shell.Attach(recursive, text, characters.state, message);
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, dockedFlag);
+      shell.AttachSound(audio, sound, music);
 
       // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
       // capital letter of the first screen depends on.
@@ -102,6 +116,18 @@ namespace
     Outpost::Window window;
     Outpost::CanvasPresenter presenter;
     Elite::Canvas canvas;
+
+    /*
+     * 6502: the sound variables, the music player and the SID they write.
+     *
+     * All three are here rather than in the flight session because BOTH halves of the loop make
+     * sound: the docked screens beep and the title screen starts the theme through the shell, and
+     * the flight loop fires lasers through the session. The output is the platform's and is the one
+     * object in this struct that can fail to open, in which case the game runs in silence.
+     */
+    Elite::SoundBuffer sound;
+    Elite::MusicPlayer music;
+    Outpost::SoundOutput audio;
 
     /*
      * 6502: QQ11 -- which screen is showing.
@@ -128,9 +154,16 @@ namespace
     std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
     std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
     std::array<std::uint8_t, 16> buffer{};
-    bool useDisk = false;
+    std::uint8_t useDisk = 0;
 
-    Elite::SystemSeeds currentSeeds{};
+    /*
+     * 6502: QQ15 and QQ2 -- the selected system's seeds, and the current system's inside `current`.
+     *
+     * THERE WAS A SECOND COPY OF QQ2 HERE, and it is gone (§6.140). The token printer was bound to
+     * it and the start sequence wrote the other one, so the status screen's "Present System" was
+     * blank from the cold start until the first hyperspace jump, which was the one path that copied
+     * across. `current.seeds` is the byte; the printer reads it directly.
+     */
     Elite::SystemSeeds selectedSeeds{};
     Elite::CurrentSystem current;
     Elite::MarketState market;
@@ -151,6 +184,44 @@ namespace
     Elite::CrosshairStep crosshairStep;
     std::uint8_t explosionCount = 0;
     std::uint8_t dockedFlag = 0;
+
+    /*
+     * 6502: safehouse -- the seeds of the system the countdown is running towards.
+     *
+     * Separate from `selectedSeeds` (`QQ15`) because the player keeps moving the crosshairs while
+     * the countdown runs, and `TT18` arrives at what was chosen when the key was pressed rather
+     * than at whatever is under the crosshairs when it expires. `QQ8` is here for the same reason:
+     * `hyp` measures the distance once and `TT18` spends that much fuel.
+     */
+    Elite::SystemSeeds jumpTarget{};
+    std::uint16_t jumpDistance = 0;
+
+    /*
+     * 6502: DK4's `CPX #&40 / BNE DK2` -- and the frozen state it leaves behind.
+     *
+     * The original does not have this byte: it FREEZES, in a loop that reads the keyboard and does
+     * not return until CLR/HOME. A windowed program cannot stop pumping messages, so the freeze is
+     * a state the outer loop is in rather than a loop inside it -- which is the same trade
+     * `PlanSteps` makes for the frame rate (ADR-005 §3).
+     */
+    bool paused = false;
+
+    /*
+     * 6502: JSTGY and JSTE -- two of the thirteen that NOTHING ELSE IN THE PORT READS.
+     *
+     * They are the joystick's y-inversion and its enable, and the flight controls read `JSTK` for
+     * both. They are here because `DKS3` walks a contiguous run and the run is thirteen long: a
+     * port that left them out would shift every option after them by two, and the "D" key would
+     * switch the music instead of the disk.
+     */
+    std::uint8_t joystickGeometry = 0;
+    std::uint8_t joystickEnabled = 0;
+
+    /// 6502: MUTOKOLD -- what `MUTOKCH` saw last, which is how it notices the switch moving.
+    std::uint8_t musicSwitchWas = 0;
+
+    /// 6502: DNOIZ -- non-zero disables the sound, and the pause screen stores the KEY CODE in it.
+    std::uint8_t soundDisabled = 0;
 
     // ---- the screens ------------------------------------------------------------------------------
     Elite::StateTokens values;
@@ -192,6 +263,54 @@ namespace
   }
 
   /*
+   * 6502: DAMP through MUSILLY -- the thirteen configuration bytes, in the assembler's order.
+   *
+   * THE ORDER IS THE ONLY DEFINITION THERE IS of which key toggles which option (§6.139), so this
+   * function is the whole of the port's statement of it and `TheTogglesMatchDKS3` is what proves
+   * the statement right. Six of the thirteen live in structs that other slices own, which is why
+   * this is pointers rather than a struct of its own: making them contiguous would touch
+   * eighty-seven call sites to buy what a sweep already establishes.
+   */
+  [[nodiscard]] Elite::OptionBlock OptionsOf(Game& _game)
+  {
+    Elite::ControlOptions& controls = _game.flight.Loop().options;
+    Elite::MusicOptions& music = _game.music.options;
+
+    return Elite::OptionBlock{
+      &controls.dampingDisabled,          // 6502: DAMP
+      &controls.recentreDisabled,         // 6502: DJD
+      &controls.authorNames,              // 6502: PATG
+      &_game.status.damageFlash,          // 6502: FLH
+      &_game.joystickGeometry,            // 6502: JSTGY
+      &_game.joystickEnabled,             // 6502: JSTE
+      &controls.joystick,                 // 6502: JSTK
+      &music.dockingMusicOff,             // 6502: MUTOK
+      &_game.useDisk,                     // 6502: DISK
+      &_game.flight.Screen().heaps.pltog, // 6502: PLTOG
+      &music.dockingMusicForced,          // 6502: MUFOR
+      &music.dockingPlaysTheme,           // 6502: MUDOCK
+      &music.effectsDuringMusic,          // 6502: MUSILLY
+    };
+  }
+
+  /*
+   * 6502: QQ12, QQ22, QQ8 and safehouse -- what `hyp` and `TT18` read besides the chart.
+   *
+   * Built here rather than held as a member for the reason `ChartOf` is: the bytes belong to the
+   * commander and the dashboard and this is the argument list the two routines want.
+   */
+  [[nodiscard]] Elite::JumpState JumpOf(Game& _game)
+  {
+    Elite::JumpState jump;
+    jump.docked = _game.dockedFlag;
+    jump.countdown = _game.status.hyperspaceCountdown;
+    jump.distance = _game.jumpDistance;
+    jump.controlHeld = false; // 6502: JSR CTRL -- a modifier `Window` does not report (§6.139)
+    jump.target = _game.jumpTarget;
+    return jump;
+  }
+
+  /*
    * 6502: TT22 and TT23 -- draw whichever chart the view says.
    *
    * TT23 LIFTS THE CLIPPER'S LIMITS AND PUTS THEM BACK. `LDA #199 / STA Yx2M1 / STA dontclip` at
@@ -229,41 +348,6 @@ namespace
   }
 
   /*
-   * 6502: the head of `MLOOP` -- main game loop part 5's two countdowns, before anything else.
-   *
-   * BOTH ARE COOLING AND NEITHER WAS PORTED. `GNTMP` is the laser temperature the LT dial reads and
-   * `LASCT` is the pulse laser's own countdown, and the two together are why a gun works at all:
-   * part 3 of the flight loop refuses to fire while `LASCT` is non-zero and jams the gun for good at
-   * a `GNTMP` of 242. Both are written by firing and this is the only place either comes down, so
-   * without it a pulse laser fires exactly once per flight and the LT bar only ever rises.
-   *
-   * `LASCT` FALLS BY TWO AND NOT BY ONE -- `DEX / BEQ P%+3 / DEX / STX LASCT`, where the branch
-   * skips the second `DEX` so it stops at zero rather than wrapping past it. `GNTMP` falls by one.
-   *
-   * They are ABOVE part 5's `LDA QQ11` gate, so they run on a docked pass as well as a flying one,
-   * and both loops call this for that reason rather than only the one that has a laser.
-   */
-  void CoolTheGuns(Elite::FlightStatus& _status) noexcept
-  {
-    // 6502: LDX GNTMP / BEQ EE20 / DEC GNTMP.
-    if (_status.laserTemperature != 0u)
-    {
-      _status.laserTemperature = static_cast<std::uint8_t>(_status.laserTemperature - 1u);
-    }
-
-    // 6502: LDX LASCT / BEQ NOLASCT / DEX / BEQ P%+3 / DEX / STX LASCT.
-    if (_status.laserCount != 0u)
-    {
-      std::uint8_t left = static_cast<std::uint8_t>(_status.laserCount - 1u);
-      if (left != 0u)
-      {
-        left = static_cast<std::uint8_t>(left - 1u);
-      }
-      _status.laserCount = left;
-    }
-  }
-
-  /*
    * 6502: FRCE -- the main loop entered with a key already "pressed".
    *
    * Declared ahead of `Perform` because `BAY2` forces one, and `BAY2` is reached from inside two of
@@ -277,9 +361,18 @@ namespace
    *
    * 6502: what `TT102` does with the label it chose. The dispatch itself is `ActionForKey`, which
    * is compared against the shipped routine over 16,384 states; this is the other half, and the
-   * actions that need phase 3 are refused rather than silently ignored -- a docked game that did
-   * nothing for a launch key would look exactly like one that had wired it up.
+   * actions that need phase 4 are refused rather than silently ignored -- a game that did nothing
+   * for the hyperspace key would look exactly like one that had wired it up.
    */
+  /*
+   * 6502: FRCE -- the main loop entered with a key already "pressed".
+   *
+   * Declared ahead of `Perform` because `BAY2` forces one, and `BAY2` is reached from inside two of
+   * the actions `Perform` performs. The recursion is one level deep and cannot be more: the key it
+   * forces is f9, and the Inventory screen forces nothing.
+   */
+  void PressKey(Game& _game, std::uint8_t _key);
+
   void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
   {
     switch (_outcome.action)
@@ -332,8 +425,8 @@ namespace
        * `LDA QQ29 / CMP #17 / BCS BAY2`. There is no third exit, which is why this is unconditional.
        *
        * `BuyScreen` returns for both rather than jumping, because BAY2 is the DISPATCH'S and the
-       * dispatch is here. Without this the port left the buy screen on the display after a cancel,
-       * so the letter key looked dead when it had in fact done exactly what the original does.
+       * dispatch is here. Without it the buy screen stays on the display after a cancel, so the
+       * letter key looks dead when it has done exactly what the original does (§6.128, §6.140).
        *
        * It forces a KEY rather than performing the action, because FRCE is entered with a key and
        * lets TT102 decide again -- so cancelling out of a purchase goes down the same path as
@@ -350,7 +443,7 @@ namespace
        *
        * `ListCargo` already makes it, on the exit that runs out of items and not on the one a letter
        * takes; that asymmetry is the original's and stays inside the screen. What is left for the
-       * dispatch is the jump, and both exits share it.
+       * dispatch is the jump, and both exits share it (§6.128, §6.140).
        */
       PressKey(_game, Elite::KEY_INVENTORY);
       return;
@@ -480,11 +573,93 @@ namespace
       --_game.status.hyperspaceCountdown; // 6502: DEC QQ22+1
 
       /*
-       * 6502: BNE t95 / JMP TT18 -- and `TT18` is the jump itself, which is phase 4's: it deducts
-       * the fuel, copies the target over the commander's system and flies the tunnel. The counter
-       * cannot reach zero in this build anyway, because `hyp` is what starts it and `hyp` is
-       * refused below -- so this is a hole that nothing can fall into rather than one left open.
+       * 6502: BNE t95 / JMP TT18 -- the jump itself, and slice 4c-b is what put it within reach.
+       *
+       * `hyp` above starts the countdown and this is where it expires, which is why the player can
+       * keep flying while it runs. `PerformJump` says which of its four ends it reached; the launch
+       * is the caller's on the one that arrived, exactly as `TT18`'s fall-through into `TT110` is.
        */
+      if (_game.status.hyperspaceCountdown != 0u)
+      {
+        return; // 6502: BNE t95
+      }
+
+      {
+        Elite::JumpState jump = JumpOf(_game);
+        Elite::SystemData described;
+        described.economy = _game.current.economy;
+        described.government = _game.current.government;
+        described.techLevel = _game.current.techLevel;
+
+        const Elite::JumpResult jumped = Elite::PerformJump(
+          _game.flight.Loop(), _game.current, _game.selectedSeeds, jump, described, _game.market, _game.flight, nullptr, _game.crosshairX,
+          _game.crosshairY, _game.commander.GalaxySeeds(), false, _game.flight.Loop().options.authorNames != 0u);
+
+        _game.jumpDistance = jump.distance;
+
+        if (jumped == Elite::JumpResult::Arrived)
+        {
+          // 6502: the fall-through into `TT110`, which is the launch the arrival ends with.
+          Elite::Launch(_game.flight.Loop(), nullptr, _game.dockedFlag, _game.crosshairX, _game.crosshairY, _game.current.techLevel,
+                        _game.selectedSeeds);
+        }
+      }
+      return;
+    }
+
+    /*
+     * 6502: hyp -- decide whether the jump can happen, and start the countdown if it can.
+     *
+     * `TT18` is not called from here. `hyp` prints the target's name and sets `QQ22`, and the jump
+     * itself happens when the countdown reaches zero in `CountdownOnly` above -- which is why the
+     * player can keep flying, or moving the crosshairs, while it runs. What this does take from
+     * `hyp` is the target: `safehouse` is written once, here, so that moving the crosshairs
+     * afterwards changes where you are LOOKING and not where you are going.
+     */
+    case Elite::KeyAction::Hyperspace:
+    {
+      Elite::ChartView chart = ChartOf(_game);
+      Elite::JumpState jump = JumpOf(_game);
+      Elite::FlightScreen& screen = _game.flight.Screen();
+
+      const Elite::JumpOutcome decided = Elite::RequestHyperspace(_game.canvas, screen.draw, _game.recursive, _game.extended, _game.text,
+                                                                  chart, jump, _game.commander.GalaxySeeds(), &_game.shell);
+
+      _game.status.hyperspaceCountdown = jump.countdown;
+      _game.jumpDistance = jump.distance;
+      _game.jumpTarget = jump.target;
+      _game.crosshairX = chart.cursorX;
+      _game.crosshairY = chart.cursorY;
+
+      /*
+       * 6502: Ghy -- and it is reached by `hyp`'s `JSR CTRL / BMI Ghy`, which this port cannot ask
+       * for yet: `CTRL` is a keyboard read and `JumpOf` hands `hyp` a `controlHeld` of false. So
+       * the galactic drive is BUILT (slice 4c-b) and unreachable until the window reports Ctrl, and
+       * the case is written out rather than left off so that adding the read is a one-line change.
+       */
+      if (decided == Elite::JumpOutcome::Galactic)
+      {
+        /*
+         * 6502: QQ21 -- and `Ghy` ROTATES the six galaxy seeds in place, so they cannot be passed
+         * by value. `GalaxySeeds()` reads them out of the commander block; the six bytes go back
+         * one at a time afterwards, because the block is the storage and `SystemSeeds` is a view
+         * of it.
+         */
+        Elite::SystemSeeds galaxy = _game.commander.GalaxySeeds();
+        Elite::GalacticJump(_game.flight.Loop(), _game.current, galaxy, _game.selectedSeeds, jump, chart, nullptr);
+
+        for (int byte = 0; byte < 6; ++byte)
+        {
+          _game.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::GalaxySeeds) + byte)) =
+            galaxy.bytes[static_cast<std::size_t>(byte)];
+        }
+
+        _game.status.hyperspaceCountdown = jump.countdown;
+        _game.jumpTarget = jump.target;
+        _game.jumpDistance = jump.distance;
+        _game.crosshairX = chart.cursorX;
+        _game.crosshairY = chart.cursorY;
+      }
       return;
     }
 
@@ -493,10 +668,8 @@ namespace
      * so that adding a phase-4 screen is a compiler error here instead of a key that does nothing.
      *
      * `SearchBySystemName` is the one that is nearly here: `MT26` reads a line and is ported, and
-     * what it still has no answer for is whose buffer the name goes into (§2e). `Hyperspace` is
-     * `hyp`, which needs `TT18` and the tunnel behind it.
+     * what it still has no answer for is whose buffer the name goes into (§2e).
      */
-    case Elite::KeyAction::Hyperspace:
     case Elite::KeyAction::ShowDistance:
     case Elite::KeyAction::SearchBySystemName:
     case Elite::KeyAction::Nothing:
@@ -548,18 +721,20 @@ namespace
 
     case Elite::LoopOutcome::Died:
       /*
-       * 6502: DEATH, which falls into DEATH2 -- and the port takes DEATH2 alone.
+       * 6502: DEATH, then DEATH2 -- and the port now takes both.
        *
-       * What is skipped is `DEATH` itself: the dying sound, `ASL DELTA` twice, the 24-row screen
-       * that hides the dashboard, and the loop that scatters wreckage through `SFS1`. All four are
-       * phase 4's or phase 5's. What is NOT skipped is the restart, because that is `JSR RES2` and
-       * then a fall into `BR1`, and both of those exist -- so death takes the player back to the
-       * title screen and the docking bay exactly as it should.
+       * `DEATH` is built (§6.117), so what a player sees on dying is the sequence rather than an
+       * immediate restart: the sound, a quarter-turn of the speed, the border rubbed off with its
+       * own EOR, a new stardust field, "GAME OVER", five pieces of wreckage and sixty-four
+       * iterations of the flight loop to fly them past. `DEATH2` is the tail -- `JSR RES2` and a
+       * fall into `BR1` -- which this already did and still does.
        *
        * Neither routine restores the energy banks. That is the game's behaviour and not an
        * omission here: `RESET` fills them and only the COLD start calls it (ADR-003).
        */
       {
+        Elite::Die(_game.flight.Loop(), _game.flight);
+
         _game.shell.ResetShip();
 
         Elite::GameStart restart = StartOf(_game);
@@ -569,15 +744,22 @@ namespace
       return;
 
     case Elite::LoopOutcome::Escaped:
+    {
       /*
-       * 6502: ESCAPE -- phase 4's, with `SESCP` that launches the pod and the cargo and equipment
-       * loss that pays for it. Refused rather than approximated: a pod that took the player back to
-       * the station without emptying the hold would be a cheaper escape than the game sells.
+       * 6502: ESCAPE -- built in slice 4b-a, and this is the last of the three jumps that leave
+       * `M%` to be wired (§6.82 named all three; `DOENTRY` and `DEATH` have been wired since 3d).
        *
-       * A default commander cannot reach this -- `KY13` is ANDed with `ESCP` -- so it needs a
-       * loaded commander who has bought one.
+       * The routine ends `JMP GOIN`, which is the docking -- so the arrival is the caller's, the
+       * way `TT18`'s fall into `TT110` was. A default commander cannot reach here at all: `KY13` is
+       * ANDed with `ESCP`, so it needs one that has bought a pod.
        */
+      Elite::AbandonShip(_game.flight.Loop(), _game.commander.At(Elite::Field::Fuel));
+
+      // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
+      _game.flight.StopDockingMusic();
+      Leave(_game, Elite::LoopOutcome::Docked);
       return;
+    }
 
     case Elite::LoopOutcome::Continued:
       return;
@@ -627,40 +809,38 @@ namespace
 
     for (int step = 0; step < plan.steps; ++step)
     {
-      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(_game.flight.Loop());
+      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(_game.flight.Loop()); // 6502: JSR M%
       if (outcome != Elite::LoopOutcome::Continued)
       {
         Leave(_game, outcome);
         return;
       }
 
-      // 6502: the two `DEC`s at the top of `MLOOP`, which the flight loop falls into.
-      CoolTheGuns(_game.status);
+      /*
+       * 6502: the rest of `TT100`, then `MLOOP` -- and until slice 4c-d none of it was here.
+       *
+       * `RunLoopHead` is the message countdown and `DEC MCNT`; the spawner (slice 4c-a) runs ONE
+       * PASS IN 256, when that counter reaches zero, which is the difference between a bubble that
+       * fills at the game's rate and one that fills 256 times too fast; and `RunLoopTail` is part
+       * 5, which cools the laser, redraws the dials every pass and breeds the Trumbles. §6.138 is
+       * why all three are functions with sweeps behind them rather than fragments transcribed here.
+       */
+      Elite::FlightLoop& loop = _game.flight.Loop();
+
+      if (Elite::RunLoopHead(loop, _game.shell) == Elite::LoopHead::Spawn)
+      {
+        Elite::RunSpawning(loop.screen.bubble, loop.screen.work, loop.screen.rng, _game.commander, _game.current, _game.status,
+                           _game.explosionCount, loop.screen.flight.blueprint, false);
+      }
 
       /*
-       * 6502: main game loop part 5 -- `LDA QQ11 / BNE P%+5 / JSR DIALS`, EVERY PASS.
-       *
-       * The dials were drawn in one place only, `ShowDashboard`'s `JSR DIALS`, which is the copy
-       * `wantdials` makes when the dashboard first arrives as a picture with every bar empty. That
-       * is the ONE-OFF, and the port had mistaken it for the whole of it: the speed, roll and dive
-       * bars redrew when the view changed and never again, so a ship being flown had a dashboard
-       * that was accurate at the moment it appeared and frozen from then on.
-       *
-       * The gate is the C64 build's own and not a guard invented here: `QQ11` non-zero is a chart
-       * or a trading screen, and only the space view has a dashboard under it. It sits AFTER the
-       * frame and BEFORE `TT17`, where part 5 puts it, because `DIALS` reads what the frame just
-       * wrote -- drawing it first would show the previous frame's speed.
-       *
-       * `DIALS` is a redraw and not a tick: part 3's energy bars run one pass in four off `MCNT`,
-       * and that counter is the flight loop's, so the four-pass cycle comes out of `M%` rather than
-       * out of how often this is called.
+       * The frames part 5 asks to wait for are DROPPED here, and saying so is better than pretending
+       * otherwise. `JSR DELAY` is two vertical syncs on a docked screen, and this is the FLIGHT
+       * pass -- `QQ11` is zero on every call that reaches here, so the option's branch is never the
+       * one that waits. The docked loop below is where it would matter, and that loop is paced by
+       * `PlanSteps` rather than by vsync counts (ADR-005 §3).
        */
-      Elite::FlightScreen& dashboard = _game.flight.Screen();
-      if (dashboard.view == 0u)
-      {
-        Elite::DrawDials(dashboard.canvas, dashboard.draw, dashboard.math, dashboard.geometry, dashboard.flight, dashboard.status,
-                         dashboard.commander.At(Elite::Field::Fuel), dashboard.compass, dashboard.bubble);
-      }
+      static_cast<void>(Elite::RunLoopTail(loop, _game.commander, loop.options.authorNames, false));
 
       /*
        * 6502: and then `MLOOP`'s second half, which the flight loop falls into -- `JSR TT17` and
@@ -681,8 +861,72 @@ namespace
       std::uint8_t key = 0;
       if (_game.window.TakeKey(key))
       {
+        /*
+         * 6502: `DOKEY` FALLS INTO `DK4`, which the port has never followed -- `Controls.cpp` says
+         * so in a comment and slice 4e is what answers it. `CPX #&40 / BNE DK2`: the pause key
+         * freezes the game and everything else carries on to the dispatch.
+         */
+        if (key == Elite::PAUSE_KEY)
+        {
+          _game.paused = true;
+          return;
+        }
+
         PressKey(_game, key);
       }
+    }
+  }
+
+  /*
+   * 6502: FREEZE -- the loop the game is in while it is paused, one pass per key.
+   *
+   * The original does not return until CLR/HOME and reads the keyboard itself. A windowed program
+   * has to keep pumping messages, so the loop is turned inside out: this is called instead of
+   * `Advance` while `paused` is set, and each key the window delivers is one pass round `FREEZE`.
+   * Nothing is drawn and nothing moves, which is what freezing is.
+   */
+  void AdvancePaused(Game& _game)
+  {
+    std::uint8_t key = 0;
+    if (!_game.window.TakeKey(key))
+    {
+      return;
+    }
+
+    const Elite::PausePass pass =
+      Elite::PressPauseKey(OptionsOf(_game), _game.soundDisabled, _game.musicSwitchWas, _game.flight.Loop().control.dockingComputer, key);
+
+    /*
+     * 6502: JSR MUTOKCH -- the music is phase 5's, and this is the seam it reaches through. The
+     * `Stop` answer goes through `stopbd`, which starts the music again when `MUFOR` is set, so
+     * the two answers are not "on" and "off" -- they are "start it now" and "ask `stopbd`".
+     */
+    if (pass.music == Elite::MusicChange::StartNow)
+    {
+      Elite::StartDockingMusicNow(_game.music, _game.audio.Direct());
+    }
+    else if (pass.music == Elite::MusicChange::Stop)
+    {
+      Elite::StopDockingMusic(_game.music, _game.flight.Loop().screen.status.titleReset, _game.sound, _game.audio.Direct());
+    }
+
+    /*
+     * The twenty frames per toggle are DROPPED, and saying so is better than pretending. `JSR
+     * DELAY` is there to stop one key press flipping a switch twenty times while the player holds
+     * it; this loop is driven by key EVENTS from the window, which repeat at the system's rate and
+     * not at the frame's, so the debounce the delay provides is already there.
+     */
+    static_cast<void>(pass.delayFrames);
+
+    if (pass.outcome == Elite::PauseOutcome::Resumed)
+    {
+      _game.paused = false; // 6502: CPX #&0D -- and `DK2`'s `RTS`
+    }
+    else if (pass.outcome == Elite::PauseOutcome::Quit)
+    {
+      // 6502: CPX #&07 / JMP DEATH2 -- which does not come back, so neither does the pause.
+      _game.paused = false;
+      Leave(_game, Elite::LoopOutcome::Died);
     }
   }
 
@@ -748,6 +992,19 @@ namespace
       const double elapsed = std::chrono::duration<double>(now - last).count();
       last = now;
 
+      /*
+       * 6502: FREEZE -- and it comes FIRST, because a frozen game is frozen in both halves.
+       *
+       * `DK4` is reached from `DOKEY`, which the flight loop calls, so the pause key is a flight
+       * key; but what `FREEZE` does is refuse to return, and the docked loop cannot run while it
+       * is refusing either. One test above both halves is what that shape becomes here.
+       */
+      if (game->paused)
+      {
+        AdvancePaused(*game);
+        continue;
+      }
+
       if (game->dockedFlag != 0)
       {
         /*
@@ -781,9 +1038,18 @@ namespace
 
         for (int pass = 0; pass < docked.steps; ++pass)
         {
-          // 6502: MLOOP's head, which a docked pass reaches too -- the gate below it is what is
-          // about the space view, not these.
-          CoolTheGuns(game->status);
+          /*
+           * 6502: MLOOP's head, which a docked pass reaches too -- the two countdowns sit ABOVE
+           * part 5's `LDA QQ11` gate, and everything below it is about the space view.
+           *
+           * It is `Elite::CoolTheGuns` and not a copy here: `RunLoopTail` runs the same function on
+           * a flying pass, so the arithmetic has one home (§6.146). What a docked pass still does
+           * NOT run is the REST of part 5 -- the author-names delay and the Trumble breeding, both
+           * of which the original reaches while docked. That is a gap this merge did not create and
+           * does not close; it needs `RunLoopTail`'s frame count plumbed into the docked pace, which
+           * is slice 4d's neighbourhood rather than a merge's.
+           */
+          Elite::CoolTheGuns(game->status);
 
           game->crosshairStep = Elite::ScanFlightControls(game->flight.Loop(), game->flight, game->view);
 

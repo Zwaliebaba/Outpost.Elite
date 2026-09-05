@@ -217,7 +217,8 @@ namespace Elite
     std::span<std::uint8_t, COMMANDER_NAME_SIZE> name;  ///< 6502: NAME
     std::span<std::uint8_t, COMMANDER_FILE_SIZE> image; ///< 6502: NA%
     std::span<std::uint8_t> buffer;                     ///< 6502: INWK+5, the line editor's
-    bool& useDisk;                                      ///< 6502: DISK
+    std::uint8_t& useDisk;                              ///< 6502: DISK -- a byte, not a flag: it is
+                                                        ///< one of the pause screen's thirteen toggles
 
     CurrentSystem& current;
     SystemSeeds& selected;        ///< 6502: QQ15
