@@ -275,9 +275,10 @@ namespace Elite
       return;
     }
 
-    // 6502: LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY -- the TARGET's type, not the missile's.
+    // 6502: LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY -- the TARGET's slot and type, not the
+    // missile's.
     const std::uint8_t target = screen.bubble.missileTarget;
-    _loop.effects.Anger(screen.bubble.slots[target]);
+    _loop.effects.Anger(target, screen.bubble.slots[target]);
 
     // 6502: LDY #BLACK2 / JSR ABORT -- the lock is gone and so is the indicator.
     AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.At(Field::Missiles), MISSILE_NONE);
@@ -1116,8 +1117,9 @@ namespace Elite
               screen.work[SHIP_ENERGY] = hit.energy; // 6502: .MA14 STA INWK+35
             }
 
-            // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too.
-            _loop.effects.Anger(type);
+            // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too. INF
+            // is this ship's block here, the one the loop is on, so the slot is XSAV's.
+            _loop.effects.Anger(screen.flight.slot, type);
           }
         }
       }
