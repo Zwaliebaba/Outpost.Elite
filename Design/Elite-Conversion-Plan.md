@@ -463,9 +463,18 @@ than at 0 -- and the test asserts 12 against the shipped routine. The BBC's sour
 comment, and the difference is not the platform this time: it is a comment that was wrong when it
 was written.
 
-**Three documentation errors in one routine, which is a rate worth naming.** §6.109 found `HFS2`'s
+**AND THE CARRY THAT PICKS THE WRECKAGE IS NOT THE ONE THE COMMENT NAMES.** `LDX #OIL / LDA
+XX21-1+2*PLT / BEQ D3 / BCC D3 / DEX` chooses between a cargo canister and an alloy plate, and the
+comment beside the `BCC` says the flag "will be random following the above call to `Ze`". It is
+random, and it is not `Ze`'s: **`SEC / ROR A` sits four instructions above it**, and a `ROR` puts
+A's old bit 0 into the carry. A there is the roll counter, `X AND %10001111`. So the wreckage is a
+plate when the random `X` was odd -- a different random number from the one the comment points at,
+and the whole-bitmap comparison is what said so, after the port had believed the comment.
+
+**Four documentation errors in one routine, which is a rate worth naming.** §6.109 found `HFS2`'s
 header with its two step sizes swapped against its own code; this has `DET1` described as a routine
-it is not, a register set that is not, and a shift in the wrong direction. The upstream commentary
+it is not, a register set that is not, a shift in the wrong direction, and a carry attributed to the
+wrong instruction. The upstream commentary
 is the best thing about the source and it is not the source: **every time this port has trusted a
 comment over an instruction it has been wrong, and every time it has measured instead it has been
 right.** `c64_source.py` exists because of that (§6.75) and it answered the first of these three in

@@ -260,6 +260,17 @@ namespace Elite
    * It does not return. The original ends `JMP DEATH2`, which resets the stack and falls into
    * `BR1` -- so this ends where the caller's own death exit already goes.
    */
+  /*
+   * 6502: DEATH from its start to the `JSR U%` -- the scene, before anything moves.
+   *
+   * Split from the animation because the routine is two things and not one: everything above `U%`
+   * builds a screen and a bubble, and everything below it runs the flight loop over them sixty-four
+   * times. The seam is the original's own -- `.D1`'s loop ends and `U%` begins -- and it is what
+   * lets the scene be compared against the shipped routine on the whole bitmap, which a routine
+   * that never returns cannot be.
+   */
+  void PrepareDeathScene(FlightLoop& _loop, DashboardEffects& _sound) noexcept;
+
   void Die(FlightLoop& _loop, DashboardEffects& _sound) noexcept;
 
 } // namespace Elite

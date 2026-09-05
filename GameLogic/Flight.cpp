@@ -437,7 +437,7 @@ namespace Elite
     }
   }
 
-  void Die(FlightLoop& _loop, DashboardEffects& _sound) noexcept
+  void PrepareDeathScene(FlightLoop& _loop, DashboardEffects& _sound) noexcept
   {
     FlightScreen& screen = _loop.screen;
 
@@ -515,10 +515,16 @@ namespace Elite
        * 6502: LDX #OIL / LDA XX21-1+2*PLT / BEQ D3 / BCC D3 / DEX.
        *
        * The load has no brackets, so it reads the byte AT `XX21 + 7` rather than through it --
-       * always &D0, never zero, so the `BEQ` is dead and only the carry decides. That carry is
-       * `Ze`'s last `DORND`, so it is a coin flip between a canister and an alloy plate.
+       * always &D0, never zero, so the `BEQ` is dead and only the carry decides.
+       *
+       * AND THAT CARRY IS NOT `Ze`'S, whatever the upstream comment says ("which will be random
+       * following the above call to Ze"). `SEC / ROR A` sits between them, four instructions up:
+       * the `ROR` shifts A right and puts A's OLD BIT 0 into the carry, and A there is the roll
+       * counter, `X AND %10001111`. So the wreckage is a plate when the random X was odd, which is
+       * random but is a different random number from the one the comment names (§6.117).
        */
-      const std::uint8_t type = roll.carry ? SHIP_TYPE_ALLOY_PLATE : SHIP_TYPE_CANISTER;
+      const bool plate = (roll.previous & 1u) != 0u;
+      const std::uint8_t type = plate ? SHIP_TYPE_ALLOY_PLATE : SHIP_TYPE_CANISTER;
 
       const NewShip made = AddDebris(screen.bubble, screen.work, type, screen.flight.delta, screen.flight.blueprint);
 
@@ -530,6 +536,13 @@ namespace Elite
         screen.bubble.blocks[made.slot][31] = static_cast<std::uint8_t>(state.value & 0x80u);
       }
     } while (screen.bubble.slots[DEATH_DEBRIS_SLOT] == 0u);
+  }
+
+  void Die(FlightLoop& _loop, DashboardEffects& _sound) noexcept
+  {
+    FlightScreen& screen = _loop.screen;
+
+    PrepareDeathScene(_loop, _sound);
 
     ClearFlightKeys(_loop.keys); // 6502: JSR U%
 
