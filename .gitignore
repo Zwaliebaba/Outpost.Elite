@@ -416,6 +416,8 @@ Tools-ext/
 # which is what gets published. Design/Reference/ itself stays, for authored content.
 Design/Reference/Labels.txt
 Design/Reference/Binaries.txt
+Design/Reference/LoaderLabels.txt
+Design/Reference/LoaderBinaries.txt
 Design/Reference/labels-*.txt
 Design/Reference/compile-*.txt
 

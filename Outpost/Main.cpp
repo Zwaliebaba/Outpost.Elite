@@ -16,6 +16,7 @@
 #include "ExtendedTokens.h"
 #include "Flight.h"
 #include "FlightLoop.h"
+#include "LoaderScreen.h"
 #include "Market.h"
 #include "MarketScreen.h"
 #include "Rng.h"
@@ -407,6 +408,17 @@ namespace
 
     game->window.Create(_instance, INITIAL_SCALE);
     game->presenter.Create(game->window.Handle());
+
+    /*
+     * 6502: the Elite loader's parts 5 and 6 -- the colours the game is drawn in.
+     *
+     * BEFORE ANYTHING ELSE, because everything else assumes it. Screen RAM and colour RAM are not
+     * the game's to fill: the loader fills them, once, and the game then writes bits into a bitmap
+     * whose palette is already decided cell by cell. Start without it and every routine below
+     * draws exactly what it should and the screen stays black -- the border box, the dashboard
+     * picture and all seven dials included.
+     */
+    Elite::SetUpLoaderScreen(game->canvas);
 
     // 6502: NA% -- the commander the disk menu's "load" compares against, and the one SVE writes.
     Elite::SaveCommander(game->commander, game->name, game->image);
