@@ -258,11 +258,17 @@ namespace Outpost
     // 6502: stopat. Phase 5.
   }
 
-  void GameShell::ShowDockingTunnel()
+  void GameShell::ShowCircle()
   {
-    // 6502: LAUN -- the expanding circles a launch and an arrival both open with. The ball line
-    // heap it draws through has existed since slice 3c; `LAUN` itself has not been ported, and it
-    // is the reason a launch cuts straight to the rings.
+    /*
+     * One circle of a launch or hyperspace tunnel has been drawn; show it and let a frame pass.
+     *
+     * This is `DELAY` with a count of one, and it is the same thing for the same reason: `Turn`
+     * ends in a present, so a turn is a vertical sync. What is being restored here is not a wait
+     * the 6502 performed -- it performed none -- but the DISPLAY the 6502 had, which showed each
+     * circle for the 14,232 cycles the next one took to compute (§6.109).
+     */
+    WaitFrames(1u);
   }
 
   Elite::TitleKey GameShell::ScanTitleKeys(Elite::KeyLogger& _keys)

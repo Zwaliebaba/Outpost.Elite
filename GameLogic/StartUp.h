@@ -116,9 +116,15 @@ namespace Elite
     /// 6502: msblob -- the dashboard's missile indicators, green up to NOMSL and black above it.
     virtual void ResetMissileIndicators() = 0;
 
-    /// 6502: LAUN -- the space station's docking tunnel, drawn as a sequence of expanding circles.
-    /// Arriving reaches it; `DOENTRY` is its only caller here.
-    virtual void ShowDockingTunnel() = 0;
+    /*
+     * `ShowDockingTunnel` WAS HERE, and it is gone because `LAUN` is ported (§6.109).
+     *
+     * It was scoped in 2e, when the ball line heap the tunnel draws through did not exist. The heap
+     * arrived in 3c and the stub stayed, so a launch cut straight to the rings and an arrival had
+     * no tunnel at all -- §6.73's pattern for the seventh time, and the seventh time the fix was to
+     * delete the seam rather than to implement it. `DOENTRY` and `TT110` now call
+     * `Elite::DrawLaunchTunnel` directly, which is what the 6502 does.
+     */
 
     /*
      * 6502: JSR RDKEY at the bottom of `TLL2` -- the title screen's per-frame keyboard scan.

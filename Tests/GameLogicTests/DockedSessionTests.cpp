@@ -154,10 +154,6 @@ namespace GameLogicTests
         return {true, 0u};
       }
 
-      void ShowDockingTunnel() override
-      {
-        Note("tunnel");
-      }
       std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _ship, std::uint8_t) override
       {
         Note("title " + std::to_string(_token) + "/" + std::to_string(_ship));

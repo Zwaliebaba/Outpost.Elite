@@ -12,6 +12,7 @@
 #include "ShipDraw.h"
 
 #include <cstdint>
+#include <span>
 #include <vector>
 #include <string>
 
@@ -163,7 +164,7 @@ namespace GameLogicTests
                             std::to_wstring(run.instructions) + L", stoppedAt " + std::to_wstring(run.stoppedAt))
                              .c_str());
 
-            Elite::DrawHyperspaceRings(world.canvas, world.heaps, draw, geometry, math, clip);
+            Elite::DrawHyperspaceRings(world.canvas, world.heaps, draw, geometry, math, clip, nullptr);
           }
 
           const std::wstring where = WidenText("HFS1 (STP " + std::to_string(step) + ", " + std::to_string(pass + 1u) + " pass(es))");
@@ -197,20 +198,175 @@ namespace GameLogicTests
     }
   };
 
+  /*
+   * 6502: LAUN and the `HFS2` it falls into -- the tunnel a launch and an arrival both open with.
+   *
+   * The port had this behind a seam until this slice, so the LAST thing on the launch path that
+   * was not compared against the shipped game is compared here (§6.109). Three things happen before
+   * the rings and each one is asserted separately, because each is a different kind of mistake:
+   * the whoosh is a call whose RESULT is dropped, the step is a store the port used to be missing
+   * altogether, and the view type is saved and restored around a `TT66` that would otherwise
+   * change it.
+   */
+  TEST_CLASS(TheLaunchTunnel)
+  {
+  public:
+    TEST_METHOD(TheLaunchTunnelMatchesLAUN)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const std::uint16_t laun = oracle.Label("LAUN");
+      const std::uint16_t stp = oracle.Label("STP");
+      const std::uint16_t noise = oracle.Label("NOISE");
+
+      // Every view the tunnel can be drawn over: the docked screens as well as the space view,
+      // because `LAUN` is called from `DOENTRY` while a docked screen is still up.
+      for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{4}, std::uint8_t{13}, std::uint8_t{255}})
+      {
+        World world;
+        Seed(world, 0x71u);
+        world.view = view;
+        world.heaps.yx2M1 = 143u;
+        world.heaps.lsp = 0u;
+
+        /*
+         * `STP` starts at something the launch must overwrite. Four is the value §6.95 had the app
+         * seeding precisely because nothing on this path wrote one -- and `LAUN` is what writes it,
+         * so the seed stops being load-bearing the moment this routine exists.
+         */
+        world.heaps.stp = 4u;
+
+        Elite::ClipState clip;
+
+        Cpu6502 cpu = oracle.Fresh();
+        FillScreens(cpu, world.canvas, at.screen, 0x1Du);
+        Mirror(world, cpu, at);
+        cpu.memory[oracle.Label("Yx2M1")] = 143u;
+        cpu.memory[oracle.Label("dontclip")] = 0u;
+        cpu.memory[stp] = 4u;
+
+        // The three the platform owns, plus §6.108's: `TT66` reaches `NOSPRITES`, and `NOSPRITES`
+        // writes VIC registers that are the ship blueprint table in the oracle's flat memory.
+        cpu.AddTrap(noise, Cpu6502::TrapExit::SetCarry);
+        cpu.AddTrap(oracle.Label("SETL1"));
+        cpu.AddTrap(oracle.Label("DOVDU19"));
+        cpu.AddTrap(oracle.Label("NOSPRITES"));
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(laun, 40'000'000);
+        Assert::IsTrue(run.completed, (std::wstring(L"LAUN returned -- illegal ") + std::to_wstring(run.illegalOpcode) + L", stoppedAt " +
+                                       std::to_wstring(run.stoppedAt))
+                                        .c_str());
+
+        Elite::FlightScreen screen = world.Screen();
+        Elite::DrawLaunchTunnel(screen, clip, nullptr);
+
+        const std::wstring where = WidenText("LAUN (QQ11 " + std::to_string(view) + ")");
+
+        // 6502: LDY #sfxwhosh / JSR NOISE -- effect 4, once, and its carry is dropped.
+        std::uint32_t whooshes = 0;
+        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+        {
+          whooshes += (hit.address == noise) ? 1u : 0u;
+        }
+        Assert::AreEqual<std::uint32_t>(1u, whooshes, (where + L": the shipped routine makes one noise").c_str());
+        Assert::AreEqual<std::size_t>(1u, world.effects.sounds.size(), (where + L": and so does the port").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, world.effects.sounds.front(), (where + L": sfxwhosh").c_str());
+
+        // 6502: LDA #8 / STA STP -- the step, which is the whole of §6.94's missing writer.
+        Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, cpu.memory[stp], (where + L": the shipped STP").c_str());
+        Assert::AreEqual(cpu.memory[stp], world.heaps.stp, (where + L": STP").c_str());
+
+        // 6502: LDA QQ11 / PHA / ... / PLA / STA QQ11 -- the view survives the TT66 inside.
+        Assert::AreEqual(cpu.memory[at.qq11], world.view, (where + L": QQ11").c_str());
+        Assert::AreEqual<std::uint8_t>(view, world.view, (where + L": and it is the one that went in").c_str());
+
+        Assert::IsTrue(CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where) > 0u, (where + L": something was drawn").c_str());
+        CompareState(cpu, world, at, where);
+      }
+    }
+
+    /*
+     * The pacing, which is the port's and not the game's -- so it is asserted against the SHAPE of
+     * the 6502 loop rather than against the oracle, which has no present to count.
+     *
+     * Thirty-four circles: the ring starting at radius 8 doubles to 16, 32, 64 and 128 before the
+     * `ASL` carries, the one at 9 does the same, and the six from 10 to 15 stop one earlier because
+     * they cross 160 first. That count does not depend on `STP` -- the step is how many segments a
+     * circle has, not how many circles a ring is -- which is why one number covers both callers.
+     */
+    TEST_METHOD(ThePacingIsOneFramePerCircle)
+    {
+      struct Counting final : Elite::TunnelEffects
+      {
+        std::uint32_t circles = 0;
+        void ShowCircle() override
+        {
+          ++circles;
+        }
+      };
+
+      for (const std::uint8_t step : {std::uint8_t{2}, std::uint8_t{4}, std::uint8_t{8}})
+      {
+        World world;
+        Seed(world, 0x71u);
+        world.heaps.yx2M1 = 143u;
+        world.heaps.lsp = 0u;
+        world.heaps.stp = step;
+
+        Elite::ClipState clip;
+        Counting counting;
+        Elite::DrawHyperspaceRings(world.canvas, world.heaps, world.draw, world.geometry, world.math, clip, &counting);
+
+        Assert::AreEqual<std::uint32_t>(34u, counting.circles, (WidenText("STP " + std::to_string(step)) + L": circles shown").c_str());
+      }
+
+      // And a null pacing is the same drawing with nobody watching, which is what the oracle
+      // comparisons pass: the count above must not be reachable through a screen difference.
+      World unpaced;
+      Seed(unpaced, 0x71u);
+      unpaced.heaps.yx2M1 = 143u;
+      unpaced.heaps.lsp = 0u;
+      unpaced.heaps.stp = 8u;
+
+      World paced;
+      Seed(paced, 0x71u);
+      paced.heaps.yx2M1 = 143u;
+      paced.heaps.lsp = 0u;
+      paced.heaps.stp = 8u;
+
+      Elite::ClipState clipA;
+      Elite::ClipState clipB;
+      Counting counting;
+      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.draw, unpaced.geometry, unpaced.math, clipA, nullptr);
+      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.draw, paced.geometry, paced.math, clipB, &counting);
+
+      const std::span<const std::uint8_t> quiet = unpaced.canvas.Screen();
+      const std::span<const std::uint8_t> watched = paced.canvas.Screen();
+      for (std::size_t index = 0; index < quiet.size(); ++index)
+      {
+        Assert::AreEqual(quiet[index], watched[index], (L"pacing changes no pixel, byte " + std::to_wstring(index)).c_str());
+      }
+    }
+  };
+
   namespace
   {
     /*
-     * The two seams the launch path still has, and nothing else.
+     * THE LAUNCH PATH HAS NO SEAMS LEFT, and this object is what is left of the ones it had.
      *
-     * `LAUN` is the docking tunnel -- a sequence of expanding circles drawn over the docked
-     * screen, which needs the frame timing the executable owns -- and `NWSPS` self-modifies
-     * `XX21` to choose between a Coriolis and a Dodo. Everything else `TT110` reaches is ported
-     * and runs for real on both sides, which is what makes a whole-bitmap compare worth doing.
+     * `LAUN` was the last: the docking tunnel needed the ball line heap, which arrived in 3c, and
+     * the stub outlived its reason by two slices as every other one on this path did (§6.109). It
+     * is ported now and runs for real on both sides, so the whole-bitmap compare below covers the
+     * tunnel as well as everything after it. What remains here is `StartUpEffects` for the
+     * routines that still take one; `Launch` no longer does.
      */
     struct RecordingStart final : Elite::StartUpEffects
     {
-      std::uint32_t tunnels = 0;
-
       void ResetUniverse() override {}
       void ResetShip() override {}
       void ClearKeyLogger() override {}
@@ -244,10 +400,6 @@ namespace GameLogicTests
         return {true, key};
       }
 
-      void ShowDockingTunnel() override
-      {
-        ++tunnels;
-      }
       void WaitFrames(std::uint8_t) override {}
 
       std::uint8_t ShowTitleScreen(std::uint8_t, std::uint8_t, std::uint8_t) override
@@ -319,7 +471,7 @@ namespace GameLogicTests
     {
       std::uint16_t nostm, lsx2, lsy2, mstg, jstx, jsty, alp2Next, bet2, bet2Next;
       std::uint16_t col2, dontclip, yx2m1, slsp, bomb, qq12, qq22, hfx, autoByte;
-      std::uint16_t inwk, fist, stp, res2, reset, tt110, laun, stopbd, noise;
+      std::uint16_t inwk, fist, stp, res2, reset, tt110, stopbd, noise;
 
       explicit LaunchWhere(const OracleImage& _oracle)
       {
@@ -347,7 +499,6 @@ namespace GameLogicTests
         res2 = _oracle.Label("RES2");
         reset = _oracle.Label("RESET");
         tt110 = _oracle.Label("TT110");
-        laun = _oracle.Label("LAUN");
         stopbd = _oracle.Label("stopbd");
         noise = _oracle.Label("NOISE");
       }
@@ -646,9 +797,17 @@ namespace GameLogicTests
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(to.stopbd);
             cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
-            cpu.AddTrap(to.laun);
             cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
+
+            /*
+             * §6.108, and this is the second run to need it. `LAUN` calls `TT66`, `TT66` calls
+             * `NOSPRITES`, and `NOSPRITES` stores into `VIC+&15` -- which is `XX21+&15` in the
+             * oracle's flat memory, the high byte of ship type 11's blueprint. The launch creates
+             * a planet and a station AFTER the tunnel, so an untrapped store here makes `NWSPS`
+             * refuse and the two sides disagree about the bubble rather than about the drawing.
+             */
+            cpu.AddTrap(oracle.Label("NOSPRITES"));
             FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
             Mirror(leaving.world, cpu, at);
             MirrorLeaving(leaving, cpu, at, to, docked);
@@ -662,7 +821,7 @@ namespace GameLogicTests
 
             std::uint8_t flag = docked;
             Elite::SystemSeeds selected{};
-            Elite::Launch(loop, leaving.start, flag, leaving.world.commander.At(Elite::Field::SystemX),
+            Elite::Launch(loop, nullptr, flag, leaving.world.commander.At(Elite::Field::SystemX),
                           leaving.world.commander.At(Elite::Field::SystemY), techLevel, selected);
 
             const std::wstring where = WidenText("TT110 (" + std::string(docked != 0u ? "docked" : "in flight") + ", tek " +
@@ -672,13 +831,6 @@ namespace GameLogicTests
             CompareState(cpu, leaving.world, at, where);
             CompareLeaving(cpu, leaving, to, flag, where);
 
-            std::uint32_t tunnels = 0;
-            for (const Cpu6502::TrapHit& hit : cpu.trapHits)
-            {
-              tunnels += (hit.address == to.laun) ? 1u : 0u;
-            }
-
-            Assert::AreEqual(tunnels, leaving.start.tunnels, (where + L": LAUN").c_str());
             Assert::AreEqual<std::uint8_t>(0u, flag, (where + L": QQ12 is cleared on both paths").c_str());
 
             launched += (docked != 0u) ? 1u : 0u;

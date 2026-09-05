@@ -12,11 +12,18 @@ namespace Outpost
     /*
      * 6502: what `CIRCLE` would have left in `STP`, for a flight world that has never drawn one.
      *
-     * §6.95: nothing on the path from a cold start to the first launch writes `STP`, and `TT110`
-     * calls `HFS1`, which walks a circle `STP` at a time and cannot terminate on a zero. `CIRCLE`
-     * is the only writer in the whole build and it stores 8, 4 or 2 by radius. Four is the middle
-     * one -- what a planet of ordinary size leaves -- and it is the value the oracle comparison
-     * seeds, so the app starts in a state the game could be in rather than in one it could not.
+     * §6.95: `HFS1` walks a circle `STP` at a time and cannot terminate on a zero, and nothing on
+     * the path from a cold start to the first launch was writing one. `CIRCLE` stores 8, 4 or 2 by
+     * radius; four is the middle one -- what a planet of ordinary size leaves -- and it is the
+     * value the oracle comparison seeds, so the app starts in a state the game could be in rather
+     * than in one it could not.
+     *
+     * **AND IT IS NO LONGER LOAD-BEARING (§6.109).** The routine that writes `STP` on this path is
+     * `LAUN`, which was a stub when §6.95 was written: its `LDA #8` is the step, and both `TT110`
+     * and `DOENTRY` run it before any circle is drawn. §6.95 diagnosed a missing write as a state
+     * the object could not start in, and the honest cause was a routine the port had not built.
+     * The seed stays because §6.95's RULE stands -- a default-constructed flight world is still a
+     * state the game cannot be in -- but nothing reads this particular byte before `LAUN` sets it.
      */
     constexpr std::uint8_t LAST_CIRCLE_STEP = 4;
 

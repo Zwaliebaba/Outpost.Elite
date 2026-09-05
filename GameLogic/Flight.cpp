@@ -175,7 +175,33 @@ namespace Elite
     ResetShipAndBubble(_loop); // 6502: and no RTS -- it falls into RES2
   }
 
-  void Launch(FlightLoop& _loop, StartUpEffects& _start, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
+  void DrawLaunchTunnel(FlightScreen& _screen, ClipState& _clip, TunnelEffects* _pacing) noexcept
+  {
+    // 6502: .LAUN LDY #sfxwhosh / JSR NOISE -- and the carry it returns is dropped, because the
+    // next instruction is a load. §6.99's third answer costs nothing here.
+    (void)_screen.effects.PlaySound(SOUND_MISSILE);
+
+    // 6502: LDA #8 -- and `HFS2`'s first instruction, `STA STP`, is what receives it. This is the
+    // only writer of the step on the launch path, and its absence is what §6.95 was working around.
+    _screen.heaps.stp = LAUNCH_TUNNEL_STEP;
+
+    /*
+     * 6502: .HFS2 LDA QQ11 / PHA / LDA #0 / JSR TT66 / PLA / STA QQ11.
+     *
+     * The screen is cleared to a space view and the view type is then PUT BACK to whatever the
+     * caller had. So the tunnel is drawn on a blank space view while the game still believes it is
+     * showing the docked screen -- which is exactly right, because the caller has not finished
+     * leaving it yet.
+     */
+    const std::uint8_t saved = _screen.view;
+    SetUpScreen(_screen, 0u);
+    _screen.view = saved;
+
+    // 6502: falls into HFS1.
+    DrawHyperspaceRings(_screen.canvas, _screen.heaps, _screen.draw, _screen.geometry, _screen.math, _clip, _pacing);
+  }
+
+  void Launch(FlightLoop& _loop, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
               std::uint8_t _techLevel, SystemSeeds& _selected) noexcept
   {
     LoopSpawnEffects spawning(_loop);
@@ -184,8 +210,9 @@ namespace Elite
     // 6502: LDX QQ12 / BEQ NLUNCH -- pressing "1" in flight does nothing but change the view.
     if (_docked != 0u)
     {
-      _start.ShowDockingTunnel(); // 6502: JSR LAUN, over the docked screen it is still showing
-      ResetShipAndBubble(_loop);  // 6502: JSR RES2
+      // 6502: JSR LAUN, over the docked screen it is still showing.
+      DrawLaunchTunnel(screen, _loop.clip, _pacing);
+      ResetShipAndBubble(_loop); // 6502: JSR RES2
 
       /*
        * 6502: JSR TT111 -- for the SEEDS, not for the distance. The planet's look comes from the
@@ -218,9 +245,14 @@ namespace Elite
 
       screen.view = VIEW_LAUNCHING; // 6502: LDA #255 / STA QQ11
 
-      // 6502: JSR HFS1 -- eight rings over the screen the tunnel left, and they erase themselves
-      // because `LOOK1` below clears the screen anyway (§6.94).
-      DrawHyperspaceRings(screen.canvas, screen.heaps, screen.draw, screen.geometry, screen.math, _loop.clip);
+      /*
+       * 6502: JSR HFS1 -- eight rings over the screen the tunnel left, and they erase themselves
+       * because `LOOK1` below clears the screen anyway (§6.94).
+       *
+       * `STP` is still the 8 `LAUN` stored, which is the second half of §6.94's answer: the step
+       * IS written on this path, by the routine the port had left as a stub (§6.109).
+       */
+      DrawHyperspaceRings(screen.canvas, screen.heaps, screen.draw, screen.geometry, screen.math, _loop.clip, _pacing);
     }
 
     // 6502: .NLUNCH LDX #0 / STX QQ12 / JMP LOOK1 -- and the X that clears the flag is the X the
