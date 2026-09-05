@@ -268,7 +268,7 @@ namespace Elite
      * Part 11 angers the ship OUR LASER has just hit, and there INF is the ship the loop is on --
      * `XSAV`'s slot -- with nothing locked at all in the common case. A seam that took only the type
      * had to guess which, guessed `MSTG`, and read block 255 the first time a laser landed without
-     * a missile lock (§6.141).
+     * a missile lock (§6.142).
      */
     virtual void Anger(std::uint8_t _slot, std::uint8_t _type) = 0;
   };
