@@ -243,6 +243,6 @@ namespace Elite
   [[nodiscard]] DiskMenuResult DiskAccessMenu(SaveScreen& _screen, CommanderBlock& _block,
                                               std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name,
                                               std::span<std::uint8_t, COMMANDER_FILE_SIZE> _image, std::span<std::uint8_t> _buffer,
-                                              bool& _useDisk) noexcept;
+                                              std::uint8_t& _useDisk) noexcept;
 
 } // namespace Elite

@@ -319,7 +319,7 @@ namespace GameLogicTests
       std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
       std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
       std::array<std::uint8_t, 16> buffer{};
-      bool useDisk = false;
+      std::uint8_t useDisk = 0;
 
       Elite::SystemSeeds currentSeeds{};
       Elite::SystemSeeds selectedSeeds{};

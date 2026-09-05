@@ -769,7 +769,7 @@ namespace GameLogicTests
         const char* what;
         std::vector<std::uint8_t> keys;
         Outcome outcome = Outcome::Left;
-        bool useDisk = false;
+        std::uint8_t useDisk = 0;
         bool failDevice = false;
         bool badFile = false;
         std::uint8_t numberWidth = 0; ///< 6502: U, which SV1 inherits rather than setting
@@ -855,7 +855,7 @@ namespace GameLogicTests
         store.badFile = script.badFile;
         Elite::NumberWorkspace numbers;
         numbers.u = script.numberWidth; // 6502: U, exactly as it was seeded on the other side
-        bool useDisk = script.useDisk;
+        std::uint8_t useDisk = script.useDisk ? std::uint8_t{0xFFu} : std::uint8_t{0};
 
         Elite::SaveScreen screen{recursive, characters, extended, sink, text, keys, effects, store, numbers};
 

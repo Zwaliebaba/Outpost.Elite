@@ -142,6 +142,7 @@ namespace GameLogicTests
       {
         return;
       }
+      CompareAgainstImage("TGINT", Elite::OPTION_KEY_TABLE);
       CompareAgainstImage("SNE", Elite::SINE_TABLE);
       CompareAgainstImage("ACT", Elite::ARCTAN_TABLE);
     }
