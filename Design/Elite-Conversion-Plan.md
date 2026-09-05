@@ -437,6 +437,37 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.112 The Ubuntu leg is not a compiler check, and it has now let two through
+
+`std::vector<bool>` cost a red CI run within minutes of §6.111 being pushed, and the interesting
+part is not the container.
+
+**WHAT HAPPENED.** The carry lists were `std::vector<bool>`, which is bit-packed: `operator[]`
+returns a **proxy**, not a `bool`, and the proxy is what `T` deduces to in
+`Assert::AreEqual(const T&, const T&, ...)`. MSVC's `CppUnitTestAssert.h` resolves `ToString<T>`
+and static-asserts when there is none, so it failed with C2338. g++ has no such assertion and the
+portable runner's shim stringifies through a stream, so **the same file built and 304 tests passed
+on the Ubuntu leg** before the Windows one saw it.
+
+**THIS IS THE SECOND TIME.** The first was `const bool near = ...`, which is `const bool = ...`
+after `<windows.h>` claims the word -- caught by the Windows leg after the Linux one was green,
+and answered by teaching `check_gamelogic.py` about Windows macros. Both have the same shape: the
+fast leg is not merely *slower to run* than the authority, it is **more permissive**, and nothing
+says by how much. The workflow's own comment calls the Linux job "a second compiler's opinion",
+which is true and is not the same thing as agreement.
+
+**THE FIX, AND WHAT IT DELIBERATELY IS NOT.** The shim now static-asserts on
+`std::vector<bool>::reference` with the reason and the remedy in the message. It does **not** try
+to mirror MSVC's whole `ToString` set, because that set is not written down anywhere this project
+can read and guessing it would trade a known gap for an unknown one -- the shim would start
+rejecting comparisons the real framework accepts, which is a worse failure because it fails on the
+leg nobody treats as authoritative. One trap, by name, where it bit.
+
+**The rule.** A stand-in for a toolchain is a stand-in for what it ACCEPTS as well as for what it
+computes, and the second half is the one nobody writes tests for. Each time the Windows leg
+catches something the Ubuntu leg could not, the answer is to teach the Ubuntu leg that specific
+thing -- not to assume the next one will be caught either.
+
 ### 6.111 The carry is not a seam's problem, it is a chain, and the port models none of it
 
 §6.99 said the fix for `bool PlaySound(std::uint8_t)` was `bool PlaySound(std::uint8_t, bool)` and

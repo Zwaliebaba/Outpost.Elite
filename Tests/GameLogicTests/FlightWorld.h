@@ -126,9 +126,16 @@ namespace GameLogicTests
     std::vector<std::uint8_t> palettes;
     std::vector<std::uint8_t> sounds;
 
-    /// The carry each `PlaySound` was handed, parallel to `sounds` (§6.99). Both seams that reach
-    /// `NOISE` push here, because the 6502 has one routine and the port has two interfaces onto it.
-    std::vector<bool> soundCarries;
+    /*
+     * The carry each `PlaySound` was handed, parallel to `sounds` (§6.99). Both seams that reach
+     * `NOISE` push here, because the 6502 has one routine and the port has two interfaces onto it.
+     *
+     * `std::uint8_t` AND NOT `bool`, which is not a style choice: `std::vector<bool>` is bit-packed
+     * and its `operator[]` hands back a PROXY, and MSVC's `Assert::AreEqual` static-asserts that it
+     * has no `ToString` for one. g++ has no such assertion, so a `vector<bool>` here compiles on the
+     * Ubuntu leg and fails the Windows one -- which is what it did (§6.112).
+     */
+    std::vector<std::uint8_t> soundCarries;
 
     void SetPalette(std::uint8_t _colour) override
     {
@@ -137,7 +144,7 @@ namespace GameLogicTests
     bool PlaySound(std::uint8_t _effect, bool _carryIn) override
     {
       sounds.push_back(_effect);
-      soundCarries.push_back(_carryIn);
+      soundCarries.push_back(_carryIn ? 1u : 0u);
       return true;
     }
   };
@@ -183,10 +190,10 @@ namespace GameLogicTests
     struct Chars final : Elite::TextEffects
     {
       std::vector<std::uint8_t>& sounds;
-      std::vector<bool>& carries;
+      std::vector<std::uint8_t>& carries;
       std::uint32_t cleared = 0;
 
-      Chars(std::vector<std::uint8_t>& _sounds, std::vector<bool>& _carries) noexcept
+      Chars(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries) noexcept
         : sounds(_sounds),
           carries(_carries)
       {
@@ -195,7 +202,7 @@ namespace GameLogicTests
       void Beep() override
       {
         sounds.push_back(SOUND_BEEP_EFFECT);
-        carries.push_back(false); // `BEEP` is `LDY #sfxbeep / JMP NOISE`: the carry is CHPR's (§6.111)
+        carries.push_back(0u); // `BEEP` is `LDY #sfxbeep / JMP NOISE`: the carry is CHPR's (§6.111)
       }
       void ClearScreen() override
       {
