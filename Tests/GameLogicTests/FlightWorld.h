@@ -7,6 +7,7 @@
 
 #include "Arith.h"
 #include "Canvas.h"
+#include "FlightLoop.h"
 #include "Commander.h"
 #include "Controls.h"
 #include "Dashboard.h"
@@ -328,6 +329,68 @@ namespace GameLogicTests
   };
 
   /// A world that is not all zeroes, so "cleared" and "left alone" are different answers everywhere.
+  /*
+   * What `MJP` and `Ghy` reach outside the world: sounds, the trumbles and the AI, none of which
+   * this slice decides. Counted rather than ignored, because `LL164` makes a noise and a
+   * comparison that dropped it would agree with a port that had lost the hyperspace sound.
+   */
+  struct LoopRecording final : Elite::FlightLoopEffects, Elite::ShipEffects, Elite::ShipDrawEffects
+  {
+    std::vector<std::uint8_t> sounds;
+
+    bool PlaySound(std::uint8_t _effect, bool) override
+    {
+      sounds.push_back(_effect);
+      return true;
+    }
+    /// The sustain is recorded too, because `MLOOP`'s Trumble squeak and its BURN are the same
+    /// effect at two sustains (&80 and &F1), and a list of effect numbers cannot tell them apart.
+    std::vector<std::uint8_t> sustains;
+
+    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t) override
+    {
+      sounds.push_back(_effect);
+      sustains.push_back(_sustain);
+      return true;
+    }
+    void StopSound(std::uint8_t) override {}
+    void MoveTrumbles() override {}
+    void StartDockingMusic() override {}
+    void StopDockingMusic() override {}
+    bool SpawnAhead(std::uint8_t) override
+    {
+      return false;
+    }
+    void Anger(std::uint8_t) override {}
+    bool SpawnChild(std::uint8_t, std::uint8_t) override
+    {
+      return true;
+    }
+    bool RunTactics(Elite::ShipBlock&) override
+    {
+      return true;
+    }
+    void DrawPlanetOrSun() override {}
+    void DrawExplosion() override {}
+    void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
+  };
+
+  /// The port's side of a case: the whole flight world plus the pieces `FlightLoop` needs. Shared,
+  /// because three suites now build the same twelve-member aggregate to call one routine.
+  struct LoopWorld
+  {
+    World world;
+    Elite::ControlState control;
+    Elite::ControlOptions options;
+    Elite::KeyLogger keys{};
+    Elite::LaserBurst burst{};
+    Elite::LineHeap heap;
+    Elite::ClipState clip;
+    Elite::Projection projection;
+    Elite::K3Block axes{};
+    LoopRecording effects;
+  };
+
   inline void Seed(World& _world, std::uint32_t _seed)
   {
     std::uint32_t state = _seed * 0x9E3779B9u + 0x85EBCA6Bu;

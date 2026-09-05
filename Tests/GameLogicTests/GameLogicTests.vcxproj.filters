@@ -132,6 +132,12 @@
     <ClCompile Include="ScannerTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="HyperspaceTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="GameLoopTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="TacticsTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
