@@ -170,6 +170,7 @@
     <ClInclude Include="Market.h" />
     <ClInclude Include="StateTokens.h" />
     <ClInclude Include="MarketScreen.h" />
+    <ClInclude Include="CargoScreens.h" />
     <ClInclude Include="Equipment.h" />
     <ClInclude Include="NameEntry.h" />
     <ClInclude Include="SaveGame.h" />
@@ -209,6 +210,7 @@
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="StateTokens.cpp" />
     <ClCompile Include="MarketScreen.cpp" />
+    <ClCompile Include="CargoScreens.cpp" />
     <ClCompile Include="Equipment.cpp" />
     <ClCompile Include="NameEntry.cpp" />
     <ClCompile Include="SaveGame.cpp" />

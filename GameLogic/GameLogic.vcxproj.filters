@@ -105,6 +105,9 @@
     <ClInclude Include="MarketScreen.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="CargoScreens.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Equipment.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -175,6 +178,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="MarketScreen.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="CargoScreens.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Equipment.cpp">

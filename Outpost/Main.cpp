@@ -9,6 +9,7 @@
 #include "Window.h"
 
 #include "Canvas.h"
+#include "CargoScreens.h"
 #include "Commander.h"
 #include "Dashboard.h"
 #include "DockedKeys.h"
@@ -151,6 +152,17 @@ namespace
     Elite::CrosshairStep crosshairStep;
     std::uint8_t explosionCount = 0;
     std::uint8_t dockedFlag = 0;
+
+    /*
+     * The key the Buy Cargo screen was left with, for the next docked pass to press (ADR-006).
+     *
+     * `BAY2`'s shape -- `FRCE` entered with a key already down -- but with the key the player
+     * pressed rather than a forced f9, and pressed by the LOOP rather than from inside `Perform`:
+     * a screen that pressed "1" from within the "1" handler would nest a level deeper on every
+     * press, and the original's one-deep recursion (f9, which forces nothing) was a property of the
+     * key it forced rather than of the mechanism.
+     */
+    std::uint8_t forcedKey = 0;
 
     // ---- the screens ------------------------------------------------------------------------------
     Elite::StateTokens values;
@@ -318,28 +330,29 @@ namespace
     }
 
     case Elite::KeyAction::MarketPrice:
-      // 6502: TT167. The screen reset above it is TRADEMODE, which the caller does.
-      _game.shell.SetUpTradeScreen(Elite::BUY_CARGO_VIEW);
-      Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.text, _game.current.economy, _game.market, false);
+      /*
+       * ADR-006: the Market Prices screen, in place of `TT167`'s `PrintMarketScreen`.
+       *
+       * The ported routine is still in `Market.h` with its oracle test; this is the read-only
+       * buy/sell listing the owner asked for, and it does its own TRADEMODE. `current.seeds` is
+       * QQ2, which `DOENTRY` copies from the selected system on arrival, so the title names the
+       * system the market belongs to.
+       */
+      Elite::MarketPricesScreen(_game.trade, _game.canvas, _game.current.seeds, _game.current.economy, _game.market, false);
       return;
 
     case Elite::KeyAction::BuyCargo:
-      Elite::BuyScreen(_game.trade, _game.commander, _game.market, _game.current.economy, false);
-
       /*
-       * 6502: BAY2 -- LDA #f9 / JMP FRCE, and the screen reaches it BOTH ways out. A letter gets
-       * there through gnum's `CMP #10 / BCS BAY2`; the seventeenth item gets there through TT222's
-       * `LDA QQ29 / CMP #17 / BCS BAY2`. There is no third exit, which is why this is unconditional.
+       * ADR-006: the combined Buy Cargo screen, in place of `TT219`'s `BuyScreen`.
        *
-       * `BuyScreen` returns for both rather than jumping, because BAY2 is the DISPATCH'S and the
-       * dispatch is here. Without this the port left the buy screen on the display after a cancel,
-       * so the letter key looked dead when it had in fact done exactly what the original does.
-       *
-       * It forces a KEY rather than performing the action, because FRCE is entered with a key and
-       * lets TT102 decide again -- so cancelling out of a purchase goes down the same path as
-       * pressing "9", rather than down a second one that happens to agree today.
+       * The screen returns the position of the key that left it -- a screen key `TT102` acts on --
+       * and the docked loop presses it on its next pass. That is `BAY2`'s `JMP FRCE` with two
+       * differences, both deliberate: the key is the one the player pressed rather than a forced
+       * f9, so leaving for the market goes to the market; and it is pressed by the loop rather
+       * than from here, so pressing "1" on the buy screen redraws it without nesting.
        */
-      PressKey(_game, Elite::KEY_INVENTORY);
+      _game.forcedKey = Elite::BuyCargoScreen(_game.trade, _game.shell, _game.canvas, _game.commander, _game.market, _game.current.economy,
+                                              _game.dockedFlag);
       return;
 
     case Elite::KeyAction::SellCargo:
@@ -788,7 +801,17 @@ namespace
           game->crosshairStep = Elite::ScanFlightControls(game->flight.Loop(), game->flight, game->view);
 
           std::uint8_t key = 0;
-          (void)game->window.TakeKey(key); // 6502: `thiskey`, which is zero when nothing is held
+          if (game->forcedKey != 0u)
+          {
+            // 6502: FRCE -- the key the Buy Cargo screen was left with is pressed before the queue
+            // is read, and once (ADR-006).
+            key = game->forcedKey;
+            game->forcedKey = 0;
+          }
+          else
+          {
+            (void)game->window.TakeKey(key); // 6502: `thiskey`, which is zero when nothing is held
+          }
           PressKey(*game, key);
         }
         continue;
