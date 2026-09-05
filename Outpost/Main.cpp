@@ -18,6 +18,7 @@
 #include "Flight.h"
 #include "FlightLoop.h"
 #include "GameLoop.h"
+#include "Hyperspace.h"
 #include "LoaderScreen.h"
 #include "Market.h"
 #include "MarketScreen.h"
@@ -58,8 +59,14 @@
  * between them, exactly as `FRCE`'s `LDA QQ12 / BEQ` does, and `PlanSteps` -- the fixed-timestep
  * accumulator ADR-005 section 3 asks for -- finally has the caller it was written for.
  *
- * WHAT IS STILL REFUSED is hyperspace and the charts, which are phase 4's, and they are listed by
- * name in `Perform` rather than defaulted so that adding one is a compiler error here.
+ * HYPERSPACE IS NO LONGER REFUSED. `hyp` starts the countdown, `CountdownOnly` spends it and calls
+ * `TT18`, and an arrival ends in the launch the original falls through to (slices 4c-b and 4c-d).
+ * What is still refused is `ShowDistance` and `SearchBySystemName`, and they are listed by name in
+ * `Perform` rather than defaulted so that adding one is a compiler error here.
+ *
+ * The galactic drive is built and UNREACHABLE: `hyp` reaches `Ghy` through `JSR CTRL / BMI Ghy`,
+ * and `CTRL` is a keyboard read this port has no answer for until slice 4e. The case is written out
+ * so that adding the read is a one-line change rather than a search.
  */
 namespace
 {
@@ -169,6 +176,17 @@ namespace
     std::uint8_t explosionCount = 0;
     std::uint8_t dockedFlag = 0;
 
+    /*
+     * 6502: safehouse -- the seeds of the system the countdown is running towards.
+     *
+     * Separate from `selectedSeeds` (`QQ15`) because the player keeps moving the crosshairs while
+     * the countdown runs, and `TT18` arrives at what was chosen when the key was pressed rather
+     * than at whatever is under the crosshairs when it expires. `QQ8` is here for the same reason:
+     * `hyp` measures the distance once and `TT18` spends that much fuel.
+     */
+    Elite::SystemSeeds jumpTarget{};
+    std::uint16_t jumpDistance = 0;
+
     // ---- the screens ------------------------------------------------------------------------------
     Elite::StateTokens values;
     Elite::ExtendedTokenPrinter extended;
@@ -206,6 +224,23 @@ namespace
     view.view = _game.view;
     view.fuel = _game.commander.At(Elite::Field::Fuel);
     return view;
+  }
+
+  /*
+   * 6502: QQ12, QQ22, QQ8 and safehouse -- what `hyp` and `TT18` read besides the chart.
+   *
+   * Built here rather than held as a member for the reason `ChartOf` is: the bytes belong to the
+   * commander and the dashboard and this is the argument list the two routines want.
+   */
+  [[nodiscard]] Elite::JumpState JumpOf(Game& _game)
+  {
+    Elite::JumpState jump;
+    jump.docked = _game.dockedFlag;
+    jump.countdown = _game.status.hyperspaceCountdown;
+    jump.distance = _game.jumpDistance;
+    jump.controlHeld = false; // 6502: JSR CTRL -- the galactic drive's key, which slice 4e reads
+    jump.target = _game.jumpTarget;
+    return jump;
   }
 
   /*
@@ -429,11 +464,94 @@ namespace
       --_game.status.hyperspaceCountdown; // 6502: DEC QQ22+1
 
       /*
-       * 6502: BNE t95 / JMP TT18 -- and `TT18` is the jump itself, which is phase 4's: it deducts
-       * the fuel, copies the target over the commander's system and flies the tunnel. The counter
-       * cannot reach zero in this build anyway, because `hyp` is what starts it and `hyp` is
-       * refused below -- so this is a hole that nothing can fall into rather than one left open.
+       * 6502: BNE t95 / JMP TT18 -- the jump itself, and slice 4c-b is what put it within reach.
+       *
+       * `hyp` above starts the countdown and this is where it expires, which is why the player can
+       * keep flying while it runs. `PerformJump` says which of its four ends it reached; the launch
+       * is the caller's on the one that arrived, exactly as `TT18`'s fall-through into `TT110` is.
        */
+      if (_game.status.hyperspaceCountdown != 0u)
+      {
+        return; // 6502: BNE t95
+      }
+
+      {
+        Elite::JumpState jump = JumpOf(_game);
+        Elite::SystemData described;
+        described.economy = _game.current.economy;
+        described.government = _game.current.government;
+        described.techLevel = _game.current.techLevel;
+
+        const Elite::JumpResult jumped = Elite::PerformJump(
+          _game.flight.Loop(), _game.current, _game.selectedSeeds, jump, described, _game.market, _game.flight, nullptr, _game.crosshairX,
+          _game.crosshairY, _game.commander.GalaxySeeds(), false, _game.flight.Loop().options.authorNames != 0u);
+
+        _game.jumpDistance = jump.distance;
+        _game.currentSeeds = _game.current.seeds;
+
+        if (jumped == Elite::JumpResult::Arrived)
+        {
+          // 6502: the fall-through into `TT110`, which is the launch the arrival ends with.
+          Elite::Launch(_game.flight.Loop(), nullptr, _game.dockedFlag, _game.crosshairX, _game.crosshairY, _game.current.techLevel,
+                        _game.selectedSeeds);
+        }
+      }
+      return;
+    }
+
+    /*
+     * 6502: hyp -- decide whether the jump can happen, and start the countdown if it can.
+     *
+     * `TT18` is not called from here. `hyp` prints the target's name and sets `QQ22`, and the jump
+     * itself happens when the countdown reaches zero in `CountdownOnly` above -- which is why the
+     * player can keep flying, or moving the crosshairs, while it runs. What this does take from
+     * `hyp` is the target: `safehouse` is written once, here, so that moving the crosshairs
+     * afterwards changes where you are LOOKING and not where you are going.
+     */
+    case Elite::KeyAction::Hyperspace:
+    {
+      Elite::ChartView chart = ChartOf(_game);
+      Elite::JumpState jump = JumpOf(_game);
+      Elite::FlightScreen& screen = _game.flight.Screen();
+
+      const Elite::JumpOutcome decided = Elite::RequestHyperspace(_game.canvas, screen.draw, _game.recursive, _game.extended, _game.text,
+                                                                  chart, jump, _game.commander.GalaxySeeds(), &_game.shell);
+
+      _game.status.hyperspaceCountdown = jump.countdown;
+      _game.jumpDistance = jump.distance;
+      _game.jumpTarget = jump.target;
+      _game.crosshairX = chart.cursorX;
+      _game.crosshairY = chart.cursorY;
+
+      /*
+       * 6502: Ghy -- and it is reached by `hyp`'s `JSR CTRL / BMI Ghy`, which this port cannot ask
+       * for yet: `CTRL` is a keyboard read and `JumpOf` hands `hyp` a `controlHeld` of false. So
+       * the galactic drive is BUILT (slice 4c-b) and unreachable until slice 4e reads the key, and
+       * the case is written out rather than left off so that adding the read is a one-line change.
+       */
+      if (decided == Elite::JumpOutcome::Galactic)
+      {
+        /*
+         * 6502: QQ21 -- and `Ghy` ROTATES the six galaxy seeds in place, so they cannot be passed
+         * by value. `GalaxySeeds()` reads them out of the commander block; the six bytes go back
+         * one at a time afterwards, because the block is the storage and `SystemSeeds` is a view
+         * of it.
+         */
+        Elite::SystemSeeds galaxy = _game.commander.GalaxySeeds();
+        Elite::GalacticJump(_game.flight.Loop(), _game.current, galaxy, _game.selectedSeeds, jump, chart, nullptr);
+
+        for (int byte = 0; byte < 6; ++byte)
+        {
+          _game.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::GalaxySeeds) + byte)) =
+            galaxy.bytes[static_cast<std::size_t>(byte)];
+        }
+
+        _game.status.hyperspaceCountdown = jump.countdown;
+        _game.jumpTarget = jump.target;
+        _game.jumpDistance = jump.distance;
+        _game.crosshairX = chart.cursorX;
+        _game.crosshairY = chart.cursorY;
+      }
       return;
     }
 
@@ -442,10 +560,8 @@ namespace
      * so that adding a phase-4 screen is a compiler error here instead of a key that does nothing.
      *
      * `SearchBySystemName` is the one that is nearly here: `MT26` reads a line and is ported, and
-     * what it still has no answer for is whose buffer the name goes into (§2e). `Hyperspace` is
-     * `hyp`, which needs `TT18` and the tunnel behind it.
+     * what it still has no answer for is whose buffer the name goes into (§2e).
      */
-    case Elite::KeyAction::Hyperspace:
     case Elite::KeyAction::ShowDistance:
     case Elite::KeyAction::SearchBySystemName:
     case Elite::KeyAction::Nothing:
