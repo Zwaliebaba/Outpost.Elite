@@ -32,6 +32,15 @@ ASSEMBLED = REPO / "Upstream" / "elite-source-code-library" / "versions" / "c64"
 LABELS = REFERENCE / "Labels.txt"
 BINARIES = REFERENCE / "Binaries.txt"
 
+# The loader's own map, which tools/labels.py writes separately and for a reason it explains:
+# COMLOD loads at &4000, over the game's screen bitmap, so it is assembled but never joins the
+# oracle image. Two tables come out of it and nothing else does.
+LOADER_LABELS = REFERENCE / "LoaderLabels.txt"
+LOADER_BINARIES = REFERENCE / "LoaderBinaries.txt"
+
+GAME = "game"
+LOADER = "loader"
+
 
 class Table:
     """One array to extract.
@@ -44,12 +53,16 @@ class Table:
     """
 
     def __init__(self, _identifier: str, _label: str, _length, _file: str, _summary: str,
-                 _address: int | None = None):
+                 _address: int | None = None, _source: str = GAME):
         self.identifier = _identifier
         self.label = _label
         self.length = _length
         self.file = _file
         self.summary = _summary
+
+        # Which image the bytes come from: the assembled game, or the assembled LOADER. The two
+        # are separate 64 KB spaces because the loader occupies the screen; see LOADER_LABELS.
+        self.source = _source
 
         # An explicit address, for a block that has no label because no assembly step produces it.
         # `DSTORE%` is the case: the dashboard bitmap arrives at run time, so BeebAsm never emits
@@ -214,6 +227,24 @@ TABLES = [
           "how many Trumble sprites to show, by population"),
     Table("TRUMBLE_SPRITE_TABLE", "TRIBMA", 8, "ScreenTables.cpp",
           "which sprites to enable for that many Trumbles"),
+    # ---- the loader: the colours the dashboard and the border box are drawn in.
+    #
+    # These two are the only things the port takes from `elite-loader.asm`, whose CODE is not
+    # ported (the inventory says so of all seven parts). They are DATA the game reads and never
+    # writes: `wantdials` copies the dashboard picture into the bitmap, and what colours those
+    # bits is screen and colour RAM, which the loader fills before the game ever runs. Without
+    # them the dashboard is drawn perfectly and is black on black.
+    #
+    # 280 BYTES EACH, and that is what reads them rather than what separates them: `mvsm` copies
+    # one page and then 24 more bytes, into offset &2D0 of each -- which is 18 * 40, the first
+    # cell of the dashboard's seven character rows (7 * 40 = 280). The gap to the next label is
+    # 288, so §6.8's rule and the layout disagree by eight bytes here.
+    Table("DASHBOARD_SCREEN_COLOURS", "sdump", 280, "ScreenTables.cpp",
+          "screen RAM for the dashboard's seven rows: %01 in the high nibble, %10 in the low",
+          _source=LOADER),
+    Table("DASHBOARD_COLOUR_RAM", "cdump", 280, "ScreenTables.cpp",
+          "colour RAM for the same rows, which is where multicolour %11 comes from",
+          _source=LOADER),
 ]
 
 
@@ -304,16 +335,18 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="verify the generated files are current, do not rewrite")
     args = parser.parse_args()
 
-    labels = read_table(LABELS)
-    binaries = read_table(BINARIES)
-    image = load_image(binaries)
+    labels = {GAME: read_table(LABELS), LOADER: read_table(LOADER_LABELS)}
+    images = {GAME: load_image(read_table(BINARIES)), LOADER: load_image(read_table(LOADER_BINARIES))}
+    names = {GAME: LABELS.name, LOADER: LOADER_LABELS.name}
 
     grouped: dict[str, list[tuple[Table, bytes]]] = {}
     for table in TABLES:
-        if table.address is None and table.label not in labels:
-            sys.exit(f"error: label '{table.label}' is not in {LABELS.name}")
-        address = table.address if table.address is not None else labels[table.label]
-        length = table.extent(image, labels)
+        image = images[table.source]
+        known = labels[table.source]
+        if table.address is None and table.label not in known:
+            sys.exit(f"error: label '{table.label}' is not in {names[table.source]}")
+        address = table.address if table.address is not None else known[table.label]
+        length = table.extent(image, known)
         data = bytes(image[address : address + length])
         if len(data) != length:
             sys.exit(f"error: {table.label} at {address:#06x} runs past the end of memory")

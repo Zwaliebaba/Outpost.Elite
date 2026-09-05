@@ -99,7 +99,7 @@ namespace Elite::Testing
 
   } // namespace
 
-  OracleImage::OracleImage()
+  OracleImage::OracleImage(const char* _labelsFile, const char* _binariesFile)
   {
     const std::filesystem::path root = FindRepositoryRoot();
     if (root.empty())
@@ -109,8 +109,8 @@ namespace Elite::Testing
     }
 
     const std::filesystem::path reference = root / "Design" / "Reference";
-    const std::filesystem::path labelsPath = reference / "Labels.txt";
-    const std::filesystem::path binariesPath = reference / "Binaries.txt";
+    const std::filesystem::path labelsPath = reference / _labelsFile;
+    const std::filesystem::path binariesPath = reference / _binariesFile;
     const std::filesystem::path output = root / "Upstream" / "elite-source-code-library" / "versions" / "c64" / "3-assembled-output";
 
     std::vector<std::pair<std::string, std::uint32_t>> labelRows;
@@ -172,7 +172,13 @@ namespace Elite::Testing
 
   const OracleImage& OracleImage::Instance()
   {
-    static const OracleImage instance;
+    static const OracleImage instance("Labels.txt", "Binaries.txt");
+    return instance;
+  }
+
+  const OracleImage& OracleImage::LoaderInstance()
+  {
+    static const OracleImage instance("LoaderLabels.txt", "LoaderBinaries.txt");
     return instance;
   }
 
