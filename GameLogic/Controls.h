@@ -38,6 +38,19 @@ namespace Elite
     std::uint8_t dampingDisabled = 0;  ///< 6502: DAMP
     std::uint8_t recentreDisabled = 0; ///< 6502: DJD
     std::uint8_t joystick = 0;         ///< 6502: JSTK
+
+    /*
+     * 6502: PATG -- "show the author names on the title screen", and it does two things.
+     *
+     * `TITLE` prints an extra token when it is set, which is the visible half. The other half is
+     * in the main game loop's spawning: five of its tests are `AND PATG`, so switching the credits
+     * on also changes what the universe puts in front of you. One configuration byte, two
+     * unrelated effects, and only one of them is what its name says.
+     *
+     * It is in this block because the block is what it is: `DKS3` toggles `DAMP-&40,X` from the
+     * key code, so these four are adjacent in memory because they are adjacent on the keyboard.
+     */
+    std::uint8_t authorNames = 0;
   };
 
   /*

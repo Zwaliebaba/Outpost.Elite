@@ -8,6 +8,7 @@
 #include "ExtendedTokens.h"
 #include "MarketScreen.h"
 #include "NameEntry.h"
+#include "PlanetDraw.h"
 #include "StartUp.h"
 #include "TextPrint.h"
 #include "Tokens.h"
@@ -45,6 +46,7 @@ namespace Outpost
                           public Elite::StartUpEffects,
                           public Elite::ControlCodes,
                           public Elite::TextEffects,
+                          public Elite::TunnelEffects,
                           public Elite::KeySource
   {
   public:
@@ -114,8 +116,13 @@ namespace Outpost
     void ClearKeyLogger() override;
     void StartTheme() override;
     void StopTheme() override;
-    void ShowDockingTunnel() override;
+    [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override;
     [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance) override;
+
+    // ---- Elite::TunnelEffects -------------------------------------------------------------------
+
+    /// 6502: the vertical sync the VIC-II was giving `HFS2` for free while it drew the next circle.
+    void ShowCircle() override;
 
     // ---- Elite::ControlCodes and Elite::TextEffects ---------------------------------------------
 

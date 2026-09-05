@@ -12,11 +12,18 @@ namespace Outpost
     /*
      * 6502: what `CIRCLE` would have left in `STP`, for a flight world that has never drawn one.
      *
-     * §6.95: nothing on the path from a cold start to the first launch writes `STP`, and `TT110`
-     * calls `HFS1`, which walks a circle `STP` at a time and cannot terminate on a zero. `CIRCLE`
-     * is the only writer in the whole build and it stores 8, 4 or 2 by radius. Four is the middle
-     * one -- what a planet of ordinary size leaves -- and it is the value the oracle comparison
-     * seeds, so the app starts in a state the game could be in rather than in one it could not.
+     * §6.95: `HFS1` walks a circle `STP` at a time and cannot terminate on a zero, and nothing on
+     * the path from a cold start to the first launch was writing one. `CIRCLE` stores 8, 4 or 2 by
+     * radius; four is the middle one -- what a planet of ordinary size leaves -- and it is the
+     * value the oracle comparison seeds, so the app starts in a state the game could be in rather
+     * than in one it could not.
+     *
+     * **AND IT IS NO LONGER LOAD-BEARING (§6.109).** The routine that writes `STP` on this path is
+     * `LAUN`, which was a stub when §6.95 was written: its `LDA #8` is the step, and both `TT110`
+     * and `DOENTRY` run it before any circle is drawn. §6.95 diagnosed a missing write as a state
+     * the object could not start in, and the honest cause was a routine the port had not built.
+     * The seed stays because §6.95's RULE stands -- a default-constructed flight world is still a
+     * state the game cannot be in -- but nothing reads this particular byte before `LAUN` sets it.
      */
     constexpr std::uint8_t LAST_CIRCLE_STEP = 4;
 
@@ -223,6 +230,11 @@ namespace Outpost
 
   void FlightSession::ScanKeyboard()
   {
+    (void)ScanMatrix(m_keys); // 6502: JSR RDKEY, whose answer `DOKEY` does not read
+  }
+
+  Elite::TitleKey FlightSession::ScanMatrix(Elite::KeyLogger& _keys) noexcept
+  {
     /*
      * 6502: RDKEY -- the CIA matrix walk, replaced by the window's held-key table (row 145).
      *
@@ -234,13 +246,24 @@ namespace Outpost
      */
     m_rasterMode = RASTER_MODE_SCANNING;                                        // 6502: LDA #%101 / JSR SETL1
     m_spriteMask = static_cast<std::uint8_t>(m_spriteMask & RDKEY_SPRITE_MASK); // 6502: AND #%11111101
-    m_keys.fill(0u);                                                            // 6502: JSR ZEKTRAN
+    _keys.fill(0u);                                                             // 6502: JSR ZEKTRAN
 
-    for (std::uint8_t key = 0; key < static_cast<std::uint8_t>(m_keys.size()); ++key)
+    /*
+     * 6502: LDX #&40 / .Rdi1 ... / DEC KEYLOOK,X / STX thiskey / SEC / .Rdi3 DEX / BMI Rdiex.
+     *
+     * THE WALK COUNTS DOWN and `thiskey` is stored on every hit, so what comes back is the LOWEST
+     * numbered key being held rather than the first one found. `TITLE` returns that byte and `BR1`
+     * compares it against 39, so the direction of this loop is the difference between "Y" opening
+     * the disk menu and not opening it.
+     */
+    Elite::TitleKey answer;
+    for (std::uint8_t key = static_cast<std::uint8_t>(_keys.size()); key-- > 0u;)
     {
       if (m_window.Held(key))
       {
-        m_keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
+        _keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
+        answer.pressed = true;
+        answer.key = key;
       }
     }
 
@@ -251,11 +274,12 @@ namespace Outpost
     {
       for (const std::size_t index : NON_STEERING_KEYS)
       {
-        m_keys[index] = 0u;
+        _keys[index] = 0u;
       }
     }
 
     m_rasterMode = RASTER_MODE_NORMAL; // 6502: LDA #%100 / JSR SETL1
+    return answer;
   }
 
   void FlightSession::RunDockingComputer(Elite::ShipBlock& _work)

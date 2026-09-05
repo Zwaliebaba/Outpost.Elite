@@ -147,10 +147,13 @@ namespace GameLogicTests
       {
         Note("music off");
       }
-      void ShowDockingTunnel() override
+      /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
+      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
       {
-        Note("tunnel");
+        (void)_keys;
+        return {true, 0u};
       }
+
       std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _ship, std::uint8_t) override
       {
         Note("title " + std::to_string(_token) + "/" + std::to_string(_ship));
@@ -535,10 +538,7 @@ namespace GameLogicTests
       game->keys = ScriptedKeys({
         '2',
         13, // buy: two tonnes of the first item with any stock
-        13,
-        13,
-        13,
-        13,
+        13, 13, 13, 13,
         13,  // then nothing of the next five, which the routine accepts silently
         'Q', // and then a letter, which is gnum's only way out of the buy loop
         'N',

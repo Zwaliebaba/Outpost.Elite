@@ -204,10 +204,32 @@ namespace GameLogicTests
     Elite::TokenPrinter printer{characters};
     Elite::MessageState message;
 
+    /*
+     * 6502: DETOK's seam, and it RECORDS rather than acts.
+     *
+     * `TITLE` prints three extended tokens and the port has no answer for a control code outside
+     * the shell, so this exists to say out loud whether any of them contains one. The tests assert
+     * the list is empty; if a token ever grows a code, the assertion is what says so rather than a
+     * screen quietly diverging from the game's.
+     */
+    struct Codes final : Elite::ControlCodes
+    {
+      std::vector<std::uint8_t> ran;
+      void Run(std::uint8_t _code) override
+      {
+        ran.push_back(_code);
+      }
+    };
+
+    Codes codes;
+
     Elite::FlightState flight;
     Elite::FlightStatus status;
     Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
     Elite::Rng rng;
+
+    /// Declared after `rng` because it binds one, and the order here is the construction order.
+    Elite::ExtendedTokenPrinter extendedPrinter{characters, printer, rng, &codes};
 
     Elite::CommanderBlock commander;
     std::uint8_t trumbles = 0;

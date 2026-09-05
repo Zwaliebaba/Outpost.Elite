@@ -12,6 +12,7 @@
 #include "ShipDraw.h"
 
 #include <cstdint>
+#include <span>
 #include <vector>
 #include <string>
 
@@ -163,7 +164,7 @@ namespace GameLogicTests
                             std::to_wstring(run.instructions) + L", stoppedAt " + std::to_wstring(run.stoppedAt))
                              .c_str());
 
-            Elite::DrawHyperspaceRings(world.canvas, world.heaps, draw, geometry, math, clip);
+            Elite::DrawHyperspaceRings(world.canvas, world.heaps, draw, geometry, math, clip, nullptr);
           }
 
           const std::wstring where = WidenText("HFS1 (STP " + std::to_string(step) + ", " + std::to_string(pass + 1u) + " pass(es))");
@@ -197,30 +198,208 @@ namespace GameLogicTests
     }
   };
 
+  /*
+   * 6502: LAUN and the `HFS2` it falls into -- the tunnel a launch and an arrival both open with.
+   *
+   * The port had this behind a seam until this slice, so the LAST thing on the launch path that
+   * was not compared against the shipped game is compared here (§6.109). Three things happen before
+   * the rings and each one is asserted separately, because each is a different kind of mistake:
+   * the whoosh is a call whose RESULT is dropped, the step is a store the port used to be missing
+   * altogether, and the view type is saved and restored around a `TT66` that would otherwise
+   * change it.
+   */
+  TEST_CLASS(TheLaunchTunnel)
+  {
+  public:
+    TEST_METHOD(TheLaunchTunnelMatchesLAUN)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const std::uint16_t laun = oracle.Label("LAUN");
+      const std::uint16_t stp = oracle.Label("STP");
+      const std::uint16_t noise = oracle.Label("NOISE");
+
+      // Every view the tunnel can be drawn over: the docked screens as well as the space view,
+      // because `LAUN` is called from `DOENTRY` while a docked screen is still up.
+      for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{4}, std::uint8_t{13}, std::uint8_t{255}})
+      {
+        World world;
+        Seed(world, 0x71u);
+        world.view = view;
+        world.heaps.yx2M1 = 143u;
+        world.heaps.lsp = 0u;
+
+        /*
+         * `STP` starts at something the launch must overwrite. Four is the value §6.95 had the app
+         * seeding precisely because nothing on this path wrote one -- and `LAUN` is what writes it,
+         * so the seed stops being load-bearing the moment this routine exists.
+         */
+        world.heaps.stp = 4u;
+
+        Elite::ClipState clip;
+
+        Cpu6502 cpu = oracle.Fresh();
+        FillScreens(cpu, world.canvas, at.screen, 0x1Du);
+        Mirror(world, cpu, at);
+        cpu.memory[oracle.Label("Yx2M1")] = 143u;
+        cpu.memory[oracle.Label("dontclip")] = 0u;
+        cpu.memory[stp] = 4u;
+
+        // The three the platform owns, plus §6.108's: `TT66` reaches `NOSPRITES`, and `NOSPRITES`
+        // writes VIC registers that are the ship blueprint table in the oracle's flat memory.
+        cpu.AddTrap(noise, Cpu6502::TrapExit::SetCarry);
+        cpu.AddTrap(oracle.Label("SETL1"));
+        cpu.AddTrap(oracle.Label("DOVDU19"));
+        cpu.AddTrap(oracle.Label("NOSPRITES"));
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(laun, 40'000'000);
+        Assert::IsTrue(run.completed, (std::wstring(L"LAUN returned -- illegal ") + std::to_wstring(run.illegalOpcode) + L", stoppedAt " +
+                                       std::to_wstring(run.stoppedAt))
+                                        .c_str());
+
+        Elite::FlightScreen screen = world.Screen();
+        Elite::DrawLaunchTunnel(screen, clip, nullptr);
+
+        const std::wstring where = WidenText("LAUN (QQ11 " + std::to_string(view) + ")");
+
+        // 6502: LDY #sfxwhosh / JSR NOISE -- effect 4, once, and its carry is dropped.
+        std::uint32_t whooshes = 0;
+        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+        {
+          whooshes += (hit.address == noise) ? 1u : 0u;
+        }
+        Assert::AreEqual<std::uint32_t>(1u, whooshes, (where + L": the shipped routine makes one noise").c_str());
+        Assert::AreEqual<std::size_t>(1u, world.effects.sounds.size(), (where + L": and so does the port").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, world.effects.sounds.front(), (where + L": sfxwhosh").c_str());
+
+        // 6502: LDA #8 / STA STP -- the step, which is the whole of §6.94's missing writer.
+        Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, cpu.memory[stp], (where + L": the shipped STP").c_str());
+        Assert::AreEqual(cpu.memory[stp], world.heaps.stp, (where + L": STP").c_str());
+
+        // 6502: LDA QQ11 / PHA / ... / PLA / STA QQ11 -- the view survives the TT66 inside.
+        Assert::AreEqual(cpu.memory[at.qq11], world.view, (where + L": QQ11").c_str());
+        Assert::AreEqual<std::uint8_t>(view, world.view, (where + L": and it is the one that went in").c_str());
+
+        Assert::IsTrue(CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where) > 0u, (where + L": something was drawn").c_str());
+        CompareState(cpu, world, at, where);
+      }
+    }
+
+    /*
+     * The pacing, which is the port's and not the game's -- so it is asserted against the SHAPE of
+     * the 6502 loop rather than against the oracle, which has no present to count.
+     *
+     * Thirty-four circles: the ring starting at radius 8 doubles to 16, 32, 64 and 128 before the
+     * `ASL` carries, the one at 9 does the same, and the six from 10 to 15 stop one earlier because
+     * they cross 160 first. That count does not depend on `STP` -- the step is how many segments a
+     * circle has, not how many circles a ring is -- which is why one number covers both callers.
+     */
+    TEST_METHOD(ThePacingIsOneFramePerCircle)
+    {
+      struct Counting final : Elite::TunnelEffects
+      {
+        std::uint32_t circles = 0;
+        void ShowCircle() override
+        {
+          ++circles;
+        }
+      };
+
+      for (const std::uint8_t step : {std::uint8_t{2}, std::uint8_t{4}, std::uint8_t{8}})
+      {
+        World world;
+        Seed(world, 0x71u);
+        world.heaps.yx2M1 = 143u;
+        world.heaps.lsp = 0u;
+        world.heaps.stp = step;
+
+        Elite::ClipState clip;
+        Counting counting;
+        Elite::DrawHyperspaceRings(world.canvas, world.heaps, world.draw, world.geometry, world.math, clip, &counting);
+
+        Assert::AreEqual<std::uint32_t>(34u, counting.circles, (WidenText("STP " + std::to_string(step)) + L": circles shown").c_str());
+      }
+
+      // And a null pacing is the same drawing with nobody watching, which is what the oracle
+      // comparisons pass: the count above must not be reachable through a screen difference.
+      World unpaced;
+      Seed(unpaced, 0x71u);
+      unpaced.heaps.yx2M1 = 143u;
+      unpaced.heaps.lsp = 0u;
+      unpaced.heaps.stp = 8u;
+
+      World paced;
+      Seed(paced, 0x71u);
+      paced.heaps.yx2M1 = 143u;
+      paced.heaps.lsp = 0u;
+      paced.heaps.stp = 8u;
+
+      Elite::ClipState clipA;
+      Elite::ClipState clipB;
+      Counting counting;
+      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.draw, unpaced.geometry, unpaced.math, clipA, nullptr);
+      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.draw, paced.geometry, paced.math, clipB, &counting);
+
+      const std::span<const std::uint8_t> quiet = unpaced.canvas.Screen();
+      const std::span<const std::uint8_t> watched = paced.canvas.Screen();
+      for (std::size_t index = 0; index < quiet.size(); ++index)
+      {
+        Assert::AreEqual(quiet[index], watched[index], (L"pacing changes no pixel, byte " + std::to_wstring(index)).c_str());
+      }
+    }
+  };
+
   namespace
   {
     /*
-     * The two seams the launch path still has, and nothing else.
+     * THE LAUNCH PATH HAS NO SEAMS LEFT, and this object is what is left of the ones it had.
      *
-     * `LAUN` is the docking tunnel -- a sequence of expanding circles drawn over the docked
-     * screen, which needs the frame timing the executable owns -- and `NWSPS` self-modifies
-     * `XX21` to choose between a Coriolis and a Dodo. Everything else `TT110` reaches is ported
-     * and runs for real on both sides, which is what makes a whole-bitmap compare worth doing.
+     * `LAUN` was the last: the docking tunnel needed the ball line heap, which arrived in 3c, and
+     * the stub outlived its reason by two slices as every other one on this path did (§6.109). It
+     * is ported now and runs for real on both sides, so the whole-bitmap compare below covers the
+     * tunnel as well as everything after it. What remains here is `StartUpEffects` for the
+     * routines that still take one; `Launch` no longer does.
      */
     struct RecordingStart final : Elite::StartUpEffects
     {
-      std::uint32_t tunnels = 0;
-
       void ResetUniverse() override {}
       void ResetShip() override {}
       void ClearKeyLogger() override {}
       void StartTheme() override {}
       void StopTheme() override {}
       void ResetMissileIndicators() override {}
-      void ShowDockingTunnel() override
+      /*
+       * 6502: JSR RDKEY inside `TLL2` -- scripted, because the loop it drives is key-driven and
+       * nothing else decides how many frames the title screen runs for.
+       *
+       * `quiet` passes answer "no key"; the one after it answers `key`, and sets `KY7` first when
+       * `fire` is on so that the loop takes `BMI TL3` instead of `INC JSTK`. The oracle is driven
+       * by a stub written over `RDKEY` that counts the same way.
+       */
+      std::uint32_t quiet = 0;
+      std::uint8_t key = 0;
+      bool fire = false;
+      std::uint32_t scans = 0;
+
+      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
       {
-        ++tunnels;
+        ++scans;
+        if (scans <= quiet)
+        {
+          return {};
+        }
+        if (fire)
+        {
+          _keys[Elite::KEY_FIRE] = 0xFFu;
+        }
+        return {true, key};
       }
+
       void WaitFrames(std::uint8_t) override {}
 
       std::uint8_t ShowTitleScreen(std::uint8_t, std::uint8_t, std::uint8_t) override
@@ -292,7 +471,7 @@ namespace GameLogicTests
     {
       std::uint16_t nostm, lsx2, lsy2, mstg, jstx, jsty, alp2Next, bet2, bet2Next;
       std::uint16_t col2, dontclip, yx2m1, slsp, bomb, qq12, qq22, hfx, autoByte;
-      std::uint16_t inwk, fist, stp, res2, reset, tt110, laun, stopbd, noise;
+      std::uint16_t inwk, fist, stp, res2, reset, tt110, stopbd, noise;
 
       explicit LaunchWhere(const OracleImage& _oracle)
       {
@@ -320,7 +499,6 @@ namespace GameLogicTests
         res2 = _oracle.Label("RES2");
         reset = _oracle.Label("RESET");
         tt110 = _oracle.Label("TT110");
-        laun = _oracle.Label("LAUN");
         stopbd = _oracle.Label("stopbd");
         noise = _oracle.Label("NOISE");
       }
@@ -619,9 +797,17 @@ namespace GameLogicTests
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(to.stopbd);
             cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
-            cpu.AddTrap(to.laun);
             cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
+
+            /*
+             * §6.108, and this is the second run to need it. `LAUN` calls `TT66`, `TT66` calls
+             * `NOSPRITES`, and `NOSPRITES` stores into `VIC+&15` -- which is `XX21+&15` in the
+             * oracle's flat memory, the high byte of ship type 11's blueprint. The launch creates
+             * a planet and a station AFTER the tunnel, so an untrapped store here makes `NWSPS`
+             * refuse and the two sides disagree about the bubble rather than about the drawing.
+             */
+            cpu.AddTrap(oracle.Label("NOSPRITES"));
             FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
             Mirror(leaving.world, cpu, at);
             MirrorLeaving(leaving, cpu, at, to, docked);
@@ -635,7 +821,7 @@ namespace GameLogicTests
 
             std::uint8_t flag = docked;
             Elite::SystemSeeds selected{};
-            Elite::Launch(loop, leaving.start, flag, leaving.world.commander.At(Elite::Field::SystemX),
+            Elite::Launch(loop, nullptr, flag, leaving.world.commander.At(Elite::Field::SystemX),
                           leaving.world.commander.At(Elite::Field::SystemY), techLevel, selected);
 
             const std::wstring where = WidenText("TT110 (" + std::string(docked != 0u ? "docked" : "in flight") + ", tek " +
@@ -645,13 +831,6 @@ namespace GameLogicTests
             CompareState(cpu, leaving.world, at, where);
             CompareLeaving(cpu, leaving, to, flag, where);
 
-            std::uint32_t tunnels = 0;
-            for (const Cpu6502::TrapHit& hit : cpu.trapHits)
-            {
-              tunnels += (hit.address == to.laun) ? 1u : 0u;
-            }
-
-            Assert::AreEqual(tunnels, leaving.start.tunnels, (where + L": LAUN").c_str());
             Assert::AreEqual<std::uint8_t>(0u, flag, (where + L": QQ12 is cleared on both paths").c_str());
 
             launched += (docked != 0u) ? 1u : 0u;
@@ -662,6 +841,179 @@ namespace GameLogicTests
 
       Assert::IsTrue(launched > 0u, L"some cases launched");
       Assert::IsTrue(refused > 0u, L"and some were refused");
+    }
+  };
+
+  /*
+   * 6502: TITLE -- the title screen, its rotating ship, and the key that dismisses it.
+   *
+   * THE ORACLE'S `RDKEY` IS PATCHED RATHER THAN TRAPPED, because the loop is key-driven and a trap
+   * gives one answer for ever: `ClearCarry` never leaves `TLL2` and `SetCarry` leaves it after one
+   * frame, and one frame does not show a ship rotating. The eleven bytes below are a counted
+   * `RDKEY` -- `DEC` a counter, `BNE` to `CLC / RTS`, otherwise `LDA #key / SEC / RTS` -- and the
+   * counter lives inside the stub so that nothing else in the compared memory moves.
+   */
+  TEST_CLASS(TheTitleScreen)
+  {
+  public:
+    TEST_METHOD(TheTitleMatchesTITLE)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LaunchWhere to(oracle);
+      const std::uint16_t title = oracle.Label("TITLE");
+      const std::uint16_t rdkey = oracle.Label("RDKEY");
+      const std::uint16_t jstk = oracle.Label("JSTK");
+      const std::uint16_t patg = oracle.Label("PATG");
+      const std::uint16_t mulie = oracle.Label("MULIE");
+      const std::uint16_t keylook = oracle.Label("KEYLOOK");
+
+      std::uint32_t compared = 0;
+      std::uint32_t dismissed = 0;
+      std::uint32_t fired = 0;
+
+      for (const std::uint8_t shipType : {Elite::SHIP_COBRA_MK3, Elite::SHIP_ADDER})
+      {
+        for (const std::uint8_t distance : {Elite::TITLE_COBRA_DISTANCE, Elite::TITLE_ADDER_DISTANCE})
+        {
+          for (const std::uint32_t frames : {std::uint32_t{1}, std::uint32_t{4}, std::uint32_t{30}})
+          {
+            for (const bool fire : {false, true})
+            {
+              for (const std::uint8_t authors : {std::uint8_t{0}, std::uint8_t{0xFF}})
+              {
+                Leaving leaving;
+                Occupy(leaving, shipType * 13u + distance + frames + (fire ? 1u : 0u) + authors);
+
+                leaving.options.authorNames = authors;
+                leaving.start.quiet = frames - 1u;
+                leaving.start.key = 0x27u; // 6502: thiskey -- "Y", which is what `BR1` tests for
+                leaving.start.fire = fire;
+
+                Cpu6502 cpu = oracle.Fresh();
+                cpu.AddTrap(oracle.Label("SETL1"));
+                cpu.AddTrap(oracle.Label("DOVDU19"));
+
+                /*
+                 * `NOSPRITES` IS TRAPPED, AND NOT BECAUSE IT IS A SEAM (§6.108).
+                 *
+                 * `XX21` is at &D000, which on a C64 is also where the VIC-II registers are: the
+                 * ship data lives in RAM UNDER the I/O area and the game banks between them. The
+                 * interpreter has flat memory and cannot, so `NOSPRITES`'s `STA VIC+&15` lands on
+                 * `XX21+21` -- the high byte of ship type 11's blueprint pointer -- and zeroes it.
+                 * `NWSHP` then reads a zero entry and refuses the ship, which is how this test
+                 * first failed: the shipped game drew no Cobra at all.
+                 *
+                 * The port writes those registers through `SightEffects` and touches no memory, so
+                 * trapping the routine is what makes the two sides agree rather than a convenience.
+                 */
+                cpu.AddTrap(oracle.Label("NOSPRITES"));
+                cpu.AddTrap(to.stopbd);
+                cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
+
+                /*
+                 * The counted `RDKEY`, written over the real one.
+                 *
+                 * IT HAS TO WRITE `KY7` ITSELF. `TITLE` calls `ZEKTRAN` before the loop, so a fire
+                 * key set up by the fixture is cleared before the loop ever reads it -- the press
+                 * has to arrive from inside the scan, which is where a real press would arrive.
+                 *
+                 *    0  CE lo hi   DEC counter
+                 *    3  D0 09      BNE quiet
+                 *    5  A9 ff      LDA #(fire ? &FF : 0)
+                 *    7  8D lo hi   STA KY7
+                 *   10  A9 kk      LDA #key
+                 *   12  38         SEC
+                 *   13  60         RTS
+                 *   14  18  quiet: CLC
+                 *   15  60         RTS
+                 *   16  nn         counter
+                 */
+                const std::uint16_t counter = static_cast<std::uint16_t>(rdkey + 16u);
+                const std::uint16_t ky7 = static_cast<std::uint16_t>(keylook + Elite::KEY_FIRE);
+                const std::uint8_t stub[17] = {0xCEu,
+                                               static_cast<std::uint8_t>(counter & 0xFFu),
+                                               static_cast<std::uint8_t>(counter >> 8),
+                                               0xD0u,
+                                               0x09u,
+                                               0xA9u,
+                                               fire ? std::uint8_t{0xFFu} : std::uint8_t{0u},
+                                               0x8Du,
+                                               static_cast<std::uint8_t>(ky7 & 0xFFu),
+                                               static_cast<std::uint8_t>(ky7 >> 8),
+                                               0xA9u,
+                                               leaving.start.key,
+                                               0x38u,
+                                               0x60u,
+                                               0x18u,
+                                               0x60u,
+                                               static_cast<std::uint8_t>(frames)};
+                cpu.Load(rdkey, stub, sizeof(stub));
+
+                FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
+                Mirror(leaving.world, cpu, at);
+                MirrorLeaving(leaving, cpu, at, to, 0xFFu);
+                cpu.memory[patg] = authors;
+
+                cpu.a = Elite::TITLE_START_TOKEN;
+                cpu.x = shipType;
+                cpu.y = distance;
+                const Elite::Testing::RunResult run = cpu.CallSubroutine(title, 20'000'000);
+                Assert::IsTrue(run.completed, L"TITLE returned");
+
+                Elite::FlightScreen screen = leaving.world.Screen();
+                Elite::FlightLoop loop{screen,        leaving.keys,    leaving.control, leaving.options,
+                                       leaving.burst, leaving.heap,    leaving.clip,    leaving.projection,
+                                       leaving.axes,  leaving.outside, leaving.outside, leaving.effects};
+
+                std::uint8_t flag = 0xFFu;
+                Elite::TitleScreen titleScreen{loop, leaving.start, leaving.world.extendedPrinter, leaving.options, leaving.keys, flag};
+                const std::uint8_t answer = Elite::ShowTitleShip(titleScreen, Elite::TITLE_START_TOKEN, shipType, distance);
+
+                const std::wstring where =
+                  WidenText("TITLE (ship " + std::to_string(shipType) + ", distance " + std::to_string(distance) + ", " +
+                            std::to_string(frames) + " frames, " + (fire ? "fire" : "key") + ", PATG " + std::to_string(authors) + ")");
+
+                /*
+                 * The block and the flags BEFORE the pixels, on purpose: a divergence in `INWK` and
+                 * one in the bitmap have the same symptom through `CompareScreens` and completely
+                 * different causes, and the cheaper assertion should be the one that fires.
+                 */
+                for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+                {
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.inwk + byte)], leaving.world.work[byte],
+                                   (where + L": INWK+" + std::to_wstring(byte)).c_str());
+                }
+
+                Assert::AreEqual(cpu.a, answer, (where + L": thiskey").c_str());
+                Assert::IsTrue(leaving.world.codes.ran.empty(), (where + L": no token reached a control code").c_str());
+
+                CompareState(cpu, leaving.world, at, where);
+                CompareLeaving(cpu, leaving, to, flag, where);
+                CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
+
+                Assert::AreEqual(cpu.memory[jstk], leaving.options.joystick, (where + L": JSTK").c_str());
+                Assert::AreEqual(cpu.memory[mulie], leaving.world.status.titleReset, (where + L": MULIE").c_str());
+
+                dismissed += fire ? 0u : 1u;
+                fired += fire ? 1u : 0u;
+                ++compared;
+              }
+            }
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(48u, compared, L"the whole sweep ran");
+      Assert::IsTrue(dismissed > 0u && fired > 0u, L"both ways out of the loop were taken");
+
+      Logger::WriteMessage(
+        ("TITLE: " + std::to_string(compared) + " title screens compared, " + std::to_string(fired) + " dismissed with fire\n").c_str());
     }
   };
 
