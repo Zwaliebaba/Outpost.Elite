@@ -437,6 +437,47 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.117 A routine that is one byte, and two comments that describe another machine
+
+`DEATH` is the last routine in phase 3, and three of its instructions do something other than what
+the source says they do.
+
+**`DET1` IS A BARE `RTS` ON THIS BUILD.** `JSR DET1` appears twice in `DEATH`, once with `LDX #24`
+and once with `LDX #31`, and the upstream comment on the first says it sets "the screen to only
+show 24 text rows, which hides the dashboard, **setting A to 6 in the process**". That is the BBC's
+routine -- `LDA #6 / SEI / STA VIA+&00 / STX VIA+&01 / CLI`, four writes to a 6522 this machine has
+not got. Every body in `det1-dodials.asm` is behind an `IF` the C64 fails, so what the label
+assembles to is one byte: `&60`. The `LDX` before it goes nowhere and the `A` after it is not 6.
+
+**SO THE DEATH SCREEN CLEARS TO VIEW 224.** `JSR TT66` is the very next instruction, `TT66` takes
+its view in A, and A is therefore whatever `RES2` left there a dozen instructions earlier -- a byte
+nothing wrote on purpose. It is **224**, and the port has it because the oracle was asked, not
+because it was derived: `TheDeathScreenSetsUpLikeDEATH` traps `TT66`, reads the accumulator and
+compares. This is §6.115's rule with a different register: **a value that arrives at a routine
+without any instruction meaning to put it there is measurable and is not derivable**, and the
+honest thing is to say which one you did.
+
+**AND `ASL DELTA / ASL DELTA` DOES NOT DIVIDE.** The comment beside it reads "Divide our speed in
+DELTA by 4"; `ASL` shifts LEFT. `RES2` sets `DELTA` to 3, so the wreckage flies past at 12 rather
+than at 0 -- and the test asserts 12 against the shipped routine. The BBC's source has the same
+comment, and the difference is not the platform this time: it is a comment that was wrong when it
+was written.
+
+**Three documentation errors in one routine, which is a rate worth naming.** §6.109 found `HFS2`'s
+header with its two step sizes swapped against its own code; this has `DET1` described as a routine
+it is not, a register set that is not, and a shift in the wrong direction. The upstream commentary
+is the best thing about the source and it is not the source: **every time this port has trusted a
+comment over an instruction it has been wrong, and every time it has measured instead it has been
+right.** `c64_source.py` exists because of that (§6.75) and it answered the first of these three in
+one command -- the other two needed the oracle, because a build's silence about a register is not
+something a source file can show you.
+
+**What `DEATH` costs, for the record.** `BOX`, `U%`, `Ze` and `fq1` are ported with it, `DET1` is
+deliberately not, and `DEATH2` was already wired as the death exit's `RES2` then `BR1` (§6.25). The
+sequence spawns five pieces of wreckage rather than four -- `LDA FRIN+4 / BEQ D1` tests the slot
+after filling one -- and half of them arrive already dead, because `DORND / AND #%10000000` goes
+straight into byte 31.
+
 ### 6.116 The Ubuntu leg is not a compiler check, and it has now let two through
 
 `std::vector<bool>` cost a red CI run within minutes of §6.115 being pushed, and the interesting
@@ -2425,7 +2466,7 @@ port stops checking.
 | **3d-b** 🟢 | `DIALS` 1–4, `DIL`/`DILX`/`DIL2`, `MSBAR`, `ECBLB`/`ECBLB2`/`SPBLB`, `PZW`, `CTWOS` — **built 2026-09-04** in `Dashboard.h/.cpp`, 45 mutations with 44 caught and one equivalent. `DILX` is one routine with four entry points and three of them are shift counts (§6.63); `dec27` is an early RETURN and five sixths of the dashboard is one pass in four (§6.64); and the fourteenth flag is the first that an `SBC` reads rather than an `ADC` (§6.65). |
 | **3d-c** 🟢 | `MESS`/`me1`/`mes9`, `ABORT`/`ABORT2`, `LASLI`/`LASLI2`/`las` — **built 2026-09-04** in `Messages.h/.cpp`, `Lasers.h/.cpp` and `Dashboard.h/.cpp`. Fixed `CLYNS`, which had been `CLYNS2` under its name since 1c (§6.67), and settled which of `LASLI`'s three uncleared adds matter (§6.68). |
 | **3d-d** | the sixteen flight-loop parts with `LOOK1`, `KS1`, `WARP`, `SPIN`, `CTRL`, `cntr`, `U%`, the `DOKEY` flight half and the docking check — **866 instructions and 64 call targets, so §6.69 splits it again into 3d-d-i, ii and iii**, and adds `MAS1`–`MAS4`, `FRMIS`, `ECMOF` and `tnpr1`, which the row does not name |
-| **3d-e** 🟢 | ✅ `LAUN`, ✅ `HFS2`, ✅ `LL164` and `DEATH` -- the two set pieces. **The tunnels are built: `LAUN` 2026-09-05 (§6.109) and `LL164` the same day.** `HFS2` is split out of the launch so both step sizes are reachable from one body -- the two entry points differ by a noise and a constant, which is what `HFS2` taking `A` says. `LL164` compared against the shipped routine over three values of `QQ11` on the whole bitmap, the step, the DELAY, the two `NOISE` calls and the one `NOISE2`; **nothing calls it yet**, because `MJP` and `TT18` are both 4c. **`DEATH` is what is left of phase 3**, and it is a slice rather than a finish-off: `DET1`, `BOX`, `Ze`, `fq1`, `U%` and `DEATH2` are none of them ported, and it ends by running the whole flight loop 64 times over a field of debris. |
+| **3d-e** ✅ | ✅ `LAUN`, ✅ `HFS2`, ✅ `LL164`, ✅ `DEATH` -- the two set pieces, both built. **The tunnels are built: `LAUN` 2026-09-05 (§6.109) and `LL164` the same day.** `HFS2` is split out of the launch so both step sizes are reachable from one body -- the two entry points differ by a noise and a constant, which is what `HFS2` taking `A` says. `LL164` compared against the shipped routine over three values of `QQ11` on the whole bitmap, the step, the DELAY, the two `NOISE` calls and the one `NOISE2`; **nothing calls it yet**, because `MJP` and `TT18` are both 4c. **`DEATH` is built 2026-09-05 and closes phase 3.** `BOX`, `U%`, `Ze` and `fq1` go in with it; `DET1` does NOT, because on this build it is one byte -- `&60`, a bare `RTS` -- and `DEATH2` was already the death exit's `RES2` then `BR1` (§6.25). Three findings in one routine (§6.117): **`DET1` is empty, so the death screen clears to view 224 rather than the 6 the comment names**, a byte `RES2` left and nothing meant to set, read off the oracle rather than derived; **`ASL DELTA / ASL DELTA` multiplies where its comment says divide**, so the wreckage flies past at 12 and not 0; and the debris loop makes FIVE pieces, not four, because `LDA FRIN+4 / BEQ D1` tests the slot after filling one. Wired at the app's death exit, so dying now shows the sequence instead of restarting immediately. |
 
 3d-a first because `SCAN` is buildable today: it rests on `CPIX4` and `CTWOS2`, both ported, and
 one table that needs extracting.
@@ -4435,6 +4476,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **`DEATH`, and phase 3 is complete.** The death screen with `BOX`, `U%`, `Ze` and `fq1` -- and `DET1` deliberately NOT, because on this build it is one byte. Three findings in one routine (§6.117), all of them the source describing a different machine. **`DET1` is a bare `RTS`**, so the `LDX #24` before it goes nowhere and the A the comment says it sets to 6 is whatever `RES2` left -- **224**, measured off the oracle because nothing meant to put it there. **`ASL DELTA` twice MULTIPLIES** where its comment says "divide by 4", so the wreckage flies past at 12 rather than stopped. And the debris loop makes **five** pieces, not four: `LDA FRIN+4 / BEQ D1` tests the slot after filling one, and half of them arrive already dead. The rate is the point -- three documentation errors in one routine, after §6.109 found `HFS2`'s two step sizes swapped against its own code: **every time this port has trusted a comment over an instruction it has been wrong.** Wired at the app's death exit. 308 tests green. |
 | 2026-09-05 | **The hyperspace tunnel, and phase 3 down to one routine.** `LL164` is five instructions once `HFS2` exists, so `HFS2` is split out of the launch and both step sizes come from one body -- 8 for the launch, 4 for the jump, which is what `HFS2` taking `A` was always saying. `HYPNOISE` goes with it: two sounds, one vertical sync and a third effect at +128, which is `NOISE`'s layering entry rather than a separate routine. Compared against the shipped `LL164` over three values of `QQ11` on the whole bitmap, the step, the `DELAY`, the two `NOISE` calls and the one `NOISE2`. The pacing seam is renamed `ShowFrame`, because `HYPNOISE`'s one-frame `DELAY` wants exactly what the per-circle pacing wants. **Nothing calls `LL164` yet** -- `MJP` and `TT18` are both 4c. **Slice 2e closes** on §6.114's flight-loop measurement, and **3a's built marker is added**, which had been missing since 3b depended on it. What is left of phase 3 is `DEATH`, and it is a slice: `DET1`, `BOX`, `Ze`, `fq1`, `U%` and `DEATH2` are none of them ported. 307 tests green. |
 | 2026-09-05 | **The carry is a chain, and the instrument to see it did not exist** (§6.115, §6.116). §6.99 said `bool PlaySound(uint8_t)` should grow a carry argument and should wait for phase 5; widening it early turned out to BE the finding. **`Cpu6502::TrapHit` recorded `a`, `x`, `y` and watched memory and not the carry** -- so five findings about a flag at a call site (§6.85, §6.86, §6.87, §6.88, §6.99) had all been read off the assembly and none could be checked. It records it now, and the flight-loop comparison checks the carry handed to every `PlaySound` against the one the oracle reaches `NOISE` with. Six suites failed at once, none of them in code the change touched: **three of the four call sites hand `NOISE` a flag set somewhere the port cannot see** -- `ECBLB2` is four instructions and none touch the carry, `BEEP` is one shorter with the same shape, and `MA63`'s `JSR EXNO3` runs on whatever `OUCH` left several routines deep. Two ARE derivable and now are: `MA59` comes off part 8's `BCS`, and `.custard` off a `CMP`, which is §6.86 supplied rather than merely recorded. The comparison is narrowed to the four laser effects with the exclusion named beside its reason. **And it cost a red CI run**: the carry lists were `std::vector<bool>`, whose `operator[]` returns a proxy MSVC's `Assert::AreEqual` static-asserts on and g++ does not, so the file built and 304 tests passed on the Ubuntu leg before Windows saw it. Second Windows-only compile error to reach CI after `const bool near`; the shim now refuses that one case by name. |
 | 2026-09-05 | **The flight loop ran at the refresh rate, and §6.17 had said not to** (§6.114). Everything in flight moved four to five times too fast. §6.17 established in September that the C64's main loop has no `WSCAN` in it and asked for the loop to be **cycle-budgeted and free-running** -- "a fixed rate would be a behaviour the game never had" -- and the port shipped a fixed rate at the NTSC vertical refresh anyway. The measurement is taken now: the shipped `M%`, mirrored into the oracle with `PLANET` and `TACTICS` untrapped, costs 47,784 cycles with an empty bubble and about 81,000 with ships in it -- **21.4 and 12.6 frames a second, against 59.826**. `FlightFrameSeconds` is two measured bands rather than a curve, for §6.110's reason: the two ship scenes sit 7% either side of one number and the difference is what the ships are, not how many. The crowded end is unmeasured, because `TACTICS` untrapped does not return for a station -- so a fight is paced at the one-ship cost and is really slower. Four faults in a day (§§6.110-6.114), all in the executable, none in a ported routine, and every one found by a person looking at the screen: **the oracle proves what the port computes and nothing yet proves what it does**. |

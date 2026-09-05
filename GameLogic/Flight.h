@@ -215,4 +215,51 @@ namespace Elite
   [[nodiscard]] std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, std::uint8_t _shipType,
                                            std::uint8_t _distance) noexcept;
 
+  /*
+   * 6502: what `TT66` is actually called with in `DEATH` -- MEASURED, and it is not 6 (§6.117).
+   *
+   * The upstream comment says `LDX #24 / JSR DET1` hides the dashboard "and sets A to 6 in the
+   * process", which is the BBC's `DET1`: `LDA #6 / SEI / STA VIA+&00 / STX VIA+&01 / CLI`. On this
+   * build `DET1` is ONE BYTE, `&60`, a bare `RTS` -- the whole routine is behind an `IF` the C64
+   * fails. So neither the `LDX` nor the `LDA` happens, and `TT66` gets whatever `RES2` left in A.
+   *
+   * That byte is **224**, read off the oracle rather than derived, because it comes out of `RES2`
+   * through a dozen instructions that were not written to produce it. `TheDeathScreenSetsUpLikeDEATH`
+   * compares it against the shipped routine so it cannot drift.
+   */
+  inline constexpr std::uint8_t DEATH_VIEW = 224;
+
+  /// 6502: LDA #146 -- the recursive token `DEATH` prints, "{all caps}GAME OVER".
+  inline constexpr std::uint8_t GAME_OVER_TOKEN = 146;
+
+  /// 6502: LDA #12 / JSR DOYC / JSR DOXC -- the cursor, moved to the middle of the screen.
+  inline constexpr std::uint8_t GAME_OVER_ROW = 12;
+  inline constexpr std::uint8_t GAME_OVER_COLUMN = 12;
+
+  /// 6502: SCBASE+&118 -- the second byte `BOX` STORES rather than EORs, so the second that a
+  /// redraw cannot rub out. `BOTTOM_RIGHT_CORNER` in `ViewChange.h` is the first.
+  inline constexpr std::uint16_t BORDER_TOP_RIGHT = 0x118;
+
+  /// 6502: LDY #64 / STY LASCT -- how long the death animation lasts, in flight-loop iterations.
+  inline constexpr std::uint8_t DEATH_FRAMES = 64;
+
+  /// 6502: LDA FRIN+4 / BEQ D1 -- the debris loop fills slots until the FIFTH one is taken.
+  inline constexpr std::size_t DEATH_DEBRIS_SLOT = 4;
+
+  /*
+   * 6502: DEATH -- the chaos of our destruction, over a "GAME OVER" sign.
+   *
+   * The sequence is: the sound, `RES2`, a quarter of our speed, a cleared screen with the border
+   * EORed off again, a fresh stardust field, the sign, then five pieces of wreckage spawned in
+   * random directions and 64 iterations of the whole flight loop to fly them past.
+   *
+   * `DET1` IS A BARE `RTS` ON THIS BUILD and the port does not call it, which is not a shortcut --
+   * see §6.117. The upstream comment says the `LDX #24 / JSR DET1` pair hides the dashboard "and
+   * sets A to 6 in the process", and both halves are the BBC's: the C64's `DET1` is one byte.
+   *
+   * It does not return. The original ends `JMP DEATH2`, which resets the stack and falls into
+   * `BR1` -- so this ends where the caller's own death exit already goes.
+   */
+  void Die(FlightLoop& _loop, DashboardEffects& _sound) noexcept;
+
 } // namespace Elite

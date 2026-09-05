@@ -320,18 +320,20 @@ namespace
 
     case Elite::LoopOutcome::Died:
       /*
-       * 6502: DEATH, which falls into DEATH2 -- and the port takes DEATH2 alone.
+       * 6502: DEATH, then DEATH2 -- and the port now takes both.
        *
-       * What is skipped is `DEATH` itself: the dying sound, `ASL DELTA` twice, the 24-row screen
-       * that hides the dashboard, and the loop that scatters wreckage through `SFS1`. All four are
-       * phase 4's or phase 5's. What is NOT skipped is the restart, because that is `JSR RES2` and
-       * then a fall into `BR1`, and both of those exist -- so death takes the player back to the
-       * title screen and the docking bay exactly as it should.
+       * `DEATH` is built (§6.117), so what a player sees on dying is the sequence rather than an
+       * immediate restart: the sound, a quarter-turn of the speed, the border rubbed off with its
+       * own EOR, a new stardust field, "GAME OVER", five pieces of wreckage and sixty-four
+       * iterations of the flight loop to fly them past. `DEATH2` is the tail -- `JSR RES2` and a
+       * fall into `BR1` -- which this already did and still does.
        *
        * Neither routine restores the energy banks. That is the game's behaviour and not an
        * omission here: `RESET` fills them and only the COLD start calls it (ADR-003).
        */
       {
+        Elite::Die(_game.flight.Loop(), _game.flight);
+
         _game.shell.ResetShip();
 
         Elite::GameStart restart = StartOf(_game);

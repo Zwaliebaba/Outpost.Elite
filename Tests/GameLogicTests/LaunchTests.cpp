@@ -1012,6 +1012,75 @@ namespace GameLogicTests
   };
 
   /*
+   * 6502: DEATH -- the death screen, compared against the shipped routine.
+   *
+   * The interesting half is the setup rather than the animation: `DET1` is a bare `RTS` on this
+   * build, so the view `TT66` is called with is whatever `RES2` left in A (§6.117), and this is
+   * where that byte is pinned. The rest is the wreckage -- five pieces, a random type each, and a
+   * laser count that decides how long the flight loop runs afterwards.
+   */
+  TEST_CLASS(TheDeathScreen)
+  {
+  public:
+    TEST_METHOD(TheDeathScreenSetsUpLikeDEATH)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t death = oracle.Label("DEATH");
+      const std::uint16_t tt66 = oracle.Label("TT66");
+      const std::uint16_t det1 = oracle.Label("DET1");
+      const std::uint16_t lasct = oracle.Label("LASCT");
+      const std::uint16_t delta = oracle.Label("DELTA");
+
+      Cpu6502 cpu = oracle.Fresh();
+      cpu.AddTrap(oracle.Label("EXNO3"));
+      cpu.AddTrap(tt66);
+      cpu.memory[delta] = 3u; // 6502: what `RES2` leaves, and what the two `ASL`s work on
+
+      cpu.a = cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.pc = death;
+
+      // Step only as far as the `JSR TT66`, which is all this comparison is about: past it the
+      // routine runs the whole flight loop sixty-four times and never returns.
+      bool reached = false;
+      std::uint8_t viewByte = 0;
+      for (int step = 0; step < 200'000; ++step)
+      {
+        if (!cpu.trapHits.empty() && cpu.trapHits.back().address == tt66)
+        {
+          viewByte = cpu.trapHits.back().a;
+          reached = true;
+          break;
+        }
+        if (!cpu.Step())
+        {
+          break;
+        }
+      }
+      Assert::IsTrue(reached, L"DEATH should reach its JSR TT66");
+
+      /*
+       * §6.117: the upstream comment says `LDX #24 / JSR DET1` hides the dashboard "and sets A to
+       * 6 in the process". Both halves are the BBC's. This asserts what THIS build does.
+       */
+      Assert::AreEqual<std::uint8_t>(Elite::DEATH_VIEW, viewByte, L"the view DEATH clears to");
+
+      // And `DET1` really is one byte: a bare RTS, so the LDX before it goes nowhere.
+      Assert::AreEqual<std::uint8_t>(0x60u, cpu.memory[det1], L"DET1 is a bare RTS on this build");
+
+      // 6502: ASL DELTA / ASL DELTA -- a SHIFT LEFT twice, whatever the comment says.
+      Assert::AreEqual<std::uint8_t>(12u, cpu.memory[delta], L"DELTA is multiplied by four, not divided");
+
+      (void)lasct;
+    }
+  };
+
+  /*
    * 6502: TITLE -- the title screen, its rotating ship, and the key that dismisses it.
    *
    * THE ORACLE'S `RDKEY` IS PATCHED RATHER THAN TRAPPED, because the loop is key-driven and a trap

@@ -74,6 +74,18 @@ namespace Elite
     }
   }
 
+  void DrawFullBorder(Canvas& _canvas, DrawWorkspace& _draw) noexcept
+  {
+    DrawScreenRule(_canvas, _draw, BOTTOM_RULE_ROW); // 6502: LDX #199 / JSR BOXS
+
+    // 6502: LDA #&FF / STA SCBASE+&1F1F -- the corner byte the rule stops one short of. The
+    // canvas is laid out from SCBASE contiguously, so the address IS the offset.
+    _canvas.Write(BOTTOM_RIGHT_CORNER, 0xFFu);
+
+    // 6502: LDX #25 / EQUB &2C -- and 25 is what falls through into `BOX2` (§6.79).
+    DrawBorder(_canvas, _draw, BORDER_ROWS_TEXT_SCREEN);
+  }
+
   void DrawColourBand(Canvas& _canvas, std::uint16_t _cell) noexcept
   {
     std::uint16_t cell = _cell;

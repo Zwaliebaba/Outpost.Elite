@@ -249,4 +249,14 @@ namespace Elite
     _effects.SetRasterMode(0x04u); // 6502: LDA #%100 / JMP SETL1, a tail call
   }
 
+  void ClearFlightKeys(KeyLogger& _keys) noexcept
+  {
+    // 6502: the loop ends on `BNE`, so index 0 is stored by the `STA KL` after it rather than by
+    // the loop -- the same byte either way, and this is the count the original actually clears.
+    for (std::size_t index = 0; index <= FLIGHT_KEYS_CLEARED; ++index)
+    {
+      _keys[index] = 0u;
+    }
+  }
+
 } // namespace Elite
