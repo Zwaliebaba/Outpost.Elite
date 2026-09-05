@@ -961,4 +961,138 @@ namespace GameLogicTests
     }
   };
 
+  /*
+   * 6502: DOCKIT on its own, which is the only way to reach its four approaches.
+   *
+   * `TACTICS` gets to the autopilot down one narrow path -- a ship with `NEWB` bit 4, near a
+   * station -- and that path reaches ONE of the four cases. Four mutations in the approach
+   * thresholds walked through the AI sweep for that reason (§6.126), so the approach is swept here
+   * instead: the ship is put in front of the slot, behind it, off to the side and right on top of
+   * it, at four distances, and as both an NPC and the PLAYER's own computer -- which `auton` marks
+   * by storing a NEGATIVE type, the branch `PH3` reads.
+   */
+  TEST_CLASS(TheDockingComputer)
+  {
+  public:
+    TEST_METHOD(TheAutopilotMatchesDOCKIT)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Labels at(oracle);
+      const std::uint16_t dockit = oracle.Label("DOCKIT");
+
+      struct Approach
+      {
+        const char* what;
+        std::uint8_t x, xSign, y, ySign, z, zSign;
+        std::uint8_t nose; ///< the station's nose vector x high byte, which points the slot
+      };
+
+      const Approach APPROACHES[] = {
+        {"straight in front of the slot", 0x02u, 0u, 0x02u, 0u, 0x30u, 0u, 0x60u},
+        {"in front but far out", 0x40u, 0u, 0x30u, 0u, 0x60u, 0u, 0x60u},
+        {"round the back", 0x04u, 0x80u, 0x04u, 0u, 0x30u, 0x80u, 0x60u},
+        {"off to one side", 0x60u, 0u, 0x08u, 0u, 0x10u, 0u, 0x60u},
+        {"almost touching", 0x01u, 0u, 0x01u, 0u, 0x03u, 0u, 0x60u},
+        {"with the slot turned away", 0x02u, 0u, 0x02u, 0u, 0x30u, 0u, 0xE0u},
+        {"with the slot edge on", 0x02u, 0u, 0x02u, 0u, 0x30u, 0u, 0x08u},
+      };
+
+      const std::uint8_t TYPES[] = {11u, 0xE0u}; // an NPC, and `auton`'s negative type
+
+      std::uint32_t compared = 0;
+      std::set<std::string> reached;
+      std::set<std::string> outcomes;
+
+      for (const Approach& approach : APPROACHES)
+      {
+        for (const std::uint8_t type : TYPES)
+        {
+          for (const std::uint8_t faces : {std::uint8_t{0u}, std::uint8_t{0xFFu}})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            for (const std::uint16_t seam : {oracle.Label("NOISE"), oracle.Label("MESS")})
+            {
+              cpu.AddTrap(seam);
+            }
+
+            Universe world;
+            SeedTacticsUniverse(cpu, world, at, 11u, 1u, 0u, GEOMETRIES[0]);
+
+            // The ship where the case asks, relative to a station that is at the origin of `K3`.
+            world.world.work[0] = approach.x;
+            world.world.work[2] = approach.xSign;
+            world.world.work[3] = approach.y;
+            world.world.work[5] = approach.ySign;
+            world.world.work[6] = approach.z;
+            world.world.work[8] = approach.zSign;
+            world.world.work[27] = 12u;
+
+            world.world.bubble.blocks[1][10] = approach.nose;
+            world.world.bubble.blocks[1][12] = 0x10u;
+            world.world.bubble.blocks[1][14] = 0x20u;
+            world.world.bubble.blocks[1][16] = 0x08u;
+            world.world.bubble.blocks[1][18] = 0x60u;
+
+            world.world.flight.type = type;
+
+            /*
+             * 6502: XX2, which `DOCKIT` reads as `K3+10` -- the eleventh face of the last ship
+             * drawn, and the only thing standing between an NPC and a completed docking (§6.125).
+             * Both answers are swept, because a port that ignored the byte would agree on one.
+             */
+            world.world.geometry.xx2[10] = faces;
+
+            PushTacticsUniverse(cpu, world, at);
+            cpu.memory[static_cast<std::uint16_t>(at.k3 + 10u)] = faces;
+
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(dockit, 400'000);
+            Assert::IsTrue(run.completed, L"DOCKIT returned");
+
+            Elite::FlightScreen screen = world.world.Screen();
+            Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
+                                   world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+            Assert::IsTrue(Elite::RunDockingComputer(loop, world.slot), L"DOCKIT does not kill anybody");
+
+            const std::wstring context = WidenText(std::string("DOCKIT: ") + approach.what + (type == 0xE0u ? " (ours)" : " (theirs)") +
+                                                   (faces != 0u ? " faces" : " no faces"));
+            CompareTacticsUniverse(cpu, world, at, context);
+
+            // 6502: K3 itself, which the AI comparison does not reach because `TACTICS` rebuilds it.
+            for (std::size_t byte = 0; byte < 10u; ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], world.axes[byte],
+                               (context + L": K3+" + std::to_wstring(byte)).c_str());
+            }
+
+            reached.insert(std::string(approach.what) + (type == 0xE0u ? "/ours" : "/theirs"));
+
+            /*
+             * WHAT THE SHIP WAS TOLD TO DO, measured from the block rather than from the inputs.
+             *
+             * `PH22` stops it dead (speed 1, no acceleration); `TN11` speeds it up and rolls it
+             * hard; the two steering paths leave a pitch and a roll from the dot products. A sweep
+             * whose cases all end the same way reaches one approach however many rows it has, so
+             * this counts the distinct answers and the assertion below is on that count.
+             */
+            outcomes.insert(std::to_string(world.world.work[27]) + "," + std::to_string(world.world.work[28]) + "," +
+                            std::to_string(world.world.work[29]) + "," + std::to_string(world.world.work[30]) + "," +
+                            std::to_string(world.world.work[36]));
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(7u * 2u * 2u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::size_t>(7u * 2u, reached.size(), L"and every approach is distinct");
+      Assert::IsTrue(outcomes.size() >= 4u, L"and the sweep reached at least four different answers");
+      Logger::WriteMessage(
+        ("DOCKIT: " + std::to_string(compared) + " cases, " + std::to_string(outcomes.size()) + " distinct answers").c_str());
+    }
+  };
+
 } // namespace GameLogicTests

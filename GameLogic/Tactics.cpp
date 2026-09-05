@@ -418,9 +418,11 @@ namespace Elite
          * BNE TA64 -- the three high bytes with their signs masked OR the three middle bytes, so
          * this is "is the target still further away than 256 units on any axis".
          */
-        const std::uint8_t far =
+        // NOT `far`: that is a macro in <windows.h>, like `near`, and `check_gamelogic.py` exists
+        // to say so (AGENTS.md §5).
+        const std::uint8_t distant =
           static_cast<std::uint8_t>((static_cast<std::uint8_t>(axes[2] | axes[5] | axes[8]) & 0x7Fu) | axes[1] | axes[4] | axes[7]);
-        if (far != 0u)
+        if (distant != 0u)
         {
           // 6502: .TA64 JSR DORND / CMP #16 / BCS TA19S -- one time in sixteen the missile checks
           // whether its target still has an ECM, and the rest of the time it just steers.
