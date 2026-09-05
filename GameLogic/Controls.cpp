@@ -282,9 +282,10 @@ namespace Elite
 
   void ClearFlightKeys(KeyLogger& _keys) noexcept
   {
-    // 6502: the loop ends on `BNE`, so index 0 is stored by the `STA KL` after it rather than by
-    // the loop -- the same byte either way, and this is the count the original actually clears.
-    for (std::size_t index = 0; index <= FLIGHT_KEYS_CLEARED; ++index)
+    // 6502: the loop ends on `BNE`, so `KLO+0` is never stored -- and the `STA KL` after it is
+    // NOT that byte: `KL` is a separate address with no C64 reader, so the port has nothing to
+    // clear for it (§6.117).
+    for (std::size_t index = 1; index <= FLIGHT_KEYS_CLEARED; ++index)
     {
       _keys[index] = 0u;
     }

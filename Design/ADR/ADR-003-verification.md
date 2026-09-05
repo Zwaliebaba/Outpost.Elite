@@ -115,6 +115,12 @@ makes this a check on the architecture as well as on the game.
   `tools/labels.py` parses that into `Labels.json`. If the listing proves awkward, a one-line
   `PRINT` per label appended to a copy of the master file does the same job — the plan does
   not depend on which.
+- **The oracle has to be present in every tree the suite is JUDGED from, and a mutation
+  worktree is one.** Amended 2026-09-05. `OracleIsPresent` is the mechanism that says when it is
+  not, and it protects a person reading the output — a harness that only counts failures sees
+  one on every run and reads it as a catch. So a mutation run starts by running the unmutated
+  suite and requiring zero failures; a tally produced without that step is not a measurement
+  (§6.119, `AGENTS.md` §6).
 
 ## Alternatives considered
 

@@ -232,8 +232,8 @@ namespace
    *
    * 6502: what `TT102` does with the label it chose. The dispatch itself is `ActionForKey`, which
    * is compared against the shipped routine over 16,384 states; this is the other half, and the
-   * actions that need phase 3 are refused rather than silently ignored -- a docked game that did
-   * nothing for a launch key would look exactly like one that had wired it up.
+   * actions that need phase 4 are refused rather than silently ignored -- a game that did nothing
+   * for the hyperspace key would look exactly like one that had wired it up.
    */
   void Perform(Game& _game, const Elite::KeyOutcome& _outcome)
   {

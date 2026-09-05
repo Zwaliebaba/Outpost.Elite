@@ -139,6 +139,13 @@ namespace Elite
    * `CMP #245 / ROL A` is the trick worth naming: the compare puts "was the byte at least 245" in
    * the carry and the `ROL` shifts it into bit 0, so one byte in eleven gets its AI flag set --
    * `ORA #%11000000` then makes the rest of it hostile and slow.
+   *
+   * THE FIRST `DORND` ROTATES THE CALLER'S CARRY IN. `ZINF` touches no flag, so `_carryIn` is
+   * whatever `JSR Ze` was reached with -- in `DEATH`, what the previous piece's last `DORND` left
+   * in its `ADC`. The second does not: what `Ze` falls into is `DORND2`, a `CLC` in front of
+   * `DORND`, so the bit 7 the `ROL A` shifted out never reaches it. The first version of this
+   * routine passed a clear carry to both and matched the shipped game for four pieces of wreckage
+   * before the fifth landed one random step off (§6.117).
    */
   /// 6502: LDA #25 -- the high byte the debris starts at in all three axes, so it appears at one
   /// distance in a random direction rather than at a random distance.
@@ -151,16 +158,20 @@ namespace Elite
   /// 6502: LDA #&60 -- the orientation `fq1` gives every piece: nose along z, side along x.
   inline constexpr std::uint8_t DEBRIS_ORIENTATION = 0x60;
 
-  [[nodiscard]] RngResult SeedDebris(ShipBlock& _work, Rng& _rng) noexcept;
+  [[nodiscard]] RngResult SeedDebris(ShipBlock& _work, Rng& _rng, bool _carryIn) noexcept;
 
   /*
    * 6502: fq1 -- point a ship along the z axis, give it the player's speed, and create it.
    *
    * `INWK+14 = &60` is the nose vector's z, `INWK+22 = &60 OR 128` the side vector's x with its
-   * sign set, and `INWK+27` is `DELTA` rolled left -- twice the player's speed, because the
-   * wreckage is going the other way. `TXA / JMP NWSHP` makes the type the caller's X.
+   * sign set, and `INWK+27` is `DELTA` ROTATED left -- `ROL A`, so the caller's carry lands in
+   * bit 0 and the speed is twice `DELTA` or one more than that. Nothing between the entry and the
+   * `ROL` touches the flag, so `_carryIn` is whatever the caller branched on: in `DEATH` it is the
+   * bit that chose a plate over a canister, so the plates fly one unit faster (§6.117). The
+   * upstream comment says "double DELTA speed (i.e. 6)", which is neither the rotate nor the 12
+   * that `DELTA` actually holds by then. `TXA / JMP NWSHP` makes the type the caller's X.
    */
-  [[nodiscard]] NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed,
+  [[nodiscard]] NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed, bool _carryIn,
                                   std::uint16_t& _blueprint) noexcept;
 
 } // namespace Elite

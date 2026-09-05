@@ -5,7 +5,7 @@ same assertions, a different way of calling them.
 
 ```sh
 python tools/labels.py --assemble        # once: the oracle needs the assembled game
-Tests/PortableRunner/run_tests.sh        # 152 tests, about 37 seconds from cold
+Tests/PortableRunner/run_tests.sh        # 313 tests, about a minute from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
 ```
 
@@ -29,14 +29,18 @@ exhaustive sweeps: 2,048 system data screens compared character for character, a
 keystrokes through `gnum`. That is the cost of the sweeps being exhaustive rather than sampled, and
 it is why `run_tests.sh` takes a filter.
 
-The second reason is CI. Measured when the suite was 146 tests: the Ubuntu leg of
-`.github/workflows/build-and-test.yml` ran the whole suite in **34 seconds** end to end (52s on a
-cold BeebAsm cache) against the Windows job's **4m35s**. Both have grown since — the sweeps added
-for slice 2a are twenty seconds of run on their own — and the ratio is what the argument rests on,
-not the absolute figures. So a push that breaks the port says so
-while the Windows job is still locating Visual Studio. It is cheaper too, though by less than it
-feels: GitHub charges roughly twice the per-minute rate for a Windows runner, so the saving is
-that factor times the 8× shorter run — not the order of magnitude the rate alone suggests.
+The second reason is CI. Measured 2026-09-05 at 310 tests, on the same commit: the Ubuntu leg of
+`.github/workflows/build-and-test.yml` ran the whole suite in **72 seconds** end to end (59s of it
+the build-and-run step, BeebAsm cached) against the Windows job's **4m24s** — of which 51s is the
+tests and the rest is two MSBuild passes over the test project, two over the executable, and a
+37-second `vswhere` preflight. The ratio is what the argument rests on, not the absolute figures.
+So a push that breaks the port says so while the Windows job is still locating Visual Studio.
+
+**What the ratio does not buy is agreement.** The Ubuntu leg is faster than the authority; it is
+also *more permissive*, and two Windows-only compile errors have reached CI through it — `const
+bool near` after `<windows.h>`, and `Assert::AreEqual` on a `std::vector<bool>` proxy that MSVC's
+`ToString` static-asserts on and g++ does not (§6.116). Each time, the fix is to teach this runner
+that one specific thing; the shim now refuses the second by name.
 
 ## How it works
 
@@ -57,12 +61,12 @@ copied.** That is the property that makes this trustworthy: there is one suite, 
 disagree only about how it is invoked. A test added to a `.cpp` is picked up by both without being
 registered anywhere.
 
-One file from `Outpost/` is compiled here too: `SaveStore.cpp`, the commander store. It is the
-executable's, not `GameLogic`'s, because the determinism guard forbids file access there — and it
-was committed and left uncompiled for a day because the only machine that could build it ran
-Windows. Ten lines of `GetEnvironmentVariableW` in the shim made that untrue, and the first test
-written against it found a defect. `Main.cpp` is not compiled here and does not need to be: it is a
-`wWinMain` with nothing to assert.
+Three files from `Outpost/` are compiled here too — `SaveStore.cpp`, `Presentation.cpp` and
+`KeyMap.cpp` — because each is the executable's and yet holds a DECISION rather than an API call:
+the commander store, the palette and viewport arithmetic and the frame pacing, and the key map.
+`ShellTests.cpp` covers them and runs on both legs. Everything else in `Outpost/` is Win32 and
+D3D12 and is not compiled here; `tools/check_outpost.py` checks the names and arities it uses,
+and only the Windows build checks the types.
 
 The build output goes to `x64/Debug/PortableTests`, deliberately the same directory MSBuild puts
 `GameLogicTests.dll` in, because the oracle finds the repository by walking up from wherever its
@@ -83,6 +87,12 @@ own binary lives.
 - **Not a substitute for assembling the game.** Without `Design/Reference/Labels.txt` and the
   assembled blocks, every oracle test skips and `OracleIsPresent` fails, exactly as it does on
   Windows (ADR-003 §1, Risk R9). `run_tests.sh` warns before it gets that far.
+- **Not safe in a worktree that has lost its submodule.** `git worktree add` leaves
+  `Upstream/elite-source-code-library` as an empty gitlink directory, and every `git checkout -f`
+  in that worktree puts the empty directory back over any symlink placed there. The suite then
+  reports `N passed, 1 failed` on EVERY run — `OracleIsPresent`, by design — and a harness that
+  reads only that line calls every mutant caught. Verify `N passed, 0 failed` before believing a
+  mutation result (`AGENTS.md` §6, §6.119).
 
 ## The one rule this tree breaks
 

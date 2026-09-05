@@ -99,7 +99,7 @@ separately rather than treating them as errors.
 
 | Script | Job | Status |
 |---|---|---|
-| `inventory.py` | `--check-includes` resolves every master include against `Upstream/`; the default report reconciles the ledger with the `// 6502:` markers; `--strict` fails on an unaccounted file | **Built** (slice 0c) |
+| `inventory.py` | `--check-includes` resolves every master include against `Upstream/`; the default report reconciles the ledger with the `// 6502:` markers; `--strict` fails on an unaccounted file | **Built** (slice 0c); `--strict` green and in CI since 2026-09-05 (plan §6.120) |
 | `labels.py` | Assembles the C64 variant and normalises BeebAsm's label dump and load addresses into `Design/Reference/Labels.txt` and `Binaries.txt` | **Built** (slice 0b-a) |
 | `extract_tables.py` | upstream `.asm` and `C.FONT.bin` → the generated `.cpp` data | slice 1a |
 | `golden_diff.py` | expected versus actual canvas → diff image | slice 1d |

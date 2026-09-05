@@ -342,11 +342,11 @@ namespace Elite
     SeedStardustAndClearShips(_canvas, _draw, _dust, _rng, _state, _bubble, _work, _flight, _view, sun.created);
   }
 
-  RngResult SeedDebris(ShipBlock& _work, Rng& _rng) noexcept
+  RngResult SeedDebris(ShipBlock& _work, Rng& _rng, bool _carryIn) noexcept
   {
-    ClearShipBlock(_work); // 6502: JSR ZINF
+    ClearShipBlock(_work); // 6502: JSR ZINF -- and it leaves the carry as it found it
 
-    const RngResult first = _rng.Next(false); // 6502: JSR DORND
+    const RngResult first = _rng.Next(_carryIn); // 6502: JSR DORND
 
     // 6502: STA T1 / AND #%10000000 / STA INWK+2 -- the x sign, and `T1` is dead here: nothing
     // between this and the `RTS` reads it.
@@ -365,15 +365,19 @@ namespace Elite
     const std::uint8_t rolled = static_cast<std::uint8_t>((first.previous << 1) | (aggressive ? 1u : 0u));
     _work[32] = static_cast<std::uint8_t>(rolled | 0xC0u);
 
-    // 6502: and no RTS -- it falls into `DORND`, whose answer is what the caller reads.
+    // 6502: and no RTS -- it falls into `DORND2`, which is a `CLC` in front of `DORND`. So the
+    // second byte always rotates a clear carry in, whatever the `ROL A` above shifted out.
     return _rng.Next(false);
   }
 
-  NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed, std::uint16_t& _blueprint) noexcept
+  NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed, bool _carryIn,
+                    std::uint16_t& _blueprint) noexcept
   {
     _work[14] = DEBRIS_ORIENTATION;                                    // 6502: LDA #&60 / STA INWK+14
     _work[22] = static_cast<std::uint8_t>(DEBRIS_ORIENTATION | 0x80u); // 6502: ORA #128 / STA INWK+22
-    _work[27] = static_cast<std::uint8_t>(_speed << 1);                // 6502: LDA DELTA / ROL A / STA INWK+27
+
+    // 6502: LDA DELTA / ROL A / STA INWK+27 -- a ROTATE, so the carry comes in at the bottom.
+    _work[27] = static_cast<std::uint8_t>((_speed << 1) | (_carryIn ? 1u : 0u));
 
     return AddShip(_bubble, _work, _shipType, _blueprint); // 6502: TXA / JMP NWSHP
   }

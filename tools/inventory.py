@@ -11,8 +11,13 @@ Three jobs, per Design/ADR-004 section 5:
                        for in Design/Source-Inventory.md, and which ported functions in
                        GameLogic/ carry a "// 6502: LABEL" marker (AGENTS.md R7).
 
-  3. --strict          Exit non-zero if any library file is unaccounted for.  Not usable
-                       until the ledger is complete; it is what CI runs at the end of a phase.
+  3. --strict          Exit non-zero if any library file is unaccounted for.  Green since
+                       2026-09-05 (plan section 6.120), and CI runs it on every push.
+
+A ledger row names its files in backticks, and two shorthands count as naming: a multi-part
+routine's family is accounted for by any one `x_part_N_of_M` in it, and `bdro1`–`bdro15` accounts
+for every number between.  The unit is the master-level include; the files those include in turn
+are workspace fields and binaries, covered by their parent's row.
 
 Run from the repository root.  Python 3.9+, no third-party packages.
 """
@@ -68,15 +73,41 @@ def check_includes(paths: dict[str, list[str]]) -> int:
     return 0
 
 
+PART_RE = re.compile(r"part_(\d+)_of_(\d+)")
+# `bdro1`–`bdro15`, `ks1`–`ks4`: two backtick groups with one stem and a number, joined by a dash.
+RANGE_RE = re.compile(r"`([A-Za-z_][A-Za-z_\-]*?)(\d+)`\s*[\u2013\-]\s*`\1(\d+)`")
+
+
+def expand_label(label: str) -> set[str]:
+    """The stems one backtick group accounts for.
+
+    A multi-part routine is one routine that the annotation split into files, and the ledger names
+    the family once: `mveit_part_1_of_9` … `part_9_of_9`. Naming any part accounts for every part
+    with the same `_of_N`, and the substitution runs over the whole group so that a compound stem
+    (`loin_part_1_of_7-loinq_part_1_of_7`) expands as a whole.
+    """
+    stems = {label}
+    parts = PART_RE.findall(label)
+    if parts:
+        total = int(parts[0][1])
+        for index in range(1, total + 1):
+            stems.add(PART_RE.sub(lambda m: f"part_{index}_of_{m.group(2)}", label))
+    return stems
+
+
 def ledger_labels() -> set[str]:
-    """Label stems named in backticks anywhere in the source inventory."""
+    """Label stems named in backticks anywhere in the source inventory, ranges expanded."""
     if not LEDGER.is_file():
         return set()
     text = LEDGER.read_text(encoding="utf-8", errors="replace")
     labels: set[str] = set()
     for hit in BACKTICK_RE.findall(text):
         # Rows list labels one per backtick group; normalise to the include file stem style.
-        labels.add(hit.strip().lower())
+        for stem in expand_label(hit.strip().lower()):
+            labels.add(stem)
+    for stem, first, last in RANGE_RE.findall(text):
+        for index in range(int(first), int(last) + 1):
+            labels.add(f"{stem}{index}".lower())
     return labels
 
 

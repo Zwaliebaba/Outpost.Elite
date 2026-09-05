@@ -21,8 +21,8 @@ namespace Elite
   /*
    * 6502: QQ12, JUNK, FRIN and ENERGY -- the four bytes the condition line reads.
    *
-   * None of this belongs to slice 2c and none of it exists yet: JUNK, FRIN and ENERGY are the local
-   * ship bubble and the energy banks, which are phase 3. They arrive as VALUES for the same reason
+   * None of this belongs to slice 2c: JUNK, FRIN and ENERGY are the local ship bubble and the energy
+   * banks, which are phase 3's and exist now. They still arrive as VALUES, for the same reason
    * the market's state does when the charts read it (§6.12): the arithmetic that reads them is this
    * slice's even though the bytes are not.
    */
