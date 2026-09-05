@@ -188,7 +188,7 @@ namespace Outpost
 
   void FlightSession::Anger(std::uint8_t _slot, std::uint8_t _type)
   {
-    // 6502: ANGRY on the block INF points at -- and which block that is, the caller says (§6.141).
+    // 6502: ANGRY on the block INF points at -- and which block that is, the caller says (§6.142).
     Elite::Anger(m_bubble, m_flight, _slot, _type);
   }
 
