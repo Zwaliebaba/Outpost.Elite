@@ -110,24 +110,26 @@ namespace Outpost
 
   // ---- the sound ----------------------------------------------------------------------------------
 
-  bool FlightSession::PlaySound(std::uint8_t _effect)
+  bool FlightSession::PlaySound(std::uint8_t _effect, bool _carryIn)
   {
     /*
      * 6502: NOISE. Phase 5 owns the SID.
      *
-     * IT RETURNS THE ANSWER A SOUNDING BUILD GIVES, not the one a silent one does, and the two are
-     * different in a way the caller can see. `NOISE` ends `SEC / RTS` when a voice took the effect;
-     * with sound switched off (`DNOIZ`) it branches to `SOUR1`, which is a bare `RTS`, so the carry
-     * passes through unchanged from the caller. §6.88 is what makes that observable: `EXNO3` tail-
-     * calls `NOISE` and `OUCH`'s `DORND` runs on the carry, so which piece of equipment an
-     * explosion breaks depends on whether the explosion got a voice.
+     * THE SEAM CAN NOW EXPRESS ALL THREE ANSWERS AND THIS BUILD STILL GIVES ONE OF THEM (§6.99).
+     * `NOISE` ends `SEC / RTS` when a voice took the effect; with sound switched off (`DNOIZ`) it
+     * branches to `SOUR1`, a bare `RTS`, so the carry passes through unchanged. §6.88 is what
+     * makes the difference observable: `EXNO3` tail-calls `NOISE` and `OUCH`'s `DORND` runs on the
+     * carry, so which piece of equipment an explosion breaks depends on whether it got a voice.
      *
-     * The seam is a `bool` with no carry IN, so it cannot express the pass-through even if this
-     * wanted to. Answering "a voice took it" is the answer the game gives whenever sound is on,
-     * which is what phase 5 will make true; answering the other way would make a silent build
-     * diverge from the oracle the tests compare against.
+     * A SOUNDING BUILD IS WHAT THIS ANSWERS, and that is a choice rather than a placeholder. The
+     * game ships with `DNOIZ` zero, so "a voice took it" is what an unmodified machine does; a
+     * port with no SID that answered `_carryIn` would be modelling a player who had turned sound
+     * OFF, which is a different game and one the oracle comparisons are not run against. When
+     * phase 5 lands, this reads `DNOIZ` and the third answer becomes reachable -- and the seam no
+     * longer has to change to allow it, which is the whole point of taking the argument now.
      */
     (void)_effect;
+    (void)_carryIn;
     return true;
   }
 

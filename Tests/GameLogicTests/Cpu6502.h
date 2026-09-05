@@ -152,6 +152,17 @@ namespace Elite::Testing
       std::uint8_t x = 0;
       std::uint8_t y = 0;
 
+      /*
+       * The carry ON ENTRY, which is an ARGUMENT to more of this game than anyone would guess.
+       *
+       * `NOISE` passes it through when sound is off, `OUCH` opens its `DORND` on it, `LASLI`'s
+       * `ROL A` reads it, and the pitch reads what the roll left across a `JSR` -- §6.85, §6.86,
+       * §6.88 and §6.99 are all the same shape. Every one of those was established by reading the
+       * assembly; this makes the flag something the oracle REPORTS, so a port's claim about the
+       * carry at a seam can be compared instead of argued.
+       */
+      bool carry = false;
+
       /// The bytes at `watch`, as they were when the trap fired. Routines that take arguments in
       /// memory rather than in registers -- SUN takes its centre in K3 and K4 -- cannot be
       /// compared without this, because by the time the run ends the caller has moved on.

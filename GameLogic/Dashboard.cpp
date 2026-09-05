@@ -208,11 +208,17 @@ namespace Elite
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(STATION_CELL + 40u), BULB_COLOUR);
   }
 
-  void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept
+  void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects, bool _carryIn) noexcept
   {
-    _status.ecmCountdown = 32u;          // 6502: LDA #32 / STA ECMA
-    (void)_effects.PlaySound(SOUND_ECM); // 6502: LDY #sfxecm / JSR NOISE
-    ToggleEcmIndicator(_canvas);         // 6502: and no RTS -- it falls into ECBLB
+    /*
+     * 6502: ECBLB2 -- `LDA #32 / STA ECMA / LDY #sfxecm / JSR NOISE`, and NOT ONE OF THOSE TOUCHES
+     * THE CARRY. So the flag `NOISE` sees is the one this routine was CALLED with, which is why it
+     * is an argument and not a constant: the pass-through §6.99 found at the seam runs through the
+     * routine above it too (§6.111).
+     */
+    _status.ecmCountdown = 32u;                    // 6502: LDA #32 / STA ECMA
+    (void)_effects.PlaySound(SOUND_ECM, _carryIn); // 6502: LDY #sfxecm / JSR NOISE
+    ToggleEcmIndicator(_canvas);                   // 6502: and no RTS -- it falls into ECBLB
   }
 
   void StopEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept
