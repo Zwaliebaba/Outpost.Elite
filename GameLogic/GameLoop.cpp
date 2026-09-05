@@ -76,17 +76,13 @@ namespace Elite
     return screen.flight.mainLoopCounter == 0u ? LoopHead::Spawn : LoopHead::SkipSpawning;
   }
 
-  std::uint8_t RunLoopTail(FlightLoop& _loop, CommanderBlock& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept
+  void CoolTheGuns(FlightStatus& _status) noexcept
   {
-    std::uint8_t requestedFrames = 0;
-    FlightScreen& screen = _loop.screen;
-    bool carry = _carryIn;
-
     // 6502: LDX GNTMP / BEQ EE20 / DEC GNTMP -- the laser cools by one every pass, docked or
-    // flying, because this is above the `QQ11` gate below.
-    if (screen.status.laserTemperature != 0u)
+    // flying, because this is above part 5's `QQ11` gate.
+    if (_status.laserTemperature != 0u)
     {
-      --screen.status.laserTemperature;
+      --_status.laserTemperature;
     }
 
     /*
@@ -96,15 +92,26 @@ namespace Elite
      * branch skips the second. So an odd countdown stops at zero and an even one steps through it,
      * and a port that subtracted two would go negative on the odd values.
      */
-    if (screen.status.laserCount != 0u)
+    if (_status.laserCount != 0u)
     {
-      std::uint8_t count = static_cast<std::uint8_t>(screen.status.laserCount - 1u);
+      std::uint8_t count = static_cast<std::uint8_t>(_status.laserCount - 1u);
       if (count != 0u)
       {
         --count;
       }
-      screen.status.laserCount = count;
+      _status.laserCount = count;
     }
+  }
+
+  std::uint8_t RunLoopTail(FlightLoop& _loop, CommanderBlock& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept
+  {
+    std::uint8_t requestedFrames = 0;
+    FlightScreen& screen = _loop.screen;
+    bool carry = _carryIn;
+
+    // 6502: the two countdowns above the `QQ11` gate, which a docked pass reaches as well -- see
+    // `CoolTheGuns`, which the executable's docked loop calls for exactly that reason.
+    CoolTheGuns(screen.status);
 
     // 6502: .NOLASCT LDA QQ11 / BNE P%+5 / JSR DIALS -- every pass on the space view, which is what
     // makes the speed, roll and pitch indicators move at all.
