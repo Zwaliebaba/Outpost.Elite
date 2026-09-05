@@ -7,6 +7,7 @@
 #include "Charts.h"
 #include "Controls.h"
 #include "Dashboard.h"
+#include "Explosion.h"
 #include "ExtendedTokens.h"
 #include "Flight.h"
 #include "FlightLoop.h"
@@ -68,6 +69,7 @@ namespace Outpost
                               public Elite::ShipDrawEffects,
                               public Elite::ControlEffects,
                               public Elite::SightEffects,
+                              public Elite::ExplosionEffects,
                               public Elite::ViewEffects,
                               public Elite::ChartShapes
   {
@@ -155,11 +157,18 @@ namespace Outpost
 
     // ---- Elite::SightEffects and Elite::ViewEffects ----------------------------------------------
 
+    /// `SetRasterMode` is `Elite::ExplosionEffects`'s as well as `SightEffects`'s -- one `SETL1` in
+    /// the game, one method here, and one override satisfying both interfaces.
     void SetRasterMode(std::uint8_t _mode) override;
     void SetSightColour(std::uint8_t _colour) override;
     void SetSpritesEnabled(std::uint8_t _mask) override;
     void MaskSprites(std::uint8_t _mask) override;
     void SetPalette(std::uint8_t _colour) override;
+
+    // ---- Elite::ExplosionEffects ----------------------------------------------------------------
+
+    void SetSpriteExpansion(std::uint8_t _mask) override;
+    void ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y) override;
 
   private:
     Window& m_window;
@@ -208,6 +217,18 @@ namespace Outpost
     std::uint8_t m_spriteMask = 0;
     std::uint8_t m_spriteColour = 0;
     std::uint8_t m_rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote into the handler
+
+    /*
+     * 6502: VIC+&17, VIC+&1D, VIC+&2, VIC+&3 and the ninth x bit in VIC+&10 -- the explosion
+     * burst, which is sprite 1 (slice 4b-b).
+     *
+     * Held for the same reason as the three above, and the read-modify-writes are performed here
+     * because they are the hardware's: `ShowExplosionSprite` takes the whole nine-bit x and this is
+     * what splits it. `Canvas::Resolve` does not draw sprites yet, so nothing reads any of it.
+     */
+    std::uint8_t m_spriteExpansion = 0;
+    std::uint16_t m_burstX = 0;
+    std::uint8_t m_burstY = 0;
 
     /// The two aggregates the ported routines take, over everything above and everything borrowed.
     /// Declared last because every reference in them is bound at construction.

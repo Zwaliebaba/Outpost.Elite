@@ -80,6 +80,17 @@ namespace Elite
   inline constexpr std::uint8_t SHIP_STATE_FIRING = 0x40;    ///< 6502: bit 6 -- laser
   inline constexpr std::uint8_t SHIP_STATE_KILLED = 0x80;    ///< 6502: bit 7 -- killed, not yet exploding
 
+  /*
+   * 6502: bit 6 again, and it is NOT the laser while bit 5 is set.
+   *
+   * `LL9` part 1 clears bits 6 and 7 in the same instruction that sets bit 5, so a ship stops
+   * firing in the moment it starts to blow up -- and `DOEXP` then uses the vacated bit to mean
+   * "there is a cloud on the screen from last frame". One bit, two meanings, told apart by
+   * another bit; the port names both rather than letting a reader meet `SHIP_STATE_FIRING` in
+   * the explosion and wonder.
+   */
+  inline constexpr std::uint8_t SHIP_STATE_CLOUD_DRAWN = 0x40;
+
   /// 6502: the ship types NWSHP and KILLSHP single out by name.
   /// 6502: MSL -- the only type that carries a target slot in its AI byte, which `KILLSHP` has to
   /// renumber, and the one `MVEIT` runs tactics on every iteration rather than one in eight.
