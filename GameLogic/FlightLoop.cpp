@@ -496,7 +496,7 @@ namespace Elite
       {
         screen.status.ecmOurs = static_cast<std::uint8_t>(screen.status.ecmOurs - 1u);
         /*
-         * 6502: DEC ECMP / JSR ECBLB2, and the carry handed on is NOT KNOWN HERE (§6.111).
+         * 6502: DEC ECMP / JSR ECBLB2, and the carry handed on is NOT KNOWN HERE (§6.115).
          *
          * `DEC`, `LDA`, `AND` and `BEQ` above this all leave the carry alone, so the flag that
          * reaches `NOISE` was set somewhere further back in the frame -- possibly inside `WARP`,
@@ -1512,6 +1512,13 @@ namespace Elite
     }
 
     return EndFlightFrame(_loop);
+  }
+
+  void ScanFlightControls(FlightLoop& _loop, ControlEffects& _effects) noexcept
+  {
+    // 6502: LDA QQ11 / BNE TT17afterall -- the space view's path, and the chart path's crosshair
+    // arithmetic is phase 4's. Both call `DOKEY`, so the scan itself happens either way.
+    ReadFlightControls(_loop.keys, _loop.control, _loop.options, _loop.screen.work, _loop.screen.flight, _effects);
   }
 
 } // namespace Elite

@@ -91,7 +91,7 @@ namespace Microsoft::VisualStudio::CppUnitTestFramework
   {
   public:
     /*
-     * MSVC REJECTS WHAT THIS WOULD HAPPILY COMPARE, and the gap is invisible from here (§6.112).
+     * MSVC REJECTS WHAT THIS WOULD HAPPILY COMPARE, and the gap is invisible from here (§6.116).
      *
      * The real `Assert::AreEqual` resolves `ToString<T>` and static-asserts when there is none, so
      * a type this shim stringifies through a stream is not necessarily a type the Windows leg will
@@ -105,7 +105,7 @@ namespace Microsoft::VisualStudio::CppUnitTestFramework
     template <typename T> static void AreEqual(const T& _expected, const T& _actual, const wchar_t* _message = nullptr)
     {
       static_assert(!std::is_same_v<std::remove_cvref_t<T>, std::vector<bool>::reference>,
-                    "std::vector<bool>'s proxy has no MSVC ToString: store std::uint8_t and compare that (section 6.112).");
+                    "std::vector<bool>'s proxy has no MSVC ToString: store std::uint8_t and compare that (section 6.116).");
 
       if (!(_expected == _actual))
       {

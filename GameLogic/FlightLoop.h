@@ -401,4 +401,27 @@ namespace Elite
   /// 6502: `M%` from end to end -- the opening, every ship, and the tail.
   [[nodiscard]] LoopOutcome MainFlightLoop(FlightLoop& _loop) noexcept;
 
+  /*
+   * 6502: TT17 -- scan the keyboard for the flight controls, once a frame.
+   *
+   * THE C64 HAS ITS OWN `TT17` AND IT IS NOT THE COMMON ONE. `library/common/.../tt17.asm` is three
+   * instructions -- `LDA JSTX / EOR #&FF / RTS` -- and the master file includes
+   * `library/c64/main/subroutine/tt17.asm` instead, which calls `DOKEY` on BOTH of its paths.
+   * Reading the common file is how a port ends up believing the frame has no keyboard scan in it,
+   * which is what happened here (§6.111).
+   *
+   * IT IS THE LAST THING `MLOOP` DOES BEFORE `TT102`. Part 5 ends `JSR TT17` and falls into part 6,
+   * which dispatches the key that was pressed -- so the game reads the hardware TWICE a frame and
+   * for two different questions: this one fills the key LOGGER with what is being held, and
+   * `TT102` takes the one key that was pressed. `M%` then reads the logger at the top of the next
+   * frame, which is why the controls are scanned at the end of a frame rather than the start.
+   *
+   * WHAT IS PORTED IS THE SPACE-VIEW PATH, which is `LDA QQ11 / BNE TT17afterall / JSR DOKEY /
+   * TXA / RTS`. The other path calls `DOKEY` too and then turns the four steering keys into the
+   * chart crosshairs' movement, and the charts are phase 4's -- so it is refused here rather than
+   * approximated, and this returns nothing because the port's `TT102` takes its key from the
+   * window's queue rather than from `thiskey`.
+   */
+  void ScanFlightControls(FlightLoop& _loop, ControlEffects& _effects) noexcept;
+
 } // namespace Elite

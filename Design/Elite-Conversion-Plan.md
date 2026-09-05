@@ -437,9 +437,9 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
-### 6.112 The Ubuntu leg is not a compiler check, and it has now let two through
+### 6.116 The Ubuntu leg is not a compiler check, and it has now let two through
 
-`std::vector<bool>` cost a red CI run within minutes of §6.111 being pushed, and the interesting
+`std::vector<bool>` cost a red CI run within minutes of §6.115 being pushed, and the interesting
 part is not the container.
 
 **WHAT HAPPENED.** The carry lists were `std::vector<bool>`, which is bit-packed: `operator[]`
@@ -468,7 +468,7 @@ computes, and the second half is the one nobody writes tests for. Each time the 
 catches something the Ubuntu leg could not, the answer is to teach the Ubuntu leg that specific
 thing -- not to assume the next one will be caught either.
 
-### 6.111 The carry is not a seam's problem, it is a chain, and the port models none of it
+### 6.115 The carry is not a seam's problem, it is a chain, and the port models none of it
 
 §6.99 said the fix for `bool PlaySound(std::uint8_t)` was `bool PlaySound(std::uint8_t, bool)` and
 that it should wait for phase 5. The seam was widened early, for a reason that turned out to be
@@ -518,6 +518,121 @@ it properly means threading a flag through the flight loop, not through one inte
 is a decision with a cost, not a defect with a fix: the alternative is to keep deriving it where a
 branch or a compare makes it local and to say plainly where it is not. This port now does the
 second, out loud, in one place. Phase 5 is when the difference starts to reach a player.
+### 6.114 The flight loop ran at the refresh rate, and §6.17 had said not to for six months
+
+Everything in flight moved four to five times too fast: the station spinning, the ships closing,
+the fuel burning. One constant, and the note above it argued for the wrong half of a question this
+plan had already answered.
+
+**§6.17 SETTLED THE SHAPE OF IT IN SEPTEMBER AND NOBODY WENT BACK.** The C64's main loop has no
+frame cap: `WSCAN` is called from `DELAY`, `TT16+7` and `FREEZE` and from nowhere else, and the
+`JSR WSCAN` in `main_flight_loop_part_13_of_16` is inside a version gate the C64 is not in. Its
+conclusion was two sentences long — "**the main loop is cycle-budgeted and free-running.** Measure
+what an iteration costs, divide by the clock, and let it slow under load exactly as the original
+does. A fixed rate would be a behaviour the game never had" — and the port shipped a fixed rate
+anyway, at the NTSC vertical refresh, with a comment that read: *"The flight loop is driven by that
+refresh and nothing else -- there is no timer in the game."* The second half is true and is exactly
+why there is no rate in the source to read; the first half is what §6.17 disproved.
+
+**THE MEASUREMENT, taken at last.** `FlightLoopTests::TheFlightFrameCostsWhatItCosts` mirrors a
+frame into the oracle and runs the shipped `M%` with everything that draws or thinks left
+untrapped — the comparison runs trap `PLANET` and `TACTICS` because their effects are seams, and a
+trapped call costs nothing, so timing one of those would leave out most of a frame:
+
+| bubble | cycles a frame | frames a second |
+|---|---|---|
+| empty | 47,784 | 21.4 |
+| one ship | 86,258 | 11.9 |
+| two ships | 75,736 | 13.5 |
+
+Against 59.826. In a real bubble — a planet and the station you just left — the port now runs at
+12.6 frames a second, which is 4.7 times slower than it was.
+
+**TWO BANDS RATHER THAN A CURVE, and the reason is the same as the title screen's.** A frame with
+anything in the bubble costs about 81,000 cycles and the two measured scenes sit 7% either side of
+it; the difference between one ship and two is what the ships ARE and where, not how many. §6.110
+found the identical thing about `LL9` — the cost tracks how much is drawn, not how far away it is
+— and reading a trend into a 7% wobble would be inventing one.
+
+**AND THE CROWDED END IS NOT MEASURED, which is where the model is weakest and where the original
+is most interesting.** `Seed`'s third slot is a space station, and `TACTICS` untrapped does not
+return inside forty million instructions — so the scene that would show the loop really slowing
+down is the one this measurement cannot time. A fight is therefore paced at the one-ship cost and
+is really slower than that. Add the missing anchor and the two bands become the curve §6.17 asked
+for; until then the constant says what it is.
+
+**The pattern across §6.110, §6.111, §6.112 and this one is worth naming.** Four faults in a day,
+all in the executable, none in a ported routine, and every one of them invisible to a suite that
+compares routines against the shipped game one at a time: a loop paced by the display, a routine
+nothing called, a heap pointer that fell between two objects, and a rate that contradicted a
+finding already written down. **The oracle proves what the port COMPUTES. Nothing in this project
+yet proves what it DOES** — and all four were found by a person looking at the screen.
+
+### 6.112 The station drew into the sun's heap, and the port kept the two in different objects
+
+The space station was invisible from the moment you launched. Not missing: the bubble had it, the
+loop moved it, `LL9` drew it, and byte 31 came back with bit 3 set to say so. Nothing reached the
+screen.
+
+**`NWSPS` HANDS THE STATION THE SUN'S LINE HEAP.** §6.58 recorded this when the routine was
+ported: `STX FRIN+1` empties the sun's slot and six instructions later `LDA #LO(LSO) / STA
+INWK+33` points the station at `LSO`, the sun's own 200 bytes — which survives because `NWSHP`
+skips the heap allocation for a station. On a 6510 that is unremarkable. Memory is flat, and a
+pointer is a pointer.
+
+**IN THE PORT THOSE 200 BYTES ARE IN A DIFFERENT OBJECT.** `LineHeap` is the arena from `K%` to
+`LS%`, addressed absolutely; the sun's heap is `PlanetSunState::sun`, because `SUN` and `WPLS`
+work on it and nothing else did. So the station's pointer — &0580 — landed between the two, and
+`LineHeap::Write` is bounds-checked: **every line the station drew was written out of range and
+dropped**, silently, by design. `DrawShipLines` then read the count back as a zero and drew
+nothing. The heap now takes a window onto the sun's bytes, which is what the machine always had.
+
+**Three things could have caught it and none of them did.**
+
+- The oracle comparisons DO compare `LSO`, byte for byte, in `FlightWorld`. They passed because
+  neither side wrote anything there: the fixtures that spawn a station rarely reach a frame that
+  draws one, so the comparison was two sets of zeros agreeing. §6.36's shape for the fourth time.
+- `NWSPS`'s own sweep compares `INWK+33/34` and finds the right address on both sides. The pointer
+  was never wrong. What was wrong was what the pointer could reach, which is not in `INWK`.
+- Every routine involved is green one at a time. This is only visible from the outside, in a whole
+  frame, with a station in it — which is what `TheStationSurvivesTheLaunch` now is.
+
+**The general lesson is about bounds checks that are documented as harmless.** `LineHeap`'s own
+comment says an address outside the arena "reads as zero and writes nowhere ... the original would
+read whatever was there, and inventing a value is less honest than reading a zero the caller can
+see". That is right for a read of unknown memory and wrong for a WRITE the game depends on: the
+port had turned one of the game's real pointers into a hole, and a hole that is documented as
+deliberate is one nobody re-examines.
+
+### 6.111 DOKEY was ported, swept, green, and called by nothing
+
+None of the flight controls worked in the app. Not the arrow keys, not the speed keys, not the
+missile keys — nothing the player HOLDS. The key map was right, the window's held-key table was
+right, `ReadFlightControls` was right and had a sweep behind it, and the flight loop read the key
+logger every frame exactly as `M%` does. The logger was empty, because nothing ever filled it.
+
+**THE C64 HAS ITS OWN `TT17` AND THE COMMON ONE IS A DECOY.** `library/common/main/subroutine/
+tt17.asm` is `LDA JSTX / EOR #&FF / RTS` — three instructions, no keyboard scan anywhere in it.
+The C64 master includes `library/c64/main/subroutine/tt17.asm` instead, and that one opens `LDA
+QQ11 / BNE TT17afterall / JSR DOKEY`, calling the scan on both of its paths. Reading the common
+file — which is what `c64_source.py` gives you if you ask for the common path by name — tells you
+the frame has no keyboard scan in it, and the port believed that for as long as the flight loop
+has existed.
+
+**THE COMMENT DESCRIBED BOTH READS AND THE CODE DID ONE.** `Main.cpp` has said since slice 2e that
+"the game reads the hardware twice per frame and so does this": once for the key that was pressed
+(`TT102`, from the window's queue) and once for the keys being held (`DOKEY`, into the logger).
+Only the first was there. The second was a seam wired at one end — `FlightSession::ScanKeyboard`
+implemented, `ControlEffects::ScanKeyboard` declared, `ReadFlightControls` calling it, and no
+caller for `ReadFlightControls` outside its own test.
+
+**`tools/check_outpost.py` cannot see this and should not be expected to.** It proves every
+`Elite::` name the app uses is declared and every call has the right arity. A routine the app never
+calls is not a name it uses. The gap it leaves is exactly this one: **ported, tested, and
+unreachable**, which no check in this project currently finds. The nearest thing to a guard is the
+one this fix adds by hand — the call site now carries the `6502: TT17` marker, so
+`tools/inventory.py` counts it as ported where before it counted `DOKEY` as ported and nothing
+asked who called it.
 
 ### 6.110 The title ship span at the monitor's rate, and Risk R3 finally got used
 
@@ -4320,6 +4435,10 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The carry is a chain, and the instrument to see it did not exist** (§6.115, §6.116). §6.99 said `bool PlaySound(uint8_t)` should grow a carry argument and should wait for phase 5; widening it early turned out to BE the finding. **`Cpu6502::TrapHit` recorded `a`, `x`, `y` and watched memory and not the carry** -- so five findings about a flag at a call site (§6.85, §6.86, §6.87, §6.88, §6.99) had all been read off the assembly and none could be checked. It records it now, and the flight-loop comparison checks the carry handed to every `PlaySound` against the one the oracle reaches `NOISE` with. Six suites failed at once, none of them in code the change touched: **three of the four call sites hand `NOISE` a flag set somewhere the port cannot see** -- `ECBLB2` is four instructions and none touch the carry, `BEEP` is one shorter with the same shape, and `MA63`'s `JSR EXNO3` runs on whatever `OUCH` left several routines deep. Two ARE derivable and now are: `MA59` comes off part 8's `BCS`, and `.custard` off a `CMP`, which is §6.86 supplied rather than merely recorded. The comparison is narrowed to the four laser effects with the exclusion named beside its reason. **And it cost a red CI run**: the carry lists were `std::vector<bool>`, whose `operator[]` returns a proxy MSVC's `Assert::AreEqual` static-asserts on and g++ does not, so the file built and 304 tests passed on the Ubuntu leg before Windows saw it. Second Windows-only compile error to reach CI after `const bool near`; the shim now refuses that one case by name. |
+| 2026-09-05 | **The flight loop ran at the refresh rate, and §6.17 had said not to** (§6.114). Everything in flight moved four to five times too fast. §6.17 established in September that the C64's main loop has no `WSCAN` in it and asked for the loop to be **cycle-budgeted and free-running** -- "a fixed rate would be a behaviour the game never had" -- and the port shipped a fixed rate at the NTSC vertical refresh anyway. The measurement is taken now: the shipped `M%`, mirrored into the oracle with `PLANET` and `TACTICS` untrapped, costs 47,784 cycles with an empty bubble and about 81,000 with ships in it -- **21.4 and 12.6 frames a second, against 59.826**. `FlightFrameSeconds` is two measured bands rather than a curve, for §6.110's reason: the two ship scenes sit 7% either side of one number and the difference is what the ships are, not how many. The crowded end is unmeasured, because `TACTICS` untrapped does not return for a station -- so a fight is paced at the one-ship cost and is really slower. Four faults in a day (§§6.110-6.114), all in the executable, none in a ported routine, and every one found by a person looking at the screen: **the oracle proves what the port computes and nothing yet proves what it does**. |
+| 2026-09-05 | **The station drew into the sun's heap and the port kept the two apart** (§6.112). The space station was invisible from the moment you launched -- in the bubble, moved by the loop, drawn by `LL9`, and with byte 31 saying so. `NWSPS` points the station at `LSO`, the SUN's line heap (§6.58 recorded it when the routine was ported), and in this port those 200 bytes live in `PlanetSunState` while `LineHeap` is the arena from `K%` to `LS%` -- so the station's pointer landed between two objects and every line it drew was **written out of range and dropped by a bounds check documented as harmless**. The heap now takes a window onto the sun's bytes, which is what the machine always had. The oracle comparisons DO compare `LSO` and passed anyway, because neither side wrote there: two sets of zeros agreeing, §6.36's shape a fourth time. |
+| 2026-09-05 | **`DOKEY` was ported, swept, green, and called by nothing** (§6.111). No flight control worked in the app -- not the arrows, the speed keys or the missile keys -- because the key LOGGER was never filled. The C64 has its own `TT17` (`LDA QQ11 / BNE TT17afterall / JSR DOKEY`) and the common one, which is what you get by asking for the common path by name, is three instructions with no scan in it; the port read the decoy. `Main.cpp`'s own comment has described both of the frame's keyboard reads since slice 2e and the code did one of them: a seam wired at one end, with `FlightSession::ScanKeyboard` implemented and `ReadFlightControls` called by nothing but its test. **No check in this project finds ported-tested-and-unreachable**, and `check_outpost.py` cannot: a routine the app never calls is not a name it uses. |
 | 2026-09-05 | **Three slices accepted on the owner's machine: 2e, 3b and 3c.** The half of ADR-003 §3 that no runner can do -- a person looking at the screen -- is given for the first time: every docked screen is legible and the cadence is right, the title screen's Cobra is right, and the launch view at Lave is right. 3b and 3c are accepted; **2e is not, and the reason is recorded rather than rounded away** -- its criterion has a second half, "measure a main-loop iteration and write the number down", and §6.110 measured the TITLE loop and says in as many words that the flight loop is still unmeasured. `FLIGHT_STEPS_PER_SECOND` is therefore still the NTSC refresh rather than a cost model, and Risk R3 is half-retired. **What was accepted for 3b and 3c is a look and not a golden**: no captures were stored, so nothing in CI will notice if the title ship or the planet regresses. That is a smaller claim than the rows originally asked for and it is written down as such, because a sign-off recorded as a golden would be read later as a file somebody could diff. |
 | 2026-09-05 | **The title ship span at the monitor's rate** (§6.110). `TITLE` has no `WSCAN` in it, so the ship turns at whatever rate a 6510 gets through `MVEIT` and `LL9` -- and the shell ran one turn per PRESENT, which is 165 a second on the machine this was found on against the original's 8. **Risk R3's cycle counter was used for its purpose for the first time**: `CycleTests` runs the shipped routines over `TITLE`'s own ship state and prices a turn at 121,276 cycles settled and 15,600 while the ship is still a dot. **The answer is a curve, not a number** -- pacing at the settled rate alone makes the ship's arrival take eleven seconds instead of four and a half, because a distant ship is drawn as a dot and costs an eighth as much -- so `TitleTurnSeconds` interpolates the measured table, indexed by the same `INWK+7` the loop walks down. Verified on screen as well as in a test: 14 captures 33 ms apart show one turn per 120 ms, 8.3 a second against the oracle's 8.4. `near` and `far` are still `<windows.h>` macros, for the second and third time. |
 | 2026-09-05 | **The launch tunnel: `LAUN` and `HFS2`, and a display for them to run on.** The last seam on the launch path goes, and `DOENTRY` gets the tunnel it never had -- `ShowDockingTunnel` was scoped in 2e before the ball line heap existed, 3c built it, and nothing revisited the stub, which is §6.73 for the eighth time. `DockAtStation` takes the screen it draws on instead of the commander, the status and the flight state separately; all three were inside `FlightScreen` already. **18 mutations, 18 caught.** One finding, and it is the port's rather than the original's (§6.109): **the rings were ported, called, compared byte for byte against the shipped game -- and invisible**, because `Launch` runs start to finish between two presents and `LOOK1` clears the screen at the end of it. The C64's display is live and never had to be asked; this one does. `TunnelEffects` is the seam for the frame the VIC-II was giving the routine for free, and **one frame per circle is measured rather than chosen** -- 483,905 cycles over thirty-four circles is 14,232 each against an NTSC frame's 17,095, so the tunnel is half a second and ADR-005 §1's "intermediate states inside a step" does not reach it. `LAUN` also turns out to write the `STP` that §6.94 said the path had no writer for and §6.95 seeded a value for, so the app's seeded 4 stops being load-bearing. The oracle now runs `LAUN` in the `TT110` comparison, which needed §6.108's `NOSPRITES` trap for the second time. 301 tests green. |

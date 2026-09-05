@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 
 namespace Elite
 {
@@ -40,17 +41,52 @@ namespace Elite
     static constexpr std::uint16_t TOP = SHIP_HEAP_TOP;
     static constexpr std::size_t SIZE = TOP - BASE;
 
+    /*
+     * 6502: LSO -- the SUN's line heap, which the SPACE STATION borrows, and it is nowhere near
+     * this arena.
+     *
+     * `NWSPS` empties the sun's slot and then writes `LDA #LO(LSO) / STA INWK+33`, so the station's
+     * heap pointer is &0580 and not an address carved out of `SLSP`. On the machine that is
+     * unremarkable -- memory is flat and a pointer is a pointer. In this port the sun's 200 bytes
+     * live in `PlanetSunState` and the ship arena lives here, so the station's pointer lands
+     * BETWEEN two objects: every line it wrote went out of range and was dropped, `LL9` set the
+     * "drawn" bit on a ship that had put nothing on screen, and the station was invisible from the
+     * moment you launched (§6.112).
+     *
+     * So the heap can be given that window, and the two never collide for the reason the game
+     * relies on: `NWSPS` evicts the sun before it takes the heap, so a station and a sun are never
+     * in the bubble at once. Nothing else in the build points a ship at anything but this arena.
+     */
+    void AttachSunHeap(std::uint16_t _base, std::span<std::uint8_t> _bytes) noexcept
+    {
+      m_sunBase = _base;
+      m_sun = _bytes;
+    }
+
     /// An address outside the arena reads as zero and writes nowhere, which is what `ShipByte`
     /// does for the blueprints and for the same reason: the original would read whatever was
     /// there, and inventing a value is less honest than reading a zero the caller can see.
     [[nodiscard]] std::uint8_t Read(std::uint16_t _address) const noexcept
     {
+      const std::uint32_t borrowed = static_cast<std::uint32_t>(_address) - m_sunBase;
+      if (!m_sun.empty() && borrowed < m_sun.size())
+      {
+        return m_sun[borrowed];
+      }
+
       const std::uint32_t offset = static_cast<std::uint32_t>(_address) - BASE;
       return (offset < SIZE) ? m_bytes[offset] : std::uint8_t{0};
     }
 
     void Write(std::uint16_t _address, std::uint8_t _value) noexcept
     {
+      const std::uint32_t borrowed = static_cast<std::uint32_t>(_address) - m_sunBase;
+      if (!m_sun.empty() && borrowed < m_sun.size())
+      {
+        m_sun[borrowed] = _value;
+        return;
+      }
+
       const std::uint32_t offset = static_cast<std::uint32_t>(_address) - BASE;
       if (offset < SIZE)
       {
@@ -60,6 +96,12 @@ namespace Elite
 
   private:
     std::array<std::uint8_t, SIZE> m_bytes{};
+
+    /// The sun's heap, if the owner has lent it -- see `AttachSunHeap`. Empty until it does, and
+    /// then a window at `m_sunBase` that takes precedence over the arena; the two cannot overlap,
+    /// because one is at &0580 and the other ends at &FFC0.
+    std::span<std::uint8_t> m_sun{};
+    std::uint16_t m_sunBase = 0;
   };
 
   /// 6502: XX19(1 0), which shares its location with `INWK+33/34` -- the ship's own heap pointer.
