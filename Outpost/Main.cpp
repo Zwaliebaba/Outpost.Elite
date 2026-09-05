@@ -88,7 +88,7 @@ namespace
         screen(canvas, text, &shell),
         characters(screen),
         recursive(characters),
-        values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
+        values(recursive, text, commander, name, current.seeds, selectedSeeds, false),
         extended(characters, recursive, rng, &shell),
         trade{recursive, characters, extended, text, shell, shell, rng},
         save{recursive, characters, extended, screen, text, shell, shell, store, numbers},
@@ -154,7 +154,14 @@ namespace
     std::array<std::uint8_t, 16> buffer{};
     bool useDisk = false;
 
-    Elite::SystemSeeds currentSeeds{};
+    /*
+     * 6502: QQ15 and QQ2 -- the selected system's seeds, and the current system's inside `current`.
+     *
+     * THERE WAS A SECOND COPY OF QQ2 HERE, and it is gone (§6.130). The token printer was bound to
+     * it and the start sequence wrote the other one, so the status screen's "Present System" was
+     * blank from the cold start until the first hyperspace jump, which was the one path that copied
+     * across. `current.seeds` is the byte; the printer reads it directly.
+     */
     Elite::SystemSeeds selectedSeeds{};
     Elite::CurrentSystem current;
     Elite::MarketState market;
@@ -487,7 +494,6 @@ namespace
           _game.crosshairY, _game.commander.GalaxySeeds(), false, _game.flight.Loop().options.authorNames != 0u);
 
         _game.jumpDistance = jump.distance;
-        _game.currentSeeds = _game.current.seeds;
 
         if (jumped == Elite::JumpResult::Arrived)
         {
