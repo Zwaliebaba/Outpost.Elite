@@ -183,12 +183,22 @@ def parse_binaries(_assemblies: list[tuple[str, str]], _runtime: bool) -> list[t
 # proves nothing (plan §6.78).
 #
 # `DSTORE% = SCBASE + &AF90` with `SCBASE = &4000`, from elite-source.asm under `_GMA_RELEASE`,
-# which is the variant this build is. That it starts at the file's FIRST byte rather than at the
-# `+&18` the original build script loads it to is settled by rendering it: 2,240 is exactly seven
-# character rows of forty cells, and decoding those bytes from offset zero produces the dashboard
-# with its labels aligned to the cell grid.
+# which is the variant this build is.
+#
+# AND THE FILE GOES &18 BYTES ABOVE IT, which is what the original build script says and what
+# §6.78 talked itself out of: `S.COMLODS.txt` line 1000 is `OSCLI("L.:2.C.CODIALS "+STR$~(O%+&18))`.
+# The reasoning that dropped the &18 was that the file's first byte "renders as a dashboard with
+# its labels aligned to the cell grid" -- and it does, because three cells of shift still looks
+# like a dashboard when there is nothing to line it up against. The COLOUR MAP is the thing to
+# line it up against, and it is unambiguous: with the file at `DSTORE%` 18.5% of the picture's lit
+# pixels come out black, and at `DSTORE% + &18` that falls to 8.4%, the lowest of any shift from
+# -8 to +8 cells. At that offset the labels sit in their boxes -- FS, AS, FU, CT, LT and AL down
+# the left and SP, RL, DC and 1 to 4 down the right -- and the three cells either side that the
+# offset costs are the ones `sdump` colours black on black, so nothing is lost that could be seen.
+# The file is 2,240 bytes of picture and eight of padding, so the copy's last 24 bytes fall off
+# its end into cells 37 to 39 of the bottom row, which are black as well (plan §6.105).
 RUNTIME_BLOCKS = [
-    ("../1-source-files/images/C.CODIALS.bin", 0x4000 + 0xAF90, 2248),
+    ("../1-source-files/images/C.CODIALS.bin", 0x4000 + 0xAF90 + 0x18, 2248),
 ]
 
 

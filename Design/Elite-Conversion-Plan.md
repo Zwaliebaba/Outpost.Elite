@@ -437,6 +437,42 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.105 The dashboard was three cells out, and only the colours could say so
+
+§6.78 had to decide where `C.CODIALS.bin` sits in memory, because nothing assembles it. The
+original build script says: `OSCLI("L.:2.C.CODIALS "+STR$~(O%+&18))` — twenty-four bytes above the
+block's start. The note dropped the `&18` on this reasoning: *"decoding those bytes from offset
+zero produces the dashboard with its labels aligned to the cell grid"*.
+
+**That test cannot distinguish the two answers.** &18 is exactly three character cells, so both
+alignments produce a dashboard aligned to the cell grid — one of them with every label three cells
+left of the box it belongs in. Rendered as bits on black, with no frame to sit inside and no
+palette to line up against, they look equally plausible. The port shipped the wrong one for a
+month and every test stayed green, because `wantdials` was compared against the shipped game and
+the shipped game copies from wherever the image is: **both sides of the comparison were reading
+the same misplaced bytes.**
+
+**The colour map is what settles it, and it is not close.** `sdump` and `cdump` give each cell its
+own palette, so a shift shows up as ink drawn in a colour that is not there. Counting the picture's
+lit pixels that resolve to black, over every shift from -8 to +8 cells:
+
+| Shift | -8 | -4 | -1 | **0** | +1 | +2 | **+3** | +4 | +6 |
+|---|---|---|---|---|---|---|---|---|---|
+| Invisible ink | 11.9% | 14.3% | 17.8% | **18.5%** | 15.5% | 11.9% | **8.4%** | 10.2% | 16.9% |
+
+`+3` is the minimum, it is the build script's `&18`, and at that offset the dashboard reads the
+way it does on a real C64: FS, AS, FU, CT, LT and AL down the left, SP, RL, DC and 1 to 4 down the
+right, each label in its own box and each bar inside its own frame. The three cells the offset
+costs at the start, and the three the copy loses off the end, are exactly the ones `sdump` colours
+black on black — so the loader wastes nothing that could have been seen.
+
+**The lesson is about what a picture can be checked against.** §6.78 checked the artwork against
+itself and got a self-consistent wrong answer; §6.5 promised that decoding the game's own output
+would be "exact, better than screenshots", and it is — but only for the half of the machine the
+oracle holds. The oracle has no colour memory, no VIC-II and no loader, so nothing in the suite
+could see this. The port now has all three, and the check that catches it is one line of counting:
+**ink you cannot see is a placement error, not a picture.**
+
 ### 6.104 Everything drawn, nothing visible: the port had no loader
 
 The title screen showed a box, a line of text and one small green square near the bottom left. It
@@ -1275,6 +1311,15 @@ bottom, aligned to the cell grid — which a load offset would have broken. **Th
 comparison against a picture rather than against a number**, and it is the only kind available
 when the thing being placed is an image and the evidence for where it goes is a line of BBC BASIC
 in a 1980s build script.
+
+> **CORRECTED 2026-09-05 (§6.105): the `&18` was right and this paragraph was wrong.** A load
+> offset would NOT have broken the grid alignment, because `&18` is exactly three character cells
+> -- both answers render as a dashboard aligned to the cell grid, and the wrong one puts every
+> label three cells away from the box it belongs in. The evidence that settles it is the colour
+> map, which arrived with the loader's screen setup: at `DSTORE%` 18.5% of the picture's lit
+> pixels come out black and at `DSTORE% + &18` only 8.4%, the minimum over every shift from -8 to
+> +8 cells. `RUNTIME_BLOCKS` loads the file at `DSTORE% + &18`, and the extracted array opens with
+> the 24 zeros the copy takes from in front of it.
 
 **This is the first thing the port has needed that the assembled build does not contain.** Every
 table so far came out of the image, by label, because everything so far was assembled into it —
@@ -4013,6 +4058,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The dashboard was three cells out, and only the colours could say so** (§6.105). §6.78 placed `C.CODIALS.bin` at `DSTORE%` rather than at the `DSTORE% + &18` the original build script names, on the grounds that the file's first byte renders as a dashboard aligned to the cell grid. It does -- `&18` is three character cells, so both answers do, and the wrong one puts every label three cells from its box. Nothing in the suite could see it: `wantdials` was compared against the shipped game, and the shipped game copies from wherever the image is, so **both sides read the same misplaced bytes**. The colour map settles it by counting ink that resolves to black -- 18.5% at `DSTORE%`, 8.4% at `DSTORE% + &18`, the minimum over every shift from -8 to +8 cells -- and at that offset FS, AS, FU, CT, LT, AL, SP, RL, DC and 1 to 4 each sit in their own box. `ViewChangeTests` now asserts the invisible-ink fraction and the 24 leading zeros the loader's gap leaves. |
 | 2026-09-05 | **The screen had no colours, because the port had no loader** (§6.104). The title screen drew a box, a prompt and one green square, and nothing was wrong with any routine that drew it: colour on the C64 lives in screen RAM and colour RAM, the game writes bits and hardly ever writes palettes, and everything else was coloured before the game started -- by the loader, whose seven parts the ledger drops. Their CODE is still dropped; the STATE parts 5 and 6 leave behind is reproduced in `LoaderScreen.cpp` and called once by the composition root, so the dashboard, the border box and the dials are visible for the first time. `sdump` and `cdump` are extracted with them, and they are **the first tables from an image that is not the game's** -- the loader assembles over the screen bitmap, so it gets a 64 KB space of its own that the oracle never loads. The test that would have caught it asserts on what `Resolve` produces rather than on the planes, which is ADR-002 §4's lesson for the second time. |
 | 2026-09-04 | **The station goes back in the bubble: `NWSPS` and `NwS1`.** The last seam on the launch path, and it opened because of a measurement rather than an argument -- `STA XX21` appears seven times in the whole upstream library and four of them are this routine, so the pointer table has exactly one mutable entry and `Bubble::stationBlueprint` is the model. **28 mutations, 28 caught.** Three findings. **One label, three routines** (§6.103): it evicts the sun from slot 1 and then hands the station the sun's line heap six instructions later, it cannot fail because it frees a slot before asking for one, and it self-modifies the blueprint table so a high-tech system gets a Dodo. **`NWSHP` writes `XX0` and the port had dropped the store** (§6.101) -- invisible for three slices, because every caller so far created a planet or a sun and those types take `BMI NW2` straight past it; the first caller with a positive type disagreed on the first frame. **And the oracle image has never booted** (§6.102): `spasto` is `EQUW &8888` until `BEGIN` overwrites it, `Fresh()` does not run `BEGIN`, so the shipped game spawned a station whose blueprint was the placeholder. That is §6.95's rule with the arrow reversed -- both sides of a comparison are fixtures, and an assembled binary is a machine before startup. `tek` joins `FlightScreen`; `LoopOutcome::Docked` is reachable for the first time. 294 tests green. |
 | 2026-09-04 | **The app can fly: the `Outpost/` wiring.** `FlightSession` owns the flight world and answers the six interfaces the flight code reaches through; `Main.cpp` grows the second outer loop `FRCE` chooses between, so `PlanSteps` has the caller it was written for at last; `KeyAction::Launch` and `ChangeView` are dispatched rather than refused; `DEATH2` and `DOENTRY` are wired at the loop's two reachable exits. `QQ11` leaves the shell because both halves write it. Four findings. **A seam outlived its reason and its going exposed a bug** — `ClearToView`'s three-call approximation is now the whole of `TT66`, which fixes a screen-mode leak the flight half would have opened AND revealed that the title screen must clear to view 13 and then store 0, because views 0 and 13 draw the same pixels and only one of them prints "FRONT VIEW" (§6.97). **The raster interrupt is a frame of work with nowhere to live**, and it belongs on every present rather than on every screen change, because `WaitFrames` and `NextKey` present too (§6.98). **`bool PlaySound` cannot express the flag §6.88 measured**: `NOISE` has three answers and the seam has two, and the third is the one a silent build gives (§6.99). And §6.100 is the honest inventory of a launch — including the gap that is the PRESENTER's, since `SIGHT` is ported and the laser sights are VIC-II sprites nothing renders. Verified by `check_outpost.py` and by compiling every `Elite::` call it makes against the real headers; **the rest needs a person at a Windows machine**, as 2e, 3b and 3c do. 293 tests green. |

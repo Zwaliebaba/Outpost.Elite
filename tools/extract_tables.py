@@ -207,6 +207,10 @@ TABLES = [
     # the image ships inside `COMLOD.bin` and the C64's loader places it at `DSTORE%` at run time,
     # so the address is the source's own `SCBASE + &AF90` rather than something BeebAsm emitted.
     #
+    # THE FIRST 24 BYTES ARE THE GAP THE LOADER LEAVES. `C.CODIALS.bin` is loaded at `DSTORE% + &18`
+    # (see `RUNTIME_BLOCKS` in tools/labels.py), so the picture starts three cells in and this array
+    # opens with 24 zeros. They are extracted rather than trimmed because the copy copies them.
+    #
     # 2,241 AND NOT 2,240. `wantdials` copies eight whole pages and then re-enters `mvblockK` at
     # `mvbllop` with Y = &C0, and that entry stores at Y and counts DOWN to 1 -- so the last byte
     # it touches is offset &900, which is 2,240, and the byte at 2,048 is never touched at all.

@@ -176,6 +176,21 @@ namespace GameLogicTests
       // the assembler. If `Binaries.txt` ever loses the row this compares 2,240 zeros against the
       // generated file and fails, which is the point.
       CompareAgainstAddress("DSTORE%", 0xEF90u, Elite::DASHBOARD_IMAGE);
+
+      /*
+       * And the 24 bytes in FRONT of the artwork, which are where it is aligned from.
+       *
+       * `C.CODIALS.bin` loads at `DSTORE% + &18` -- three character cells in -- so the copy
+       * takes 24 bytes of nothing before it reaches the picture. Drop the `&18` and the whole
+       * dashboard shifts three cells left, which still renders as a dashboard and puts every
+       * label outside its box (§6.105). Nothing else in the suite can see that, because both
+       * sides of every comparison copy from wherever the image was put.
+       */
+      for (std::size_t index = 0; index < 24u; ++index)
+      {
+        Assert::AreEqual<std::uint32_t>(0u, Elite::DASHBOARD_IMAGE[index], L"the loader's gap in front of the picture");
+      }
+      Assert::AreNotEqual<std::uint32_t>(0u, Elite::DASHBOARD_IMAGE[24], L"and the picture right after it");
     }
 
     /*

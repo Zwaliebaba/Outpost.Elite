@@ -253,6 +253,13 @@ namespace Elite
    * address comes from the source's `SCBASE + &AF90`. Before `Binaries.txt` carried the row, the
    * oracle held zeros there — and a comparison of `wantdials` would have copied blanks on both
    * sides and agreed (§6.78).
+   *
+   * IT OPENS WITH 24 ZEROS, AND THEY ARE THE PICTURE'S ALIGNMENT. The loader reads the file in at
+   * `DSTORE% + &18`, so the artwork starts three cells along and the first 24 bytes are whatever
+   * was already at `DSTORE%` — nothing, in a machine that has just booted. Put the file at
+   * `DSTORE%` instead and the whole dashboard shifts three cells left: it still reads as a
+   * dashboard, which is how the port shipped it that way, and every label sits outside the box it
+   * belongs in. What settles it is the colour map, not the picture (§6.105).
    */
   extern const std::array<std::uint8_t, 2241> DASHBOARD_IMAGE;
 

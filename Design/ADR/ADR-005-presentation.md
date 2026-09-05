@@ -77,6 +77,15 @@ main loop that ran as fast as the scene allowed.
   screens are F1–F6, and the four views — front, rear, left, right, the first of which is also
   launch — are F7–F10. The `DINT`/`FINT`/`HINT`/`OINT`/`YINT` letter keys and `@` are unchanged.
 
+- **Space keeps its C64 meaning as well, because the game asks for it by name.** Amended
+  2026-09-05, after the title screen was found ignoring it. Moving speed to `,` and `.` left
+  Space unbound, and an unbound key never reaches the queue at all — so "PRESS SPACE OR FIRE,
+  COMMANDER." printed a prompt the shell could not answer, and `TITLE` takes any key. Space is
+  bound to position 4, which is the C64's own Space, so it dismisses every "press space" prompt
+  and increases speed in flight exactly as it did on the machine. **The rule this is an instance
+  of:** a layout may move a control, but it may not leave a key the game's own TEXT names bound
+  to nothing.
+
 - **The map is therefore many-to-one, and that is a consequence rather than a convenience.**
   `gnum` and the line editor read a key as the CHARACTER `TRANTABLE` gives its position, so the
   number row cannot be unbound to free the digits for the function keys: "4" keeps position 53
