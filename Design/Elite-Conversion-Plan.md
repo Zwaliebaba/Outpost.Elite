@@ -472,6 +472,62 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.152 Thirteen survivors, and three different ways for a sweep to be blind
+
+The one piece of recorded debt: thirteen mutants in the ship AI's sweep that nothing caught,
+measured rather than named by `python tools/mutate.py --unit tactics` (§6.147). §6.132's method
+applied to all thirteen at once — put a probe on each surviving comparison, run the sweep, print
+what reaches it, and look at how many numbers come back. It took one afternoon and the port was
+right every time; what was wrong was the sweep, in three distinct ways.
+
+**SIX THRESHOLDS WERE NEVER STOOD ON.** `CMP #253` for the station's launch, `CMP #240` for the
+police, `CMP #200` for the Anaconda's escort, `CMP #250` for the random pitch, `CMP #230` for losing
+your nerve, `CMP #16` for a missile's ECM check: each saw exactly four values in 1,800 cases,
+because half of `TACTICS` is `DORND` and the sweep had four seeds. None of the four was ever the
+constant, so every mutant that shifted a constant by one agreed everywhere. Six more seeds close
+them, found by search: 1,024 seeds through the whole sweep with the probes in place, taking the
+first that lands on each.
+
+**AND THE FIRST SEARCH MADE IT WORSE BEFORE IT MADE IT BETTER.** Seeds affine in the index — `{i,
+7i+1, 13i+3, 29i+5}` — produced rolls whose bit 1 was always set, so at three of the six sites the
+reachable set was 128 values rather than 256 and 252 and 16 were not unlucky but impossible. The
+tell was the distinct count: 128 out of 256 is not a coincidence, and a search that had stopped at
+"no seed works" would have concluded the mutants were equivalents. `DORND` is affine in its state,
+so an affine family of seeds stays affine through it.
+
+**THE MISSILE'S ARRIVAL HAD NEVER RUN.** Everything past `BNE TA64` — the station that a missile
+dies against rather than exploding, the "do not blow up a wreck" test that reads bit 5 out of the
+middle of an instruction (`BIT M32+1`), and the kill scored against the TARGET's slot — executes
+only when the missile is within 256 units of its target on every axis. `SeedTacticsUniverse` spread
+the fleet out, so `distant` was non-zero in all 1,800 cases and the last third of part 1 had never
+executed. Five cases now put the target at the missile's own position, and one of them marks the
+victim in bit 4 rather than bit 5, which is the only way to tell `BIT M32+1` from a test of the bit
+below it.
+
+**TWO MORE STATES THE LADDER DID NOT HAVE.** `TA7` compares the blueprint's maximum energy HALVED
+against the ship's, and the cases ran at 20 and 2 — both below a QUARTER of a Cobra's 150, so
+halving and quartering gave the same answer and `ta-half` was invisible. And `ta3`'s `LDA ECMA /
+BNE TA3` stops a missile launch, and `ECMA` was zero in all 144 cases that reached it: the only case
+with an ECM running was a missile, and a missile never reaches the launch test.
+
+**ONE SURVIVOR WAS NOT A COVERAGE GAP AT ALL, AND IT IS THE FIND OF THE EXERCISE.** `ta20-eor`
+flipped the `EOR #%10000000` that turns a missile's steering round, and no ladder would ever have
+caught it: the port had `TA20` written out TWICE. Once inlined in `SteerMissileTowardsTarget`, which
+is where both of part 1's missile paths go, and once again in part 4 — which no missile in the port
+can reach, because every branch of part 1's missile block returns. The mutant named the second copy.
+Removed rather than left, because dead code that no mutation can reach is exactly what a surviving
+mutant is for finding, and a duplicate that only one of the two copies is tested on is worse than
+no duplicate at all.
+
+**What the exercise says about the method.** §6.126 asked for distinct ANSWERS rather than cases;
+§6.132 sharpened that to distinct answers per BRANCH. This adds a third: **distinct answers per
+branch, and whether the branch is reachable at all.** Four of the thirteen were unreached code, not
+unlanded thresholds, and the probe told the two apart in seconds where reasoning about the port
+would not have. It also says something about surviving mutants as a class — thirteen of them, and
+none was a defect in the port. That is the third slice running where the mutation tool found a
+fixture problem rather than a porting one, which is worth knowing before the next tally is read as
+a statement about the code.
+
 ### 6.151 The seven missions, and three pieces of bit arithmetic that an `ORA` would get wrong
 
 Slice 4d-c, and with it phase 4. Six of the seven missions are eleven instructions of state each:
@@ -6247,6 +6303,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The thirteen survivors in the ship AI's sweep are closed** (§6.152). §6.132's probe on all thirteen comparisons at once: the port was right every time and the sweep was blind in three ways. **Six thresholds were never stood on** -- four seeds gave four values at each and none was the constant -- and six seeds found by searching 1,024 land on them; an affine seed family made it worse first, giving rolls whose bit 1 was always set so two constants were unreachable rather than unlucky. **The missile's arrival had never run**: everything past `BNE TA64` needs the target within 256 units and the fixture spread the fleet out. **`TA7`'s half-energy test and `ta3`'s ECM test had one input each.** And **`ta20-eor` was not a coverage gap**: the port had `TA20` written out twice and the mutant named the copy in part 4, which no missile can reach. Removed. The sweep is 5,940 cases against 1,800. |
 | 2026-09-05 | **Slice 4d-c: the seven missions, and phase 4 closes** (§6.151). Six of them are eleven instructions of state each, so the comparison is the WHOLE commander block from sixteen values of `TP` rather than the flag: `DEBRIEF` pays 5,000 credits, `DEBRIEF2` sets `ENGY` and adds 256 kills to the tally's high byte. **Three pieces of bit arithmetic that an `ORA` would get wrong**: `BRIEF3`'s `AND` forgets mission 1 on the way to setting mission 2, `DEBRIEF`'s `LSR`/`ASL` leaves bit 1 standing so the pair reads as finished and paid, and `TBRIEF` sets bit 4 before it asks. **An original bug ported** (ADR-001 §6): `TBRIEF` never tests `LCASH`'s carry, so a commander who cannot afford a Trumble gets one. `BRIEF` compared on the whole screen over ~200 frames, with `MCNT` as state because the counter is dead in the second loop. Wired into `DOENTRY`'s dispatch. |
 | 2026-09-05 | **Slice 4d-b: a briefing is not a screen** (§6.150). Token 10 is a paragraph; what makes it a briefing is that four control codes inside it stop and wait. **The dispatch for nine of them lived in `Outpost/Shell.cpp` as arithmetic no test could reach**, and `MT23`/`MT29` were moving the cursor when `DOYC` is `STA YC / RTS` and neither touches `XC`. `MT9`'s missing column store looked like a second defect and is not: `TT66` writes the same `XC` twice on its own, so the `DOXC` is dead and the mutation run is what said so. **Code 22 falls into MT23**, so a briefing printed in the wrong case after its first page. `PAS1` puts the ship at z_hi = 2 where the upstream comment says 1 -- the Master's value, travelled. MT27 and MT28 overlap and run off the end of the names. |
 | 2026-09-05 | **Slice 4d-a: the Trumbles' coordinates live in the video chip and nowhere else** (§6.149). `MVTRIBS` reads a sprite register, adds a velocity and writes it back, so the registers are its INPUT -- which is why it takes a `VideoState` where every other register write goes through a write-only seam. **The two `DORND` calls have different carries** and only `RAND` can say so. **`SPMASK` is not ported**: `VideoState` unshares the ninth x bit, so the read-modify-write became a store. **Nothing initialises `TRIBXH`**, so the first Trumble starts with an arbitrary velocity -- which is also what tells `BPL` from a test of bit 6. The `MoveTrumbles` seam is deleted rather than answered, §6.73's pattern for the ninth time. |
