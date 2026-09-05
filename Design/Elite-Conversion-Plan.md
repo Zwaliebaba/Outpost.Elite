@@ -490,6 +490,22 @@ an odd count stops at zero and an even one steps through it. And the Trumbles do
 `CMP #220 / LDA TRIBBLE / ADC #0` adds the compare's CARRY to the low byte, so the population grows
 by one about one pass in seven and the high byte only moves when the low byte wraps.
 
+**And the head, which is where the spawner's rate lives.** `TT100`'s three instructions between
+`JSR M%` and the spawning are `DEC DLY / BEQ me2 / BPL me3 / INC DLY` and then `DEC MCNT / BEQ P%+5
+/ JMP MLOOP`. The first is a countdown that STOPS at zero rather than wrapping -- a `DLY` of 0
+decrements to 255, which is negative, and the `INC` puts it straight back, so only a `DLY` of
+exactly 1 expires a message. The second is the one that matters to slice 4c-a: **the spawner runs
+one pass in 256**, and a port that called it every frame would fill the bubble 256 times too fast,
+which looks like a working game for about two seconds. `RunLoopHead` is that, compared over sixteen
+cases against a stop at `MLOOP` -- which BOTH answers reach, so one address catches the skip and the
+spawn, and the port has to run the spawner too to be comparable. That makes it a test of the join
+as much as of the head.
+
+**All three are wired into `Main.cpp` now**, which is what turns 4c-a from correct unreachable code
+into the thing that fills the bubble. What is NOT yet wired is the hyperspace key: `RequestHyperspace`
+needs a `JumpState` that `Game` does not carry, and the countdown's `JMP TT18` needs it too. That is
+the last of 4c-d and it is plumbing rather than porting.
+
 **The rule.** §6.137 said to check the port rather than the prose. This is the same lesson from the
 other end: **a plan section is not evidence that code exists.** When a slice's record says work was
 done by hand in an executable, the audit is not optional and it is a grep. Anything the port owns
@@ -690,7 +706,7 @@ than `TACTICS` was.
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates | 199 | Spawn decisions against the shipped routine over seeded generator states, comparing the WHOLE bubble as slice 4a-b does; the generator is the input, so this is exactly reproducible. **136 cases, 50 distinct bubbles**, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than from the generator and the port had six wrong; `MLOOP` turned out to be the label on part 5, so the routine has one exit and not two |
 | **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive, in `Hyperspace.cpp`. This is what `Main.cpp` refuses by name and what slice 2d's `JumpOutcome::Galactic` was waiting for | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` run whole on both sides, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them — `QQ28` from the last `TT111` rather than from the seeds beside it, `QQ0` from crosshairs `TT111` snapped, and `MJ` from `ZINF`'s loop counter — and `TT18` turned out to have four exits rather than three |
 | **4c-c** ✅ | `NWSPS` and the Coriolis/Dodo switch by tech level | **Already built, in slice 3d-d-iii-b — this row should never have been written (§6.137).** `AddStation` in `Spawn.h` carries `NwS1`, the sun's eviction from slot 1 and the tech-level switch, and `TheStationMatchesNWSPS` compares it against the shipped routine over tech levels straddling ten from both sides. Both callers run it for real. The scope line was taken from the ledger without checking the port |
-| **4c-d** | Main game loop part 5's frame-rate option — `LDA QQ11 / BEQ plus13 / AND PATG / LSR A / BCS plus13 / LDY #2 / JSR DELAY`. **Seven instructions, not 71 (§6.137)**: §6.128 placed part 5's two cooling countdowns, `JSR DIALS`, `TT17` and the whole of part 6 by hand already, and the thirty-four instructions of Trumble breeding and squeaking between them are slice 4d's scope | The option's effect on the pass, and an audit of what §6.128 placed by hand against the routine it came from — as much review as port |
+| **4c-d** ◐ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Mostly built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it. Both are wired into the flight pass, so the spawner now runs — one pass in 256, as `DEC MCNT` says. **Left: the hyperspace key**, which needs a `JumpState` on `Game` that does not exist yet |
 
 **What it unblocks.** `Main.cpp` lists what it refuses by name rather than defaulting, so that adding
 one is a compiler error: hyperspace and the charts, which are 4c-b's. And nothing at all currently
@@ -5420,7 +5436,7 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates. 199 C64 instructions | **Built 2026-09-05** (§6.135). 136 cases from `ytq+3` to `MLOOP` over seventeen situations, four generator states and both entry carries, compared on the whole bubble, `INWK`, `EV`, `XX0` and the generator; 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than the generator and the port had six wrong; `MLOOP` is the label on part 5, so the routine has one exit and not two |
 | **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive. 111 instructions. This is what `Main.cpp` refuses by name | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` whole, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them, and `TT18` has four exits rather than three |
 | **4c-c** ✅ | ~~`NWSPS` and the Coriolis/Dodo switch by tech level~~ | **Retired (§6.137): already built in slice 3d-d-iii-b**, with `NwS1`, the sun's eviction from slot 1 and the tech-level switch, and compared by `TheStationMatchesNWSPS` over tech levels straddling ten. The original row's "this is what `FlightSession` stubs" was wrong -- it has not, since that slice |
-| **4c-d** | Main game loop part 5's frame-rate option — `LDA QQ11 / BEQ plus13 / AND PATG / LSR A / BCS plus13 / LDY #2 / JSR DELAY` — and the wiring that lets `Main.cpp` call 4c-a and 4c-b at all | **Seven instructions, not 71 (§6.137)**: §6.128 placed part 5's cooling countdowns, `JSR DIALS`, `TT17` and all of part 6 by hand, and the 34 Trumble instructions between them are slice 4d's. As much audit of what was placed by hand as new port |
+| **4c-d** ◐ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Mostly built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it. Both are wired into the flight pass, so the spawner now runs — one pass in 256, as `DEC MCNT` says. **Left: the hyperspace key**, which needs a `JumpState` on `Game` that does not exist yet |
 
 ### Phase 5 — Sound and music
 

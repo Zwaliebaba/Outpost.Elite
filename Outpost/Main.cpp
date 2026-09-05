@@ -17,6 +17,7 @@
 #include "ExtendedTokens.h"
 #include "Flight.h"
 #include "FlightLoop.h"
+#include "GameLoop.h"
 #include "LoaderScreen.h"
 #include "Market.h"
 #include "MarketScreen.h"
@@ -577,12 +578,38 @@ namespace
 
     for (int step = 0; step < plan.steps; ++step)
     {
-      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(_game.flight.Loop());
+      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(_game.flight.Loop()); // 6502: JSR M%
       if (outcome != Elite::LoopOutcome::Continued)
       {
         Leave(_game, outcome);
         return;
       }
+
+      /*
+       * 6502: the rest of `TT100`, then `MLOOP` -- and until slice 4c-d none of it was here.
+       *
+       * `RunLoopHead` is the message countdown and `DEC MCNT`; the spawner (slice 4c-a) runs ONE
+       * PASS IN 256, when that counter reaches zero, which is the difference between a bubble that
+       * fills at the game's rate and one that fills 256 times too fast; and `RunLoopTail` is part
+       * 5, which cools the laser, redraws the dials every pass and breeds the Trumbles. §6.138 is
+       * why all three are functions with sweeps behind them rather than fragments transcribed here.
+       */
+      Elite::FlightLoop& loop = _game.flight.Loop();
+
+      if (Elite::RunLoopHead(loop, _game.shell) == Elite::LoopHead::Spawn)
+      {
+        Elite::RunSpawning(loop.screen.bubble, loop.screen.work, loop.screen.rng, _game.commander, _game.current, _game.status,
+                           _game.explosionCount, loop.screen.flight.blueprint, false);
+      }
+
+      /*
+       * The frames part 5 asks to wait for are DROPPED here, and saying so is better than pretending
+       * otherwise. `JSR DELAY` is two vertical syncs on a docked screen, and this is the FLIGHT
+       * pass -- `QQ11` is zero on every call that reaches here, so the option's branch is never the
+       * one that waits. The docked loop below is where it would matter, and that loop is paced by
+       * `PlanSteps` rather than by vsync counts (ADR-005 §3).
+       */
+      static_cast<void>(Elite::RunLoopTail(loop, _game.commander, loop.options.authorNames, false));
 
       /*
        * 6502: and then `MLOOP`'s second half, which the flight loop falls into -- `JSR TT17` and

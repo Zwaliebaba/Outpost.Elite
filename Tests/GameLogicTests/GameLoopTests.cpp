@@ -159,6 +159,99 @@ namespace GameLogicTests
 
   public:
     /*
+     * 6502: TT100's head, from three bytes past the label -- after `JSR M%` -- to `ytq`.
+     *
+     * `ytq` is the `JMP MLOOP` the head takes 255 passes in 256, so stopping there catches BOTH
+     * answers: the run reaches it on a skip, and on a spawn the fall-through goes past it into
+     * part 2 and the interpreter runs on to the `MLOOP` the spawner ends at. Which one happened is
+     * `run.stoppedAt`, and the port's `LoopHead` has to agree with it.
+     *
+     * `DLY` is swept across 0, 1, 2 and 255 because the countdown's whole shape is that it stops at
+     * zero rather than wrapping, and only a 1 reaches `me2`. `MCNT` across 1 and 2 because one of
+     * them is the pass in 256 that spawns.
+     */
+    TEST_METHOD(TheLoopHeadMatchesTT100)
+    {
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where where(oracle);
+      const std::uint16_t head = static_cast<std::uint16_t>(oracle.Label("TT100") + 3u);
+      const std::uint16_t ytq = oracle.Label("ytq");
+      const std::uint16_t mloop = oracle.Label("MLOOP");
+
+      std::uint32_t compared = 0;
+      std::set<std::string> outcomes;
+
+      for (const std::uint8_t delay : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{2}, std::uint8_t{255}})
+      {
+        for (const std::uint8_t counter : {std::uint8_t{1}, std::uint8_t{2}})
+        {
+          for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            for (const char* seam : {"NOISE", "NOISE2", "WSCAN", "DELAY", "CLYNS"})
+            {
+              std::uint16_t address = 0;
+              if (oracle.TryLabel(seam, address))
+              {
+                cpu.AddTrap(address);
+              }
+            }
+
+            LoopWorld world;
+            Seed(world.world, 4u);
+            world.world.message.delay = delay;
+            world.world.message.token = 200u; // 6502: MCH -- the message `me2` re-sends to erase it
+            world.world.flight.mainLoopCounter = counter;
+            world.world.view = view;
+
+            Mirror(world.world, cpu, where);
+
+            // Stopped at `ytq` -- the skip's own `JMP` -- so a spawn is the run that goes PAST it.
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(head, 4'000'000, ytq);
+
+            Elite::FlightScreen screen = world.world.Screen();
+            Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
+                                   world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+
+            struct Rows final : Elite::ChartEffects
+            {
+              std::uint32_t cleared = 0;
+              void ClearBottomRows() override
+              {
+                ++cleared;
+              }
+            } rows;
+
+            const Elite::LoopHead decided = Elite::RunLoopHead(loop, rows);
+
+            const std::wstring context =
+              WidenText("TT100 dly " + std::to_string(delay) + " mcnt " + std::to_string(counter) + " view " + std::to_string(view));
+            Assert::IsTrue(run.completed, (context + L": the head reached MLOOP").c_str());
+
+            if (decided == Elite::LoopHead::Spawn)
+            {
+              // 6502: the fall-through into part 2's `LDA MJ`, which is slice 4c-a. The port has to
+              // run it too or the comparison is against a machine that did more work.
+              Elite::CurrentSystem current;
+              Elite::RunSpawning(screen.bubble, screen.work, screen.rng, screen.commander, current, screen.status, screen.explosions,
+                                 screen.flight.blueprint, false);
+            }
+
+            CompareState(cpu, world.world, where, context);
+            static_cast<void>(ytq);
+
+            outcomes.insert(std::to_string(decided == Elite::LoopHead::Spawn ? 1 : 0) + "/" + std::to_string(world.world.message.delay) +
+                            "/" + std::to_string(rows.cleared));
+            ++compared;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(4u * 2u * 2u, compared, L"the whole sweep ran");
+      Assert::IsTrue(outcomes.size() >= 5u, L"and the skip, the spawn, the expiry and the clear were all reached");
+    }
+
+    /*
      * 6502: MLOOP -- part 5, run from its second instruction to `TT17`.
      *
      * NOT FROM THE FIRST, because the first two are `LDX #&FF / TXS`: the stack reset that six

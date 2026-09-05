@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Charts.h"
 #include "Commander.h"
 #include "Dashboard.h"
 #include "FlightLoop.h"
@@ -52,6 +53,32 @@ namespace Elite
    * (keys, then `TT102`), and `FRCE` chooses the next pass's entry from `QQ12`. A port that
    * believed the enum would have given `Main.cpp` a branch the original does not have.
    */
+
+  /// What `TT100`'s head decided, which the original says by whether it takes the `JMP MLOOP`.
+  enum class LoopHead : std::uint8_t
+  {
+    SkipSpawning, ///< 6502: .ytq JMP MLOOP -- 255 passes in 256 go straight to part 5
+    Spawn,        ///< 6502: the fall-through past `BEQ P%+5` -- `MCNT` reached zero
+  };
+
+  /*
+   * 6502: TT100 -- the three instructions after `JSR M%` and before the spawning (slice 4c-d).
+   *
+   * `DEC DLY / BEQ me2 / BPL me3 / INC DLY` is a countdown that STOPS AT ZERO rather than wrapping:
+   * a `DLY` of 0 decrements to 255, which is negative, and the `INC` puts it straight back. So the
+   * only pass that reaches `me2` is the one where it was exactly 1.
+   *
+   * `me2` then does two different things by view. On a space view it re-sends the message token
+   * through `MESS`, which ERASES the message because the printer is an EOR, and zeroes `DLY`; on a
+   * text screen it calls `CLYNS` instead, because a message there is in the bottom rows and those
+   * are cleared rather than un-printed.
+   *
+   * **AND THE SPAWNER RUNS ONE PASS IN 256.** `DEC MCNT / BEQ P%+5 / JMP MLOOP` -- `MCNT` is a byte
+   * that nothing else resets, so it wraps, and everything slice 4c-a built happens on the pass
+   * where it reaches zero. Reading parts 1 to 4 without this makes the bubble fill 256 times too
+   * fast, which is the kind of wrong that looks like a working game for the first few seconds.
+   */
+  [[nodiscard]] LoopHead RunLoopHead(FlightLoop& _loop, ChartEffects& _rows) noexcept;
 
   /*
    * 6502: MLOOP -- main game loop part 5, which is the loop's own housekeeping (slice 4c-d).
