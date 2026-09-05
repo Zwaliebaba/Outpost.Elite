@@ -476,6 +476,72 @@ this one (§6.116, §6.123) were things no local check could see; this one was s
 not read. That is a worse failure than either of them, and it is worth writing down precisely
 because the tooling was already right.
 
+### 6.126 A sweep that could not reach what it was sweeping, in four separate ways
+
+Slice 4a-c's first mutation run left five survivors in the thresholds `TACTICS` and `DOCKIT` decide
+by. None was the port. All five were the sweep, and closing them took four distinct corrections --
+which is worth writing down as a list, because each is a way a fixture can look thorough and test
+one branch.
+
+**THE COORDINATES WERE IN THE WRONG BYTES.** A ship position is (low, high, sign), and `TAS2` --
+which every steering decision in both routines runs through -- reads bytes 1, 4 and 7, the HIGH
+bytes. The fixture varied bytes 0, 3 and 6. So `TAS2` was handed a vector whose three components
+were zero, `NORM` normalised nothing, the length came back as zero and every dot product was tiny.
+The distance test was not merely uncrossed, it was UNREACHABLE, and 1,656 cases proved one branch.
+Fixing it immediately failed two real defects (below), which is the clearest possible statement of
+what the fixture had been hiding.
+
+**THE STATION WAS SOMEWHERE ARBITRARY.** `VCSU1` computes the vector from the station to the ship
+and every one of `DOCKIT`'s three decisions is a dot product along it, so "in front of the slot" is
+a direction the sweep has to be able to AIM at. With the station wherever the seeding ramp put it,
+a grid of two hundred ship positions all landed on the same approach. Putting the station at the
+origin makes the vector the ship's own position, and the grid steers.
+
+**THE SHIPS ALL POINTED THE SAME WAY.** `CNT` -- the byte deciding whether a ship fires (160),
+whether it hits (163) and whether it throttles back (`CNT2`) -- is the ship's own NOSE dotted with
+the direction to it. The fixture gave every ship one fixed orientation, so across five hundred
+cases `CNT` took two values, no ship ever fired its laser, and three thresholds plus a carry were
+untestable. Orientation is a dimension of the sweep, not a detail of the fixture.
+
+**AND THREE THRESHOLDS NEEDED AN EXACT VALUE, WHICH WAS SEARCHED FOR.** Moving a constant by one is
+observable only when the quantity lands on the boundary, and the map from a nose vector to `CNT`
+runs through two dot products and a normalisation -- it cannot be inverted by hand. So it was
+measured: the port was instrumented, the nose swept one step at a time against a fixed position,
+and the three orientations that produce 159, 162 and 22 read off and written into the test as named
+rows. The same for the distance: a uniform diagonal quantises (a magnitude of &B4 gives 155 and &B6
+gives 157, and 156 is not on the line at all), so one axis is pulled away from the other two.
+
+**THREE real defects fell out of the corrections.** A missile rejoining the common code at `TN4` or
+`TA19` falls into part 4, whose first act is to send a missile to `TA20` -- which turns the vector
+round and flips the sign of `CNT` before steering. The port jumped from `TA19` straight to the
+steering at both of part 1's rejoins. The test at `M32` was inverted: `BCS P%+5` skips a THREE-byte
+instruction, so a SET bit 0 -- "this ship has an ECM" -- skips the jump to the steering and lands on
+the jump to `ECBLB2`, and the port set off the ECM of every target that did not have one. Neither is
+visible while the geometry is degenerate.
+
+**And `ASL x / SEC / ROR x` IS AN `ORA #128`.** The two shifts cancel: `ASL` moves every bit up and
+drops bit 7, `SEC / ROR` moves them all back down and puts a one into bit 7. What comes out is the
+byte that went in with its top bit set, which is how a 6502 sets bit 7 of a memory location without
+loading it. The port read it as a shift AND a set, in `TA873` and again in `DOCKIT`'s `TN13`, and
+that is a different answer for every byte with anything in bits 0 to 6. It agreed for a whole slice
+because both sites were only ever reached with the byte at zero -- and `FlightLoop.cpp` has had the
+idiom RIGHT since slice 3d-d-iii-b, under a comment reading "set bit 7 without touching the other
+seven". **The correct reading was already in the codebase and was re-derived wrongly**, which is a
+sharper version of §6.73: the thing to check before transcribing an idiom is whether this port has
+already met it.
+
+**One survivor is provably equivalent.** `TA11` skips the roll when `INWK+29` doubled is 32 or
+more, and moving that to 31 changes nothing: the value tested is a LEFT SHIFT, so it is always even
+and can never equal 31. Recorded rather than chased, with the proof, the way §6.43 and §6.48 record
+theirs.
+
+**The rule this leaves.** §6.93 said a fixture that makes two things equal cannot tell them apart,
+and §6.124 said a generated ramp is systematically wrong about signs and about bits that happen to
+be set. This adds the third and sharpest form: **a fixture can be wrong about which BYTES the code
+reads**, and then no amount of sweeping helps, because every case is the same case. The counter
+that should have caught it is not "how many cases ran" but "how many distinct ANSWERS came back" --
+which is now asserted in both sweeps, and was 2 when it should have been 14.
+
 ### 6.125 The AI, the autopilot, and a byte the source itself gave up on
 
 Slice 4a-c is `TACTICS`'s seven parts and `DOCKIT` built as one unit, because §6.122 established
@@ -4926,6 +4992,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Five surviving mutations, none of them the port, and two real defects underneath them** (§6.126). Slice 4a-c's sweeps could not reach what they were sweeping in four separate ways: the ship coordinates were in the LOW bytes and `TAS2` reads the high ones, so every vector normalised to zero length; the station sat wherever the seeding ramp put it, so "in front of the slot" was a direction the grid could not aim at; every ship had one fixed orientation, so `CNT` took two values in five hundred cases and no ship ever fired; and three thresholds are only observable on an exact boundary, which had to be searched for by instrumenting the port and sweeping the nose one step at a time. Correcting the first alone exposed two defects: a missile rejoining at `TN4` or `TA19` falls into part 4 and is sent to `TA20`, which the port skipped, and the ECM test at `M32` was inverted because `BCS P%+5` skips a three-byte instruction. The coverage counter is now "how many distinct answers" rather than "how many cases", and it was 2 when it should have been 14. |
 | 2026-09-05 | **A red build from a check that already existed** (§6.127). `Tactics.cpp` declared a local called `far`, which is a `<windows.h>` macro, so MSVC turned the declaration into a syntax error and both CI jobs failed on one cause. `check_gamelogic.py` has caught `near` and `far` since slice 0f and it named the file and the line -- it simply was not run, because the list of eight checks was retyped into a shell loop and the entry whose name is a PREFIX of another entry's was lost. `tools/check_all.py` now runs all nine in CI's order and takes no arguments, and AGENTS.md points at it rather than at a list. §6.123's argument, turned back on the checks themselves. |
 | 2026-09-05 | **Slice 4a-c: the ships fight back** (§6.125). `TACTICS`'s seven parts and `DOCKIT` as one unit, with the death path threaded out of `MVEIT` per §6.122 and observed false on eight of 92 cases. **`K3+10` is settled**: the upstream commentary says "I have no idea what K3+10 contains", and the port can close it mechanically -- `K3` is `SKIP 0` over `XX2`'s fourteen bytes, `DOCKIT` is the only reader and `LL9` the only writer, so whether an NPC finishes docking depends on the visibility of the eleventh face of the last ship drawn. Two defects the oracle found: `DOCKIT` calls `TA2` and then the WHOLE of `TAS2` again over the same `K3`, which the port had transcribed as one call, and six of ten `DORND` carries come from compares several instructions earlier. The carries were measured by stepping the interpreter rather than derived by eye -- §6.118's instrument used as a first resort. |
 | 2026-09-05 | **Three mutations walked through slice 4a-b's sweep and none of them was the port** (§6.124). One generator seed, so the carry `SFS1` rotates into byte 29 never varied; a ramp of test data that never reaches 128, so `SFS2`'s sign-magnitude amount was always positive; and a `NEWB` byte whose ramp value already had the bit `ANGRY` sets, so the OR was a no-op. All three are §6.93 again, and all three came from the same convenience -- generated ramps are systematically wrong about signs and about bits that happen to be set. The sweeps now name the values a routine branches on and assert the answer came out both ways rather than counting cases. |

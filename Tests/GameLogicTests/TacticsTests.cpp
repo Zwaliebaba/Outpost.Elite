@@ -631,21 +631,31 @@ namespace GameLogicTests
        * thresholds agreed everywhere (§6.126).
        */
       std::uint8_t noseX, noseY, noseZ;
+
+      /*
+       * AND THE ROLL COUNTER AND FLAGS, because zero makes two different operations agree.
+       *
+       * `TA11` skips the roll when `INWK+29` doubled is 32 or more, and `TN13` sets bit 7 of
+       * `NEWB` with `ASL / SEC / ROR` -- a rotate, not an `ORA`. With both bytes zero the shift is
+       * invisible (`(0 << 1) | 0x80` and `0 | 0x80` are the same answer) and the roll test only
+       * ever sees one side, which is §6.124's "a bit that was already set" in a third form.
+       */
+      std::uint8_t roll, flags;
     };
 
     constexpr Geometry GEOMETRIES[] = {
-      {"ahead", 0x20u, 0x00u, 0x10u, 0x00u, 0x28u, 0x00u, 0x60u, 0x10u, 0xE0u},
-      {"behind", 0x20u, 0x80u, 0x10u, 0x00u, 0x28u, 0x80u, 0x60u, 0x10u, 0xE0u},
-      {"above", 0x08u, 0x00u, 0x60u, 0x00u, 0x18u, 0x00u, 0x60u, 0x10u, 0xE0u},
-      {"beside", 0x70u, 0x80u, 0x04u, 0x00u, 0x0Cu, 0x00u, 0x60u, 0x10u, 0xE0u},
-      {"nearly touching", 0x01u, 0x00u, 0x01u, 0x80u, 0x02u, 0x00u, 0x60u, 0x10u, 0xE0u},
+      {"ahead", 0x20u, 0x00u, 0x10u, 0x00u, 0x28u, 0x00u, 0x60u, 0x10u, 0xE0u, 0x00u, 0x00u},
+      {"behind", 0x20u, 0x80u, 0x10u, 0x00u, 0x28u, 0x80u, 0x60u, 0x10u, 0xE0u, 0x0Fu, 0x24u},
+      {"above", 0x08u, 0x00u, 0x60u, 0x00u, 0x18u, 0x00u, 0x60u, 0x10u, 0xE0u, 0x10u, 0x41u},
+      {"beside", 0x70u, 0x80u, 0x04u, 0x00u, 0x0Cu, 0x00u, 0x60u, 0x10u, 0xE0u, 0x1Fu, 0x12u},
+      {"nearly touching", 0x01u, 0x00u, 0x01u, 0x80u, 0x02u, 0x00u, 0x60u, 0x10u, 0xE0u, 0x40u, 0x08u},
 
       // Aimed AT us, which is the only way a ship's laser ever fires: `CNT` has to pass 160, and
       // to HIT, 163.
-      {"ahead and aiming at us", 0x20u, 0x00u, 0x10u, 0x00u, 0x28u, 0x00u, 0xE0u, 0x90u, 0x60u},
-      {"close and aiming at us", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xE0u, 0x90u, 0x60u},
-      {"close and aiming just off", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xD0u, 0xA0u, 0x50u},
-      {"close and nearly aimed", 0x06u, 0x00u, 0x03u, 0x00u, 0x08u, 0x00u, 0xE8u, 0x88u, 0x68u},
+      {"ahead and aiming at us", 0x20u, 0x00u, 0x10u, 0x00u, 0x28u, 0x00u, 0xE0u, 0x90u, 0x60u, 0x81u, 0x60u},
+      {"close and aiming at us", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xE0u, 0x90u, 0x60u, 0x2Au, 0x03u},
+      {"close and aiming just off", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xD0u, 0xA0u, 0x50u, 0x7Fu, 0x55u},
+      {"close and nearly aimed", 0x06u, 0x00u, 0x03u, 0x00u, 0x08u, 0x00u, 0xE8u, 0x88u, 0x68u, 0x00u, 0x00u},
 
       /*
          * ANTI-PARALLEL, computed rather than guessed.
@@ -656,11 +666,11 @@ namespace GameLogicTests
          * 96 with every sign set: (&B3, &9A, &CD). The rows either side of it are the same
          * direction nudged, so the sweep straddles both 160 and 163 (§6.126).
          */
-      {"close and pointing straight at us", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xB3u, 0x9Au, 0xCDu},
-      {"close and pointing nearly straight", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xB0u, 0x9Au, 0xC8u},
-      {"close and pointing a little wide", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xA8u, 0x9Au, 0xC0u},
-      {"close and pointing wider", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xA0u, 0x98u, 0xB8u},
-      {"very close and pointing at us", 0x02u, 0x00u, 0x01u, 0x00u, 0x03u, 0x00u, 0xB3u, 0x9Au, 0xCDu},
+      {"close and pointing straight at us", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xB3u, 0x9Au, 0xCDu, 0x0Fu, 0x24u},
+      {"close and pointing nearly straight", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xB0u, 0x9Au, 0xC8u, 0x10u, 0x41u},
+      {"close and pointing a little wide", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xA8u, 0x9Au, 0xC0u, 0x1Fu, 0x12u},
+      {"close and pointing wider", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xA0u, 0x98u, 0xB8u, 0x40u, 0x08u},
+      {"very close and pointing at us", 0x02u, 0x00u, 0x01u, 0x00u, 0x03u, 0x00u, 0xB3u, 0x9Au, 0xCDu, 0x81u, 0x60u},
 
       /*
          * THREE ORIENTATIONS THAT LAND ON A THRESHOLD EXACTLY, found by search rather than by eye.
@@ -671,9 +681,9 @@ namespace GameLogicTests
          * normalisation, so it cannot be inverted by hand: these were measured by sweeping the nose
          * one step at a time against a fixed position and reading the answer (§6.126).
          */
-      {"aimed so CNT is 159, one below firing", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0x9Du, 0x9Au, 0xCDu},
-      {"aimed so CNT is 162, one below hitting", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xADu, 0x9Au, 0xCDu},
-      {"aimed so CNT is 22, the throttle cone", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0x10u, 0x1Au, 0x38u},
+      {"aimed so CNT is 159, one below firing", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0x9Du, 0x9Au, 0xCDu, 0x2Au, 0x03u},
+      {"aimed so CNT is 162, one below hitting", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xADu, 0x9Au, 0xCDu, 0x7Fu, 0x55u},
+      {"aimed so CNT is 22, the throttle cone", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0x10u, 0x1Au, 0x38u, 0x00u, 0x00u},
 
       /*
          * ALL THREE HIGH BYTES ZERO, which is what `MAS4` means by "it has arrived".
@@ -683,7 +693,7 @@ namespace GameLogicTests
          * no missile ever landed and the death contract stopped being exercised. This row is the
          * case the others cannot reach (§6.126).
          */
-      {"touching", 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x60u, 0x10u, 0xE0u}};
+      {"touching", 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x60u, 0x10u, 0xE0u, 0x0Fu, 0x24u}};
 
     void SeedTacticsUniverse(Cpu6502& _cpu, Universe& _world, const Labels& _at, std::uint8_t _type, std::uint8_t _stations,
                              std::uint8_t _thargoids, const Geometry& _where)
@@ -736,15 +746,15 @@ namespace GameLogicTests
           _world.world.bubble.blocks[slot][14] = _where.noseZ;
         }
 
-        _world.world.bubble.blocks[slot][27] = 12u; // speed
-        _world.world.bubble.blocks[slot][28] = 0u;  // acceleration
-        _world.world.bubble.blocks[slot][29] = 0u;  // roll
-        _world.world.bubble.blocks[slot][30] = 0u;  // pitch
+        _world.world.bubble.blocks[slot][27] = 12u;                        // speed
+        _world.world.bubble.blocks[slot][28] = 0u;                         // acceleration
+        _world.world.bubble.blocks[slot][29] = subject ? _where.roll : 0u; // roll
+        _world.world.bubble.blocks[slot][30] = 0u;                         // pitch
         _world.world.bubble.blocks[slot][31] = 0u;
         _world.world.bubble.blocks[slot][33] = 0u;
         _world.world.bubble.blocks[slot][34] = 0u;
         _world.world.bubble.blocks[slot][35] = 20u;
-        _world.world.bubble.blocks[slot][36] = 0u;
+        _world.world.bubble.blocks[slot][36] = subject ? _where.flags : 0u;
       }
 
       _world.world.bubble.counts[Elite::SHIP_TYPE_STATION] = _stations;
@@ -914,6 +924,11 @@ namespace GameLogicTests
         {"a trader", 11u, 0xC1u, 0x01u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
         {"a clean bounty hunter", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
         {"a bounty hunter and an offender", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 60u, 0u, 0u, 255u},
+
+        // Exactly on the boundary, because `CPX #40 / BCC TN2` is a `>=` and the only way to tell
+        // it from a `>` is to stand on 40 (§6.126).
+        {"a bounty hunter and a fresh offender", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 40u, 0u, 0u, 255u},
+        {"a bounty hunter one short of it", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 39u, 0u, 0u, 255u},
         {"a ship on its way in to dock", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
         {"a ship docking with no station", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
         {"a hostile pirate", 11u, 0xC1u, 0x04u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
@@ -1022,8 +1037,8 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(23u * 4u * 18u, compared, L"the whole sweep ran");
-      Assert::AreEqual<std::size_t>(23u * 18u, reached.size(), L"and every case is distinct");
+      Assert::AreEqual<std::uint32_t>(25u * 4u * 18u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::size_t>(25u * 18u, reached.size(), L"and every case is distinct");
       Assert::IsTrue(died > 0u, L"and the player died on some of them, so the bool is observed false");
       Logger::WriteMessage(("TACTICS: " + std::to_string(compared) + " cases, " + std::to_string(died) + " of them fatal").c_str());
     }
@@ -1214,6 +1229,15 @@ namespace GameLogicTests
             world.world.work[7] = approach.z;
             world.world.work[8] = approach.zSign;
             world.world.work[27] = 12u;
+
+            /*
+             * A NON-ZERO `NEWB`, because `TN13` sets its top bit with `ASL / SEC / ROR`.
+             *
+             * That is a ROTATE and not an `ORA #128`: it also shifts bits 0 to 5 up one and drops
+             * bit 6. With the byte zero the two are the same answer, and the mutation that made it
+             * an `ORA` survived a thousand cases (§6.126). It varies per case so the shift shows.
+             */
+            world.world.work[36] = static_cast<std::uint8_t>(0x24u + (compared & 0x1Fu));
 
             world.world.bubble.blocks[1][10] = approach.nose;
             world.world.bubble.blocks[1][12] = approach.noseY;

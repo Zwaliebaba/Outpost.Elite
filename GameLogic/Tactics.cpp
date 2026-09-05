@@ -252,11 +252,23 @@ namespace Elite
       _work[27] = 1u; // 6502: INX / STX INWK+27
     }
 
-    /// 6502: .TA873 -- ASL INWK+31 / SEC / ROR INWK+31, which sets bit 7 (killed) and keeps the
-    /// rest. Written as a rotate rather than an `ORA` because the `ASL` clears bit 0 on the way.
+    /*
+     * 6502: .TA873 -- ASL INWK+31 / SEC / ROR INWK+31.
+     *
+     * THE TWO SHIFTS CANCEL. `ASL` moves every bit up and drops bit 7; `SEC / ROR` moves every bit
+     * back down and puts a one into bit 7. What comes out is the byte it went in as, with bit 7
+     * set -- an `ORA #128` written in three instructions, which is how a 6502 sets the top bit of a
+     * memory location without loading it into the accumulator.
+     *
+     * The port had it as a shift AND a set, which is a different answer for every byte with
+     * anything in bits 0 to 6. It agreed for a whole slice because the two places that reach it
+     * were only ever tested with the byte at zero (§6.126) -- and `FlightLoop.cpp`'s `MarkKilled`
+     * had the idiom RIGHT since slice 3d-d-iii-b, under a comment saying "set bit 7 without
+     * touching the other seven". The reading was in the codebase and was re-derived wrongly.
+     */
     void MarkAsKilled(ShipBlock& _work) noexcept
     {
-      _work[31] = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_work[31] << 1u) | 0x80u);
+      _work[31] = static_cast<std::uint8_t>(_work[31] | 0x80u);
     }
 
   } // namespace
@@ -1125,7 +1137,9 @@ namespace Elite
       return true;
     }
 
-    work[36] = static_cast<std::uint8_t>(static_cast<std::uint8_t>(work[36] << 1u) | 0x80u);
+    // 6502: ASL NEWB / SEC / ROR NEWB -- the same three-instruction "set bit 7" as `TA873`, and
+    // the same mistake: the shifts cancel (§6.126).
+    work[36] = static_cast<std::uint8_t>(work[36] | 0x80u);
     return true;
   }
 
