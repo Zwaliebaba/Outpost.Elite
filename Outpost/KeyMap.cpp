@@ -44,6 +44,22 @@ namespace Outpost
       {0x41, Elite::KEY_FIRE, "A -- fire lasers"},          // VK_A,          6502: KY7, C64 "A"
 
       /*
+       * AND SPACE, WHICH IS THE ONE KEY THE GAME NAMES IN ITS OWN TEXT.
+       *
+       * "PRESS SPACE OR FIRE, COMMANDER." is token 7, and `TITLE` waits for it: `JSR RDKEY / BIT
+       * KY7 / BMI TL3 / BCC TLL2` loops until the fire button or ANY key. Any key is what the
+       * shell does too -- and Space was not one, because the layout above moved speed onto "." and
+       * left nothing on the key the prompt asks for. The title screen ignored the one press a
+       * player is told to make.
+       *
+       * It maps to position 4, which IS the C64's Space, so this is the original's binding rather
+       * than an invented one: it dismisses every "press space" prompt AND increases speed in
+       * flight, exactly as it did on the machine. `.` keeps the same position beside it, which is
+       * the seventh alias in a map that has six -- and the only one that is not a moved screen.
+       */
+      {0x20, Elite::KEY_SPEED_UP, "Space -- increase speed, and every \"press space\" prompt"}, // VK_SPACE, 6502: KY2
+
+      /*
        * The nine secondary flight controls, 6502: KY12 to KY20.
        *
        * Seven of them keep the C64's own letter. The two that do not are the two the C64 put on

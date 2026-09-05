@@ -41,6 +41,12 @@ namespace Outpost
    * six information screens are F1 to F6, the four views are F7 to F10, and every letter the game
    * names keeps its own letter.
    *
+   * SPACE KEEPS ITS C64 MEANING ON TOP OF THAT, and it has to: the game asks for it by name. The
+   * title screen prints "PRESS SPACE OR FIRE, COMMANDER." and `TITLE` takes any key, so a map with
+   * nothing on Space produces a title screen that ignores the one press it just asked for. Binding
+   * it to position 4 -- the C64's own Space -- answers the prompt and gives back the speed-up key
+   * the modern layout moved to ".".
+   *
    * IT IS MANY-TO-ONE, and that is the price of moving the screens off the number row. `gnum`
    * reads a QUANTITY through this same seam, as the CHARACTER `TRANTABLE` gives the position -- so
    * unbinding "4" to free it for F1 would leave no way to type four units of food. "4" therefore

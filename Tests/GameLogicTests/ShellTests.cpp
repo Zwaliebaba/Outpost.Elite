@@ -505,6 +505,7 @@ namespace GameLogicTests
         {0x26, 'X', "Up -- the C64's \"X\""},
         {0x28, 'S', "Down -- the C64's \"S\""},
         {0xBE, ' ', "period -- the C64's Space"},
+        {0x20, ' ', "Space -- the C64's Space itself, which the title screen asks for"},
         {0xBC, '/', "comma -- the C64's \"?\""},
         {0x09, 2, "Tab -- the C64's Commodore key"},
 
@@ -638,19 +639,25 @@ namespace GameLogicTests
 
     /*
      * No Windows key is bound twice, nothing is bound to "no key", and the C64 keys that ARE bound
-     * twice are exactly the six the new layout moved to the function keys.
+     * twice are exactly the six the new layout moved to the function keys -- and Space.
      *
      * The map used to be one-to-one in both directions and this is where that stopped. Moving the
      * six information screens to F1 to F6 could not take the digits with them -- `gnum` reads a
      * quantity as the CHARACTER the position translates to, so "4" has to keep position 53 -- and a
      * second Windows key for the same position is the cheapest way to have both. The set is named
-     * rather than merely permitted, so that a seventh alias is a failure and not a shrug.
+     * rather than merely permitted, so that an eighth alias is a failure and not a shrug.
+     *
+     * SPACE IS THE SEVENTH AND IT IS A DIFFERENT KIND OF THING. The other six are one C64 key
+     * reachable from two PC keys because the layout moved. Space is the C64's own speed-up key,
+     * which the layout moved to "." and then left unbound -- and it is the one key the GAME NAMES
+     * in its own text, in "PRESS SPACE OR FIRE, COMMANDER.". `TITLE` takes any key, so an unbound
+     * Space meant the title screen ignored the only press a player is told to make.
      */
-    TEST_METHOD(OnlyTheSixMovedScreensAreBoundTwice)
+    TEST_METHOD(OnlyTheMovedScreensAndSpaceAreBoundTwice)
     {
       const std::set<std::uint8_t> ALLOWED_ALIASES = {
-        Elite::KEY_LONG_RANGE,   Elite::KEY_SHORT_RANGE, Elite::KEY_DATA_ON_SYSTEM,
-        Elite::KEY_MARKET_PRICE, Elite::KEY_STATUS,      Elite::KEY_INVENTORY,
+        Elite::KEY_LONG_RANGE, Elite::KEY_SHORT_RANGE, Elite::KEY_DATA_ON_SYSTEM, Elite::KEY_MARKET_PRICE,
+        Elite::KEY_STATUS,     Elite::KEY_INVENTORY,   Elite::KEY_SPEED_UP,
       };
 
       std::set<int> virtualKeys;
