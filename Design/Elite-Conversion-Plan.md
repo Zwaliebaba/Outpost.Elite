@@ -451,6 +451,26 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.141 A seam that carried the type and not the ship, and the block it read at 255
+
+The game crashed on the first laser hit with no missile lock: `Anger` indexed `Bubble::blocks`
+with 255. Reported from the debugger by the owner.
+
+`ANGRY` works on `(INF)`, the block of whichever ship the caller has pointed it at, and its two
+callers point it at different ships. Part 3 fires a missile and does `LDX MSTG / JSR GINF` first,
+so INF is the locked target; part 11 angers the ship our laser has just damaged, and there INF is
+the ship the loop is on -- `XSAV`'s slot -- with `MSTG` very often &FF because nothing is locked.
+The seam `FlightLoopEffects::Anger` took the TYPE alone, and the executable's answer resolved the
+slot through `MSTG` for both callers, because 4a-b built it beside `FRMIS` and `FRMIS` is the
+caller for which that is right. The laser path was the other one.
+
+The fix is the shape §6.99 established for `NOISE`: the seam carries what the 6502 has at the
+call -- the slot as well as the type -- and the caller says which. Part 3 passes `MSTG`, part 11
+passes `XSAV`. The three test doubles took the extra argument and record the same thing they did,
+because the oracle's trap reports A and A is the type; the slot is INF's, which the trap does not
+see, and that is exactly the gap the sweep could not close: `Anger` was oracle-compared on the
+ship it was handed and never on WHICH ship it was handed.
+
 ### 6.140 One byte, two variables, and a screen that was blank from the start
 
 The status screen's "Present System" line was empty at the cold start and stayed empty until the
@@ -5631,6 +5651,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **`Anger` read block 255** (§6.141). The seam carried the type and resolved the slot through `MSTG` for both callers; part 11's laser hit points `INF` at the ship the loop is on, not at a missile target. The seam now carries the slot, and each caller passes the one the 6502 has. |
 | 2026-09-05 | **A second copy of `QQ2` blanked the status screen** (§6.140). `Game` held the current system's seeds twice; the printer read the copy nobody wrote at the cold start. Deleted, printer bound to `current.seeds`. §6.28's rule, applied to the composition root. |
 | 2026-09-05 | **Slice 4e: thirteen switches whose only definition is where they sit** (§6.139). `DKS3` pairs entry Y of `TGINT` with the byte Y after `DAMP` and nothing else in the game says which key toggles which option, so `TGINT` is extracted and byte-checked and the port's thirteen POINTERS are verified by pressing all 256 keys at all thirteen positions -- 3,328 cases, and exactly thirteen match. `EOR #&FF` and not `EOR #1`, because `BIT PATG / BPL` tests bit 7 and a 1 would hide three music toggles. `STX DNOIZ` stores the KEY CODE in the sound flag. `april16` is exposed as its own entry because `MUTOKCH` jumps past five decisions, not one. And a fixture that seeded `MUTOKOLD` inconsistently made `MUTOKCH` fire every pass, whose excursion clobbers X -- so the quit key stopped working and it looked like a port bug (§6.95 again). |
 | 2026-09-05 | **Two of §6.128's three fixes were recorded and never made** (§6.138). Auditing what that section said it had placed in `Main.cpp` by hand found `DrawDials` still with one caller and nothing anywhere cooling `GNTMP` or `LASCT`: the dials still only moved on a screen change and the laser still never cooled. The commit carrying §6.128 touches `Main.cpp` once, for sound. **The cause is the shape** -- 65 instructions of game logic held as fragments to be transcribed into the executable, owned by nothing in `GameLogic`, compared by nothing, so nothing could go red. `RunLoopTail` is the whole routine now, in `GameLoop.cpp` (renamed from `Spawner.cpp` per §6.121), compared over 52 cases and six outcomes. Four more carries, a `DEX / BEQ P%+3 / DEX` that cannot pass zero, and Trumbles that grow by a CARRY rather than an increment. A plan section is not evidence that code exists. |

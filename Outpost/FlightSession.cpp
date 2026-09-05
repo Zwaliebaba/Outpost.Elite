@@ -186,11 +186,10 @@ namespace Outpost
     return Elite::SpawnShipAhead(m_bubble, m_work, _type, m_flight.delta, m_bubble.missileTarget, m_flight.blueprint).created;
   }
 
-  void FlightSession::Anger(std::uint8_t _type)
+  void FlightSession::Anger(std::uint8_t _slot, std::uint8_t _type)
   {
-    // 6502: JSR GINF then JSR ANGRY -- the caller has already pointed `INF` at the target's slot,
-    // and `MSTG` is the slot it pointed at.
-    Elite::Anger(m_bubble, m_flight, m_bubble.missileTarget, _type);
+    // 6502: ANGRY on the block INF points at -- and which block that is, the caller says (§6.141).
+    Elite::Anger(m_bubble, m_flight, _slot, _type);
   }
 
   bool FlightSession::SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type)
