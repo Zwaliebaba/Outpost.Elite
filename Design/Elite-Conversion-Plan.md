@@ -451,6 +451,86 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.144 Slice 4b-b: the explosion, a carry the upstream comment misses, and a table that exists
+
+`DOEXP`, `PTCLS`, `PTCLS2` and `EXS1` are built. 126 explosion frames and 420 clouds compared
+against the shipped code on the whole canvas, the whole line heap, all of `INWK`, the generator's
+four bytes, ten workspace bytes, and -- through the burst seam's recorded arguments -- the six
+VIC-II registers and the 6510 port register. 2,880 `EXS1` offsets swept on their own. It is exact
+rather than statistical for the reason the slice line said: every particle comes out of `DORND2`, so
+the port either walks the generator in the same order or the screens differ on the first mark.
+
+**THE CLOUD AGES BY FOUR OR BY FIVE, AND WHICH IT IS DEPENDS ON DISTANCE.** The upstream comment on
+`ADC #4` says "Add 4 to the cloud counter, so it ticks onwards every we redraw it", and there is no
+`CLC` in front of it. The carry reaching it is the `CMP #32` eleven instructions earlier, the test
+that decides whether the ship is too far away to scale its z: the far branch takes `LDA #&FE / BNE`
+and leaves the carry SET, and the near branch runs `SEC / ROL A` on a value whose bit 7 cannot be
+set -- z_hi under 32, shifted twice, is at most 127 -- and so leaves it CLEAR. So a distant
+explosion runs 48 frames and a near one 60, and the same carry decides which frame overflows and
+ends it. Two scenes in the sweep sit either side of the boundary at z_hi 31 and 32.
+
+**`FMLTU` clobbers `P`, and the port had never noticed.** `FMLTU` opens `STX P` and all four of its
+exits end `LDX P`: it preserves the caller's X by parking it in a workspace byte, and `P` keeps that
+register value afterwards. The port's `MultiplyByLog` models neither, so `P` came out of `PTCLS`
+holding whatever `DVID4` had left, and the first run of the new comparison failed on that one byte
+out of everything it checks. The bound is measurable and was measured: the six callers in this build
+are `MVEIT` part 3, `CIRCLE2` through `FMLTU2`, `LL51`, `PLS22`, `LL9` part 5 and `EXS1`, and only
+`PLS22` mentions `P` at all -- twice, both `STA P`. Nothing reads it. So the stale byte is invisible
+to the GAME and stopped being invisible to the PORT the moment a test compared it. `EXS1` is the one
+call site where the port can say what X was -- `LDA RAND+1 / TAX` two instructions back, so it is
+the generator's previous byte -- and it now writes `P` itself; `Arith.h` carries the general fact
+and names the exception. Fixing it everywhere means knowing X at twelve more call sites, and three
+of them inherit it from their caller, so it is a slice and not a drive-by.
+
+**`EXLOOK` IS IN THIS GAME, and §6.141 said it was not.** That section reported the scope line
+naming a routine that "appears nowhere in the upstream library -- not in the C64 tree, not in any
+other version's" and counted it as the phase's third scope-line error. It is at
+`library/master/main/variable/exlook.asm`, the C64's `elite-source.asm` INCLUDEs it at line 926, and
+`exlook` is in `Labels.txt` at 31143. The mistake was searching `library/c64/` and the version's own
+sources and concluding from their silence: this build assembles files from the master tree, and
+`PTCLS2` -- a C64-only routine -- is the only thing in any version that reads it. The lesson is the
+one §6.121 already wrote for `DORND2` and it now has a second shape: **a label's absence from the
+directory you expected is not its absence from the build; `Labels.txt` is the build.**
+
+It is two bytes, `%00` and `%10`, and `ORA exlook,X` with X of 0 or 1 is a way of shifting X left one
+place without the register shuffling a 6502 would otherwise need. So it is ported and NOT extracted
+as a table: it is absorbed into the seam's nine-bit x argument, where the ninth bit is a bit of a
+number rather than an entry in a lookup.
+
+**`PTCLS` and `PTCLS2` are one body.** Instruction for instruction the C64's `PTCLS2` is `PTCLS`
+with a prologue that sizes the burst sprite, an insert inside the vertex loop that places it, and a
+`SETL1` pair around the whole thing. Every other instruction, branch and flag is identical -- the
+only differences left are that `PTCLS2` calls `DORND2` where `PTCLS` inlines it, and that its
+loop-back is spelled `BCS P%+5 / JMP` rather than `BCC`. So the port is one implementation and a
+flag, with both entry points exported and both compared, rather than sixty duplicated lines that
+could quietly stop agreeing.
+
+**What the seam is and what it is not.** The particles are canvas writes, compared byte for byte;
+the burst sprite is five VIC-II registers and `SETL1`, and those are `ExplosionEffects`. That is
+§6.73's split inside `SIGHT` applied again, and the test does not stop at the seam either: it turns
+the recorded arguments back into the registers the original writes -- including the two
+read-modify-writes, the ninth x bit into `VIC+&10` and the enable bit into `VIC+&15` -- and compares
+those against the shipped code's memory. `SetRasterMode` is deliberately the same signature as
+`SightEffects`'s, because there is one `SETL1` in the game and `FlightSession` overrides it once for
+both interfaces.
+
+**The cloud seam is narrower than it looked.** `SeedExplosionCloud` is still a seam because `EE55`'s
+first `JSR DORND` runs on whatever carry `LOIN` last left (§6.91). Reading the loop for this slice
+shows that is the ONLY unknown one: `.EE55 INY / JSR DORND / STA (XX19),Y / CPY #6 / BNE EE55`, and
+`CPY #6` sets the carry before every iteration but the first -- clear for Y of 3, 4 and 5. So three
+of the four seed bytes are determined and one is not. Not enough to close the seam, and worth
+writing down before someone re-derives it.
+
+**Two coverage corrections inside the slice's own tests, both §6.132's lesson.** The `EXS1` sweep
+began with five generator seeds and reported 960 cases down one branch and 240 down the other --
+which is one answer per seed dressed up as a sweep, because `Q`, `R` and the coordinate do not reach
+that branch at all: the seed alone decides it. Twelve seeds now. And the burst sprite has four ways
+of being refused -- negative x, x past 511, y with a high byte, y at or below `2*Y+50` -- so the
+vertex layouts are a ladder built for them rather than a cloud in the middle of the view: seven
+layouts, and the test asserts per layout that the centred one places every burst and that each edge
+layout refuses at least one. The last was added because no vertex landed on row 194 exactly; two of
+its five rows straddle the comparison for each of the sprite's two sizes.
+
 ### 6.143 Slice 4b-a: the last of the three jumps out of the loop
 
 `ESCAPE` is built, and with it `LoopOutcome::Escaped` -- which the flight loop has returned since
@@ -524,6 +604,13 @@ names a routine that does not exist. That is the third scope-line error this pha
 in 4c), and the three of them have one cause: the rows were written from a reading of what Elite
 does, and this one has been carried since the plan was drafted.
 
+**THAT PARAGRAPH IS WRONG, and 4b-b found out (§6.144).** `exlook` is at
+`library/master/main/variable/exlook.asm`, the C64's own `elite-source.asm` INCLUDEs it at line 926,
+and it is in `Labels.txt` at 31143. This build assembles files from the master tree; searching
+`library/c64/` and the version's sources and concluding from their silence is what went wrong. The
+scope line was right and the dependency pass was not, which makes this the phase's second scope-line
+error rather than its third.
+
 **Forward -- what the four remaining routines call.** Twenty-one targets, and every external one is
 built: `DORND`, `DORND2`, `PIXEL`, `FMLTU`, `DVID4`, `LL9`, `MVEIT`, `RES2`, `SCAN`, `FRS1` and
 `GOIN`, with `SETL1` a seam since slice 3d. The rest -- `EX4`, `EX42`, `EXS1`, `EXL52`, `PTCLS`,
@@ -533,7 +620,7 @@ found for `DORND2`. Nothing blocks the slice.
 | | Scope | C64 instructions | How it is checked |
 |---|---|---|---|
 | **4b-a** ✅ | `ESCAPE`, and `DEATH2` — which turned out to be already built (§6.142) | 42 | **Built 2026-09-05.** The whole world against the oracle over six cases, including the ninety-seven frames of `MVEIT` and `LL9`. Wired: `LoopOutcome::Escaped` was refused from slice 3d-d until now |
-| **4b-b** | `DOEXP` and `PTCLS2` — the explosion cloud, with `EX4`, `EXS1`, `PTCLS`, `PTCLS2S`, `EX42` and `EXL52` inside them | 311 | The canvas, byte for byte, over a whole explosion; the cloud is `DORND`-driven so it is exact rather than statistical |
+| **4b-b** ✅ | `DOEXP` and `PTCLS2` — the explosion cloud, with `EX4`, `EXS1`, `PTCLS`, `PTCLS2S`, `EX42` and `EXL52` inside them | 311 | **Built 2026-09-05.** 126 frames and 420 clouds on the whole canvas, the whole heap, `INWK`, the generator, ten workspace bytes and the seven registers the burst seam writes; 2,880 `EXS1` offsets separately. See §6.144 |
 
 **What 4b-a closes.** `LoopOutcome::Escaped` has been returned by the flight loop since 3d-d and
 refused by `Main.cpp` ever since -- the third of the three jumps that leave `M%`, and the only one
@@ -5726,6 +5813,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Slice 4b-b: the explosion cloud** (§6.144). `DOEXP`, `PTCLS`, `PTCLS2` and `EXS1` in `Explosion.cpp`, compared on the whole canvas over 126 frames and 420 clouds plus 2,880 `EXS1` offsets; the burst sprite is a seam and the test turns its recorded arguments back into the seven registers the original writes, read-modify-writes included. **The cloud ages by four or by five** -- the `ADC #4` takes the carry from the `CMP #32` that asked whether the ship was far away, so a distant explosion is a fifth shorter and the upstream comment says only "add 4". **`FMLTU` clobbers `P`** through the `STX P` it preserves X with, which the port had never modelled and a one-byte comparison found; nothing in the shipped build reads `P` after an `FMLTU`, so it is invisible to the game and `EXS1` -- the one caller that can prove what X held -- now writes it. **`exlook` exists**, contradicting §6.141: it is INCLUDEd from the master tree and is in `Labels.txt`, so a label's absence from the directory you expected is not its absence from the build. `PTCLS` and `PTCLS2` are one body with an insert. The `EE55` seam is narrowed to ONE unknown carry, because `CPY #6` pins the other three. Two coverage corrections in the slice's own tests, both §6.132's lesson: the `EXS1` sweep had one answer per seed, and the burst's four refusals needed a ladder of vertex layouts rather than a cloud in the middle of the view. |
 | 2026-09-05 | **Slice 4b-a: the last of the three jumps out of `M%`** (§6.143). `ESCAPE` built and wired, so `LoopOutcome::Escaped` is answered after being refused since 3d-d. `DEATH2` turned out to be already done -- the fourth scope-line entry this phase to be built already, which makes the rule plain: the backward pass has to check EVERY label, not the big ones. Three things the routine hides: 194 is the pitch AND, halved, both the AI byte and the frame count the loop decrements; `FRS1` takes `DELTA` rotated with `MSTG`'s bit 7 rather than a speed, so the ship always leaves at 6 or 7 because `RES2` has just set `DELTA` to 3; and `LL9` writes back to the slot `FRS1` filled, which the port had as slot 0 -- the planet. The pirate-Cobra fallback is dead code, because `RES2` empties the bubble first. |
 | 2026-09-05 | **`Anger` read block 255** (§6.142). The seam carried the type and resolved the slot through `MSTG` for both callers; part 11's laser hit points `INF` at the ship the loop is on, not at a missile target. The seam now carries the slot, and each caller passes the one the 6502 has. |
 | 2026-09-05 | **A second copy of `QQ2` blanked the status screen** (§6.140). `Game` held the current system's seeds twice; the printer read the copy nobody wrote at the cold start. Deleted, printer bound to `current.seeds`. §6.28's rule, applied to the composition root. |

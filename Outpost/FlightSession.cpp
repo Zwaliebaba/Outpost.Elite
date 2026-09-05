@@ -218,8 +218,10 @@ namespace Outpost
 
   void FlightSession::DrawExplosion()
   {
-    // 6502: DOEXP -- redraw the cloud, which is how it is erased as well as how it appears. Phase
-    // 4, so a ship that explodes leaves the screen instead of blooming.
+    // 6502: LL14's JMP DOEXP -- age the cloud by one frame and draw it, which is how the last
+    // frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
+    // vertices `LL9` part 8 projected, which `DOEXP` copies onto the ship's line heap.
+    Elite::DrawExplosionCloud(m_canvas, m_draw, m_math, m_screen.rng, m_work, m_heap, m_geometry, m_bubble, *this);
   }
 
   void FlightSession::SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint)
@@ -381,6 +383,28 @@ namespace Outpost
   void FlightSession::SetSpritesEnabled(std::uint8_t _mask)
   {
     m_spriteMask = _mask; // 6502: STA VIC+&15
+  }
+
+  void FlightSession::SetSpriteExpansion(std::uint8_t _mask)
+  {
+    // 6502: STA VIC+&17 / STA VIC+&1D -- the same byte into both, so a sprite is double size in
+    // both directions or in neither.
+    m_spriteExpansion = _mask;
+  }
+
+  void FlightSession::ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y)
+  {
+    /*
+     * 6502: STX VIC+&2 / STY VIC+&3, the ninth x bit into bit 1 of VIC+&10, and bit 1 of VIC+&15
+     * to switch sprite 1 on.
+     *
+     * The nine-bit x arrives whole and is split here rather than in `GameLogic`, because the split
+     * is the register layout's and not the game's -- the original spells it `ORA exlook,X` over a
+     * two-byte table whose only job is to shift a 0 or 1 left one place.
+     */
+    m_burstX = _x;
+    m_burstY = _y;
+    m_spriteMask = static_cast<std::uint8_t>(m_spriteMask | 0x02u);
   }
 
   void FlightSession::MaskSprites(std::uint8_t _mask)

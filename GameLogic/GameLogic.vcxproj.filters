@@ -94,6 +94,9 @@
     <ClInclude Include="Hyperspace.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Explosion.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="GameLoop.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -287,6 +290,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Hyperspace.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Explosion.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="GameLoop.cpp">
