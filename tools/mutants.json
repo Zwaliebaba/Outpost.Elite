@@ -157,10 +157,10 @@
         {
           "id": "ta20-eor",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      NegateVector(screen.draw); // 6502: .TA20 JSR TAS6\n      SteerTowards(_loop, static_cast<std::uint8_t>(math.cnt ^ 0x80u));",
-          "replace": "      NegateVector(screen.draw); // 6502: .TA20 JSR TAS6\n      SteerTowards(_loop, math.cnt);",
-          "expect": "survives",
-          "note": "TA20's EOR #%10000000 on the MISSILE path in part 4. The identical two lines appear again on the `reverse` path below, so the mutant carries the NegateVector call above it to be unique -- and that is the second thing this pins: which of the two TA20 entrances is being measured."
+          "find": "      SteerTowards(_loop, static_cast<std::uint8_t>(nose.high ^ 0x80u));",
+          "replace": "      SteerTowards(_loop, nose.high);",
+          "expect": "caught",
+          "note": "`TA20`'s `EOR #%10000000` on the missile path -- a missile closes on its target rather than facing it, so the sign of how far off it is gets flipped. IT USED TO POINT AT A SECOND COPY OF THIS. The port had `TA20` written out twice: inlined in `SteerMissileTowardsTarget`, which is where every missile actually goes, and again in part 4, which no missile in the port reaches because every branch of part 1's missile block returns. The mutant flipped the unreachable one and nothing noticed. The duplicate is gone (plan §6.152) and this now names the live copy."
         },
         {
           "id": "msl-16",
