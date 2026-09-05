@@ -850,6 +850,10 @@ namespace GameLogicTests
       };
 
       std::vector<std::uint8_t>& sounds;
+
+      /// The world's carry list, not this object's: the 6502 has ONE `NOISE` and the port reaches
+      /// it through two interfaces, so a comparison against one list needs both to write to it.
+      std::vector<bool>& soundCarries;
       std::vector<Pitched> pitched;
       std::vector<std::uint8_t> stopped;
       std::vector<std::uint8_t> spawned;
@@ -861,14 +865,16 @@ namespace GameLogicTests
       /// What `FRS1` answers -- carry set for "there was room", clear for a full bubble.
       bool spawnSucceeds = true;
 
-      explicit RecordingLoop(std::vector<std::uint8_t>& _sounds) noexcept
-        : sounds(_sounds)
+      RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<bool>& _carries) noexcept
+        : sounds(_sounds),
+          soundCarries(_carries)
       {
       }
 
-      bool PlaySound(std::uint8_t _effect) override
+      bool PlaySound(std::uint8_t _effect, bool _carryIn) override
       {
         sounds.push_back(_effect);
+        soundCarries.push_back(_carryIn);
         return true;
       }
       /// `NOISE2` is trapped at its own address, so its hits never reach `NOISE` and belong in
@@ -960,7 +966,7 @@ namespace GameLogicTests
       Elite::Projection projection;
       Elite::CompassAxes axes{};
       RecordingWorld outside;
-      RecordingLoop effects{world.effects.sounds};
+      RecordingLoop effects{world.effects.sounds, world.effects.soundCarries};
 
       explicit Frame(std::uint32_t _seed)
       {
@@ -1258,6 +1264,7 @@ namespace GameLogicTests
       std::uint32_t docked = 0;
       std::vector<Elite::Testing::Cpu6502::TrapHit> pitched;
       std::vector<std::uint8_t> sounds;
+      std::vector<bool> soundCarries;
       std::vector<std::uint8_t> spawned;
       std::vector<std::uint8_t> angered;
       std::uint32_t starts = 0;
@@ -1276,6 +1283,7 @@ namespace GameLogicTests
         else if (hit.address == _loop.noise)
         {
           sounds.push_back(hit.y);
+          soundCarries.push_back(hit.carry);
         }
         else if (hit.address == _loop.frs1)
         {
@@ -1334,6 +1342,42 @@ namespace GameLogicTests
         Assert::AreEqual(sounds.size(), _frame.world.effects.sounds.size(),
                          (_context + L": sounds asked for -- game [" + wanted + L"] port [" + got + L"]").c_str());
       }
+      /*
+       * THE CARRY GOING IN, compared as well as the effect (§6.99).
+       *
+       * `NOISE` passes it straight back when sound is off, and `OUCH` and `LASLI` both open a
+       * `DORND` on what comes back -- so a port that asked for the right effect with the wrong
+       * carry would break a different piece of equipment on a silent build and no comparison of
+       * effect numbers alone would say so. The seam could not carry this until it took the
+       * argument; `Cpu6502::TrapHit` could not report it until it recorded the flag.
+       */
+      Assert::AreEqual(soundCarries.size(), _frame.world.effects.soundCarries.size(), (_context + L": carries recorded").c_str());
+      for (std::size_t index = 0; index < soundCarries.size() && index < _frame.world.effects.soundCarries.size(); ++index)
+      {
+        /*
+         * ONLY THE LASER SOUNDS ARE COMPARED, and the exclusion is named rather than quiet (§6.111).
+         *
+         * The four laser effects are the ones whose carry the port DERIVES: `.custard` is reached
+         * from a `CMP`, so the flag is the laser power measured against `Mlas` or `Armlas`, and
+         * §6.86 is the finding that made it matter. Every other call is a PASS-THROUGH from
+         * somewhere the port does not model -- `ECBLB2` touches no flag, `BEEP` touches no flag,
+         * and `MA63`'s `JSR EXNO3` runs on whatever `OUCH` left several routines deep. Comparing
+         * those would be fitting a constant to whatever this fixture happens to produce.
+         *
+         * Excluded the way §6.91 excludes the explosion cloud's six bytes: in the open, by name,
+         * with the reason beside it. What is left of the gap is §6.111.
+         */
+        const bool derived =
+          index < sounds.size() && (sounds[index] == 0u || sounds[index] == 10u || sounds[index] == 11u || sounds[index] == 12u);
+        if (!derived)
+        {
+          continue;
+        }
+        Assert::AreEqual(
+          soundCarries[index], _frame.world.effects.soundCarries[index],
+          (_context + L": the carry into NOISE " + std::to_wstring(index) + L" (effect " + std::to_wstring(sounds[index]) + L")").c_str());
+      }
+
       for (std::size_t index = 0; index < sounds.size(); ++index)
       {
         Assert::AreEqual(sounds[index], _frame.world.effects.sounds[index], (_context + L": sound " + std::to_wstring(index)).c_str());

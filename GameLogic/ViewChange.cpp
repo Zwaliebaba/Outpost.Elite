@@ -397,7 +397,7 @@ namespace Elite
 
     if ((occupied | station | _screen.status.midJump) != 0u)
     {
-      (void)_screen.effects.PlaySound(SOUND_BOOP); // 6502: .WA1 LDY #sfxboop / JMP NOISE
+      (void)_screen.effects.PlaySound(SOUND_BOOP, false); // 6502: .WA1 LDY #sfxboop / JMP NOISE
       return;
     }
 
@@ -415,7 +415,7 @@ namespace Elite
     {
       if (LargestAxis(_screen.bubble, 0u) < 2u)
       {
-        (void)_screen.effects.PlaySound(SOUND_BOOP);
+        (void)_screen.effects.PlaySound(SOUND_BOOP, false);
         return;
       }
     }
@@ -426,7 +426,7 @@ namespace Elite
     {
       if (LargestAxis(_screen.bubble, 1u) < 2u)
       {
-        (void)_screen.effects.PlaySound(SOUND_BOOP);
+        (void)_screen.effects.PlaySound(SOUND_BOOP, false);
         return;
       }
     }

@@ -283,7 +283,7 @@ namespace Elite
     // 6502: DEC NOMSL -- one fewer on the rail.
     screen.commander.At(Field::Missiles) = static_cast<std::uint8_t>(screen.commander.At(Field::Missiles) - 1u);
 
-    (void)_loop.effects.PlaySound(SOUND_MISSILE); // 6502: LDY #sfxwhosh / JMP NOISE
+    (void)_loop.effects.PlaySound(SOUND_MISSILE, false); // 6502: LDY #sfxwhosh / JMP NOISE
   }
 
   LoopOutcome BeginFlightFrame(FlightLoop& _loop) noexcept
@@ -414,8 +414,8 @@ namespace Elite
     if ((_loop.keys[KEY_UNARM_MISSILE] & commander.At(Field::Missiles)) != 0u)
     {
       AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, commander.At(Field::Missiles), MISSILE_READY);
-      (void)_loop.effects.PlaySound(SOUND_BOOP); // 6502: LDY #sfxboop / JSR NOISE
-      screen.status.missileArmed = 0u;           // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
+      (void)_loop.effects.PlaySound(SOUND_BOOP, false); // 6502: LDY #sfxboop / JSR NOISE
+      screen.status.missileArmed = 0u;                  // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
     }
 
     /*
@@ -466,7 +466,7 @@ namespace Elite
           // 6502: LDY #%11010000 / STY moonflower -- the upper half of the screen changes mode, and
           // that IS the effect: no drawing is involved.
           screen.screen.upperBitmapMode = BOMB_BITMAP_MODE;
-          (void)_loop.effects.PlaySound(SOUND_ENERGY_BOMB);
+          (void)_loop.effects.PlaySound(SOUND_ENERGY_BOMB, false);
         }
       }
 
@@ -495,7 +495,16 @@ namespace Elite
       if ((_loop.keys[KEY_ECM] & commander.At(Field::Ecm)) != 0u && screen.status.ecmCountdown == 0u)
       {
         screen.status.ecmOurs = static_cast<std::uint8_t>(screen.status.ecmOurs - 1u);
-        StartEcm(screen.canvas, screen.status, _loop.effects);
+        /*
+         * 6502: DEC ECMP / JSR ECBLB2, and the carry handed on is NOT KNOWN HERE (§6.111).
+         *
+         * `DEC`, `LDA`, `AND` and `BEQ` above this all leave the carry alone, so the flag that
+         * reaches `NOISE` was set somewhere further back in the frame -- possibly inside `WARP`,
+         * three instructions earlier, which this port calls through a seam. The port models no
+         * carry across the flight loop, so false is what it can honestly supply, and the sound
+         * comparison excludes this effect by name rather than pretending to agree.
+         */
+        StartEcm(screen.canvas, screen.status, _loop.effects, false);
       }
     }
 
@@ -571,9 +580,18 @@ namespace Elite
       sound = SOUND_MINING_LASER;
     }
 
-    // 6502: .custard JSR NOISE -- and `LASLI` opens `JSR DORND`, whose `ROL A` reads the carry
-    // this leaves, so the sound's own outcome shifts the burst by a pixel (§6.86).
-    const bool heard = _loop.effects.PlaySound(sound);
+    /*
+     * 6502: .custard JSR NOISE -- and `LASLI` opens `JSR DORND`, whose `ROL A` reads the carry
+     * this leaves, so the sound's own outcome shifts the burst by a pixel (§6.86).
+     *
+     * THE CARRY GOING IN IS A COMPARISON'S, and both paths to `.custard` come off a `CMP`: the
+     * beam half arrives through `CMP #Armlas` and the rest through `CMP #Mlas`, so it is the
+     * laser power measured against whichever constant that branch tested. Nothing between the
+     * compare and the call touches the flag -- `LDY` does not, and neither does the `EQUB &2C`
+     * that swallows one of the loads. A silent build hands this straight back (§6.99).
+     */
+    const bool carryIn = ((fitted & 0x80u) != 0u) ? (fitted >= LASER_POWER_MILITARY) : (fitted >= LASER_POWER_MINING);
+    const bool heard = _loop.effects.PlaySound(sound, carryIn);
 
     // 6502: JSR LASLI -- the burst itself, which draws and heats the gun.
     (void)FireLaser(screen.canvas, screen.draw, screen.rng, _loop.burst, screen.status, screen.view, heard);
@@ -1008,7 +1026,9 @@ namespace Elite
        */
       if (holdFull)
       {
-        (void)_loop.effects.PlaySound(SOUND_EXPLOSION);                // 6502: .MA59 JSR EXNO3
+        // 6502: .MA59 JSR EXNO3 -- and the carry is SET, because `BCS MA59` in part 8 is the
+        // only way here: a full hold is exactly the carry the capacity test leaves.
+        (void)_loop.effects.PlaySound(SOUND_EXPLOSION, true);
         screen.work[SHIP_STATE] = MarkKilled(screen.work[SHIP_STATE]); // 6502: .MA60
         // 6502: .MA61 BNE MA26 -- and `ROR` has just set bit 7, so it always branches.
       }
@@ -1036,7 +1056,13 @@ namespace Elite
         {
           return LoopOutcome::Died;
         }
-        (void)_loop.effects.PlaySound(SOUND_EXPLOSION);
+        /*
+         * 6502: .MA63 JSR OOPS / JSR EXNO3 -- and the carry into `EXNO3` is the one `OOPS` left.
+         *
+         * `OOPS` ends `ADC ENERGY / STA ENERGY / BEQ / BCS`, and reaching here at all means the
+         * `BCS` was taken, so it is SET. Nothing between the two calls touches the flag.
+         */
+        (void)_loop.effects.PlaySound(SOUND_EXPLOSION, true);
       }
 
       /*
@@ -1064,7 +1090,7 @@ namespace Elite
           // missile locks onto whatever the sights are on, and the indicator turns red.
           if (screen.status.missileArmed != 0u)
           {
-            (void)_loop.effects.PlaySound(SOUND_BEEP);
+            (void)_loop.effects.PlaySound(SOUND_BEEP, false);
             SetMissileTarget(screen.canvas, screen.bubble, screen.status.missileArmed, commander.At(Field::Missiles), screen.flight.slot,
                              MISSILE_LOCKED);
           }

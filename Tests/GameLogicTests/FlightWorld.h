@@ -126,13 +126,18 @@ namespace GameLogicTests
     std::vector<std::uint8_t> palettes;
     std::vector<std::uint8_t> sounds;
 
+    /// The carry each `PlaySound` was handed, parallel to `sounds` (§6.99). Both seams that reach
+    /// `NOISE` push here, because the 6502 has one routine and the port has two interfaces onto it.
+    std::vector<bool> soundCarries;
+
     void SetPalette(std::uint8_t _colour) override
     {
       palettes.push_back(_colour);
     }
-    bool PlaySound(std::uint8_t _effect) override
+    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
     {
       sounds.push_back(_effect);
+      soundCarries.push_back(_carryIn);
       return true;
     }
   };
@@ -178,16 +183,19 @@ namespace GameLogicTests
     struct Chars final : Elite::TextEffects
     {
       std::vector<std::uint8_t>& sounds;
+      std::vector<bool>& carries;
       std::uint32_t cleared = 0;
 
-      explicit Chars(std::vector<std::uint8_t>& _sounds) noexcept
-        : sounds(_sounds)
+      Chars(std::vector<std::uint8_t>& _sounds, std::vector<bool>& _carries) noexcept
+        : sounds(_sounds),
+          carries(_carries)
       {
       }
 
       void Beep() override
       {
         sounds.push_back(SOUND_BEEP_EFFECT);
+        carries.push_back(false); // `BEEP` is `LDY #sfxbeep / JMP NOISE`: the carry is CHPR's (§6.111)
       }
       void ClearScreen() override
       {
@@ -198,7 +206,7 @@ namespace GameLogicTests
     /// 6502: sfxbeep -- what `BEEP` asks `NOISE` for.
     static constexpr std::uint8_t SOUND_BEEP_EFFECT = 5;
 
-    Chars chars{effects.sounds};
+    Chars chars{effects.sounds, effects.soundCarries};
     Elite::TextPrinter glyphs{canvas, text, &chars};
     Elite::CharacterPrinter characters{glyphs};
     Elite::TokenPrinter printer{characters};

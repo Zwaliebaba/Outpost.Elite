@@ -413,7 +413,7 @@ namespace GameLogicTests
       std::vector<std::uint8_t> sounds;
       std::uint32_t musicStops = 0;
 
-      bool PlaySound(std::uint8_t _effect) override
+      bool PlaySound(std::uint8_t _effect, bool) override
       {
         sounds.push_back(_effect);
         return true;

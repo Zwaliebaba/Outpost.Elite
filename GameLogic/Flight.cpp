@@ -179,7 +179,7 @@ namespace Elite
   {
     // 6502: .LAUN LDY #sfxwhosh / JSR NOISE -- and the carry it returns is dropped, because the
     // next instruction is a load. §6.99's third answer costs nothing here.
-    (void)_screen.effects.PlaySound(SOUND_MISSILE);
+    (void)_screen.effects.PlaySound(SOUND_MISSILE, false);
 
     // 6502: LDA #8 -- and `HFS2`'s first instruction, `STA STP`, is what receives it. This is the
     // only writer of the step on the launch path, and its absence is what §6.95 was working around.

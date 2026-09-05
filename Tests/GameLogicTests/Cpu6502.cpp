@@ -520,7 +520,7 @@ namespace Elite::Testing
       {
         if (pc == trapped.address)
         {
-          TrapHit hit{pc, a, x, y, {}};
+          TrapHit hit{pc, a, x, y, c, {}};
           for (std::size_t slot = 0; slot < WATCH_SLOTS; ++slot)
           {
             hit.watched[slot] = memory[watch[slot]];

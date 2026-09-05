@@ -220,8 +220,9 @@ namespace Elite
     virtual void SetPalette(std::uint8_t _colour) = 0;
 
     /// 6502: LDY #sfxboop / JMP NOISE -- the refusal noise `WARP` makes when it will not warp.
-    /// Returns the carry, as `DashboardEffects::PlaySound` does; `WARP` tail-calls and drops it.
-    virtual bool PlaySound(std::uint8_t _effect) = 0;
+    /// Takes and returns the carry, as `DashboardEffects::PlaySound` does and for the reason
+    /// written out there (§6.99); `WARP` tail-calls and drops both, so its `_carryIn` is false.
+    virtual bool PlaySound(std::uint8_t _effect, bool _carryIn) = 0;
   };
 
   /// 6502: sfxboop -- the effect number `WARP` asks for when it refuses.
