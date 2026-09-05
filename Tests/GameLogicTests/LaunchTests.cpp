@@ -748,7 +748,7 @@ namespace GameLogicTests
                 cpu.AddTrap(oracle.Label("DOVDU19"));
 
                 /*
-                 * `NOSPRITES` IS TRAPPED, AND NOT BECAUSE IT IS A SEAM (§6.107).
+                 * `NOSPRITES` IS TRAPPED, AND NOT BECAUSE IT IS A SEAM (§6.108).
                  *
                  * `XX21` is at &D000, which on a C64 is also where the VIC-II registers are: the
                  * ship data lives in RAM UNDER the I/O area and the game banks between them. The
