@@ -263,7 +263,7 @@
       "filter": [
         "TheTrumbles"
       ],
-      "tests": 6,
+      "tests": 7,
       "note": [
         "MVTRIBS and the six Trumble sprites (plan section 6.148). Ten mutants, written with the",
         "slice rather than reconstructed from a name, so this unit is a measurement from its first",
