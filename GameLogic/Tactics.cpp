@@ -770,13 +770,20 @@ namespace Elite
 
     /*
      * 6502: .TA7 LDY #14 / LDA (XX0),Y / LSR A / CMP INWK+35 / BCC TA3 -- energy above half the
-     * blueprint's maximum and the ship fights on. Below a QUARTER (`LSR` twice) it may run, and
-     * `DORND / CMP #230` is how often.
+     * blueprint's maximum and the ship fights on. Below an EIGHTH (`LSR` twice more) it may run,
+     * and `DORND / CMP #230` is how often.
+     *
+     * AND THE TWO BRANCHES DO NOT GO TO THE SAME PLACE. `BCC TA3` here is the CAPITAL label, which
+     * is part SIX -- so a ship with more than half its energy jumps over part five and never
+     * launches a missile at all. `BCC ta3` below is the lower-case one, which is part five. The
+     * port ran both of them into part five, so a healthy ship could fire; `ta-half` is the
+     * mutation that survived long enough to say so (§6.153).
      */
     const std::uint8_t maximumEnergy = ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + 14u));
     bool fellFromFleeTest = false;
+    const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work[35];
 
-    if (static_cast<std::uint8_t>(maximumEnergy >> 1u) >= work[35])
+    if (!fightsOn)
     {
       if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work[35])
       {
@@ -819,9 +826,11 @@ namespace Elite
      * 6502: .ta3 LDA INWK+31 / AND #%00000111 / BEQ TA3 / STA T / JSR DORND / AND #31 / CMP T /
      * BCS TA3 -- the bottom three bits of the state byte are how many missiles the ship has, and
      * the chance of it firing one is that count out of thirty-two.
+     *
+     * `fightsOn` is `TA7`'s first `BCC TA3` jumping clean over this part -- see the comment there.
      */
     const std::uint8_t missiles = static_cast<std::uint8_t>(work[31] & 7u);
-    if (missiles != 0u)
+    if (!fightsOn && missiles != 0u)
     {
       math.t = missiles;
 
