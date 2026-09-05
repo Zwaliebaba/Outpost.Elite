@@ -133,6 +133,22 @@ namespace Outpost
       {0xC0, Elite::KEY_DISK_ACCESS, "@ -- disk access menu"}, // VK_OEM_3
 
       /*
+       * CTRL, WHICH IS A POSITION AND NOT A MODIFIER, and this row is the whole of the fix.
+       *
+       * `CTRL` is `LDX #6` falling into `DKS4`, so the game asks for key-logger entry 6 exactly
+       * the way it asks for "A" or "T" -- `keylook.asm` calls that byte "CTRL is being pressed
+       * (KLO+&6)". `Main.cpp` had recorded the opposite ("Ctrl is not a matrix position") and
+       * the galactic hyperdrive, built in slice 4c-b, was unreachable on the strength of it.
+       *
+       * Windows reports left and right CTRL as one VK_CONTROL in WM_KEYDOWN, which is what the
+       * C64 has: one key. It goes in the key QUEUE as well as the held table, and that is
+       * faithful rather than a side effect -- `RDKEY` walks the whole matrix, so CTRL answers a
+       * "press any key" prompt on a real machine too. TRANTABLE turns position 6 into character
+       * 3, which prints nothing.
+       */
+      {0x11, static_cast<std::uint8_t>(Elite::KEY_CONTROL), "Ctrl -- galactic hyperdrive, with H"}, // VK_CONTROL, 6502: CTRL
+
+      /*
        * The three the line editor compares numbers against. Their positions translate to 13, 127 and
        * 27, which is checked rather than asserted here.
        *

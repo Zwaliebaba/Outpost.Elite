@@ -70,7 +70,8 @@ done at once, because the second has no definition of "correct" until the first 
    - Everything not ours lives under **`Upstream/`, with one exception this section used to
      omit**. No original assembler is copied into `GameLogic/`, `Tests/` or `Design/`, and
      `Upstream/` is a reference rather than a copy, so nothing under it is in the history at
-     all. **`MasterFile/` is the exception, and it is committed:** 13 files, 5,615 lines,
+     all. **`MasterFile/` is the exception, and it is committed:** <!--count:masterfile-files-->13
+     files, <!--count:masterfile-lines-->5,616 lines,
      headed `copyright D. Braben and I. Bell 1985` with commentary `copyright Mark Moxon`.
      "Removing one directory removes all of it" was therefore not true — removing `Upstream/`
      removes nothing, and `MasterFile/` is what a published history would carry. That is an
@@ -106,9 +107,13 @@ done at once, because the second has no definition of "correct" until the first 
    **This does not make the exposure smaller. It makes it accepted rather than mitigated**, and
    the difference is worth writing down:
 
-   - The 13 masters are still public and still carry `copyright D. Braben and I. Bell 1985` in
-     their own headers, with the commentary `copyright Mark Moxon`. That is 5,615 lines of source
-     this project does not own, in a repository anyone can read.
+   - The <!--count:masterfile-files-->13 tracked files are still public and still carry `copyright
+     D. Braben and I. Bell 1985` in their own headers, with the commentary `copyright Mark Moxon`.
+     That is <!--count:masterfile-lines-->5,616 lines of source this project does not own, in a
+     repository anyone can read. **Thirteen is the right number HERE and twelve is the right
+     number in §1.1 of the plan**: the exposure is every tracked file in the folder, upstream's
+     own `README.md` included, while the annotated SOURCE is the twelve `.asm` files. The two
+     were conflated until `tools/check_counts.py` made each of them a marked, checked claim.
    - What the structural mitigation bought is unchanged and is why this is 13 files rather than
      3,000: `Upstream/` is a **submodule**, so the library is a gitlink and not content; no
      assembled binary is tracked; and no original assembler is copied into `GameLogic/`, `Tests/`

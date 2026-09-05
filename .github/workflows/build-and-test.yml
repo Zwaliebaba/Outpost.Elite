@@ -99,6 +99,20 @@ jobs:
       - name: Design tables still render everything they hold
         run: python tools/check_docs.py
 
+      # Prose about a decision ages well; a NUMBER beside it ages badly and in silence. Every
+      # number a document states about the tree as it is now carries a <!--count:name--> marker,
+      # and this reads the tree and checks it. Unmarked numbers are the journal's history and are
+      # deliberately not touched (§6.145 asked for this check; §6.147 is what it found).
+      - name: The numbers the documents state are the numbers the tree has
+        run: python tools/check_counts.py
+
+      # The mutation RUN is minutes per mutant and belongs to whoever is finishing a slice. What
+      # runs here is the cheap half: every recorded mutant still points at code that exists. A
+      # mutant whose `find` has rotted out of its file is a stale record, and a stale record is
+      # what Risk R13 is about.
+      - name: The recorded mutants still apply
+        run: python tools/mutate.py --check
+
       # A tool that stops on an unknown symbol is only useful if it never meets one, and four of
       # the build's own files used to stop this one -- each looking like a missing SYMBOLS entry,
       # which invites somebody to invent a value for it (§6.75).

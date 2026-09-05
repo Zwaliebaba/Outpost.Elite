@@ -1,0 +1,257 @@
+{
+  "$schema-note": [
+    "The mutant list, per unit, as data -- which is what closes Risk R13.",
+    "",
+    "Every slice in the plan reports a mutation tally and none of them could be re-run: the mutants",
+    "were hand edits in a scratch worktree and were thrown away, so a tally was an assertion rather",
+    "than a measurement (Risk R13, plan section 6.145). A mutant here is a find/replace against one",
+    "ported file plus what it is EXPECTED to do, and `python tools/mutate.py` turns the tally back",
+    "into a command.",
+    "",
+    "FIELDS.",
+    "  unit.name     what to pass to --unit",
+    "  unit.slice    the plan row this list belongs to",
+    "  unit.filter   substrings handed to the test runner, one per TEST_CLASS that covers this",
+    "                unit, so a mutant runs its own tests rather than all 349",
+    "  unit.tests    how many tests those filters select, VERIFIED against the unmutated build",
+    "                before any mutant is applied. A filter that selects the wrong tests reports",
+    "                survivors for code it never ran, which is worse than no filter at all --",
+    "                `hyperspace` was recorded as \"Hyperspace\" and matched three tests in other",
+    "                files whose method names contain the word (plan section 6.147)",
+    "  mutant.id     the name the plan uses for it, where the plan named one",
+    "  mutant.find   text that must appear EXACTLY ONCE in the file; the run fails loudly if not,",
+    "                because a mutant that silently applied nowhere is a mutant reported as caught",
+    "  mutant.expect caught | survives | equivalent | uncompilable",
+    "  mutant.selftest  true on the one mutant per unit whose job is to prove the HARNESS works --",
+    "                an unmissable change the suite cannot fail to catch. A run in which a selftest",
+    "                mutant survives is a run whose every other answer is worthless, and the tool",
+    "                stops there rather than reporting a tally (Risk R13, plan section 6.119)",
+    "",
+    "`expect: caught` is the normal case and anything else must say why in its note. A run fails",
+    "when an outcome differs from its expectation in EITHER direction: a new survivor is a gap in",
+    "the tests, and a recorded survivor that starts being caught is debt that has been paid and",
+    "should be written down as paid."
+  ],
+
+  "units": [
+    {
+      "name": "tactics",
+      "slice": "4a-c",
+      "filter": ["TheTacticsVectors", "TheShipAi", "TheDockingComputer"],
+      "tests": 7,
+      "note": [
+        "The ship AI and the autopilot (plan section 6.125). The docking half is closed -- every",
+        "`dock-*` and `steer-*` mutation is caught after sections 6.131 and 6.132 found three",
+        "branches its sweep could not reach. The AI half is not: fifteen survivors are recorded in",
+        "the plan BY NAME and are the reason this file exists.",
+        "",
+        "HOW THE FIFTEEN GOT HERE, stated plainly because it bears on what a first run means. The",
+        "original mutants were hand edits and are gone; what survives is their names in section",
+        "6.125. Each name points at a constant or an operation that appears exactly once in",
+        "`Tactics.cpp` -- `ta-253` at the `CMP #253`, `msl-bit5` at the `BIT M32+1`, and so on -- so",
+        "the edit below is reconstructed from the name and from the routine, not recovered.",
+        "",
+        "That makes the first run of this unit a TEST OF THE RECONSTRUCTION as much as of the port:",
+        "a reconstructed mutant that survives confirms the name was read correctly, and one that is",
+        "caught means either the reconstruction missed or the debt is smaller than recorded. Either",
+        "answer is worth more than the fifteen names were, because from here on the mutant is the",
+        "data and the name is just its label.",
+        "",
+        "THE FIRST RUN, 2026-09-05, on the MSVC leg with a green 348-test baseline: 16 mutants, 3",
+        "caught, 13 survived. The three caught are the selftest, `ta7-three` and `msl-kill`; the",
+        "other thirteen survive exactly as section 6.125 recorded. So the measured debt is THIRTEEN",
+        "and not fifteen -- and the two that came back caught are the honest limit of this exercise,",
+        "because the original mutants are gone and nothing can say whether the reconstruction missed",
+        "or the debt was overstated. Thirteen re-runnable survivors is still thirteen more than the",
+        "corpus had yesterday.",
+        "",
+        "The method for closing them is section 6.132's and is unchanged: probe the comparison,",
+        "count the distinct values that reach it, and add a ladder to the fixture. All fifteen are",
+        "thresholds the geometry table never lands on."
+      ],
+      "mutants": [
+        {
+          "id": "ta-selftest",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "    _draw.y1 = static_cast<std::uint8_t>(_draw.y1 ^ 0x80u);",
+          "replace": "    _draw.y1 = static_cast<std::uint8_t>(_draw.y1 ^ 0x00u);",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Dropping one of TAS6's three EOR #%10000000s leaves the negated vector wrong on the y axis, and TheNegationMatchesTAS6 compares all three against the shipped routine. Its job is to prove this run OBSERVES a catch -- without it, fifteen 'survivors' below could all be a harness that never rebuilt. Keep it first and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "ta-253",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if (roll.value < 253u)",
+          "replace": "if (roll.value < 252u)",
+          "expect": "survives",
+          "note": "The station's launch roll, three times in 256. The sweep's seeds never land on 252."
+        },
+        {
+          "id": "ta-240",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if (roll.value < 240u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
+          "replace": "if (roll.value < 239u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
+          "expect": "survives",
+          "note": "TN5's police roll. Same shape as ta-253: a threshold with no case beside it."
+        },
+        {
+          "id": "ta-ana200",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if (first.value >= 200u)",
+          "replace": "if (first.value >= 201u)",
+          "expect": "survives",
+          "note": "The Anaconda's escort roll, CMP #200 at TN7's entrance -- not the hermit's CMP #200."
+        },
+        {
+          "id": "ta-250",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if (chance.value >= 250u)",
+          "replace": "if (chance.value >= 249u)",
+          "expect": "survives",
+          "note": "TN7's six-times-in-256 roll that gives a ship a random pitch."
+        },
+        {
+          "id": "ta-104",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "work[29] = static_cast<std::uint8_t>(amount.value | 104u);",
+          "replace": "work[29] = static_cast<std::uint8_t>(amount.value | 105u);",
+          "expect": "survives",
+          "note": "ORA #104 on the roll TN7 just made. Only reachable through ta-250's branch."
+        },
+        {
+          "id": "ta-230",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if (flee.value >= 230u)",
+          "replace": "if (flee.value >= 229u)",
+          "expect": "survives",
+          "note": "How often a badly damaged ship with a pod actually runs."
+        },
+        {
+          "id": "ta-half",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 1u) >= work[35])",
+          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work[35])",
+          "expect": "survives",
+          "note": "TA7's LSR A -- energy above HALF the blueprint maximum and the ship fights on."
+        },
+        {
+          "id": "ta7-three",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work[35])",
+          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work[35])",
+          "expect": "caught",
+          "note": "The second energy test, below which a ship may run, nested inside ta-half's. CAUGHT on the first run, by TheAiMatchesTACTICS, while the plan names `ta7-three` among fifteen survivors. Since the original mutant is gone, this says one of two things and does not say which: the reconstruction is not the edit that was made, or that item of debt does not exist. What it does settle is that THIS perturbation of the shift is distinguished, and it stays here as a caught mutant rather than being deleted, because a mutant that is caught is still evidence."
+        },
+        {
+          "id": "ta3-ecm",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && screen.status.ecmCountdown == 0u)",
+          "replace": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles)",
+          "expect": "survives",
+          "note": "LDA ECMA / BNE TA3 -- a running ECM stops the launch and the missile is not spent."
+        },
+        {
+          "id": "ta20-eor",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "      NegateVector(screen.draw); // 6502: .TA20 JSR TAS6\n      SteerTowards(_loop, static_cast<std::uint8_t>(math.cnt ^ 0x80u));",
+          "replace": "      NegateVector(screen.draw); // 6502: .TA20 JSR TAS6\n      SteerTowards(_loop, math.cnt);",
+          "expect": "survives",
+          "note": "TA20's EOR #%10000000 on the MISSILE path in part 4. The identical two lines appear again on the `reverse` path below, so the mutant carries the NegateVector call above it to be unique -- and that is the second thing this pins: which of the two TA20 entrances is being measured."
+        },
+        {
+          "id": "msl-16",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if (roll.value < 16u)",
+          "replace": "if (roll.value < 17u)",
+          "expect": "survives",
+          "note": "TA64's CMP #16 -- one frame in sixteen a missile checks its target's ECM."
+        },
+        {
+          "id": "msl-82",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "destroyed = (work[32] == 0x82u);",
+          "replace": "destroyed = (work[32] == 0x83u);",
+          "expect": "survives",
+          "note": "A missile that reaches slot 1 -- the station -- dies rather than exploding."
+        },
+        {
+          "id": "msl-bit5",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "if ((victim[31] & 0x20u) == 0u)",
+          "replace": "if ((victim[31] & 0x10u) == 0u)",
+          "expect": "survives",
+          "note": "BIT M32+1 read as data: bit 5 is 'already exploding', so this is 'do not blow up a wreck'."
+        },
+        {
+          "id": "msl-kill",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "        return TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], MISSILE_DAMAGE, false);",
+          "replace": "        return TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], COLLISION_DAMAGE, false);",
+          "expect": "caught",
+          "note": "LDA #250 / JMP OOPS -- what a missile that has arrived costs, against the 80 a near miss costs. CAUGHT on the first run, by TheAiMatchesTACTICS, while the plan names `msl-kill` among fifteen survivors; the same caveat as ta7-three applies. 250 against 80 is a large difference in the player's energy banks and the sweep compares all three, so this one being caught is unsurprising -- which is itself a hint that the original `msl-kill` mutated something smaller."
+        },
+        {
+          "id": "kill-rotate",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>((work[32] & 0x7Fu) >> 1u));",
+          "replace": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>(work[32] & 0x7Fu));",
+          "expect": "survives",
+          "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2."
+        }
+      ]
+    },
+
+    {
+      "name": "hyperspace",
+      "slice": "4c-b",
+      "filter": ["TheJump"],
+      "tests": 6,
+      "note": [
+        "The jump, witchspace and the galactic hyperdrive (plan section 6.136). Seeded with three",
+        "mutants rather than a full sweep, and they are here to prove the HARNESS rather than the",
+        "slice: two constants that a green suite must notice, and one recorded equivalent so the",
+        "'expect' field is exercised in more than one state.",
+        "",
+        "A full list for this unit is work the next slice to touch it should do, and that is the",
+        "shape this file is meant to grow in: a slice adds its own mutants when it lands, instead of",
+        "reporting a number nobody can check."
+      ],
+      "mutants": [
+        {
+          "id": "hyp-selftest",
+          "file": "GameLogic/Hyperspace.cpp",
+          "find": "    const bool fromSpace = screen.view == 0u;",
+          "replace": "    const bool fromSpace = screen.view != 0u;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent. Inverting 'is this a space view' changes whether the hyperspace tunnel is drawn at all, so TheJumpMatchesTT18 cannot miss it. Its job is not to measure the port -- it is to prove that this harness still OBSERVES a catch, applies its edit to the file the build actually compiles, and rebuilds between mutants. Risk R13's realised form was a harness that reported catches it never saw (section 6.119); a run in which this one survives is a run whose every other answer is worthless. Keep it first in the list and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "hyp-253",
+          "file": "GameLogic/Hyperspace.cpp",
+          "find": "if (roll.value >= WITCHSPACE_ROLL)",
+          "replace": "if (roll.value > WITCHSPACE_ROLL)",
+          "expect": "survives",
+          "note": "CMP #253 / BCS MJP -- three jumps in 256 mis-jump, and `>=` to `>` makes it two. SURVIVED on this tool's first run, and it is a real gap rather than an equivalent. TheJumpMatchesTT18 sweeps four generator seeds by three fuels by three distances by four views, and its own comment says the seeds were chosen so that BOTH SIDES of the CMP are reached -- which they are. Reaching both sides is not landing ON the boundary, and 253 exactly is never rolled, so the one value that tells `>=` from `>` is the one value never tried. Section 6.132 in a new instance: the counter wanted is distinct answers per BRANCH, and here it is distinct values at the branch. Closing it is a seed that rolls 253."
+        },
+        {
+          "id": "hyp-ctrl-and",
+          "file": "GameLogic/Hyperspace.cpp",
+          "find": "if (_controlHeld && _patg)",
+          "replace": "if (_controlHeld || _patg)",
+          "expect": "survives",
+          "note": "JSR CTRL / AND PATG / BMI ptg -- the cheat needs BOTH the key and the option, and `&&` to `||` is not caught. Nothing in TheJump varies the two flags: TheCheatFlagMatchesPtg tests `ptg` ALONE, over all 256 values of COK, and never enters PerformJump. The `&&` was also unreachable in the app until 2026-09-05, because JumpOf hardcoded controlHeld to false (section 6.147) -- so the fix that made the galactic hyperdrive reachable also made this gap matter, and the tool found it the same day. Closing it is four cases in PerformJump over the two flags."
+        },
+        {
+          "id": "hyp-fuel-zero",
+          "file": "GameLogic/Hyperspace.cpp",
+          "find": "screen.commander.At(Field::Fuel) = fuel.carry ? fuel.value : std::uint8_t{0};",
+          "replace": "screen.commander.At(Field::Fuel) = fuel.carry ? fuel.value : std::uint8_t{0u};",
+          "expect": "equivalent",
+          "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made."
+        }
+      ]
+    }
+  ]
+}

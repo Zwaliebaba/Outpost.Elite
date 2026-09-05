@@ -6,11 +6,12 @@ sound and music, the ship AI and the autopilot, the explosions, the main game lo
 and the spawning rules, and the pause screen with its thirteen option toggles are all ported and
 compared against the assembled original. The executable launches, flies, fights, docks and dies.
 **What is left is slice 4d** — the missions and the Trumbles — plus two pieces of recorded debt:
-fifteen mutation survivors in the ship AI's sweep (plan §6.125, §6.132) and the `VideoState` work
-that ADR-005 §1's closed decision turned out to need (plan §6.133). **A fresh clone needs
+thirteen mutation survivors in the ship AI's sweep — measured rather than named, by `python
+tools/mutate.py --unit tactics` (plan §6.125, §6.132, §6.147), and the `VideoState` work that ADR-005 §1's closed decision
+turned out to need (plan §6.133). **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **348 tests** and CI runs **nine
-repository checks** beside it.
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->349 tests** and
+CI runs **<!--count:checks-->eleven repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
@@ -19,13 +20,22 @@ under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game 
 
 ## The one finding to read first
 
-`MasterFile/` holds the **13 master files** of Mark Moxon's annotated C64 Elite source
-(5,615 lines). Those masters are almost entirely `INCLUDE` lines: they pull in **710 distinct
-library files** plus the font binary, and the routine bodies, ship blueprints and token tables
-all live in those includes rather than in the masters. They were not in this repository.
+`MasterFile/` holds the **<!--count:masters-->12 master files** of Mark Moxon's annotated C64
+Elite source (<!--count:master-lines-->5,577 lines). Those masters are almost entirely `INCLUDE`
+lines: they pull in **<!--count:library-includes-->710 distinct library files** plus the font
+binary, and the routine bodies, ship blueprints and token tables all live in those includes
+rather than in the masters. They were not in this repository.
+
+**The count used to read "13 master files ... 5,615 lines" and that counted the FOLDER**, not the
+source: upstream's own `README.md` sits beside the twelve `.asm` files and is 39 lines of
+Markdown. `inventory.py` had been printing twelve since the day it was written. Both numbers are
+now marked and checked by `tools/check_counts.py`; the thirteen-file figure is still the right
+one for the licence exposure, which is every tracked file in the folder, and ADR-001 §5 says so
+there.
 
 **Slice 0a fixed that**: the upstream tree sits at `Upstream/elite-source-code-library`, pinned
-at commit `aa3f7ee`, and all 712 include paths resolve. It is a **submodule**, not a copy —
+at commit `aa3f7ee`, and all <!--count:includes-->712 include paths resolve. It is a
+**submodule**, not a copy —
 a fresh clone needs `git submodule update --init` before anything here can be built or tested,
 and `tools/inventory.py --check-includes` is the standing proof either way. See
 [Elite-Conversion-Plan.md §1](Elite-Conversion-Plan.md#1-what-we-actually-have).

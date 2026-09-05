@@ -65,10 +65,11 @@
  * What is still refused is `ShowDistance` and `SearchBySystemName`, and they are listed by name in
  * `Perform` rather than defaulted so that adding one is a compiler error here.
  *
- * The galactic drive is built and UNREACHABLE: `hyp` reaches `Ghy` through `JSR CTRL / BMI Ghy`,
- * and `CTRL` is a MODIFIER, which `Window` and `KeyMap` do not report -- they deliver matrix
- * positions, and Ctrl is not one. The case is written out
- * so that adding the read is a one-line change rather than a search.
+ * THE GALACTIC DRIVE IS REACHABLE, and what unblocked it was reading `CTRL` rather than
+ * reasoning about it. This comment used to say Ctrl was a MODIFIER that `Window` and `KeyMap`
+ * could not report because they deliver matrix positions -- but `CTRL` is `LDX #6` falling into
+ * `DKS4`, so it IS a matrix position, number 6, and the seam had been able to express it since
+ * slice 2e. `JumpOf` reads it and Ctrl-H takes the drive (slices 4c-b and 4c-d built the rest).
  */
 namespace
 {
@@ -305,7 +306,8 @@ namespace
     jump.docked = _game.dockedFlag;
     jump.countdown = _game.status.hyperspaceCountdown;
     jump.distance = _game.jumpDistance;
-    jump.controlHeld = false; // 6502: JSR CTRL -- a modifier `Window` does not report (§6.139)
+    // 6502: JSR CTRL -- key-logger entry 6, read LIVE, because that is when the original reads it.
+    jump.controlHeld = _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL));
     jump.target = _game.jumpTarget;
     return jump;
   }
@@ -593,7 +595,8 @@ namespace
 
         const Elite::JumpResult jumped = Elite::PerformJump(
           _game.flight.Loop(), _game.current, _game.selectedSeeds, jump, described, _game.market, _game.flight, nullptr, _game.crosshairX,
-          _game.crosshairY, _game.commander.GalaxySeeds(), false, _game.flight.Loop().options.authorNames != 0u);
+          _game.crosshairY, _game.commander.GalaxySeeds(), _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL)),
+          _game.flight.Loop().options.authorNames != 0u);
 
         _game.jumpDistance = jump.distance;
 
@@ -632,10 +635,9 @@ namespace
       _game.crosshairY = chart.cursorY;
 
       /*
-       * 6502: Ghy -- and it is reached by `hyp`'s `JSR CTRL / BMI Ghy`, which this port cannot ask
-       * for yet: `CTRL` is a keyboard read and `JumpOf` hands `hyp` a `controlHeld` of false. So
-       * the galactic drive is BUILT (slice 4c-b) and unreachable until the window reports Ctrl, and
-       * the case is written out rather than left off so that adding the read is a one-line change.
+       * 6502: Ghy -- reached by `hyp`'s `JSR CTRL / BMI Ghy`, which `JumpOf` now answers from the
+       * held-key table. `CTRL` reads key-logger entry 6, so Ctrl-H fits the map the game already
+       * has; it was believed to be a modifier the seam could not carry, and was not.
        */
       if (decided == Elite::JumpOutcome::Galactic)
       {
