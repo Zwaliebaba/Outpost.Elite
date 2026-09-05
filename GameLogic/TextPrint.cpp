@@ -434,6 +434,27 @@ namespace Elite
     m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.cellColour);
   }
 
+  void InvertTextRow(Canvas& _canvas, std::uint8_t _row) noexcept
+  {
+    // The same 256 bytes ClearTextArea zeroes for this row: 32 cells of 8, starting at the margin.
+    constexpr std::uint16_t TEXT_ROW_BYTES = 32 * 8;
+    const std::uint16_t base = Canvas::RowOffset(static_cast<std::uint8_t>(_row * 8));
+    for (std::uint16_t offset = 0; offset < TEXT_ROW_BYTES; ++offset)
+    {
+      _canvas.ExclusiveOr(static_cast<std::uint16_t>(base + offset), 0xFF);
+    }
+  }
+
+  void ClearTextCells(Canvas& _canvas, std::uint8_t _row, std::uint8_t _column, std::uint8_t _count) noexcept
+  {
+    // CHPR's own cell address: the row's bytes, the margin, then eight bytes a cell.
+    const std::uint16_t base = static_cast<std::uint16_t>(_row * Canvas::ROW_BYTES + Canvas::SPACE_VIEW_MARGIN + _column * 8);
+    for (std::uint16_t offset = 0; offset < static_cast<std::uint16_t>(_count) * 8u; ++offset)
+    {
+      _canvas.Write(static_cast<std::uint16_t>(base + offset), 0);
+    }
+  }
+
   void MoveCursorDown(TextState& _text) noexcept
   {
     ++_text.row;
