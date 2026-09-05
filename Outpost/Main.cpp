@@ -103,6 +103,7 @@ namespace
       shell.Attach(recursive, text, characters.state, message);
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, dockedFlag);
+      shell.AttachVideo(flight.Video()); // ADR-005 §1 -- the sprites composite in Resolve
       shell.AttachSound(audio, sound, music);
 
       // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
@@ -726,10 +727,14 @@ namespace
        * 6502: DEATH, then DEATH2 -- and the port now takes both.
        *
        * `DEATH` is built (§6.117), so what a player sees on dying is the sequence rather than an
-       * immediate restart: the sound, a quarter-turn of the speed, the border rubbed off with its
-       * own EOR, a new stardust field, "GAME OVER", five pieces of wreckage and sixty-four
-       * iterations of the flight loop to fly them past. `DEATH2` is the tail -- `JSR RES2` and a
-       * fall into `BR1` -- which this already did and still does.
+       * immediate restart: the sound, FOUR TIMES the speed, the border rubbed off with its own
+       * EOR, a new stardust field, "GAME OVER", five pieces of wreckage and sixty-four iterations
+       * of the flight loop to fly them past. `DEATH2` is the tail -- `JSR RES2` and a fall into
+       * `BR1` -- which this already did and still does.
+       *
+       * It said "a quarter-turn of the speed" until 2026-09-05, as did `Flight.h`. `ASL DELTA`
+       * twice is a multiply, the port and its test have always had it right, and the debris
+       * rushing past at four times your last speed is exactly what the sequence looks like.
        *
        * Neither routine restores the energy banks. That is the game's behaviour and not an
        * omission here: `RESET` fills them and only the COLD start calls it (ADR-003).

@@ -279,9 +279,16 @@ namespace Elite
   /*
    * 6502: DEATH -- the chaos of our destruction, over a "GAME OVER" sign.
    *
-   * The sequence is: the sound, `RES2`, a quarter of our speed, a cleared screen with the border
+   * The sequence is: the sound, `RES2`, FOUR TIMES our speed, a cleared screen with the border
    * EORed off again, a fresh stardust field, the sign, then five pieces of wreckage spawned in
    * random directions and 64 iterations of the whole flight loop to fly them past.
+   *
+   * FOUR TIMES, not a quarter, and this comment said a quarter until 2026-09-05. `ASL DELTA / ASL
+   * DELTA` shifts LEFT twice, `PrepareDeathScene` does `delta << 2`, and
+   * `TheDeathScreenSetsUpLikeDEATH` asserts 3 becomes 12 in as many words. So the code and the
+   * test were right and the two comments describing them were inverted -- which mattered, because
+   * the speed is the whole visual: the wreckage RUSHES past rather than drifting, and half of it
+   * bursts on the way (`DORND / AND #%10000000` marks it dead as it is spawned).
    *
    * `DET1` IS A BARE `RTS` ON THIS BUILD and the port does not call it, which is not a shortcut --
    * see §6.117. The upstream comment says the `LDX #24 / JSR DET1` pair hides the dashboard "and

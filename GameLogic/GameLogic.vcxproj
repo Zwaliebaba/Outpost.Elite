@@ -162,6 +162,7 @@
     <ClInclude Include="Dashboard.h" />
     <ClInclude Include="FlightLoop.h" />
     <ClInclude Include="Controls.h" />
+    <ClInclude Include="VideoState.h" />
     <ClInclude Include="ViewChange.h" />
     <ClInclude Include="Lasers.h" />
     <ClInclude Include="Messages.h" />
@@ -243,7 +244,9 @@
     <ClCompile Include="Dashboard.cpp" />
     <ClCompile Include="FlightLoop.cpp" />
     <ClCompile Include="Controls.cpp" />
+    <ClCompile Include="VideoState.cpp" />
     <ClCompile Include="ViewChange.cpp" />
+    <ClCompile Include="SpriteData.cpp" />
     <ClCompile Include="DashboardImage.cpp" />
     <ClCompile Include="Lasers.cpp" />
     <ClCompile Include="Messages.cpp" />

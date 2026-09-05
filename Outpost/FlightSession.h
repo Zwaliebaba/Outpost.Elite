@@ -13,6 +13,7 @@
 #include "FlightLoop.h"
 #include "Lasers.h"
 #include "LineHeap.h"
+#include "VideoState.h"
 #include "PlanetDraw.h"
 #include "Rng.h"
 #include "Scanner.h"
@@ -160,6 +161,19 @@ namespace Outpost
     /// `SetRasterMode` is `Elite::ExplosionEffects`'s as well as `SightEffects`'s -- one `SETL1` in
     /// the game, one method here, and one override satisfying both interfaces.
     void SetRasterMode(std::uint8_t _mode) override;
+    /*
+     * 6502: the VIC-II sprite registers, for `Canvas::Resolve` to composite from.
+     *
+     * A reference to plain data and NOT a getter that computes anything -- see `VideoState.h`, and
+     * `SightEffects::MaskSprites` before it. The flight session owns the struct because the seams
+     * that write it are its, and the presenter reads it because that is what ADR-005 §1 decided
+     * `Resolve` is for.
+     */
+    [[nodiscard]] const Elite::VideoState& Video() const noexcept
+    {
+      return m_video;
+    }
+
     void SetSightColour(std::uint8_t _colour) override;
     void SetSpritesEnabled(std::uint8_t _mask) override;
     void MaskSprites(std::uint8_t _mask) override;
@@ -208,27 +222,21 @@ namespace Outpost
     Elite::K3Block m_axes{};
 
     /*
-     * 6502: VIC+&15 and VIC+&27 -- the sprite enable mask and sprite 0's colour.
+     * 6502: the VIC-II sprite registers, and they are NO LONGER PRIVATE TO THIS CLASS.
      *
-     * Held rather than acted on. `SIGHT` computes the whole mask and part 15 ANDs the register it
-     * cannot compute (§6.73's read-modify-write), so the port needs somewhere for the register to
-     * be even while nothing draws sprites.
+     * They used to be five members here -- the enable mask, sprite 0's colour, the expand byte and
+     * the burst's position -- written by the two seams and read by nothing at all, which is why the
+     * laser sights, the Trumbles and the explosion sprite never appeared. ADR-005 §1 settled that
+     * compositing belongs in `Canvas::Resolve`, and that needs the registers to be DATA rather than
+     * private state behind a getter (plan §6.133, §6.148).
+     *
+     * So they live in `Elite::VideoState`, the seam methods below are one line each into it, and
+     * `Video()` hands it to the presenter. It is public state on purpose: a getter that computed
+     * anything would be the mistake `SightEffects::MaskSprites` already warns about.
      */
-    std::uint8_t m_spriteMask = 0;
-    std::uint8_t m_spriteColour = 0;
-    std::uint8_t m_rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote into the handler
+    Elite::VideoState m_video{};
 
-    /*
-     * 6502: VIC+&17, VIC+&1D, VIC+&2, VIC+&3 and the ninth x bit in VIC+&10 -- the explosion
-     * burst, which is sprite 1 (slice 4b-b).
-     *
-     * Held for the same reason as the three above, and the read-modify-writes are performed here
-     * because they are the hardware's: `ShowExplosionSprite` takes the whole nine-bit x and this is
-     * what splits it. `Canvas::Resolve` does not draw sprites yet, so nothing reads any of it.
-     */
-    std::uint8_t m_spriteExpansion = 0;
-    std::uint16_t m_burstX = 0;
-    std::uint8_t m_burstY = 0;
+    std::uint8_t m_rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote into the handler
 
     /// The two aggregates the ported routines take, over everything above and everything borrowed.
     /// Declared last because every reference in them is bound at construction.
