@@ -192,4 +192,147 @@ namespace Elite
   /// 6502: MT8 -- LDA #6 / JSR DOXC, and the `DTW2` store beside it is the printer's.
   inline constexpr std::uint8_t MT8_COLUMN = 6;
 
+  // ---- the missions themselves (slice 4d-c) ---------------------------------------------------
+
+  /*
+   * 6502: TP -- the mission state, and mission 1's two bits mean FOUR things (slice 2e).
+   *
+   * `%00` is not started, `%01` is in progress, `%11` is "in progress AND complete" -- the state
+   * `MissionOnDocking` reads as "you have only just finished it" -- and `%10` is finished and paid.
+   * So the pair is a small state machine, and `BRIEF` and `DEBRIEF` are the two transitions that
+   * are not a docking test.
+   */
+  inline constexpr std::uint8_t MISSION_1_STARTED = 0x01; ///< 6502: LSR TP / SEC / ROL TP
+  inline constexpr std::uint8_t MISSION_2_STARTED = 0x04; ///< 6502: ORA #%00000100
+  inline constexpr std::uint8_t MISSION_2_PLANS = 0x0A;   ///< 6502: ORA #%00001010, after AND #%11110000
+  inline constexpr std::uint8_t MISSION_2_KEEP = 0xF0;    ///< 6502: AND #%11110000 -- `BRIEF3` clears the low nibble
+  inline constexpr std::uint8_t MISSION_TRUMBLES = 0x10;  ///< 6502: ORA #%00010000
+
+  /// 6502: LDA #64 / STA MCNT -- how many frames the Constrictor turns for before it starts to
+  /// move away, and the counter goes on counting DOWN through the second loop without being read.
+  inline constexpr std::uint8_t BRIEFING_SPIN_FRAMES = 64;
+
+  /// 6502: LDX #%01111111 -- the roll and pitch counters at maximum with the damping bit clear, so
+  /// the ship turns and keeps turning. Written INSIDE the loop, once per frame.
+  inline constexpr std::uint8_t BRIEFING_SPIN = 0x7F;
+
+  /// 6502: LDA #1 / JSR DOXC / STA INWK+7 -- one load again, and this one is a column and a
+  /// DISTANCE. `TT66` two instructions later gets the same 1 as its view.
+  inline constexpr std::uint8_t BRIEFING_START_DISTANCE = 1;
+
+  /// 6502: the tokens each mission prints. 10 and 15 are the Constrictor's briefing and its thank
+  /// you, 11, 222 and 223 are the Thargoid plans' three, and 199 offers the Trumble.
+  inline constexpr std::uint8_t MISSION_1_BRIEFING = 10;
+  inline constexpr std::uint8_t MISSION_1_DEBRIEFING = 15;
+  inline constexpr std::uint8_t MISSION_2_CONTACT = 11;
+  inline constexpr std::uint8_t MISSION_2_BRIEFING = 222;
+  inline constexpr std::uint8_t MISSION_2_DEBRIEFING = 223;
+  inline constexpr std::uint8_t TRUMBLE_OFFER = 199;
+
+  /// 6502: LDX #LO(50000) / LDY #HI(50000) -- 5,000 credits, in the tenths the cash is held in.
+  /// The same number is the reward for mission 1 and the price of a Trumble.
+  inline constexpr std::uint16_t MISSION_REWARD = 50000;
+
+  /// 6502: LDA #2 / STA ENGY -- the navy's energy unit, which recharges at three units a pass
+  /// where the shop's does two. Two is the byte and three is what the flight loop makes of it.
+  inline constexpr std::uint8_t NAVY_ENERGY_UNIT = 2;
+
+  /*
+   * What a mission needs beyond the text: the commander it changes, and the docking bay it ends at.
+   *
+   * `BRP` is `JSR DETOK` then `JMP BAY`, and every mission but `TBRIEF`'s refusal is a tail call
+   * into it -- so all seven return the same thing, and it is the forced key `BAY` presses.
+   */
+  struct MissionBay
+  {
+    CommanderBlock& commander; ///< 6502: TP, CASH, ENGY, TALLY and TRIBBLE
+    std::uint8_t& dockedFlag;  ///< 6502: QQ12, which `BAY` sets to &FF
+    std::uint8_t view;         ///< 6502: QQ11, for the forced key's dispatch
+    std::uint8_t countdown;    ///< 6502: QQ22+1 -- an in-flight hyperspace countdown, which is zero here
+    bool hyperspaceHeld = false;
+  };
+
+  /*
+   * 6502: BRP -- print an extended token and go to the docking bay.
+   *
+   * `JSR DETOK` then `.BAYSTEP JMP BAY`, and `BAYSTEP` is the entry `TBRIEF` uses when the player
+   * turns the Trumble down: it skips the token and goes straight to the bay.
+   */
+  [[nodiscard]] ForcedKey PrintAndEnterBay(MissionScreen& _mission, MissionBay& _bay, std::uint8_t _token) noexcept;
+
+  /*
+   * 6502: BRIEF -- start mission 1, and show the Constrictor turning while it says so.
+   *
+   * THE SHIP IS BUILT INTO THE BRIEFING SCREEN'S OWN BUBBLE. `ZINF`, `NWSHP` and then a `TT66`
+   * that clears the screen the ship was just added to -- so the Constrictor occupies a slot in the
+   * docked game's ship list for as long as the briefing runs, which is why `RES2` is what tidies
+   * up after it rather than anything here.
+   *
+   * TWO LOOPS AND ONE COUNTER. The first turns the ship on the spot for sixty-four frames; the
+   * second moves it away and up until `z_lo` passes 255, and it goes on decrementing `MCNT` all
+   * the way without ever reading it. So the counter is live in the first loop and dead in the
+   * second, and a port that stopped decrementing it there would be caught by `MCNT` alone.
+   *
+   * THE SECOND LOOP INCREMENTS `z_lo` TWICE PER FRAME and tests after each, so the ship recedes at
+   * two units a frame and the exit can be taken on either half. `LSR INWK` halves the x coordinate
+   * every frame at the same time, which is what walks it back to the middle of the screen.
+   *
+   * Returns the token `BR2` leaves in the accumulator, which is 10 -- so this is `BRIEF` up to but
+   * not including its tail call, and `BriefMission1` below is the whole of it. Split there because
+   * that is where the original splits: `BR2` ends `LDA #10 / BNE BRPS`, and everything after the
+   * branch is `BRP`'s and is shared with four other missions.
+   */
+  [[nodiscard]] std::uint8_t RunConstrictorBriefing(MissionScreen& _mission, MissionBay& _bay) noexcept;
+
+  /// 6502: BRIEF, whole -- the briefing and then `BRP`, which prints token 10 and goes to the bay.
+  [[nodiscard]] ForcedKey BriefMission1(MissionScreen& _mission, MissionBay& _bay) noexcept;
+
+  /// 6502: BRIEF2 -- set bit 2 of `TP` and print token 11, the message that sends the player to
+  /// Ceerdi. Falls into `BRP`.
+  [[nodiscard]] ForcedKey BriefMission2(MissionScreen& _mission, MissionBay& _bay) noexcept;
+
+  /*
+   * 6502: BRIEF3 -- collect the plans at Ceerdi.
+   *
+   * `AND #%11110000 / ORA #%00001010` -- and the `AND` is the interesting half: it clears mission
+   * 1's two bits as well as setting mission 2's, so picking up the plans is also what forgets that
+   * the Constrictor ever happened. Bit 3 is "the plans are aboard".
+   */
+  [[nodiscard]] ForcedKey CollectPlans(MissionScreen& _mission, MissionBay& _bay) noexcept;
+
+  /*
+   * 6502: DEBRIEF -- finish mission 1 and pay for it.
+   *
+   * `LSR TP / ASL TP` clears bit 0 and nothing else, which leaves bit 1 standing: the pair goes
+   * from `%11` to `%10`, which is the state `MissionOnDocking` reads as "finished and paid" and
+   * will not offer again. The commented-out `INC TALLY+1` beside it is in the original source and
+   * is not ported, because it does not run.
+   */
+  [[nodiscard]] ForcedKey DebriefMission1(MissionScreen& _mission, MissionBay& _bay) noexcept;
+
+  /*
+   * 6502: DEBRIEF2 -- deliver the plans at Birera.
+   *
+   * Three rewards in five instructions: bit 2 of `TP` set so both 2 and 3 are up, `ENGY` set to 2
+   * -- the navy's energy unit, which recharges faster than the one the shop sells -- and 256 kill
+   * points, added to the HIGH byte of the tally so the low byte is untouched.
+   */
+  [[nodiscard]] ForcedKey DebriefMission2(MissionScreen& _mission, MissionBay& _bay) noexcept;
+
+  /*
+   * 6502: TBRIEF -- offer the Trumble, and take the money if it is accepted.
+   *
+   * BIT 4 IS SET BEFORE THE QUESTION IS ASKED, so declining still marks the mission as offered and
+   * it is never offered again. Accepting costs 50,000 tenths and `INC TRIBBLE` -- the LOW byte, so
+   * the player leaves with one Trumble and the breeding in `MLOOP` does the rest.
+   *
+   * `JSR LCASH` AND ITS ANSWER IS DISCARDED. `INC TRIBBLE` follows unconditionally, and `LCASH`
+   * puts the money back when it cannot afford the spend -- so a commander who is short gets the
+   * Trumble for nothing. `MissionOnDocking` mostly prevents that by refusing to offer below a cash
+   * threshold, but that test reads ONE BYTE of a four-byte value (slice 2e), so the band recurs
+   * every 6,553.6 credits and a poor player inside one is offered a free Trumble. Ported rather
+   * than fixed, and recorded in ADR-001 §6.
+   */
+  [[nodiscard]] ForcedKey OfferTrumble(MissionScreen& _mission, MissionBay& _bay, KeySource& _keys) noexcept;
+
 } // namespace Elite

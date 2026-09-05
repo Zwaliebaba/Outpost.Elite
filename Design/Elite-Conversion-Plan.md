@@ -135,7 +135,7 @@ is preserved in the history and was true then.
   `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
   WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
   docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->373 tests in <!--count:test-files-->52 files: the 6502 interpreter with its cycle counter and
+- `Tests/GameLogicTests/` — <!--count:tests-->377 tests in <!--count:test-files-->52 files: the 6502 interpreter with its cycle counter and
   its in-order store log, the oracle fixture over the assembled game and the loader, and the
   suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
@@ -584,7 +584,7 @@ first tally in this corpus that anybody can reproduce with one command.
 a check that reads the counts out of the tree. The difficulty it did not name is that this corpus
 is mostly a JOURNAL: "321 tests" and "304 tests" appear in entries that were true when written and
 must stay exactly as they are, so a checker that scanned for "N tests" would fail on the history.
-So a live claim marks itself — `the suite is <!--count:tests-->373 tests` — and an unmarked number
+So a live claim marks itself — `the suite is <!--count:tests-->377 tests` — and an unmarked number
 is history. The marker renders as nothing and is the point rather than the plumbing: it says out
 loud which numbers are claims about now.
 

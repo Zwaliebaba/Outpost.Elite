@@ -388,7 +388,8 @@
       "name": "missions",
       "slice": "4d-b",
       "filter": [
-        "TheMissionText"
+        "TheMissionText",
+        "TheMissions"
       ],
       "tests": 5,
       "note": [
@@ -397,7 +398,13 @@
         "TWO OF THESE ARE ABOUT A FALL-THROUGH. `PAUSE` ends `JSR LL9` and the next instruction is",
         "MT23's `LDA #10`, so a briefing's `{22}` moves the cursor to row 10 and forces lower case as",
         "surely as a `{23}` does. The port splits that across two objects -- the row is the seam's and",
-        "the two case flags are the text system's -- and the mutants below take one half away each."
+        "the two case flags are the text system's -- and the mutants below take one half away each.",
+        "",
+        "FIRST RUN, 2026-09-05: 12 mutants, 9 caught, 3 survived, and all three were real gaps in the",
+        "sweep rather than debt. `mi-release` needed a keyboard that starts with a key DOWN;",
+        "`mi-mt9-view` needed a token that is not 216; `mi-pause2-loop` needed a scan count that does",
+        "not wrap -- and the mutant itself was replaced, because `if (x) continue;` at the top of a",
+        "`for(;;)` and `while (x) {}` are the same loop, so the first version could not have failed."
       ],
       "mutants": [
         {
@@ -431,7 +438,7 @@
           "find": "    while (ShowBriefingShip(_mission).key != 0u)\n    {\n    }\n",
           "replace": "",
           "expect": "caught",
-          "note": "The FIRST of PAUSE's two loops, dropped. `JSR PAS1 / BNE PAUSE` waits for the player to LET GO of the key that turned the previous page; without it one keystroke dismisses every remaining page of a briefing in a single frame. Caught by the scan count rather than by the pixels, which is why that count is asserted."
+          "note": "The FIRST of PAUSE's two loops, dropped. `JSR PAS1 / BNE PAUSE` waits for the player to LET GO of the key that turned the previous page; without it one keystroke dismisses every remaining page of a briefing in a single frame. SURVIVED the first run, because the sweep always started with an empty keyboard and the loop is invisible from there -- closed by giving the script a `held` run, which is the state the loop exists for."
         },
         {
           "id": "mi-erase",
@@ -452,10 +459,10 @@
         {
           "id": "mi-pause2-loop",
           "file": "GameLogic/Missions.cpp",
-          "find": "      if (_mission.effects.ScanTitleKeys(_mission.keys).key != 0u)\n      {\n        continue;\n      }",
-          "replace": "      while (_mission.effects.ScanTitleKeys(_mission.keys).key != 0u)\n      {\n      }",
+          "find": "      if (_mission.effects.ScanTitleKeys(_mission.keys).key != 0u)\n      {\n        return; // 6502: .newyearseve RTS\n      }\n    }\n  }",
+          "replace": "      while (_mission.effects.ScanTitleKeys(_mission.keys).key == 0u)\n      {\n      }\n      return; // 6502: .newyearseve RTS\n    }\n  }",
           "expect": "caught",
-          "note": "PAUSE2's `BEQ PAUSE2` goes back to the TOP of the routine and not to the scan above it, so a failed attempt re-checks for a release it has already had. Turning the outer loop into an inner one costs one scan per attempt, which is the only thing a routine that draws nothing can be measured by."
+          "note": "PAUSE2's `BEQ PAUSE2` goes back to the TOP of the routine and not to the scan above it, so an empty second scan re-checks for a release the routine has already had. The mutant turns that into a do-while, which is the reading everybody has first. It shows only when the keyboard goes empty, empty, PRESSED: the real routine treats that third scan as 'still held' and goes round again, and the do-while takes it as the answer. Two scans apart, and nothing is drawn, so the scan count is the only instrument -- which is why the script counts calls in a byte that cannot wrap. The first version of this mutant was `continue` against an inner `while`, and those two ARE the same loop."
         },
         {
           "id": "mi-captain",
@@ -495,7 +502,111 @@
           "find": "      m_text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
           "replace": "      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
           "expect": "caught",
-          "note": "MT9's column store, which the port did not have until this slice. `LDA #1 / JSR DOXC / JMP TT66` is one load serving two purposes, because `STA` does not touch the accumulator -- so a port that read it as a view alone opened every briefing page at whatever column the previous one left behind."
+          "note": "MT9's column store, which the port did not have until this slice. `LDA #1 / JSR DOXC / JMP TT66` is one load serving two purposes, because `STA` does not touch the accumulator. SURVIVED the first run: the only token that reaches code 9 is 216, and it follows the `{9}` with an `{8}`, which moves the cursor to column 6 and hides the difference. Closed by `TheNewViewMatchesMT9`, which runs the code itself from a cursor at column 29."
+        },
+        {
+          "id": "mi-tp-set",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_mission); // 6502: JSR BRIS",
+          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_mission); // 6502: JSR BRIS",
+          "expect": "caught",
+          "note": "`LSR TP / SEC / ROL TP` sets bit 0; clearing it instead means the Constrictor is offered for ever. The sweep starts from sixteen values of TP so the flag is compared from states where it was already set as well as from states where it was not."
+        },
+        {
+          "id": "mi-brief3-and",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    progress = static_cast<std::uint8_t>((progress & MISSION_2_KEEP) | MISSION_2_PLANS);",
+          "replace": "    progress = static_cast<std::uint8_t>(progress | MISSION_2_PLANS);",
+          "expect": "caught",
+          "note": "`BRIEF3`'s `AND #%11110000`, dropped. Picking the plans up also FORGETS mission 1 -- both its bits go -- and a port that only ORed would agree from every starting state whose low nibble was already zero, which is why the sweep walks sixteen of them."
+        },
+        {
+          "id": "mi-debrief-shift",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);",
+          "replace": "    progress = static_cast<std::uint8_t>(progress & ~0x03u);",
+          "expect": "caught",
+          "note": "`LSR TP / ASL TP` clears bit 0 and LEAVES BIT 1, which is what takes the pair from `%11` to `%10` -- finished and paid, and never offered again. Clearing both would leave it at `%00`, which reads as never started."
+        },
+        {
+          "id": "mi-reward",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    ReceiveCash(_bay.commander, MISSION_REWARD);",
+          "replace": "    ReceiveCash(_bay.commander, 5000u);",
+          "expect": "caught",
+          "note": "5,000 CREDITS IS 50,000 TENTHS. The cash is held in tenths of a credit throughout, so a reward written in credits pays a tenth of what the game pays -- and the whole commander block is compared, so it is the four cash bytes that say so."
+        },
+        {
+          "id": "mi-engy",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _bay.commander.At(Field::EnergyUnit) = NAVY_ENERGY_UNIT;",
+          "replace": "    _bay.commander.At(Field::EnergyUnit) = 1u;",
+          "expect": "caught",
+          "note": "`LDA #2 / STA ENGY` -- the navy's energy unit, which the flight loop reads as three units a pass where the shop's one gives two. A 1 is the shop's."
+        },
+        {
+          "id": "mi-tally",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _bay.commander.bytes[tally + 1u] = static_cast<std::uint8_t>(_bay.commander.bytes[tally + 1u] + 1u);",
+          "replace": "    _bay.commander.bytes[tally] = static_cast<std::uint8_t>(_bay.commander.bytes[tally] + 1u);",
+          "expect": "caught",
+          "note": "`INC TALLY+1` -- the HIGH byte, so the reward is 256 kills and a whole combat rank rather than one kill. This pair is low byte first, unlike the cash above it, which is exactly the trap."
+        },
+        {
+          "id": "mi-trumble-flag",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);\n\n    _mission.tokens.Print(TRUMBLE_OFFER);",
+          "replace": "    _mission.tokens.Print(TRUMBLE_OFFER);\n    progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);",
+          "expect": "equivalent",
+          "note": "Bit 4 set AFTER the question rather than before it. In the game the order matters -- `BCC BAYSTEP` leaves before the `INC` -- but the flag is set above the `DETOK` and nothing between the two reads it, so moving it past a print that cannot fail is the same program. Recorded as an equivalent so a run exercises that path, and it must never come back caught."
+        },
+        {
+          "id": "mi-trumble-inc",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    trumbles = static_cast<std::uint8_t>(trumbles + 1u);",
+          "replace": "    trumbles = static_cast<std::uint8_t>(trumbles + 2u);",
+          "expect": "caught",
+          "note": "`INC TRIBBLE` -- the player leaves with ONE Trumble and `MLOOP`'s breeding does the rest. Two would double every population the game ever reaches."
+        },
+        {
+          "id": "mi-spin-frames",
+          "file": "GameLogic/Missions.h",
+          "find": "  inline constexpr std::uint8_t BRIEFING_SPIN_FRAMES = 64;",
+          "replace": "  inline constexpr std::uint8_t BRIEFING_SPIN_FRAMES = 63;",
+          "expect": "caught",
+          "note": "`LDA #64 / STA MCNT` -- how long the Constrictor turns before it starts to move away. One frame out is a different screen and a different `MCNT` at the end, and both are compared."
+        },
+        {
+          "id": "mi-second-inc",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      screen.work[6] = static_cast<std::uint8_t>(screen.work[6] + 1u);\n      if (screen.work[6] == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
+          "replace": "      // 6502: LDX INWK+3",
+          "expect": "caught",
+          "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on."
+        },
+        {
+          "id": "mi-height-clamp",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      if (height >= BRIEFING_SHIP_HEIGHT)\n      {\n        height = BRIEFING_SHIP_HEIGHT;\n      }",
+          "replace": "      if (height > BRIEFING_SHIP_HEIGHT)\n      {\n        height = BRIEFING_SHIP_HEIGHT;\n      }",
+          "expect": "equivalent",
+          "note": "`CPX #conhieght / BCC P%+4 / LDX #conhieght` clamps at the value rather than above it, and `>=` against `>` is the same clamp: the only value they treat differently is `conhieght` itself, which both leave at `conhieght`. An equivalent by construction, kept so the run exercises one."
+        },
+        {
+          "id": "mi-dead-counter",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      screen.flight.mainLoopCounter = static_cast<std::uint8_t>(screen.flight.mainLoopCounter - 1u);\n    }\n\n    // 6502: .BR2 INC INWK+7",
+          "replace": "    }\n\n    // 6502: .BR2 INC INWK+7",
+          "expect": "caught",
+          "note": "`DEC MCNT` in the SECOND loop, which nothing branches on. The counter is live in the first loop and dead in the second, and dropping it there is invisible on screen -- so `MCNT` is compared as state, which is the only place it shows."
+        },
+        {
+          "id": "mi-inwk7",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    screen.work[7] = static_cast<std::uint8_t>(screen.work[7] + 1u);",
+          "replace": "",
+          "expect": "caught",
+          "note": "`.BR2 INC INWK+7` -- the high byte following the low one past 255. Without it the ship is 256 units nearer than the briefing text was written for, and `INWK` is compared byte for byte."
         }
       ]
     }
