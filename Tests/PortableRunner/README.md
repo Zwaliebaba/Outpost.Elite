@@ -5,7 +5,7 @@ same assertions, a different way of calling them.
 
 ```sh
 python tools/labels.py --assemble        # once: the oracle needs the assembled game
-Tests/PortableRunner/run_tests.sh        # 313 tests, about a minute from cold
+Tests/PortableRunner/run_tests.sh        # 348 tests, about a minute from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
 ```
 
@@ -19,21 +19,25 @@ with, and a disagreement between the two runners is decided in MSVC's favour eve
 What MSVC is not, is *available*. The port is written against the assembled original a routine at
 a time, and getting a carry chain right takes ten or twenty compile-run cycles. On a machine with
 no Visual Studio those cycles either do not happen, or they happen on CI at four minutes each.
-This runner turns that loop into thirty-seven seconds from cold, and under six when one file
-changed and a filter narrows the run to the suite being worked on — and every defect found while
-writing slices 1c-c-b, 2a, 2b, 2c and 2d was found here first, with MSVC agreeing exactly
-afterwards.
+This runner turns that loop into a minute from cold and a few seconds when one file changed and a
+filter narrows the run to the suite being worked on — and every defect found while writing slices
+1c-c-b, 2a, 2b, 2c and 2d was found here first, with MSVC agreeing exactly afterwards. That has
+held for every slice since.
 
-Twenty of those thirty-seven are the RUN rather than the build, and almost all of it is two
-exhaustive sweeps: 2,048 system data screens compared character for character, and 393,216
-keystrokes through `gnum`. That is the cost of the sweeps being exhaustive rather than sampled, and
-it is why `run_tests.sh` takes a filter.
+**Measured 2026-09-05 at 348 tests: 64 seconds from cold, 21 seconds warm.** Those 21 are the RUN
+rather than the build, and almost all of them are a handful of exhaustive sweeps: 2,048 system data
+screens compared character for character, 393,216 keystrokes through `gnum`, 65,536 pairs through
+several of the arithmetic routines, and the whole-canvas comparisons in the drawing and explosion
+suites. That is the cost of the sweeps being exhaustive rather than sampled, and it is why
+`run_tests.sh` takes a filter. The cold figure grows with the number of translation units — it was
+thirty-seven seconds at 313 tests and 52 files — so treat it as the shape and not the constant.
 
 The second reason is CI. Measured 2026-09-05 at 310 tests, on the same commit: the Ubuntu leg of
 `.github/workflows/build-and-test.yml` ran the whole suite in **72 seconds** end to end (59s of it
 the build-and-run step, BeebAsm cached) against the Windows job's **4m24s** — of which 51s is the
 tests and the rest is two MSBuild passes over the test project, two over the executable, and a
-37-second `vswhere` preflight. The ratio is what the argument rests on, not the absolute figures.
+37-second `vswhere` preflight. Re-measured at 348 tests the two are 87 seconds and 5m07s, so the
+ratio has held while both grew. The ratio is what the argument rests on, not the absolute figures.
 So a push that breaks the port says so while the Windows job is still locating Visual Studio.
 
 **What the ratio does not buy is agreement.** The Ubuntu leg is faster than the authority; it is

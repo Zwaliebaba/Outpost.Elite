@@ -50,6 +50,12 @@ ideas:
 The work is sized in [§6](#6-the-build-order); the coverage ledger is
 [Source-Inventory.md](Source-Inventory.md).
 
+**Where it stands, 2026-09-05.** Phases 0, 1, 2, 3 and 5 are complete and phase 4 is complete but
+for slice 4d (missions and Trumbles) — twenty-five of the twenty-six slices, with 0b-b cancelled and
+0e open by owner acceptance rather than unbuilt. The executable launches, flies, fights, docks and
+dies. [§1.2](#12-what-the-solution-contains-today) is the inventory of what that means in files, and
+it also lists what is left.
+
 ---
 
 ## 1. What we actually have
@@ -108,30 +114,42 @@ hardware in them.
 
 ### 1.2 What the solution contains today
 
-Rewritten 2026-09-05; what it said on 2026-09-02 is preserved in the history and was true then.
+Rewritten 2026-09-05 and again the same day as phases 4 and 5 landed; what it said on 2026-09-02
+is preserved in the history and was true then.
 
 - `Outpost.slnx` with four projects: `NeuronCore`, `GameLogic`, `GameLogicTests` and `Outpost`.
 - `NeuronCore/` — the foundation static library: the shared precompiled-header content and
   `Debug.h`. No game semantics, and no C++/WinRT in the two libraries that never used it.
-- `GameLogic/` — **the port**, namespace `Elite`: 52 translation units, deterministic and
-  platform-free, guarded by `tools/check_gamelogic.py`. Everything phases 0 to 3 name is here —
-  the arithmetic kernel, the text system, the universe, every docked screen, the ship slots and
-  motion, `LL9` and the clipper, the planet, sun and stardust, all sixteen parts of the flight
-  loop, the dashboard, the launch and the two tunnels, the title screen and the death screen —
-  each compared against the shipped routine. Phase 4's tactics, explosions and spawning rules and
-  phase 5's sound are the stubs on its effects interfaces, listed in `Outpost/FlightSession.h`.
+- `GameLogic/` — **the port**, namespace `Elite`: 61 translation units and 49 headers,
+  deterministic and platform-free, guarded by `tools/check_gamelogic.py`. Everything phases 0 to 3
+  name is here — the arithmetic kernel, the text system, the universe, every docked screen, the
+  ship slots and motion, `LL9` and the clipper, the planet, sun and stardust, all sixteen parts of
+  the flight loop, the dashboard, the launch and the two tunnels, the title screen and the death
+  screen — and so is almost all of phases 4 and 5: the ship AI and the autopilot, the explosion
+  cloud, the main game loop with its spawning rules, hyperspace and witchspace, the escape pod,
+  the pause screen's thirteen toggles, and the sound effects and music players. Each is compared
+  against the shipped routine. **What is not here is slice 4d** — the missions and the Trumbles.
 - `Outpost/` — the executable: a raw Win32 window, a D3D12 flip-model presenter for the indexed
-  canvas, the key map, the commander store, `FlightSession` (the flight world and its six seams)
-  and `GameShell` (the docked world's seven), and the composition root in `Main.cpp` with both of
-  the original's outer loops. It builds unpackaged on CI; MSIX stays and WinUI 3 is ignored
-  rather than stripped (ADR-005 §5, owner ruling). It launches, flies, docks and dies.
-- `Tests/GameLogicTests/` — 313 tests: the 6502 interpreter with its cycle counter, the oracle
-  fixture over the assembled game and the loader, and the suites. `Tests/PortableRunner/` runs
-  the same suite under g++ in about a minute.
+  canvas, the key map, the commander store, `FlightSession` (the flight world and its eight
+  effects interfaces) and `GameShell` (the docked world's eight), and the composition root in
+  `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
+  WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
+  docks and dies.
+- `Tests/GameLogicTests/` — 348 tests in 49 files: the 6502 interpreter with its cycle counter and
+  its in-order store log, the oracle fixture over the assembled game and the loader, and the
+  suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
+  twenty seconds warm.
 - `tools/` — the label map and table extractors, `c64_source.py`, and the nine repository checks
-  CI runs on every push.
+  CI runs on every push. **No mutation tooling** — the method is in `AGENTS.md` §6 and the mutants
+  are hand edits in a scratch worktree, which is Risk R13.
 - `Design/Reference/` holds the generated oracle inputs and is gitignored; `Upstream/` is the
   annotated source library as a submodule, pinned.
+
+**What is left, in one place.** Slice 4d (missions and Trumbles) is the only unbuilt slice before
+phase 6. Beside it stand three pieces of recorded debt: the fifteen mutation survivors in the ship
+AI's sweep (§6.125, and §6.132 has the method that closes them), the `VideoState` and `SPRITE.bin`
+work that ADR-005 §1's closed decision turned out to need (§6.133), and R13's unreproducible
+tallies. None blocks 4d.
 
 ### 1.3 What the sibling repositories give us
 
@@ -241,8 +259,10 @@ Three instruments, each cheap to keep running:
 
 The reference binaries are built with BeebAsm from the upstream tree (`make encrypt=no
 match=no`), which is how label addresses are obtained too. They are **not committed** (ADR-001
-§5); the tests read their location from `Tests/GameLogicTests/Oracle.json` and report
-*skipped, oracle absent* — loudly — when it is missing.
+§5); `OracleImage` finds them by walking up from its own module path — there is no config file and
+nothing to keep in step per machine (ADR-003 §1, amended 2026-09-03) — and every oracle test
+reports *skipped, oracle absent* with the command that fixes it, while `OracleIsPresent` fails so
+that a tree without the oracle cannot read as green (Risk R9).
 
 ---
 
@@ -450,6 +470,67 @@ coverage ledger and an unreliable dependency graph, because its rows were writte
 routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
+
+### 6.145 The documentation pass, and six things that had quietly stopped being true
+
+Every `.md` in the tree read against the tree, the second such pass (§6.120 was the first, three
+days and eleven slices ago). The corpus held up: no ADR had been overtaken by the code, and no
+decision recorded in it turned out to have been made differently in practice. What HAD rotted was
+every number and every status, which is the shape worth naming.
+
+**Six findings, in descending order of how misleading they were.**
+
+**1. The slice count was wrong, and it was the headline number.** §7's table totalled 24 while its
+own rows added to 26 — 4e was added by §6.120 and never counted, and phase 0's `0b` had been
+counted as one slice in the table and two in the build order. So "twenty-four slices" appeared in
+the summary of a plan whose own table disagreed with it. The count is 26; twenty-five are built.
+
+**2. ADR-003 contradicted itself in two places.** Its §1 carries an amendment saying "there is no
+`Oracle.json`" — the config file was dropped in slice 0b-a in favour of repository-root discovery —
+and its §4 and its Consequences still told a reader to point `Oracle.json` at the binaries and
+described `tools/labels.py` writing `Labels.json`. The plan's own §3 repeated the `Oracle.json`
+instruction. An amendment was made in one section and the rest of the document was not read.
+
+**3. ADR-002 and ADR-003 were still marked "Proposed".** They are the numeric model and the oracle:
+twenty-five slices were built on them and every one of those slices is evidence. A decision that has
+been implemented, validated and never amended in substance is Accepted, and leaving it as Proposed
+makes the status field mean nothing anywhere else in the corpus. Both are Accepted, dated, with the
+evidence named rather than by decree.
+
+**4. ADR-001 §6 — "original behaviours ported deliberately" — had one row and no rule.** The
+working rules in `AGENTS.md` §7 say to append to it when a shipped bug is ported, and nobody had,
+because it was not clear what qualified: the port has found a great deal of dead code, unreachable
+branches, upstream comments describing other versions' constants, and flags computed and discarded,
+and none of that is a bug a player meets. The rule is now written down — **a row is a behaviour a
+player can observe** — and the two that qualify are in it: `SHPPT` drawing a distant ship at the
+previous ship's position (§6.36) and `LOD`'s stack frame poisoning every later exit from the disk
+menu (§6.21).
+
+**5. ADR-004 §5's tooling table listed five scripts and the tree has eleven.** Four of the nine
+repository checks were missing from the decision record that is supposed to describe the tooling,
+and two of the five listed still said "slice 1a" and "slice 1d" in their Status column years after
+being built. Also corrected: the nine CHECKS come from seven scripts, because two of them
+contribute more than one.
+
+**6. The risk register had no row for its own weakest evidence, and it does now (R13).** Almost
+every slice reports a mutation tally, and those tallies are what turn "the suite is green" into "the
+suite would notice" — they carry more weight than any other number in the corpus. `AGENTS.md` §6
+records the method; nothing records which mutants were run. **No tally here can be re-checked**, and
+§6.119 is the demonstration that a tally can be confidently wrong: three of them were published from
+a harness reading the wrong line. Survivors are named where they matter, so the debt is visible even
+though the evidence is not. What closes R13 is a `tools/mutate.py` holding the mutant list per unit
+as data, and it is the highest-value script the tree does not have.
+
+**The rule that comes out of this, and it is not "keep the docs up to date".** Prose about a
+decision ages well; a NUMBER or a STATUS in the same document ages badly and in silence. "313
+tests", "52 translation units", "six seams", "24 slices", "Proposed" — every one of them was true
+when written and none of them announces that it has stopped being true, whereas the reasoning
+around them is still correct three days and eleven slices later. Two of the tools already act on
+this idea (`inventory.py --strict` fails on an unaccounted file; `check_docs.py` fails on a table
+row that will not render), and the natural next one is a check that reads the counts out of the
+tree — translation units, tests, checks, slices marked ✅ — and fails when a document states a
+different one. Until that exists, a number in a document is a claim with no test behind it, and it
+should be read the way the port reads an upstream comment: as intent, not as the bytes.
 
 ### 6.144 Slice 4b-b: the explosion, a carry the upstream comment misses, and a table that exists
 
@@ -5708,15 +5789,20 @@ Three things that is worth noting for the slices ahead:
 | **3c Planet, sun, stardust** ✅ **Built 2026-09-04, accepted 2026-09-05** | `PLANET`, `PL9` 1–3, `PLS1`–`PLS6`, `PLS22`, `WPLS`/`WPLS2`, `WP1`, `EDGES`, `CHKON`, `PL21`, `SUN` 1–4 with its heap, `CIRCLE`, `CIRCLE2`, `BLINE`, `SOS1`, ✅ `STARS`, ✅ `STARS1`, ✅ `STARS2`, ✅ `STARS6`, `NWSTARS`, ✅ `FLIP`, `WPSHPS`, `FLFLLS`, `SOLAR`, `NWQ` — **and the twelve prerequisites §6.40 found the row missing**: `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41` and `DV42` from row 94, `HLOIN2` from row 116, `ZINF` from row 44, and `BLINE`/`CIRCLE`/`CIRCLE2` from row 117. The seven in row 94 were deferred out of phase 1 because they read state that did not exist; `INWK` and `ALP1` arrived with 3a and the stardust arrays are this slice's own, so the reason has expired. **Seven of the twelve are built**: `MLS1`, `MLS2`, `MLU1`, `MUT1`, `MUT2`, `DV41` and `DV42` went in with the stardust, and `PIX1` — which §6.41 found marked ported and absent — with them. `HLOIN2`, `ZINF`, `BLINE`, `CIRCLE` and `CIRCLE2` remain. | Goldens of the launch view at Lave (planet + sun + stardust) at several iterations; oracle for `PLS`/`CHKON` arithmetic.<br><br>**The stardust unit is complete, 2026-09-04.** Six parallel arrays, seven wrappers, `PIX1`, `FLIP`, all three movers and the dispatcher: 280 frames per view compared on the whole canvas, all six arrays, the generator's state and — for the side views — seven flight bytes and `newzp`. Thirty of thirty real mutations caught, two equivalent and measured (§6.43). Three findings: the three views are three routines and not one with a sign (§6.44), the `DEX` in `STARS`'s six-instruction dispatch means `STARS2` compares against the LEFT view rather than against 2, and `MLU1`/`MLU2`/`LL38` needed their exit carries returned (§6.42) — the fifth and sixth time an uncleared flag has been the defect. **Slice 3c is complete.** Its acceptance criterion — goldens of the launch view at Lave — needs a person at a Windows machine, as 2e's and 3b's do.<br><br>**The planet and sun line heaps followed the same day**: `LSO`/`LSX`, `LSX2`/`LSY2` and `LSP`, with `EDGES`, `HLOIN2`, `FLFLLS`, `WP1`, `WPLS`, `WPLS2`, `PL2`, `CHKON` and `PL21`. Both sizes come from the layout rather than from an estimate, and the two ball arrays are one block because `BLINE` indexes across their join. 27 of 27 mutations caught, after three survivors turned out to be gaps rather than equivalents (§6.48). **The two defects it found were both in already-shipped slices**: `SWAP` is one byte with two writers and the port had it as `LL145`'s return value, so `WPLS2` could not ask `LOIN` (§6.46); and `LOIN`'s downward setup ends `SBC #247`, whose borrow its accumulator reads twelve instructions later — dropped since 1d-a, one pixel of one line in nine, and invisible to a 3,528-case sweep chosen to reach every branch (§6.47). A four-thousand-line sample now runs beside that grid, and the mutation test confirms the grid alone still misses it. <br><br>**SIGNED OFF 2026-09-05 by the owner**: the launch view at Lave -- planet, sun and stardust -- is right on screen. **A look rather than a golden**, as 3b's is, with the same consequence: no stored capture, so a regression in the planet's crater or the sun's haze would reach `main` unnoticed by CI. The oracle half of the criterion (`PLS`/`CHKON` arithmetic) was already met and is unaffected. |
 | **3d Flight loop and dashboard** — **scoped 2026-09-04 into 3d-a … 3d-e (§6.59); the row is a slice and a half** | Main flight loop 1–16 (`main_flight_loop_part_N_of_16`, NOT `mainloop_part_N`), `DIALS` 1–4, `DILX`/`DIL2`, `COMPAS`/`SP1`/`SP2`/`SPS*`, `SCAN` (sprite blips as canvas draws), `MSBAR`, `ECBLB`/`ECBLB2`/`SPBLB` (in `spblb-dobulb.asm`), `PZW`, `MESS`/`me1`/`mes9`, `LASLI`, `LAUN`/`LL164` hyperspace tunnel, `DEATH` (the "GAME OVER" fly-by), `WARP` (J), `CTRL`, `DOKEY` flight half, `SPIN`, `cargo` canisters, docking check (`ISDK` path in loop part 10–11). **Plus the twelve prerequisites §6.59 found the row missing**: `ABORT`/`ABORT2`, `DOT`, `KS1`, `LOOK1`, `CTWOS`, `scacol`, `cntr` (deferred out of phase 1 with row 94's seven), `U%`, `BOX`, `dec27` and `tnpr1`. `SETL1` is NOT one of them: it is self-modifying code inside a raster interrupt handler and belongs behind a seam like the sound, not in `GameLogic`. | Launch from Lave, fly, dock manually, hyperspace to Diso, dock. Goldens of the dashboard; replay hashes for the whole trip. |
 
-### Phase 4 — Combat and a living universe
+### Phase 4 — Combat and a living universe ✅ **but for 4d** (2026-09-05)
+
+4a, 4b, 4c and 4e are built and compared against the shipped code. **4d — missions and Trumbles —
+is the one slice left**, and it is the only unbuilt slice anywhere before phase 6. The debt 4a
+carries is fifteen mutation survivors in the ship AI's sweep, named individually in its row.
+
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **4a Tactics** — **scoped 2026-09-05 into 4a-a … 4a-d (§6.121); two of the four are built** | `TACTICS` 1–7, `DOCKIT`, ✅ `ANGRY`, `FR1`, ✅ `FRS1`, `FRMIS`, `SFRMIS`, ✅ `SFS1`/✅ `SFS2` spawning from ships, `HITCH`, `OOPS`, `EXNO*`, `ECMOF`, ✅ `SESCP`, `bomboff` / energy bomb. **Plus the six prerequisites the row never named** (§6.121): ✅ `TAS1`, ✅ `VCSUB`/✅ `VCSU1`, ✅ `TAS3`/✅ `TAS4`, ✅ `TAS6` and ✅ `DCS1` — the vectors both `TACTICS` and `DOCKIT` are written on, none of them buildable before slice 3a put `MVT3` and the ship blocks in place. `OOPS`, `EXNO*`, `ECMOF` and `bomboff` were built with the flight loop in 3d-d-iii-b and are ✅ already; `HITCH` and `FRMIS` likewise. | Oracle for `TACTICS` decisions on sampled states (they consume `DORND`, so seed-locked); a replay: launch, get attacked, win.<br><br>**4a-a is built, 2026-09-05** — the six vectors in a new `Tactics.h/.cpp`, compared against the shipped routines on every byte they write over sweeps that cross each sign test. **17 mutations, 17 caught**, and two of them are the `JSR P%+3` reading: running the body once and running it three times are both caught, so "twice" is measured rather than believed.<br><br>**4a-b is built, 2026-09-05, 28 mutations and 28 caught** — `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`, compared on the WHOLE bubble (slots, all ten blocks, the type counts, the junk count, `SLSP` and the line heap) rather than on the ship they build. **Three seams in `FlightSession` are answered**: `SpawnAhead`, `SpawnChild` and `Anger` had been refusing since 3d-d-v, and a fired missile now leaves the rail. Four carries found (§6.121), one of which the port had wrong and only the generator's state could show. The first run caught 24 of 28 and all three survivors were the SWEEP -- one generator seed, a ramp of test data with no negative numbers, and a flag bit the fixture had already set (§6.124). |
-| **4b Explosions and death** ∥ | `DOEXP`, ~~`EXLOOK`~~, `PTCLS2`, ✅ `SOS1`, `DEATH2`, the escape pod, ✅ `BAD`/✅ `FAROF`/✅ `FAROF2`, ✅ `SHD`/✅ `DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle.<br><br>**Scoped 2026-09-05 into 4b-a and 4b-b (§6.141).** Six of the eleven labels were already built in phases 2 and 3, and **`EXLOOK` is not in this game at all** — it appears nowhere in the upstream library, in any version, and is not a label in the assembled build. What is left is `DOEXP` (192 instructions), `PTCLS2` (119), `ESCAPE` (42) and `DEATH2` (6). The forward pass is clean: every external call target is built and the rest are entry points inside the two files. |
-| **4c Main game loop** | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds.<br><br>**Scoped 2026-09-05 into 4c-a … 4c-d (§6.134), and the dependency pass came back EMPTY**: of 111 distinct call targets across its fourteen routines, 46 are already ported, 16 belong to platforms the C64 build never assembles, and the rest are entry points inside 4c's own files. The only unported routine it calls is `GTHG`, which is in its own scope, and every state byte the spawner branches on is modelled. Unlike 4a (§6.121) this row named its routines accurately. 414 instructions of new code, more than `TACTICS`. |
+| **4a Tactics** ✅ — **scoped 2026-09-05 into 4a-a … 4a-d (§6.121), and 4a-d turned out to be part of 4a-c: `DOCKIT` and `TACTICS` are one graph (§6.122). All built** | `TACTICS` 1–7, `DOCKIT`, ✅ `ANGRY`, `FR1`, ✅ `FRS1`, `FRMIS`, `SFRMIS`, ✅ `SFS1`/✅ `SFS2` spawning from ships, `HITCH`, `OOPS`, `EXNO*`, `ECMOF`, ✅ `SESCP`, `bomboff` / energy bomb. **Plus the six prerequisites the row never named** (§6.121): ✅ `TAS1`, ✅ `VCSUB`/✅ `VCSU1`, ✅ `TAS3`/✅ `TAS4`, ✅ `TAS6` and ✅ `DCS1` — the vectors both `TACTICS` and `DOCKIT` are written on, none of them buildable before slice 3a put `MVT3` and the ship blocks in place. `OOPS`, `EXNO*`, `ECMOF` and `bomboff` were built with the flight loop in 3d-d-iii-b and are ✅ already; `HITCH` and `FRMIS` likewise. | Oracle for `TACTICS` decisions on sampled states (they consume `DORND`, so seed-locked); a replay: launch, get attacked, win.<br><br>**4a-a is built, 2026-09-05** — the six vectors in a new `Tactics.h/.cpp`, compared against the shipped routines on every byte they write over sweeps that cross each sign test. **17 mutations, 17 caught**, and two of them are the `JSR P%+3` reading: running the body once and running it three times are both caught, so "twice" is measured rather than believed.<br><br>**4a-b is built, 2026-09-05, 28 mutations and 28 caught** — `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`, compared on the WHOLE bubble (slots, all ten blocks, the type counts, the junk count, `SLSP` and the line heap) rather than on the ship they build. **Three seams in `FlightSession` are answered**: `SpawnAhead`, `SpawnChild` and `Anger` had been refusing since 3d-d-v, and a fired missile now leaves the rail. Four carries found (§6.121), one of which the port had wrong and only the generator's state could show. The first run caught 24 of 28 and all three survivors were the SWEEP -- one generator seed, a ramp of test data with no negative numbers, and a flag bit the fixture had already set (§6.124). |
+| **4b Explosions and death** ✅ ∥ | ✅ `DOEXP`, ✅ `EXLOOK`, ✅ `PTCLS2`, ✅ `SOS1`, ✅ `DEATH2`, ✅ the escape pod, ✅ `BAD`/✅ `FAROF`/✅ `FAROF2`, ✅ `SHD`/✅ `DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle.<br><br>**Scoped 2026-09-05 into 4b-a and 4b-b (§6.141).** Six of the eleven labels were already built in phases 2 and 3. What is left is `DOEXP` (192 instructions), `PTCLS2` (119), `ESCAPE` (42) and `DEATH2` (6). The forward pass is clean: every external call target is built and the rest are entry points inside the two files.<br><br>**§6.141 also reported that `EXLOOK` "is not in this game at all", and that was wrong (§6.144).** It is INCLUDEd from the master tree at `library/master/main/variable/exlook.asm`, `PTCLS2` reads it, and it is in `Labels.txt` at 31143. The dependency pass had searched `library/c64/` and concluded from its silence.<br><br>**Both sub-slices built 2026-09-05.** The accept is met and then some: not a golden of an explosion sequence but the WHOLE CANVAS over 126 explosion frames and 420 clouds, plus the heap, `INWK`, the generator, ten workspace bytes and the seven registers the burst seam writes. `SHD`/`DENGY` were compared with the flight loop in 3d. |
+| **4c Main game loop** ✅ | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds.<br><br>**Scoped 2026-09-05 into 4c-a … 4c-d (§6.134), and the dependency pass came back EMPTY**: of 111 distinct call targets across its fourteen routines, 46 are already ported, 16 belong to platforms the C64 build never assembles, and the rest are entry points inside 4c's own files. The only unported routine it calls is `GTHG`, which is in its own scope, and every state byte the spawner branches on is modelled. Unlike 4a (§6.121) this row named its routines accurately. 414 instructions of new code, more than `TACTICS`. |
 | **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps. |
-| **4e Pause screen** — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows.<br><br>**Built 2026-09-05** (§6.139). `TGINT` extracted and byte-checked; `DKS3` swept over all 256 keys at all thirteen positions (3,328 cases, exactly thirteen matches); the two loops over both answers to `PATG`; `FREEZE` over 1,024 cases reading the outcome from the oracle's own X, because `MUTOKCH` clobbers it. `april16` exposed as its own music entry. `DISK` changed from a bool to the byte it is. Wired into the outer loop as a state rather than a loop, which is what `DOKEY`'s fall into `DK4` has needed since slice 3d. |
+| **4e Pause screen** ✅ — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows.<br><br>**Built 2026-09-05** (§6.139). `TGINT` extracted and byte-checked; `DKS3` swept over all 256 keys at all thirteen positions (3,328 cases, exactly thirteen matches); the two loops over both answers to `PATG`; `FREEZE` over 1,024 cases reading the outcome from the oracle's own X, because `MUTOKCH` clobbers it. `april16` exposed as its own music entry. `DISK` changed from a bool to the byte it is. Wired into the outer loop as a state rather than a loop, which is what `DOKEY`'s fall into `DK4` has needed since slice 3d. |
 
 Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: nothing above can be compared before the thing below it exists.
 
@@ -5725,17 +5811,19 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 | **4a-a** ✅ | `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6`, `DCS1` — the vectors, in `Tactics.h/.cpp` | **Built 2026-09-05**, 17 mutations and 17 caught |
 | **4a-b** ✅ | `FRS1`, `SESCP`, `SFS1`, `SFS2`, `ANGRY` — a ship arriving from inside the bubble, and the three `FlightSession` seams they answer | **Built 2026-09-05**, compared on the whole bubble. **28 mutations, 28 caught** — after three survivors turned out to be the fixture rather than the port (§6.124) |
 | **4a-c** ✅ | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | **Built 2026-09-05** (§6.125). 92 cases over 23 situations and four generator seeds, each comparing the ship block, the whole bubble, the counts, the generator, `RAT`/`RAT2`/`JUNK` and the player's energy banks against the shipped routine. `DEATH` is trapped and eight cases are fatal, so §6.122's `bool` is observed false rather than merely declared. Two defects only the oracle could find: a `JSR TAS2` transcribed as absent, and six of ten `DORND` carries.<br><br>**79 mutations, 59 caught, 4 not applicable, 2026-09-05.** The docking half is closed: every `dock-*` and `steer-*` mutation is caught after §6.131 and §6.132 found three branches its sweep could not reach and two mutations that could not fail. **The AI half is not.** Fifteen survivors remain, all in `TheAiMatchesTACTICS` -- `ta-253`, `ta-240`, `ta-ana200`, `ta-250`, `ta-104`, `ta-half`, `ta-230`, `ta3-ecm`, `ta7-three`, `ta20-eor`, `msl-16`, `msl-82`, `msl-bit5`, `msl-kill` and `kill-rotate` -- and they are the same shape as the docking ones were: thresholds the geometry table never lands on. The method that closed the others applies unchanged (§6.132): probe the comparison, count what reaches it, add a ladder. Recorded as debt rather than left implicit, because a slice reported as built with a green suite and fifteen live mutations is exactly the state §6.126 warns about. |
+| **4b-a** ✅ | `ESCAPE` and `DEATH2` — the escape pod, and the third of the three jumps that leave `M%`. 42 instructions | **Built 2026-09-05** (§6.143). The whole world against the oracle over six cases, including the ninety-seven frames of `MVEIT` and `LL9` the pod flies through. `DEATH2` was already built. Three things the routine hides: 194 is the pitch AND, halved, both the AI byte and the frame count the loop decrements; `FRS1` takes `DELTA` rotated with `MSTG`'s bit 7 rather than a speed; and the pirate-Cobra fallback is dead code, because `RES2` empties the bubble first |
+| **4b-b** ✅ | `DOEXP`, `PTCLS`, `PTCLS2` and `EXS1` — the explosion cloud. 311 instructions | **Built 2026-09-05** (§6.144). 126 frames and 420 clouds on the whole canvas, the whole heap, `INWK`, the generator, ten workspace bytes and the seven registers the burst seam writes; 2,880 `EXS1` offsets separately. The cloud ages by four or by five depending on distance, which the upstream comment does not say; `FMLTU` clobbers `P` and the port had never modelled it; `exlook` exists after all |
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates. 199 C64 instructions | **Built 2026-09-05** (§6.135). 136 cases from `ytq+3` to `MLOOP` over seventeen situations, four generator states and both entry carries, compared on the whole bubble, `INWK`, `EV`, `XX0` and the generator; 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than the generator and the port had six wrong; `MLOOP` is the label on part 5, so the routine has one exit and not two |
 | **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive. 111 instructions. This is what `Main.cpp` refuses by name | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` whole, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them, and `TT18` has four exits rather than three |
 | **4c-c** ✅ | ~~`NWSPS` and the Coriolis/Dodo switch by tech level~~ | **Retired (§6.137): already built in slice 3d-d-iii-b**, with `NwS1`, the sun's eviction from slot 1 and the tech-level switch, and compared by `TheStationMatchesNWSPS` over tech levels straddling ten. The original row's "this is what `FlightSession` stubs" was wrong -- it has not, since that slice |
 | **4c-d** ✅ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it, which makes it a test of the join too. All of it wired: the spawner runs one pass in 256 as `DEC MCNT` says, and hyperspace is no longer refused by name. The galactic drive is built and unreachable until slice 4e reads `CTRL` |
 
-### Phase 5 — Sound and music
+### Phase 5 — Sound and music ✅ (complete 2026-09-05)
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **5a Effects** | `NOISE`, `NOISE2`, `BEEP`, `EXNO`, `EXNO2`, `EXNO3`, `SOFLUSH`, `NOISEOFF`, `HYPNOISE`, the `sfx*` tables, the interrupt-time effect player (`soint`, `comirq1`'s SID half) as a per-step state machine emitting `SoundEvent`s; `SidSynth` in the exe. | The register-write log for each of the 16 effects matches the oracle's over the effect's duration; audible check against VICE.<br><br>**Built 2026-09-05** (§6.129). `SoundEffects.h/.cpp`: `NOISE`, `NOISE2`, `NOISEOFF`, `SOFLUSH`, `BEEP` and the `SOINT` tick, over the sound workspace as a struct; the eight tables plus `SEVENS` extracted. **The log is the observable**: every SID write of every frame, in order, compared against `COMIRQ1` run to its `RTI` -- 4,160 frames for the sixteen effects played out singly and 600 for a script that fills, refuses and replaces voices -- and every byte of the buffer beside it. The interpreter grew a store log to make that comparison possible. `SidSynth.cpp` is the chip: per-cycle, integer, no filter, box-filtered to 44.1 kHz; `SoundOutput.cpp` plays it through XAudio2 and runs the interrupt off the device's queue depth rather than off any clock. **The audible check against VICE has not been made** -- VICE was dropped in slice 0b-b -- so the synthesiser is fidelity by construction and R6 stays open on it. |
-| **5b Music** | The `BD*` player (`bdirqhere`, `bdro*`, `bdlab*`, `bdentry`, jump tables), `comudat`, `music_variables`, the nine tune blocks, `startat`/`startbd`/`stopbd`, docking music trigger, the `M` mute keys. | Register-write log for the first 2,000 ticks of each tune matches the oracle.<br><br>**Built 2026-09-05** (§6.129), bar the `M` keys, which are the pause screen's and slice 4e's. `Music.h/.cpp`: `BDirqhere` with all fifteen commands and the vibrato, `BDENTRY`, `startbd`/`startat`/`stopbd`/`stopat`, and `COMIRQ1`'s music-or-effects gate. The tune data is ONE region and not nine blocks -- the row's "nine tune blocks" were the raster interrupt's VIC-II tables misread as music (ledger row corrected). Accept met: 2,000 interrupts of each tune compared on every SID write and every player byte, and the docking tune on past its first rewind; the five option flags swept over all 32 combinations for the start and stop routines. |
+| **5a Effects** ✅ | `NOISE`, `NOISE2`, `BEEP`, `EXNO`, `EXNO2`, `EXNO3`, `SOFLUSH`, `NOISEOFF`, `HYPNOISE`, the `sfx*` tables, the interrupt-time effect player (`soint`, `comirq1`'s SID half) as a per-step state machine emitting `SoundEvent`s; `SidSynth` in the exe. | The register-write log for each of the 16 effects matches the oracle's over the effect's duration; audible check against VICE.<br><br>**Built 2026-09-05** (§6.129). `SoundEffects.h/.cpp`: `NOISE`, `NOISE2`, `NOISEOFF`, `SOFLUSH`, `BEEP` and the `SOINT` tick, over the sound workspace as a struct; the eight tables plus `SEVENS` extracted. **The log is the observable**: every SID write of every frame, in order, compared against `COMIRQ1` run to its `RTI` -- 4,160 frames for the sixteen effects played out singly and 600 for a script that fills, refuses and replaces voices -- and every byte of the buffer beside it. The interpreter grew a store log to make that comparison possible. `SidSynth.cpp` is the chip: per-cycle, integer, no filter, box-filtered to 44.1 kHz; `SoundOutput.cpp` plays it through XAudio2 and runs the interrupt off the device's queue depth rather than off any clock. **The audible check against VICE has not been made** -- VICE was dropped in slice 0b-b -- so the synthesiser is fidelity by construction and R6 stays open on it. |
+| **5b Music** ✅ | The `BD*` player (`bdirqhere`, `bdro*`, `bdlab*`, `bdentry`, jump tables), `comudat`, `music_variables`, the nine tune blocks, `startat`/`startbd`/`stopbd`, docking music trigger, the `M` mute keys. | Register-write log for the first 2,000 ticks of each tune matches the oracle.<br><br>**Built 2026-09-05** (§6.129), bar the `M` keys, which are the pause screen's and slice 4e's. `Music.h/.cpp`: `BDirqhere` with all fifteen commands and the vibrato, `BDENTRY`, `startbd`/`startat`/`stopbd`/`stopat`, and `COMIRQ1`'s music-or-effects gate. The tune data is ONE region and not nine blocks -- the row's "nine tune blocks" were the raster interrupt's VIC-II tables misread as music (ledger row corrected). Accept met: 2,000 interrupts of each tune compared on every SID write and every player byte, and the docking tune on past its first rewind; the five option flags swept over all 32 combinations for the start and stop routines. |
 
 ### Phase 6 — Modernisation (each item its own ADR when it comes)
 
@@ -5757,12 +5845,22 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **in progress**: 4a, 4c and 4e are built and wired. 4c-c turned out to have been done in phase 3 (§6.137). **4b (explosions and death) and 4d (missions and Trumbles) remain.** The galactic hyperdrive, built in 4c-b, is still unreachable — and NOT because of 4e: `hyp` reaches `Ghy` through `JSR CTRL`, and Ctrl is a modifier that `Window` and `KeyMap` do not report, because they deliver C64 matrix positions. That is a `KeyMap` change and it belongs to whoever revisits input |
+| 4 | 5 | 8–12 | **all but 4d**: 4a, 4b, 4c and 4e are built and wired. 4c-c turned out to have been done in phase 3 (§6.137). **4d (missions and Trumbles) remains.** Two things stay open beside it. The galactic hyperdrive, built in 4c-b, is still unreachable — and NOT because of 4e: `hyp` reaches `Ghy` through `JSR CTRL`, and Ctrl is a modifier that `Window` and `KeyMap` do not report, because they deliver C64 matrix positions; that is a `KeyMap` change and it belongs to whoever revisits input. And 4a-c carries fifteen mutation survivors in the ship AI's sweep, named in its row, with §6.132's method to close them |
 | 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
-| **Total** | **24** | **40–60** | before modernisation |
+| **Total** | **26** | **40–60** | before modernisation. **The count was 24 until 2026-09-05** and was simply stale: 4e was added by §6.120 and phase 0's 0b had been counted as one slice in one place and two in another. Twenty-five of the twenty-six are built; the twenty-sixth is 4d. 0b-b was cancelled and 0e is open by owner acceptance rather than unbuilt |
 
 Phases 0 to 3 took four days rather than the twenty-eight to forty-two sittings estimated, which
-says more about what a sitting turned out to be than about the estimate.
+says more about what a sitting turned out to be than about the estimate. Phases 4 and 5 then landed
+inside the fourth day, on two tracks in parallel, leaving one slice of twenty-four unbuilt.
+
+**The estimate was wrong in a way worth naming, because it will be wrong the same way again.** It
+sized the work by how much 6502 there was to port, and that turned out to be the cheap part: a
+routine is read, ported and swept in an hour or two. What actually consumed the time was the
+findings — a carry threaded through eleven instructions, a table indexed by a nibble, a byte with
+two meanings, a fixture whose ladder never reached a branch. Those are not proportional to
+instruction count and cannot be estimated from it; they are proportional to how strange the code
+is, and Elite is strange in proportion to how clever it was being. The one honest predictor found
+so far is the number of `// 6502:` comments a slice ends up needing to explain itself.
 
 The curve front-loads risk: by the end of phase 1 the oracle has either proven itself or shown
 where the 6502-semantics approach leaks (Risk R4), and by 2e there is a playable build.
@@ -5813,6 +5911,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The documentation pass** (§6.145). Every `.md` in the tree read against the tree. The ADRs held — none had been overtaken by the code — and every number and status in them had not. **The slice count was wrong in the headline**: §7 totalled 24 while its own rows added to 26. **ADR-003 contradicted itself**, telling a reader to point an `Oracle.json` at the binaries in two sections while its §1 records that the file was dropped in slice 0b-a. **ADR-002 and ADR-003 were still "Proposed"** after twenty-five slices were built on them; both are Accepted with the evidence named. **ADR-001 §6 had one row and no rule for what belongs in it**; the rule is now written (a behaviour a PLAYER can observe) and the two that qualify are recorded. **ADR-004 §5 listed five scripts of eleven**, missing four of the nine CI checks. **Risk R13 added**: the mutation tallies are the corpus's strongest evidence and none of them can be re-run, which §6.119 already demonstrated the hard way. `Design/README.md`, the runner README (re-measured: 64s cold, 21s warm at 348 tests), the reference README (the `SPRITE.bin` gap), AGENTS.md and the plan's §0, §1.2, §3 and §7 brought to the tree as it is. The rule: prose about a decision ages well and a number beside it ages badly and in silence, so the next check to write is one that reads the counts out of the tree. |
 | 2026-09-05 | **Slice 4b-b: the explosion cloud** (§6.144). `DOEXP`, `PTCLS`, `PTCLS2` and `EXS1` in `Explosion.cpp`, compared on the whole canvas over 126 frames and 420 clouds plus 2,880 `EXS1` offsets; the burst sprite is a seam and the test turns its recorded arguments back into the seven registers the original writes, read-modify-writes included. **The cloud ages by four or by five** -- the `ADC #4` takes the carry from the `CMP #32` that asked whether the ship was far away, so a distant explosion is a fifth shorter and the upstream comment says only "add 4". **`FMLTU` clobbers `P`** through the `STX P` it preserves X with, which the port had never modelled and a one-byte comparison found; nothing in the shipped build reads `P` after an `FMLTU`, so it is invisible to the game and `EXS1` -- the one caller that can prove what X held -- now writes it. **`exlook` exists**, contradicting §6.141: it is INCLUDEd from the master tree and is in `Labels.txt`, so a label's absence from the directory you expected is not its absence from the build. `PTCLS` and `PTCLS2` are one body with an insert. The `EE55` seam is narrowed to ONE unknown carry, because `CPY #6` pins the other three. Two coverage corrections in the slice's own tests, both §6.132's lesson: the `EXS1` sweep had one answer per seed, and the burst's four refusals needed a ladder of vertex layouts rather than a cloud in the middle of the view. |
 | 2026-09-05 | **Slice 4b-a: the last of the three jumps out of `M%`** (§6.143). `ESCAPE` built and wired, so `LoopOutcome::Escaped` is answered after being refused since 3d-d. `DEATH2` turned out to be already done -- the fourth scope-line entry this phase to be built already, which makes the rule plain: the backward pass has to check EVERY label, not the big ones. Three things the routine hides: 194 is the pitch AND, halved, both the AI byte and the frame count the loop decrements; `FRS1` takes `DELTA` rotated with `MSTG`'s bit 7 rather than a speed, so the ship always leaves at 6 or 7 because `RES2` has just set `DELTA` to 3; and `LL9` writes back to the slot `FRS1` filled, which the port had as slot 0 -- the planet. The pirate-Cobra fallback is dead code, because `RES2` empties the bubble first. |
 | 2026-09-05 | **`Anger` read block 255** (§6.142). The seam carried the type and resolved the slot through `MSTG` for both callers; part 11's laser hit points `INF` at the ship the loop is on, not at a missile target. The seam now carries the slot, and each caller passes the one the 6502 has. |

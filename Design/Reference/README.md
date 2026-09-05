@@ -44,6 +44,14 @@ What the tool produces:
 | `compile-source.txt`, `compile-data.txt`, `compile-loader.txt` | The full assembly logs, kept because the load addresses only appear in them. |
 | `labels-source.txt`, `labels-data.txt`, `labels-loader.txt` | BeebAsm's raw dumps, before normalising. |
 
+**A fourth assembly is missing, and it is a known gap rather than a decision.** `tools/labels.py`
+builds `elite-source.asm`, `elite-data.asm` and `elite-loader.asm`. It does not build
+`elite-sprites.asm` — 84 lines, 448 bytes, seven sprite definitions — so those bytes are the one
+piece of the original's data that `extract_tables.py --check` cannot verify. Adding it on the
+`LOADER_ASSEMBLY` pattern (its own reference pair, kept out of the oracle image, because
+`CODE% = &7C3A`) is the prerequisite ADR-005 §1 names for the sprite work, and it is worth doing on
+its own regardless.
+
 The assembled `.bin` files land in the vendored tree under
 `Upstream/elite-source-code-library/versions/c64/3-assembled-output/`, and are ignored there.
 **One of them overwrites a vendored file**: `COMLOD.unprot.bin` is tracked upstream at 18,016
