@@ -103,7 +103,7 @@ namespace
       shell.Attach(recursive, text, characters.state, message);
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, dockedFlag);
-      shell.AttachVideo(flight.Video()); // ADR-005 §1 -- the sprites composite in Resolve
+      shell.AttachVideo(flight.Video());                            // ADR-005 §1 -- the sprites composite in Resolve
       shell.AttachGalaxy(commander.At(Elite::Field::GalaxyNumber)); // 6502: GCNT, for MT27 and MT28
       shell.AttachSound(audio, sound, music);
 
@@ -689,6 +689,48 @@ namespace
   }
 
   /*
+   * 6502: the six `JMP` targets `DOENTRY` chooses between, and `EN6`'s `JMP BAY`.
+   *
+   * A function rather than six lines in the switch because `BRIEF` needs the briefing ship's slot
+   * carried into the control code that spins it, and that is one line the other five do not have.
+   */
+  [[nodiscard]] Elite::ForcedKey MissionOf(Elite::DockingOutcome _outcome, Elite::MissionScreen& _mission, Elite::MissionBay& _bay,
+                                           Game& _game)
+  {
+    switch (_outcome)
+    {
+    case Elite::DockingOutcome::BriefMission1:
+    {
+      /*
+       * `BRIEF` creates the Constrictor and then prints a token containing two `{22}`s, which spin
+       * it -- so the slot has to reach the control code, and the shell is where that code runs.
+       */
+      const std::uint8_t token = Elite::RunConstrictorBriefing(_mission, _bay);
+      _game.shell.SetBriefingShip(_mission.shipSlot);
+      const Elite::ForcedKey key = Elite::PrintAndEnterBay(_mission, _bay, token);
+      _game.shell.SetBriefingShip(0u);
+      return key;
+    }
+
+    case Elite::DockingOutcome::DebriefMission1:
+      return Elite::DebriefMission1(_mission, _bay);
+    case Elite::DockingOutcome::BriefMission2:
+      return Elite::BriefMission2(_mission, _bay);
+    case Elite::DockingOutcome::CollectPlans:
+      return Elite::CollectPlans(_mission, _bay);
+    case Elite::DockingOutcome::DebriefMission2:
+      return Elite::DebriefMission2(_mission, _bay);
+    case Elite::DockingOutcome::OfferTrumbles:
+      return Elite::OfferTrumble(_mission, _bay, _game.shell);
+
+    case Elite::DockingOutcome::DockingBay:
+    default:
+      // 6502: EN6 -- JMP BAY, and nothing happened.
+      return Elite::EnterDockingBay(_bay.dockedFlag, _bay.view, _bay.countdown, _bay.hyperspaceHeld);
+    }
+  }
+
+  /*
    * 6502: the three jumps that leave `M%` and do not come back -- `JMP DOENTRY`, `JMP DEATH` and
    * `JMP ESCAPE` (§6.82).
    *
@@ -713,12 +755,19 @@ namespace
       const Elite::DockingResult arrival = Elite::DockAtStation(_game.shell, _game.flight.Screen(), _game.flight.Loop().clip, &_game.shell,
                                                                 _game.dockedFlag, _game.view, false);
 
-      // 6502: JMP BAY, which every one of the seven exits eventually reaches -- directly on the
-      // `EN6` path, and after a briefing on the other six. The briefings are phase 4's, so the
-      // port takes the tail they share rather than inventing a screen for them.
-      const Elite::ForcedKey bay = (arrival.outcome == Elite::DockingOutcome::DockingBay)
-                                     ? arrival.bay
-                                     : Elite::EnterDockingBay(_game.dockedFlag, _game.view, _game.status.hyperspaceCountdown, false);
+      /*
+       * 6502: the seven exits, and six of them are a briefing (slice 4d-c).
+       *
+       * `EN6` is `JMP BAY` and the other six are tail calls into `BRIEF`, `DEBRIEF`, `BRIEF2`,
+       * `BRIEF3`, `DEBRIEF2` and `TBRIEF`, each of which ends at `BAY` in its own turn. Until this
+       * slice the port took the tail they share and skipped the briefings themselves, which is why
+       * a docking that had earned one went straight to the status screen.
+       */
+      Elite::FlightLoop& loop = _game.flight.Loop();
+      Elite::MissionScreen mission{loop, _game.shell, _game.extended, loop.keys, 0u};
+      Elite::MissionBay missionBay{_game.commander, _game.dockedFlag, _game.view, _game.status.hyperspaceCountdown, false};
+
+      const Elite::ForcedKey bay = MissionOf(arrival.outcome, mission, missionBay, _game);
       Perform(_game, bay.outcome);
       return;
     }

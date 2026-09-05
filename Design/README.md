@@ -10,7 +10,7 @@ thirteen mutation survivors in the ship AI's sweep — measured rather than name
 tools/mutate.py --unit tactics` (plan §6.125, §6.132, §6.147), and the `VideoState` work that ADR-005 §1's closed decision
 turned out to need (plan §6.133). **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->373 tests** and
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->377 tests** and
 CI runs **<!--count:checks-->eleven repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
