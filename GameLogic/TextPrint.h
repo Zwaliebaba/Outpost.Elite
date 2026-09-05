@@ -177,6 +177,26 @@ namespace Elite
   inline constexpr std::uint8_t MESSAGE_ROW = 21;
 
   /*
+   * Two helpers the modernised trading screens need and the original never had (ADR-006).
+   *
+   * Neither is a port. They are written against the same layout `ClearTextArea` walks -- 32 cells
+   * of eight bytes from `RowOffset(row * 8)`, the four-cell margins left alone -- so they clear and
+   * invert exactly the cells `CHPR` prints into and nothing else.
+   *
+   * `InvertTextRow` is how the selection bar is drawn. A text screen is standard bitmap mode, so a
+   * cell's two colours are chosen by one bit each, and flipping every bit swaps them: black text on
+   * a white bar, with no colour RAM write at all. Inverting twice restores the row, which is the
+   * canvas's own draw-to-erase idiom, and it is why the bar can be moved without reprinting the line
+   * under it.
+   *
+   * `ClearTextCells` zeroes a run of cells on one row. It exists because `CHPR` draws by EOR, so
+   * printing spaces over a prompt does not erase it -- the cells have to be cleared before anything
+   * is printed there again.
+   */
+  void InvertTextRow(Canvas& _canvas, std::uint8_t _row) noexcept;
+  void ClearTextCells(Canvas& _canvas, std::uint8_t _row, std::uint8_t _column, std::uint8_t _count) noexcept;
+
+  /*
    * 6502: TT26 / CHPR -- print one character at the cursor and advance it.
    *
    * Two entry points in the original share this body, and the control codes below 32 are handled

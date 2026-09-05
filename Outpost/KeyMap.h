@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CargoScreens.h"
 #include "Controls.h"
 
 #include <cstdint>
@@ -98,5 +99,17 @@ namespace Outpost
   };
 
   [[nodiscard]] CursorKeys CursorKeysFor(int _virtualKey) noexcept;
+
+  /*
+   * What a queued key MEANS to the Buy Cargo screen (ADR-006).
+   *
+   * `Elite::ListKeySource` is the second key seam, and this is the executable's half of it: the
+   * matrix position the window queued, read as the screen's own vocabulary. Up and Down are the
+   * positions the arrow keys are bound to -- which are the C64 pitch keys, "X" and "S", and that
+   * fact belongs here and not in `GameLogic` -- and everything else is `TRANTABLE`'s character:
+   * "B", the digits, DELETE, RETURN and ESCAPE by name, and any other key as `Other` with its
+   * position kept so the screen can ask `TT102` about it.
+   */
+  [[nodiscard]] Elite::ListKeyPress ListKeyFor(std::uint8_t _c64Key) noexcept;
 
 } // namespace Outpost

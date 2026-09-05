@@ -81,6 +81,9 @@
     <ClCompile Include="MarketScreenTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="CargoScreenTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="StateTokenTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>

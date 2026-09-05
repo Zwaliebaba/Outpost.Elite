@@ -4,6 +4,7 @@
 #include "Window.h"
 
 #include "Canvas.h"
+#include "CargoScreens.h"
 #include "Charts.h"
 #include "ExtendedTokens.h"
 #include "MarketScreen.h"
@@ -48,7 +49,8 @@ namespace Outpost
                           public Elite::ControlCodes,
                           public Elite::TextEffects,
                           public Elite::TunnelEffects,
-                          public Elite::KeySource
+                          public Elite::KeySource,
+                          public Elite::ListKeySource
   {
   public:
     GameShell(Window& _window, CanvasPresenter& _presenter, Elite::Canvas& _canvas, std::uint8_t& _view) noexcept
@@ -98,6 +100,11 @@ namespace Outpost
      * a save is a menu item rather than a shutdown hook.
      */
     std::uint8_t NextKey() override;
+
+    // ---- Elite::ListKeySource ------------------------------------------------------------------
+
+    /// The same wait as `NextKey`, read through `ListKeyFor` instead of `TRANTABLE` (ADR-006).
+    Elite::ListKeyPress NextListKey() override;
 
     // ---- Elite::TradeScreenEffects and Elite::ChartEffects -------------------------------------
 

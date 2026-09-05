@@ -536,6 +536,7 @@ namespace GameLogicTests
         {0x37, '7', "7"},
         {0x38, '8', "8"},
         {0x39, '9', "9"},
+        {0x30, '0', "0, which the Buy Cargo prompt needs for ten and up (ADR-006)"},
 
         // The letters, every one of which is the letter the C64 key carries.
         {0x41, 'A', "A -- fire"},
@@ -782,6 +783,53 @@ namespace GameLogicTests
 
       Assert::AreEqual<std::uint8_t>(Outpost::NO_KEY, Outpost::C64KeyFor(0x5A), L"Z is not bound");
       Assert::AreEqual<std::uint8_t>(0, Outpost::CharacterFor(Outpost::NO_KEY), L"and nothing pressed translates to nothing printable");
+    }
+
+    /*
+     * The Buy Cargo screen's seam (ADR-006): the arrows before the letters they share a position
+     * with, and every other key by the character TRANTABLE gives it.
+     */
+    TEST_METHOD(TheListKeySeamReadsArrowsBeforeLetters)
+    {
+      const std::uint8_t up = Outpost::C64KeyFor(0x26);   // VK_UP
+      const std::uint8_t down = Outpost::C64KeyFor(0x28); // VK_DOWN
+      Assert::AreEqual<std::uint8_t>('X', Outpost::CharacterFor(up), L"the premise: Up is bound to the C64 pitch key, which types X");
+      Assert::AreEqual<std::uint8_t>('S', Outpost::CharacterFor(down), L"and Down to the one that types S");
+      Assert::IsTrue(Elite::ListKey::Up == Outpost::ListKeyFor(up).key);
+      Assert::IsTrue(Elite::ListKey::Down == Outpost::ListKeyFor(down).key);
+
+      const std::uint8_t b = Outpost::C64KeyFor(0x42); // VK_B
+      Assert::AreNotEqual<std::uint8_t>(Outpost::NO_KEY, b, L"B is bound");
+      Assert::AreEqual<std::uint8_t>('B', Outpost::CharacterFor(b));
+      Assert::IsTrue(Elite::ListKey::Buy == Outpost::ListKeyFor(b).key);
+      Assert::IsTrue(Elite::KeyAction::Nothing == Elite::ActionForKey(b, 0xFF, 2, 0, false).action ||
+                       Elite::KeyAction::CountdownOnly == Elite::ActionForKey(b, 0xFF, 2, 0, false).action,
+                     L"and TT102 does nothing with it, so binding it costs no screen");
+
+      for (int digit = 0; digit < 10; ++digit)
+      {
+        const Elite::ListKeyPress press = Outpost::ListKeyFor(Outpost::C64KeyFor(0x30 + digit)); // VK_0 to VK_9
+        Assert::IsTrue(Elite::ListKey::Digit == press.key, L"a digit");
+        Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>('0' + digit), press.character);
+      }
+
+      Assert::IsTrue(Elite::ListKey::Delete == Outpost::ListKeyFor(Outpost::C64KeyFor(0x08)).key, L"Backspace");
+      Assert::IsTrue(Elite::ListKey::Return == Outpost::ListKeyFor(Outpost::C64KeyFor(0x0D)).key, L"Return");
+      Assert::IsTrue(Elite::ListKey::Escape == Outpost::ListKeyFor(Outpost::C64KeyFor(0x1B)).key, L"Escape");
+
+      // F4 is "7"'s position (ADR-005 §4), so it arrives as the digit -- with the position kept, which
+      // is how the list half of the screen still reaches the market from it.
+      const Elite::ListKeyPress market = Outpost::ListKeyFor(Outpost::C64KeyFor(0x73)); // VK_F4
+      Assert::IsTrue(Elite::ListKey::Digit == market.key, L"F4 types 7");
+      Assert::AreEqual<std::uint8_t>('7', market.character);
+      Assert::AreEqual<std::uint8_t>(Elite::KEY_MARKET_PRICE, market.position, L"and its position travels, for TT102");
+
+      const Elite::ListKeyPress launch = Outpost::ListKeyFor(Outpost::C64KeyFor(0x76)); // VK_F7
+      Assert::IsTrue(Elite::ListKey::Other == launch.key, L"F7 is not the screen's");
+      Assert::AreEqual<std::uint8_t>(Elite::KEY_LAUNCH, launch.position, L"but its position travels too");
+
+      Assert::IsTrue(Elite::ListKey::Other == Outpost::ListKeyFor(Outpost::NO_KEY).key, L"nothing pressed is Other, with position 0");
+      Assert::AreEqual<std::uint8_t>(0, Outpost::ListKeyFor(Outpost::NO_KEY).position);
     }
   };
 

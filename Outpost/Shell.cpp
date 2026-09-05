@@ -94,6 +94,22 @@ namespace Outpost
     return CharacterFor(key);
   }
 
+  Elite::ListKeyPress GameShell::NextListKey()
+  {
+    std::uint8_t key = 0;
+    while (!m_window.TakeKey(key))
+    {
+      if (!Turn())
+      {
+        Abandon();
+      }
+    }
+
+    // The POSITION goes to the map rather than the character, because two of the keys the screen
+    // reads -- the arrows -- have no character of their own; see `ListKeyFor`.
+    return ListKeyFor(key);
+  }
+
   void GameShell::Abandon()
   {
     /*

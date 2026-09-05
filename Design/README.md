@@ -42,6 +42,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 | [003](ADR/ADR-003-verification.md) | Verification | **A 6502 oracle in the test project** runs the assembled original's routines and the C++ port on the same inputs; **golden canvases** for screens; **replay hashes** for whole-game determinism. |
 | [004](ADR/ADR-004-projects-and-layout.md) | Projects and layout | **Our own codebase — nothing lifted from a sibling repository.** `GameLogic` (namespace `Elite`) holds the port, platform-free and deterministic; presentation lives in `Outpost.exe`; tests under `Tests/`. Flat folders, unique PascalCase names, generated data tables checked in, `MasterFile/` and `Upstream/` are reference only. |
 | [005](ADR/ADR-005-presentation.md) | Presentation | **Packaged Win32, no XAML: MSIX stays, WinUI 3 goes.** Raw window, flip-model D3D12 swap chain blitting the indexed canvas at integer scale, XAudio2 with a small SID-style synthesiser. |
+| [006](ADR/ADR-006-modernised-trading-screens.md) | Modernised trading screens | **An owner-ruled exception to ADR-001 §4, and only that.** A Buy Cargo screen with a selection bar and a `B`-opened quantity prompt, and a read-only `<SYSTEM> MARKET PRICES` screen with an empty sell column, replace `TT219` and `TT167` in the executable. The faithful routines stay ported, proven and unwired; the new screens compute nothing of their own. Design in [Trading-Screens-Design.md](Trading-Screens-Design.md). |
 
 ## Two things this corpus is deliberately not
 

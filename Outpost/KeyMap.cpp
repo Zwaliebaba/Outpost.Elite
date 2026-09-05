@@ -116,6 +116,7 @@ namespace Outpost
       {0x37, Elite::KEY_MARKET_PRICE, "7 -- market, F4's digit"},       // VK_7
       {0x38, Elite::KEY_STATUS, "8 -- status, F5's digit"},             // VK_8
       {0x39, Elite::KEY_INVENTORY, "9 -- inventory, F6's digit"},       // VK_9
+      {0x30, 0x1D, "0 -- a digit, and nothing else"},                   // VK_0, ADR-006: "10" needs it; position 29 types "0"
 
       // The letter keys the game names as constants.
       {0x44, Elite::KEY_DISTANCE, "D -- distance to system"}, // VK_D
@@ -124,6 +125,7 @@ namespace Outpost
       {0x4F, Elite::KEY_HOME, "O -- crosshairs home"},        // VK_O
       {0x59, Elite::KEY_YES_INTERNAL, "Y -- yes"},            // VK_Y
       {0x4E, 0x19, "N -- no"},                                // VK_N
+      {0x42, 0x24, "B -- buy the selected item"},             // VK_B, ADR-006; position 36 types "B"
 
       /*
        * The disk menu's "@". A PC keyboard has no C64 "@" key; VK_OEM_3 is where it sits on a UK
@@ -235,6 +237,43 @@ namespace Outpost
       return 0;
     }
     return Elite::KEY_TRANSLATION[_c64Key];
+  }
+
+  Elite::ListKeyPress ListKeyFor(std::uint8_t _c64Key) noexcept
+  {
+    // The arrows FIRST, because they are bound to positions that also translate to letters, and
+    // the letters "X" and "S" are not what a player pressing Up and Down meant.
+    if (_c64Key == Elite::KEY_PITCH_UP)
+    {
+      return {Elite::ListKey::Up, 0, _c64Key};
+    }
+    if (_c64Key == Elite::KEY_PITCH_DOWN)
+    {
+      return {Elite::ListKey::Down, 0, _c64Key};
+    }
+
+    const std::uint8_t character = CharacterFor(_c64Key);
+    if (character == 'B')
+    {
+      return {Elite::ListKey::Buy, character, _c64Key};
+    }
+    if (character >= '0' && character <= '9')
+    {
+      return {Elite::ListKey::Digit, character, _c64Key};
+    }
+    if (character == 127)
+    {
+      return {Elite::ListKey::Delete, character, _c64Key};
+    }
+    if (character == 13)
+    {
+      return {Elite::ListKey::Return, character, _c64Key};
+    }
+    if (character == 27)
+    {
+      return {Elite::ListKey::Escape, character, _c64Key};
+    }
+    return {Elite::ListKey::Other, character, _c64Key};
   }
 
 } // namespace Outpost

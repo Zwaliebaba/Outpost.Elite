@@ -437,6 +437,57 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.116 Two screens the original never had, and what it cost to add them without losing the two it did
+
+The owner asked for a Buy Cargo screen that lists the market with a selection bar and asks for a
+quantity only on `B`, and a read-only Market Prices screen with a buy and a sell column — both
+black and white, no purple. That is modernisation, ADR-001 §4 says modernisation waits for
+phase 6, and the gate for phase 6 is not met. It was put to the owner as the first question of
+[Trading-Screens-Design.md](Trading-Screens-Design.md) and ruled on: build now, record the
+exception as [ADR-006](ADR/ADR-006-modernised-trading-screens.md), keep the faithful routines.
+
+**THE FAITHFUL ROUTINES COST NOTHING TO KEEP AND WOULD HAVE COST THE PROOF TO LOSE.** `TT219`,
+`TT167` and `gnum` are compared against the oracle character for character and keystroke for
+keystroke (§6.12's slice 2c). The new screens compute nothing of their own — `MarketPrice`,
+`CargoFits`, `SpendCash`, `TotalPrice` and `PrintMarketItem` are the same functions — so the
+oracle suites still prove every number a player sees or pays, and the two ported screens simply
+lost their caller in `Perform`. `check_outpost.py` passed throughout because nothing in
+`GameLogic` was renamed or removed.
+
+**THE ARROWS HAD NO CHARACTER, WHICH IS WHY THERE IS A SECOND KEY SEAM.** `KeySource::NextKey`
+is `TT217`: it returns what `TRANTABLE` gives a matrix position. The window queues an arrow as
+the C64 pitch key it is bound to (ADR-005 §4), and that position translates to `X` or `S`. A
+screen that read `X` as "up" would have the executable's layout inside `GameLogic`; so
+`ListKeySource` returns a meaning, `Outpost::ListKeyFor` produces it from the position, and the
+tests script meanings. The position travels with the meaning, and that turned out to matter twice.
+
+**A DIGIT IS ALSO A SCREEN KEY, AND THE FIRST DRAFT FORGOT.** F4 and `7` are one position, which
+ADR-005 §4 accepted as the price of moving the screens off the number row. The first draft of the
+selection loop ignored digits, so `7` on the list — and F4 — did nothing, and the test that
+pressed F4 to leave found it. Now a digit while nothing is being typed is asked about through
+`TT102` like any other key, and a digit while the prompt is open is a digit. The same test also
+found that `0` had never been bound at all: nothing before this screen could type ten.
+
+**LEAVING GOES TO THE KEY PRESSED, AND THE LOOP PRESSES IT.** `BAY2` forces f9. Forcing the key the
+player pressed instead is what makes F4 from the buy screen reach the market; and it is pressed
+by the docked loop on its next pass rather than from inside `Perform`, because `1` on the buy
+screen would otherwise re-enter the buy handler from the buy handler on every press. The
+original's one-deep recursion was a property of the key it forced, not of the mechanism.
+
+**TOKEN 167 IS NOT "MARKET PRICES".** It is `{current system} MARKET PRICES`, and the current
+system it prints is the value tokens' — which in the executable is a `Game::currentSeeds` that
+nothing assigns. The new screen prints the name from the seeds it is given (`QQ2`, which `DOENTRY`
+writes) and the words verbatim. The test that found it printed `RIATER RIATER MARKET PRICES`,
+which was also the moment the "Lave" seeds borrowed from `CycleTests` turned out to be something
+else; Lave is now found the way `TT111` finds it. That `currentSeeds` is never written is a
+finding about the existing wiring, recorded here and not fixed here.
+
+**THE SCREEN IS READ BACK FROM THE CANVAS.** The ported screens are compared as a character stream
+with the cursor stamped on each; these print some of their text straight through `CHPR`, which no
+sink sees, and the bar is not a character at all. So the tests decode cells against the font and
+ask whether a row's unprintable 32nd cell is inverted. Fourteen tests, all green on the portable
+runner with the oracle assembled; not built with MSVC on this machine.
+
 ### 6.115 The charts were finished and unreachable, and the seam said so in its own comment
 
 F1 and F2 did nothing. That was deliberate — `Perform` lists the charts among the actions it

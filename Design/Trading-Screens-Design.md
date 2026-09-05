@@ -1,7 +1,11 @@
 # Trading screens — design for the combined Buy Cargo screen and the Market Prices screen
 
-**Status:** draft for owner review, 2026-09-05. Nothing in this document is built. It becomes
-ADR-006 and a plan slice once the open questions in §8 are answered.
+**Status:** ruled and built, 2026-09-05. The owner answered all four questions in §8 with the
+recommended option; the ruling is [ADR-006](ADR/ADR-006-modernised-trading-screens.md) and the
+build write-up is [Elite-Conversion-Plan.md §6.116](Elite-Conversion-Plan.md). Two things changed
+between this design and the code, both found by tests: a digit on the list is asked about through
+`TT102` like any other key (F4 is `7`'s position), and the Market Prices title prints its words
+verbatim because token 167 carries a system name of its own.
 
 ## 1. What is asked
 
