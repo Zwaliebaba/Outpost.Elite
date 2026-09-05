@@ -186,7 +186,7 @@ namespace Outpost
     Elite::LineHeap m_heap;
     Elite::ClipState m_clip;
     Elite::Projection m_projection;
-    Elite::CompassAxes m_axes{};
+    Elite::K3Block m_axes{};
 
     /*
      * 6502: VIC+&15 and VIC+&27 -- the sprite enable mask and sprite 0's colour.

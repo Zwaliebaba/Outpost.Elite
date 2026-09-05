@@ -965,7 +965,7 @@ namespace GameLogicTests
       Elite::LineHeap heap;
       Elite::ClipState clip;
       Elite::Projection projection;
-      Elite::CompassAxes axes{};
+      Elite::K3Block axes{};
       RecordingWorld outside;
       RecordingLoop effects{world.effects.sounds, world.effects.soundCarries};
 

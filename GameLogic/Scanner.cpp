@@ -221,7 +221,7 @@ namespace Elite
     (void)PlotDash(_canvas, _work);
   }
 
-  void LoadPlanetAxis(const ShipBlock& _planet, CompassAxes& _axes, std::uint8_t _at) noexcept
+  void LoadPlanetAxis(const ShipBlock& _planet, K3Block& _axes, std::uint8_t _at) noexcept
   {
     // 6502: LDA K%+1,X / STA K3,X
     _axes[_at] = _planet[static_cast<std::size_t>(_at) + 1u];
@@ -232,7 +232,7 @@ namespace Elite
     _axes[static_cast<std::size_t>(_at) + 2u] = static_cast<std::uint8_t>(top & 0x80u);
   }
 
-  void NormaliseAxes(CompassAxes& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
+  void NormaliseAxes(K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
   {
     // 6502: LDA K3 / ORA K3+3 / ORA K3+6 / ORA #1 / STA K3+9 -- the low bytes together, with a bit
     // forced on so the loop below is guaranteed to end.
@@ -300,7 +300,7 @@ namespace Elite
     _work.x2 = vector[2];
   }
 
-  void LoadPlanetAxes(const Bubble& _bubble, CompassAxes& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
+  void LoadPlanetAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
   {
     // 6502: LDX #0 / JSR SPS3 / LDX #3 / JSR SPS3 / LDX #6 / JSR SPS3, all on slot 0.
     LoadPlanetAxis(_bubble.blocks[0], _axes, 0u);
@@ -310,7 +310,7 @@ namespace Elite
     NormaliseAxes(_axes, _work, _math); // 6502: the fall-through into TAS2
   }
 
-  void LoadStationAxes(const Bubble& _bubble, CompassAxes& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
+  void LoadStationAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
   {
     // 6502: LDX #8 / SPL1 -- LDA K%+NI%,X / STA K3,X / DEX / BPL SPL1. Nine bytes, downwards.
     for (std::size_t at = 9u; at-- > 0u;)
@@ -368,7 +368,7 @@ namespace Elite
   }
 
   void AimCompassAtStation(Canvas& _canvas, DrawWorkspace& _work, MathWorkspace& _math, Compass& _compass, const Bubble& _bubble,
-                           CompassAxes& _axes) noexcept
+                           K3Block& _axes) noexcept
   {
     LoadStationAxes(_bubble, _axes, _work, _math); // 6502: JSR SPS4
     DrawCompass(_canvas, _work, _math, _compass);  // 6502: the fall-through into SP2
@@ -378,7 +378,7 @@ namespace Elite
   {
     DrawCompassDot(_canvas, _work, _compass); // 6502: JSR DOT -- draw the old dot again to erase it
 
-    CompassAxes axes{};
+    K3Block axes{};
 
     // 6502: LDA SSPR / BNE SP1 -- and `SSPR` is the station's entry in `MANY` (§6.58).
     if (_bubble.StationPresent() != 0u)

@@ -166,6 +166,7 @@
     <ClInclude Include="Lasers.h" />
     <ClInclude Include="Messages.h" />
     <ClInclude Include="Scanner.h" />
+    <ClInclude Include="Tactics.h" />
     <ClInclude Include="Spawn.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="StateTokens.h" />
@@ -240,6 +241,7 @@
     <ClCompile Include="Lasers.cpp" />
     <ClCompile Include="Messages.cpp" />
     <ClCompile Include="Scanner.cpp" />
+    <ClCompile Include="Tactics.cpp" />
     <ClCompile Include="Spawn.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
     <ClCompile Include="TokenTables.cpp" />

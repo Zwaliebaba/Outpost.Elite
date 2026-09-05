@@ -560,7 +560,7 @@ namespace GameLogicTests
       Elite::LineHeap heap;
       Elite::ClipState clip;
       Elite::Projection projection;
-      Elite::CompassAxes axes{};
+      Elite::K3Block axes{};
       RecordingOutside outside;
       RecordingLaunch effects;
       RecordingStart start;

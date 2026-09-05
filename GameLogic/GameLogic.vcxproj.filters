@@ -81,6 +81,9 @@
     <ClInclude Include="Combat.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Tactics.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Flight.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -253,6 +256,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Combat.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Tactics.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Flight.cpp">
