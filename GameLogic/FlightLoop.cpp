@@ -30,7 +30,9 @@ namespace Elite
     // doubling cannot overflow: it widens instead.
     _math.k[3] = RotateRight(0u, high.carry).value;
 
-    AddShipCoordinateToK(_work, _math, _to); // 6502: JSR MVT3
+    // The exit carry is live only on `VCSUB`'s path out to `TA64` (§6.126). `MVT1` reads `K+3`
+    // and stores, so the flag dies here.
+    static_cast<void>(AddShipCoordinateToK(_work, _math, _to)); // 6502: JSR MVT3
 
     // 6502: STA INWK+2,X -- and A is `K+3`, because every path through `MVT3` ends `STA K+3`.
     _work[static_cast<std::size_t>(_to) + 2u] = _math.k[3];

@@ -91,6 +91,12 @@
     <ClInclude Include="Combat.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Hyperspace.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="GameLoop.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Tactics.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -275,6 +281,12 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Combat.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Hyperspace.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="GameLoop.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Tactics.cpp">

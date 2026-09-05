@@ -1,6 +1,8 @@
 # ADR-005 — Presentation: Window, Canvas Blit, Sound, Input, Timing
 
-**Status:** Accepted · 2026-09-02 (§5 settled by owner ruling: keep MSIX, drop WinUI 3)
+**Status:** Accepted · 2026-09-02 (§5 settled by owner ruling: keep MSIX, drop WinUI 3;
+§1's sprite overlay and VIC-II effects settled 2026-09-05 — both composite in `Canvas::Resolve`
+over a new `VideoState`, with the border the presenter's)
 **Depends on:** ADR-002 (the canvas), ADR-004 (where the code lives)
 **Feeds:** slices 0d, 2e, 5a
 
@@ -42,27 +44,67 @@ main loop that ran as fast as the scene allowed.
   per frame. Which one a routine is, is measured with `Cpu6502`'s cycle counter and not judged
   (§6.109). Vsync on; the DXGI flip-model swap chain from
   Frontier's `GpuSwapChain`.
-- **OPEN DECISION — the sprite overlay, recorded 2026-09-05.** This section describes a 320×200
-  indexed texture and nothing above it, and the C64 drew eight hardware sprites above it: the
-  laser crosshairs, the Trumbles, and nothing else the game uses. `SIGHT` is ported and writes
-  the sprite pointers and colour; no code composites them, so the crosshairs do not appear (plan
-  §6.100). Two things make this a decision rather than a slice. `SPRITE.bin` is a fourth assembly
-  that `tools/labels.py` does not build, so the oracle holds no sprite data; and there is no
-  oracle for a COMPOSITED image at all — the game never rendered one into memory — so this would
-  be the first drawing in the port with nothing to compare against beyond the sprite bytes
-  themselves. The choice is where compositing lives: in `Canvas::Resolve` (`GameLogic`, testable
-  on both CI legs, and the sprite data extractable and byte-checked like every other table) or in
-  the presenter (`Outpost/`, Windows-only, checked by nothing this repository can run). The
-  recommendation is the canvas; the ruling is the owner's.
-- **OPEN ITEM — the VIC-II effects the game drives through the raster handler, recorded 2026-09-05.**
-  `moonflower` (the energy bomb drops the upper half to standard bitmap mode), `welcome` (the border
-  colour it cycles while the bomb runs) and `HFX` (the hyperspace tearing, `DOHFX`) are ordinary
-  bytes in `ScreenState` that `FlightSession::SyncVideoRegisters` carries and `Canvas::Resolve` has
-  no model for (plan §6.98). They were a finding and not a decision until this line: a player of
-  the shipped game sees the bomb and the jump, and a player of the port sees neither. The choice is
-  the sprites' choice -- model them in the canvas, where a test can see them, or in the presenter,
-  where nothing can -- and the recommendation is the same. What is NOT open is whether they exist
-  (plan §6.120).
+- **SETTLED 2026-09-05 — the sprite overlay composites in `Canvas::Resolve`.** The C64 drew eight
+  hardware sprites above the bitmap: the laser crosshairs and the Trumbles, and nothing else the
+  game uses. `SIGHT` is ported and writes the sprite pointers and colour; no code composites them,
+  so the crosshairs do not appear (plan §6.100).
+
+  **The reason is not the one the open question gave.** It argued for the canvas because that is
+  testable on both CI legs, and that argument is weaker than it looks: compositing has no oracle
+  WHEREVER it lives, because the game never rendered a composited image into memory, so moving it
+  into `GameLogic` makes it runnable under test without making it verified. The decisive reason is
+  structural. `Canvas` keeps the game's BYTES, laid out exactly as the original's memory, and that
+  is the thing the oracle compares — it is untouched either way. `Resolve()` is already the
+  un-oracled "what a person would see" layer downstream of it: it already turns the multicolour
+  bitmap, screen RAM and colour RAM into indices, already has no byte-level oracle, and is already
+  covered by golden hashes and by targeted assertions on known cases. Sprites are the same kind of
+  transformation over the same inputs. Putting them anywhere else splits one function across two
+  binaries and buys nothing.
+
+  **What actually makes this a design change, which the open question missed.** `Resolve` today
+  takes only the canvas, and the sprite state is not in it. The pointers are (they are canvas
+  writes at `SIGHT_SPRITE_CELL`, compared byte for byte already), but the enable mask, the colour
+  and the raster mode are `SightEffects` — a WRITE-ONLY seam out to the presenter — and the Trumble
+  positions `MVTRIBS` writes are not modelled at all. So this needs the register state to become
+  DATA that `GameLogic` owns and both `Resolve` and the presenter read: an explicit `VideoState`
+  struct, not a getter on `SightEffects`. The reason it must not be a getter is already written on
+  `MaskSprites`: a getter invites a port to compute what the hardware is holding.
+
+  **Prerequisite, and it should be done first regardless.** `SPRITE.bin` is a fourth assembly
+  `tools/labels.py` does not build — 84 lines of source and 448 bytes, seven sprite definitions.
+  Add it on the `LOADER_ASSEMBLY` pattern (its own reference pair, kept out of the oracle image,
+  because `CODE% = &7C3A`), and the definitions are byte-checked by `extract_tables.py --check`
+  like every other table.
+
+  **What stays unverified, said plainly.** The blit rule itself — sprite-over-bitmap priority, the
+  multicolour sprite bit pairs, and the x-expand flag. That is documented VIC-II behaviour and it is
+  small, but it is the first drawing in the port with nothing to compare against. The honest
+  mitigation is a golden hash plus one hand-checked screenshot on the owner's machine, in the shape
+  slice 2e already established — not a claim of oracle coverage.
+- **SETTLED 2026-09-05 — the VIC-II raster effects model in `Canvas::Resolve` too, on the same
+  `VideoState`.** `moonflower` (the energy bomb drops the upper half to standard bitmap mode),
+  `welcome` (the border colour it cycles while the bomb runs) and `HFX` (the hyperspace tearing,
+  `DOHFX`) are ordinary bytes in `ScreenState` that `FlightSession::SyncVideoRegisters` carries
+  outbound and `Canvas::Resolve` has no model for (plan §6.98). A player of the shipped game sees
+  the bomb and the jump; a player of the port sees neither.
+
+  This is the sprites' decision and it goes the same way, for the same structural reason and with
+  one difference worth naming: these are not an overlay but a MODE CHANGE on pixels `Resolve`
+  already produces. `moonflower` switches the upper half between multicolour and standard bitmap,
+  which changes how the same bytes decode — so it belongs inside `Resolve`'s decode and nowhere
+  else, and putting it in the presenter would mean decoding the bitmap twice in two languages.
+  `welcome` is the border, which is outside the 320×200 image entirely and is the one part that is
+  genuinely the presenter's (the letterbox bars are already its). `HFX` is a per-row shift of the
+  space view, which is a `Resolve` concern.
+
+  So: `moonflower` and `HFX` in `Resolve`, `welcome` in the presenter as the letterbox colour, and
+  all three read from the same `VideoState`. What is NOT open is whether they exist (plan §6.120).
+
+- **Ordering, so neither of the two rulings above blocks anything.** Neither is on phase 4's
+  critical path. The crosshairs need only `SIGHT`, which is built; the Trumbles need `MVTRIBS`
+  (slice 4d); `moonflower` and `welcome` need the energy bomb (4b) and `HFX` needs hyperspace (4c).
+  The `SPRITE.bin` assembly and the `VideoState` struct are the shared prerequisite and are worth
+  doing early, because both are small and everything else waits on them.
 - **The 256-wide space view's horizontal placement** inside the bitmap and the dashboard row
   split. **Answered 2026-09-03, and it never needed the screenshots this clause asked for.**
   Slice 0b-b was cancelled, and the plan's §6.5 accounted for only two of its dependents; this

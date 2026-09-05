@@ -192,7 +192,7 @@ namespace GameLogicTests
               Assert::IsTrue(run.completed, L"VCSUB returned");
 
               Elite::MathWorkspace math;
-              Elite::SubtractShipAxes(theirs, mine, axes, math);
+              const bool carry = Elite::SubtractShipAxes(theirs, mine, axes, math);
 
               const std::wstring where = WidenText("VCSUB mine " + std::to_string(mineHigh) + "/" + std::to_string(mineSign) + " theirs " +
                                                    std::to_string(theirHigh) + "/" + std::to_string(theirSign));
@@ -206,6 +206,11 @@ namespace GameLogicTests
                                  (where + L": K+" + std::to_wstring(byte)).c_str());
               }
               Assert::AreEqual(cpu.memory[at.u], math.u, (where + L": U").c_str());
+
+              // The carry the LAST of the three `MVT3`s exits with. Nothing between here and the
+              // `DORND` at `TA64` touches the flag, so it is `TACTICS`'s input and not scratch
+              // (§6.126).
+              Assert::AreEqual(cpu.c, carry, (where + L": carry").c_str());
               ++compared;
             }
           }
@@ -620,13 +625,80 @@ namespace GameLogicTests
     {
       const char* what;
       std::uint8_t x, xSign, y, ySign, z, zSign;
+
+      /*
+       * AND THE SHIP'S NOSE.
+       *
+       * `CNT` is the ship's nose dotted with the direction to it, and every decision in parts 6 and
+       * 7 is made on that byte: whether it fires (160), whether it hits (163) and whether it
+       * throttles back (`CNT2`). With one fixed orientation the sweep produced TWO values of `CNT`
+       * in five hundred cases, so no ship ever fired its laser and three mutations in those
+       * thresholds agreed everywhere (§6.126).
+       */
+      std::uint8_t noseX, noseY, noseZ;
+
+      /*
+       * AND THE ROLL COUNTER AND FLAGS, because zero makes two different operations agree.
+       *
+       * `TA11` skips the roll when `INWK+29` doubled is 32 or more, and `TN13` sets bit 7 of
+       * `NEWB` with `ASL / SEC / ROR` -- a rotate, not an `ORA`. With both bytes zero the shift is
+       * invisible (`(0 << 1) | 0x80` and `0 | 0x80` are the same answer) and the roll test only
+       * ever sees one side, which is §6.124's "a bit that was already set" in a third form.
+       */
+      std::uint8_t roll, flags;
     };
 
-    constexpr Geometry GEOMETRIES[] = {{"ahead", 0x20u, 0x00u, 0x10u, 0x00u, 0x28u, 0x00u},
-                                       {"behind", 0x20u, 0x80u, 0x10u, 0x00u, 0x28u, 0x80u},
-                                       {"above", 0x08u, 0x00u, 0x60u, 0x00u, 0x18u, 0x00u},
-                                       {"beside", 0x70u, 0x80u, 0x04u, 0x00u, 0x0Cu, 0x00u},
-                                       {"nearly touching", 0x01u, 0x00u, 0x01u, 0x80u, 0x02u, 0x00u}};
+    constexpr Geometry GEOMETRIES[] = {
+      {"ahead", 0x20u, 0x00u, 0x10u, 0x00u, 0x28u, 0x00u, 0x60u, 0x10u, 0xE0u, 0x00u, 0x00u},
+      {"behind", 0x20u, 0x80u, 0x10u, 0x00u, 0x28u, 0x80u, 0x60u, 0x10u, 0xE0u, 0x0Fu, 0x24u},
+      {"above", 0x08u, 0x00u, 0x60u, 0x00u, 0x18u, 0x00u, 0x60u, 0x10u, 0xE0u, 0x10u, 0x41u},
+      {"beside", 0x70u, 0x80u, 0x04u, 0x00u, 0x0Cu, 0x00u, 0x60u, 0x10u, 0xE0u, 0x1Fu, 0x12u},
+      {"nearly touching", 0x01u, 0x00u, 0x01u, 0x80u, 0x02u, 0x00u, 0x60u, 0x10u, 0xE0u, 0x40u, 0x08u},
+
+      // Aimed AT us, which is the only way a ship's laser ever fires: `CNT` has to pass 160, and
+      // to HIT, 163.
+      {"ahead and aiming at us", 0x20u, 0x00u, 0x10u, 0x00u, 0x28u, 0x00u, 0xE0u, 0x90u, 0x60u, 0x81u, 0x60u},
+      {"close and aiming at us", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xE0u, 0x90u, 0x60u, 0x2Au, 0x03u},
+      {"close and aiming just off", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xD0u, 0xA0u, 0x50u, 0x7Fu, 0x55u},
+      {"close and nearly aimed", 0x06u, 0x00u, 0x03u, 0x00u, 0x08u, 0x00u, 0xE8u, 0x88u, 0x68u, 0x00u, 0x00u},
+
+      /*
+         * ANTI-PARALLEL, computed rather than guessed.
+         *
+         * `CNT` passes 160 only when the nose is opposite the direction to the ship on ALL THREE
+         * axes in proportion, not merely opposite on one. For a ship at (4, 2, 6) the unit vector
+         * is about (0.53, 0.27, 0.80), so the nose that points straight back at us is that times
+         * 96 with every sign set: (&B3, &9A, &CD). The rows either side of it are the same
+         * direction nudged, so the sweep straddles both 160 and 163 (§6.126).
+         */
+      {"close and pointing straight at us", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xB3u, 0x9Au, 0xCDu, 0x0Fu, 0x24u},
+      {"close and pointing nearly straight", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xB0u, 0x9Au, 0xC8u, 0x10u, 0x41u},
+      {"close and pointing a little wide", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xA8u, 0x9Au, 0xC0u, 0x1Fu, 0x12u},
+      {"close and pointing wider", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xA0u, 0x98u, 0xB8u, 0x40u, 0x08u},
+      {"very close and pointing at us", 0x02u, 0x00u, 0x01u, 0x00u, 0x03u, 0x00u, 0xB3u, 0x9Au, 0xCDu, 0x81u, 0x60u},
+
+      /*
+         * THREE ORIENTATIONS THAT LAND ON A THRESHOLD EXACTLY, found by search rather than by eye.
+         *
+         * `CNT` is compared against three constants -- 160 to fire, 163 to hit, and `CNT2` (22) to
+         * throttle back -- and moving any of them by one is only observable when `CNT` is on the
+         * boundary. The map from a nose vector to `CNT` runs through two dot products and a
+         * normalisation, so it cannot be inverted by hand: these were measured by sweeping the nose
+         * one step at a time against a fixed position and reading the answer (§6.126).
+         */
+      {"aimed so CNT is 159, one below firing", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0x9Du, 0x9Au, 0xCDu, 0x2Au, 0x03u},
+      {"aimed so CNT is 162, one below hitting", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0xADu, 0x9Au, 0xCDu, 0x7Fu, 0x55u},
+      {"aimed so CNT is 22, the throttle cone", 0x04u, 0x00u, 0x02u, 0x00u, 0x06u, 0x00u, 0x10u, 0x1Au, 0x38u, 0x00u, 0x00u},
+
+      /*
+         * ALL THREE HIGH BYTES ZERO, which is what `MAS4` means by "it has arrived".
+         *
+         * `TA34` reaches the fatal path only when the OR of the high bytes is zero, so once the
+         * sweep moved its positions into the high bytes -- which is where the geometry belongs --
+         * no missile ever landed and the death contract stopped being exercised. This row is the
+         * case the others cannot reach (§6.126).
+         */
+      {"touching", 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x60u, 0x10u, 0xE0u, 0x0Fu, 0x24u}};
 
     void SeedTacticsUniverse(Cpu6502& _cpu, Universe& _world, const Labels& _at, std::uint8_t _type, std::uint8_t _stations,
                              std::uint8_t _thargoids, const Geometry& _where)
@@ -647,14 +719,18 @@ namespace GameLogicTests
         // The ship under test goes where the case asks; the others are spread around it so that a
         // missile's target and the station are somewhere distinct.
         const bool subject = (slot == 2u);
-        _world.world.bubble.blocks[slot][0] = subject ? _where.x : static_cast<std::uint8_t>(0x20u + slot);
-        _world.world.bubble.blocks[slot][1] = 0u;
+
+        // (low, high, sign) per axis, and the HIGH byte is the one that matters: see the comment on
+        // `Geometry` above. The low bytes are varied too, so a routine reading the wrong one does
+        // not agree by accident.
+        _world.world.bubble.blocks[slot][0] = static_cast<std::uint8_t>(0x40u + slot * 11u);
+        _world.world.bubble.blocks[slot][1] = subject ? _where.x : static_cast<std::uint8_t>(0x20u + slot);
         _world.world.bubble.blocks[slot][2] = subject ? _where.xSign : static_cast<std::uint8_t>((slot & 1u) != 0u ? 0x80u : 0x00u);
-        _world.world.bubble.blocks[slot][3] = subject ? _where.y : static_cast<std::uint8_t>(0x30u + slot);
-        _world.world.bubble.blocks[slot][4] = 0u;
+        _world.world.bubble.blocks[slot][3] = static_cast<std::uint8_t>(0x60u + slot * 7u);
+        _world.world.bubble.blocks[slot][4] = subject ? _where.y : static_cast<std::uint8_t>(0x30u + slot);
         _world.world.bubble.blocks[slot][5] = subject ? _where.ySign : std::uint8_t{0u};
-        _world.world.bubble.blocks[slot][6] = subject ? _where.z : static_cast<std::uint8_t>(0x28u + slot);
-        _world.world.bubble.blocks[slot][7] = 0u;
+        _world.world.bubble.blocks[slot][6] = static_cast<std::uint8_t>(0x18u + slot * 13u);
+        _world.world.bubble.blocks[slot][7] = subject ? _where.z : static_cast<std::uint8_t>(0x28u + slot);
         _world.world.bubble.blocks[slot][8] = subject ? _where.zSign : std::uint8_t{0u};
 
         // A believable orientation: nose along z, roof along y, side along x, with signs mixed.
@@ -668,15 +744,22 @@ namespace GameLogicTests
         _world.world.bubble.blocks[slot][24] = 0x08u;
         _world.world.bubble.blocks[slot][26] = 0x60u;
 
-        _world.world.bubble.blocks[slot][27] = 12u; // speed
-        _world.world.bubble.blocks[slot][28] = 0u;  // acceleration
-        _world.world.bubble.blocks[slot][29] = 0u;  // roll
-        _world.world.bubble.blocks[slot][30] = 0u;  // pitch
+        if (subject)
+        {
+          _world.world.bubble.blocks[slot][10] = _where.noseX;
+          _world.world.bubble.blocks[slot][12] = _where.noseY;
+          _world.world.bubble.blocks[slot][14] = _where.noseZ;
+        }
+
+        _world.world.bubble.blocks[slot][27] = 12u;                        // speed
+        _world.world.bubble.blocks[slot][28] = 0u;                         // acceleration
+        _world.world.bubble.blocks[slot][29] = subject ? _where.roll : 0u; // roll
+        _world.world.bubble.blocks[slot][30] = 0u;                         // pitch
         _world.world.bubble.blocks[slot][31] = 0u;
         _world.world.bubble.blocks[slot][33] = 0u;
         _world.world.bubble.blocks[slot][34] = 0u;
         _world.world.bubble.blocks[slot][35] = 20u;
-        _world.world.bubble.blocks[slot][36] = 0u;
+        _world.world.bubble.blocks[slot][36] = subject ? _where.flags : 0u;
       }
 
       _world.world.bubble.counts[Elite::SHIP_TYPE_STATION] = _stations;
@@ -846,6 +929,11 @@ namespace GameLogicTests
         {"a trader", 11u, 0xC1u, 0x01u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
         {"a clean bounty hunter", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
         {"a bounty hunter and an offender", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 60u, 0u, 0u, 255u},
+
+        // Exactly on the boundary, because `CPX #40 / BCC TN2` is a `>=` and the only way to tell
+        // it from a `>` is to stand on 40 (§6.126).
+        {"a bounty hunter and a fresh offender", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 40u, 0u, 0u, 255u},
+        {"a bounty hunter one short of it", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 39u, 0u, 0u, 255u},
         {"a ship on its way in to dock", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
         {"a ship docking with no station", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
         {"a hostile pirate", 11u, 0xC1u, 0x04u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
@@ -954,8 +1042,8 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(23u * 4u * 5u, compared, L"the whole sweep ran");
-      Assert::AreEqual<std::size_t>(23u * 5u, reached.size(), L"and every case is distinct");
+      Assert::AreEqual<std::uint32_t>(25u * 4u * 18u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::size_t>(25u * 18u, reached.size(), L"and every case is distinct");
       Assert::IsTrue(died > 0u, L"and the player died on some of them, so the bool is observed false");
       Logger::WriteMessage(("TACTICS: " + std::to_string(compared) + " cases, " + std::to_string(died) + " of them fatal").c_str());
     }
@@ -989,30 +1077,182 @@ namespace GameLogicTests
       {
         const char* what;
         std::uint8_t x, xSign, y, ySign, z, zSign;
-        std::uint8_t nose; ///< the station's nose vector x high byte, which points the slot
+        std::uint8_t nose;  ///< the station's nose vector x high byte, which points the slot
+        std::uint8_t noseY; ///< and its y and z, because a slot pointing down one axis cannot be
+        std::uint8_t noseZ; ///< both far away and lined up at once -- see `far along a diagonal slot`
+
+        /*
+         * AND THE SHIP'S OWN NOSE, which decides `TAS3` and therefore `CMP #&A2`.
+         *
+         * With one fixed orientation the ship's nose points at the station only by accident, so
+         * that dot product stayed under 0x26 across fifty thousand positions and the threshold was
+         * unreachable (§6.126). A ship on a real approach is pointing AT the slot: these rows say
+         * so, by giving the nose the opposite sign to the position.
+         */
+        std::uint8_t shipNoseX, shipNoseY, shipNoseZ;
+
+        /*
+         * AND THE STATION'S ROOF, which is the other half of `PH32`'s roll test.
+         *
+         * `TN11` dots the ship's SIDE vector with this, and both were constants: the side comes
+         * from the seeding ramp and the roof was set to one value for every case. So the dot
+         * product took ONE value -- 6 after the shift, in all 332 cases that reached it -- the
+         * `CMP #66` was false every time and `TN11` never executed at all (§6.132). Defaulted to
+         * what the sweep used, so the rows above keep their behaviour and only the ladder varies.
+         */
+        std::uint8_t roofX = 0x08u;
+        std::uint8_t roofY = 0x60u;
+        std::uint8_t roofZ = 0x08u;
       };
 
       const Approach APPROACHES[] = {
-        {"straight in front of the slot", 0x02u, 0u, 0x02u, 0u, 0x30u, 0u, 0x60u},
-        {"in front but far out", 0x40u, 0u, 0x30u, 0u, 0x60u, 0u, 0x60u},
-        {"round the back", 0x04u, 0x80u, 0x04u, 0u, 0x30u, 0x80u, 0x60u},
-        {"off to one side", 0x60u, 0u, 0x08u, 0u, 0x10u, 0u, 0x60u},
-        {"almost touching", 0x01u, 0u, 0x01u, 0u, 0x03u, 0u, 0x60u},
-        {"with the slot turned away", 0x02u, 0u, 0x02u, 0u, 0x30u, 0u, 0xE0u},
-        {"with the slot edge on", 0x02u, 0u, 0x02u, 0u, 0x30u, 0u, 0x08u},
+        // The station's slot points along its NOSE vector, which these put on +x, so "in front of
+        // the slot" is a large positive x with small y and z.
+        {"straight in front of the slot", 0x40u, 0u, 0x02u, 0u, 0x02u, 0u, 0x60u, 0x10u, 0x20u, 0x60u, 0x10u, 0xE0u},
+        {"in front and further out", 0x70u, 0u, 0x08u, 0u, 0x08u, 0u, 0x60u, 0x10u, 0x20u, 0x60u, 0x10u, 0xE0u},
+        {"in front and close", 0x10u, 0u, 0x01u, 0u, 0x01u, 0u, 0x60u, 0x10u, 0x20u, 0x60u, 0x10u, 0xE0u},
+        {"round the back", 0x40u, 0x80u, 0x02u, 0u, 0x02u, 0u, 0x60u, 0x10u, 0x20u, 0x60u, 0x10u, 0xE0u},
+        {"off to one side", 0x04u, 0u, 0x50u, 0u, 0x04u, 0u, 0x60u, 0x10u, 0x20u, 0x60u, 0x10u, 0xE0u},
+        {"above the slot", 0x20u, 0u, 0x30u, 0u, 0x04u, 0u, 0x60u, 0x10u, 0x20u, 0x60u, 0x10u, 0xE0u},
+        {"with the slot turned away", 0x40u, 0u, 0x02u, 0u, 0x02u, 0u, 0xE0u, 0x10u, 0x20u, 0x60u, 0x10u, 0xE0u},
+
+        /*
+         * FAR ALONG A DIAGONAL SLOT, which is the only shape that reaches `CMP #157`.
+         *
+         * `K` is the length of the vector before `NORM` scales it, and each component of that
+         * vector is seven bits, so the length only passes 157 when all three are large. But the
+         * distance is only tested at all when `TAS4` says the ship is in front of the slot, which
+         * needs the vector ALIGNED with the station's nose. With a nose pointing mostly along one
+         * axis the two conditions exclude each other and the branch is unreachable, which is why
+         * two mutations in it survived a sweep of two hundred positions (§6.126).
+         */
+        {"far along a diagonal slot", 0xFEu, 0u, 0xFEu, 0u, 0xFEu, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u},
+        {"close along a diagonal slot", 0x30u, 0u, 0x30u, 0u, 0x30u, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u},
       };
 
+      /*
+       * A LADDER OF DIAGONAL MAGNITUDES, one step apart through the interesting part.
+       *
+       * `DOCKIT` compares the distance against 157 and the grid above cannot reach past about 135,
+       * because its y and z are small and the length is built from three seven-bit components. A
+       * uniform diagonal can: it runs from about 90 at &60 to 219 at &FE. Two apart steps over the
+       * threshold -- &B4 gives 155 and &B6 gives 157 -- so the range that matters is walked one at
+       * a time, which is what makes moving the constant by one observable (§6.126).
+       */
+      std::vector<Approach> ladder;
+      for (int magnitude = 0x60; magnitude <= 0xFE; magnitude += 8)
+      {
+        const std::uint8_t m = static_cast<std::uint8_t>(magnitude);
+        ladder.push_back({"diagonal ladder", m, 0u, m, 0u, m, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
+      }
+      /*
+       * SKEWED, because a uniform diagonal cannot produce every length. `TA2` halves each component
+       * before squaring it, so the three equal values quantise the answer: &B4 gives 155, &B6 gives
+       * 157, and 156 is not on the line at all. Pulling one axis away from the other two fills the
+       * gaps -- (&B4, &B6, &B4) is 156 exactly, which is the value that makes moving the constant
+       * from 157 to 156 observable (§6.126).
+       */
+      for (int magnitude = 0xA8; magnitude <= 0xC4; magnitude += 4)
+      {
+        for (int skew = -4; skew <= 4; skew += 2)
+        {
+          const std::uint8_t m = static_cast<std::uint8_t>(magnitude);
+          const std::uint8_t skewed = static_cast<std::uint8_t>(magnitude + skew);
+          ladder.push_back({"diagonal ladder", m, 0u, skewed, 0u, m, 0u, 0x60u, 0x60u, 0x60u, 0x60u, 0x10u, 0xE0u});
+        }
+      }
+
+      /*
+       * A SLOT POINTING ALONG Z, which is the only shape that reaches `PH3`'s own two tests.
+       *
+       * `PH3` asks `|XX15| < 6` on the x component and then on the y, and `XX15` is the unit vector
+       * from the station to the ship. Reaching `PH3` at all needs the ship IN FRONT OF THE SLOT,
+       * which is a large component along the station's nose -- so with every row above pointing the
+       * nose down +x, `XX15`'s x component was never smaller than 48 and the x test was true in
+       * every case that got there. Instrumenting the port says so exactly: nine distinct values
+       * reached it, the smallest 96 after the shift, and the y test below it NEVER RAN AT ALL.
+       *
+       * Pointing the slot down +z instead makes "in front of it" a direction whose x and y are both
+       * small, and then the two ladders below walk each of them across 6. The ship's nose points
+       * back down -z so the `CMP #&A2` gate still opens.
+       */
+      for (const std::uint8_t offX : {0x00u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u, 0x0Au, 0x14u})
+      {
+        for (const std::uint8_t offY : {0x00u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x0Au})
+        {
+          for (const std::uint8_t sign : {0x00u, 0x80u})
+          {
+            ladder.push_back({"down the z slot", offX, sign, offY, sign, 0x40u, 0u, 0x08u, 0x08u, 0x60u, 0x08u, 0x08u, 0xE0u});
+          }
+        }
+      }
+
+      /*
+       * A ROOF LADDER, because `PH32`'s roll test had one input and therefore one answer.
+       *
+       * `TN11` dots the ship's SIDE vector -- fixed at (&E0, &08, &60) by the seeding ramp -- with
+       * the STATION'S ROOF, which was also fixed. Walking the roof from perpendicular to the side
+       * round to aligned with it sweeps the dot product across the constant `DOCKIT` compares it
+       * against, and that is the only way the branch can be reached at all.
+       */
+      for (const std::uint8_t roofX : {0x08u, 0x28u, 0x48u, 0x60u, 0x88u, 0xA8u, 0xC8u, 0xE0u})
+      {
+        for (const std::uint8_t roofZ : {0x08u, 0x30u, 0x60u, 0xB0u, 0xE0u})
+        {
+          ladder.push_back({"roof ladder", 0x02u, 0u, 0x02u, 0u, 0x40u, 0u, 0x08u, 0x08u, 0x60u, 0x08u, 0x08u, 0xE0u, roofX, 0x10u, roofZ});
+        }
+      }
+
       const std::uint8_t TYPES[] = {11u, 0xE0u}; // an NPC, and `auton`'s negative type
+
+      /*
+       * A GRID AS WELL AS THE NAMED APPROACHES, and the reason is four surviving mutations.
+       *
+       * `DOCKIT` decides by three measured quantities -- the station's nose against the vector to
+       * the ship (35), the ship's own nose against it (&A2), and the distance (157) -- and a
+       * handful of hand-placed positions lands near none of the three thresholds, so moving each of
+       * them by one agreed everywhere (§6.126). Hand-picking the exact values is not possible from
+       * the inputs, because each is a dot product of a normalised vector; a grid dense enough to
+       * straddle them is, and it costs a few hundred fast cases.
+       */
+      /*
+       * The grid, kept coarse now that the named rows and the ladder carry the thresholds. &4A with
+       * small y and z is in it deliberately: with the ship aimed back at the station that position
+       * puts `TAS3`'s dot product on &A1, one below the constant `DOCKIT` compares it against.
+       */
+      const std::uint8_t GRID_X[] = {0x08u, 0x18u, 0x28u, 0x40u, 0x4Au, 0x60u, 0x90u, 0xC0u, 0xFEu};
+      const std::uint8_t GRID_Y[] = {0x00u, 0x08u, 0x18u, 0x38u};
+      const std::uint8_t GRID_Z[] = {0x00u, 0x08u, 0x20u, 0x40u};
 
       std::uint32_t compared = 0;
       std::set<std::string> reached;
       std::set<std::string> outcomes;
 
-      for (const Approach& approach : APPROACHES)
+      std::vector<Approach> approaches(std::begin(APPROACHES), std::end(APPROACHES));
+      approaches.insert(approaches.end(), ladder.begin(), ladder.end());
+      for (const std::uint8_t x : GRID_X)
+      {
+        for (const std::uint8_t y : GRID_Y)
+        {
+          for (const std::uint8_t z : GRID_Z)
+          {
+            approaches.push_back({"grid", x, 0u, y, 0u, z, 0u, 0x60u, 0x10u, 0x20u, 0x60u, 0x10u, 0xE0u});
+
+            // The same position with the nose reversed, so the ship faces the station rather than
+            // away from it. `TAS3` is a dot product: the sign of the nose is most of its answer.
+            approaches.push_back({"aimed", x, 0u, y, 0u, z, 0u, 0x60u, 0x10u, 0x20u, 0xE0u, 0x90u, 0x60u});
+          }
+        }
+      }
+
+      for (const Approach& approach : approaches)
       {
         for (const std::uint8_t type : TYPES)
         {
-          for (const std::uint8_t faces : {std::uint8_t{0u}, std::uint8_t{0xFFu}})
+          // The face byte only decides `TN13`, so both answers are swept on the NAMED approaches
+          // and one is enough on the grid, which is there for the three thresholds above.
+          const bool named = std::string(approach.what) != "grid";
+          for (const std::uint8_t faces : named ? std::vector<std::uint8_t>{0u, 0xFFu} : std::vector<std::uint8_t>{0u})
           {
             Cpu6502 cpu = oracle.Fresh();
             for (const std::uint16_t seam : {oracle.Label("NOISE"), oracle.Label("MESS")})
@@ -1024,19 +1264,50 @@ namespace GameLogicTests
             SeedTacticsUniverse(cpu, world, at, 11u, 1u, 0u, GEOMETRIES[0]);
 
             // The ship where the case asks, relative to a station that is at the origin of `K3`.
-            world.world.work[0] = approach.x;
+            /*
+             * THE STATION GOES TO THE ORIGIN, and the ship's position is a HIGH byte.
+             *
+             * `VCSU1` computes `K3` = ship minus station and every one of `DOCKIT`'s three
+             * decisions is a dot product of the unit vector along it, which `TAS2` builds from
+             * bytes 1, 4 and 7. Zeroing the station makes `K3` the ship's own position, so the
+             * sweep can aim at the slot rather than at wherever the ramp happened to put it -- and
+             * before both of those, every case in this test went down one branch (§6.126).
+             */
+            for (std::size_t byte = 0; byte < 9u; ++byte)
+            {
+              world.world.bubble.blocks[1][byte] = 0u;
+            }
+
+            world.world.work[0] = 0u;
+            world.world.work[1] = approach.x;
             world.world.work[2] = approach.xSign;
-            world.world.work[3] = approach.y;
+            world.world.work[3] = 0u;
+            world.world.work[4] = approach.y;
             world.world.work[5] = approach.ySign;
-            world.world.work[6] = approach.z;
+            world.world.work[6] = 0u;
+            world.world.work[7] = approach.z;
             world.world.work[8] = approach.zSign;
             world.world.work[27] = 12u;
 
+            /*
+             * A NON-ZERO `NEWB`, because `TN13` sets its top bit with `ASL / SEC / ROR`.
+             *
+             * That is a ROTATE and not an `ORA #128`: it also shifts bits 0 to 5 up one and drops
+             * bit 6. With the byte zero the two are the same answer, and the mutation that made it
+             * an `ORA` survived a thousand cases (§6.126). It varies per case so the shift shows.
+             */
+            world.world.work[36] = static_cast<std::uint8_t>(0x24u + (compared & 0x1Fu));
+
             world.world.bubble.blocks[1][10] = approach.nose;
-            world.world.bubble.blocks[1][12] = 0x10u;
-            world.world.bubble.blocks[1][14] = 0x20u;
-            world.world.bubble.blocks[1][16] = 0x08u;
-            world.world.bubble.blocks[1][18] = 0x60u;
+            world.world.bubble.blocks[1][12] = approach.noseY;
+            world.world.bubble.blocks[1][14] = approach.noseZ;
+
+            world.world.work[10] = approach.shipNoseX;
+            world.world.work[12] = approach.shipNoseY;
+            world.world.work[14] = approach.shipNoseZ;
+            world.world.bubble.blocks[1][16] = approach.roofX;
+            world.world.bubble.blocks[1][18] = approach.roofY;
+            world.world.bubble.blocks[1][20] = approach.roofZ;
 
             world.world.flight.type = type;
 
@@ -1069,7 +1340,8 @@ namespace GameLogicTests
                                (context + L": K3+" + std::to_wstring(byte)).c_str());
             }
 
-            reached.insert(std::string(approach.what) + (type == 0xE0u ? "/ours" : "/theirs"));
+            reached.insert(std::string(approach.what) + std::to_string(approach.x) + "," + std::to_string(approach.y) + "," +
+                           std::to_string(approach.z) + (type == 0xE0u ? "/ours" : "/theirs"));
 
             /*
              * WHAT THE SHIP WAS TOLD TO DO, measured from the block rather than from the inputs.
@@ -1087,9 +1359,12 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(7u * 2u * 2u, compared, L"the whole sweep ran");
-      Assert::AreEqual<std::size_t>(7u * 2u, reached.size(), L"and every approach is distinct");
-      Assert::IsTrue(outcomes.size() >= 4u, L"and the sweep reached at least four different answers");
+      Assert::IsTrue(compared > 500u, L"the whole sweep ran");
+
+      // A lower bound rather than an exact count, because a few named approaches share coordinates
+      // with the grid and the set collapses them -- the number that matters is `compared`.
+      Assert::IsTrue(reached.size() >= 300u, L"and the approaches are nearly all distinct");
+      Assert::IsTrue(outcomes.size() >= 8u, L"and the sweep reached at least eight different answers");
       Logger::WriteMessage(
         ("DOCKIT: " + std::to_string(compared) + " cases, " + std::to_string(outcomes.size()) + " distinct answers").c_str());
     }
