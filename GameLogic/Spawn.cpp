@@ -2,6 +2,8 @@
 
 #include "Spawn.h"
 
+#include "ShipMove.h"
+
 #include "EliteTypes.h"
 #include "ShipBlueprint.h"
 
@@ -380,6 +382,109 @@ namespace Elite
     _work[27] = static_cast<std::uint8_t>((_speed << 1) | (_carryIn ? 1u : 0u));
 
     return AddShip(_bubble, _work, _shipType, _blueprint); // 6502: TXA / JMP NWSHP
+  }
+
+  NewShip SpawnShipAhead(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed, std::uint8_t _missileTarget,
+                         std::uint16_t& _blueprint) noexcept
+  {
+    ClearShipBlock(_work); // 6502: JSR ZINF
+
+    // 6502: LDA #28 / STA INWK+3 / LSR A / STA INWK+6 -- and the 14 is the 28 shifted, so the two
+    // distances are one constant. `LSR` also clears the carry, which the `ORA` below does not use.
+    _work[3] = SPAWN_AHEAD_X;
+    _work[6] = SPAWN_AHEAD_Z;
+
+    _work[5] = 0x80u; // 6502: LDA #%10000000 / STA INWK+5 -- below us, so it appears in the view
+
+    /*
+     * 6502: LDA MSTG / ASL A / ORA #%10000000 / STA INWK+32.
+     *
+     * The `ASL` doubles the target slot into the AI byte's aggression field and pushes `MSTG`'s
+     * BIT 7 into the carry, where `fq1`'s `ROL A` collects it four instructions later (§6.121).
+     */
+    const bool carry = (_missileTarget & 0x80u) != 0u;
+    _work[32] = static_cast<std::uint8_t>((_missileTarget << 1u) | 0x80u);
+
+    return AddDebris(_bubble, _work, _shipType, _speed, carry, _blueprint); // 6502: no JSR -- a fall into `fq1`
+  }
+
+  void MoveShipAlongAxis(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _amount, std::uint8_t _axis) noexcept
+  {
+    // 6502: ASL A / STA R / LDA #0 / ROR A / JMP MVT1 -- R is the doubled magnitude and A the sign.
+    _math.r = static_cast<std::uint8_t>(_amount << 1u);
+    const std::uint8_t sign = static_cast<std::uint8_t>((_amount & 0x80u) != 0u ? 0x80u : 0x00u);
+
+    AddToShipCoordinate(_work, _math, sign, _axis, false);
+  }
+
+  NewShip SpawnChildShip(Bubble& _bubble, ShipBlock& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent, std::uint8_t _parentType,
+                         std::uint8_t _aiFlag, std::uint8_t _shipType, std::uint16_t& _blueprint) noexcept
+  {
+    // 6502: STA T1 / TXA / PHA / LDA XX0 / PHA ... -- the AI byte kept and the caller's state saved.
+    _math.t1 = _aiFlag;
+    const std::uint16_t savedBlueprint = _blueprint;
+
+    // 6502: LDY #NI%-1 / .FRL2 LDA INWK,Y / STA XX3,Y / LDA (INF),Y / STA INWK,Y / DEY / BPL FRL2.
+    const ShipBlock saved = _work;
+    _work = _bubble.blocks[_parent];
+
+    // 6502: LDA TYPE / CMP #SST / BNE rx -- the PARENT's type, which `MVEIT` left in `TYPE`, and
+    // not the type being created.
+    if (_parentType == SHIP_TYPE_STATION)
+    {
+      _work[27] = STATION_CHILD_SPEED; // 6502: LDA #32 / STA INWK+27
+
+      // 6502: LDX #0 / LDA INWK+10 / JSR SFS2, and twice more -- out along the station's own axes,
+      // so a ship leaves through the slot rather than out of the middle of the hull.
+      MoveShipAlongAxis(_work, _math, _work[10], 0u);
+      MoveShipAlongAxis(_work, _math, _work[12], 3u);
+      MoveShipAlongAxis(_work, _math, _work[14], 6u);
+    }
+
+    // 6502: .rx LDA T1 / STA INWK+32 / LSR INWK+29 / ASL INWK+29 -- the AI byte, then bit 0 of the
+    // roll counter cleared, which is what makes the new ship's roll damp rather than lock.
+    _work[32] = _math.t1;
+    _work[29] = static_cast<std::uint8_t>(_work[29] & 0xFEu);
+
+    /*
+     * 6502: TXA / CMP #SPL+1 / BCS NOIL / CMP #PLT / BCC NOIL -- the cargo range, plate to
+     * splinter, and only that range is given a random tumble.
+     */
+    if (_shipType >= SHIP_TYPE_ALLOY_PLATE && _shipType <= SHIP_TYPE_SPLINTER)
+    {
+      /*
+       * 6502: JSR DORND / ASL A / STA INWK+30 / TXA / AND #%00001111 / STA INWK+27.
+       *
+       * AND THE CARRY GOING IN IS SET, every time. Reaching this line means `CMP #PLT` did not
+       * borrow -- that is what `BCC NOIL` just tested -- and `PHA` leaves the flag alone, so the
+       * generator's first rotate takes a one. The port had `false` here and the oracle disagreed on
+       * the generator's own state, which is the only place a wrong carry into `DORND` shows
+       * (§6.121).
+       */
+      const RngResult roll = _rng.Next(true);
+      _work[30] = static_cast<std::uint8_t>(roll.value << 1u);
+      _work[27] = static_cast<std::uint8_t>(roll.previous & 0x0Fu);
+
+      // 6502: LDA #&FF / ROR A / STA INWK+29 -- and the carry it rotates in is the `ASL A` above,
+      // so the pitch counter's sign is bit 7 of the random byte that set the roll.
+      const bool carry = (roll.value & 0x80u) != 0u;
+      _work[29] = static_cast<std::uint8_t>((0xFFu >> 1u) | (carry ? 0x80u : 0x00u));
+    }
+
+    const NewShip made = AddShip(_bubble, _work, _shipType, _blueprint); // 6502: .NOIL JSR NWSHP
+
+    // 6502: PLA / STA INF+1 ... / .FRL3 LDA XX3,X / STA INWK,X -- everything put back.
+    _work = saved;
+    _blueprint = savedBlueprint;
+
+    return made;
+  }
+
+  NewShip SpawnEscapePod(Bubble& _bubble, ShipBlock& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent, std::uint8_t _parentType,
+                         std::uint16_t& _blueprint) noexcept
+  {
+    // 6502: LDX #ESC / LDA #%11111110, and then straight into `SFS1`.
+    return SpawnChildShip(_bubble, _work, _rng, _math, _parent, _parentType, SPAWN_CHILD_AI, SHIP_TYPE_ESCAPE_POD, _blueprint);
   }
 
 } // namespace Elite

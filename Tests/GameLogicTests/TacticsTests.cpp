@@ -6,6 +6,7 @@
 #include "Arith.h"
 #include "Canvas.h"
 #include "Scanner.h"
+#include "ShipMove.h"
 #include "ShipSlot.h"
 #include "Tactics.h"
 
@@ -265,8 +266,8 @@ namespace GameLogicTests
                 math.s = 0x5Au;
                 const Elite::AddSignedResult got = Elite::DotProductWithShip(block, draw, math, which);
 
-                const std::wstring where = Widen(std::string(station != 0 ? "TAS4" : "TAS3") + " vector " + std::to_string(which) +
-                                                 " (" + std::to_string(vx) + "," + std::to_string(vy) + "," + std::to_string(sx) + ")");
+                const std::wstring where = Widen(std::string(station != 0 ? "TAS4" : "TAS3") + " vector " + std::to_string(which) + " (" +
+                                                 std::to_string(vx) + "," + std::to_string(vy) + "," + std::to_string(sx) + ")");
                 Assert::AreEqual(cpu.a, got.high, (where + L": A").c_str());
                 Assert::AreEqual(cpu.x, got.low, (where + L": X").c_str());
                 Assert::AreEqual(cpu.memory[at.q], math.q, (where + L": Q").c_str());
@@ -316,8 +317,7 @@ namespace GameLogicTests
             draw.x2 = z;
             Elite::NegateVector(draw);
 
-            const std::wstring where =
-                Widen("TAS6 " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z));
+            const std::wstring where = Widen("TAS6 " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z));
             Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": XX15").c_str());
             Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": XX15+1").c_str());
             Assert::AreEqual(cpu.memory[at.x2], draw.x2, (where + L": XX15+2").c_str());
@@ -395,6 +395,97 @@ namespace GameLogicTests
       }
 
       Assert::AreEqual<std::uint32_t>(6u * 6u * 6u * 2u, compared, L"the whole sweep ran");
+    }
+    /*
+     * 6502: ANGRY -- and the sweep's job is the four branches, not the arithmetic.
+     *
+     * Bit 5 of `NEWB` (anger the station too), a zero AI byte (leave the ship entirely alone), and
+     * `TYPE` on both sides of `CYL` are three tests a small sweep can cross exhaustively; the
+     * fourth is the ship BEING the station, which returns before any of them. `TYPE` is set
+     * independently of the type in A on purpose -- they are different bytes in the original and
+     * the test is what says the port kept them different.
+     */
+    TEST_METHOD(TheAngerMatchesANGRY)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Labels at(oracle);
+      const std::uint16_t angry = oracle.Label("ANGRY");
+      const std::uint16_t inf = oracle.Label("INF");
+      const std::uint16_t typeAt = oracle.Label("TYPE");
+
+      const std::uint8_t NEWBS[] = {0x00u, 0x20u, 0x04u, 0x24u, 0xFFu};
+      const std::uint8_t AI[] = {0x00u, 0x01u, 0x7Fu, 0x80u, 0xFEu};
+      const std::uint8_t LOOP_TYPES[] = {0u, 1u, 10u, 11u, 29u, 128u};
+      const std::uint8_t CALLED[] = {Elite::SHIP_TYPE_STATION, Elite::SHIP_TYPE_MISSILE, Elite::SHIP_TYPE_COBRA_MK3};
+
+      Cpu6502 cpu = oracle.Fresh();
+      std::uint32_t compared = 0;
+
+      for (const std::uint8_t newb : NEWBS)
+      {
+        for (const std::uint8_t ai : AI)
+        {
+          for (const std::uint8_t loopType : LOOP_TYPES)
+          {
+            for (const std::uint8_t called : CALLED)
+            {
+              constexpr std::uint8_t SLOT = 3;
+
+              Elite::Bubble bubble;
+              for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+              {
+                for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+                {
+                  bubble.blocks[slot][byte] = static_cast<std::uint8_t>(0x11u + slot * 7u + byte * 3u);
+                }
+              }
+              bubble.blocks[SLOT][32] = ai;
+              bubble.blocks[SLOT][36] = newb;
+
+              for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+              {
+                for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+                {
+                  cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = bubble.blocks[slot][byte];
+                }
+              }
+
+              const std::uint16_t block = static_cast<std::uint16_t>(at.kPercent + SLOT * Elite::SHIP_BLOCK_SIZE);
+              cpu.memory[inf] = static_cast<std::uint8_t>(block);
+              cpu.memory[static_cast<std::uint16_t>(inf + 1)] = static_cast<std::uint8_t>(block >> 8u);
+              cpu.memory[typeAt] = loopType;
+
+              cpu.a = called;
+              const Elite::Testing::RunResult run = cpu.CallSubroutine(angry, 20'000);
+              Assert::IsTrue(run.completed, L"ANGRY returned");
+
+              Elite::FlightState flight;
+              flight.type = loopType;
+              Elite::Anger(bubble, flight, SLOT, called);
+
+              const std::wstring where = Widen("ANGRY NEWB " + std::to_string(newb) + " AI " + std::to_string(ai) + " TYPE " +
+                                               std::to_string(loopType) + " called " + std::to_string(called));
+              for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+              {
+                for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+                {
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
+                                   bubble.blocks[slot][byte],
+                                   (where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
+                }
+              }
+              ++compared;
+            }
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(5u * 5u * 6u * 3u, compared, L"the whole sweep ran");
     }
   };
 

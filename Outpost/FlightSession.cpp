@@ -2,6 +2,8 @@
 
 #include "FlightSession.h"
 
+#include "Tactics.h"
+
 #include "DockedKeys.h"
 
 #include "ShipBlueprint.h"
@@ -178,32 +180,32 @@ namespace Outpost
 
   // ---- the bubble ---------------------------------------------------------------------------------
 
+  /*
+   * 6502: FRS1, ANGRY and SFS1 -- three seams answered by slice 4a-b, 2026-09-05.
+   *
+   * All three were stubs that said "phase 4", and each had a comment explaining which answer an
+   * empty implementation must give so that its caller stayed honest. Those answers are gone now,
+   * and the routines behind them are compared against the shipped game byte for byte. What is
+   * still missing is not the spawning: it is `TACTICS`, so a ship that `Anger` makes hostile has
+   * nothing to do about it yet.
+   */
   bool FlightSession::SpawnAhead(std::uint8_t _type)
   {
-    /*
-     * 6502: FRS1 -- put a ship right in front of us, and answer with the carry.
-     *
-     * Phase 4. It answers CLEAR, which is "the bubble was full": `FRMIS` reads that as a jammed
-     * missile and says so, which is a refusal the player can see rather than a missile that leaves
-     * and never arrives. Answering "it fitted" would spend the missile and spawn nothing.
-     */
-    (void)_type;
-    return false;
+    return Elite::SpawnShipAhead(m_bubble, m_work, _type, m_flight.delta, m_bubble.missileTarget, m_flight.blueprint).created;
   }
 
   void FlightSession::Anger(std::uint8_t _type)
   {
-    (void)_type; // 6502: ANGRY. Phase 4.
+    // 6502: JSR GINF then JSR ANGRY -- the caller has already pointed `INF` at the target's slot,
+    // and `MSTG` is the slot it pointed at.
+    Elite::Anger(m_bubble, m_flight, m_bubble.missileTarget, _type);
   }
 
   bool FlightSession::SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type)
   {
-    // 6502: SFS1 -- drop a piece of wreckage where a ship just died. Phase 4, and it answers
-    // "there was no room", which is what an empty implementation must say: `SPIN` gives up on a
-    // clear carry and a set one would have the caller believe a splinter is out there.
-    (void)_aiFlag;
-    (void)_type;
-    return false;
+    // 6502: SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.
+    return Elite::SpawnChildShip(m_bubble, m_work, m_screen.rng, m_math, m_flight.slot, m_flight.type, _aiFlag, _type, m_flight.blueprint)
+      .created;
   }
 
   // ---- the ships ----------------------------------------------------------------------------------

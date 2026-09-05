@@ -1,6 +1,7 @@
 #include "Tactics.h"
 
 #include "ShipMove.h"
+#include "Spawn.h"
 
 namespace Elite
 {
@@ -79,8 +80,7 @@ namespace Elite
 
   } // namespace
 
-  void SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math,
-                        std::uint8_t _at) noexcept
+  void SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math, std::uint8_t _at) noexcept
   {
     // 6502: LDA (V),Y / EOR #%10000000 / STA K+3 -- the other object's sign, negated.
     _math.k[3] = static_cast<std::uint8_t>(_other[_at + 2u] ^ 0x80u);
@@ -113,8 +113,7 @@ namespace Elite
     SubtractShipAxes(_bubble.blocks[1], _work, _axes, _math);
   }
 
-  AddSignedResult DotProductWithShip(const ShipBlock& _block, const DrawWorkspace& _draw, MathWorkspace& _math,
-                                     std::uint8_t _at) noexcept
+  AddSignedResult DotProductWithShip(const ShipBlock& _block, const DrawWorkspace& _draw, MathWorkspace& _math, std::uint8_t _at) noexcept
   {
     // 6502: LDX INWK,Y / STX Q / LDA XX15 / JSR MULT12 -- (S R) = vect_x * XX15.
     _math.q = _block[_at];
@@ -149,6 +148,49 @@ namespace Elite
       OffsetAxis(_axes, station[NOSE_VECTOR_X], 0u); // 6502: LDA K%+NI%+10 / LDX #0 / JSR TAS7
       OffsetAxis(_axes, station[NOSE_VECTOR_Y], 3u); // 6502: LDA K%+NI%+12 / LDX #3 / JSR TAS7
       OffsetAxis(_axes, station[NOSE_VECTOR_Z], 6u); // 6502: LDA K%+NI%+14 / LDX #6, a fall-through
+    }
+  }
+
+  void Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, std::uint8_t _type) noexcept
+  {
+    ShipBlock& station = _bubble.blocks[1];
+
+    // 6502: .AN2 LDA K%+NI%+36 / ORA #%00000100 / STA K%+NI%+36 -- the station is always slot 1,
+    // so this is a fixed address in the original and a fixed index here.
+    const auto angerStation = [&station]() noexcept { station[36] = static_cast<std::uint8_t>(station[36] | NEWB_HOSTILE); };
+
+    if (_type == SHIP_TYPE_STATION)
+    {
+      angerStation(); // 6502: CMP #SST / BEQ AN2, and AN2 returns -- nothing else happens
+      return;
+    }
+
+    ShipBlock& ship = _bubble.blocks[_slot];
+
+    // 6502: LDY #36 / LDA (INF),Y / AND #%00100000 / BEQ P%+5 / JSR AN2 -- and it is a `JSR`, so
+    // an ally of the station angers the station AND carries on being angered itself.
+    if ((ship[36] & NEWB_STATION_ALLY) != 0u)
+    {
+      angerStation();
+    }
+
+    // 6502: LDY #32 / LDA (INF),Y / BEQ HI1 -- and `HI1` is a bare `RTS` inside `HITCH`. A ship
+    // with no AI byte is left entirely alone: no acceleration, no dive, no hostile flag.
+    if (ship[32] == 0u)
+    {
+      return;
+    }
+
+    ship[32] = static_cast<std::uint8_t>(ship[32] | 0x80u); // 6502: ORA #%10000000 / STA (INF),Y
+
+    // 6502: LDY #28 / LDA #2 / STA (INF),Y / ASL A / LDY #30 / STA (INF),Y.
+    ship[28] = ANGRY_ACCELERATION;
+    ship[30] = static_cast<std::uint8_t>(ANGRY_ACCELERATION << 1u);
+
+    // 6502: LDA TYPE / CMP #CYL / BCC AN3 -- the LOOP's type byte, not the one in A.
+    if (_flight.type >= SHIP_TYPE_COBRA_MK3)
+    {
+      ship[36] = static_cast<std::uint8_t>(ship[36] | NEWB_HOSTILE);
     }
   }
 
