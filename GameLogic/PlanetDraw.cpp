@@ -1188,7 +1188,7 @@ namespace Elite
        */
       if (_pacing != nullptr)
       {
-        _pacing->ShowCircle();
+        _pacing->ShowFrame();
       }
 
       // 6502: ASL K / BCS HF8 -- a radius past 128 doubles out of the byte and ends the ring.

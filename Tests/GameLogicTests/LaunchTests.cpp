@@ -299,12 +299,111 @@ namespace GameLogicTests
      * they cross 160 first. That count does not depend on `STP` -- the step is how many segments a
      * circle has, not how many circles a ring is -- which is why one number covers both callers.
      */
+    /*
+     * 6502: LL164 -- the hyperspace tunnel, compared against the shipped routine.
+     *
+     * `HYPNOISE` is trapped on both of its seams and its ORDER is what the comparison is really
+     * about: two effects, a frame, and a third effect whose number has bit 7 set. The pixels are
+     * `HFS2` at step 4, which is the same body the launch draws at step 8 -- so a port that had
+     * copied the launch instead of sharing `HFS2` would pass the picture and fail the step.
+     */
+    TEST_METHOD(TheHyperspaceTunnelMatchesLL164)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      struct Counting final : Elite::TunnelEffects
+      {
+        std::uint32_t frames = 0;
+        void ShowFrame() override
+        {
+          ++frames;
+        }
+      };
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const std::uint16_t ll164 = oracle.Label("LL164");
+      const std::uint16_t stp = oracle.Label("STP");
+      const std::uint16_t noise = oracle.Label("NOISE");
+      const std::uint16_t noise2 = oracle.Label("NOISE2");
+      const std::uint16_t delay = oracle.Label("DELAY");
+
+      for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{255}})
+      {
+        World world;
+        Seed(world, 0x5Eu);
+        world.view = view;
+        world.heaps.yx2M1 = 143u;
+        world.heaps.lsp = 0u;
+        world.heaps.stp = 8u; // the launch's step, so a routine that forgot to store 4 is visible
+
+        Elite::ClipState clip;
+
+        Cpu6502 cpu = oracle.Fresh();
+        FillScreens(cpu, world.canvas, at.screen, 0x1Du);
+        Mirror(world, cpu, at);
+        cpu.memory[oracle.Label("Yx2M1")] = 143u;
+        cpu.memory[oracle.Label("dontclip")] = 0u;
+        cpu.memory[stp] = 8u;
+
+        cpu.AddTrap(noise, Cpu6502::TrapExit::SetCarry);
+        cpu.AddTrap(noise2);
+        cpu.AddTrap(delay);
+        cpu.AddTrap(oracle.Label("SETL1"));
+        cpu.AddTrap(oracle.Label("DOVDU19"));
+        cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, third time
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(ll164, 40'000'000);
+        Assert::IsTrue(run.completed, L"LL164 returned");
+
+        Counting counting;
+        Elite::FlightScreen screen = world.Screen();
+        Elite::DrawHyperspaceTunnel(screen, clip, world.dashboard, &counting);
+
+        const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
+
+        // 6502: LDA #4 / JSR HFS2 -- the step, which is the whole reason this is not `LAUN`.
+        Assert::AreEqual<std::uint8_t>(Elite::HYPERSPACE_TUNNEL_STEP, cpu.memory[stp], (where + L": the shipped STP").c_str());
+        Assert::AreEqual(cpu.memory[stp], world.heaps.stp, (where + L": STP").c_str());
+
+        // 6502: LDY #1 / JSR DELAY -- one vertical sync, plus one frame for each circle drawn.
+        std::uint32_t delays = 0;
+        std::uint32_t noises = 0;
+        std::uint32_t pitched = 0;
+        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+        {
+          delays += (hit.address == delay) ? 1u : 0u;
+          noises += (hit.address == noise) ? 1u : 0u;
+          pitched += (hit.address == noise2) ? 1u : 0u;
+        }
+        Assert::AreEqual<std::uint32_t>(1u, delays, (where + L": one DELAY").c_str());
+        Assert::AreEqual<std::uint32_t>(2u, noises, (where + L": two NOISE calls").c_str());
+        Assert::AreEqual<std::uint32_t>(1u, pitched, (where + L": one NOISE2 call").c_str());
+        Assert::AreEqual<std::uint32_t>(35u, counting.frames, (where + L": 34 circles and the DELAY").c_str());
+
+        // The sounds, in order: pitched sfxhyp1, sfxwhosh, then sfxhyp1 layered with bit 7 set.
+        Assert::AreEqual<std::size_t>(2u, world.dashboard.sounds.size(), (where + L": sounds").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, world.dashboard.sounds[0], (where + L": sfxwhosh").c_str());
+        Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(Elite::SOUND_HYPERSPACE + 128u), world.dashboard.sounds[1],
+                                       (where + L": sfxhyp1 layered").c_str());
+        Assert::AreEqual<std::size_t>(1u, world.dashboard.pitched.size(), (where + L": one pitched sound").c_str());
+
+        // 6502: QQ11 is saved across the TT66 inside HFS2, exactly as the launch's is.
+        Assert::AreEqual(cpu.memory[at.qq11], world.view, (where + L": QQ11").c_str());
+
+        Assert::IsTrue(CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where) > 0u, (where + L": something was drawn").c_str());
+      }
+    }
+
     TEST_METHOD(ThePacingIsOneFramePerCircle)
     {
       struct Counting final : Elite::TunnelEffects
       {
         std::uint32_t circles = 0;
-        void ShowCircle() override
+        void ShowFrame() override
         {
           ++circles;
         }
@@ -873,7 +972,7 @@ namespace GameLogicTests
       struct Counting final : Elite::TunnelEffects
       {
         std::uint32_t circles = 0;
-        void ShowCircle() override
+        void ShowFrame() override
         {
           ++circles;
         }

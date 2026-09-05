@@ -193,12 +193,54 @@ namespace Elite
      * showing the docked screen -- which is exactly right, because the caller has not finished
      * leaving it yet.
      */
+    DrawTunnel(_screen, _clip, LAUNCH_TUNNEL_STEP, _pacing);
+  }
+
+  void DrawTunnel(FlightScreen& _screen, ClipState& _clip, std::uint8_t _step, TunnelEffects* _pacing) noexcept
+  {
+    // 6502: .HFS2 STA STP -- the only writer of the step on either tunnel's path, which is the
+    // other half of §6.94's answer.
+    _screen.heaps.stp = _step;
+
+    /*
+     * 6502: LDA QQ11 / PHA / LDA #0 / JSR TT66 / PLA / STA QQ11.
+     *
+     * The screen is cleared to a space view and the view type is then PUT BACK to whatever the
+     * caller had. So the tunnel is drawn on a blank space view while the game still believes it is
+     * showing the docked screen -- which is exactly right, because the caller has not finished
+     * leaving it yet.
+     */
     const std::uint8_t saved = _screen.view;
     SetUpScreen(_screen, 0u);
     _screen.view = saved;
 
     // 6502: falls into HFS1.
     DrawHyperspaceRings(_screen.canvas, _screen.heaps, _screen.draw, _screen.geometry, _screen.math, _clip, _pacing);
+  }
+
+  void DrawHyperspaceTunnel(FlightScreen& _screen, ClipState& _clip, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
+  {
+    /*
+     * 6502: .HYPNOISE -- LDY #sfxhyp1 / LDA #&F5 / LDX #240 / JSR NOISE2, then `sfxwhosh` through
+     * `NOISE`, then one frame of `DELAY`, then `sfxhyp1 + 128`.
+     *
+     * The last one is `NOISE`'s LAYERING entry: bit 7 of the effect number means "do not check
+     * whether it is already playing", so the second hyperspace sound stacks on the first rather
+     * than replacing it. That bit is the argument, not a separate routine.
+     */
+    (void)_sound.PlaySoundPitched(SOUND_HYPERSPACE, HYPERSPACE_SUSTAIN, HYPERSPACE_FREQUENCY);
+    (void)_sound.PlaySound(SOUND_MISSILE, false);
+
+    // 6502: LDY #1 / JSR DELAY -- one vertical sync, which is what the pacing object holds for.
+    if (_pacing != nullptr)
+    {
+      _pacing->ShowFrame();
+    }
+
+    (void)_sound.PlaySound(static_cast<std::uint8_t>(SOUND_HYPERSPACE + 128u), false);
+
+    // 6502: LDA #4 / JSR HFS2 / RTS.
+    DrawTunnel(_screen, _clip, HYPERSPACE_TUNNEL_STEP, _pacing);
   }
 
   void Launch(FlightLoop& _loop, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,

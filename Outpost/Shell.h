@@ -123,7 +123,7 @@ namespace Outpost
     // ---- Elite::TunnelEffects -------------------------------------------------------------------
 
     /// 6502: the vertical sync the VIC-II was giving `HFS2` for free while it drew the next circle.
-    void ShowCircle() override;
+    void ShowFrame() override;
 
     // ---- Elite::ControlCodes and Elite::TextEffects ---------------------------------------------
 

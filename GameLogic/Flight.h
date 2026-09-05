@@ -88,6 +88,43 @@ namespace Elite
    */
   void DrawLaunchTunnel(FlightScreen& _screen, ClipState& _clip, TunnelEffects* _pacing) noexcept;
 
+  /// 6502: LDA #4 -- the step `LL164` hands `HFS2`, and the rounder of the two. `HFS2`'s header
+  /// comment has this pair the wrong way round; see `LAUNCH_TUNNEL_STEP`.
+  inline constexpr std::uint8_t HYPERSPACE_TUNNEL_STEP = 4;
+
+  /// 6502: sfxhyp1 -- the hyperspace drive engaging, which `HYPNOISE` plays twice: once pitched
+  /// through `NOISE2`, and once more at +128, which is `NOISE`'s "layer it on top" entry.
+  inline constexpr std::uint8_t SOUND_HYPERSPACE = 7;
+
+  /// 6502: LDA #&F5 / LDX #240 -- `NOISE2`'s two arguments for the first hyperspace sound. The
+  /// low nibble of A is a release length of 5 and the high nibble a sustain volume of 15.
+  inline constexpr std::uint8_t HYPERSPACE_SUSTAIN = 0xF5;
+  inline constexpr std::uint8_t HYPERSPACE_FREQUENCY = 240;
+
+  /*
+   * 6502: HFS2 on its own -- the step, the screen clear, and the eight rings.
+   *
+   * `LAUN` and `LL164` are the same routine with a different noise and a different step in front
+   * of it, which is what `HFS2` taking `A` says: the two entry points differ by two instructions.
+   * Splitting it out is what lets the hyperspace tunnel exist without copying the launch's body.
+   */
+  void DrawTunnel(FlightScreen& _screen, ClipState& _clip, std::uint8_t _step, TunnelEffects* _pacing) noexcept;
+
+  /*
+   * 6502: LL164 -- the hyperspace tunnel, and `HYPNOISE` in front of it.
+   *
+   * Five instructions once `HFS2` exists: the noise, a step of 4, and the rings. `HYPNOISE` is a
+   * SOUND routine (the upstream files it as one) and it is played through the seams phase 5 owns,
+   * except for its `LDY #1 / JSR DELAY`, which is one vertical sync and is therefore the pacing
+   * object's `ShowFrame`.
+   *
+   * NOTHING IN THE PORT CALLS THIS YET. `MJP` and `TT18` are its only callers and both are 4c, so
+   * this is the tunnel waiting for the jump rather than a routine with a live caller -- built here
+   * because it is what slice 3d-e names, and because the alternative was to leave `HFS2` reachable
+   * at one step size out of two.
+   */
+  void DrawHyperspaceTunnel(FlightScreen& _screen, ClipState& _clip, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
+
   /*
    * 6502: TT110 -- leave the station, or refuse to.
    *
