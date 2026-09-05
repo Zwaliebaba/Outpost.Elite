@@ -128,10 +128,6 @@ namespace GameLogicTests
         return {true, 0u};
       }
 
-      void ShowDockingTunnel() override
-      {
-        seams.push_back({"LAUN", 0, 0, 0});
-      }
       void WaitFrames(std::uint8_t _frames) override
       {
         seams.push_back({"DELAY", _frames, 0, 0});

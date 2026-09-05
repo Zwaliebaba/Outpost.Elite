@@ -5,6 +5,7 @@
 #include "Commander.h"
 #include "ExtendedTokens.h"
 #include "FlightLoop.h"
+#include "PlanetDraw.h"
 #include "Spawn.h"
 #include "StartUp.h"
 #include "Universe.h"
@@ -63,6 +64,31 @@ namespace Elite
   inline constexpr std::uint8_t LAUNCH_SPEED = 12;
 
   /*
+   * 6502: LDA #8 -- the step `LAUN` hands `HFS2`, and the upstream header comment has it backwards.
+   *
+   * `HFS2`'s own summary says "4 for launch, 8 for hyperspace"; the instruction inside `LAUN` is
+   * `LDA #8`, and the comment beside THAT instruction says 8, "so there are fewer sections in the
+   * rings and they are quite polygonal (compared to the step size of 4 used in the much rounder
+   * hyperspace rings)". The two are irreconcilable and the code is the one that runs, so the
+   * launch tunnel is the polygonal one.
+   */
+  inline constexpr std::uint8_t LAUNCH_TUNNEL_STEP = 8;
+
+  /*
+   * 6502: LAUN, and the `HFS2` it falls into -- the tunnel a launch and an arrival both open with.
+   *
+   * Three things and then eight rings: the whoosh, the step, and a `TT66` that clears the screen
+   * and draws the border box with `QQ11` PUT BACK AFTERWARDS. That last is the whole of why the
+   * routine can be run over a docked screen -- `TT66` sets the view to zero as a side effect of
+   * clearing it, and `LAUN` saves the byte across the call so the caller's screen type survives an
+   * effect drawn on top of it.
+   *
+   * It was a seam on `StartUpEffects` until this slice, for the reason every other one was: the
+   * ball line heap it draws through arrived in 3c and nothing revisited the stub (§6.73, again).
+   */
+  void DrawLaunchTunnel(FlightScreen& _screen, ClipState& _clip, TunnelEffects* _pacing) noexcept;
+
+  /*
    * 6502: TT110 -- leave the station, or refuse to.
    *
    * `LDX QQ12 / BEQ NLUNCH` is the refusal: pressing "1" in flight falls straight through to the
@@ -74,7 +100,7 @@ namespace Elite
    * contraband fine is ORed into `FIST` on the way out, so leaving is what levies it rather than
    * being scanned.
    */
-  void Launch(FlightLoop& _loop, StartUpEffects& _start, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
+  void Launch(FlightLoop& _loop, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
               std::uint8_t _techLevel, SystemSeeds& _selected) noexcept;
 
   /// 6502: LDA #13 / JSR TT66 / LDA #0 / STA QQ11 -- and it is two values on purpose. `TTX66K`

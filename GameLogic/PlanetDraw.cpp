@@ -1163,7 +1163,7 @@ namespace Elite
   }
 
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                          ClipState& _clip, const Projection& _centre, std::uint8_t _index) noexcept
+                          ClipState& _clip, const Projection& _centre, std::uint8_t _index, TunnelEffects* _pacing) noexcept
   {
     // 6502: .HFL1 LDA XX4 / AND #7 / CLC / ADC #8 / STA K -- the ring's starting radius.
     _math.k[0] = static_cast<std::uint8_t>((_index & 7u) + 8u);
@@ -1179,6 +1179,17 @@ namespace Elite
      */
       _state.lsp = 1u;
       DrawBall(_canvas, _state, _draw, _geometry, _math, _clip, _centre, false);
+
+      /*
+       * Not in the 6502, and it is the display's absence rather than an addition to the routine.
+       * The VIC-II was showing this circle while the next one was being computed; here nothing is
+       * showing anything until somebody presents, so the pacing goes where the machine's own
+       * pause was -- between one circle and the one that erases it.
+       */
+      if (_pacing != nullptr)
+      {
+        _pacing->ShowCircle();
+      }
 
       // 6502: ASL K / BCS HF8 -- a radius past 128 doubles out of the byte and ends the ring.
       const ShiftResult doubled = RotateLeftValue(_math.k[0], false);
@@ -1199,7 +1210,7 @@ namespace Elite
   }
 
   void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry,
-                           MathWorkspace& _math, ClipState& _clip) noexcept
+                           MathWorkspace& _math, ClipState& _clip, TunnelEffects* _pacing) noexcept
   {
     // 6502: LDX #X / STX K3 / LDX #Y / STX K4 / LDX #0 / STX XX4 / STX K3+1 / STX K4+1.
     Projection centre{};
@@ -1212,7 +1223,7 @@ namespace Elite
     for (std::uint8_t index = 0; index < 8u; ++index)
     {
       _geometry.xx4 = index;
-      DrawHyperspaceRing(_canvas, _state, _draw, _geometry, _math, _clip, centre, index);
+      DrawHyperspaceRing(_canvas, _state, _draw, _geometry, _math, _clip, centre, index, _pacing);
     }
 
     // 6502: the loop leaves `XX4` at eight, and `LL9` part 1 is the next thing to read it.

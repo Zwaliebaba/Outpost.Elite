@@ -155,14 +155,14 @@ namespace Elite
     return TrumblesOrBay(_commander);
   }
 
-  DockingResult DockAtStation(StartUpEffects& _effects, CommanderBlock& _commander, FlightStatus& _status, FlightState& _flight,
+  DockingResult DockAtStation(StartUpEffects& _effects, FlightScreen& _screen, ClipState& _clip, TunnelEffects* _pacing,
                               std::uint8_t& _dockedFlag, std::uint8_t _view, bool _hyperspaceHeld) noexcept
   {
     // 6502: JSR RES2 -- once here, where the cold start reaches it twice (§6.25).
     _effects.ResetShip();
 
-    // 6502: JSR LAUN.
-    _effects.ShowDockingTunnel();
+    // 6502: JSR LAUN -- the routine rather than a seam, since this slice ported it.
+    DrawLaunchTunnel(_screen, _clip, _pacing);
 
     /*
      * 6502: LDA #0 / STA DELTA / STA GNTMP / STA QQ22+1 / LDA #&FF / STA FSH / STA ASH / STA ENERGY.
@@ -171,18 +171,18 @@ namespace Elite
      * in the original -- ALPHA, BETA, ALP1 and BET1, the roll and pitch -- and RES2 has already
      * zeroed them, which is presumably why.
      */
-    _flight.delta = 0;
-    _status.laserTemperature = 0;
-    _status.hyperspaceCountdown = 0;
-    _status.forwardShield = 0xFF;
-    _status.aftShield = 0xFF;
-    _status.energy = 0xFF;
+    _screen.flight.delta = 0;
+    _screen.status.laserTemperature = 0;
+    _screen.status.hyperspaceCountdown = 0;
+    _screen.status.forwardShield = 0xFF;
+    _screen.status.aftShield = 0xFF;
+    _screen.status.energy = 0xFF;
 
     // 6502: LDY #44 / JSR DELAY.
     _effects.WaitFrames(DOCKING_PAUSE_FRAMES);
 
     DockingResult result{};
-    result.outcome = MissionOnDocking(_commander);
+    result.outcome = MissionOnDocking(_screen.commander);
 
     /*
      * 6502: EN6 -- JMP BAY, and only this exit reaches it. Every briefing is a tail call that ends
@@ -190,7 +190,7 @@ namespace Elite
      */
     if (result.outcome == DockingOutcome::DockingBay)
     {
-      result.bay = EnterDockingBay(_dockedFlag, _view, _status.hyperspaceCountdown, _hyperspaceHeld);
+      result.bay = EnterDockingBay(_dockedFlag, _view, _screen.status.hyperspaceCountdown, _hyperspaceHeld);
     }
 
     return result;
