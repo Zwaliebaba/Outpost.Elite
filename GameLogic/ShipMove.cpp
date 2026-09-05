@@ -545,7 +545,7 @@ namespace Elite
     }
   } // namespace
 
-  void MoveShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
+  bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
                 std::uint16_t _blueprint, std::uint8_t _view) noexcept
   {
     // 6502: LDA INWK+31 / AND #&A0 / BNE MV30 -- exploding or already dead, so straight to the
@@ -564,7 +564,7 @@ namespace Elite
       {
         MovePlanetOrSun(_work, _math, _flight.alpha, _flight.beta);
         MoveShipTail(_canvas, _draw, _work, _math, _flight, _view);
-        return;
+        return true;
       }
 
       /*
@@ -576,7 +576,11 @@ namespace Elite
       if ((_work[32] & 0x80u) != 0u &&
           (_flight.type == SHIP_TYPE_MISSILE || (static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 7u) == 0u))
       {
-        _effects.RunTactics(_work); // 6502: MV26
+        // 6502: JSR TACTICS at MV26 -- and it can end in `JMP DEATH`, which does not come back.
+        if (!_effects.RunTactics(_work))
+        {
+          return false;
+        }
       }
     }
 
@@ -693,6 +697,7 @@ namespace Elite
     _work[0] = _math.p1;
 
     MoveShipTail(_canvas, _draw, _work, _math, _flight, _view); // 6502: falls into MV45
+    return true;
   }
 
   namespace

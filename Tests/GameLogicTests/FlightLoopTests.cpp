@@ -933,9 +933,10 @@ namespace GameLogicTests
       std::uint32_t explosions = 0;
       std::uint32_t clouds = 0;
 
-      void RunTactics(Elite::ShipBlock& _work) override
+      bool RunTactics(Elite::ShipBlock& _work) override
       {
         tactics.push_back(_work[32]);
+        return true; // the counted double never kills the player -- §6.122's answer for "nothing happened"
       }
       void DrawPlanetOrSun() override
       {

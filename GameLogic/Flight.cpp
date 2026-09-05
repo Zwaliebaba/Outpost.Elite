@@ -395,8 +395,16 @@ namespace Elite
         screen.work[7] = static_cast<std::uint8_t>(screen.work[7] - 1u);
       }
 
-      // 6502: .TL1 JSR MVEIT.
-      MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, screen.flight.blueprint, screen.view);
+      /*
+       * 6502: .TL1 JSR MVEIT.
+       *
+       * The answer is discarded and saying so is the point: `MVEIT` only reaches `TACTICS` for a
+       * ship whose `INWK+32` has bit 7 set, and `TITLE` builds its ship with `ZINF` and then sets
+       * byte 32 to nothing. So the AI cannot run here and cannot kill anybody, and there is no
+       * player to kill -- the title screen has no energy banks (§6.122).
+       */
+      (void)MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, screen.flight.blueprint,
+                     screen.view);
 
       /*
        * 6502: LDX distaway / STX INWK+6 / LDA MCNT / AND #3 / LDA #0 / STA INWK / STA INWK+3.
