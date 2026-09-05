@@ -193,19 +193,18 @@ namespace Outpost
   };
 
   /*
-   * How fast a flight frame runs, for `PlanSteps`.
+   * WHAT USED TO BE HERE: `FLIGHT_STEPS_PER_SECOND = 59.826`, the NTSC vertical refresh, with a
+   * note arguing that "the flight loop is driven by that refresh and nothing else -- there is no
+   * timer in the game".
    *
-   * THE SHIPPED BUILD IS THE NTSC RELEASE. `tools/c64_source.py` assembles with `_GMA85_NTSC` set,
-   * which is the binary every comparison in this port is made against, and an NTSC C64's vertical
-   * refresh is 59.826 Hz rather than PAL's 50.125. The flight loop is driven by that refresh and
-   * nothing else -- there is no timer in the game -- so this is the rate, and §6.17's PAL/NTSC note
-   * is what makes choosing it a decision rather than a guess.
+   * The second half is true and the first is what §6.17 had already disproved: the C64's main loop
+   * has no `WSCAN` in it, so it is not driven by the refresh at all, and a frame really takes
+   * 48,000 to 86,000 cycles -- twelve to twenty-one a second rather than sixty. The rate now comes
+   * from `Outpost::FlightFrameSeconds` in `Presentation.h`, where the measurement it is derived
+   * from is written down beside it (§6.114).
    *
-   * `GameShell::WaitFrames` still counts PRESENTS rather than steps, because `DELAY` counts vertical
-   * syncs and a present is one. On a 60 Hz display the two are within a third of a percent; on a
-   * 144 Hz one a `DELAY` is two and a half times too short and the flight loop is unaffected. That
-   * is the accumulator earning its place.
+   * `GameShell::WaitFrames` still counts PRESENTS, because `DELAY` counts vertical syncs and a
+   * present is one; that half of §6.17 was right and is unchanged.
    */
-  inline constexpr double FLIGHT_STEPS_PER_SECOND = 59.826;
 
 } // namespace Outpost

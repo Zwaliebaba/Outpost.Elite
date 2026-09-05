@@ -78,7 +78,17 @@ main loop that ran as fast as the scene allowed.
   1 MHz 6510) needs a cost model of the original loop and is a phase-6 item if anyone wants it.
   Risk R3 owns the uncertainty here.
 
-- **The title screen is the exception, and it is cycle-budgeted. Added 2026-09-05.** `TITLE`
+- **The flight loop is cycle-budgeted too, from 2026-09-05.** The fixed rate above was the NTSC
+  vertical refresh, and §6.17 had already established that the C64's main loop is not driven by
+  the refresh — there is no `WSCAN` in it. A frame measured against the shipped `M%` costs 47,784
+  cycles with an empty bubble and about 81,000 with ships in it, so the loop runs at 21 frames a
+  second at best and 12.6 in a real bubble, not 60. `Outpost::FlightFrameSeconds` is that
+  measurement, indexed by how many slots of `FRIN` are occupied, and it is **two bands rather than
+  a curve** because the two ship scenes measured sit 7% either side of one number. The crowded
+  end — where the original slows down most, and where the slowdown is part of the difficulty —
+  is not measured yet and is paced at the one-ship cost (§6.114).
+
+- **The title screen is cycle-budgeted as well. Added 2026-09-05.** `TITLE`
   is not driven by the vertical sync — §6.17's scan found `WSCAN` called from `DELAY`,
   `TT16+7` and `FREEZE` and nowhere else — so its ship turns at whatever rate a 6510 gets
   through `MVEIT` and `LL9`, and a fixed rate is the wrong shape of answer. `TitleTurnSeconds`

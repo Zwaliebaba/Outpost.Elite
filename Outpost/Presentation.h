@@ -167,11 +167,65 @@ namespace Outpost
   }};
 
   /// 6502: the 6510's clock on the NTSC machine this build is for -- 1,022,727 Hz. The PAL one is
-  /// 985,248, and choosing between them is the same decision `FLIGHT_STEPS_PER_SECOND` makes.
+  /// 985,248, and choosing between them is the same decision the shipped build's variant makes.
   inline constexpr double NTSC_CLOCK_HZ = 1'022'727.0;
 
   /// How long a turn of the title ship should take with the ship `_distanceHigh` away, in seconds.
   /// Linear between the measured points, flat outside them.
   [[nodiscard]] double TitleTurnSeconds(std::uint8_t _distanceHigh) noexcept;
+
+  /*
+   * How long a FLIGHT frame takes on the machine it was written for.
+   *
+   * §6.17 settled the shape of this question in 2026-09-03 and it took until now to answer it. The
+   * C64's main loop has no frame cap: `WSCAN` -- the wait for vertical sync -- is called from
+   * `DELAY`, `TT16+7` and `FREEZE`, and the `JSR WSCAN` in `main_flight_loop_part_13_of_16` is
+   * inside a version gate the C64 build is not in. So `M%` runs as fast as a 6510 gets round it,
+   * the rate is a CONSEQUENCE of what a frame costs, and **that is why the real game visibly slows
+   * down when the screen fills with ships**.
+   *
+   * THE PORT RAN IT AT THE VERTICAL REFRESH INSTEAD, and the note that did so argued the loop "is
+   * driven by that refresh and nothing else -- there is no timer in the game". The first half is
+   * what §6.17 had already disproved; the second is true and is the reason there is no rate to
+   * read out of the source. 59.826 frames a second is four to five times what the machine manages,
+   * which is a game running at four to five times speed: the station spinning, the ships closing,
+   * the fuel burning, all of it (§6.114).
+   *
+   * SO IT IS MEASURED, by `FlightLoopTests::TheFlightFrameCostsWhatItCosts`, which runs the shipped
+   * `M%` over a mirrored frame with everything that draws or thinks left untrapped:
+   *
+   *     bubble            cycles a frame     frames a second
+   *     empty                 47,784               21.4
+   *     one ship              86,258               11.9
+   *     two ships             75,736               13.5
+   *
+   * TWO BANDS AND NOT A CURVE, because two of those numbers are one number. A frame with ships in
+   * it costs about 81,000 cycles and the two scenes sit 7% either side of that -- the difference
+   * between them is what the ships ARE and where, not how many, exactly as the title screen's cost
+   * turned out to depend on the ship's size rather than on its distance (§6.110). Reading a trend
+   * into a 7% wobble would be inventing one.
+   *
+   * WHAT IT DOES NOT COVER, stated because a measurement whose limits are not written beside it
+   * gets read as a fact. The crowded end is not measured: `Seed`'s third slot is a station and its
+   * `TACTICS` does not return untrapped, so a frame with a station or a fight in it is paced at the
+   * one-ship cost and is really slower. The scenes have no planet in them, so the floor is
+   * optimistic. And the counter prices neither the trapped sound calls nor the cycles the VIC-II
+   * steals, which is a further 5-10% -- so the port still runs slightly fast, and every one of
+   * those errors is in the same direction.
+   */
+  struct FlightFrameCost
+  {
+    std::uint8_t ships;   ///< 6502: how many slots of `FRIN` are occupied
+    std::uint32_t cycles; ///< what a frame costs there, measured against the shipped `M%`
+  };
+
+  inline constexpr std::array<FlightFrameCost, 2> FLIGHT_FRAME_COSTS = {{
+    {0, 47'784},
+    {1, 81'000},
+  }};
+
+  /// How long one flight frame should take with `_ships` in the bubble, in seconds. Flat above the
+  /// last measured point, because a rate beyond the measurement would be a guess wearing a number.
+  [[nodiscard]] double FlightFrameSeconds(std::uint8_t _ships) noexcept;
 
 } // namespace Outpost
