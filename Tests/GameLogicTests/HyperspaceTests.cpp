@@ -5,6 +5,7 @@
 #include "OracleImage.h"
 
 #include "Charts.h"
+#include "Flight.h"
 #include "Commander.h"
 #include "Hyperspace.h"
 #include "Market.h"
@@ -562,6 +563,142 @@ namespace GameLogicTests
 
       Assert::AreEqual<std::uint32_t>(6u * 2u * 2u, compared, L"the whole sweep ran");
       Assert::IsTrue(economies.size() >= 4u, L"and it arrived in systems of several kinds");
+    }
+
+    /*
+     * 6502: ESCAPE -- abandon ship, which is ninety-seven frames of animation and then a docking.
+     *
+     * Run whole on both sides, canvas included, because `MVEIT` and `LL9` draw the ship receding
+     * and `SCAN` puts a blip on the scanner. `GOIN` is trapped: it is the docking, which belongs to
+     * slice 2d, and the port hands it back to the caller the way every other `JMP` out of a routine
+     * has been.
+     *
+     * The Trumbles are swept from none to a hold full, because `ORA #1` is what stops the
+     * population reaching zero -- one to eight always survive -- and a sweep that started with none
+     * would never execute the branch that says so.
+     */
+    TEST_METHOD(AbandoningShipMatchesESCAPE)
+    {
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where where(oracle);
+      const std::uint16_t escape = oracle.Label("ESCAPE");
+      const std::uint16_t qq20 = oracle.Label("QQ20");
+      const std::uint16_t escp = oracle.Label("ESCP");
+      const std::uint16_t fist = oracle.Label("FIST");
+      const std::uint16_t qq14 = oracle.Label("QQ14");
+      const std::uint16_t tribble = oracle.Label("TRIBBLE");
+      const std::uint16_t goin = oracle.Label("GOIN");
+
+      struct Case
+      {
+        std::uint32_t seed;
+        std::uint8_t tribbleLow, tribbleHigh, legal, fuel;
+        std::vector<std::uint8_t> fleet;
+      };
+
+      const Case CASES[] = {
+        {6u, 0u, 0u, 0u, 20u, {128u, 129u}},                   // no Trumbles at all
+        {6u, 3u, 0u, 40u, 5u, {128u, 129u}},                   // a few, and an offender
+        {9u, 200u, 90u, 200u, 0u, {128u, 129u}},               // a hold full, and a fugitive
+        {9u, 0u, 1u, 0u, 70u, {128u, 129u}},                   // only the high byte set
+        {12u, 17u, 2u, 10u, 33u, {128u, 129u, 11u, 11u, 11u}}, // a busy bubble
+        // A FULL one, which is the branch `BCS ES1` exists for: the Cobra does not fit, so the
+        // pirate Cobra is tried instead, and here neither fits. The animation runs regardless.
+        {12u, 5u, 0u, 0u, 12u, {128u, 129u, 11u, 11u, 11u, 11u, 11u, 11u, 11u, 11u}},
+      };
+
+      std::uint32_t compared = 0;
+      std::set<std::string> outcomes;
+
+      for (const Case& one : CASES)
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        for (const char* seam : {"NOISE", "NOISE2", "MESS", "WSCAN", "DELAY", "BELL"})
+        {
+          std::uint16_t address = 0;
+          if (oracle.TryLabel(seam, address))
+          {
+            cpu.AddTrap(address);
+          }
+        }
+        cpu.AddTrap(goin); // 6502: JMP GOIN -- the docking, which is the caller's
+
+        LoopWorld world;
+        Seed(world.world, one.seed);
+        world.world.commander.At(Elite::Field::Tribbles) = one.tribbleLow;
+        world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)) = one.tribbleHigh;
+        world.world.commander.At(Elite::Field::LegalStatus) = one.legal;
+        world.world.commander.At(Elite::Field::EscapePod) = 0xFFu;
+        world.world.commander.At(Elite::Field::Fuel) = one.fuel;
+        for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
+        {
+          world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + static_cast<int>(item))) =
+            static_cast<std::uint8_t>(3u + item);
+        }
+
+        Mirror(world.world, cpu, where);
+        cpu.memory[tribble] = one.tribbleLow;
+        cpu.memory[static_cast<std::uint16_t>(tribble + 1u)] = one.tribbleHigh;
+        cpu.memory[fist] = one.legal;
+        cpu.memory[escp] = 0xFFu;
+        cpu.memory[qq14] = one.fuel;
+        for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
+        {
+          cpu.memory[static_cast<std::uint16_t>(qq20 + item)] = static_cast<std::uint8_t>(3u + item);
+        }
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(escape, 40'000'000);
+        Assert::IsTrue(run.completed, L"ESCAPE reached GOIN");
+
+        Elite::FlightScreen screen = world.world.Screen();
+        Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
+                               world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+
+        std::uint8_t fuel = one.fuel;
+        Elite::AbandonShip(loop, fuel);
+
+        const std::wstring context = WidenText("ESCAPE seed " + std::to_string(one.seed) + " trib " + std::to_string(one.tribbleHigh) +
+                                               "/" + std::to_string(one.tribbleLow));
+
+        CompareState(cpu, world.world, where, context);
+
+        for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
+        {
+          Assert::AreEqual(
+            cpu.memory[static_cast<std::uint16_t>(qq20 + item)],
+            world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + static_cast<int>(item))),
+            (context + L": QQ20+" + std::to_wstring(item)).c_str());
+        }
+        Assert::AreEqual(cpu.memory[fist], world.world.commander.At(Elite::Field::LegalStatus), (context + L": FIST").c_str());
+        Assert::AreEqual(cpu.memory[escp], world.world.commander.At(Elite::Field::EscapePod), (context + L": ESCP").c_str());
+        Assert::AreEqual(cpu.memory[tribble], world.world.commander.At(Elite::Field::Tribbles), (context + L": TRIBBLE").c_str());
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tribble + 1u)],
+                         world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)),
+                         (context + L": TRIBBLE+1").c_str());
+        Assert::AreEqual(cpu.memory[qq14], fuel, (context + L": QQ14").c_str());
+
+        outcomes.insert(std::to_string(world.world.commander.At(Elite::Field::Tribbles)) + "/" +
+                        std::to_string(world.world.bubble.slots[0]));
+        ++compared;
+      }
+
+      Assert::AreEqual<std::uint32_t>(6u, compared, L"the whole sweep ran");
+      /*
+       * TWO OUTCOMES, AND THE THIRD IS UNREACHABLE. `RES2` empties the bubble before `FRS1` runs,
+       * so there is always a free slot and always heap: the Cobra never fails, and `BCS ES1`'s
+       * alternative -- `LDX #CYL2 / JSR FRS1`, the PIRATE Cobra -- can never be the ship you left
+       * behind. A ten-ship fleet was put in this sweep to reach it and `RES2` wiped it first.
+       *
+       * Dead on this build for the same kind of reason as part 1's `CMP #HER / BEQ TT100` (§6.135):
+       * not because the code is wrong, but because a routine three calls up guarantees the test.
+       * Transcribed anyway, and recorded here so the next reader does not have to prove it again.
+       */
+      Assert::AreEqual<std::size_t>(2u, outcomes.size(), L"the Trumbles survived and were absent");
+      for (const std::string& one : outcomes)
+      {
+        Assert::IsTrue(one.find("/" + std::to_string(Elite::SHIP_TYPE_COBRA_MK3)) != std::string::npos,
+                       L"and the ship left behind is always the Cobra, never the pirate");
+      }
     }
   };
 

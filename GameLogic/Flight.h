@@ -140,6 +140,36 @@ namespace Elite
   void Launch(FlightLoop& _loop, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
               std::uint8_t _techLevel, SystemSeeds& _selected) noexcept;
 
+  /*
+   * 6502: ESCAPE -- abandon ship, and it is the only way to survive a fight you are losing
+   * (slice 4b-a).
+   *
+   * `RES2`, then the ship you left becomes an NPC flying away from you: `FRS1` puts a Cobra ahead,
+   * and if the bubble refuses it -- `BCS ES1` takes the SUCCESS -- it tries a PIRATE Cobra instead,
+   * which is a different blueprint and a different bounty. Then ninety-seven frames of `MVEIT` and
+   * `LL9` while it recedes.
+   *
+   * **194 IS THREE THINGS.** `LDA #194 / STA INWK+30` is the pitch; `LSR A / STA INWK+32` makes 97
+   * the AI byte; and `.ESL1 ... DEC INWK+32 / BNE ESL1` counts the animation down through that same
+   * byte. So the abandoned ship's AI setting drains to zero as it flies off, and the number of
+   * frames it flies for is half its pitch.
+   *
+   * What it costs: the whole cargo hold (`QQ20`, seventeen bytes), the legal status, the pod
+   * itself, and all but a handful of Trumbles -- `DORND AND #7 ORA #1` leaves one to eight of them,
+   * and zeroes the high byte, so a hold full of them comes back as a nuisance rather than a crisis.
+   * What it gives: seven light years of fuel, and a docking.
+   */
+  /// 6502: LDA #8 / STA INWK+27 -- the speed the abandoned ship leaves at.
+  inline constexpr std::uint8_t ESCAPE_SPEED = 8;
+
+  /// 6502: LDA #194 -- the pitch, and HALVED it is both the AI byte and the frame count.
+  inline constexpr std::uint8_t ESCAPE_PITCH = 194;
+
+  /// 6502: LDA #70 / STA QQ14 -- seven light years, which is what the pod is worth.
+  inline constexpr std::uint8_t ESCAPE_FUEL = 70;
+
+  void AbandonShip(FlightLoop& _loop, std::uint8_t& _fuel) noexcept;
+
   /// 6502: LDA #13 / JSR TT66 / LDA #0 / STA QQ11 -- and it is two values on purpose. `TTX66K`
   /// tail-jumps to `wantdials` for view 0 AND for view 13, so both draw the same pixels; what
   /// differs is that `TT66` prints the view's NAME for a zero, and the title screen has none.

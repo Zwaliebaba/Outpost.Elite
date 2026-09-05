@@ -731,15 +731,22 @@ namespace
       return;
 
     case Elite::LoopOutcome::Escaped:
+    {
       /*
-       * 6502: ESCAPE -- phase 4's, with `SESCP` that launches the pod and the cargo and equipment
-       * loss that pays for it. Refused rather than approximated: a pod that took the player back to
-       * the station without emptying the hold would be a cheaper escape than the game sells.
+       * 6502: ESCAPE -- built in slice 4b-a, and this is the last of the three jumps that leave
+       * `M%` to be wired (§6.82 named all three; `DOENTRY` and `DEATH` have been wired since 3d).
        *
-       * A default commander cannot reach this -- `KY13` is ANDed with `ESCP` -- so it needs a
-       * loaded commander who has bought one.
+       * The routine ends `JMP GOIN`, which is the docking -- so the arrival is the caller's, the
+       * way `TT18`'s fall into `TT110` was. A default commander cannot reach here at all: `KY13` is
+       * ANDed with `ESCP`, so it needs one that has bought a pod.
        */
+      Elite::AbandonShip(_game.flight.Loop(), _game.commander.At(Elite::Field::Fuel));
+
+      // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
+      _game.flight.StopDockingMusic();
+      Leave(_game, Elite::LoopOutcome::Docked);
       return;
+    }
 
     case Elite::LoopOutcome::Continued:
       return;

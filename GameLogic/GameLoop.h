@@ -116,7 +116,6 @@ namespace Elite
    * `PACK` is not a type of its own: the source says `PACK = SH3`, so the pack hunters are the
    * eight blueprints from the Sidewinder up, and part 4 picks one with `AND #7 / ADC #PACK`.
    */
-  inline constexpr std::uint8_t SHIP_TYPE_COBRA_PIRATE = 24;                 ///< 6502: CYL2
   inline constexpr std::uint8_t SHIP_TYPE_COUGAR = 32;                       ///< 6502: COU
   inline constexpr std::uint8_t SHIP_TYPE_PACK_FIRST = SHIP_TYPE_SIDEWINDER; ///< 6502: PACK = SH3
 

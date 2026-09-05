@@ -110,6 +110,11 @@ namespace Elite
   inline constexpr std::uint8_t SHIP_TYPE_ESCAPE_POD = 3;
   inline constexpr std::uint8_t SHIP_TYPE_COBRA_MK3 = 11;
 
+  /// 6502: CYL2 -- the pirate Cobra, which is a different blueprint and a different bounty. Named
+  /// here rather than beside the spawner that asked for it first, because `ESCAPE` asks too
+  /// (§6.121: a name that records which routine asked first stops being true when a second one does).
+  inline constexpr std::uint8_t SHIP_TYPE_COBRA_PIRATE = 24;
+
   /// 6502: SHU, ANA, COPS, SH3, WRM and TGL -- the six `TACTICS` names when it decides what a
   /// station launches, what an Anaconda escorts itself with, and what a rock hermit turns into.
   /// `SHU + 1` is the Transporter, which the source never names and which `TA1` counts.
