@@ -138,6 +138,16 @@ namespace
 
     std::uint8_t crosshairX = 0;
     std::uint8_t crosshairY = 0;
+
+    /*
+     * 6502: what `TT17` leaves in X and Y -- the crosshair steps, held between the scan and the
+     * dispatch that uses them.
+     *
+     * On the 6502 they are registers and the two routines are consecutive; here `TT102`'s work is
+     * a function call away, so they have to live somewhere. This is that somewhere, and it is in
+     * `Game` rather than in the shell because both halves of the loop write it.
+     */
+    Elite::CrosshairStep crosshairStep;
     std::uint8_t explosionCount = 0;
     std::uint8_t dockedFlag = 0;
 
@@ -159,6 +169,62 @@ namespace
     return Elite::GameStart{_game.shell,      _game.save,       _game.text,           _game.commander, _game.name,
                             _game.image,      _game.buffer,     _game.useDisk,        _game.current,   _game.selectedSeeds,
                             _game.crosshairX, _game.crosshairY, _game.explosionCount, _game.dockedFlag};
+  }
+
+  /*
+   * 6502: what a chart reads -- QQ9, QQ10, QQ0, QQ1, QQ11 and QQ14, gathered where they live.
+   *
+   * The crosshairs are the game's own two bytes and the home position is INSIDE the commander
+   * block (§2e's finding: `QQ0` and `QQ1` are `TP+1` and `TP+2`), so this is a view onto four
+   * different owners rather than a struct anybody keeps.
+   */
+  [[nodiscard]] Elite::ChartView ChartOf(Game& _game)
+  {
+    Elite::ChartView view;
+    view.cursorX = _game.crosshairX;
+    view.cursorY = _game.crosshairY;
+    view.homeX = _game.commander.At(Elite::Field::SystemX);
+    view.homeY = _game.commander.At(Elite::Field::SystemY);
+    view.view = _game.view;
+    view.fuel = _game.commander.At(Elite::Field::Fuel);
+    return view;
+  }
+
+  /*
+   * 6502: TT22 and TT23 -- draw whichever chart the view says.
+   *
+   * TT23 LIFTS THE CLIPPER'S LIMITS AND PUTS THEM BACK. `LDA #199 / STA Yx2M1 / STA dontclip` at
+   * the top and `LDA #0 / STA dontclip / LDA #2*Y-1 / STA Yx2M1` at the bottom, because the
+   * short-range chart draws system discs below the space view's floor. Both bytes belong to the
+   * drawing rather than to the chart, which is why they are set here and not inside `TT23` (§6.45).
+   */
+  void DrawChart(Game& _game)
+  {
+    const Elite::ChartView chart = ChartOf(_game);
+    Elite::FlightScreen& screen = _game.flight.Screen();
+
+    if (_game.view == Elite::SHORT_RANGE_CHART_VIEW)
+    {
+      screen.heaps.yx2M1 = Elite::CHART_SCREEN_BOTTOM;
+      _game.flight.Loop().clip.dontclip = Elite::CHART_SCREEN_BOTTOM;
+
+      Elite::DrawShortRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.GalaxySeeds(),
+                                 &_game.flight);
+
+      _game.flight.Loop().clip.dontclip = 0u;
+      screen.heaps.yx2M1 = Elite::SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
+      return;
+    }
+
+    Elite::DrawLongRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.GalaxySeeds(), &_game.flight);
+  }
+
+  /// 6502: TT22 and TT23's opening `JSR TT66`, which the routines leave to their caller, and then
+  /// the chart itself.
+  void ShowChart(Game& _game, std::uint8_t _view)
+  {
+    _game.shell.ClearToView(_view);
+    DrawChart(_game);
   }
 
   /*
@@ -263,14 +329,107 @@ namespace
      * The rest belong to phases the port has not reached. They are listed rather than defaulted
      * so that adding a phase-4 screen is a compiler error here instead of a key that does nothing.
      */
-    case Elite::KeyAction::Hyperspace:
-    case Elite::KeyAction::CountdownOnly:
     case Elite::KeyAction::LongRangeChart:
+      // 6502: JMP TT22.
+      ShowChart(_game, Elite::LONG_RANGE_CHART_VIEW);
+      return;
+
     case Elite::KeyAction::ShortRangeChart:
+      // 6502: JMP TT23.
+      ShowChart(_game, Elite::SHORT_RANGE_CHART_VIEW);
+      return;
+
+    case Elite::KeyAction::HomeCrosshairs:
+    {
+      /*
+       * 6502: TT103 / ping / TT103 -- erase the crosshairs, move them home, draw them again.
+       *
+       * It is a TAIL call and skips the countdown, which is the one path through `TT102`'s chart
+       * half that does not reach `TT107` -- so this returns rather than falling through, exactly
+       * as the dispatch's own comment says.
+       */
+      Elite::FlightScreen& screen = _game.flight.Screen();
+      Elite::ChartView chart = ChartOf(_game);
+
+      Elite::DrawTargetCrosshairs(_game.canvas, screen.draw, chart);
+      Elite::CrosshairsToCurrentSystem(_game.commander, _game.crosshairX, _game.crosshairY);
+
+      chart.cursorX = _game.crosshairX;
+      chart.cursorY = _game.crosshairY;
+      Elite::DrawTargetCrosshairs(_game.canvas, screen.draw, chart);
+      return;
+    }
+
+    case Elite::KeyAction::MoveCrosshairs:
+    {
+      /*
+       * 6502: ee2 -- JSR TT16, and then TT107.
+       *
+       * The steps are `TT17`'s, from the key LOGGER rather than from the key that was dispatched:
+       * `TT102` is reached every pass of `MLOOP` with whatever `thiskey` holds, including nothing,
+       * and it is the held cursor key that moves the crosshairs (§6.115). Zero on both axes is the
+       * usual answer and `TT16` is called with it anyway, because that is what the original does.
+       */
+      Elite::FlightScreen& screen = _game.flight.Screen();
+      Elite::ChartView chart = ChartOf(_game);
+
+      Elite::MoveCrosshairs(_game.canvas, screen.draw, chart, _game.crosshairStep.x, _game.crosshairStep.y);
+
+      _game.crosshairX = chart.cursorX;
+      _game.crosshairY = chart.cursorY;
+    }
+      [[fallthrough]];
+
+    case Elite::KeyAction::CountdownOnly:
+    {
+      /*
+       * 6502: TT107 -- tick the hyperspace countdown, and it is TWO counters and one number.
+       *
+       * `QQ22+1` is what is on screen and `QQ22` is the tick within each of its steps, reset to
+       * five every time it runs out. Every chart pass ends here, which is why the countdown keeps
+       * running while you move the crosshairs.
+       *
+       * IT PRINTS THE NEW NUMBER AND THEN THE OLD ONE. `CHPR` draws by EOR, so printing the number
+       * that is already there is what RUBS IT OUT -- the pair of calls is one update, and doing
+       * them in the other order would leave the old digit on screen.
+       */
+      if (_game.status.hyperspaceCountdown == 0u)
+      {
+        return;
+      }
+
+      --_game.status.hyperspaceCounter; // 6502: DEC QQ22
+      if (_game.status.hyperspaceCounter != 0u)
+      {
+        return;
+      }
+
+      Elite::PrintCountdown(_game.characters, _game.text, static_cast<std::uint8_t>(_game.status.hyperspaceCountdown - 1u));
+      _game.status.hyperspaceCounter = 5u; // 6502: LDA #5 / STA QQ22
+      Elite::PrintCountdown(_game.characters, _game.text, _game.status.hyperspaceCountdown);
+
+      --_game.status.hyperspaceCountdown; // 6502: DEC QQ22+1
+
+      /*
+       * 6502: BNE t95 / JMP TT18 -- and `TT18` is the jump itself, which is phase 4's: it deducts
+       * the fuel, copies the target over the commander's system and flies the tunnel. The counter
+       * cannot reach zero in this build anyway, because `hyp` is what starts it and `hyp` is
+       * refused below -- so this is a hole that nothing can fall into rather than one left open.
+       */
+      return;
+    }
+
+    /*
+     * The rest belong to phases the port has not reached. They are listed rather than defaulted
+     * so that adding a phase-4 screen is a compiler error here instead of a key that does nothing.
+     *
+     * `SearchBySystemName` is the one that is nearly here: `MT26` reads a line and is ported, and
+     * what it still has no answer for is whose buffer the name goes into (§2e). `Hyperspace` is
+     * `hyp`, which needs `TT18` and the tunnel behind it.
+     */
+    case Elite::KeyAction::Hyperspace:
     case Elite::KeyAction::ShowDistance:
     case Elite::KeyAction::SearchBySystemName:
-    case Elite::KeyAction::HomeCrosshairs:
-    case Elite::KeyAction::MoveCrosshairs:
     case Elite::KeyAction::Nothing:
       return;
     }
@@ -422,7 +581,7 @@ namespace
        * green -- was never called by anything but its own test: no key the player HELD reached the
        * game, which is every flight control there is (§6.111).
        */
-      Elite::ScanFlightControls(_game.flight.Loop(), _game.flight);
+      (void)Elite::ScanFlightControls(_game.flight.Loop(), _game.flight, _game.flight.Screen().view);
 
       std::uint8_t key = 0;
       if (_game.window.TakeKey(key))
@@ -485,6 +644,7 @@ namespace
      * screen key worked at all.
      */
     double accumulated = 0.0;
+    double dockedLeftover = 0.0;
     auto last = std::chrono::steady_clock::now();
 
     while (game->shell.Turn())
@@ -504,9 +664,32 @@ namespace
          */
         accumulated = 0.0;
 
-        std::uint8_t key = 0;
-        if (game->window.TakeKey(key))
+        /*
+         * 6502: MLOOP's tail -- `JSR TT17` and then `TT102`, EVERY PASS and not only when a key
+         * was pressed.
+         *
+         * The port dispatched on key EVENTS, which is right for every docked screen except the two
+         * that read the keyboard as a state: a chart moves its crosshairs while a cursor key is
+         * HELD, and `TT102` reaches that through `TT17`'s X and Y rather than through the key it
+         * was handed. So the loop now does what `MLOOP` does -- scan, then dispatch whatever
+         * `thiskey` is, including nothing -- and `ActionForKey`'s own fall-through turns a pass
+         * with no key into `MoveCrosshairs` on a chart and `CountdownOnly` everywhere else (§6.115).
+         *
+         * THE PASSES ARE PACED, for §6.114's reason one screen further on: a pass per PRESENT is
+         * 165 crosshair steps a second on this display. `MLOOP`'s docked pass ends in a jump to
+         * whichever screen the key chose, so it cannot be timed the way a flight frame was -- the
+         * flight frame's empty-bubble cost is used instead, and it is a floor rather than a
+         * measurement, because a docked pass draws no ships and is cheaper than that.
+         */
+        const Outpost::StepPlan docked = Outpost::PlanSteps(elapsed, dockedLeftover, 1.0 / Outpost::FlightFrameSeconds(0));
+        dockedLeftover = docked.leftoverSeconds;
+
+        for (int pass = 0; pass < docked.steps; ++pass)
         {
+          game->crosshairStep = Elite::ScanFlightControls(game->flight.Loop(), game->flight, game->view);
+
+          std::uint8_t key = 0;
+          (void)game->window.TakeKey(key); // 6502: `thiskey`, which is zero when nothing is held
           PressKey(*game, key);
         }
         continue;

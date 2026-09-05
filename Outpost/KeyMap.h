@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Controls.h"
+
 #include <cstdint>
 
 namespace Outpost
@@ -81,5 +83,20 @@ namespace Outpost
 
   /// The character `TT217` would have returned for that C64 key -- `TRANTABLE`, and nothing else.
   [[nodiscard]] std::uint8_t CharacterFor(std::uint8_t _c64Key) noexcept;
+
+  /*
+   * The chart crosshairs' keys, which are the one place a PC key stands for two C64 keys.
+   *
+   * `TT17` reads one cursor key per AXIS and takes the direction from SHIFT, so an arrow is its
+   * axis key plus, for two of the four, a shift. Both entries go into the key logger while the key
+   * is held; `NO_KEY` in either field means there is nothing to press. See the table in the .cpp.
+   */
+  struct CursorKeys
+  {
+    std::uint8_t axis = NO_KEY;
+    std::uint8_t shift = NO_KEY;
+  };
+
+  [[nodiscard]] CursorKeys CursorKeysFor(int _virtualKey) noexcept;
 
 } // namespace Outpost

@@ -130,6 +130,46 @@ namespace Elite
   inline constexpr std::size_t KEY_PITCH_DOWN = 51; ///< 6502: KY6 -- "S"
   inline constexpr std::size_t KEY_FIRE = 54;       ///< 6502: KY7 -- "A"
 
+  /*
+   * 6502: the five key-logger entries `TT17`'s CHART path reads, which are not `KY` anything.
+   *
+   * The flight keys above have names in the source because `DOKEY` reads them through labels; these
+   * are written as raw offsets from `KLO` and named only in the upstream commentary, which is why
+   * they arrive here as numbers with a comment rather than as constants somebody transcribed.
+   *
+   * THE C64 HAS ONE CURSOR KEY PER AXIS. `KLO+&3E` is "cursor left/right" and `KLO+&39` is "cursor
+   * up/down" -- one key each, with SHIFT choosing the direction, which is what the two SHIFT
+   * entries are for. RETURN is the accelerator: held, it multiplies the step by four.
+   */
+  inline constexpr std::size_t KEY_CURSOR_X = 0x3E;       ///< 6502: KLO+&3E -- cursor left/right
+  inline constexpr std::size_t KEY_CURSOR_Y = 0x39;       ///< 6502: KLO+&39 -- cursor up/down
+  inline constexpr std::size_t KEY_SHIFT_LEFT = 0x31;     ///< 6502: KLO+&31 -- left SHIFT
+  inline constexpr std::size_t KEY_SHIFT_RIGHT = 0x0C;    ///< 6502: KLO+&C -- right SHIFT
+  inline constexpr std::size_t KEY_CROSSHAIR_FAST = 0x3F; ///< 6502: KLO+&3F -- RETURN
+
+  /// 6502: what `TT17` leaves in X and Y -- one signed step per axis, four times as big with
+  /// RETURN held. Zero on both when nothing is pressed, which is most passes.
+  struct CrosshairStep
+  {
+    std::uint8_t x = 0; ///< 6502: X on return from `TT17`
+    std::uint8_t y = 0; ///< 6502: Y
+  };
+
+  /*
+   * 6502: TT17's `TJ1` path -- the cursor keys, as two signed steps.
+   *
+   * `JSTK` chooses between this and the joystick path above it, and this build's joystick path is
+   * the one `TT17afterall` runs when `JSTK` is non-zero; the title screen sets `JSTK` to zero the
+   * moment you dismiss it with a key rather than with fire (§6.107's other half), so a keyboard
+   * player is always here.
+   *
+   * THE Y AXIS IS INVERTED AND THE `EOR` IS WHERE. Both axes start at 1 and become &FF when a SHIFT
+   * is held, by `ORA`ing the shift entries -- and then the y one is `EOR #%11111110`, which turns 1
+   * into &FF and &FF into 1. So the unshifted cursor key moves y NEGATIVE and the shifted one moves
+   * it positive, the opposite way round from x.
+   */
+  [[nodiscard]] CrosshairStep ReadCrosshairKeys(const KeyLogger& _keys) noexcept;
+
   /// 6502: LDA #14 -- what `DOKEY` bumps and reduces the rates by on every pass.
   inline constexpr std::uint8_t CONTROL_STEP = 14;
 

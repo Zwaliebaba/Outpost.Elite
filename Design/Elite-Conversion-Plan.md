@@ -437,88 +437,7 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
-### 6.117 A routine that is one byte, and two comments that describe another machine
-
-`DEATH` is the last routine in phase 3, and three of its instructions do something other than what
-the source says they do.
-
-**`DET1` IS A BARE `RTS` ON THIS BUILD.** `JSR DET1` appears twice in `DEATH`, once with `LDX #24`
-and once with `LDX #31`, and the upstream comment on the first says it sets "the screen to only
-show 24 text rows, which hides the dashboard, **setting A to 6 in the process**". That is the BBC's
-routine -- `LDA #6 / SEI / STA VIA+&00 / STX VIA+&01 / CLI`, four writes to a 6522 this machine has
-not got. Every body in `det1-dodials.asm` is behind an `IF` the C64 fails, so what the label
-assembles to is one byte: `&60`. The `LDX` before it goes nowhere and the `A` after it is not 6.
-
-**SO THE DEATH SCREEN CLEARS TO VIEW 224.** `JSR TT66` is the very next instruction, `TT66` takes
-its view in A, and A is therefore whatever `RES2` left there a dozen instructions earlier -- a byte
-nothing wrote on purpose. It is **224**, and the port has it because the oracle was asked, not
-because it was derived: `TheDeathScreenSetsUpLikeDEATH` traps `TT66`, reads the accumulator and
-compares. This is §6.115's rule with a different register: **a value that arrives at a routine
-without any instruction meaning to put it there is measurable and is not derivable**, and the
-honest thing is to say which one you did.
-
-**AND `ASL DELTA / ASL DELTA` DOES NOT DIVIDE.** The comment beside it reads "Divide our speed in
-DELTA by 4"; `ASL` shifts LEFT. `RES2` sets `DELTA` to 3, so the wreckage flies past at 12 rather
-than at 0 -- and the test asserts 12 against the shipped routine. The BBC's source has the same
-comment, and the difference is not the platform this time: it is a comment that was wrong when it
-was written.
-
-**AND THE CARRY THAT PICKS THE WRECKAGE IS NOT THE ONE THE COMMENT NAMES.** `LDX #OIL / LDA
-XX21-1+2*PLT / BEQ D3 / BCC D3 / DEX` chooses between a cargo canister and an alloy plate, and the
-comment beside the `BCC` says the flag "will be random following the above call to `Ze`". It is
-random, and it is not `Ze`'s: **`SEC / ROR A` sits four instructions above it**, and a `ROR` puts
-A's old bit 0 into the carry. A there is the roll counter, `X AND %10001111`. So the wreckage is a
-plate when the random `X` was odd -- a different random number from the one the comment points at,
-and the whole-bitmap comparison is what said so, after the port had believed the comment.
-
-**Four documentation errors in one routine, which is a rate worth naming.** §6.109 found `HFS2`'s
-header with its two step sizes swapped against its own code; this has `DET1` described as a routine
-it is not, a register set that is not, a shift in the wrong direction, and a carry attributed to the
-wrong instruction. The upstream commentary
-is the best thing about the source and it is not the source: **every time this port has trusted a
-comment over an instruction it has been wrong, and every time it has measured instead it has been
-right.** `c64_source.py` exists because of that (§6.75) and it answered the first of these three in
-one command -- the other two needed the oracle, because a build's silence about a register is not
-something a source file can show you.
-
-**What `DEATH` costs, for the record.** `BOX`, `U%`, `Ze` and `fq1` are ported with it, `DET1` is
-deliberately not, and `DEATH2` was already wired as the death exit's `RES2` then `BR1` (§6.25). The
-sequence spawns five pieces of wreckage rather than four -- `LDA FRIN+4 / BEQ D1` tests the slot
-after filling one -- and half of them arrive already dead, because `DORND / AND #%10000000` goes
-straight into byte 31.
-
-### 6.116 The Ubuntu leg is not a compiler check, and it has now let two through
-
-`std::vector<bool>` cost a red CI run within minutes of §6.115 being pushed, and the interesting
-part is not the container.
-
-**WHAT HAPPENED.** The carry lists were `std::vector<bool>`, which is bit-packed: `operator[]`
-returns a **proxy**, not a `bool`, and the proxy is what `T` deduces to in
-`Assert::AreEqual(const T&, const T&, ...)`. MSVC's `CppUnitTestAssert.h` resolves `ToString<T>`
-and static-asserts when there is none, so it failed with C2338. g++ has no such assertion and the
-portable runner's shim stringifies through a stream, so **the same file built and 304 tests passed
-on the Ubuntu leg** before the Windows one saw it.
-
-**THIS IS THE SECOND TIME.** The first was `const bool near = ...`, which is `const bool = ...`
-after `<windows.h>` claims the word -- caught by the Windows leg after the Linux one was green,
-and answered by teaching `check_gamelogic.py` about Windows macros. Both have the same shape: the
-fast leg is not merely *slower to run* than the authority, it is **more permissive**, and nothing
-says by how much. The workflow's own comment calls the Linux job "a second compiler's opinion",
-which is true and is not the same thing as agreement.
-
-**THE FIX, AND WHAT IT DELIBERATELY IS NOT.** The shim now static-asserts on
-`std::vector<bool>::reference` with the reason and the remedy in the message. It does **not** try
-to mirror MSVC's whole `ToString` set, because that set is not written down anywhere this project
-can read and guessing it would trade a known gap for an unknown one -- the shim would start
-rejecting comparisons the real framework accepts, which is a worse failure because it fails on the
-leg nobody treats as authoritative. One trap, by name, where it bit.
-
-**The rule.** A stand-in for a toolchain is a stand-in for what it ACCEPTS as well as for what it
-computes, and the second half is the one nobody writes tests for. Each time the Windows leg
-catches something the Ubuntu leg could not, the answer is to teach the Ubuntu leg that specific
-thing -- not to assume the next one will be caught either.
-
-### 6.115 The carry is not a seam's problem, it is a chain, and the port models none of it
+### 6.118 The carry is not a seam's problem, it is a chain, and the port models none of it
 
 §6.99 said the fix for `bool PlaySound(std::uint8_t)` was `bool PlaySound(std::uint8_t, bool)` and
 that it should wait for phase 5. The seam was widened early, for a reason that turned out to be
@@ -568,6 +487,139 @@ it properly means threading a flag through the flight loop, not through one inte
 is a decision with a cost, not a defect with a fix: the alternative is to keep deriving it where a
 branch or a compare makes it local and to say plainly where it is not. This port now does the
 second, out loud, in one place. Phase 5 is when the difference starts to reach a player.
+### 6.117 A routine that is one byte, and two comments that describe another machine
+
+`DEATH` is the last routine in phase 3, and three of its instructions do something other than what
+the source says they do.
+
+**`DET1` IS A BARE `RTS` ON THIS BUILD.** `JSR DET1` appears twice in `DEATH`, once with `LDX #24`
+and once with `LDX #31`, and the upstream comment on the first says it sets "the screen to only
+show 24 text rows, which hides the dashboard, **setting A to 6 in the process**". That is the BBC's
+routine -- `LDA #6 / SEI / STA VIA+&00 / STX VIA+&01 / CLI`, four writes to a 6522 this machine has
+not got. Every body in `det1-dodials.asm` is behind an `IF` the C64 fails, so what the label
+assembles to is one byte: `&60`. The `LDX` before it goes nowhere and the `A` after it is not 6.
+
+**SO THE DEATH SCREEN CLEARS TO VIEW 224.** `JSR TT66` is the very next instruction, `TT66` takes
+its view in A, and A is therefore whatever `RES2` left there a dozen instructions earlier -- a byte
+nothing wrote on purpose. It is **224**, and the port has it because the oracle was asked, not
+because it was derived: `TheDeathScreenSetsUpLikeDEATH` traps `TT66`, reads the accumulator and
+compares. This is §6.118's rule with a different register: **a value that arrives at a routine
+without any instruction meaning to put it there is measurable and is not derivable**, and the
+honest thing is to say which one you did.
+
+**AND `ASL DELTA / ASL DELTA` DOES NOT DIVIDE.** The comment beside it reads "Divide our speed in
+DELTA by 4"; `ASL` shifts LEFT. `RES2` sets `DELTA` to 3, so the wreckage flies past at 12 rather
+than at 0 -- and the test asserts 12 against the shipped routine. The BBC's source has the same
+comment, and the difference is not the platform this time: it is a comment that was wrong when it
+was written.
+
+**AND THE CARRY THAT PICKS THE WRECKAGE IS NOT THE ONE THE COMMENT NAMES.** `LDX #OIL / LDA
+XX21-1+2*PLT / BEQ D3 / BCC D3 / DEX` chooses between a cargo canister and an alloy plate, and the
+comment beside the `BCC` says the flag "will be random following the above call to `Ze`". It is
+random, and it is not `Ze`'s: **`SEC / ROR A` sits four instructions above it**, and a `ROR` puts
+A's old bit 0 into the carry. A there is the roll counter, `X AND %10001111`. So the wreckage is a
+plate when the random `X` was odd -- a different random number from the one the comment points at,
+and the whole-bitmap comparison is what said so, after the port had believed the comment.
+
+**Four documentation errors in one routine, which is a rate worth naming.** §6.109 found `HFS2`'s
+header with its two step sizes swapped against its own code; this has `DET1` described as a routine
+it is not, a register set that is not, a shift in the wrong direction, and a carry attributed to the
+wrong instruction. The upstream commentary
+is the best thing about the source and it is not the source: **every time this port has trusted a
+comment over an instruction it has been wrong, and every time it has measured instead it has been
+right.** `c64_source.py` exists because of that (§6.75) and it answered the first of these three in
+one command -- the other two needed the oracle, because a build's silence about a register is not
+something a source file can show you.
+
+**What `DEATH` costs, for the record.** `BOX`, `U%`, `Ze` and `fq1` are ported with it, `DET1` is
+deliberately not, and `DEATH2` was already wired as the death exit's `RES2` then `BR1` (§6.25). The
+sequence spawns five pieces of wreckage rather than four -- `LDA FRIN+4 / BEQ D1` tests the slot
+after filling one -- and half of them arrive already dead, because `DORND / AND #%10000000` goes
+straight into byte 31.
+
+### 6.116 The Ubuntu leg is not a compiler check, and it has now let two through
+
+`std::vector<bool>` cost a red CI run within minutes of §6.118 being pushed, and the interesting
+part is not the container.
+
+**WHAT HAPPENED.** The carry lists were `std::vector<bool>`, which is bit-packed: `operator[]`
+returns a **proxy**, not a `bool`, and the proxy is what `T` deduces to in
+`Assert::AreEqual(const T&, const T&, ...)`. MSVC's `CppUnitTestAssert.h` resolves `ToString<T>`
+and static-asserts when there is none, so it failed with C2338. g++ has no such assertion and the
+portable runner's shim stringifies through a stream, so **the same file built and 304 tests passed
+on the Ubuntu leg** before the Windows one saw it.
+
+**THIS IS THE SECOND TIME.** The first was `const bool near = ...`, which is `const bool = ...`
+after `<windows.h>` claims the word -- caught by the Windows leg after the Linux one was green,
+and answered by teaching `check_gamelogic.py` about Windows macros. Both have the same shape: the
+fast leg is not merely *slower to run* than the authority, it is **more permissive**, and nothing
+says by how much. The workflow's own comment calls the Linux job "a second compiler's opinion",
+which is true and is not the same thing as agreement.
+
+**THE FIX, AND WHAT IT DELIBERATELY IS NOT.** The shim now static-asserts on
+`std::vector<bool>::reference` with the reason and the remedy in the message. It does **not** try
+to mirror MSVC's whole `ToString` set, because that set is not written down anywhere this project
+can read and guessing it would trade a known gap for an unknown one -- the shim would start
+rejecting comparisons the real framework accepts, which is a worse failure because it fails on the
+leg nobody treats as authoritative. One trap, by name, where it bit.
+
+**The rule.** A stand-in for a toolchain is a stand-in for what it ACCEPTS as well as for what it
+computes, and the second half is the one nobody writes tests for. Each time the Windows leg
+catches something the Ubuntu leg could not, the answer is to teach the Ubuntu leg that specific
+thing -- not to assume the next one will be caught either.
+
+### 6.115 The charts were finished and unreachable, and the seam said so in its own comment
+
+F1 and F2 did nothing. That was deliberate — `Perform` lists the charts among the actions it
+refuses, spelled out rather than defaulted "so that adding a phase-4 screen is a compiler error
+here instead of a key that does nothing" — and it had stopped being true.
+
+**THE SEAM CARRIED ITS OWN EXPIRY DATE.** `ChartShapes` is the fuel circle and the system discs,
+and its comment reads: *"Both draw by walking a line heap so that the next frame can erase exactly
+what the last one drew, and that heap is the flight model's (slice 3c). **Until it exists** the
+charts hand their arguments here instead."* Slice 3c landed in September. `CIRCLE2` is `DrawBall`
+and `SUN` is `DrawSun`, both ported, both drawing through heaps `FlightSession` already owned; the
+only thing missing was somebody implementing two methods. §6.73's pattern for the fifth and sixth
+time in a day, and the clearest case yet: the note said what would make it stale and nothing
+re-read the note.
+
+**WHAT WAS ACTUALLY MISSING was the keyboard, and it was missing in three different ways.**
+
+`TT17`'s CHART path had not been ported — §6.111 took the space-view half that morning and left
+the other, which is where the crosshair steps come from. It is `TJ1`: one cursor key per AXIS with
+SHIFT choosing the direction, RETURN multiplying the step by four, and an `EOR #%11111110` on the
+y axis that makes the unshifted key step `QQ10` NEGATIVE. Thirty-two combinations of five key-logger
+entries is the whole input space, and all thirty-two are compared against the shipped routine.
+
+`TT102` had to be reached EVERY PASS and was reached only on a key event. The crosshairs move
+while a key is HELD, and the dispatch reads that through `TT17`'s X and Y rather than through the
+key it was handed — so `ActionForKey`'s fall-through turns a pass with no key at all into
+`MoveCrosshairs`. The docked loop now does what `MLOOP` does: scan, then dispatch whatever
+`thiskey` is, including nothing.
+
+And the passes had to be PACED, which is §6.114 one screen further on: a pass per present is 165
+crosshair steps a second. `MLOOP`'s docked pass ends in a jump to whichever screen the key chose,
+so it cannot be timed the way a flight frame was; the flight frame's empty-bubble cost stands in,
+and that is a floor rather than a measurement because a docked pass draws no ships.
+
+**THE ARROW KEYS DO TWO JOBS AND THE C64'S DID NOT.** There, `<`, `>`, `X` and `S` steer and the
+cursor keys aim, so no key ever means both. This port's map is a modern one (ADR-005 §4) and the
+arrows are the obvious thing to aim with, so one job has to give way: `ScanKeyboard` drops the
+steering entries while a chart is up. That rule is the PORT'S and is marked as such where it
+lives, one statement below the view-dependent clearing that `RDKEY` really does.
+
+**And the vertical pair is asymmetric on purpose.** Up presses no shift and down presses one,
+which is the opposite of left and right, because of that `EOR`: unshifted steps `QQ10` by -1 and
+`QQ10` grows downwards on both charts. The first version had them the symmetric way round and the
+crosshairs went the wrong way on screen — found by pressing the key, not by reading the code, and
+now asserted so that nobody tidies the table into symmetry.
+
+**A trap that had to be added to make the comparison mean anything.** `TT17` calls `DOKEY` and
+`DOKEY` opens with `JSR RDKEY`, which walks the CIA — and in a flat 64 KB image the CIA is whatever
+bytes happen to sit at those addresses. The first run of the new test compared the port against a
+keyboard with keys held that nothing had pressed. Trapping `RDKEY` is not a convenience: it is the
+same seam the port answers with `ControlEffects::ScanKeyboard`.
+
 ### 6.114 The flight loop ran at the refresh rate, and §6.17 had said not to for six months
 
 Everything in flight moved four to five times too fast: the station spinning, the ships closing,
@@ -4485,9 +4537,10 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **The charts, F1 and F2** (§6.115). They were refused in the dispatch and the refusal had gone stale: `TT22` and `TT23` were ported and oracle-compared, and `ChartShapes` -- the fuel circle and the system discs -- said in its own comment that it was a seam only "until" slice 3c existed. Slice 3c landed in September. `FlightSession` implements it over `CIRCLE2` and `SUN`, and what was really missing was the KEYBOARD: `TT17`'s chart path (ported now, all 32 combinations of its five key-logger entries compared against the shipped routine), `TT102` reached every pass rather than on a key event, and those passes paced -- 165 crosshair steps a second otherwise. The arrows aim on a chart and steer in flight, so the scan drops the steering keys while a chart is up; that rule is the port's own and is marked as such. **Up presses no shift and down presses one**, because `TT17`'s `EOR #%11111110` makes the unshifted key step `QQ10` negative -- found by pressing the key, not by reading the code. `D`, `F` and hyperspace stay refused, and `F` is named as the nearest: `MT26` is ported and has nowhere to put the name yet. |
 | 2026-09-05 | **`DEATH`, and phase 3 is complete.** The death screen with `BOX`, `U%`, `Ze` and `fq1` -- and `DET1` deliberately NOT, because on this build it is one byte. Three findings in one routine (§6.117), all of them the source describing a different machine. **`DET1` is a bare `RTS`**, so the `LDX #24` before it goes nowhere and the A the comment says it sets to 6 is whatever `RES2` left -- **224**, measured off the oracle because nothing meant to put it there. **`ASL DELTA` twice MULTIPLIES** where its comment says "divide by 4", so the wreckage flies past at 12 rather than stopped. And the debris loop makes **five** pieces, not four: `LDA FRIN+4 / BEQ D1` tests the slot after filling one, and half of them arrive already dead. The rate is the point -- three documentation errors in one routine, after §6.109 found `HFS2`'s two step sizes swapped against its own code: **every time this port has trusted a comment over an instruction it has been wrong.** Wired at the app's death exit. 308 tests green. |
 | 2026-09-05 | **The hyperspace tunnel, and phase 3 down to one routine.** `LL164` is five instructions once `HFS2` exists, so `HFS2` is split out of the launch and both step sizes come from one body -- 8 for the launch, 4 for the jump, which is what `HFS2` taking `A` was always saying. `HYPNOISE` goes with it: two sounds, one vertical sync and a third effect at +128, which is `NOISE`'s layering entry rather than a separate routine. Compared against the shipped `LL164` over three values of `QQ11` on the whole bitmap, the step, the `DELAY`, the two `NOISE` calls and the one `NOISE2`. The pacing seam is renamed `ShowFrame`, because `HYPNOISE`'s one-frame `DELAY` wants exactly what the per-circle pacing wants. **Nothing calls `LL164` yet** -- `MJP` and `TT18` are both 4c. **Slice 2e closes** on §6.114's flight-loop measurement, and **3a's built marker is added**, which had been missing since 3b depended on it. What is left of phase 3 is `DEATH`, and it is a slice: `DET1`, `BOX`, `Ze`, `fq1`, `U%` and `DEATH2` are none of them ported. 307 tests green. |
-| 2026-09-05 | **The carry is a chain, and the instrument to see it did not exist** (§6.115, §6.116). §6.99 said `bool PlaySound(uint8_t)` should grow a carry argument and should wait for phase 5; widening it early turned out to BE the finding. **`Cpu6502::TrapHit` recorded `a`, `x`, `y` and watched memory and not the carry** -- so five findings about a flag at a call site (§6.85, §6.86, §6.87, §6.88, §6.99) had all been read off the assembly and none could be checked. It records it now, and the flight-loop comparison checks the carry handed to every `PlaySound` against the one the oracle reaches `NOISE` with. Six suites failed at once, none of them in code the change touched: **three of the four call sites hand `NOISE` a flag set somewhere the port cannot see** -- `ECBLB2` is four instructions and none touch the carry, `BEEP` is one shorter with the same shape, and `MA63`'s `JSR EXNO3` runs on whatever `OUCH` left several routines deep. Two ARE derivable and now are: `MA59` comes off part 8's `BCS`, and `.custard` off a `CMP`, which is §6.86 supplied rather than merely recorded. The comparison is narrowed to the four laser effects with the exclusion named beside its reason. **And it cost a red CI run**: the carry lists were `std::vector<bool>`, whose `operator[]` returns a proxy MSVC's `Assert::AreEqual` static-asserts on and g++ does not, so the file built and 304 tests passed on the Ubuntu leg before Windows saw it. Second Windows-only compile error to reach CI after `const bool near`; the shim now refuses that one case by name. |
+| 2026-09-05 | **The carry is a chain, and the instrument to see it did not exist** (§6.118, §6.116). §6.99 said `bool PlaySound(uint8_t)` should grow a carry argument and should wait for phase 5; widening it early turned out to BE the finding. **`Cpu6502::TrapHit` recorded `a`, `x`, `y` and watched memory and not the carry** -- so five findings about a flag at a call site (§6.85, §6.86, §6.87, §6.88, §6.99) had all been read off the assembly and none could be checked. It records it now, and the flight-loop comparison checks the carry handed to every `PlaySound` against the one the oracle reaches `NOISE` with. Six suites failed at once, none of them in code the change touched: **three of the four call sites hand `NOISE` a flag set somewhere the port cannot see** -- `ECBLB2` is four instructions and none touch the carry, `BEEP` is one shorter with the same shape, and `MA63`'s `JSR EXNO3` runs on whatever `OUCH` left several routines deep. Two ARE derivable and now are: `MA59` comes off part 8's `BCS`, and `.custard` off a `CMP`, which is §6.86 supplied rather than merely recorded. The comparison is narrowed to the four laser effects with the exclusion named beside its reason. **And it cost a red CI run**: the carry lists were `std::vector<bool>`, whose `operator[]` returns a proxy MSVC's `Assert::AreEqual` static-asserts on and g++ does not, so the file built and 304 tests passed on the Ubuntu leg before Windows saw it. Second Windows-only compile error to reach CI after `const bool near`; the shim now refuses that one case by name. |
 | 2026-09-05 | **The flight loop ran at the refresh rate, and §6.17 had said not to** (§6.114). Everything in flight moved four to five times too fast. §6.17 established in September that the C64's main loop has no `WSCAN` in it and asked for the loop to be **cycle-budgeted and free-running** -- "a fixed rate would be a behaviour the game never had" -- and the port shipped a fixed rate at the NTSC vertical refresh anyway. The measurement is taken now: the shipped `M%`, mirrored into the oracle with `PLANET` and `TACTICS` untrapped, costs 47,784 cycles with an empty bubble and about 81,000 with ships in it -- **21.4 and 12.6 frames a second, against 59.826**. `FlightFrameSeconds` is two measured bands rather than a curve, for §6.110's reason: the two ship scenes sit 7% either side of one number and the difference is what the ships are, not how many. The crowded end is unmeasured, because `TACTICS` untrapped does not return for a station -- so a fight is paced at the one-ship cost and is really slower. Four faults in a day (§§6.110-6.114), all in the executable, none in a ported routine, and every one found by a person looking at the screen: **the oracle proves what the port computes and nothing yet proves what it does**. |
 | 2026-09-05 | **The station drew into the sun's heap and the port kept the two apart** (§6.112). The space station was invisible from the moment you launched -- in the bubble, moved by the loop, drawn by `LL9`, and with byte 31 saying so. `NWSPS` points the station at `LSO`, the SUN's line heap (§6.58 recorded it when the routine was ported), and in this port those 200 bytes live in `PlanetSunState` while `LineHeap` is the arena from `K%` to `LS%` -- so the station's pointer landed between two objects and every line it drew was **written out of range and dropped by a bounds check documented as harmless**. The heap now takes a window onto the sun's bytes, which is what the machine always had. The oracle comparisons DO compare `LSO` and passed anyway, because neither side wrote there: two sets of zeros agreeing, §6.36's shape a fourth time. |
 | 2026-09-05 | **`DOKEY` was ported, swept, green, and called by nothing** (§6.111). No flight control worked in the app -- not the arrows, the speed keys or the missile keys -- because the key LOGGER was never filled. The C64 has its own `TT17` (`LDA QQ11 / BNE TT17afterall / JSR DOKEY`) and the common one, which is what you get by asking for the common path by name, is three instructions with no scan in it; the port read the decoy. `Main.cpp`'s own comment has described both of the frame's keyboard reads since slice 2e and the code did one of them: a seam wired at one end, with `FlightSession::ScanKeyboard` implemented and `ReadFlightControls` called by nothing but its test. **No check in this project finds ported-tested-and-unreachable**, and `check_outpost.py` cannot: a routine the app never calls is not a name it uses. |

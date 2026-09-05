@@ -1359,7 +1359,7 @@ namespace GameLogicTests
       for (std::size_t index = 0; index < soundCarries.size() && index < _frame.world.effects.soundCarries.size(); ++index)
       {
         /*
-         * ONLY THE LASER SOUNDS ARE COMPARED, and the exclusion is named rather than quiet (§6.115).
+         * ONLY THE LASER SOUNDS ARE COMPARED, and the exclusion is named rather than quiet (§6.118).
          *
          * The four laser effects are the ones whose carry the port DERIVES: `.custard` is reached
          * from a `CMP`, so the flag is the laser power measured against `Mlas` or `Armlas`, and
@@ -1369,7 +1369,7 @@ namespace GameLogicTests
          * those would be fitting a constant to whatever this fixture happens to produce.
          *
          * Excluded the way §6.91 excludes the explosion cloud's six bytes: in the open, by name,
-         * with the reason beside it. What is left of the gap is §6.115.
+         * with the reason beside it. What is left of the gap is §6.118.
          */
         const bool derived =
           index < sounds.size() && (sounds[index] == 0u || sounds[index] == 10u || sounds[index] == 11u || sounds[index] == 12u);

@@ -737,6 +737,49 @@ namespace GameLogicTests
 
       Assert::AreEqual(ALLOWED_ALIASES.size(), aliased.size(), L"every allowed alias is actually used");
 
+      /*
+       * And the four arrows carry a SECOND C64 key each, which the walk above cannot see.
+       *
+       * `TT17` reads one cursor key per axis and takes the direction from SHIFT, so a PC arrow is
+       * an axis key and, for two of them, a shift as well (§6.115). They are a separate table
+       * because they are a separate question -- `C64KeyFor` answers "what does this key type",
+       * and this answers "what does it aim" -- and the two never meet in the game: the crosshairs
+       * are read from the logger and the dispatch is read from the queue.
+       */
+      struct Aim
+      {
+        int virtualKey;
+        std::uint8_t axis;
+        std::uint8_t shift;
+        const wchar_t* what;
+      };
+
+      const Aim AIMS[] = {
+        {0x27, Elite::KEY_CURSOR_X, Outpost::NO_KEY, L"Right"},
+        {0x25, Elite::KEY_CURSOR_X, Elite::KEY_SHIFT_LEFT, L"Left"},
+        {0x26, Elite::KEY_CURSOR_Y, Outpost::NO_KEY, L"Up"},
+        {0x28, Elite::KEY_CURSOR_Y, Elite::KEY_SHIFT_LEFT, L"Down"},
+      };
+
+      for (const Aim& aim : AIMS)
+      {
+        const Outpost::CursorKeys keys = Outpost::CursorKeysFor(aim.virtualKey);
+        Assert::AreEqual<std::uint32_t>(aim.axis, keys.axis, (std::wstring(aim.what) + L": the axis key").c_str());
+        Assert::AreEqual<std::uint32_t>(aim.shift, keys.shift, (std::wstring(aim.what) + L": the shift").c_str());
+      }
+
+      /*
+       * UP IS THE UNSHIFTED ONE AND DOWN IS THE SHIFTED ONE, which is the opposite of the x pair
+       * and is not a slip: `TT17` ends the y axis with `EOR #%11111110`, so the unshifted key steps
+       * `QQ10` by -1, and `QQ10` grows downwards on both charts. Asserting it here is what stops
+       * somebody tidying the table into symmetry.
+       */
+      Assert::AreEqual<std::uint32_t>(Outpost::NO_KEY, Outpost::CursorKeysFor(0x26).shift, L"up presses no shift");
+      Assert::AreNotEqual<std::uint32_t>(Outpost::NO_KEY, Outpost::CursorKeysFor(0x28).shift, L"and down does");
+
+      // A key that aims nothing says so, which is what `Window::PressKey` tests before it stores.
+      Assert::AreEqual<std::uint32_t>(Outpost::NO_KEY, Outpost::CursorKeysFor(0x41).axis, L"A does not aim");
+
       Assert::AreEqual<std::uint8_t>(Outpost::NO_KEY, Outpost::C64KeyFor(0x5A), L"Z is not bound");
       Assert::AreEqual<std::uint8_t>(0, Outpost::CharacterFor(Outpost::NO_KEY), L"and nothing pressed translates to nothing printable");
     }

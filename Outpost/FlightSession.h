@@ -4,6 +4,7 @@
 
 #include "Canvas.h"
 #include "Commander.h"
+#include "Charts.h"
 #include "Controls.h"
 #include "Dashboard.h"
 #include "ExtendedTokens.h"
@@ -64,7 +65,8 @@ namespace Outpost
                               public Elite::ShipDrawEffects,
                               public Elite::ControlEffects,
                               public Elite::SightEffects,
-                              public Elite::ViewEffects
+                              public Elite::ViewEffects,
+                              public Elite::ChartShapes
   {
   public:
     FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
@@ -134,6 +136,17 @@ namespace Outpost
     // ---- Elite::ControlEffects ------------------------------------------------------------------
 
     void ScanKeyboard() override;
+
+    /*
+     * 6502: TT128's `JMP CIRCLE2` and TT23's `ee1` -- the two shapes a chart draws.
+     *
+     * `ChartShapes` was a seam because "that heap is the flight model's (slice 3c)", and slice 3c
+     * landed: `CIRCLE2` is `DrawBall` and `SUN` is `DrawSun`, both here, both drawing through the
+     * heaps this session already owns. The seam is answered rather than removed, because the charts
+     * are compared against the shipped game through it (§6.115).
+     */
+    void DrawRangeCircle(const Elite::RangeCircle& _circle) override;
+    void DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius) override;
     void RunDockingComputer(Elite::ShipBlock& _work) override;
 
     // ---- Elite::SightEffects and Elite::ViewEffects ----------------------------------------------
