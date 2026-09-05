@@ -451,6 +451,45 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.137 A dependency pass that checked the wrong direction, and two rows it mis-sized
+
+§6.134 recorded that slice 4c's dependency pass "came back empty" and scoped the slice into four
+parts. Starting 4c-c found that **it is already built**, and the reason is a hole in how the pass
+was done. Correcting it here rather than quietly, because the section is pushed and a reader would
+otherwise plan from it.
+
+**What the pass actually checked.** It took 4c's fourteen routines, extracted every `JSR` and `JMP`
+target, and asked of each whether the port had it. That is a sound question and the answer was
+sound: the only unported routine 4c CALLS is `GTHG`. But it is one direction. It never asked the
+other question -- whether the routines in 4c's own SCOPE LINE were already built by an earlier
+slice -- and two of them were.
+
+**`NWSPS` was built in slice 3d-d-iii-b.** `AddStation` is in `Spawn.h`, it implements `NwS1`, the
+sun's eviction from slot 1 and the Coriolis/Dodo switch, and `TheStationMatchesNWSPS` compares it
+against the shipped routine over tech levels that straddle ten from both sides. `FlightLoop.h` says
+so in as many words -- "`NWSPS` WAS A SEAM HERE AND IS NOT ANY MORE" -- and both callers run it for
+real. So slice 4c-c has no work in it at all.
+
+**And the claim that `FlightSession` stubs it was simply wrong.** §6.134 said so, this plan's 4c row
+said so, and two commit messages said so. `FlightSession.h` says the opposite on its own line 54:
+"`NWSPS` is NOT among them any more: the station is put back on a launch". The sentence was carried
+forward from the phase table's older text and never checked.
+
+**4c-d is a quarter of the size it was given.** Part 5 is 65 instructions, and §6.128 already placed
+the first fourteen of them in `Main.cpp` -- the two cooling countdowns and `JSR DIALS` -- and `TT17`
+and the whole of part 6 with them. Of what is left, THIRTY-FOUR INSTRUCTIONS ARE TRUMBLES: the
+breeding at `plus13` and the squeaking at `NOSQUEEK`, which are slice 4d's scope and not 4c's. What
+genuinely remains of 4c-d is seven instructions -- `LDA QQ11 / BEQ plus13 / AND PATG / LSR A / BCS
+plus13 / LDY #2 / JSR DELAY`, the frame-rate option -- plus an audit of what was placed by hand.
+
+**The rule this leaves.** A dependency pass has two directions and §6.122 only ever demonstrated
+one. Asking "what does this slice call that I do not have" finds missing prerequisites; asking "what
+does this slice's scope line name that I already have" finds duplicated work, and it is the cheaper
+question because the answer is a grep for the label in the port. §6.121 and §6.128 both concluded
+that the ledger was written from what routines are ABOUT rather than from what they TOUCH -- and
+this is the same failure one level up, in a plan section written to guard against exactly it. The
+scope lines are a decade-old inventory; the port is the fact. Check the port.
+
 ### 6.136 Slice 4c-b: the jump, and two bytes that come from somewhere else entirely
 
 `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` are built, in `Hyperspace.cpp`. `hyp` decided WHETHER to jump
@@ -605,13 +644,15 @@ than `TACTICS` was.
 |---|---|---|---|
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates | 199 | Spawn decisions against the shipped routine over seeded generator states, comparing the WHOLE bubble as slice 4a-b does; the generator is the input, so this is exactly reproducible. **136 cases, 50 distinct bubbles**, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than from the generator and the port had six wrong; `MLOOP` turned out to be the label on part 5, so the routine has one exit and not two |
 | **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive, in `Hyperspace.cpp`. This is what `Main.cpp` refuses by name and what slice 2d's `JumpOutcome::Galactic` was waiting for | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` run whole on both sides, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them — `QQ28` from the last `TT111` rather than from the seeds beside it, `QQ0` from crosshairs `TT111` snapped, and `MJ` from `ZINF`'s loop counter — and `TT18` turned out to have four exits rather than three |
-| **4c-c** | `NWSPS` and the Coriolis/Dodo switch by tech level | 33 | The station's block byte for byte, both station types, across the tech level the switch turns on |
-| **4c-d** | Main game loop parts 5 and 6 and the loop's tail, reconciled against what §6.128 already put in `Main.cpp` by hand | 71 | The counters and the dashboard calls per pass; part of this exists and the pass is as much audit as port |
+| **4c-c** ✅ | `NWSPS` and the Coriolis/Dodo switch by tech level | **Already built, in slice 3d-d-iii-b — this row should never have been written (§6.137).** `AddStation` in `Spawn.h` carries `NwS1`, the sun's eviction from slot 1 and the tech-level switch, and `TheStationMatchesNWSPS` compares it against the shipped routine over tech levels straddling ten from both sides. Both callers run it for real. The scope line was taken from the ledger without checking the port |
+| **4c-d** | Main game loop part 5's frame-rate option — `LDA QQ11 / BEQ plus13 / AND PATG / LSR A / BCS plus13 / LDY #2 / JSR DELAY`. **Seven instructions, not 71 (§6.137)**: §6.128 placed part 5's two cooling countdowns, `JSR DIALS`, `TT17` and the whole of part 6 by hand already, and the thirty-four instructions of Trumble breeding and squeaking between them are slice 4d's scope | The option's effect on the pass, and an audit of what §6.128 placed by hand against the routine it came from — as much review as port |
 
 **What it unblocks.** `Main.cpp` lists what it refuses by name rather than defaulting, so that adding
-one is a compiler error: hyperspace and the charts, which are 4c-b's. `FlightSession` stubs `NWSPS`,
-which is 4c-c's. And nothing at all currently populates the bubble over time, so the AI built in
-4a-c steers ships that only a test ever creates -- 4c-a is what makes the game a game.
+one is a compiler error: hyperspace and the charts, which are 4c-b's. And nothing at all currently
+populates the bubble over time, so the AI built in 4a-c steers ships that only a test ever creates --
+4c-a is what makes the game a game. **The third clause of this paragraph said `FlightSession` stubs
+`NWSPS`, and that was wrong** -- it has not since slice 3d-d-iii-b, and `FlightSession.h` says so.
+See §6.137, which also retires slice 4c-c and re-sizes 4c-d.
 
 **Order.** 4c-a first, because 4c-b's `MJP` spawns Thargoids through the same path and would
 otherwise need it stubbed, and 4c-c is independent and can go at any point.
@@ -5331,10 +5372,10 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 | **4a-a** ✅ | `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6`, `DCS1` — the vectors, in `Tactics.h/.cpp` | **Built 2026-09-05**, 17 mutations and 17 caught |
 | **4a-b** ✅ | `FRS1`, `SESCP`, `SFS1`, `SFS2`, `ANGRY` — a ship arriving from inside the bubble, and the three `FlightSession` seams they answer | **Built 2026-09-05**, compared on the whole bubble. **28 mutations, 28 caught** — after three survivors turned out to be the fixture rather than the port (§6.124) |
 | **4a-c** ✅ | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | **Built 2026-09-05** (§6.125). 92 cases over 23 situations and four generator seeds, each comparing the ship block, the whole bubble, the counts, the generator, `RAT`/`RAT2`/`JUNK` and the player's energy banks against the shipped routine. `DEATH` is trapped and eight cases are fatal, so §6.122's `bool` is observed false rather than merely declared. Two defects only the oracle could find: a `JSR TAS2` transcribed as absent, and six of ten `DORND` carries.<br><br>**79 mutations, 59 caught, 4 not applicable, 2026-09-05.** The docking half is closed: every `dock-*` and `steer-*` mutation is caught after §6.131 and §6.132 found three branches its sweep could not reach and two mutations that could not fail. **The AI half is not.** Fifteen survivors remain, all in `TheAiMatchesTACTICS` -- `ta-253`, `ta-240`, `ta-ana200`, `ta-250`, `ta-104`, `ta-half`, `ta-230`, `ta3-ecm`, `ta7-three`, `ta20-eor`, `msl-16`, `msl-82`, `msl-bit5`, `msl-kill` and `kill-rotate` -- and they are the same shape as the docking ones were: thresholds the geometry table never lands on. The method that closed the others applies unchanged (§6.132): probe the comparison, count what reaches it, add a ladder. Recorded as debt rather than left implicit, because a slice reported as built with a green suite and fifteen live mutations is exactly the state §6.126 warns about. |
-| **4c-a** | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates. 199 C64 instructions | **Next.** Spawn decisions against the shipped routine over seeded generator states, comparing the whole bubble as 4a-b does — the generator is the input, so the comparison is exactly reproducible |
-| **4c-b** | `TT18`, `hyp1`, `MJP`, `ghy` — the jump, witchspace and the galactic hyperdrive. 111 instructions. This is what `Main.cpp` refuses by name | Fuel, system, seeds and the witchspace flag against the oracle; `MJP`'s Thargoid ambush shares 4c-a's comparison |
-| **4c-c** | `NWSPS` and the Coriolis/Dodo switch by tech level. 33 instructions. This is what `FlightSession` stubs | The station's block byte for byte, both types, across the tech level the switch turns on. Independent of the other three |
-| **4c-d** | Main game loop parts 5 and 6 and the loop's tail. 71 instructions, part of it already placed in `Main.cpp` by hand in §6.128 | The counters and the dashboard calls per pass. As much audit of what is there as new port |
+| **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates. 199 C64 instructions | **Built 2026-09-05** (§6.135). 136 cases from `ytq+3` to `MLOOP` over seventeen situations, four generator states and both entry carries, compared on the whole bubble, `INWK`, `EV`, `XX0` and the generator; 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than the generator and the port had six wrong; `MLOOP` is the label on part 5, so the routine has one exit and not two |
+| **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive. 111 instructions. This is what `Main.cpp` refuses by name | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` whole, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them, and `TT18` has four exits rather than three |
+| **4c-c** ✅ | ~~`NWSPS` and the Coriolis/Dodo switch by tech level~~ | **Retired (§6.137): already built in slice 3d-d-iii-b**, with `NwS1`, the sun's eviction from slot 1 and the tech-level switch, and compared by `TheStationMatchesNWSPS` over tech levels straddling ten. The original row's "this is what `FlightSession` stubs" was wrong -- it has not, since that slice |
+| **4c-d** | Main game loop part 5's frame-rate option — `LDA QQ11 / BEQ plus13 / AND PATG / LSR A / BCS plus13 / LDY #2 / JSR DELAY` — and the wiring that lets `Main.cpp` call 4c-a and 4c-b at all | **Seven instructions, not 71 (§6.137)**: §6.128 placed part 5's cooling countdowns, `JSR DIALS`, `TT17` and all of part 6 by hand, and the 34 Trumble instructions between them are slice 4d's. As much audit of what was placed by hand as new port |
 
 ### Phase 5 — Sound and music
 
@@ -5363,7 +5404,7 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **in progress**: 4a is built (4a-a, 4a-b and 4a-c, the last of which absorbed 4a-d per §6.122). 4b, 4c, 4d and 4e are not started. **4c is the critical path** — `Main.cpp` still refuses hyperspace and the charts by name and `FlightSession` still stubs `NWSPS`, so nothing populates the bubble that `TACTICS` steers |
+| 4 | 5 | 8–12 | **in progress**: 4a is built (4a-a, 4a-b and 4a-c, the last of which absorbed 4a-d per §6.122); 4c-a and 4c-b are built, and 4c-c turned out to have been built in phase 3 (§6.137). What is left of 4c is 4c-d, which is seven instructions and an audit. 4b, 4d and 4e are not started. **The jump and the spawner are not yet wired into `Main.cpp`** -- that is 4c-d's, and until it lands nothing a player does has changed |
 | 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
 | **Total** | **24** | **40–60** | before modernisation |
 
@@ -5419,6 +5460,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **§6.134's dependency pass checked one direction, and two rows were mis-sized** (§6.137). Starting 4c-c found `NWSPS` already built -- in slice 3d-d-iii-b, with `NwS1`, the sun's eviction and the Dodo switch, compared against the shipped routine over tech levels straddling ten. **Slice 4c-c has no work in it.** The claim that `FlightSession` stubs it, repeated in §6.134, the 4c row and two commit messages, was wrong: `FlightSession.h` says the opposite. And 4c-d is seven instructions and an audit, not 71 -- §6.128 placed fourteen of part 5 by hand already and thirty-four of the rest are Trumbles, which are slice 4d's. The pass asked what 4c CALLS that the port lacks; it never asked what 4c's own scope line names that the port already has, which is the cheaper question and a grep. |
 | 2026-09-05 | **Slice 4c-b: the jump** (§6.136). `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` in `Hyperspace.cpp`, which answers the `JumpOutcome::Galactic` slice 2d left open and the hyperspace `Main.cpp` refuses by name. Five findings, and three of them are bytes that come from somewhere else: **`QQ2` and `QQ28` describe different systems** (the seeds from `safehouse`, the cache from whatever the last `TT111` left), **`TT111` SNAPS the crosshairs** so `jmp` stores the snapped pair, and **`MJ` is 255** because `ZINF`'s loop counter runs past zero three routines away from the `STY`. `ptg` is `ORA #1`, the mirror of §6.126's idiom; `BEQ zZ+1` executes the operand of `LDA #96` as an `RTS`; the witchspace roll's carry is provably set because both of `HFS2`'s exits set it; and `TT18` has FOUR exits, not three -- `BNE TT114` jumps out to the chart rather than returning. Also removed: an `ArriveAtSystem` the port had invented in `Ghy`, which does not stock the new galaxy's market. |
 | 2026-09-05 | **Slice 4c-a: the universe fills itself** (§6.135). Main game loop parts 1 to 4 in `Spawner.cpp` as one function, because all four fall through and none returns. **`MLOOP` is the label on part 5**, so the six `JMP MLOOP`s and the pirate loop's fall-through are one exit and not two -- the first version of the header had an enum for a branch the original does not have. **Nine carries come from compares rather than from `DORND`**, worse than §6.125's six, and the port had six wrong until the oracle found them: a carry that is wrong changes every roll after it, so `RAND` catches it even when the bubble agrees. `THERE` answers in the carry via `BEQ THEX+1`; `.nodo AND #2` runs on the roll on one path and on the ORed AI byte on the other; and part 1's `BEQ TT100` is dead because `CYL+2` cannot reach `HER`. 136 cases, 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG` -- whose `JMP NWSHP` means it reports the Thargon's answer, so a bubble that takes the mothership and refuses the escort reports failure. |
 | 2026-09-05 | **Slice 4c scoped, and its dependency pass came back empty** (§6.134). Fourteen routines making 111 distinct calls: 46 targets already in the port, 16 belonging to platforms the C64 build never assembles, and the rest entry points inside 4c's own files. **The only unported routine 4c calls is `GTHG`, which is in 4c.** Every state byte the spawner branches on is modelled. That is the opposite of §6.121's result for 4a and the contrast is the finding: 4a's row was written from what routines are about, 4c's from what they touch. Scoped into 4c-a (the spawner, 199 instructions), 4c-b (hyperspace and witchspace, 111), 4c-c (station placement, 33) and 4c-d (the loop's tail, 71, as much audit as port). |
