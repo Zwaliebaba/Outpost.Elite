@@ -1078,6 +1078,82 @@ namespace GameLogicTests
 
       (void)lasct;
     }
+
+    /*
+     * The SCENE, compared on the whole bitmap against the shipped routine.
+     *
+     * The oracle is run to `U%`, which is where `DEATH`'s own two halves meet, and `M%` never
+     * happens on either side. Everything above that line is compared: the cleared screen, the
+     * border rubbed off with its own EOR, the two bytes `BOX` stores rather than EORs, the fresh
+     * stardust, "GAME OVER" in the middle of it, and the five pieces of wreckage in `FRIN`.
+     */
+    TEST_METHOD(TheDeathSceneMatchesDEATH)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const std::uint16_t death = oracle.Label("DEATH");
+      const std::uint16_t uPercent = oracle.Label("U%");
+
+      Leaving leaving;
+      Occupy(leaving, 0x2Fu);
+      leaving.world.view = 0u;
+      leaving.world.heaps.stp = 4u;
+
+      Cpu6502 cpu = oracle.Fresh();
+      FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
+      Mirror(leaving.world, cpu, at);
+      MirrorLeaving(leaving, cpu, at, LaunchWhere(oracle), 0u);
+
+      cpu.AddTrap(oracle.Label("EXNO3"), Cpu6502::TrapExit::SetCarry);
+      cpu.AddTrap(oracle.Label("SETL1"));
+      cpu.AddTrap(oracle.Label("DOVDU19"));
+      cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, fourth time
+
+      cpu.a = cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.pc = death;
+
+      bool reached = false;
+      for (int step = 0; step < 40'000'000; ++step)
+      {
+        if (cpu.pc == uPercent)
+        {
+          reached = true;
+          break;
+        }
+        if (!cpu.Step())
+        {
+          break;
+        }
+      }
+      Assert::IsTrue(reached, L"DEATH should reach its JSR U%");
+
+      Elite::FlightScreen screen = leaving.world.Screen();
+      Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
+                             leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+
+      Elite::PrepareDeathScene(loop, leaving.world.dashboard);
+
+      const std::wstring where = L"DEATH (the scene)";
+
+      CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
+
+      // 6502: FRIN -- five pieces of wreckage, and the same types in the same slots.
+      for (std::size_t slot = 0; slot < 8u; ++slot)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.frin + slot)], leaving.world.bubble.slots[slot],
+                         (where + L": FRIN " + std::to_wstring(slot)).c_str());
+      }
+
+      Assert::AreEqual(cpu.memory[oracle.Label("LASCT")], leaving.world.status.laserCount, (where + L": LASCT").c_str());
+      Assert::AreEqual(cpu.memory[oracle.Label("MCNT")], leaving.world.flight.mainLoopCounter, (where + L": MCNT").c_str());
+      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], leaving.world.flight.delta, (where + L": DELTA").c_str());
+    }
   };
 
   /*
