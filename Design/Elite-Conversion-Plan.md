@@ -888,6 +888,23 @@ no backtick group contains a ✅ would have caught this in the commit that made 
 lines. Filed against the next documentation sitting rather than done here, because the failing check
 already names the twelve files and the repair took a minute.
 
+### 6.130 One byte, two variables, and a screen that was blank from the start
+
+The status screen's "Present System" line was empty at the cold start and stayed empty until the
+first hyperspace jump. Reported from the player's chair, and the shape is §6.28's exactly: `Game`
+in `Main.cpp` held `QQ2` twice -- `currentSeeds`, which the token printer was bound to, and
+`current.seeds`, which the start sequence's `likeTT112` copy and every arrival write. One caller,
+the hyperspace path, copied the second into the first by hand; nothing else did, and the printer
+read six zeros, which `cpl` prints as nothing because a zero letter-pair index is "skip".
+
+The fix is to delete the copy and bind the printer to the byte, which is what §6.28 said in the
+first place. The "Hyperspace System" line on the same screenshot read Diso rather than Lave, and
+that is not a bug: the default commander is at (20, 173), the cold start's `TT111` finds Lave, and
+Diso is what the crosshairs had been moved to on a chart. One thing noticed on the way and left
+alone: `StateTokens::PrintCurrentSystem`'s comment says printing a name twists the seeds, and
+`cpl` backs `QQ15` up to `QQ19` and restores it -- the port restores too, so the code is right and
+the comment is not. It is not this change's line to touch.
+
 ### 6.129 The sound has two halves, and only one of them can be heard
 
 Phase 5 was ported in one sitting, both slices, and what made that possible is that the C64's
@@ -5530,6 +5547,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **A second copy of `QQ2` blanked the status screen** (§6.130). `Game` held the current system's seeds twice; the printer read the copy nobody wrote at the cold start. Deleted, printer bound to `current.seeds`. §6.28's rule, applied to the composition root. |
 | 2026-09-05 | **Two of §6.128's three fixes were recorded and never made** (§6.138). Auditing what that section said it had placed in `Main.cpp` by hand found `DrawDials` still with one caller and nothing anywhere cooling `GNTMP` or `LASCT`: the dials still only moved on a screen change and the laser still never cooled. The commit carrying §6.128 touches `Main.cpp` once, for sound. **The cause is the shape** -- 65 instructions of game logic held as fragments to be transcribed into the executable, owned by nothing in `GameLogic`, compared by nothing, so nothing could go red. `RunLoopTail` is the whole routine now, in `GameLoop.cpp` (renamed from `Spawner.cpp` per §6.121), compared over 52 cases and six outcomes. Four more carries, a `DEX / BEQ P%+3 / DEX` that cannot pass zero, and Trumbles that grow by a CARRY rather than an increment. A plan section is not evidence that code exists. |
 | 2026-09-05 | **§6.134's dependency pass checked one direction, and two rows were mis-sized** (§6.137). Starting 4c-c found `NWSPS` already built -- in slice 3d-d-iii-b, with `NwS1`, the sun's eviction and the Dodo switch, compared against the shipped routine over tech levels straddling ten. **Slice 4c-c has no work in it.** The claim that `FlightSession` stubs it, repeated in §6.134, the 4c row and two commit messages, was wrong: `FlightSession.h` says the opposite. And 4c-d is seven instructions and an audit, not 71 -- §6.128 placed fourteen of part 5 by hand already and thirty-four of the rest are Trumbles, which are slice 4d's. The pass asked what 4c CALLS that the port lacks; it never asked what 4c's own scope line names that the port already has, which is the cheaper question and a grep. |
 | 2026-09-05 | **Slice 4c-b: the jump** (§6.136). `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` in `Hyperspace.cpp`, which answers the `JumpOutcome::Galactic` slice 2d left open and the hyperspace `Main.cpp` refuses by name. Five findings, and three of them are bytes that come from somewhere else: **`QQ2` and `QQ28` describe different systems** (the seeds from `safehouse`, the cache from whatever the last `TT111` left), **`TT111` SNAPS the crosshairs** so `jmp` stores the snapped pair, and **`MJ` is 255** because `ZINF`'s loop counter runs past zero three routines away from the `STY`. `ptg` is `ORA #1`, the mirror of §6.126's idiom; `BEQ zZ+1` executes the operand of `LDA #96` as an `RTS`; the witchspace roll's carry is provably set because both of `HFS2`'s exits set it; and `TT18` has FOUR exits, not three -- `BNE TT114` jumps out to the chart rather than returning. Also removed: an `ArriveAtSystem` the port had invented in `Ghy`, which does not stock the new galaxy's market. |
