@@ -5,9 +5,10 @@ docked game, flight with its 3D pipeline, the sound and music, the ship AI and t
 explosions, the main game loop with hyperspace and the spawning rules, the pause screen with its
 thirteen option toggles, and — closing phase 4 — the three missions and the Trumbles are all ported
 and compared against the assembled original. The executable launches, flies, fights, docks, takes a
-briefing and dies. **What is left is one piece of recorded debt**: thirteen mutation survivors in
-the ship AI's sweep — measured rather than named, by `python
-tools/mutate.py --unit tactics` (plan §6.125, §6.132, §6.147). **A fresh clone needs
+briefing and dies. **There is no recorded mutation debt left**: the ship AI's thirteen survivors are
+closed and `python tools/mutate.py --unit tactics` is 16 of 16 — the last one was a defect, `TA7`'s
+first `BCC` jumping to part SIX so that a ship above half energy never launches a missile (plan
+§6.152, §6.153). **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
 anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->377 tests** and
 CI runs **<!--count:checks-->eleven repository checks** beside it.

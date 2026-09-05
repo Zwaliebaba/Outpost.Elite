@@ -43,34 +43,31 @@
       ],
       "tests": 7,
       "note": [
-        "The ship AI and the autopilot (plan section 6.125). The docking half is closed -- every",
-        "`dock-*` and `steer-*` mutation is caught after sections 6.131 and 6.132 found three",
-        "branches its sweep could not reach. The AI half is not: fifteen survivors are recorded in",
-        "the plan BY NAME and are the reason this file exists.",
+        "The ship AI and the autopilot (plan section 6.125). Both halves are closed: every `dock-*` and",
+        "`steer-*` mutation is caught after sections 6.131 and 6.132 found three branches its sweep could",
+        "not reach, and every `ta-*`, `msl-*` and `kill-*` mutation is caught after sections 6.152 and",
+        "6.153 closed the thirteen this file was written to record.",
         "",
-        "HOW THE FIFTEEN GOT HERE, stated plainly because it bears on what a first run means. The",
-        "original mutants were hand edits and are gone; what survives is their names in section",
-        "6.125. Each name points at a constant or an operation that appears exactly once in",
-        "`Tactics.cpp` -- `ta-253` at the `CMP #253`, `msl-bit5` at the `BIT M32+1`, and so on -- so",
-        "the edit below is reconstructed from the name and from the routine, not recovered.",
+        "HOW THE FIFTEEN GOT HERE, kept because it bears on what the numbers below mean. The original",
+        "mutants were hand edits and are gone; what survived was their names in section 6.125. Each name",
+        "points at a constant or an operation that appears exactly once in `Tactics.cpp` -- `ta-253` at",
+        "the `CMP #253`, `msl-bit5` at the `BIT M32+1`, and so on -- so each edit below was reconstructed",
+        "from the name and from the routine, not recovered.",
         "",
-        "That makes the first run of this unit a TEST OF THE RECONSTRUCTION as much as of the port:",
-        "a reconstructed mutant that survives confirms the name was read correctly, and one that is",
-        "caught means either the reconstruction missed or the debt is smaller than recorded. Either",
-        "answer is worth more than the fifteen names were, because from here on the mutant is the",
-        "data and the name is just its label.",
+        "THE FIRST RUN, 2026-09-05, on the MSVC leg with a green 348-test baseline: 16 mutants, 3 caught,",
+        "13 survived. Thirteen survived exactly as section 6.125 recorded, which is the reconstruction",
+        "confirming itself thirteen times over; `ta7-three` and `msl-kill` came back caught and nothing",
+        "can now say whether those two reconstructions missed or that debt never existed.",
         "",
-        "THE FIRST RUN, 2026-09-05, on the MSVC leg with a green 348-test baseline: 16 mutants, 3",
-        "caught, 13 survived. The three caught are the selftest, `ta7-three` and `msl-kill`; the",
-        "other thirteen survive exactly as section 6.125 recorded. So the measured debt is THIRTEEN",
-        "and not fifteen -- and the two that came back caught are the honest limit of this exercise,",
-        "because the original mutants are gone and nothing can say whether the reconstruction missed",
-        "or the debt was overstated. Thirteen re-runnable survivors is still thirteen more than the",
-        "corpus had yesterday.",
-        "",
-        "The method for closing them is section 6.132's and is unchanged: probe the comparison,",
-        "count the distinct values that reach it, and add a ladder to the fixture. All fifteen are",
-        "thresholds the geometry table never lands on."
+        "THE SECOND AND THIRD RUNS, the same day: 16 of 16, none equivalent. Twelve of the thirteen were",
+        "the sweep -- six thresholds no seed stood on, a missile's whole arrival never executed, an",
+        "`ORA #104` reached by one odd value, a `CMP #16` whose branch read a bit no target had set, a",
+        "`TALLY` that was never compared, and a duplicate `TA20` that no missile in the port can reach.",
+        "THE THIRTEENTH WAS A DEFECT: `TA7`'s first `BCC` goes to `TA3`, which is part SIX, and the port",
+        "ran it into part five, so a ship above half its energy could launch a missile the original never",
+        "would. It was the LAST survivor closed, after three rounds of ladder-building had used up the",
+        "easy explanations -- which is the finding of section 6.153 and the reason a stubborn survivor",
+        "deserves more attention than a fresh one, not less."
       ],
       "mutants": [
         {
@@ -87,56 +84,56 @@
           "file": "GameLogic/Tactics.cpp",
           "find": "if (roll.value < 253u)",
           "replace": "if (roll.value < 252u)",
-          "expect": "survives",
-          "note": "The station's launch roll, three times in 256. The sweep's seeds never land on 252."
+          "expect": "caught",
+          "note": "The station's launch roll, three times in 256. Closed by a seed that reads 252 there."
         },
         {
           "id": "ta-240",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (roll.value < 240u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
           "replace": "if (roll.value < 239u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
-          "expect": "survives",
-          "note": "TN5's police roll. Same shape as ta-253: a threshold with no case beside it."
+          "expect": "caught",
+          "note": "The police roll. Closed by a seed that reads 239 there."
         },
         {
           "id": "ta-ana200",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (first.value >= 200u)",
           "replace": "if (first.value >= 201u)",
-          "expect": "survives",
-          "note": "The Anaconda's escort roll, CMP #200 at TN7's entrance -- not the hermit's CMP #200."
+          "expect": "caught",
+          "note": "The Anaconda's escort roll. Closed by a seed that reads exactly 200 there."
         },
         {
           "id": "ta-250",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (chance.value >= 250u)",
           "replace": "if (chance.value >= 249u)",
-          "expect": "survives",
-          "note": "TN7's six-times-in-256 roll that gives a ship a random pitch."
+          "expect": "caught",
+          "note": "TN7's random pitch, six times in 256. Closed by a seed that reads 249 and one that reads 255."
         },
         {
           "id": "ta-104",
           "file": "GameLogic/Tactics.cpp",
           "find": "work[29] = static_cast<std::uint8_t>(amount.value | 104u);",
           "replace": "work[29] = static_cast<std::uint8_t>(amount.value | 105u);",
-          "expect": "survives",
-          "note": "ORA #104 on the roll TN7 just made. Only reachable through ta-250's branch."
+          "expect": "caught",
+          "note": "ORA #104 on the roll TN7 just made, reachable only through ta-250's branch -- and for a year one value reached it, 125, whose bottom bit is set. Closed by a seed that lands 252 at TN7 and then an EVEN operand (plan section 6.153)."
         },
         {
           "id": "ta-230",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (flee.value >= 230u)",
           "replace": "if (flee.value >= 229u)",
-          "expect": "survives",
-          "note": "How often a badly damaged ship with a pod actually runs."
+          "expect": "caught",
+          "note": "Losing your nerve. Closed by a seed that reads 229 there."
         },
         {
           "id": "ta-half",
           "file": "GameLogic/Tactics.cpp",
           "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work[35];",
           "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < work[35];",
-          "expect": "survives",
-          "note": "TA7's LSR A -- energy above HALF the blueprint maximum and the ship fights on."
+          "expect": "caught",
+          "note": "TA7's first LSR A -- and its BCC goes to CAPITAL TA3, part SIX, so a ship above half energy skips the missile launch. THIS ONE WAS A DEFECT: the port ran both energy branches into part five. Closed by the fix plus three cases WITH missiles straddling the threshold (plan section 6.153)."
         },
         {
           "id": "ta7-three",
@@ -144,15 +141,15 @@
           "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work[35])",
           "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work[35])",
           "expect": "caught",
-          "note": "The second energy test, below which a ship may run, nested inside ta-half's. CAUGHT on the first run, by TheAiMatchesTACTICS, while the plan names `ta7-three` among fifteen survivors. Since the original mutant is gone, this says one of two things and does not say which: the reconstruction is not the edit that was made, or that item of debt does not exist. What it does settle is that THIS perturbation of the shift is distinguished, and it stays here as a caught mutant rather than being deleted, because a mutant that is caught is still evidence."
+          "note": "TA7's second and third LSR A -- an EIGHTH of the maximum, not a quarter."
         },
         {
           "id": "ta3-ecm",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && screen.status.ecmCountdown == 0u)",
           "replace": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles)",
-          "expect": "survives",
-          "note": "LDA ECMA / BNE TA3 -- a running ECM stops the launch and the missile is not spent."
+          "expect": "caught",
+          "note": "ta3's LDA ECMA / BNE TA3 stops a launch. ECMA was zero in every case that reached it; closed by a pirate with missiles and an ECM running."
         },
         {
           "id": "ta20-eor",
@@ -160,31 +157,31 @@
           "find": "      SteerTowards(_loop, static_cast<std::uint8_t>(nose.high ^ 0x80u));",
           "replace": "      SteerTowards(_loop, nose.high);",
           "expect": "caught",
-          "note": "`TA20`'s `EOR #%10000000` on the missile path -- a missile closes on its target rather than facing it, so the sign of how far off it is gets flipped. IT USED TO POINT AT A SECOND COPY OF THIS. The port had `TA20` written out twice: inlined in `SteerMissileTowardsTarget`, which is where every missile actually goes, and again in part 4, which no missile in the port reaches because every branch of part 1's missile block returns. The mutant flipped the unreachable one and nothing noticed. The duplicate is gone (plan \u00a76.152) and this now names the live copy."
+          "note": "TA20's EOR #%10000000, in SteerMissileTowardsTarget. A second, unreachable copy of TA20 stood in part 4 and was deleted (plan section 6.152)."
         },
         {
           "id": "msl-16",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (roll.value < 16u)",
           "replace": "if (roll.value < 17u)",
-          "expect": "survives",
-          "note": "TA64's CMP #16 -- one frame in sixteen a missile checks its target's ECM."
+          "expect": "caught",
+          "note": "TA64's CMP #16. Landing on 16 was not enough: the branch it guards reads bit 0 of the TARGET's INWK+32 and every missile in the sweep chased a slot whose byte 32 is even. Closed by a missile chasing slot 0 (plan section 6.153)."
         },
         {
           "id": "msl-82",
           "file": "GameLogic/Tactics.cpp",
           "find": "destroyed = (work[32] == 0x82u);",
           "replace": "destroyed = (work[32] == 0x83u);",
-          "expect": "survives",
-          "note": "A missile that reaches slot 1 -- the station -- dies rather than exploding."
+          "expect": "caught",
+          "note": "The station a missile dies against. Closed by cases that put the target at the missile's own position, which is the only way part 1's tail runs at all."
         },
         {
           "id": "msl-bit5",
           "file": "GameLogic/Tactics.cpp",
           "find": "if ((victim[31] & 0x20u) == 0u)",
           "replace": "if ((victim[31] & 0x10u) == 0u)",
-          "expect": "survives",
-          "note": "BIT M32+1 read as data: bit 5 is 'already exploding', so this is 'do not blow up a wreck'."
+          "expect": "caught",
+          "note": "BIT M32+1 reads bit 5 out of the middle of an instruction. Closed by a victim marked in bit 4 and not bit 5, which is the only state that tells the two apart."
         },
         {
           "id": "msl-kill",
@@ -192,15 +189,15 @@
           "find": "        return TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], MISSILE_DAMAGE, false);",
           "replace": "        return TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], COLLISION_DAMAGE, false);",
           "expect": "caught",
-          "note": "LDA #250 / JMP OOPS -- what a missile that has arrived costs, against the 80 a near miss costs. CAUGHT on the first run, by TheAiMatchesTACTICS, while the plan names `msl-kill` among fifteen survivors; the same caveat as ta7-three applies. 250 against 80 is a large difference in the player's energy banks and the sweep compares all three, so this one being caught is unsurprising -- which is itself a hint that the original `msl-kill` mutated something smaller."
+          "note": "250 into OOPS when a missile arrives."
         },
         {
           "id": "kill-rotate",
           "file": "GameLogic/Tactics.cpp",
           "find": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>((work[32] & 0x7Fu) >> 1u));",
           "replace": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>(work[32] & 0x7Fu));",
-          "expect": "survives",
-          "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2."
+          "expect": "caught",
+          "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2. Not a coverage gap: TALLY and TALLYL were neither pushed nor compared, so what EXNO2 scores was invisible. Closed by comparing all three bytes (plan section 6.153)."
         }
       ]
     },
