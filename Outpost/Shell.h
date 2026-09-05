@@ -13,6 +13,7 @@
 #include "TextPrint.h"
 #include "Tokens.h"
 
+#include <chrono>
 #include <cstdint>
 
 namespace Outpost
@@ -182,6 +183,18 @@ namespace Outpost
      * same address. Two copies would have agreed until the first launch.
      */
     std::uint8_t& m_view;
+
+    /*
+     * What paces the title screen's ship, and it is a CLOCK because the thing being paced is not
+     * frames (`Presentation.h`, `TitleTurnSeconds`).
+     *
+     * `TLL2` has no `WSCAN` in it, so a turn of the ship costs what `MVEIT` and `LL9` cost and the
+     * rate is a consequence. Presenting once per turn ties it to the display instead, which is
+     * twenty times too fast on a 165 Hz panel; these two carry the accumulator that decouples
+     * them, the same arrangement `Main.cpp` gives the flight loop and for the same reason.
+     */
+    std::chrono::steady_clock::time_point m_lastSpin{};
+    double m_spinLeftover = 0.0;
   };
 
 } // namespace Outpost

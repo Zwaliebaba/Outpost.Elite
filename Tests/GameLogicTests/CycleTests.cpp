@@ -3,6 +3,8 @@
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
+#include "LineHeap.h"
+
 #include <array>
 #include <cstdint>
 #include <string>
@@ -611,6 +613,161 @@ namespace GameLogicTests
         Assert::AreEqual<std::uint16_t>(1, static_cast<std::uint16_t>(oracle.Label("DORND") - oracle.Label("DORND2")),
                                         L"DORND2 should be exactly one byte before DORND");
       }
+    }
+
+    /*
+     * What one turn of the title screen's ship COSTS, which is what decides how fast it spins.
+     *
+     * `TITLE` has no frame cap -- §6.17's scan found `WSCAN` called from `DELAY`, `TT16+7` and
+     * `FREEZE` and from nowhere else -- so `TLL2` runs as fast as a 6510 can get round it, and the
+     * rotation rate is a CONSEQUENCE of `MVEIT` and `LL9` rather than a number anyone chose. This
+     * is that consequence, measured: the loop body is run against the shipped routines with the
+     * ship state `TITLE` sets up, and the cycles are added.
+     *
+     * IT IS THE FIRST TIME THE COUNTER HAS BEEN USED FOR ITS PURPOSE. Everything else in this file
+     * proves the model; this uses it, and the numbers it produces are `TITLE_TURN_COSTS` in
+     * the shell. Without it the title screen ran one turn per PRESENT, so the ship span at the
+     * monitor's refresh rate -- 60 turns a second on one machine and 165 on another, against the
+     * twenty-odd the original manages (§6.110).
+     *
+     * TWO KNOWN BIASES, BOTH DOWNWARD, both from the `cycles` field's own documentation: a trapped
+     * call costs nothing (nothing is trapped here, so this one does not apply) and the VIC-II's
+     * stolen cycles are not modelled, which on a real C64 is a further 5-10%. So the true machine
+     * is slightly slower than this says and the port runs slightly fast.
+     */
+    TEST_METHOD(TheTitleScreensLoopCostsWhatItCosts)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      Cpu6502 cpu = oracle.Fresh();
+
+      const std::uint16_t inwk = oracle.Label("INWK");
+      const std::uint16_t frin = oracle.Label("FRIN");
+      const std::uint16_t many = oracle.Label("MANY");
+      const std::uint16_t slsp = oracle.Label("SLSP");
+      const std::uint16_t type = oracle.Label("TYPE");
+
+      // 6502: RES2's `LDA #LO(LS%) / STA SLSP` and the loops that clear `FRIN` and `MANY` -- the
+      // state `NWSHP` needs to be able to create anything at all (§6.95: a default-constructed
+      // world is a state the machine cannot be in).
+      for (std::uint16_t offset = 0; offset < 13u; ++offset)
+      {
+        cpu.memory[static_cast<std::uint16_t>(frin + offset)] = 0;
+      }
+      for (std::uint16_t offset = 0; offset < 40u; ++offset)
+      {
+        cpu.memory[static_cast<std::uint16_t>(many + offset)] = 0;
+      }
+      // 6502: LDA #LO(LS%) / STA SLSP -- and `LS%` is &FFC0, the TOP of memory, because the ship
+      // line heap descends from there towards `K%`. `LSO` is the sun's and is a different region.
+      cpu.memory[slsp] = static_cast<std::uint8_t>(Elite::LineHeap::TOP & 0xFFu);
+      cpu.memory[static_cast<std::uint16_t>(slsp + 1)] = static_cast<std::uint8_t>(Elite::LineHeap::TOP >> 8);
+
+      // 6502: JSR ZINF -- the ship workspace, as `TITLE` gets it from `RES2`.
+      Assert::IsTrue(cpu.CallSubroutine(oracle.Label("ZINF")).completed, L"ZINF returned");
+
+      /*
+       * 6502: LDA #96 / STA INWK+14 / STA INWK+7 / LDX #127 / STX INWK+29 / STX INWK+30, and then
+       * `LDA TYPE / JSR NWSHP`.
+       *
+       * The Cobra Mk III at the distance `BR1` passes for it, which is the pair the player actually
+       * looks at -- the Adder is the second screen and is smaller and nearer, so it is cheaper.
+       */
+      constexpr std::uint8_t COBRA = 11;     // 6502: CYL
+      constexpr std::uint8_t DISTANCE = 210; // 6502: distaway, from BR1
+      cpu.memory[static_cast<std::uint16_t>(inwk + 14)] = 96;
+      cpu.memory[static_cast<std::uint16_t>(inwk + 7)] = 96;
+      cpu.memory[static_cast<std::uint16_t>(inwk + 29)] = 127;
+      cpu.memory[static_cast<std::uint16_t>(inwk + 30)] = 127;
+      cpu.memory[type] = COBRA;
+
+      cpu.a = COBRA;
+      Assert::IsTrue(cpu.CallSubroutine(oracle.Label("NWSHP")).completed, L"NWSHP returned");
+      Assert::AreEqual<std::uint32_t>(COBRA, cpu.memory[frin], L"the Cobra is in the bubble");
+
+      /*
+       * 6502: .TLL2 -- the loop body, and nothing else. The ship closes from 96 to 1 over the first
+       * ninety-five turns and holds there afterwards, and it is the HELD state that is measured:
+       * that is where a player watching the title screen spends every second after the first.
+       */
+      const std::uint16_t mveit = oracle.Label("MVEIT");
+      const std::uint16_t ll9 = oracle.Label("LL9");
+
+      std::uint64_t settled = 0;
+      std::uint64_t settledLines = 0;
+      std::uint32_t turns = 0;
+
+      for (int turn = 0; turn < 160; ++turn)
+      {
+        if (cpu.memory[static_cast<std::uint16_t>(inwk + 7)] != 1u)
+        {
+          --cpu.memory[static_cast<std::uint16_t>(inwk + 7)];
+        }
+
+        const std::uint64_t before = cpu.cycles;
+
+        Assert::IsTrue(cpu.CallSubroutine(mveit, 4'000'000).completed, L"MVEIT returned");
+
+        // 6502: LDX distaway / STX INWK+6 / LDA #0 / STA INWK / STA INWK+3 -- the three stores that
+        // undo the movement, so the ship turns on the spot instead of flying past.
+        cpu.memory[static_cast<std::uint16_t>(inwk + 6)] = DISTANCE;
+        cpu.memory[inwk] = 0;
+        cpu.memory[static_cast<std::uint16_t>(inwk + 3)] = 0;
+
+        Assert::IsTrue(cpu.CallSubroutine(ll9, 4'000'000).completed, L"LL9 returned");
+
+        const std::uint64_t cost = cpu.cycles - before;
+
+        // How many lines `LL9` left on this ship's heap: the first byte of the heap is the number
+        // of bytes used, and a line is four of them after it.
+        const std::uint16_t heapAt = static_cast<std::uint16_t>(cpu.memory[static_cast<std::uint16_t>(inwk + 33)] |
+                                                                (cpu.memory[static_cast<std::uint16_t>(inwk + 34)] << 8));
+        const std::uint32_t lines = (cpu.memory[heapAt] > 1u) ? ((cpu.memory[heapAt] - 1u) / 4u) : 0u;
+        const std::uint8_t remaining = cpu.memory[static_cast<std::uint16_t>(inwk + 7)];
+
+        if (remaining == 1u)
+        {
+          settled += cost;
+          settledLines += lines;
+          ++turns;
+        }
+        else if ((remaining % 8u) == 0u)
+        {
+          // The approach, logged rather than asserted: `LL9` draws a distant ship as a DOT, so the
+          // first turns are a fraction of the cost of the last and the original closes the distance
+          // far quicker than it then turns. That spread is what a single fixed rate cannot express.
+          Logger::WriteMessage(("  approach at z_hi " + std::to_string(remaining) + ": " + std::to_string(cost) + " cycles, " +
+                                std::to_string(lines) + " lines, " + std::to_string(1022727.0 / static_cast<double>(cost)) +
+                                " turns a second")
+                                 .c_str());
+        }
+      }
+
+      Assert::IsTrue(turns >= 60u, L"the ship reached its settled distance and stayed there");
+
+      const std::uint64_t perTurn = settled / turns;
+      Logger::WriteMessage(("title screen: " + std::to_string(settledLines / turns) + " lines a turn").c_str());
+      Logger::WriteMessage(("title screen: " + std::to_string(perTurn) + " cycles a turn over " + std::to_string(turns) +
+                            " turns, which is " + std::to_string(1022727.0 / static_cast<double>(perTurn)) + " turns a second")
+                             .c_str());
+
+      /*
+       * 121,276 cycles when this was written, which is 8.4 turns a second on an NTSC 6510. The
+       * bound is wide because the number is a MEASUREMENT and the port's constant is derived from
+       * it -- narrow it and any upstream change to `LL9` becomes a failing test with nothing wrong.
+       * What it really asserts is the ORDER: a hundred thousand cycles a turn is single-figure
+       * turns a second, not hundreds, so a shell that spins the ship once per PRESENT is wrong by
+       * a factor nobody has to argue about -- seven times over on a 60 Hz display and twenty on a
+       * 165 Hz one.
+       */
+      Assert::IsTrue(perTurn > 80'000u && perTurn < 180'000u, (L"a turn of the title ship costs " + std::to_wstring(perTurn) +
+                                                               L" cycles, which is outside the "
+                                                               L"range Outpost::TITLE_TURN_COSTS was derived from")
+                                                                .c_str());
     }
   };
 

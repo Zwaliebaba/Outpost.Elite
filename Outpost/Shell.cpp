@@ -3,9 +3,12 @@
 #include "Shell.h"
 
 #include "FlightSession.h"
+#include "Presentation.h"
 
 #include "Flight.h"
 #include "KeyMap.h"
+
+#include <chrono>
 
 namespace Outpost
 {
@@ -282,9 +285,45 @@ namespace Outpost
      * this does not. It is also the only place the keyboard can be read at all, because the table
      * `Held` walks is filled by the message pump `Turn` runs.
      */
-    if (!Turn())
+    /*
+     * AND THE WAIT, WHICH IS THE POINT. `TITLE` runs `MVEIT` and `LL9` and comes straight back
+     * round -- there is no `JSR WSCAN` anywhere in it (§6.17) -- so the ship turns at whatever rate
+     * a 6510 gets through those two, which `CycleTests` measures at 121,276 cycles: 8.43 turns a
+     * second. Presenting once per turn made the display decide instead, and on a 165 Hz panel the
+     * ship span twenty times too fast (§6.110).
+     *
+     * SO THIS PRESENTS UNTIL A TURN IS DUE, and the frames in between are the same picture -- which
+     * is exactly what the VIC-II was doing while the 6510 computed the next one. The accumulator is
+     * the flight loop's arrangement with one difference: the period is not a constant, because what
+     * a turn costs depends on how much of the ship there is to draw (`TitleTurnSeconds`).
+     */
+    for (;;)
     {
-      Abandon();
+      if (!Turn())
+      {
+        Abandon();
+      }
+
+      const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+      const double elapsed = std::chrono::duration<double>(now - m_lastSpin).count();
+      m_lastSpin = now;
+
+      /*
+       * The rate is read fresh every time because it CHANGES: the ship is a dot when it starts and
+       * a wireframe across the middle of the screen when it arrives, and those cost 15,600 and
+       * 121,276 cycles. `INWK+7` is the byte `TLL2` walks down, so it is what the curve is indexed
+       * by -- the port is reading the same counter the original's cost depends on.
+       */
+      const double period = TitleTurnSeconds(m_flight->Screen().work[7]);
+
+      m_spinLeftover += elapsed;
+      if (m_spinLeftover >= period)
+      {
+        // One turn, and the rest of the backlog is dropped rather than repaid: a stall should cost
+        // the ship a turn, not spin it faster to catch up.
+        m_spinLeftover = (m_spinLeftover >= 2.0 * period) ? 0.0 : (m_spinLeftover - period);
+        break;
+      }
     }
 
     return (m_flight != nullptr) ? m_flight->ScanMatrix(_keys) : Elite::TitleKey{true, 0u};
