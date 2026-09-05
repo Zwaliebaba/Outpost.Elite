@@ -501,10 +501,19 @@ cases against a stop at `MLOOP` -- which BOTH answers reach, so one address catc
 spawn, and the port has to run the spawner too to be comparable. That makes it a test of the join
 as much as of the head.
 
-**All three are wired into `Main.cpp` now**, which is what turns 4c-a from correct unreachable code
-into the thing that fills the bubble. What is NOT yet wired is the hyperspace key: `RequestHyperspace`
-needs a `JumpState` that `Game` does not carry, and the countdown's `JMP TT18` needs it too. That is
-the last of 4c-d and it is plumbing rather than porting.
+**All of it is wired into `Main.cpp` now**, which is what turns three slices of correct unreachable
+code into a game. The loop calls what `TT100` calls, in that order: `M%`, the head, the spawner on
+the pass that asks for it, then part 5. `hyp` starts the countdown, `CountdownOnly` spends it and
+calls `PerformJump`, and an arrival ends in the launch the original falls through to. `Game` gained
+the two bytes the countdown needs -- `safehouse` and `QQ8` -- which it had never carried, because
+nothing had ever been able to start a jump.
+
+**One thing is built and deliberately unreachable.** `hyp` reaches `Ghy` through `JSR CTRL / BMI
+Ghy`, and `CTRL` is a keyboard read this port has no answer for until slice 4e's pause screen. So
+the galactic hyperdrive is ported, compared against the shipped routine over both answers to the
+drive test (§6.136), and cannot be invoked. The case is written out in the dispatch rather than left
+off, so that adding the key read is one line and not a search -- and `Main.cpp`'s header says so, in
+the same place it used to say hyperspace was refused.
 
 **The rule.** §6.137 said to check the port rather than the prose. This is the same lesson from the
 other end: **a plan section is not evidence that code exists.** When a slice's record says work was
@@ -706,7 +715,7 @@ than `TACTICS` was.
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates | 199 | Spawn decisions against the shipped routine over seeded generator states, comparing the WHOLE bubble as slice 4a-b does; the generator is the input, so this is exactly reproducible. **136 cases, 50 distinct bubbles**, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than from the generator and the port had six wrong; `MLOOP` turned out to be the label on part 5, so the routine has one exit and not two |
 | **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive, in `Hyperspace.cpp`. This is what `Main.cpp` refuses by name and what slice 2d's `JumpOutcome::Galactic` was waiting for | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` run whole on both sides, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them — `QQ28` from the last `TT111` rather than from the seeds beside it, `QQ0` from crosshairs `TT111` snapped, and `MJ` from `ZINF`'s loop counter — and `TT18` turned out to have four exits rather than three |
 | **4c-c** ✅ | `NWSPS` and the Coriolis/Dodo switch by tech level | **Already built, in slice 3d-d-iii-b — this row should never have been written (§6.137).** `AddStation` in `Spawn.h` carries `NwS1`, the sun's eviction from slot 1 and the tech-level switch, and `TheStationMatchesNWSPS` compares it against the shipped routine over tech levels straddling ten from both sides. Both callers run it for real. The scope line was taken from the ledger without checking the port |
-| **4c-d** ◐ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Mostly built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it. Both are wired into the flight pass, so the spawner now runs — one pass in 256, as `DEC MCNT` says. **Left: the hyperspace key**, which needs a `JumpState` on `Game` that does not exist yet |
+| **4c-d** ✅ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it, which makes it a test of the join too. All of it wired: the spawner runs one pass in 256 as `DEC MCNT` says, and hyperspace is no longer refused by name. The galactic drive is built and unreachable until slice 4e reads `CTRL` |
 
 **What it unblocks.** `Main.cpp` lists what it refuses by name rather than defaulting, so that adding
 one is a compiler error: hyperspace and the charts, which are 4c-b's. And nothing at all currently
@@ -5436,7 +5445,7 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates. 199 C64 instructions | **Built 2026-09-05** (§6.135). 136 cases from `ytq+3` to `MLOOP` over seventeen situations, four generator states and both entry carries, compared on the whole bubble, `INWK`, `EV`, `XX0` and the generator; 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than the generator and the port had six wrong; `MLOOP` is the label on part 5, so the routine has one exit and not two |
 | **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive. 111 instructions. This is what `Main.cpp` refuses by name | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` whole, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them, and `TT18` has four exits rather than three |
 | **4c-c** ✅ | ~~`NWSPS` and the Coriolis/Dodo switch by tech level~~ | **Retired (§6.137): already built in slice 3d-d-iii-b**, with `NwS1`, the sun's eviction from slot 1 and the tech-level switch, and compared by `TheStationMatchesNWSPS` over tech levels straddling ten. The original row's "this is what `FlightSession` stubs" was wrong -- it has not, since that slice |
-| **4c-d** ◐ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Mostly built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it. Both are wired into the flight pass, so the spawner now runs — one pass in 256, as `DEC MCNT` says. **Left: the hyperspace key**, which needs a `JumpState` on `Game` that does not exist yet |
+| **4c-d** ✅ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it, which makes it a test of the join too. All of it wired: the spawner runs one pass in 256 as `DEC MCNT` says, and hyperspace is no longer refused by name. The galactic drive is built and unreachable until slice 4e reads `CTRL` |
 
 ### Phase 5 — Sound and music
 
@@ -5465,7 +5474,7 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **in progress**: 4a is built (4a-a, 4a-b and 4a-c, the last of which absorbed 4a-d per §6.122); 4c-a and 4c-b are built, and 4c-c turned out to have been built in phase 3 (§6.137). What is left of 4c is 4c-d, which is seven instructions and an audit. 4b, 4d and 4e are not started. **The jump and the spawner are not yet wired into `Main.cpp`** -- that is 4c-d's, and until it lands nothing a player does has changed |
+| 4 | 5 | 8–12 | **in progress**: 4a is built (4a-a, 4a-b and 4a-c, the last of which absorbed 4a-d per §6.122), and **4c is COMPLETE** — 4c-a and 4c-b built, 4c-c found already done in phase 3 (§6.137), 4c-d built and wired (§6.138). The spawner fills the bubble, the AI steers what it puts there, and hyperspace works. 4b, 4d and 4e are not started; the galactic drive is built but needs 4e to read its key |
 | 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
 | **Total** | **24** | **40–60** | before modernisation |
 
