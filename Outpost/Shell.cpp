@@ -3,6 +3,8 @@
 #include "Shell.h"
 
 #include "FlightSession.h"
+
+#include "Flight.h"
 #include "KeyMap.h"
 
 namespace Outpost
@@ -27,84 +29,6 @@ namespace Outpost
     /// 6502: MT9 -- LDA #1 / JSR DOXC / JMP TT66, and STA does not touch A, so TT66 gets the 1 too.
     constexpr std::uint8_t MT9_VIEW = 1;
 
-    /*
-     * Where the title ship would be, until `LL9` exists (slice 3b).
-     *
-     * The plan's 2e row asks for "the title screen WITHOUT the rotating ship -- a placeholder box
-     * until 3b", and a box is what this is. It is centred in the space view and its size follows the
-     * distance the way the real projection would, because that is the one thing about it that can be
-     * right: `LL9` divides by z, so a Cobra settling at 210 is small and an Adder at 48 fills the
-     * screen, and a placeholder of a fixed size would make the two title screens look identical when
-     * the game means them to look nothing alike.
-     */
-    constexpr std::uint8_t SPACE_VIEW_CENTRE_X = 128;
-    constexpr std::uint8_t SPACE_VIEW_CENTRE_Y = Elite::Canvas::SPACE_VIEW_HEIGHT / 2;
-    constexpr int PLACEHOLDER_PROJECTION = 6000; ///< half-width times distance, so 28 for the Cobra
-    constexpr int PLACEHOLDER_MIN_HALF_WIDTH = 16;
-
-    /// The nearest ship's box would reach row 15 and collide with the prompt, so the placeholder
-    /// gives way to the text rather than the other way round: half the height is half the width, and
-    /// 88 puts the bottom edge at y = 116, clear of the prompt's row.
-    constexpr int PLACEHOLDER_MAX_HALF_WIDTH = 88;
-
-    /*
-     * 6502: TITLE -- LDA #15 / STA YC / LDA #1 / STA XC, immediately before the PLA and DETOK that
-     * print the token this routine was passed.
-     *
-     * BR1 sets the column to 3 before it calls TITLE and TITLE OVERWRITES IT, which is why the port
-     * keeps both: `TITLE_PROMPT_COLUMN` is BR1's store and is pinned against the shipped sequence,
-     * and these two are what actually decide where the prompt lands. Getting that wrong is visible
-     * rather than academic -- "Press Space Or Fire,Commander." is thirty characters, and from column
-     * 3 the last two fall off the 32-column screen and wrap onto the next row.
-     */
-    constexpr std::uint8_t TITLE_PROMPT_ROW = 15;
-    constexpr std::uint8_t TITLE_PROMPT_COLUMN = 1;
-
-    /*
-     * 6502: TITLE's `LDA #13 / JSR TT66 / LDA #0 / STA QQ11` -- and it is TWO different values on
-     * purpose.
-     *
-     * `TTX66K` tail-jumps to `wantdials` for view 0 AND for view 13, so both get the dashboard and
-     * the pixels come out the same either way. What differs is the text: `TT66` prints the view's
-     * NAME when `QQ11` is zero, and the title screen has no view name. So the clear is asked for as
-     * 13 and the byte is dropped to 0 immediately after, which is what everything drawn on top of
-     * it then reads. Calling `TT66` with 0 puts "FRONT VIEW" across the top of the title screen.
-     */
-    constexpr std::uint8_t TITLE_CLEAR_VIEW = 13;
-    constexpr std::uint8_t TITLE_VIEW = 0;
-
-    void DrawPlaceholderShip(Elite::Canvas& _canvas, std::uint8_t _distance) noexcept
-    {
-      int halfWidth = (_distance > 0) ? (PLACEHOLDER_PROJECTION / _distance) : PLACEHOLDER_MAX_HALF_WIDTH;
-      halfWidth = (halfWidth < PLACEHOLDER_MIN_HALF_WIDTH) ? PLACEHOLDER_MIN_HALF_WIDTH : halfWidth;
-      halfWidth = (halfWidth > PLACEHOLDER_MAX_HALF_WIDTH) ? PLACEHOLDER_MAX_HALF_WIDTH : halfWidth;
-      const int halfHeight = halfWidth / 2;
-
-      const std::uint8_t left = static_cast<std::uint8_t>(SPACE_VIEW_CENTRE_X - halfWidth);
-      const std::uint8_t right = static_cast<std::uint8_t>(SPACE_VIEW_CENTRE_X + halfWidth);
-      const std::uint8_t top = static_cast<std::uint8_t>(SPACE_VIEW_CENTRE_Y - halfHeight);
-      const std::uint8_t bottom = static_cast<std::uint8_t>(SPACE_VIEW_CENTRE_Y + halfHeight);
-
-      // 6502: LOIN, four times. The line routine alternates between each cell's two colours as it
-      // goes, which is why the box comes out striped rather than flat -- and that is the real
-      // renderer's behaviour, not an artefact of the placeholder.
-      const std::uint8_t corners[4][4] = {
-        {left, top, right, top},
-        {right, top, right, bottom},
-        {right, bottom, left, bottom},
-        {left, bottom, left, top},
-      };
-
-      Elite::DrawWorkspace work;
-      for (const auto& side : corners)
-      {
-        work.x1 = side[0];
-        work.y1 = side[1];
-        work.x2 = side[2];
-        work.y2 = side[3];
-        Elite::DrawLine(_canvas, work);
-      }
-    }
   } // namespace
 
   bool GameShell::Turn()
@@ -341,28 +265,47 @@ namespace Outpost
     // is the reason a launch cuts straight to the rings.
   }
 
+  Elite::TitleKey GameShell::ScanTitleKeys(Elite::KeyLogger& _keys)
+  {
+    /*
+     * 6502: JSR RDKEY at the bottom of `TLL2` -- and the PRESENT that comes with it on this
+     * platform.
+     *
+     * `LL9` has just drawn the ship into the canvas and nothing else stands between this frame and
+     * the next, so the turn belongs here: the C64 had a VIC-II showing the bitmap continuously and
+     * this does not. It is also the only place the keyboard can be read at all, because the table
+     * `Held` walks is filled by the message pump `Turn` runs.
+     */
+    if (!Turn())
+    {
+      Abandon();
+    }
+
+    return (m_flight != nullptr) ? m_flight->ScanMatrix(_keys) : Elite::TitleKey{true, 0u};
+  }
+
   std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance)
   {
     /*
-     * 6502: TITLE. What is here is the token and the key; what is not is the ROTATING SHIP, which
-     * is `LL9` and lands in slice 3b. The plan's 2e row names that omission, and it is the reason
-     * this slice's acceptance is a docked game rather than a finished front end.
+     * 6502: TITLE -- ported in full now, so this is a forward rather than a placeholder.
+     *
+     * The rotating ship was a box for as long as `LL9` was slice 3b's. It has not been since 3b
+     * landed; what kept the box was that nothing revisited the seam, which is the same pattern the
+     * launch path hit three times (§6.73). `AddShip` becoming public for `NWSPS` was the last piece.
+     *
+     * IT RETURNS `thiskey`, THE KEY NUMBER, and that is the fix as much as the ship is. `BR1`
+     * compares the answer against 39 -- the internal number for "Y" -- and this used to return
+     * `NextKey()`, which is the CHARACTER. 89 never equals 39, so the disk menu could not be opened
+     * from the title screen at all (§6.105).
      */
-    (void)_shipType; // 6502: the ship BLUEPRINT, which needs the ship data slice 3a extracts.
-
-    ClearToView(TITLE_CLEAR_VIEW); // 6502: LDA #13 / JSR TT66
-    m_view = TITLE_VIEW;           // 6502: LDA #0 / STA QQ11
-    DrawPlaceholderShip(m_canvas, _distance);
-
-    if (m_extendedPrinter != nullptr && m_text != nullptr)
+    if (m_flight == nullptr || m_extendedPrinter == nullptr || m_dockedFlag == nullptr)
     {
-      // 6502: LDA #15 / STA YC / LDA #1 / STA XC -- TITLE's own cursor, not BR1's.
-      m_text->row = TITLE_PROMPT_ROW;
-      m_text->column = TITLE_PROMPT_COLUMN;
-      m_extendedPrinter->Print(_token);
+      return 0;
     }
 
-    return NextKey();
+    Elite::FlightLoop& loop = m_flight->Loop();
+    Elite::TitleScreen title{loop, *this, *m_extendedPrinter, loop.options, loop.keys, *m_dockedFlag};
+    return Elite::ShowTitleShip(title, _token, _shipType, _distance);
   }
 
   // ---- the control codes that leave the text system ------------------------------------------------

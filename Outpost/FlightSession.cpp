@@ -223,6 +223,11 @@ namespace Outpost
 
   void FlightSession::ScanKeyboard()
   {
+    (void)ScanMatrix(m_keys); // 6502: JSR RDKEY, whose answer `DOKEY` does not read
+  }
+
+  Elite::TitleKey FlightSession::ScanMatrix(Elite::KeyLogger& _keys) noexcept
+  {
     /*
      * 6502: RDKEY -- the CIA matrix walk, replaced by the window's held-key table (row 145).
      *
@@ -234,13 +239,24 @@ namespace Outpost
      */
     m_rasterMode = RASTER_MODE_SCANNING;                                        // 6502: LDA #%101 / JSR SETL1
     m_spriteMask = static_cast<std::uint8_t>(m_spriteMask & RDKEY_SPRITE_MASK); // 6502: AND #%11111101
-    m_keys.fill(0u);                                                            // 6502: JSR ZEKTRAN
+    _keys.fill(0u);                                                             // 6502: JSR ZEKTRAN
 
-    for (std::uint8_t key = 0; key < static_cast<std::uint8_t>(m_keys.size()); ++key)
+    /*
+     * 6502: LDX #&40 / .Rdi1 ... / DEC KEYLOOK,X / STX thiskey / SEC / .Rdi3 DEX / BMI Rdiex.
+     *
+     * THE WALK COUNTS DOWN and `thiskey` is stored on every hit, so what comes back is the LOWEST
+     * numbered key being held rather than the first one found. `TITLE` returns that byte and `BR1`
+     * compares it against 39, so the direction of this loop is the difference between "Y" opening
+     * the disk menu and not opening it.
+     */
+    Elite::TitleKey answer;
+    for (std::uint8_t key = static_cast<std::uint8_t>(_keys.size()); key-- > 0u;)
     {
       if (m_window.Held(key))
       {
-        m_keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
+        _keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
+        answer.pressed = true;
+        answer.key = key;
       }
     }
 
@@ -251,11 +267,12 @@ namespace Outpost
     {
       for (const std::size_t index : NON_STEERING_KEYS)
       {
-        m_keys[index] = 0u;
+        _keys[index] = 0u;
       }
     }
 
     m_rasterMode = RASTER_MODE_NORMAL; // 6502: LDA #%100 / JSR SETL1
+    return answer;
   }
 
   void FlightSession::RunDockingComputer(Elite::ShipBlock& _work)

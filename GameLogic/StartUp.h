@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Controls.h"
 #include "DockedKeys.h"
 #include "SaveGame.h"
 #include "Universe.h"
@@ -72,6 +73,13 @@ namespace Elite
    * or the executable's. They are separate methods rather than one "start" because the ORDER is the
    * thing being ported, and an interface that bundled them would have nothing left to compare.
    */
+  /// 6502: what `RDKEY` leaves behind -- the carry, and `thiskey` in both X and A.
+  struct TitleKey
+  {
+    bool pressed = false; ///< 6502: the carry, SET when the matrix walk found something
+    std::uint8_t key = 0; ///< 6502: thiskey, which is what `TITLE` returns and `BR1` compares
+  };
+
   class StartUpEffects
   {
   public:
@@ -111,6 +119,23 @@ namespace Elite
     /// 6502: LAUN -- the space station's docking tunnel, drawn as a sequence of expanding circles.
     /// Arriving reaches it; `DOENTRY` is its only caller here.
     virtual void ShowDockingTunnel() = 0;
+
+    /*
+     * 6502: JSR RDKEY at the bottom of `TLL2` -- the title screen's per-frame keyboard scan.
+     *
+     * IT IS A SECOND SEAM FOR THE SAME ROUTINE, and that is deliberate rather than the §6.59
+     * mistake. `ControlEffects::ScanKeyboard` is `RDKEY` for `DOKEY`, inside the flight loop, where
+     * the app has already presented the frame before stepping; this one is `RDKEY` for `TITLE`,
+     * whose loop is entirely inside `GameLogic` and so is the only thing standing between two drawn
+     * frames. The two callers want different things from the platform AROUND the scan, not
+     * different things from the scan, which is why the difference is in the seam rather than in an
+     * argument: an implementation that presented on both would cap the flight loop at one frame in
+     * five, and one that presented on neither would leave the title ship invisible.
+     *
+     * It answers what `RDKEY` answers: the carry, and `thiskey` -- the LOWEST-numbered held key,
+     * because the matrix walk counts down from &40 and the last store wins.
+     */
+    [[nodiscard]] virtual TitleKey ScanTitleKeys(KeyLogger& _keys) = 0;
 
     /*
      * 6502: DELAY -- wait for _frames VERTICAL SYNCS.
