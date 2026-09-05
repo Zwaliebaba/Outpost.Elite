@@ -7,6 +7,7 @@
 
 #include "Arith.h"
 #include "Canvas.h"
+#include "FlightLoop.h"
 #include "Commander.h"
 #include "Controls.h"
 #include "Dashboard.h"
@@ -128,13 +129,25 @@ namespace GameLogicTests
     std::vector<std::uint8_t> palettes;
     std::vector<std::uint8_t> sounds;
 
+    /*
+     * The carry each `PlaySound` was handed, parallel to `sounds` (§6.99). Both seams that reach
+     * `NOISE` push here, because the 6502 has one routine and the port has two interfaces onto it.
+     *
+     * `std::uint8_t` AND NOT `bool`, which is not a style choice: `std::vector<bool>` is bit-packed
+     * and its `operator[]` hands back a PROXY, and MSVC's `Assert::AreEqual` static-asserts that it
+     * has no `ToString` for one. g++ has no such assertion, so a `vector<bool>` here compiles on the
+     * Ubuntu leg and fails the Windows one -- which is what it did (§6.116).
+     */
+    std::vector<std::uint8_t> soundCarries;
+
     void SetPalette(std::uint8_t _colour) override
     {
       palettes.push_back(_colour);
     }
-    bool PlaySound(std::uint8_t _effect) override
+    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
     {
       sounds.push_back(_effect);
+      soundCarries.push_back(_carryIn ? 1u : 0u);
       return true;
     }
   };
@@ -146,6 +159,44 @@ namespace GameLogicTests
    * message counters, the laser, the stardust and the dashboard -- and building it twice per test
    * method would be the same eighteen arguments in a different disguise.
    */
+  /*
+   * 6502: the three seams `NOISE`, `NOISE2` and `NOISEOFF` sit behind, recorded rather than played.
+   *
+   * Separate from `RecordingView`, which answers `LOOK1`'s and `WARP`'s single `PlaySound`: this is
+   * the whole sound interface, and `HYPNOISE` is the first routine in the port that needs the
+   * pitched entry as well as the plain one.
+   */
+  struct RecordingDashboard final : Elite::DashboardEffects
+  {
+    struct Pitched
+    {
+      std::uint8_t effect;
+      std::uint8_t sustain;
+      std::uint8_t frequency;
+    };
+
+    std::vector<std::uint8_t> sounds;
+    std::vector<std::uint8_t> carries;
+    std::vector<Pitched> pitched;
+    std::vector<std::uint8_t> stopped;
+
+    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
+    {
+      sounds.push_back(_effect);
+      carries.push_back(_carryIn ? 1u : 0u);
+      return true;
+    }
+    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
+    {
+      pitched.push_back({_effect, _sustain, _frequency});
+      return true;
+    }
+    void StopSound(std::uint8_t _effect) override
+    {
+      stopped.push_back(_effect);
+    }
+  };
+
   struct World
   {
     RecordingView effects; ///< first, because the character printer's bell records into its list
@@ -180,16 +231,19 @@ namespace GameLogicTests
     struct Chars final : Elite::TextEffects
     {
       std::vector<std::uint8_t>& sounds;
+      std::vector<std::uint8_t>& carries;
       std::uint32_t cleared = 0;
 
-      explicit Chars(std::vector<std::uint8_t>& _sounds) noexcept
-        : sounds(_sounds)
+      Chars(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries) noexcept
+        : sounds(_sounds),
+          carries(_carries)
       {
       }
 
       void Beep() override
       {
         sounds.push_back(SOUND_BEEP_EFFECT);
+        carries.push_back(0u); // `BEEP` is `LDY #sfxbeep / JMP NOISE`: the carry is CHPR's (§6.118)
       }
       void ClearScreen() override
       {
@@ -200,7 +254,7 @@ namespace GameLogicTests
     /// 6502: sfxbeep -- what `BEEP` asks `NOISE` for.
     static constexpr std::uint8_t SOUND_BEEP_EFFECT = 5;
 
-    Chars chars{effects.sounds};
+    Chars chars{effects.sounds, effects.soundCarries};
     Elite::TextPrinter glyphs{canvas, text, &chars};
     Elite::CharacterPrinter characters{glyphs};
     Elite::TokenPrinter printer{characters};
@@ -237,6 +291,7 @@ namespace GameLogicTests
     std::uint8_t trumbles = 0;
 
     RecordingSight sight;
+    RecordingDashboard dashboard;
 
     std::uint8_t view = 0;
     std::uint8_t spaceView = 0;
@@ -274,6 +329,68 @@ namespace GameLogicTests
   };
 
   /// A world that is not all zeroes, so "cleared" and "left alone" are different answers everywhere.
+  /*
+   * What `MJP` and `Ghy` reach outside the world: sounds, the trumbles and the AI, none of which
+   * this slice decides. Counted rather than ignored, because `LL164` makes a noise and a
+   * comparison that dropped it would agree with a port that had lost the hyperspace sound.
+   */
+  struct LoopRecording final : Elite::FlightLoopEffects, Elite::ShipEffects, Elite::ShipDrawEffects
+  {
+    std::vector<std::uint8_t> sounds;
+
+    bool PlaySound(std::uint8_t _effect, bool) override
+    {
+      sounds.push_back(_effect);
+      return true;
+    }
+    /// The sustain is recorded too, because `MLOOP`'s Trumble squeak and its BURN are the same
+    /// effect at two sustains (&80 and &F1), and a list of effect numbers cannot tell them apart.
+    std::vector<std::uint8_t> sustains;
+
+    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t) override
+    {
+      sounds.push_back(_effect);
+      sustains.push_back(_sustain);
+      return true;
+    }
+    void StopSound(std::uint8_t) override {}
+    void MoveTrumbles() override {}
+    void StartDockingMusic() override {}
+    void StopDockingMusic() override {}
+    bool SpawnAhead(std::uint8_t) override
+    {
+      return false;
+    }
+    void Anger(std::uint8_t, std::uint8_t) override {}
+    bool SpawnChild(std::uint8_t, std::uint8_t) override
+    {
+      return true;
+    }
+    bool RunTactics(Elite::ShipBlock&) override
+    {
+      return true;
+    }
+    void DrawPlanetOrSun() override {}
+    void DrawExplosion() override {}
+    void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
+  };
+
+  /// The port's side of a case: the whole flight world plus the pieces `FlightLoop` needs. Shared,
+  /// because three suites now build the same twelve-member aggregate to call one routine.
+  struct LoopWorld
+  {
+    World world;
+    Elite::ControlState control;
+    Elite::ControlOptions options;
+    Elite::KeyLogger keys{};
+    Elite::LaserBurst burst{};
+    Elite::LineHeap heap;
+    Elite::ClipState clip;
+    Elite::Projection projection;
+    Elite::K3Block axes{};
+    LoopRecording effects;
+  };
+
   inline void Seed(World& _world, std::uint32_t _seed)
   {
     std::uint32_t state = _seed * 0x9E3779B9u + 0x85EBCA6Bu;

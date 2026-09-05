@@ -280,4 +280,15 @@ namespace Elite
     _effects.SetRasterMode(0x04u); // 6502: LDA #%100 / JMP SETL1, a tail call
   }
 
+  void ClearFlightKeys(KeyLogger& _keys) noexcept
+  {
+    // 6502: the loop ends on `BNE`, so `KLO+0` is never stored -- and the `STA KL` after it is
+    // NOT that byte: `KL` is a separate address with no C64 reader, so the port has nothing to
+    // clear for it (§6.117).
+    for (std::size_t index = 1; index <= FLIGHT_KEYS_CLEARED; ++index)
+    {
+      _keys[index] = 0u;
+    }
+  }
+
 } // namespace Elite

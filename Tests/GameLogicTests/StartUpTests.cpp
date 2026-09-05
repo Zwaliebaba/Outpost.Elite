@@ -620,7 +620,7 @@ namespace GameLogicTests
         std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name{};
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> portImage = image;
         std::array<std::uint8_t, 16> buffer{};
-        bool useDisk = false;
+        std::uint8_t useDisk = 0;
 
         CurrentSystem current;
         SystemSeeds selected{};

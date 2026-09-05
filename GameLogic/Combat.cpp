@@ -151,9 +151,15 @@ namespace Elite
       return false; // 6502: JMP DEATH
     }
 
-    // 6502: JSR EXNO3 / JMP OUCH -- and `EXNO3` is `LDY #sfxexpl / BNE NOISE`, so the carry `OUCH`
-    // opens its `JSR DORND` on is the sound routine's answer (§6.88).
-    const bool heard = _effects.PlaySound(SOUND_EXPLOSION);
+    /*
+     * 6502: JSR EXNO3 / JMP OUCH -- and `EXNO3` is `LDY #sfxexpl / BNE NOISE`, so the carry `OUCH`
+     * opens its `JSR DORND` on is the sound routine's answer (§6.88).
+     *
+     * The carry going IN is SET, and it is the `BCS P%+5` four instructions above that sets it:
+     * this line is only reached when the energy addition carried. A silent build passes it
+     * straight through (§6.99), so with sound off the roll below is the one a carry of 1 gives.
+     */
+    const bool heard = _effects.PlaySound(SOUND_EXPLOSION, true);
     DamageEquipment(_screen, heard);
     return true;
   }

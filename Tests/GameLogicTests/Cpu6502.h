@@ -152,6 +152,17 @@ namespace Elite::Testing
       std::uint8_t x = 0;
       std::uint8_t y = 0;
 
+      /*
+       * The carry ON ENTRY, which is an ARGUMENT to more of this game than anyone would guess.
+       *
+       * `NOISE` passes it through when sound is off, `OUCH` opens its `DORND` on it, `LASLI`'s
+       * `ROL A` reads it, and the pitch reads what the roll left across a `JSR` -- §6.85, §6.86,
+       * §6.88 and §6.99 are all the same shape. Every one of those was established by reading the
+       * assembly; this makes the flag something the oracle REPORTS, so a port's claim about the
+       * carry at a seam can be compared instead of argued.
+       */
+      bool carry = false;
+
       /// The bytes at `watch`, as they were when the trap fired. Routines that take arguments in
       /// memory rather than in registers -- SUN takes its centre in K3 and K4 -- cannot be
       /// compared without this, because by the time the run ends the caller has moved on.
@@ -197,10 +208,50 @@ namespace Elite::Testing
       trapHits.clear();
     }
 
+    // ---- store log ------------------------------------------------------------------------
+
+    /*
+     * The stores made to a range of addresses, in the order they were made.
+     *
+     * The traps above observe CALLS; this observes WRITES, and it exists for the SID. The sound
+     * interrupt handler writes the chip's registers in a particular order -- seven zeros and then
+     * the values, which a real chip hears as a gate going down and up -- and reading the registers
+     * back after the run would show the values and not the zeros. So a test that wants to know
+     * what the handler DID rather than what it LEFT sets the range to the chip's registers and
+     * compares the log against the port's own list of writes.
+     *
+     * Only STA, STX and STY are logged. Read-modify-write instructions on the range would be
+     * missed, and none of the routines under test make one to a hardware register.
+     */
+    struct StoreHit
+    {
+      std::uint16_t address = 0;
+      std::uint8_t value = 0;
+    };
+
+    std::uint16_t storeLogLow = 1;  ///< the range is empty until a test sets it
+    std::uint16_t storeLogHigh = 0;
+    std::vector<StoreHit> stores;
+
+    void LogStores(std::uint16_t _low, std::uint16_t _high)
+    {
+      storeLogLow = _low;
+      storeLogHigh = _high;
+      stores.clear();
+    }
+
     // ---- helpers for fixtures ----------------------------------------------------------
 
     void Load(std::uint16_t _address, const std::uint8_t* _bytes, std::size_t _count) noexcept;
     [[nodiscard]] std::uint16_t ReadWord(std::uint16_t _address) const noexcept;
+
+    /// Public because a fixture that enters an INTERRUPT handler has to push what the 6510 pushes --
+    /// the return address and the status byte -- before jumping in; `CallSubroutine` pushes a return
+    /// address only, and an RTI would pop the wrong thing.
+    void Push(std::uint8_t _value) noexcept;
+
+    /// The one place a store lands, so that the store log sees every STA, STX and STY.
+    void Store(std::uint16_t _address, std::uint8_t _value) noexcept;
 
   private:
     [[nodiscard]] std::uint8_t Fetch() noexcept
@@ -209,7 +260,6 @@ namespace Elite::Testing
     }
     [[nodiscard]] std::uint16_t FetchWord() noexcept;
 
-    void Push(std::uint8_t _value) noexcept;
     [[nodiscard]] std::uint8_t Pop() noexcept;
 
     void SetNz(std::uint8_t _value) noexcept

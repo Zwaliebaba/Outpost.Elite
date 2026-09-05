@@ -147,6 +147,15 @@ done at once, because the second has no definition of "correct" until the first 
 
 ## §6 — Original behaviours ported deliberately (append as found)
 
+**What belongs in this table, decided 2026-09-05 because it had been filled by feel.** A row here
+is a behaviour **a player can observe** that the original gets wrong and the port reproduces. The
+port has found a great deal else — dead code, branches that cannot be taken on this build, upstream
+comments describing another version's constants, flags computed and discarded — and none of that is
+a row: it is recorded at the call site in `GameLogic/` and in the plan's §6 findings, where it
+belongs. Mixing the two would make this table long and stop it meaning anything.
+
 | Behaviour | Where | Status |
 |---|---|---|
+| **A distant ship can be drawn where the previous one was.** `SHPPT` does not test `PROJ`'s carry; it tests the accumulator ORed with `K3+1`, and on one of `PROJ`'s two overflow exits the accumulator is zero and `K3+1` still holds the LAST projection's high byte. So a ship whose x overflowed is plotted at the previous ship's position. | `ShipDraw.h` / `ShipDraw.cpp`, `DrawShipAsPoint` — and it is why `_screen` is a parameter that outlives the call rather than a local | Ported, with the reason on the declaration; plan §6.36 |
+| **A failed load poisons every later exit from the disk menu.** `LOD`'s two error paths leave by `JMP SVE` rather than by an RTS, so the menu is re-entered with `loading`'s own `JSR LOD` return address still on the stack. Leaving the menu afterwards returns *into* `loading`, renames the last-saved commander to whatever was typed, and restarts the game; and the frame is pushed again on every failed load. | `SaveGame.cpp` | Ported; plan §6.21 has the full trace |
 | `NRU% = 0` although the RUGAL table has entries; Data on System can hang for a few systems (e.g. after docking at Biarge in galaxy 1 during the Constrictor mission) | `EliteConfig.h`, `SystemData.cpp` | Ported; fix is a phase-6 option |

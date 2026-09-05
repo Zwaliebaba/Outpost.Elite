@@ -151,7 +151,7 @@ namespace GameLogicTests
       std::vector<std::uint8_t> stopped;
       std::vector<Pitched> pitched;
 
-      bool PlaySound(std::uint8_t _effect) override
+      bool PlaySound(std::uint8_t _effect, bool) override
       {
         started.push_back(_effect);
         return true;
@@ -499,7 +499,7 @@ namespace GameLogicTests
 
       Elite::FlightStatus status;
       status.ecmCountdown = 0x7Bu;
-      Elite::StartEcm(canvas, status, effects);
+      Elite::StartEcm(canvas, status, effects, false);
 
       (void)CompareScreens(cpu, at.screen, canvas, 0x00u, L"ECBLB2");
       Assert::AreEqual(cpu.memory[at.ecma], status.ecmCountdown, L"ECMA");

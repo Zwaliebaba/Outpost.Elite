@@ -9,6 +9,7 @@
 #include "FlightLoop.h"
 #include "Market.h"
 #include "PlanetDraw.h"
+#include "Combat.h"
 #include "ShipDraw.h"
 
 #include <cstdint>
@@ -299,12 +300,111 @@ namespace GameLogicTests
      * they cross 160 first. That count does not depend on `STP` -- the step is how many segments a
      * circle has, not how many circles a ring is -- which is why one number covers both callers.
      */
+    /*
+     * 6502: LL164 -- the hyperspace tunnel, compared against the shipped routine.
+     *
+     * `HYPNOISE` is trapped on both of its seams and its ORDER is what the comparison is really
+     * about: two effects, a frame, and a third effect whose number has bit 7 set. The pixels are
+     * `HFS2` at step 4, which is the same body the launch draws at step 8 -- so a port that had
+     * copied the launch instead of sharing `HFS2` would pass the picture and fail the step.
+     */
+    TEST_METHOD(TheHyperspaceTunnelMatchesLL164)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      struct Counting final : Elite::TunnelEffects
+      {
+        std::uint32_t frames = 0;
+        void ShowFrame() override
+        {
+          ++frames;
+        }
+      };
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const std::uint16_t ll164 = oracle.Label("LL164");
+      const std::uint16_t stp = oracle.Label("STP");
+      const std::uint16_t noise = oracle.Label("NOISE");
+      const std::uint16_t noise2 = oracle.Label("NOISE2");
+      const std::uint16_t delay = oracle.Label("DELAY");
+
+      for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{255}})
+      {
+        World world;
+        Seed(world, 0x5Eu);
+        world.view = view;
+        world.heaps.yx2M1 = 143u;
+        world.heaps.lsp = 0u;
+        world.heaps.stp = 8u; // the launch's step, so a routine that forgot to store 4 is visible
+
+        Elite::ClipState clip;
+
+        Cpu6502 cpu = oracle.Fresh();
+        FillScreens(cpu, world.canvas, at.screen, 0x1Du);
+        Mirror(world, cpu, at);
+        cpu.memory[oracle.Label("Yx2M1")] = 143u;
+        cpu.memory[oracle.Label("dontclip")] = 0u;
+        cpu.memory[stp] = 8u;
+
+        cpu.AddTrap(noise, Cpu6502::TrapExit::SetCarry);
+        cpu.AddTrap(noise2);
+        cpu.AddTrap(delay);
+        cpu.AddTrap(oracle.Label("SETL1"));
+        cpu.AddTrap(oracle.Label("DOVDU19"));
+        cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, third time
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(ll164, 40'000'000);
+        Assert::IsTrue(run.completed, L"LL164 returned");
+
+        Counting counting;
+        Elite::FlightScreen screen = world.Screen();
+        Elite::DrawHyperspaceTunnel(screen, clip, world.dashboard, &counting);
+
+        const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
+
+        // 6502: LDA #4 / JSR HFS2 -- the step, which is the whole reason this is not `LAUN`.
+        Assert::AreEqual<std::uint8_t>(Elite::HYPERSPACE_TUNNEL_STEP, cpu.memory[stp], (where + L": the shipped STP").c_str());
+        Assert::AreEqual(cpu.memory[stp], world.heaps.stp, (where + L": STP").c_str());
+
+        // 6502: LDY #1 / JSR DELAY -- one vertical sync, plus one frame for each circle drawn.
+        std::uint32_t delays = 0;
+        std::uint32_t noises = 0;
+        std::uint32_t pitched = 0;
+        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+        {
+          delays += (hit.address == delay) ? 1u : 0u;
+          noises += (hit.address == noise) ? 1u : 0u;
+          pitched += (hit.address == noise2) ? 1u : 0u;
+        }
+        Assert::AreEqual<std::uint32_t>(1u, delays, (where + L": one DELAY").c_str());
+        Assert::AreEqual<std::uint32_t>(2u, noises, (where + L": two NOISE calls").c_str());
+        Assert::AreEqual<std::uint32_t>(1u, pitched, (where + L": one NOISE2 call").c_str());
+        Assert::AreEqual<std::uint32_t>(35u, counting.frames, (where + L": 34 circles and the DELAY").c_str());
+
+        // The sounds, in order: pitched sfxhyp1, sfxwhosh, then sfxhyp1 layered with bit 7 set.
+        Assert::AreEqual<std::size_t>(2u, world.dashboard.sounds.size(), (where + L": sounds").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, world.dashboard.sounds[0], (where + L": sfxwhosh").c_str());
+        Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(Elite::SOUND_HYPERSPACE + 128u), world.dashboard.sounds[1],
+                                       (where + L": sfxhyp1 layered").c_str());
+        Assert::AreEqual<std::size_t>(1u, world.dashboard.pitched.size(), (where + L": one pitched sound").c_str());
+
+        // 6502: QQ11 is saved across the TT66 inside HFS2, exactly as the launch's is.
+        Assert::AreEqual(cpu.memory[at.qq11], world.view, (where + L": QQ11").c_str());
+
+        Assert::IsTrue(CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where) > 0u, (where + L": something was drawn").c_str());
+      }
+    }
+
     TEST_METHOD(ThePacingIsOneFramePerCircle)
     {
       struct Counting final : Elite::TunnelEffects
       {
         std::uint32_t circles = 0;
-        void ShowCircle() override
+        void ShowFrame() override
         {
           ++circles;
         }
@@ -413,7 +513,7 @@ namespace GameLogicTests
       std::vector<std::uint8_t> sounds;
       std::uint32_t musicStops = 0;
 
-      bool PlaySound(std::uint8_t _effect) override
+      bool PlaySound(std::uint8_t _effect, bool) override
       {
         sounds.push_back(_effect);
         return true;
@@ -434,7 +534,7 @@ namespace GameLogicTests
       {
         return true;
       }
-      void Anger(std::uint8_t) override {}
+      void Anger(std::uint8_t, std::uint8_t) override {}
       bool SpawnChild(std::uint8_t, std::uint8_t) override
       {
         return true;
@@ -443,7 +543,10 @@ namespace GameLogicTests
 
     struct RecordingOutside final : Elite::ShipEffects, Elite::ShipDrawEffects
     {
-      void RunTactics(Elite::ShipBlock&) override {}
+      bool RunTactics(Elite::ShipBlock&) override
+      {
+        return true;
+      }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
       void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
@@ -460,7 +563,7 @@ namespace GameLogicTests
       Elite::LineHeap heap;
       Elite::ClipState clip;
       Elite::Projection projection;
-      Elite::CompassAxes axes{};
+      Elite::K3Block axes{};
       RecordingOutside outside;
       RecordingLaunch effects;
       RecordingStart start;
@@ -873,7 +976,7 @@ namespace GameLogicTests
       struct Counting final : Elite::TunnelEffects
       {
         std::uint32_t circles = 0;
-        void ShowCircle() override
+        void ShowFrame() override
         {
           ++circles;
         }
@@ -909,6 +1012,292 @@ namespace GameLogicTests
                     flying.world.commander.At(Elite::Field::SystemY), 7u, ignored);
 
       Assert::AreEqual<std::uint32_t>(0u, none.circles, L"pressing 1 in flight is a view change and draws no tunnel");
+    }
+  };
+
+  /*
+   * 6502: DEATH -- the death screen, compared against the shipped routine.
+   *
+   * The interesting half is the setup rather than the animation: `DET1` is a bare `RTS` on this
+   * build, so the view `TT66` is called with is whatever `RES2` left in A (§6.117), and this is
+   * where that byte is pinned. The rest is the wreckage -- five pieces, a random type each, and a
+   * laser count that decides how long the flight loop runs afterwards.
+   */
+  TEST_CLASS(TheDeathScreen)
+  {
+  public:
+    TEST_METHOD(TheDeathScreenSetsUpLikeDEATH)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t death = oracle.Label("DEATH");
+      const std::uint16_t tt66 = oracle.Label("TT66");
+      const std::uint16_t det1 = oracle.Label("DET1");
+      const std::uint16_t lasct = oracle.Label("LASCT");
+      const std::uint16_t delta = oracle.Label("DELTA");
+
+      Cpu6502 cpu = oracle.Fresh();
+      cpu.AddTrap(oracle.Label("EXNO3"));
+      cpu.AddTrap(tt66);
+      cpu.memory[delta] = 3u; // 6502: what `RES2` leaves, and what the two `ASL`s work on
+
+      cpu.a = cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.pc = death;
+
+      // Step only as far as the `JSR TT66`, which is all this comparison is about: past it the
+      // routine runs the whole flight loop sixty-four times and never returns.
+      bool reached = false;
+      std::uint8_t viewByte = 0;
+      for (int step = 0; step < 200'000; ++step)
+      {
+        if (!cpu.trapHits.empty() && cpu.trapHits.back().address == tt66)
+        {
+          viewByte = cpu.trapHits.back().a;
+          reached = true;
+          break;
+        }
+        if (!cpu.Step())
+        {
+          break;
+        }
+      }
+      Assert::IsTrue(reached, L"DEATH should reach its JSR TT66");
+
+      /*
+       * §6.117: the upstream comment says `LDX #24 / JSR DET1` hides the dashboard "and sets A to
+       * 6 in the process". Both halves are the BBC's. This asserts what THIS build does.
+       */
+      Assert::AreEqual<std::uint8_t>(Elite::DEATH_VIEW, viewByte, L"the view DEATH clears to");
+
+      // And `DET1` really is one byte: a bare RTS, so the LDX before it goes nowhere.
+      Assert::AreEqual<std::uint8_t>(0x60u, cpu.memory[det1], L"DET1 is a bare RTS on this build");
+
+      // 6502: ASL DELTA / ASL DELTA -- a SHIFT LEFT twice, whatever the comment says.
+      Assert::AreEqual<std::uint8_t>(12u, cpu.memory[delta], L"DELTA is multiplied by four, not divided");
+
+      (void)lasct;
+    }
+
+    /*
+     * The SCENE, compared on the whole bitmap against the shipped routine.
+     *
+     * The oracle is run to `U%`, which is where `DEATH`'s own two halves meet, and `M%` never
+     * happens on either side. Everything above that line is compared: the cleared screen, the
+     * border rubbed off with its own EOR, the two bytes `BOX` stores rather than EORs, the fresh
+     * stardust, "GAME OVER" in the middle of it, and the five pieces of wreckage in `FRIN`.
+     */
+    TEST_METHOD(TheDeathSceneMatchesDEATH)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const std::uint16_t death = oracle.Label("DEATH");
+      const std::uint16_t uPercent = oracle.Label("U%");
+
+      Leaving leaving;
+      Occupy(leaving, 0x2Fu);
+      leaving.world.view = 0u;
+      leaving.world.heaps.stp = 4u;
+
+      Cpu6502 cpu = oracle.Fresh();
+      FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
+      Mirror(leaving.world, cpu, at);
+      MirrorLeaving(leaving, cpu, at, LaunchWhere(oracle), 0u);
+
+      cpu.AddTrap(oracle.Label("EXNO3"), Cpu6502::TrapExit::SetCarry);
+      cpu.AddTrap(oracle.Label("SETL1"));
+      cpu.AddTrap(oracle.Label("DOVDU19"));
+      cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, fourth time
+
+      cpu.a = cpu.x = cpu.y = 0;
+      cpu.sp = 0xFD;
+      cpu.pc = death;
+
+      bool reached = false;
+      for (int step = 0; step < 40'000'000; ++step)
+      {
+        if (cpu.pc == uPercent)
+        {
+          reached = true;
+          break;
+        }
+        if (!cpu.Step())
+        {
+          break;
+        }
+      }
+      Assert::IsTrue(reached, L"DEATH should reach its JSR U%");
+
+      Elite::FlightScreen screen = leaving.world.Screen();
+      Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
+                             leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+
+      Elite::PrepareDeathScene(loop, leaving.world.dashboard);
+
+      const std::wstring where = L"DEATH (the scene)";
+
+      CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
+
+      // 6502: FRIN -- five pieces of wreckage, and the same types in the same slots.
+      for (std::size_t slot = 0; slot < 8u; ++slot)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.frin + slot)], leaving.world.bubble.slots[slot],
+                         (where + L": FRIN " + std::to_wstring(slot)).c_str());
+      }
+
+      /*
+       * THE BLOCKS, not just the types. `FRIN` says a canister went into slot 3; `K%` says where it
+       * is, which way it points, how fast it goes and whether it arrived dead -- and every one of
+       * those is a byte `Ze`, `fq1` or `.D1` computed. The first version of this test compared the
+       * types alone, and eleven mutations in that arithmetic walked through it.
+       */
+      for (std::size_t slot = 0; slot < 5u; ++slot)
+      {
+        for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
+                           leaving.world.bubble.blocks[slot][byte],
+                           (where + L": K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte)).c_str());
+        }
+      }
+
+      // 6502: STY QQ11 with Y = 0, once per piece of wreckage -- the view the scene ends on.
+      Assert::AreEqual(cpu.memory[at.qq11], leaving.world.view, (where + L": QQ11").c_str());
+
+      // 6502: JSR EXNO3 -- one explosion, and it is the one the shipped routine makes.
+      std::uint32_t explosions = 0;
+      for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+      {
+        explosions += (hit.address == oracle.Label("EXNO3")) ? 1u : 0u;
+      }
+      Assert::AreEqual<std::size_t>(explosions, leaving.world.dashboard.sounds.size(), (where + L": sounds").c_str());
+      Assert::AreEqual<std::uint8_t>(Elite::SOUND_EXPLOSION, leaving.world.dashboard.sounds.front(), (where + L": sfxexpl").c_str());
+
+      Assert::AreEqual(cpu.memory[oracle.Label("LASCT")], leaving.world.status.laserCount, (where + L": LASCT").c_str());
+      Assert::AreEqual(cpu.memory[oracle.Label("MCNT")], leaving.world.flight.mainLoopCounter, (where + L": MCNT").c_str());
+      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], leaving.world.flight.delta, (where + L": DELTA").c_str());
+    }
+
+    /*
+     * 6502: BOX -- the whole-screen border with its floor, compared against the shipped routine.
+     *
+     * On its own rather than only through `DEATH`, because `DEATH` zeroes the two bytes `BOX`
+     * stores straight after drawing them -- so a `BOX` that forgot the corner would pass the death
+     * scene and fail every other caller. There are no other callers yet; this is what says the
+     * routine is right regardless.
+     */
+    TEST_METHOD(TheFullBorderMatchesBOX)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const std::uint16_t box = oracle.Label("BOX");
+
+      World world;
+      Seed(world, 0x19u);
+
+      Cpu6502 cpu = oracle.Fresh();
+      FillScreens(cpu, world.canvas, at.screen, 0x00u);
+      Mirror(world, cpu, at);
+
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(box, 2'000'000);
+      Assert::IsTrue(run.completed, L"BOX returned");
+
+      Elite::DrawFullBorder(world.canvas, world.draw);
+
+      const std::uint32_t touched = CompareScreens(cpu, at.screen, world.canvas, 0x00u, L"BOX");
+      Assert::IsTrue(touched > 0u, L"BOX: something was drawn");
+
+      // 6502: LDA #&FF / STA SCBASE+&1F1F -- the corner byte the rule cannot reach, STORED not EORed.
+      Assert::AreEqual<std::uint8_t>(0xFFu, world.canvas.Read(Elite::BOTTOM_RIGHT_CORNER), L"BOX: the bottom right corner");
+    }
+
+    /*
+     * 6502: U% -- fifty-seven bytes and not sixty-five, compared against the shipped routine.
+     *
+     * `LDY #56 / .DKL3 STA KLO,Y / DEY / BNE DKL3 / STA KL` walks down to one and stores at zero
+     * separately, so 0 to 56 are cleared and 57 to 64 are left alone. `ZEKTRAN` clears all
+     * sixty-five, which is why this is its own routine and not a call to that one.
+     */
+    TEST_METHOD(TheFlightKeysClearLikeUPercent)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t uPercent = oracle.Label("U%");
+      const std::uint16_t keylook = oracle.Label("KEYLOOK");
+
+      Elite::KeyLogger keys{};
+      Cpu6502 cpu = oracle.Fresh();
+      for (std::size_t index = 0; index < keys.size(); ++index)
+      {
+        keys[index] = static_cast<std::uint8_t>(0xA0u + index);
+        cpu.memory[static_cast<std::uint16_t>(keylook + index)] = keys[index];
+      }
+
+      const Elite::Testing::RunResult run = cpu.CallSubroutine(uPercent, 10'000);
+      Assert::IsTrue(run.completed, L"U% returned");
+
+      Elite::ClearFlightKeys(keys);
+
+      for (std::size_t index = 0; index < keys.size(); ++index)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(keylook + index)], keys[index],
+                         (L"KEYLOOK+" + std::to_wstring(index)).c_str());
+      }
+      Assert::AreEqual<std::uint8_t>(0xA0u, keys[0], L"KLO+0 is below the loop and is left alone");
+      Assert::AreEqual<std::uint8_t>(0xA0u + 57u, keys[57], L"and byte 57 is the first one above it left alone");
+    }
+
+    /*
+     * `Die` after the scene: the keys, the speed and the count, by what is left when it returns.
+     *
+     * Not an oracle comparison, and it says so: the 6502 runs `M%` sixty-four times over the
+     * wreckage and never comes back, so the two sides can only be compared frame by frame through
+     * the whole-frame fixture, which is a different suite's. What THIS pins is the five
+     * instructions between the scene and the loop -- `JSR U%`, `STA DELTA`, and a count that must
+     * reach zero -- because a mutation that dropped any of them passed the scene comparison.
+     */
+    TEST_METHOD(DyingClearsTheKeysAndStopsTheShip)
+    {
+      Leaving leaving;
+      Occupy(leaving, 0x2Fu);
+      leaving.world.heaps.stp = 4u;
+      for (std::size_t index = 0; index < leaving.keys.size(); ++index)
+      {
+        leaving.keys[index] = 0xFFu;
+      }
+
+      Elite::FlightScreen screen = leaving.world.Screen();
+      Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
+                             leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+
+      Elite::Die(loop, leaving.world.dashboard);
+
+      Assert::AreEqual<std::uint8_t>(0xFFu, leaving.keys[0], L"KLO+0 is below U%'s range and is untouched");
+      for (std::size_t index = 1; index <= Elite::FLIGHT_KEYS_CLEARED; ++index)
+      {
+        Assert::AreEqual<std::uint8_t>(0u, leaving.keys[index], (L"U% cleared KLO+" + std::to_wstring(index)).c_str());
+      }
+      Assert::AreEqual<std::uint8_t>(0xFFu, leaving.keys[64], L"and the byte above U%'s range is untouched");
+      Assert::AreEqual<std::uint8_t>(0u, leaving.world.status.laserCount, L"LASCT counted down to zero");
+      Assert::IsTrue(leaving.world.flight.delta <= 1u, L"STA DELTA stopped the ship before the loop ran");
     }
   };
 

@@ -80,11 +80,16 @@ namespace Elite
    * and `K3+2,X` with X in a register -- §6.37's rule, the same one that made `XX15` two fields
    * and `XX16` an array.
    *
-   * It is scratch with no life outside a compass update, so `UpdateCompass` declares one and the
-   * routines below take it; nothing keeps one. The original shares the same zero page with
-   * `CIRCLE2` and `TACTICS`, which are never live at the same time.
+   * It is scratch with no life outside the routine that fills it, so `UpdateCompass` declares one
+   * and the routines below take it; nothing keeps one.
+   *
+   * IT WAS CALLED `CompassAxes` UNTIL 2026-09-05, and the old comment said why that was safe: the
+   * original shares this zero page with `CIRCLE2` and `TACTICS`, "which are never live at the same
+   * time". True, and the name still stopped being right the moment phase 4 started -- `TAS1`,
+   * `VCSUB` and `DCS1` fill the same ten bytes with a vector that has nothing to do with a compass.
+   * The original's own name is the one that survives both callers (§6.121).
    */
-  using CompassAxes = std::array<std::uint8_t, 10>;
+  using K3Block = std::array<std::uint8_t, 10>;
 
   /*
    * 6502: DOT -- draw the compass dot where `COMX`, `COMY` and `COMC` say it is.
@@ -104,7 +109,7 @@ namespace Elite
    * below it -- so this takes bytes 1 and 2 as a sixteen-bit magnitude and keeps the sign apart.
    * The planet is millions of units away; the bottom eight bits of that are not a direction.
    */
-  void LoadPlanetAxis(const ShipBlock& _planet, CompassAxes& _axes, std::uint8_t _at) noexcept;
+  void LoadPlanetAxis(const ShipBlock& _planet, K3Block& _axes, std::uint8_t _at) noexcept;
 
   /*
    * 6502: TAS2 -- turn the three coordinates in `K3` into a unit vector in `XX15`.
@@ -126,11 +131,11 @@ namespace Elite
    * `XX15` here is `X1`, `Y1` and `X2` -- the same six bytes the line drawing uses, because that is
    * what `XX15` is (§6.37). `SP2` reads all three back.
    */
-  void NormaliseAxes(CompassAxes& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
+  void NormaliseAxes(K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
 
   /// 6502: SPS1 -- three `SPS3` calls for the planet, then a fall-through into `TAS2`. The
   /// fall-through is the routine: `SPS1` has no `RTS` of its own.
-  void LoadPlanetAxes(const Bubble& _bubble, CompassAxes& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
+  void LoadPlanetAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
 
   /*
    * 6502: SPS4 -- the same for the space station, which is nine bytes copied straight across.
@@ -139,7 +144,7 @@ namespace Elite
    * -- over the sun, which is why the two are never in the bubble together. And the station's
    * coordinates are ordinary sixteen-bit ones, so unlike the planet's there is nothing to drop.
    */
-  void LoadStationAxes(const Bubble& _bubble, CompassAxes& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
+  void LoadStationAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
 
   /// What `SPS2` hands back: the original returns the signed offset in X and its sign extension in
   /// Y, and `SP2` reads both -- plus the carry, which comes from `DVID4` and lands in an `ADC` and
@@ -173,7 +178,7 @@ namespace Elite
   /// 6502: SP1 -- `JSR SPS4` and then a fall-through into `SP2`. Aim the compass at the station
   /// and draw it.
   void AimCompassAtStation(Canvas& _canvas, DrawWorkspace& _work, MathWorkspace& _math, Compass& _compass, const Bubble& _bubble,
-                           CompassAxes& _axes) noexcept;
+                           K3Block& _axes) noexcept;
 
   /*
    * 6502: COMPAS -- erase the old dot, work out the new one, draw it.

@@ -74,7 +74,7 @@ namespace Elite
     _work[_x + 2u] = static_cast<std::uint8_t>((high.value & 0x7Fu) | _math.t);
   }
 
-  void AddShipCoordinateToK(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x) noexcept
+  bool AddShipCoordinateToK(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x) noexcept
   {
     // 6502: LDA K+3 / STA S / AND #128 / STA T / EOR INWK+2,X / BMI MV13.
     _math.s = _math.k[3];
@@ -91,7 +91,7 @@ namespace Elite
 
       const AddResult high = AddWithCarry(_math.k[3], _work[_x + 2u], middle.carry);
       _math.k[3] = static_cast<std::uint8_t>((high.value & 0x7Fu) | _math.t);
-      return;
+      return high.carry; // 6502: the `ADC`'s, which `AND` and `ORA` leave alone
     }
 
     // 6502: MV13 -- LDA S / AND #127 / STA S, then subtract the other way round.
@@ -108,7 +108,7 @@ namespace Elite
 
     if (high.carry)
     {
-      return; // 6502: BCS MV14
+      return true; // 6502: BCS MV14 -- taken means the carry is set by definition
     }
 
     low = SubtractWithCarry(1, _math.k[1], false);
@@ -119,6 +119,7 @@ namespace Elite
 
     high = SubtractWithCarry(0, _math.k[3], middle.carry);
     _math.k[3] = static_cast<std::uint8_t>((high.value & 0x7Fu) | _math.t);
+    return high.carry;
   }
 
   std::uint8_t AddShipCoordinateToP(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x) noexcept
@@ -369,8 +370,9 @@ namespace Elite
     _math.q = static_cast<std::uint8_t>(_alpha ^ 0x80u);
     _math.p = _work[0];
     _math.p1 = _work[1];
-    MultiplySignedToK(_math, _work[2]);     // 6502: JSR MULT3 -- K = -alpha * x
-    AddShipCoordinateToK(_work, _math, 3u); // 6502: LDX #3 / JSR MVT3 -- K = y - alpha * x
+    MultiplySignedToK(_math, _work[2]); // 6502: JSR MULT3 -- K = -alpha * x
+    // Discarded: `MV40` runs a second `MULT3` over this result, so nothing reads the flag (§6.126).
+    static_cast<void>(AddShipCoordinateToK(_work, _math, 3u)); // 6502: LDX #3 / JSR MVT3 -- K = y - alpha * x
 
     // 6502: LDA K+1 / STA K2+1 / STA P ... -- the result parked in K2 while MULT3 refills K.
     _math.k2[1] = _math.k[1];
@@ -380,8 +382,8 @@ namespace Elite
     _math.q = _beta;
     _math.k2[3] = _math.k[3];
 
-    MultiplySignedToK(_math, _math.k[3]);   // 6502: JSR MULT3 -- K = beta * K2
-    AddShipCoordinateToK(_work, _math, 6u); // 6502: LDX #6 / JSR MVT3 -- K = z + beta * K2
+    MultiplySignedToK(_math, _math.k[3]);                      // 6502: JSR MULT3 -- K = beta * K2
+    static_cast<void>(AddShipCoordinateToK(_work, _math, 6u)); // 6502: LDX #6 / JSR MVT3 -- K = z + beta * K2
 
     // 6502: the new z, and P set up for the multiply that follows.
     _math.p = _math.k[1];
@@ -456,7 +458,7 @@ namespace Elite
     _math.p = _work[3];
     _math.p1 = _work[4];
     MultiplySignedToK(_math, _work[5]);
-    AddShipCoordinateToK(_work, _math, 0u);
+    static_cast<void>(AddShipCoordinateToK(_work, _math, 0u)); // the flag dies at `MV45` (§6.126)
 
     _work[0] = _math.k[1];
     _work[1] = _math.k[2];
@@ -545,7 +547,7 @@ namespace Elite
     }
   } // namespace
 
-  void MoveShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
+  bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
                 std::uint16_t _blueprint, std::uint8_t _view) noexcept
   {
     // 6502: LDA INWK+31 / AND #&A0 / BNE MV30 -- exploding or already dead, so straight to the
@@ -564,7 +566,7 @@ namespace Elite
       {
         MovePlanetOrSun(_work, _math, _flight.alpha, _flight.beta);
         MoveShipTail(_canvas, _draw, _work, _math, _flight, _view);
-        return;
+        return true;
       }
 
       /*
@@ -576,7 +578,11 @@ namespace Elite
       if ((_work[32] & 0x80u) != 0u &&
           (_flight.type == SHIP_TYPE_MISSILE || (static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 7u) == 0u))
       {
-        _effects.RunTactics(_work); // 6502: MV26
+        // 6502: JSR TACTICS at MV26 -- and it can end in `JMP DEATH`, which does not come back.
+        if (!_effects.RunTactics(_work))
+        {
+          return false;
+        }
       }
     }
 
@@ -693,6 +699,7 @@ namespace Elite
     _work[0] = _math.p1;
 
     MoveShipTail(_canvas, _draw, _work, _math, _flight, _view); // 6502: falls into MV45
+    return true;
   }
 
   namespace

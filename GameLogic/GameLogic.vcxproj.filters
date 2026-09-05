@@ -21,6 +21,10 @@
       <UniqueIdentifier>{7e4d0f63-3ab5-4c98-d2e6-9f714cb0d83a}</UniqueIdentifier>
       <Extensions>cpp</Extensions>
     </Filter>
+    <Filter Include="Sound">
+      <UniqueIdentifier>{b21d7f08-6e4a-4c53-9a1e-3d8f5c2b7e60}</UniqueIdentifier>
+      <Extensions>h;cpp</Extensions>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -60,6 +64,12 @@
     <ClInclude Include="LineHeap.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="SoundEffects.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Music.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
     <ClInclude Include="Spawn.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -79,6 +89,21 @@
       <Filter>Universe</Filter>
     </ClInclude>
     <ClInclude Include="Combat.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Hyperspace.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Explosion.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="GameLoop.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="PauseScreen.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
+    <ClInclude Include="Tactics.h">
       <Filter>Universe</Filter>
     </ClInclude>
     <ClInclude Include="Flight.h">
@@ -219,6 +244,9 @@
     <ClCompile Include="KeyTable.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
+    <ClCompile Include="SoundTables.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
     <ClCompile Include="ShipData.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
@@ -233,6 +261,12 @@
     </ClCompile>
     <ClCompile Include="ShipDraw.cpp">
       <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundEffects.cpp">
+      <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="Music.cpp">
+      <Filter>Sound</Filter>
     </ClCompile>
     <ClCompile Include="Spawn.cpp">
       <Filter>Universe</Filter>
@@ -253,6 +287,24 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Combat.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Hyperspace.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Explosion.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="GameLoop.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="PauseScreen.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="OptionTables.cpp">
+      <Filter>Tables</Filter>
+    </ClCompile>
+    <ClCompile Include="Tactics.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Flight.cpp">

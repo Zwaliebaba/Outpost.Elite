@@ -276,7 +276,22 @@ namespace Elite
      * leaves for `SOUR1` with the caller's own carry untouched. The port has no sound-off option
      * to reach it, so a bool is complete for what is modelled and would not be if one arrived.
      */
-    virtual bool PlaySound(std::uint8_t _effect) = 0;
+    /*
+     * `_carryIn` is the carry the 6502 reaches `JSR NOISE` with, and it is an argument because
+     * `NOISE` has THREE answers where a `bool` return has two (§6.99).
+     *
+     * It ends `SEC / RTS` when a voice took the effect. With sound switched off -- `DNOIZ`
+     * non-zero, a title-screen toggle the player owns -- it branches to `SOUR1`, which is a bare
+     * `RTS`: the carry that comes back is the carry that went in, because `LDA DNOIZ / BNE SOUR1`
+     * touches neither flag. So a silent build returns `_carryIn` and a sounding one returns true,
+     * and §6.88 measured that the difference reaches the player -- `OUCH` opens its `DORND` on
+     * this carry, so which piece of equipment an explosion breaks depends on it.
+     *
+     * WHERE THE CALLER DROPS THE RESULT, `_carryIn` IS NOT OBSERVABLE and those sites pass false.
+     * The two that read it pass what the 6502 has: `EXNO3` is reached through `BCS`, so its carry
+     * is set; `.custard` is reached from a `CMP`, so its carry is the comparison's.
+     */
+    virtual bool PlaySound(std::uint8_t _effect, bool _carryIn) = 0;
 
     /*
      * 6502: LDX #n / JMP NOISE2 -- the same sound, with the sustain and the frequency supplied.
@@ -313,7 +328,9 @@ namespace Elite
    * It has no `RTS`; it falls into `ECBLB`, so lighting the bulb is part of starting the E.C.M.
    * rather than something the caller does afterwards.
    */
-  void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept;
+  /// `_carryIn` because `ECBLB2` touches no flag on its way to `NOISE`, so what the sound sees
+  /// is what this routine was called with (§6.118).
+  void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects, bool _carryIn) noexcept;
 
   /*
    * 6502: ECMOF -- stop the E.C.M.: clear both flags, put the bulb out, silence the hum.

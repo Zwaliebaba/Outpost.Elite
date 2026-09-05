@@ -16,10 +16,17 @@
 #include <chrono>
 #include <cstdint>
 
+namespace Elite
+{
+  struct SoundBuffer;
+  struct MusicPlayer;
+} // namespace Elite
+
 namespace Outpost
 {
 
   class FlightSession;
+  class SoundOutput;
 
   /*
    * Everything the game reaches for outside `GameLogic`, answered once (slice 2e).
@@ -123,7 +130,7 @@ namespace Outpost
     // ---- Elite::TunnelEffects -------------------------------------------------------------------
 
     /// 6502: the vertical sync the VIC-II was giving `HFS2` for free while it drew the next circle.
-    void ShowCircle() override;
+    void ShowFrame() override;
 
     // ---- Elite::ControlCodes and Elite::TextEffects ---------------------------------------------
 
@@ -159,6 +166,16 @@ namespace Outpost
       m_dockedFlag = &_dockedFlag;
     }
 
+    /// The SID and what feeds it. Set by the composition root, like the flight, because the sound
+    /// buffer and the music player are the game's and the output is the platform's, and this object
+    /// is where the two halves of the loop meet.
+    void AttachSound(SoundOutput& _audio, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music) noexcept
+    {
+      m_audio = &_audio;
+      m_sound = &_sound;
+      m_music = &_music;
+    }
+
   private:
     /// Ends the process. See `NextKey`.
     [[noreturn]] void Abandon();
@@ -174,6 +191,10 @@ namespace Outpost
     Elite::ExtendedTokenPrinter* m_extendedPrinter = nullptr;
     FlightSession* m_flight = nullptr;
     std::uint8_t* m_dockedFlag = nullptr;
+
+    SoundOutput* m_audio = nullptr;
+    Elite::SoundBuffer* m_sound = nullptr;
+    Elite::MusicPlayer* m_music = nullptr;
 
     /*
      * 6502: QQ11 -- which screen is showing, and it is a REFERENCE because both halves write it.

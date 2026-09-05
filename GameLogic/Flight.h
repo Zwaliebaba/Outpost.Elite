@@ -88,6 +88,43 @@ namespace Elite
    */
   void DrawLaunchTunnel(FlightScreen& _screen, ClipState& _clip, TunnelEffects* _pacing) noexcept;
 
+  /// 6502: LDA #4 -- the step `LL164` hands `HFS2`, and the rounder of the two. `HFS2`'s header
+  /// comment has this pair the wrong way round; see `LAUNCH_TUNNEL_STEP`.
+  inline constexpr std::uint8_t HYPERSPACE_TUNNEL_STEP = 4;
+
+  /// 6502: sfxhyp1 -- the hyperspace drive engaging, which `HYPNOISE` plays twice: once pitched
+  /// through `NOISE2`, and once more at +128, which is `NOISE`'s "layer it on top" entry.
+  inline constexpr std::uint8_t SOUND_HYPERSPACE = 7;
+
+  /// 6502: LDA #&F5 / LDX #240 -- `NOISE2`'s two arguments for the first hyperspace sound. The
+  /// low nibble of A is a release length of 5 and the high nibble a sustain volume of 15.
+  inline constexpr std::uint8_t HYPERSPACE_SUSTAIN = 0xF5;
+  inline constexpr std::uint8_t HYPERSPACE_FREQUENCY = 240;
+
+  /*
+   * 6502: HFS2 on its own -- the step, the screen clear, and the eight rings.
+   *
+   * `LAUN` and `LL164` are the same routine with a different noise and a different step in front
+   * of it, which is what `HFS2` taking `A` says: the two entry points differ by two instructions.
+   * Splitting it out is what lets the hyperspace tunnel exist without copying the launch's body.
+   */
+  void DrawTunnel(FlightScreen& _screen, ClipState& _clip, std::uint8_t _step, TunnelEffects* _pacing) noexcept;
+
+  /*
+   * 6502: LL164 -- the hyperspace tunnel, and `HYPNOISE` in front of it.
+   *
+   * Five instructions once `HFS2` exists: the noise, a step of 4, and the rings. `HYPNOISE` is a
+   * SOUND routine (the upstream files it as one) and it is played through the seams phase 5 owns,
+   * except for its `LDY #1 / JSR DELAY`, which is one vertical sync and is therefore the pacing
+   * object's `ShowFrame`.
+   *
+   * NOTHING IN THE PORT CALLS THIS YET. `MJP` and `TT18` are its only callers and both are 4c, so
+   * this is the tunnel waiting for the jump rather than a routine with a live caller -- built here
+   * because it is what slice 3d-e names, and because the alternative was to leave `HFS2` reachable
+   * at one step size out of two.
+   */
+  void DrawHyperspaceTunnel(FlightScreen& _screen, ClipState& _clip, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
+
   /*
    * 6502: TT110 -- leave the station, or refuse to.
    *
@@ -102,6 +139,36 @@ namespace Elite
    */
   void Launch(FlightLoop& _loop, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
               std::uint8_t _techLevel, SystemSeeds& _selected) noexcept;
+
+  /*
+   * 6502: ESCAPE -- abandon ship, and it is the only way to survive a fight you are losing
+   * (slice 4b-a).
+   *
+   * `RES2`, then the ship you left becomes an NPC flying away from you: `FRS1` puts a Cobra ahead,
+   * and if the bubble refuses it -- `BCS ES1` takes the SUCCESS -- it tries a PIRATE Cobra instead,
+   * which is a different blueprint and a different bounty. Then ninety-seven frames of `MVEIT` and
+   * `LL9` while it recedes.
+   *
+   * **194 IS THREE THINGS.** `LDA #194 / STA INWK+30` is the pitch; `LSR A / STA INWK+32` makes 97
+   * the AI byte; and `.ESL1 ... DEC INWK+32 / BNE ESL1` counts the animation down through that same
+   * byte. So the abandoned ship's AI setting drains to zero as it flies off, and the number of
+   * frames it flies for is half its pitch.
+   *
+   * What it costs: the whole cargo hold (`QQ20`, seventeen bytes), the legal status, the pod
+   * itself, and all but a handful of Trumbles -- `DORND AND #7 ORA #1` leaves one to eight of them,
+   * and zeroes the high byte, so a hold full of them comes back as a nuisance rather than a crisis.
+   * What it gives: seven light years of fuel, and a docking.
+   */
+  /// 6502: LDA #8 / STA INWK+27 -- the speed the abandoned ship leaves at.
+  inline constexpr std::uint8_t ESCAPE_SPEED = 8;
+
+  /// 6502: LDA #194 -- the pitch, and HALVED it is both the AI byte and the frame count.
+  inline constexpr std::uint8_t ESCAPE_PITCH = 194;
+
+  /// 6502: LDA #70 / STA QQ14 -- seven light years, which is what the pod is worth.
+  inline constexpr std::uint8_t ESCAPE_FUEL = 70;
+
+  void AbandonShip(FlightLoop& _loop, std::uint8_t& _fuel) noexcept;
 
   /// 6502: LDA #13 / JSR TT66 / LDA #0 / STA QQ11 -- and it is two values on purpose. `TTX66K`
   /// tail-jumps to `wantdials` for view 0 AND for view 13, so both draw the same pixels; what
@@ -177,5 +244,63 @@ namespace Elite
    */
   [[nodiscard]] std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, std::uint8_t _shipType,
                                            std::uint8_t _distance) noexcept;
+
+  /*
+   * 6502: what `TT66` is actually called with in `DEATH` -- MEASURED, and it is not 6 (§6.117).
+   *
+   * The upstream comment says `LDX #24 / JSR DET1` hides the dashboard "and sets A to 6 in the
+   * process", which is the BBC's `DET1`: `LDA #6 / SEI / STA VIA+&00 / STX VIA+&01 / CLI`. On this
+   * build `DET1` is ONE BYTE, `&60`, a bare `RTS` -- the whole routine is behind an `IF` the C64
+   * fails. So neither the `LDX` nor the `LDA` happens, and `TT66` gets whatever `RES2` left in A.
+   *
+   * That byte is **224**, read off the oracle rather than derived, because it comes out of `RES2`
+   * through a dozen instructions that were not written to produce it. `TheDeathScreenSetsUpLikeDEATH`
+   * compares it against the shipped routine so it cannot drift.
+   */
+  inline constexpr std::uint8_t DEATH_VIEW = 224;
+
+  /// 6502: LDA #146 -- the recursive token `DEATH` prints, "{all caps}GAME OVER".
+  inline constexpr std::uint8_t GAME_OVER_TOKEN = 146;
+
+  /// 6502: LDA #12 / JSR DOYC / JSR DOXC -- the cursor, moved to the middle of the screen.
+  inline constexpr std::uint8_t GAME_OVER_ROW = 12;
+  inline constexpr std::uint8_t GAME_OVER_COLUMN = 12;
+
+  /// 6502: SCBASE+&118 -- the second byte `BOX` STORES rather than EORs, so the second that a
+  /// redraw cannot rub out. `BOTTOM_RIGHT_CORNER` in `ViewChange.h` is the first.
+  inline constexpr std::uint16_t BORDER_TOP_RIGHT = 0x118;
+
+  /// 6502: LDY #64 / STY LASCT -- how long the death animation lasts, in flight-loop iterations.
+  inline constexpr std::uint8_t DEATH_FRAMES = 64;
+
+  /// 6502: LDA FRIN+4 / BEQ D1 -- the debris loop fills slots until the FIFTH one is taken.
+  inline constexpr std::size_t DEATH_DEBRIS_SLOT = 4;
+
+  /*
+   * 6502: DEATH -- the chaos of our destruction, over a "GAME OVER" sign.
+   *
+   * The sequence is: the sound, `RES2`, a quarter of our speed, a cleared screen with the border
+   * EORed off again, a fresh stardust field, the sign, then five pieces of wreckage spawned in
+   * random directions and 64 iterations of the whole flight loop to fly them past.
+   *
+   * `DET1` IS A BARE `RTS` ON THIS BUILD and the port does not call it, which is not a shortcut --
+   * see §6.117. The upstream comment says the `LDX #24 / JSR DET1` pair hides the dashboard "and
+   * sets A to 6 in the process", and both halves are the BBC's: the C64's `DET1` is one byte.
+   *
+   * It does not return. The original ends `JMP DEATH2`, which resets the stack and falls into
+   * `BR1` -- so this ends where the caller's own death exit already goes.
+   */
+  /*
+   * 6502: DEATH from its start to the `JSR U%` -- the scene, before anything moves.
+   *
+   * Split from the animation because the routine is two things and not one: everything above `U%`
+   * builds a screen and a bubble, and everything below it runs the flight loop over them sixty-four
+   * times. The seam is the original's own -- `.D1`'s loop ends and `U%` begins -- and it is what
+   * lets the scene be compared against the shipped routine on the whole bitmap, which a routine
+   * that never returns cannot be.
+   */
+  void PrepareDeathScene(FlightLoop& _loop, DashboardEffects& _sound) noexcept;
+
+  void Die(FlightLoop& _loop, DashboardEffects& _sound) noexcept;
 
 } // namespace Elite

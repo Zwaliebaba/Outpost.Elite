@@ -1,9 +1,16 @@
 # Design/ — Outpost: Elite
 
-**Status:** opened 2026-09-02; all five owner decisions taken the same day, and **slices 0a and
-0c are built** — the upstream source is referenced and proved, the 6502 oracle runs, and the
-first routine is ported and matching it. **A fresh clone needs `git submodule update --init`
-before any of that is true** (Elite-Conversion-Plan.md §6.9).
+**Status:** opened 2026-09-02. **Phases 0, 1, 2, 3 and 5 are built as of 2026-09-05**, and phase 4
+is built but for one slice: the kernel, the whole docked game, flight with its 3D pipeline, the
+sound and music, the ship AI and the autopilot, the explosions, the main game loop with hyperspace
+and the spawning rules, and the pause screen with its thirteen option toggles are all ported and
+compared against the assembled original. The executable launches, flies, fights, docks and dies.
+**What is left is slice 4d** — the missions and the Trumbles — plus two pieces of recorded debt:
+fifteen mutation survivors in the ship AI's sweep (plan §6.125, §6.132) and the `VideoState` work
+that ADR-005 §1's closed decision turned out to need (plan §6.133). **A fresh clone needs
+`git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **348 tests** and CI runs **nine
+repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
@@ -51,16 +58,16 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
   the plan is shaped to avoid.
 - **Not a licence.** The upstream source carries no licence (ADR-001 §5, Risk R1), and the
   owner intends to publish eventually, which makes this the project's largest exposure rather
-  than a footnote. Slice **0e** seeks the rights holders' permission, and nothing is pushed to
-  a public remote until it closes. `Upstream/` is a submodule, so none of its content is in
-  this history at all — but `MasterFile/`'s 13 files are, and they carry the same copyright.
-  ADR-001 §5 records that as an open owner decision.
+  than a footnote. Slice **0e** seeks the rights holders' permission. **The repository is
+  already public**, by owner ruling on 2026-09-03 that reversed a same-day ruling to make it
+  private (Risk R1, realised and accepted rather than mitigated). `Upstream/` is a submodule, so
+  none of its content is in this history — but `MasterFile/`'s 13 files are, and they carry
+  the same copyright. What still closes 0e is a written answer from the rights holders.
 
 ## Conventions
 
-The house rules are the ones this repository already carries in `.clang-format`,
-`.clang-tidy` and `.editorconfig` (copied from Outpost.Frontier, and they reference an
-`AGENTS.md` that does not exist here yet — slice 0c writes it). In short: PascalCase types,
+The house rules are in [`AGENTS.md`](../AGENTS.md) at the repository root, written for this
+repository in slice 0c from its own `.clang-format`, `.clang-tidy` and `.editorconfig`. In short: PascalCase types,
 functions and files; `_param`, `m_member`, `g_global`; `UPPER_CASE` constants; Allman braces,
 two-space indent, 140 columns; flat project folders; `/std:c++latest`, x64, v145.
 

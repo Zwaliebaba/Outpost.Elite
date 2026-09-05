@@ -180,8 +180,8 @@ namespace Elite
      *
      * ONE FLAG, TWO EFFECTS, and they always move together: with the dashboard shown, character
      * rows 18 to 24 switch to multicolour AND to the second block of screen RAM. Without it the
-     * whole screen is standard bitmap mode coloured from the first block, which is every screen
-     * this port draws today -- the dashboard is phase 3's.
+     * whole screen is standard bitmap mode coloured from the first block, which is every docked
+     * screen; the flight half sets it every frame through `FlightSession::SyncVideoRegisters`.
      */
     [[nodiscard]] bool DashboardShown() const noexcept
     {

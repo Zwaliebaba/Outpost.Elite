@@ -1,6 +1,10 @@
 # ADR-003 — Verification: the Assembled Original Is the Oracle
 
-**Status:** Proposed · 2026-09-02 · amended 2026-09-03 (§3: slice 2e's criterion split by owner ruling)
+**Status:** **Accepted** · 2026-09-02 · amended 2026-09-03 (§3: slice 2e's criterion split by owner
+ruling) · amended 2026-09-05 (§4: the mutation baseline rule) · **moved from Proposed to Accepted
+2026-09-05**, on the evidence rather than by decree: twenty-five of the plan's twenty-six slices were
+built against this ADR and every one of them found defects the oracle caught and nothing else would
+have. The two `Labels.json`/`Oracle.json` references below were stale draft names and are corrected.
 **Depends on:** ADR-001 (fidelity), ADR-002 (exact semantics — without it there is nothing to compare)
 **Feeds:** the acceptance column of every slice in the plan; ADR-004 (test project shape)
 
@@ -112,9 +116,15 @@ makes this a check on the architecture as well as on the game.
   from the commentary. Then `MULTU` exhaustively. If those two are not green the interpreter is
   wrong, and it is fixed before anything else is ported.
 - Label addresses: BeebAsm's verbose listing (`-v`) prints each label with its address;
-  `tools/labels.py` parses that into `Labels.json`. If the listing proves awkward, a one-line
-  `PRINT` per label appended to a copy of the master file does the same job — the plan does
-  not depend on which.
+  `tools/labels.py` parses that into `Design/Reference/Labels.txt` — a tab-separated `NAME<TAB>
+  ADDRESS` per line, 1,927 of them, alongside `Binaries.txt` and a matching pair for the loader.
+  (The draft called it `Labels.json`; it is text because nothing needs it to be anything else.)
+- **The oracle has to be present in every tree the suite is JUDGED from, and a mutation
+  worktree is one.** Amended 2026-09-05. `OracleIsPresent` is the mechanism that says when it is
+  not, and it protects a person reading the output — a harness that only counts failures sees
+  one on every run and reads it as a catch. So a mutation run starts by running the unmutated
+  suite and requiring zero failures; a tally produced without that step is not a measurement
+  (§6.119, `AGENTS.md` §6).
 
 ## Alternatives considered
 
@@ -132,7 +142,9 @@ makes this a check on the architecture as well as on the game.
 - Every slice from 1b onward starts with the oracle test and ends with it green. The port's
   speed of progress is bounded by writing tests, which is the right bound.
 - The test project depends on files outside the repository. That is deliberate (ADR-001 §5)
-  and made loud (§1, R9), and a new machine's setup is: clone the upstream tree, build it,
-  point `Oracle.json` at it.
+  and made loud (§1, R9), and a new machine's setup is two commands and no configuration:
+  `git submodule update --init` and `python tools/labels.py --assemble`. There is nothing to
+  point at anything — `OracleImage` finds the repository root by walking up from its own module
+  path (§1, amended 2026-09-03), so there is no per-machine file to keep in step.
 - The interpreter is a small, permanent asset: any future 6502 port in this family of
   repositories inherits it.
