@@ -293,6 +293,10 @@ namespace GameLogicTests
     /// gave a home. It was the bare count while nothing moved them.
     Elite::TrumbleSprites trumbles;
 
+    /// 6502: the VIC-II sprite registers (ADR-005 §1). `MVTRIBS` reads and writes two of them per
+    /// Trumble; every other writer reaches them through a seam.
+    Elite::VideoState video{};
+
     /*
      * Whether the Trumbles' COORDINATE REGISTERS are mirrored into the oracle and compared back.
      *
@@ -338,8 +342,9 @@ namespace GameLogicTests
     [[nodiscard]] Elite::FlightScreen Screen() noexcept
     {
       return Elite::FlightScreen{
-        canvas,  draw,   math,   geometry, dust, heaps,     bubble,   work,  screen,  text, characters.state, printer,    characters,
-        message, flight, status, compass,  rng,  commander, trumbles, sight, effects, view, spaceView,        explosions, techLevel};
+        canvas,  draw,       math,      geometry,   dust,     heaps,   bubble, work,      screen,   text,  characters.state,
+        printer, characters, message,   flight,     status,   compass, rng,    commander, trumbles, video, sight,
+        effects, view,       spaceView, explosions, techLevel};
     }
   };
 
@@ -677,8 +682,23 @@ namespace GameLogicTests
     block(_at.tribxh, _world.trumbles.coordinateXHigh.data(), _world.trumbles.coordinateXHigh.size());
     if (_world.spriteRegistersAreOurs)
     {
-      block(static_cast<std::uint16_t>(_at.vic + 4u), _world.trumbles.coordinates.data(), _world.trumbles.coordinates.size());
-      _cpu.memory[static_cast<std::uint16_t>(_at.vic + 0x10u)] = _world.trumbles.coordinateMsb;
+      /*
+       * The whole x that `VideoState` holds, split back into the register pair the game has: the
+       * low eight bits per sprite and the ninth in the byte all eight share. `MVTRIBS` is the only
+       * reader of those registers, so only the six Trumble sprites are mirrored.
+       */
+      std::uint8_t shared = 0;
+      for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
+      {
+        const std::uint16_t at = static_cast<std::uint16_t>(_at.vic + 2u * sprite);
+        _cpu.memory[at] = static_cast<std::uint8_t>(_world.video.x[sprite] & 0xFFu);
+        _cpu.memory[static_cast<std::uint16_t>(at + 1u)] = _world.video.y[sprite];
+        if ((_world.video.x[sprite] & 0x100u) != 0u)
+        {
+          shared = static_cast<std::uint8_t>(shared | (1u << sprite));
+        }
+      }
+      _cpu.memory[static_cast<std::uint16_t>(_at.vic + 0x10u)] = shared;
     }
 
     const std::array<std::uint8_t, 4> seed = _world.rng.State();
@@ -805,11 +825,14 @@ namespace GameLogicTests
     {
       // Compared only where they were mirrored, and for the same reason: unless a fixture has
       // claimed them these addresses hold `XX21` on one side and sprite registers on the other.
-      for (std::size_t index = 0; index < _world.trumbles.coordinates.size(); ++index)
+      const std::uint8_t shared = _cpu.memory[static_cast<std::uint16_t>(_at.vic + 0x10u)];
+      for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
-        same(static_cast<std::uint16_t>(_at.vic + 4u + index), _world.trumbles.coordinates[index], L"VIC+&04");
+        const std::uint16_t at = static_cast<std::uint16_t>(_at.vic + 2u * sprite);
+        const std::uint16_t theirs = static_cast<std::uint16_t>(_cpu.memory[at] | (((shared >> sprite) & 1u) != 0u ? 0x100u : 0u));
+        Assert::AreEqual(theirs, _world.video.x[sprite], (_context + L": sprite x").c_str());
+        same(static_cast<std::uint16_t>(at + 1u), _world.video.y[sprite], L"sprite y");
       }
-      same(static_cast<std::uint16_t>(_at.vic + 0x10u), _world.trumbles.coordinateMsb, L"VIC+&10");
     }
     same(_at.nostm, _world.dust.count, L"NOSTM");
     same(_at.tek, _world.techLevel, L"tek");

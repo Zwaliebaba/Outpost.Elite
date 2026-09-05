@@ -1514,8 +1514,11 @@ namespace GameLogicTests
              */
             frame.world.spriteRegistersAreOurs = true;
             frame.world.trumbles.count = ((roll & 1u) != 0u) ? 0u : 3u;
-            frame.world.trumbles.coordinates = {0x20u, 0x30u, 0x40u, 0x50u, 0x60u, 0x70u, 0x80u, 0x90u, 0xA0u, 0xB0u, 0xC0u, 0xD0u};
-            frame.world.trumbles.coordinateMsb = 0x03u; // the sights' and the explosion's bits, which are not this routine's
+            for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
+            {
+              frame.world.video.x[sprite] = static_cast<std::uint16_t>(0x20u + 0x10u * sprite);
+              frame.world.video.y[sprite] = static_cast<std::uint8_t>(0x40u + 0x10u * sprite);
+            }
 
             const std::wstring where =
               WidenText("M% (JSTX " + std::to_string(roll) + ", JSTY " + std::to_string(pitch) + ", mode " + std::to_string(mode) + ")");

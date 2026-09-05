@@ -2,6 +2,8 @@
 
 #include "CanvasPresenter.h"
 
+#include "VideoState.h"
+
 #include "Canvas.h"
 
 /*
@@ -357,7 +359,7 @@ namespace Outpost
     CreateRenderTargets();
   }
 
-  bool CanvasPresenter::Present(const Elite::Canvas& _canvas, int _clientWidth, int _clientHeight)
+  bool CanvasPresenter::Present(const Elite::Canvas& _canvas, const Elite::VideoState* _video, int _clientWidth, int _clientHeight)
   {
     if (!m_device || _clientWidth <= 0 || _clientHeight <= 0)
     {
@@ -365,7 +367,18 @@ namespace Outpost
     }
 
     const Viewport view = FitCanvas(m_width, m_height);
-    _canvas.Resolve(m_resolved);
+
+    // 6502: what the VIC-II put on the wire -- the bitmap, and then the eight sprites over it
+    // (ADR-005 §1). With no registers to composite from this is the bitmap alone, which is what
+    // every golden hash asserts and what the loader screen and title show.
+    if (_video != nullptr)
+    {
+      _canvas.Resolve(m_resolved, *_video);
+    }
+    else
+    {
+      _canvas.Resolve(m_resolved);
+    }
 
     winrt::check_hresult(m_allocators[m_frameIndex]->Reset());
     winrt::check_hresult(m_commands->Reset(m_allocators[m_frameIndex].get(), m_pipeline.get()));

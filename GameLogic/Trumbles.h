@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Rng.h"
+#include "VideoState.h"
 
 #include <array>
 #include <cstdint>
@@ -25,18 +26,19 @@ namespace Elite
    *
    * THE COORDINATES LIVE IN THE VIDEO CHIP AND NOWHERE ELSE. `MVTRIBS` reads `VIC+&04+Y`, adds a
    * velocity to it and writes it straight back, so the registers are the only copy of where a
-   * Trumble is -- there is no shadow of them in RAM. That is why the sprite bank below holds
-   * `coordinates` rather than the presenter holding them: a port that kept the position outside
-   * `GameLogic` would have nothing to add the velocity to.
+   * Trumble is -- there is no shadow of them in RAM. That is why this routine takes a `VideoState`
+   * and not a `SightEffects`: the register seams are WRITE-ONLY by design (`VideoState.h`), and a
+   * routine that has to read a register back cannot be served by one. `SETL1` still is, because
+   * it is memory banking rather than a register and nothing can read it.
    */
 
   /// 6502: TRIBCT's range -- "the number of Trumble sprites we are showing, 0 to 6", and the six
   /// are VIC-II sprites 2 to 7 because 0 and 1 are the laser sights and the explosion.
   inline constexpr std::uint8_t TRUMBLE_SPRITE_MAX = 6;
 
-  /// 6502: the twelve registers VIC+&04 to VIC+&0F -- x and y for sprites 2 to 7, interleaved,
-  /// which is why one index Y reaches both (`VIC+4,Y` and `VIC+5,Y`).
-  inline constexpr std::size_t TRUMBLE_COORDINATE_COUNT = 12;
+  /// 6502: the Trumbles are VIC-II sprites 2 to 7 -- 0 is the laser sights and 1 is the explosion,
+  /// so Trumble N is sprite N + 2 and `VIC+4,Y` with Y = 2N is that sprite's x register.
+  inline constexpr std::size_t FIRST_TRUMBLE_SPRITE = 2;
 
   /*
    * 6502: TRIBVX, TRIBVXH and TRIBXH -- `SKIP 16` each, and sixteen is what the port keeps.
@@ -104,16 +106,16 @@ namespace Elite
     /// 6502: TRIBVXH -- the high byte of the x velocity, which is 0 or &FF.
     std::array<std::uint8_t, TRUMBLE_VELOCITY_COUNT> velocityXHigh{};
 
-    /// 6502: TRIBXH -- bit 8 of the x coordinate, kept in RAM because the register that holds it
-    /// on the chip is shared with seven other sprites and cannot be read back per sprite.
+    /*
+     * 6502: TRIBXH -- bit 8 of the x coordinate, and it is here rather than in `VideoState`
+     * because the GAME keeps it here.
+     *
+     * The ninth bit of a sprite's x lives in a register shared by all eight sprites, so it cannot
+     * be read back one sprite at a time -- which is why the game shadows it in RAM and why
+     * `SPMASK` exists at all. `VideoState` gives each sprite a whole sixteen-bit x, so the port
+     * needs no masks; it still needs this byte, because this byte is what the routine reads.
+     */
     std::array<std::uint8_t, TRUMBLE_VELOCITY_COUNT> coordinateXHigh{};
-
-    /// 6502: VIC+&04 to VIC+&0F -- x, y, x, y ... for sprites 2 to 7.
-    std::array<std::uint8_t, TRUMBLE_COORDINATE_COUNT> coordinates{};
-
-    /// 6502: VIC+&10 -- the ninth x bit of all EIGHT sprites, so bits 0 and 1 belong to the laser
-    /// sights and the explosion and are read-modify-written round rather than through.
-    std::uint8_t coordinateMsb = 0;
   };
 
   /*
@@ -139,8 +141,17 @@ namespace Elite
    * bottom with no code to put it there, while one that drifts off the left needs four
    * instructions.
    *
-   * Returns nothing: everything it decides is in `_sprites`, which is what the presenter reads.
+   * `SPMASK` IS NOT PORTED AND THE ABSENCE IS THE POINT. Its twelve bytes are a pair of masks per
+   * sprite for clearing and setting that sprite's bit in VIC+&10, and they exist because the ninth
+   * x bit of eight sprites shares one register. `VideoState` gives each sprite a whole sixteen-bit
+   * x (ADR-005 section 1), so there is nothing to mask: the read-modify-write of a shared byte
+   * becomes a store. The two are equivalent because the masks are correct -- clearing a bit and
+   * then setting it back cannot touch another sprite's.
+   *
+   * Returns nothing: everything it decides is in `_sprites` and `_video`, and the second of those
+   * is what the presenter composites.
    */
-  void MoveTrumbleSprites(TrumbleSprites& _sprites, Rng& _rng, std::uint8_t _mainLoopCounter, SightEffects& _effects) noexcept;
+  void MoveTrumbleSprites(TrumbleSprites& _sprites, VideoState& _video, Rng& _rng, std::uint8_t _mainLoopCounter,
+                          SightEffects& _effects) noexcept;
 
 } // namespace Elite

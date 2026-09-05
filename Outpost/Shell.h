@@ -166,6 +166,19 @@ namespace Outpost
       m_dockedFlag = &_dockedFlag;
     }
 
+    /*
+     * The VIC-II sprite registers the presenter composites from (ADR-005 §1).
+     *
+     * Attached separately from the flight session although it comes from it, because what this
+     * object needs is the DATA and not the session: a shell handed the registers can present them
+     * on a docked screen, where there is no flight loop running and the laser sights are still
+     * switched off by `NOSPRITES` rather than by nobody having asked.
+     */
+    void AttachVideo(const Elite::VideoState& _video) noexcept
+    {
+      m_video = &_video;
+    }
+
     /// The SID and what feeds it. Set by the composition root, like the flight, because the sound
     /// buffer and the music player are the game's and the output is the platform's, and this object
     /// is where the two halves of the loop meet.
@@ -183,6 +196,9 @@ namespace Outpost
     Window& m_window;
     CanvasPresenter& m_presenter;
     Elite::Canvas& m_canvas;
+
+    /// 6502: the sprite registers, null until the composition root attaches them.
+    const Elite::VideoState* m_video = nullptr;
 
     Elite::TokenPrinter* m_printer = nullptr;
     Elite::TextState* m_text = nullptr;

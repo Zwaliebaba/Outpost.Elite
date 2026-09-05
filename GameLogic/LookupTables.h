@@ -261,18 +261,27 @@ namespace Elite
   extern const std::array<std::uint8_t, 4> TRUMBLE_DIRECTION_HIGH_TABLE;
 
   /*
-   * 6502: SPMASK -- the ninth bit of each Trumble sprite's x coordinate, as a pair of masks.
+   * 6502: spritp -- the seven sprite definitions, 64 bytes each.
    *
-   * Sprite x coordinates are nine bits on the VIC-II: eight in the sprite's own register and the
-   * ninth in a bit of VIC+&10 shared by all eight sprites. So moving one sprite sideways is a
-   * read-modify-write of a byte the other seven also live in, and the table is what says which
-   * bit is whose: entry 2n clears Trumble n's bit and entry 2n+1 sets it.
+   * FROM A FOURTH ASSEMBLY, and that is the only reason they were not here already.
+   * `elite-sprites.asm` is 84 lines that no build of the GAME assembles: it saves `SPRITE.bin` at
+   * &7C3A and the LOADER copies it to `SPRITELOC%`, which is `SCBASE + &2800` -- one byte past
+   * everything `Canvas` models. `tools/labels.py` now assembles it into its own reference pair
+   * (ADR-005 section 1 asked for this first, and on its own merits), so these bytes are compared
+   * against the assembler's output by `extract_tables.py --check` like every other table.
    *
-   * TWELVE ENTRIES, sized by what indexes them (§6.8). Y is twice the Trumble number and the
-   * number is below six, so `SPMASK+1,Y` reaches offset 11 and no further. The first pair belongs
-   * to sprite 2, not sprite 0: sprites 0 and 1 are the laser sights and the explosion.
+   * The order is the loader's, because the loader is what sets the pointers: 0 to 3 are the laser
+   * sights for a pulse, beam, military and mining laser, 4 is the explosion cloud, and 5 and 6 are
+   * the two Trumbles, facing right and left. Definitions 0 to 4 are hi-res (one bit per pixel, 24
+   * across) and 5 and 6 are multicolour (two bits per pixel, 12 across) -- see
+   * `FIRST_MULTICOLOUR_DEFINITION` in `VideoState.h`, which is where that fact is used.
+   *
+   * Byte 63 of each is padding the hardware never reads. In definition 0 it is &3A, which the
+   * upstream source says is "random workspace noise left over from the BBC Micro assembly
+   * process" -- so it is data that means nothing and is carried anyway, because the extraction is
+   * of an address range and not of a meaning.
    */
-  extern const std::array<std::uint8_t, 12> TRUMBLE_SPRITE_BIT_TABLE;
+  extern const std::array<std::uint8_t, 448> SPRITE_DEFINITIONS;
 
   /*
    * 6502: DSTORE% -- the dashboard picture, which `wantdials` copies into the bitmap.

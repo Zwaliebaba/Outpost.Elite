@@ -90,7 +90,7 @@ namespace Outpost
       return !m_window.Closed();
     }
 
-    return m_presenter.Present(m_canvas, width, height);
+    return m_presenter.Present(m_canvas, m_video, width, height);
   }
 
   std::uint8_t GameShell::NextKey()

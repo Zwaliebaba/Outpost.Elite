@@ -15,7 +15,8 @@
 namespace Elite
 {
   class Canvas;
-}
+  struct VideoState;
+} // namespace Elite
 
 namespace Outpost
 {
@@ -57,7 +58,14 @@ namespace Outpost
      * frame, which is what paces the whole program -- there is no timer and no sleep anywhere in
      * the shell. Returns false if the device has been removed, which is not recoverable here.
      */
-    [[nodiscard]] bool Present(const Elite::Canvas& _canvas, int _clientWidth, int _clientHeight);
+    /*
+     * `_video` is the VIC-II sprite registers, or null for the bitmap alone.
+     *
+     * A POINTER rather than a reference, because "no sprites" is a real state and not a missing
+     * argument: the title screen and every docked screen present before a flight session exists,
+     * and a default-constructed `VideoState` would be a lie about registers nothing has written.
+     */
+    [[nodiscard]] bool Present(const Elite::Canvas& _canvas, const Elite::VideoState* _video, int _clientWidth, int _clientHeight);
 
     /// The client area changed. Cheap and idempotent; a zero-sized client (a minimised window) is
     /// ignored rather than resized to, because `ResizeBuffers` rejects it.

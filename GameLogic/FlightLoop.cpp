@@ -313,7 +313,7 @@ namespace Elite
      */
     if (screen.trumbles.count != 0u)
     {
-      MoveTrumbleSprites(screen.trumbles, screen.rng, screen.flight.mainLoopCounter, screen.sight);
+      MoveTrumbleSprites(screen.trumbles, screen.video, screen.rng, screen.flight.mainLoopCounter, screen.sight);
     }
 
     // ---- part 2: the roll ------------------------------------------------------------------------

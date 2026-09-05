@@ -7,6 +7,8 @@
 namespace Elite
 {
 
+  struct VideoState; // VideoState.h -- the sprite registers, which `Resolve` composites from.
+
   /*
    * The screen, held the way the C64 held it (ADR-002 section 4).
    *
@@ -201,6 +203,27 @@ namespace Elite
      * uploads. Each multicolour pixel becomes two columns, because that is its real width.
      */
     void Resolve(std::span<std::uint8_t> _out) const noexcept;
+
+    /*
+     * The same image with the hardware SPRITES composited over it (ADR-005 section 1).
+     *
+     * An OVERLOAD rather than a defaulted argument, because the two callers mean different things
+     * and both are right. Every docked screen and every golden hash wants the bitmap alone -- that
+     * is what the game drew and what the oracle can be compared against -- while the presenter
+     * wants what a person would see, which on a C64 includes eight sprites the bitmap knows
+     * nothing about. Making sprites the default would quietly change what a golden asserts.
+     *
+     * `Canvas` supplies two of the three inputs already: the sprite POINTERS are screen-RAM bytes
+     * it holds and has compared since section 6.73, and the bitmap underneath is its own. The
+     * third is `VideoState`, which is the registers, and it is a parameter because it belongs to
+     * the game world rather than to the screen memory.
+     *
+     * This is the first drawing in the port with NO oracle behind it, and the honest reason is in
+     * `VideoState.h`: the game never rendered a composited image into memory, so there is nothing
+     * to compare one against. Everything upstream is compared; the blit rule is documented VIC-II
+     * behaviour, and a golden hash plus a hand-checked screenshot is the whole of its coverage.
+     */
+    void Resolve(std::span<std::uint8_t> _out, const VideoState& _video) const noexcept;
 
     /*
      * A hash of the resolved image, for golden tests (ADR-003 section 2).

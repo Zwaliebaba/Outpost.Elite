@@ -120,7 +120,7 @@ is preserved in the history and was true then.
 - `Outpost.slnx` with four projects: `NeuronCore`, `GameLogic`, `GameLogicTests` and `Outpost`.
 - `NeuronCore/` — the foundation static library: the shared precompiled-header content and
   `Debug.h`. No game semantics, and no C++/WinRT in the two libraries that never used it.
-- `GameLogic/` — **the port**, namespace `Elite`: <!--count:gamelogic-sources-->61 translation units and <!--count:gamelogic-headers-->49 headers,
+- `GameLogic/` — **the port**, namespace `Elite`: <!--count:gamelogic-sources-->63 translation units and <!--count:gamelogic-headers-->50 headers,
   deterministic and platform-free, guarded by `tools/check_gamelogic.py`. Everything phases 0 to 3
   name is here — the arithmetic kernel, the text system, the universe, every docked screen, the
   ship slots and motion, `LL9` and the clipper, the planet, sun and stardust, all sixteen parts of
@@ -135,7 +135,7 @@ is preserved in the history and was true then.
   `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
   WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
   docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->349 tests in <!--count:test-files-->49 files: the 6502 interpreter with its cycle counter and
+- `Tests/GameLogicTests/` — <!--count:tests-->361 tests in <!--count:test-files-->50 files: the 6502 interpreter with its cycle counter and
   its in-order store log, the oracle fixture over the assembled game and the loader, and the
   suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
