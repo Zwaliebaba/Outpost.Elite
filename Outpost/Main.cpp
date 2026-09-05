@@ -6,6 +6,7 @@
 #include "Presentation.h"
 #include "SaveStore.h"
 #include "Shell.h"
+#include "SoundOutput.h"
 #include "Window.h"
 
 #include "Canvas.h"
@@ -19,8 +20,10 @@
 #include "LoaderScreen.h"
 #include "Market.h"
 #include "MarketScreen.h"
+#include "Music.h"
 #include "Rng.h"
 #include "SaveGame.h"
+#include "SoundEffects.h"
 #include "StartUp.h"
 #include "StateTokens.h"
 #include "StatusScreen.h"
@@ -81,13 +84,15 @@ namespace
         extended(characters, recursive, rng, &shell),
         trade{recursive, characters, extended, text, shell, shell, rng},
         save{recursive, characters, extended, screen, text, shell, shell, store, numbers},
-        flight(window, canvas, text, characters, recursive, message, commander, rng, status, view, explosionCount, current.techLevel)
+        flight(window, canvas, text, characters, recursive, message, commander, rng, status, view, explosionCount, current.techLevel, sound,
+               music, audio)
     {
       recursive.SetValueTokens(&values);
       recursive.SetCursor(&text);
       shell.Attach(recursive, text, characters.state, message);
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, dockedFlag);
+      shell.AttachSound(audio, sound, music);
 
       // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
       // capital letter of the first screen depends on.
@@ -101,6 +106,18 @@ namespace
     Outpost::Window window;
     Outpost::CanvasPresenter presenter;
     Elite::Canvas canvas;
+
+    /*
+     * 6502: the sound variables, the music player and the SID they write.
+     *
+     * All three are here rather than in the flight session because BOTH halves of the loop make
+     * sound: the docked screens beep and the title screen starts the theme through the shell, and
+     * the flight loop fires lasers through the session. The output is the platform's and is the one
+     * object in this struct that can fail to open, in which case the game runs in silence.
+     */
+    Elite::SoundBuffer sound;
+    Elite::MusicPlayer music;
+    Outpost::SoundOutput audio;
 
     /*
      * 6502: QQ11 -- which screen is showing.

@@ -289,4 +289,43 @@ namespace Elite
   extern const std::array<std::uint8_t, 280> DASHBOARD_SCREEN_COLOURS;
   extern const std::array<std::uint8_t, 280> DASHBOARD_COLOUR_RAM;
 
+  /*
+   * 6502: SFXPR, SFXCNT, SFXFQ, SFXCR, SFXATK, SFXSUS, SFXFRCH and SFXVCH -- the sixteen sound
+   * effects, one byte each in eight tables, and SEVENS, which turns a voice number into its SID
+   * register base.
+   *
+   * THE PRIORITY TABLE IS 136 BYTES AND NOT 16. `HYPNOISE` calls `NOISE` with the effect number
+   * plus 128 -- the flag that says "play it again even if it is already playing" -- and `NOISE`
+   * reads `SFXPR,Y` BEFORE it masks the flag off, so index 135 is reachable and the byte there
+   * decides a branch. The source calls the read "fairly random, as it is fetching values from game
+   * code"; it is not random, it is the second byte of `COLD`, and the table is sized to reach it
+   * (section 6.8). The other seven are indexed only after the mask and stay at sixteen.
+   */
+  extern const std::array<std::uint8_t, 136> EFFECT_PRIORITY_TABLE;
+  extern const std::array<std::uint8_t, 16> EFFECT_COUNT_TABLE;
+  extern const std::array<std::uint8_t, 16> EFFECT_FREQUENCY_TABLE;
+  extern const std::array<std::uint8_t, 16> EFFECT_CONTROL_TABLE;
+  extern const std::array<std::uint8_t, 16> EFFECT_ATTACK_TABLE;
+  extern const std::array<std::uint8_t, 16> EFFECT_SUSTAIN_TABLE;
+  extern const std::array<std::uint8_t, 16> EFFECT_FREQUENCY_CHANGE_TABLE;
+  extern const std::array<std::uint8_t, 16> EFFECT_VOLUME_RATE_TABLE;
+  extern const std::array<std::uint8_t, 3> SEVENS_TABLE;
+
+  /*
+   * 6502: musicstart, COMUDAT and THEME -- the two tunes, as one region.
+   *
+   * The player keeps a sixteen-bit pointer and PRE-INCREMENTS it before every read, so a tune
+   * starts at the byte BEFORE its first note: `startbd` hands `BDENTRY` the address `musicstart`
+   * (the last byte of `BDJMPTBH`) for the docking music and `THEME-1` (the last byte of the docking
+   * music) for the title theme. The region is extracted from `musicstart` so that the port's
+   * offsets are the original's addresses minus one constant, and the oracle can compare them.
+   */
+  extern const std::array<std::uint8_t, 5547> MUSIC_DATA;
+
+  /// 6502: LO(musicstart) and LO(THEME-1) -- where each tune's pointer starts, as offsets into
+  /// `MUSIC_DATA`. The docking music is the Blue Danube; the theme is the one added for the GMA
+  /// release, which this build is.
+  inline constexpr std::uint16_t MUSIC_DOCKING_OFFSET = 0;
+  inline constexpr std::uint16_t MUSIC_THEME_OFFSET = 2615;
+
 } // namespace Elite

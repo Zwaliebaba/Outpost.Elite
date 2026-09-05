@@ -23,11 +23,14 @@
 #include "TextPrint.h"
 #include "Tokens.h"
 #include "ViewChange.h"
+#include "Music.h"
+#include "SoundEffects.h"
 
 #include <cstdint>
 
 namespace Outpost
 {
+  class SoundOutput;
 
   /*
    * The world a flight happens in, and the six seams the flight code reaches through.
@@ -71,7 +74,8 @@ namespace Outpost
   public:
     FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
                   Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::CommanderBlock& _commander, Elite::Rng& _rng,
-                  Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions, std::uint8_t& _techLevel) noexcept;
+                  Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions, std::uint8_t& _techLevel,
+                  Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music, SoundOutput& _audio) noexcept;
 
     FlightSession(const FlightSession&) = delete;
     FlightSession& operator=(const FlightSession&) = delete;
@@ -160,6 +164,12 @@ namespace Outpost
   private:
     Window& m_window;
     Elite::Canvas& m_canvas;
+
+    /// 6502: the sound buffer, the music player and the chip they write -- the composition root's,
+    /// because the docked half beeps and starts the theme through the shell.
+    Elite::SoundBuffer& m_sound;
+    Elite::MusicPlayer& m_music;
+    SoundOutput& m_audio;
 
     // ---- the flight world -------------------------------------------------------------------------
 
