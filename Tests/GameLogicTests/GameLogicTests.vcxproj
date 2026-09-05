@@ -157,6 +157,7 @@
     <ClCompile Include="LaserTests.cpp" />
     <ClCompile Include="MessageTests.cpp" />
     <ClCompile Include="ScannerTests.cpp" />
+    <ClCompile Include="SpawnerTests.cpp" />
     <ClCompile Include="TacticsTests.cpp" />
     <ClCompile Include="SpawnTests.cpp" />
     <ClCompile Include="SoundTests.cpp" />
