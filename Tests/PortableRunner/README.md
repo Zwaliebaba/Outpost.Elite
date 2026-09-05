@@ -5,7 +5,7 @@ same assertions, a different way of calling them.
 
 ```sh
 python tools/labels.py --assemble        # once: the oracle needs the assembled game
-Tests/PortableRunner/run_tests.sh        # 348 tests, about a minute from cold
+Tests/PortableRunner/run_tests.sh        # <!--count:tests-->349 tests, about a minute from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
 ```
 

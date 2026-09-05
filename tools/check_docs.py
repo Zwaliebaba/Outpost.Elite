@@ -22,7 +22,11 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SKIP = {"Upstream", ".git", "node_modules", "out", "build"}
+# `packages/` and `.claude/` are gitignored, so CI never sees them and a local run did: NuGet's own
+# `readme.md` has two over-wide table rows, which made `check_all.py` red on any machine that had
+# restored the executable's packages. A check that fails on files the repository does not track
+# teaches people to skip it.
+SKIP = {"Upstream", ".git", ".claude", ".vs", "packages", "node_modules", "out", "build", "x64"}
 
 
 def split_cells(_line: str) -> list[str]:

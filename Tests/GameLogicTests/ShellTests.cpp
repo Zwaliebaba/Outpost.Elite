@@ -692,6 +692,61 @@ namespace GameLogicTests
     }
 
     /*
+     * CTRL IS KEY-LOGGER ENTRY 6, MEASURED RATHER THAN ASSERTED.
+     *
+     * `hyp` reaches the galactic hyperdrive through `JSR CTRL / BMI Ghy` and `TT18` reaches the
+     * mis-jump cheat through `JSR CTRL / AND PATG / BMI ptg`. The port recorded, in three places,
+     * that Ctrl was a MODIFIER the key seam could not carry -- so both were built and unreachable.
+     * `CTRL` is `LDX #6` falling into `DKS4` (`LDA KEYLOOK,X / TAX / RTS`), which makes it a
+     * position like any other.
+     *
+     * A constant transcribed from a comment is what caused this, so the constant is not
+     * transcribed here either. The shipped routine is run once for EVERY key-logger entry with
+     * that entry alone held, and the assertion is that exactly one of the 65 comes back negative
+     * and that it is `KEY_CONTROL`. That is the shape §6.132 asks for -- count the distinct
+     * answers a branch sees -- applied to a single byte: an off-by-one in either direction fails,
+     * and so does a routine that answers on more than one key.
+     */
+    TEST_METHOD(CtrlIsKeyLoggerEntrySixAndTheMapReachesIt)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t keylook = oracle.Label("KEYLOOK");
+      std::vector<int> negative;
+
+      for (int entry = 0; entry < 65; ++entry)
+      {
+        Cpu6502 cpu = oracle.Fresh();
+
+        // 6502: RDKEY leaves a held key at 255 (`DEC KEYLOOK,X` from zero), which is what the
+        // `BMI` on the way out of CTRL is reading. One entry held, and the other 64 clear.
+        for (int other = 0; other < 65; ++other)
+        {
+          cpu.memory[static_cast<std::uint16_t>(keylook + other)] = (other == entry) ? 0xFFu : 0x00u;
+        }
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("CTRL"));
+        Assert::IsTrue(run.completed, L"CTRL returns");
+
+        if (cpu.n)
+        {
+          negative.push_back(entry);
+          Assert::AreEqual<std::uint8_t>(0xFFu, cpu.x, L"CTRL leaves the held byte in X, through TAX");
+        }
+      }
+
+      Assert::AreEqual<std::size_t>(1u, negative.size(), L"exactly one key-logger entry answers CTRL");
+      Assert::AreEqual(static_cast<int>(Elite::KEY_CONTROL), negative.front(), L"and it is KEY_CONTROL");
+
+      // And the shell reaches it: VK_CONTROL is the one Windows key bound to that position.
+      Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(Elite::KEY_CONTROL), Outpost::C64KeyFor(0x11),
+                                     L"VK_CONTROL maps to the position CTRL reads");
+    }
+    /*
      * No Windows key is bound twice, nothing is bound to "no key", and the C64 keys that ARE bound
      * twice are exactly the six the new layout moved to the function keys -- and Space.
      *

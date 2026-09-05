@@ -158,6 +158,21 @@ namespace Elite
   inline constexpr std::size_t KEY_SHIFT_RIGHT = 0x0C;    ///< 6502: KLO+&C -- right SHIFT
   inline constexpr std::size_t KEY_CROSSHAIR_FAST = 0x3F; ///< 6502: KLO+&3F -- RETURN
 
+  /*
+   * 6502: CTRL -- and it is a key-logger entry like the five above, not a modifier.
+   *
+   * `CTRL` is one instruction, `LDX #6`, falling into `DKS4` (`LDA KEYLOOK,X / TAX / RTS`), so
+   * "is CTRL held" is `KEYLOOK+6` and nothing more exotic -- `keylook.asm` names that byte "CTRL
+   * is being pressed (KLO+&6)". Both readers test it with `BMI`, which is true because `RDKEY`
+   * leaves a held key at 255.
+   *
+   * IT IS HERE BECAUSE THE PORT BELIEVED OTHERWISE. `Main.cpp` carried "CTRL is a MODIFIER, which
+   * `Window` and `KeyMap` do not report -- they deliver matrix positions, and Ctrl is not one",
+   * and that left the galactic hyperdrive built and unreachable from slice 4c-b onwards. Ctrl IS
+   * a matrix position, and the seam could have expressed it the whole time.
+   */
+  inline constexpr std::size_t KEY_CONTROL = 0x06; ///< 6502: KLO+&6 -- CTRL, read by `hyp` and `TT18`
+
   /// 6502: what `TT17` leaves in X and Y -- one signed step per axis, four times as big with
   /// RETURN held. Zero on both when nothing is pressed, which is most passes.
   struct CrosshairStep

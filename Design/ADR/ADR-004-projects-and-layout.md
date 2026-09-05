@@ -107,13 +107,19 @@ separately rather than treating them as errors.
 | `check_projects.py` | Every `.vcxproj` path resolves, nothing on disk is unlisted, the `.filters` has not drifted from its project, and `pch.h` is every source's first line | **Built**; in CI |
 | `check_outpost.py` | Every `Elite::` name the executable calls still exists, with the right arity — the one check that reaches `Outpost/`, which the portable runner does not compile | **Built**; in CI |
 | `check_docs.py` | No Markdown table row is wider than its header, because GitHub silently drops the cells that do not fit | **Built**; in CI |
+| `check_counts.py` | Every number a document states about the tree AS IT IS carries a `<!--count:name-->` marker, and this reads the tree and checks it; it also checks §7's effort table against the sum of its own rows. `--list` prints what the tree holds. Unmarked numbers are the journal's history and are left alone | **Built** (plan §6.147); in CI |
+| `mutate.py` | The recorded mutants, from `tools/mutants.json`, applied one at a time in a detached worktree against a proven-green baseline; a timeout counts as a catch and a `find` that does not match exactly once is an error. `--check` verifies the list against the tree without building and is the half CI runs; `--list` prints it | **Built** (plan §6.147); `--check` in CI |
 | `c64_source.py` | Prints a routine's C64 form by evaluating the upstream `IF`/`ELIF`/`ENDIF` conditionals against this build's symbols, and annotates fall-throughs; `--check-all` reads every file the build assembles | **Built**; in CI |
-| `check_all.py` | Runs the nine repository checks in CI's order, so a local run cannot leave one out. Nine CHECKS from seven scripts — `inventory.py` contributes `--check-includes` and `--strict`, and `check_gamelogic.py` its own `--self-test`; `labels.py` and `golden_diff.py` are tools rather than checks and are not in it | **Built** (plan §6.127) |
+| `check_all.py` | Runs the <!--count:checks-->eleven repository checks in CI's order, so a local run cannot leave one out. Eleven CHECKS from nine scripts — `inventory.py` contributes `--check-includes` and `--strict`, and `check_gamelogic.py` its own `--self-test`; `labels.py`, `golden_diff.py` and `mutate.py` are tools rather than checks and are not in it | **Built** (plan §6.127) |
 
-**What is deliberately absent, so nobody assumes otherwise: there is no mutation tooling.** The
-method is in `AGENTS.md` §6 and the mutants are hand edits in a detached worktree, which means no
-tally in this corpus can be re-run (Risk R13). A `tools/mutate.py` holding the mutant list per unit
-as data is the highest-value script still missing.
+**The mutation tooling exists as of 2026-09-05, and what it changes is narrower than it looks.**
+`tools/mutants.json` holds the mutants per unit and `tools/mutate.py` runs them against a
+proven-green baseline, so a tally is a command (Risk R13). That fixes every tally FROM HERE: a
+slice adds its mutants when it lands and anyone can re-run them. It does not fix the tallies
+already published — those mutants were hand edits and are gone, and no tool recovers them. The
+fifteen survivors §6.125 named are in the file because their names pinned them to a constant
+apiece; the numbers beside the other slices stay unreproducible. **R13 therefore stays open on
+that half rather than closing on the tooling.**
 
 One script lives outside `tools/`: `Tests/PortableRunner/generate_runner.py`, because it is
 useless without the shim headers beside it and moving it would split one mechanism across two

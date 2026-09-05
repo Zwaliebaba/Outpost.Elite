@@ -60,7 +60,7 @@ it also lists what is left.
 
 ## 1. What we actually have
 
-### 1.1 `MasterFile/` — 13 master files, 5,615 lines, and 710 files that are not here
+### 1.1 `MasterFile/` — <!--count:masters-->12 master files, <!--count:master-lines-->5,577 lines, and <!--count:library-includes-->710 files that are not here
 
 | File | Lines | What it is | Port disposition |
 |---|---|---|---|
@@ -120,7 +120,7 @@ is preserved in the history and was true then.
 - `Outpost.slnx` with four projects: `NeuronCore`, `GameLogic`, `GameLogicTests` and `Outpost`.
 - `NeuronCore/` — the foundation static library: the shared precompiled-header content and
   `Debug.h`. No game semantics, and no C++/WinRT in the two libraries that never used it.
-- `GameLogic/` — **the port**, namespace `Elite`: 61 translation units and 49 headers,
+- `GameLogic/` — **the port**, namespace `Elite`: <!--count:gamelogic-sources-->61 translation units and <!--count:gamelogic-headers-->49 headers,
   deterministic and platform-free, guarded by `tools/check_gamelogic.py`. Everything phases 0 to 3
   name is here — the arithmetic kernel, the text system, the universe, every docked screen, the
   ship slots and motion, `LL9` and the clipper, the planet, sun and stardust, all sixteen parts of
@@ -135,13 +135,13 @@ is preserved in the history and was true then.
   `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
   WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
   docks and dies.
-- `Tests/GameLogicTests/` — 348 tests in 49 files: the 6502 interpreter with its cycle counter and
+- `Tests/GameLogicTests/` — <!--count:tests-->349 tests in <!--count:test-files-->49 files: the 6502 interpreter with its cycle counter and
   its in-order store log, the oracle fixture over the assembled game and the loader, and the
   suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
-- `tools/` — the label map and table extractors, `c64_source.py`, and the nine repository checks
-  CI runs on every push. **No mutation tooling** — the method is in `AGENTS.md` §6 and the mutants
-  are hand edits in a scratch worktree, which is Risk R13.
+- `tools/` — the label map and table extractors, `c64_source.py`, and the
+  <!--count:checks-->eleven repository checks CI runs on every push, of <!--count:tools-->12 scripts
+  in the folder.
 - `Design/Reference/` holds the generated oracle inputs and is gitignored; `Upstream/` is the
   annotated source library as a submodule, pinned.
 
@@ -470,6 +470,140 @@ coverage ledger and an unreliable dependency graph, because its rows were writte
 routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
+
+### 6.147 Three pieces of debt, and the tool that found its own first defect in a headline
+
+None of this is a slice. It is Risk R13's tooling, the galactic hyperdrive's key, and the check
+§6.145 ended by asking for — and two of the three turned out to be smaller than recorded while the
+third was larger.
+
+**THE HYPERDRIVE WAS NEVER BLOCKED, AND THE PORT HAD WRITTEN DOWN THAT IT WAS.** `hyp` reaches
+`Ghy` through `JSR CTRL / BMI Ghy`, and three comments — `Main.cpp`'s header, `Main.cpp`'s `Ghy`
+case, and §7's phase-4 row — said the same thing in the same words: Ctrl is a MODIFIER, `Window`
+and `KeyMap` deliver C64 matrix positions, and Ctrl is not one of them, so this is a `KeyMap`
+change belonging to whoever revisits input. **`CTRL` is `LDX #6` falling into `DKS4`**, which is
+`LDA KEYLOOK,X / TAX / RTS`. It is key-logger entry 6. `keylook.asm` names that byte in as many
+words: *"CTRL is being pressed (KLO+&6)"*. The seam had been able to carry it since slice 2e, and
+the whole fix is one row in `BINDINGS` and two `false` literals replaced by `Held(KEY_CONTROL)`.
+
+The comment was not careless — it was a reasonable thing to believe about a PC keyboard, where
+Ctrl really is a modifier, transferred to a machine where it is not. **What makes it worth an entry
+is that the corpus already held the right answer, in the document whose job is to hold it.**
+`Source-Inventory.md`'s key-scan row has said since slice 3d: *"and **`ctrl` is one instruction**,
+`LDX #6` falling into `DKS4`, with nothing to compare"*. That sentence and `Main.cpp`'s comment
+cannot both be true, they sat in the tree together for four slices, and the ledger was right.
+
+So this is not "read the original more carefully". It is that a claim was made in the executable's
+comments, contradicted in the ledger, repeated into the plan, and repeated again into §7 — and the
+repetition is what made it look established. §6.137's rule was "check the port rather than the
+prose"; the corollary is that **when two of our own documents disagree, one of them is a finding
+and neither is evidence** — `tools/c64_source.py --code library/common/main/subroutine/ctrl.asm`
+settles it in four lines and nobody ran it.
+
+The test does not transcribe the 6 either. It runs the shipped `CTRL` sixty-five times, once per
+key-logger entry with that entry alone held, and asserts that exactly ONE comes back negative and
+that it is `KEY_CONTROL`. That is §6.132's discipline — count the distinct answers a branch sees —
+applied to a single byte, and it fails on an off-by-one in either direction.
+
+**R13'S TOOL EXISTS, AND WHAT IT CLOSES IS NARROWER THAN THE RISK.** `tools/mutants.json` holds the
+mutants per unit as data and `tools/mutate.py` runs them, so a tally is a command. Four things in
+it are scar tissue rather than design: the unmutated baseline is proven before any mutant is
+believed (§6.119); a timeout is recorded as a CATCH and not as a tooling failure; a `find` that
+does not match its file exactly once is an error, because a mutant that applies nowhere runs the
+unmutated suite and reports a survivor; and the worktree has **no symlinks in it at all** — the
+reference files are text and the assembled output the oracle actually opens is 1.2 MB, so copying
+removes `AGENTS.md`'s "every `git checkout -f` eats the symlink" trap by construction rather than
+documenting it.
+
+**But it does not make the published tallies re-runnable, and nothing can.** Those mutants were
+hand edits and are gone. What is recoverable is the fifteen survivors §6.125 NAMED, because each
+name pins a constant that appears exactly once in `Tactics.cpp` — `ta-253` at the `CMP #253`,
+`msl-bit5` at the `BIT M32+1` read as data, `ta20-eor` at TA20's `EOR #%10000000`. Those are in
+the file, reconstructed from their names rather than recovered, and the file says so. **So a first
+run of that unit tests the reconstruction as much as the port**: a reconstructed mutant that
+survives confirms the name was read right, and one that is caught means the reconstruction missed
+or the debt is smaller than recorded. Either answer is worth more than fifteen names were. R13
+stays open on the twenty-four slices whose mutants are gone.
+
+The cheap half runs on every push: `mutate.py --check` verifies that every recorded mutant still
+applies, with no build at all. A mutation PASS is minutes per mutant and belongs to whoever is
+finishing a slice; a mutant whose `find` has rotted out of its file is a stale record, and a stale
+record is precisely what R13 is about. It found its first defect immediately — `ta20-eor`'s two
+lines appear twice in `Tactics.cpp`, on the missile path and on the `reverse` path, so the mutant
+had to name which of the two TA20 entrances it measures.
+
+**THE FIRST REAL RUN FOUND TWO THINGS, AND THE FIRST OF THEM WAS THE TOOL'S OWN.** `hyperspace` was
+recorded with the filter `"Hyperspace"`. The jump's tests live in a `TEST_CLASS` called `TheJump`,
+so that filter matched three tests in `ChartTests` and `LaunchTests` whose METHOD names happen to
+contain the word and which touch none of the mutated code — and two mutants the suite certainly
+catches came back as survivors, with nothing anywhere saying why. **A wrong filter is worse than no
+filter**, because it produces a confident number about code it never ran, which is R13's own failure
+mode wearing a different hat. So the number of tests a unit's filters select is data now, verified
+against the unmutated build before any mutant is applied.
+
+That fix exposed the second thing, and it is the one worth keeping. Beside the baseline gate there
+is now a **`selftest` mutant per unit** — an unmissable change the suite cannot fail to catch,
+whose only job is to prove that THIS run rebuilt and observed a failure. Run first, and the run
+stops if it survives. §6.119's harness would have failed on it immediately. With that in place the
+two hyperspace survivors are measurements rather than suspicions, and both are genuine gaps:
+
+- **`hyp-253`.** `CMP #253 / BCS MJP`, mutated from `>=` to `>`, is not caught. `TheJumpMatchesTT18`
+  sweeps 144 cases and its own comment says the seeds were chosen so that BOTH SIDES of the compare
+  are reached — and they are. Reaching both sides is not landing ON the boundary, and 253 exactly is
+  never rolled, so the single value that tells `>=` from `>` is the single value never tried. That
+  is §6.132 in a new instance, and it sharpens it again: **the counter wanted is not distinct
+  answers per branch but distinct VALUES at the branch.**
+- **`hyp-ctrl-and`.** `JSR CTRL / AND PATG / BMI ptg`, mutated from `&&` to `||`, is not caught.
+  Nothing in `TheJump` varies the two flags — `TheCheatFlagMatchesPtg` tests `ptg` alone over all
+  256 values of `COK` and never enters `PerformJump`. And it was unreachable in the app as well
+  until this same day, because `JumpOf` handed it a hardcoded `false`. **The Ctrl fix above is what
+  made this gap matter, and the tool found it within the hour.**
+
+Neither is closed here — closing them is four cases and one seed, and it belongs to whoever next
+opens 4c-b. They are recorded as survivors with the reason, which is the state R13 asked for: debt
+that is visible, named, and re-runnable by anyone.
+
+**AND THE FIFTEEN ARE THIRTEEN.** The `tactics` unit's first run, against a green 348-test baseline
+on the MSVC leg: **16 mutants, 3 caught, 13 survived**. Thirteen of §6.125's fifteen survive exactly
+as recorded, which is the reconstruction confirming itself thirteen times over. `ta7-three` and
+`msl-kill` came back CAUGHT.
+
+That pair is the honest limit of the whole exercise and is worth stating rather than smoothing
+over. The original mutants are gone, so a reconstruction that is caught says one of two things and
+**cannot say which**: the edit is not the edit that was made, or that item of debt never existed.
+`msl-kill` at least hints — 250 against 80 in the player's energy banks is a large difference and
+the sweep compares all three banks, so a mutant that obvious being caught suggests the original
+mutated something smaller. Both stay in the file as `caught` rather than being deleted, because a
+caught mutant is still evidence and deleting it would quietly restore the fifteen.
+
+So the recorded debt for slice 4a-c is now **thirteen named, re-runnable survivors** rather than
+fifteen names. That is a smaller number reached by measuring rather than by arguing, and it is the
+first tally in this corpus that anybody can reproduce with one command.
+
+**AND THE COUNTS CHECK FOUND ITS FIRST DEFECT IN THE CORPUS'S OPENING PARAGRAPH.** §6.145 asked for
+a check that reads the counts out of the tree. The difficulty it did not name is that this corpus
+is mostly a JOURNAL: "321 tests" and "304 tests" appear in entries that were true when written and
+must stay exactly as they are, so a checker that scanned for "N tests" would fail on the history.
+So a live claim marks itself — `the suite is <!--count:tests-->349 tests` — and an unmarked number
+is history. The marker renders as nothing and is the point rather than the plumbing: it says out
+loud which numbers are claims about now.
+
+What it caught on its first run: **`MasterFile/` holds twelve master files and 5,577 lines, not
+"13 master files, 5,615 lines"**. That figure opens `Design/README.md`, titles §1.1 and is repeated
+in ADR-001 — and it counted the FOLDER. Upstream's own `README.md` sits beside the twelve `.asm`
+files and is 39 lines of Markdown. `inventory.py` has printed `master files 12` in its first line
+of output since the day it was written, on every CI run, for three days.
+
+The nice part is that thirteen is not simply wrong. **It is the right number for the licence
+exposure and the wrong number for the source**: what Risk R1 accepts is every tracked file in the
+folder, README included; what §1.1 describes is the annotated assembly. One figure was doing two
+jobs and was correct for one of them, which is why nobody reading either sentence would have
+stopped. Both are now marked with different counts, and ADR-001 says why they differ.
+
+**The rule, and it is not "check your numbers".** It is that the marker is the useful half. Before
+this, every number in the corpus had the same status — a reader could not tell a live claim from a
+dated one, and neither could a tool. Making a number checkable required first making it say
+whether it was claiming anything, and that turned out to be the whole design.
 
 ### 6.146 The merge whose dangerous part was the half that merged cleanly
 
@@ -917,6 +1051,13 @@ drive test (§6.136), and cannot be invoked. The case is written out in the disp
 off, so that adding the key read is one line and not a search -- and `Main.cpp`'s header says so, in
 the same place it used to say hyperspace was refused.
 
+> **That paragraph is wrong and is kept because being wrong is its value (§6.147).** `CTRL` is
+> `LDX #6` falling into `DKS4`, which is `LDA KEYLOOK,X / TAX / RTS` -- key-logger entry 6, and
+> `keylook.asm` labels that byte "CTRL is being pressed (KLO+&6)". Ctrl IS a matrix position, the
+> seam could carry it, and the fix on 2026-09-05 was one row in `BINDINGS`. The belief was written
+> here, in `Main.cpp`'s header, in `Main.cpp`'s `Ghy` case and in §7's phase-4 row, and none of the
+> four was the 6502.
+
 **The rule.** §6.137 said to check the port rather than the prose. This is the same lesson from the
 other end: **a plan section is not evidence that code exists.** When a slice's record says work was
 done by hand in an executable, the audit is not optional and it is a grep. Anything the port owns
@@ -1125,7 +1266,7 @@ than `TACTICS` was.
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates | 199 | Spawn decisions against the shipped routine over seeded generator states, comparing the WHOLE bubble as slice 4a-b does; the generator is the input, so this is exactly reproducible. **136 cases, 50 distinct bubbles**, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than from the generator and the port had six wrong; `MLOOP` turned out to be the label on part 5, so the routine has one exit and not two |
 | **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive, in `Hyperspace.cpp`. This is what `Main.cpp` refuses by name and what slice 2d's `JumpOutcome::Galactic` was waiting for | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` run whole on both sides, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them — `QQ28` from the last `TT111` rather than from the seeds beside it, `QQ0` from crosshairs `TT111` snapped, and `MJ` from `ZINF`'s loop counter — and `TT18` turned out to have four exits rather than three |
 | **4c-c** ✅ | `NWSPS` and the Coriolis/Dodo switch by tech level | **Already built, in slice 3d-d-iii-b — this row should never have been written (§6.137).** `AddStation` in `Spawn.h` carries `NwS1`, the sun's eviction from slot 1 and the tech-level switch, and `TheStationMatchesNWSPS` compares it against the shipped routine over tech levels straddling ten from both sides. Both callers run it for real. The scope line was taken from the ledger without checking the port |
-| **4c-d** ✅ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it, which makes it a test of the join too. All of it wired: the spawner runs one pass in 256 as `DEC MCNT` says, and hyperspace is no longer refused by name. The galactic drive is built and unreachable until slice 4e reads `CTRL` |
+| **4c-d** ✅ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it, which makes it a test of the join too. All of it wired: the spawner runs one pass in 256 as `DEC MCNT` says, and hyperspace is no longer refused by name. The galactic drive was built and unreachable here, and became reachable on 2026-09-05 -- not through 4e: `CTRL` is key-logger entry 6 and the seam had always been able to carry it (§6.147) |
 
 **What it unblocks.** `Main.cpp` lists what it refuses by name rather than defaulting, so that adding
 one is a compiler error: hyperspace and the charts, which are 4c-b's. And nothing at all currently
@@ -5856,13 +5997,13 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 |---|---|---|
 | **4a-a** ✅ | `TAS1`, `VCSUB`/`VCSU1`, `TAS3`/`TAS4`, `TAS6`, `DCS1` — the vectors, in `Tactics.h/.cpp` | **Built 2026-09-05**, 17 mutations and 17 caught |
 | **4a-b** ✅ | `FRS1`, `SESCP`, `SFS1`, `SFS2`, `ANGRY` — a ship arriving from inside the bubble, and the three `FlightSession` seams they answer | **Built 2026-09-05**, compared on the whole bubble. **28 mutations, 28 caught** — after three survivors turned out to be the fixture rather than the port (§6.124) |
-| **4a-c** ✅ | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | **Built 2026-09-05** (§6.125). 92 cases over 23 situations and four generator seeds, each comparing the ship block, the whole bubble, the counts, the generator, `RAT`/`RAT2`/`JUNK` and the player's energy banks against the shipped routine. `DEATH` is trapped and eight cases are fatal, so §6.122's `bool` is observed false rather than merely declared. Two defects only the oracle could find: a `JSR TAS2` transcribed as absent, and six of ten `DORND` carries.<br><br>**79 mutations, 59 caught, 4 not applicable, 2026-09-05.** The docking half is closed: every `dock-*` and `steer-*` mutation is caught after §6.131 and §6.132 found three branches its sweep could not reach and two mutations that could not fail. **The AI half is not.** Fifteen survivors remain, all in `TheAiMatchesTACTICS` -- `ta-253`, `ta-240`, `ta-ana200`, `ta-250`, `ta-104`, `ta-half`, `ta-230`, `ta3-ecm`, `ta7-three`, `ta20-eor`, `msl-16`, `msl-82`, `msl-bit5`, `msl-kill` and `kill-rotate` -- and they are the same shape as the docking ones were: thresholds the geometry table never lands on. The method that closed the others applies unchanged (§6.132): probe the comparison, count what reaches it, add a ladder. Recorded as debt rather than left implicit, because a slice reported as built with a green suite and fifteen live mutations is exactly the state §6.126 warns about. |
+| **4a-c** ✅ | `TACTICS` 1–7 **with `DOCKIT`** and `SFRMIS`, plus the internal labels `TA151`, `TA152`, `TA15`, `TA19`, `TA20`, `TA34`, `TA64`, `TA872`, `TA873`, `TN4`, `TN6`, `GOPL`, `PH22`, `PH3`. **The AI and the autopilot are ONE slice and not two** — `DOCKIT` jumps into `TACTICS` part 7 for its steering and into part 3 for its refusal, so neither can be compared without the other (§6.122). It also needs a signature change the port does not have: `TACTICS` reaches `OOPS`, `OOPS` reaches `DEATH`, and `ShipEffects::RunTactics` returns `void` with no way to reach `LoopOutcome::Died` — `TakeDamage`'s `bool` is the shape to copy, threaded out through `MoveShip` and `MoveEveryShip`. | **Built 2026-09-05** (§6.125). 92 cases over 23 situations and four generator seeds, each comparing the ship block, the whole bubble, the counts, the generator, `RAT`/`RAT2`/`JUNK` and the player's energy banks against the shipped routine. `DEATH` is trapped and eight cases are fatal, so §6.122's `bool` is observed false rather than merely declared. Two defects only the oracle could find: a `JSR TAS2` transcribed as absent, and six of ten `DORND` carries.<br><br>**79 mutations, 59 caught, 4 not applicable, 2026-09-05.** The docking half is closed: every `dock-*` and `steer-*` mutation is caught after §6.131 and §6.132 found three branches its sweep could not reach and two mutations that could not fail. **The AI half is not.** Fifteen survivors remain, all in `TheAiMatchesTACTICS` -- `ta-253`, `ta-240`, `ta-ana200`, `ta-250`, `ta-104`, `ta-half`, `ta-230`, `ta3-ecm`, `ta7-three`, `ta20-eor`, `msl-16`, `msl-82`, `msl-bit5`, `msl-kill` and `kill-rotate` -- and they are the same shape as the docking ones were: thresholds the geometry table never lands on. The method that closed the others applies unchanged (§6.132): probe the comparison, count what reaches it, add a ladder. Recorded as debt rather than left implicit, because a slice reported as built with a green suite and fifteen live mutations is exactly the state §6.126 warns about.<br><br>**Re-measured 2026-09-05 and the number came down** (§6.147). The fifteen names are now mutants in `tools/mutants.json` and `python tools/mutate.py --unit tactics` runs them: **16 mutants, 3 caught, 13 survived** against a green 348-test baseline. Thirteen survive as recorded; `ta7-three` and `msl-kill` are caught, and because the original hand edits are gone nothing can say whether those two reconstructions missed or that debt never existed. **The debt is thirteen, and for the first time it is a command rather than a claim.** |
 | **4b-a** ✅ | `ESCAPE` and `DEATH2` — the escape pod, and the third of the three jumps that leave `M%`. 42 instructions | **Built 2026-09-05** (§6.143). The whole world against the oracle over six cases, including the ninety-seven frames of `MVEIT` and `LL9` the pod flies through. `DEATH2` was already built. Three things the routine hides: 194 is the pitch AND, halved, both the AI byte and the frame count the loop decrements; `FRS1` takes `DELTA` rotated with `MSTG`'s bit 7 rather than a speed; and the pirate-Cobra fallback is dead code, because `RES2` empties the bubble first |
 | **4b-b** ✅ | `DOEXP`, `PTCLS`, `PTCLS2` and `EXS1` — the explosion cloud. 311 instructions | **Built 2026-09-05** (§6.144). 126 frames and 420 clouds on the whole canvas, the whole heap, `INWK`, the generator, ten workspace bytes and the seven registers the burst seam writes; 2,880 `EXS1` offsets separately. The cloud ages by four or by five depending on distance, which the upstream comment does not say; `FMLTU` clobbers `P` and the port had never modelled it; `exlook` exists after all |
 | **4c-a** ✅ | Main game loop parts 1–4 and `GTHG` — the spawning rules: traders, asteroids, canisters, police, bounty hunters, Thargoids, pirates. 199 C64 instructions | **Built 2026-09-05** (§6.135). 136 cases from `ytq+3` to `MLOOP` over seventeen situations, four generator states and both entry carries, compared on the whole bubble, `INWK`, `EV`, `XX0` and the generator; 50 distinct bubbles, plus 200 for `THERE` and 24 for `GTHG`. Nine of its `DORND` carries come from compares rather than the generator and the port had six wrong; `MLOOP` is the label on part 5, so the routine has one exit and not two |
 | **4c-b** ✅ | `TT18`, `hyp1`, `MJP`, `ptg` and `Ghy` — the jump, witchspace and the galactic hyperdrive. 111 instructions. This is what `Main.cpp` refuses by name | **Built 2026-09-05** (§6.136). `hyp1` over both entry points and six crosshair positions; `MJP` whole, screen included; `ptg` over all 256 values of `COK`; `Ghy` over both answers to the drive test; `TT18` over 144 cases, stopped at `TT110`. Three bytes come from somewhere other than the routine that stores them, and `TT18` has four exits rather than three |
 | **4c-c** ✅ | ~~`NWSPS` and the Coriolis/Dodo switch by tech level~~ | **Retired (§6.137): already built in slice 3d-d-iii-b**, with `NwS1`, the sun's eviction from slot 1 and the tech-level switch, and compared by `TheStationMatchesNWSPS` over tech levels straddling ten. The original row's "this is what `FlightSession` stubs" was wrong -- it has not, since that slice |
-| **4c-d** ✅ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it, which makes it a test of the join too. All of it wired: the spawner runs one pass in 256 as `DEC MCNT` says, and hyperspace is no longer refused by name. The galactic drive is built and unreachable until slice 4e reads `CTRL` |
+| **4c-d** ✅ | Main game loop part 5 whole, `TT100`'s head, and the wiring that lets `Main.cpp` reach slices 4c-a and 4c-b | **Built 2026-09-05** (§6.138). `RunLoopTail` over 52 cases and six outcomes; `RunLoopHead` over sixteen, stopped at `MLOOP` because both its answers reach it, which makes it a test of the join too. All of it wired: the spawner runs one pass in 256 as `DEC MCNT` says, and hyperspace is no longer refused by name. The galactic drive was built and unreachable here, and became reachable on 2026-09-05 -- not through 4e: `CTRL` is key-logger entry 6 and the seam had always been able to carry it (§6.147) |
 
 ### Phase 5 — Sound and music ✅ (complete 2026-09-05)
 
@@ -5891,7 +6032,7 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **all but 4d**: 4a, 4b, 4c and 4e are built and wired. 4c-c turned out to have been done in phase 3 (§6.137). **4d (missions and Trumbles) remains.** Two things stay open beside it. The galactic hyperdrive, built in 4c-b, is still unreachable — and NOT because of 4e: `hyp` reaches `Ghy` through `JSR CTRL`, and Ctrl is a modifier that `Window` and `KeyMap` do not report, because they deliver C64 matrix positions; that is a `KeyMap` change and it belongs to whoever revisits input. And 4a-c carries fifteen mutation survivors in the ship AI's sweep, named in its row, with §6.132's method to close them |
+| 4 | 5 | 8–12 | **all but 4d**: 4a, 4b, 4c and 4e are built and wired. 4c-c turned out to have been done in phase 3 (§6.137). **4d (missions and Trumbles) remains.** The galactic hyperdrive is **reachable as of 2026-09-05** (§6.147): this row used to say Ctrl was a modifier `Window` and `KeyMap` could not report, and `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 like any other key. What stays open beside 4d is 4a-c's mutation survivors in the ship AI's sweep, now RUNNABLE and MEASURED — `python tools/mutate.py --unit tactics` gives 16 mutants, 3 caught, 13 survived, so the debt is thirteen and not the fifteen §6.125 named (§6.147) — with §6.132's method to close them |
 | 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
 | **Total** | **26** | **40–60** | before modernisation. **The count was 24 until 2026-09-05** and was simply stale: 4e was added by §6.120 and phase 0's 0b had been counted as one slice in one place and two in another. Twenty-five of the twenty-six are built; the twenty-sixth is 4d. 0b-b was cancelled and 0e is open by owner acceptance rather than unbuilt |
 
@@ -5957,6 +6098,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Three pieces of debt cleared, and two of them were smaller than recorded** (§6.147). **The galactic hyperdrive is reachable**: `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 and not the modifier three comments said the seam could not carry -- one row in `BINDINGS` and two `false` literals. The test runs the shipped `CTRL` over all 65 entries and asserts exactly one answers. **Risk R13's tooling is built**: `tools/mutants.json` holds the mutants per unit and `tools/mutate.py` runs them against a proven-green baseline, with a timeout counted as a catch, a non-unique `find` refused, and a worktree with no symlinks in it; `--check` is a repository check. It does NOT recover the published tallies, so R13 stays open on that half. **`tools/check_counts.py` is the check §6.145 asked for**: a live number carries a `<!--count:name-->` marker and is compared against the tree, while the journal's history is left alone -- and its first run found that `MasterFile/` holds twelve masters and 5,577 lines, not the "13 master files, 5,615 lines" that opens `Design/README.md` and titles §1.1. Thirteen is right for the licence exposure and wrong for the source; both are marked now. |
 | 2026-09-05 | **`main` merged in, and the dangerous half merged cleanly** (§6.146). Two conflicts, both comments. What applied without complaint was the other track's `CoolTheGuns` and `DrawDials` in `Main.cpp` -- correct against the 6502, and the same fourteen instructions slice 4c-d had already put inside `RunLoopTail`, which `Advance` calls three statements later on the same `FlightScreen`. The merged file would have cooled `GNTMP` twice a frame, stepped `LASCT` by up to four, and drawn the dials twice, with nothing going red. The duplicate in `Advance` is removed; the call in the DOCKED pass is kept, because that one is not a duplicate -- the countdowns are above part 5's `QQ11` gate and the docked loop runs no part of `RunLoopTail`. `CoolTheGuns` moved into `GameLogic` so there is one copy reachable from both loops. Still open and now written down: a docked pass runs neither the author-names delay nor the Trumble breeding, and the original does. |
 | 2026-09-05 | **The documentation pass** (§6.145). Every `.md` in the tree read against the tree. The ADRs held — none had been overtaken by the code — and every number and status in them had not. **The slice count was wrong in the headline**: §7 totalled 24 while its own rows added to 26. **ADR-003 contradicted itself**, telling a reader to point an `Oracle.json` at the binaries in two sections while its §1 records that the file was dropped in slice 0b-a. **ADR-002 and ADR-003 were still "Proposed"** after twenty-five slices were built on them; both are Accepted with the evidence named. **ADR-001 §6 had one row and no rule for what belongs in it**; the rule is now written (a behaviour a PLAYER can observe) and the two that qualify are recorded. **ADR-004 §5 listed five scripts of eleven**, missing four of the nine CI checks. **Risk R13 added**: the mutation tallies are the corpus's strongest evidence and none of them can be re-run, which §6.119 already demonstrated the hard way. `Design/README.md`, the runner README (re-measured: 64s cold, 21s warm at 348 tests), the reference README (the `SPRITE.bin` gap), AGENTS.md and the plan's §0, §1.2, §3 and §7 brought to the tree as it is. The rule: prose about a decision ages well and a number beside it ages badly and in silence, so the next check to write is one that reads the counts out of the tree. |
 | 2026-09-05 | **Slice 4b-b: the explosion cloud** (§6.144). `DOEXP`, `PTCLS`, `PTCLS2` and `EXS1` in `Explosion.cpp`, compared on the whole canvas over 126 frames and 420 clouds plus 2,880 `EXS1` offsets; the burst sprite is a seam and the test turns its recorded arguments back into the seven registers the original writes, read-modify-writes included. **The cloud ages by four or by five** -- the `ADC #4` takes the carry from the `CMP #32` that asked whether the ship was far away, so a distant explosion is a fifth shorter and the upstream comment says only "add 4". **`FMLTU` clobbers `P`** through the `STX P` it preserves X with, which the port had never modelled and a one-byte comparison found; nothing in the shipped build reads `P` after an `FMLTU`, so it is invisible to the game and `EXS1` -- the one caller that can prove what X held -- now writes it. **`exlook` exists**, contradicting §6.141: it is INCLUDEd from the master tree and is in `Labels.txt`, so a label's absence from the directory you expected is not its absence from the build. `PTCLS` and `PTCLS2` are one body with an insert. The `EE55` seam is narrowed to ONE unknown carry, because `CPY #6` pins the other three. Two coverage corrections in the slice's own tests, both §6.132's lesson: the `EXS1` sweep had one answer per seed, and the burst's four refusals needed a ladder of vertex layouts rather than a cloud in the middle of the view. |

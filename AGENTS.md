@@ -204,7 +204,7 @@ and always run.
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all nine in CI's order and takes no
+**Run them with `python tools/check_all.py`**, which runs all eleven in CI's order and takes no
 arguments. Do not retype the list into a loop: that is how a push went red on 2026-09-05 with the
 one check that would have caught it left out (§6.127). What it runs:
 
@@ -214,10 +214,19 @@ python tools/inventory.py --strict            # coverage ledger: every master-le
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted; pch.h is every source's first line
 python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
 python tools/check_docs.py                    # no table row is wider than its header
+python tools/check_counts.py                  # every <!--count:name--> number in a document matches the tree
 python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
+python tools/mutate.py --check                # every recorded mutant still applies to the code it names
 python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles
 python tools/extract_tables.py --check        # the generated tables match the assembled binaries (needs the oracle)
 ```
+
+**A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
+decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->349 tests` — and the
+check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
+marker and are never touched: "321 tests" was true the day it was written and must stay. Before
+writing a new live number, `python tools/check_counts.py --list` says what the tree holds.
 
 **`check_docs.py` exists because a Markdown table drops what it cannot fit.** GitHub renders a
 table with the header's number of columns and discards every cell past it without a word, so a
@@ -242,34 +251,53 @@ quietly test different things. `check_projects.py` fails on that, on a path that
 (`Include` is relative to the PROJECT, not to the repository), and on a filters file that has
 drifted from its project.
 
-**Mutation-test a finished unit, in a worktree, and PROVE THE BASELINE FIRST.** A slice is not done
-until each of its decisions has been shown to matter: change one constant, one comparison or one
-flag in the ported source, run the suite, and a mutation that nothing catches is either a gap in
-the tests or an equivalent worth measuring and recording. Run it against a detached worktree rather
-than the working tree, because the alternative is a tree that holds deliberately broken code for
-half an hour at a time. The recipe, and every line of it has bitten:
+**Mutation-test a finished unit, and RECORD THE MUTANTS.** A slice is not done until each of its
+decisions has been shown to matter: change one constant, one comparison or one flag in the ported
+source, run the suite, and a mutation that nothing catches is either a gap in the tests or an
+equivalent worth measuring and recording.
+
+**The mutants go in `tools/mutants.json` and the run is `tools/mutate.py`.** Do not do this by
+hand any more. A hand-edited mutant is thrown away when the run ends, which made every tally in
+this corpus an assertion nobody could re-check — Risk R13, and §6.119 is the demonstration that a
+tally can be confidently wrong.
 
 ```
-git worktree add --detach <scratch>/mutant HEAD
-rmdir <scratch>/mutant/Upstream/elite-source-code-library          # an EMPTY gitlink directory
-ln -s <repo>/Upstream/elite-source-code-library <scratch>/mutant/Upstream/elite-source-code-library
-ln -sf <repo>/Design/Reference/*.txt <scratch>/mutant/Design/Reference/
-<scratch>/mutant/Tests/PortableRunner/run_tests.sh | tail -1        # MUST read "N passed, 0 failed"
+python tools/mutate.py --list             # what is recorded, and for which slice
+python tools/mutate.py --unit tactics     # run one unit's mutants
+python tools/mutate.py --id ta-253        # run one
+python tools/mutate.py --check            # they all still apply, without building (this is in CI)
 ```
 
-The symlink goes at the submodule's own path, not at `Upstream/`, and **every `git checkout -f` in
-the worktree replaces it with the empty directory again** — re-make it after each sync. Then run the
-suite ONCE unmutated and require zero failures before running a single mutant: with the oracle
-missing the suite reports `N passed, 1 failed` on every run (`OracleIsPresent`, by design), a harness
-that reads only that line reports every mutant as caught, and three tallies were published from
-exactly that before anyone checked (§6.119). A green baseline is the mutation run's own
-`OracleIsPresent`.
+Add a `{id, file, find, replace, expect, note}` per mutant when the slice lands. `find` must match
+its file EXACTLY ONCE — the tool refuses anything else, because a mutant that applies nowhere runs
+the unmutated suite and reports a survivor. `expect` is `caught` unless the note says why not.
 
-**A mutation that HANGS is caught, and a harness that reads the last line will say otherwise.**
-Turning `cnt - 1` into `cnt - 2` in a loop that stops at zero makes an odd count run for ever; the
-suite times out, no `N passed, M failed` line is printed, and a harness that looks for one reports
-a compile error. Look at what the run actually did before believing that label: a timeout is the
-strongest possible catch and the easiest to file as a tooling failure.
+Four things the tool does that a hand run kept getting wrong, so that reading them here is enough:
+
+- **The baseline is proven before any mutant is believed.** With the oracle missing the suite
+  reports `N passed, 1 failed` on every run (`OracleIsPresent`, by design); a harness that reads
+  only that line reports every mutant as caught, and three tallies were published from exactly
+  that (§6.119). The unmutated suite runs first and must be green.
+- **A timeout is a catch.** Turning `cnt - 1` into `cnt - 2` in a loop that stops at zero makes an
+  odd count run for ever: the suite times out, no summary line is printed, and a harness looking
+  for one calls it a tooling failure. It is the strongest possible catch.
+- **A worktree with no symlinks in it.** The old recipe symlinked the submodule into a detached
+  worktree and warned that every `git checkout -f` ate the link. The tool COPIES instead — the
+  reference files are text and the oracle's `versions/c64` tree is 4.4 MB — so the trap is gone by
+  construction rather than documented.
+- **A unit's test filter is verified before it is trusted.** A filter that selects the wrong tests
+  is worse than no filter, because it produces a confident number about code it never ran. Record
+  one filter per `TEST_CLASS` and the count they select; the tool checks it against the unmutated
+  build.
+- **Every unit carries a `selftest` mutant** — an unmissable change the suite cannot fail to catch,
+  run first, and the run stops if it survives. It is the harness's own `OracleIsPresent`: without
+  it, a list of "survivors" could be a run that never rebuilt, which is R13 realised (§6.119). Add
+  one when you add a unit; `--check` fails if a unit has none.
+- **It builds HEAD, not your working tree**, and says so when something selected is uncommitted.
+
+What it does NOT do is recover the tallies already published. Those mutants are gone; the fifteen
+survivors §6.125 named are in the file because their names pinned them, and the rest stay
+unreproducible. R13 is open on that half.
 
 **Read a routine through `tools/c64_source.py`, not by eye.** The upstream library is one tree
 serving ten versions of Elite, and a routine's C64 form is whatever survives its `IF` / `ELIF` /
