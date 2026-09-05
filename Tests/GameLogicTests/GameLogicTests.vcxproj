@@ -157,6 +157,7 @@
     <ClCompile Include="LaserTests.cpp" />
     <ClCompile Include="MessageTests.cpp" />
     <ClCompile Include="ScannerTests.cpp" />
+    <ClCompile Include="TacticsTests.cpp" />
     <ClCompile Include="SpawnTests.cpp" />
     <!-- The parts of the executable that are decisions rather than API calls, compiled into the
          suite so they are covered rather than only shipped: the commander store, the palette and

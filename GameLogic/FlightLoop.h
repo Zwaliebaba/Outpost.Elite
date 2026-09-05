@@ -310,7 +310,7 @@ namespace Elite
     LineHeap& heap;           ///< 6502: the `LS%` region, and `SLSP` inside it
     ClipState& clip;          ///< 6502: XX12, XX13 and the clipper's own workspace
     Projection& projection;   ///< 6502: K3 and K4 -- where the ship landed on screen
-    CompassAxes& axes;        ///< 6502: K3, which `SPS1` fills for part 9's docking check
+    K3Block& axes;        ///< 6502: K3, which `SPS1` fills for part 9's docking check
     ShipEffects& tactics;     ///< 6502: JSR TACTICS, from inside `MVEIT`
     ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
 
