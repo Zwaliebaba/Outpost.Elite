@@ -147,4 +147,21 @@ namespace Outpost
     return cycles / NTSC_CLOCK_HZ;
   }
 
+  double FlightFrameSeconds(std::uint8_t _ships) noexcept
+  {
+    // Two entries, in ascending order of how full the bubble is, and flat above the last -- the
+    // crowded end is not measured, so it is held rather than extrapolated (see the header).
+    const FlightFrameCost* cost = &FLIGHT_FRAME_COSTS.front();
+
+    for (const FlightFrameCost& point : FLIGHT_FRAME_COSTS)
+    {
+      if (_ships >= point.ships)
+      {
+        cost = &point;
+      }
+    }
+
+    return static_cast<double>(cost->cycles) / NTSC_CLOCK_HZ;
+  }
+
 } // namespace Outpost

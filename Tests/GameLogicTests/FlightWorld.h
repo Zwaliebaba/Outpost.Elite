@@ -16,7 +16,9 @@
 #include "Rng.h"
 #include "ShipDraw.h"
 #include "ShipMove.h"
+#include "LineHeap.h"
 #include "ShipSlot.h"
+#include "Spawn.h"
 #include "Stardust.h"
 #include "TextPrint.h"
 #include "Tokens.h"
@@ -248,6 +250,19 @@ namespace GameLogicTests
     World()
     {
       printer.SetCursor(&text);
+    }
+
+    /*
+     * 6502: LSO -- the sun's heap, which `NWSPS` hands to the SPACE STATION (§6.112).
+     *
+     * The `LineHeap` belongs to whoever is running a frame rather than to the world, so this is
+     * the world lending its sun window to one. Every fixture that draws a station has to call it,
+     * for the same reason `FlightSession` does: without it the station's lines are written out of
+     * the arena and dropped, and the comparison against `LSO` compares two sets of nothing.
+     */
+    void LendSunHeap(Elite::LineHeap& _heap) noexcept
+    {
+      _heap.AttachSunHeap(Elite::SUN_HEAP_ADDRESS, heaps.sun);
     }
 
     [[nodiscard]] Elite::FlightScreen Screen() noexcept

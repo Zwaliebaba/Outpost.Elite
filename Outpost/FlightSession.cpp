@@ -100,6 +100,16 @@ namespace Outpost
      * `NWSHP` refuses, so an unseeded session would silently never build a station.
      */
     m_bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+
+    /*
+     * 6502: LSO -- and the station's line heap is IT, not a run carved out of `SLSP` (§6.112).
+     *
+     * `NWSPS` points the station at the sun's 200 bytes, which live in `m_heaps` here and not in
+     * the arena `m_heap` addresses. Lending the window is what makes the station's lines land
+     * somewhere; without it every one of them is written out of range and dropped, and the station
+     * you have just launched from is invisible in the rear view.
+     */
+    m_heap.AttachSunHeap(Elite::SUN_HEAP_ADDRESS, m_heaps.sun);
   }
 
   void FlightSession::SyncVideoRegisters() noexcept

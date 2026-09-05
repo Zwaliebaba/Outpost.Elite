@@ -362,8 +362,8 @@ namespace
    * THE STEPS ARE COUNTED RATHER THAN TAKEN ONE PER PRESENT. `Present` blocks on the display's
    * vertical sync and the game was written for the C64's, so tying the two together would run the
    * game at the monitor's rate: correct at 60 Hz and two and a half times too fast at 144. ADR-005
-   * section 3's accumulator is what decouples them, and `FLIGHT_STEPS_PER_SECOND` is the rate it
-   * counts against.
+   * section 3's accumulator is what decouples them, and `FlightFrameSeconds` is the measured cost it
+   * counts against (§6.114).
    *
    * A BACKLOG LONGER THAN THE CLAMP IS DROPPED, which is `PlanSteps` doing what it was built for:
    * a breakpoint or a closed lid produces an accumulator holding minutes, and running it out would
@@ -372,7 +372,28 @@ namespace
    */
   void Advance(Game& _game, double _elapsedSeconds, double& _accumulated)
   {
-    const Outpost::StepPlan plan = Outpost::PlanSteps(_elapsedSeconds, _accumulated, Outpost::FLIGHT_STEPS_PER_SECOND);
+    /*
+     * 6502: how long `M%` takes, which is the only thing that decides how fast the game runs.
+     *
+     * THE RATE IS NOT THE REFRESH. §6.17 found that the C64's main loop has no `WSCAN` in it, so
+     * the loop runs at whatever the processor manages and the game slows down when the bubble
+     * fills -- and this port ran it at the NTSC vertical refresh, four to five times faster than
+     * the machine (§6.114). `FlightFrameSeconds` is the measured cost, indexed by how many slots
+     * of `FRIN` are occupied, which is what the measurement varied.
+     */
+    const Elite::Bubble& bubble = _game.flight.Screen().bubble;
+    std::uint8_t ships = 0;
+    for (const std::uint8_t type : bubble.slots)
+    {
+      // 6502: `FRIN`'s zero is the list's terminator, not a hole in it.
+      if (type == 0u)
+      {
+        break;
+      }
+      ++ships;
+    }
+
+    const Outpost::StepPlan plan = Outpost::PlanSteps(_elapsedSeconds, _accumulated, 1.0 / Outpost::FlightFrameSeconds(ships));
     _accumulated = plan.leftoverSeconds;
     (void)plan.stalled;
 
@@ -393,7 +414,14 @@ namespace
        * the key logger `FlightSession::ScanKeyboard` fills: `TT102` wants the key that was pressed
        * and the flight loop wants the keys being held, which is why the game reads the hardware
        * twice per frame and so does this.
+       *
+       * AND `TT17` IS THE HALF THAT WAS MISSING. The comment above described both reads from the
+       * day this loop was written and only one of them was here, so `DOKEY` -- ported, swept and
+       * green -- was never called by anything but its own test: no key the player HELD reached the
+       * game, which is every flight control there is (§6.111).
        */
+      Elite::ScanFlightControls(_game.flight.Loop(), _game.flight);
+
       std::uint8_t key = 0;
       if (_game.window.TakeKey(key))
       {

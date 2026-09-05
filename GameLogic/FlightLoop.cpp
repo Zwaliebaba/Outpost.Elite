@@ -1488,4 +1488,11 @@ namespace Elite
     return EndFlightFrame(_loop);
   }
 
+  void ScanFlightControls(FlightLoop& _loop, ControlEffects& _effects) noexcept
+  {
+    // 6502: LDA QQ11 / BNE TT17afterall -- the space view's path, and the chart path's crosshair
+    // arithmetic is phase 4's. Both call `DOKEY`, so the scan itself happens either way.
+    ReadFlightControls(_loop.keys, _loop.control, _loop.options, _loop.screen.work, _loop.screen.flight, _effects);
+  }
+
 } // namespace Elite
