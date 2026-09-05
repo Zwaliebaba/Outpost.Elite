@@ -370,8 +370,9 @@ namespace Elite
     _math.q = static_cast<std::uint8_t>(_alpha ^ 0x80u);
     _math.p = _work[0];
     _math.p1 = _work[1];
-    MultiplySignedToK(_math, _work[2]);     // 6502: JSR MULT3 -- K = -alpha * x
-    AddShipCoordinateToK(_work, _math, 3u); // 6502: LDX #3 / JSR MVT3 -- K = y - alpha * x
+    MultiplySignedToK(_math, _work[2]); // 6502: JSR MULT3 -- K = -alpha * x
+    // Discarded: `MV40` runs a second `MULT3` over this result, so nothing reads the flag (§6.126).
+    static_cast<void>(AddShipCoordinateToK(_work, _math, 3u)); // 6502: LDX #3 / JSR MVT3 -- K = y - alpha * x
 
     // 6502: LDA K+1 / STA K2+1 / STA P ... -- the result parked in K2 while MULT3 refills K.
     _math.k2[1] = _math.k[1];
@@ -381,8 +382,8 @@ namespace Elite
     _math.q = _beta;
     _math.k2[3] = _math.k[3];
 
-    MultiplySignedToK(_math, _math.k[3]);   // 6502: JSR MULT3 -- K = beta * K2
-    AddShipCoordinateToK(_work, _math, 6u); // 6502: LDX #6 / JSR MVT3 -- K = z + beta * K2
+    MultiplySignedToK(_math, _math.k[3]);                      // 6502: JSR MULT3 -- K = beta * K2
+    static_cast<void>(AddShipCoordinateToK(_work, _math, 6u)); // 6502: LDX #6 / JSR MVT3 -- K = z + beta * K2
 
     // 6502: the new z, and P set up for the multiply that follows.
     _math.p = _math.k[1];
@@ -457,7 +458,7 @@ namespace Elite
     _math.p = _work[3];
     _math.p1 = _work[4];
     MultiplySignedToK(_math, _work[5]);
-    AddShipCoordinateToK(_work, _math, 0u);
+    static_cast<void>(AddShipCoordinateToK(_work, _math, 0u)); // the flag dies at `MV45` (§6.126)
 
     _work[0] = _math.k[1];
     _work[1] = _math.k[2];
