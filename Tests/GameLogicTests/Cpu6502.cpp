@@ -330,6 +330,15 @@ namespace Elite::Testing
     return static_cast<std::uint16_t>(lo | (hi << 8));
   }
 
+  void Cpu6502::Store(std::uint16_t _address, std::uint8_t _value) noexcept
+  {
+    memory[_address] = _value;
+    if (_address >= storeLogLow && _address <= storeLogHigh)
+    {
+      stores.push_back(StoreHit{_address, _value});
+    }
+  }
+
   void Cpu6502::Push(std::uint8_t _value) noexcept
   {
     memory[static_cast<std::uint16_t>(STACK_BASE + sp)] = _value;
@@ -635,45 +644,45 @@ namespace Elite::Testing
       break;
 
     case 0x85:
-      memory[AddrZeroPage()] = a;
+      Store(AddrZeroPage(), a);
       break;
     case 0x95:
-      memory[AddrZeroPageX()] = a;
+      Store(AddrZeroPageX(), a);
       break;
     case 0x8D:
-      memory[AddrAbsolute()] = a;
+      Store(AddrAbsolute(), a);
       break;
     case 0x9D:
-      memory[AddrAbsoluteX()] = a;
+      Store(AddrAbsoluteX(), a);
       break;
     case 0x99:
-      memory[AddrAbsoluteY()] = a;
+      Store(AddrAbsoluteY(), a);
       break;
     case 0x81:
-      memory[AddrIndirectX()] = a;
+      Store(AddrIndirectX(), a);
       break;
     case 0x91:
-      memory[AddrIndirectY()] = a;
+      Store(AddrIndirectY(), a);
       break;
 
     case 0x86:
-      memory[AddrZeroPage()] = x;
+      Store(AddrZeroPage(), x);
       break;
     case 0x96:
-      memory[AddrZeroPageY()] = x;
+      Store(AddrZeroPageY(), x);
       break;
     case 0x8E:
-      memory[AddrAbsolute()] = x;
+      Store(AddrAbsolute(), x);
       break;
 
     case 0x84:
-      memory[AddrZeroPage()] = y;
+      Store(AddrZeroPage(), y);
       break;
     case 0x94:
-      memory[AddrZeroPageX()] = y;
+      Store(AddrZeroPageX(), y);
       break;
     case 0x8C:
-      memory[AddrAbsolute()] = y;
+      Store(AddrAbsolute(), y);
       break;
 
     // ---- register transfers ------------------------------------------------------------

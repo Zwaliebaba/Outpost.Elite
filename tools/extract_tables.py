@@ -123,6 +123,19 @@ SHIP_HEADER_SIZE = 20
 # pointer table is 33 entries and `E%` begins immediately after it. Reading past the table gives
 # E%'s bytes as addresses, which look plausible enough to chase: entries 35, 38 and 39 come out
 # as 1, 24865 and 41120, which are zero page and the middle of two code blocks.
+def music_data_extent(_image: bytearray, _labels: dict[str, int]) -> int:
+    """From `musicstart` to `F%`, which is the end of the title theme.
+
+    The music player's pointer starts AT `musicstart` and pre-increments, so the byte at offset 0
+    -- the last entry of `BDJMPTBH`, which `.musicstart` labels -- is part of what the player
+    addresses even though it is never a note. `COMUDAT` (the docking music, 2,615 bytes) and
+    `THEME` (the title music, 2,931 bytes) follow it back to back, and `F%` is the label after
+    both, so the extent is the sum of the two INCBINs plus one -- a property of the data rather
+    than a number anybody chose.
+    """
+    return _labels["F%"] - _labels["musicstart"]
+
+
 SHIP_TYPE_COUNT = 33
 
 
@@ -249,6 +262,30 @@ TABLES = [
     Table("DASHBOARD_COLOUR_RAM", "cdump", 280, "ScreenTables.cpp",
           "colour RAM for the same rows, which is where multicolour %11 comes from",
           _source=LOADER),
+    # ---- slice 5a: the sound effects. Sixteen of everything, because the effect number is what
+    # indexes all eight tables -- EXCEPT the priority table, which one caller indexes with bit 7
+    # set: `HYPNOISE` calls `NOISE` with Y = sfxhyp1 + 128 = 135, and `LDA SFXPR,Y / LSR A / BCS`
+    # reads whatever byte sits 135 past the table (the source says "fairly random, as it is
+    # fetching values from game code"). It is the second byte of `COLD`, and its bit 0 decides
+    # whether the "already playing" scan runs. Section 6.8's rule sizes the table from what can
+    # index it, so it is 136 bytes and the last 120 of them are seven other tables and some code.
+    Table("EFFECT_PRIORITY_TABLE", "SFXPR", 136, "SoundTables.cpp",
+          "the priority of each effect, and 120 bytes more that one caller can reach"),
+    Table("EFFECT_COUNT_TABLE", "SFXCNT", 16, "SoundTables.cpp", "how many interrupts each effect lasts"),
+    Table("EFFECT_FREQUENCY_TABLE", "SFXFQ", 16, "SoundTables.cpp", "the starting frequency, in SOFRQ's units"),
+    Table("EFFECT_CONTROL_TABLE", "SFXCR", 16, "SoundTables.cpp", "the voice control register: waveform and gate"),
+    Table("EFFECT_ATTACK_TABLE", "SFXATK", 16, "SoundTables.cpp", "attack in the high nibble, decay in the low"),
+    Table("EFFECT_SUSTAIN_TABLE", "SFXSUS", 16, "SoundTables.cpp", "sustain volume in the high nibble, release in the low"),
+    Table("EFFECT_FREQUENCY_CHANGE_TABLE", "SFXFRCH", 16, "SoundTables.cpp", "the signed change to the frequency each interrupt"),
+    Table("EFFECT_VOLUME_RATE_TABLE", "SFXVCH", 16, "SoundTables.cpp",
+          "the mask the counter is tested against before the volume steps down"),
+    # Three entries, because Y is a voice number and there are three voices.
+    Table("SEVENS_TABLE", "SEVENS", 3, "SoundTables.cpp", "seven times the voice number: the voice's SID register base"),
+    # ---- slice 5b: the music. One region rather than two tunes, addressed from `musicstart`
+    # exactly as the player addresses it -- see `music_data_extent` for why it starts one byte
+    # before the first note.
+    Table("MUSIC_DATA", "musicstart", music_data_extent, "SoundTables.cpp",
+          "the docking music and the title theme, back to back, from the byte the player's pointer starts on"),
 ]
 
 

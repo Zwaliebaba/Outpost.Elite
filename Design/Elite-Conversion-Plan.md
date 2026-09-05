@@ -451,6 +451,102 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.129 The sound has two halves, and only one of them can be heard
+
+Phase 5 was ported in one sitting, both slices, and what made that possible is that the C64's
+sound is written the way this port is: a buffer the game fills and an interrupt that reads it. The
+game half -- `NOISE`, `NOISE2`, `NOISEOFF`, `SOFLUSH`, `startbd`, `stopat` -- is functions over a
+struct, and the interrupt half -- `SOINT` and the `BD*` music player -- is a tick that turns the
+struct into register writes. Nothing in `GameLogic` knows there is a chip; the executable's
+`SidSynth` is what the writes go to, and the ADR's fallback (recorded samples) would replace that
+one file and nothing else.
+
+**The observable is the ORDER of writes, and the interpreter could not report it.** A new effect
+zeroes all seven of a voice's registers and then writes four of them, and a real chip hears the
+first zero as a gate going down and the control byte as it going up again; a comparison of the
+registers' final state would see only the control byte. `Cpu6502` gained a store log -- every
+`STA`, `STX` and `STY` into a range, in order -- alongside the call traps it already had, and the
+sound tests compare the port's `SidWriteLog` against it write for write. The same instrument showed
+that the music player writes each control register TWICE per note (`STY` zero, then `STA`), which
+is the re-trigger, and that `BDENTRY` zeroes registers &18 down to ONE and not zero, because its
+loop ends on `BNE`.
+
+**The interrupt handler was run as an interrupt.** `SOINT` has no `RTS`: it falls into `coffee`,
+which pops the registers `COMIRQ1` pushed and executes `RTI`. Calling it as a subroutine would
+unwind the wrong thing, so the fixture pushes what the 6510 pushes -- the return address and the
+status byte -- and enters `COMIRQ1` with `RASTCT` at 1, the dashboard pass. That is also how the
+`MUPLA`/`MUSILLY` gate got compared without transcribing it: the handler decides, and the port's
+`RunSoundInterrupt` decides beside it.
+
+**Five things the source does not say in its comments, all found by the comparison or by reading
+for it.** `SFXPR` is read BEFORE bit 7 is masked off the effect number, so `HYPNOISE`'s
+`sfxhyp1 + 128` reads index 135 -- a byte of `COLD` -- and its bit 0 decides a branch; the table is
+extracted to 136 bytes for that one read, which is §6.8's rule taken literally. `PULSEW` flips on
+one exit of `SOINT` and not the other: a silent voice 1 leaves through `SOUL3b`, which returns from
+the interrupt before the `EOR`. `SOSUS`'s volume step is `SEC / SBC #16` on a byte whose high nibble
+is the volume, and it WRAPS, so a nibble of zero steps to fifteen -- the oracle confirms it. The
+music player's vibrato alternates by rewriting a `BEQ`'s operand, and the ASSEMBLED operand reaches
+the labelled half, so the first trigger after a note restates the note and the second raises it --
+two bools in `MusicPlayer` that `BDENTRY` does not reset, because it does not reset the code. And
+the vibrato variables are named backwards: `voice2lo1` holds the byte written to the frequency's
+HIGH register. They are kept as named, because the oracle test names them.
+
+**What the ledger had wrong.** Row 164 filed `abraxas`, `innersec`, `shango`, `moonflower`,
+`caravanserai`, `santana`, `lotus`, `welcome` and `soul3b` under `TuneData.cpp` as "Data", and the
+plan's 5b scope called them "the nine tune blocks". None is a tune: eight are the raster interrupt's
+per-pass VIC-II values and the ninth is a subroutine, the effect player's early exit. The two tunes
+are `COMUDAT` and `THEME`, back to back, 5,547 bytes with the byte before the first note included
+because the player's pointer starts on it. Corrected in the row rather than in a new cell (§6.72).
+
+**The interrupt runs off the DAC.** Nothing on this machine fires once a C64 frame. The display's
+vertical sync is the wrong rate and the wall clock is the wrong kind; the audio device consumes
+samples at exactly the rate they are rendered for, so "the queue is four frames deep" is the
+clock. `SoundOutput::Pump` runs one interrupt and renders 17,095 cycles of chip -- 737 samples and a
+carried fraction -- for every frame the queue is short, before every present. A machine with no
+audio device still runs the interrupt once a present, because the buffer's counters are game state:
+`OUCH` reads `NOISE`'s carry, and `NOISE`'s carry depends on what is still playing (§6.88).
+
+**What is not done, said plainly.** The audible check the 5a row asks for against VICE cannot be
+made -- VICE was dropped in 0b-b -- so `SidSynth` is fidelity by construction: the chip's rate table,
+its exponential decay steps, its noise taps, per-cycle and box-filtered, and no filter. R6 stays
+open on that alone. The `M` keys and `S` key that toggle `MUTOK`, `MUFOR`, `MUDOCK`, `MUSILLY` and
+`DNOIZ` are the pause screen's (4e), so every option is at its boot value: effects on, docking music
+on, the Blue Danube for docking, no effects during music. The Trumble chatter in main game loop
+part 5 -- `NOISE2` with a random pitch, gated on the high byte of `TRIBBLE` -- is 4d's with the
+rest of the Trumbles. And `ADR-005 §2`'s `SoundEvent` carried an `offsetSamples` field that the port
+does not: the interrupt fires at one raster line, so every write in a frame has the same offset and
+the field would carry no information. The ADR is amended rather than left disagreeing with the code.
+
+### 6.128 Three things the outer loop was missing, and the shape they share
+
+`MLOOP` -- main game loop part 5 -- is eleven instructions before `TT17`, and the port's outer loop
+in `Main.cpp` had none of them. Found the same afternoon by three reports from the player's chair,
+each of which read as a different bug and was the same omission.
+
+**A letter key on the buy screen looked dead.** `BuyScreen` returned correctly on `gnum`'s
+`JMP BAY2`, and `BAY2` is `LDA #f9 / JMP FRCE` -- force "9", the Inventory screen. The header comment
+in `MarketScreen.h` had deferred that jump to "the dispatch, 2e"; 2e landed and never picked it
+up, so the screen exited and the display did not change. The dispatch now forces the key rather
+than performing the action, because `FRCE` re-enters `TT102` and lets it decide again.
+
+**SP, RL and DC never moved.** `DrawDials` had one caller, `ShowDashboard`'s `JSR DIALS`, which is
+`wantdials`' one-off fill of a freshly copied dashboard picture. Part 5's `LDA QQ11 / BNE P%+5 /
+JSR DIALS` -- every pass, on the space view -- was not there. Now it is, after the frame and before
+`TT17`, because `DIALS` reads what the frame wrote.
+
+**LT rose and never fell, and a pulse laser fired once.** Part 5 opens with `LDX GNTMP / BEQ /
+DEC GNTMP` and `LDX LASCT / BEQ / DEX / BEQ / DEX / STX LASCT` -- the laser cools by one and the
+pulse countdown by two, every pass, docked or flying, because both are above the `QQ11` gate. The
+port decremented neither. Part 3 refuses to fire while `LASCT` is non-zero and jams the gun for
+good at a `GNTMP` of 242, so a pulse laser fired exactly once per flight and the LT bar was a
+ratchet. `CoolTheGuns` runs at the head of both loop halves.
+
+The shape: the flight loop's sixteen parts were ported and swept, and the OUTER loop that calls
+them was written from a description of what it does rather than from `MLOOP`'s listing. §6.111
+(`DOKEY` ported and called by nothing) and §6.115 (the charts finished and unreachable) are the
+same finding at other seams. A ✅ on a routine says it is built; it says nothing about whether the
+loop reaches it, and the outer loop is the one piece of the game nobody swept.
+
 ### 6.127 The check that would have caught it, and the list it fell off
 
 `Tactics.cpp` declared a local called `far`. On the Ubuntu leg that is an ordinary identifier; on
@@ -4847,8 +4943,8 @@ Slice 4a, scoped 2026-09-05 (§6.121). The order is what the call graph forces: 
 
 | Slice | Scope | Accept |
 |---|---|---|
-| **5a Effects** | `NOISE`, `NOISE2`, `BEEP`, `EXNO`, `EXNO2`, `EXNO3`, `SOFLUSH`, `NOISEOFF`, `HYPNOISE`, the `sfx*` tables, the interrupt-time effect player (`soint`, `comirq1`'s SID half) as a per-step state machine emitting `SoundEvent`s; `SidSynth` in the exe. | The register-write log for each of the 16 effects matches the oracle's over the effect's duration; audible check against VICE. |
-| **5b Music** | The `BD*` player (`bdirqhere`, `bdro*`, `bdlab*`, `bdentry`, jump tables), `comudat`, `music_variables`, the nine tune blocks, `startat`/`startbd`/`stopbd`, docking music trigger, the `M` mute keys. | Register-write log for the first 2,000 ticks of each tune matches the oracle. |
+| **5a Effects** | `NOISE`, `NOISE2`, `BEEP`, `EXNO`, `EXNO2`, `EXNO3`, `SOFLUSH`, `NOISEOFF`, `HYPNOISE`, the `sfx*` tables, the interrupt-time effect player (`soint`, `comirq1`'s SID half) as a per-step state machine emitting `SoundEvent`s; `SidSynth` in the exe. | The register-write log for each of the 16 effects matches the oracle's over the effect's duration; audible check against VICE.<br><br>**Built 2026-09-05** (§6.129). `SoundEffects.h/.cpp`: `NOISE`, `NOISE2`, `NOISEOFF`, `SOFLUSH`, `BEEP` and the `SOINT` tick, over the sound workspace as a struct; the eight tables plus `SEVENS` extracted. **The log is the observable**: every SID write of every frame, in order, compared against `COMIRQ1` run to its `RTI` -- 4,160 frames for the sixteen effects played out singly and 600 for a script that fills, refuses and replaces voices -- and every byte of the buffer beside it. The interpreter grew a store log to make that comparison possible. `SidSynth.cpp` is the chip: per-cycle, integer, no filter, box-filtered to 44.1 kHz; `SoundOutput.cpp` plays it through XAudio2 and runs the interrupt off the device's queue depth rather than off any clock. **The audible check against VICE has not been made** -- VICE was dropped in slice 0b-b -- so the synthesiser is fidelity by construction and R6 stays open on it. |
+| **5b Music** | The `BD*` player (`bdirqhere`, `bdro*`, `bdlab*`, `bdentry`, jump tables), `comudat`, `music_variables`, the nine tune blocks, `startat`/`startbd`/`stopbd`, docking music trigger, the `M` mute keys. | Register-write log for the first 2,000 ticks of each tune matches the oracle.<br><br>**Built 2026-09-05** (§6.129), bar the `M` keys, which are the pause screen's and slice 4e's. `Music.h/.cpp`: `BDirqhere` with all fifteen commands and the vibrato, `BDENTRY`, `startbd`/`startat`/`stopbd`/`stopat`, and `COMIRQ1`'s music-or-effects gate. The tune data is ONE region and not nine blocks -- the row's "nine tune blocks" were the raster interrupt's VIC-II tables misread as music (ledger row corrected). Accept met: 2,000 interrupts of each tune compared on every SID write and every player byte, and the docking tune on past its first rewind; the five option flags swept over all 32 combinations for the start and stop routines. |
 
 ### Phase 6 — Modernisation (each item its own ADR when it comes)
 
@@ -4926,6 +5022,8 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-05 | **Phase 5, both slices** (§6.129). `SoundEffects` and `Music` in `GameLogic`, the sound workspace and the music variables as structs, the tables extracted (`SFXPR` at 136 bytes for `HYPNOISE`'s bit-7 read), and the interrupt's SID half as a tick that emits register writes. `Cpu6502` gained an in-order store log and the fixture enters `COMIRQ1` as an interrupt, so the comparison is on every SID write of every frame -- 4,160 effect frames and 4,000 music interrupts -- rather than on the registers' final state. `SidSynth` and `SoundOutput` in the executable: a per-cycle 6581 without its filter, played through XAudio2 with the interrupt run off the device's queue depth. Ledger row 164 corrected -- the "nine tune blocks" are the raster interrupt's VIC-II tables. ADR-005 §2 amended: no `offsetSamples`. Left for 4d and 4e: the Trumble chatter and the option keys. |
+| 2026-09-05 | **The outer loop was missing `MLOOP`'s head** (§6.128). Three player reports -- a letter key that looked dead on the buy screen, dials that never moved, a laser that fired once -- were one omission: `BAY2`'s forced "9", part 5's `JSR DIALS`, and the two cooling countdowns on `GNTMP` and `LASCT` were not in `Main.cpp`. All three are, and the pattern joins §6.111 and §6.115: a swept routine that nothing reached. |
 | 2026-09-05 | **A red build from a check that already existed** (§6.127). `Tactics.cpp` declared a local called `far`, which is a `<windows.h>` macro, so MSVC turned the declaration into a syntax error and both CI jobs failed on one cause. `check_gamelogic.py` has caught `near` and `far` since slice 0f and it named the file and the line -- it simply was not run, because the list of eight checks was retyped into a shell loop and the entry whose name is a PREFIX of another entry's was lost. `tools/check_all.py` now runs all nine in CI's order and takes no arguments, and AGENTS.md points at it rather than at a list. §6.123's argument, turned back on the checks themselves. |
 | 2026-09-05 | **Slice 4a-c: the ships fight back** (§6.125). `TACTICS`'s seven parts and `DOCKIT` as one unit, with the death path threaded out of `MVEIT` per §6.122 and observed false on eight of 92 cases. **`K3+10` is settled**: the upstream commentary says "I have no idea what K3+10 contains", and the port can close it mechanically -- `K3` is `SKIP 0` over `XX2`'s fourteen bytes, `DOCKIT` is the only reader and `LL9` the only writer, so whether an NPC finishes docking depends on the visibility of the eleventh face of the last ship drawn. Two defects the oracle found: `DOCKIT` calls `TA2` and then the WHOLE of `TAS2` again over the same `K3`, which the port had transcribed as one call, and six of ten `DORND` carries come from compares several instructions earlier. The carries were measured by stepping the interpreter rather than derived by eye -- §6.118's instrument used as a first resort. |
 | 2026-09-05 | **Three mutations walked through slice 4a-b's sweep and none of them was the port** (§6.124). One generator seed, so the carry `SFS1` rotates into byte 29 never varied; a ramp of test data that never reaches 128, so `SFS2`'s sign-magnitude amount was always positive; and a `NEWB` byte whose ramp value already had the bit `ANGRY` sets, so the OR was a no-op. All three are §6.93 again, and all three came from the same convenience -- generated ramps are systematically wrong about signs and about bits that happen to be set. The sweeps now name the values a routine branches on and assert the answer came out both ways rather than counting cases. |
