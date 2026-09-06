@@ -1268,3 +1268,9 @@ narrowed from `XX0` to the one byte `EE55` reads (the app's implementation is a 
 either way, §6.91). Ratchet: `origin-markers` 3,654 → 3,702 for the header's twenty labels and the
 parser's (rule 4); everything else unmoved, `outpost-elite-names` included, by the seam's
 narrowing. Mutants: every anchor still applies; the corpus rerun follows.
+
+**2026-09-06 — M1-e closed on the mutants.** 65 mutants on the parsed-blueprint tree: 61 caught, 4
+survived, the four the recorded equivalents — M0-d's tally for the sixth time, with no anchor
+moved, because no mutant ever named a blueprint byte. Rule 3 is met; M1-f — the line heap
+addressed by offset, `NWSHP`'s chain in `TryReserveHeap`, the sun's heap lent as a span — is
+next, and it closes M1.
