@@ -102,7 +102,7 @@ namespace GameLogicTests
      */
 
     /// The port's side: every seam recorded, and the title screen answering from a script.
-    class RecordingStart : public Elite::StartUpEffects
+    class RecordingStart : public Elite::StartUpEffects, public Elite::Presenter
     {
     public:
       explicit RecordingStart(std::vector<std::uint8_t> _answers) noexcept
@@ -178,7 +178,6 @@ namespace GameLogicTests
     class SilentEffects : public Elite::LineEntryEffects
     {
     public:
-      void WaitFrames(std::uint8_t) override {}
       void FlushKeyboard() override {}
     };
 
@@ -626,8 +625,8 @@ namespace GameLogicTests
         RecordingStart effects({script.firstAnswer, 0});
         Elite::SidWriteLog sid; ///< 6502: SID -- what `startat`, `stopat` and `stopbd` write
         NullSeams nulls;
-        Elite::Ports ports{recursive, characters, sink,  nulls, nulls, sid,
-                           extended,  effects,    keys,  nulls,       lineEffects, store};
+        Elite::Ports ports{recursive, characters, sink,    nulls, nulls,       sid,
+                           extended,  effects,    effects, keys,  lineEffects, store};
 
         /*
          * 6502: msblob -- the one thing the sequence draws, and a count cannot say so any more

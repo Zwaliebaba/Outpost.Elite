@@ -31,7 +31,7 @@ namespace GameLogicTests
      * `quiet` is how many scans answer "no key" before one answers `key`. `PAUSE` needs at least
      * one of each in that order; `PAUSE2` needs the same.
      */
-    struct ScriptedStart final : Elite::StartUpEffects
+    struct ScriptedStart final : Elite::StartUpEffects, Elite::Presenter
     {
       std::uint32_t quiet = 0;
       std::uint8_t key = 0;
@@ -278,9 +278,9 @@ namespace GameLogicTests
     }
 
     /// The seams a briefing reaches: the frame's three recorded, and the script answering `TITLE`'s.
-    [[nodiscard]] static Elite::Ports PortsOver(LoopUniverse& _universe, Elite::StartUpEffects& _start)
+    [[nodiscard]] static Elite::Ports PortsOver(LoopUniverse& _universe, ScriptedStart& _start)
     {
-      return _universe.universe.PortsWith(_universe.effects, _universe.effects, _start);
+      return _universe.universe.PortsWith(_universe.effects, _universe.effects, _start, _start);
     }
 
     /// What `Mirror` does not send: the line heap, the flight model's rotation rates, and `INF`.

@@ -28,7 +28,7 @@ using Elite::Testing::OracleImage;
  * The Data on System screen, against the game that draws it (slice 2a).
  *
  * 2a's row deferred this as "cursor and canvas work" and it is neither. Every line of TT25 is a
- * token, a number or a seed bit; the only thing it reaches outside GameLogic for is TRADEMODE,
+ * token, a number or a seed bit; the one thing it reached outside GameLogic for was TRADEMODE,
  * which slice 2c already made a seam and four screens already use. That is plan section 6.12's
  * pattern for the fifth time, and this test is the demonstration: all 2,048 systems in all eight
  * galaxies, compared character for character with the cursor stamped on every character.
@@ -98,28 +98,13 @@ namespace GameLogicTests
              std::to_wstring(_port.size()) + L"; game " + window(_game, at) + L", port " + window(_port, at);
     }
 
-    class RecordingEffects : public Elite::TradeScreenEffects
-    {
-    public:
-      void SetUpTradeScreen(std::uint8_t _view) override
-      {
-        log.push_back(static_cast<std::uint32_t>(0x100u + _view));
-      }
-      void ClearBottomRows() override
-      {
-        log.push_back(0x200u);
-      }
-      void BeepAndPause() override
-      {
-        log.push_back(0x300u);
-      }
-      void ClearToView(std::uint8_t _view) override
-      {
-        log.push_back(static_cast<std::uint32_t>(0x400u + _view));
-      }
-
-      std::vector<std::uint32_t> log;
-    };
+    /*
+     * `RecordingEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3b).
+     *
+     * `TRADEMODE` was the one thing this screen reached outside `GameLogic` for, and it is
+     * `Elite::SetUpScreen` plus a keyboard flush now. Both machines run it, so the screen it
+     * leaves is in the character stream this sweep already compares.
+     */
 
     class NoKeys : public Elite::KeySource
     {
@@ -152,7 +137,6 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t chpr = oracle.Label("CHPR");
-      const std::uint16_t trademode = oracle.Label("TRADEMODE");
       const std::uint16_t qq15 = oracle.Label("QQ15");
       const std::uint16_t qq3 = oracle.Label("QQ3");
       const std::uint16_t qq8 = oracle.Label("QQ8");
@@ -178,7 +162,6 @@ namespace GameLogicTests
           // ---- the shipped routine -----------------------------------------------------------
           Cpu6502 cpu = oracle.Fresh();
           cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
-          cpu.AddTrap(trademode);
           cpu.AddTrap(oracle.Label("NLIN"));
           cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
@@ -256,13 +239,12 @@ namespace GameLogicTests
           printer.SetValueTokens(&values);
 
           NoKeys keys;
-          RecordingEffects effects;
           Elite::Rng& rng = universe.rng;
           Elite::ExtendedTokenPrinter extended(characters, printer, rng);
           NullSeams nulls;
           Elite::SidWriteLog sid;
           Elite::Ports ports{printer,  characters, sink,  nulls, nulls, sid,
-                             extended, nulls,      keys,  effects, nulls, nulls};
+                             extended, nulls,      nulls, keys,  nulls, nulls};
 
           Elite::SystemDataScreen(universe, ports, data, distance);
 
@@ -284,10 +266,9 @@ namespace GameLogicTests
                              (where + L": seed byte " + std::to_wstring(index) + L" on exit").c_str());
           }
 
-          // The one seam it reaches, and the view number it reaches it with.
-          Assert::AreEqual<std::size_t>(1, effects.log.size(), (where + L": how many seams").c_str());
-          Assert::AreEqual<std::uint32_t>(0x100u + Elite::DATA_ON_SYSTEM_VIEW, effects.log[0],
-                                          (where + L": TRADEMODE's view number").c_str());
+          // 6502: TRADEMODE's `STA QQ11` -- the view it sets, which was the one seam this screen
+          // reached and is a byte of the universe since M3-b-3b.
+          Assert::AreEqual<std::uint32_t>(Elite::DATA_ON_SYSTEM_VIEW, universe.view, (where + L": QQ11").c_str());
 
           ++compared;
           Elite::NextSystem(seeds);

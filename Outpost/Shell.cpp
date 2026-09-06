@@ -20,7 +20,6 @@ namespace Outpost
   namespace
   {
     /// 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.
-    constexpr std::uint8_t BEEP_PAUSE_FRAMES = 50;
 
   } // namespace
 
@@ -119,13 +118,6 @@ namespace Outpost
 
   // ---- the screen -------------------------------------------------------------------------------
 
-  void GameShell::SetUpTradeScreen(std::uint8_t _view)
-  {
-    // 6502: TRADEMODE -- TT66, then FLKB, then DOVDU19 (a palette change this build does not act on).
-    ClearToView(_view);
-    FlushKeyboard();
-  }
-
   void GameShell::ClearToView(std::uint8_t _view)
   {
     /*
@@ -152,31 +144,11 @@ namespace Outpost
     Elite::SetUpScreen(m_flight->Universe(), *m_ports, _view);
   }
 
-  void GameShell::ClearBottomRows()
-  {
-    if (m_text == nullptr || m_printer == nullptr || m_extended == nullptr || m_message == nullptr)
-    {
-      return;
-    }
-    Elite::ClearMessageRows(m_canvas, *m_printer, *m_text, *m_extended, *m_message);
-  }
-
   void GameShell::ClearScreen()
   {
     // 6502: clss -- CHPR reaching past the last row clears the screen and prints again. The caller
     // does the printing; this is the clear.
     ClearToView(m_view);
-  }
-
-  void GameShell::BeepAndPause()
-  {
-    // 6502: dn2 -- JSR BEEP and then JSR DELAY, and the beep's carry is dropped as `R5` and `DK4`
-    // drop it. `TextPrinter` rings the bell for `R5` itself since M3-b-2b; this is the other caller.
-    if (m_sound != nullptr)
-    {
-      (void)Elite::Beep(*m_sound, false);
-    }
-    WaitFrames(BEEP_PAUSE_FRAMES);
   }
 
   // ---- waiting and the keyboard ------------------------------------------------------------------
@@ -399,7 +371,10 @@ namespace Outpost
     case 21:
       // 6502: CLYNS -- the bottom rows, which belong to the docked screens rather than to a
       // mission. The two flags it sets are the printer's and are already set.
-      ClearBottomRows();
+      if (m_text != nullptr && m_printer != nullptr && m_extended != nullptr && m_message != nullptr)
+      {
+        Elite::ClearMessageRows(m_canvas, *m_printer, *m_text, *m_extended, *m_message);
+      }
       return;
 
     default:

@@ -494,8 +494,9 @@ namespace GameLogicTests
       bool badFile = false;
     };
 
-    /// 6502: DELAY and FLKB, recorded rather than performed.
-    class MenuEffects : public Elite::LineEntryEffects
+    /// 6502: DELAY and FLKB, recorded rather than performed -- the first is `Presenter`'s since
+    /// M3-b-3b and the second is still the line editor's.
+    class MenuEffects : public Elite::LineEntryEffects, public Elite::Presenter
     {
     public:
       void WaitFrames(std::uint8_t) override
@@ -876,8 +877,8 @@ namespace GameLogicTests
 
         NullSeams nulls;
         Elite::SidWriteLog sid;
-        Elite::Ports ports{recursive, characters, sink,  nulls, nulls, sid,
-                           extended,  nulls,      keys,  nulls, effects, store};
+        Elite::Ports ports{recursive, characters, sink,    nulls, nulls, sid,
+                           extended,  nulls,      effects, keys,  effects, store};
 
         const Elite::DiskMenuResult result = Elite::DiskAccessMenu(universe, ports);
 

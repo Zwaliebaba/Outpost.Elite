@@ -397,8 +397,8 @@ namespace
     }
 
     case Elite::KeyAction::MarketPrice:
-      // 6502: TT167. The screen reset above it is TRADEMODE, which the caller does.
-      _game.shell.SetUpTradeScreen(Elite::BUY_CARGO_VIEW);
+      _game.shell.ClearToView(Elite::BUY_CARGO_VIEW); // 6502: TT167's TRADEMODE -- TT66 and FLKB
+      _game.shell.FlushKeyboard();
       Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.universe.text, _game.universe.current.economy,
                                _game.universe.market, false);
       return;
@@ -609,8 +609,8 @@ namespace
       Elite::JumpState jump = JumpOf(_game);
 
       const Elite::JumpOutcome decided =
-        Elite::RequestHyperspace(_game.universe.canvas, _game.recursive, _game.extended, _game.universe.text, chart, jump,
-                                 _game.universe.commander.galaxySeeds, &_game.shell);
+        Elite::RequestHyperspace(_game.universe.canvas, _game.recursive, _game.extended, _game.universe.text, _game.characters.state,
+                                 _game.universe.message, chart, jump, _game.universe.commander.galaxySeeds);
 
       _game.universe.status.hyperspaceCountdown = jump.countdown;
       _game.universe.status.hyperspaceCounter = jump.counter; // 6502: STA QQ22 -- and it was never copied back (§6.159)
@@ -912,7 +912,7 @@ namespace
        */
       Elite::Universe& universe = _game.universe;
 
-      if (Elite::RunLoopHead(universe, _game.ports, _game.shell) == Elite::LoopHead::Spawn)
+      if (Elite::RunLoopHead(universe, _game.ports) == Elite::LoopHead::Spawn)
       {
         Elite::RunSpawning(universe.bubble, universe.work, universe.rng, universe.commander, universe.current, universe.status,
                            universe.explosions, universe.flight.blueprint, false);

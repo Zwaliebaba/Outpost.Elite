@@ -492,8 +492,8 @@
         {
           "id": "mi-brief-frames",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _ports.start.WaitFrames(INCOMING_MESSAGE_FRAMES);",
-          "replace": "    _ports.start.WaitFrames(50u);",
+          "find": "    _ports.present.WaitFrames(INCOMING_MESSAGE_FRAMES);",
+          "replace": "    _ports.present.WaitFrames(50u);",
           "expect": "caught",
           "note": "`LDY #100 / JMP DELAY` -- two seconds on PAL. Compared as a number rather than as elapsed time, because neither side has a raster."
         },

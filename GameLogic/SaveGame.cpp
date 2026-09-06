@@ -265,8 +265,8 @@ namespace Elite
         // The name GTNME falls back on is the IMAGE's, through TR1's `LDA NA%,X` -- not the live
         // commander's. Type nothing and you keep the name you last saved under, which need not be
         // the name you are playing as.
-        (void)AskCommanderName(_ports.keys, _ports.sink, _universe.text, _ports.tokens, _ports.entry, _universe.lineBuffer, imageName,
-                               limits);
+        (void)AskCommanderName(_ports.keys, _ports.sink, _universe.text, _ports.tokens, _ports.entry, _ports.present,
+                               _universe.lineBuffer, imageName, limits);
 
         std::array<std::uint8_t, COMMANDER_FILE_SIZE> file{};
 
@@ -307,8 +307,8 @@ namespace Elite
        */
       if (key == DISK_MENU_SAVE)
       {
-        (void)AskCommanderName(_ports.keys, _ports.sink, _universe.text, _ports.tokens, _ports.entry, _universe.lineBuffer, imageName,
-                               limits);
+        (void)AskCommanderName(_ports.keys, _ports.sink, _universe.text, _ports.tokens, _ports.entry, _ports.present,
+                               _universe.lineBuffer, imageName, limits);
 
         // 6502: JSR TRNME -- and here it runs BEFORE the file is touched, so the name the store is
         // given and the name in the image are the same eight bytes.

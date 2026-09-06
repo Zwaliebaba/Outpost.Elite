@@ -7,6 +7,10 @@
 #include "LookupTables.h"
 #include "Ports.h"
 #include "Universe.h"
+#include "ViewChange.h"
+#include "TextPrint.h"
+#include "SoundEffects.h"
+#include "Presenter.h"
 
 /*
  * The equipment shop (slice 2c).
@@ -119,7 +123,7 @@ namespace Elite
      */
     if (_universe.current.techLevel >= MENU_CLEARS_SCREEN_AT)
     {
-      _ports.trade.ClearToView(EQUIP_SHIP_VIEW);
+      SetUpScreen(_universe, _ports, EQUIP_SHIP_VIEW);
     }
 
     /*
@@ -145,7 +149,7 @@ namespace Elite
     }
 
     // 6502: JSR CLYNS / qv2: LDA #175 / JSR prq / JSR TT217 / SEC / SBC #'0' / CMP #4 / BCC qv3.
-    _ports.trade.ClearBottomRows();
+    ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message);
     for (;;)
     {
       PrintThenQuestion(_ports.printer, VIEW_TOKEN);
@@ -158,7 +162,7 @@ namespace Elite
       }
 
       // 6502: JSR CLYNS / JMP qv2 -- and there is no way out of this loop but a valid view.
-      _ports.trade.ClearBottomRows();
+      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message);
     }
   }
 
@@ -204,7 +208,8 @@ namespace Elite
     for (;;)
     {
       // 6502: LDA #32 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-      _ports.trade.SetUpTradeScreen(EQUIP_SHIP_VIEW);
+      SetUpScreen(_universe, _ports, EQUIP_SHIP_VIEW);
+      _ports.entry.FlushKeyboard();
 
       // 6502: LDA #12 / JSR DOXC / LDA #207 / JSR spc / LDA #185 / JSR NLIN3.
       _universe.text.column = TITLE_COLUMN;
@@ -250,7 +255,7 @@ namespace Elite
       }
 
       // 6502: JSR CLYNS / LDA #127 / JSR prq / JSR gnum.
-      _ports.trade.ClearBottomRows();
+      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message);
       PrintThenQuestion(_ports.printer, ITEM_TOKEN);
 
       const NumberEntry entry = ReadNumber(_ports.keys, _ports.characters, _universe.text, highest);
@@ -289,7 +294,8 @@ namespace Elite
       if (!SpendCash(_universe.commander, EquipmentPrice(item, fuel)))
       {
         PrintThenQuestion(_ports.printer, CASH_TOKEN);
-        _ports.trade.BeepAndPause();
+        (void)Beep(_universe.sound, false);
+        _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
         return;
       }
 
@@ -450,14 +456,17 @@ namespace Elite
         ReceiveCash(_universe.commander, EquipmentPrice(item, fuel));
         PrintThenSpace(_ports.printer, complaint);
         _ports.printer.Print(PRESENT_TOKEN);
-        _ports.trade.BeepAndPause();
+        // 6502: .dn2 JSR BEEP / LDY #50 / JMP DELAY
+        (void)Beep(_universe.sound, false);
+        _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
         return;
       }
 
       // 6502: et11 -- JSR dn, which prints the cash and falls into dn2, then JMP EQSHP.
       PrintSpace(_ports.printer);
       PrintThenSpace(_ports.printer, CASH_LINE_TOKEN);
-      _ports.trade.BeepAndPause();
+      (void)Beep(_universe.sound, false);
+      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
     }
   }
 

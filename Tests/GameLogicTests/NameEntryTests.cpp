@@ -89,8 +89,9 @@ namespace GameLogicTests
       bool m_overrun = false;
     };
 
-    /// The two C64 things the line editor reaches for, recorded rather than performed.
-    class RecordingEffects : public Elite::LineEntryEffects
+    /// The two C64 things the line editor reaches for, recorded rather than performed. `DELAY` is
+    /// `Presenter`'s since M3-b-3b and `FLKB` is still the line editor's own.
+    class RecordingEffects : public Elite::LineEntryEffects, public Elite::Presenter
     {
     public:
       void WaitFrames(std::uint8_t _frames) override
@@ -303,7 +304,7 @@ namespace GameLogicTests
         LineLimits limits;
         limits.maxLength = script.maxLength;
 
-        const LineResult result = Elite::ReadLine(keys, sink, text, effects, buffer, limits);
+        const LineResult result = Elite::ReadLine(keys, sink, text, effects, effects, buffer, limits);
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
@@ -499,7 +500,7 @@ namespace GameLogicTests
         buffer.fill(0x77);
         LineLimits limits;
 
-        const LineResult result = Elite::AskCommanderName(keys, sink, text, extended, effects, buffer, EXISTING, limits);
+        const LineResult result = Elite::AskCommanderName(keys, sink, text, extended, effects, effects, buffer, EXISTING, limits);
 
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
         Assert::AreEqual(run.keysTaken, keys.Taken(), (where + L": how many keys were read").c_str());

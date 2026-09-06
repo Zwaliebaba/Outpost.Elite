@@ -303,10 +303,10 @@ the rest existed: "the struct is the argument list".
 <!--count:main-lines-->1,197 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->177 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->175 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->14 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->13 abstract classes in
 `GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `TunnelEffects::ShowFrame`,
 `SaveStore` through `SaveScreen`). Most are **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
@@ -1359,10 +1359,17 @@ become `Keyboard`. `SightEffects` and `ExplosionEffects` become `VideoState` wri
 makes itself, which ADR-005 §1 already decided.
 
 **M3-b-3a did that last part first, and it is what pays for the two ports.** Both seams go and
-nothing replaces them, so `aggregate-refs` reaches twelve with the credit standing: `Keyboard` is a
-rename of `KeySource` and costs nothing, and `Presenter` spends the credit. What held the two back
-was `SetRasterMode` — `SETL1`, which this plan's own row called "self-modifying code inside a raster
-interrupt handler" and which is nothing of the kind (§8, `MemoryMap.h`).
+nothing replaces them, so `aggregate-refs` reaches twelve with the credit standing. What held them
+back was `SetRasterMode` — `SETL1`, which this plan's own row called "self-modifying code inside a
+raster interrupt handler" and which is nothing of the kind (§8, `MemoryMap.h`).
+
+**M3-b-3b spent it on `Presenter`, and the row above is wrong about what that port carries.**
+`TradeScreenEffects::ClearToView` is not the presenter's: it is `TT66`, which the library has. Nor
+are `SetUpTradeScreen`, `ClearBottomRows` or `BeepAndPause`'s beep. What `Presenter` carries is
+`DELAY`, because `WSCAN` waits for a raster line and nothing in `GameLogic` knows what one is —
+which is also why the oracle traps it and a suite that untrapped it would hang (§8).
+`TunnelEffects::ShowFrame` is `Present()` and is M3-b-3c's, threaded as a nullable `TunnelEffects*`
+through ten routines that the port replaces with the `Ports` member.
 
 **M3-b-4 — `SaveStore`, the text system, and the null port.** `CommanderStore` is renamed to §4.5's
 name. `TextSink`, `ValueTokens` and `ControlCodes` are the text system's own polymorphism rather
@@ -1706,6 +1713,42 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-3b: `Presenter` arrives, and four of the five seams it was supposed to collapse
+turned out to be forwarding calls.** §4.5 lists `TunnelEffects::ShowFrame`,
+`LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames` and `TradeScreenEffects::ClearToView` as
+`Presenter`'s. Reading the executable's implementations first is what changed the slice: three of
+`TradeScreenEffects`' four methods called library routines and nothing else -- `ClearToView` was
+`Elite::SetUpScreen`, `ClearBottomRows` was `Elite::ClearMessageRows`, `SetUpTradeScreen` was those
+two calls one after the other -- and `BeepAndPause` was `Elite::Beep` plus the one thing that is not
+the library's. So `TradeScreenEffects` and `ChartEffects` GO, and what `Presenter` carries out of
+this slice is `DELAY` alone. `effects-seams` 14 → 13, `outpost-elite-names` 177 → 175,
+`aggregate-refs` twelve before and twelve after.
+
+**WHY `DELAY` IS A PORT WHEN THE OTHER FOUR WERE NOT, and a test that would hang says so.** `DELAY`
+is `LDY #n / JSR WSCAN / DEY / BNE`, and `WSCAN` waits for the raster to reach the bottom of the
+screen. There is no way to wait for a vertical sync that does not know what a screen is -- and the
+oracle cannot run it either: a flat-memory interpreter never reaches that raster line, so every
+suite that drives a docked screen traps `DELAY` and would spin for ever without the trap. That is
+the sharpest statement of the difference between a seam and a call that this phase has produced.
+
+**`ClearBottomRows` WAS DECLARED TWICE, WHICH IS WHAT §6.59's MISTAKE LOOKS LIKE FROM INSIDE.**
+`TradeScreenEffects` and `ChartEffects` each had it, because two slices needed `CLYNS` and neither
+could call it. `Elite::ClearMessageRows` has been that routine since slice 1d.
+
+**Five suites stopped counting seams and started comparing screens.** `MarketScreenTests` compared
+the port's list of `TRADEMODE`/`CLYNS`/`TT66`/`dn2` calls against the oracle's trap hits, four
+sweeps of it; `SystemScreenTests` asserted the one `TRADEMODE` and its view number; `ChartTests`
+counted `CLYNS`; `GameLoopTests` folded a `CLYNS` tally into its coverage key; `DockedSessionTests`
+answered all four from its null shell. `TRADEMODE`, `CLYNS` and `TT66` are trapped nowhere now, so
+what those sweeps compare is the character stream and the text state the routines produce. `dn2`
+splits: `JSR BEEP` runs on both machines and `JMP DELAY` cannot, so the oracle keeps that one trap
+and the port's `Presenter::WaitFrames` is counted against it.
+
+**One assertion was replaced by a weaker one and it is worth naming.** `SystemScreenTests` asserted
+that the data screen reached exactly one seam and that its argument was the view number. What it
+asserts now is `QQ11` -- the byte `TRADEMODE`'s `STA QQ11` leaves -- which cannot tell one call from
+two. The character stream is what carries the rest, and it is compared in full.
 
 **2026-09-06 — M3-b-3a: `SETL1` is not what six slices of this port believed it was.** `SightEffects`
 and `ExplosionEffects` go, and with them the last write-only seams over the VIC-II. Five of their six

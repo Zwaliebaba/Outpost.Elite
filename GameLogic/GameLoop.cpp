@@ -11,6 +11,7 @@
 #include "Messages.h"
 #include "Spawn.h"
 #include "SoundEffects.h"
+#include "TextPrint.h"
 
 namespace Elite
 {
@@ -31,7 +32,7 @@ namespace Elite
 
   } // namespace
 
-  LoopHead RunLoopHead(Universe& _universe, Ports& _ports, ChartEffects& _rows) noexcept
+  LoopHead RunLoopHead(Universe& _universe, Ports& _ports) noexcept
   {
 
     /*
@@ -49,7 +50,8 @@ namespace Elite
       // 6502: .me2 LDA QQ11 / BNE clynsneed.
       if (_universe.view != 0u)
       {
-        _rows.ClearBottomRows(); // 6502: JSR CLYNS -- a text screen's message is in the bottom rows
+        // 6502: JSR CLYNS -- a text screen's message is in the bottom rows. A seam until M3-b-3b.
+        ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message);
       }
       else
       {

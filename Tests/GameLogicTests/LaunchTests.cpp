@@ -451,7 +451,7 @@ namespace GameLogicTests
      * tunnel as well as everything after it. What remains here is `StartUpEffects` for the
      * routines that still take one; `Launch` no longer does.
      */
-    struct RecordingStart final : Elite::StartUpEffects
+    struct RecordingStart final : Elite::StartUpEffects, Elite::Presenter
     {
       void ClearKeyLogger() override {}
       /*
@@ -530,7 +530,7 @@ namespace GameLogicTests
       /// The seams a launch reaches: the AI and the drawing, the sounds, and `RESET`'s own.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(outside, effects, start);
+        return universe.PortsWith(outside, effects, start, start);
       }
     };
 

@@ -190,18 +190,12 @@ namespace Elite
   void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept;
 
   /*
-   * 6502: CLYNS -- clear the bottom two rows of the screen and put the cursor there.
+   * `ChartEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3b).
    *
-   * The chart routines reach it through `hm`, and it clears screen memory the way TT66 does, so it
-   * is the same seam control code 21 already declares. The two flags it sets are text state and are
-   * set by the caller rather than here.
+   * One method, `ClearBottomRows`, which is `CLYNS` -- and `Elite::ClearMessageRows` has been that
+   * routine since slice 1d. It was declared twice, here and on `TradeScreenEffects`, because two
+   * slices needed it and neither could call it; both call it now.
    */
-  class ChartEffects
-  {
-  public:
-    virtual ~ChartEffects() = default;
-    virtual void ClearBottomRows() = 0;
-  };
 
   /*
    * 6502: QQ12, QQ22, QQ8 and safehouse -- what choosing a hyperspace target reads and writes
@@ -264,8 +258,8 @@ namespace Elite
    * Erase, search, redraw: the first TT103 rubs out the crosshair that is there, because LOIN
    * draws by EOR, and the second draws it at wherever TT111 settled.
    */
-  NearestSystem SelectNearestSystem(Canvas& _canvas, ChartView& _view, const SystemSeeds& _galaxy,
-                                    ChartEffects* _effects) noexcept;
+  NearestSystem SelectNearestSystem(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _sentences,
+                                    MessageState& _message, ChartView& _view, const SystemSeeds& _galaxy) noexcept;
 
   /*
    * 6502: hyp -- the hyperspace key, up to the point where the countdown starts.
@@ -279,9 +273,9 @@ namespace Elite
    * system 25.6 light years away is out of range even with a full tank, and the message is the same
    * one you get for having no fuel.
    */
-  JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended,
-                                TextState& _text, ChartView& _view, JumpState& _jump, const SystemSeeds& _galaxy,
-                                ChartEffects* _effects) noexcept;
+  JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended, TextState& _text,
+                                ExtendedTextState& _sentences, MessageState& _message, ChartView& _view, JumpState& _jump,
+                                const SystemSeeds& _galaxy) noexcept;
 
   /*
    * 6502: HME2's HME3 loop -- find a system by the name that was typed.

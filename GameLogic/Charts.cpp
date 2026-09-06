@@ -8,6 +8,7 @@
 #include "PlanetDraw.h"
 #include "Ports.h"
 #include "Universe.h"
+#include "TextPrint.h"
 
 /*
  * The galactic charts (slice 2b).
@@ -499,8 +500,8 @@ namespace Elite
     PrintValue(_sink, _count, 3, false);
   }
 
-  NearestSystem SelectNearestSystem(Canvas& _canvas, ChartView& _view, const SystemSeeds& _galaxy,
-                                    ChartEffects* _effects) noexcept
+  NearestSystem SelectNearestSystem(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _sentences,
+                                    MessageState& _message, ChartView& _view, const SystemSeeds& _galaxy) noexcept
   {
     // 6502: hm -- JSR TT103 / JSR TT111 / JSR TT103 / JMP CLYNS. The first call rubs the crosshair
     // out, because LOIN draws by EOR and drawing it twice is how it moves.
@@ -512,17 +513,15 @@ namespace Elite
 
     DrawTargetCrosshairs(_canvas, _view);
 
-    if (_effects != nullptr)
-    {
-      _effects->ClearBottomRows();
-    }
+    // 6502: JMP CLYNS, which is `ClearMessageRows` and was a seam until M3-b-3b.
+    ClearMessageRows(_canvas, _printer, _text, _sentences, _message);
 
     return nearest;
   }
 
-  JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended,
-                                TextState& _text, ChartView& _view, JumpState& _jump, const SystemSeeds& _galaxy,
-                                ChartEffects* _effects) noexcept
+  JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended, TextState& _text,
+                                ExtendedTextState& _sentences, MessageState& _message, ChartView& _view, JumpState& _jump,
+                                const SystemSeeds& _galaxy) noexcept
   {
     if (_jump.docked != 0)
     {
@@ -532,10 +531,7 @@ namespace Elite
        * The message is an EXTENDED token, which is why this routine needs both printers: the rest
        * of hyp prints recursive ones.
        */
-      if (_effects != nullptr)
-      {
-        _effects->ClearBottomRows();
-      }
+      ClearMessageRows(_canvas, _printer, _text, _sentences, _message); // 6502: JSR CLYNS
       _text.column = 15;
       _extended.Print(DOCKED_TOKEN);
       return JumpOutcome::Docked;
@@ -571,7 +567,7 @@ namespace Elite
     }
     else
     {
-      const NearestSystem nearest = SelectNearestSystem(_canvas, _view, _galaxy, _effects);
+      const NearestSystem nearest = SelectNearestSystem(_canvas, _printer, _text, _sentences, _message, _view, _galaxy);
       _jump.distance = nearest.distance;
       _jump.target = nearest.seeds;
     }

@@ -62,7 +62,7 @@ namespace GameLogicTests
       return "?";
     }
 
-    class RecordingEffects : public Elite::StartUpEffects
+    class RecordingEffects : public Elite::StartUpEffects, public Elite::Presenter
     {
     public:
       void ClearKeyLogger() override
@@ -330,7 +330,7 @@ namespace GameLogicTests
       universe.status.energy = 0x5C;
       std::uint8_t dockedFlag = 0;
 
-      Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, effects);
+      Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, effects, effects);
       const Elite::DockingResult result = Elite::DockAtStation(universe, ports, nullptr, dockedFlag, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome), L"this commander earns no briefing");
@@ -411,7 +411,7 @@ namespace GameLogicTests
       earnerUniverse.commander = earner;
       earnerUniverse.heaps.stp = 4u; // §6.95, as above
       std::uint8_t earnerDocked = 0;
-      Elite::Ports earnerPorts = earnerUniverse.PortsWith(earnerUniverse.unused, earnerUniverse.unused, briefed);
+      Elite::Ports earnerPorts = earnerUniverse.PortsWith(earnerUniverse.unused, earnerUniverse.unused, briefed, briefed);
       const Elite::DockingResult briefing =
         Elite::DockAtStation(earnerUniverse, earnerPorts, nullptr, earnerDocked, 0, false);
 

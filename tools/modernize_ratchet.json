@@ -36,17 +36,17 @@
     "main-lines": {
       "ceiling": 1197,
       "slack": 0,
-      "slice": "M3-b-3a: Main.cpp names neither sight seam and the Ports list is one line"
+      "slice": "M3-b-3b: Main.cpp opens a trade screen with TT66 and a flush rather than a seam"
     },
     "outpost-elite-names": {
-      "ceiling": 177,
+      "ceiling": 175,
       "slack": 0,
-      "slice": "M3-b-3a: SightEffects, ExplosionEffects and the six overrides are not names any more"
+      "slice": "M3-b-3b: the app names neither TradeScreenEffects nor ChartEffects nor their four methods"
     },
     "effects-seams": {
-      "ceiling": 14,
+      "ceiling": 13,
       "slack": 0,
-      "slice": "M3-b-3a: SightEffects and ExplosionEffects become VideoState and MemoryMap writes"
+      "slice": "M3-b-3b: TradeScreenEffects and ChartEffects go and Presenter arrives -- two out, one in"
     },
     "out-params": {
       "ceiling": 17,
@@ -71,7 +71,7 @@
     "origin-markers": {
       "ceiling": 3910,
       "slack": 0,
-      "slice": "M3-b-3a: one pair of SETL1 constants for the whole library, not three"
+      "slice": "M3-b-3b: one marker per call site for dn2 and TRADEMODE, not two"
     },
     "oracle-test-files": {
       "ceiling": 50,
