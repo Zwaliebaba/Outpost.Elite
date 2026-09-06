@@ -231,12 +231,12 @@ namespace Elite
    * `SFRMIS` enters at `SFS1-2` -- the `LDA #%11111110` -- so all three share one body and differ
    * only in what they arrive holding.
    */
-  [[nodiscard]] NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
+  [[nodiscard]] NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent,
                                        ShipType _parentType, std::uint8_t _aiFlag, ShipType _shipType,
                                        const Blueprint*& _blueprint) noexcept;
 
   /// 6502: SESCP -- `SFS1` with the escape pod's type and the standard AI byte already loaded.
-  [[nodiscard]] NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
+  [[nodiscard]] NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent,
                                        ShipType _parentType, const Blueprint*& _blueprint) noexcept;
 
 } // namespace Elite

@@ -553,18 +553,17 @@ namespace GameLogicTests
               void MaskSprites(std::uint8_t) override {}
             } effects;
 
-            Elite::MathWorkspace math;
-            math.t = 0x9Cu;
             Elite::TrumbleSprites trumbles;
             trumbles.count = 0x9Cu;
-            Elite::DrawLaserSights(canvas, math, commander, trumbles, which, effects);
+            Elite::DrawLaserSights(canvas, commander, trumbles, which, effects);
 
             const std::wstring where = Widen("SIGHT(laser " + std::to_string(laser) + " on view " + std::to_string(which) + ", Trumbles " +
                                              std::to_string(population) + ")");
 
             CompareScreens(cpu, screen, canvas, where);
             Assert::AreEqual(cpu.memory[tribct], trumbles.count, (where + L": TRIBCT").c_str());
-            Assert::AreEqual(cpu.memory[t], math.t, (where + L": T").c_str());
+            // `T` is `SIGHT`'s own since M2-c-3 -- one if a laser was found, zero if not -- and
+            // what it produced is the sprite-enable byte compared on the next line.
             Assert::AreEqual(cpu.memory[vicEnable], effects.enabled, (where + L": VIC+&15").c_str());
 
             // The colour register is only written when a laser was found, so a case with none

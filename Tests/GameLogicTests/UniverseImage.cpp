@@ -101,29 +101,6 @@ namespace GameLogicTests
       }
     }
 
-    /// The two bytes of a sixteen-bit value the port holds whole and the game holds low byte first.
-    void Pair(std::vector<Cell>& _cells, const wchar_t* _low, const wchar_t* _high, std::uint16_t _address, std::uint16_t& _value,
-              CellScope _scope)
-    {
-      std::uint16_t* at = &_value;
-
-      Cell low;
-      low.name = _low;
-      low.address = _address;
-      low.scope = _scope;
-      low.get = [at]() { return static_cast<std::uint8_t>(*at & 0xFFu); };
-      low.set = [at](std::uint8_t _byte) { *at = static_cast<std::uint16_t>((*at & 0xFF00u) | _byte); };
-      _cells.push_back(std::move(low));
-
-      Cell high;
-      high.name = _high;
-      high.address = static_cast<std::uint16_t>(_address + 1u);
-      high.scope = _scope;
-      high.get = [at]() { return static_cast<std::uint8_t>(*at >> 8); };
-      high.set = [at](std::uint8_t _byte) { *at = static_cast<std::uint16_t>((*at & 0x00FFu) | (_byte << 8)); };
-      _cells.push_back(std::move(high));
-    }
-
   } // namespace
 
   std::vector<Cell> ImageCells(Universe& _universe, const Where& _at)

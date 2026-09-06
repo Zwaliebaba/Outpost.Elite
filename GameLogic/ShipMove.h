@@ -225,6 +225,19 @@ namespace Elite
     /// `PLUT` runs when the view changes and `MVS5` while a ship moves.
     std::uint8_t rat = 0;
     std::uint8_t rat2 = 0;
+
+    /*
+     * 6502: CNT2 -- how wide a cone counts as "pointing at it", and the third byte of the same
+     * setting as `RAT` and `RAT2`.
+     *
+     * `TACTICS` writes all three in three instructions and `DOCKIT` overwrites all three, which is
+     * the whole difference between a ship flying itself and one being flown; `TA6` reads all three
+     * deep inside the steering. So it sits here with them rather than becoming a fourth parameter
+     * threaded through `TA151`, `GOPL` and `TA152` (M2-c-3, and the one place that slice's plan
+     * said "parameter" and the tree says otherwise). The ellipse walk's `CNT2` is a different
+     * meaning in the same byte and is `PLS22`'s parameter.
+     */
+    std::uint8_t steerCone = 0;
   };
 
   // 6502: MSL -- `ShipType::Missile` is in `ShipSlot.h` with the other type numbers. `MVEIT`

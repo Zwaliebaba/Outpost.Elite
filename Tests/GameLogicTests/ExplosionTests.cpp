@@ -155,13 +155,19 @@ namespace GameLogicTests
         Assert::AreEqual(_cpu.memory[at], _ours, (_context + L": " + Widen(_name)).c_str());
       };
 
-      // `Q` is the cloud size `DOEXP` hands `EXS1`, and `U` the particle count it hands `PTCLS`;
-      // the rest of the kernel's scratch -- `P`, `R`, `S`, `T` -- stays inside the kernel since
-      // M2-b and is not compared.
+      /*
+       * `Q` alone since M2-c-3, and it is compared for a reason that is not `DOEXP`'s: it is the
+       * frame's `Q`, which `MA23`'s altitude check reads as its radicand's low byte (§8, R22), and
+       * `DOEXP` runs inside `LL9` part 9. So what this routine leaves there is observable outside
+       * it and is pinned here.
+       *
+       * `U`, `CNT`, `TGT` and `T` were compared until M2-c-3 and are the routines' own locals now
+       * -- the particle count, the vertex the loop is on, the last vertex and the low half of the
+       * distance scale. Each is written before its first read inside one routine, and what they
+       * produced is the screen, the heap and the sprite seam, all compared. `P`, `R` and `S` went
+       * the same way with M2-b.
+       */
       same("Q", _math.q);
-      same("U", _math.u);
-      same("CNT", _math.cnt);
-      same("TGT", _math.tgt);
 
       // `ZZ` and `Y1` are the particle loop's own since M2-c -- the distance each particle is
       // plotted at and the row it landed on -- and what they produced is the screen comparison.

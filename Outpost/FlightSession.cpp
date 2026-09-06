@@ -229,7 +229,7 @@ namespace Outpost
   bool FlightSession::SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type)
   {
     // 6502: SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.
-    return Elite::SpawnChildShip(m_bubble, m_work, m_screen.rng, m_math, m_flight.slot, m_flight.type, _aiFlag, _type, m_flight.blueprint)
+    return Elite::SpawnChildShip(m_bubble, m_work, m_screen.rng, m_flight.slot, m_flight.type, _aiFlag, _type, m_flight.blueprint)
       .created;
   }
 
@@ -345,10 +345,9 @@ namespace Outpost
      */
     m_heaps.lsp = 1u;
     m_heaps.stp = _circle.step;
-    m_math.k[0] = _circle.radius;
 
     const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-    Elite::DrawBall(m_canvas, m_heaps, m_geometry, m_math, m_clip, centre, false);
+    Elite::DrawBall(m_canvas, m_heaps, m_geometry, m_math, m_clip, centre, _circle.radius, false);
   }
 
   void FlightSession::DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius)
@@ -362,9 +361,8 @@ namespace Outpost
      */
     Elite::ClearSunHeap(m_heaps);
 
-    m_math.k[0] = _radius;
     const Elite::Projection centre{_x, 0u, _y, 0u};
-    Elite::DrawSun(m_canvas, m_heaps, m_math, m_screen.rng, centre);
+    Elite::DrawSun(m_canvas, m_heaps, m_math, m_screen.rng, centre, _radius);
 
     Elite::ClearSunHeap(m_heaps);
   }

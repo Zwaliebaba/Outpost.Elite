@@ -50,7 +50,15 @@ namespace Elite
         spry = distant ? 40u : 30u;
       }
 
-      _math.q = _heap.Read(address); // 6502: byte 0 of the heap -- this frame's cloud size
+      /*
+       * 6502: byte 0 of the heap -- this frame's cloud size, and `STA Q`.
+       *
+       * `Q` stays in the workspace where `T`, `U`, `CNT` and `TGT` became locals, for the same
+       * reason the clipper's did (M2-c-2): it is the frame's `Q`, and the altitude check takes
+       * whatever the frame last left there as its radicand's low byte (§8, R22). `DOEXP` runs
+       * inside `LL9` part 9, so on a frame whose last ship exploded this is that byte.
+       */
+      _math.q = _heap.Read(address);
 
       /*
        * 6502: byte 1, the cloud counter, turned into a particle count.
@@ -64,8 +72,10 @@ namespace Elite
       {
         counter ^= 0xFFu;
       }
-      _math.u = static_cast<std::uint8_t>((counter >> 4) | 1u); // 6502: LSR A x4 / ORA #1 / STA U
-      _math.tgt = _heap.Read(address.Byte(static_cast<std::uint16_t>(2u)));
+      // `U`, `TGT` and `CNT` are `PTCLS`'s own since M2-c-3: it fills each before its first read
+      // and `DOEXP` is the last thing that happens to a ship in a frame. `Q` is not -- see below.
+      const std::uint8_t particles = static_cast<std::uint8_t>((counter >> 4) | 1u); // 6502: LSR A x4 / ORA #1 / STA U
+      const std::uint8_t lastVertex = _heap.Read(address.Byte(static_cast<std::uint16_t>(2u))); // 6502: TGT
 
       // 6502: LDA RAND+1 / PHA -- kept across the whole routine, because everything below
       // deliberately destroys the generator's state and one byte of it has to survive.
@@ -90,7 +100,7 @@ namespace Elite
           ++vertex;
           k3[static_cast<std::size_t>(index)] = _heap.Read(address.Byte(static_cast<std::uint16_t>(vertex)));
         }
-        _math.cnt = vertex; // 6502: STY CNT
+        const std::uint8_t cnt = vertex; // 6502: STY CNT
 
         if (_effects != nullptr)
         {
@@ -128,12 +138,12 @@ namespace Elite
         std::array<std::uint8_t, 4> seeds{};
         for (std::size_t byte = 0; byte < 4u; ++byte)
         {
-          seeds[byte] = static_cast<std::uint8_t>(_heap.Read(address.Byte(static_cast<std::uint16_t>(3u + byte))) ^ _math.cnt);
+          seeds[byte] = static_cast<std::uint8_t>(_heap.Read(address.Byte(static_cast<std::uint16_t>(3u + byte))) ^ cnt);
         }
         _rng.SetState(seeds);
 
         // 6502: LDY U / EXL4 ... DEY / BPL EXL4 -- so the body runs U + 1 times, not U.
-        std::uint8_t particle = _math.u;
+        std::uint8_t particle = particles;
         for (;;)
         {
           // 6502: JSR DORND2 / STA ZZ -- how far away the particle is, which is what decides
@@ -172,8 +182,8 @@ namespace Elite
           }
         }
 
-        vertex = _math.cnt; // 6502: LDY CNT
-      } while (vertex < _math.tgt);
+        vertex = cnt; // 6502: LDY CNT
+      } while (vertex < lastVertex);
 
       /*
        * 6502: PLA / STA RAND+1, then LDA K%+6 / STA RAND+3.
@@ -268,7 +278,7 @@ namespace Elite
      * bit 7 must be clear -- z_hi under 32 shifted twice cannot reach 128 -- and so leaves it
      * CLEAR and the cloud ages by four.
      */
-    _math.t = _work.z.lo;
+    std::uint8_t t = _work.z.lo; // 6502: T -- `DOEXP`'s own since M2-c-3, the low half of the scale
     std::uint8_t scaled = _work.z.hi;
     bool carry = scaled >= 32u;
 
@@ -280,8 +290,8 @@ namespace Elite
     {
       for (int pass = 0; pass < 2; ++pass)
       {
-        const ShiftResult low = RotateLeftValue(_math.t, false); // 6502: ASL T
-        _math.t = low.value;
+        const ShiftResult low = RotateLeftValue(t, false); // 6502: ASL T
+        t = low.value;
         scaled = RotateLeftValue(scaled, low.carry).value; // 6502: ROL A
       }
 

@@ -63,7 +63,9 @@ namespace Elite
    */
   /// `_numerator` is (A P+1 P) -- a coordinate's shape, the sign in the top byte -- and the
   /// quotient is left in `K`, where `PLS1`, `PLS6` and `PLANET` read it (M2-c takes it further).
-  void DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
+  /// Returns `K(3 2 1 0)`, the quotient -- a value since M2-c-3. `_math` is still here for one
+  /// byte: `DV9`'s `STA Q`, which is the frame's `Q` (Modernize.md section 8, risk R22).
+  KBlock DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
 
   /*
    * 6502: PLS6 (with its PL21, PL44 and PL6 exits) -- (X K) = (A P+1 P) / z, overflowing at 1024.
@@ -233,27 +235,19 @@ namespace Elite
      */
     std::array<std::uint8_t, 260> xx3{};
 
-    /// 6502: XX4 -- the ship's distance, as the visibility test's units. Thirty-one until part 2
-    /// works out the real one, and zero while the ship is exploding so that everything is drawn.
-    std::uint8_t xx4 = 0;
-
-    /// 6502: XX17 -- how far each of `LL9`'s three loops has walked, in its own units: vertices in
-    /// part 6, edges in part 10, and a shift count in part 5.
-    std::uint8_t xx17 = 0;
-
-    /// 6502: XX18 -- the ship's position copied out of `INWK`, halved until it fits, and then
-    /// replaced by its own dot products with the orientation vectors.
-    std::array<std::uint8_t, 9> xx18{};
-
-    /// 6502: XX20 -- what each loop counts up to, taken from the blueprint's header.
-    std::uint8_t xx20 = 0;
-
-    // 6502: CNT -- where the next projected vertex goes in `XX3`, in bytes -- is on
-    // `MathWorkspace`. It is not this workspace's byte: fourteen routines share it (§6.49).
-
-    /// 6502: V(1 0) -- a walker into the blueprint. An address here, because the blueprints are one
-    /// address-indexed region (§6.32) rather than an array per ship.
-    std::uint16_t v = 0;
+    /*
+     * 6502: XX4, XX17, XX18, XX20, V(1 0) and CNT went with M2-c-3.
+     *
+     * They are `LL9`'s own -- the distance threshold, the three loops' counters, the position it
+     * halves, the loops' bounds, the blueprint walker and where the next vertex goes in `XX3` --
+     * and they were zero page because parts 1 to 11 are eleven entry points sharing one workspace.
+     * `DrawShip` is one function, so they are its locals. `HFL5`'s `XX4` went with them: it counts
+     * the hyperspace rings and `LL9` part 1 overwrites the eight it leaves before reading it.
+     *
+     * What is left in this struct is the four stage results parts 3 to 11 hand each other, two of
+     * which have a reader outside the routine -- `DOEXP`'s copy of `XX3` and `DOCKIT`'s `XX2+10`
+     * (§6.125). That is why the frame is still a struct and not four more locals.
+     */
   };
 
   /*

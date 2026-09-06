@@ -145,7 +145,7 @@ namespace Elite
    * own, which says "no" for a sum too big to compare rather than for a ship too far to the side --
    * the same answer by a different route, and the port keeps them apart because the original does.
    */
-  [[nodiscard]] bool IsHit(const Ship& _work, MathWorkspace& _math, const Blueprint& _blueprint, ShipType _type) noexcept;
+  [[nodiscard]] bool IsHit(const Ship& _work, const Blueprint& _blueprint, ShipType _type) noexcept;
 
   /// 6502: SFS1 -- phase 4's "spawn a child ship from this one", which is where the wreckage
   /// actually comes from. It is here rather than in `Spawn.h` because the only thing in this slice
@@ -183,7 +183,7 @@ namespace Elite
    * kept the test inside the loop would agree with the game on every input and be a different
    * routine.
    */
-  void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count) noexcept;
+  void SpawnItems(SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count) noexcept;
 
   /*
    * 6502: SPIN -- a destroyed ship drops some of its cargo, or does not.
@@ -198,7 +198,7 @@ namespace Elite
    * The port had it the obvious way round and the oracle disagreed on the first blueprint whose
    * byte 0 differed from the roll (§6.74).
    */
-  void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type,
+  void SpawnDebris(Rng& _rng, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type,
                    bool _carryIn) noexcept;
 
   /*

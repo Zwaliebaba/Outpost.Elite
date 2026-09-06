@@ -989,7 +989,7 @@ namespace GameLogicTests
                 {
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(sescp, 200'000);
                   Assert::IsTrue(run.completed, L"SESCP returned");
-                  made = Elite::SpawnEscapePod(bubble, work, rng, math, PARENT_SLOT, parentType, blueprint);
+                  made = Elite::SpawnEscapePod(bubble, work, rng, PARENT_SLOT, parentType, blueprint);
                   where = Widen("SESCP parent " + std::to_string(Elite::Byte(parentType)));
                 }
                 else
@@ -998,7 +998,7 @@ namespace GameLogicTests
                   cpu.x = Elite::Byte(childType);
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(sfs1, 200'000);
                   Assert::IsTrue(run.completed, L"SFS1 returned");
-                  made = Elite::SpawnChildShip(bubble, work, rng, math, PARENT_SLOT, parentType, flag, childType, blueprint);
+                  made = Elite::SpawnChildShip(bubble, work, rng, PARENT_SLOT, parentType, flag, childType, blueprint);
                   where = Widen("SFS1 parent " + std::to_string(Elite::Byte(parentType)) + " child " + std::to_string(Elite::Byte(childType)) + " flag " +
                                 std::to_string(flag));
                 }

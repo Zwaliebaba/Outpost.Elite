@@ -424,9 +424,7 @@ namespace GameLogicTests
           Assert::IsTrue(run.completed, L"SPIN2 returned");
 
           Recorder effects;
-          Elite::MathWorkspace math;
-          math.cnt = 0xEEu;
-          Elite::SpawnItems(math, effects, Elite::TypeOf(type), static_cast<std::uint8_t>(count));
+          Elite::SpawnItems(effects, Elite::TypeOf(type), static_cast<std::uint8_t>(count));
 
           const std::wstring where = WidenText("SPIN2(count " + std::to_string(count) + ", type " + std::to_string(type) + ")");
 
@@ -436,7 +434,8 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit], (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
             Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit], (where + L": the type of #" + std::to_wstring(hit)).c_str());
           }
-          Assert::AreEqual(cpu.memory[cnt], math.cnt, (where + L": CNT").c_str());
+          // `CNT` is `SPIN2`'s loop counter and its own since M2-c-3. How many times it went round
+          // is what the seam above records, spawn for spawn.
 
           placed += static_cast<std::uint32_t>(cpu.trapHits.size());
         }
@@ -481,11 +480,9 @@ namespace GameLogicTests
             Assert::IsTrue(run.completed, L"SPIN returned");
 
             Recorder effects;
-            Elite::MathWorkspace math;
-            math.cnt = 0xEEu;
             Elite::Rng rng;
             rng.SetState(bytes);
-            Elite::SpawnDebris(rng, math, effects, *blueprint, Elite::TypeOf(type), carry);
+            Elite::SpawnDebris(rng, effects, *blueprint, Elite::TypeOf(type), carry);
 
             const std::wstring where = WidenText("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed) + ", carry " +
                                                  std::to_string(carry ? 1 : 0) + ")");
@@ -496,7 +493,7 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit], (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
               Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit], (where + L": the type of #" + std::to_wstring(hit)).c_str());
             }
-            Assert::AreEqual(cpu.memory[cnt], math.cnt, (where + L": CNT").c_str());
+            // `CNT` is `SPIN2`'s own since M2-c-3; the seam records every spawn it made.
             for (std::size_t byte = 0; byte < bytes.size(); ++byte)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
@@ -733,8 +730,7 @@ namespace GameLogicTests
 
                 Assert::IsTrue(cpu.CallSubroutine(hitch, 5'000).completed, L"HITCH returned");
 
-                Elite::MathWorkspace math;
-                const bool ours = Elite::IsHit(work, math, *blueprint, Elite::TypeOf(shipType));
+                const bool ours = Elite::IsHit(work, *blueprint, Elite::TypeOf(shipType));
 
                 const std::wstring where =
                   WidenText("HITCH(type " + std::to_string(shipType) + ", x " + std::to_string(across) + ", y " + std::to_string(down) +

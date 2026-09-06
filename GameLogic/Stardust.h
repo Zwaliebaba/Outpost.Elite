@@ -57,8 +57,8 @@ namespace Elite
      *
      * `STARS2` stores the divide's quotient here and compares against it thirty instructions later,
      * by which time nothing else still holds it. It is the only byte of the movers' scratch that is
-     * genuinely the stardust's: `XX` and `YY` looked like it and are not (§6.45), so they live in
-     * `MathWorkspace` where `EDGES` and the sun can reach them.
+     * genuinely the stardust's: `XX` and `YY` looked like it and are not (§6.45) -- they are the
+     * sun's, and are `EDGES`'s parameter and `SUN`'s locals since M2-c.
      */
     std::uint8_t newzp = 0;
   };

@@ -119,9 +119,11 @@ namespace Elite
     return static_cast<std::uint8_t>(reduced + 1u);
   }
 
-  void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count) noexcept
+  void SpawnItems(SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count) noexcept
   {
-    _math.cnt = _count; // 6502: .SPIN2 STA CNT, which sets no flags
+    // 6502: .SPIN2 STA CNT, which sets no flags. `CNT` is this loop's counter and its own since
+    // M2-c-3: `SFS1` is a seam and nothing behind it reads the byte.
+    std::uint8_t cnt = _count;
 
     // 6502: .spl BEQ oh -- on the caller's Z flag, which every caller has just set from the count.
     if (_count == 0u)
@@ -133,15 +135,15 @@ namespace Elite
     {
       (void)_effects.SpawnChild(0u, _type); // 6502: LDA #0 / JSR SFS1
 
-      _math.cnt = static_cast<std::uint8_t>(_math.cnt - 1u); // 6502: DEC CNT
-      if (_math.cnt == 0u)                                   // 6502: BNE spl+2
+      cnt = static_cast<std::uint8_t>(cnt - 1u); // 6502: DEC CNT
+      if (cnt == 0u)                             // 6502: BNE spl+2
       {
         return;
       }
     }
   }
 
-  void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type,
+  void SpawnDebris(Rng& _rng, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type,
                    bool _carryIn) noexcept
   {
     // 6502: JSR DORND / BPL oh -- and nothing else in the routine looks at the roll's low bits
@@ -162,7 +164,7 @@ namespace Elite
      */
     const std::uint8_t capped = static_cast<std::uint8_t>(Byte(_type) & _blueprint.cargo & 0x0Fu);
 
-    SpawnItems(_math, _effects, _type, capped); // 6502: and it falls into SPIN2
+    SpawnItems(_effects, _type, capped); // 6502: and it falls into SPIN2
   }
 
   bool DrainEnergy(FlightStatus& _status) noexcept
@@ -207,7 +209,7 @@ namespace Elite
     return _limit >= _work.z.hi;
   }
 
-  bool IsHit(const Ship& _work, MathWorkspace& _math, const Blueprint& _blueprint, ShipType _type) noexcept
+  bool IsHit(const Ship& _work, const Blueprint& _blueprint, ShipType _type) noexcept
   {
     // 6502: CLC / LDA INWK+8 / BNE HI1 -- the z sign byte, and anything but zero means the ship is
     // not close enough in front of us to have been hit.
@@ -229,22 +231,22 @@ namespace Elite
       return false;
     }
 
-    // 6502: LDA INWK / JSR SQUA2 / STA S / LDA P / STA R.
+    // 6502: LDA INWK / JSR SQUA2 / STA S / LDA P / STA R. `(S R)` is this routine's own since
+    // M2-c-3: nothing between the two squares and the compare below reads either byte.
     const Product across = SquareUnsigned(_work.x.lo);
-    _math.s = across.high;
-    _math.r = across.low;
+    SignMag16 area{across.low, across.high}; // 6502: (S R)
 
     // 6502: LDA INWK+3 / JSR SQUA2 / TAX / LDA P / ADC R / STA R / TXA / ADC S / BCS TN10.
     const Product down = SquareUnsigned(_work.y.lo);
-    const AddResult low = AddWithCarry(down.low, _math.r, across.carry);
-    _math.r = low.value;
-    const AddResult high = AddWithCarry(down.high, _math.s, low.carry);
+    const AddResult low = AddWithCarry(down.low, area.lo, across.carry);
+    area.lo = low.value;
+    const AddResult high = AddWithCarry(down.high, area.hi, low.carry);
     if (high.carry)
     {
       return false; // 6502: .TN10 CLC / RTS -- too big to compare, which is its own "no"
     }
 
-    _math.s = high.value; // 6502: STA S
+    area.hi = high.value; // 6502: STA S
 
     /*
      * 6502: LDY #2 / LDA (XX0),Y / CMP S / BNE HI1 / DEY / LDA (XX0),Y / CMP R.
@@ -258,12 +260,12 @@ namespace Elite
      * it as a fifth and failed on the first case it was given (§6.84).
      */
     const std::uint8_t target = static_cast<std::uint8_t>(_blueprint.targetArea >> 8); // 6502: (XX0),2 -- the high byte
-    if (target != _math.s)
+    if (target != area.hi)
     {
-      return target >= _math.s;
+      return target >= area.hi;
     }
 
-    return static_cast<std::uint8_t>(_blueprint.targetArea & 0xFFu) >= _math.r; // 6502: (XX0),1 -- the low byte
+    return static_cast<std::uint8_t>(_blueprint.targetArea & 0xFFu) >= area.lo; // 6502: (XX0),1 -- the low byte
   }
 
   void FireMissile(FlightLoop& _loop) noexcept
@@ -753,12 +755,12 @@ namespace Elite
     if (_type == ShipType::Asteroid && power == LASER_POWER_MINING)
     {
       const RngResult roll = screen.rng.Next(false);
-      SpawnItems(screen.math, _spawn, ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u));
+      SpawnItems(_spawn, ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u));
     }
 
     // 6502: .nosp LDY #PLT / JSR SPIN / LDY #OIL / JSR SPIN -- both, in that order, every time.
-    SpawnDebris(screen.rng, screen.math, _spawn, _blueprint, ShipType::AlloyPlate, false);
-    SpawnDebris(screen.rng, screen.math, _spawn, _blueprint, ShipType::Canister, false);
+    SpawnDebris(screen.rng, _spawn, _blueprint, ShipType::AlloyPlate, false);
+    SpawnDebris(screen.rng, _spawn, _blueprint, ShipType::Canister, false);
 
     // 6502: LDX TYPE / JSR EXNO2 -- and what `.MA14` stores is what NOISE2 left in A (§6.86's
     // dependency again: the dead ship's energy byte comes out of the sound system).
@@ -1089,7 +1091,7 @@ namespace Elite
       {
         FlipAxesForView(screen.work, screen.flight, screen.spaceView); // 6502: JSR PLUT
 
-        if (IsHit(screen.work, screen.math, *screen.flight.blueprint, type)) // 6502: JSR HITCH / BCC MA8
+        if (IsHit(screen.work, *screen.flight.blueprint, type)) // 6502: JSR HITCH / BCC MA8
         {
           carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it
 
@@ -1353,7 +1355,7 @@ namespace Elite
 
         if (ahead && WithinRange(screen.work, STATION_SPAWN_RANGE))
         {
-          EraseSun(screen.canvas, screen.heaps, screen.math); // 6502: JSR WPLS
+          EraseSun(screen.canvas, screen.heaps); // 6502: JSR WPLS
 
           // 6502: JSR NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties
           // the sun's SLOT and takes its line heap, so this rubs the sun off the screen first.

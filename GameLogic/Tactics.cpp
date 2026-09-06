@@ -124,9 +124,7 @@ namespace Elite
     {
       FlightScreen& screen = _loop.screen;
       Ship& work = screen.work;
-      MathWorkspace& math = screen.math;
 
-      math.cnt = _cnt; // 6502: .TA152 STA CNT
 
       // 6502: .TA15 LDY #16 / JSR TAS3 / TAX / EOR #%10000000 / AND #%10000000 / STA INWK+30.
       const AddSignedResult roof = DotProductWithShip(work, _towards, ORIENTATION_ROOF);
@@ -166,8 +164,10 @@ namespace Elite
        * `CNT` is the NOSE dot product, so bit 7 means the target is behind. Behind, or inside the
        * cone `CNT2` names, and the ship throttles back to 3 and stops here.
        */
-      const std::uint8_t cnt = math.cnt;
-      if ((cnt & 0x80u) == 0u && cnt >= math.cnt2)
+      // 6502: .TA152 STA CNT / ... / .TA6 LDA CNT -- `TA152`'s only job is to park the byte its
+      // caller measured, so it is this routine's parameter since M2-c-3.
+      const std::uint8_t cnt = _cnt;
+      if ((cnt & 0x80u) == 0u && cnt >= screen.flight.steerCone)
       {
         work.acceleration = 3u;
         return;
@@ -401,7 +401,6 @@ namespace Elite
   {
     FlightScreen& screen = _loop.screen;
     Ship& work = screen.work;
-    MathWorkspace& math = screen.math;
     K3Block& axes = _loop.axes;
     const ShipType type = screen.flight.type;
 
@@ -409,7 +408,7 @@ namespace Elite
     // overwrites all three, which is the whole difference between flying and being flown.
     screen.flight.rat = TACTICS_RAT;
     screen.flight.rat2 = TACTICS_RAT2;
-    math.cnt2 = TACTICS_CNT2;
+    screen.flight.steerCone = TACTICS_CNT2;
 
     /*
      * 6502: CPX #MSL / BEQ TA18 -- and `TA18` is in PART 1, which is not the beginning. A missile
@@ -601,7 +600,7 @@ namespace Elite
       }
 
       // 6502: .TN6 LDA #%11110001 / JMP SFS1 -- hostile, aggressive, and out of the slot.
-      (void)SpawnChildShip(screen.bubble, work, screen.rng, math, _slot, type, STATION_LAUNCH_AI, launch, screen.flight.blueprint);
+      (void)SpawnChildShip(screen.bubble, work, screen.rng, _slot, type, STATION_LAUNCH_AI, launch, screen.flight.blueprint);
       return true;
     }
 
@@ -630,7 +629,7 @@ namespace Elite
 
       // 6502: AND #3 / ADC #SH3 -- and the carry is the `CMP #200`'s, which is SET on this path.
       const ShipType pirate = TypeOf(static_cast<std::uint8_t>((roll.value & 3u) + Byte(ShipType::Sidewinder) + 1u));
-      (void)SpawnChildShip(screen.bubble, work, screen.rng, math, _slot, type, STATION_LAUNCH_AI, pirate, screen.flight.blueprint);
+      (void)SpawnChildShip(screen.bubble, work, screen.rng, _slot, type, STATION_LAUNCH_AI, pirate, screen.flight.blueprint);
 
       work.ai = 0u;
       return true;
@@ -718,7 +717,9 @@ namespace Elite
     // 6502: .TA19 JSR TAS2 / LDY #10 / JSR TAS3 / STA CNT, and then part 4.
     const UnitVector towards = NormaliseAxes(axes).vector;
     const AddSignedResult nose = DotProductWithShip(work, towards, ORIENTATION_NOSE);
-    math.cnt = nose.high;
+    // 6502: STA CNT -- how far off the nose the target is. `TACTICS`'s own since M2-c-3: parts 4
+    // to 8 read it and `TA152` takes it as an argument.
+    const std::uint8_t offNose = nose.high;
 
     /*
      * ---- part 4: is it an Anaconda, is it scared, has it lost its nerve ------------------------
@@ -750,7 +751,7 @@ namespace Elite
         // `CMP #200`'s, and reaching here means it did not borrow.
         const RngResult second = screen.rng.Next(true);
         const ShipType escort = (second.value >= 100u) ? ShipType::Worm : ShipType::Sidewinder;
-        (void)SpawnChildShip(screen.bubble, work, screen.rng, math, _slot, type, STATION_LAUNCH_AI, escort, screen.flight.blueprint);
+        (void)SpawnChildShip(screen.bubble, work, screen.rng, _slot, type, STATION_LAUNCH_AI, escort, screen.flight.blueprint);
         return true;
       }
 
@@ -816,7 +817,7 @@ namespace Elite
             screen.bubble.blocks[_slot].newb = work.newb;
             work.ai = 0u;
 
-            (void)SpawnEscapePod(screen.bubble, work, screen.rng, math, _slot, type, screen.flight.blueprint);
+            (void)SpawnEscapePod(screen.bubble, work, screen.rng, _slot, type, screen.flight.blueprint);
             return true;
           }
 
@@ -839,7 +840,8 @@ namespace Elite
     const std::uint8_t missiles = MissilesOf(work.state);
     if (!fightsOn && missiles != 0u)
     {
-      math.t = missiles;
+      // 6502: STA T -- the count is parked for one instruction and read back as `CMP T`, which
+      // is `missiles` here: `TACTICS`'s own byte since M2-c-3.
 
       // 6502: .ta3 ... STA T / JSR DORND -- and `ta3` has two entrances. `BCC ta3` from either
       // energy compare arrives with the carry CLEAR; falling out of the escape-pod test arrives
@@ -855,12 +857,12 @@ namespace Elite
         // launches a Thargon and passes ITS OWN AI byte on, which is why Thargons arrive hostile.
         if (type == ShipType::Thargoid)
         {
-          (void)SpawnChildShip(screen.bubble, work, screen.rng, math, _slot, type, work.ai, ShipType::Thargon, screen.flight.blueprint);
+          (void)SpawnChildShip(screen.bubble, work, screen.rng, _slot, type, work.ai, ShipType::Thargon, screen.flight.blueprint);
           return true;
         }
 
         // 6502: .TA16 JMP SFRMIS -- and it answers, because a full bubble means no missile.
-        if (SpawnChildShip(screen.bubble, work, screen.rng, math, _slot, type, SPAWN_CHILD_AI, ShipType::Missile, screen.flight.blueprint)
+        if (SpawnChildShip(screen.bubble, work, screen.rng, _slot, type, SPAWN_CHILD_AI, ShipType::Missile, screen.flight.blueprint)
               .created)
         {
           ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, MESSAGE_INCOMING_MISSILE, screen.view);
@@ -878,7 +880,7 @@ namespace Elite
      */
     if ((LargestShipAxis(work, 0u) & 0xE0u) == 0u)
     {
-      const std::uint8_t cnt = math.cnt;
+      const std::uint8_t cnt = offNose;
 
       // 6502: LDX CNT / CPX #160 / BCC TA4 -- and 160 has bit 7 set, so this is also "in front".
       if (cnt >= 160u)
@@ -958,11 +960,11 @@ namespace Elite
     {
       // 6502: .TA20 JSR TAS6 / LDA CNT / EOR #%10000000 / .TA152 STA CNT -- turn the vector round
       // and flip the sign of how far off it is, which is how a ship backs away.
-      SteerTowards(_loop, NegateVector(towards), static_cast<std::uint8_t>(math.cnt ^ 0x80u));
+      SteerTowards(_loop, NegateVector(towards), static_cast<std::uint8_t>(offNose ^ 0x80u));
       return true;
     }
 
-    SteerTowards(_loop, towards, math.cnt); // 6502: .TA15, entered with `CNT` already set
+    SteerTowards(_loop, towards, offNose); // 6502: .TA15, entered with `CNT` already set
     return true;
   }
 
@@ -970,14 +972,13 @@ namespace Elite
   {
     FlightScreen& screen = _loop.screen;
     Ship& work = screen.work;
-    MathWorkspace& math = screen.math;
     K3Block& axes = _loop.axes;
 
     // 6502: LDA #6 / STA RAT2 / LSR A / STA RAT / LDA #29 / STA CNT2 -- and `RAT` is the six
     // shifted, not a second constant.
     screen.flight.rat2 = DOCKING_RAT2;
     screen.flight.rat = static_cast<std::uint8_t>(DOCKING_RAT2 >> 1u);
-    math.cnt2 = DOCKING_CNT2;
+    screen.flight.steerCone = DOCKING_CNT2;
 
     // 6502: LDA SSPR / BNE P%+5 / .GOPLS JMP GOPL -- no station in the bubble, so steer at the
     // planet and stop pretending to dock.
