@@ -34,9 +34,9 @@
       "slice": "M0-a"
     },
     "main-lines": {
-      "ceiling": 1162,
+      "ceiling": 1199,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "main 4bab1f8 (merged 2026-09-06)"
     },
     "outpost-elite-names": {
       "ceiling": 225,

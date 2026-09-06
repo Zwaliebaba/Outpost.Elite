@@ -296,7 +296,7 @@ plainly: "the struct is the argument list". They are built by `FlightSession`'s 
 times over.
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
-<!--count:main-lines-->1,162 lines, most of them the dispatch, the exits and the two loops. Plan
+<!--count:main-lines-->1,199 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
 the executable reaches <!--count:outpost-elite-names-->225 distinct `Elite::` names that
@@ -1274,3 +1274,10 @@ survived, the four the recorded equivalents — M0-d's tally for the sixth time,
 moved, because no mutant ever named a blueprint byte. Rule 3 is met; M1-f — the line heap
 addressed by offset, `NWSHP`'s chain in `TryReserveHeap`, the sun's heap lent as a span — is
 next, and it closes M1.
+
+**2026-09-06 — `main` merged in, mid M1-f.** The owner's death-sequence pacing (`HoldFlightFrame`,
+a `TunnelEffects*` on `Die`) came in from `main` with one conflict — `leaving.world.dashboard`,
+which this branch had already renamed to `universe` — and the suite was 392 of 392 on the merged
+tree before the M1-f work was put back. It moved one count: `main-lines` 1,162 → 1,199, the
+thirty-seven lines the pacing adds to `Main.cpp`. That is the product moving, not a pattern
+coming back, so the ceiling follows it and says so in `slice`; M3 is the slice that takes it down.
