@@ -55,7 +55,12 @@ ORACLE_SOURCES = ["Cpu6502.cpp", "OracleImage.cpp", "GoldenCanvas.cpp"]
 # its decisions from its API calls precisely so that the decisions can be tested on a machine with
 # no GPU and no Windows SDK. What is left in Window.cpp, CanvasPresenter.cpp and Main.cpp is
 # Direct3D, a message pump and a thread, and those are verified by compiling.
-EXECUTABLE_SOURCES = ["SaveStore.cpp", "Presentation.cpp", "KeyMap.cpp"]
+# `SidSynth` joined them 2026-09-06 (plan section 6.156). It is the 6581 emulation and it has no
+# oracle -- the game never rendered audio, only wrote registers -- so the only thing that can catch
+# a change in it is a hash of what it produces, and a hash is useless on a leg that cannot build it.
+# Its header includes <array>, <cstddef> and <cstdint> and nothing else, so there was never a
+# platform reason for it to be out.
+EXECUTABLE_SOURCES = ["SaveStore.cpp", "Presentation.cpp", "KeyMap.cpp", "SidSynth.cpp"]
 
 
 def write_if_changed(_path: Path, _text: str) -> None:

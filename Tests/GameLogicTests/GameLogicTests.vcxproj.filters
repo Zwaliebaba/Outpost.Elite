@@ -84,6 +84,9 @@
     <ClCompile Include="RasterTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="SidRenderTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="MarketScreenTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
@@ -193,6 +196,9 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Outpost\KeyMap.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\SidSynth.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="ChartTests.cpp">

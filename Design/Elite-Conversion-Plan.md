@@ -140,7 +140,7 @@ is preserved in the history and was true then.
   `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
   WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
   docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->384 tests in <!--count:test-files-->53 files: the 6502 interpreter with its cycle counter and
+- `Tests/GameLogicTests/` — <!--count:tests-->385 tests in <!--count:test-files-->54 files: the 6502 interpreter with its cycle counter and
   its in-order store log, the oracle fixture over the assembled game and the loader, and the
   suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
@@ -150,10 +150,11 @@ is preserved in the history and was true then.
 - `Design/Reference/` holds the generated oracle inputs and is gitignored; `Upstream/` is the
   annotated source library as a submodule, pinned.
 
-**What is left, in one place.** Nothing in the BUILD ORDER is unbuilt before phase 6, and **there is
-no recorded mutation debt anywhere in the corpus**: the ship AI's thirteen survivors are closed
-(§6.152, §6.153), the last of them a real defect in `TA7`. Three things stand beside the code, and
-the one that used to head this list is gone:
+**What is left, in one place.** Nothing in the BUILD ORDER is unbuilt before phase 6, and **every
+recorded mutant in the corpus is caught or a proved equivalent** — the ship AI's thirteen (§6.152,
+§6.153, the last a real defect in `TA7`) and the hyperspace jump's last two (§6.156). What stands
+beside the code is two things a person has to do and one that is not debt at all; the item that used
+to head this list is gone, and so is the item below it:
 
 0. ~~**ADR-005 §1's raster effects are decided and unwritten.**~~ **Built 2026-09-06 as slice 4f
    (§6.155)** — and one third of it did not exist. `moonflower` and `welcome` are the energy bomb,
@@ -163,27 +164,31 @@ the one that used to head this list is gone:
    the byte. ADR-005 §1 scheduled a per-row shift of the space view that the shipped game never
    had, and §6.154 repeated the claim a day before checking it. **It is left in this list, struck
    through, because a decision that quietly stops being true is exactly what §6.154 is about.**
-1. **Four acceptance criteria were signed off by look or by ear, and none left an artefact** — 2e,
-   3b and 3c by eye and 5a by ear (R6, 2026-09-06). Nothing in CI can see a regression in the title
-   ship, the launch view or the dashboard, or hear one in the synthesiser.
+1. ~~**Four acceptance criteria were signed off by look or by ear, and none left an artefact.**~~
+   **Three of the four never needed one** (§6.156): `TheTitleMatchesTITLE` compares the whole bitmap
+   against the shipped `TITLE` over forty-eight cases, `TheLaunchMatchesTT110` does the same for the
+   launch, and the dashboard, planet and stardust suites carry twenty-one more whole-bitmap
+   comparisons between them. A stored hash would be strictly weaker than that, and R10 says so
+   itself: the oracle, not the golden, is the authority for anything it can reach. **The fourth
+   really had nothing and has a hash now** — sixteen effects rendered through `SidSynth` at
+   `SoundOutput`'s own clock, because the game never rendered audio and no oracle lies downstream of
+   the register writes.
 
-   **And "it needs a person at a Windows machine" is true of the ACCEPTANCE and not of the
-   regression guard**, which is a distinction this corpus has been eliding. What needed a person was
-   confirming the thing looks right on real hardware; what would catch a regression is a hash of
-   what `GameLogic` produces, and that is headless — `GoldenCanvas` already resolves a `Canvas` and
-   compares it pixel for pixel on both CI legs, and the session tests already drive the loops. Four
-   goldens and one hashed sound render would close this and nothing blocks any of them. The half
-   that genuinely does need Windows is the presenter — the D3D12 upload, the palette and the
-   letterbox — and that is a much smaller surface than the drawing code the sign-offs were about.
-2. **Two live mutation survivors in the whole corpus, and they are both `hyperspace`'s.** `tactics`,
-   `raster`, `trumbles` and `missions` are at zero; the four other not-caught entries in
-   `tools/mutants.json` are recorded EQUIVALENTS with the proof on them, which is a measurement and
-   not debt. What is left is `hyp-253` (`CMP #253 / BCS MJP`, a threshold no seed lands on) and
-   `hyp-ctrl-and` (the mis-jump cheat needs the key AND the option, and nothing varies the two flags
-   together) — four cases and one seed, per §6.147. Separately, every tally published before
-   `mutate.py` existed remains an assertion nobody can re-run, which is R13's other half.
-3. **Slice 0e is owner acceptance**, and what closes it is a written answer from the rights holders
-   (R1).
+   **What the sign-offs were about is the PRESENTER**, and that is what is left of this item: the
+   D3D12 upload, the palette, the integer scale and the letterbox, none of it `GameLogic` and none
+   of it oracle-comparable. One hand-checked screenshot on the owner's machine covers it, and it is
+   a far smaller surface than the drawing code the worry had attached itself to.
+2. **The presenter has no test of any kind**, per the item above, and that is R5's residual: the
+   sprite blit rule gained logic in slice 4f (mode and colour per screen row) and still has nothing
+   to compare against.
+3. ~~**Two live mutation survivors.**~~ **Closed 2026-09-06** (§6.156). All five units are at zero
+   and the five not-caught entries left in `tools/mutants.json` are recorded EQUIVALENTS with the
+   proof on them, which is a measurement and not debt. **R13 does not close on it**: every tally
+   published before `mutate.py` existed is still an assertion nobody can re-run, and that half of
+   the row is not recoverable by anything.
+4. **Slice 0e is owner acceptance**, and what closes it is a written answer from the rights holders
+   (R1). With R12's `.d64` fixture — a save written by a real C64, which needs a disk image — it is
+   one of two items here that no amount of work in this repository can advance.
 
 ### 1.3 What the sibling repositories give us
 
@@ -504,6 +509,68 @@ coverage ledger and an unreliable dependency graph, because its rows were writte
 routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
+
+### 6.156 The last things anybody could do without a person, and what they found
+
+Three items that needed nobody's permission and nobody's Windows machine, done together. Each of
+them was smaller than the corpus said, and two of them were smaller because the corpus was wrong
+about what was missing.
+
+**THE LAST TWO MUTATION SURVIVORS, AND BOTH HID BEHIND A SENTENCE.** `hyp-253` and `hyp-ctrl-and`
+were the whole of the recorded debt. The first is `CMP #253 / BCS MJP`, and the sweep's four seeds
+rolled 0, 104, 206 and **252** — one below the boundary, which separates `>=` from `>` no better
+than zero does. Landing near a threshold is not landing on it, which is §6.132's rule in a seventh
+instance and the same shape as `ta-104`'s (§6.153). The roll is the FIRST `DORND` from the seed, so
+the fifth seed was inverted rather than searched. The second survived behind a claim written into
+the test itself: *"`JSR CTRL` reads the keyboard, which an interpreter has no answer for"*. `CTRL`
+is `LDX #6` falling into `DKS4`, and this build's `DKS4` is `LDA KEYLOOK,X / TAX / RTS` — three
+instructions over ordinary memory. §6.147 established that shape when it made the galactic
+hyperdrive reachable, and nothing came back to the test that had written the cheat off, so the
+sweep kept passing `false` for both flags, where `AND` and `OR` agree. **Every recorded mutant in
+the corpus is now caught or a proved equivalent.**
+
+**THE THREE VISUAL SIGN-OFFS DID NOT NEED GOLDENS, BECAUSE THE ORACLE ALREADY COVERS THEM.** §6.154
+and §1.2 both said 2e, 3b and 3c were closed "without a stored capture, so CI cannot see a
+regression in the title ship, the launch view or the dashboard". That is false and checking it took
+one grep. `TheTitleMatchesTITLE` compares the WHOLE BITMAP against the shipped `TITLE` over
+forty-eight cases — both ships, both distances, at one, four and thirty frames. `TheLaunchMatchesTT110`
+does the same for the launch. `DashboardTests` has nine whole-bitmap comparisons, `PlanetDrawTests`
+ten and `StardustTests` two. A stored hash would be strictly WEAKER than what is already there:
+R10's own rule says the oracle, not the golden, is the authority for anything it can reach, and it
+reaches all of this on every CI run on both legs.
+
+**What the sign-offs were actually about is the presenter**, and that distinction had been lost.
+What needed a person at a Windows machine was confirming that the resolved canvas reaches the
+screen — the D3D12 upload, the palette, the letterbox, the integer scale. None of that is
+`GameLogic` and none of it is oracle-comparable. It is also a far smaller surface than the drawing
+code the worry had attached itself to. **The corpus had been carrying a scary version of a real but
+narrow gap**, and would have paid for four redundant goldens to close it.
+
+**THE SOUND WAS THE ONE THAT REALLY HAD NOTHING, AND BUILDING ITS HASH FOUND A DEFECT.** `SidSynth`
+is the one piece of the port with no oracle and no prospect of one: the game never rendered audio,
+it wrote to a chip, so nothing the assembled original can be asked about lies downstream of the
+register writes §6.129 already compares. R6 closed on the owner listening (2026-09-06) and left
+nothing behind, which is exactly what a golden is for. Sixteen effects are rendered to samples and
+hashed now, at `SoundOutput`'s own clock and sample rate, with the hashes committed;
+`Outpost/SidSynth.cpp` joins the three executable sources the portable runner already compiles,
+because a hash is useless on a leg that cannot build it.
+
+**The first run produced sixteen IDENTICAL hashes**, which is the shape of silence, and chasing that
+found this: **`SOINT` never writes the master volume.** It programs the three voices and never
+touches `SID+&18`, so every sound in the game plays at whatever volume something else left there.
+Two routines leave 15 in it — `COLD` at boot, and `BDENTRY` when the theme starts — and **the port
+has neither**: `COLD` is inside row 32's Kernal setup, which the ledger marks Replace, and the
+executable therefore relies entirely on the title screen playing music first. It is audible today
+because it always does. It would be silent from any start that did not, and the original would not
+be. `SoundOutput` writes the boot volume now, where `COLD` does.
+
+**The rule.** §6.155 said a decision recorded about code nobody has read is a guess with a date on
+it. This adds the cheerful corollary: **a gap recorded about tests nobody has re-read is a guess
+too, and it is usually pessimistic.** Two of the three items here were already covered and the
+corpus did not know it, which cost nothing except the work that was nearly done twice — but the
+same habit is what let the raster effects sit unbuilt for a day (§6.154). The fix is the same in
+both directions: before acting on a sentence about the state of this tree, check it against the
+tree.
 
 ### 6.155 The energy bomb, and a third of a decision that was about nothing
 
@@ -6600,6 +6667,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-06 | **The last things anybody could do without a person** (§6.156). **The corpus's last two mutation survivors are closed**: `hyp-253`'s sweep rolled 252 — one below a boundary that only 253 separates — and `hyp-ctrl-and` hid behind a sentence in its own test saying an interpreter cannot answer `JSR CTRL`, when `CTRL` is `LDX #6` into `LDA KEYLOOK,X / TAX / RTS`. Every recorded mutant is now caught or a proved equivalent. **The three visual sign-offs did not need goldens**: `TheTitleMatchesTITLE` compares the whole bitmap over 48 cases, `TheLaunchMatchesTT110` the same, and the dashboard, planet and stardust suites carry twenty-one more — a stored hash would be strictly weaker than an oracle comparison that runs on both legs. What the sign-offs were about is the PRESENTER, which is not `GameLogic` and is a much smaller surface than the worry had attached itself to. **The sound really did have nothing**, so sixteen effects are rendered and hashed — and the first run produced sixteen identical hashes, because **`SOINT` never writes the master volume**: `COLD` and `BDENTRY` do, the port has neither, and the executable is audible only because the title screen plays music first. `SoundOutput` writes it now. **The rule: a gap recorded about tests nobody has re-read is a guess too, and it is usually pessimistic.** |
 | 2026-09-06 | **Slice 4f: the energy bomb, and a third of a decision that was about nothing** (§6.155). `COMIRQ1`'s VIC-II half, which §6.154 found decided and unbuilt. **`HFX` is not in this build**: upstream's `hfx.asm` says the flag is unused in this version, `DOHFX` has both instructions commented out in the original source, the C64's `LL164` does not write it and its `COMIRQ1` does not read it — so ADR-005 §1 scheduled a per-row shift of the space view that the shipped game never had, and the grouping came from §6.98 naming three bytes together because they sit together. **And `welcome` is not the border**: `VIC+&21` is background colour 0, inside the image, supplying `%00` — so all of this landed in `Resolve` and none in the presenter, the opposite of what the ADR apportioned. What the bomb IS: `moonflower` bit 4 puts the space view into multicolour, so the same bytes decode as four two-bit codes instead of eight one-bit pixels, and `welcome` is the background it flashes — incremented ABOVE the split test, so twice a frame. Compared on the SEQUENCE of VIC writes over 256 interrupts, matched first time; nine mutants, nine caught. `shango`'s `51 + 143` confirms `DASHBOARD_CELL_ROW`. **And the same false claim had been made twice more**: `VideoState.h` said VIC+&1C is never written, so the compositor read a sprite's mode off its definition -- and `santana` and `lotus` are how the original keeps the explosion out of the dashboard, by making it single-colour in colour 0 down there rather than by clipping it. The port had the burst invisible everywhere, and two defects that cancel are harder to see than either alone. **The rule: a decision recorded about code nobody has read is a guess with a date on it — and "nothing writes this register" is the claim to distrust hardest, because the code that would use it cannot falsify it.** |
 | 2026-09-06 | **R6 signed off by the owner: the synthesiser has been heard and it works.** The last risk that was open on evidence rather than on work. Slice 5a's accept asked for an audible comparison against VICE and 0b-b cancelled VICE, so the only evidence available was a person listening — the same standing as 2e, 3b and 3c, and stated as such rather than dressed up. It settles that `SidSynth` plays the game's sounds and that they are right; it does not settle that they match a 6581 or an 8580, since neither was playing beside it and no filter is implemented. **No render was captured, so CI cannot hear a regression** — the same hole the three visual sign-offs have, and a hashed reference render of the sixteen effects is the cheap way to close it. |
 | 2026-09-06 | **A settled decision nobody owned, and a check that reported OK on markers it never read** (§6.154). The second documentation pass. **ADR-005 §1 closed two questions on 2026-09-05 and only one was built**: the sprite overlay ships (`VideoState`, `SPRITE.bin`, the compositor in `Resolve` — §6.148) and the VIC-II raster effects do not, so `moonflower`, `welcome` and `HFX` are carried in `ScreenState` and a player of the port sees neither the energy bomb nor the hyperspace tearing. The ADR's own "ordering, so neither blocks anything" bullet is the mechanism: **an ordering note says when work MAY start and never says who starts it**, and a decision taken in an ADR has no slice, no accept and no check looking for it. **`check_counts.py` reported 20 of 24 markers and did not say so**: it skipped fenced blocks and blanked code spans, and a live number had rotted in each — `Tests/PortableRunner/README.md` and `AGENTS.md` both said 349 tests against 377, which is the figure the corpus uses to TEACH the convention. Exclusions removed; the syntax is now shown as `<!--count:NAME-->`, which the pattern cannot match, so an illustration is inert by construction. Corrections in ADR-005 §1, `Explosion.h`, ADR-003 and Risk R2, R5 and R11. **The rule: a status ages worse than a number, because it is prose in shape and a number in kind, and neither mechanism reaches it.** |
