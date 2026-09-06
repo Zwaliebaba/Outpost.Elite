@@ -204,7 +204,7 @@ and always run.
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all eleven in CI's order and takes no
+**Run them with `python tools/check_all.py`**, which runs all twelve in CI's order and takes no
 arguments. Do not retype the list into a loop: that is how a push went red on 2026-09-05 with the
 one check that would have caught it left out (§6.127). What it runs:
 
@@ -215,6 +215,7 @@ python tools/check_projects.py                # .vcxproj paths resolve; nothing 
 python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
 python tools/check_docs.py                    # no table row is wider than its header
 python tools/check_counts.py                  # every <!--count:NAME--> number in a document matches the tree
+python tools/check_modernize.py               # the legacy-pattern counts Design/Modernize.md states sit at their recorded ceilings
 python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
 python tools/mutate.py --check                # every recorded mutant still applies to the code it names
 python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles

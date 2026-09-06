@@ -1,0 +1,709 @@
+# Modernize — from a faithful transcription to a modern C++ codebase
+
+**Status:** Proposed · opened 2026-09-06. **The gate ADR-001 §4 set for phase 6 is met**: every oracle
+suite, every whole-bitmap comparison and the docked replay are green on the faithful build
+(<!--count:tests-->385 tests, oracle present), all <!--count:checks-->twelve repository checks pass,
+and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
+the original's data model would be kept "until the oracle is green, then and only then tidy"; this
+document is the tidy, planned.
+**Depends on:** ADR-001 (fidelity — unchanged), ADR-002 (numeric model — unchanged), ADR-003 (the
+oracle stays the judge), ADR-004 (projects and layout — §1's seam is what M3 finally builds).
+**Feeds:** ADR-006 and ADR-007 (to be written when M1 and M3 open — §6), the risk register (§7).
+
+**What this is.** A plan to restructure `GameLogic/` and the executable so that the code reads as a
+C++ program rather than as annotated 6502, **with no behavioural change**. Same universe, same
+prices, same AI decisions on the same RNG state, same bytes on the canvas, same SID writes. The
+oracle suites are the definition of "same" and every slice below ends with them green.
+
+**What this is not.** It is not phase 6's *feature* list (resolution, gamepad, save UI, bug-fix
+toggles — plan §6 Phase 6). Those change the game and each waits for its own ADR. This plan changes
+the *program* and leaves the game alone, which is why it can go first and why it must: every phase-6
+feature would otherwise be built on top of `FlightScreen`'s twenty-three references and a `Game`
+struct that lives in `Main.cpp`.
+
+---
+
+## 0. Summary
+
+The port is already further from "decompiled C" than the brief assumed: it has no `goto`, no
+globals, no raw-pointer arithmetic, no `union` punning, `std::span` in thirty places and a comment
+culture that explains every carry. What it carries instead is the **6502's calling convention and
+memory map as its architecture** — routines that talk through zero-page scratch structs, a ship
+that is thirty-seven bytes addressed by number, blueprints and line heaps addressed as 6502
+addresses, argument lists that are structs of twenty references, twenty-two abstract "effects"
+seams most of which exist because a routine had not been ported yet, and the whole top of the
+program — the outer loops, the key dispatch, the mode changes — written in the Windows executable
+where no oracle and no Linux job can reach it.
+
+Five moves, in order, each a phase with slices and a fidelity gate:
+
+| Phase | Move | What it buys |
+|---|---|---|
+| **M0** | **The safety net.** A ratchet on the patterns this plan removes; a layout-independent image of the game state for the oracle to compare and the replay to hash; the mutants re-runnable on Linux (they already are). | Every later slice is measured by the same instruments the port was, plus one that sees composition rather than routines. |
+| **M1** | **Typed data.** `Ship`, `Commander`, `Blueprint`, `ShipType`, ship-state flags — each with a byte codec that reproduces the original layout exactly, so the oracle compare stays a byte compare. | Three hundred and twenty-nine numeric byte indices become names; the bytes stop being the model and become the wire format. |
+| **M2** | **Explicit calling conventions.** Value in, value out; the zero-page scratch structs shrink to the handful of channels that genuinely cross routine boundaries, each named. | A reader can see what a routine consumes and produces without knowing what `P` held three files away. |
+| **M3** | **Ownership.** `Elite::World` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
+| **M4** | **Control flow.** The flight frame, the ship renderer, the AI and the docking computer become pipelines of named stages with typed intermediate results; implicit state machines become explicit ones. | The three routines over five hundred lines each become readable in one sitting. |
+| **M5** | **Polish and the ledger.** Strong types for the remaining bytes, `constexpr` where the data allows, the twenty-one stale file names in `Source-Inventory.md`, and the ADRs that record the decisions. | The corpus describes the tree again. |
+
+Four rules hold across all of it and are restated in §5: **the oracle decides**; **a byte's width
+and wraparound never change**; **a mutant is re-anchored, never dropped**; **`// 6502:` and the
+ledger survive every rename**.
+
+---
+
+## 1. Clarification — decisions this plan needs, and what it assumes meanwhile
+
+The brief asks for questions before rewriting. These are the ones whose answers change the work;
+each carries the default this plan proceeds on until the owner rules, so that M0 — which needs no
+answer — is not blocked on them.
+
+| # | Question | Why it matters | Assumed until ruled |
+|---|---|---|---|
+| Q1 | **C++20 or C++23?** The brief says C++20/23. The projects pin `stdcpp20` and the portable runner compiles with `-std=c++20` (`generate_runner.py`); MSVC v145 and g++ 13 both carry most of C++23 behind a flag. | `std::expected` would replace the `{value, carry}` result structs' error half; deducing `this` would simplify the typed views; `std::to_underlying` the enum plumbing. Each is a toolchain flag in three places and one CI matrix. | **C++20.** C++23 features are listed in §4.9 as candidates; nothing in the plan needs them. |
+| Q2 | **Are the tests inside the "structural freedom"?** ADR-003's suites index the port's structs by name (`math.k[3]`, `work[31]`) at hundreds of sites. Changing the data model changes them. | If tests are frozen the data model is frozen with them. If they may change, M0-b builds the bridge that makes them layout-independent once, so later slices touch them rarely. | **Yes**, provided each changed test still compares the same bytes against the oracle — the bridge (§4.7) is how that is proved. |
+| Q3 | **May game logic move out of `Outpost/`?** `Main.cpp` holds `Game`, `Perform`, `Leave`, `Advance`, `Run` and thirteen option bytes — the top of the 6502 program. ADR-004 §1 says the executable is "composition root and presentation". | It is the largest single item (M3) and the one this environment cannot compile: `Outpost/` is Win32 and D3D12 and builds only on the Windows job. Every M3 slice therefore lands through CI rather than a local build. | **Yes.** It is what ADR-004 already says; the plan treats the current state as the debt, not the decision. |
+| Q4 | **Do `// 6502:` markers and the ledger stay mandatory after modernisation?** A typed `Ship` has no natural place for `INWK+31`. | Traceability is what lets "where did `TA7` go" be a grep. Dropping it would also break `inventory.py --strict`, which CI runs. | **Yes.** The marker moves to the field or the function that replaces the offset; the ledger's *Home* column follows the file. |
+| Q5 | **Blueprints: parsed or addressed?** `ShipBlueprint.h` argues that a struct "would have to decide what a blueprint IS", because `LL9` walks the vertex bytes through a pointer it advances. | A parsed `Blueprint` with `std::span`s over vertices, edges and faces removes `ShipByte(address)` and the `XX21` self-modification model; the three blueprints whose header disagrees with their extent (`ShipDataTests`) are the risk. | **Parsed**, with the extent taken from the header exactly as `ShipBlueprintExtent` takes it today and the three disagreeing ships carried as they are — the port reads what the header says, so the parse reads the same. |
+| Q6 | **The line heap: an arena with 6502 addresses, or per-ship spans?** `KILLSHP` shuffles every run above a dead ship down; `NWSHP` refuses a ship when the heap would run into the block it is about to write, by comparing two addresses through a carry-dependent subtraction. | Per-ship spans are the clean model and cannot express the refusal without reproducing the same arithmetic. | **Arena kept, addressing changed**: a `HeapOffset` strong type from the top of the arena replaces the raw `std::uint16_t`; the refusal keeps its exact byte chain inside one function (§4.2). |
+| Q7 | **Should the oracle bridge be allowed to grow the label map?** `Where` in `FlightWorld.h` looks up sixty labels by hand. A generic bridge wants the map generated. | `tools/labels.py` already writes `Labels.txt`; a `--fields` mode could emit the C++ table. Generated code is checked in (ADR-004 §3) and needs a `--check`. | **Yes**, as a generated header with a check, like the data tables. |
+| Q8 | **May `clang-tidy`'s `modernize-*` set be widened?** `.clang-tidy` enables two `modernize-` checks. | The rest (`modernize-use-using`, `-loop-convert`, `-avoid-c-arrays`, `-use-designated-initializers`) would mechanise part of M5 and stop regressions. `WarningsAsErrors: '*'` means each one is a decision. | **Widened one check at a time**, each in its own commit with the fixes it demands, never as a batch. |
+
+Anything not in this table is a routine judgement call this plan makes itself and records in §6.
+
+---
+
+## 2. What the port is today — the system decoded
+
+This section is the reading a person needs before touching any of it: how execution and data flow
+through the whole program, in the port's own names. The 6502 labels are given once each so that the
+`Source-Inventory.md` row can be found.
+
+### 2.1 Two outer loops, and where they live
+
+The original has one main loop with two halves chosen by `QQ12` (docked): `FRCE` reads a key,
+`MLOOP` dispatches it through `TT102`, and `TT100` runs a flight frame (`M%`) first and then falls
+into `MLOOP`. Every docked screen ends by blocking in `TT217` for a key, so the docked half costs one
+keypress per pass; the flight half runs as fast as the processor allows and the game slows down as
+the bubble fills (plan §6.17, §6.114).
+
+**In the port both halves are in `Outpost/Main.cpp`**, in the anonymous namespace, over a struct
+named `Game` that is the composition root's and not `GameLogic`'s:
+
+```
+Run()                                  6502: BR1 / TT170 / FRCE
+ ├─ SetUpLoaderScreen, SaveCommander   the loader's palette, NA%
+ ├─ ResetAndStartGame -> ForcedKey     TITLE, RESET, BAY -- the start sequence, in GameLogic
+ └─ while (shell.Turn())               one present per turn; the window pumps and blocks on vsync
+      ├─ paused?  AdvancePaused        6502: FREEZE, turned inside out (one pass per key event)
+      ├─ docked?  N passes of          6502: MLOOP -- paced by PlanSteps on the empty-bubble frame cost
+      │            CoolTheGuns / ScanFlightControls / TakeKey / PressKey -> Perform(KeyAction)
+      └─ flying:  Advance              6502: TT100
+                   for each planned step:
+                     MainFlightLoop -> LoopOutcome     6502: M% parts 1..16 (GameLogic)
+                     Leave(outcome)                    6502: JMP DOENTRY / DEATH / ESCAPE -- the exits
+                     RunLoopHead -> maybe RunSpawning  6502: MLOOP parts 1..4 (one pass in 256)
+                     RunLoopTail                       6502: MLOOP part 5 (laser cooling, dials, Trumbles)
+                     ScanFlightControls, TakeKey, PressKey   6502: TT17 then TT102
+```
+
+`Perform` is the eighteen-way `switch` on `KeyAction` that `TT102` decides (`DockedKeys.h` decides,
+`Main.cpp` performs). `Leave` is the three non-returning jumps out of `M%`, turned into a return
+value and a `switch`: docking runs `DockAtStation` and one of seven mission briefings; dying runs
+`Die` and the start sequence again; the escape pod runs `AbandonShip` and then the docking.
+
+The consequence for verification: **`DockedSessionTests.cpp` rebuilds this graph by hand** over a
+null presenter to drive the docked half, and there is no flight equivalent — `MainFlightLoop` is
+oracle-compared frame by frame in `FlightLoopTests.cpp`, but nothing drives `Advance`/`Leave`
+outside a Windows build. The mode machine that connects title, docked, flight, paused, dying and
+docking is written twice (once in `Main.cpp`, once in the test) and tested once.
+
+### 2.2 The flight frame — `M%` as a pipeline
+
+`MainFlightLoop(FlightLoop&)` runs three stages a frame; every stage reads and writes the same
+aggregates, which is the shape M4 changes and M3 makes possible.
+
+| Stage | 6502 | What it does | Reads | Writes |
+|---|---|---|---|---|
+| `BeginFlightFrame` | `M%` to `MA3` (parts 1–3) | Seeds `RAND` from the planet's x, moves the Trumbles, reads the key logger into roll/pitch/speed, fires lasers, missiles, the E.C.M., the energy bomb, the escape pod, the docking computer | keys, controls, commander, status | `FlightState` (alpha/beta/delta and their sign/magnitude copies), `RAND`, sounds |
+| `MoveEveryShip` | `MA3` to `MAL1` (parts 4–12) and `KS1` | Per occupied slot: copy the block into `INWK`, look up the blueprint, let the bomb kill it, `MVEIT` (motion, tactics one pass in eight, scanner blip), copy back, contact test, scooping, docking, collision damage, `LL9`, laser hit, kill or write-back | bubble, `INWK`, blueprint, status, commander | the same, plus the canvas, the line heap, the scanner, sounds |
+| `EndFlightFrame` | `MA18` to `STARS` (parts 13–16) | Shield and bank recharge every eighth frame, the sixteen-step housekeeping cycle (energy warning, docking-computer reminder, cabin temperature, altitude, fuel scooping, the planet and sun through `PLANET`), then the stardust | status, bubble slots 0 and 1 | status, canvas, `FlightState::delt4` |
+
+The loop over slots is a `for (;;)` with a hand-advanced index because `KILLSHP` shuffles the slots
+down and the slot that took the dead one's place is processed next. Three things leave the frame
+without finishing it — docking, death, the escape pod — and come back as `LoopOutcome`.
+
+**The data a ship moves through in one frame** is the trap for any refactor and is worth stating
+exactly: `Bubble::blocks[slot]` (the resting copy) → `ShipBlock work` (`INWK`, the working copy) →
+`MoveShip` → `blocks[slot] = work` → contact tests read `work` → `DrawShip` reads `work` and writes
+the ship's run of the `LineHeap` through the address in `work[33..34]` → kill or write back bytes 31
+and 32 only. `FlightState::blueprint` (`XX0`) is loop state and **is not reset per ship** — a planet
+inherits the previous ship's blueprint pointer and `MVEIT` reads byte 15 of it (§6.90). The typed
+`Ship` of M1 keeps that: the blueprint reference lives on the loop, not the ship.
+
+### 2.3 Drawing — `LL9`, the clipper, and erase-by-redraw
+
+`DrawShip` (`LL9`, 531 lines in `ShipDraw.cpp`) is one routine with twelve annotated parts:
+distance and visibility tests → scale the orientation matrix → transpose it → face visibility by dot
+product → project every vertex (`PROJ`, one division per axis) → decide each edge from its two faces
+→ clip each edge (`LL145`, four parts, `ClipState` for `XX12`/`XX13`) → write the surviving lines
+into the ship's run of the line heap → draw them by XOR. Erasing a ship is drawing its previous run
+again (`EraseShip`), which is why the heap is game state and not a rendering cache: lose it and
+nothing can be rubbed out. The sun and the planet keep their own heaps (`PlanetSunState`) and the
+space station borrows the sun's (§6.112).
+
+Intermediate values flow through `GeometryWorkspace` (`XX16`, `XX12`, `XX2`, `XX3`, `XX4`, `XX17`,
+`XX18`, `XX20`, `V`), `DrawWorkspace` (`X1`, `Y1`, `X2`, `Y2`, `XX15`...) and `MathWorkspace`. None of
+those is ship state; all of them are a single frame's scratch, which M4 turns into stage results.
+
+### 2.4 The docked half — screens over a token language
+
+`TT102` maps a key to one of eighteen actions; each action is a screen (`StatusScreen`, `BuyScreen`,
+the charts, `EquipShipScreen`, `DiskAccessMenu`...) that prints through the token printers
+(`TokenPrinter` → `CharacterPrinter` → `TextPrinter` → `Canvas`) and reads keys through `KeySource`
+and `LineEntryEffects`. The token system is a small language with persistent capitalisation state
+(`QQ17`), a recursion into `ExtendedTokenPrinter` for the descriptions and the missions, and a cycle
+(`ValueTokens` needs the printer that needs it) that the composition root breaks with
+`SetValueTokens`. This half is already close to the target shape: screens are functions over a small
+aggregate (`TradeScreen`, seven references), and the seams they use are genuinely platform
+(a key, a wait, a beep). It changes least.
+
+### 2.5 The AI and the living universe
+
+`RunTactics` (`TACTICS`, 567 lines) decides one ship's behaviour: missiles steer at their target
+and die against the station; the station launches Vipers or Transporters; an Anaconda calls
+escorts; everything else measures its energy, its distance and the dot product of its nose against
+the player, rolls the RNG and picks between fleeing, attacking, firing and doing nothing. It reaches
+`OOPS` and therefore `DEATH` on three paths, which is why it returns "is the player still alive"
+(§6.122). `RunDockingComputer` (`DOCKIT`) is the same shape for the autopilot. `RunSpawning`
+(`MLOOP` parts 1–4) puts traders, asteroids, police, bounty hunters, Thargoids and pirate packs into
+the bubble one pass in 256, driven entirely by `DORND`.
+
+All three are decision procedures written as one fall-through routine each, with the decision
+carried in the ship's bytes (`INWK+32`'s AI flags, `INWK+31`'s state bits, `NEWB`) and the result
+being side effects on the ship (roll, pitch, speed, a missile launched, a laser fired). M4 gives
+each a decision type.
+
+### 2.6 Who owns which byte today
+
+The single most important table for M3. Every 6502 label that is game state has a home; the homes
+are in four places and the boundaries between them are the port's history rather than a design.
+
+| Owner | Where | Holds |
+|---|---|---|
+| `Outpost::Game` (anonymous namespace, `Main.cpp`) | the executable | `TP`..`CHK` (`CommanderBlock`), `NA%` image and name, `QQ15`, `QQ2` and `tek`/`gov`/`QQ28` (`CurrentSystem`), the market (`AVL`, `QQ26`), `FlightStatus` (`ENERGY`, `FSH`, `ASH`, `QQ22`, `GNTMP`...), `MessageState`, `QQ9`/`QQ10`, `EV`, `QQ12`, `safehouse`, `QQ8`, the pause state, `JSTGY`, `JSTE`, `MUTOKOLD`, `DNOIZ`, the RNG, the whole text system, the sound buffer and the music player |
+| `Outpost::FlightSession` | the executable | `INWK`, `K%`/`FRIN`/`MANY`/`JUNK`/`MSTG`/`SLSP` (`Bubble`), the stardust, the planet and sun heaps, the ship line heap, `FlightState` (`ALPHA`..`DELT4`, `MCNT`, `XSAV`, `TYPE`, `XX0`), `ControlState`, `ControlOptions` (`DAMP`, `DJD`, `JSTK`, `PATG`), `KLO`, the compass, the Trumble sprites, `VideoState`, `ScreenState`, every workspace, `VIEW`, `L1M` |
+| `Outpost::GameShell` | the executable | `QQ11` (by reference into `Game`), `GCNT` (a pointer into the commander), the briefing ship slot, the title-screen clock |
+| `GameLogic` aggregates | the library | none of it — `FlightScreen` and `FlightLoop` are structs **of references** into the three above, and `TradeScreen`, `SaveScreen`, `GameStart`, `MissionScreen`, `TitleScreen` and `JumpState` are the same for the docked half |
+
+`GameLogic` owns no game state at all. It owns behaviour over state the caller lends it, one
+aggregate of references per routine family, and the two callers that lend it are the Windows
+executable and a test fixture that copies the executable's wiring. ADR-003 §3's `StateHash` was
+never built because there is no object to hash.
+
+### 2.7 What pins behaviour, and what does not
+
+Three instruments are in place and every slice below leans on them:
+
+- **The oracle**, per routine: a test sets the same bytes on both sides, runs both, compares the
+  bytes the routine's commentary lists plus the flags its callers read. For the flight world this
+  is `FlightWorld.h`'s `Mirror` (port → 6502 memory, by label) and `CompareState` (6502 memory →
+  port), which already know where sixty labels live. **That pair is the seed of the bridge in
+  §4.7**: it is written once per fixture and against the port's *current* struct layout, which is
+  why a layout change today would touch it.
+- **The whole-bitmap comparisons**: `TITLE`, `TT110`, the dashboard, the planet and the stardust
+  suites compare the whole `SCBASE` region byte for byte. They see composition where the per-routine
+  tests see routines.
+- **The mutants**: <!--count:mutants-->65 recorded edits in seven files, each anchored to a line of
+  source that must match exactly once, each expected to be caught. `mutate.py --check` runs in CI;
+  the run itself works through the portable runner on Linux (`--runner portable`).
+
+What nothing pins: the outer loops and the mode machine in `Main.cpp` (Windows only, no test); the
+presenter (R5, by design); timing (ADR-005 §3, by design). M0 closes the first of those.
+
+---
+
+## 3. The legacy patterns, named and measured
+
+Each pattern below is a claim about the tree and carries a checked number where the tree can be
+counted. `tools/check_modernize.py` counts them and **fails the build if any count rises** — the
+ratchet is what stops a slice reintroducing what another slice removed (§5, rule 5). The recorded
+ceilings are in `tools/modernize_ratchet.json` and are lowered as slices land.
+
+**P1 — The register-shaped calling convention.** <!--count:register-params-->64 parameters in
+`GameLogic/*.h` are named `_a`, `_x` or `_y` and typed `std::uint8_t`: the routine takes what the
+6502 routine took in that register, and its meaning is in the comment. Twelve result structs carry
+a field named `a` or `carry` for the same reason (`ProjectResult::a`, `ScreenOffset::a`). Example:
+`LargestAxisFrom(const Bubble&, std::uint8_t _slot, std::uint8_t _a)` is `MAS2` and `_a` is the
+value the caller ORs the high bytes into.
+
+**P2 — Zero-page scratch as an implicit channel.** `MathWorkspace` holds `P`, `P+1`, `P+2`, `Q`, `R`,
+`S`, `T`, `T1`, `U`, `CNT`, `TGT`, `CNT2`, `XX`, `YY`, `widget`, `K` and `K2` and is passed to
+hundreds of functions so that a routine can "leave the low byte in P" for a caller three files
+away (`Arith.h`'s own words). `DrawWorkspace`, `GeometryWorkspace`, `ClipState`, `K3Block`,
+`Projection` and `NumberWorkspace` are the same pattern for other zero-page runs;
+<!--count:workspace-params-->207 parameters in the headers are one of the three workspaces by
+reference. The pattern is faithful and it is also the reason no signature says what a function
+consumes or produces.
+
+**P3 — Flat byte blobs addressed by number.** `ShipBlock` is `std::array<std::uint8_t, 37>` with
+`operator[]`; <!--count:ship-literal-sites-->329 sites in `GameLogic/*.cpp` index it with a numeric
+literal (`work[31]`, `work[29]`, `_work[8]`) and <!--count:ship-offset-sites-->107 with a named
+offset constant, of which two families name the same byte (`SHIP_STATE` and `SHIP_STATE_OFFSET`,
+`SHIP_FLAGS` and `SHIP_FLAGS_OFFSET`, `SHIP_ENERGY` and `SHIP_ENERGY_OFFSET`) — the §6.34 trap set
+twice. `CommanderBlock` is seventy-seven bytes behind a `Field` enum and `At()`, which is the better
+half of the pattern and still hands back a byte for `Cash` (four bytes) and `Kills` (two). A second
+naming family duplicates the ship types (`SHIP_COBRA_MK3` and `SHIP_TYPE_COBRA_MK3`; `SHIP_ADDER`
+beside `SHIP_TYPE_*`).
+
+**P4 — 6502 addresses as a data model.** `SHIP_BLOCK_BASE = 0xF900`, `SHIP_HEAP_TOP = 0xFFC0`,
+`SlotAddress(slot)`, `ShipHeapAddress(ship)`, `BlueprintFor(bubble, type) -> std::uint16_t`,
+`ShipByte(address)`, `LineHeap::Read(address)` with a "borrowed" window at `&0580` for the sun's heap,
+and `Bubble::stationBlueprint` modelling the one self-modifying store into `XX21`. Each is right and
+each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refusal — the one place
+the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
+reproduces exactly and must keep reproducing (§4.2).
+
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->78 reference members
+across the structs `FlightScreen` (twenty-three), `FlightLoop`, `TradeScreen`, `SaveScreen`,
+`GameStart`, `MissionScreen`, `TitleScreen` and `ClipState`'s neighbours. `ViewChange.h` says it
+plainly: "the struct is the argument list". They are built by `FlightSession`'s constructor, by
+`Main.cpp`'s `StartOf`/`ChartOf`/`JumpOf`/`OptionsOf`, and by `FlightWorld.h`'s `Screen()`, three
+times over.
+
+**P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
+<!--count:main-lines-->1,162 lines, most of them the dispatch, the exits and the two loops. Plan
+§2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
+ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
+the executable reaches <!--count:outpost-elite-names-->227 distinct `Elite::` names that
+only a Windows compiler can type-check.
+
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
+`GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `DashboardEffects::PlaySound`,
+`TunnelEffects::ShowFrame`, `SaveStore` through `SaveScreen`). Most are **phase order**:
+`ShipEffects::RunTactics`, `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`,
+`FlightLoopEffects::SpawnAhead` and `Anger`, `SpawnChildEffects::SpawnChild`, `ChartShapes`,
+`ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each declared when the routine on the
+far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
+times. Three methods are declared on two interfaces each and one override satisfies both, which is
+the language's rule and a smell. One seam carries a CPU flag across the platform boundary:
+`PlaySound(std::uint8_t _effect, bool _carryIn)` returns a carry because `NOISE` does (§6.99), and
+the *window* is asked to preserve it.
+
+**P8 — Monolithic frame procedures.** `MoveEveryShip` is four hundred lines over nine annotated
+parts; `BeginFlightFrame` and `EndFlightFrame` about the same between them; `DrawShip` 531 and
+`RunTactics` 567; `RunDockingComputer` two hundred. Each is one routine in the original and one
+function here, with local `bool`s standing in for the branch targets (`docking`, `scoopable`,
+`collision`, `holdFull`, `crashed`) and results carried in the workspaces.
+
+**P9 — Implicit state machines.** The game's mode is `dockedFlag` (a `std::uint8_t&` written by
+`RESET`, `DOENTRY` and `TT110`), `paused` (a `bool` in `Main.cpp`), `LoopOutcome` plus `Leave`, and
+`ForcedKey::loop`. A ship's mode is bits 5, 6 and 7 of byte 31 (`SHIP_STATE_EXPLODING`, `FIRING`
+*or* `CLOUD_DRAWN` depending on bit 5, `KILLED`) and bits of byte 36 (`NEWB`: hostile, remove,
+cop, trader...). The screen's mode is `QQ11`'s value (`BUY_CARGO_VIEW = 2`, `SELL_CARGO_VIEW = 4`,
+`INVENTORY_VIEW = 8`, `EQUIP_SHIP_VIEW = 32`, charts, space views 0..3 through `VIEW`).
+
+**P10 — Untyped bytes.** Ship types, views, laser kinds, sound effects, message tokens and colours
+are `std::uint8_t` constants; booleans are `0`/`0xFF` (`BST`, `ECM`, `DISK`); the thirteen pause-
+screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making them contiguous
+would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->18 parameters are
+`std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
+
+**P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->28 `bool
+_carryIn` parameters in headers. Inside the kernel (`AddWithCarry`, `Rng::Next`, the multipliers)
+they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThargoidPair`,
+`AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
+6502 flag was live, and every caller passes a literal.
+
+**What is not a legacy pattern, and stays.** The 8-bit arithmetic with explicit carries, the
+sign-magnitude coordinates, the extracted tables, the RNG's carry chain, the XOR canvas with the
+C64's byte layout, the line heaps, the ported bugs of ADR-001 §6, the deliberate divergences
+recorded at their call sites (the stardust count of zero, out-of-arena reads as zero), the
+`// 6502:` markers and the commentary. ADR-002 is unchanged by this plan in every clause.
+
+---
+
+## 4. Target architecture
+
+### 4.1 Layers and the dependency rule
+
+```
+Ports          Presenter · Keyboard · SoundSink · SaveStore        (4 abstract classes; the executable and the null port implement them)
+   ▲
+Game           Elite::Game -- the mode machine, the outer loops, the key dispatch, the exits      6502: BR1, FRCE, MLOOP, TT100, DOENTRY, DEATH2, FREEZE
+   ▲
+Systems        Flight (M%), Render (LL9, PLANET, SUN, STARS), Tactics, Spawn, Docked screens, Text, Sound players, Missions
+   ▲
+Model          World { Commander, Bubble{Ship[10]}, LineHeap, Stardust, FlightState, FlightStatus, Screen, Options, Rng ... }   -- owns every byte
+   ▲
+Kernel         EliteTypes (Byte, carry, SignMag24), Arith (value in / value out), Rng, LookupTables, Canvas, Tokens
+```
+
+Edges point down only. `Systems` never include each other's private workspaces; they communicate
+through `World` and through typed stage results. `Game` is the only thing that knows there are two
+halves. Nothing below `Ports` includes a Windows header, as now.
+
+### 4.2 The data model
+
+**`Ship` (6502: `INWK`, one entry of `K%`).** A struct with the fields the thirty-seven bytes are —
+`SignMag24 x, y, z`; `Orientation` of three `Vector16` (`INWK+9..26`, each component sixteen-bit
+sign-magnitude, `nosev`/`roofv`/`sidev`); `rollCounter`, `pitchCounter` (`INWK+29`, `30`); `speed`
+(`27`); `acceleration` (`28`); `ShipState state` (`31`); `AiFlags ai` (`32`); `HeapOffset heap`
+(`33..34`); `energy` (`35`); `NewbFlags newb` (`36`) — and two functions:
+
+```cpp
+[[nodiscard]] constexpr std::array<std::uint8_t, SHIP_BLOCK_SIZE> ToBytes() const noexcept;   // 6502: the K% layout
+[[nodiscard]] static constexpr Ship FromBytes(std::span<const std::uint8_t, SHIP_BLOCK_SIZE>) noexcept;
+static_assert(Ship::FromBytes(Ship{}.ToBytes()) == Ship{});
+```
+
+The bytes are the **wire format**: what `NWSHP` copies, what the save game will never contain, and
+what the oracle compares. The routines that walk the block by index — `MVT1`'s `INWK,X` with X an
+axis offset, `MVS4`'s Y stepping through the orientation in sixes, `NWSHP`'s wholesale copy — get
+`Ship::Axis(Axis::X)` returning `SignMag24&` and `Orientation::Component(vector, axis)`; the wholesale
+copy is `ToBytes()` into the slot. Where a routine genuinely reads one byte as two things (`INWK+31`
+is missiles-left in bits 0–2 and state in bits 3–7), `ShipState` is a flags type with both accessors
+and one storage byte.
+
+**Why bytes-plus-codec and not a view over the bytes.** A view (`ShipView` over `std::array`) is the
+smaller step and is M1-a below, because it lets the 329 literal sites be renamed before any layout
+changes and gives the oracle bridge nothing to do. It is also where the port has to stop if Q2 is
+answered no. The struct with a codec is M1-c, and it is the one that removes `operator[]`.
+
+**`Commander` (6502: `TP` to `CHK`).** The same: typed fields (`Credits cash` as a strong type over
+four bytes big-endian in tenths, `LightYearsTenths fuel`, `std::array<Laser, 4>`, `CargoHold`,
+`Equipment` flags with their `0`/`0xFF` encoding preserved in the codec, `Tally kills`) and a
+seventy-seven-byte `ToBytes`/`FromBytes` that `SaveCommander`, `LoadCommander` and both checksums use
+unchanged. The disk format is untouched by construction; `SaveGameTests` proves the round trip.
+
+**`ShipType`, `View`, `Laser`, `SoundEffect`, `Message`, `Colour`.** Scoped enums with the original
+values. `ShipType` gets `IsBody()` (bit 7), `IsJunk()` (the `JL`..`JH` range), `IsWreckage()`
+(`PLT`..`SPL`) as `constexpr` functions beside it, and the second naming family goes.
+
+**`Blueprint` (6502: `XX21` and the region under it).** Parsed once from the generated data into
+`std::array<Blueprint, SHIP_TYPE_COUNT + 1>`: the twenty header bytes as named fields, then
+`std::span<const std::uint8_t>` over the vertices (six bytes each), edges (four) and faces (four),
+sized by the header exactly as `ShipBlueprintExtent` sizes them today. `LL9`'s advancing pointer
+becomes an index into the span. The station's mutable entry becomes `Bubble::stationType`
+(`Coriolis` or `Dodo`) resolved to a blueprint at the two places `NWSPS` and part 14 read it.
+`Blueprint` is `const`, which is what the region was until `NWSPS` — so the self-modification is
+modelled as the one bit of state it is, and nowhere else.
+
+**`Bubble` and the line heap.** `slots`, `counts`, `junk`, `missileTarget` stay. `SlotAddress` and
+the two base constants move *inside* `Bubble::TryReserveHeap(slot, bytesNeeded)`, which reproduces
+`NWSHP`'s chain — `LDA SLSP / SEC / SBC bytes / STA INWK+33 / LDA SLSP+1 / SBC #0 / STA INWK+34 /
+LDA INWK+33 / SBC INF / LDA INWK+34 / SBC INF+1 / BCC refuse` — byte for byte, with the constants
+as the only 6502 addresses left in the model and a comment saying why. The heap is addressed by
+`HeapOffset` (bytes down from `LS%`), a strong type with no implicit conversion, and `LineHeap`
+loses the sun window: the station's heap is `PlanetSunState::sun` lent as a `std::span`, and a
+`HeapRun` is `{HeapOffset start, std::uint8_t count}` whether it is in the arena or the sun's.
+
+### 4.3 Explicit calling conventions
+
+Every kernel routine gets a signature in which the inputs are parameters and the outputs are a
+returned struct. The workspace fields that are *genuinely* live across a call — the ones a caller
+reads after the callee returns without having set them — are enumerated in M2-a and each becomes a
+named field of the callee's result. From the port's own findings, the list is short and known:
+
+| Channel | Producer → consumer | Becomes |
+|---|---|---|
+| `P` low byte after `MULTU`/`MU11` | the multipliers → `MVEIT`, the stardust | `Product{ high, low, carry }` (the carry is already `WideResult::carry`, §6.33) |
+| `K`, `K2` in `MV40` | `MULT3` → `MV40`'s add | locals in `MovePlanetOrSun` |
+| `XX15` after `SPS1` | `LoadPlanetAxes` → part 9's alignment test | `UnitVector` returned |
+| `K3`/`K4` after `PROJ`, and `K3+1` surviving to the next ship (ADR-001 §6, `SHPPT`) | `Project` → `DrawShipAsPoint` | `Projection` stays a parameter that outlives the call, **deliberately**, with the ADR row on it |
+| `CNT`, `TGT`, `CNT2` | fourteen users, each initialising before reading (§6.49) | locals |
+| `T1` after `TIDY`, `Q` after `DVID`, `R` after `LL28` | within one file each | locals or a result field |
+
+`MathWorkspace` shrinks to what is left after that pass, which the plan expects to be nothing; if a
+channel is found that the list above misses, it is recorded as a new row here and modelled the same
+way. `Flags` stays for the routines whose callers read `C` or `V` (`TwistSeeds`'s carry,
+`PrintSystemName`'s carry, `Rng::Next`'s `C` and `V`), returned, never global.
+
+The `_a`/`_x`/`_y` parameters are renamed for what they carry (`_seed`, `_axisOffset`, `_highBits`)
+at the same time; the `// 6502:` comment keeps the register.
+
+### 4.4 `World`, `Game`, and the mode machine
+
+```cpp
+namespace Elite
+{
+  struct World            // every byte of game state, and nothing else. Plain aggregate, value-copyable, hashable.
+  {
+    Commander commander;  CurrentSystem current;  SystemSeeds selected;  Market market;
+    Bubble bubble;        LineHeap heap;          PlanetSunState heaps;  Stardust dust;
+    Ship work;            FlightState flight;     FlightStatus status;   Compass compass;
+    Screen screen;        Text text;              Messages messages;     Options options;
+    KeyLogger keys;       ControlState control;   TrumbleSprites trumbles; VideoState video;
+    Rng rng;              Canvas canvas;          SoundBuffer sound;     MusicPlayer music;
+    Mode mode;            JumpState jump;         std::uint8_t explosions;  // EV
+  };
+
+  class Game
+  {
+  public:
+    void Reset();                                     // 6502: BR1 / RESET / BAY -- the cold start
+    void Step(const InputFrame& _input);              // one pass of FRCE: a docked pass, a flight frame, or a paused pass
+    [[nodiscard]] const Canvas& Frame() const noexcept;
+    [[nodiscard]] std::span<const SoundEvent> Sounds() const noexcept;
+    [[nodiscard]] std::uint64_t StateHash() const noexcept;  // over WorldImage (§4.7), so it survives refactors
+    [[nodiscard]] const World& State() const noexcept;
+  private:
+    World m_world;  Ports& m_ports;
+  };
+}
+```
+
+`Mode` is the explicit machine `Main.cpp` and `DockedSessionTests.cpp` each spell out by hand today:
+
+```
+        ┌──────────┐  key      ┌──────────┐  TT110 / TT18 arrival    ┌──────────┐
+  Reset─►  Title   ├──────────►│  Docked  ├─────────────────────────►│  Flight  │
+        └──────────┘           └────▲─────┘                          └──┬───┬───┘
+                                    │ DOENTRY (+ one of seven briefings)│   │ DEATH
+                                    └───────────────────────────────────┘   ▼
+             CLR/HOME ◄──── Paused ◄──── pause key (either mode)        Dying ──► Title (DEATH2 → BR1)
+                              │ Q                                      ESCAPE → Docked
+                              └──────────────────────────────────────► Dying
+```
+
+`Step` is a `switch` on `mode`, and each arm is what `Advance`, the docked pass and `AdvancePaused`
+do now, moved into the library with the executable's pacing (`PlanSteps`, `FlightFrameSeconds`)
+left where it is: the executable decides *how many* steps and the library takes them. `Leave`'s
+three arms become transitions with the mission briefings as a sub-machine (`DockingOutcome` already
+is one). The docked dispatch (`Perform`) moves whole, its `switch` on `KeyAction` intact, because it
+is `TT102`'s second half and belongs beside the first.
+
+`InputFrame` is plan §2.1's `{ held, pressed }` over the C64 matrix positions `KeyMap` already
+produces, plus the one blocking read the docked screens need (`KeySource::NextKey`), which stays a
+port because a windowed program cannot block and the plan does not change that (§2.1 of the plan,
+`GameShell::NextKey`'s comment).
+
+### 4.5 Four ports
+
+| Port | Replaces | Methods |
+|---|---|---|
+| `Presenter` | `TunnelEffects::ShowFrame`, `TradeScreenEffects::ClearToView` (the pixels half), `LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames`, `ExplosionEffects`/`SightEffects`'s VIC pokes (they become `VideoState` writes the library makes itself) | `Present()`, `WaitFrames(n)` |
+| `Keyboard` | `KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys`, `FlushKeyboard`, `JumpState::controlHeld` | `Scan(KeyLogger&)`, `NextKey()`, `Flush()` |
+| `SoundSink` | `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep`, `FlightLoopEffects::Start/StopDockingMusic` | `Write(SidRegister, value)` — the library runs `NOISE` and the music player itself and emits register writes, which ADR-003 §1 already says is the port's `SoundEvent` stream |
+| `SaveStore` | the `SaveScreen` half that reads and writes files | `Load(name) -> std::optional<Image>`, `Save(name, Image)` |
+
+Everything else in the twenty-two is either a call into a routine that now exists (`RunTactics`,
+`DrawPlanetOrSun`, `SpawnAhead`, `Anger`, `SpawnChild`, `ChartShapes`, `DrawExplosion`,
+`SeedExplosionCloud`, `ResetUniverse`, `ResetShip`, `ClearKeyLogger`, `StartTheme`, `StopTheme`,
+`ShowTitleScreen`, `Run(controlCode)`) or a `VideoState` write. `PlaySound`'s carry stays inside
+the library where `NOISE` lives. The null port for tests is one class with four interfaces and a
+transcript, which is what `NullShell` and `LoopRecording` are today in two halves.
+
+### 4.6 Pipelines with named stages
+
+**The flight frame** keeps `MainFlightLoop` as its orchestrator and turns each annotated part into
+a function with a typed result, so that the local `bool`s become one value:
+
+```cpp
+enum class Contact : std::uint8_t { None, Docking, Scoopable, Collision };   // part 7's four answers
+struct ScoopResult { bool crashed; bool holdFull; std::optional<Cargo> item; };  // part 8
+enum class DockingTest : std::uint8_t { Arrived, Bounced, Fatal };             // part 9
+struct LaserHit { ... };                                                       // part 11, already a struct
+```
+
+and the slot loop is `while (auto slot = bubble.NextOccupied(slot))` with `KillShip` returning
+whether the index must not advance — the same control flow, said once.
+
+**`LL9`** becomes six stages over a `ShipRender` frame object: `Visible?` → `ScaledOrientation` →
+`FaceVisibility` → `ProjectedVertices` → `EdgeSelection` → `ClippedLines` → `HeapRun`, each a
+function of the previous stage's result; `DrawShipAsPoint` and `EraseShip` stay as they are (the
+ADR-001 §6 row on `SHPPT` is about `Projection` outliving a call, and the stage form makes that
+visible rather than hiding it).
+
+**`TACTICS` and `DOCKIT`** return a `Decision` (`enum class Manoeuvre { Flee, Attack, Fire, Launch,
+Steer, Halt, ... }` plus the parameters each needs) that a single `Apply(Ship&, Decision)` performs.
+The seven parts become `DecideMissile`, `DecideStation`, `DecideEscorts`, `DecideCombat`, in the
+order the fall-through runs them, and `OOPS`'s three paths become `Decision::Fatal`.
+
+### 4.7 The oracle bridge and the replay hash
+
+`Tests/GameLogicTests/WorldImage.h`: one function pair over `World` and the label map —
+
+```cpp
+void Materialise(const Elite::World&, Cpu6502&, const Labels&);      // port -> 6502 memory, every label the game has
+void Absorb(const Cpu6502&, Elite::World&, const Labels&);           // and back
+[[nodiscard]] std::uint64_t Hash(const Elite::World&);               // FNV-1a over Materialise's bytes
+```
+
+— which is `FlightWorld.h`'s `Mirror`/`CompareState` promoted to cover the whole state and driven
+by a generated table (`Labels.h`, from `tools/labels.py --fields`, checked like the data tables).
+The invariant every M1–M4 slice is measured by: **`Materialise` produces the same bytes before and
+after the slice for the same game**, and every oracle test compares through it rather than through
+`math.k[3]`. `Game::StateHash` is `Hash`, so the replay suite ADR-003 §3 asked for — the docked
+transcript and a flight script through the null port, hashed at every step, stored — is
+layout-independent by construction and is the one instrument that sees composition.
+
+### 4.8 What the executable becomes
+
+`Outpost/` keeps `Window`, `CanvasPresenter`, `SidSynth`, `SoundOutput`, `KeyMap`, `SaveStore` and
+`Presentation.h`'s pacing, and gains one `Platform` class implementing the four ports. `Main.cpp`
+becomes: create the window and the device, build `Game` over `Platform`, and loop `PlanSteps` →
+`game.Step(input)` → present, with `Guarded` around it — the two hundred lines ADR-004 §1
+described. `FlightSession` and `GameShell` are absorbed: the world half into `World`, the eight-
+interface halves into `Platform`. `check_outpost.py` keeps running and has almost nothing to check.
+
+### 4.9 C++20 used, C++23 held
+
+Used from C++20: `std::span` (fixed-extent for the codecs), `constexpr` codecs with
+`static_assert` round trips, scoped enums with `using enum` in the dispatch, designated initialisers
+for the stage results, `<bit>` (`std::rotl`, `std::bit_cast` for nothing wider than a byte),
+`[[nodiscard]]` everywhere a result carries a flag, concepts for the two ports that are templated in
+tests. Held for Q1: `std::expected` (the `{value, carry}` structs are not errors, so the case is
+weak), deducing `this` for the typed views, `std::to_underlying`, `std::print` in tools. Nothing
+in the plan depends on any of them.
+
+---
+
+## 5. Rules every slice obeys
+
+1. **The oracle decides.** A slice ends with the suite green on the portable runner with the
+   oracle present and, before merge, on the Windows job. "Builds, not run" is not a state a slice
+   is left in.
+2. **No width changes.** Every `std::uint8_t` that becomes a typed field keeps eight bits and its
+   wraparound; every widening happens inside a helper narrowed the way the original narrowed
+   (ADR-002 §3). A codec's `static_assert` round trip is the proof for a struct; the oracle byte
+   compare is the proof for a routine.
+3. **A mutant is re-anchored, never dropped.** A slice that touches a line a mutant's `find` names
+   updates `tools/mutants.json` in the same commit and re-runs that unit (`mutate.py --unit X
+   --runner portable`); the tally goes in the slice's journal entry. `mutate.py --check` in CI is
+   the backstop, not the process.
+4. **`// 6502:` and the ledger survive.** A renamed function keeps its label on the declaration; a
+   field that replaces an offset carries the label the offset carried; `Source-Inventory.md`'s
+   *Home* column changes in the same commit as the file, inside the notes column and never as a
+   new cell (`check_docs.py`).
+5. **The ratchet only goes down.** `tools/check_modernize.py` fails when any P1–P11 count exceeds
+   its recorded ceiling; a slice that lowers a count lowers the ceiling in the same commit. It
+   also fails when a ceiling is above the count by more than the slack it records, so the file
+   cannot quietly stop describing the tree (§6.154's rule, mechanised).
+6. **Every signature change reaches `Outpost/` in the same commit**, and `check_outpost.py` runs.
+   Until M3 lands the executable is the caller this environment cannot compile, and a Windows job
+   red on a type change is the failure mode; keeping the diff small per slice is the mitigation.
+7. **One pattern per slice.** A slice removes one pattern from one unit. A slice that "while it is
+   in there" renames a second thing is two slices and is split before review.
+8. **Original bugs stay ported** (ADR-001 §3, §6). A refactor that would fix one — a typed
+   `Contact` that cannot express `SHPPT`'s reading of a stale `K3+1` — is wrong, and the ADR row is
+   the test that says so.
+9. **New files go in both project files** (`.vcxproj` and `.filters`) and are unique repo-wide;
+   `check_projects.py` runs.
+10. **The journal is written as the slice lands** (§8), numbers unmarked, in the plan's convention.
+
+---
+
+## 6. The build order
+
+Each slice: what it does, the files, the acceptance criterion, and the risk it carries. Sizing is in
+sittings of a few hours, as the conversion plan's §7 counts them, and is a guess to be corrected in
+the journal.
+
+### Phase M0 — The safety net (no product code changes)
+
+| Slice | Scope | Acceptance | Sittings |
+|---|---|---|---|
+| **M0-a Ratchet** | `tools/check_modernize.py` counting P1–P11 with `tools/modernize_ratchet.json` as the ceilings; wired into `check_all.py`, the workflow and `check_counts.py`'s names so this document's numbers are checked. | In CI; a deliberately raised count fails `--self-test`. **Built 2026-09-06 with this document** (§8). | 1 |
+| **M0-b WorldImage** | `Materialise`/`Absorb`/`Hash` over the current structs, driven by a generated `Labels.h` (`labels.py --fields`, `--check` in CI). `FlightWorld.h`'s `Mirror`/`CompareState` become calls into it. | Every existing flight-world test passes unchanged through the bridge; `Hash` is stable across two runs and across Debug/Release on the Windows job. | 2–3 |
+| **M0-c Flight replay** | A scripted flight through the null port (launch, fly, fight a seeded Viper, dock) hashed at every step through `Hash`, with the hashes stored beside the docked transcript. | Green; a one-byte mutation anywhere in the flight world changes a stored hash (the harness's own selftest). | 2 |
+| **M0-d Mutation baseline on Linux** | `mutate.py --runner portable` for all five units, tallies journaled, so the re-anchoring in later slices has a number to match. | Five units, zero survivors beyond the recorded equivalents. | 1 |
+
+### Phase M1 — Typed data
+
+| Slice | Scope | Acceptance | Sittings |
+|---|---|---|---|
+| **M1-a ShipView** | Named accessors over `ShipBlock` (`Axis()`, `Orientation()`, `State()`, `Ai()`, `HeapAddress()`, `Energy()`, `Newb()`, `RollCounter()`...), `static_assert`ed against the offsets; the 329 literal and 107 constant sites migrated; the duplicate offset and type constants removed. Bytes unchanged. | Oracle suite green; `ship-literal-sites` and `ship-offset-sites` at zero in the ratchet; mutants in `Tactics.cpp`, `Missions.cpp` and `Spawn.cpp` re-anchored and re-run. | 3–4 |
+| **M1-b ShipType and the flag types** | `enum class ShipType`, `ShipState`, `AiFlags`, `NewbFlags` with the original bit values; the second naming family deleted. | Green; `check_outpost.py` green after the app's constants follow. | 2 |
+| **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become codec calls. Tests migrate to the bridge. | Green through `WorldImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). | 4–5 |
+| **M1-d Commander** | Typed `Commander` with the seventy-seven-byte codec; `Credits`, `LightYearsTenths`, `Laser`, `Equipment` strong types; `SaveCommander`/`LoadCommander`/checksums over the codec. | `SaveGameTests` and `CommanderTests` green; a commander file from R12's fixture still loads. | 3 |
+| **M1-e Blueprint** | Parsed `Blueprint` table; `ShipByte`/`BlueprintAddress`/`BlueprintFor` removed; `Bubble::stationType`. | `ShipDataTests` green with the three disagreeing ships called out as before; `LL9` suite green. | 3 |
+| **M1-f HeapOffset** | The line heap addressed by offset; `TryReserveHeap` with the exact chain; the sun's heap lent as a span. | `NWSHP`'s refusal sweep green (`ShipSlotTests`); the station-into-sun-heap case (§6.112) green. | 2–3 |
+
+### Phase M2 — Explicit calling conventions
+
+| Slice | Scope | Acceptance | Sittings |
+|---|---|---|---|
+| **M2-a The channel census** | For every workspace field: who writes it, who reads it, and whether any reader reads without writing first — from the tests' `Mirror` lists and a read of each routine. Written into this document as §4.3's table, completed. | The table names every field; no field is "unknown". | 2 |
+| **M2-b Kernel** | `Arith` routines take values and return `Product`/`Quotient`/`SignedSum` structs; `MathWorkspace` parameters removed one routine family at a time (multipliers, dividers, `LL28`, `NORM`, `TIDY`). | Exhaustive oracle sweeps unchanged; `register-params` and the `MathWorkspace` parameter count in the ratchet fall to their floors. | 4–5 |
+| **M2-c Geometry and drawing scratch** | `GeometryWorkspace`, `DrawWorkspace`, `ClipState`, `K3Block`, `Projection` become stage results or locals; `Projection` outliving `Project` stays and is documented at the one place it matters. | `LL9`, planet, sun, stardust and clipper suites green. | 4 |
+| **M2-d Boundary carries** | The `bool _carryIn` on `RunSpawning`, `RunLoopTail`, `SpawnThargoidPair`, `AddDebris`, `SpawnDebris` and the two `PlaySound` seams resolved to what each caller passes; kernel carries untouched. | Green; `carry-params` at the kernel's floor. | 1 |
+
+### Phase M3 — Ownership
+
+| Slice | Scope | Acceptance | Sittings |
+|---|---|---|---|
+| **M3-a World** | `Elite::World` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`JumpState` replaced by `World&` (plus the ports) on every routine; `FlightSession` and `Outpost::Game` lend their members to it. | Green on both legs; `aggregate-refs` at zero. **Windows job is the gate** — this slice cannot be compiled here. | 4 |
+| **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at four. | 4 |
+| **M3-c Game** | `Elite::Game` with `Reset`, `Step`, `Frame`, `Sounds`, `StateHash`; `Perform`, `Leave`, the docked pass, `Advance` and `AdvancePaused` moved from `Main.cpp`; `Mode` explicit. `Main.cpp` at its target shape. | `DockedSessionTests` and the M0-c replay drive `Game::Step` and reproduce their stored hashes; `main-lines` in the ratchet under 300. | 4–5 |
+| **M3-d ADR-007** | State ownership and the replay hash, written from M3-a..c as built. | Accepted. | 1 |
+
+### Phase M4 — Control flow
+
+| Slice | Scope | Acceptance | Sittings |
+|---|---|---|---|
+| **M4-a Flight frame stages** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the sixteen-step cycle as a table. | `FlightLoopTests` green frame for frame; replay hashes unchanged. | 4 |
+| **M4-b LL9 stages** | `DrawShip` as the six stages of §4.6 over a `ShipRender` frame. | `ShipDrawTests` green; the whole-bitmap comparisons unchanged. | 4 |
+| **M4-c Decisions** | `TACTICS`, `DOCKIT` and `MLOOP` parts 1–4 return `Decision`s applied by one function; the sixteen `tactics` mutants re-anchored and re-run to zero survivors. | `TacticsTests` green; `mutate.py --unit tactics` at the recorded tally. | 5 |
+| **M4-d Mode machine polish** | The mission sub-machine, the death sequence and the pause as explicit states; `LoopOutcome` retired. | Replay hashes unchanged. | 2 |
+
+### Phase M5 — Polish and the ledger
+
+| Slice | Scope | Acceptance | Sittings |
+|---|---|---|---|
+| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). | Green; `out-params` at zero. | 3 |
+| **M5-b constexpr data** | The generated tables as `constexpr std::array`; the codecs, the trig lookups and the token decoder evaluated at compile time where the tests can `static_assert` a known value. | `TableTests` green; one `static_assert` per table against the oracle-checked value. | 2 |
+| **M5-c The ledger** | The <!--count:inventory-stale-files-->21 file names in `Source-Inventory.md` that name no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. | In CI. | 1 |
+| **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture) written from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
+
+**Total: roughly 70 sittings**, which is the same order as the port itself took (plan §7), and the
+plan expects the estimate to be wrong in the same direction the port's was: the dense units
+(`LL9`, `MVEIT`, `TACTICS`) cost more and the rest cost less.
+
+### Appendix — the four-step method on one module, as the template
+
+The brief's process (analyse → decode → strategise → implement) applied to `ShipSlot.h`, which is
+M1-a's first file and the worked example every later slice copies.
+
+1. **Clarification.** `ShipBlock` is addressed three ways (§2.2): by literal offset, by named
+   constant, and by dynamic offset from an axis register. The ambiguity is whether the dynamic
+   form (`_work[_x + 2u]` with `_x` ∈ {0, 3, 6}) is an axis or a byte index; reading `MVT1`, `MVT3`
+   and `MVS5` settles it as an axis in every case, and `MVS4`'s Y-in-sixes as an orientation vector.
+   No global-state dependency: the block is copied in and out by its callers.
+2. **Flow.** Slot block → `INWK` copy → motion → drawing → two-byte write-back or full copy (§2.2).
+   The heap address in bytes 33–34 is read by the drawing and written by `NWSHP`; the state byte is
+   written by `LL9`, `DOEXP`, the bomb and the kill path; byte 36 by `NWSHP`, `ANGRY` and the scoop.
+3. **Strategy.** A view first (`ShipView`), a struct with a codec second (`Ship`), never a struct
+   without one — the bytes are what the oracle and `NWSHP` see. The two constant families collapse
+   to the accessor names. The dynamic-offset routines get `Axis` and `Orientation::Component`.
+4. **Implementation.** M1-a lands the view and the 436 migrated sites with the oracle suite green
+   and the `Tactics.cpp`, `Missions.cpp` and `Spawn.cpp` mutants re-anchored; M1-c lands the codec.
+   The summary that goes in the journal names what became safer (no numeric offsets, no duplicate
+   names), what became clearer (a reader sees `ship.State().IsExploding()` where there was
+   `(work[31] & 0xA0u)`), and what did not change (every byte).
+
+---
+
+## 7. Risks this plan adds to the register
+
+| # | Risk | Where it is validated | Mitigation |
+|---|---|---|---|
+| **R14** | A refactor that keeps the oracle green changes composition the per-routine tests cannot see (an ordering of side effects between two routines). | M0-c's replay hashes, from the first slice of M1 on. | The replay is layout-independent and covers a whole flight; a changed hash is a stop. |
+| **R15** | `Outpost/` breaks on a type change that `check_outpost.py` cannot see, on the Windows job only, after the Linux leg is green (§6.116, §6.123 again). | Every M1–M3 slice. | Small slices; the app edited in the same commit; M3 removes most of the surface. |
+| **R16** | A typed field silently widens a byte (an `int` promotion in a codec, a `bool` that was `0xFF`). | The codec `static_assert`s and the byte compare. | Rule 2; the ratchet counts `int` arithmetic on model fields as a pattern from M1-c. |
+| **R17** | The mutant corpus degrades under renaming — a `find` that matches once by accident on a different line. | `mutate.py --check` per commit, `--unit` per slice. | Rule 3; the selftest mutant per unit is the harness's `OracleIsPresent`. |
+| **R18** | The ratchet's ceilings are lowered to match the tree rather than the tree lowered to match the plan (a number with no decision behind it). | `check_modernize.py`'s slack check. | Rule 5; a ceiling change needs a journal entry naming the slice. |
+
+---
+
+## 8. Journal
+
+**2026-09-06 — Opened, with the baseline measured rather than asserted.** Suite green on the
+portable runner with the oracle assembled from the submodule (385 of 385); all eleven repository
+checks passed before this document added a twelfth. Pattern counts taken by `check_modernize.py`
+on the same tree and recorded as the ratchet's first ceilings: 64 register-shaped parameters, 207
+workspace parameters, 329 numeric ship-byte indices and 107 named ones, 78 reference members in
+the argument-list structs, 22 abstract seams, 28 carry-in parameters, 18 byte out-parameters,
+1,162 lines in `Main.cpp` reaching 227 `Elite::` names, 21 stale ledger file names. Three of those
+are not the numbers a first grep gave (56, 66 and 26): the greps read comments and missed
+`std::uint8_t&`, which is the argument for a counter with a self-test over a hand count. M0-a is built with this entry; nothing in `GameLogic/` changed.
