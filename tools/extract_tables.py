@@ -251,6 +251,40 @@ TABLES = [
           "how many Trumble sprites to show, by population"),
     Table("TRUMBLE_SPRITE_TABLE", "TRIBMA", 8, "ScreenTables.cpp",
           "which sprites to enable for that many Trumbles"),
+    # ---- slice 4d: what `MVTRIBS` moves the sprites BY, and the register bits it moves them in.
+    #
+    # `TRIBDIR` and `TRIBDIRH` are indexed `LDA TRIBDIR,X` after `AND #3`, so four entries each,
+    # and the pair is one 16-bit table split across two: (TRIBDIRH TRIBDIR) is 0, 1, -1 and 0.
+    # The repeat is the point -- two of four directions are "do not move", so a Trumble stands
+    # still half the time on each axis.
+    Table("TRUMBLE_DIRECTION_TABLE", "TRIBDIR", 4, "ScreenTables.cpp",
+          "the low byte of the four directions a Trumble sprite can move in"),
+    Table("TRUMBLE_DIRECTION_HIGH_TABLE", "TRIBDIRH", 4, "ScreenTables.cpp",
+          "the high byte of the same four, which makes the second of them negative"),
+    # ---- slice 4f: the raster interrupt's own tables, indexed by `RASTCT`.
+    #
+    # `COMIRQ1` reads SEVEN two-byte tables at `LDX RASTCT` and only these four are DATA. The
+    # other three are the game's live state wearing a table's shape, because the second byte of
+    # each pair is a separately named variable something writes: `zebop`/`abraxas` is the screen
+    # RAM block and `wantdials` writes the second; `moonflower`/`caravanserai` is the bitmap mode
+    # and the energy bomb writes the first while `wantdials` writes the second;
+    # `welcome`/`welcome+1` is the background colour and the interrupt itself increments the
+    # first. Extracting those would freeze a byte the game moves, so `Raster.h` holds the two
+    # halves that really are constant (`zebop` and `welcome+1`) as named constants instead, and
+    # the rest are `ScreenState` fields.
+    Table("RASTER_NEXT_LINE_TABLE", "shango", 2, "ScreenTables.cpp",
+          "which raster line the next interrupt fires on, per half of the split"),
+    Table("RASTER_SPRITE_MULTICOLOUR_TABLE", "santana", 2, "ScreenTables.cpp",
+          "which sprites are multicolour, per half -- sprite 1 is the only one that differs"),
+    Table("RASTER_SPRITE_COLOUR_TABLE", "lotus", 2, "ScreenTables.cpp",
+          "sprite 1's colour, which is red above the split and invisible below it"),
+    Table("RASTER_NEXT_COUNTER_TABLE", "innersec", 2, "ScreenTables.cpp",
+          "what RASTCT becomes, which is what makes the split alternate"),
+    # `SPMASK` IS NOT EXTRACTED, and the absence is deliberate. Its twelve bytes are a pair of
+    # masks per Trumble sprite for clearing and setting that sprite's ninth x bit in VIC+&10, and
+    # they exist because eight sprites share that register. `VideoState` gives each sprite a whole
+    # sixteen-bit x (ADR-005 section 1), so `MVTRIBS` stores both halves at once and there is
+    # nothing to mask. A table nothing indexes is not a table this port needs.
     # ---- the loader: the colours the dashboard and the border box are drawn in.
     #
     # These two are the only things the port takes from `elite-loader.asm`, whose CODE is not

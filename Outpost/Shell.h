@@ -7,6 +7,7 @@
 #include "Charts.h"
 #include "ExtendedTokens.h"
 #include "MarketScreen.h"
+#include "Missions.h"
 #include "NameEntry.h"
 #include "PlanetDraw.h"
 #include "StartUp.h"
@@ -179,6 +180,31 @@ namespace Outpost
       m_video = &_video;
     }
 
+    /*
+     * 6502: GCNT -- which galaxy the player is in, which MT27 and MT28 add to a token number.
+     *
+     * A pointer to the commander block's byte rather than a copy, because a galactic hyperdrive
+     * changes it mid-session and a mission briefing printed afterwards names the new galaxy's
+     * captain.
+     */
+    void AttachGalaxy(const std::uint8_t& _galaxy) noexcept
+    {
+      m_galaxy = &_galaxy;
+    }
+
+    /*
+     * 6502: INF, for the briefing -- which slot holds the ship `PAUSE` spins.
+     *
+     * Set by `BRIEF` when it creates the Constrictor and read by control code 22, which runs
+     * inside the token `BRIEF` is printing. Zero when no briefing is running, which is the slot
+     * the planet is in and so draws nothing a briefing would want -- but nothing prints a `{22}`
+     * outside a briefing either.
+     */
+    void SetBriefingShip(std::uint8_t _slot) noexcept
+    {
+      m_briefingSlot = _slot;
+    }
+
     /// The SID and what feeds it. Set by the composition root, like the flight, because the sound
     /// buffer and the music player are the game's and the output is the platform's, and this object
     /// is where the two halves of the loop meet.
@@ -199,6 +225,10 @@ namespace Outpost
 
     /// 6502: the sprite registers, null until the composition root attaches them.
     const Elite::VideoState* m_video = nullptr;
+
+    /// 6502: GCNT, and INF for the briefing ship. See `AttachGalaxy` and `SetBriefingShip`.
+    const std::uint8_t* m_galaxy = nullptr;
+    std::uint8_t m_briefingSlot = 0;
 
     Elite::TokenPrinter* m_printer = nullptr;
     Elite::TextState* m_text = nullptr;

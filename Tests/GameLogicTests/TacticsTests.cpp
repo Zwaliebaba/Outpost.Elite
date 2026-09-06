@@ -50,6 +50,7 @@ namespace GameLogicTests
       std::uint16_t frin = 0, many = 0, rand = 0, inf = 0, xx0 = 0, type = 0, ecma = 0, fist = 0, slsp = 0;
       std::uint16_t cnt = 0, cnt2 = 0, rat = 0, rat2 = 0, junk = 0;
       std::uint16_t energy = 0, fsh = 0, ash = 0, dly = 0;
+      std::uint16_t tally = 0, tallyl = 0;
 
       explicit Labels(const OracleImage& _oracle)
       {
@@ -66,6 +67,8 @@ namespace GameLogicTests
         fsh = _oracle.Label("FSH");
         ash = _oracle.Label("ASH");
         dly = _oracle.Label("DLY");
+        tally = _oracle.Label("TALLY");
+        tallyl = _oracle.Label("TALLYL");
         cnt = _oracle.Label("CNT");
         cnt2 = _oracle.Label("CNT2");
         rat = _oracle.Label("RAT");
@@ -548,7 +551,6 @@ namespace GameLogicTests
     {
       std::vector<std::uint8_t> sounds;
       std::vector<std::uint8_t> spawned;
-      std::uint32_t trumbleMoves = 0;
 
       bool PlaySound(std::uint8_t _effect, bool) override
       {
@@ -561,10 +563,6 @@ namespace GameLogicTests
         return true;
       }
       void StopSound(std::uint8_t) override {}
-      void MoveTrumbles() override
-      {
-        ++trumbleMoves;
-      }
       void StartDockingMusic() override {}
       void StopDockingMusic() override {}
       bool SpawnAhead(std::uint8_t) override
@@ -826,6 +824,19 @@ namespace GameLogicTests
       _cpu.memory[_at.dly] = 0u;
       _cpu.memory[_at.slsp] = static_cast<std::uint8_t>(Elite::SHIP_HEAP_TOP);
       _cpu.memory[static_cast<std::uint16_t>(_at.slsp + 1)] = static_cast<std::uint8_t>(Elite::SHIP_HEAP_TOP >> 8u);
+
+      /*
+       * THE KILL TALLY, which is the only thing `EXNO2` writes.
+       *
+       * It is three bytes with the bottom one a fraction, and until it was pushed and compared the
+       * kill a missile scores against its target was invisible: `kill-rotate` handed `EXNO2` the
+       * target's slot UNHALVED and the sweep agreed, because nothing ever looked at what the two
+       * scores were (§6.153).
+       */
+      _cpu.memory[_at.tallyl] = _world.world.commander.At(Elite::Field::KillsLow);
+      _cpu.memory[_at.tally] = _world.world.commander.At(Elite::Field::Kills);
+      _cpu.memory[static_cast<std::uint16_t>(_at.tally + 1)] =
+        _world.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u];
     }
 
     /*
@@ -872,6 +883,13 @@ namespace GameLogicTests
       Assert::AreEqual(_cpu.memory[_at.energy], _world.world.status.energy, (_where + L": ENERGY").c_str());
       Assert::AreEqual(_cpu.memory[_at.fsh], _world.world.status.forwardShield, (_where + L": FSH").c_str());
       Assert::AreEqual(_cpu.memory[_at.ash], _world.world.status.aftShield, (_where + L": ASH").c_str());
+
+      // What `EXNO2` scores, all three bytes of it -- see `PushTacticsUniverse`.
+      Assert::AreEqual(_cpu.memory[_at.tallyl], _world.world.commander.At(Elite::Field::KillsLow), (_where + L": TALLYL").c_str());
+      Assert::AreEqual(_cpu.memory[_at.tally], _world.world.commander.At(Elite::Field::Kills), (_where + L": TALLY").c_str());
+      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.tally + 1)],
+                       _world.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u],
+                       (_where + L": TALLY+1").c_str());
     }
   } // namespace
 
@@ -914,46 +932,146 @@ namespace GameLogicTests
         /// The PLAYER's banks, not the ship's. Low values are how `OOPS` reaches `JMP DEATH`, which
         /// is the whole reason `RunTactics` answers a `bool` (§6.122).
         std::uint8_t banks;
+
+        /*
+         * WHERE THE MISSILE'S TARGET IS, and it is the reason four mutations used to survive.
+         *
+         * A missile that is still more than 256 units from its target on any axis steers and
+         * returns; everything AFTER that test -- the station special case, the "do not blow up a
+         * wreck" bit, and the kill scored against the target's slot -- runs only when it has
+         * arrived. `SeedTacticsUniverse` spreads the fleet out, so `distant` was non-zero in all
+         * 1,800 cases and that whole tail had never executed (plan §6.152).
+         *
+         * Non-zero puts the named slot at the missile's own position, which is what arriving means.
+         * `victimState` is that ship's `INWK+31`, because the wreck test reads bit 5 of it.
+         */
+        std::uint8_t targetSlot;
+        std::uint8_t victimState;
       };
 
       const Case CASES[] = {
-        {"a missile chasing us", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a missile chasing us with an ECM running", 1u, 0xC0u, 0u, 0u, 20u, 1u, 0u, 0u, 0u, 255u},
-        {"a missile chasing a ship", 1u, 0x86u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a missile chasing the station", 1u, 0x82u, 0u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
-        {"a calm station", 2u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
-        {"an angry station", 2u, 0xFFu, 0x04u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
-        {"a rock hermit", 15u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a lone Thargon", 30u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a Thargon with its Thargoid", 30u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 0u, 1u, 255u},
-        {"a trader", 11u, 0xC1u, 0x01u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a clean bounty hunter", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a bounty hunter and an offender", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 60u, 0u, 0u, 255u},
+        {"a missile chasing us", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a missile chasing us with an ECM running", 1u, 0xC0u, 0u, 0u, 20u, 1u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a missile chasing a ship", 1u, 0x86u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a missile chasing the station", 1u, 0x82u, 0u, 0u, 20u, 0u, 0u, 1u, 0u, 255u, 0u, 0u},
+
+        /*
+         * A MISSILE WHOSE TARGET HAS AN ECM, because one time in sixteen that is the whole point
+         * of `.TA64`.
+         *
+         * `M32` reads bit 0 of the target's `INWK+32` and a SET bit sets the target's ECM off
+         * instead of steering. `SeedTacticsUniverse` fills byte 32 with `9 + slot*5 + 96`, which
+         * is odd only in slot 0, and the two missile cases above chase slots 3 and 1 -- so the
+         * `BCS` after the `LSR` went one way in all 360 cases that reached it and `msl-16` could
+         * move `CMP #16` by one unnoticed (§6.153).
+         */
+        {"a missile chasing a target with an ECM", 1u, 0x80u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a calm station", 2u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 1u, 0u, 255u, 0u, 0u},
+        {"an angry station", 2u, 0xFFu, 0x04u, 0u, 20u, 0u, 0u, 1u, 0u, 255u, 0u, 0u},
+        {"a rock hermit", 15u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a lone Thargon", 30u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a Thargon with its Thargoid", 30u, 0xFFu, 0u, 0u, 20u, 0u, 0u, 0u, 1u, 255u, 0u, 0u},
+        {"a trader", 11u, 0xC1u, 0x01u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a clean bounty hunter", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a bounty hunter and an offender", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 60u, 0u, 0u, 255u, 0u, 0u},
 
         // Exactly on the boundary, because `CPX #40 / BCC TN2` is a `>=` and the only way to tell
         // it from a `>` is to stand on 40 (§6.126).
-        {"a bounty hunter and a fresh offender", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 40u, 0u, 0u, 255u},
-        {"a bounty hunter one short of it", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 39u, 0u, 0u, 255u},
-        {"a ship on its way in to dock", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
-        {"a ship docking with no station", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a hostile pirate", 11u, 0xC1u, 0x04u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a hostile pirate with missiles", 11u, 0xC1u, 0x04u, 0x03u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a wounded pirate", 11u, 0xC1u, 0x04u, 0u, 2u, 0u, 0u, 0u, 0u, 255u},
-        {"a pirate near a station", 11u, 0xC9u, 0x0Cu, 0u, 20u, 0u, 0u, 1u, 0u, 255u},
-        {"an Anaconda", 14u, 0xC1u, 0x04u, 0u, 20u, 0u, 0u, 0u, 0u, 255u},
-        {"a Thargoid with Thargons to launch", 29u, 0xC1u, 0x04u, 0x03u, 20u, 0u, 0u, 0u, 0u, 255u},
+        {"a bounty hunter and a fresh offender", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 40u, 0u, 0u, 255u, 0u, 0u},
+        {"a bounty hunter one short of it", 11u, 0xC1u, 0x02u, 0u, 20u, 0u, 39u, 0u, 0u, 255u, 0u, 0u},
+        {"a ship on its way in to dock", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 1u, 0u, 255u, 0u, 0u},
+        {"a ship docking with no station", 11u, 0xC1u, 0x10u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a hostile pirate", 11u, 0xC1u, 0x04u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a hostile pirate with missiles", 11u, 0xC1u, 0x04u, 0x03u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a wounded pirate", 11u, 0xC1u, 0x04u, 0u, 2u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a pirate near a station", 11u, 0xC9u, 0x0Cu, 0u, 20u, 0u, 0u, 1u, 0u, 255u, 0u, 0u},
+        {"an Anaconda", 14u, 0xC1u, 0x04u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a Thargoid with Thargons to launch", 29u, 0xC1u, 0x04u, 0x03u, 20u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
 
         // The fatal cases: a missile arriving on empty banks, and a collision on nearly empty
         // ones. Without these the `bool` §6.122 added is never once observed to be false.
-        {"a missile arriving on empty banks", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 0u},
-        {"a missile arriving on a sliver", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 4u},
-        {"a missile arriving on half banks", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 128u},
+        {"a missile arriving on empty banks", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {"a missile arriving on a sliver", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 4u, 0u, 0u},
+        {"a missile arriving on half banks", 1u, 0xC0u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 128u, 0u, 0u},
+
+        /*
+         * A MISSILE THAT HAS ARRIVED AT ITS TARGET, which is where the last third of part 1 lives
+         * and where nothing had ever been (plan §6.152).
+         *
+         * `targetSlot` puts the target at the missile's own position, so `distant` is zero and the
+         * routine goes past the steering into the tail. Slot 3 is an ordinary ship and slot 1 is
+         * the STATION, which a missile dies against rather than exploding; the two victim states
+         * are a live ship and a wreck, and the third is a state with bit 4 set and bit 5 clear,
+         * which is the only way to tell `BIT M32+1` from a test of the bit below it.
+         */
+        {"a missile arriving at a live ship", 1u, 0x86u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 3u, 0x00u},
+        {"a missile arriving at a wreck", 1u, 0x86u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 3u, 0x20u},
+        {"a missile arriving at a ship marked in bit 4", 1u, 0x86u, 0u, 0u, 20u, 0u, 0u, 0u, 0u, 255u, 3u, 0x10u},
+        {"a missile arriving at the station", 1u, 0x82u, 0u, 0u, 20u, 0u, 0u, 1u, 0u, 255u, 1u, 0x00u},
+        {"a missile arriving at the station on low banks", 1u, 0x82u, 0u, 0u, 20u, 0u, 0u, 1u, 0u, 4u, 1u, 0x00u},
+
+        /*
+         * A SHIP AT A THIRD OF ITS ENERGY, which is neither of the two levels above it.
+         *
+         * `TA7` compares the blueprint's maximum HALVED against the ship's energy, and the ladder
+         * ran at 20 and 2 -- both below a QUARTER of a Cobra's 150, so halving and quartering the
+         * maximum gave the same answer and `ta-half` could not be seen. Fifty is between the two.
+         */
+        {"a pirate at a third of its energy", 11u, 0xC1u, 0x04u, 0u, 50u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a pirate just under half its energy", 11u, 0xC1u, 0x04u, 0u, 74u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+
+        /*
+         * AND THE SAME TWO WITH MISSILES, which is the only way `TA7`'s first branch is observable
+         * at all.
+         *
+         * `BCC TA3` jumps over part five, so what a healthy ship does differently is NOT LAUNCH --
+         * and a ship with no missiles does not launch either. Every energy case above had
+         * `INWK+31` zero, so part five returned immediately on both sides of the branch and the
+         * port's missing jump agreed with the original everywhere (§6.153). The third of these is
+         * above half, where the original never reaches part five.
+         */
+        {"a pirate at a third of its energy with missiles", 11u, 0xC1u, 0x04u, 0x03u, 50u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a pirate just under half its energy with missiles", 11u, 0xC1u, 0x04u, 0x03u, 74u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+        {"a healthy pirate with missiles", 11u, 0xC1u, 0x04u, 0x03u, 120u, 0u, 0u, 0u, 0u, 255u, 0u, 0u},
+
+        /*
+         * A SHIP WITH MISSILES AND AN ECM RUNNING. `ta3`'s `LDA ECMA / BNE TA3` stops the launch,
+         * and `ECMA` was zero in all 144 cases that reached it: the only case with an ECM up was a
+         * missile, and missiles never get there.
+         */
+        {"a hostile pirate with missiles and an ECM running", 11u, 0xC1u, 0x04u, 0x03u, 20u, 1u, 0u, 0u, 0u, 255u, 0u, 0u},
       };
 
       // Four generator states, because half of `TACTICS` is `DORND` and one seed reaches one
       // branch of each roll (§6.124).
-      const std::array<std::array<std::uint8_t, 4>, 4> SEEDS = {
-        {{0x31u, 0xF5u, 0x7Au, 0x0Cu}, {0x11u, 0x22u, 0x33u, 0x44u}, {0xFEu, 0xC3u, 0x09u, 0x5Du}, {0x80u, 0x7Fu, 0xFFu, 0x01u}}};
+      /*
+       * Four generator states for coverage, and six more that each LAND ON A THRESHOLD.
+       *
+       * Half of `TACTICS` is `DORND`, and every roll in it is compared against a constant: 253 for
+       * the station's launch, 240 for the police, 200 for the Anaconda's escort, 250 for the random
+       * pitch, 230 for losing your nerve, 16 for a missile's ECM check. Four seeds gave four values
+       * at each of those comparisons and none of the four was ever the constant itself -- so six
+       * threshold mutations agreed with the port everywhere and survived (§6.125, §6.147).
+       *
+       * The six below were found by search: 1,024 seeds through the whole sweep with a probe on
+       * each comparison, printing what reached it, and these are the first that land. Reaching both
+       * SIDES of a comparison is not the same as standing on it, which is §6.132's point in a sixth
+       * instance and the reason the first four were not enough.
+       */
+      const std::array<std::array<std::uint8_t, 4>, 11> SEEDS = {{
+        {0x31u, 0xF5u, 0x7Au, 0x0Cu},
+        {0x11u, 0x22u, 0x33u, 0x44u},
+        {0xFEu, 0xC3u, 0x09u, 0x5Du},
+        {0x80u, 0x7Fu, 0xFFu, 0x01u},
+
+        {0xB7u, 0xECu, 0x46u, 0x10u}, ///< the station's `CMP #253` reads 252, and `CMP #230` 229
+        {0x83u, 0x72u, 0x42u, 0x7Du}, ///< the police `CMP #240` reads 239
+        {0x49u, 0xE2u, 0x94u, 0x03u}, ///< the Anaconda's `CMP #200` reads 200
+        {0x58u, 0x6Du, 0xDEu, 0xD8u}, ///< the pitch `CMP #250` reads 249
+        {0x7Au, 0xFCu, 0x2Cu, 0x84u}, ///< and reads 255, which is the only way past it to `ORA #104`
+        {0x0Cu, 0x87u, 0x21u, 0x89u}, ///< a missile's `CMP #16` reads 16
+        {0x6Au, 0xE1u, 0x53u, 0x38u}, ///< 252 past `CMP #250`, and then an EVEN operand for `ORA #104`
+      }};
 
       std::uint32_t compared = 0;
       std::uint32_t died = 0;
@@ -1003,6 +1121,23 @@ namespace GameLogicTests
             world.world.work[35] = one.energy;
             world.world.work[36] = one.newb;
             world.world.bubble.blocks[2] = world.world.work;
+
+            /*
+             * 6502: what "the missile has arrived" means -- `K3` under 256 on every axis.
+             *
+             * `VCSUB` subtracts the missile's position from its target's, and the routine reads
+             * the three high bytes and the three middle bytes of the answer. Copying the position
+             * across makes all six zero, which is the only state that gets past `BNE TA64` into
+             * the tail. Nine bytes, because a coordinate is three.
+             */
+            if (one.targetSlot != 0u)
+            {
+              for (std::size_t byte = 0; byte < 9u; ++byte)
+              {
+                world.world.bubble.blocks[one.targetSlot][byte] = world.world.work[byte];
+              }
+              world.world.bubble.blocks[one.targetSlot][31] = one.victimState;
+            }
             world.seed = seed;
             world.ecm = one.ecm;
             world.legal = one.legal;
@@ -1042,8 +1177,8 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(25u * 4u * 18u, compared, L"the whole sweep ran");
-      Assert::AreEqual<std::size_t>(25u * 18u, reached.size(), L"and every case is distinct");
+      Assert::AreEqual<std::uint32_t>(37u * 11u * 18u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::size_t>(37u * 18u, reached.size(), L"and every case is distinct");
       Assert::IsTrue(died > 0u, L"and the player died on some of them, so the bool is observed false");
       Logger::WriteMessage(("TACTICS: " + std::to_string(compared) + " cases, " + std::to_string(died) + " of them fatal").c_str());
     }

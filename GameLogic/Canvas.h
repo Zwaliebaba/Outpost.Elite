@@ -167,7 +167,17 @@ namespace Elite
       m_colourCells[_cell] = _colour;
     }
 
-    /// 6502: the VIC-II background register, which supplies %00.
+    /*
+     * 6502: VIC+&21, the background register, which supplies %00 -- and there are TWO of it.
+     *
+     * One register, rewritten twice a frame by `COMIRQ1` from `welcome,X`: the LOWER half gets
+     * `welcome+1`, which nothing in the game ever changes, and the upper half gets `welcome`, which
+     * the interrupt itself increments while the energy bomb burns. So the port keeps the pair the
+     * split makes of it rather than the one byte the chip has, for the same reason it keeps two
+     * bitmap modes (§6.155).
+     *
+     * This one is the lower half's, and it is the one the loader sets before any interrupt exists.
+     */
     [[nodiscard]] std::uint8_t Background() const noexcept
     {
       return m_background;
@@ -175,6 +185,59 @@ namespace Elite
     void SetBackground(std::uint8_t _colour) noexcept
     {
       m_background = _colour;
+    }
+
+    /// 6502: welcome -- the SPACE VIEW's background, and only visible while `moonflower` has put
+    /// the upper half into multicolour, which is the energy bomb and nothing else.
+    [[nodiscard]] std::uint8_t SpaceViewBackground() const noexcept
+    {
+      return m_spaceViewBackground;
+    }
+    void SetSpaceViewBackground(std::uint8_t _colour) noexcept
+    {
+      m_spaceViewBackground = _colour;
+    }
+
+    /*
+     * 6502: moonflower's bit 4 -- is the SPACE VIEW in multicolour mode?
+     *
+     * Clear for every ordinary frame, and the energy bomb is the one thing that sets it: flight
+     * loop part 3 stores %11010000 and `BOMBOFF` puts %11000000 back. The same bytes then decode as
+     * four two-bit pixels instead of eight one-bit ones, which is why the bomb scrambles the view
+     * rather than tinting it -- the effect is a reinterpretation of the bitmap, not a filter over
+     * it, and no colour-per-pixel model could express that (§6.155).
+     */
+    [[nodiscard]] bool SpaceViewMulticolour() const noexcept
+    {
+      return m_spaceViewMulticolour;
+    }
+    void SetSpaceViewMulticolour(bool _multicolour) noexcept
+    {
+      m_spaceViewMulticolour = _multicolour;
+    }
+
+    /*
+     * 6502: VIC+&1C and VIC+&28 as `COMIRQ1` leaves them -- index 0 is the space view's pass and
+     * index 1 the dashboard's.
+     *
+     * `santana` is which sprites are multicolour and `lotus` is sprite 1's colour, and the pair
+     * exists to do ONE thing: keep the explosion inside the space view. Above the split sprite 1 is
+     * multicolour and red; below it, single-colour in colour 0, which draws nothing. The port takes
+     * both per screen row, because a burst near the bottom of the view straddles the split and the
+     * VIC-II decides this as it scans (§6.155).
+     *
+     * The defaults are the values `santana` and `lotus` hold, so a canvas nobody has wired to the
+     * raster tick still composites the way the hardware does.
+     */
+    void SetSpriteMulticolour(std::uint8_t _spaceView, std::uint8_t _dashboard) noexcept
+    {
+      m_spriteMulticolour[0] = _spaceView;
+      m_spriteMulticolour[1] = _dashboard;
+    }
+    void SetExplosionColour(std::uint8_t _spaceView, std::uint8_t _dashboard) noexcept
+    {
+      m_explosionColour[0] = _spaceView;
+      m_explosionColour[1] = _dashboard;
     }
 
     /*
@@ -241,6 +304,12 @@ namespace Elite
     std::array<std::uint8_t, SCREEN_SIZE> m_screen{};
     std::array<std::uint8_t, CELL_COLUMNS * CELL_ROWS> m_colourCells{};
     std::uint8_t m_background = 0;
+    std::uint8_t m_spaceViewBackground = 0;
+    bool m_spaceViewMulticolour = false;
+
+    /// 6502: santana and lotus -- see `SetSpriteMulticolour`. Initialised to what the game holds.
+    std::uint8_t m_spriteMulticolour[2] = {0xFEu, 0xFCu};
+    std::uint8_t m_explosionColour[2] = {0x02u, 0x00u};
     bool m_dashboardShown = false;
   };
 

@@ -66,6 +66,9 @@ namespace Outpost
     void Pump(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music) noexcept;
 
   private:
+    /// 6502: `COLD`'s `STA SID+&18` -- see the definition. Called once, at construction.
+    void SetBootVolume() noexcept;
+
     void Apply(const Elite::SidWriteLog& _log) noexcept;
     void RunFrame(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music) noexcept;
     [[nodiscard]] std::uint32_t QueuedBuffers() noexcept;

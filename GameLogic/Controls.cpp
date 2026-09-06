@@ -224,7 +224,7 @@ namespace Elite
     // unit's. A caller of `DOKEY` gets that as well, and the call site does not say so.
   }
 
-  void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const CommanderBlock& _commander, std::uint8_t& _trumbleSprites,
+  void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const CommanderBlock& _commander, TrumbleSprites& _trumbles,
                        std::uint8_t _view, SightEffects& _effects) noexcept
   {
     _effects.SetRasterMode(0x05u); // 6502: LDA #%101 / JSR SETL1
@@ -272,7 +272,7 @@ namespace Elite
     const std::uint8_t population = _commander.bytes[static_cast<std::size_t>(Field::Tribbles) + 1u];
     const std::size_t index = static_cast<std::size_t>((population & 0x7Fu) >> 4u);
 
-    _trumbleSprites = TRUMBLE_COUNT_TABLE[index]; // 6502: LDA TRIBTA,X / STA TRIBCT
+    _trumbles.count = TRUMBLE_COUNT_TABLE[index]; // 6502: LDA TRIBTA,X / STA TRIBCT
 
     // 6502: LDA TRIBMA,X / ORA T / STA VIC+&15 -- the sights and the Trumbles in one byte.
     _effects.SetSpritesEnabled(static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | _math.t));

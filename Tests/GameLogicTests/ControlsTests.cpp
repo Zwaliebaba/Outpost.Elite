@@ -553,14 +553,15 @@ namespace GameLogicTests
 
             Elite::MathWorkspace math;
             math.t = 0x9Cu;
-            std::uint8_t trumbleSprites = 0x9Cu;
-            Elite::DrawLaserSights(canvas, math, commander, trumbleSprites, which, effects);
+            Elite::TrumbleSprites trumbles;
+            trumbles.count = 0x9Cu;
+            Elite::DrawLaserSights(canvas, math, commander, trumbles, which, effects);
 
             const std::wstring where = Widen("SIGHT(laser " + std::to_string(laser) + " on view " + std::to_string(which) + ", Trumbles " +
                                              std::to_string(population) + ")");
 
             CompareScreens(cpu, screen, canvas, where);
-            Assert::AreEqual(cpu.memory[tribct], trumbleSprites, (where + L": TRIBCT").c_str());
+            Assert::AreEqual(cpu.memory[tribct], trumbles.count, (where + L": TRIBCT").c_str());
             Assert::AreEqual(cpu.memory[t], math.t, (where + L": T").c_str());
             Assert::AreEqual(cpu.memory[vicEnable], effects.enabled, (where + L": VIC+&15").c_str());
 

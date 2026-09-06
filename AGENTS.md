@@ -214,7 +214,7 @@ python tools/inventory.py --strict            # coverage ledger: every master-le
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted; pch.h is every source's first line
 python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
 python tools/check_docs.py                    # no table row is wider than its header
-python tools/check_counts.py                  # every <!--count:name--> number in a document matches the tree
+python tools/check_counts.py                  # every <!--count:NAME--> number in a document matches the tree
 python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
 python tools/mutate.py --check                # every recorded mutant still applies to the code it names
 python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles
@@ -223,10 +223,23 @@ python tools/extract_tables.py --check        # the generated tables match the a
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->349 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->385 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.
+
+**A marker is a claim WHEREVER it sits**, including inside a fenced block or a code span — the
+check used to skip both and a stale number hid in each (§6.154). To SHOW the syntax without making
+a claim, spell the placeholder in capitals: `<!--count:NAME-->`, which the pattern cannot match. Use
+that spelling in a journal entry that quotes a marker too, so history cannot become a live claim
+that a later change breaks.
+
+**AND A STATUS AGES WORSE THAN A NUMBER**, because it is prose in shape and a number in kind. "Not
+modelled", "we will", "that work is not done", "settled" — each reads like reasoning and survives a
+proofread, and no check reaches it. §6.154 found an ADR decision that had been taken and never
+built, and it was invisible precisely because the coverage ledger tracks routines, the effort table
+tracks slices and `check_counts.py` tracks numbers. When you write a sentence in the future tense,
+leave something behind that will ask later whether the future happened.
 
 **`check_docs.py` exists because a Markdown table drops what it cannot fit.** GitHub renders a
 table with the header's number of columns and discards every cell past it without a word, so a
@@ -294,6 +307,18 @@ Four things the tool does that a hand run kept getting wrong, so that reading th
   it, a list of "survivors" could be a run that never rebuilt, which is R13 realised (§6.119). Add
   one when you add a unit; `--check` fails if a unit has none.
 - **It builds HEAD, not your working tree**, and says so when something selected is uncommitted.
+
+**Closing a survivor: three questions, in this order.** §6.132's method is "probe the comparison,
+print what reaches it, count the distinct values" and it closes most of them. When it does not, ask
+the other two before concluding the mutant is equivalent. **Does what this line writes reach the
+comparison at all?** `kill-rotate` survived every ladder because `TALLY` was neither pushed into the
+interpreter nor read back out, and no amount of coverage fixes a value nobody looks at. **And is
+the code PAST the branch reached both ways?** `msl-16` was landed on exactly and still survived,
+because the branch it opens reads a bit that no target in the fixture had set. Then: **a survivor
+that outlives a round of ladder-building deserves more attention than a fresh one, not less.** The
+easy explanations are used up, and what is left is a hole in the comparison or a hole in the port.
+Twelve of the ship AI's thirteen were the sweep and the thirteenth was a defect, and it was the last
+one closed (plan §6.152, §6.153).
 
 What it does NOT do is recover the tallies already published. Those mutants are gone; the fifteen
 survivors §6.125 named are in the file because their names pinned them, and the rest stay
