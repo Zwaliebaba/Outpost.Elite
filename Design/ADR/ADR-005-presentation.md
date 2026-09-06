@@ -2,10 +2,12 @@
 
 **Status:** Accepted · 2026-09-02 (§5 settled by owner ruling: keep MSIX, drop WinUI 3;
 §1's sprite overlay and VIC-II effects settled 2026-09-05 — both composite in `Canvas::Resolve`
-over a new `VideoState`, with the border the presenter's). **§1's two settled items are one built
-and one not, as of 2026-09-06**: the sprite overlay ships (`VideoState`, `SPRITE.bin`, the
-compositor in `Resolve` — §6.148), and the raster effects are decided and unwritten. See the
-paragraphs below, each of which now says which it is.
+over a new `VideoState`, with the border the presenter's). **§1's two settled items are both
+built as of 2026-09-06** — the sprite overlay (`VideoState`, `SPRITE.bin`, the compositor in
+`Resolve` — §6.148) and the raster effects (slice 4f — §6.155) — **and the second was wrong about
+two of its three subjects.** `welcome` is `VIC+&21`, the background colour inside the image, not
+the border, so nothing went to the presenter; and `HFX` is not an effect this build has at all. The
+paragraphs below are corrected in place and say which claim was which.
 **Depends on:** ADR-002 (the canvas), ADR-004 (where the code lives)
 **Feeds:** slices 0d, 2e, 5a
 
@@ -98,11 +100,24 @@ main loop that ran as fast as the scene allowed.
   mitigation is a golden hash plus one hand-checked screenshot on the owner's machine, in the shape
   slice 2e already established — not a claim of oracle coverage.
 - **SETTLED 2026-09-05 — the VIC-II raster effects model in `Canvas::Resolve` too, on the same
-  `VideoState`. NOT BUILT as of 2026-09-06, and nothing in the build order schedules it (§6.154).**
-  The three bytes are carried and not shown: `ScreenState::upperBitmapMode`, `backgroundFlash` and
-  `hyperspaceEffect` are written by the game, `FlightSession::SyncVideoRegisters` carries them
-  outbound, and `Resolve` has no model for any of them — the comment on that method says so in as
-  many words. `moonflower` (the energy bomb drops the upper half to standard bitmap mode),
+  `VideoState`. BUILT 2026-09-06 as slice 4f (§6.155) — AND WRONG ABOUT TWO OF ITS THREE
+  SUBJECTS.**
+
+  **`HFX` is not in this build.** Upstream's `hfx.asm` is `SKIP 1` and says the flag is unused in
+  this version; `DOHFX` assembles with both its instructions commented out in the original source;
+  the C64's `LL164` is four instructions and does not write it; and the C64's `COMIRQ1` does not
+  read it. The hyperspace tearing belongs to the BBC and the 6502 Second Processor, whose `IRQ1`
+  really does read the flag. There was never anything here to build, and §6.98 grouped the three
+  bytes because they sit together in memory rather than because one routine reads them all.
+
+  **`welcome` is not the border.** It is `VIC+&21`, background colour 0 — inside the 320×200 image,
+  supplying the `%00` bit pair of every multicolour cell — and the upstream comment on the
+  instruction says "we change the background colour of the space view". `VIC+&20` is the border and
+  the handler never writes it. So the apportionment below is the wrong way round: **all** of this
+  landed in `Canvas::Resolve` and **none** of it in the presenter.
+
+  What was right is the third subject and the reasoning. The paragraphs as written follow;
+  `moonflower` (the energy bomb drops the upper half to standard bitmap mode),
   `welcome` (the border colour it cycles while the bomb runs) and `HFX` (the hyperspace tearing,
   `DOHFX`) are ordinary bytes in `ScreenState` that `FlightSession::SyncVideoRegisters` carries
   outbound and `Canvas::Resolve` has no model for (plan §6.98). A player of the shipped game sees
@@ -119,6 +134,15 @@ main loop that ran as fast as the scene allowed.
 
   So: `moonflower` and `HFX` in `Resolve`, `welcome` in the presenter as the letterbox colour, and
   all three read from the same `VideoState`. What is NOT open is whether they exist (plan §6.120).
+
+  **CORRECTED 2026-09-06 (§6.155).** Two of those three clauses are wrong and the last sentence is
+  the reason they went unchallenged for a day: "whether they exist" was taken as settled for all
+  three because §6.120 had found the BYTES, and a byte existing is not an effect existing. What is
+  built is `moonflower` and `welcome`, both in `Resolve`, neither on a `VideoState` — the raster
+  registers sit on `Canvas` beside `m_background` and `m_dashboardShown`, which were already there
+  and which `LoaderScreen` writes with no `VideoState` in sight. `VideoState` is the SPRITE
+  registers and its tests are named for that; putting one byte of the raster split in it would have
+  meant threading a sprite struct through the loader.
 
 - **Ordering, so neither of the two rulings above blocks anything.** Neither is on phase 4's
   critical path. The crosshairs need only `SIGHT`, which is built; the Trumbles need `MVTRIBS`

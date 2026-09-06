@@ -152,23 +152,26 @@ is preserved in the history and was true then.
 
 **What is left, in one place.** Nothing in the BUILD ORDER is unbuilt before phase 6, and **there is
 no recorded mutation debt anywhere in the corpus**: the ship AI's thirteen survivors are closed
-(§6.152, §6.153), the last of them a real defect in `TA7`. Four things stand beside the code and
-none of them is a slice, which is why they are listed here rather than in a row:
+(§6.152, §6.153), the last of them a real defect in `TA7`. Three things stand beside the code, and
+the one that used to head this list is gone:
 
-1. **ADR-005 §1's raster effects are decided and unwritten** — `moonflower`, `welcome` and `HFX`
-   are carried in `ScreenState` and nothing renders them, so a player of the port sees neither the
-   energy bomb nor the hyperspace tearing (§6.154). The sprite half of the same ADR entry shipped
-   (`VideoState`, `SPRITE.bin`, the compositor — §6.148); this half was left behind because
-   "blocks nothing" was mistaken for "owned by somebody".
-2. **Four acceptance criteria were signed off by look or by ear** — 2e, 3b and 3c by eye and 5a by
+0. ~~**ADR-005 §1's raster effects are decided and unwritten.**~~ **Built 2026-09-06 as slice 4f
+   (§6.155)** — and one third of it did not exist. `moonflower` and `welcome` are the energy bomb,
+   they are rendered now, and they were the only two. `HFX` is not an effect this build has at all:
+   upstream's own comment says the flag is unused in this version, `DOHFX`'s two instructions are
+   commented out in the original source, and neither the C64's `LL164` nor its `COMIRQ1` touches
+   the byte. ADR-005 §1 scheduled a per-row shift of the space view that the shipped game never
+   had, and §6.154 repeated the claim a day before checking it. **It is left in this list, struck
+   through, because a decision that quietly stops being true is exactly what §6.154 is about.**
+1. **Four acceptance criteria were signed off by look or by ear** — 2e, 3b and 3c by eye and 5a by
    ear (R6, 2026-09-06), each needing a person at a Windows machine and each closed without a stored
    artefact, so nothing in CI can see a regression in the title ship, the launch view or the
    dashboard, or hear one in the synthesiser. Four captures and four hashes would close all of it,
    and nothing blocks them.
-3. **R13 is closed on one unit of four.** `tactics` is carried to zero survivors; `hyperspace`,
-   `trumbles` and `missions` carry mutants and every tally published before the tool exists only as
-   an assertion.
-4. **Slice 0e is owner acceptance**, and what closes it is a written answer from the rights holders
+2. **R13 is closed on two units of five.** `tactics` and `raster` are carried to zero survivors;
+   `hyperspace`, `trumbles` and `missions` carry mutants, and every tally published before the tool
+   exists only as an assertion.
+3. **Slice 0e is owner acceptance**, and what closes it is a written answer from the rights holders
    (R1).
 
 ### 1.3 What the sibling repositories give us
@@ -490,6 +493,88 @@ coverage ledger and an unreliable dependency graph, because its rows were writte
 routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
+
+### 6.155 The energy bomb, and a third of a decision that was about nothing
+
+Slice 4f: `COMIRQ1`'s VIC-II half, which §6.154 found decided in ADR-005 §1 and built by nobody.
+The decision named three effects. Two of them are real and are ported here. **The third is not in
+this build at all**, and establishing that took longer than porting the other two.
+
+**`HFX` DOES NOT EXIST IN COMMODORE 64 ELITE.** The ADR describes it as "the hyperspace tearing"
+and files it as "a per-row shift of the space view, which is a `Resolve` concern". Four independent
+things say otherwise, and they agree: upstream's `hfx.asm` is `SKIP 1` with a comment saying in as
+many words that the flag is unused in this version; `DOHFX` assembles as a label with both of its
+instructions commented out in the original source; the C64's `LL164` is four instructions —
+`JSR HYPNOISE / LDA #4 / JSR HFS2 / RTS` — and does not write it; and the C64's `COMIRQ1` does not
+read it. The only thing in the assembled game that touches address 1161 is `ZERO`, which clears
+`FRIN` to `de` and catches it in passing. The effect belongs to the BBC and the 6502 Second
+Processor, whose `IRQ1` really does read the flag.
+
+**How a decision came to schedule work on an effect that is not there.** §6.98 found three bytes
+the presenter had no model for and named them together, because the three are named together in
+the port's own `ScreenState` — and they are named together there because they are three bytes in
+the same region that the raster handler was believed to read. Two of them it does read. The third
+was carried along by the sentence, and every document downstream repeated the grouping: the ADR,
+§6.133, §6.154, and this corpus's "what is left" list. **Nobody had read `COMIRQ1` for `HFX`,
+because nobody had read `COMIRQ1`.** The moment the routine was printed through
+`tools/c64_source.py` in order to port it, the absence was the first thing on the page.
+
+**AND `welcome` IS NOT THE BORDER.** ADR-005 §1 put it in the presenter: "the border, which is
+outside the 320×200 image entirely and is the one part that is genuinely the presenter's". It is
+`VIC+&21`, which is background colour 0 — inside the image, supplying the `%00` bit pair of every
+multicolour cell — and the upstream comment on the very instruction says "we change the background
+colour of the space view". `VIC+&20` is the border and nothing in the handler writes it. So all of
+the raster work landed in `Canvas::Resolve` and none of it in the presenter, which is the opposite
+of what the ADR apportioned and reached by reading the register rather than the noun.
+
+**What the bomb actually is.** `moonflower` is `VIC+&16` for the upper half and its bit 4 is the
+VIC-II's multicolour bit. Flight loop part 3 stores `%11010000` and `BOMBOFF` puts `%11000000`
+back, so for as long as the bomb burns **the space view's own bytes are decoded differently**: four
+two-bit codes per byte instead of eight one-bit pixels, half the horizontal resolution, and colours
+from screen RAM, colour RAM and the background register. It is a reinterpretation of the bitmap
+rather than a filter over it, which is ADR-002 §7's argument arriving a fourth time — no
+colour-per-pixel canvas could express it, and the port keeps the bytes precisely so that it can.
+Beside it, `welcome` is that background register, and `BIT BOMB / BPL / INC welcome` sits ABOVE the
+split test, so a burning bomb moves the colour on **every pass** — twice a frame, not once. The
+port runs both passes per frame for that reason and the mutant that halves it (`ra-incr-once`) is
+recorded.
+
+**Two registers of six reach anything a player sees, and that is why the comparison is a
+sequence.** `shango`, `santana`, `lotus` and the memory pointers are programmed correctly and
+consumed by nothing in the port: `Resolve` takes the split position and the space view's cell block
+as fixed, because they are. A comparison of final register state would have been satisfied by any
+port that wrote the right values eventually; what the oracle is asked instead is the ORDER of
+`VIC` writes over 256 interrupts, entering `COMIRQ1` with a return address and a status byte on the
+stack exactly as the 6510 leaves them. Seven mutants, seven caught — three of them on registers
+nothing consumes, which is the assertion that the sequence is what is holding them.
+
+**Two writes are named exclusions and they are the same kind of thing.** `VIC+&19` is the interrupt
+latch, acknowledged on the way in; there is no interrupt here to acknowledge, and in a flat oracle
+image that address is inside `XX21`, so the value read back is a ship blueprint pointer. `l1` is
+the 6510 port register, which is the `SetRasterMode` seam already. Neither reaches the screen.
+
+**Four of seven tables are data and three are not tables.** The handler reads seven consecutive
+two-byte tables at `LDX RASTCT`, which is what makes it look like seven tables. Three of the seven
+have a second byte that is a separately named variable something writes — `zebop`/`abraxas`,
+`moonflower`/`caravanserai`, `welcome`/`welcome+1` — so extracting those would freeze a byte the
+game moves. They are `ScreenState` fields, the two halves that really are fixed are constants in
+`Raster.h`, and the four that are data go through `extract_tables.py` and are byte-checked. Ledger
+row 164 had all nine filed as "Data" under a file that does not exist; §6.129 corrected the file and
+this corrects the disposition.
+
+**One arithmetic confirmation, kept because it settles a constant nobody had derived.** `shango` is
+`{51 + 143, 51}`. Fifty-one is the first raster line of the bitmap, so the interrupt fires on row
+143 — the LAST row of the space view — and its registers take effect from the next one, which is
+row 144. `Canvas::DASHBOARD_CELL_ROW` is 18 and 18 × 8 is 144. The port splits where it does because
+of that, and the apparent off-by-one is the handler not being instantaneous.
+
+**The rule this slice adds.** §6.154 said a status ages worse than a number. This adds the reason
+one particular kind of status is unfalsifiable: **a decision recorded about code nobody has read is
+a guess with a date on it.** ADR-005 §1 is three paragraphs of good reasoning about where
+compositing belongs, and two of its three subjects were misidentified — one register by its noun
+and one flag by its family — because the routine that reads them had never been printed. The
+reasoning survived contact with the tree; the nouns did not. Reading the routine first would have
+cost ten minutes and it is the ten minutes `tools/c64_source.py` exists for.
 
 ### 6.154 A decision nobody owned, and a check that reported OK on what it had not read
 
@@ -6355,6 +6440,7 @@ defect — `TA7`'s first `BCC` goes to part SIX, so a ship above half energy nev
 | **4a Tactics** ✅ — **scoped 2026-09-05 into 4a-a … 4a-d (§6.121), and 4a-d turned out to be part of 4a-c: `DOCKIT` and `TACTICS` are one graph (§6.122). All built** | `TACTICS` 1–7, `DOCKIT`, ✅ `ANGRY`, `FR1`, ✅ `FRS1`, `FRMIS`, `SFRMIS`, ✅ `SFS1`/✅ `SFS2` spawning from ships, `HITCH`, `OOPS`, `EXNO*`, `ECMOF`, ✅ `SESCP`, `bomboff` / energy bomb. **Plus the six prerequisites the row never named** (§6.121): ✅ `TAS1`, ✅ `VCSUB`/✅ `VCSU1`, ✅ `TAS3`/✅ `TAS4`, ✅ `TAS6` and ✅ `DCS1` — the vectors both `TACTICS` and `DOCKIT` are written on, none of them buildable before slice 3a put `MVT3` and the ship blocks in place. `OOPS`, `EXNO*`, `ECMOF` and `bomboff` were built with the flight loop in 3d-d-iii-b and are ✅ already; `HITCH` and `FRMIS` likewise. | Oracle for `TACTICS` decisions on sampled states (they consume `DORND`, so seed-locked); a replay: launch, get attacked, win.<br><br>**4a-a is built, 2026-09-05** — the six vectors in a new `Tactics.h/.cpp`, compared against the shipped routines on every byte they write over sweeps that cross each sign test. **17 mutations, 17 caught**, and two of them are the `JSR P%+3` reading: running the body once and running it three times are both caught, so "twice" is measured rather than believed.<br><br>**4a-b is built, 2026-09-05, 28 mutations and 28 caught** — `FRS1`, `SESCP`, `SFS1`, `SFS2` and `ANGRY`, compared on the WHOLE bubble (slots, all ten blocks, the type counts, the junk count, `SLSP` and the line heap) rather than on the ship they build. **Three seams in `FlightSession` are answered**: `SpawnAhead`, `SpawnChild` and `Anger` had been refusing since 3d-d-v, and a fired missile now leaves the rail. Four carries found (§6.121), one of which the port had wrong and only the generator's state could show. The first run caught 24 of 28 and all three survivors were the SWEEP -- one generator seed, a ramp of test data with no negative numbers, and a flag bit the fixture had already set (§6.124). |
 | **4b Explosions and death** ✅ ∥ | ✅ `DOEXP`, ✅ `EXLOOK`, ✅ `PTCLS2`, ✅ `SOS1`, ✅ `DEATH2`, ✅ the escape pod, ✅ `BAD`/✅ `FAROF`/✅ `FAROF2`, ✅ `SHD`/✅ `DENGY` shields and energy. | Golden of an explosion sequence; energy/shield oracle.<br><br>**Scoped 2026-09-05 into 4b-a and 4b-b (§6.141).** Six of the eleven labels were already built in phases 2 and 3. What is left is `DOEXP` (192 instructions), `PTCLS2` (119), `ESCAPE` (42) and `DEATH2` (6). The forward pass is clean: every external call target is built and the rest are entry points inside the two files.<br><br>**§6.141 also reported that `EXLOOK` "is not in this game at all", and that was wrong (§6.144).** It is INCLUDEd from the master tree at `library/master/main/variable/exlook.asm`, `PTCLS2` reads it, and it is in `Labels.txt` at 31143. The dependency pass had searched `library/c64/` and concluded from its silence.<br><br>**Both sub-slices built 2026-09-05.** The accept is met and then some: not a golden of an explosion sequence but the WHOLE CANVAS over 126 explosion frames and 420 clouds, plus the heap, `INWK`, the generator, ten workspace bytes and the seven registers the burst seam writes. `SHD`/`DENGY` were compared with the flight loop in 3d. |
 | **4c Main game loop** ✅ | Main game loop 1–6 (spawning rules: traders, pirates, police, asteroids, Thargoids, rock hermits, cougar), `MJP` witchspace, `ghy` galactic hyperspace, `hyp1`, `GTHG`, `TT18`, `NWSPS` station placement, `TT102`, the Dodo station switch by tech level. | Long replay (≥10,000 steps) hash-stable; spawn statistics over seeds match the oracle's for the same seeds.<br><br>**Scoped 2026-09-05 into 4c-a … 4c-d (§6.134), and the dependency pass came back EMPTY**: of 111 distinct call targets across its fourteen routines, 46 are already ported, 16 belong to platforms the C64 build never assembles, and the rest are entry points inside 4c's own files. The only unported routine it calls is `GTHG`, which is in its own scope, and every state byte the spawner branches on is modelled. Unlike 4a (§6.121) this row named its routines accurately. 414 instructions of new code, more than `TACTICS`. |
+| **4f Raster effects** ✅ — **added 2026-09-06 (§6.154), built the same day (§6.155)** | `COMIRQ1`'s VIC-II half: the six registers it programs from seven tables at `LDX RASTCT`, `RASTCT` itself, and the two of them a player sees — `moonflower`'s bitmap mode for the space view and `welcome`'s background, which together are the energy bomb. | The port's VIC writes match the shipped `COMIRQ1`'s in order; the bomb changes what `Resolve` produces.<br><br>**Built 2026-09-06.** `TickRasterInterrupt` in a new `Raster.cpp`, compared on the SEQUENCE of writes over 256 interrupts — both passes, the bomb on and off, both modes for each half, both banks and four values of `welcome` including the wrap — and it matched first time. `VIC+&19` and `l1` are named exclusions: an interrupt latch this port has nothing to acknowledge, and the `SetRasterMode` seam. Four of the seven tables are extracted and byte-checked; the other three have a second byte the game writes, so they are `ScreenState` fields and the fixed halves are constants. **`HFX` IS NOT IN THIS BUILD** and the row exists partly to say so: ADR-005 §1 scheduled the hyperspace tearing and upstream says the flag is unused in this version, `DOHFX`'s body is commented out, `LL164` does not write it and `COMIRQ1` does not read it. **And `welcome` is `VIC+&21`, the background, not the border** — so nothing went to the presenter. Seven mutations, seven caught, three of them on registers nothing consumes yet, which is what proves the sequence comparison is holding them. |
 | **4d Missions and Trumbles** | `BRIEF`, `BRIEF2`, `BRIEF3`, `BRP`, `BRIS`, `DEBRIEF`, `DEBRIEF2`, `TBRIEF`, `PAUSE`/`PAUSE2`, `MT23`/`MT29`, the Constrictor and Thargoid-plans state (`TP`), `MVTRIBS`, `TRIBTA`, `TRIBMA`, `tribdir`, the Trumble sprites and sounds. | Scripted replays reach each briefing; Trumble multiplication matches oracle over N steps.<br><br>**Scoped 2026-09-05 into 4d-a, 4d-b and 4d-c, and all three are built.** The dependency pass came back with one surprise and it was in the other direction: `MVTRIBS` needed nothing unbuilt, and the BRIEFINGS needed nine control codes that were sitting in `Outpost/Shell.cpp` as arithmetic no test could reach — two of them wrong.<br><br>**4d-a is built (§6.149)**: `MVTRIBS`, `TRIBDIR`, `TRIBDIRH` and the sprite bank in a new `Trumbles.h/.cpp`, compared on the whole bank over 1,792 counter/count pairs, 1,536 x positions, 768 y positions, 3,072 sign cases and 1,536 direction rolls. The two `DORND` calls have different carries; `SPMASK` is not ported because `VideoState` unshares the ninth bit; nothing in the library initialises `TRIBXH`. 11 mutations, 10 caught and one a proved equivalent.<br><br>**4d-b is built (§6.150)**: `PAUSE`, `PAS1`, `PAUSE2`, `BRIS`, `MT9`, `MT27`, `MT28` and the dispatch, in `Missions.h/.cpp`. `MT9` was not moving the cursor, `MT23`/`MT29` were moving it when the game does not, and code 22 falls into MT23 so a briefing printed in the wrong case after its first page. `PAS1` puts the ship at z_hi = 2 where the upstream comment says 1. 12 mutations, 12 caught after three first-run survivors were closed.<br><br>**4d-c is built (§6.151)**: the seven missions, compared on the whole commander block from sixteen values of `TP`, and `BRIEF` on the whole screen over ~200 frames. `BRIEF3`'s `AND` forgets mission 1; `DEBRIEF`'s shift pair leaves bit 1; `TBRIEF` gives a Trumble to a commander who cannot pay for it (ADR-001 §6). Wired into `DOENTRY`'s dispatch. 26 mutations, 24 caught and two proved equivalents. |
 | **4e Pause screen** ✅ — added 2026-09-05 (§6.120) | `DK4`/`FREEZE`: INST/DEL pauses, CLR/HOME resumes; `DKS3` over `TGINT` for the thirteen configuration toggles (`DAMP`, `DJD`, `PATG`, `FLH`, `JSTGY`, `JSTE`, `JSTK`, `MUTOK`, `DISK`, `PLTOG`, and `MUFOR`/`MUDOCK`/`MUSILLY` behind `PATG`), the `BELL` and twenty-frame `DELAY` per toggle, the two sound keys on `DNOIZ`, `MUTOKCH`, and the quit through `DEATH2`. It was in no slice, and `PLTOG` -- planetary detail -- has no other writer. | Oracle on `DKS3` and `DK4` over every key against every block state (`TGINT` is thirteen entries, the block fourteen bytes); the app pauses and resumes, and P toggles the planet's craters. The key map gets the three keys and `EveryFlightControlHasAKey` three rows.<br><br>**Built 2026-09-05** (§6.139). `TGINT` extracted and byte-checked; `DKS3` swept over all 256 keys at all thirteen positions (3,328 cases, exactly thirteen matches); the two loops over both answers to `PATG`; `FREEZE` over 1,024 cases reading the outcome from the oracle's own X, because `MUTOKCH` clobbers it. `april16` exposed as its own music entry. `DISK` changed from a bool to the byte it is. Wired into the outer loop as a state rather than a loop, which is what `DOKEY`'s fall into `DK4` has needed since slice 3d. |
 
@@ -6399,13 +6485,18 @@ Rough, in sittings of a few hours each, assuming the oracle is in place from 0c:
 | 1 | 4 | 6–9 | ✅ done; the ship and sound data of 1a landed with the slices that read them |
 | 2 | 5 | 8–12 | ✅ done, and 2e run and signed off on the owner's machine 2026-09-05 |
 | 3 | 4 | 10–15 | ✅ done 2026-09-05 — `LL9` and `MVEIT` were the densest code, as predicted |
-| 4 | 5 | 8–12 | **all five built and wired.** 4c-c turned out to have been done in phase 3 (§6.137), and **4d closed the phase on 2026-09-05** in three sub-slices: the Trumble sprites (§6.149), the control codes a briefing is made of (§6.150) and the seven missions themselves (§6.151). The galactic hyperdrive is **reachable as of 2026-09-05** (§6.147): this row used to say Ctrl was a modifier `Window` and `KeyMap` could not report, and `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 like any other key. 4a-c's mutation survivors are CLOSED as of the same day — `python tools/mutate.py --unit tactics` gives 16 of 16, and the thirteenth was a defect in `TA7` rather than a gap in the sweep (§6.152, §6.153) |
+| 4 | 6 | 8–12 | **all six built and wired**, the sixth added 2026-09-06 (§6.155) after §6.154 found ADR-005 §1's raster-effects decision taken and never built. 4c-c turned out to have been done in phase 3 (§6.137), and **4d closed the phase on 2026-09-05** in three sub-slices: the Trumble sprites (§6.149), the control codes a briefing is made of (§6.150) and the seven missions themselves (§6.151). The galactic hyperdrive is **reachable as of 2026-09-05** (§6.147): this row used to say Ctrl was a modifier `Window` and `KeyMap` could not report, and `CTRL` is `LDX #6` falling into `DKS4`, so it is key-logger entry 6 like any other key. 4a-c's mutation survivors are CLOSED as of the same day — `python tools/mutate.py --unit tactics` gives 16 of 16, and the thirteenth was a defect in `TA7` rather than a gap in the sweep (§6.152, §6.153). **4f is `COMIRQ1`'s VIC-II half**, which is the energy bomb: `moonflower` puts the space view into multicolour and `welcome` cycles its background, and both were carried and never shown |
 | 5 | 2 | 4–7 | ✅ **done 2026-09-05** (§6.129), both slices in one sitting, on a track run in parallel with 4a-c. The synthesiser was not the unknown it was expected to be; the register-write log was what made it comparable |
-| **Total** | **26** | **40–60** | before modernisation. **The count was 24 until 2026-09-05** and was simply stale: 4e was added by §6.120 and phase 0's 0b had been counted as one slice in one place and two in another. ALL TWENTY-SIX ARE BUILT as of 2026-09-05, 4d last. 0b-b was cancelled and 0e is open by owner acceptance rather than unbuilt |
+| **Total** | **27** | **40–60** | before modernisation. **The count was 24 until 2026-09-05** and was simply stale: 4e was added by §6.120 and phase 0's 0b had been counted as one slice in one place and two in another. **It is 27 as of 2026-09-06**: 4f is work ADR-005 §1 decided on and no row scheduled, and giving it a row is the fix §6.154 asked for, because a slice is the only thing in this corpus that anything looks for. ALL TWENTY-SEVEN ARE BUILT. 0b-b was cancelled and 0e is open by owner acceptance rather than unbuilt |
 
 Phases 0 to 3 took four days rather than the twenty-eight to forty-two sittings estimated, which
 says more about what a sitting turned out to be than about the estimate. Phases 4 and 5 then landed
 inside the fourth day, on two tracks in parallel, and 4d closed the last of them the same day.
+
+**And the twenty-seventh slice is the interesting one for an estimate.** It was not missed by the
+sizing; it was never in the build order at all, because it was decided in an ADR and ADRs have no
+rows. A count of slices measures what somebody remembered to schedule, which is a different thing
+from what the port needs, and §6.154 is the pass that found the difference.
 
 **The estimate was wrong in a way worth naming, because it will be wrong the same way again.** It
 sized the work by how much 6502 there was to port, and that turned out to be the cheap part: a
@@ -6465,6 +6556,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-06 | **Slice 4f: the energy bomb, and a third of a decision that was about nothing** (§6.155). `COMIRQ1`'s VIC-II half, which §6.154 found decided and unbuilt. **`HFX` is not in this build**: upstream's `hfx.asm` says the flag is unused in this version, `DOHFX` has both instructions commented out in the original source, the C64's `LL164` does not write it and its `COMIRQ1` does not read it — so ADR-005 §1 scheduled a per-row shift of the space view that the shipped game never had, and the grouping came from §6.98 naming three bytes together because they sit together. **And `welcome` is not the border**: `VIC+&21` is background colour 0, inside the image, supplying `%00` — so all of this landed in `Resolve` and none in the presenter, the opposite of what the ADR apportioned. What the bomb IS: `moonflower` bit 4 puts the space view into multicolour, so the same bytes decode as four two-bit codes instead of eight one-bit pixels, and `welcome` is the background it flashes — incremented ABOVE the split test, so twice a frame. Compared on the SEQUENCE of VIC writes over 256 interrupts, matched first time; seven mutants, seven caught, three of them on registers nothing in the port consumes. `shango`'s `51 + 143` confirms `DASHBOARD_CELL_ROW`. **The rule: a decision recorded about code nobody has read is a guess with a date on it.** |
 | 2026-09-06 | **R6 signed off by the owner: the synthesiser has been heard and it works.** The last risk that was open on evidence rather than on work. Slice 5a's accept asked for an audible comparison against VICE and 0b-b cancelled VICE, so the only evidence available was a person listening — the same standing as 2e, 3b and 3c, and stated as such rather than dressed up. It settles that `SidSynth` plays the game's sounds and that they are right; it does not settle that they match a 6581 or an 8580, since neither was playing beside it and no filter is implemented. **No render was captured, so CI cannot hear a regression** — the same hole the three visual sign-offs have, and a hashed reference render of the sixteen effects is the cheap way to close it. |
 | 2026-09-06 | **A settled decision nobody owned, and a check that reported OK on markers it never read** (§6.154). The second documentation pass. **ADR-005 §1 closed two questions on 2026-09-05 and only one was built**: the sprite overlay ships (`VideoState`, `SPRITE.bin`, the compositor in `Resolve` — §6.148) and the VIC-II raster effects do not, so `moonflower`, `welcome` and `HFX` are carried in `ScreenState` and a player of the port sees neither the energy bomb nor the hyperspace tearing. The ADR's own "ordering, so neither blocks anything" bullet is the mechanism: **an ordering note says when work MAY start and never says who starts it**, and a decision taken in an ADR has no slice, no accept and no check looking for it. **`check_counts.py` reported 20 of 24 markers and did not say so**: it skipped fenced blocks and blanked code spans, and a live number had rotted in each — `Tests/PortableRunner/README.md` and `AGENTS.md` both said 349 tests against 377, which is the figure the corpus uses to TEACH the convention. Exclusions removed; the syntax is now shown as `<!--count:NAME-->`, which the pattern cannot match, so an illustration is inert by construction. Corrections in ADR-005 §1, `Explosion.h`, ADR-003 and Risk R2, R5 and R11. **The rule: a status ages worse than a number, because it is prose in shape and a number in kind, and neither mechanism reaches it.** |
 | 2026-09-05 | **The last four survivors, and the thirteenth was a defect** (§6.153). §6.152 closed nine and concluded that none of the thirteen was a defect in the port; the other four say otherwise. **`ta-half` is a real one.** `TA7`'s two energy compares branch to `TA3` and `ta3` — the same five letters in different case, and parts SIX and FIVE of `TACTICS` — so a ship with more than half its blueprint energy jumps clean over the missile launch. The port ran both into part five, and it hid behind two coincidences at once: every energy case in the fixture had `INWK+31` zero, so part five returned at its first instruction either way. **`kill-rotate` was a hole in the COMPARISON, not the fixture** — `TALLY` and `TALLYL` were neither pushed nor read back, so what `EXNO2` scores was invisible and no ladder would ever have caught it. **`msl-16` was landed on and the branch past it was not**: the ECM check reads bit 0 of the target's `INWK+32` and only slot 0's is odd. **`ta-104` needed a two-roll seed** — at least 250 at `TN7` and then an EVEN operand — and the first one searched used the Anaconda's roll ordinal, which is unreachable because an Anaconda that rolls 200 or more launches its escorts and returns. 16 of 16, none equivalent, 7,326 comparisons. The rule: a survivor that outlives a round of ladder-building deserves MORE attention than a fresh one, because the easy explanations are used up. |
