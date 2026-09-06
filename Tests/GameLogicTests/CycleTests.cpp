@@ -653,7 +653,7 @@ namespace GameLogicTests
 
       // 6502: RES2's `LDA #LO(LS%) / STA SLSP` and the loops that clear `FRIN` and `MANY` -- the
       // state `NWSHP` needs to be able to create anything at all (§6.95: a default-constructed
-      // world is a state the machine cannot be in).
+      // universe is a state the machine cannot be in).
       for (std::uint16_t offset = 0; offset < 13u; ++offset)
       {
         cpu.memory[static_cast<std::uint16_t>(frin + offset)] = 0;

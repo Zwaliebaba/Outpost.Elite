@@ -44,7 +44,7 @@ SUITE_NAMESPACE = "GameLogicTests"
 # GameLogic is compiled whole. The three named test-project files are the oracle: the interpreter,
 # the loader that finds the assembled game, and the golden-canvas reader. The rest of that
 # directory is suites, which arrive through the generated units.
-ORACLE_SOURCES = ["Cpu6502.cpp", "OracleImage.cpp", "GoldenCanvas.cpp"]
+ORACLE_SOURCES = ["Cpu6502.cpp", "OracleImage.cpp", "GoldenCanvas.cpp", "UniverseImage.cpp"]
 
 # The executable's own files that the suite covers, which is every one that does not call into
 # Windows. `SaveStore` earned its place by being written, committed and left uncompiled for a day

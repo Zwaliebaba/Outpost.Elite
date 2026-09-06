@@ -33,7 +33,7 @@
 #include <vector>
 
 /*
- * The port's whole flight world, and the oracle's memory beside it.
+ * The port's whole flight universe, and the oracle's memory beside it.
  *
  * Shared by `ViewChangeTests` and `FlightLoopTests` because both compare routines that reach all
  * of it: `TT66` clears everything drawn on the screen, and the flight loop drives everything that
@@ -153,7 +153,7 @@ namespace GameLogicTests
   };
 
   /*
-   * The port's whole flight world, and the `FlightScreen` over it.
+   * The port's whole flight universe, and the `FlightScreen` over it.
    *
    * One object because `TT66` genuinely reaches all of it -- the line heaps, the token printer, the
    * message counters, the laser, the stardust and the dashboard -- and building it twice per test
@@ -197,7 +197,7 @@ namespace GameLogicTests
     }
   };
 
-  struct World
+  struct Universe
   {
     RecordingView effects; ///< first, because the character printer's bell records into its list
 
@@ -337,7 +337,7 @@ namespace GameLogicTests
     /// commander block's, because part 15's fuel scooping writes it and a copy would drift.
     std::uint8_t fuel = 0;
 
-    World()
+    Universe()
     {
       printer.SetCursor(&text);
     }
@@ -345,8 +345,8 @@ namespace GameLogicTests
     /*
      * 6502: LSO -- the sun's heap, which `NWSPS` hands to the SPACE STATION (§6.112).
      *
-     * The `LineHeap` belongs to whoever is running a frame rather than to the world, so this is
-     * the world lending its sun window to one. Every fixture that draws a station has to call it,
+     * The `LineHeap` belongs to whoever is running a frame rather than to the universe, so this is
+     * the universe lending its sun window to one. Every fixture that draws a station has to call it,
      * for the same reason `FlightSession` does: without it the station's lines are written out of
      * the arena and dropped, and the comparison against `LSO` compares two sets of nothing.
      */
@@ -364,9 +364,9 @@ namespace GameLogicTests
     }
   };
 
-  /// A world that is not all zeroes, so "cleared" and "left alone" are different answers everywhere.
+  /// A universe that is not all zeroes, so "cleared" and "left alone" are different answers everywhere.
   /*
-   * What `MJP` and `Ghy` reach outside the world: sounds, the trumbles and the AI, none of which
+   * What `MJP` and `Ghy` reach outside the universe: sounds, the trumbles and the AI, none of which
    * this slice decides. Counted rather than ignored, because `LL164` makes a noise and a
    * comparison that dropped it would agree with a port that had lost the hyperspace sound.
    */
@@ -410,11 +410,11 @@ namespace GameLogicTests
     void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
   };
 
-  /// The port's side of a case: the whole flight world plus the pieces `FlightLoop` needs. Shared,
+  /// The port's side of a case: the whole flight universe plus the pieces `FlightLoop` needs. Shared,
   /// because three suites now build the same twelve-member aggregate to call one routine.
-  struct LoopWorld
+  struct LoopUniverse
   {
-    World world;
+    Universe universe;
     Elite::ControlState control;
     Elite::ControlOptions options;
     Elite::KeyLogger keys{};
@@ -426,7 +426,7 @@ namespace GameLogicTests
     LoopRecording effects;
   };
 
-  inline void Seed(World& _world, std::uint32_t _seed)
+  inline void Seed(Universe& _universe, std::uint32_t _seed)
   {
     std::uint32_t state = _seed * 0x9E3779B9u + 0x85EBCA6Bu;
     auto next = [&]()
@@ -438,10 +438,10 @@ namespace GameLogicTests
     const std::uint8_t TYPES[] = {3u, 5u, 2u};
     for (std::size_t slot = 0; slot < 3u; ++slot)
     {
-      _world.bubble.slots[slot] = TYPES[slot];
+      _universe.bubble.slots[slot] = TYPES[slot];
     }
-    _world.bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
-    _world.bubble.junk = 1u;
+    _universe.bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
+    _universe.bubble.junk = 1u;
 
     /*
      * 6502: XX21+2*SST-2 -- the pointer table's station entry, which the game has held since boot.
@@ -450,87 +450,87 @@ namespace GameLogicTests
      * type whose entry is zero, so an unseeded bubble would silently stop creating stations. The
      * Coriolis is what `BEGIN` leaves and what every system below tech level ten keeps.
      */
-    _world.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+    _universe.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
 
-    _world.techLevel = 7u; // 6502: tek -- below the Dodo's threshold, so the seeded state is stable
+    _universe.techLevel = 7u; // 6502: tek -- below the Dodo's threshold, so the seeded state is stable
 
-    for (std::size_t slot = 0; slot < _world.bubble.blocks.size(); ++slot)
+    for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
     {
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        _world.bubble.blocks[slot][byte] = (byte == 31u) ? 0xFFu : next();
+        _universe.bubble.blocks[slot][byte] = (byte == 31u) ? 0xFFu : next();
       }
     }
     for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
     {
-      _world.work[byte] = next();
+      _universe.work[byte] = next();
     }
 
-    for (std::size_t index = 0; index < _world.dust.x.size(); ++index)
+    for (std::size_t index = 0; index < _universe.dust.x.size(); ++index)
     {
-      _world.dust.x[index] = next();
-      _world.dust.xLow[index] = next();
-      _world.dust.y[index] = next();
-      _world.dust.yLow[index] = next();
-      _world.dust.z[index] = next();
-      _world.dust.zLow[index] = next();
+      _universe.dust.x[index] = next();
+      _universe.dust.xLow[index] = next();
+      _universe.dust.y[index] = next();
+      _universe.dust.yLow[index] = next();
+      _universe.dust.z[index] = next();
+      _universe.dust.zLow[index] = next();
     }
-    _world.dust.count = 12u; // 6502: NOST
+    _universe.dust.count = 12u; // 6502: NOST
 
-    for (std::size_t index = 0; index < _world.heaps.sun.size(); ++index)
+    for (std::size_t index = 0; index < _universe.heaps.sun.size(); ++index)
     {
-      _world.heaps.sun[index] = next();
+      _universe.heaps.sun[index] = next();
     }
-    for (std::size_t index = 0; index < _world.heaps.ball.size(); ++index)
+    for (std::size_t index = 0; index < _universe.heaps.ball.size(); ++index)
     {
-      _world.heaps.ball[index] = next();
+      _universe.heaps.ball[index] = next();
     }
-    _world.heaps.lsp = 0x37u;
+    _universe.heaps.lsp = 0x37u;
 
-    _world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] = Elite::LASER_PULSE;
-    _world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 1u] = 0u;
-    _world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 2u] = Elite::LASER_BEAM;
-    _world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 3u] = Elite::LASER_MILITARY;
-    _world.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)] = 0x40u;
-    _world.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = 0x21u;
-    _world.trumbles.count = 0x5Au;
+    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] = Elite::LASER_PULSE;
+    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 1u] = 0u;
+    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 2u] = Elite::LASER_BEAM;
+    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 3u] = Elite::LASER_MILITARY;
+    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)] = 0x40u;
+    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = 0x21u;
+    _universe.trumbles.count = 0x5Au;
 
-    _world.rng.SetState({0x11u, 0x22u, 0x33u, 0x44u});
+    _universe.rng.SetState({0x11u, 0x22u, 0x33u, 0x44u});
 
-    _world.text.column = 0x1Fu;
-    _world.text.row = 0x0Bu;
-    _world.text.cellColour = Elite::TEXT_COLOUR_WHITE;
-    _world.printer.SetCaseFlags(0x40u);
-    _world.characters.state.lowerCaseBits = 0u;
-    _world.characters.state.sentenceStart = 0u;
-    _world.characters.state.alwaysLower = 0xFFu;
+    _universe.text.column = 0x1Fu;
+    _universe.text.row = 0x0Bu;
+    _universe.text.cellColour = Elite::TEXT_COLOUR_WHITE;
+    _universe.printer.SetCaseFlags(0x40u);
+    _universe.characters.state.lowerCaseBits = 0u;
+    _universe.characters.state.sentenceStart = 0u;
+    _universe.characters.state.alwaysLower = 0xFFu;
 
-    _world.message.delay = 0x2Au;
-    _world.message.append = 0x3Bu;
-    _world.status.viewLaser = 0x4Cu;
-    _world.status.energy = 180u;
-    _world.status.forwardShield = 90u;
-    _world.status.aftShield = 60u;
-    _world.status.cabinTemperature = 100u;
-    _world.status.laserTemperature = 70u;
-    _world.status.altitude = 120u;
-    _world.status.damageFlash = 0u;
-    _world.status.ecmCountdown = 0u;
-    _world.fuel = 40u;
-    _world.commander.At(Elite::Field::Fuel) = _world.fuel; // `Mirror` sends the block, not the byte
+    _universe.message.delay = 0x2Au;
+    _universe.message.append = 0x3Bu;
+    _universe.status.viewLaser = 0x4Cu;
+    _universe.status.energy = 180u;
+    _universe.status.forwardShield = 90u;
+    _universe.status.aftShield = 60u;
+    _universe.status.cabinTemperature = 100u;
+    _universe.status.laserTemperature = 70u;
+    _universe.status.altitude = 120u;
+    _universe.status.damageFlash = 0u;
+    _universe.status.ecmCountdown = 0u;
+    _universe.fuel = 40u;
+    _universe.commander.At(Elite::Field::Fuel) = _universe.fuel; // `Mirror` sends the block, not the byte
 
-    _world.flight.delta = 14u;
-    _world.flight.alp1 = 5u;
-    _world.flight.alp2 = 128u;
-    _world.flight.beta = 200u;
-    _world.flight.bet1 = 3u;
-    _world.flight.mainLoopCounter = 0u;
+    _universe.flight.delta = 14u;
+    _universe.flight.alp1 = 5u;
+    _universe.flight.alp2 = 128u;
+    _universe.flight.beta = 200u;
+    _universe.flight.bet1 = 3u;
+    _universe.flight.mainLoopCounter = 0u;
 
-    _world.screen.colourBank = 0x33u;
-    _world.screen.bitmapMode = 0x44u;
-    _world.screen.dashboardShown = 0u;
-    _world.draw.t2 = 0x88u;
-    _world.explosions = 0x66u;
+    _universe.screen.colourBank = 0x33u;
+    _universe.screen.bitmapMode = 0x44u;
+    _universe.screen.dashboardShown = 0u;
+    _universe.draw.t2 = 0x88u;
+    _universe.explosions = 0x66u;
   }
 
   /// Every label the screen routines touch, looked up once.
@@ -644,251 +644,15 @@ namespace GameLogicTests
     }
   };
 
-  /// Copy the port's world into the oracle's memory, so both start identical.
-  inline void Mirror(const World& _world, Cpu6502& _cpu, const Where& _at)
-  {
-    auto block = [&](std::uint16_t _base, const std::uint8_t* _from, std::size_t _count)
-    {
-      for (std::size_t index = 0; index < _count; ++index)
-      {
-        _cpu.memory[static_cast<std::uint16_t>(_base + index)] = _from[index];
-      }
-    };
-
-    block(_at.frin, _world.bubble.slots.data(), _world.bubble.slots.size());
-    block(_at.many, _world.bubble.counts.data(), _world.bubble.counts.size());
-    block(_at.inwk, _world.work.bytes.data(), Elite::SHIP_BLOCK_SIZE);
-    for (std::size_t slot = 0; slot < _world.bubble.blocks.size(); ++slot)
-    {
-      block(static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE), _world.bubble.blocks[slot].bytes.data(),
-            Elite::SHIP_BLOCK_SIZE);
-    }
-
-    block(_at.sx, _world.dust.x.data(), _world.dust.x.size());
-    block(_at.sxl, _world.dust.xLow.data(), _world.dust.xLow.size());
-    block(_at.sy, _world.dust.y.data(), _world.dust.y.size());
-    block(_at.syl, _world.dust.yLow.data(), _world.dust.yLow.size());
-    block(_at.sz, _world.dust.z.data(), _world.dust.z.size());
-    block(_at.szl, _world.dust.zLow.data(), _world.dust.zLow.size());
-    _cpu.memory[_at.nostm] = _world.dust.count;
-
-    block(_at.lso, _world.heaps.sun.data(), _world.heaps.sun.size());
-    block(_at.lsx2, _world.heaps.ball.data(), _world.heaps.ball.size());
-    _cpu.memory[_at.lsp] = _world.heaps.lsp;
-
-    /*
-     * The WHOLE commander block, because `LASER` and `TRIBBLE` are two fields of one structure and
-     * the routines that read the others -- `OUCH` empties a hold slot, `EXNO2` adds to the tally,
-     * the flight loop reads `ESCP`, `ECM` and `NOMSL` -- would otherwise be comparing the port's
-     * zeroes against whatever the shipped block happens to hold.
-     */
-    block(_at.tp, _world.commander.bytes.data(), Elite::COMMANDER_BLOCK_SIZE);
-    /*
-     * The Trumble sprite bank, and the last two lines of it are CONDITIONAL (slice 4d-a).
-     *
-     * `TRIBCT`, `TRIBVX`, `TRIBVXH` and `TRIBXH` are ordinary RAM at &0510 and are always mirrored.
-     * The COORDINATES are not: they are VIC-II registers, and in a flat image the VIC-II is `XX21`
-     * (§6.108) -- so writing them writes the blueprint pointers for ship types 3 to 9, and a frame
-     * that then draws a ship reads a blueprint the port never corrupted. `spriteRegistersAreOurs`
-     * is the fixture saying it means to move a sprite and will not draw a ship afterwards.
-     */
-    _cpu.memory[_at.tribct] = _world.trumbles.count;
-    block(_at.tribvx, _world.trumbles.velocityX.data(), _world.trumbles.velocityX.size());
-    block(_at.tribvxh, _world.trumbles.velocityXHigh.data(), _world.trumbles.velocityXHigh.size());
-    block(_at.tribxh, _world.trumbles.coordinateXHigh.data(), _world.trumbles.coordinateXHigh.size());
-    if (_world.spriteRegistersAreOurs)
-    {
-      /*
-       * The whole x that `VideoState` holds, split back into the register pair the game has: the
-       * low eight bits per sprite and the ninth in the byte all eight share. `MVTRIBS` is the only
-       * reader of those registers, so only the six Trumble sprites are mirrored.
-       */
-      std::uint8_t shared = 0;
-      for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
-      {
-        const std::uint16_t at = static_cast<std::uint16_t>(_at.vic + 2u * sprite);
-        _cpu.memory[at] = static_cast<std::uint8_t>(_world.video.x[sprite] & 0xFFu);
-        _cpu.memory[static_cast<std::uint16_t>(at + 1u)] = _world.video.y[sprite];
-        if ((_world.video.x[sprite] & 0x100u) != 0u)
-        {
-          shared = static_cast<std::uint8_t>(shared | (1u << sprite));
-        }
-      }
-      _cpu.memory[static_cast<std::uint16_t>(_at.vic + 0x10u)] = shared;
-    }
-
-    const std::array<std::uint8_t, 4> seed = _world.rng.State();
-    block(_at.rand, seed.data(), seed.size());
-
-    _cpu.memory[_at.xc] = _world.text.column;
-    _cpu.memory[_at.yc] = _world.text.row;
-    _cpu.memory[_at.qq17] = _world.printer.CaseFlags();
-    _cpu.memory[_at.col2] = _world.text.cellColour;
-    _cpu.memory[_at.dtw1] = _world.characters.state.lowerCaseBits;
-    _cpu.memory[_at.dtw2] = _world.characters.state.sentenceStart;
-    _cpu.memory[_at.dtw6] = _world.characters.state.alwaysLower;
-
-    /*
-     * The rest of the extended printer's state, which no screen routine reads but `MESS` does:
-     * it turns the justifier into a measuring device (`DTW4` = %11000000, print, read `DTW5`) and
-     * a stale byte in either would centre the message in the wrong column. `DTW7` is not in this
-     * build -- the Master's literal-character byte has no C64 label.
-     */
-    _cpu.memory[_at.dtw3] = _world.characters.state.toLineBuffer;
-    _cpu.memory[_at.dtw4] = _world.characters.state.justify;
-    _cpu.memory[_at.dtw5] = _world.characters.state.bufferLength;
-    _cpu.memory[_at.dtw8] = _world.characters.state.caseMask;
-
-    _cpu.memory[_at.dly] = _world.message.delay;
-    _cpu.memory[_at.de] = _world.message.append;
-    _cpu.memory[_at.mch] = _world.message.token;
-    _cpu.memory[_at.messxc] = _world.message.column;
-    _cpu.memory[_at.las2] = _world.status.viewLaser;
-    _cpu.memory[static_cast<std::uint16_t>(_at.qq22 + 1)] = _world.status.hyperspaceCountdown;
-    _cpu.memory[_at.mj] = _world.status.midJump;
-    _cpu.memory[_at.junk] = _world.bubble.junk;
-    _cpu.memory[_at.ev] = _world.explosions;
-    _cpu.memory[_at.viewByte] = _world.spaceView;
-    _cpu.memory[_at.qq11] = _world.view;
-
-    _cpu.memory[_at.tek] = _world.techLevel;
-
-    /*
-     * 6502: BEGIN's `LDA XX21+SST*2-2 / STA spasto`, which the fixture has to do itself.
-     *
-     * `spasto` is `EQUW &8888` in the source and `BEGIN` overwrites it at boot with the Coriolis's
-     * table entry. `BEGIN` is startup code and `OracleImage::Fresh()` does not run it, so the
-     * assembled image still holds the placeholder -- and `NWSPS` copies `spasto` INTO the table, so
-     * a comparison against an image that has not booted spawns a station whose blueprint is &8888.
-     * That is not a state the machine is ever in, which is §6.95's rule reaching a third byte: the
-     * ORACLE has to be put into a state the game could be in, not just the port.
-     *
-     * The port needs no field for it. Nothing writes `spasto` after `BEGIN`, and the port's ship
-     * data region is immutable, so `BlueprintAddress(SHIP_TYPE_STATION)` IS `spasto` for ever.
-     */
-    const std::uint16_t coriolis = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
-    _cpu.memory[_at.spasto] = static_cast<std::uint8_t>(coriolis & 0xFFu);
-    _cpu.memory[static_cast<std::uint16_t>(_at.spasto + 1u)] = static_cast<std::uint8_t>(coriolis >> 8);
-
-    // 6502: XX21+2*SST-2 -- RAM, and the port's copy of it is `Bubble::stationBlueprint`.
-    _cpu.memory[_at.xx21Station] = static_cast<std::uint8_t>(_world.bubble.stationBlueprint & 0xFFu);
-    _cpu.memory[static_cast<std::uint16_t>(_at.xx21Station + 1u)] = static_cast<std::uint8_t>(_world.bubble.stationBlueprint >> 8);
-
-    _cpu.memory[_at.abraxas] = _world.screen.colourBank;
-    _cpu.memory[_at.caravanserai] = _world.screen.bitmapMode;
-    _cpu.memory[_at.dflag] = _world.screen.dashboardShown;
-    _cpu.memory[_at.comx] = _world.compass.x;
-    _cpu.memory[_at.comy] = _world.compass.y;
-    _cpu.memory[_at.comc] = _world.compass.colour;
-    _cpu.memory[_at.t2] = _world.draw.t2;
-
-    _cpu.memory[_at.delta] = _world.flight.delta;
-    _cpu.memory[_at.alp1] = _world.flight.alp1;
-    _cpu.memory[_at.alp2] = _world.flight.alp2;
-    _cpu.memory[_at.beta] = _world.flight.beta;
-    _cpu.memory[_at.bet1] = _world.flight.bet1;
-    _cpu.memory[_at.mcnt] = _world.flight.mainLoopCounter;
-    _cpu.memory[_at.xx0] = static_cast<std::uint8_t>(_world.flight.blueprint & 0xFFu);
-    _cpu.memory[static_cast<std::uint16_t>(_at.xx0 + 1u)] = static_cast<std::uint8_t>(_world.flight.blueprint >> 8);
-
-    _cpu.memory[_at.energy] = _world.status.energy;
-    _cpu.memory[_at.fsh] = _world.status.forwardShield;
-    _cpu.memory[_at.ash] = _world.status.aftShield;
-    _cpu.memory[_at.cabtmp] = _world.status.cabinTemperature;
-    _cpu.memory[_at.gntmp] = _world.status.laserTemperature;
-    _cpu.memory[_at.altit] = _world.status.altitude;
-    _cpu.memory[_at.flh] = _world.status.damageFlash;
-    _cpu.memory[_at.ecma] = _world.status.ecmCountdown;
-    // `QQ14` came over with the whole commander block above; `Seed` keeps `World::fuel` equal to it.
-  }
-
-  /// Compare every byte of state the screen routines can touch.
-  inline void CompareState(const Cpu6502& _cpu, const World& _world, const Where& _at, const std::wstring& _context,
-                           bool _compareRng = true)
-  {
-    auto same = [&](std::uint16_t _address, std::uint8_t _ours, const std::wstring& _name)
-    { Assert::AreEqual(_cpu.memory[_address], _ours, (_context + L": " + _name).c_str()); };
-
-    same(_at.xc, _world.text.column, L"XC");
-    same(_at.yc, _world.text.row, L"YC");
-    same(_at.qq17, _world.printer.CaseFlags(), L"QQ17");
-    same(_at.dtw1, _world.characters.state.lowerCaseBits, L"DTW1");
-    same(_at.dtw2, _world.characters.state.sentenceStart, L"DTW2");
-    same(_at.dtw6, _world.characters.state.alwaysLower, L"DTW6");
-    same(_at.lsp, _world.heaps.lsp, L"LSP");
-    same(_at.dly, _world.message.delay, L"DLY");
-    same(_at.de, _world.message.append, L"de");
-    same(_at.las2, _world.status.viewLaser, L"LAS2");
-    same(_at.viewByte, _world.spaceView, L"VIEW");
-    same(_at.qq11, _world.view, L"QQ11");
-    same(_at.ev, _world.explosions, L"EV");
-    same(_at.mcnt, _world.flight.mainLoopCounter, L"MCNT");
-    same(_at.xx0, static_cast<std::uint8_t>(_world.flight.blueprint & 0xFFu), L"XX0");
-    same(static_cast<std::uint16_t>(_at.xx0 + 1u), static_cast<std::uint8_t>(_world.flight.blueprint >> 8), L"XX0+1");
-    same(_at.abraxas, _world.screen.colourBank, L"abraxas");
-    same(_at.caravanserai, _world.screen.bitmapMode, L"caravanserai");
-    same(_at.dflag, _world.screen.dashboardShown, L"DFLAG");
-    same(_at.comc, _world.compass.colour, L"COMC");
-    same(_at.tribct, _world.trumbles.count, L"TRIBCT");
-    for (std::size_t index = 0; index < _world.trumbles.velocityX.size(); ++index)
-    {
-      const std::uint16_t offset = static_cast<std::uint16_t>(index);
-      same(static_cast<std::uint16_t>(_at.tribvx + offset), _world.trumbles.velocityX[index], L"TRIBVX");
-      same(static_cast<std::uint16_t>(_at.tribvxh + offset), _world.trumbles.velocityXHigh[index], L"TRIBVXH");
-      same(static_cast<std::uint16_t>(_at.tribxh + offset), _world.trumbles.coordinateXHigh[index], L"TRIBXH");
-    }
-    if (_world.spriteRegistersAreOurs)
-    {
-      // Compared only where they were mirrored, and for the same reason: unless a fixture has
-      // claimed them these addresses hold `XX21` on one side and sprite registers on the other.
-      const std::uint8_t shared = _cpu.memory[static_cast<std::uint16_t>(_at.vic + 0x10u)];
-      for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
-      {
-        const std::uint16_t at = static_cast<std::uint16_t>(_at.vic + 2u * sprite);
-        const std::uint16_t theirs = static_cast<std::uint16_t>(_cpu.memory[at] | (((shared >> sprite) & 1u) != 0u ? 0x100u : 0u));
-        Assert::AreEqual(theirs, _world.video.x[sprite], (_context + L": sprite x").c_str());
-        same(static_cast<std::uint16_t>(at + 1u), _world.video.y[sprite], L"sprite y");
-      }
-    }
-    same(_at.nostm, _world.dust.count, L"NOSTM");
-    same(_at.tek, _world.techLevel, L"tek");
-
-    // 6502: XX21+2*SST-2 -- the self-modified table entry. It is compared as state rather than
-    // asserted about because `NWSPS` is the only writer, so an unexpected change is a defect.
-    same(_at.xx21Station, static_cast<std::uint8_t>(_world.bubble.stationBlueprint & 0xFFu), L"XX21+2*SST-2");
-    same(static_cast<std::uint16_t>(_at.xx21Station + 1u), static_cast<std::uint8_t>(_world.bubble.stationBlueprint >> 8), L"XX21+2*SST-1");
-
-    for (std::size_t index = 0; index < _world.heaps.sun.size(); ++index)
-    {
-      same(static_cast<std::uint16_t>(_at.lso + index), _world.heaps.sun[index], L"LSO");
-    }
-    for (std::size_t slot = 0; slot < _world.bubble.blocks.size(); ++slot)
-    {
-      for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
-      {
-        same(static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte), _world.bubble.blocks[slot][byte],
-             L"K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte));
-      }
-    }
-    for (std::size_t index = 0; index < _world.dust.x.size(); ++index)
-    {
-      same(static_cast<std::uint16_t>(_at.sx + index), _world.dust.x[index], L"SX");
-      same(static_cast<std::uint16_t>(_at.sy + index), _world.dust.y[index], L"SY");
-      same(static_cast<std::uint16_t>(_at.sz + index), _world.dust.z[index], L"SZ");
-    }
-    /*
-     * The generator is compared unless the caller says otherwise, and the one caller that says
-     * otherwise is the flight loop on a frame that seeds an explosion cloud: `LL9`'s `EE55` block
-     * makes four `DORND` calls on a carry that comes out of `LOIN` through `EE51`, and `LOIN` does
-     * not return its flags yet (§6.91).
-     */
-    if (_compareRng)
-    {
-      for (std::size_t index = 0; index < 4u; ++index)
-      {
-        same(static_cast<std::uint16_t>(_at.rand + index), _world.rng.State()[index], L"RAND");
-      }
-    }
-  }
+  /*
+   * The two names the suites use, answered by the universe image (Design/Modernize.md slice M0-b).
+   *
+   * They were two hand-written functions here, each naming its fields in its own order, so that the
+   * map from a port field to a 6502 label existed twice. `UniverseImage.cpp` holds it once, as a
+   * table of cells; `Mirror` is its `Materialise` and `CompareState` its `Compare` with the first
+   * difference turned into an assertion. Nothing a suite passes has changed.
+   */
+  void Mirror(const Universe& _universe, Cpu6502& _cpu, const Where& _at);
+  void CompareState(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context, bool _compareRng = true);
 
 } // namespace GameLogicTests

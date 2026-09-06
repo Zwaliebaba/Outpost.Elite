@@ -36,14 +36,14 @@ namespace Outpost
   class SoundOutput;
 
   /*
-   * The world a flight happens in, and the six seams the flight code reaches through.
+   * The universe a flight happens in, and the six seams the flight code reaches through.
    *
    * `GameShell` is the docked half's answer to the same question and this is the flying half's,
    * separate for one reason: what a shell answers is the PLATFORM -- a window, a presenter, a
    * keyboard -- and most of what this answers is phase 4. Putting them together would hide which
    * stubs are waiting on a machine and which are waiting on a slice.
    *
-   * IT OWNS THE FLIGHT WORLD AND BORROWS THE SCREEN. The canvas, the text system, the commander,
+   * IT OWNS THE FLIGHT UNIVERSE AND BORROWS THE SCREEN. The canvas, the text system, the commander,
    * the generator, the flight status, `QQ11` and `EV` all belong to the composition root because
    * the docked screens write them too; everything below `m_draw` is memory only a flight touches,
    * and there is nowhere else for it to live. `Elite::FlightScreen` and `Elite::FlightLoop` are
@@ -194,7 +194,7 @@ namespace Outpost
     Elite::MusicPlayer& m_music;
     SoundOutput& m_audio;
 
-    // ---- the flight world -------------------------------------------------------------------------
+    // ---- the flight universe -------------------------------------------------------------------------
 
     Elite::DrawWorkspace m_draw;
     Elite::MathWorkspace m_math;

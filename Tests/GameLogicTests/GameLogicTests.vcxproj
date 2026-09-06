@@ -105,7 +105,8 @@
     <ClInclude Include="Cpu6502.h" />
     <ClInclude Include="OracleImage.h" />
     <ClInclude Include="GoldenCanvas.h" />
-    <ClInclude Include="FlightWorld.h" />
+    <ClInclude Include="FlightUniverse.h" />
+    <ClInclude Include="UniverseImage.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
@@ -131,6 +132,8 @@
     <ClCompile Include="GoldenTests.cpp" />
     <ClCompile Include="NumberTests.cpp" />
     <ClCompile Include="UniverseTests.cpp" />
+    <ClCompile Include="UniverseImage.cpp" />
+    <ClCompile Include="UniverseImageTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MissionTests.cpp" />
     <ClCompile Include="MarketScreenTests.cpp" />

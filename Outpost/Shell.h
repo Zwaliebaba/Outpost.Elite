@@ -154,7 +154,7 @@ namespace Outpost
     }
 
     /*
-     * The flight world, for `RESET`, `RES2` and the raster handler.
+     * The flight universe, for `RESET`, `RES2` and the raster handler.
      *
      * The start sequence reaches both resets through this object and both of them are ported now,
      * so what was a stub is a forward (§6.73 again: a seam scoped before the thing behind it

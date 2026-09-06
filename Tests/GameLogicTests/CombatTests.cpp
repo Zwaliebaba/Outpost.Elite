@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
-#include "FlightWorld.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Combat.h"
@@ -197,29 +197,29 @@ namespace GameLogicTests
       {
         for (const Start& start : STARTS)
         {
-          World world;
-          Seed(world, type * 11u + start.whole);
-          world.message.token = 101u;
-          world.message.column = 9u;
-          world.message.append = 1u;
-          world.message.delay = 0u;
-          world.commander.At(Elite::Field::KillsLow) = start.fraction;
-          world.commander.At(Elite::Field::Kills) = start.whole;
-          world.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = start.high;
-          world.work[7] = static_cast<std::uint8_t>(type * 7u);
+          Universe universe;
+          Seed(universe, type * 11u + start.whole);
+          universe.message.token = 101u;
+          universe.message.column = 9u;
+          universe.message.append = 1u;
+          universe.message.delay = 0u;
+          universe.commander.At(Elite::Field::KillsLow) = start.fraction;
+          universe.commander.At(Elite::Field::Kills) = start.whole;
+          universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = start.high;
+          universe.work[7] = static_cast<std::uint8_t>(type * 7u);
 
           Cpu6502 cpu = oracle.Fresh();
           cpu.AddTrap(noise2);
-          FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-          Mirror(world, cpu, at);
+          FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+          Mirror(universe, cpu, at);
           cpu.memory[tallyl] = start.fraction;
           cpu.memory[tally] = start.whole;
           cpu.memory[static_cast<std::uint16_t>(tally + 1u)] = start.high;
-          cpu.memory[at.mch] = world.message.token;
-          cpu.memory[at.messxc] = world.message.column;
+          cpu.memory[at.mch] = universe.message.token;
+          cpu.memory[at.messxc] = universe.message.column;
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
-            cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = world.work[byte];
+            cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = universe.work[byte];
           }
 
           cpu.x = type;
@@ -227,7 +227,7 @@ namespace GameLogicTests
           Assert::IsTrue(run.completed, L"EXNO2 returned");
 
           RecordingCombat effects;
-          Elite::FlightScreen screen = world.Screen();
+          Elite::FlightScreen screen = universe.Screen();
           const std::uint8_t ours = Elite::RecordKill(screen, effects, type);
 
           const std::wstring where = WidenText("EXNO2(type " + std::to_string(type) + ", tally " + std::to_string(start.high) + "." +
@@ -238,14 +238,14 @@ namespace GameLogicTests
           Assert::AreEqual<std::uint8_t>(Elite::EXPLOSION_PITCH_KILL, cpu.trapHits[0].x, (where + L": frequency").c_str());
           Assert::AreEqual<std::uint8_t>(Elite::SOUND_EXPLOSION, cpu.trapHits[0].y, (where + L": effect").c_str());
 
-          Assert::AreEqual(cpu.memory[tallyl], world.commander.At(Elite::Field::KillsLow), (where + L": TALLYL").c_str());
-          Assert::AreEqual(cpu.memory[tally], world.commander.At(Elite::Field::Kills), (where + L": TALLY").c_str());
+          Assert::AreEqual(cpu.memory[tallyl], universe.commander.At(Elite::Field::KillsLow), (where + L": TALLYL").c_str());
+          Assert::AreEqual(cpu.memory[tally], universe.commander.At(Elite::Field::Kills), (where + L": TALLY").c_str());
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tally + 1u)],
-                           world.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u], (where + L": TALLY+1").c_str());
+                           universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u], (where + L": TALLY+1").c_str());
 
-          CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
-          Assert::AreEqual(cpu.memory[at.dly], world.message.delay, (where + L": DLY").c_str());
-          Assert::AreEqual(cpu.memory[at.mch], world.message.token, (where + L": MCH").c_str());
+          CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
+          Assert::AreEqual(cpu.memory[at.dly], universe.message.delay, (where + L": DLY").c_str());
+          Assert::AreEqual(cpu.memory[at.mch], universe.message.token, (where + L": MCH").c_str());
 
           announced += (cpu.memory[at.mch] == 101u && start.whole == 255u) ? 1u : 0u;
           ++compared;
@@ -301,33 +301,33 @@ namespace GameLogicTests
               const bool fromBehind = (shape & 1u) != 0u;
               const bool carryIn = (shape & 2u) != 0u;
 
-              World world;
-              Seed(world, damage + shield * 3u + banks * 7u + shape);
-              world.message.token = 101u;
-              world.message.column = 9u;
-              world.message.append = 1u;
-              world.message.delay = 0u;
-              world.status.forwardShield = shield;
-              world.status.aftShield = static_cast<std::uint8_t>(shield ^ 0x11u);
-              world.status.energy = banks;
-              world.bubble.blocks[2][8] = fromBehind ? 0x80u : 0x00u;
+              Universe universe;
+              Seed(universe, damage + shield * 3u + banks * 7u + shape);
+              universe.message.token = 101u;
+              universe.message.column = 9u;
+              universe.message.append = 1u;
+              universe.message.delay = 0u;
+              universe.status.forwardShield = shield;
+              universe.status.aftShield = static_cast<std::uint8_t>(shield ^ 0x11u);
+              universe.status.energy = banks;
+              universe.bubble.blocks[2][8] = fromBehind ? 0x80u : 0x00u;
 
               // A hold with something in every slot, and a generator whose X lands inside it often
               // enough that `OUCH` actually breaks things -- `Seed`'s own state always picks slot
               // 34, which is past the end of the block and so never breaks anything at all.
               for (std::size_t index = 0; index < 22u; ++index)
               {
-                world.commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + index] = 6u;
+                universe.commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + index] = 6u;
               }
-              world.rng.SetState({0u, static_cast<std::uint8_t>((damage + shield + banks + shape) % 30u), 0u, 0u});
+              universe.rng.SetState({0u, static_cast<std::uint8_t>((damage + shield + banks + shape) % 30u), 0u, 0u});
 
               Cpu6502 cpu = oracle.Fresh();
               cpu.AddTrap(noise, Cpu6502::TrapExit::SetCarry);
               cpu.AddTrap(death);
-              FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-              Mirror(world, cpu, at);
-              cpu.memory[at.mch] = world.message.token;
-              cpu.memory[at.messxc] = world.message.column;
+              FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+              Mirror(universe, cpu, at);
+              cpu.memory[at.mch] = universe.message.token;
+              cpu.memory[at.messxc] = universe.message.column;
 
               const std::uint16_t block = static_cast<std::uint16_t>(at.kPercent + 2u * Elite::SHIP_BLOCK_SIZE);
               cpu.memory[inf] = static_cast<std::uint8_t>(block & 0xFFu);
@@ -339,8 +339,8 @@ namespace GameLogicTests
               Assert::IsTrue(run.completed, L"OOPS returned");
 
               RecordingCombat effects;
-              Elite::FlightScreen screen = world.Screen();
-              const bool alive = Elite::TakeDamage(screen, effects, world.bubble.blocks[2], damage, carryIn);
+              Elite::FlightScreen screen = universe.Screen();
+              const bool alive = Elite::TakeDamage(screen, effects, universe.bubble.blocks[2], damage, carryIn);
 
               const std::wstring where =
                 WidenText("OOPS(damage " + std::to_string(damage) + ", shield " + std::to_string(shield) + ", banks " +
@@ -353,23 +353,23 @@ namespace GameLogicTests
               }
               Assert::AreEqual(!wentToDeath, alive, (where + L": survived").c_str());
 
-              Assert::AreEqual(cpu.memory[at.fsh], world.status.forwardShield, (where + L": FSH").c_str());
-              Assert::AreEqual(cpu.memory[at.ash], world.status.aftShield, (where + L": ASH").c_str());
-              Assert::AreEqual(cpu.memory[at.energy], world.status.energy, (where + L": ENERGY").c_str());
+              Assert::AreEqual(cpu.memory[at.fsh], universe.status.forwardShield, (where + L": FSH").c_str());
+              Assert::AreEqual(cpu.memory[at.ash], universe.status.aftShield, (where + L": ASH").c_str());
+              Assert::AreEqual(cpu.memory[at.energy], universe.status.energy, (where + L": ENERGY").c_str());
 
               if (!wentToDeath)
               {
-                CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
-                Assert::AreEqual(cpu.memory[at.dly], world.message.delay, (where + L": DLY").c_str());
-                Assert::AreEqual(cpu.memory[at.de], world.message.append, (where + L": de").c_str());
+                CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
+                Assert::AreEqual(cpu.memory[at.dly], universe.message.delay, (where + L": DLY").c_str());
+                Assert::AreEqual(cpu.memory[at.de], universe.message.append, (where + L": de").c_str());
                 for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tp + byte)], world.commander.bytes[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tp + byte)], universe.commander.bytes[byte],
                                    (where + L": commander byte " + std::to_wstring(byte)).c_str());
                 }
                 for (std::size_t index = 0; index < 4u; ++index)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + index)], world.rng.State()[index],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + index)], universe.rng.State()[index],
                                    (where + L": RAND").c_str());
                 }
               }
@@ -378,7 +378,7 @@ namespace GameLogicTests
               for (std::size_t index = 0; index < 22u; ++index)
               {
                 const std::size_t byte = static_cast<std::size_t>(Elite::Field::CargoHold) + index;
-                broke += (world.commander.bytes[byte] == 0u) ? 1u : 0u;
+                broke += (universe.commander.bytes[byte] == 0u) ? 1u : 0u;
               }
               ++compared;
             }
@@ -436,48 +436,48 @@ namespace GameLogicTests
             {
               for (std::uint8_t carry = 0; carry < 2u; ++carry)
               {
-                World world;
-                Seed(world, slot * 13u + toss + already + held + carry);
-                world.message.token = 101u;
-                world.message.column = 9u;
-                world.message.append = 1u;
-                world.message.delay = already;
-                world.rng.SetState({0u, slot, 0u, toss});
+                Universe universe;
+                Seed(universe, slot * 13u + toss + already + held + carry);
+                universe.message.token = 101u;
+                universe.message.column = 9u;
+                universe.message.append = 1u;
+                universe.message.delay = already;
+                universe.rng.SetState({0u, slot, 0u, toss});
 
                 for (std::size_t index = 0; index < 22u; ++index)
                 {
-                  world.commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + index] = held;
+                  universe.commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + index] = held;
                 }
 
                 Cpu6502 cpu = oracle.Fresh();
-                FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-                Mirror(world, cpu, at);
+                FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+                Mirror(universe, cpu, at);
 
                 cpu.c = (carry != 0u);
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(ouch, 400'000);
                 Assert::IsTrue(run.completed, L"OUCH returned");
 
-                Elite::FlightScreen screen = world.Screen();
+                Elite::FlightScreen screen = universe.Screen();
                 Elite::DamageEquipment(screen, carry != 0u);
 
                 const std::wstring where =
                   WidenText("OUCH(slot " + std::to_string(slot) + ", toss " + std::to_string(toss) + ", DLY " + std::to_string(already) +
                             ", held " + std::to_string(held) + (carry != 0u ? ", carry set)" : ", carry clear)"));
 
-                CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
-                CompareState(cpu, world, at, where);
-                Assert::AreEqual(cpu.memory[at.dly], world.message.delay, (where + L": DLY").c_str());
-                Assert::AreEqual(cpu.memory[at.de], world.message.append, (where + L": de").c_str());
-                Assert::AreEqual(cpu.memory[at.mch], world.message.token, (where + L": MCH").c_str());
-                Assert::AreEqual(cpu.memory[at.messxc], world.message.column, (where + L": messXC").c_str());
+                CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
+                CompareState(cpu, universe, at, where);
+                Assert::AreEqual(cpu.memory[at.dly], universe.message.delay, (where + L": DLY").c_str());
+                Assert::AreEqual(cpu.memory[at.de], universe.message.append, (where + L": de").c_str());
+                Assert::AreEqual(cpu.memory[at.mch], universe.message.token, (where + L": MCH").c_str());
+                Assert::AreEqual(cpu.memory[at.messxc], universe.message.column, (where + L": messXC").c_str());
                 for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tp + byte)], world.commander.bytes[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tp + byte)], universe.commander.bytes[byte],
                                    (where + L": commander byte " + std::to_wstring(byte)).c_str());
                 }
 
                 const std::uint8_t after =
-                  (slot < 22u) ? world.commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + slot] : held;
+                  (slot < 22u) ? universe.commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + slot] : held;
                 emptied += (held != 0u && after == 0u) ? 1u : 0u;
                 suppressed += (already != 0u && after == held) ? 1u : 0u;
                 ++compared;

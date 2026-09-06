@@ -269,7 +269,7 @@ namespace GameLogicTests
 
             cpu.memory[at.tek] = techLevel;
 
-            // 6502: BEGIN's copy, which `OracleImage::Fresh()` has never run -- see `FlightWorld.h`.
+            // 6502: BEGIN's copy, which `OracleImage::Fresh()` has never run -- see `FlightUniverse.h`.
             cpu.memory[spasto] = static_cast<std::uint8_t>(coriolis & 0xFFu);
             cpu.memory[static_cast<std::uint16_t>(spasto + 1u)] = static_cast<std::uint8_t>(coriolis >> 8);
 

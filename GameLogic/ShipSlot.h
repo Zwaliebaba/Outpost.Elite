@@ -11,7 +11,7 @@ namespace Elite
   /*
    * The local bubble of ships (slice 3a).
    *
-   * 6502: FRIN, K%, UNIV and MANY. Elite does not have a world; it has a BUBBLE of at most ten
+   * 6502: FRIN, K%, UNIV and MANY. Elite does not have a persistent universe; it has a BUBBLE of at most ten
    * ships around the player, created as they come into range and destroyed as they leave. Every
    * routine that moves, draws, shoots at or is shot by a ship works on one slot of this at a time,
    * copied into `INWK` and copied back.
@@ -240,7 +240,7 @@ namespace Elite
      * IT MUST BE SEEDED, and zero is not a value the game can hold here: a zero entry in `XX21`
      * means "this build does not carry that type" and `NWSHP` refuses the ship. So an unseeded
      * bubble refuses to create a station rather than creating a wrong one, which is §6.95's rule
-     * applied to a second byte -- the flight world has to be built in a state the game could be in.
+     * applied to a second byte -- the flight universe has to be built in a state the game could be in.
      */
     std::uint16_t stationBlueprint = 0;
   };
