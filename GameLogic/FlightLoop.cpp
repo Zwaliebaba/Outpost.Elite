@@ -789,31 +789,9 @@ namespace Elite
     return {true, RecordKill(_universe, _ports, _ports.loop, _type)};
   }
 
-  void LoopSpawnEffects::AbortMissile(std::uint8_t _colour)
-  {
-    AbortMissileLock(m_universe.canvas, m_universe.bubble, m_universe.status.missileArmed, m_universe.commander.missiles, _colour);
-  }
-
-  void LoopSpawnEffects::ShowMessage(std::uint8_t _token)
-  {
-    Elite::ShowMessage(m_universe.canvas, m_ports.printer, m_universe.text, m_ports.characters.state, m_universe.message, _token,
-                       m_universe.view);
-  }
-
-  void LoopSpawnEffects::ToggleStationIndicator()
-  {
-    Elite::ToggleStationIndicator(m_universe.canvas);
-  }
-
-  void LoopSpawnEffects::ResetMissileIndicators()
-  {
-    Elite::ResetMissileIndicators(m_universe.canvas, m_universe.commander.missiles);
-  }
-
   LoopOutcome MoveEveryShip(Universe& _universe, Ports& _ports) noexcept
   {
     Commander& commander = _universe.commander;
-    LoopSpawnEffects spawning(_universe, _ports);
 
     // 6502: .MA3 LDX #0 / .MAL1 STX XSAV -- and the index is advanced by hand, never by the loop.
     std::uint8_t slot = 0;
@@ -1227,7 +1205,7 @@ namespace Elite
          * what processes it. A port that wrote a `for` over the slots would skip a ship for every
          * one killed.
          */
-        KillShip(_universe.bubble, _universe.heap, _universe.heaps, _universe.work, commander, spawning, slot, _universe.flight.blueprint);
+        KillShip(_universe, _ports, slot);
       }
       else
       {
@@ -1383,8 +1361,7 @@ namespace Elite
 
           // 6502: JSR NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties
           // the sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
-          LoopSpawnEffects spawning(_universe, _ports);
-          (void)AddStation(_universe.bubble, _universe.work, spawning, _universe.current.techLevel, _universe.flight.blueprint);
+          (void)AddStation(_universe, _ports);
         }
       }
 

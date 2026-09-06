@@ -332,33 +332,9 @@ namespace Elite
    */
   void FireMissile(Universe& _universe, Ports& _ports) noexcept;
 
-  /*
-   * 6502: what `KILLSHP` and `SOS1` call, wired to the routines the port already has.
-   *
-   * `SpawnEffects` was a seam when `Spawn.cpp` was written, because the dashboard and the message
-   * printer did not exist yet. All four of its calls are ported now, so anything holding a
-   * `FlightLoop` can hand the real thing over instead of counting calls it could make for real
-   * (§6.73's rule, applied forwards). It is here rather than in a .cpp because both the flight
-   * loop and the launch need it.
-   */
-  class LoopSpawnEffects final : public SpawnEffects
-  {
-  public:
-    LoopSpawnEffects(Universe& _universe, Ports& _ports) noexcept
-      : m_universe(_universe),
-        m_ports(_ports)
-    {
-    }
+  // `LoopSpawnEffects` was the adapter that answered `SpawnEffects` out of a universe and its
+  // ports. It went with the seam in M3-b-1: the spawn routines take the two objects it held.
 
-    void AbortMissile(std::uint8_t _colour) override;
-    void ShowMessage(std::uint8_t _token) override;
-    void ToggleStationIndicator() override;
-    void ResetMissileIndicators() override;
-
-  private:
-    Universe& m_universe;
-    Ports& m_ports;
-  };
 
   [[nodiscard]] LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept;
 

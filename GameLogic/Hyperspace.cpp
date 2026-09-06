@@ -227,11 +227,9 @@ namespace Elite
     // 6502: JSR RES2 / JSR SOLAR -- a clean bubble and then the system's own planet and sun.
     ResetShipAndBubble(_universe, _ports);
 
-    // 6502: JSR SOLAR -- and `SpawnEffects` is `LoopSpawnEffects` over the loop, the adapter
-    // FlightLoop.h already carries for exactly this (it was a seam when `Spawn.cpp` was written).
-    LoopSpawnEffects spawning(_universe, _ports);
-    BuildSystem(_universe.canvas, _universe.dust, _universe.heaps, _universe.bubble, _universe.work, _universe.commander, _universe.rng,
-                _universe.flight, spawning, _universe.current.techLevel, _universe.current.seeds.bytes, _universe.view, false);
+    // 6502: JSR SOLAR -- the four seams it reached through are four routines this library now
+    // contains, so M3-b-1 has it call them.
+    BuildSystem(_universe, _ports, false);
 
     /*
      * 6502: LDA QQ11 / AND #%00111111 / BNE RTS111.

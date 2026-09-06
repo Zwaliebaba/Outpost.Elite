@@ -174,7 +174,8 @@ namespace Elite
     std::uint8_t below = 0;     ///< 6502: K+1 -- drawn under `T1`, unless it is zero
   };
 
-  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold, DialColours _colours) noexcept;
+  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold,
+               DialColours _colours) noexcept;
 
   /*
    * 6502: DIL2 -- the roll and pitch indicators, which are one lit pixel rather than a bar.
@@ -263,6 +264,10 @@ namespace Elite
 
   /// 6502: SPBLB -- the same for the space station bulb, seventeen cells to the right.
   void ToggleStationIndicator(Canvas& _canvas) noexcept;
+
+  /// 6502: GREEN2 -- the palette byte `KILLSHP` hands `ABORT`. It was `SpawnEffects::MISSILE_GREEN`
+  /// until M3-b-1 took the seam away; the constant belongs beside the routine that takes it.
+  inline constexpr std::uint8_t MISSILE_GREEN = 0x57;
 
   /// What `ECBLB2` and `ECMOF` reach outside this slice: the sound, which is hardware.
   class DashboardEffects

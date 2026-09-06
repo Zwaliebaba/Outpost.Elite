@@ -306,7 +306,7 @@ ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists
 the executable reaches <!--count:outpost-elite-names-->199 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->21 abstract classes in
 `GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `DashboardEffects::PlaySound`,
 `TunnelEffects::ShowFrame`, `SaveStore` through `SaveScreen`). Most are **phase order**:
 `ShipEffects::RunTactics`, `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`,
@@ -347,7 +347,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,925 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,922 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1262,6 +1262,46 @@ need a seam — `TextPrinter` takes the bell and `ExtendedTokenPrinter` the cont
 `Universe` that held them would not be a plain aggregate, which is the one property M3-c's
 `StateHash` needs.
 
+#### M3-b slice plan (written before the build, 2026-09-06; four commits; §8 records what each found)
+
+**Twenty-two seams become four, and most of them are not ports.** §4.5's table is the destination:
+`Presenter`, `Keyboard`, `SoundSink`, `SaveStore`. Everything else in the twenty-two is either a
+call into a routine that now exists — the phase order that scoped it has since been built — or a
+`VideoState` write, or a piece of the text system's own internal polymorphism.
+
+**M3-b-1 — the phase-order seams go, ONE COMMIT EACH.** `SpawnEffects`, `SpawnChildEffects`,
+`ShipEffects`, `ShipDrawEffects`, `ChartShapes` and the spawn and reset halves of
+`FlightLoopEffects` and `StartUpEffects`: every method of them is a routine `GameLogic` now
+contains, reached through an interface because it did not when the seam was written (§6.73's rule,
+which this slice is the last application of). The routines that reached through them take
+`(Universe&, Ports&)` and call. No new abstraction.
+
+**One commit each, and the reason is the tests.** A seam is what a suite COUNTS: the oracle traps
+the routine, the port records the call, and the two tallies are compared. Take the seam away and
+both sides run the routine, so the trap has to come off and the comparison becomes the pixels or
+the state the routine produced — which is a stronger statement and a per-suite piece of work. §8
+records what each one found.
+
+**M3-b-2 — `SoundSink`.** `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep` and
+`FlightLoopEffects`'s music pair collapse into one port that takes a SID REGISTER WRITE. The library
+already owns `SoundBuffer`, the music player and the tables; what it lacks is somewhere to put them,
+so `Universe` gains the two objects and the port is what `SidWriteLog` already is.
+
+**M3-b-3 — `Presenter` and `Keyboard`.** `TunnelEffects::ShowFrame`, `LineEntryEffects::WaitFrames`,
+`StartUpEffects::WaitFrames` and `TradeScreenEffects::ClearToView`'s pixels become `Presenter`;
+`KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys` and `FlushKeyboard`
+become `Keyboard`. `SightEffects` and `ExplosionEffects` become `VideoState` writes the library
+makes itself, which ADR-005 §1 already decided.
+
+**M3-b-4 — `SaveStore`, the text system, and the null port.** `CommanderStore` is renamed to §4.5's
+name. `TextSink`, `ValueTokens` and `ControlCodes` are the text system's own polymorphism rather
+than platform, and are the three the table does not mention: they go by the same argument as the
+rest, since `CHPR`, the value tokens and the nine mission codes all exist. `NullShell`,
+`LoopRecording`, `RecordingSight`, `RecordingView` and `RecordingDashboard` become one null port.
+
+**What this slice does not do.** `Elite::Game` is M3-c's. The seams that survive are four, and the
+count is what says so.
+
 ### Phase M2 — Explicit calling conventions
 
 | Slice | Scope | Acceptance | Sittings |
@@ -1595,6 +1635,23 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-1a: `SpawnEffects` goes, and three traps come off with it.** The seam's four
+methods — `ABORT`, `MESS`, `SPBLB` and `msblob` — are four routines this library contains, reached
+through an interface because it did not when `KILLSHP` and `SOLAR` were ported. `KillShip`,
+`AddPlanetOrSun`, `AddStation` and `BuildSystem` take `(Universe&, Ports&)` and call them;
+`LoopSpawnEffects`, the adapter that answered the seam out of a universe and its ports, went with
+it, and `MISSILE_GREEN` moved to `Dashboard.h` beside the routine that takes it. `effects-seams`
+22 → 21.
+
+**The tests are what made this a commit rather than a rename.** A seam is what a suite COUNTS: the
+oracle traps the routine, the port records the call, and the two tallies are compared. With the
+seam gone both sides run the routine, so the three traps in `SpawnTests` came off and the
+comparison became the WHOLE SCREEN — the missile indicator, the message row and the station light
+are all pixels, and one comparison covers them where three tallies did. `NWSPS` gained a screen
+comparison it never had, and it asserts the indicator was actually drawn rather than that a call
+was made. That is what §6.73 has been arguing a seam owes the port every time it comes up, and it
+is why the remaining phase-order seams are a commit each rather than one sweep.
 
 **2026-09-06 — the Windows job on M3-a-3, and a fourth half for `check_outpost.py`.** `Main.cpp`
 would not compile: `Game`'s constructor still initialised `trade` and `save` and still named
