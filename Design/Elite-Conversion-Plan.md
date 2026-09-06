@@ -163,14 +163,25 @@ the one that used to head this list is gone:
    the byte. ADR-005 §1 scheduled a per-row shift of the space view that the shipped game never
    had, and §6.154 repeated the claim a day before checking it. **It is left in this list, struck
    through, because a decision that quietly stops being true is exactly what §6.154 is about.**
-1. **Four acceptance criteria were signed off by look or by ear** — 2e, 3b and 3c by eye and 5a by
-   ear (R6, 2026-09-06), each needing a person at a Windows machine and each closed without a stored
-   artefact, so nothing in CI can see a regression in the title ship, the launch view or the
-   dashboard, or hear one in the synthesiser. Four captures and four hashes would close all of it,
-   and nothing blocks them.
-2. **R13 is closed on two units of five.** `tactics` and `raster` are carried to zero survivors;
-   `hyperspace`, `trumbles` and `missions` carry mutants, and every tally published before the tool
-   exists only as an assertion.
+1. **Four acceptance criteria were signed off by look or by ear, and none left an artefact** — 2e,
+   3b and 3c by eye and 5a by ear (R6, 2026-09-06). Nothing in CI can see a regression in the title
+   ship, the launch view or the dashboard, or hear one in the synthesiser.
+
+   **And "it needs a person at a Windows machine" is true of the ACCEPTANCE and not of the
+   regression guard**, which is a distinction this corpus has been eliding. What needed a person was
+   confirming the thing looks right on real hardware; what would catch a regression is a hash of
+   what `GameLogic` produces, and that is headless — `GoldenCanvas` already resolves a `Canvas` and
+   compares it pixel for pixel on both CI legs, and the session tests already drive the loops. Four
+   goldens and one hashed sound render would close this and nothing blocks any of them. The half
+   that genuinely does need Windows is the presenter — the D3D12 upload, the palette and the
+   letterbox — and that is a much smaller surface than the drawing code the sign-offs were about.
+2. **Two live mutation survivors in the whole corpus, and they are both `hyperspace`'s.** `tactics`,
+   `raster`, `trumbles` and `missions` are at zero; the four other not-caught entries in
+   `tools/mutants.json` are recorded EQUIVALENTS with the proof on them, which is a measurement and
+   not debt. What is left is `hyp-253` (`CMP #253 / BCS MJP`, a threshold no seed lands on) and
+   `hyp-ctrl-and` (the mis-jump cheat needs the key AND the option, and nothing varies the two flags
+   together) — four cases and one seed, per §6.147. Separately, every tally published before
+   `mutate.py` existed remains an assertion nobody can re-run, which is R13's other half.
 3. **Slice 0e is owner acceptance**, and what closes it is a written answer from the rights holders
    (R1).
 
