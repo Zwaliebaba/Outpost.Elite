@@ -149,4 +149,37 @@ namespace Elite
     _canvas.SetBackground(0u);
   }
 
+  void SetUpLoaderVideo(VideoState& _video) noexcept
+  {
+    _video.enabled = 0u;     // 6502: LDA #%00000000 / STA VIC+&15 -- all eight off
+    _video.expanded = 0xFFu; // 6502: LDA #%11111111 / STA VIC+&17 / STA VIC+&1D -- all double height and width
+
+    // 6502: LDA #9 / STA VIC+&29 ... LDA #9 / STA VIC+&2E -- the six Trumbles' colours.
+    _video.colour[2] = 9u;  // brown
+    _video.colour[3] = 12u; // grey
+    _video.colour[4] = 6u;  // blue
+    _video.colour[5] = 1u;  // white
+    _video.colour[6] = 5u;  // green
+    _video.colour[7] = 9u;  // brown
+
+    // 6502: LDA #0 / STA VIC+&10 -- bit 9 of every x clear, which the sixteen-bit x carries.
+    // 6502: LDX #161 / LDY #101 / STX VIC+0 / STY VIC+1 -- the sights, in the centre of the view.
+    _video.x[0] = 161u;
+    _video.y[0] = 101u;
+
+    // 6502: LDA #18 / LDY #12 / STA VIC+2 / STY VIC+3, then ASL A between each Trumble's STA and
+    // the same Y for every one: 18, 36, 72, 144; then LDA #14: 14, 28, 56.
+    _video.x[1] = 18u;
+    _video.x[2] = 36u;
+    _video.x[3] = 72u;
+    _video.x[4] = 144u;
+    _video.x[5] = 14u;
+    _video.x[6] = 28u;
+    _video.x[7] = 56u;
+    for (std::size_t sprite = 1; sprite < SPRITE_COUNT; ++sprite)
+    {
+      _video.y[sprite] = 12u;
+    }
+  }
+
 } // namespace Elite

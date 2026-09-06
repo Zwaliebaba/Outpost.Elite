@@ -34,14 +34,14 @@
       "slice": "M0-a"
     },
     "main-lines": {
-      "ceiling": 1209,
+      "ceiling": 1220,
       "slack": 0,
-      "slice": "hyperspace key wired 2026-09-06 (plan 6.159): PressKey reads H off the matrix"
+      "slice": "hyperspace key wired 2026-09-06 (plan 6.159): PressKey reads H off the matrix, Advance dispatches every pass"
     },
     "outpost-elite-names": {
-      "ceiling": 225,
+      "ceiling": 226,
       "slack": 0,
-      "slice": "hyperspace key wired 2026-09-06 (plan 6.159): PressKey reads H off the matrix"
+      "slice": "hyperspace key and loader sprites 2026-09-06 (plan 6.159, 6.160)"
     },
     "effects-seams": {
       "ceiling": 22,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3721,
+      "ceiling": 3730,
       "slack": 0,
-      "slice": "death-sequence fix and hyperspace key 2026-09-06 (plan 6.157-6.159)"
+      "slice": "death-sequence fix, hyperspace key and loader sprites 2026-09-06 (plan 6.157-6.160)"
     },
     "oracle-test-files": {
       "ceiling": 50,

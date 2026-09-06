@@ -140,7 +140,7 @@ is preserved in the history and was true then.
   `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
   WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
   docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->394 tests in <!--count:test-files-->56 files: the 6502 interpreter with its cycle counter and
+- `Tests/GameLogicTests/` — <!--count:tests-->395 tests in <!--count:test-files-->56 files: the 6502 interpreter with its cycle counter and
   its in-order store log, the oracle fixture over the assembled game and the loader, and the
   suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
@@ -510,6 +510,25 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.160 The sights were switched on at the origin, because the loader's registers were never modelled
+
+The owner: "the crosshair does not render. Is that correct?" It was not. The laser sights are
+hardware sprite 0, and `SIGHT` does three things to it -- writes its pointer into both blocks of
+screen RAM, writes its colour into `VIC+&27`, and switches it on in `VIC+&15` -- and one thing it
+never does is position it. The Elite loader's part 4 did that, once: `LDX #161 / LDY #101 / STX
+VIC+0 / STY VIC+1`, the centre of the space view, and the same block puts the explosion sprite at
+(18, 12), the six Trumbles along the top row, colours the Trumbles, and sets every sprite double
+width and double height. The port had the loader's parts 5 and 6 (the colour cells, §6.104) and
+not part 4, so a fresh `VideoState` held sprite 0 at (0, 0) -- which the VIC-II's origin puts 24
+pixels left of and 50 above the screen. Every frame the sights were on, coloured, pointed at the
+right definition and drawn where nobody could see them.
+
+`SetUpLoaderVideo` is part 4's sprite half now, run once by the flight session that owns the
+video state, and `TheLoaderPutsTheSightsInTheCentreOfTheView` asserts the loader's values and
+then resolves a frame and checks that every painted pixel lies in the 48-by-42 box the doubled
+sprite covers, centred on the view to the pixel. Same shape as §6.104: the game inherits state
+from a program the oracle image does not contain, and the port has to read that program too.
+
 ### 6.159 The hyperspace key was never connected, and a comment on the dispatch said exactly why
 
 The owner: "it looks like I cannot hyperjump. Is the H key even connected?" It was not. `TT102`
@@ -536,6 +555,24 @@ range, which gets the "range" message. Proximity to the station is not among the
 lets you jump from the docking approach, and the `safehouse` copy of the seeds exists precisely
 to stop the "hyperspace while docking" bug that allowed. What the owner may remember is the
 docking computer's behaviour, or another Elite.
+
+**Then the countdown sat at 15.** `MLOOP` calls `TT102` on every pass with `thiskey` in A, zero
+when nothing is pressed, and a key nothing matches falls through `HME1` into `TT107` -- which is
+how the countdown ticks, once a pass, keys or no keys. `Advance` dispatched only when the window
+had a key, so a countdown started in flight advanced one tick per keypress and otherwise not at
+all; the docked loop already dispatched the zero. `Advance` dispatches every pass now. Two faults
+on one key, both in the one file no suite compiles, and both of the same shape as §6.111: the
+outer loop written from a description of what it does rather than from what it calls.
+
+**And it still sat at 15, because the countdown is two bytes and the port carried one.** `wW`
+stores 15 into `QQ22+1`, the number on the screen, AND into `QQ22`, the tick within a step;
+`TT107` counts `QQ22` down to zero before it moves the number, then reloads it with 5. `JumpState`
+had a field for the first byte and none for the second, so every countdown began its first step
+from a `QQ22` of zero -- 255 passes, about twenty seconds, before the 15 became 14, and nobody had
+waited that long. `hyp`'s oracle test compared `QQ22+1` and not `QQ22`, which is the hole the
+missing field hid in; `JumpState::counter` is the second byte now, `Ghy`'s `wW2` sets it to 2 as
+it does the first, and both tests compare it. Three faults on one key, then, and the third was
+in `GameLogic` under a test that named the routine and compared half of what it wrote.
 
 ### 6.158 A typed hold with seventeen slots, and a routine that indexes twenty-two of them
 
@@ -6787,7 +6824,8 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
-| 2026-09-06 | **The hyperspace key was never connected** (§6.159). `TT102` reaches `hyp` on `BIT KLO+HINT` -- H held on the matrix, not H as the key pressed -- so `ActionForKey` takes the held flag as an argument, and `Main.cpp`'s `PressKey` passed it as a literal `false`. `Window::Held(KEY_HYPERSPACE)` now, read live at dispatch as `JumpOf` reads CTRL. The original has no refusal near the station: docked, a running countdown, the same system and out of range are the four. |
+| 2026-09-06 | **The laser sights were on and off-screen** (§6.160). `SIGHT` points, colours and enables sprite 0 and never positions it; the loader's part 4 did, at (161, 101), with the explosion and Trumble sprites and their colours, and every sprite doubled. The port had parts 5 and 6 and not 4, so a fresh `VideoState` drew the sights at the VIC-II origin, off the screen. `SetUpLoaderVideo` now, run once by the flight session, with a test that resolves a frame and finds every painted pixel in the doubled sprite's box, centred on the view. |
+| 2026-09-06 | **The hyperspace key was never connected** (§6.159). `TT102` reaches `hyp` on `BIT KLO+HINT` -- H held on the matrix, not H as the key pressed -- so `ActionForKey` takes the held flag as an argument, and `Main.cpp`'s `PressKey` passed it as a literal `false`. `Window::Held(KEY_HYPERSPACE)` now, read live at dispatch as `JumpOf` reads CTRL. The countdown then sat at 15: `MLOOP` runs `TT102` every pass with a zero key and that is what ticks `TT107`, while `Advance` dispatched only on a key; it dispatches every pass now. And `JumpState` carried `QQ22+1` but not `QQ22`, the tick within a step that `wW` also sets to 15, so the first step took 255 passes; `JumpState::counter` now, compared in both oracle tests. The original has no refusal near the station: docked, a running countdown, the same system and out of range are the four. |
 | 2026-09-06 | **`OUCH` indexed past a typed hold** (§6.158). The Debug suite run for §6.157 died in `TheDamageMatchesOOPS`: `QQ20,X` runs to twenty-one on purpose, into the five fittings after the hold, and M1-d's `std::array<std::uint8_t, 17>` turned every one of them into an out-of-range subscript -- an assertion in Debug, the right bytes by accident in Release, which is why CI stayed green. `Commander::HoldOrFitting` is the indexed load now, in the routine and in both `OUCH` tests. The same run then died in the synthesiser render test, whose silence baseline played effect 255 on the belief that `NOISE` refuses it; `SOUX6` masks it to 127 and reads the tables there. The baseline plays nothing now. |
 | 2026-09-06 | **The death sequence was corrupt, and every explosion with it** (§6.157). The owner died and saw the title screen with coloured blocks down both borders: line bytes landing in screen RAM from rows past the bottom of the bitmap. The wreckage pieces were replaying, as lines, the `XX3` vertices that a neighbour's explosion had written across their heaps -- because `LL9`'s `EE55` block, which seeds a cloud's six bytes, had been a seam with nothing behind it since slice 3b, and `DOEXP` ran its vertex copy from an unseeded zero down through 255. §6.91's reason for the seam was wrong: the first `DORND`'s carry is `EE51`'s exit, a `CMP`'s, not `LOIN`'s. The block is `LL9`'s code now, `EraseShip` and `Anger` return their exit carries, part 11 derives the flag at `MA8` along its four paths, and the whole-frame harness compares the seeded bytes and the generator it used to skip -- which found the scooped canister's `.oily DORND` running on a clear carry where `CPX #OIL / BEQ` leaves a set one. Replay record re-taken from step 200 (rule 1, second case). Four tests added or widened; 394 green with the oracle present. |
 | 2026-09-06 | **The last things anybody could do without a person** (§6.156). **The corpus's last two mutation survivors are closed**: `hyp-253`'s sweep rolled 252 — one below a boundary that only 253 separates — and `hyp-ctrl-and` hid behind a sentence in its own test saying an interpreter cannot answer `JSR CTRL`, when `CTRL` is `LDX #6` into `LDA KEYLOOK,X / TAX / RTS`. Every recorded mutant is now caught or a proved equivalent. **The three visual sign-offs did not need goldens**: `TheTitleMatchesTITLE` compares the whole bitmap over 48 cases, `TheLaunchMatchesTT110` the same, and the dashboard, planet and stardust suites carry twenty-one more — a stored hash would be strictly weaker than an oracle comparison that runs on both legs. What the sign-offs were about is the PRESENTER, which is not `GameLogic` and is a much smaller surface than the worry had attached itself to. **The sound really did have nothing**, so sixteen effects are rendered and hashed — and the first run produced sixteen identical hashes, because **`SOINT` never writes the master volume**: `COLD` and `BDENTRY` do, the port has neither, and the executable is audible only because the title screen plays music first. `SoundOutput` writes it now. **The rule: a gap recorded about tests nobody has re-read is a guess too, and it is usually pessimistic.** |

@@ -1033,6 +1033,7 @@ namespace GameLogicTests
                     Elite::JumpState jump;
                     jump.docked = static_cast<std::uint8_t>(docked);
                     jump.countdown = static_cast<std::uint8_t>(countdown);
+                    jump.counter = static_cast<std::uint8_t>(countdown); // the oracle's QQ22 is seeded the same above
                     jump.controlHeld = control != 0;
 
                     ChartView ours = chart;
@@ -1055,6 +1056,11 @@ namespace GameLogicTests
                     Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq10], ours.cursorY, (where + L": QQ10").c_str());
                     Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.qq22 + 1)], jump.countdown,
                                                     (where + L": QQ22+1").c_str());
+
+                    // 6502: wW's second store. Compared since 2026-09-06: the port set only the byte
+                    // above, so every countdown started its first step from a tick counter of zero
+                    // and ran 255 passes before the 15 moved (§6.159).
+                    Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq22], jump.counter, (where + L": QQ22").c_str());
 
                     /*
                      * The cursor has to be compared on its own. CHPR is trapped on both sides, so

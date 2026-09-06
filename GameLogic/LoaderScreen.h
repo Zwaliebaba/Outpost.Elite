@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Canvas.h"
+#include "VideoState.h"
 
 #include <cstdint>
 
@@ -33,6 +34,25 @@ namespace Elite
    * alone, which is exactly the part the loader coloured.
    */
   void SetUpLoaderScreen(Canvas& _canvas) noexcept;
+
+  /*
+   * 6502: the Elite loader's part 4 -- the VIC-II registers the game inherits and never sets.
+   *
+   * The sprite half of it: all eight switched off, all eight double width and double height, the
+   * laser sights (sprite 0) at (161, 101), the centre of the space view, the explosion sprite at
+   * (18, 12), the six Trumbles along the top row at (36, 12), (72, 12), (144, 12), (14, 12),
+   * (28, 12) and (56, 12), and the Trumbles' colours -- brown, grey, blue, white, green, brown.
+   * The sights' own colour is `SIGHT`'s and the explosion's is the raster handler's, so neither
+   * is here; the two shared multicolour registers are `VideoState.h`'s constants.
+   *
+   * WITHOUT THIS THE SIGHTS NEVER APPEAR. `SIGHT` writes the pointer and the colour and switches
+   * sprite 0 on, and nothing in the game ever writes its position, because the loader did: a fresh
+   * `VideoState` had it at (0, 0), which is 24 pixels left of and 50 above the screen (§6.160).
+   * The same was true of every Trumble's first position and colour.
+   *
+   * Run once by the composition root's flight session, as `SetUpLoaderScreen` is by the root.
+   */
+  void SetUpLoaderVideo(VideoState& _video) noexcept;
 
   /*
    * 6502: LDA #&70 -- foreground colour 7 (yellow) over background colour 0 (black).

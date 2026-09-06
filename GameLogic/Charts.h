@@ -223,6 +223,12 @@ namespace Elite
   {
     std::uint8_t docked = 0;    ///< 6502: QQ12 -- non-zero while docked, and you cannot jump docked
     std::uint8_t countdown = 0; ///< 6502: QQ22+1 -- non-zero while a jump is already counting down
+
+    /// 6502: QQ22 -- the tick within each step of the countdown. `wW` stores 15 into BOTH bytes,
+    /// and `TT107` counts this one down to zero before it moves the displayed one; a request that
+    /// left it alone started every countdown at zero, which is 255 ticks before the first step
+    /// (§6.159).
+    std::uint8_t counter = 0;
     std::uint16_t distance = 0; ///< 6502: QQ8 -- how far the selected system is, in tenths
     bool controlHeld = false;   ///< 6502: JSR CTRL / BMI Ghy -- the galactic hyperdrive's key
 

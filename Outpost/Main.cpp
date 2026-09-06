@@ -307,6 +307,7 @@ namespace
     Elite::JumpState jump;
     jump.docked = _game.dockedFlag;
     jump.countdown = _game.status.hyperspaceCountdown;
+    jump.counter = _game.status.hyperspaceCounter;
     jump.distance = _game.jumpDistance;
     // 6502: JSR CTRL -- key-logger entry 6, read LIVE, because that is when the original reads it.
     jump.controlHeld = _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL));
@@ -631,6 +632,7 @@ namespace
                                                                   chart, jump, _game.commander.galaxySeeds, &_game.shell);
 
       _game.status.hyperspaceCountdown = jump.countdown;
+      _game.status.hyperspaceCounter = jump.counter; // 6502: STA QQ22 -- and it was never copied back (§6.159)
       _game.jumpDistance = jump.distance;
       _game.jumpTarget = jump.target;
       _game.crosshairX = chart.cursorX;
@@ -659,6 +661,7 @@ namespace
         }
 
         _game.status.hyperspaceCountdown = jump.countdown;
+        _game.status.hyperspaceCounter = jump.counter; // 6502: `Ghy` falls into `wW`, which stores QQ22 as well
         _game.jumpTarget = jump.target;
         _game.jumpDistance = jump.distance;
         _game.crosshairX = chart.cursorX;
@@ -962,22 +965,30 @@ namespace
        */
       (void)Elite::ScanFlightControls(_game.flight.Loop(), _game.flight, _game.flight.Screen().view);
 
+      /*
+       * 6502: JSR TT102 -- EVERY PASS, with A = `thiskey`, which is zero when nothing was pressed.
+       *
+       * The dispatch is not only for keys. A key nothing matches falls through `HME1` into `TT107`,
+       * and that is how the hyperspace countdown ticks: once per pass of the main loop, whether or
+       * not the player touched anything. Until 2026-09-06 this dispatched only when the window had
+       * a key, so a countdown started in flight sat at 15 until the next keypress, and advanced by
+       * one tick per key after that (§6.159). The docked loop below already dispatched the zero.
+       */
       std::uint8_t key = 0;
-      if (_game.window.TakeKey(key))
-      {
-        /*
-         * 6502: `DOKEY` FALLS INTO `DK4`, which the port has never followed -- `Controls.cpp` says
-         * so in a comment and slice 4e is what answers it. `CPX #&40 / BNE DK2`: the pause key
-         * freezes the game and everything else carries on to the dispatch.
-         */
-        if (key == Elite::PAUSE_KEY)
-        {
-          _game.paused = true;
-          return;
-        }
+      (void)_game.window.TakeKey(key);
 
-        PressKey(_game, key);
+      /*
+       * 6502: `DOKEY` FALLS INTO `DK4`, which the port has never followed -- `Controls.cpp` says
+       * so in a comment and slice 4e is what answers it. `CPX #&40 / BNE DK2`: the pause key
+       * freezes the game and everything else carries on to the dispatch.
+       */
+      if (key == Elite::PAUSE_KEY)
+      {
+        _game.paused = true;
+        return;
       }
+
+      PressKey(_game, key);
     }
   }
 
