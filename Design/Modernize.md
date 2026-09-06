@@ -88,6 +88,7 @@ Clarified the same day into four rulings:
 | R-a | **Detach at the end, not first.** The oracle stays the judge through M1–M5; a final phase records its answers as checked-in fixtures, replaces every oracle test with a fixture test, and only then deletes the interpreter, the upstream submodule and the masters. | Phase **M6** (§6). Every earlier slice is still measured against the assembled original, which is the only instrument that can say a refactor changed nothing. |
 | R-b | **Every trace of the original goes**: the `// 6502:` markers and `Source-Inventory.md`; the identifiers that are 6502 labels (`p`, `q`, `xx15`, `k3`, `INWK`-style names); the assembly transcribed in comments (`LDA` / `STA` / `BCC` sequences); `MasterFile/` and `Upstream/` from the tree. | M6-c, M6-d and M6-e. M2 and M4 rename as they go so that M6-c is a sweep of what is left, not a second pass over everything. AGENTS.md R7 and §7 are amended when M6-e lands, not before. |
 | R-c | **The derived data stays**: the generated tables the game cannot run without, and the recorded fixtures the tests cannot run without. That is the accepted residual exposure (Risk R1, restated at M6-f). | Q7 is moot — the label table the bridge needs exists only while the oracle does, and is generated into the test tree for M0-b to M6-a and deleted with it. Q8 stands: `modernize-*` widened one check per commit. |
+| R-e | **"The port was wrong, the record is not needed."** (Ruled 2026-09-06, on the replay.) When a slice finds a defect in the port and fixes it, the replay record follows the fix: it is re-taken with the journal entry naming the defect, and no ADR-001 §6 row is needed for the record to move. What stays forbidden is a record that moves with no defect named — that is a refactor that changed the game. | Rule 1 and M0-c's "when the record may change", below. The journal entry is the audit trail; the oracle suites, which do not move for a fix of this kind unless the defect was theirs too, are the check that the fix is a fix. |
 | R-d | **History is not rewritten by this plan.** Removing the files at the tip is M6-f; whether the history that carried them is rewritten is a separate owner decision and is not scheduled here. | Recorded in R21 (§7) so that it cannot be mistaken for something M6 did. |
 
 Anything not in this table is a routine judgement call this plan makes itself and records in §6.
@@ -643,9 +644,11 @@ tree carries the original's data and the port's own code, and nothing of its sou
 
 1. **The oracle decides, until M6 records it.** A slice ends with the suite green on the portable
    runner with the oracle present and, before merge, on the Windows job. "Builds, not run" is not
-   a state a slice is left in. After M6-b the recorded fixtures decide, and a fixture is never
-   re-recorded — nothing remains to record it from — so a changed fixture is a changed game, by
-   definition, and needs its own ADR under plan §6 Phase 6.
+   a state a slice is left in. The replay record (M0-c) moves in exactly two cases: the digest is
+   deliberately widened, or a defect in the port is found and fixed — "the port was wrong, the
+   record is not needed" (§1 R-e) — and the journal entry names which. After M6-b the recorded
+   fixtures decide, and a fixture is never re-recorded — nothing remains to record it from — so a
+   changed fixture is a changed game, by definition, and needs its own ADR under plan §6 Phase 6.
 2. **No width changes.** Every `std::uint8_t` that becomes a typed field keeps eight bits and its
    wraparound; every widening happens inside a helper narrowed the way the original narrowed
    (ADR-002 §3). A codec's `static_assert` round trip is the proof for a struct; the oracle byte
@@ -694,7 +697,7 @@ the journal.
 | **M0-a Ratchet** | `tools/check_modernize.py` counting P1–P11 with `tools/modernize_ratchet.json` as the ceilings; wired into `check_all.py`, the workflow and `check_counts.py`'s names so this document's numbers are checked. | In CI; a deliberately raised count fails `--self-test`. **Built 2026-09-06 with this document** (§8). | 1 |
 | **M0-b UniverseImage** | `Materialise`/`Absorb`/`Compare`/`Hash` over the fixture's `Universe`, as one table of cells with the labels resolved at runtime (the slice plan below says why there is no generated table). `FlightUniverse.h`'s `Mirror`/`CompareState` become calls into it. | Every existing flight-universe test passes unchanged through the bridge; `Hash` is stable across two runs; four tests of the bridge itself. **Built 2026-09-06** (§8). | 2–3 |
 | **M0-c Flight replay** | A scripted flight through a test-side port that answers every seam with the routine the executable calls (launch from Lave, coast, accelerate, fight a hostile Viper, dock on the autopilot), digested at every hundredth step and every turn of the script, the record stored in the suite. | Green; the same script twice gives the same digests; a one-byte change in four places each changes the record (the harness's own selftest). **Built 2026-09-06** (§8). | 2 |
-| **M0-d Mutation baseline on Linux** | `mutate.py --runner portable` for all five units, tallies journaled, so the re-anchoring in later slices has a number to match. | Five units, zero survivors beyond the recorded equivalents. | 1 |
+| **M0-d Mutation baseline on Linux** | `mutate.py --runner portable` for all five units, tallies journaled, so the re-anchoring in later slices has a number to match. | Five units, zero survivors beyond the recorded equivalents. **Built 2026-09-06**, and re-run after M0-b and M0-c so that the bridge is shown to catch what the fixture caught (§8). | 1 |
 
 #### M0-b slice plan (written 2026-09-06, before the build; §8 records what the build found)
 
@@ -770,8 +773,10 @@ hundredth step and at every turn of the script, stored as constants in the suite
 fails, so the tree can never carry an unpinned replay; the failure message prints the whole new
 record in paste-able form.
 
-**When the record may change.** Never for a refactor. Only when the digest is deliberately widened,
-with a journal entry that says so; there is no re-record for "the numbers moved".
+**When the record may change.** Never for a refactor. In two cases, each with a journal entry that
+says which: the digest is deliberately widened, or a defect in the port is found and fixed and the
+record follows the fix (§1 R-e, ruled 2026-09-06). There is no re-record for "the numbers moved" —
+a moved record with no defect named is a refactor that changed the game.
 
 ### Phase M1 — Typed data
 
