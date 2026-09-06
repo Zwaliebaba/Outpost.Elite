@@ -699,6 +699,11 @@ the journal.
 | **M0-c Flight replay** | A scripted flight through a test-side port that answers every seam with the routine the executable calls (launch from Lave, coast, accelerate, fight a hostile Viper, dock on the autopilot), digested at every hundredth step and every turn of the script, the record stored in the suite. | Green; the same script twice gives the same digests; a one-byte change in four places each changes the record (the harness's own selftest). **Built 2026-09-06** (§8). | 2 |
 | **M0-d Mutation baseline on Linux** | `mutate.py --runner portable` for all five units, tallies journaled, so the re-anchoring in later slices has a number to match. | Five units, zero survivors beyond the recorded equivalents. **Built 2026-09-06**, and re-run after M0-b and M0-c so that the bridge is shown to catch what the fixture caught (§8). | 1 |
 
+**Phase M0 is complete, 2026-09-06.** Four slices built and green on both legs; the Windows job
+compiled the executable and ran the suite in Release against the same replay record the portable
+runner took, which is the cross-compiler half of ADR-003 §3's determinism check done by CI rather
+than by hand.
+
 #### M0-b slice plan (written 2026-09-06, before the build; §8 records what the build found)
 
 **Name.** The aggregate is `Universe`, by owner ruling of 2026-09-06 ("we are in space"): the fixture
@@ -927,4 +932,13 @@ digests. The three tests it needed all pass on the first run that had a record t
 the same script twice agrees digest for digest, and each of four one-byte changes after the launch
 (the planet's x, a generator byte, the fuel, a speck of stardust) changes the record. What the
 first run found: a checkpoint taken twice at step 100, once as a hundredth step and once as the end
-of a phase, which the script now takes once. Nothing in `GameLogic/` changed for any of this. M0-a is built with this entry; nothing in `GameLogic/` changed.
+of a phase, which the script now takes once. Nothing in `GameLogic/` changed for any of this.
+
+**2026-09-06 — M0-d re-run through the bridge, and M0 closed.** The mutation corpus again on the
+tree with the universe image and the replay in it: baseline 392 of 392, then 65 mutants, 61 caught,
+4 survived, the four the recorded equivalents — the same tally as before M0-b, which is the bridge
+shown to catch what the two hand-written functions caught. CI on the same commit: all three jobs
+green, the Windows job's Release suite agreeing with the record the portable runner took. A note on
+method rather than on the tree: a shell loop that waited for the run by `pgrep`-ing its command line
+matched itself and never ended, which is the kind of thing that looks like a hung run and is not.
+M0 is complete; M1-a is next. M0-a is built with this entry; nothing in `GameLogic/` changed.
