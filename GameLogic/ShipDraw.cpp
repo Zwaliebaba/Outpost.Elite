@@ -12,23 +12,49 @@ namespace Elite
   /// 6502: LDA #18 -- what byte 1 of a fresh cloud's heap starts at, the counter `DOEXP` ages.
   inline constexpr std::uint8_t EXPLOSION_COUNTER_START = 18;
 
-  void DivideByShipZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
+  namespace
   {
-    _math.p2 = _a;
+    /// 6502: DVL6 / DV9 -- the denominator's top byte, shifted up (at least once, with the bytes
+    /// below it) until its top bit is set: what `DVID3B` stores in `Q` and leaves there.
+    [[nodiscard]] std::uint8_t ScaledDivisorTop(SignMag24 _divisor) noexcept
+    {
+      std::uint8_t low = _divisor.lo;
+      std::uint8_t middle = _divisor.hi;
+      std::uint8_t top = static_cast<std::uint8_t>(_divisor.sgn & 0x7Fu);
+      do
+      {
+        const ShiftResult first = RotateLeftValue(low, false);
+        low = first.value;
+        const ShiftResult second = RotateLeftValue(middle, first.carry);
+        middle = second.value;
+        top = RotateLeftValue(top, second.carry).value;
+      } while ((top & 0x80u) == 0u);
+      return top;
+    }
+  } // namespace
 
+  void DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept
+  {
     // The `ORA #1` is what makes the divide below safe, and it is deliberate rather than defensive:
     // a ship exactly on the plane of the screen has z_lo = 0, and the difference between dividing
     // by zero and dividing by one is invisible at this scale.
-    _math.q = static_cast<std::uint8_t>(_ship.z.lo | 0x01u);
-    _math.r = _ship.z.hi;
-    _math.s = _ship.z.sgn;
+    const SignMag24 distance{static_cast<std::uint8_t>(_ship.z.lo | 0x01u), _ship.z.hi, _ship.z.sgn};
 
-    DivideSignedToK(_math);
+    const KBlock k = DivideSigned24(_numerator, distance);
+    _math.k[0] = k.low;
+    _math.k[1] = k.mid;
+    _math.k[2] = k.high;
+    _math.k[3] = k.top;
+
+    // 6502: DV9's STA Q -- the divide leaves the scaled divisor in `Q`, and for a ship drawn as a
+    // dot that is the frame's Q the altitude check reads (`EndFlightFrame`). The kernel keeps its
+    // scratch since M2-b; this byte is recomputed here for that one reader.
+    _math.q = ScaledDivisorTop(distance);
   }
 
-  ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
+  ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept
   {
-    DivideByShipZ(_ship, _math, _a);
+    DivideByShipZ(_ship, _math, _numerator);
 
     // The top two bytes of the quotient, sign removed. Anything at all up there is already past
     // 65,536 and there is nothing to say about where it would be on a 256-pixel view.
@@ -68,10 +94,8 @@ namespace Elite
 
   ProjectResult Project(const Ship& _ship, MathWorkspace& _math, Projection& _screen) noexcept
   {
-    _math.p = _ship.x.lo;
-    _math.p1 = _ship.x.hi;
-
-    const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.x.sgn);
+    // 6502: LDA INWK / STA P / LDA INWK+1 / STA P+1 / LDA INWK+2 / JSR PLS6 -- the x coordinate.
+    const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.x);
     if (across.overflow)
     {
       // 6502: BCS PL2-1, which is PROJ's own RTS one byte before the next routine begins.
@@ -84,11 +108,9 @@ namespace Elite
     const AddResult x1 = AddWithCarry(across.high, 0, x.carry);
     _screen.x1 = x1.value;
 
-    _math.p = _ship.y.lo;
-    _math.p1 = _ship.y.hi;
-
+    // 6502: the y coordinate, with its sign flipped: up the screen is down the axis.
     const std::uint8_t upwards = static_cast<std::uint8_t>(_ship.y.sgn ^ 0x80u);
-    const ScreenOffset down = DivideToScreenOffset(_ship, _math, upwards);
+    const ScreenOffset down = DivideToScreenOffset(_ship, _math, SignMag24{_ship.y.lo, _ship.y.hi, upwards});
     if (down.overflow)
     {
       return ProjectResult{true, down.a};
@@ -231,7 +253,7 @@ namespace Elite
     StoreLineCountAndDraw(_canvas, _draw, _heap, heap, 8);
   }
 
-  void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+  void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry) noexcept
   {
     // The six bytes of XX15, as the three sign-magnitude pairs the dot product treats them as.
     const std::uint8_t magnitude[3] = {_draw.x1, _draw.x2, _draw.xx15Plus4};
@@ -245,25 +267,21 @@ namespace Elite
 
       // The first term sets S, which is the sign the whole sum is accumulated against -- `LL38`
       // FLIPS it when a subtraction goes past zero, so what comes out at the end is the sign of the
-      // answer and not of the first product.
-      _math.q = magnitude[0];
-      const std::uint8_t first = MultiplyByLog(_math, _geometry.xx16[base], false).high;
-      _math.t = first;
-      _math.s = static_cast<std::uint8_t>(sign[0] ^ _geometry.xx16[base + 1]);
+      // answer and not of the first product. 6502: STA Q / JSR FMLTU / STA T ... STA S.
+      SignMag16 total{MultiplyByLog(_geometry.xx16[base], magnitude[0], false).value,
+                      static_cast<std::uint8_t>(sign[0] ^ _geometry.xx16[base + 1])};
 
-      // Q is set twice on purpose and the first is not dead: `FMLTU` reads Q as one operand and
-      // the original stores the product straight back over it. `STA Q / JSR FMLTU / STA Q`.
-      _math.q = magnitude[1];
-      _math.q = MultiplyByLog(_math, _geometry.xx16[base + 2], false).high;
-      _math.r = _math.t;
-      _math.t = CombineSigned(_math, static_cast<std::uint8_t>(sign[1] ^ _geometry.xx16[base + 3])).value;
+      // 6502: STA Q / JSR FMLTU / STA Q -- the second product goes straight back over its own
+      // multiplier, and `LL38` combines it with the total under the two signs.
+      std::uint8_t term = MultiplyByLog(_geometry.xx16[base + 2], magnitude[1], false).value;
+      SignedSum combined = CombineSigned(static_cast<std::uint8_t>(sign[1] ^ _geometry.xx16[base + 3]), term, total);
+      total = SignMag16{combined.value, combined.sign}; // 6502: STA T ... LDA T / STA R
 
-      _math.q = magnitude[2];
-      _math.q = MultiplyByLog(_math, _geometry.xx16[base + 4], false).high;
-      _math.r = _math.t;
+      term = MultiplyByLog(_geometry.xx16[base + 4], magnitude[2], false).value;
+      combined = CombineSigned(static_cast<std::uint8_t>(sign[2] ^ _geometry.xx16[base + 5]), term, total);
 
-      _geometry.xx12[vector * 2u] = CombineSigned(_math, static_cast<std::uint8_t>(sign[2] ^ _geometry.xx16[base + 5])).value;
-      _geometry.xx12[vector * 2u + 1u] = _math.s;
+      _geometry.xx12[vector * 2u] = combined.value;
+      _geometry.xx12[vector * 2u + 1u] = combined.sign;
     }
   }
 
@@ -584,16 +602,18 @@ namespace Elite
       // decrements it to 255.
       _math.t = 0;
 
+      // The divisor stays in `Q` and the quotient in `R`: they are the slope the clipper's helpers
+      // read from the workspace (`MultiplySlope` and `DivideSlope`, M2-c).
       if (_geometry.xx12[2] >= _geometry.xx12[4])
       {
         _math.q = _geometry.xx12[2];
-        (void)DivideToR(_math, _geometry.xx12[4]);
+        _math.r = DivideByLog(_geometry.xx12[4], _math.q).value;
         return;
       }
 
       // 6502: LL114 -- steep.
       _math.q = _geometry.xx12[4];
-      (void)DivideToR(_math, _geometry.xx12[2]);
+      _math.r = DivideByLog(_geometry.xx12[2], _math.q).value;
       _math.t = static_cast<std::uint8_t>(_math.t - 1u);
     }
 
@@ -682,7 +702,7 @@ namespace Elite
     /// 6502: LL15 and LL21 -- copy the ship's three orientation vectors into XX16 and scale each
     /// magnitude down by 197. The `ASL A` on the magnitude puts its top bit into the carry and the
     /// `ROL A` on the sign byte rotates it in, so what gets divided is the pair read as nine bits.
-    void ScaleOrientation(const Ship& _work, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+    void ScaleOrientation(const Ship& _work, GeometryWorkspace& _geometry) noexcept
     {
       const std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _work.ToBytes();
       for (int byte = 5; byte >= 0; --byte)
@@ -693,13 +713,12 @@ namespace Elite
         _geometry.xx16[at + 12u] = bytes[SHIP_NOSE_OFFSET + at];
       }
 
-      _math.q = 197;
+      constexpr std::uint8_t SCALE = 197; // 6502: LDA #197 / STA Q
       for (int index = 16; index >= 0; index -= 2)
       {
         const std::size_t at = static_cast<std::size_t>(index);
         const ShiftResult raised = RotateLeftValue(_geometry.xx16[at], false);
-        (void)DivideToR(_math, RotateLeft(_geometry.xx16[at + 1u], raised.carry).value);
-        _geometry.xx16[at] = _math.r;
+        _geometry.xx16[at] = DivideByLog(RotateLeft(_geometry.xx16[at + 1u], raised.carry).value, SCALE).value;
       }
     }
 
@@ -719,24 +738,20 @@ namespace Elite
     /// 6502: LL89 -- the dot product of a face's normal in XX12 with the position in XX15, whose SIGN
     /// decides whether the face is drawn. What gets stored is the MAGNITUDE, so a face seen exactly
     /// edge-on comes out invisible.
-    std::uint8_t FaceVisibility(const DrawWorkspace& _draw, const GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+    std::uint8_t FaceVisibility(const DrawWorkspace& _draw, const GeometryWorkspace& _geometry) noexcept
     {
-      _math.q = _geometry.xx12[0];
-      _math.t = MultiplyByLog(_math, _draw.x1, false).high;
-      _math.s = static_cast<std::uint8_t>(_geometry.xx12[1] ^ _draw.y1);
+      // 6502: STA Q / JSR FMLTU / STA T ... STA S -- the first product and the sign it is summed under.
+      SignMag16 total{MultiplyByLog(_draw.x1, _geometry.xx12[0], false).value, static_cast<std::uint8_t>(_geometry.xx12[1] ^ _draw.y1)};
 
-      _math.q = _geometry.xx12[2];
-      _math.q = MultiplyByLog(_math, _draw.x2, false).high;
-      _math.r = _math.t;
-      _math.t = CombineSigned(_math, static_cast<std::uint8_t>(_geometry.xx12[3] ^ _draw.y2)).value;
+      std::uint8_t term = MultiplyByLog(_draw.x2, _geometry.xx12[2], false).value;
+      SignedSum combined = CombineSigned(static_cast<std::uint8_t>(_geometry.xx12[3] ^ _draw.y2), term, total);
+      total = SignMag16{combined.value, combined.sign};
 
-      _math.q = _geometry.xx12[4];
-      _math.q = MultiplyByLog(_math, _draw.xx15Plus4, false).high;
-      _math.r = _math.t;
-      const std::uint8_t magnitude = CombineSigned(_math, static_cast<std::uint8_t>(_draw.xx15Plus5 ^ _geometry.xx12[5])).value;
+      term = MultiplyByLog(_draw.xx15Plus4, _geometry.xx12[4], false).value;
+      combined = CombineSigned(static_cast<std::uint8_t>(_draw.xx15Plus5 ^ _geometry.xx12[5]), term, total);
 
       // `BIT S / BMI P%+4 / LDA #0` -- the branch skips the zero, so a negative S keeps the answer.
-      return ((_math.s & 0x80u) != 0u) ? magnitude : std::uint8_t{0};
+      return ((combined.sign & 0x80u) != 0u) ? combined.value : std::uint8_t{0};
     }
 
     /*
@@ -911,7 +926,7 @@ namespace Elite
 
     // ---- part 3: the orientation vectors, scaled -------------------------------------------
 
-    ScaleOrientation(_work, _geometry, _math);
+    ScaleOrientation(_work, _geometry);
 
     const std::array<std::uint8_t, SHIP_BLOCK_SIZE> position = _work.ToBytes();
     for (int byte = 8; byte >= 0; --byte)
@@ -967,7 +982,7 @@ namespace Elite
       _draw.x2 = _geometry.xx18[3];
       _draw.y2 = _geometry.xx18[5];
       _draw.xx15Plus4 = _geometry.xx18[6];
-      DotProducts(_draw, _geometry, _math);
+      DotProducts(_draw, _geometry);
       _geometry.xx18[0] = _geometry.xx12[0];
       _geometry.xx18[2] = _geometry.xx12[1];
       _geometry.xx18[3] = _geometry.xx12[2];
@@ -1035,32 +1050,25 @@ namespace Elite
               third = static_cast<std::uint8_t>(third >> 1);
             }
 
-            _math.r = third;
-            _math.s = _geometry.xx12[5];
-            _math.q = _geometry.xx18[6];
-            const SignedSum alongZ = CombineSigned(_math, _geometry.xx18[8]);
+            // 6502: STA R / LDA XX12+5 / STA S / LDA XX18+6 / STA Q / LDA XX18+8 / JSR LL38, and the
+            // same for x and y: each is the halved coordinate under the ship's sign, plus the vertex.
+            const SignedSum alongZ = CombineSigned(_geometry.xx18[8], _geometry.xx18[6], SignMag16{third, _geometry.xx12[5]});
             if (!alongZ.carry)
             {
               _draw.xx15Plus4 = alongZ.value;
-              _draw.xx15Plus5 = _math.s;
+              _draw.xx15Plus5 = alongZ.sign;
 
-              _math.r = _draw.x1;
-              _math.s = _geometry.xx12[1];
-              _math.q = _geometry.xx18[0];
-              const SignedSum alongX = CombineSigned(_math, _geometry.xx18[2]);
+              const SignedSum alongX = CombineSigned(_geometry.xx18[2], _geometry.xx18[0], SignMag16{_draw.x1, _geometry.xx12[1]});
               if (!alongX.carry)
               {
                 _draw.x1 = alongX.value;
-                _draw.y1 = _math.s;
+                _draw.y1 = alongX.sign;
 
-                _math.r = _draw.x2;
-                _math.s = _geometry.xx12[3];
-                _math.q = _geometry.xx18[3];
-                const SignedSum alongY = CombineSigned(_math, _geometry.xx18[5]);
+                const SignedSum alongY = CombineSigned(_geometry.xx18[5], _geometry.xx18[3], SignMag16{_draw.x2, _geometry.xx12[3]});
                 if (!alongY.carry)
                 {
                   _draw.x2 = alongY.value;
-                  _draw.y2 = _math.s;
+                  _draw.y2 = alongY.sign;
                   break;
                 }
               }
@@ -1074,7 +1082,7 @@ namespace Elite
           }
         }
 
-        _geometry.xx2[static_cast<std::size_t>(at >> 2)] = FaceVisibility(_draw, _geometry, _math);
+        _geometry.xx2[static_cast<std::size_t>(at >> 2)] = FaceVisibility(_draw, _geometry);
         at = static_cast<std::uint8_t>(at + 4u);
       } while (at < _geometry.xx20);
     }
@@ -1108,7 +1116,7 @@ namespace Elite
         _draw.y2 = static_cast<std::uint8_t>(flags << 1);
         _draw.xx15Plus5 = static_cast<std::uint8_t>(flags << 2);
 
-        DotProducts(_draw, _geometry, _math);
+        DotProducts(_draw, _geometry);
 
         PlaceVertexAxis(_draw.x1, _draw.y1, _draw.x2, _geometry.xx12[0], _geometry.xx12[1], _work, SHIP_X_OFFSET);
         PlaceVertexAxis(_draw.y2, _draw.xx15Plus4, _draw.xx15Plus5, _geometry.xx12[2], _geometry.xx12[3], _work, SHIP_Y_OFFSET);
@@ -1158,60 +1166,65 @@ namespace Elite
         // than the distance, LL61 when it is not.
         std::uint8_t x = _math.cnt;
 
-        _math.q = _math.t;
-        if (_draw.x1 < _math.q)
+        // 6502: LDA T / STA Q -- the distance, and the divide is (U R) = 256 * x / distance. `LL28`
+        // leaves U as it was, which is the zero the halving loop above ended on. `Q` is written as
+        // well as read here because, for the last vertex of the last ship drawn, it is the frame's Q
+        // the altitude check reads (`EndFlightFrame`) -- unless the clipper writes it after.
+        const std::uint8_t distance = _math.t;
+        _math.q = distance;
+        Quotient16 across{_math.u, 0};
+        if (_draw.x1 < distance)
         {
-          (void)DivideToR(_math, _draw.x1);
+          across.low = DivideByLog(_draw.x1, distance).value;
         }
         else
         {
-          DivideToUR(_math, _draw.x1);
+          across = DivideWideByLog(_draw.x1, distance, _math.u);
         }
 
         if ((_draw.x2 & 0x80u) != 0u)
         {
           // 6502: LL62 -- 128 - (U R), for a vertex to the left of centre.
-          const SubResult low = SubtractWithCarry(128, _math.r, true);
+          const SubResult low = SubtractWithCarry(128, across.low, true);
           _geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = SubtractWithCarry(0, _math.u, low.carry).value;
+          _geometry.xx3[x] = SubtractWithCarry(0, across.high, low.carry).value;
         }
         else
         {
-          const AddResult low = AddWithCarry(_math.r, 128, false);
+          const AddResult low = AddWithCarry(across.low, 128, false);
           _geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = AddWithCarry(_math.u, 0, low.carry).value;
+          _geometry.xx3[x] = AddWithCarry(across.high, 0, low.carry).value;
         }
 
         // 6502: LL66 -- and the same again for y, with U cleared first because `LL28` does not
         // write it and the last vertex's value would otherwise be added in.
-        _math.u = 0;
-        _math.q = _math.t;
-        if (_draw.y2 < _math.q)
+        Quotient16 down{0, 0};
+        if (_draw.y2 < distance)
         {
-          (void)DivideToR(_math, _draw.y2);
+          down.low = DivideByLog(_draw.y2, distance).value;
         }
         else
         {
-          DivideToUR(_math, _draw.y2);
+          down = DivideWideByLog(_draw.y2, distance, 0);
         }
 
         ++x;
         if ((_draw.xx15Plus5 & 0x80u) != 0u)
         {
           // 6502: LL70 -- below the centre of the view.
-          const AddResult low = AddWithCarry(SPACE_VIEW_CENTRE_Y, _math.r, false);
+          const AddResult low = AddWithCarry(SPACE_VIEW_CENTRE_Y, down.low, false);
           _geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = AddWithCarry(0, _math.u, low.carry).value;
+          _geometry.xx3[x] = AddWithCarry(0, down.high, low.carry).value;
         }
         else
         {
-          const SubResult low = SubtractWithCarry(SPACE_VIEW_CENTRE_Y, _math.r, true);
+          const SubResult low = SubtractWithCarry(SPACE_VIEW_CENTRE_Y, down.low, true);
           _geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = SubtractWithCarry(0, _math.u, low.carry).value;
+          _geometry.xx3[x] = SubtractWithCarry(0, down.high, low.carry).value;
         }
       }
 

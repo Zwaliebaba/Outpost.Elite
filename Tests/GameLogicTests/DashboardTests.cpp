@@ -753,7 +753,9 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
             Assert::AreEqual(cpu.memory[at.k], math.k[0], (where + L": K").c_str());
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k + 1)], math.k[1], (where + L": K+1").c_str());
-            Assert::AreEqual(cpu.memory[at.t1], math.t1, (where + L": T1").c_str());
+            // `T1` is not compared: `DIALS` stores its threshold there for `DIL`, and the `ADD` under
+            // the two indicators then overwrites it with the pitch -- kernel scratch the port keeps
+            // as a local since M2-b. The threshold's own reader is pinned by `DIL`'s sweep above.
             Assert::AreEqual(cpu.memory[at.col], draw.col, (where + L": COL").c_str());
 
             for (std::size_t byte = 0; byte < 4u; ++byte)

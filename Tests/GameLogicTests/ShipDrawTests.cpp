@@ -161,7 +161,6 @@ namespace GameLogicTests
                   }
 
                   Cpu6502 cpu = oracle.Fresh();
-                  Elite::MathWorkspace math;
 
                   cpu.memory[pp] = p;
                   cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
@@ -169,36 +168,21 @@ namespace GameLogicTests
                   cpu.memory[qq] = q;
                   cpu.memory[rr] = r;
                   cpu.memory[ss] = s;
-                  math.p = p;
-                  math.p1 = p1;
-                  math.p2 = p2;
-                  math.q = q;
-                  math.r = r;
-                  math.s = s;
 
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(dvid3b);
                   Assert::IsTrue(run.completed, L"DVID3B returned");
 
-                  Elite::DivideSignedToK(math);
+                  const Elite::KBlock k = Elite::DivideSigned24(Elite::SignMag24{p, p1, p2}, Elite::SignMag24{q, r, s});
+                  const std::uint8_t bytes[4] = {k.low, k.mid, k.high, k.top};
 
                   const std::wstring where =
                     Widen("DVID3B(P=" + std::to_string(p) + "/" + std::to_string(p1) + "/" + std::to_string(p2) +
                           ", Q=" + std::to_string(q) + ", R=" + std::to_string(r) + ", S=" + std::to_string(s) + ")");
                   for (int byte = 0; byte < 4; ++byte)
                   {
-                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], math.k[byte],
+                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], bytes[byte],
                                      (where + L": K+" + std::to_wstring(byte)).c_str());
                   }
-
-                  // The scratch bytes too. Nothing downstream reads them today, but they are what
-                  // a later routine reaching this through a different entry point would see, and a
-                  // divergence here is a divergence in the loop counts above it.
-                  Assert::AreEqual(cpu.memory[tt], math.t, (where + L": T").c_str());
-                  Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
-                  Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-                  Assert::AreEqual(cpu.memory[pp], math.p, (where + L": P").c_str());
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 1)], math.p1, (where + L": P+1").c_str());
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 2)], math.p2, (where + L": P+2").c_str());
 
                   /*
                    * Which of the three tails ran, decided from the answer rather than from the
@@ -207,16 +191,20 @@ namespace GameLogicTests
                    * either something reaches the top three bytes or the low byte grew. `DVL10`
                    * shifts it RIGHT at least once, so the low byte shrank and nothing can reach
                    * the top three. A zero quotient looks like all three and is counted apart.
+                   *
+                   * The quotient is the ORACLE's R: the port's divider keeps it as a local since
+                   * M2-b, and the scratch bytes it used to leave are no longer compared.
                    */
-                  if (math.r == 0u)
+                  const std::uint8_t quotient = cpu.memory[rr];
+                  if (quotient == 0u)
                   {
                     ++unclassified;
                   }
-                  else if ((math.k[1] | math.k[2] | (math.k[3] & 0x7Fu)) != 0u || math.k[0] > math.r)
+                  else if ((k.mid | k.high | (k.top & 0x7Fu)) != 0u || k.low > quotient)
                   {
                     ++scaledUp;
                   }
-                  else if (math.k[0] == math.r)
+                  else if (k.low == quotient)
                   {
                     ++unscaled;
                   }
@@ -283,14 +271,12 @@ namespace GameLogicTests
                   }
                   cpu.memory[pp] = p;
                   cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
-                  math.p = p;
-                  math.p1 = p1;
 
                   cpu.a = a;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(dvid3b2);
                   Assert::IsTrue(run.completed, L"DVID3B2 returned");
 
-                  Elite::DivideByShipZ(ship, math, a);
+                  Elite::DivideByShipZ(ship, math, Elite::SignMag24{p, p1, a});
 
                   const std::wstring where =
                     Widen("DVID3B2(a=" + std::to_string(a) + ", P=" + std::to_string(p) + "/" + std::to_string(p1) +
@@ -372,14 +358,12 @@ namespace GameLogicTests
                   }
                   cpu.memory[pp] = p;
                   cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
-                  math.p = p;
-                  math.p1 = p1;
 
                   cpu.a = a;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(pls6);
                   Assert::IsTrue(run.completed, L"PLS6 returned");
 
-                  const Elite::ScreenOffset offset = Elite::DivideToScreenOffset(ship, math, a);
+                  const Elite::ScreenOffset offset = Elite::DivideToScreenOffset(ship, math, Elite::SignMag24{p, p1, a});
 
                   const std::wstring where =
                     Widen("PLS6(a=" + std::to_string(a) + ", P=" + std::to_string(p) + "/" + std::to_string(p1) +
@@ -1016,7 +1000,6 @@ namespace GameLogicTests
         Cpu6502 cpu = oracle.Fresh();
         Elite::DrawWorkspace draw;
         Elite::GeometryWorkspace geometry;
-        Elite::MathWorkspace math;
 
         // XX15 is the first six; XX16 is the eighteen after it.
         const std::uint8_t* const vector = block.data();
@@ -1039,7 +1022,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll51, 200'000);
         Assert::IsTrue(run.completed, L"LL51 returned");
 
-        Elite::DotProducts(draw, geometry, math);
+        Elite::DotProducts(draw, geometry);
 
         const std::wstring where = Widen("LL51 case " + std::to_string(compared));
         for (std::size_t byte = 0; byte < 6u; ++byte)
@@ -1502,30 +1485,26 @@ namespace GameLogicTests
         for (std::uint32_t a = 0; a < 256u; ++a)
         {
           Cpu6502 cpu = oracle.Fresh();
-          Elite::MathWorkspace math;
 
           // Not zero: `ROL U` brings the old bits back up, so a cleared U would hide a port that
-          // dropped the rotate and assigned instead.
+          // dropped the rotate and assigned instead. Since M2-b the incoming U is a parameter.
           const std::uint8_t seededU = static_cast<std::uint8_t>((a * 7u + q * 13u) & 0x3Fu);
 
           cpu.memory[qq] = static_cast<std::uint8_t>(q);
           cpu.memory[uu] = seededU;
-          math.q = static_cast<std::uint8_t>(q);
-          math.u = seededU;
 
           cpu.a = static_cast<std::uint8_t>(a);
           const Elite::Testing::RunResult run = cpu.CallSubroutine(ll61, 100'000);
           Assert::IsTrue(run.completed, L"LL61 returned");
 
-          Elite::DivideToUR(math, static_cast<std::uint8_t>(a));
+          const Elite::Quotient16 quotient = Elite::DivideWideByLog(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(q), seededU);
 
           const std::wstring where =
             Widen("LL61(a=" + std::to_string(a) + ", Q=" + std::to_string(q) + ", U=" + std::to_string(seededU) + ")");
-          Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-          Assert::AreEqual(cpu.memory[uu], math.u, (where + L": U").c_str());
-          Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
+          Assert::AreEqual(cpu.memory[rr], quotient.low, (where + L": R").c_str());
+          Assert::AreEqual(cpu.memory[uu], quotient.high, (where + L": U").c_str());
 
-          if (math.r == 50u && math.u == 50u)
+          if (quotient.low == 50u && quotient.high == 50u)
           {
             ++failed;
           }

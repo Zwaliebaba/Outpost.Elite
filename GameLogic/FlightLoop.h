@@ -39,7 +39,7 @@ namespace Elite
    * stores `K+3` and the port needs nothing returned from the call. Returns the high byte with the
    * sign cleared, which is what the caller compares against a distance.
    */
-  [[nodiscard]] std::uint8_t DoubleAndAddCoordinate(Ship& _work, MathWorkspace& _math, std::uint8_t _from, std::uint8_t _to) noexcept;
+  [[nodiscard]] std::uint8_t DoubleAndAddCoordinate(Ship& _work, std::uint8_t _from, std::uint8_t _to) noexcept;
 
   /*
    * 6502: MAS2, and `m` above it -- OR the three sign bytes of a ship block together and drop the
@@ -64,7 +64,7 @@ namespace Elite
    * the additions are the plain ones they look like. That is measured over all 512 inputs rather
    * than assumed, and it is why `MAS3` needed no change when the flag was modelled (§6.70).
    */
-  [[nodiscard]] std::uint8_t SumOfSquares(const Bubble& _bubble, MathWorkspace& _math, std::uint8_t _slot) noexcept;
+  [[nodiscard]] std::uint8_t SumOfSquares(const Bubble& _bubble, std::uint8_t _slot) noexcept;
 
   /// 6502: MAS4 -- the same OR as `MAS2` but over `INWK`'s high bytes rather than a slot's sign
   /// bytes, and without the mask. Four instructions, and it is here because the loop calls it.

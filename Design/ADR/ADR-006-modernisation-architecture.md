@@ -75,7 +75,7 @@ census and a verdict for each field. The verdicts fall into four classes and onl
   `COL`, `ZZ`, the line the clipper takes).
 - **Result** — a caller reads what the routine left (`P`'s low byte after a multiply, `R` after a
   divide, `K` after `DVID3B`, `SWAP` and `XX13` after the clipper, `XX3` after `LL9`).
-- **Local** — every user writes before it reads (`U`, `widget`, `T2`, `R2`, `LL9`'s counters).
+- **Local** — every user writes before it reads (`U`, `T2`, `R2`, `LL9`'s counters).
 - **State, deliberately** — a value that outlives the call because the original's behaviour depends
   on it: `Projection` (`K3`/`K4`) after `PROJ`, which `SHPPT` reads stale (ADR-001 §6), and `SC`,
   the dashboard cursor `DIALS` advances across seven calls. Each has its reason at the one place it
@@ -158,7 +158,7 @@ needs it.
 |---|---|---|
 | M0 The safety net | Built 2026-09-06 | Modernize.md §6 M0, §8 |
 | M1 Typed data | Built 2026-09-06 | §2 above; Modernize.md §6 M1 |
-| M2 Calling conventions | M2-a built 2026-09-06; M2-b to M2-d open | §3 above; Modernize.md §4.3 |
+| M2 Calling conventions | M2-a and M2-b built 2026-09-06 (the kernel takes values and returns structs; the frame's `Q` named, Modernize.md §8 and R22); M2-c and M2-d open | §3 above; Modernize.md §4.3 |
 | M3 Ownership | Planned | §4; ADR-007 when built |
 | M4 Control flow | Planned | §5 |
 | M5 Polish and the ledger | Planned; amends this document | Modernize.md §6 M5 |

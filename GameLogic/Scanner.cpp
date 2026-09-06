@@ -233,7 +233,7 @@ namespace Elite
     _axes[static_cast<std::size_t>(_at) + 2u] = static_cast<std::uint8_t>(top & 0x80u);
   }
 
-  void NormaliseAxes(K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
+  std::uint8_t NormaliseAxes(K3Block& _axes, DrawWorkspace& _work) noexcept
   {
     // 6502: LDA K3 / ORA K3+3 / ORA K3+6 / ORA #1 / STA K3+9 -- the low bytes together, with a bit
     // forced on so the loop below is guaranteed to end.
@@ -295,23 +295,24 @@ namespace Elite
      * array for one caller.
      */
     std::array<std::uint8_t, 3> vector = {_work.x1, _work.y1, _work.x2};
-    Normalise(_math, std::span<std::uint8_t, 3>(vector));
+    const std::uint8_t length = Normalise(std::span<std::uint8_t, 3>(vector));
     _work.x1 = vector[0];
     _work.y1 = vector[1];
     _work.x2 = vector[2];
+    return length;
   }
 
-  void LoadPlanetAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
+  void LoadPlanetAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work) noexcept
   {
     // 6502: LDX #0 / JSR SPS3 / LDX #3 / JSR SPS3 / LDX #6 / JSR SPS3, all on slot 0.
     LoadPlanetAxis(_bubble.blocks[0], _axes, 0u);
     LoadPlanetAxis(_bubble.blocks[0], _axes, 3u);
     LoadPlanetAxis(_bubble.blocks[0], _axes, 6u);
 
-    NormaliseAxes(_axes, _work, _math); // 6502: the fall-through into TAS2
+    (void)NormaliseAxes(_axes, _work); // 6502: the fall-through into TAS2
   }
 
-  void LoadStationAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
+  void LoadStationAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work) noexcept
   {
     // 6502: LDX #8 / SPL1 -- LDA K%+NI%,X / STA K3,X / DEX / BPL SPL1. Nine bytes, downwards: the
     // station's position, in the block's own order.
@@ -321,20 +322,20 @@ namespace Elite
       _axes[at] = station[at];
     }
 
-    NormaliseAxes(_axes, _work, _math); // 6502: JMP TAS2
+    (void)NormaliseAxes(_axes, _work); // 6502: JMP TAS2
   }
 
-  CompassOffset ScaleToCompass(MathWorkspace& _math, std::uint8_t _a) noexcept
+  CompassOffset ScaleToCompass(std::uint8_t _value) noexcept
   {
     // 6502: ASL A / TAX / LDA #0 / ROR A / TAY -- the magnitude doubled into X, and the sign bit
     // caught in the carry and rotated back down into Y as 0 or 128.
-    const ShiftResult doubled = RotateLeftValue(_a, false);
+    const ShiftResult doubled = RotateLeftValue(_value, false);
     const std::uint8_t sign = RotateRight(0u, doubled.carry).value;
 
-    _math.q = 20u; // 6502: LDA #20 / STA Q -- the compass's radius in pixels
-    const ScaledDivision divided = DivideAndScale(_math, doubled.value);
+    constexpr std::uint8_t COMPASS_RADIUS = 20u; // 6502: LDA #20 / STA Q -- the compass's radius in pixels
+    const ScaledDivision divided = DivideAndScale(doubled.value, COMPASS_RADIUS);
 
-    const std::uint8_t whole = _math.p; // 6502: LDX P
+    const std::uint8_t whole = divided.whole; // 6502: LDX P
 
     // 6502: TYA / BMI LL163 -- negate the offset for a negative coordinate, and hand back 255 as
     // the sign so that `SP2` can hold it in a byte.
@@ -357,10 +358,10 @@ namespace Elite
      * with no `SEC`, which is why 156 comes out as 155 for every input the divide does not
      * saturate on.
      */
-    const CompassOffset across = ScaleToCompass(_math, _work.x1);
+    const CompassOffset across = ScaleToCompass(_work.x1);
     _compass.x = AddWithCarry(across.offset, 195u, across.carry).value;
 
-    const CompassOffset down = ScaleToCompass(_math, _work.y1);
+    const CompassOffset down = ScaleToCompass(_work.y1);
     _math.t = down.offset; // 6502: STX T
     _compass.y = SubtractWithCarry(156u, _math.t, down.carry).value;
 
@@ -373,7 +374,7 @@ namespace Elite
   void AimCompassAtStation(Canvas& _canvas, DrawWorkspace& _work, MathWorkspace& _math, Compass& _compass, const Bubble& _bubble,
                            K3Block& _axes) noexcept
   {
-    LoadStationAxes(_bubble, _axes, _work, _math); // 6502: JSR SPS4
+    LoadStationAxes(_bubble, _axes, _work); // 6502: JSR SPS4
     DrawCompass(_canvas, _work, _math, _compass);  // 6502: the fall-through into SP2
   }
 
@@ -390,7 +391,7 @@ namespace Elite
       return;
     }
 
-    LoadPlanetAxes(_bubble, axes, _work, _math);  // 6502: JSR SPS1
+    LoadPlanetAxes(_bubble, axes, _work);         // 6502: JSR SPS1
     DrawCompass(_canvas, _work, _math, _compass); // 6502: JMP SP2
   }
 

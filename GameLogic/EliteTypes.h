@@ -92,6 +92,20 @@ namespace Elite
     return RotateLeft(_value, _carryIn);
   }
 
+  /*
+   * 6502: INWK+9/10 and kin, and the register pairs (A P), (S R) and (A X) the arithmetic kernel
+   * takes and returns -- a sixteen-bit sign-magnitude value: fifteen bits of magnitude and the sign
+   * in bit 7 of the high byte. One component of an orientation vector is one of these, and so is
+   * every operand of `ADD` (M2-b), which is why the type lives here and not with the ship.
+   */
+  struct SignMag16
+  {
+    std::uint8_t lo = 0;
+    std::uint8_t hi = 0;
+
+    [[nodiscard]] constexpr bool operator==(const SignMag16&) const noexcept = default;
+  };
+
   /// Elite stores a coordinate as three bytes: a 16-bit magnitude and a separate sign byte whose
   /// bit 7 is the sign. It is not two's complement, so negative zero exists and comparisons are
   /// on magnitude -- which is exactly why this is a type rather than an int.

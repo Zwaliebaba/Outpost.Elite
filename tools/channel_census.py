@@ -41,7 +41,7 @@ END = "<!--census:end-->"
 
 # The workspaces and their fields, as the headers declare them.
 WORKSPACES: dict[str, list[str]] = {
-    "MathWorkspace": ["p", "p1", "p2", "q", "r", "s", "t", "t1", "u", "cnt", "tgt", "cnt2", "xx", "xxNext", "yy", "yyNext", "widget", "k", "k2"],
+    "MathWorkspace": ["p", "p1", "p2", "q", "r", "s", "t", "t1", "u", "cnt", "tgt", "cnt2", "xx", "xxNext", "yy", "yyNext", "k", "k2"],
     "DrawWorkspace": ["x1", "y1", "x2", "y2", "col", "zz", "t2", "r2", "sc", "swap", "xx15Plus4", "xx15Plus5"],
     "GeometryWorkspace": ["xx16", "xx12", "xx2", "xx3", "xx4", "xx17", "xx18", "xx20", "v"],
     "ClipState": ["xx13", "dontclip"],
@@ -55,7 +55,7 @@ LABELS: dict[str, str] = {
     "MathWorkspace.p": "P", "MathWorkspace.p1": "P+1", "MathWorkspace.p2": "P+2", "MathWorkspace.q": "Q", "MathWorkspace.r": "R",
     "MathWorkspace.s": "S", "MathWorkspace.t": "T", "MathWorkspace.t1": "T1", "MathWorkspace.u": "U", "MathWorkspace.cnt": "CNT",
     "MathWorkspace.tgt": "TGT", "MathWorkspace.cnt2": "CNT2", "MathWorkspace.xx": "XX", "MathWorkspace.xxNext": "XX+1",
-    "MathWorkspace.yy": "YY", "MathWorkspace.yyNext": "YY+1", "MathWorkspace.widget": "widget", "MathWorkspace.k": "K(3 2 1 0)",
+    "MathWorkspace.yy": "YY", "MathWorkspace.yyNext": "YY+1", "MathWorkspace.k": "K(3 2 1 0)",
     "MathWorkspace.k2": "K2(3 2 1 0)",
     "DrawWorkspace.x1": "X1", "DrawWorkspace.y1": "Y1", "DrawWorkspace.x2": "X2", "DrawWorkspace.y2": "Y2", "DrawWorkspace.col": "COL",
     "DrawWorkspace.zz": "ZZ", "DrawWorkspace.t2": "T2", "DrawWorkspace.r2": "R2", "DrawWorkspace.sc": "SC(1 0)", "DrawWorkspace.swap": "SWAP",
@@ -79,16 +79,16 @@ AGGREGATE_MEMBERS: dict[str, str] = {
 # out. "local" is scratch within one routine; "result" a value a callee hands back; "parameter"
 # a value a caller hands in; "state" a value that outlives the call on purpose, with the reason.
 VERDICTS: dict[str, str] = {
-    # ---- MathWorkspace: the arithmetic kernel's channels, M2-b ------------------------------------
-    "MathWorkspace.p": "**Result and parameter** (M2-b). The multipliers leave the low byte here (`MU11`, `MULTU`, `MULT1`) and `MVEIT`, the stardust, `HITCH` and the cloud read it after the call: `Product{high, low, carry}`. Where a routine reads it from its caller (`AddSigned`, `MultiplyWide`, `DivideWide`, `MultiplyByX`, `Arctan`, `MultiplySignedToK`) it is the operand `P`, a parameter.",
-    "MathWorkspace.p1": "**Parameter and result** (M2-b). The three-byte routines (`AddShipCoordinateToP`, `DivideSignedToK`, `MultiplySignedToK`) read `P+1` from the caller and `MoveShip` and `DrawSun` read it after: one `Wide24` value in and out with `p` and `p2`.",
-    "MathWorkspace.p2": "**Parameter and result** (M2-b), the top byte of the same `Wide24`.",
-    "MathWorkspace.q": "**Parameter** (M2-b). Every read-first is a kernel routine reading the multiplier or divisor `Q` its caller set. The one after-call read, `EndFlightFrame` after `DoubleAndAddCoordinate`, is `MAS1` leaving the doubled high byte in `Q`: a result field.",
-    "MathWorkspace.r": "**Result and parameter** (M2-b). The dividers leave `R` (`DivideToR`, `DivideByLogarithms`) and `AngleOfRatio`, `DivideAndScale`, `ScaleOrientation`, `OffsetByCloud` read it after: `Quotient`. `AddSigned`, `CombineSigned`, `SquareRoot` and `MVT1` read it from the caller: a parameter.",
-    "MathWorkspace.s": "**Result and parameter** (M2-b), the high half of `(S R)`: `MultiplySignedToSR` leaves it, `AddSigned` and `CombineSigned` take it; the clipper's slope helpers hand it between `MeasureSlope`, `PrepareSlope`, `MultiplySlope` and `DivideSlope`, which is M2-c's `Slope` value.",
-    "MathWorkspace.t": "**Parameter, else local** (M2-b, M2-c). `StepAlongX`/`StepAlongY` read `T` after `PrepareSlope` (the slope helpers' shared value) and `DrawBallLine` reads what `DrawBall` set (`BLINE`'s step); every other writer initialises it.",
-    "MathWorkspace.t1": "**One parameter, else local** (M2-c). `DrawBar` reads the threshold `DrawDials` stored in `T1` (`LDA #14 / STA T1`); `Arctan`, `MultiplyScaled`, `AddSigned`, `DrawShip` and `SpawnChildShip` use it as their own scratch.",
-    "MathWorkspace.u": "**Local**. Six writers, no reader that did not write it first.",
+    # ---- MathWorkspace: the arithmetic kernel's channels, taken to values by M2-b ------------------
+    "MathWorkspace.p": "**Done (M2-b): the kernel's operand and low byte are values** -- `Product{high, low, carry}` out of the multipliers, `SignMag16` into `ADD`. What is left is the planet drawer parking a crater offset and the dashboard its scratch: M2-c's locals.",
+    "MathWorkspace.p1": "**Left for M2-c.** The kernel's three-byte operands are `SignMag24` values since M2-b; what remains is `CHKON`'s (`CircleOffScreen`) horizontal extent, which `DrawSun` reads after `EraseSun` -- the planet drawer's own channel.",
+    "MathWorkspace.p2": "**Left for M2-c**, with `p1`.",
+    "MathWorkspace.q": "**The frame's Q** (M2-b, §8; risk R22). The kernel takes its multiplier and divisor as values. Two readers are left: the clipper's slope helpers hand it between `MeasureSlope`, `PrepareSlope`, `MultiplySlope` and `DivideSlope` (M2-c's `Slope`), and the altitude check in `EndFlightFrame` takes whatever the frame last left in `Q` as its radicand's low byte -- `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip` and `DrawSun` write it for that read alone, as the original's `STA Q`s did, and `LOIN`'s is the one this port has never modelled. `DrawDials`/`DrawBar`/`DrawIndicator` and the cloud's `DrawExplosionCloud`/`DrawParticles` are the dashboard's and the explosion's own parameter (M2-c).",
+    "MathWorkspace.r": "**Left for M2-c.** The kernel's `Quotient` and `Product` went with M2-b; what remains is the clipper's slope (`MeasureSlope` → `PrepareSlope` → `MultiplySlope`/`DivideSlope`, `StepAlongX`'s x) and `HITCH`'s (`IsHit`) sum of squares -- one `Slope` value and one local.",
+    "MathWorkspace.s": "**Left for M2-c**, the high half of the clipper's `(S R)` and `IsHit`'s; the kernel's `SignedSum::sign` and `SignMag16::hi` since M2-b.",
+    "MathWorkspace.t": "**Parameter, else local** (M2-c). `StepAlongX`/`StepAlongY` read `T` after `PrepareSlope` (the slope helpers' shared value) and `DrawBallLine` reads what `DrawBall` set (`BLINE`'s step); every other writer initialises it. The kernel's `T` is a local since M2-b.",
+    "MathWorkspace.t1": "**One parameter, else local** (M2-c). `DrawBar` reads the threshold `DrawDials` stored in `T1` (`LDA #14 / STA T1`); `DrawShip` and `SpawnChildShip` use it as their own scratch. The kernel's `T1` is a local since M2-b.",
+    "MathWorkspace.u": "**Local**. Two writers, no reader that did not write it first; `LL61`'s incoming `U` is a parameter since M2-b.",
     "MathWorkspace.cnt": "**Local, and one parameter** (M2-c). Every writer initialises it (its own comment, §6.49); the hand-over is `DrawBall` → `DrawBallLine`, `CIRCLE2` giving `BLINE` its segment count.",
     "MathWorkspace.tgt": "**Parameter** (M2-c). `DrawEllipse` reads what `DrawHalfEllipse`, `DrawPlanetDetail` and `DrawSun` set: what the walk counts up to.",
     "MathWorkspace.cnt2": "**Parameter** (M2-c). `DrawEllipse` reads the starting angle `SetMeridianAngle` and `DrawPlanetDetail` set; `ShowTitleShip`'s use is its own local.",
@@ -96,9 +96,8 @@ VERDICTS: dict[str, str] = {
     "MathWorkspace.xxNext": "**Parameter** (M2-c), the high byte of the same `Coord16`.",
     "MathWorkspace.yy": "**Parameter** (M2-c). `ClipSunRow` reads `YY(1 0)` from `DrawSun`/`EraseSun`; the stardust writes and reads its own.",
     "MathWorkspace.yyNext": "**Parameter** (M2-c), the high byte of the same.",
-    "MathWorkspace.widget": "**Local** to the logarithm routines, as its comment says.",
-    "MathWorkspace.k": "**Result and parameter** (M2-b, M2-c). `DivideByShipZ` leaves the quotient in `K` and `DivideAxisByZ`, `DivideToScreenOffset` and `DrawPlanetOrSun` read it after; `MultiplySignedToK`/`AddShipCoordinateToK` leave it for `MovePlanetOrSun` (§4.3's `MV40` row, locals there); `CircleOffScreen`, `DrawBar` and `AddShipCoordinateToK` read what their callers set (the radius, the bar's colours, the coordinate): a `K24` value in and out.",
-    "MathWorkspace.k2": "**Result and parameter** (M2-b, M2-c). `DrawEllipse` reads the two axes its caller set and what `MultiplyByLog` left; `MovePlanetOrSun`, `LoadTwoAxes` and `DrawSun` write their own: locals in `MV40`, a parameter in the ellipse.",
+    "MathWorkspace.k": "**Result and parameter** (M2-c). `DivideByShipZ` leaves the quotient in `K` and `DivideAxisByZ`, `DivideToScreenOffset` and `DrawPlanetOrSun` read it after; `CircleOffScreen`, `DrawBall` and `DrawBar` read what their callers set (the radius, the bar's colours): a `KBlock` value in and out. `MV40`, `MAS1` and `TAS1` hold theirs as `KBlock` locals since M2-b.",
+    "MathWorkspace.k2": "**Parameter, and one byte of state** (M2-c; M2-b, §8). `DrawEllipse` reads the two axes `LoadTwoAxes` set; `DrawSun` and `DrawPlanetDetail` write their own. `MV40` holds its `K2` as a local since M2-b -- except the bottom byte, which it never writes and reads for the carry of its first addition: whatever the last drawer left there, on purpose.",
     # ---- DrawWorkspace: the line being drawn, M2-c ------------------------------------------------
     "DrawWorkspace.x1": "**Parameter and result** (M2-c). `XX15` is the line: `LOIN` and the pixel helpers take its four ends (`Line`), the clipper takes six bytes and returns four (`Line16` in, `Line` out), `DotProducts` and `TAS2` take a vector in the same bytes, the stardust its point. No read outlives a call except through `SWAP`.",
     "DrawWorkspace.y1": "**Parameter and result** (M2-c), with `x1`.",
@@ -132,8 +131,8 @@ VERDICTS: dict[str, str] = {
     "Projection.y1": "**State, deliberately**, with `x`.",
     # ---- K3Block and NumberWorkspace --------------------------------------------------------------
     "K3Block.*": "**Parameter and result** (M2-c). `SPS1` (`LoadPlanetAxis`, `NormaliseAxes`) leaves the vector `BuildUnitVector` and part 9 read; `TAS2`/`OffsetAxis` take and return it: `UnitVector`/`Vector24`, §4.3's `XX15 after SPS1` row.",
-    "NumberWorkspace.k": "**Parameter** (M2-b). `PrintNumber` reads the value its caller set and uses the rest as scratch; `PrintValue` already wraps it.",
-    "NumberWorkspace.u": "**Parameter** (M2-b), the digit count.",
+    "NumberWorkspace.k": "**Parameter** (M2-c; not the kernel's, so not M2-b's). `PrintNumber` reads the value its caller set and uses the rest as scratch; `PrintValue` already wraps it.",
+    "NumberWorkspace.u": "**Parameter** (M2-c), the digit count.",
 }
 
 WRITE_AFTER = re.compile(r"^\s*(?:\[[^\]]*\]\s*)*(?:=(?!=)|\+=|-=|\|=|&=|\^=|<<=|>>=|\+\+|--)")
@@ -202,6 +201,11 @@ def routines_of(_path: Path) -> list[Routine]:
                 for workspace in WORKSPACES:
                     for match in re.finditer(r"\b" + workspace + r"&\s+(" + IDENT + r")", signature):
                         routine.params[match.group(1)] = workspace
+                    # a local reference to a workspace (`MathWorkspace& math = screen.math;`) is a
+                    # receiver too -- `TACTICS` binds three of them, which the first census missed
+                    for line in body:
+                        for match in re.finditer(r"\b" + workspace + r"&\s+(" + IDENT + r")\s*=", strip_comments(line)):
+                            routine.params[match.group(1)] = workspace
                 found.append(routine)
                 index = cursor + 1
                 continue

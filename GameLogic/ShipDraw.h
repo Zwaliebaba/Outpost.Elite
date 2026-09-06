@@ -61,7 +61,9 @@ namespace Elite
    * the projection -- it exists to divide by a ship's distance, and its callers are `PLS6` here
    * and `PLANET`/`PLS1` in slice 3c. Nothing in the movement code calls it.
    */
-  void DivideByShipZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
+  /// `_numerator` is (A P+1 P) -- a coordinate's shape, the sign in the top byte -- and the
+  /// quotient is left in `K`, where `PLS1`, `PLS6` and `PLANET` read it (M2-c takes it further).
+  void DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
 
   /*
    * 6502: PLS6 (with its PL21, PL44 and PL6 exits) -- (X K) = (A P+1 P) / z, overflowing at 1024.
@@ -75,7 +77,7 @@ namespace Elite
    * where a sign-magnitude number is converted, because a screen coordinate is an offset from the
    * centre and has to be added to it.
    */
-  [[nodiscard]] ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
+  [[nodiscard]] ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
 
   /// 6502: K3(1 0) and K4(1 0) -- where a point landed on the screen, as sixteen bits per axis so
   /// that a shape whose centre is off the edge still has somewhere to be drawn from. These are the
@@ -269,7 +271,7 @@ namespace Elite
    * `XX15` and `XX16`. Those exist as part of `LL9`, it is called from `LL9` and nowhere else, and
    * it is built here (§6.37).
    */
-  void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept;
+  void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry) noexcept;
 
   /*
    * The line clipper's arithmetic (slice 3b).

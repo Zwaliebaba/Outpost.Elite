@@ -140,8 +140,8 @@ namespace Elite
           // whether `PIXEL` draws one mark, two, or a square.
           _draw.zz = _rng.NextRepeatable().value;
 
-          _math.r = k3[1];
-          const ExplosionOffset offsetY = OffsetByCloud(_math, _rng, k3[0]);
+          // 6502: LDA K3+1 / STA R / LDA K3 / JSR EXS1 -- the vertex's y, against the cloud in Q.
+          const ExplosionOffset offsetY = OffsetByCloud(_rng, k3[0], k3[1], _math.q);
 
           if (offsetY.high != 0u || offsetY.low >= EXPLOSION_PARTICLE_BOTTOM)
           {
@@ -157,8 +157,7 @@ namespace Elite
           {
             _draw.y1 = offsetY.low; // 6502: STX Y1
 
-            _math.r = k3[3];
-            const ExplosionOffset offsetX = OffsetByCloud(_math, _rng, k3[2]);
+            const ExplosionOffset offsetX = OffsetByCloud(_rng, k3[2], k3[3], _math.q);
 
             if (offsetX.high == 0u)
             {
@@ -197,9 +196,9 @@ namespace Elite
     }
   } // namespace
 
-  ExplosionOffset OffsetByCloud(MathWorkspace& _math, Rng& _rng, std::uint8_t _a) noexcept
+  ExplosionOffset OffsetByCloud(Rng& _rng, std::uint8_t _high, std::uint8_t _low, std::uint8_t _size) noexcept
   {
-    _math.s = _a; // 6502: STA S -- the high byte of the vertex, kept for the tail
+    const std::uint8_t s = _high; // 6502: STA S -- the high byte of the vertex, kept for the tail
 
     // 6502: the inlined copy of DORND2 -- the C64 spells the routine out here rather than calling
     // it, which changes the timing and nothing else.
@@ -212,27 +211,27 @@ namespace Elite
      * byte. `FMLTU` parks X there to preserve it and every exit reloads it, which leaves `P`
      * holding a register value nothing goes on to read. See `MultiplyByLog` in `Arith.h`.
      */
-    _math.p = random.previous;
+    (void)random.previous;
 
     if (doubled.carry)
     {
       // 6502: EX5 -- the negative half. The carry is SET here BECAUSE the branch was taken, and
       // `FMLTU` passes an entry carry straight through on its two zero exits, so it matters.
-      const WideResult product = MultiplyByLog(_math, doubled.value, true);
-      _math.t = product.high;
+      const LogProduct product = MultiplyByLog(doubled.value, _size, true);
+      const std::uint8_t t = product.value;
 
       // 6502: LDA R / SBC T / TAX / LDA S / SBC #0 -- and the borrow going in is whatever `FMLTU`
       // left, not a `SEC`.
-      const SubResult low = SubtractWithCarry(_math.r, _math.t, product.carry);
-      const SubResult high = SubtractWithCarry(_math.s, 0, low.carry);
+      const SubResult low = SubtractWithCarry(_low, t, product.carry);
+      const SubResult high = SubtractWithCarry(s, 0, low.carry);
       return ExplosionOffset{high.value, low.value};
     }
 
     // 6502: JSR FMLTU / ADC R / TAX / LDA S / ADC #0 -- the positive half, and the same borrowed
     // carry the other way round. §6.42 recorded this call as one of the two that read it.
-    const WideResult product = MultiplyByLog(_math, doubled.value, false);
-    const AddResult low = AddWithCarry(product.high, _math.r, product.carry);
-    const AddResult high = AddWithCarry(_math.s, 0, low.carry);
+    const LogProduct product = MultiplyByLog(doubled.value, _size, false);
+    const AddResult low = AddWithCarry(product.value, _low, product.carry);
+    const AddResult high = AddWithCarry(s, 0, low.carry);
     return ExplosionOffset{high.value, low.value};
   }
 
@@ -315,19 +314,20 @@ namespace Elite
      * branch on it. `ASL R / ROL A` three times shifts the sixteen-bit answer up rather than the
      * byte, which is why R is a workspace byte here and not a discarded remainder.
      */
-    static_cast<void>(DivideAndScale(_math, grown.value));
+    const ScaledDivision divided = DivideAndScale(grown.value, _math.q);
 
-    std::uint8_t size = _math.p;
+    std::uint8_t size = divided.whole;
     if (size >= 0x1Cu)
     {
       size = 0xFEu;
     }
     else
     {
+      std::uint8_t fraction = divided.fraction;
       for (int pass = 0; pass < 3; ++pass)
       {
-        const ShiftResult low = RotateLeftValue(_math.r, false); // 6502: ASL R
-        _math.r = low.value;
+        const ShiftResult low = RotateLeftValue(fraction, false); // 6502: ASL R
+        fraction = low.value;
         size = RotateLeftValue(size, low.carry).value; // 6502: ROL A
       }
     }

@@ -481,8 +481,7 @@ namespace GameLogicTests
             Assert::IsTrue(run.completed, L"NORM returned");
 
             std::array<std::uint8_t, 3> vector = {x, y, z};
-            Elite::MathWorkspace work;
-            Elite::Normalise(work, vector);
+            (void)Elite::Normalise(vector);
 
             const std::wstring where = Widen("NORM(" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + ")");
             Assert::AreEqual(cpu.memory[xx15], vector[0], (where + L": x").c_str());
@@ -530,18 +529,14 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(mult3);
               Assert::IsTrue(run.completed, L"MULT3 returned");
 
-              Elite::MathWorkspace work;
-              work.p = p0;
-              work.p1 = p1;
-              work.q = q;
-              Elite::MultiplySignedToK(work, a);
+              const Elite::KBlock k = Elite::MultiplySigned24(Elite::SignMag24{p0, p1, a}, q);
+              const std::uint8_t bytes[4] = {k.low, k.mid, k.high, k.top};
 
               const std::wstring where =
                 Widen("MULT3(" + std::to_string(a) + " " + std::to_string(p1) + " " + std::to_string(p0) + " * " + std::to_string(q) + ")");
               for (int byte = 0; byte < 4; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], work.k[byte],
-                                 (where + L": K+" + std::to_wstring(byte)).c_str());
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], bytes[byte], (where + L": K+" + std::to_wstring(byte)).c_str());
               }
               ++compared;
             }

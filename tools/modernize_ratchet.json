@@ -9,14 +9,14 @@
   ],
   "ceilings": {
     "register-params": {
-      "ceiling": 64,
+      "ceiling": 22,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M2-b"
     },
     "workspace-params": {
-      "ceiling": 207,
+      "ceiling": 151,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M2-b"
     },
     "ship-literal-sites": {
       "ceiling": 0,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3730,
+      "ceiling": 3807,
       "slack": 0,
-      "slice": "death-sequence fix, hyperspace key and loader sprites 2026-09-06 (plan 6.157-6.160)"
+      "slice": "M2-b's kernel scratch labels plus the death-sequence fix, hyperspace key and loader sprites (plan 6.157-6.160), merged 2026-09-06"
     },
     "oracle-test-files": {
       "ceiling": 50,

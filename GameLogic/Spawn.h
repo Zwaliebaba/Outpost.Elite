@@ -209,7 +209,7 @@ namespace Elite
    * the sign into the carry, `LDA #0 / ROR A` catches it. Then `JMP MVT1` rather than `TAS7`'s own
    * arithmetic, so this one adds to a SHIP COORDINATE where that one adds to `K3`.
    */
-  void MoveShipAlongAxis(Ship& _work, MathWorkspace& _math, std::uint8_t _amount, std::uint8_t _axis) noexcept;
+  void MoveShipAlongAxis(Ship& _work, std::uint8_t _amount, std::uint8_t _axis) noexcept;
 
   /*
    * 6502: SFS1 -- spawn a child from the ship in slot `_parent`: wreckage, a Viper out of a

@@ -120,27 +120,28 @@ namespace Elite
      * constants are reached through the carry the population's last ADC left, so they are not
      * really 3 and 4.
      */
-    MathWorkspace work;
     step = AddWithCarry(static_cast<std::uint8_t>(data.economy ^ 0x07u), 3, step.carry);
-    work.p = step.value;
+    const std::uint8_t economyFactor = step.value;
 
     step = AddWithCarry(data.government, 4, step.carry);
-    work.q = step.value;
+    const std::uint8_t governmentFactor = step.value;
 
-    // 6502: JSR MULTU twice -- (A P) = P * Q, then that product times the population.
-    std::uint8_t productHigh = MultiplyUnsigned(work).high;
-    work.q = data.population;
-    productHigh = MultiplyUnsigned(work).high;
+    // 6502: JSR MULTU twice -- (A P) = P * Q, then the LOW byte of that product (still in P) times
+    // the population.
+    Product product = MultiplyUnsigned(economyFactor, governmentFactor);
+    product = MultiplyUnsigned(product.low, data.population);
 
     // 6502: ASL P / ROL A, three times -- a multiply by eight across the sixteen-bit product.
+    std::uint8_t productHigh = product.high;
+    std::uint8_t productLow = product.low;
     for (int shift = 0; shift < 3; ++shift)
     {
-      const ShiftResult lowHalf = RotateLeft(work.p, false);
-      work.p = lowHalf.value;
+      const ShiftResult lowHalf = RotateLeft(productLow, false);
+      productLow = lowHalf.value;
       productHigh = RotateLeft(productHigh, lowHalf.carry).value;
     }
 
-    data.productivity = static_cast<std::uint16_t>((static_cast<std::uint16_t>(productHigh) << 8) | work.p);
+    data.productivity = static_cast<std::uint16_t>((static_cast<std::uint16_t>(productHigh) << 8) | productLow);
     return data;
   }
 
@@ -206,27 +207,23 @@ namespace Elite
      * 6502: TT139 onwards -- the real distance, which is a different measurement from the one the
      * search just used. dx is squared whole; dy is HALVED first, then squared.
      */
-    MathWorkspace work;
-    const std::uint8_t high = SquareUnsigned(work, AbsoluteDifference(best.x, _currentX)).high;
-    const std::uint8_t squaredHigh = high;
-    const std::uint8_t squaredLow = work.p;
+    const Product squared = SquareUnsigned(AbsoluteDifference(best.x, _currentX));
 
     const std::uint8_t halfDy = static_cast<std::uint8_t>(AbsoluteDifference(best.y, _currentY) >> 1);
-    const std::uint8_t secondHigh = SquareUnsigned(work, halfDy).high;
+    const Product second = SquareUnsigned(halfDy);
 
     // 6502: CLC / ADC K / STA Q / PLA / ADC K+1 / BCC / LDA #255 -- the sum saturates rather than
     // wrapping, because a distance that wrapped would read as very close indeed.
-    const AddResult sumLow = AddWithCarry(work.p, squaredLow, false);
-    const AddResult sumHigh = AddWithCarry(secondHigh, squaredHigh, sumLow.carry);
+    const AddResult sumLow = AddWithCarry(second.low, squared.low, false);
+    const AddResult sumHigh = AddWithCarry(second.high, squared.high, sumLow.carry);
 
-    work.q = sumLow.value;
-    work.r = sumHigh.carry ? std::uint8_t{255} : sumHigh.value;
+    const std::uint8_t radicandHigh = sumHigh.carry ? std::uint8_t{255} : sumHigh.value;
 
     // 6502: JSR LL5 -- Q becomes the square root of (R Q). The exit carry is not read here.
-    (void)SquareRoot(work);
+    const Root root = SquareRoot(radicandHigh, sumLow.value);
 
     // 6502: ASL A / ROL QQ8+1 twice -- the answer times four, as a sixteen-bit value.
-    std::uint8_t distanceLow = work.q;
+    std::uint8_t distanceLow = root.value;
     std::uint8_t distanceHigh = 0;
     for (int shift = 0; shift < 2; ++shift)
     {
