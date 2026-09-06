@@ -89,17 +89,15 @@ namespace Elite
     virtual ~StartUpEffects() = default;
 
     /*
-     * 6502: RESET, which falls into RES2 -- the whole universe and then the ship.
+     * `RESET` AND `RES2` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-1e).
      *
-     * RESET zeroes the ship slots, clears the roll and pitch, sets QQ12 to zero and clears the
-     * fuel-scoop damage, and then runs off its end into RES2. So a caller of RESET gets both, and
-     * that is not visible from the call site.
+     * `ResetUniverse` was `RESET`, which zeroes the ship slots, clears the roll and pitch, sets
+     * `QQ12` and clears the fuel-scoop damage and then RUNS OFF ITS END into `RES2` -- so a caller
+     * of `RESET` gets both, which is not visible from the call site and is why `ResetGame` ends
+     * with `ResetShipAndBubble` rather than calling it. `ResetShip` was `RES2` on its own, which
+     * `DEATH2` enters and `TT170` reaches a SECOND time (§6.25). Both are `Flight.cpp`'s since the
+     * stardust, the heaps and the dashboard were built, and the start sequence calls them.
      */
-    virtual void ResetUniverse() = 0;
-
-    /// 6502: RES2 on its own -- the ship, the line heap, the dashboard, the missile lock and the
-    /// stardust. DEATH2 enters here, and so does TT170 a second time (see ResetAndStartGame).
-    virtual void ResetShip() = 0;
 
     /*
      * 6502: ZEKTRAN -- zero the key logger and `thiskey`.
@@ -116,8 +114,6 @@ namespace Elite
     /// 6502: stopat -- stop it, and silence all three voices.
     virtual void StopTheme() = 0;
 
-    /// 6502: msblob -- the dashboard's missile indicators, green up to NOMSL and black above it.
-    virtual void ResetMissileIndicators() = 0;
 
     /*
      * `ShowDockingTunnel` WAS HERE, and it is gone because `LAUN` is ported (§6.109).

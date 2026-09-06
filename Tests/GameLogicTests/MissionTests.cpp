@@ -38,12 +38,9 @@ namespace GameLogicTests
       std::uint32_t scans = 0;
       std::vector<std::uint8_t> delays;
 
-      void ResetUniverse() override {}
-      void ResetShip() override {}
       void ClearKeyLogger() override {}
       void StartTheme() override {}
       void StopTheme() override {}
-      void ResetMissileIndicators() override {}
 
       /// How many scans answer "pressed" BEFORE the quiet run -- the state `PAUSE`'s first loop
       /// exists for, and the one a script that starts empty cannot reach.

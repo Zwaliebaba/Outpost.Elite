@@ -88,6 +88,36 @@ namespace GameLogicTests
       return text + L"]";
     }
 
+    /*
+     * 6502: stopbd, which `RES2` opens with -- and it is a `FlightLoopEffects` rather than a
+     * `StartUpEffects`, so it needs its own recorder (M3-b-1e).
+     *
+     * `RESET` and `RES2` were seams on `StartUpEffects` until then, and the sequence's list said
+     * they had been reached. They are `Flight.cpp`'s routines now and run on both sides, so what
+     * the list carries is what THEY reach: one `JSR stopbd` each. On the oracle it has to be
+     * trapped at its own address rather than left to fall through into `stopat`, which is the
+     * next routine in the binary and the theme's stop.
+     */
+    struct RecordingMusic final : Elite::FlightLoopEffects
+    {
+      std::vector<Seam>& seams;
+
+      explicit RecordingMusic(std::vector<Seam>& _seams) noexcept
+        : seams(_seams)
+      {
+      }
+
+      void StopDockingMusic() override
+      {
+        seams.push_back({"stopbd", 0, 0, 0});
+      }
+      void StartDockingMusic() override {}
+      bool PlaySound(std::uint8_t, bool) override { return false; }
+      bool PlaySoundPitched(std::uint8_t, std::uint8_t, std::uint8_t) override { return false; }
+      void StopSound(std::uint8_t) override {}
+      bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
+    };
+
     /// The port's side: every seam recorded, and the title screen answering from a script.
     class RecordingStart : public Elite::StartUpEffects
     {
@@ -97,14 +127,6 @@ namespace GameLogicTests
       {
       }
 
-      void ResetUniverse() override
-      {
-        seams.push_back({"RESET", 0, 0, 0});
-      }
-      void ResetShip() override
-      {
-        seams.push_back({"RES2", 0, 0, 0});
-      }
       void ClearKeyLogger() override
       {
         seams.push_back({"ZEKTRAN", 0, 0, 0});
@@ -116,10 +138,6 @@ namespace GameLogicTests
       void StopTheme() override
       {
         seams.push_back({"stopat", 0, 0, 0});
-      }
-      void ResetMissileIndicators() override
-      {
-        seams.push_back({"msblob", 0, 0, 0});
       }
 
       // Reached by DOENTRY rather than by the start sequence, so neither script here should see one.
@@ -434,28 +452,26 @@ namespace GameLogicTests
       const Seam ZEK{"ZEKTRAN", 0, 0, 0};
       const Seam START{"startat", 0, 0, 0};
       const Seam STOP{"stopat", 0, 0, 0};
-      const Seam BLOB{"msblob", 0, 0, 0};
-      const Seam RESET{"RESET", 0, 0, 0};
-      const Seam RES2{"RES2", 0, 0, 0};
+      const Seam BD{"stopbd", 0, 0, 0};
       const Seam FIRST{"TITLE", Elite::TITLE_LOAD_TOKEN, Elite::Byte(Elite::ShipType::CobraMk3), Elite::TITLE_COBRA_DISTANCE};
       const Seam SECOND{"TITLE", Elite::TITLE_START_TOKEN, Elite::Byte(Elite::ShipType::Adder), Elite::TITLE_ADDER_DISTANCE};
 
       const std::vector<Script> SCRIPTS = {
-        {"N at the prompt", false, 'N', {}, {ZEK, START, FIRST, BLOB, SECOND, STOP}},
-        {"a key that is not Y", false, ' ', {}, {ZEK, START, FIRST, BLOB, SECOND, STOP}},
-        {"no key at all", false, 0, {}, {ZEK, START, FIRST, BLOB, SECOND, STOP}},
-        {"Y, then leave the menu", false, Elite::KEY_YES_INTERNAL, {'5'}, {ZEK, START, FIRST, STOP, START, BLOB, SECOND, STOP}},
+        {"N at the prompt", false, 'N', {}, {ZEK, START, FIRST, SECOND, STOP}},
+        {"a key that is not Y", false, ' ', {}, {ZEK, START, FIRST, SECOND, STOP}},
+        {"no key at all", false, 0, {}, {ZEK, START, FIRST, SECOND, STOP}},
+        {"Y, then leave the menu", false, Elite::KEY_YES_INTERNAL, {'5'}, {ZEK, START, FIRST, STOP, START, SECOND, STOP}},
         {"Y, toggle the media, then leave",
          false,
          Elite::KEY_YES_INTERNAL,
          {'3', '5'},
-         {ZEK, START, FIRST, STOP, START, BLOB, SECOND, STOP}},
-        {"a cold start", true, 'N', {}, {RESET, RES2, ZEK, START, FIRST, BLOB, SECOND, STOP}},
+         {ZEK, START, FIRST, STOP, START, SECOND, STOP}},
+        {"a cold start", true, 'N', {}, {BD, BD, ZEK, START, FIRST, SECOND, STOP}},
         {"a cold start into the menu",
          true,
          Elite::KEY_YES_INTERNAL,
          {'5'},
-         {RESET, RES2, ZEK, START, FIRST, STOP, START, BLOB, SECOND, STOP}},
+         {BD, BD, ZEK, START, FIRST, STOP, START, SECOND, STOP}},
       };
 
       std::uint32_t compared = 0;
@@ -484,8 +500,8 @@ namespace GameLogicTests
         constexpr std::uint16_t KERNAL_LOAD = 0xFFD5;
 
         std::vector<std::pair<std::uint16_t, std::string>> named = {
-          {oracle.Label("ZEKTRAN"), "ZEKTRAN"}, {oracle.Label("startat"), "startat"}, {oracle.Label("stopat"), "stopat"},
-          {oracle.Label("msblob"), "msblob"},   {oracle.Label("RESET"), "RESET"},     {oracle.Label("RES2"), "RES2"},
+          {oracle.Label("ZEKTRAN"), "ZEKTRAN"}, {oracle.Label("startat"), "startat"},
+          {oracle.Label("stopat"), "stopat"},    {oracle.Label("stopbd"), "stopbd"},
         };
         for (const auto& entry : named)
         {
@@ -637,12 +653,31 @@ namespace GameLogicTests
         std::uint8_t& dockedFlag = universe.dockedFlag;
 
         RecordingStart effects({script.firstAnswer, 0});
+        RecordingMusic music(effects.seams); ///< `RES2`'s `JSR stopbd`, in the same list and order
         NullSeams nulls;
-        Elite::Ports ports{recursive, characters, sink,    nulls, nulls, nulls,       nulls,
+        Elite::Ports ports{recursive, characters, sink,    nulls, nulls, nulls,       music,
                            extended,  effects,    keys,    nulls, lineEffects, store};
+
+        /*
+         * 6502: msblob -- the one thing the sequence draws, and a count cannot say so any more
+         * (M3-b-1e). Nothing else here touches the canvas: the text goes into `CountingSink` and
+         * `TITLE` is still a seam. So a canvas that gained ink is a `msblob` that ran.
+         */
+        std::uint32_t inkBefore = 0;
+        for (const std::uint8_t byte : universe.canvas.Screen())
+        {
+          inkBefore += (byte != 0u) ? 1u : 0u;
+        }
 
         const Elite::ForcedKey forced =
           script.coldStart ? Elite::ResetAndStartGame(universe, ports, false) : Elite::StartGame(universe, ports, false);
+
+        std::uint32_t inkAfter = 0;
+        for (const std::uint8_t byte : universe.canvas.Screen())
+        {
+          inkAfter += (byte != 0u) ? 1u : 0u;
+        }
+        Assert::IsTrue(inkAfter > inkBefore, (where + L": msblob drew the missile indicators").c_str());
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(effects.overran, (where + L": the port asked for more title screens").c_str());

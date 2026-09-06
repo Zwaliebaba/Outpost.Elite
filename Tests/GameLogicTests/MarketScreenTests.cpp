@@ -255,10 +255,6 @@ namespace GameLogicTests
       {
         log.push_back(static_cast<std::uint32_t>(0x400u + _view));
       }
-      void ResetMissileIndicators() override
-      {
-        log.push_back(0x500u);
-      }
 
       std::vector<std::uint32_t> log;
     };
@@ -1292,7 +1288,6 @@ namespace GameLogicTests
         cpu.AddTrap(clyns);
         cpu.AddTrap(dn2);
         cpu.AddTrap(tt66);
-        cpu.AddTrap(msblob);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
         cpu.memory[oracle.Label("tek")] = s.tech;
@@ -1359,10 +1354,6 @@ namespace GameLogicTests
           {
             gameEffects.push_back(0x400u + hit.a);
           }
-          else if (hit.address == msblob)
-          {
-            gameEffects.push_back(0x500u);
-          }
         }
 
         // ---- the port ------------------------------------------------------------------------
@@ -1396,7 +1387,28 @@ namespace GameLogicTests
                            extended, nulls,      keys,  effects, nulls, nulls};
 
         universe.current.techLevel = s.tech; // 6502: tek -- the byte the shop reads
+
+        /*
+         * 6502: msblob -- the ONE thing in this screen that touches the canvas (M3-b-1e).
+         *
+         * It was a seam and the comparison counted it; `Dashboard.cpp` has had the routine since
+         * slice 3d-d-iii-b, so the shop calls it. Nothing else here draws -- the text goes into
+         * `RecordingSink` and `CLYNS`, `TT66` and `dn2` are still seams -- so a canvas that changed
+         * is a `msblob` that ran, and one that did not is a call that went missing.
+         */
+        std::uint32_t inkBefore = 0;
+        for (const std::uint8_t byte : universe.canvas.Screen())
+        {
+          inkBefore += (byte != 0u) ? 1u : 0u;
+        }
+
         Elite::EquipShipScreen(universe, ports);
+
+        std::uint32_t inkAfter = 0;
+        for (const std::uint8_t byte : universe.canvas.Screen())
+        {
+          inkAfter += (byte != 0u) ? 1u : 0u;
+        }
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
@@ -1411,6 +1423,12 @@ namespace GameLogicTests
         for (std::size_t index = 0; index < gameEffects.size(); ++index)
         {
           Assert::AreEqual(gameEffects[index], effects.log[index], (where + L": seam " + std::to_wstring(index)).c_str());
+        }
+
+        // And `msblob`, which a count cannot say any more: a missile bought redraws the indicators.
+        if (commander.missiles > s.missiles)
+        {
+          Assert::IsTrue(inkAfter != inkBefore, (where + L": msblob redrew the missile indicators").c_str());
         }
 
         // Everything a purchase can change.

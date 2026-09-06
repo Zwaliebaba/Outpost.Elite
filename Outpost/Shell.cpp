@@ -183,17 +183,6 @@ namespace Outpost
     }
   }
 
-  void GameShell::ResetMissileIndicators()
-  {
-    // 6502: msblob -- ported in slice 3d-d-iii-b, because `KILLSHP`'s seam needed it, so this is a
-    // forward rather than a stub. `NOMSL` is the commander's, which is why the count is passed
-    // rather than read: the routine draws as many blocks as the ship still carries.
-    if (m_flight != nullptr)
-    {
-      Elite::ResetMissileIndicators(m_canvas, m_flight->Universe().commander.missiles);
-    }
-  }
-
   // ---- waiting and the keyboard ------------------------------------------------------------------
 
   void GameShell::WaitFrames(std::uint8_t _frames)
@@ -224,36 +213,6 @@ namespace Outpost
   }
 
   // ---- the start sequence -------------------------------------------------------------------------
-
-  void GameShell::ResetUniverse()
-  {
-    // 6502: RESET, and it falls into RES2 rather than calling it -- which is why the port's
-    // `ResetGame` ends with `ResetShipAndBubble` and this does not call `ResetShip` as well.
-    if (m_flight != nullptr && m_ports != nullptr && m_dockedFlag != nullptr)
-    {
-      Elite::ResetGame(m_flight->Universe(), *m_ports, *m_dockedFlag);
-    }
-  }
-
-  void GameShell::ResetShip()
-  {
-    /*
-     * 6502: RES2 -- the ship, both line heaps, the dashboard state and the stardust.
-     *
-     * This was the shell's own approximation of one instruction of it (`LDA #&10 / STA COL2`) for
-     * as long as the stardust, the heaps and the dashboard were phase 3's. All three exist, so the
-     * seam is gone and the routine runs: §6.73's rule, which is that a seam scoped before the thing
-     * behind it existed has to be revisited once it does.
-     *
-     * It is NOT idempotent, and the cold start calls it twice (§6.25) -- once through `RESET`'s
-     * fall-through and once through `DEATH2`'s. The port reproduces both calls rather than
-     * collapsing them.
-     */
-    if (m_flight != nullptr && m_ports != nullptr)
-    {
-      Elite::ResetShipAndBubble(m_flight->Universe(), *m_ports);
-    }
-  }
 
   void GameShell::StartTheme()
   {

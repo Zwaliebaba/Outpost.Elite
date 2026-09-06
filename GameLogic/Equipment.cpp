@@ -2,6 +2,7 @@
 
 #include "Equipment.h"
 
+#include "Dashboard.h"
 #include "EliteTypes.h"
 #include "LookupTables.h"
 #include "Ports.h"
@@ -322,7 +323,7 @@ namespace Elite
         else
         {
           _universe.commander.missiles = missiles;
-          _ports.trade.ResetMissileIndicators();
+          ResetMissileIndicators(_universe.canvas, _universe.commander.missiles); // 6502: JSR msblob
         }
       }
 

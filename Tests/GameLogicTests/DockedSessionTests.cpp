@@ -113,11 +113,6 @@ namespace GameLogicTests
         }
         Note("clear " + std::to_string(_view));
       }
-      void ResetMissileIndicators() override
-      {
-        Note("missiles");
-      }
-
       // 6502: DELAY and FLKB, from two interfaces that both want them.
       void WaitFrames(std::uint8_t _frames) override
       {
@@ -128,15 +123,8 @@ namespace GameLogicTests
         Note("flush");
       }
 
-      // 6502: RESET, RES2, ZEKTRAN, startat, stopat, LAUN and TITLE.
-      void ResetUniverse() override
-      {
-        Note("reset");
-      }
-      void ResetShip() override
-      {
-        Note("res2");
-      }
+      // 6502: ZEKTRAN, startat, stopat and TITLE. `RESET`, `RES2` and `msblob` were here until
+      // M3-b-1e and are calls into `GameLogic` now.
       void ClearKeyLogger() override
       {
         Note("zektran");

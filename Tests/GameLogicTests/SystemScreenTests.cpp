@@ -117,10 +117,6 @@ namespace GameLogicTests
       {
         log.push_back(static_cast<std::uint32_t>(0x400u + _view));
       }
-      void ResetMissileIndicators() override
-      {
-        log.push_back(0x500u);
-      }
 
       std::vector<std::uint32_t> log;
     };
