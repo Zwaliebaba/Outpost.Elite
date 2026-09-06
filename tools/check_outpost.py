@@ -312,6 +312,34 @@ def check_initialisers(_sources: list[Path]) -> tuple[int, list[str]]:
     return checked, wrong
 
 
+def check_braces(_sources: list["Path"]) -> tuple[int, list[str]]:
+    """Every app source's braces balance, which the Linux leg cannot otherwise know.
+
+    `Outpost/` compiles on the Windows job alone (R15), so a scripted edit that deletes one brace
+    too many is invisible here until CI reports it -- which is exactly what M3-b-2a did, cutting
+    `SyncVideoRegisters`'s body away with the three sound methods below it and producing sixteen
+    `local function definitions are illegal` errors from one missing `}`. Names and arity cannot
+    see that; counting delimiters can, and it is the cheapest half of a parse there is.
+
+    Strings, character literals and comments are removed first, because a brace inside any of them
+    is not a brace. `'{'` in this very file's source would otherwise be one.
+    """
+    counted = 0
+    wrong: list[str] = []
+    for source in _sources:
+        text = source.read_text(encoding="utf-8", errors="replace")
+        text = strip_comments(text)
+        text = re.sub(r"'(?:\\.|[^'\\])'", "''", text)
+        text = re.sub(r'"(?:\\.|[^"\\])*"', '""', text)
+        counted += 1
+        for opener, closer, what in (("{", "}", "brace"), ("(", ")", "parenthesis")):
+            depth = text.count(opener) - text.count(closer)
+            if depth != 0:
+                more = "opening" if depth > 0 else "closing"
+                wrong.append(f"  FAIL  {source.name} has {abs(depth)} more {more} {what}(s) than the other kind")
+    return counted, wrong
+
+
 def self_test() -> int:
     """Plant an access that cannot resolve and check the member check says so.
 
@@ -370,8 +398,32 @@ def self_test() -> int:
             print(line)
         return 1
 
-    print(f"OK    self-test passed: a planted member and a planted initialiser were caught, "
-          f"{len(members)} types parsed, the tree is clean")
+    # ---- and the brace check, planted the same way -------------------------------------------
+    with tempfile.TemporaryDirectory() as folder:
+        planted = Path(folder) / "Planted.cpp"
+        # A BRACE INSIDE A STRING AND A CHARACTER LITERAL, on purpose: a check that counted them
+        # would report this file as unbalanced and would report a real one as fine whenever the two
+        # mistakes cancelled. The missing `}` is the body of `lost`, which is what M3-b-2a deleted.
+        planted.write_text('void lost() { const char* s = "}"; char c = \'{\';\n'
+                           'void next() { }\n', encoding="utf-8")
+        counted, unbalanced = check_braces([planted])
+
+    if counted == 0:
+        print("FAIL  the self-test's source was not read at all")
+        return 1
+    if not unbalanced:
+        print("FAIL  the self-test's missing brace was not reported")
+        return 1
+
+    lopsided = check_braces(sorted(list(APP.glob("*.cpp")) + list(APP.glob("*.h"))))[1]
+    if lopsided:
+        print("FAIL  the tree itself does not pass the brace check")
+        for line in lopsided:
+            print(line)
+        return 1
+
+    print(f"OK    self-test passed: a planted member, a planted initialiser and a planted missing "
+          f"brace were caught, {len(members)} types parsed, the tree is clean")
     return 0
 
 
@@ -425,17 +477,22 @@ def main() -> int:
     initialisersChecked, badInitialisers = check_initialisers(sources)
     wrong.extend(badInitialisers)
 
+    # ---- and that every one of them still balances its delimiters ----------------------------
+    bracesChecked, unbalanced = check_braces(sources)
+    wrong.extend(unbalanced)
+
     print(f"app sources      {len(sources)}")
     print(f"Elite:: names    {len(used)}")
     print(f"calls checked    {checked}")
     print(f"members checked  {membersChecked}")
     print(f"initialisers     {initialisersChecked}")
+    print(f"braces balanced  {bracesChecked}")
 
     for line in wrong:
         print(line)
 
     if wrong and not missing:
-        print(f"FAIL  {len(wrong)} call(s), member(s) or initialiser(s) the app names do not match")
+        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s) or delimiter(s) in the app do not match")
         return 1
 
     if missing:
@@ -446,7 +503,7 @@ def main() -> int:
         return 1
 
     if wrong:
-        print(f"FAIL  {len(wrong)} call(s), member(s) or initialiser(s) the app names do not match")
+        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s) or delimiter(s) in the app do not match")
         return 1
 
     print("OK    every Elite:: name the app uses is declared, every call it makes has the right")
