@@ -60,7 +60,7 @@ namespace Elite
    * The space station is the exception and it does not shuffle anything: `KS4` clears the bubble
    * back to just a sun.
    */
-  void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, Ship& _work, CommanderBlock& _commander,
+  void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, Ship& _work, Commander& _commander,
                 SpawnEffects& _effects, std::uint8_t _slot, std::uint16_t& _blueprint) noexcept;
 
   /*
@@ -125,7 +125,7 @@ namespace Elite
    * part of the same call (§6.58).
    */
   void BuildSystem(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
-                   CommanderBlock& _commander, Rng& _rng, FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
+                   Commander& _commander, Rng& _rng, FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
                    const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _view, bool _carryIn) noexcept;
 
   /*

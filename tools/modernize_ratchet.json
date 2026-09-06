@@ -39,9 +39,9 @@
       "slice": "M0-a"
     },
     "outpost-elite-names": {
-      "ceiling": 226,
+      "ceiling": 225,
       "slack": 0,
-      "slice": "M1-b"
+      "slice": "M1-d"
     },
     "effects-seams": {
       "ceiling": 22,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3623,
+      "ceiling": 3654,
       "slack": 0,
-      "slice": "M1-c"
+      "slice": "M1-d"
     },
     "oracle-test-files": {
       "ceiling": 50,

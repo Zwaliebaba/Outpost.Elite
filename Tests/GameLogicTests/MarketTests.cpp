@@ -396,8 +396,8 @@ namespace GameLogicTests
                                         (static_cast<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(cashAt + 2)]) << 8) |
                                         cpu.memory[static_cast<std::uint16_t>(cashAt + 3)];
 
-            Elite::CommanderBlock block;
-            block.SetCash(cash);
+            Elite::Commander block;
+            block.cash.tenths = (cash);
             bool ourAnswer = true;
             if (spending)
             {
@@ -410,7 +410,7 @@ namespace GameLogicTests
 
             const std::wstring where =
               std::wstring(spending ? L"LCASH(" : L"MCASH(") + std::to_wstring(cash) + L", " + std::to_wstring(amount) + L")";
-            Assert::AreEqual<std::uint32_t>(after, block.Cash(), (where + L": cash").c_str());
+            Assert::AreEqual<std::uint32_t>(after, block.cash.tenths, (where + L": cash").c_str());
 
             if (spending)
             {
@@ -419,7 +419,7 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.c, ourAnswer, (where + L": affordable").c_str());
               if (!ourAnswer)
               {
-                Assert::AreEqual<std::uint32_t>(cash, block.Cash(), (where + L": a refused purchase must leave the cash alone").c_str());
+                Assert::AreEqual<std::uint32_t>(cash, block.cash.tenths, (where + L": a refused purchase must leave the cash alone").c_str());
                 ++refused;
               }
             }
@@ -509,10 +509,10 @@ namespace GameLogicTests
               {
                 for (std::uint32_t amount = 0; amount < 256; ++amount)
                 {
-                  Elite::CommanderBlock block;
-                  block.At(Elite::Field::CargoCapacity) = static_cast<std::uint8_t>(capacity);
-                  block.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)] = static_cast<std::uint8_t>(tribbles);
-                  block.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = static_cast<std::uint8_t>(tribbles >> 8);
+                  Elite::Commander block;
+                  block.cargoCapacity = static_cast<std::uint8_t>(capacity);
+                  block.tribbles.lo = static_cast<std::uint8_t>(tribbles);
+                  block.tribbles.hi = static_cast<std::uint8_t>(tribbles >> 8);
 
                   /*
                    * Two layouts, and the second is not decoration.
@@ -523,23 +523,22 @@ namespace GameLogicTests
                    * which is how a port that dropped it passed a sweep of all 256 amounts. Found by
                    * mutation.
                    */
-                  const std::size_t hold = static_cast<std::size_t>(Elite::Field::CargoHold);
                   if (concentrated)
                   {
-                    block.bytes[hold + 0] = static_cast<std::uint8_t>(filled);
+                    block.cargoHold[0] = static_cast<std::uint8_t>(filled);
                   }
                   else
                   {
-                    block.bytes[hold + 0] = static_cast<std::uint8_t>(filled / 3u);
-                    block.bytes[hold + 5] = static_cast<std::uint8_t>(filled / 3u);
-                    block.bytes[hold + 12] = static_cast<std::uint8_t>(filled - 2u * (filled / 3u));
+                    block.cargoHold[0] = static_cast<std::uint8_t>(filled / 3u);
+                    block.cargoHold[5] = static_cast<std::uint8_t>(filled / 3u);
+                    block.cargoHold[12] = static_cast<std::uint8_t>(filled - 2u * (filled / 3u));
                   }
-                  block.bytes[hold + 14] = 90; // some gold already aboard, for the kilo path
+                  block.cargoHold[14] = 90; // some gold already aboard, for the kilo path
 
                   Cpu6502 cpu = oracle.Fresh();
                   for (std::size_t index = 0; index < Elite::MARKET_ITEM_COUNT; ++index)
                   {
-                    cpu.memory[static_cast<std::uint16_t>(qq20 + index)] = block.bytes[hold + index];
+                    cpu.memory[static_cast<std::uint16_t>(qq20 + index)] = block.cargoHold[index];
                   }
                   cpu.memory[crgo] = static_cast<std::uint8_t>(capacity);
                   cpu.memory[tribble] = static_cast<std::uint8_t>(tribbles);

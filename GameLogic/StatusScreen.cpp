@@ -134,7 +134,7 @@ namespace Elite
     }
   } // namespace
 
-  void StatusScreen(TradeScreen& _screen, const CommanderBlock& _commander, const ShipCondition& _condition, std::uint8_t _crosshairX,
+  void StatusScreen(TradeScreen& _screen, const Commander& _commander, const ShipCondition& _condition, std::uint8_t _crosshairX,
                     std::uint8_t _crosshairY, SystemSeeds& _outSelected) noexcept
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
@@ -147,7 +147,7 @@ namespace Elite
      * result goes straight into the selected system rather than being read here.
      */
     _outSelected =
-      FindNearestSystem(_commander.GalaxySeeds(), _crosshairX, _crosshairY, _commander.At(Field::SystemX), _commander.At(Field::SystemY))
+      FindNearestSystem(_commander.galaxySeeds, _crosshairX, _crosshairY, _commander.systemX, _commander.systemY)
         .seeds;
 
     // 6502: LDA #7 / JSR DOXC / LDA #126 / JSR NLIN3 -- the rule itself is the canvas's.
@@ -213,7 +213,7 @@ namespace Elite
      * third one reachable at all.
      */
     std::uint8_t legal = LEGAL_BASE;
-    const std::uint8_t fist = _commander.At(Field::LegalStatus);
+    const std::uint8_t fist = _commander.legalStatus;
     if (fist != 0)
     {
       legal = AddWithCarry(legal, 1, fist >= FUGITIVE_AT).value;
@@ -222,21 +222,21 @@ namespace Elite
 
     // 6502: LDA #16 / JSR spc / ... / st3: TXA / CLC / ADC #21 / JSR plf.
     PrintThenSpace(_screen.printer, RATING_HEADING_TOKEN);
-    PrintThenNewline(_screen.printer, static_cast<std::uint8_t>(RATING_BASE + Rating(_commander.Kills())));
+    PrintThenNewline(_screen.printer, static_cast<std::uint8_t>(RATING_BASE + Rating(_commander.kills.Value())));
 
     // 6502: LDA #18 / JSR plf2.
     PrintThenIndent(_screen.printer, _screen.text, EQUIPMENT_HEADING_TOKEN);
 
     // 6502: LDA ESCP / BEQ P%+7 / LDA #112 / JSR plf2, and the same shape twice more.
-    if (_commander.At(Field::EscapePod) != 0)
+    if (_commander.escapePod != 0)
     {
       PrintThenIndent(_screen.printer, _screen.text, ESCAPE_POD_TOKEN);
     }
-    if (_commander.At(Field::FuelScoops) != 0)
+    if (_commander.fuelScoops != 0)
     {
       PrintThenIndent(_screen.printer, _screen.text, FUEL_SCOOPS_TOKEN);
     }
-    if (_commander.At(Field::Ecm) != 0)
+    if (_commander.ecm != 0)
     {
       PrintThenIndent(_screen.printer, _screen.text, ECM_TOKEN);
     }
@@ -249,10 +249,13 @@ namespace Elite
      * index and subtracting 113 from the base address. So the loop counter and the thing printed
      * are the same byte, which is why there is no separate table.
      */
+    // The walk is over BYTES from BOMB, so it goes through the codec: the five it reaches are the bomb,
+    // the energy unit, the docking computer, the galactic hyperdrive and the escape pod.
+    const std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> equipment = _commander.ToBytes();
     for (std::uint8_t token = BOMB_GROUP_FIRST_TOKEN; token < BOMB_GROUP_LAST_TOKEN; ++token)
     {
       const std::size_t field = static_cast<std::size_t>(Field::EnergyBomb) + static_cast<std::size_t>(token - BOMB_GROUP_FIRST_TOKEN);
-      if (_commander.bytes[field] != 0)
+      if (equipment[field] != 0)
       {
         PrintThenIndent(_screen.printer, _screen.text, token);
       }
@@ -261,7 +264,7 @@ namespace Elite
     // 6502: LDX #0 / st: STX CNT / LDY LASER,X / BEQ st1 / ... / CPX #4 / BCC st.
     for (int mount = 0; mount < LASER_MOUNTS; ++mount)
     {
-      const std::uint8_t power = _commander.bytes[static_cast<std::size_t>(Field::Lasers) + static_cast<std::size_t>(mount)];
+      const std::uint8_t power = _commander.lasers[static_cast<std::size_t>(mount)];
       if (power == 0)
       {
         continue;

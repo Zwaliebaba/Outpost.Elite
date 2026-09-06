@@ -129,7 +129,7 @@ namespace Elite
    * decision ADR-005 §3 made for the loop as a whole: the game says how long, the platform decides
    * how to spend it.
    */
-  [[nodiscard]] std::uint8_t RunLoopTail(FlightLoop& _loop, CommanderBlock& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept;
+  [[nodiscard]] std::uint8_t RunLoopTail(FlightLoop& _loop, Commander& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept;
 
   /*
    * 6502: CYL2, COU and PACK -- the three ship types the spawner names that no earlier slice did.
@@ -186,7 +186,7 @@ namespace Elite
    * the `CLC`. A port that returned `true`/`false` from the compares would be right here and would
    * have lost the idiom; this returns the flag, like `SubtractShipAxis` does (§6.126).
    */
-  [[nodiscard]] bool AtConstrictorSystem(const CommanderBlock& _commander) noexcept;
+  [[nodiscard]] bool AtConstrictorSystem(const Commander& _commander) noexcept;
 
   /*
    * 6502: GTHG -- a Thargoid and its Thargon, which is the only pair the game spawns together.
@@ -204,7 +204,7 @@ namespace Elite
    * `_carryIn` is the flag the first `DORND` rotates in, which is whatever `Main.cpp` reached the
    * spawner with -- §6.121 is the reason it is a parameter rather than an assumption.
    */
-  void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, CommanderBlock& _commander, const CurrentSystem& _current,
+  void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, Commander& _commander, const CurrentSystem& _current,
                    const FlightStatus& _status, std::uint8_t& _explosionCount, std::uint16_t& _blueprint, bool _carryIn) noexcept;
 
 } // namespace Elite

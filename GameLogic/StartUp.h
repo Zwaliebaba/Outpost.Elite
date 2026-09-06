@@ -55,7 +55,7 @@ namespace Elite
    * The crosshairs to where the ship is, both coordinates, counting DOWN -- so the loop moves the y
    * first. It reads the COMMANDER, because QQ0 and QQ1 are two of its bytes.
    */
-  void CrosshairsToCurrentSystem(const CommanderBlock& _commander, std::uint8_t& _crosshairX, std::uint8_t& _crosshairY) noexcept;
+  void CrosshairsToCurrentSystem(const Commander& _commander, std::uint8_t& _crosshairX, std::uint8_t& _crosshairY) noexcept;
 
   /*
    * 6502: jmp -- the other direction, and it is what makes a hyperspace jump arrive.
@@ -64,7 +64,7 @@ namespace Elite
    * routines return through that. And it writes into the commander: arriving somewhere is a change
    * to the saved game, not to a variable beside it.
    */
-  void CurrentSystemToCrosshairs(CommanderBlock& _commander, std::uint8_t _crosshairX, std::uint8_t _crosshairY) noexcept;
+  void CurrentSystemToCrosshairs(Commander& _commander, std::uint8_t _crosshairX, std::uint8_t _crosshairY) noexcept;
 
   /*
    * What the start sequence reaches for outside GameLogic.
@@ -211,7 +211,7 @@ namespace Elite
     SaveScreen& save;
     TextState& text;
 
-    CommanderBlock& commander;                          ///< 6502: TP, through NAME
+    Commander& commander;                          ///< 6502: TP, through NAME
     std::span<std::uint8_t, COMMANDER_NAME_SIZE> name;  ///< 6502: NAME
     std::span<std::uint8_t, COMMANDER_FILE_SIZE> image; ///< 6502: NA%
     std::span<std::uint8_t> buffer;                     ///< 6502: INWK+5, the line editor's

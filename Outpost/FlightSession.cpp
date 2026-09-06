@@ -53,7 +53,7 @@ namespace Outpost
   } // namespace
 
   FlightSession::FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
-                               Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::CommanderBlock& _commander,
+                               Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::Commander& _commander,
                                Elite::Rng& _rng, Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions,
                                std::uint8_t& _techLevel, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music,
                                SoundOutput& _audio) noexcept
@@ -137,7 +137,7 @@ namespace Outpost
      * test, so a burning bomb moves the background colour on EVERY pass: running this once a frame
      * would halve the flash rate.
      */
-    const std::uint8_t bomb = m_screen.commander.At(Elite::Field::EnergyBomb); // 6502: BOMB
+    const std::uint8_t bomb = m_screen.commander.energyBomb; // 6502: BOMB
     const Elite::RasterRegisters first = Elite::TickRasterInterrupt(m_screenState, bomb);
     const Elite::RasterRegisters second = Elite::TickRasterInterrupt(m_screenState, bomb);
 

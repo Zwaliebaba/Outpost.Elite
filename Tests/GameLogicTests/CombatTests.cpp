@@ -203,9 +203,9 @@ namespace GameLogicTests
           universe.message.column = 9u;
           universe.message.append = 1u;
           universe.message.delay = 0u;
-          universe.commander.At(Elite::Field::KillsLow) = start.fraction;
-          universe.commander.At(Elite::Field::Kills) = start.whole;
-          universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = start.high;
+          universe.commander.killsFraction = start.fraction;
+          universe.commander.kills.lo = start.whole;
+          universe.commander.kills.hi = start.high;
           universe.work.z.hi = static_cast<std::uint8_t>(type * 7u);
 
           Cpu6502 cpu = oracle.Fresh();
@@ -238,10 +238,10 @@ namespace GameLogicTests
           Assert::AreEqual<std::uint8_t>(Elite::EXPLOSION_PITCH_KILL, cpu.trapHits[0].x, (where + L": frequency").c_str());
           Assert::AreEqual<std::uint8_t>(Elite::SOUND_EXPLOSION, cpu.trapHits[0].y, (where + L": effect").c_str());
 
-          Assert::AreEqual(cpu.memory[tallyl], universe.commander.At(Elite::Field::KillsLow), (where + L": TALLYL").c_str());
-          Assert::AreEqual(cpu.memory[tally], universe.commander.At(Elite::Field::Kills), (where + L": TALLY").c_str());
+          Assert::AreEqual(cpu.memory[tallyl], universe.commander.killsFraction, (where + L": TALLYL").c_str());
+          Assert::AreEqual(cpu.memory[tally], universe.commander.kills.lo, (where + L": TALLY").c_str());
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tally + 1u)],
-                           universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u], (where + L": TALLY+1").c_str());
+                           universe.commander.kills.hi, (where + L": TALLY+1").c_str());
 
           CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
           Assert::AreEqual(cpu.memory[at.dly], universe.message.delay, (where + L": DLY").c_str());
@@ -317,7 +317,7 @@ namespace GameLogicTests
               // 34, which is past the end of the block and so never breaks anything at all.
               for (std::size_t index = 0; index < 22u; ++index)
               {
-                universe.commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + index] = 6u;
+                universe.commander.cargoHold[index] = 6u;
               }
               universe.rng.SetState({0u, static_cast<std::uint8_t>((damage + shield + banks + shape) % 30u), 0u, 0u});
 
@@ -364,7 +364,7 @@ namespace GameLogicTests
                 Assert::AreEqual(cpu.memory[at.de], universe.message.append, (where + L": de").c_str());
                 for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tp + byte)], universe.commander.bytes[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tp + byte)], universe.commander.ToBytes()[byte],
                                    (where + L": commander byte " + std::to_wstring(byte)).c_str());
                 }
                 for (std::size_t index = 0; index < 4u; ++index)
@@ -378,7 +378,7 @@ namespace GameLogicTests
               for (std::size_t index = 0; index < 22u; ++index)
               {
                 const std::size_t byte = static_cast<std::size_t>(Elite::Field::CargoHold) + index;
-                broke += (universe.commander.bytes[byte] == 0u) ? 1u : 0u;
+                broke += (universe.commander.ToBytes()[byte] == 0u) ? 1u : 0u;
               }
               ++compared;
             }
@@ -446,7 +446,7 @@ namespace GameLogicTests
 
                 for (std::size_t index = 0; index < 22u; ++index)
                 {
-                  universe.commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + index] = held;
+                  universe.commander.cargoHold[index] = held;
                 }
 
                 Cpu6502 cpu = oracle.Fresh();
@@ -472,12 +472,12 @@ namespace GameLogicTests
                 Assert::AreEqual(cpu.memory[at.messxc], universe.message.column, (where + L": messXC").c_str());
                 for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tp + byte)], universe.commander.bytes[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tp + byte)], universe.commander.ToBytes()[byte],
                                    (where + L": commander byte " + std::to_wstring(byte)).c_str());
                 }
 
                 const std::uint8_t after =
-                  (slot < 22u) ? universe.commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + slot] : held;
+                  (slot < 22u) ? universe.commander.cargoHold[slot] : held;
                 emptied += (held != 0u && after == 0u) ? 1u : 0u;
                 suppressed += (already != 0u && after == held) ? 1u : 0u;
                 ++compared;

@@ -299,7 +299,7 @@ times over.
 <!--count:main-lines-->1,162 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->226 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->225 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
@@ -340,7 +340,7 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,623 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,654 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -793,7 +793,7 @@ a moved record with no defect named is a refactor that changed the game.
 | **M1-a ShipView** | Named accessors on `ShipBlock` (`X()`, `Y()`, `Z()`, `Nose()`, `Roof()`, `Side()`, `PositionAt()`, `VectorAt()`, `ComponentAt()`, `Speed()` … `Newb()`), the layout named once and `static_assert`ed; every literal and named-offset site migrated; the duplicate offset and type constants removed. Bytes unchanged. | Oracle suite green; `ship-literal-sites` and `ship-offset-sites` at zero in the ratchet; mutants in `Tactics.cpp` and `Missions.cpp` re-anchored and re-run. **Built 2026-09-06** (slice plan and §8 below). | 3–4 |
 | **M1-b ShipType and the flag types** | `enum class ShipType`, `ShipStateBit`, `AiBit`, `NewbBit` with the original bit values, the byte-valued helpers beside them; the second naming families deleted. | Green; `check_outpost.py` green after the app's constants follow. **Built 2026-09-06** (slice plan and §8 below). | 2 |
 | **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become struct copies and the partial copies codec calls. Tests migrate to the bridge. | Green through `UniverseImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). **Built 2026-09-06** (slice plan and §8 below). | 4–5 |
-| **M1-d Commander** | Typed `Commander` with the seventy-seven-byte codec; `Credits`, `LightYearsTenths`, `Laser`, `Equipment` strong types; `SaveCommander`/`LoadCommander`/checksums over the codec. | `SaveGameTests` and `CommanderTests` green; a commander file from R12's fixture still loads. | 3 |
+| **M1-d Commander** | Typed `Commander` with the seventy-seven-byte codec; `Credits` and `Tally` strong types where the bytes' order is the risk, plain named bytes elsewhere; `SaveCommander`/`LoadCommander`/checksums over the codec. | `SaveGameTests` and `CommanderTests` green; a commander file from R12's fixture still loads. **Built 2026-09-06** (slice plan and §8 below). | 3 |
 | **M1-e Blueprint** | Parsed `Blueprint` table; `ShipByte`/`BlueprintAddress`/`BlueprintFor` removed; `Bubble::stationType`. | `ShipDataTests` green with the three disagreeing ships called out as before; `LL9` suite green. | 3 |
 | **M1-f HeapOffset** | The line heap addressed by offset; `TryReserveHeap` with the exact chain; the sun's heap lent as a span. | `NWSHP`'s refusal sweep green (`ShipSlotTests`); the station-into-sun-heap case (§6.112) green. | 2–3 |
 
@@ -919,6 +919,48 @@ file: `sun` is also the sun's line heap and a label, `seeded` and `afterClear` a
 test's `block` is sometimes a byte array. Each misfire was a compile error, none a wrong test; the
 lesson for M1-d's pass over `CommanderBlock` is to derive the receiver list per file from the
 declarations rather than from the library's habits.
+
+#### M1-d slice plan (written with the build, 2026-09-06; §8 records what the build found)
+
+**The same shape as M1-c, on the block that has a file format.** `Commander` is the fields the
+seventy-seven bytes are, in their order, with the two bytes no label names kept as fields (`spare`
+after `ESCP`; `lasers` has six entries because `LASER` is six bytes of which four are mounts) so
+that `ToBytes`/`FromBytes` is a plain walk written in terms of the `Field` offsets. `Field` STAYS:
+it is the wire format's table, the codec is written in it, and the tests address the oracle's `TP`
+through it. The `static_assert` round trip over seventy-seven distinct bytes proves the order;
+`CommanderTests`' 221 compared blocks and `SaveGameTests`' round trips prove the file.
+
+**Two strong types, where a byte's order is the thing a port gets wrong.** `Credits` holds `CASH`
+as tenths and writes the four bytes most-significant first in `Byte`/`SetByte`, which the two
+routines that read byte 2 (`EN6`'s Trumbles offer, the competition number) and the printer that
+reads all four say by name. `Tally` is `TALLY` and `TRIBBLE`: two bytes, low first, which the game
+steps and rotates a byte at a time (`INC TALLY+1`, `ROR TRIBBLE+1 / ROR TRIBBLE`), so the halves
+are fields and `Value` is for the readers of the pair. The plan's `LightYearsTenths`, `Laser` and
+`Equipment` types are NOT here: `fuel` is compared and subtracted at twenty-nine sites and a type
+would be arithmetic operators with a name, the lasers are read as bytes (`LASER,Y` with Y the
+view) and written as powers, and the equipment bytes carry `0`, `&FF` and the bomb's `&7F` as the
+original carries them. Named bytes are the honest step; a type that earns its operators is M5's.
+
+**The accessors and the second family went.** `At(Field::x)`, `Cash()`/`SetCash()`,
+`Kills()`, `GalaxySeeds()`/`SetGalaxySeeds()` and `bytes[static_cast<std::size_t>(Field::x) + n]`
+became the field — 319, 40 and 72 sites by regex, twelve that had cached an offset in a local by
+hand (`hold + item` is `cargoHold[item]`, `tribble + 1u` is `tribbles.hi`). `Equipment`'s
+fittings table, which held a `Field` per item, holds a pointer to member; `STATUS`'s walk from
+`BOMB` over five equipment bytes reads `ToBytes()`, because it IS a byte walk (`LDA BOMB,X`) and
+saying so is truer than five names. `CommanderBlock` is `Commander` at its 131 mentions.
+
+**The file and the checksums are the codec's first customers.** `CHECK` and `CHECK2` walk
+`ToBytes()`; `DefaultCommander` is `FromBytes` of the table; `SaveCommander` writes `ToBytes()`
+after the name; `LoadCommander` is `FromBytes` of the file's block, and the byte the original's
+`QUL1` never loads — the block's own checksum — is kept by copying the struct and putting the
+caller's `checksum` back, which says in two lines what a seventy-six-iteration loop said. The
+bridge's `TP` cells go through the same `CodecCells` the ship's do, so the image is the layout
+whatever the struct is.
+
+**What the build found.** Nothing in the library: 392 of 392 on the first run after the compile,
+which is what a codec proved by a `static_assert` and a file format proved by the oracle's own
+`SVE` buys. One mutant anchor (`mi-tally`) named the cached `tally` local and was re-anchored to
+`kills.hi`; the executable lost `Elite::Field` and gained `Elite::Commander`.
 
 ### Phase M2 — Explicit calling conventions
 
@@ -1149,3 +1191,17 @@ the four the recorded equivalents — M0-d's tally for the fourth time, with the
 `work.rollCounter`, `work.energy`, `work.ai` and `screen.work.z.hi`. Rule 3 is met; M1-d — the
 typed `Commander` with the seventy-seven-byte codec, the checksums and the save file over it — is
 next.
+
+**2026-09-06 — M1-d built.** `Commander` is a struct of named fields with `Credits` and `Tally`
+for the two multi-byte orders that matter and `ToBytes`/`FromBytes` as the seventy-seven-byte wire
+format; `Field` stays as that format's table; 431 sites by regex and a dozen by hand; the
+checksums, the default commander, `SaveCommander`, `LoadCommander` and the bridge's `TP` cells are
+codec calls. **First suite run green**, 392 of 392 — the first slice of M1 where the oracle found
+nothing, and the reason is the order of the previous three: the ship's slice had already made the
+bridge and the tests speak bytes through a codec, so this one changed one struct and the pattern
+held. The plan's `LightYearsTenths`, `Laser` and `Equipment` types were not built, and the slice
+plan says why: a byte that is compared and subtracted at twenty-nine sites needs operators before
+it needs a name, and the equipment bytes carry three different "fitted" values the original
+chose. Ratchet: `outpost-elite-names` 226 → 225 (`Elite::Field` left the executable,
+`Elite::CommanderBlock` became `Elite::Commander`), `origin-markers` 3,623 → 3,654 for the field
+labels (rule 4). One mutant re-anchored; the corpus rerun follows.

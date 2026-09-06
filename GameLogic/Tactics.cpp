@@ -670,7 +670,7 @@ namespace Elite
     // 6502: .TN1 LSR A / BCC TN2 / LDX FIST / CPX #40 / BCC TN2 / LDA NEWB / ORA #%00000100 /
     // STA NEWB / LSR A / LSR A -- bit 1 is "bounty hunter", and it only turns on you once your
     // legal status is over 40. The two `LSR`s put the shifted copy back in step.
-    if ((flags & 1u) != 0u && screen.commander.At(Field::LegalStatus) >= BOUNTY_HUNTER_FIST)
+    if ((flags & 1u) != 0u && screen.commander.legalStatus >= BOUNTY_HUNTER_FIST)
     {
       work.newb = With(work.newb, NewbBit::Hostile);
       flags = static_cast<std::uint8_t>(work.newb >> 2u);

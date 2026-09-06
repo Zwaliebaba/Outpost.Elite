@@ -76,10 +76,10 @@ namespace Elite
      * loaded -- so the bomb is switched off by the routine and emptied by its accumulator, and
      * reading `STA BOMB` as "store the bomb" gets the value from the wrong routine.
      */
-    if ((screen.commander.At(Field::EnergyBomb) & 0x80u) != 0u)
+    if ((screen.commander.energyBomb & 0x80u) != 0u)
     {
       StopEnergyBomb(screen.screen);
-      screen.commander.At(Field::EnergyBomb) = 0u;
+      screen.commander.energyBomb = 0u;
     }
 
     screen.dust.count = STARDUST_COUNT; // 6502: LDA #NOST / STA NOSTM
@@ -262,8 +262,8 @@ namespace Elite
        * 6502: JSR TT111 -- for the SEEDS, not for the distance. The planet's look comes from the
        * system's own seeds through `tek`, so a launch has to know which system it is leaving.
        */
-      const NearestSystem found = FindNearestSystem(screen.commander.GalaxySeeds(), _crosshairX, _crosshairY,
-                                                    screen.commander.At(Field::SystemX), screen.commander.At(Field::SystemY));
+      const NearestSystem found = FindNearestSystem(screen.commander.galaxySeeds, _crosshairX, _crosshairY,
+                                                    screen.commander.systemX, screen.commander.systemY);
       _selected = found.seeds;
 
       /*
@@ -284,8 +284,8 @@ namespace Elite
       screen.flight.delta = LAUNCH_SPEED; // 6502: LDA #12 / STA DELTA
 
       // 6502: JSR BAD / ORA FIST / STA FIST -- the fine is levied by leaving, not by being scanned.
-      screen.commander.At(Field::LegalStatus) =
-        static_cast<std::uint8_t>(ContrabandPenalty(screen.commander) | screen.commander.At(Field::LegalStatus));
+      screen.commander.legalStatus =
+        static_cast<std::uint8_t>(ContrabandPenalty(screen.commander) | screen.commander.legalStatus);
 
       screen.view = VIEW_LAUNCHING; // 6502: LDA #255 / STA QQ11
 
@@ -647,11 +647,11 @@ namespace Elite
     // loop runs from 16 down THROUGH zero.
     for (std::size_t item = 0; item < MARKET_ITEM_COUNT; ++item)
     {
-      screen.commander.At(static_cast<Field>(static_cast<int>(Field::CargoHold) + static_cast<int>(item))) = 0u;
+      screen.commander.cargoHold[item] = 0u;
     }
 
-    screen.commander.At(Field::LegalStatus) = 0u; // 6502: STA FIST -- a clean record
-    screen.commander.At(Field::EscapePod) = 0u;   // 6502: STA ESCP -- and the pod is spent
+    screen.commander.legalStatus = 0u; // 6502: STA FIST -- a clean record
+    screen.commander.escapePod = 0u;   // 6502: STA ESCP -- and the pod is spent
 
     /*
      * 6502: LDA TRIBBLE / ORA TRIBBLE+1 / BEQ nosurviv / JSR DORND / AND #7 / ORA #1 / STA TRIBBLE
@@ -660,8 +660,8 @@ namespace Elite
      * `ORA #1` is what stops the population reaching zero: one to eight survive, never none, so
      * abandoning ship never clears them. The high byte is zeroed, which is the whole of the mercy.
      */
-    const std::uint8_t low = screen.commander.At(Field::Tribbles);
-    const std::uint8_t high = screen.commander.At(static_cast<Field>(static_cast<int>(Field::Tribbles) + 1));
+    const std::uint8_t low = screen.commander.tribbles.lo;
+    const std::uint8_t high = screen.commander.tribbles.hi;
 
     if (static_cast<std::uint8_t>(low | high) != 0u)
     {
@@ -673,8 +673,8 @@ namespace Elite
        * screen address rather than anything this routine can reason about.
        */
       const RngResult survivors = screen.rng.Next(true);
-      screen.commander.At(Field::Tribbles) = static_cast<std::uint8_t>((survivors.value & 7u) | 1u);
-      screen.commander.At(static_cast<Field>(static_cast<int>(Field::Tribbles) + 1)) = 0u;
+      screen.commander.tribbles.lo = static_cast<std::uint8_t>((survivors.value & 7u) | 1u);
+      screen.commander.tribbles.hi = 0u;
     }
 
     // 6502: .nosurviv LDA #70 / STA QQ14 / JMP GOIN -- seven light years, and the docking is the

@@ -285,10 +285,10 @@ namespace Elite
     _loop.effects.Anger(target, TypeOf(screen.bubble.slots[target]));
 
     // 6502: LDY #BLACK2 / JSR ABORT -- the lock is gone and so is the indicator.
-    AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.At(Field::Missiles), MISSILE_NONE);
+    AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.missiles, MISSILE_NONE);
 
     // 6502: DEC NOMSL -- one fewer on the rail.
-    screen.commander.At(Field::Missiles) = static_cast<std::uint8_t>(screen.commander.At(Field::Missiles) - 1u);
+    screen.commander.missiles = static_cast<std::uint8_t>(screen.commander.missiles - 1u);
 
     (void)_loop.effects.PlaySound(SOUND_MISSILE, false); // 6502: LDY #sfxwhosh / JMP NOISE
   }
@@ -403,7 +403,7 @@ namespace Elite
 
     // ---- part 3: the keys ------------------------------------------------------------------------
 
-    CommanderBlock& commander = screen.commander;
+    Commander& commander = screen.commander;
 
     // 6502: LDA KY2 / BEQ MA17 / LDA DELTA / CMP #40 / BCS MA17 / INC DELTA -- forty is the ceiling.
     if (_loop.keys[KEY_SPEED_UP] != 0u && screen.flight.delta < 40u)
@@ -424,9 +424,9 @@ namespace Elite
 
     // 6502: .MA4 LDA KY15 / AND NOMSL / BEQ MA20 -- the AND is the "have we got one" test, so the
     // key does nothing at all with an empty rail.
-    if ((_loop.keys[KEY_UNARM_MISSILE] & commander.At(Field::Missiles)) != 0u)
+    if ((_loop.keys[KEY_UNARM_MISSILE] & commander.missiles) != 0u)
     {
-      AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, commander.At(Field::Missiles), MISSILE_READY);
+      AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, commander.missiles, MISSILE_READY);
       (void)_loop.effects.PlaySound(SOUND_BOOP, false); // 6502: LDY #sfxboop / JSR NOISE
       screen.status.missileArmed = 0u;                  // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
     }
@@ -439,10 +439,10 @@ namespace Elite
      * seeking cannot be re-armed. And `STA MSAR` stores the KEY's value rather than a flag of its
      * own, which is &FF because that is what the scan writes.
      */
-    if ((screen.bubble.missileTarget & 0x80u) != 0u && _loop.keys[KEY_ARM_MISSILE] != 0u && commander.At(Field::Missiles) != 0u)
+    if ((screen.bubble.missileTarget & 0x80u) != 0u && _loop.keys[KEY_ARM_MISSILE] != 0u && commander.missiles != 0u)
     {
       screen.status.missileArmed = _loop.keys[KEY_ARM_MISSILE];
-      SetMissileIndicator(screen.canvas, commander.At(Field::Missiles), MISSILE_ARMED);
+      SetMissileIndicator(screen.canvas, commander.missiles, MISSILE_ARMED);
     }
 
     /*
@@ -472,9 +472,9 @@ namespace Elite
       // shift, so the bomb burns for as many frames as it has bits left.
       if (_loop.keys[KEY_ENERGY_BOMB] != 0u)
       {
-        commander.At(Field::EnergyBomb) = static_cast<std::uint8_t>(commander.At(Field::EnergyBomb) << 1u);
+        commander.energyBomb = static_cast<std::uint8_t>(commander.energyBomb << 1u);
 
-        if (commander.At(Field::EnergyBomb) != 0u)
+        if (commander.energyBomb != 0u)
         {
           // 6502: LDY #%11010000 / STY moonflower -- the upper half of the screen changes mode, and
           // that IS the effect: no drawing is involved.
@@ -492,7 +492,7 @@ namespace Elite
 
       // 6502: .MA78 LDA KY13 / AND ESCP / BEQ noescp / LDA MJ / BNE noescp / JMP ESCAPE -- and it
       // does not come back, so the frame ends here.
-      if ((_loop.keys[KEY_ESCAPE_POD] & commander.At(Field::EscapePod)) != 0u && screen.status.midJump == 0u)
+      if ((_loop.keys[KEY_ESCAPE_POD] & commander.escapePod) != 0u && screen.status.midJump == 0u)
       {
         return LoopOutcome::Escaped;
       }
@@ -505,7 +505,7 @@ namespace Elite
 
       // 6502: LDA KY17 / AND ECM / BEQ MA64 / LDA ECMA / BNE MA64 / DEC ECMP / JSR ECBLB2 -- and
       // `DEC ECMP` on a zero byte is what makes it &FF, which is "ours" (§6.71's pair).
-      if ((_loop.keys[KEY_ECM] & commander.At(Field::Ecm)) != 0u && screen.status.ecmCountdown == 0u)
+      if ((_loop.keys[KEY_ECM] & commander.ecm) != 0u && screen.status.ecmCountdown == 0u)
       {
         screen.status.ecmOurs = static_cast<std::uint8_t>(screen.status.ecmOurs - 1u);
         /*
@@ -529,8 +529,8 @@ namespace Elite
      * Nothing in the source says so and the offset is written as a number rather than as the label.
      */
     const std::uint8_t requested =
-      static_cast<std::uint8_t>((_loop.keys[KEY_DOCKING_COMPUTER] & commander.At(Field::DockingComputer)) ^ _loop.keys[KEY_PITCH_UP]);
-    if ((_loop.keys[KEY_DOCKING_COMPUTER] & commander.At(Field::DockingComputer)) != 0u && requested != 0u)
+      static_cast<std::uint8_t>((_loop.keys[KEY_DOCKING_COMPUTER] & commander.dockingComputer) ^ _loop.keys[KEY_PITCH_UP]);
+    if ((_loop.keys[KEY_DOCKING_COMPUTER] & commander.dockingComputer) != 0u && requested != 0u)
     {
       _loop.control.dockingComputer = requested;
       _loop.effects.StartDockingMusic();
@@ -565,7 +565,7 @@ namespace Elite
     }
 
     // 6502: LDX VIEW / LDA LASER,X / BEQ MA3 -- this view's laser, if it has one.
-    const std::uint8_t fitted = commander.bytes[static_cast<std::size_t>(Field::Lasers) + screen.spaceView];
+    const std::uint8_t fitted = commander.lasers[screen.spaceView];
     if (fitted == 0u)
     {
       return LoopOutcome::Continued;
@@ -776,7 +776,7 @@ namespace Elite
   void LoopSpawnEffects::AbortMissile(std::uint8_t _colour)
   {
     FlightScreen& screen = m_loop.screen;
-    AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.At(Field::Missiles), _colour);
+    AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.missiles, _colour);
   }
 
   void LoopSpawnEffects::ShowMessage(std::uint8_t _token)
@@ -792,13 +792,13 @@ namespace Elite
 
   void LoopSpawnEffects::ResetMissileIndicators()
   {
-    Elite::ResetMissileIndicators(m_loop.screen.canvas, m_loop.screen.commander.At(Field::Missiles));
+    Elite::ResetMissileIndicators(m_loop.screen.canvas, m_loop.screen.commander.missiles);
   }
 
   LoopOutcome MoveEveryShip(FlightLoop& _loop) noexcept
   {
     FlightScreen& screen = _loop.screen;
-    CommanderBlock& commander = screen.commander;
+    Commander& commander = screen.commander;
     LoopSpawnEffects spawning(_loop);
 
     // 6502: .MA3 LDX #0 / .MAL1 STX XSAV -- and the index is advanced by hand, never by the loop.
@@ -843,7 +843,7 @@ namespace Elite
          */
         const bool exempt = (type == ShipType::Station) || (type == ShipType::Thargoid) || (Byte(type) >= Byte(ShipType::Constrictor));
 
-        if ((commander.At(Field::EnergyBomb) & 0x80u) != 0u && !exempt && !Has(screen.work.state, ShipStateBit::Exploding))
+        if ((commander.energyBomb & 0x80u) != 0u && !exempt && !Has(screen.work.state, ShipStateBit::Exploding))
         {
           screen.work.state = MarkKilled(screen.work.state);
           (void)RecordKill(screen, _loop.effects, type); // 6502: LDX TYPE / JSR EXNO2
@@ -899,7 +899,7 @@ namespace Elite
                * is "we have scoops AND it is below us" -- scooping only works on things that come
                * up from underneath. Anything else at this range is a collision.
                */
-              const std::uint8_t under = static_cast<std::uint8_t>(commander.At(Field::FuelScoops) & screen.work.y.sgn);
+              const std::uint8_t under = static_cast<std::uint8_t>(commander.fuelScoops & screen.work.y.sgn);
               scoopable = (under & 0x80u) != 0u;
               collision = !scoopable;
             }
@@ -958,9 +958,9 @@ namespace Elite
           {
             // 6502: LDY QQ29 / ADC QQ20,Y / STA QQ20,Y -- A is the 1 `tnpr` pushed and popped, and
             // the carry is clear because that is how the `BCS` was not taken.
-            const std::size_t held = static_cast<std::size_t>(Field::CargoHold) + item;
-            const AddResult stored = AddWithCarry(1u, commander.bytes[held], false);
-            commander.bytes[held] = stored.value;
+            std::uint8_t& held = commander.cargoHold[item];
+            const AddResult stored = AddWithCarry(1u, held, false);
+            held = stored.value;
 
             // 6502: TYA / ADC #208 / JSR MESS -- on the carry the store above left behind.
             const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
@@ -1093,7 +1093,7 @@ namespace Elite
           if (screen.status.missileArmed != 0u)
           {
             (void)_loop.effects.PlaySound(SOUND_BEEP, false);
-            SetMissileTarget(screen.canvas, screen.bubble, screen.status.missileArmed, commander.At(Field::Missiles), screen.flight.slot,
+            SetMissileTarget(screen.canvas, screen.bubble, screen.status.missileArmed, commander.missiles, screen.flight.slot,
                              MISSILE_LOCKED);
           }
 
@@ -1144,8 +1144,8 @@ namespace Elite
          * added -- so the offence is recorded once however many innocents die, and a fugitive
          * cannot become more of one this way.
          */
-        commander.At(Field::LegalStatus) =
-          static_cast<std::uint8_t>(commander.At(Field::LegalStatus) | (screen.work.newb & Mask(NewbBit::Cop)));
+        commander.legalStatus =
+          static_cast<std::uint8_t>(commander.legalStatus | (screen.work.newb & Mask(NewbBit::Cop)));
 
         // 6502: LDA DLY / ORA MJ / BNE KS1S -- no bounty while a message is up or in witchspace,
         // because the bounty IS a message and there is nowhere to put it.
@@ -1270,7 +1270,7 @@ namespace Elite
   LoopOutcome EndFlightFrame(FlightLoop& _loop) noexcept
   {
     FlightScreen& screen = _loop.screen;
-    CommanderBlock& commander = screen.commander;
+    Commander& commander = screen.commander;
 
     /*
      * ---- part 13: the bomb, the shields and the banks -----------------------------------------
@@ -1281,11 +1281,11 @@ namespace Elite
      * and this doubles it again every frame, so it burns for as many frames as it has bits left and
      * ends when the top bit falls off.
      */
-    if ((commander.At(Field::EnergyBomb) & 0x80u) != 0u)
+    if ((commander.energyBomb & 0x80u) != 0u)
     {
-      commander.At(Field::EnergyBomb) = static_cast<std::uint8_t>(commander.At(Field::EnergyBomb) << 1u);
+      commander.energyBomb = static_cast<std::uint8_t>(commander.energyBomb << 1u);
 
-      if ((commander.At(Field::EnergyBomb) & 0x80u) == 0u)
+      if ((commander.energyBomb & 0x80u) == 0u)
       {
         StopEnergyBomb(screen.screen);
       }
@@ -1313,7 +1313,7 @@ namespace Elite
        * eighth frame. And the overflow branch SKIPS the store rather than clamping, so banks that
        * would pass 255 are left exactly where they were.
        */
-      const AddResult banks = AddWithCarry(commander.At(Field::EnergyUnit), screen.status.energy, true);
+      const AddResult banks = AddWithCarry(commander.energyUnit, screen.status.energy, true);
       if (!banks.carry)
       {
         screen.status.energy = banks.value;
@@ -1474,10 +1474,9 @@ namespace Elite
         screen.sight.MaskSprites(SPRITES_KEEP);
         screen.sight.SetRasterMode(RASTER_TRUMBLE_DONE);
 
-        const std::size_t tribbles = static_cast<std::size_t>(Field::Tribbles);
-        const ShiftResult high = RotateRight(commander.bytes[tribbles + 1u], false);
-        commander.bytes[tribbles + 1u] = high.value;
-        commander.bytes[tribbles] = RotateRight(commander.bytes[tribbles], high.carry).value;
+        const ShiftResult high = RotateRight(commander.tribbles.hi, false);
+        commander.tribbles.hi = high.value;
+        commander.tribbles.lo = RotateRight(commander.tribbles.lo, high.carry).value;
       }
 
       /*
@@ -1487,12 +1486,12 @@ namespace Elite
        * Fuel scooping, and the amount is the player's own SPEED: `DELT4+1` is `DELTA` shifted up
        * six places, halved again here. Flying into the sun faster fills the tank faster.
        */
-      if (commander.At(Field::FuelScoops) != 0u)
+      if (commander.fuelScoops != 0u)
       {
         const ShiftResult scooped = RotateRight(screen.flight.delt4Next, false);
-        const AddResult tank = AddWithCarry(scooped.value, commander.At(Field::Fuel), scooped.carry);
+        const AddResult tank = AddWithCarry(scooped.value, commander.fuel, scooped.carry);
 
-        commander.At(Field::Fuel) = (tank.value < FUEL_MAXIMUM) ? tank.value : FUEL_MAXIMUM;
+        commander.fuel = (tank.value < FUEL_MAXIMUM) ? tank.value : FUEL_MAXIMUM;
 
         ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, MESSAGE_SCOOPS_ON, screen.view);
       }

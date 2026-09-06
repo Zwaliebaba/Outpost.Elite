@@ -480,11 +480,11 @@ namespace GameLogicTests
         cpu.AddTrap(dn2);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
-        Elite::CommanderBlock commander = Elite::DefaultCommander();
-        commander.SetCash(scenario.cash);
+        Elite::Commander commander = Elite::DefaultCommander();
+        commander.cash.tenths = (scenario.cash);
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
-          commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + item] = scenario.alreadyHeld;
+          commander.cargoHold[item] = scenario.alreadyHeld;
         }
 
         Elite::MarketState market;
@@ -499,7 +499,7 @@ namespace GameLogicTests
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)] =
             static_cast<std::uint8_t>(scenario.cash >> (24 - 8 * index));
         }
-        cpu.memory[oracle.Label("CRGO")] = commander.At(Elite::Field::CargoCapacity);
+        cpu.memory[oracle.Label("CRGO")] = commander.cargoCapacity;
         cpu.memory[oracle.Label("QQ28")] = ECONOMY;
         cpu.memory[oracle.Label("QQ26")] = RANDOMISER;
         cpu.memory[oracle.Label("MJ")] = 0;
@@ -573,8 +573,8 @@ namespace GameLogicTests
          * has one TT27 and one QQ17: a screen that owned its own would be a second token printer.
          */
         static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> NAME = {'J', 'A', 'M', 'E', 'S', 'O', 'N', 13};
-        Elite::SystemSeeds current = commander.GalaxySeeds();
-        Elite::SystemSeeds selected = commander.GalaxySeeds();
+        Elite::SystemSeeds current = commander.galaxySeeds;
+        Elite::SystemSeeds selected = commander.galaxySeeds;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(NAME), current,
                                   selected, false);
         printer.SetValueTokens(&values);
@@ -607,13 +607,13 @@ namespace GameLogicTests
         for (std::size_t index = 0; index < 4; ++index)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)],
-                           commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index],
+                           commander.cash.Byte(index),
                            (where + L": cash byte " + std::to_wstring(index)).c_str());
         }
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ20") + item)],
-                           commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + item],
+                           commander.cargoHold[item],
                            (where + L": the hold, item " + std::to_wstring(item)).c_str());
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("AVL") + item)], market.availability[item],
                            (where + L": what is left on the market, item " + std::to_wstring(item)).c_str());
@@ -717,14 +717,14 @@ namespace GameLogicTests
         cpu.AddTrap(dn2);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
-        Elite::CommanderBlock commander = Elite::DefaultCommander();
-        commander.SetCash(1000);
-        commander.At(Elite::Field::CargoCapacity) = scenario.capacity;
-        commander.At(Elite::Field::Tribbles) = static_cast<std::uint8_t>(scenario.trumbles & 0xFFu);
-        commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = static_cast<std::uint8_t>(scenario.trumbles >> 8);
+        Elite::Commander commander = Elite::DefaultCommander();
+        commander.cash.tenths = (1000);
+        commander.cargoCapacity = scenario.capacity;
+        commander.tribbles.lo = static_cast<std::uint8_t>(scenario.trumbles & 0xFFu);
+        commander.tribbles.hi = static_cast<std::uint8_t>(scenario.trumbles >> 8);
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
-          commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + item] = scenario.held;
+          commander.cargoHold[item] = scenario.held;
         }
 
         Elite::MarketState market;
@@ -737,19 +737,19 @@ namespace GameLogicTests
         for (std::size_t index = 0; index < 4; ++index)
         {
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)] =
-            commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+            commander.cash.Byte(index);
           cpu.memory[static_cast<std::uint16_t>(rand + index)] = SEED[index];
         }
         cpu.memory[oracle.Label("CRGO")] = scenario.capacity;
-        cpu.memory[oracle.Label("QQ14")] = commander.At(Elite::Field::Fuel);
-        cpu.memory[oracle.Label("GCNT")] = commander.At(Elite::Field::GalaxyNumber);
+        cpu.memory[oracle.Label("QQ14")] = commander.fuel;
+        cpu.memory[oracle.Label("GCNT")] = commander.galaxyNumber;
         cpu.memory[oracle.Label("QQ28")] = ECONOMY;
         cpu.memory[oracle.Label("QQ26")] = RANDOMISER;
         cpu.memory[oracle.Label("QQ11")] = scenario.view;
         cpu.memory[oracle.Label("MJ")] = 0;
-        cpu.memory[oracle.Label("TRIBBLE")] = commander.At(Elite::Field::Tribbles);
+        cpu.memory[oracle.Label("TRIBBLE")] = commander.tribbles.lo;
         cpu.memory[static_cast<std::uint16_t>(oracle.Label("TRIBBLE") + 1)] =
-          commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u];
+          commander.tribbles.hi;
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("AVL") + item)] = market.availability[item];
@@ -759,7 +759,7 @@ namespace GameLogicTests
         {
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("NAME") + index)] = Elite::DefaultCommanderName()[index];
         }
-        const Elite::SystemSeeds seeds = commander.GalaxySeeds();
+        const Elite::SystemSeeds seeds = commander.galaxySeeds;
         for (std::size_t index = 0; index < 6; ++index)
         {
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ15") + index)] = seeds.bytes[index];
@@ -861,7 +861,7 @@ namespace GameLogicTests
         for (std::size_t index = 0; index < 4; ++index)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)],
-                           commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index],
+                           commander.cash.Byte(index),
                            (where + L": cash byte " + std::to_wstring(index)).c_str());
 
           // The Trumble tail calls DORND, so the random state is part of what this screen does.
@@ -871,7 +871,7 @@ namespace GameLogicTests
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ20") + item)],
-                           commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + item],
+                           commander.cargoHold[item],
                            (where + L": the hold, item " + std::to_wstring(item)).c_str());
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("AVL") + item)], market.availability[item],
                            (where + L": the market, item " + std::to_wstring(item)).c_str());
@@ -950,20 +950,20 @@ namespace GameLogicTests
       {
         const std::wstring where = Widen(std::string("STATUS: ") + s.what);
 
-        Elite::CommanderBlock commander = Elite::DefaultCommander();
-        commander.At(Elite::Field::LegalStatus) = s.legal;
-        commander.bytes[static_cast<std::size_t>(Elite::Field::Kills)] = static_cast<std::uint8_t>(s.kills & 0xFFu);
-        commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = static_cast<std::uint8_t>(s.kills >> 8);
-        commander.At(Elite::Field::EscapePod) = s.escapePod;
-        commander.At(Elite::Field::FuelScoops) = s.fuelScoops;
-        commander.At(Elite::Field::Ecm) = s.ecm;
-        commander.At(Elite::Field::EnergyBomb) = s.bomb;
-        commander.At(Elite::Field::EnergyUnit) = s.energyUnit;
-        commander.At(Elite::Field::DockingComputer) = s.docking;
-        commander.At(Elite::Field::GalacticDrive) = s.galactic;
+        Elite::Commander commander = Elite::DefaultCommander();
+        commander.legalStatus = s.legal;
+        commander.kills.lo = static_cast<std::uint8_t>(s.kills & 0xFFu);
+        commander.kills.hi = static_cast<std::uint8_t>(s.kills >> 8);
+        commander.escapePod = s.escapePod;
+        commander.fuelScoops = s.fuelScoops;
+        commander.ecm = s.ecm;
+        commander.energyBomb = s.bomb;
+        commander.energyUnit = s.energyUnit;
+        commander.dockingComputer = s.docking;
+        commander.galacticDrive = s.galactic;
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + mount] = s.lasers[mount];
+          commander.lasers[mount] = s.lasers[mount];
         }
 
         constexpr std::uint8_t CROSSHAIR_X = 30;
@@ -996,19 +996,19 @@ namespace GameLogicTests
         }
         cpu.memory[oracle.Label("QQ9")] = CROSSHAIR_X;
         cpu.memory[oracle.Label("QQ10")] = CROSSHAIR_Y;
-        cpu.memory[oracle.Label("QQ0")] = commander.At(Elite::Field::SystemX);
-        cpu.memory[oracle.Label("QQ1")] = commander.At(Elite::Field::SystemY);
+        cpu.memory[oracle.Label("QQ0")] = commander.systemX;
+        cpu.memory[oracle.Label("QQ1")] = commander.systemY;
 
         // The status screen's top four lines print the fuel and the cash through control codes 5
         // and 0, which is not obvious from its source -- they arrive inside recursive token 126.
-        cpu.memory[oracle.Label("QQ14")] = commander.At(Elite::Field::Fuel);
-        cpu.memory[oracle.Label("GCNT")] = commander.At(Elite::Field::GalaxyNumber);
+        cpu.memory[oracle.Label("QQ14")] = commander.fuel;
+        cpu.memory[oracle.Label("GCNT")] = commander.galaxyNumber;
         for (std::size_t index = 0; index < 4; ++index)
         {
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)] =
-            commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+            commander.cash.Byte(index);
         }
-        const Elite::SystemSeeds galaxy = commander.GalaxySeeds();
+        const Elite::SystemSeeds galaxy = commander.galaxySeeds;
         for (std::size_t index = 0; index < 6; ++index)
         {
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ21") + index)] = galaxy.bytes[index];
@@ -1213,21 +1213,21 @@ namespace GameLogicTests
       {
         const std::wstring where = Widen(std::string("EQSHP: ") + s.what);
 
-        Elite::CommanderBlock commander = Elite::DefaultCommander();
-        commander.SetCash(s.cash);
-        commander.At(Elite::Field::Fuel) = s.fuel;
-        commander.At(Elite::Field::CargoCapacity) = s.capacity;
-        commander.At(Elite::Field::Missiles) = s.missiles;
-        commander.At(Elite::Field::Ecm) = s.fitted[0];
-        commander.At(Elite::Field::FuelScoops) = s.fitted[1];
-        commander.At(Elite::Field::EscapePod) = s.fitted[2];
-        commander.At(Elite::Field::EnergyBomb) = s.fitted[3];
-        commander.At(Elite::Field::EnergyUnit) = s.fitted[4];
-        commander.At(Elite::Field::DockingComputer) = s.fitted[5];
-        commander.At(Elite::Field::GalacticDrive) = s.fitted[6];
+        Elite::Commander commander = Elite::DefaultCommander();
+        commander.cash.tenths = (s.cash);
+        commander.fuel = s.fuel;
+        commander.cargoCapacity = s.capacity;
+        commander.missiles = s.missiles;
+        commander.ecm = s.fitted[0];
+        commander.fuelScoops = s.fitted[1];
+        commander.escapePod = s.fitted[2];
+        commander.energyBomb = s.fitted[3];
+        commander.energyUnit = s.fitted[4];
+        commander.dockingComputer = s.fitted[5];
+        commander.galacticDrive = s.fitted[6];
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + mount] = s.lasers[mount];
+          commander.lasers[mount] = s.lasers[mount];
         }
 
         // ---- the shipped routine ------------------------------------------------------------
@@ -1258,9 +1258,9 @@ namespace GameLogicTests
         for (std::size_t index = 0; index < 4; ++index)
         {
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)] =
-            commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+            commander.cash.Byte(index);
         }
-        cpu.memory[oracle.Label("GCNT")] = commander.At(Elite::Field::GalaxyNumber);
+        cpu.memory[oracle.Label("GCNT")] = commander.galaxyNumber;
         cpu.memory[oracle.Label("QQ17")] = 0;
         cpu.memory[oracle.Label("XC")] = 1;
         cpu.memory[oracle.Label("YC")] = 1;
@@ -1323,8 +1323,8 @@ namespace GameLogicTests
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-        Elite::SystemSeeds current = commander.GalaxySeeds();
-        Elite::SystemSeeds selected = commander.GalaxySeeds();
+        Elite::SystemSeeds current = commander.galaxySeeds;
+        Elite::SystemSeeds selected = commander.galaxySeeds;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
@@ -1374,18 +1374,18 @@ namespace GameLogicTests
         };
         for (const Check& check : CHECKS)
         {
-          Assert::AreEqual(cpu.memory[check.address], commander.At(check.field), (where + L": " + Widen(check.name)).c_str());
+          Assert::AreEqual(cpu.memory[check.address], commander.ToBytes()[static_cast<std::size_t>(check.field)], (where + L": " + Widen(check.name)).c_str());
         }
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)],
-                           commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + mount],
+                           commander.lasers[mount],
                            (where + L": laser mount " + std::to_wstring(mount)).c_str());
         }
         for (std::size_t index = 0; index < 4; ++index)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("CASH") + index)],
-                           commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index],
+                           commander.cash.Byte(index),
                            (where + L": cash byte " + std::to_wstring(index)).c_str());
         }
 

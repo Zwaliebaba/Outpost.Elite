@@ -5,6 +5,9 @@
 #include "EliteTypes.h"
 #include "LookupTables.h"
 
+#include <array>
+#include <span>
+
 /*
  * The commander (slice 2d).
  *
@@ -29,53 +32,7 @@ namespace Elite
     constexpr std::size_t BLOCK_IN_FILE = COMMANDER_NAME_SIZE;
   } // namespace
 
-  std::uint32_t CommanderBlock::Cash() const noexcept
-  {
-    // 6502: CASH is four bytes with the MOST significant first, which is the opposite of every
-    // sixteen-bit value elsewhere in the game.
-    const std::size_t at = static_cast<std::size_t>(Field::Cash);
-    return (static_cast<std::uint32_t>(bytes[at]) << 24) | (static_cast<std::uint32_t>(bytes[at + 1]) << 16) |
-           (static_cast<std::uint32_t>(bytes[at + 2]) << 8) | bytes[at + 3];
-  }
-
-  void CommanderBlock::SetCash(std::uint32_t _tenths) noexcept
-  {
-    const std::size_t at = static_cast<std::size_t>(Field::Cash);
-    bytes[at] = static_cast<std::uint8_t>(_tenths >> 24);
-    bytes[at + 1] = static_cast<std::uint8_t>(_tenths >> 16);
-    bytes[at + 2] = static_cast<std::uint8_t>(_tenths >> 8);
-    bytes[at + 3] = static_cast<std::uint8_t>(_tenths);
-  }
-
-  std::uint16_t CommanderBlock::Kills() const noexcept
-  {
-    // 6502: TALLY -- and this one IS low byte first. The two conventions sit sixty bytes apart in
-    // the same block.
-    const std::size_t at = static_cast<std::size_t>(Field::Kills);
-    return static_cast<std::uint16_t>(bytes[at] | (bytes[at + 1] << 8));
-  }
-
-  SystemSeeds CommanderBlock::GalaxySeeds() const noexcept
-  {
-    SystemSeeds seeds;
-    const std::size_t at = static_cast<std::size_t>(Field::GalaxySeeds);
-    for (std::size_t index = 0; index < seeds.bytes.size(); ++index)
-    {
-      seeds.bytes[index] = bytes[at + index];
-    }
-    return seeds;
-  }
-
-  void CommanderBlock::SetGalaxySeeds(const SystemSeeds& _seeds) noexcept
-  {
-    const std::size_t at = static_cast<std::size_t>(Field::GalaxySeeds);
-    for (std::size_t index = 0; index < _seeds.bytes.size(); ++index)
-    {
-      bytes[at + index] = _seeds.bytes[index];
-    }
-  }
-
-  std::uint8_t Checksum(const CommanderBlock& _block) noexcept
+  std::uint8_t Checksum(const Commander& _block) noexcept
   {
     /*
      * 6502: CHECK -- LDX #&49 / CLC / TXA / QUL2: ADC NA%+6,X / EOR NA%+7,X / DEX / BNE QUL2.
@@ -84,20 +41,21 @@ namespace Elite
      * reads. Each step therefore mixes a neighbouring pair, and the loop ends at X = 1 rather than
      * at 0 -- so the block's last three bytes, which are the checksums themselves, are never read.
      */
+    const std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> bytes = _block.ToBytes();
     std::uint8_t accumulator = CHECKSUM_STEPS;
     bool carry = false;
 
     for (int index = CHECKSUM_STEPS; index >= 1; --index)
     {
-      const AddResult sum = AddWithCarry(accumulator, _block.bytes[static_cast<std::size_t>(index) - 1u], carry);
-      accumulator = static_cast<std::uint8_t>(sum.value ^ _block.bytes[static_cast<std::size_t>(index)]);
+      const AddResult sum = AddWithCarry(accumulator, bytes[static_cast<std::size_t>(index) - 1u], carry);
+      accumulator = static_cast<std::uint8_t>(sum.value ^ bytes[static_cast<std::size_t>(index)]);
       carry = sum.carry;
     }
 
     return accumulator;
   }
 
-  std::uint8_t Checksum2(const CommanderBlock& _block) noexcept
+  std::uint8_t Checksum2(const Commander& _block) noexcept
   {
     /*
      * 6502: CHECK2 -- STX T / EOR T / ROR A / ADC NA%+6,X / EOR NA%+7,X.
@@ -107,6 +65,7 @@ namespace Elite
      * replaced, and consumed again. Written as arithmetic this is not expressible, which is
      * presumably why it was chosen to protect the save file.
      */
+    const std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> bytes = _block.ToBytes();
     std::uint8_t accumulator = CHECKSUM_STEPS;
     bool carry = false;
 
@@ -115,23 +74,18 @@ namespace Elite
       accumulator = static_cast<std::uint8_t>(accumulator ^ static_cast<std::uint8_t>(index));
 
       const ShiftResult rotated = RotateRight(accumulator, carry);
-      const AddResult sum = AddWithCarry(rotated.value, _block.bytes[static_cast<std::size_t>(index) - 1u], rotated.carry);
+      const AddResult sum = AddWithCarry(rotated.value, bytes[static_cast<std::size_t>(index) - 1u], rotated.carry);
 
-      accumulator = static_cast<std::uint8_t>(sum.value ^ _block.bytes[static_cast<std::size_t>(index)]);
+      accumulator = static_cast<std::uint8_t>(sum.value ^ bytes[static_cast<std::size_t>(index)]);
       carry = sum.carry;
     }
 
     return accumulator;
   }
 
-  CommanderBlock DefaultCommander() noexcept
+  Commander DefaultCommander() noexcept
   {
-    CommanderBlock block;
-    for (std::size_t index = 0; index < COMMANDER_BLOCK_SIZE; ++index)
-    {
-      block.bytes[index] = DEFAULT_COMMANDER[BLOCK_IN_FILE + index];
-    }
-    return block;
+    return Commander::FromBytes(std::span<const std::uint8_t, COMMANDER_BLOCK_SIZE>{DEFAULT_COMMANDER.data() + BLOCK_IN_FILE, COMMANDER_BLOCK_SIZE});
   }
 
   std::array<std::uint8_t, COMMANDER_NAME_SIZE> DefaultCommanderName() noexcept
@@ -144,7 +98,7 @@ namespace Elite
     return name;
   }
 
-  void SaveCommander(const CommanderBlock& _block, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
+  void SaveCommander(const Commander& _block, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
                      std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept
   {
     /*
@@ -163,9 +117,9 @@ namespace Elite
       _outFile[index] = _name[index];
     }
 
-    CommanderBlock image = _block;
-    image.At(Field::Checksum3Byte) = Checksum2(image);
-    image.At(Field::ChecksumByte) = Checksum(image);
+    Commander image = _block;
+    image.checksum3 = Checksum2(image);
+    image.checksum = Checksum(image);
 
     /*
      * 6502: PLA / EOR #&A9 / STA CHK2 -- the THIRD stored byte, and this port did not write it
@@ -182,26 +136,23 @@ namespace Elite
      * both CHECK and CHECK2 read the block's first seventy-four bytes only, so byte seventy-four
      * cannot change what they returned.
      */
-    image.At(Field::Checksum2Byte) = static_cast<std::uint8_t>(image.At(Field::ChecksumByte) ^ 0xA9u);
+    image.checksum2 = static_cast<std::uint8_t>(image.checksum ^ 0xA9u);
 
+    const std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> bytes = image.ToBytes();
     for (std::size_t index = 0; index < COMMANDER_BLOCK_SIZE; ++index)
     {
-      _outFile[BLOCK_IN_FILE + index] = image.bytes[index];
+      _outFile[BLOCK_IN_FILE + index] = bytes[index];
     }
   }
 
-  bool LoadCommander(std::span<const std::uint8_t, COMMANDER_FILE_SIZE> _file, CommanderBlock& _outBlock,
+  bool LoadCommander(std::span<const std::uint8_t, COMMANDER_FILE_SIZE> _file, Commander& _outBlock,
                      std::span<std::uint8_t, COMMANDER_NAME_SIZE> _outName) noexcept
   {
     /*
      * The file's own block. Both checksums are computed over THIS rather than over what is handed
      * back, because the original reads NA% -- the copy from disk -- and writes only to TP.
      */
-    CommanderBlock image;
-    for (std::size_t index = 0; index < COMMANDER_BLOCK_SIZE; ++index)
-    {
-      image.bytes[index] = _file[BLOCK_IN_FILE + index];
-    }
+    const Commander image = Commander::FromBytes(_file.subspan<BLOCK_IN_FILE, COMMANDER_BLOCK_SIZE>());
 
     // 6502: QUL1 -- LDA NA%-1,X / STA YSAV2,X, which copies the name and the block together
     // because they are consecutive in both places.
@@ -215,9 +166,10 @@ namespace Elite
      * seventy-sixth and the seventy-seventh -- the block's own checksum -- is never loaded. What
      * the caller had there stays there. Nothing reads it before the next save recomputes it.
      */
-    for (std::size_t index = 0; index + 1 < COMMANDER_BLOCK_SIZE; ++index)
     {
-      _outBlock.bytes[index] = image.bytes[index];
+      const std::uint8_t kept = _outBlock.checksum;
+      _outBlock = image;
+      _outBlock.checksum = kept;
     }
 
     /*
@@ -226,7 +178,7 @@ namespace Elite
      * The branch goes BACKWARDS to the check, not forwards to an error path, so a block whose
      * checksum is wrong spins here for ever. The port returns instead; the header says why.
      */
-    if (Checksum(image) != image.At(Field::ChecksumByte))
+    if (Checksum(image) != image.checksum)
     {
       return false;
     }
@@ -243,17 +195,17 @@ namespace Elite
      * such a file here: it remembers it, and the competition code further on reads the flag. That
      * is why the check below is not the only thing that matters.
      */
-    const std::uint8_t stamp = static_cast<std::uint8_t>(image.At(Field::ChecksumByte) ^ 0xA9u);
-    std::uint8_t competition = _outBlock.At(Field::Competition);
-    if (stamp != image.At(Field::Checksum2Byte))
+    const std::uint8_t stamp = static_cast<std::uint8_t>(image.checksum ^ 0xA9u);
+    std::uint8_t competition = _outBlock.competition;
+    if (stamp != image.checksum2)
     {
       competition = static_cast<std::uint8_t>(competition | 0x80u);
     }
     competition = static_cast<std::uint8_t>(competition | 0x40u);
-    _outBlock.At(Field::Competition) = competition;
+    _outBlock.competition = competition;
 
     // 6502: JSR CHECK2 / CMP CHK3 / BNE doitagain -- and the same backwards branch.
-    return Checksum2(image) == image.At(Field::Checksum3Byte);
+    return Checksum2(image) == image.checksum3;
   }
 
 } // namespace Elite

@@ -77,7 +77,7 @@ namespace Outpost
   {
   public:
     FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
-                  Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::CommanderBlock& _commander, Elite::Rng& _rng,
+                  Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::Commander& _commander, Elite::Rng& _rng,
                   Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions, std::uint8_t& _techLevel,
                   Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music, SoundOutput& _audio) noexcept;
 

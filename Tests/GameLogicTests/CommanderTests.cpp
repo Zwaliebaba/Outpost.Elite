@@ -10,7 +10,7 @@
 #include <string>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
-using Elite::CommanderBlock;
+using Elite::Commander;
 using Elite::Field;
 using Elite::Testing::Cpu6502;
 using Elite::Testing::OracleImage;
@@ -64,26 +64,27 @@ namespace GameLogicTests
     };
 
     /// Puts a block where the shipped checksum routines read it.
-    void PlaceBlock(Cpu6502& _cpu, const Layout& _layout, const CommanderBlock& _block)
+    void PlaceBlock(Cpu6502& _cpu, const Layout& _layout, const Commander& _block)
     {
       for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_layout.block + index)] = _block.bytes[index];
+        _cpu.memory[static_cast<std::uint16_t>(_layout.block + index)] = _block.ToBytes()[index];
       }
     }
 
     /// A spread of blocks: the shipped one, the corners, a walking bit, and pseudo-random fill.
-    std::vector<CommanderBlock> SampleBlocks()
+    std::vector<Commander> SampleBlocks()
     {
-      std::vector<CommanderBlock> blocks;
+      std::vector<Commander> blocks;
 
       blocks.push_back(Elite::DefaultCommander());
 
-      CommanderBlock zeros;
+      Commander zeros;
       blocks.push_back(zeros);
 
-      CommanderBlock ones;
-      ones.bytes.fill(0xFF);
+      std::array<std::uint8_t, Elite::COMMANDER_BLOCK_SIZE> allSet{};
+      allSet.fill(0xFF);
+      const Commander ones = Commander::FromBytes(allSet);
       blocks.push_back(ones);
 
       // One bit set at a time, through every byte. This is what finds a carry that threads the wrong
@@ -93,8 +94,9 @@ namespace GameLogicTests
       {
         for (const std::uint8_t bit : {0x01u, 0x80u})
         {
-          CommanderBlock walking;
-          walking.bytes[byte] = static_cast<std::uint8_t>(bit);
+          std::array<std::uint8_t, Elite::COMMANDER_BLOCK_SIZE> oneBit{};
+          oneBit[byte] = static_cast<std::uint8_t>(bit);
+          const Commander walking = Commander::FromBytes(oneBit);
           blocks.push_back(walking);
         }
       }
@@ -104,13 +106,13 @@ namespace GameLogicTests
       std::uint32_t state = 0x1234567u;
       for (int round = 0; round < 64; ++round)
       {
-        CommanderBlock random;
+        std::array<std::uint8_t, Elite::COMMANDER_BLOCK_SIZE> noise{};
         for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
         {
           state = state * 1103515245u + 12345u;
-          random.bytes[index] = static_cast<std::uint8_t>(state >> 16);
+          noise[index] = static_cast<std::uint8_t>(state >> 16);
         }
-        blocks.push_back(random);
+        blocks.push_back(Commander::FromBytes(noise));
       }
 
       return blocks;
@@ -142,21 +144,21 @@ namespace GameLogicTests
                                         (L"DEFAULT_COMMANDER byte " + std::to_wstring(index)).c_str());
       }
 
-      const CommanderBlock block = Elite::DefaultCommander();
-      Assert::IsTrue(block.GalaxySeeds() == Elite::GALAXY_ONE_SEEDS,
+      const Commander block = Elite::DefaultCommander();
+      Assert::IsTrue(block.galaxySeeds == Elite::GALAXY_ONE_SEEDS,
                      L"the default commander's seeds and GALAXY_ONE_SEEDS must still agree");
 
       // The values a player would recognise, as a check that the offsets name the right bytes
       // rather than merely being self-consistent.
-      Assert::AreEqual<std::uint32_t>(1000u, block.Cash(), L"a new commander starts with 100.0 credits");
-      Assert::AreEqual<std::uint32_t>(70u, block.At(Field::Fuel), L"and 7.0 light years of fuel");
-      Assert::AreEqual<std::uint32_t>(20u, block.At(Field::SystemX), L"at Lave, which is at x = 20");
-      Assert::AreEqual<std::uint32_t>(173u, block.At(Field::SystemY), L"and y = 173");
-      Assert::AreEqual<std::uint32_t>(0u, block.At(Field::GalaxyNumber), L"in galaxy one, counted from zero");
+      Assert::AreEqual<std::uint32_t>(1000u, block.cash.tenths, L"a new commander starts with 100.0 credits");
+      Assert::AreEqual<std::uint32_t>(70u, block.fuel, L"and 7.0 light years of fuel");
+      Assert::AreEqual<std::uint32_t>(20u, block.systemX, L"at Lave, which is at x = 20");
+      Assert::AreEqual<std::uint32_t>(173u, block.systemY, L"and y = 173");
+      Assert::AreEqual<std::uint32_t>(0u, block.galaxyNumber, L"in galaxy one, counted from zero");
       // CRGO is stored two greater than the capacity it means, to save an instruction in tnpr, so
       // a standard twenty-tonne hold reads 22 and not 20.
-      Assert::AreEqual<std::uint32_t>(22u, block.At(Field::CargoCapacity), L"with twenty tonnes of space, written as 22");
-      Assert::AreEqual<std::uint32_t>(3u, block.At(Field::Missiles), L"and three missiles");
+      Assert::AreEqual<std::uint32_t>(22u, block.cargoCapacity, L"with twenty tonnes of space, written as 22");
+      Assert::AreEqual<std::uint32_t>(3u, block.missiles, L"and three missiles");
 
       std::string name;
       for (const std::uint8_t byte : Elite::DefaultCommanderName())
@@ -178,7 +180,7 @@ namespace GameLogicTests
       const std::uint16_t routine = oracle.Label("CHECK");
 
       std::uint32_t compared = 0;
-      for (const CommanderBlock& block : SampleBlocks())
+      for (const Commander& block : SampleBlocks())
       {
         Cpu6502 cpu = oracle.Fresh();
         PlaceBlock(cpu, layout, block);
@@ -205,7 +207,7 @@ namespace GameLogicTests
       const std::uint16_t routine = oracle.Label("CHECK2");
 
       std::uint32_t compared = 0;
-      for (const CommanderBlock& block : SampleBlocks())
+      for (const Commander& block : SampleBlocks())
       {
         Cpu6502 cpu = oracle.Fresh();
         PlaceBlock(cpu, layout, block);
@@ -238,14 +240,14 @@ namespace GameLogicTests
       const Layout layout(oracle);
 
       std::uint32_t compared = 0;
-      for (const CommanderBlock& block : SampleBlocks())
+      for (const Commander& block : SampleBlocks())
       {
         Cpu6502 cpu = oracle.Fresh();
 
         // 6502: SVE copies from TP, the live commander, so that is where the block goes.
         for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
         {
-          cpu.memory[static_cast<std::uint16_t>(layout.tp + index)] = block.bytes[index];
+          cpu.memory[static_cast<std::uint16_t>(layout.tp + index)] = block.ToBytes()[index];
         }
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
@@ -307,7 +309,7 @@ namespace GameLogicTests
          */
         for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
         {
-          Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(layout.tp + index)], block.bytes[index],
+          Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(layout.tp + index)], block.ToBytes()[index],
                                           (L"the live commander should be untouched at byte " + std::to_wstring(index)).c_str());
         }
         ++compared;
@@ -325,7 +327,7 @@ namespace GameLogicTests
     {
       std::uint32_t compared = 0;
 
-      for (const CommanderBlock& block : SampleBlocks())
+      for (const Commander& block : SampleBlocks())
       {
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> file{};
@@ -334,7 +336,7 @@ namespace GameLogicTests
 
         // Seeded with the block, so that the two bytes the load does NOT overwrite -- the block's
         // own checksum, and nothing else -- start where a round trip would leave them.
-        CommanderBlock loaded = block;
+        Commander loaded = block;
         std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> loadedName{};
         const bool accepted = Elite::LoadCommander(std::span<const std::uint8_t, Elite::COMMANDER_FILE_SIZE>(file), loaded,
                                                    std::span<std::uint8_t, Elite::COMMANDER_NAME_SIZE>(loadedName));
@@ -356,7 +358,7 @@ namespace GameLogicTests
           {
             continue;
           }
-          Assert::AreEqual<std::uint32_t>(block.bytes[index], loaded.bytes[index],
+          Assert::AreEqual<std::uint32_t>(block.ToBytes()[index], loaded.ToBytes()[index],
                                           (L"round trip differs at byte " + std::to_wstring(index)).c_str());
         }
 
@@ -370,18 +372,18 @@ namespace GameLogicTests
          * already on keeps it -- and one of the sample blocks is all 255. What a correct save
          * guarantees is that loading it does not turn the bit on, not that it turns it off.
          */
-        Assert::IsTrue((loaded.At(Field::Competition) & 0x40u) != 0u, L"loading sets the flag that says the commander came from a file");
-        Assert::AreEqual<std::uint32_t>(block.At(Field::Competition) & 0x80u, loaded.At(Field::Competition) & 0x80u,
+        Assert::IsTrue((loaded.competition & 0x40u) != 0u, L"loading sets the flag that says the commander came from a file");
+        Assert::AreEqual<std::uint32_t>(block.competition & 0x80u, loaded.competition & 0x80u,
                                         L"a correctly saved file is not newly flagged as tampered");
 
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> written{};
         Elite::SaveCommander(block, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name),
                              std::span<std::uint8_t, Elite::COMMANDER_FILE_SIZE>(written));
-        Assert::AreEqual<std::uint32_t>(written[8u + static_cast<std::size_t>(Field::Checksum2Byte)], loaded.At(Field::Checksum2Byte),
+        Assert::AreEqual<std::uint32_t>(written[8u + static_cast<std::size_t>(Field::Checksum2Byte)], loaded.checksum2,
                                         L"the second checksum is loaded back over the caller's block");
 
         // The block's own checksum byte is never loaded, so it keeps whatever the caller had.
-        Assert::AreEqual<std::uint32_t>(block.At(Field::ChecksumByte), loaded.At(Field::ChecksumByte),
+        Assert::AreEqual<std::uint32_t>(block.checksum, loaded.checksum,
                                         L"the checksum byte is not loaded, so the caller's survives");
         ++compared;
       }
@@ -414,7 +416,7 @@ namespace GameLogicTests
       std::uint32_t accepted = 0;
       std::uint32_t rejected = 0;
 
-      for (const CommanderBlock& block : SampleBlocks())
+      for (const Commander& block : SampleBlocks())
       {
         // Both a block with the right checksum and the same block with a wrong one, so the test
         // covers each answer rather than whichever the sample happens to give.
@@ -431,7 +433,7 @@ namespace GameLogicTests
             file[Elite::COMMANDER_NAME_SIZE + static_cast<std::size_t>(Field::ChecksumByte)] ^= 0x01u;
           }
 
-          CommanderBlock loaded;
+          Commander loaded;
           std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> loadedName{};
           const bool ourAnswer = Elite::LoadCommander(std::span<const std::uint8_t, Elite::COMMANDER_FILE_SIZE>(file), loaded,
                                                       std::span<std::uint8_t, Elite::COMMANDER_NAME_SIZE>(loadedName));

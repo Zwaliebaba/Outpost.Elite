@@ -123,7 +123,7 @@ namespace Elite
    * And the market is changed by PRINTING it, not only by buying: `var` zeroes Alien Items'
    * availability on every price it computes (§6.16), so the seventeenth line always offers nothing.
    */
-  void BuyScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market, std::uint8_t _economy, bool _misJumped) noexcept;
+  void BuyScreen(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy, bool _misJumped) noexcept;
 
   /*
    * 6502: TT210 -- list what is in the hold, and on the Sell Cargo screen offer each item for sale.
@@ -146,7 +146,7 @@ namespace Elite
    * blank in this version of Elite, so nothing of it is visible except the count and a possible
    * "s" -- but it calls DORND, so it moves the random state, and that is observable.
    */
-  void ListCargo(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market, std::uint8_t _economy,
+  void ListCargo(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy,
                  std::uint8_t _view) noexcept;
 
   /*
@@ -160,6 +160,6 @@ namespace Elite
    * The rule is NLIN4, which is the canvas's rather than this routine's, so a caller draws
    * DrawSeparator at row 19 -- the same split the market screen already uses for NLIN3.
    */
-  void InventoryScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market, std::uint8_t _economy) noexcept;
+  void InventoryScreen(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy) noexcept;
 
 } // namespace Elite

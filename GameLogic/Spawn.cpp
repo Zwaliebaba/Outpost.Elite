@@ -21,7 +21,7 @@ namespace Elite
     }
   } // namespace
 
-  void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, Ship& _work, CommanderBlock& _commander,
+  void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, Ship& _work, Commander& _commander,
                 SpawnEffects& _effects, std::uint8_t _slot, std::uint16_t& _blueprint) noexcept
   {
     // 6502: STX XX4 / LDA MSTG / CMP XX4 / BNE KS5 -- the player's missile was chasing this one,
@@ -63,8 +63,8 @@ namespace Elite
     // is scored as 256 kills rather than one.
     if (type == ShipType::Constrictor)
     {
-      _commander.At(Field::MissionProgress) = static_cast<std::uint8_t>(_commander.At(Field::MissionProgress) | 0x02u);
-      ++_commander.bytes[static_cast<std::size_t>(Field::Kills) + 1u];
+      _commander.missionProgress = static_cast<std::uint8_t>(_commander.missionProgress | 0x02u);
+      ++_commander.kills.hi;
     }
 
     // 6502: lll -- the rock hermit counts as junk despite its type, which is the same extra
@@ -245,21 +245,19 @@ namespace Elite
   }
 
   void BuildSystem(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
-                   CommanderBlock& _commander, Rng& _rng, FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
+                   Commander& _commander, Rng& _rng, FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
                    const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _view, bool _carryIn) noexcept
   {
-    const std::size_t tribble = static_cast<std::size_t>(Field::Tribbles);
-
     // 6502: LDA TRIBBLE / BEQ nobirths -- only the LOW byte is tested, so a swarm whose count has
     // reached a multiple of 256 stops breeding until it moves off one.
-    if (_commander.bytes[tribble] != 0u)
+    if (_commander.tribbles.lo != 0u)
     {
       /*
        * 6502: LDA #0 / STA QQ20 / STA QQ20+6 -- the Trumbles eat the food and the narcotics, and
        * only those two.
        */
-      _commander.bytes[static_cast<std::size_t>(Field::CargoHold)] = 0;
-      _commander.bytes[static_cast<std::size_t>(Field::CargoHold) + 6u] = 0;
+      _commander.cargoHold[0] = 0;
+      _commander.cargoHold[6u] = 0;
 
       /*
        * 6502: JSR DORND / AND #15 / ADC TRIBBLE / ORA #4 / ROL A / STA TRIBBLE /
@@ -273,18 +271,18 @@ namespace Elite
       // The entry carry is the caller's: `LDA TRIBBLE / BEQ / LDA #0 / STA QQ20 / STA QQ20+6`
       // touches no flag between `SOLAR`'s first instruction and this call.
       const RngResult roll = _rng.Next(_carryIn);
-      const AddResult grown = AddWithCarry(static_cast<std::uint8_t>(roll.value & 0x0Fu), _commander.bytes[tribble], roll.carry);
+      const AddResult grown = AddWithCarry(static_cast<std::uint8_t>(roll.value & 0x0Fu), _commander.tribbles.lo, roll.carry);
       const ShiftResult doubled = RotateLeftValue(static_cast<std::uint8_t>(grown.value | 0x04u), grown.carry);
-      _commander.bytes[tribble] = doubled.value;
+      _commander.tribbles.lo = doubled.value;
 
-      const ShiftResult high = RotateLeftValue(_commander.bytes[tribble + 1u], doubled.carry);
+      const ShiftResult high = RotateLeftValue(_commander.tribbles.hi, doubled.carry);
       if ((high.value & 0x80u) == 0u)
       {
-        _commander.bytes[tribble + 1u] = high.value;
+        _commander.tribbles.hi = high.value;
       }
       else
       {
-        _commander.bytes[tribble + 1u] = RotateRight(high.value, high.carry).value;
+        _commander.tribbles.hi = RotateRight(high.value, high.carry).value;
       }
     }
 
@@ -297,9 +295,9 @@ namespace Elite
      * odd** (§6.58). Nobody designed that; it is what happens when a routine is written straight
      * through without a `CLC`, and it is in every copy of the game ever sold.
      */
-    const std::uint8_t bounty = _commander.At(Field::LegalStatus);
+    const std::uint8_t bounty = _commander.legalStatus;
     const bool odd = (bounty & 0x01u) != 0u;
-    _commander.At(Field::LegalStatus) = static_cast<std::uint8_t>(bounty >> 1);
+    _commander.legalStatus = static_cast<std::uint8_t>(bounty >> 1);
 
     /*
      * 6502: JSR ZINF, then the planet's position from the system's own seed bytes.

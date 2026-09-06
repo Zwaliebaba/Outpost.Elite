@@ -419,7 +419,7 @@ namespace GameLogicTests
             Elite::LineHeap heap;
             Elite::PlanetSunState state;
             Elite::Ship work{};
-            Elite::CommanderBlock commander;
+            Elite::Commander commander;
             RecordingEffects effects;
 
             // ABORT, MESS and SPBLB are slice 3d's.
@@ -454,9 +454,9 @@ namespace GameLogicTests
               cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + 32u)] = ai;
             }
 
-            commander.At(Elite::Field::MissionProgress) = 0x01;
+            commander.missionProgress = 0x01;
             cpu.memory[at.tp] = 0x01;
-            commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = 40;
+            commander.kills.hi = 40;
             cpu.memory[static_cast<std::uint16_t>(at.tally + 1)] = 40;
 
             /*
@@ -486,15 +486,15 @@ namespace GameLogicTests
                                              " locked=" + std::to_string(locked));
 
             CompareBubble(cpu, bubble, heap, at, where);
-            Assert::AreEqual(cpu.memory[at.tp], commander.At(Elite::Field::MissionProgress), (where + L": TP").c_str());
+            Assert::AreEqual(cpu.memory[at.tp], commander.missionProgress, (where + L": TP").c_str());
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tally + 1)],
-                             commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u], (where + L": TALLY+1").c_str());
+                             commander.kills.hi, (where + L": TALLY+1").c_str());
             Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.aborts.size() + effects.messages.size() + effects.stationBlobs,
                                           (where + L": the seams").c_str());
 
             aborted += static_cast<std::uint32_t>(effects.aborts.size());
             stations += effects.stationBlobs;
-            missions += (commander.At(Elite::Field::MissionProgress) != 0x01u) ? 1u : 0u;
+            missions += (commander.missionProgress != 0x01u) ? 1u : 0u;
             // A kill only relocates when something is living above it, and the station's own
             // path shuffles nothing at all.
             moved += (Elite::TypeOf(fleet[victim]) != Elite::ShipType::Station && victim + 1u < living) ? 1u : 0u;
@@ -577,7 +577,7 @@ namespace GameLogicTests
         bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
         Elite::LineHeap heap;
         Elite::Ship work{};
-        Elite::CommanderBlock commander;
+        Elite::Commander commander;
         RecordingEffects effects;
         Elite::FlightState flight;
         Elite::Rng rng;
@@ -595,20 +595,18 @@ namespace GameLogicTests
           cpu.memory[static_cast<std::uint16_t>(at.qq15 + byte)] = system.seeds[byte];
         }
         cpu.memory[at.tek] = system.techLevel;
-
-        const std::size_t tribble = static_cast<std::size_t>(Elite::Field::Tribbles);
-        commander.bytes[tribble] = system.tribbleLow;
-        commander.bytes[tribble + 1u] = system.tribbleHigh;
+        commander.tribbles.lo = system.tribbleLow;
+        commander.tribbles.hi = system.tribbleHigh;
         cpu.memory[at.tribble] = system.tribbleLow;
         cpu.memory[static_cast<std::uint16_t>(at.tribble + 1)] = system.tribbleHigh;
 
-        commander.At(Elite::Field::LegalStatus) = system.legal;
+        commander.legalStatus = system.legal;
         cpu.memory[at.fist] = system.legal;
 
         for (std::size_t good = 0; good < 17u; ++good)
         {
           const std::uint8_t value = static_cast<std::uint8_t>(7u + good);
-          commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + good] = value;
+          commander.cargoHold[good] = value;
           cpu.memory[static_cast<std::uint16_t>(at.qq20 + good)] = value;
         }
 
@@ -653,14 +651,14 @@ namespace GameLogicTests
         }
 
         CompareBubble(cpu, bubble, heap, at, where);
-        Assert::AreEqual(cpu.memory[at.tribble], commander.bytes[tribble], (where + L": TRIBBLE").c_str());
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tribble + 1)], commander.bytes[tribble + 1u],
+        Assert::AreEqual(cpu.memory[at.tribble], commander.tribbles.lo, (where + L": TRIBBLE").c_str());
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tribble + 1)], commander.tribbles.hi,
                          (where + L": TRIBBLE+1").c_str());
-        Assert::AreEqual(cpu.memory[at.fist], commander.At(Elite::Field::LegalStatus), (where + L": FIST").c_str());
+        Assert::AreEqual(cpu.memory[at.fist], commander.legalStatus, (where + L": FIST").c_str());
         for (std::size_t good = 0; good < 17u; ++good)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.qq20 + good)],
-                           commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + good],
+                           commander.cargoHold[good],
                            (where + L": QQ20+" + std::to_wstring(good)).c_str());
         }
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
@@ -674,7 +672,7 @@ namespace GameLogicTests
                            (where + L": RAND+" + std::to_wstring(byte)).c_str());
         }
 
-        bred += (commander.bytes[tribble] != system.tribbleLow) ? 1u : 0u;
+        bred += (commander.tribbles.lo != system.tribbleLow) ? 1u : 0u;
         ++compared;
       }
 

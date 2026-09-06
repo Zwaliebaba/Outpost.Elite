@@ -191,7 +191,7 @@ namespace Outpost
     if (m_flight != nullptr)
     {
       const Elite::FlightScreen& screen = m_flight->Screen();
-      Elite::ResetMissileIndicators(m_canvas, screen.commander.At(Elite::Field::Missiles));
+      Elite::ResetMissileIndicators(m_canvas, screen.commander.missiles);
     }
   }
 

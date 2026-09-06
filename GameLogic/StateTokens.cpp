@@ -74,10 +74,9 @@ namespace Elite
      * agree, and it is why the loop is a straight copy rather than a reversal.
      */
     NumberWorkspace work;
-    const std::size_t cash = static_cast<std::size_t>(Field::Cash);
     for (std::size_t index = 0; index < 4; ++index)
     {
-      work.k[index] = m_commander.bytes[cash + index];
+      work.k[index] = m_commander.cash.Byte(index); // 6502: CASH to CASH+3, most significant first
     }
     work.u = CASH_WIDTH;
 
@@ -94,7 +93,7 @@ namespace Elite
      * One-based on screen and zero-based in the block, which is why the INX is here and not at
      * every call site. The CLC is the "no decimal point" argument to pr2 rather than arithmetic.
      */
-    const std::uint8_t number = static_cast<std::uint8_t>(m_commander.At(Field::GalaxyNumber) + 1u);
+    const std::uint8_t number = static_cast<std::uint8_t>(m_commander.galaxyNumber + 1u);
     PrintByteValue(_sink, number, false);
   }
 
@@ -170,7 +169,7 @@ namespace Elite
 
     // 6502: LDX QQ14 / SEC / JSR pr2 -- the fuel is in tenths of a light year, so it prints with a
     // decimal point in a width of three.
-    PrintByteValue(_sink, m_commander.At(Field::Fuel), true);
+    PrintByteValue(_sink, m_commander.fuel, true);
 
     PrintThenNewline(m_printer, LIGHT_YEARS_TOKEN);
     m_printer.Print(CASH_LINE_TOKEN);

@@ -325,7 +325,7 @@ namespace Elite
     _screen.text.row = 1u;    // 6502: STA YC
 
     SetUpScreenPixels(_screen.canvas, _screen.draw, _screen.math, _screen.geometry, _screen.text, _screen.screen, _screen.bubble,
-                      _screen.flight, _screen.status, _screen.commander.At(Field::Fuel), _screen.compass, _screen.sight,
+                      _screen.flight, _screen.status, _screen.commander.fuel, _screen.compass, _screen.sight,
                       _screen.view); // 6502: JSR TTX66K
 
     // 6502: LDX QQ22+1 / BEQ OLDBOX / JSR ee3 -- the hyperspace countdown outlives a screen change

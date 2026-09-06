@@ -224,13 +224,13 @@ namespace Elite
     // unit's. A caller of `DOKEY` gets that as well, and the call site does not say so.
   }
 
-  void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const CommanderBlock& _commander, TrumbleSprites& _trumbles,
+  void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const Commander& _commander, TrumbleSprites& _trumbles,
                        std::uint8_t _view, SightEffects& _effects) noexcept
   {
     _effects.SetRasterMode(0x05u); // 6502: LDA #%101 / JSR SETL1
 
     // 6502: LDY VIEW / LDA LASER,Y / BEQ SIG3.
-    const std::uint8_t laser = _commander.bytes[static_cast<std::size_t>(Field::Lasers) + _view];
+    const std::uint8_t laser = _commander.lasers[_view];
 
     if (laser != 0u)
     {
@@ -269,7 +269,7 @@ namespace Elite
     _math.t = (laser != 0u) ? std::uint8_t{1u} : std::uint8_t{0u};
 
     // 6502: LDA TRIBBLE+1 / AND #%01111111 / LSR A x4 / TAX.
-    const std::uint8_t population = _commander.bytes[static_cast<std::size_t>(Field::Tribbles) + 1u];
+    const std::uint8_t population = _commander.tribbles.hi;
     const std::size_t index = static_cast<std::size_t>((population & 0x7Fu) >> 4u);
 
     _trumbles.count = TRUMBLE_COUNT_TABLE[index]; // 6502: LDA TRIBTA,X / STA TRIBCT

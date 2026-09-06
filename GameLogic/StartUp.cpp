@@ -11,18 +11,18 @@
 namespace Elite
 {
 
-  void CrosshairsToCurrentSystem(const CommanderBlock& _commander, std::uint8_t& _crosshairX, std::uint8_t& _crosshairY) noexcept
+  void CrosshairsToCurrentSystem(const Commander& _commander, std::uint8_t& _crosshairX, std::uint8_t& _crosshairY) noexcept
   {
     // 6502: ping -- and QQ0 is TP+1, so this reads the commander block itself.
-    _crosshairX = _commander.At(Field::SystemX);
-    _crosshairY = _commander.At(Field::SystemY);
+    _crosshairX = _commander.systemX;
+    _crosshairY = _commander.systemY;
   }
 
-  void CurrentSystemToCrosshairs(CommanderBlock& _commander, std::uint8_t _crosshairX, std::uint8_t _crosshairY) noexcept
+  void CurrentSystemToCrosshairs(Commander& _commander, std::uint8_t _crosshairX, std::uint8_t _crosshairY) noexcept
   {
     // 6502: jmp -- two separate loads, not a loop, and it falls into `hy5`'s RTS.
-    _commander.At(Field::SystemX) = _crosshairX;
-    _commander.At(Field::SystemY) = _crosshairY;
+    _commander.systemX = _crosshairX;
+    _commander.systemY = _crosshairY;
   }
 
   ForcedKey ForceKey(std::uint8_t _key, std::uint8_t _dockedFlag, std::uint8_t _view, std::uint8_t _countdown,
@@ -112,8 +112,8 @@ namespace Elite
      */
     CrosshairsToCurrentSystem(_game.commander, _game.crosshairX, _game.crosshairY);
 
-    const NearestSystem found = FindNearestSystem(_game.commander.GalaxySeeds(), _game.crosshairX, _game.crosshairY,
-                                                  _game.commander.At(Field::SystemX), _game.commander.At(Field::SystemY));
+    const NearestSystem found = FindNearestSystem(_game.commander.galaxySeeds, _game.crosshairX, _game.crosshairY,
+                                                  _game.commander.systemX, _game.commander.systemY);
     _game.selected = found.seeds;
     _game.crosshairX = found.x;
     _game.crosshairY = found.y;

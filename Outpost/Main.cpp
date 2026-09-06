@@ -104,7 +104,7 @@ namespace
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, dockedFlag);
       shell.AttachVideo(flight.Video());                            // ADR-005 §1 -- the sprites composite in Resolve
-      shell.AttachGalaxy(commander.At(Elite::Field::GalaxyNumber)); // 6502: GCNT, for MT27 and MT28
+      shell.AttachGalaxy(commander.galaxyNumber); // 6502: GCNT, for MT27 and MT28
       shell.AttachSound(audio, sound, music);
 
       // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
@@ -153,7 +153,7 @@ namespace
     Elite::NumberWorkspace numbers;
 
     // ---- the commander and the universe ----------------------------------------------------------
-    Elite::CommanderBlock commander = Elite::DefaultCommander();
+    Elite::Commander commander = Elite::DefaultCommander();
     std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
     std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
     std::array<std::uint8_t, 16> buffer{};
@@ -258,10 +258,10 @@ namespace
     Elite::ChartView view;
     view.cursorX = _game.crosshairX;
     view.cursorY = _game.crosshairY;
-    view.homeX = _game.commander.At(Elite::Field::SystemX);
-    view.homeY = _game.commander.At(Elite::Field::SystemY);
+    view.homeX = _game.commander.systemX;
+    view.homeY = _game.commander.systemY;
     view.view = _game.view;
-    view.fuel = _game.commander.At(Elite::Field::Fuel);
+    view.fuel = _game.commander.fuel;
     return view;
   }
 
@@ -332,7 +332,7 @@ namespace
       screen.heaps.yx2M1 = Elite::CHART_SCREEN_BOTTOM;
       _game.flight.Loop().clip.dontclip = Elite::CHART_SCREEN_BOTTOM;
 
-      Elite::DrawShortRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.GalaxySeeds(),
+      Elite::DrawShortRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.galaxySeeds,
                                  &_game.flight);
 
       _game.flight.Loop().clip.dontclip = 0u;
@@ -340,7 +340,7 @@ namespace
       return;
     }
 
-    Elite::DrawLongRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.GalaxySeeds(), &_game.flight);
+    Elite::DrawLongRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.galaxySeeds, &_game.flight);
   }
 
   /// 6502: TT22 and TT23's opening `JSR TT66`, which the routines leave to their caller, and then
@@ -407,8 +407,8 @@ namespace
     {
       // 6502: JSR TT111 / JMP TT25 -- the screen reads what the search leaves behind.
       const Elite::NearestSystem found =
-        Elite::FindNearestSystem(_game.commander.GalaxySeeds(), _game.crosshairX, _game.crosshairY,
-                                 _game.commander.At(Elite::Field::SystemX), _game.commander.At(Elite::Field::SystemY));
+        Elite::FindNearestSystem(_game.commander.galaxySeeds, _game.crosshairX, _game.crosshairY,
+                                 _game.commander.systemX, _game.commander.systemY);
       _game.selectedSeeds = found.seeds;
       Elite::SystemDataScreen(_game.trade, _game.selectedSeeds, found.data, found.distance);
       return;
@@ -597,7 +597,7 @@ namespace
 
         const Elite::JumpResult jumped = Elite::PerformJump(
           _game.flight.Loop(), _game.current, _game.selectedSeeds, jump, described, _game.market, _game.flight, nullptr, _game.crosshairX,
-          _game.crosshairY, _game.commander.GalaxySeeds(), _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL)),
+          _game.crosshairY, _game.commander.galaxySeeds, _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL)),
           _game.flight.Loop().options.authorNames != 0u);
 
         _game.jumpDistance = jump.distance;
@@ -628,7 +628,7 @@ namespace
       Elite::FlightScreen& screen = _game.flight.Screen();
 
       const Elite::JumpOutcome decided = Elite::RequestHyperspace(_game.canvas, screen.draw, _game.recursive, _game.extended, _game.text,
-                                                                  chart, jump, _game.commander.GalaxySeeds(), &_game.shell);
+                                                                  chart, jump, _game.commander.galaxySeeds, &_game.shell);
 
       _game.status.hyperspaceCountdown = jump.countdown;
       _game.jumpDistance = jump.distance;
@@ -649,12 +649,12 @@ namespace
          * one at a time afterwards, because the block is the storage and `SystemSeeds` is a view
          * of it.
          */
-        Elite::SystemSeeds galaxy = _game.commander.GalaxySeeds();
+        Elite::SystemSeeds galaxy = _game.commander.galaxySeeds;
         Elite::GalacticJump(_game.flight.Loop(), _game.current, galaxy, _game.selectedSeeds, jump, chart, nullptr);
 
         for (int byte = 0; byte < 6; ++byte)
         {
-          _game.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::GalaxySeeds) + byte)) =
+          _game.commander.galaxySeeds.bytes[byte] =
             galaxy.bytes[static_cast<std::size_t>(byte)];
         }
 
@@ -810,7 +810,7 @@ namespace
        * way `TT18`'s fall into `TT110` was. A default commander cannot reach here at all: `KY13` is
        * ANDed with `ESCP`, so it needs one that has bought a pod.
        */
-      Elite::AbandonShip(_game.flight.Loop(), _game.commander.At(Elite::Field::Fuel));
+      Elite::AbandonShip(_game.flight.Loop(), _game.commander.fuel);
 
       // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
       _game.flight.StopDockingMusic();

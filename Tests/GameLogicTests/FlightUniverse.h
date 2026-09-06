@@ -303,7 +303,7 @@ namespace GameLogicTests
     /// Declared after `rng` because it binds one, and the order here is the construction order.
     Elite::ExtendedTokenPrinter extendedPrinter{characters, printer, rng, &codes};
 
-    Elite::CommanderBlock commander;
+    Elite::Commander commander;
 
     /// 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and VIC+&04 to VIC+&10 -- the sprite bank slice 4d-a
     /// gave a home. It was the bare count while nothing moved them.
@@ -491,12 +491,12 @@ namespace GameLogicTests
     }
     _universe.heaps.lsp = 0x37u;
 
-    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] = Elite::LASER_PULSE;
-    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 1u] = 0u;
-    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 2u] = Elite::LASER_BEAM;
-    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + 3u] = Elite::LASER_MILITARY;
-    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)] = 0x40u;
-    _universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = 0x21u;
+    _universe.commander.lasers[0] = Elite::LASER_PULSE;
+    _universe.commander.lasers[1u] = 0u;
+    _universe.commander.lasers[2u] = Elite::LASER_BEAM;
+    _universe.commander.lasers[3u] = Elite::LASER_MILITARY;
+    _universe.commander.tribbles.lo = 0x40u;
+    _universe.commander.tribbles.hi = 0x21u;
     _universe.trumbles.count = 0x5Au;
 
     _universe.rng.SetState({0x11u, 0x22u, 0x33u, 0x44u});
@@ -521,7 +521,7 @@ namespace GameLogicTests
     _universe.status.damageFlash = 0u;
     _universe.status.ecmCountdown = 0u;
     _universe.fuel = 40u;
-    _universe.commander.At(Elite::Field::Fuel) = _universe.fuel; // `Mirror` sends the block, not the byte
+    _universe.commander.fuel = _universe.fuel; // `Mirror` sends the block, not the byte
 
     _universe.flight.delta = 14u;
     _universe.flight.alp1 = 5u;

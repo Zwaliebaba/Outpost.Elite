@@ -51,7 +51,7 @@ namespace Elite
 
   } // namespace
 
-  void ArriveAtSystem(CommanderBlock& _commander, CurrentSystem& _current, SystemSeeds& _selected, const SystemSeeds& _target,
+  void ArriveAtSystem(Commander& _commander, CurrentSystem& _current, SystemSeeds& _selected, const SystemSeeds& _target,
                       SystemData& _described, MarketState& _market, Rng& _rng, std::uint8_t& _explosionCount, std::uint8_t _crosshairX,
                       std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _findNearest) noexcept
   {
@@ -65,7 +65,7 @@ namespace Elite
     if (_findNearest)
     {
       const NearestSystem nearest =
-        FindNearestSystem(_galaxy, crosshairX, crosshairY, _commander.At(Field::SystemX), _commander.At(Field::SystemY));
+        FindNearestSystem(_galaxy, crosshairX, crosshairY, _commander.systemX, _commander.systemY);
       _selected = nearest.seeds;
 
       // 6502: `TT111` ends `JMP TT24`, so `QQ3` to `QQ5` are its side effect and not its answer.
@@ -112,7 +112,7 @@ namespace Elite
     GenerateMarket(_rng, _described.economy, _market);
   }
 
-  void EnterWitchspace(FlightLoop& _loop, CommanderBlock& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
+  void EnterWitchspace(FlightLoop& _loop, Commander& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
   {
     FlightScreen& screen = _loop.screen;
 
@@ -143,10 +143,10 @@ namespace Elite
      * 6502: LDA QQ1 / EOR #%00011111 / STA QQ1 -- the y coordinate is scrambled, so leaving
      * witchspace does not put you back where you were. Five bits, so it is a jump of at most 31.
      */
-    _commander.At(Field::SystemY) = static_cast<std::uint8_t>(_commander.At(Field::SystemY) ^ 0x1Fu);
+    _commander.systemY = static_cast<std::uint8_t>(_commander.systemY ^ 0x1Fu);
   }
 
-  void EnterWitchspaceCheating(FlightLoop& _loop, CommanderBlock& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
+  void EnterWitchspaceCheating(FlightLoop& _loop, Commander& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
   {
     /*
      * 6502: .ptg LSR COK / SEC / ROL COK -- which is `ORA #1` and NOT a rotate.
@@ -156,7 +156,7 @@ namespace Elite
      * trip. §6.126 found the mirror of this (`ASL / SEC / ROR` is `ORA #128`) ported as a shift
      * twice over, so it is written out here rather than transcribed instruction by instruction.
      */
-    _commander.At(Field::Competition) = static_cast<std::uint8_t>(_commander.At(Field::Competition) | 1u);
+    _commander.competition = static_cast<std::uint8_t>(_commander.competition | 1u);
 
     // 6502: and then it FALLS INTO MJP.
     EnterWitchspace(_loop, _commander, _sound, _pacing);
@@ -177,8 +177,8 @@ namespace Elite
      * game that goes through `hyp`. Transcribed anyway, because what makes it unreachable is
      * another routine.
      */
-    const SubResult fuel = SubtractWithCarry(screen.commander.At(Field::Fuel), static_cast<std::uint8_t>(_jump.distance & 0xFFu), true);
-    screen.commander.At(Field::Fuel) = fuel.carry ? fuel.value : std::uint8_t{0};
+    const SubResult fuel = SubtractWithCarry(screen.commander.fuel, static_cast<std::uint8_t>(_jump.distance & 0xFFu), true);
+    screen.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0};
 
     // 6502: LDA QQ11 / BNE ee5 / JSR TT66 / JSR LL164 -- the tunnel is only drawn from a space
     // view. Jumping with a chart up spends the fuel and shows nothing.
@@ -249,7 +249,7 @@ namespace Elite
 
     // 6502: JSR TTX66 / LDA QQ11 / BNE TT114 / INC QQ11, and then it falls into `TT110`.
     SetUpScreenPixels(screen.canvas, screen.draw, screen.math, screen.geometry, screen.text, screen.screen, screen.bubble, screen.flight,
-                      screen.status, screen.commander.At(Field::Fuel), screen.compass, screen.sight, screen.view);
+                      screen.status, screen.commander.fuel, screen.compass, screen.sight, screen.view);
 
     if (screen.view != 0u)
     {
@@ -274,22 +274,22 @@ namespace Elite
      * `zZ` is `LDA #96`, assembled as `A9 60`, so the branch lands on the OPERAND and executes &60
      * as an `RTS`. With no drive fitted the routine returns from the middle of an instruction.
      */
-    if (screen.commander.At(Field::GalacticDrive) == 0u)
+    if (screen.commander.galacticDrive == 0u)
     {
       return;
     }
 
     // 6502: INX / STX GHYP / STX FIST -- X was 255, so both bytes become zero: the drive is spent
     // and the record is clean, from one register.
-    screen.commander.At(Field::GalacticDrive) = 0u;
-    screen.commander.At(Field::LegalStatus) = 0u;
+    screen.commander.galacticDrive = 0u;
+    screen.commander.legalStatus = 0u;
 
     // 6502: LDA #2 / JSR wW2 -- the countdown, started at two rather than fifteen.
     _jump.countdown = 2u;
 
     // 6502: INC GCNT / LDA GCNT / AND #%11110111 / STA GCNT -- eight galaxies, and the mask is
     // what wraps the eighth back to the first.
-    screen.commander.At(Field::GalaxyNumber) = static_cast<std::uint8_t>((screen.commander.At(Field::GalaxyNumber) + 1u) & 0xF7u);
+    screen.commander.galaxyNumber = static_cast<std::uint8_t>((screen.commander.galaxyNumber + 1u) & 0xF7u);
 
     /*
      * 6502: .G1 LDA QQ21,X / ASL A / ROL QQ21,X / DEX / BPL G1.
@@ -316,7 +316,7 @@ namespace Elite
     // 6502: JSR TT111 / LDX #5 / .dumdeedum LDA QQ15,X / STA safehouse,X -- the system nearest the
     // middle of the galaxy becomes both the selection and the countdown's target.
     const NearestSystem nearest =
-      FindNearestSystem(_galaxy, _chart.cursorX, _chart.cursorY, screen.commander.At(Field::SystemX), screen.commander.At(Field::SystemY));
+      FindNearestSystem(_galaxy, _chart.cursorX, _chart.cursorY, screen.commander.systemX, screen.commander.systemY);
     _selected = nearest.seeds;
     _jump.target = nearest.seeds;
 

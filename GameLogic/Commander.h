@@ -13,11 +13,12 @@ namespace Elite
    * The commander (slice 2d).
    *
    * Everything the game remembers about you is seventy-seven consecutive bytes, and the save file
-   * IS those bytes with an eight-byte name in front. That is why this is a byte array with named
-   * offsets rather than a struct of fields: a struct would need a serialiser, a serialiser can
-   * drift from the layout, and the acceptance criterion for this slice is that a commander file
-   * extracted from an original disk loads. Make the bytes the storage and there is nothing to
-   * drift.
+   * IS those bytes with an eight-byte name in front. Until Modernize.md's M1-d that was a byte
+   * array with named offsets, on the argument that a struct needs a serialiser and a serialiser
+   * can drift from the layout. It is a struct now, and the serialiser is `ToBytes`/`FromBytes`
+   * below, written once in terms of the `Field` offsets and proved by `CommanderTests`' round
+   * trips against the assembled original -- the acceptance criterion is still that a commander
+   * file extracted from an original disk loads, and it still does.
    *
    * Two checksums guard the block, and they are the game's copy protection rather than error
    * detection: CHECK threads a carry through seventy-three additions and CHECK2 folds a rotate in
@@ -35,7 +36,8 @@ namespace Elite
   inline constexpr std::size_t COMMANDER_FILE_SIZE = COMMANDER_NAME_SIZE + COMMANDER_BLOCK_SIZE;
 
   /*
-   * Where each field sits in the block.
+   * Where each field sits in the block -- THE WIRE FORMAT, which `ToBytes` and `FromBytes` are
+   * written in and the tests address the oracle's `TP` through.
    *
    * These are the label addresses minus TP's, taken from the assembled build rather than counted
    * from the source, because several fields are followed by bytes no label names and counting
@@ -83,44 +85,220 @@ namespace Elite
   };
 
   /*
-   * The commander's data block.
+   * 6502: CASH -- four bytes, MOST significant first, in tenths of a credit.
    *
-   * Held as the bytes the game holds, so that a file written by the original loads and a file this
-   * writes is one the original would accept. The accessors below are for the fields wider than a
-   * byte, because those are where a port gets the endianness wrong.
+   * The opposite way round from everything else in the game, which keeps its sixteen-bit values
+   * low byte first. A port that used one convention throughout would give the player either
+   * fourteen pence or several million credits. It is a type of its own so that the one place the
+   * order is written down is `Bytes`, and so that a routine that reads byte 2 (`EN6`'s Trumbles
+   * offer, the competition number) says which byte it means.
    */
-  struct CommanderBlock
+  struct Credits
   {
-    std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> bytes{};
+    std::uint32_t tenths = 0;
 
-    [[nodiscard]] std::uint8_t& At(Field _field) noexcept
+    /// 6502: CASH+n -- one of the four bytes, most significant first.
+    [[nodiscard]] constexpr std::uint8_t Byte(std::size_t _index) const noexcept
     {
-      return bytes[static_cast<std::size_t>(_field)];
+      return static_cast<std::uint8_t>(tenths >> (8u * (3u - _index)));
     }
-    [[nodiscard]] std::uint8_t At(Field _field) const noexcept
+    constexpr void SetByte(std::size_t _index, std::uint8_t _value) noexcept
     {
-      return bytes[static_cast<std::size_t>(_field)];
+      const std::uint32_t shift = 8u * (3u - _index);
+      tenths = (tenths & ~(std::uint32_t{0xFFu} << shift)) | (static_cast<std::uint32_t>(_value) << shift);
     }
 
-    /*
-     * 6502: CASH -- four bytes, MOST significant first.
-     *
-     * The opposite way round from everything else in the game, which keeps its sixteen-bit values
-     * low byte first. A port that used one convention throughout would give the player either
-     * fourteen pence or several million credits.
-     */
-    [[nodiscard]] std::uint32_t Cash() const noexcept;
-    void SetCash(std::uint32_t _tenths) noexcept;
-
-    /// 6502: TALLY -- two bytes, and this pair IS low byte first, unlike the cash above it.
-    [[nodiscard]] std::uint16_t Kills() const noexcept;
-
-    /// 6502: QQ21 -- the six seed bytes the whole galaxy is generated from.
-    [[nodiscard]] SystemSeeds GalaxySeeds() const noexcept;
-    void SetGalaxySeeds(const SystemSeeds& _seeds) noexcept;
-
-    [[nodiscard]] bool operator==(const CommanderBlock&) const = default;
+    [[nodiscard]] constexpr bool operator==(const Credits&) const noexcept = default;
   };
+
+  /*
+   * 6502: TALLY and TRIBBLE -- a sixteen-bit count kept as two bytes, low byte first, which the
+   * game steps and shifts a byte at a time (`INC TALLY+1`, the Trumbles' `ROR TRIBBLE+1 / ROR
+   * TRIBBLE`). The halves are fields because that is how every routine reaches them; `Value` is
+   * for the ones that read the pair (`TT111`'s rank, the market's count).
+   */
+  struct Tally
+  {
+    std::uint8_t lo = 0;
+    std::uint8_t hi = 0;
+
+    [[nodiscard]] constexpr std::uint16_t Value() const noexcept
+    {
+      return static_cast<std::uint16_t>(lo | (hi << 8));
+    }
+
+    [[nodiscard]] constexpr bool operator==(const Tally&) const noexcept = default;
+  };
+
+  /*
+   * 6502: TP to CHK -- the commander, as the fields the seventy-seven bytes are.
+   *
+   * In the bytes' order, with the two bytes no label names kept as fields so that the codec is a
+   * plain walk: `lasers` has six entries because `LASER` is six bytes of which four are mounts,
+   * and `spare` is the byte after `ESCP`. The equipment is one byte each with the original's
+   * `0`/`&FF` (and the energy bomb's `&7F`) values -- typing them is a later slice's. The three
+   * checksums are fields because the block on disk carries them and `LoadCommander` leaves the
+   * last one untouched.
+   */
+  struct Commander
+  {
+    std::uint8_t missionProgress = 0;         ///< 6502: TP
+    std::uint8_t systemX = 0;                 ///< 6502: QQ0
+    std::uint8_t systemY = 0;                 ///< 6502: QQ1
+    SystemSeeds galaxySeeds{};                ///< 6502: QQ21 -- six bytes
+    Credits cash{};                           ///< 6502: CASH -- four bytes, most significant first
+    std::uint8_t fuel = 0;                    ///< 6502: QQ14 -- light years times ten
+    std::uint8_t competition = 0;             ///< 6502: COK
+    std::uint8_t galaxyNumber = 0;            ///< 6502: GCNT
+    std::array<std::uint8_t, 6> lasers{};     ///< 6502: LASER -- front, rear, left, right, and two nothing names
+    std::uint8_t cargoCapacity = 0;           ///< 6502: CRGO -- two more than the hold holds
+    std::array<std::uint8_t, 17> cargoHold{}; ///< 6502: QQ20 -- seventeen goods
+    std::uint8_t ecm = 0;                     ///< 6502: ECM
+    std::uint8_t fuelScoops = 0;              ///< 6502: BST
+    std::uint8_t energyBomb = 0;              ///< 6502: BOMB
+    std::uint8_t energyUnit = 0;              ///< 6502: ENGY
+    std::uint8_t dockingComputer = 0;         ///< 6502: DKCMP
+    std::uint8_t galacticDrive = 0;           ///< 6502: GHYP
+    std::uint8_t escapePod = 0;               ///< 6502: ESCP
+    std::uint8_t spare = 0;                   ///< 6502: the byte after ESCP that nothing names
+    Tally tribbles{};                         ///< 6502: TRIBBLE -- two bytes
+    std::uint8_t killsFraction = 0;           ///< 6502: TALLYL
+    std::uint8_t missiles = 0;                ///< 6502: NOMSL
+    std::uint8_t legalStatus = 0;             ///< 6502: FIST
+    std::array<std::uint8_t, 17> availability{}; ///< 6502: AVL -- the market's stock
+    std::uint8_t marketRandomiser = 0;        ///< 6502: QQ26
+    Tally kills{};                            ///< 6502: TALLY -- two bytes
+    std::uint8_t saveCount = 0;               ///< 6502: SVC
+    std::uint8_t checksum2 = 0;               ///< 6502: CHK2
+    std::uint8_t checksum3 = 0;               ///< 6502: CHK3
+    std::uint8_t checksum = 0;                ///< 6502: CHK
+
+    [[nodiscard]] constexpr bool operator==(const Commander&) const noexcept = default;
+
+    /// 6502: the TP layout -- the seventy-seven bytes SVE writes and DFAULT reads.
+    [[nodiscard]] constexpr std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> ToBytes() const noexcept
+    {
+      std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> bytes{};
+      const auto at = [&bytes](Field _field) noexcept -> std::uint8_t& { return bytes[static_cast<std::size_t>(_field)]; };
+      const auto run = [&bytes](Field _field, const auto& _values) noexcept
+      {
+        for (std::size_t index = 0; index < _values.size(); ++index)
+        {
+          bytes[static_cast<std::size_t>(_field) + index] = _values[index];
+        }
+      };
+      at(Field::MissionProgress) = missionProgress;
+      at(Field::SystemX) = systemX;
+      at(Field::SystemY) = systemY;
+      run(Field::GalaxySeeds, galaxySeeds.bytes);
+      for (std::size_t index = 0; index < 4u; ++index)
+      {
+        bytes[static_cast<std::size_t>(Field::Cash) + index] = cash.Byte(index);
+      }
+      at(Field::Fuel) = fuel;
+      at(Field::Competition) = competition;
+      at(Field::GalaxyNumber) = galaxyNumber;
+      run(Field::Lasers, lasers);
+      at(Field::CargoCapacity) = cargoCapacity;
+      run(Field::CargoHold, cargoHold);
+      at(Field::Ecm) = ecm;
+      at(Field::FuelScoops) = fuelScoops;
+      at(Field::EnergyBomb) = energyBomb;
+      at(Field::EnergyUnit) = energyUnit;
+      at(Field::DockingComputer) = dockingComputer;
+      at(Field::GalacticDrive) = galacticDrive;
+      at(Field::EscapePod) = escapePod;
+      bytes[static_cast<std::size_t>(Field::EscapePod) + 1u] = spare;
+      at(Field::Tribbles) = tribbles.lo;
+      bytes[static_cast<std::size_t>(Field::Tribbles) + 1u] = tribbles.hi;
+      at(Field::KillsLow) = killsFraction;
+      at(Field::Missiles) = missiles;
+      at(Field::LegalStatus) = legalStatus;
+      run(Field::Availability, availability);
+      at(Field::MarketRandomiser) = marketRandomiser;
+      at(Field::Kills) = kills.lo;
+      bytes[static_cast<std::size_t>(Field::Kills) + 1u] = kills.hi;
+      at(Field::SaveCount) = saveCount;
+      at(Field::Checksum2Byte) = checksum2;
+      at(Field::Checksum3Byte) = checksum3;
+      at(Field::ChecksumByte) = checksum;
+      return bytes;
+    }
+
+    /// The commander seventy-seven bytes of the TP layout describe -- the inverse of `ToBytes`.
+    [[nodiscard]] static constexpr Commander FromBytes(std::span<const std::uint8_t, COMMANDER_BLOCK_SIZE> _bytes) noexcept
+    {
+      Commander commander;
+      const auto at = [&_bytes](Field _field) noexcept { return _bytes[static_cast<std::size_t>(_field)]; };
+      const auto run = [&_bytes](Field _field, auto& _values) noexcept
+      {
+        for (std::size_t index = 0; index < _values.size(); ++index)
+        {
+          _values[index] = _bytes[static_cast<std::size_t>(_field) + index];
+        }
+      };
+      commander.missionProgress = at(Field::MissionProgress);
+      commander.systemX = at(Field::SystemX);
+      commander.systemY = at(Field::SystemY);
+      run(Field::GalaxySeeds, commander.galaxySeeds.bytes);
+      for (std::size_t index = 0; index < 4u; ++index)
+      {
+        commander.cash.SetByte(index, _bytes[static_cast<std::size_t>(Field::Cash) + index]);
+      }
+      commander.fuel = at(Field::Fuel);
+      commander.competition = at(Field::Competition);
+      commander.galaxyNumber = at(Field::GalaxyNumber);
+      run(Field::Lasers, commander.lasers);
+      commander.cargoCapacity = at(Field::CargoCapacity);
+      run(Field::CargoHold, commander.cargoHold);
+      commander.ecm = at(Field::Ecm);
+      commander.fuelScoops = at(Field::FuelScoops);
+      commander.energyBomb = at(Field::EnergyBomb);
+      commander.energyUnit = at(Field::EnergyUnit);
+      commander.dockingComputer = at(Field::DockingComputer);
+      commander.galacticDrive = at(Field::GalacticDrive);
+      commander.escapePod = at(Field::EscapePod);
+      commander.spare = _bytes[static_cast<std::size_t>(Field::EscapePod) + 1u];
+      commander.tribbles.lo = at(Field::Tribbles);
+      commander.tribbles.hi = _bytes[static_cast<std::size_t>(Field::Tribbles) + 1u];
+      commander.killsFraction = at(Field::KillsLow);
+      commander.missiles = at(Field::Missiles);
+      commander.legalStatus = at(Field::LegalStatus);
+      run(Field::Availability, commander.availability);
+      commander.marketRandomiser = at(Field::MarketRandomiser);
+      commander.kills.lo = at(Field::Kills);
+      commander.kills.hi = _bytes[static_cast<std::size_t>(Field::Kills) + 1u];
+      commander.saveCount = at(Field::SaveCount);
+      commander.checksum2 = at(Field::Checksum2Byte);
+      commander.checksum3 = at(Field::Checksum3Byte);
+      commander.checksum = at(Field::ChecksumByte);
+      return commander;
+    }
+
+    /// `FromBytes` over an array, which is what every caller has.
+    [[nodiscard]] static constexpr Commander FromBytes(const std::array<std::uint8_t, COMMANDER_BLOCK_SIZE>& _bytes) noexcept
+    {
+      return FromBytes(std::span<const std::uint8_t, COMMANDER_BLOCK_SIZE>{_bytes});
+    }
+  };
+
+  namespace Detail
+  {
+    /// Seventy-seven distinct bytes, so that the round trip below proves the order of the codec.
+    [[nodiscard]] constexpr std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> DistinctCommanderBytes() noexcept
+    {
+      std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> bytes{};
+      for (std::size_t at = 0; at < bytes.size(); ++at)
+      {
+        bytes[at] = static_cast<std::uint8_t>(0x13u + at * 3u);
+      }
+      return bytes;
+    }
+  } // namespace Detail
+
+  static_assert(Commander::FromBytes(Commander{}.ToBytes()) == Commander{}, "the codec round-trips the empty commander");
+  static_assert(Commander::FromBytes(Detail::DistinctCommanderBytes()).ToBytes() == Detail::DistinctCommanderBytes(),
+                "the codec round-trips seventy-seven distinct bytes in their order");
 
   /*
    * 6502: CHECK -- the checksum SVE writes to CHK and DFAULT insists on.
@@ -133,7 +311,7 @@ namespace Elite
    *
    * The accumulator starts at 73, which is the loop counter, not a constant anyone chose.
    */
-  [[nodiscard]] std::uint8_t Checksum(const CommanderBlock& _block) noexcept;
+  [[nodiscard]] std::uint8_t Checksum(const Commander& _block) noexcept;
 
   /*
    * 6502: CHECK2 -- the second checksum, which goes into CHK3.
@@ -143,7 +321,7 @@ namespace Elite
    * consumes what the rotate shifted out. So the carry is read, written, and read again inside one
    * step, and there is no way to write this as arithmetic.
    */
-  [[nodiscard]] std::uint8_t Checksum2(const CommanderBlock& _block) noexcept;
+  [[nodiscard]] std::uint8_t Checksum2(const Commander& _block) noexcept;
 
   /*
    * 6502: NA2% -- the commander the game hands a new player.
@@ -152,7 +330,7 @@ namespace Elite
    * and a pulse laser. The seeds in it are the ones slice 2a carries as GALAXY_ONE_SEEDS, and a
    * test checks the two still agree.
    */
-  [[nodiscard]] CommanderBlock DefaultCommander() noexcept;
+  [[nodiscard]] Commander DefaultCommander() noexcept;
 
   /// 6502: NA2% -- the eight bytes of name that go in front of the block.
   [[nodiscard]] std::array<std::uint8_t, COMMANDER_NAME_SIZE> DefaultCommanderName() noexcept;
@@ -171,7 +349,7 @@ namespace Elite
    * decide whether to flag the file as tampered, so a round trip agreed with itself and the gap
    * survived 221 compared blocks. Building the save flow on top is what found it.
    */
-  void SaveCommander(const CommanderBlock& _block, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
+  void SaveCommander(const Commander& _block, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
                      std::span<std::uint8_t, COMMANDER_FILE_SIZE> _outFile) noexcept;
 
   /*
@@ -190,7 +368,7 @@ namespace Elite
    * the second one. And the copy loop stops one byte early, so the block's own checksum byte is
    * never loaded and whatever the caller had there survives.
    */
-  [[nodiscard]] bool LoadCommander(std::span<const std::uint8_t, COMMANDER_FILE_SIZE> _file, CommanderBlock& _outBlock,
+  [[nodiscard]] bool LoadCommander(std::span<const std::uint8_t, COMMANDER_FILE_SIZE> _file, Commander& _outBlock,
                                    std::span<std::uint8_t, COMMANDER_NAME_SIZE> _outName) noexcept;
 
 } // namespace Elite
