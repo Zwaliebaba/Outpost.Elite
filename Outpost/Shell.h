@@ -87,6 +87,24 @@ namespace Outpost
      */
     [[nodiscard]] bool Turn();
 
+    /*
+     * One FLIGHT-LOOP frame has been drawn: show it for as long as the shipped loop took to
+     * compute the next one.
+     *
+     * NOT THE SAME THING AS `ShowFrame`, and the difference is five times over. `ShowFrame` is
+     * `DELAY` with a count of one -- a single vertical sync, which is what the launch and
+     * hyperspace tunnels ask for because the original spells `JSR DELAY` inside them. `DEATH`'s
+     * `.D2 JSR M% / DEC LASCT / BNE D2` asks for nothing of the kind: it runs the flight loop flat
+     * out and the VIC-II showed each frame for however long the next took (§6.17 -- the C64 loop
+     * has no frame cap). At the measured 81,000-odd cycles a frame that is about 12.7 a second, so
+     * paced by vsync the sixty-four frames of the death sequence took a second instead of five and
+     * looked like a glitch rather than a death.
+     *
+     * The accumulator is the title screen's, for the same reason and with the same backlog rule:
+     * a stall costs a frame rather than being repaid by running faster to catch up.
+     */
+    void HoldFlightFrame(std::uint8_t _ships);
+
     // ---- Elite::KeySource ----------------------------------------------------------------------
 
     /*
@@ -232,6 +250,11 @@ namespace Outpost
      */
     std::chrono::steady_clock::time_point m_lastSpin{};
     double m_spinLeftover = 0.0;
+
+    /// The same pair again for `HoldFlightFrame`, kept apart from the title's so that a death
+    /// does not inherit whatever backlog the title screen had left over.
+    std::chrono::steady_clock::time_point m_lastFlightFrame{};
+    double m_flightFrameLeftover = 0.0;
   };
 
 } // namespace Outpost
