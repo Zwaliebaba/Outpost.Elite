@@ -317,14 +317,14 @@ namespace
       universe.heaps.yx2M1 = Elite::CHART_SCREEN_BOTTOM;
       universe.clip.dontclip = Elite::CHART_SCREEN_BOTTOM;
 
-      Elite::DrawShortRangeChart(universe.canvas, _game.recursive, universe.text, chart, universe.commander.galaxySeeds, &_game.flight);
+      Elite::DrawShortRangeChart(universe, _game.ports, chart, universe.commander.galaxySeeds);
 
       universe.clip.dontclip = 0u;
       universe.heaps.yx2M1 = Elite::SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
       return;
     }
 
-    Elite::DrawLongRangeChart(universe.canvas, _game.recursive, universe.text, chart, universe.commander.galaxySeeds, &_game.flight);
+    Elite::DrawLongRangeChart(universe, _game.ports, chart, universe.commander.galaxySeeds);
   }
 
   /// 6502: TT22 and TT23's opening `JSR TT66`, which the routines leave to their caller, and then

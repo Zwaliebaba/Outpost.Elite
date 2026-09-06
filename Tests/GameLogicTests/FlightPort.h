@@ -52,7 +52,6 @@ namespace GameLogicTests
                            public Elite::SightEffects,
                            public Elite::ExplosionEffects,
                            public Elite::ViewEffects,
-                           public Elite::ChartShapes,
                            public Elite::ChartEffects
   {
   public:
@@ -251,22 +250,8 @@ namespace GameLogicTests
       rasterMode = 0b100; // 6502: LDA #%100 / JSR SETL1
     }
 
-    // ---- Elite::ChartShapes and Elite::ChartEffects ---------------------------------------------
+    // ---- Elite::ChartEffects, and Elite::ControlEffects's docking computer ----------------------
 
-    void DrawRangeCircle(const Elite::RangeCircle& _circle) override
-    {
-      universe.heaps.lsp = 1u;
-      universe.heaps.stp = _circle.step;
-      const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-      Elite::DrawBall(universe.canvas, universe.heaps, universe.geometry, universe.math, universe.clip, centre, _circle.radius, false);
-    }
-    void DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius) override
-    {
-      Elite::ClearSunHeap(universe.heaps);
-      const Elite::Projection centre{_x, 0u, _y, 0u};
-      Elite::DrawSun(universe.canvas, universe.heaps, universe.math, universe.rng, centre, _radius);
-      Elite::ClearSunHeap(universe.heaps);
-    }
     void RunDockingComputer(Elite::Ship& _work) override
     {
       static_cast<void>(_work);
