@@ -5,6 +5,9 @@
 #include "EliteTypes.h"
 
 #include <array>
+#include "PlanetDraw.h"
+#include "Ports.h"
+#include "Universe.h"
 
 /*
  * The galactic charts (slice 2b).
@@ -206,7 +209,7 @@ namespace Elite
     DrawTargetCrosshairs(_canvas, _view);
   }
 
-  void DrawFuelRange(Canvas& _canvas, const ChartView& _view, ChartShapes* _shapes) noexcept
+  void DrawFuelRange(Universe& _universe, const ChartView& _view) noexcept
   {
     Crosshairs at;
     RangeCircle circle;
@@ -218,7 +221,7 @@ namespace Elite
       at.x = SHORT_RANGE_CENTRE_X;
       at.y = SHORT_RANGE_CENTRE_Y;
       at.size = 16;
-      DrawCrosshairs(_canvas, at, _view.view);
+      DrawCrosshairs(_universe.canvas, at, _view.view);
 
       circle.x = at.x;
       circle.y = at.y;
@@ -230,7 +233,7 @@ namespace Elite
       at.x = _view.homeX;
       at.y = static_cast<std::uint8_t>(_view.homeY >> 1);
       at.size = 7;
-      DrawCrosshairs(_canvas, at, _view.view);
+      DrawCrosshairs(_universe.canvas, at, _view.view);
 
       circle.x = at.x;
 
@@ -244,9 +247,19 @@ namespace Elite
     // sixty-four segments rather than the smoother sixteen the planets use.
     circle.step = 2;
 
-    if (_shapes != nullptr)
     {
-      _shapes->DrawRangeCircle(circle);
+      /*
+       * 6502: TT128 -- STA K3 / STA K4 / STX K3+1 / STX K4+1 / INX / STX LSP / LDX #2 / STX STP /
+       * JMP CIRCLE2, and it is a CALL now rather than a seam (M3-b-1b).
+       *
+       * `LSP` goes to ONE rather than to zero: the ball heap's first byte is not a line, so an
+       * empty heap is a pointer of 1 and a `LSP` of 0 would make `BLINE`'s first segment
+       * overwrite it.
+       */
+      _universe.heaps.lsp = 1u;
+      _universe.heaps.stp = circle.step;
+      const Projection centre{circle.x, 0u, circle.y, 0u};
+      DrawBall(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, centre, circle.radius, false);
     }
   }
 
@@ -257,12 +270,11 @@ namespace Elite
     (void)DrawLine(_canvas, Line{0u, _y, 255u, _y});
   }
 
-  void DrawLongRangeChart(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
-                          const SystemSeeds& _galaxy, ChartShapes* _shapes) noexcept
+  void DrawLongRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept
   {
     // 6502: LDA #7 / JSR DOXC / LDA #199 / JSR TT27 -- the title, seven cells in.
-    _text.column = 7;
-    _printer.Print(TITLE_LONG_RANGE);
+    _universe.text.column = 7;
+    _ports.printer.Print(TITLE_LONG_RANGE);
 
     /*
      * 6502: JSR NLIN, which is LDA #23 / JSR INCYC / NLIN2.
@@ -270,12 +282,12 @@ namespace Elite
      * The rule goes at row 23 and the CURSOR moves down one, in that order -- the increment is
      * INCYC's and has nothing to do with the 23. Then a second rule at 152, under the chart.
      */
-    ++_text.row;
-    DrawSeparator(_canvas, LONG_RANGE_RULE_TOP);
-    DrawSeparator(_canvas, LONG_RANGE_RULE_BOTTOM);
+    ++_universe.text.row;
+    DrawSeparator(_universe.canvas, LONG_RANGE_RULE_TOP);
+    DrawSeparator(_universe.canvas, LONG_RANGE_RULE_BOTTOM);
 
     // 6502: JSR TT14 -- the fuel circle, before the dots rather than after.
-    DrawFuelRange(_canvas, _view, _shapes);
+    DrawFuelRange(_universe, _view);
 
     /*
      * 6502: TT83 -- 256 systems, and each one is a single PIXEL call.
@@ -289,16 +301,15 @@ namespace Elite
     {
       const std::uint8_t distance = static_cast<std::uint8_t>(seeds.bytes[4] | 0x50u); // 6502: STA ZZ
       const std::uint8_t y = AddWithCarry(static_cast<std::uint8_t>(seeds.bytes[1] >> 1), LONG_RANGE_TOP, false).value;
-      PlotPixel(_canvas, seeds.bytes[3], y, distance);
+      PlotPixel(_universe.canvas, seeds.bytes[3], y, distance);
       NextSystem(seeds);
     }
 
     // 6502: the fall-through into TT15 with QQ19 set from QQ9 and QQ10.
-    DrawTargetCrosshairs(_canvas, _view);
+    DrawTargetCrosshairs(_universe.canvas, _view);
   }
 
-  void DrawShortRangeChart(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
-                           const SystemSeeds& _galaxy, ChartShapes* _shapes) noexcept
+  void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept
   {
     /*
      * 6502: LDA #7 / JSR DOXC / LDA #190 / JSR NLIN3.
@@ -308,12 +319,17 @@ namespace Elite
      * is at 23, and neither number appears at the call site. NLIN4 also skips the INCYC that NLIN
      * does, so the cursor does not move here.
      */
-    _text.column = 7;
-    _printer.Print(TITLE_SHORT_RANGE);
-    DrawSeparator(_canvas, SHORT_RANGE_RULE);
+    // 6502: TT23's opening `LDA #199 / STA Yx2M1 / STA dontclip` -- the clipper's limits, lifted
+    // for the length of the routine because the discs go below the space view's floor.
+    _universe.heaps.yx2M1 = CHART_SCREEN_BOTTOM;
+    _universe.clip.dontclip = CHART_SCREEN_BOTTOM;
 
-    DrawFuelRange(_canvas, _view, _shapes);
-    DrawTargetCrosshairs(_canvas, _view);
+    _universe.text.column = 7;
+    _ports.printer.Print(TITLE_SHORT_RANGE);
+    DrawSeparator(_universe.canvas, SHORT_RANGE_RULE);
+
+    DrawFuelRange(_universe, _view);
+    DrawTargetCrosshairs(_universe.canvas, _view);
 
     /*
      * 6502: EE3 -- LDX #24 / STA XX1,X, counting down.
@@ -351,7 +367,7 @@ namespace Elite
         const std::uint8_t screenY = AddWithCarry(dy1.value, SHORT_RANGE_CENTRE_Y, dy1.carry).value;
 
         // 6502: LSR / LSR / LSR / CLC / ADC #1 -- the cell the name starts in.
-        _text.column = AddWithCarry(static_cast<std::uint8_t>(screenX >> 3), 1, false).value;
+        _universe.text.column = AddWithCarry(static_cast<std::uint8_t>(screenX >> 3), 1, false).value;
 
         /*
          * 6502: LDX XX1,Y / BEQ EE4 / INY / LDX XX1,Y / BEQ EE4 / DEY / DEY / LDX XX1,Y / BNE ee1.
@@ -400,7 +416,7 @@ namespace Elite
 
         if (named)
         {
-          _text.row = static_cast<std::uint8_t>(row);
+          _universe.text.row = static_cast<std::uint8_t>(row);
 
           // 6502: CPY #3 / BCC TT187 -- too near the top, so the system is skipped ENTIRELY. The
           // branch goes past the disc as well as past the name.
@@ -411,18 +427,18 @@ namespace Elite
           else
           {
             rowUsed[static_cast<std::size_t>(row)] = 0xFF;
-            _printer.SetCaseFlags(0x80);
+            _ports.printer.SetCaseFlags(0x80);
 
             /*
              * 6502: JSR cpl, and the carry it returns is the one the ADC below consumes. The CPY
              * that guarded this branch set the carry, and cpl's last seed twist then overwrote it.
              */
             SystemSeeds naming = seeds;
-            carry = PrintSystemName(_printer, naming);
+            carry = PrintSystemName(_ports.printer, naming);
           }
         }
 
-        if (drawDisc && _shapes != nullptr)
+        if (drawDisc)
         {
           /*
            * 6502: LDA QQ15+5 / AND #1 / ADC #2.
@@ -437,12 +453,27 @@ namespace Elite
            * as though it could only ever produce two or three from one bit.
            */
           const std::uint8_t radius = AddWithCarry(static_cast<std::uint8_t>(seeds.bytes[5] & 0x01u), 2, carry).value;
-          _shapes->DrawSystemDisc(screenX, screenY, radius);
+          /*
+           * 6502: TT23's ee1 -- JSR FLFLLS / JSR SUN / JSR FLFLLS, a call since M3-b-1b.
+           *
+           * The sun is drawn and then FORGOTTEN, twice over: the heap is cleared before so that
+           * `SUN` has nothing to erase, and cleared after so that the next disc does not rub this
+           * one out. A chart's discs are the one place the game draws suns it never intends to move.
+           */
+          ClearSunHeap(_universe.heaps);
+          const Projection centre{screenX, 0u, screenY, 0u};
+          DrawSun(_universe.canvas, _universe.heaps, _universe.math, _universe.rng, centre, radius);
+          ClearSunHeap(_universe.heaps);
         }
       }
 
       NextSystem(seeds);
     }
+
+    // The other half of `CHART_SCREEN_BOTTOM`'s note: the clipper back where the space view wants
+    // it, which the routine does on its way out.
+    _universe.clip.dontclip = 0u;
+    _universe.heaps.yx2M1 = SPACE_VIEW_BOTTOM;
   }
 
   void PrintRangeError(TokenPrinter& _printer) noexcept

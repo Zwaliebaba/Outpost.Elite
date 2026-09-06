@@ -310,40 +310,6 @@ namespace Outpost
     return answer;
   }
 
-  void FlightSession::DrawRangeCircle(const Elite::RangeCircle& _circle)
-  {
-    /*
-     * 6502: TT128 -- STA K3 / STA K4 / STX K3+1 / STX K4+1 / INX / STX LSP / LDX #2 / STX STP /
-     * JMP CIRCLE2.
-     *
-     * `LSP` goes to ONE rather than to zero: the ball heap's first byte is not a line, so an empty
-     * heap is a pointer of 1 and a `LSP` of 0 would make `BLINE`'s first segment overwrite it.
-     */
-    m_universe.heaps.lsp = 1u;
-    m_universe.heaps.stp = _circle.step;
-
-    const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-    Elite::DrawBall(m_universe.canvas, m_universe.heaps, m_universe.geometry, m_universe.math, m_universe.clip, centre, _circle.radius,
-                    false);
-  }
-
-  void FlightSession::DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius)
-  {
-    /*
-     * 6502: TT23's ee1 -- JSR FLFLLS / JSR SUN / JSR FLFLLS.
-     *
-     * The sun is drawn and then FORGOTTEN, twice over: the heap is cleared before so that `SUN`
-     * has nothing to erase, and cleared after so that the next disc does not rub this one out. A
-     * chart's discs are the one place the game draws suns it never intends to move.
-     */
-    Elite::ClearSunHeap(m_universe.heaps);
-
-    const Elite::Projection centre{_x, 0u, _y, 0u};
-    Elite::DrawSun(m_universe.canvas, m_universe.heaps, m_universe.math, m_universe.rng, centre, _radius);
-
-    Elite::ClearSunHeap(m_universe.heaps);
-  }
-
   void FlightSession::RunDockingComputer(Elite::Ship& _work)
   {
     /*

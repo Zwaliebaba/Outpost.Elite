@@ -252,7 +252,7 @@ counted. `tools/check_modernize.py` counts them and **fails the build if any cou
 ratchet is what stops a slice reintroducing what another slice removed (§5, rule 5). The recorded
 ceilings are in `tools/modernize_ratchet.json` and are lowered as slices land.
 
-**P1 — The register-shaped calling convention.** <!--count:register-params-->16 parameters in
+**P1 — The register-shaped calling convention.** <!--count:register-params-->14 parameters in
 `GameLogic/*.h` are named `_a`, `_x` or `_y` and typed `std::uint8_t`: the routine takes what the
 6502 routine took in that register, and its meaning is in the comment. Twelve result structs carry
 a field named `a` or `carry` for the same reason (`ProjectResult::a`, `ScreenOffset::a`). Example:
@@ -303,10 +303,10 @@ the rest existed: "the struct is the argument list".
 <!--count:main-lines-->1,198 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->199 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->193 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->21 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->20 abstract classes in
 `GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `DashboardEffects::PlaySound`,
 `TunnelEffects::ShowFrame`, `SaveStore` through `SaveScreen`). Most are **phase order**:
 `ShipEffects::RunTactics`, `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`,
@@ -487,7 +487,7 @@ never global.
 | `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, DrawShip, MeasureSlope | FaceVisibility | DrawShip (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
 | `GeometryWorkspace.xx2` | `XX2` | DrawShip | EitherFaceVisible, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
 | `GeometryWorkspace.xx3` | `XX3` | DrawShip | DrawExplosionCloud | — | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
-| `ClipState.dontclip` | `dontclip` | ResetShipAndBubble | ClipLineKeepingSwap | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
+| `ClipState.dontclip` | `dontclip` | DrawShortRangeChart, ResetShipAndBubble | ClipLineKeepingSwap | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
 | `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
 | `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
 | `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
@@ -1650,6 +1650,33 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-1b: `ChartShapes` goes, and the first run without its traps found the port
+drawing nothing at all.** `CIRCLE2` is `DrawBall` and `SUN` is `DrawSun`, both ported since slice
+3c; the seam survived because "the charts are compared against the shipped game through it"
+(§6.115), which is the argument that kept it and the reason nothing noticed what follows.
+`effects-seams` 21 → 20, `register-params` 16 → 14 (the seam's `DrawSystemDisc` took an x and a y),
+`outpost-elite-names` 199 → 193.
+
+**THE PORT'S SHORT-RANGE CHART DREW NO DISCS, and no test could see it.** `TT23` opens
+`LDA #199 / STA Yx2M1 / STA dontclip` and closes by putting both back — it lifts the clipper's
+limits because the system discs go below the space view's floor. §6.45 moved those two stores OUT
+of `DrawShortRangeChart` and into the caller, on the sound-sounding argument that both bytes live
+with the drawing rather than with the chart; `Main.cpp` did them and the app was right. The suite
+could not be, because `ChartShapes` meant the chart asked for discs and drew none, so the clipper
+never came into it. Take the seam away and the port's canvas comes back empty against a game that
+drew 114 bytes of ink on the first chart. The stores are inside the routine now, where the original
+has them.
+
+**What the tests compare changed shape, and got stronger.** `TT14` and `TT22` compared `K3`, `K4`,
+`K` and `STP` at a `CIRCLE2` trap; `TT23` compared the SEQUENCE of `SUN`'s arguments through a
+watched trap. All three now draw on both sides and compare the whole screen, which subsumes every
+one of those: a circle at a different centre draws different pixels. `TT23`'s "how many discs"
+became "how much ink", because the count was the trap's and the ink is the port's own.
+
+**One thing the sweep needed that the seam had hidden**: `SUN` takes a `DORND` for the streak down
+the disc, so the port's generator has to start where the game's does. `DrawBall` takes none, which
+is why the other two sweeps needed nothing.
 
 **2026-09-06 — M3-b-1a: `SpawnEffects` goes, and three traps come off with it.** The seam's four
 methods — `ABORT`, `MESS`, `SPBLB` and `msblob` — are four routines this library contains, reached

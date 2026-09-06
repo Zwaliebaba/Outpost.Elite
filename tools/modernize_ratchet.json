@@ -9,9 +9,9 @@
   ],
   "ceilings": {
     "register-params": {
-      "ceiling": 16,
+      "ceiling": 14,
       "slack": 0,
-      "slice": "M2-c-3: LL9's frame, the planet, the sun and the explosion take values"
+      "slice": "M3-b-1b: ChartShapes goes, and its two methods took an _x and a _y"
     },
     "workspace-params": {
       "ceiling": 46,
@@ -39,14 +39,14 @@
       "slice": "M3-a-3: Main.cpp holds no state the universe owns and builds no argument list"
     },
     "outpost-elite-names": {
-      "ceiling": 199,
+      "ceiling": 193,
       "slack": 0,
-      "slice": "M3-a-3: three more argument-list structs go"
+      "slice": "M3-b-1b: the app no longer names ChartShapes or the chart routines' pieces"
     },
     "effects-seams": {
-      "ceiling": 21,
+      "ceiling": 20,
       "slack": 0,
-      "slice": "M3-b-1: SpawnEffects goes -- its four methods are four routines GameLogic contains"
+      "slice": "M3-b-1b: ChartShapes goes -- CIRCLE2 is DrawBall and SUN is DrawSun"
     },
     "out-params": {
       "ceiling": 17,
