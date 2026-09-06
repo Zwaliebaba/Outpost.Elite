@@ -625,7 +625,7 @@ namespace GameLogicTests
       universe.message.delay = 12u;
       universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
 
-      universe.bubble.heapBottom = static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 64u);
+      universe.bubble.heapBottom = Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 64u));
       universe.heaps.yx2M1 = 199u;
       universe.heaps.lsp = 0x20u;
       universe.status.ecmCountdown = 20u;
@@ -673,8 +673,8 @@ namespace GameLogicTests
        */
       _cpu.memory[_to.stp] = universe.heaps.stp;
 
-      _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(universe.bubble.heapBottom & 0xFFu);
-      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(universe.bubble.heapBottom >> 8);
+      _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() & 0xFFu);
+      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() >> 8);
 
       for (std::size_t index = 0; index < Elite::BALL_HEAP_SIZE * 2u; ++index)
       {
@@ -714,7 +714,7 @@ namespace GameLogicTests
 
       const std::uint16_t bottom =
         static_cast<std::uint16_t>(_cpu.memory[_to.slsp] | (_cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] << 8));
-      Assert::AreEqual<std::uint32_t>(bottom, universe.bubble.heapBottom, (_context + L": SLSP").c_str());
+      Assert::AreEqual<std::uint32_t>(bottom, universe.bubble.heapBottom.Address(), (_context + L": SLSP").c_str());
 
       for (std::size_t index = 0; index < Elite::BALL_HEAP_SIZE * 2u; ++index)
       {

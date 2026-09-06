@@ -760,8 +760,7 @@ namespace GameLogicTests
         _universe.universe.bubble.blocks[slot].rollCounter = subject ? _where.roll : 0u; // roll
         _universe.universe.bubble.blocks[slot].pitchCounter = 0u;                         // pitch
         _universe.universe.bubble.blocks[slot].state = 0u;
-        _universe.universe.bubble.blocks[slot].heapLow = 0u;
-        _universe.universe.bubble.blocks[slot].heapHigh = 0u;
+        _universe.universe.bubble.blocks[slot].heap = Elite::HeapOffset{}; // address 0, as ZINF leaves it
         _universe.universe.bubble.blocks[slot].energy = 20u;
         _universe.universe.bubble.blocks[slot].newb = subject ? _where.flags : 0u;
       }
@@ -769,7 +768,7 @@ namespace GameLogicTests
       _universe.universe.bubble.Count(Elite::ShipType::Station) = _stations;
       _universe.universe.bubble.Count(Elite::ShipType::Thargoid) = _thargoids;
       _universe.universe.bubble.Count(Elite::ShipType::CobraMk3) = 1u;
-      _universe.universe.bubble.heapBottom = Elite::SHIP_HEAP_TOP;
+      _universe.universe.bubble.heapBottom = Elite::HeapOffset::Top();
 
       _universe.universe.work = _universe.universe.bubble.blocks[2];
       _universe.universe.flight.type = Elite::TypeOf(_type);

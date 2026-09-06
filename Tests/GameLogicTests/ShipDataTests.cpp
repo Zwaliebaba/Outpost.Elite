@@ -369,7 +369,7 @@ namespace GameLogicTests
 
         cpu.memory[slsp] = static_cast<std::uint8_t>(item.heapBottom & 0xFFu);
         cpu.memory[static_cast<std::uint16_t>(slsp + 1)] = static_cast<std::uint8_t>(item.heapBottom >> 8);
-        bubble.heapBottom = item.heapBottom;
+        bubble.heapBottom = Elite::HeapOffset::FromAddress(item.heapBottom);
 
         // A recognisable INWK on both sides, so the copy into the slot is checked rather than
         // assumed -- a routine that wrote nothing would agree with one that wrote zeroes.
@@ -409,7 +409,7 @@ namespace GameLogicTests
         }
 
         const std::uint16_t heap = static_cast<std::uint16_t>(cpu.memory[slsp] | (cpu.memory[static_cast<std::uint16_t>(slsp + 1)] << 8));
-        Assert::AreEqual(heap, bubble.heapBottom, (where + L": SLSP").c_str());
+        Assert::AreEqual(heap, bubble.heapBottom.Address(), (where + L": SLSP").c_str());
 
         // INWK as the routine left it, including NEWB at offset 36 and the heap pointer at 33/34.
         for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
@@ -421,7 +421,7 @@ namespace GameLogicTests
         // And the block that was written into the slot, when one was.
         if (created.created)
         {
-          const std::uint16_t block = Elite::SlotAddress(created.slot);
+          const std::uint16_t block = static_cast<std::uint16_t>(Elite::SHIP_BLOCK_BASE + (created.slot) * Elite::SHIP_BLOCK_SIZE);
           for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
           {
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(block + offset)], bubble.blocks[created.slot].ToBytes()[offset],

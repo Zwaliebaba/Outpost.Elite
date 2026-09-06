@@ -27,7 +27,7 @@ namespace Elite
     void DrawParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
                        const Bubble& _bubble, ExplosionEffects* _effects) noexcept
     {
-      const std::uint16_t address = ShipHeapAddress(_work);
+      const HeapOffset address = _work.heap;
 
       /*
        * 6502: sprx and spry -- where the burst sits relative to the cloud's centre.
@@ -59,13 +59,13 @@ namespace Elite
        * is complemented, so the count walks 1..7 up and 7..1 back down over the explosion's life.
        * Four shifts rather than the cassette version's three -- the C64 draws half as many.
        */
-      std::uint8_t counter = _heap.Read(static_cast<std::uint16_t>(address + 1u));
+      std::uint8_t counter = _heap.Read(address.Byte(static_cast<std::uint16_t>(1u)));
       if ((counter & 0x80u) != 0u)
       {
         counter ^= 0xFFu;
       }
       _math.u = static_cast<std::uint8_t>((counter >> 4) | 1u); // 6502: LSR A x4 / ORA #1 / STA U
-      _math.tgt = _heap.Read(static_cast<std::uint16_t>(address + 2u));
+      _math.tgt = _heap.Read(address.Byte(static_cast<std::uint16_t>(2u)));
 
       // 6502: LDA RAND+1 / PHA -- kept across the whole routine, because everything below
       // deliberately destroys the generator's state and one byte of it has to survive.
@@ -88,7 +88,7 @@ namespace Elite
         for (int index = 3; index >= 0; --index)
         {
           ++vertex;
-          k3[static_cast<std::size_t>(index)] = _heap.Read(static_cast<std::uint16_t>(address + vertex));
+          k3[static_cast<std::size_t>(index)] = _heap.Read(address.Byte(static_cast<std::uint16_t>(vertex)));
         }
         _math.cnt = vertex; // 6502: STY CNT
 
@@ -128,7 +128,7 @@ namespace Elite
         std::array<std::uint8_t, 4> seeds{};
         for (std::size_t byte = 0; byte < 4u; ++byte)
         {
-          seeds[byte] = static_cast<std::uint8_t>(_heap.Read(static_cast<std::uint16_t>(address + 3u + byte)) ^ _math.cnt);
+          seeds[byte] = static_cast<std::uint8_t>(_heap.Read(address.Byte(static_cast<std::uint16_t>(3u + byte))) ^ _math.cnt);
         }
         _rng.SetState(seeds);
 
@@ -251,7 +251,7 @@ namespace Elite
   void DrawExplosionCloud(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap,
                           const GeometryWorkspace& _geometry, const Bubble& _bubble, ExplosionEffects& _effects) noexcept
   {
-    const std::uint16_t address = ShipHeapAddress(_work);
+    const HeapOffset address = _work.heap;
 
     // 6502: bit 6 of byte 31 -- there is a cloud on the screen from last frame, so draw it again
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
@@ -295,7 +295,7 @@ namespace Elite
 
     _math.q = scaled; // 6502: STA Q -- the distance the cloud size is divided by
 
-    const std::uint8_t frump = _heap.Read(static_cast<std::uint16_t>(address + 1u));
+    const std::uint8_t frump = _heap.Read(address.Byte(static_cast<std::uint16_t>(1u)));
     const AddResult grown = AddWithCarry(frump, 4u, carry);
 
     if (grown.carry)
@@ -306,7 +306,7 @@ namespace Elite
       return;
     }
 
-    _heap.Write(static_cast<std::uint16_t>(address + 1u), grown.value);
+    _heap.Write(address.Byte(static_cast<std::uint16_t>(1u)), grown.value);
 
     /*
      * 6502: JSR DVID4 -- (P R) = 256 * counter / distance, then times eight, capped at 254.
@@ -354,11 +354,11 @@ namespace Elite
      * produces -- the smallest explosion count in the thirty-three is ten. The port reads zero
      * there rather than inventing a neighbour it does not model.
      */
-    std::uint8_t index = _heap.Read(static_cast<std::uint16_t>(address + 2u));
+    std::uint8_t index = _heap.Read(address.Byte(static_cast<std::uint16_t>(2u)));
     do
     {
       const std::size_t at = static_cast<std::size_t>(index) - 7u;
-      _heap.Write(static_cast<std::uint16_t>(address + index), (at < _geometry.xx3.size()) ? _geometry.xx3[at] : std::uint8_t{0});
+      _heap.Write(address.Byte(static_cast<std::uint16_t>(index)), (at < _geometry.xx3.size()) ? _geometry.xx3[at] : std::uint8_t{0});
       --index;
     } while (index != 6u);
 

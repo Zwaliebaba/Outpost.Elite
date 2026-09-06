@@ -1,5 +1,6 @@
 #pragma once
 
+#include "HeapOffset.h"
 #include "Ship.h"
 #include "ShipBlueprint.h"
 #include "ShipFlags.h"
@@ -29,23 +30,6 @@ namespace Elite
    * several versions of the game -- so grepping them gives whichever comes first.
    */
   inline constexpr std::uint8_t MAX_SHIPS = 10;
-
-  /*
-   * 6502: K% and LS% -- where the blocks and the ship line heap live, and why the port needs the
-   * ADDRESSES rather than just the storage.
-   *
-   * `NWSHP` refuses to create a ship when the line heap it would need runs down into the block it
-   * is about to write, and it decides that by comparing two addresses: the new heap bottom against
-   * `INF`, the slot's own address. The blocks grow UP from `K%` and the heap grows DOWN from `LS%`,
-   * so the check is real and reachable -- a bubble full of complex ships runs out of heap before it
-   * runs out of slots.
-   *
-   * A port that kept only an array and an index would have nothing to compare and would create
-   * ships the original refuses. So the addresses are kept as arithmetic on the side, the storage
-   * stays an array, and `SlotAddress` is the bridge.
-   */
-  inline constexpr std::uint16_t SHIP_BLOCK_BASE = 0xF900; ///< 6502: K%
-  inline constexpr std::uint16_t SHIP_HEAP_TOP = 0xFFC0;   ///< 6502: LS%, where SLSP starts
 
   /*
    * 6502: FRIN, K% and MANY together -- everything that is in the bubble right now.
@@ -114,7 +98,26 @@ namespace Elite
     /// 6502: SLSP -- the bottom of the ship line heap, which grows DOWN from LS%. It is bubble
     /// state rather than drawing state: `NWSHP` moves it and `KILLSHP` moves it back, and what
     /// lives between it and LS% is slice 3b's.
-    std::uint16_t heapBottom = SHIP_HEAP_TOP;
+    HeapOffset heapBottom = HeapOffset::Top();
+
+    /*
+     * 6502: NWSHP's heap check -- LDA SLSP / SEC / SBC T1 / STA INWK+33 / LDA SLSP+1 / SBC #0 /
+     * STA INWK+34 / LDA INWK+33 / SBC INF / LDA INWK+34 / SBC INF+1 / BCC NW3+1 / BNE NW4 /
+     * CPY #NI% / BCC NW3+1 / .NW4 -- carve `_bytes` off the bottom of the heap for the ship going
+     * into `_slot`, unless that would run down into the slot's own block.
+     *
+     * Byte for byte, with the two arena addresses as the only 6502 addresses in the model, because
+     * the refusal is a comparison of addresses and reproducing it any other way would create
+     * ships the original refuses. `start` is what `INWK+33/34` receive WHETHER OR NOT the ship is
+     * admitted -- the original writes them before it decides -- and `heapBottom` moves only when it
+     * fits.
+     */
+    struct HeapReservation
+    {
+      HeapOffset start;
+      bool fits = false;
+    };
+    [[nodiscard]] HeapReservation TryReserveHeap(std::uint8_t _slot, std::uint8_t _bytes) noexcept;
 
     /*
      * 6502: XX21+2*SST-2 and XX21+2*SST-1 -- the space station's entry in the blueprint pointer
@@ -149,13 +152,6 @@ namespace Elite
    * the table by type -- `NWSHP` and the flight loop's part 4 -- go through here for that reason.
    */
   [[nodiscard]] const Blueprint* BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept;
-
-  /// 6502: what GINF computes -- the ADDRESS of slot X's block, which is what `NWSHP` compares the
-  /// heap against. The blocks are an array here; this is the address the original would have used.
-  [[nodiscard]] constexpr std::uint16_t SlotAddress(std::uint8_t _slot) noexcept
-  {
-    return static_cast<std::uint16_t>(SHIP_BLOCK_BASE + _slot * SHIP_BLOCK_SIZE);
-  }
 
   /*
    * 6502: GINF -- the address of slot X's data block.

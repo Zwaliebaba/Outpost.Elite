@@ -82,9 +82,6 @@ namespace Elite
   /// 6502: LDA tek / CMP #10 / BCC notadodo -- a system this advanced has a Dodo, not a Coriolis.
   inline constexpr std::uint8_t STATION_DODO_TECH_LEVEL = 10;
 
-  /// 6502: LDA #LO(LSO) / STA INWK+33 -- `LSO`, the SUN's line heap, handed to the station.
-  inline constexpr std::uint16_t SUN_HEAP_ADDRESS = 1408;
-
   /*
    * 6502: NWSPS -- put the space station into the bubble, and NwS1 with it.
    *

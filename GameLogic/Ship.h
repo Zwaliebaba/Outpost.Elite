@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EliteTypes.h"
+#include "HeapOffset.h"
 
 #include <array>
 #include <cstddef>
@@ -112,9 +113,8 @@ namespace Elite
    *
    * The fields are the bytes' meanings and in the bytes' order; `ToBytes` and `FromBytes` are the
    * one place that order is written down, and the `static_assert` under them is the round trip.
-   * `state`, `ai` and `newb` are still bytes with `ShipFlags.h`'s named bits over them, and the
-   * heap pointer is still two bytes (`ShipHeapAddress` joins them) -- the owning types are later
-   * slices'. A whole ship copies as a struct (`NWSHP`'s `NWL3` loop, `MAL2`'s and `MAL3`'s), and
+   * `state`, `ai` and `newb` are still bytes with `ShipFlags.h`'s named bits over them -- the
+   * owning types are a later slice's; the heap pointer is a `HeapOffset` (M1-f). A whole ship copies as a struct (`NWSHP`'s `NWL3` loop, `MAL2`'s and `MAL3`'s), and
    * a routine that copies PART of one (`WSL2`'s thirty-two bytes, `MAL4`'s twenty-nine) says so
    * through the codec, where the count is visible.
    */
@@ -134,8 +134,7 @@ namespace Elite
     std::uint8_t pitchCounter = 0; ///< 6502: INWK+30
     std::uint8_t state = 0;        ///< 6502: INWK+31 -- see `SHIP_STATE_OFFSET` and `ShipStateBit`
     std::uint8_t ai = 0;           ///< 6502: INWK+32 -- see `AiBit`
-    std::uint8_t heapLow = 0;      ///< 6502: INWK+33
-    std::uint8_t heapHigh = 0;     ///< 6502: INWK+34
+    HeapOffset heap{};             ///< 6502: INWK+33 and 34 -- XX19, the ship's own line heap
     std::uint8_t energy = 0;       ///< 6502: INWK+35
     std::uint8_t newb = 0;         ///< 6502: INWK+36, which is NEWB -- see `NewbBit`
 
@@ -215,8 +214,8 @@ namespace Elite
       bytes[SHIP_PITCH_OFFSET] = pitchCounter;
       bytes[SHIP_STATE_OFFSET] = state;
       bytes[SHIP_AI_OFFSET] = ai;
-      bytes[SHIP_HEAP_LOW_OFFSET] = heapLow;
-      bytes[SHIP_HEAP_HIGH_OFFSET] = heapHigh;
+      bytes[SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(heap.Address() & 0xFFu);
+      bytes[SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(heap.Address() >> 8);
       bytes[SHIP_ENERGY_OFFSET] = energy;
       bytes[SHIP_FLAGS_OFFSET] = newb;
       return bytes;
@@ -247,8 +246,7 @@ namespace Elite
       ship.pitchCounter = _bytes[SHIP_PITCH_OFFSET];
       ship.state = _bytes[SHIP_STATE_OFFSET];
       ship.ai = _bytes[SHIP_AI_OFFSET];
-      ship.heapLow = _bytes[SHIP_HEAP_LOW_OFFSET];
-      ship.heapHigh = _bytes[SHIP_HEAP_HIGH_OFFSET];
+      ship.heap = HeapOffset::FromAddress(static_cast<std::uint16_t>(_bytes[SHIP_HEAP_LOW_OFFSET] | (_bytes[SHIP_HEAP_HIGH_OFFSET] << 8)));
       ship.energy = _bytes[SHIP_ENERGY_OFFSET];
       ship.newb = _bytes[SHIP_FLAGS_OFFSET];
       return ship;

@@ -299,7 +299,7 @@ times over.
 <!--count:main-lines-->1,199 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->225 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->224 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
@@ -340,7 +340,7 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,702 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,705 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -795,7 +795,7 @@ a moved record with no defect named is a refactor that changed the game.
 | **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become struct copies and the partial copies codec calls. Tests migrate to the bridge. | Green through `UniverseImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). **Built 2026-09-06** (slice plan and §8 below). | 4–5 |
 | **M1-d Commander** | Typed `Commander` with the seventy-seven-byte codec; `Credits` and `Tally` strong types where the bytes' order is the risk, plain named bytes elsewhere; `SaveCommander`/`LoadCommander`/checksums over the codec. | `SaveGameTests` and `CommanderTests` green; a commander file from R12's fixture still loads. **Built 2026-09-06** (slice plan and §8 below). | 3 |
 | **M1-e Blueprint** | Parsed `Blueprint` table; `ShipByte`/`BlueprintAddress`/`ShipBlueprintExtent` removed, `BlueprintFor` returns the parsed entry; `XX0` a pointer; `Bubble::stationType`. | `ShipDataTests` green with the three disagreeing ships called out as before; `LL9` suite green. **Built 2026-09-06** (slice plan and §8 below). | 3 |
-| **M1-f HeapOffset** | The line heap addressed by offset; `TryReserveHeap` with the exact chain; the sun's heap lent as a span. | `NWSHP`'s refusal sweep green (`ShipSlotTests`); the station-into-sun-heap case (§6.112) green. | 2–3 |
+| **M1-f HeapOffset** | The line heap addressed by offset; `TryReserveHeap` with the exact chain; the sun's heap lent as a span. | `NWSHP`'s refusal sweep green (`ShipSlotTests`); the station-into-sun-heap case (§6.112) green. **Built 2026-09-06** (slice plan and §8 below); M1 complete. | 2–3 |
 
 #### M1-a slice plan (written with the build, 2026-09-06; §8 records what the build found)
 
@@ -997,6 +997,38 @@ one more `Elite::` name the executable reaches, and the executable does not need
 **What the build found.** One test red on the first run, `LL9` for type 8, and the reason is the
 finding below. Then 392 of 392, `ShipDataTests` still counting three disagreements and the same two
 "overruns" — for a truer reason.
+
+#### M1-f slice plan (written with the build, 2026-09-06; §8 records what the build found)
+
+**A place in the heap is an offset, and the two arena addresses live in one header.** `HeapOffset`
+(`HeapOffset.h`) is bytes up from `K%` — ruling R-c's offset arena — with `Byte(Y)` for `(XX19),Y`,
+`Back(n)` for a run moved down, and `FromAddress`/`Address` for the wire format and nothing else.
+Its DEFAULT is the zero pointer `ZINF` writes, which is outside the arena as the original's is, so
+`Ship{}` still codes to thirty-seven zero bytes; `Top()` is `LS%`, where `SLSP` starts; the
+station's pointer, `FromAddress(SUN_HEAP_ADDRESS)`, is outside the arena too and `LineHeap`
+resolves it against the window it has been lent. `SHIP_BLOCK_BASE`, `SHIP_HEAP_TOP` and
+`SUN_HEAP_ADDRESS` moved into the header as the only 6502 addresses left in the model.
+
+**`NWSHP`'s chain is `Bubble::TryReserveHeap`.** The eleven-instruction comparison of the new heap
+bottom against the slot's block address is one function, byte for byte as it was in `AddShip`,
+with `SlotAddress` (`GINF`'s arithmetic) private to it. It returns the pointer `INWK+33/34` receive
+WHETHER OR NOT the ship is admitted — the original writes them before it decides, and the refusal
+sweep compares them — and moves `heapBottom` only when the ship fits.
+
+**`Ship::heap` is a `HeapOffset`, `Bubble::heapBottom` too, and `LineHeap` reads and writes by
+offset.** `ShipHeapAddress` is gone: `LL9`, `EE31`, `DOEXP` and `KILLSHP` say `work.heap` and
+`run.Byte(y)`; `KILLSHP`'s two-byte `ADC` for the top of the dead run is `heap.Byte(size)` and its
+descent `top.Back(size)`. The sun's heap is lent as a span with no base argument — the window's
+address is the constant. The `SeedExplosionCloud` seam keeps its `std::uint16_t` address, which is
+`heap.Address()`, for the same reason as M1-e's: the executable does not need the type.
+
+**The tests speak addresses where the oracle does.** Thirty-eight `FromAddress` sites: a fixture's
+`HEAP_AT`, the arena sweeps against `LS%`, `SLSP` mirrored into `cpu.memory` and back. Nothing in
+the tests moved to offsets, because the oracle's copy is bytes at addresses.
+
+**What the build found.** Nothing: 392 of 392 on the first run, the refusal sweep and §6.112's
+station-into-sun-heap case among them — the chain moved as a block and the offset type's default
+was chosen before the first compile for the reason above.
 
 ### Phase M2 — Explicit calling conventions
 
@@ -1274,6 +1306,22 @@ survived, the four the recorded equivalents — M0-d's tally for the sixth time,
 moved, because no mutant ever named a blueprint byte. Rule 3 is met; M1-f — the line heap
 addressed by offset, `NWSHP`'s chain in `TryReserveHeap`, the sun's heap lent as a span — is
 next, and it closes M1.
+
+**2026-09-06 — M1-f built, and M1 is complete.** `HeapOffset` addresses the arena, `TryReserveHeap`
+holds `NWSHP`'s chain, `Ship::heap` and `Bubble::heapBottom` are offsets, `LineHeap` takes the
+sun's heap as a span; thirty-one offset sites in the library and thirty-eight `FromAddress` in the
+tests, `ShipHeapAddress` and the public `SlotAddress` gone. First suite run green. **The one
+decision worth recording**: the offset's default. `ZINF` zeroes `INWK+33/34`, so a ship the game
+has not yet given a heap points at address 0 — outside the arena — and a `HeapOffset` that
+defaulted to `K%` would have made `Ship{}` code to bytes `00 F9` where the oracle has `00 00`.
+The default is the zero pointer, `Top()` is `LS%`, and the `static_assert` in the header says so.
+Ratchet: `outpost-elite-names` 225 → 224 (`Elite::SUN_HEAP_ADDRESS` left the executable with the
+base argument), `origin-markers` 3,702 → 3,705. **M1 as a whole**: six slices, every one green on
+the oracle and the corpus, four findings the bytes never showed (two misnamed offsets, two misnamed
+flag bits, a misnamed state mask, and the Splinter's borrowed edges), and the data model is now
+`Ship`, `Commander`, `Blueprint`, `ShipType`, the flag bits and `HeapOffset`, with the bytes as
+their codecs. M2 — explicit calling conventions — is next; `Design/ADR-006` is due when it opens
+(§0).
 
 **2026-09-06 — `main` merged in, mid M1-f.** The owner's death-sequence pacing (`HoldFlightFrame`,
 a `TunnelEffects*` on `Die`) came in from `main` with one conflict — `leaving.world.dashboard`,

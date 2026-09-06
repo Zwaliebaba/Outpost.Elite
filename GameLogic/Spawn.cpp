@@ -88,10 +88,9 @@ namespace Elite
      * size -- and comes down by each surviving ship's size in turn. So it is always pointing at
      * where the next ship's heap belongs, and when the walk ends it is the new `SLSP`.
      */
-    const Ship& dead = _bubble.blocks[_slot];
-    const AddResult topLow = AddWithCarry(HeapSizeFor(_bubble, type), dead.heapLow, false);
-    const AddResult topHigh = AddWithCarry(dead.heapHigh, 0u, topLow.carry);
-    std::uint16_t top = static_cast<std::uint16_t>(topLow.value | (topHigh.value << 8));
+    // 6502: LDY #33 / LDA (INF),Y / CLC / ADC T / STA P / INY / LDA (INF),Y / ADC #0 / STA P+1 --
+    // the top of the dead ship's run, which is sixteen-bit addition in two bytes and one here.
+    HeapOffset top = _bubble.blocks[_slot].heap.Byte(HeapSizeFor(_bubble, type));
 
     // 6502: KSL1 -- every slot above the dead one comes down by one, and its heap with it.
     for (std::size_t into = _slot; into + 1u < _bubble.slots.size(); ++into)
@@ -104,7 +103,7 @@ namespace Elite
       }
 
       const std::uint8_t size = HeapSizeFor(_bubble, moved);
-      top = static_cast<std::uint16_t>(top - size);
+      top = top.Back(size);
 
       /*
        * The block moves down a slot, and bytes 33 and 34 take the NEW heap address rather than
@@ -112,18 +111,17 @@ namespace Elite
        * same breath as writing the new one, because it needs the old one to copy from.
        */
       const Ship source = _bubble.blocks[into + 1u];
-      const std::uint16_t was = static_cast<std::uint16_t>(source.heapLow | (source.heapHigh << 8));
+      const HeapOffset was = source.heap;
 
       Ship& destination = _bubble.blocks[into];
       destination = source;
-      destination.heapLow = static_cast<std::uint8_t>(top);
-      destination.heapHigh = static_cast<std::uint8_t>(top >> 8);
+      destination.heap = top;
 
       // 6502: KSL3 -- LDY T / DEY / LDA (K),Y / STA (P),Y / TYA / BNE KSL3. Downwards in index,
       // which is what makes an overlapping move safe when the destination is below the source.
       for (std::uint8_t byte = size; byte-- > 0u;)
       {
-        _heap.Write(static_cast<std::uint16_t>(top + byte), _heap.Read(static_cast<std::uint16_t>(was + byte)));
+        _heap.Write(top.Byte(byte), _heap.Read(was.Byte(byte)));
         if (byte == 0u)
         {
           break;
@@ -238,8 +236,7 @@ namespace Elite
     // 6502: LDA #LO(LSO) / STA INWK+33 / LDA #HI(LSO) / STA INWK+34 -- the sun's heap, which the
     // slot above has just been emptied of. `NWSHP` skips its own allocation for a station, so this
     // is the pointer the block keeps.
-    _work.heapLow = static_cast<std::uint8_t>(SUN_HEAP_ADDRESS);
-    _work.heapHigh = static_cast<std::uint8_t>(SUN_HEAP_ADDRESS >> 8);
+    _work.heap = HeapOffset::FromAddress(SUN_HEAP_ADDRESS);
 
     return AddShip(_bubble, _work, ShipType::Station, _blueprint); // 6502: LDA #SST, and no RTS -- it falls in
   }

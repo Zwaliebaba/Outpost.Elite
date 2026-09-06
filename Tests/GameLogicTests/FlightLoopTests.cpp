@@ -1157,7 +1157,7 @@ namespace GameLogicTests
         block.speed = 20u; // speed
         block.state = _state;
         block.ai = 0u;    // no AI, so `TACTICS` is not reached
-        block.heapHigh = 0x0Cu; // the heap pointer's high byte
+        block.heap = Elite::HeapOffset::FromAddress(0x0C00u); // the heap pointer's high byte
         block.energy = 60u;   // energy
       }
 
@@ -1265,10 +1265,10 @@ namespace GameLogicTests
        */
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        cpu.memory[address] = _frame.heap.Read(address);
+        cpu.memory[address] = _frame.heap.Read(Elite::HeapOffset::FromAddress(address));
       }
-      cpu.memory[_loop.slsp] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom & 0xFFu);
-      cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom >> 8);
+      cpu.memory[_loop.slsp] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom.Address() & 0xFFu);
+      cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom.Address() >> 8);
 
       const std::uint16_t entry = (_reach == Reach::Ships) ? _loop.ma3 : (_reach == Reach::Tail) ? _loop.ma18 : _loop.mainLoop;
 
@@ -1456,12 +1456,12 @@ namespace GameLogicTests
         {
           continue;
         }
-        Assert::AreEqual(cpu.memory[address], _frame.heap.Read(address), (_context + L": heap byte " + std::to_wstring(address)).c_str());
+        Assert::AreEqual(cpu.memory[address], _frame.heap.Read(Elite::HeapOffset::FromAddress(address)), (_context + L": heap byte " + std::to_wstring(address)).c_str());
       }
 
       const std::uint16_t bottom =
         static_cast<std::uint16_t>(cpu.memory[_loop.slsp] | (cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] << 8));
-      Assert::AreEqual<std::uint32_t>(bottom, _frame.universe.bubble.heapBottom, (_context + L": SLSP").c_str());
+      Assert::AreEqual<std::uint32_t>(bottom, _frame.universe.bubble.heapBottom.Address(), (_context + L": SLSP").c_str());
 
       for (std::size_t slot = 0; slot < _frame.universe.bubble.slots.size(); ++slot)
       {
@@ -2192,9 +2192,9 @@ namespace GameLogicTests
        * still counted it, and the rear view was empty. So this asserts the LINES: a station in the
        * heap it was given, and pixels on the canvas from drawing them.
        */
-      const std::uint16_t heapAt = Elite::ShipHeapAddress(frame.universe.bubble.blocks[1]);
+      const std::uint16_t heapAt = frame.universe.bubble.blocks[1].heap.Address();
       Assert::AreEqual<std::uint32_t>(Elite::SUN_HEAP_ADDRESS, heapAt, L"the station draws through the sun's heap");
-      Assert::IsTrue(frame.heap.Read(heapAt) > 1u, L"and the heap holds the lines it last drew");
+      Assert::IsTrue(frame.heap.Read(Elite::HeapOffset::FromAddress(heapAt)) > 1u, L"and the heap holds the lines it last drew");
 
       std::size_t lit = 0;
       for (int y = 0; y < Elite::Canvas::SPACE_VIEW_HEIGHT; ++y)
@@ -2300,10 +2300,10 @@ namespace GameLogicTests
 
         for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
         {
-          cpu.memory[address] = frame.heap.Read(address);
+          cpu.memory[address] = frame.heap.Read(Elite::HeapOffset::FromAddress(address));
         }
-        cpu.memory[loop.slsp] = static_cast<std::uint8_t>(frame.universe.bubble.heapBottom & 0xFFu);
-        cpu.memory[static_cast<std::uint16_t>(loop.slsp + 1u)] = static_cast<std::uint8_t>(frame.universe.bubble.heapBottom >> 8);
+        cpu.memory[loop.slsp] = static_cast<std::uint8_t>(frame.universe.bubble.heapBottom.Address() & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(loop.slsp + 1u)] = static_cast<std::uint8_t>(frame.universe.bubble.heapBottom.Address() >> 8);
 
         const std::uint64_t before = cpu.cycles;
         const Elite::Testing::RunResult run = cpu.CallSubroutine(loop.mainLoop, 40'000'000);

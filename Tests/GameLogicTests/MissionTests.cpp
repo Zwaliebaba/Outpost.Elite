@@ -279,9 +279,8 @@ namespace GameLogicTests
        * scribbled were the whole of the disagreement.
        */
       const std::uint16_t heap = static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 0x100u);
-      universe.work.heapLow = static_cast<std::uint8_t>(heap & 0xFFu);
-      universe.work.heapHigh = static_cast<std::uint8_t>(heap >> 8);
-      universe.bubble.heapBottom = heap;
+      universe.work.heap = Elite::HeapOffset::FromAddress(heap);
+      universe.bubble.heapBottom = Elite::HeapOffset::FromAddress(heap);
 
       universe.bubble.blocks[0] = universe.work;
     }
@@ -298,13 +297,13 @@ namespace GameLogicTests
     {
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        _cpu.memory[address] = _universe.heap.Read(address);
+        _cpu.memory[address] = _universe.heap.Read(Elite::HeapOffset::FromAddress(address));
       }
       _cpu.memory[_at.lsp] = _universe.universe.heaps.lsp;
 
       // 6502: SLSP -- the bottom of the ship line heap, which `NWSHP` allocates downwards from.
-      _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom & 0xFFu);
-      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom >> 8);
+      _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom.Address() & 0xFFu);
+      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom.Address() >> 8);
 
       _cpu.memory[_to.alpha] = _universe.universe.flight.alpha;
       _cpu.memory[_to.alp2Next] = _universe.universe.flight.alp2Next;
@@ -335,7 +334,7 @@ namespace GameLogicTests
     {
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        Assert::AreEqual(_cpu.memory[address], _universe.heap.Read(address), (_where + L": heap " + std::to_wstring(address)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _universe.heap.Read(Elite::HeapOffset::FromAddress(address)), (_where + L": heap " + std::to_wstring(address)).c_str());
       }
     }
   } // namespace
@@ -1152,7 +1151,7 @@ namespace GameLogicTests
           universe.universe.bubble.counts[type] = 0u;
         }
         universe.universe.bubble.junk = 0u;
-        universe.universe.bubble.heapBottom = Elite::SHIP_HEAP_TOP;
+        universe.universe.bubble.heapBottom = Elite::HeapOffset::Top();
 
         Cpu6502 cpu = oracle.Fresh();
         Trap(cpu, to);

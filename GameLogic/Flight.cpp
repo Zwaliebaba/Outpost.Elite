@@ -136,7 +136,7 @@ namespace Elite
     ClearBubbleState(_loop); // 6502: JSR ZERO
 
     // 6502: LDA #LO(LS%) / STA SLSP / LDA #HI(LS%) / STA SLSP+1 -- the heap is empty again.
-    screen.bubble.heapBottom = SHIP_HEAP_TOP;
+    screen.bubble.heapBottom = HeapOffset::Top();
 
     ClearShip(screen.work); // 6502: and no RTS -- it falls into ZINF
   }

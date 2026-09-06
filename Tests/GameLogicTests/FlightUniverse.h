@@ -352,7 +352,7 @@ namespace GameLogicTests
      */
     void LendSunHeap(Elite::LineHeap& _heap) noexcept
     {
-      _heap.AttachSunHeap(Elite::SUN_HEAP_ADDRESS, heaps.sun);
+      _heap.AttachSunHeap(heaps.sun);
     }
 
     [[nodiscard]] Elite::FlightScreen Screen() noexcept
