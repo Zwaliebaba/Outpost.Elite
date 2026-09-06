@@ -304,7 +304,7 @@ namespace Outpost
      * `NextKey()`, which is the CHARACTER. 89 never equals 39, so the disk menu could not be opened
      * from the title screen at all (§6.107).
      */
-    if (m_flight == nullptr || m_ports == nullptr || m_extendedPrinter == nullptr || m_dockedFlag == nullptr)
+    if (m_flight == nullptr || m_ports == nullptr || m_dockedFlag == nullptr)
     {
       return 0;
     }

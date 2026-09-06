@@ -173,10 +173,6 @@ namespace Outpost
 
     /// The extended token printer, for the control codes that print. Set by the composition root
     /// after construction, because the printer needs this object to exist first.
-    void AttachExtended(Elite::ExtendedTokenPrinter& _extendedPrinter) noexcept
-    {
-      m_extendedPrinter = &_extendedPrinter;
-    }
 
     /*
      * The flight universe, for `RESET`, `RES2` and the raster handler.
@@ -233,7 +229,6 @@ namespace Outpost
     /// 6502: the sprite registers, null until the composition root attaches them.
     const Elite::VideoState* m_video = nullptr;
 
-    Elite::ExtendedTokenPrinter* m_extendedPrinter = nullptr;
     FlightSession* m_flight = nullptr;
     Elite::Ports* m_ports = nullptr;
     std::uint8_t* m_dockedFlag = nullptr;

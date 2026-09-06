@@ -135,6 +135,7 @@
     <ClCompile Include="GoldenTests.cpp" />
     <ClCompile Include="NumberTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
+    <ClCompile Include="GameTests.cpp" />
     <ClCompile Include="UniverseImage.cpp" />
     <ClCompile Include="UniverseImageTests.cpp" />
     <ClCompile Include="FlightReplayTests.cpp" />

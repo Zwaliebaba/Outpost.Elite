@@ -147,6 +147,7 @@
     <ClInclude Include="EliteConfig.h" />
     <ClInclude Include="EliteTypes.h" />
     <ClInclude Include="ExtendedTokens.h" />
+    <ClInclude Include="Game.h" />
     <ClInclude Include="LookupTables.h" />
     <ClInclude Include="Canvas.h" />
     <ClInclude Include="LoaderScreen.h" />
@@ -276,6 +277,7 @@
     <ClCompile Include="SoundEffects.cpp" />
     <ClCompile Include="Music.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
+    <ClCompile Include="Game.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />
   </ItemGroup>
