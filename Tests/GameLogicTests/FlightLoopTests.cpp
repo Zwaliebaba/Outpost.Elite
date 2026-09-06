@@ -452,8 +452,8 @@ namespace GameLogicTests
 
       for (std::uint8_t type = 1; type <= Elite::SHIP_TYPE_COUNT; ++type)
       {
-        const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(type));
-        if (blueprint == 0u)
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(type));
+        if (blueprint == nullptr)
         {
           continue;
         }
@@ -473,8 +473,8 @@ namespace GameLogicTests
 
             cpu.ClearTrapHits();
             cpu.memory[cnt] = 0xEEu;
-            cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
-            cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+            cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
+            cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
             cpu.y = type;
             cpu.c = carry;
 
@@ -486,7 +486,7 @@ namespace GameLogicTests
             math.cnt = 0xEEu;
             Elite::Rng rng;
             rng.SetState(bytes);
-            Elite::SpawnDebris(rng, math, effects, blueprint, Elite::TypeOf(type), carry);
+            Elite::SpawnDebris(rng, math, effects, *blueprint, Elite::TypeOf(type), carry);
 
             const std::wstring where = WidenText("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed) + ", carry " +
                                                  std::to_string(carry ? 1 : 0) + ")");
@@ -704,8 +704,8 @@ namespace GameLogicTests
 
       for (std::uint8_t shipType = 1; shipType <= Elite::SHIP_TYPE_COUNT; ++shipType)
       {
-        const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(shipType));
-        if (blueprint == 0u)
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(shipType));
+        if (blueprint == nullptr)
         {
           continue;
         }
@@ -728,14 +728,14 @@ namespace GameLogicTests
                 {
                   cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work.ToBytes()[byte];
                 }
-                cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
-                cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+                cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
+                cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
                 cpu.memory[type] = shipType;
 
                 Assert::IsTrue(cpu.CallSubroutine(hitch, 5'000).completed, L"HITCH returned");
 
                 Elite::MathWorkspace math;
-                const bool ours = Elite::IsHit(work, math, blueprint, Elite::TypeOf(shipType));
+                const bool ours = Elite::IsHit(work, math, *blueprint, Elite::TypeOf(shipType));
 
                 const std::wstring where =
                   WidenText("HITCH(type " + std::to_string(shipType) + ", x " + std::to_string(across) + ", y " + std::to_string(down) +
@@ -946,7 +946,7 @@ namespace GameLogicTests
       {
         ++explosions;
       }
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t _address, std::uint16_t) override
+      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t _address, std::uint8_t) override
       {
         seeded.push_back(_address);
         ++clouds;
@@ -1011,7 +1011,7 @@ namespace GameLogicTests
          * zero the game reads `(XX0),15` out of its own zero page and the port reads a guarded zero,
          * which is a disagreement about an address neither would ever form.
          */
-        universe.flight.blueprint = Elite::BlueprintAddress(Elite::ShipType::CobraMk3);
+        universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
         universe.screen.upperBitmapMode = 0xC0u;
         universe.status.laserCount = 0u;
         universe.status.laserPower = 0u;

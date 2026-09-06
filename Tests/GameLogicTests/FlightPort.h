@@ -80,8 +80,8 @@ namespace GameLogicTests
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
-      universe.flight.blueprint = Elite::BlueprintAddress(Elite::ShipType::CobraMk3);
-      universe.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
+      universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
+      universe.bubble.stationType = Elite::ShipType::Station;
       universe.LendSunHeap(heap);
       Elite::SetUpLoaderScreen(universe.canvas); // 6502: the loader's palette, without which the screen stays black
     }
@@ -225,7 +225,7 @@ namespace GameLogicTests
       Elite::DrawExplosionCloud(universe.canvas, universe.draw, universe.math, universe.rng, universe.work, heap, universe.geometry,
                                 universe.bubble, *this);
     }
-    void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
+    void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override {}
 
     // ---- Elite::ControlEffects ------------------------------------------------------------------
 

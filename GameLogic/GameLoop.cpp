@@ -24,7 +24,7 @@ namespace Elite
      * Every call in these four parts has the same shape, and gathering it here keeps the parts
      * readable as the branch structure they are rather than as bookkeeping.
      */
-    NewShip Spawn(Bubble& _bubble, Ship& _work, ShipType _type, std::uint16_t& _blueprint) noexcept
+    NewShip Spawn(Bubble& _bubble, Ship& _work, ShipType _type, const Blueprint*& _blueprint) noexcept
     {
       return AddShip(_bubble, _work, _type, _blueprint);
     }
@@ -277,7 +277,7 @@ namespace Elite
     return _commander.systemY == 33u;
   }
 
-  NewShip SpawnThargoidPair(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint16_t& _blueprint, bool _carryIn) noexcept
+  NewShip SpawnThargoidPair(Bubble& _bubble, Ship& _work, Rng& _rng, const Blueprint*& _blueprint, bool _carryIn) noexcept
   {
     // 6502: JSR Ze -- a block at a fixed distance in a random direction, and a second `DORND`
     // whose answer this routine throws away.
@@ -301,7 +301,7 @@ namespace Elite
   }
 
   void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, Commander& _commander, const CurrentSystem& _current,
-                   const FlightStatus& _status, std::uint8_t& _explosionCount, std::uint16_t& _blueprint, bool _carryIn) noexcept
+                   const FlightStatus& _status, std::uint8_t& _explosionCount, const Blueprint*& _blueprint, bool _carryIn) noexcept
   {
     // 6502: LDA MJ / BNE ytq -- nothing spawns in witchspace, because witchspace has no system to
     // spawn from. `MJP` puts the Thargoids there itself.

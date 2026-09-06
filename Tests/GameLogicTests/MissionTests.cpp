@@ -235,7 +235,7 @@ namespace GameLogicTests
       Universe& universe = _universe.universe;
 
       universe.flight.type = _type;
-      universe.flight.blueprint = Elite::BlueprintAddress(_type);
+      universe.flight.blueprint = Elite::BlueprintOf(_type);
       universe.bubble.slots[0] = Elite::Byte(_type);
       universe.bubble.slots[1] = 0u;
       universe.bubble.slots[2] = 0u;

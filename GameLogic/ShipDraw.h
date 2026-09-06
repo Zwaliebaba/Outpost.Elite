@@ -362,9 +362,10 @@ namespace Elite
     /// 6502: LL14's JMP DOEXP -- redraw the explosion cloud, which is how it is erased.
     virtual void DrawExplosion() = 0;
 
-    /// 6502: the EE55 block -- byte 1 of the heap is the cloud's size, byte 2 its particle count
-    /// from the blueprint, and bytes 3 to 6 are random.
-    virtual void SeedExplosionCloud(LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint) = 0;
+    /// 6502: the EE55 block -- byte 1 of the heap is the cloud's size, byte 2 its particle count,
+    /// which is `(XX0),7` and arrives here as the blueprint's `explosionCount`, and bytes 3 to 6
+    /// are random.
+    virtual void SeedExplosionCloud(LineHeap& _heap, std::uint16_t _address, std::uint8_t _explosionCount) = 0;
   };
 
   /*
@@ -383,7 +384,7 @@ namespace Elite
    * caller.
    */
   void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, std::uint16_t _blueprint, ShipType _type,
+                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
                 ShipDrawEffects& _effects) noexcept;
 
 } // namespace Elite

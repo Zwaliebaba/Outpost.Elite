@@ -60,7 +60,8 @@ namespace GameLogicTests
       std::set<std::uint16_t> distinct;
       for (int type = 1; type <= Elite::SHIP_TYPE_COUNT; ++type)
       {
-        const std::uint16_t address = Elite::BlueprintAddress(Elite::TypeOf(static_cast<std::uint8_t>(type)));
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(static_cast<std::uint8_t>(type)));
+        const std::uint16_t address = (blueprint == nullptr) ? std::uint16_t{0} : blueprint->address;
         if (address != 0)
         {
           distinct.insert(address);
@@ -95,7 +96,10 @@ namespace GameLogicTests
         const std::uint16_t expected = static_cast<std::uint16_t>(cpu.memory[entry] | (cpu.memory[entry + 1] << 8));
 
         const std::wstring where = Widen("ship type " + std::to_string(type));
-        Assert::AreEqual(expected, Elite::BlueprintAddress(Elite::TypeOf(static_cast<std::uint8_t>(type))), (where + L": the blueprint address").c_str());
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(static_cast<std::uint8_t>(type)));
+        Assert::IsNotNull(blueprint, (where + L": carried").c_str());
+        Assert::AreEqual(expected, blueprint->address, (where + L": the blueprint address").c_str());
+        Assert::IsTrue(Elite::BlueprintAt(expected) == blueprint, (where + L": and the address finds it again").c_str());
 
         if (expected != 0)
         {
@@ -121,10 +125,10 @@ namespace GameLogicTests
        */
       for (const int beyond : {Elite::SHIP_TYPE_COUNT + 1, Elite::SHIP_TYPE_COUNT + 2, 39, 255})
       {
-        Assert::AreEqual<std::uint16_t>(0, Elite::BlueprintAddress(Elite::TypeOf(static_cast<std::uint8_t>(beyond))),
-                                        L"a type this build does not carry has no blueprint");
+        Assert::IsNull(Elite::BlueprintOf(Elite::TypeOf(static_cast<std::uint8_t>(beyond))), L"a type this build does not carry has no blueprint");
       }
-      Assert::AreEqual<std::uint16_t>(0, Elite::BlueprintAddress(Elite::ShipType::None), L"and nor does the empty slot");
+      Assert::IsNull(Elite::BlueprintOf(Elite::ShipType::None), L"and nor does the empty slot");
+      Assert::IsTrue(Elite::BlueprintAt(0) == &Elite::NO_BLUEPRINT, L"and XX0 = 0 is the blueprint of nothing");
     }
 
     /*
@@ -157,7 +161,7 @@ namespace GameLogicTests
       {
         const std::uint16_t start = blueprints[index];
         const int gap = static_cast<int>(blueprints[index + 1]) - static_cast<int>(start);
-        const int extent = static_cast<int>(Elite::ShipBlueprintExtent(start));
+        const int extent = static_cast<int>(Elite::BlueprintAt(start)->Extent());
 
         if (gap != extent)
         {
@@ -183,7 +187,7 @@ namespace GameLogicTests
         const auto found = std::find(blueprints.begin(), blueprints.end(), start);
         Assert::IsTrue(found != blueprints.end(), L"the overrunning blueprint is still there");
         const int gap = static_cast<int>(*(found + 1)) - static_cast<int>(start);
-        Assert::IsTrue(Elite::ShipBlueprintExtent(start) > gap, Widen("blueprint at " + std::to_string(start) + " still overruns").c_str());
+        Assert::IsTrue(Elite::BlueprintAt(start)->Extent() > gap, Widen("blueprint at " + std::to_string(start) + " still overruns").c_str());
       }
     }
 
@@ -201,20 +205,19 @@ namespace GameLogicTests
       for (std::size_t offset = 0; offset < Elite::SHIP_DATA.size(); ++offset)
       {
         const std::uint16_t address = static_cast<std::uint16_t>(Elite::SHIP_DATA_BASE + offset);
-        if (cpu.memory[address] != Elite::ShipByte(address))
+        if (cpu.memory[address] != Elite::SHIP_DATA[offset])
         {
           Assert::Fail(Widen("ship data differs at " + std::to_string(address)).c_str());
         }
       }
 
-      Assert::AreEqual<std::uint8_t>(0, Elite::ShipByte(Elite::SHIP_DATA_BASE - 1), L"below the region reads zero");
-      Assert::AreEqual<std::uint8_t>(0, Elite::ShipByte(static_cast<std::uint16_t>(Elite::SHIP_DATA_BASE + Elite::SHIP_DATA.size())),
-                                     L"and above it");
+      Assert::IsNull(Elite::BlueprintAt(Elite::SHIP_DATA_BASE - 1), L"below the region there is no blueprint");
+      Assert::IsNull(Elite::BlueprintAt(static_cast<std::uint16_t>(Elite::SHIP_DATA_BASE + Elite::SHIP_DATA.size())), L"and nor above it");
 
       // 6502: E% -- the per-type default flags NWSHP ORs into NEWB. Inside the region, which is why
       // it does not need extracting separately.
       Assert::AreEqual<std::uint16_t>(oracle.Label("E%"), Elite::SHIP_DEFAULT_FLAGS, L"E% is where the constant says");
-      Assert::AreEqual(cpu.memory[oracle.Label("E%")], Elite::ShipByte(Elite::SHIP_DEFAULT_FLAGS), L"and reads back through the region");
+      Assert::AreEqual(cpu.memory[oracle.Label("E%")], Elite::DefaultNewbFor(Elite::ShipType::Missile), L"and reads back as the missile's default NEWB");
     }
   };
 
@@ -355,7 +358,7 @@ namespace GameLogicTests
 
         // 6502: XX21+2*SST-2 -- the entry `NWSPS` writes and `NWSHP` reads. The oracle's copy is
         // the assembled one, so the port's has to be too or the station case refuses the ship.
-        bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
+        bubble.stationType = Elite::ShipType::Station;
 
         // The same starting bubble on both sides: `occupied` slots holding a Viper.
         for (std::uint8_t filled = 0; filled < item.occupied; ++filled)
@@ -384,7 +387,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(nwshp);
         Assert::IsTrue(run.completed, (where + L": NWSHP returned").c_str());
 
-        std::uint16_t blueprint = 0; // 6502: XX0, which NWSHP writes
+        const Elite::Blueprint* blueprint = &Elite::NO_BLUEPRINT; // 6502: XX0, which NWSHP writes
         const Elite::NewShip created = Elite::AddShip(bubble, work, Elite::TypeOf(item.type), blueprint);
 
         // The carry is the answer, and both refusals clear it.

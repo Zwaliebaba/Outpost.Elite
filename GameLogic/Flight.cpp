@@ -405,7 +405,7 @@ namespace Elite
        * byte 32 to nothing. So the AI cannot run here and cannot kill anybody, and there is no
        * player to kill -- the title screen has no energy banks (§6.122).
        */
-      (void)MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, screen.flight.blueprint,
+      (void)MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, *screen.flight.blueprint,
                      screen.view);
 
       /*
@@ -422,7 +422,7 @@ namespace Elite
 
       // 6502: JSR LL9.
       DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
-               screen.bubble.blocks[slot], loop.heap, screen.flight.blueprint, screen.flight.type, loop.drawing);
+               screen.bubble.blocks[slot], loop.heap, *screen.flight.blueprint, screen.flight.type, loop.drawing);
 
       // 6502: JSR RDKEY / DEC MCNT.
       const TitleKey scan = _title.effects.ScanTitleKeys(_title.keys);
@@ -628,14 +628,14 @@ namespace Elite
     while (screen.work.ai != 0u)
     {
       static_cast<void>(
-        MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, screen.flight.blueprint, screen.view));
+        MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, *screen.flight.blueprint, screen.view));
       /*
        * 6502: JSR LL9 -- and the SLOT it writes back to is the one `FRS1` just filled, through
        * `INF`. Handing it slot 0 would have `LL9` writing its bookkeeping into the PLANET, which
        * is what the port did until the oracle disagreed about the planet's speed byte.
        */
       DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work,
-               screen.bubble.blocks[abandoned.slot], _loop.heap, screen.flight.blueprint, screen.flight.type, _loop.drawing);
+               screen.bubble.blocks[abandoned.slot], _loop.heap, *screen.flight.blueprint, screen.flight.type, _loop.drawing);
       --screen.work.ai;
     }
 

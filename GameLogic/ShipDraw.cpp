@@ -785,7 +785,7 @@ namespace Elite
   } // namespace
 
   void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, std::uint16_t _blueprint, ShipType _type,
+                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
                 ShipDrawEffects& _effects) noexcept
   {
     // ---- part 1: is there anything to draw at all? ------------------------------------------
@@ -819,7 +819,7 @@ namespace Elite
       _slot.pitchCounter = 0;
 
       EraseShip(_canvas, _draw, _work, _heap);
-      _effects.SeedExplosionCloud(_heap, ShipHeapAddress(_work), _blueprint);
+      _effects.SeedExplosionCloud(_heap, ShipHeapAddress(_work), _blueprint.explosionCount); // 6502: (XX0),7
     }
 
     // 6502: EE28 / EE49 and LL10 -- four ways of being not worth drawing, sharing one exit. The
@@ -855,7 +855,7 @@ namespace Elite
 
     // Blueprint byte 6 is a vertex's offset in XX3, and 255 there means "this one did not
     // project". The laser line in part 9 reads it back and gives up when it is still 255.
-    const std::uint8_t laserVertex = ShipByte(static_cast<std::uint16_t>(_blueprint + 6u));
+    const std::uint8_t laserVertex = _blueprint.laserVertex;
     _geometry.xx3[laserVertex] = 255;
     _geometry.xx3[static_cast<std::size_t>(laserVertex) + 1u] = 255;
 
@@ -876,7 +876,7 @@ namespace Elite
     {
       _geometry.xx4 = static_cast<std::uint8_t>(RotateRight(distanceLow, spare).value >> 3);
     }
-    else if (ShipByte(static_cast<std::uint16_t>(_blueprint + 13u)) < _work.z.hi &&
+    else if (_blueprint.visibility < _work.z.hi &&
              !Has(_work.state, ShipStateBit::Exploding))
     {
       // 6502: LL13 -- past the blueprint's own visibility distance, so a dot will do.
@@ -895,7 +895,7 @@ namespace Elite
     }
     _geometry.xx2[15] = 255;
 
-    const std::uint8_t faceBytes = ShipByte(static_cast<std::uint16_t>(_blueprint + 12u));
+    const std::uint8_t faceBytes = _blueprint.faceBytes;
 
     // ---- parts 4 and 5: which faces can be seen --------------------------------------------
 
@@ -915,7 +915,7 @@ namespace Elite
       // on top of the blueprint's own scale in byte 18.
       _geometry.xx20 = faceBytes;
 
-      std::uint8_t shifts = ShipByte(static_cast<std::uint16_t>(_blueprint + 18u));
+      std::uint8_t shifts = _blueprint.normalShifts;
       std::uint8_t z = _geometry.xx18[7];
       while (z != 0u)
       {
@@ -950,19 +950,16 @@ namespace Elite
       _geometry.xx18[6] = _geometry.xx12[4];
       _geometry.xx18[8] = _geometry.xx12[5];
 
-      const AddResult faceLow =
-        AddWithCarry(ShipByte(static_cast<std::uint16_t>(_blueprint + 4u)), static_cast<std::uint8_t>(_blueprint), false);
-      const std::uint8_t faceHigh =
-        AddWithCarry(ShipByte(static_cast<std::uint16_t>(_blueprint + 17u)), static_cast<std::uint8_t>(_blueprint >> 8), faceLow.carry)
-          .value;
-      _geometry.v = static_cast<std::uint16_t>(faceLow.value | (faceHigh << 8));
+      // 6502: LDY #4 / LDA (XX0),Y / CLC / ADC XX0 / STA V / LDY #17 / LDA (XX0),Y / ADC XX0+1 /
+      // STA V+1 -- V is the faces, which the blueprint carries as a span; V's index starts at 0.
+      _geometry.v = 0;
 
       std::uint8_t at = 0;
       do
       {
         // 6502: LL86 -- a face whose own distance is under the ship's is taken as visible without
         // the arithmetic.
-        const std::uint8_t flags = ShipByte(static_cast<std::uint16_t>(_geometry.v + at));
+        const std::uint8_t flags = _blueprint.faces[at];
         _geometry.xx12[1] = flags;
 
         if ((flags & 0x1Fu) < _geometry.xx4)
@@ -975,9 +972,9 @@ namespace Elite
         // 6502: LL87 -- the face's normal, with its three sign bits spread out by doubling.
         _geometry.xx12[3] = static_cast<std::uint8_t>(flags << 1);
         _geometry.xx12[5] = static_cast<std::uint8_t>(flags << 2);
-        _geometry.xx12[0] = ShipByte(static_cast<std::uint16_t>(_geometry.v + at + 1u));
-        _geometry.xx12[2] = ShipByte(static_cast<std::uint16_t>(_geometry.v + at + 2u));
-        _geometry.xx12[4] = ShipByte(static_cast<std::uint16_t>(_geometry.v + at + 3u));
+        _geometry.xx12[0] = _blueprint.faces[at + 1u];
+        _geometry.xx12[2] = _blueprint.faces[at + 2u];
+        _geometry.xx12[4] = _blueprint.faces[at + 3u];
 
         if (_geometry.xx17 >= 4u)
         {
@@ -1061,22 +1058,22 @@ namespace Elite
 
     TransposeOrientation(_geometry);
 
-    _geometry.xx20 = ShipByte(static_cast<std::uint16_t>(_blueprint + 8u));
-    _geometry.v = static_cast<std::uint16_t>(_blueprint + 20u);
+    _geometry.xx20 = _blueprint.vertexBytes;
+    _geometry.v = 0; // 6502: XX0+20 -- the vertices, which the blueprint carries as a span
     _math.cnt = 0;
 
     for (std::uint8_t vertex = 0;;)
     {
       _geometry.xx17 = vertex;
 
-      _draw.x1 = ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex));
-      _draw.x2 = ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 1u));
-      _draw.xx15Plus4 = ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 2u));
-      const std::uint8_t flags = ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 3u));
+      _draw.x1 = _blueprint.vertices[vertex];
+      _draw.x2 = _blueprint.vertices[vertex + 1u];
+      _draw.xx15Plus4 = _blueprint.vertices[vertex + 2u];
+      const std::uint8_t flags = _blueprint.vertices[vertex + 3u];
 
       const bool nearEnough = (flags & 0x1Fu) >= _geometry.xx4;
-      const bool visible = nearEnough && (EitherFaceVisible(_geometry, ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 4u))) ||
-                                          EitherFaceVisible(_geometry, ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 5u))));
+      const bool visible = nearEnough && (EitherFaceVisible(_geometry, _blueprint.vertices[vertex + 4u]) ||
+                                          EitherFaceVisible(_geometry, _blueprint.vertices[vertex + 5u]));
 
       if (visible)
       {
@@ -1224,7 +1221,7 @@ namespace Elite
     }
     _work.state = With(_work.state, ShipStateBit::OnScreen);
 
-    _geometry.xx20 = ShipByte(static_cast<std::uint16_t>(_blueprint + 9u));
+    _geometry.xx20 = _blueprint.edgeCount;
     _geometry.xx17 = 0;
     _math.u = 1;
 
@@ -1232,7 +1229,7 @@ namespace Elite
     {
       _work.state = Without(_work.state, ShipStateBit::Firing);
 
-      const std::size_t muzzle = ShipByte(static_cast<std::uint16_t>(_blueprint + 6u));
+      const std::size_t muzzle = _blueprint.laserVertex;
       _draw.x1 = _geometry.xx3[muzzle];
       _draw.y1 = _geometry.xx3[muzzle + 1u];
 
@@ -1265,22 +1262,20 @@ namespace Elite
 
     // ---- parts 10 and 11: the edges ---------------------------------------------------------
 
-    const AddResult edgeLow =
-      AddWithCarry(ShipByte(static_cast<std::uint16_t>(_blueprint + 3u)), static_cast<std::uint8_t>(_blueprint), false);
-    const std::uint8_t edgeHigh =
-      AddWithCarry(ShipByte(static_cast<std::uint16_t>(_blueprint + 16u)), static_cast<std::uint8_t>(_blueprint >> 8), edgeLow.carry).value;
-    _geometry.v = static_cast<std::uint16_t>(edgeLow.value | (edgeHigh << 8));
-    _math.t1 = ShipByte(static_cast<std::uint16_t>(_blueprint + 5u));
+    // 6502: LDY #3 / LDA (XX0),Y / CLC / ADC XX0 / STA V / LDY #16 / LDA (XX0),Y / ADC XX0+1 /
+    // STA V+1 -- V is the edges, which the blueprint carries as a span; V's index starts at 0.
+    _geometry.v = 0;
+    _math.t1 = _blueprint.heapBytes;
 
     for (;;)
     {
       // 6502: LL75 -- four bytes per edge: how far away it stays visible, the two faces it joins,
       // and the two vertices it runs between.
-      const std::uint8_t distance = ShipByte(_geometry.v);
-      if (distance >= _geometry.xx4 && EitherFaceVisible(_geometry, ShipByte(static_cast<std::uint16_t>(_geometry.v + 1u))))
+      const std::uint8_t distance = _blueprint.edges[_geometry.v];
+      if (distance >= _geometry.xx4 && EitherFaceVisible(_geometry, _blueprint.edges[_geometry.v + 1u]))
       {
-        const std::size_t from = ShipByte(static_cast<std::uint16_t>(_geometry.v + 2u));
-        const std::size_t to = ShipByte(static_cast<std::uint16_t>(_geometry.v + 3u));
+        const std::size_t from = _blueprint.edges[_geometry.v + 2u];
+        const std::size_t to = _blueprint.edges[_geometry.v + 3u];
 
         _draw.y1 = _geometry.xx3[from + 1u];
         _draw.x1 = _geometry.xx3[from];

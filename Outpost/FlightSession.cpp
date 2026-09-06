@@ -102,14 +102,14 @@ namespace Outpost
      * is the title screen's Cobra Mk III, so that is what the pointer would hold.
      */
     m_heaps.stp = LAST_CIRCLE_STEP;
-    m_flight.blueprint = Elite::BlueprintAddress(Elite::ShipType::CobraMk3);
+    m_flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
 
     /*
      * 6502: XX21+2*SST-2 -- a third byte of the same shape, and this one is not left by a previous
      * screen at all: `BEGIN` writes it at boot and only `NWSPS` writes it afterwards. Zero is what
      * `NWSHP` refuses, so an unseeded session would silently never build a station.
      */
-    m_bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
+    m_bubble.stationType = Elite::ShipType::Station;
 
     /*
      * 6502: LSO -- and the station's line heap is IT, not a run carved out of `SLSP` (§6.112).
@@ -251,7 +251,7 @@ namespace Outpost
     Elite::DrawExplosionCloud(m_canvas, m_draw, m_math, m_screen.rng, m_work, m_heap, m_geometry, m_bubble, *this);
   }
 
-  void FlightSession::SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint)
+  void FlightSession::SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint8_t _explosionCount)
   {
     /*
      * 6502: the `EE55` block -- six instructions, and they are behind a seam rather than in `LL9`
@@ -262,7 +262,7 @@ namespace Outpost
      */
     (void)_heap;
     (void)_address;
-    (void)_blueprint;
+    (void)_explosionCount;
   }
 
   // ---- the controls -------------------------------------------------------------------------------

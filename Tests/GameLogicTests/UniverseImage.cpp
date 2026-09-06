@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <functional>
+#include <memory>
 #include <tuple>
 #include <vector>
 
@@ -36,6 +38,33 @@ namespace GameLogicTests
     }
 
     /// A run of directly held bytes, one cell each, named with their index.
+    /// A sixteen-bit address the port holds as a POINTER -- `XX0`, the station's `XX21` entry --
+    /// as two cells: reads give the pointee's address, and a write reassembles the address from
+    /// both bytes before it is looked up, so a half-written pair changes nothing.
+    void AddressPair(std::vector<Cell>& _cells, const wchar_t* _lowName, const wchar_t* _highName, std::uint16_t _address,
+                     std::function<std::uint16_t()> _get, std::function<void(std::uint16_t)> _set, CellScope _scope)
+    {
+      const auto pending = std::make_shared<std::uint16_t>(_get());
+      for (std::size_t half = 0; half < 2u; ++half)
+      {
+        Cell cell;
+        cell.name = (half == 0u) ? _lowName : _highName;
+        cell.address = static_cast<std::uint16_t>(_address + half);
+        cell.scope = _scope;
+        cell.get = [_get, half]() { return static_cast<std::uint8_t>(_get() >> (8u * half)); };
+        cell.set = [_set, pending, half](std::uint8_t _value)
+        {
+          const std::uint16_t mask = static_cast<std::uint16_t>(0xFFu << (8u * half));
+          *pending = static_cast<std::uint16_t>((*pending & ~mask) | (static_cast<std::uint16_t>(_value) << (8u * half)));
+          if (half == 1u)
+          {
+            _set(*pending);
+          }
+        };
+        _cells.push_back(std::move(cell));
+      }
+    }
+
     /// A struct with a codec -- a `Ship`'s thirty-seven bytes, a `Commander`'s seventy-seven --
     /// as cells: each reads `ToBytes()` and writes back through `FromBytes`, so the image is the
     /// original's layout whatever the struct's own layout is.
@@ -128,7 +157,15 @@ namespace GameLogicTests
     cells.push_back(Direct(L"QQ11", _at.qq11, _universe.view, CellScope::Compared));
     cells.push_back(Direct(L"EV", _at.ev, _universe.explosions, CellScope::Compared));
     cells.push_back(Direct(L"MCNT", _at.mcnt, _universe.flight.mainLoopCounter, CellScope::Compared));
-    Pair(cells, L"XX0", L"XX0+1", _at.xx0, _universe.flight.blueprint, CellScope::Compared);
+    AddressPair(cells, L"XX0", L"XX0+1", _at.xx0, [&_universe]() { return _universe.flight.blueprint->address; },
+                [&_universe](std::uint16_t _address)
+                {
+                  if (const Elite::Blueprint* found = Elite::BlueprintAt(_address))
+                  {
+                    _universe.flight.blueprint = found;
+                  }
+                },
+                CellScope::Compared);
     cells.push_back(Direct(L"abraxas", _at.abraxas, _universe.screen.colourBank, CellScope::Compared));
     cells.push_back(Direct(L"caravanserai", _at.caravanserai, _universe.screen.bitmapMode, CellScope::Compared));
     cells.push_back(Direct(L"DFLAG", _at.dflag, _universe.screen.dashboardShown, CellScope::Compared));
@@ -205,7 +242,15 @@ namespace GameLogicTests
 
     // 6502: XX21+2*SST-2 -- the self-modified table entry, compared as state because `NWSPS` is
     // the only writer, so an unexpected change is a defect.
-    Pair(cells, L"XX21+2*SST-2", L"XX21+2*SST-1", _at.xx21Station, _universe.bubble.stationBlueprint, CellScope::Compared);
+    AddressPair(cells, L"XX21+2*SST-2", L"XX21+2*SST-1", _at.xx21Station, [&_universe]() { return Elite::BlueprintOf(_universe.bubble.stationType)->address; },
+                [&_universe](std::uint16_t _address)
+                {
+                  if (const Elite::Blueprint* found = Elite::BlueprintAt(_address); found != nullptr && found->address != 0u)
+                  {
+                    _universe.bubble.stationType = found->type;
+                  }
+                },
+                CellScope::Compared);
 
     Run(cells, L"LSO", _at.lso, _universe.heaps.sun.data(), _universe.heaps.sun.size(), CellScope::Compared);
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
@@ -301,11 +346,11 @@ namespace GameLogicTests
      * assembled image still holds the placeholder -- and `NWSPS` copies `spasto` INTO the table, so
      * a comparison against an image that has not booted spawns a station whose blueprint is &8888.
      * That is not a state the machine is ever in (§6.95's rule reaching a third byte). The port
-     * needs no field: nothing writes `spasto` after `BEGIN`, and `BlueprintAddress(ShipType::Station)`
+     * needs no field: nothing writes `spasto` after `BEGIN`, and `BlueprintOf(ShipType::Station)->address`
      * IS `spasto` for ever.
      */
     {
-      const std::uint16_t coriolis = Elite::BlueprintAddress(Elite::ShipType::Station);
+      const std::uint16_t coriolis = Elite::BlueprintOf(Elite::ShipType::Station)->address;
       Cell low;
       low.name = L"spasto";
       low.address = _at.spasto;

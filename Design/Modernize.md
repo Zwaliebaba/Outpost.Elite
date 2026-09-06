@@ -340,7 +340,7 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,654 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,702 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -794,7 +794,7 @@ a moved record with no defect named is a refactor that changed the game.
 | **M1-b ShipType and the flag types** | `enum class ShipType`, `ShipStateBit`, `AiBit`, `NewbBit` with the original bit values, the byte-valued helpers beside them; the second naming families deleted. | Green; `check_outpost.py` green after the app's constants follow. **Built 2026-09-06** (slice plan and §8 below). | 2 |
 | **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become struct copies and the partial copies codec calls. Tests migrate to the bridge. | Green through `UniverseImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). **Built 2026-09-06** (slice plan and §8 below). | 4–5 |
 | **M1-d Commander** | Typed `Commander` with the seventy-seven-byte codec; `Credits` and `Tally` strong types where the bytes' order is the risk, plain named bytes elsewhere; `SaveCommander`/`LoadCommander`/checksums over the codec. | `SaveGameTests` and `CommanderTests` green; a commander file from R12's fixture still loads. **Built 2026-09-06** (slice plan and §8 below). | 3 |
-| **M1-e Blueprint** | Parsed `Blueprint` table; `ShipByte`/`BlueprintAddress`/`BlueprintFor` removed; `Bubble::stationType`. | `ShipDataTests` green with the three disagreeing ships called out as before; `LL9` suite green. | 3 |
+| **M1-e Blueprint** | Parsed `Blueprint` table; `ShipByte`/`BlueprintAddress`/`ShipBlueprintExtent` removed, `BlueprintFor` returns the parsed entry; `XX0` a pointer; `Bubble::stationType`. | `ShipDataTests` green with the three disagreeing ships called out as before; `LL9` suite green. **Built 2026-09-06** (slice plan and §8 below). | 3 |
 | **M1-f HeapOffset** | The line heap addressed by offset; `TryReserveHeap` with the exact chain; the sun's heap lent as a span. | `NWSHP`'s refusal sweep green (`ShipSlotTests`); the station-into-sun-heap case (§6.112) green. | 2–3 |
 
 #### M1-a slice plan (written with the build, 2026-09-06; §8 records what the build found)
@@ -961,6 +961,42 @@ whatever the struct is.
 which is what a codec proved by a `static_assert` and a file format proved by the oracle's own
 `SVE` buys. One mutant anchor (`mi-tally`) named the cached `tally` local and was re-anchored to
 `kills.hi`; the executable lost `Elite::Field` and gained `Elite::Commander`.
+
+#### M1-e slice plan (written with the build, 2026-09-06; §8 records what the build found)
+
+**A blueprint is its header, named, and three spans placed where the header says.** `Blueprint`
+holds the twenty header bytes as fields (`heapBytes`, `laserVertex`, `vertexBytes`, `edgeCount`,
+`bounty`, `faceBytes`, `visibility`, `maxEnergy`, `maxSpeed`, `normalShifts`, `weapons`, and the
+rest) and `vertices`, `edges` and `faces` as `std::span<const std::uint8_t>` over the region,
+sized by the header's counts and starting at `XX0` plus the header's offset in SIXTEEN-BIT
+ARITHMETIC. The table is parsed once from `SHIP_DATA`, per type, into `BlueprintOf(ShipType)`;
+`SHIP_HEADER_x` are the parser's layout constants, the wire format's table, and `address` is kept
+on every entry for the bridge and the tests, which address the oracle's copy, and read by no
+routine. `NO_BLUEPRINT` is twenty zero bytes with address 0 — what `XX0` holds before anything has
+set it, and what the old `ShipByte` returned for an address outside the region.
+
+**`XX0` is a pointer.** `FlightState::blueprint` is `const Blueprint*`, never null; the routines
+that read it take `const Blueprint&` (`MVEIT`, `LL9`, `HITCH`, `SFS1`'s debris) and the ones
+that WRITE it — `NWSHP` and everything that falls into it — take `const Blueprint*&`, which is
+the same out-parameter it was in a different type, and M2's to remove. `E%`, `KWL%` and `KWH%` are
+functions of a `ShipType` (`DefaultNewbFor`, `KillWorthFor`), not fields of a `Blueprint`, because
+the game indexes them by the type in the slot and the station is type 2 under either of its two
+blueprints; `DefaultNewbFor` still reads past the table for the negative types, as `NW8` does.
+
+**The station's self-modified entry is a type.** `Bubble::stationType` is `Station` or `Dodo`,
+`NWSPS` sets it from the tech level, and `BlueprintFor(bubble, Station)` resolves it. The bridge's
+two address pairs — `XX0` and `XX21+2*SST-2` — are `AddressPair` cells that read the pointee's
+address and, on a write, reassemble the address from both bytes before looking it up, so a
+half-written pair changes nothing. `ShipDraw`'s `V` pointer is an index into the span it walks.
+
+**The seam that carried an address carries the byte.** `SeedExplosionCloud` took `XX0` and read
+nothing from it; it takes `explosionCount`, which is `(XX0),7`, the one byte `EE55` reads. That is
+also what kept `outpost-elite-names` at 225: a `Blueprint` in the seam's signature would have been
+one more `Elite::` name the executable reaches, and the executable does not need the type.
+
+**What the build found.** One test red on the first run, `LL9` for type 8, and the reason is the
+finding below. Then 392 of 392, `ShipDataTests` still counting three disagreements and the same two
+"overruns" — for a truer reason.
 
 ### Phase M2 — Explicit calling conventions
 
@@ -1211,3 +1247,24 @@ survived, the four the recorded equivalents — the fifth run of M0-d's tally, w
 reading `kills.hi` against `kills.lo` and caught by the mission's `TALLY+1` compare as before.
 Rule 3 is met; M1-e — the parsed `Blueprint` table, `XX0` as a pointer to one, the station's
 self-modified entry as `Bubble::stationType` — is next.
+
+**2026-09-06 — M1-e built.** The region is a parsed table: `Blueprint` with the header as fields and
+the three tables as spans, `BlueprintOf(type)`, `BlueprintAt(address)` for the bridge, `XX0` a
+pointer, the station's entry a `ShipType`; `ShipByte`, `BlueprintAddress` and
+`ShipBlueprintExtent` are gone and 61 header reads in the library say what byte they read.
+**The famous disagreement is not what the port thought it was.** `ShipDataTests` has said since
+slice 3a that three headers "overrun" the gap to the next blueprint, and the first build placed
+each span at the blueprint's start plus the header's offset, as the words say — and `LL9` drew the
+Splinter wrong. The Splinter's edges offset is &FD78 and the Thargon's &E7E6: added to `XX0` in the
+6502's sixteen-bit arithmetic they WRAP, and the tables they name sit before the blueprint — the
+Splinter draws with the Escape Pod's six edges and the Thargon with the Canister's fifteen, two
+ships sharing another's data by an offset nobody would write by hand. The Splinter's faces, at +68,
+do run into the Shuttle's header eight bytes on, so that one table is read out of the next
+blueprint, which is the part the old test measured. The parser now places every span at the
+wrapped address and the comment in `ShipBlueprint.cpp` says which ship's table each of the two
+borrows. A port that had cut the region into thirty-three arrays would have found this on day one
+and had to decide; a port that kept the region as bytes never had to know. `SeedExplosionCloud`
+narrowed from `XX0` to the one byte `EE55` reads (the app's implementation is a documented no-op
+either way, §6.91). Ratchet: `origin-markers` 3,654 → 3,702 for the header's twenty labels and the
+parser's (rule 4); everything else unmoved, `outpost-elite-names` included, by the seam's
+narrowing. Mutants: every anchor still applies; the corpus rerun follows.

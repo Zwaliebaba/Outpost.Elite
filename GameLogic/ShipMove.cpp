@@ -560,7 +560,7 @@ namespace Elite
   } // namespace
 
   bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
-                std::uint16_t _blueprint, std::uint8_t _view) noexcept
+                const Blueprint& _blueprint, std::uint8_t _view) noexcept
   {
     // 6502: LDA INWK+31 / AND #&A0 / BNE MV30 -- exploding or already dead, so straight to the
     // scanner. Nothing below moves it, which is why a wreck hangs where it died.
@@ -631,7 +631,7 @@ namespace Elite
     AddResult speed = AddWithCarry(_work.speed, _work.acceleration, false);
     std::uint8_t wanted = ((speed.value & 0x80u) != 0u) ? std::uint8_t{0} : speed.value;
 
-    const std::uint8_t maximum = ShipByte(static_cast<std::uint16_t>(_blueprint + 15u));
+    const std::uint8_t maximum = _blueprint.maxSpeed;
     if (wanted >= maximum)
     {
       wanted = maximum;

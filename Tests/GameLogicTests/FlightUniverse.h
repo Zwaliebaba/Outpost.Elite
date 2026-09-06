@@ -407,7 +407,7 @@ namespace GameLogicTests
     }
     void DrawPlanetOrSun() override {}
     void DrawExplosion() override {}
-    void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
+    void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override {}
   };
 
   /// The port's side of a case: the whole flight universe plus the pieces `FlightLoop` needs. Shared,
@@ -450,7 +450,7 @@ namespace GameLogicTests
      * type whose entry is zero, so an unseeded bubble would silently stop creating stations. The
      * Coriolis is what `BEGIN` leaves and what every system below tech level ten keeps.
      */
-    _universe.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
+    _universe.bubble.stationType = Elite::ShipType::Station;
 
     _universe.techLevel = 7u; // 6502: tek -- below the Dodo's threshold, so the seeded state is stable
 

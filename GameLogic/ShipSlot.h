@@ -130,14 +130,14 @@ namespace Elite
      *
      * `spasto` needs no field of its own. `BEGIN` copies this entry into it at boot, before
      * anything can have changed it, so `spasto` is permanently the Coriolis's address -- which is
-     * what `BlueprintAddress(ShipType::Station)` returns from the immutable region.
+     * what `BlueprintOf(ShipType::Station)` is in the immutable region.
      *
      * IT MUST BE SEEDED, and zero is not a value the game can hold here: a zero entry in `XX21`
      * means "this build does not carry that type" and `NWSHP` refuses the ship. So an unseeded
      * bubble refuses to create a station rather than creating a wrong one, which is §6.95's rule
      * applied to a second byte -- the flight universe has to be built in a state the game could be in.
      */
-    std::uint16_t stationBlueprint = 0;
+    ShipType stationType = ShipType::Station; ///< 6502: which blueprint the entry names -- the Coriolis or the Dodo
   };
 
   /*
@@ -148,7 +148,7 @@ namespace Elite
    * table, because that is where the Coriolis and the Dodo differ. Both of the routines that index
    * the table by type -- `NWSHP` and the flight loop's part 4 -- go through here for that reason.
    */
-  [[nodiscard]] std::uint16_t BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept;
+  [[nodiscard]] const Blueprint* BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept;
 
   /// 6502: what GINF computes -- the ADDRESS of slot X's block, which is what `NWSHP` compares the
   /// heap against. The blocks are an array here; this is the address the original would have used.
@@ -201,6 +201,6 @@ namespace Elite
    * the `BMI NW2` path past those stores -- so the omission could not be seen until `NWSPS` created
    * a real ship. The oracle caught it on the first frame that spawned a station.
    */
-  [[nodiscard]] NewShip AddShip(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint16_t& _blueprint) noexcept;
+  [[nodiscard]] NewShip AddShip(Bubble& _bubble, Ship& _work, ShipType _shipType, const Blueprint*& _blueprint) noexcept;
 
 } // namespace Elite

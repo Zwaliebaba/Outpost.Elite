@@ -547,7 +547,7 @@ namespace GameLogicTests
       }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
+      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override {}
     };
 
     /// Everything the launch works on, and the oracle's memory beside it.
@@ -623,7 +623,7 @@ namespace GameLogicTests
       universe.message.column = 9u;
       universe.message.append = 1u;
       universe.message.delay = 12u;
-      universe.flight.blueprint = Elite::BlueprintAddress(Elite::ShipType::CobraMk3);
+      universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
 
       universe.bubble.heapBottom = static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 64u);
       universe.heaps.yx2M1 = 199u;

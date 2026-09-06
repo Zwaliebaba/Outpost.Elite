@@ -97,8 +97,8 @@ namespace GameLogicTests
         }
         _bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
 
-        const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(type));
-        const std::uint8_t size = (blueprint == 0u) ? std::uint8_t{0} : Elite::ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(type));
+        const std::uint8_t size = (blueprint == 0u) ? std::uint8_t{0} : blueprint->heapBytes;
         heapAt = static_cast<std::uint16_t>(heapAt - size);
 
         _bubble.blocks[slot].heapLow = static_cast<std::uint8_t>(heapAt);
@@ -485,9 +485,9 @@ namespace GameLogicTests
             }
             work = Elite::Ship::FromBytes(shipBytes);
 
-            std::uint16_t blueprint = 0x4321u;
-            cpu.memory[at.xx0] = 0x21u;
-            cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = 0x43u;
+            const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
+            cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
+            cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
             cpu.c = carryIn != 0u;
             const Elite::Testing::RunResult run = cpu.CallSubroutine(at.gthg, 200'000);
@@ -636,9 +636,9 @@ namespace GameLogicTests
             }
             work = Elite::Ship::FromBytes(shipBytes);
 
-            std::uint16_t blueprint = 0x1234u;
-            cpu.memory[at.xx0] = 0x34u;
-            cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = 0x12u;
+            const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
+            cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
+            cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
             cpu.c = carryIn != 0u;
 
@@ -683,7 +683,7 @@ namespace GameLogicTests
                                (where + L": RAND+" + std::to_wstring(byte)).c_str());
             }
             Assert::AreEqual(cpu.memory[at.ev], encounters, (where + L": EV").c_str());
-            Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.xx0] | (cpu.memory[at.xx0 + 1] << 8)), blueprint,
+            Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.xx0] | (cpu.memory[at.xx0 + 1] << 8)), blueprint->address,
                                             (where + L": XX0").c_str());
 
             // What arrived, measured from the bubble rather than from the inputs -- section 6.132's

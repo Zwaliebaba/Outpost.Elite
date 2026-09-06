@@ -142,7 +142,7 @@ namespace Elite
     }
   }
 
-  void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects, std::uint16_t _blueprint, ShipType _type,
+  void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type,
                    bool _carryIn) noexcept
   {
     // 6502: JSR DORND / BPL oh -- and nothing else in the routine looks at the roll's low bits
@@ -161,7 +161,7 @@ namespace Elite
      * count is the ship TYPE masked by the blueprint's first byte; the roll decides only whether
      * anything is dropped at all. The oracle caught the port doing it the obvious way (§6.74).
      */
-    const std::uint8_t capped = static_cast<std::uint8_t>(Byte(_type) & ShipByte(_blueprint) & 0x0Fu);
+    const std::uint8_t capped = static_cast<std::uint8_t>(Byte(_type) & _blueprint.cargo & 0x0Fu);
 
     SpawnItems(_math, _effects, _type, capped); // 6502: and it falls into SPIN2
   }
@@ -208,7 +208,7 @@ namespace Elite
     return _limit >= _work.z.hi;
   }
 
-  bool IsHit(const Ship& _work, MathWorkspace& _math, std::uint16_t _blueprint, ShipType _type) noexcept
+  bool IsHit(const Ship& _work, MathWorkspace& _math, const Blueprint& _blueprint, ShipType _type) noexcept
   {
     // 6502: CLC / LDA INWK+8 / BNE HI1 -- the z sign byte, and anything but zero means the ship is
     // not close enough in front of us to have been hit.
@@ -258,13 +258,13 @@ namespace Elite
      * The label is shared with four genuine rejections above, which is exactly why the port read
      * it as a fifth and failed on the first case it was given (§6.84).
      */
-    const std::uint8_t target = ShipByte(static_cast<std::uint16_t>(_blueprint + 2u));
+    const std::uint8_t target = static_cast<std::uint8_t>(_blueprint.targetArea >> 8); // 6502: (XX0),2 -- the high byte
     if (target != _math.s)
     {
       return target >= _math.s;
     }
 
-    return ShipByte(static_cast<std::uint16_t>(_blueprint + 1u)) >= _math.r;
+    return static_cast<std::uint8_t>(_blueprint.targetArea & 0xFFu) >= _math.r; // 6502: (XX0),1 -- the low byte
   }
 
   void FireMissile(FlightLoop& _loop) noexcept
@@ -620,13 +620,6 @@ namespace Elite
   namespace
   {
 
-    /// 6502: (XX0),10 and (XX0),11 -- the bounty a blueprint carries, low byte first.
-    inline constexpr std::uint16_t BLUEPRINT_BOUNTY_LOW = 10;
-    inline constexpr std::uint16_t BLUEPRINT_BOUNTY_HIGH = 11;
-
-    /// 6502: (XX0),0 -- the top nibble is what the ship is worth when it is scooped.
-    inline constexpr std::uint16_t BLUEPRINT_SCOOP = 0;
-
     /// 6502: LDA K%+NI%+36 / AND #%00000100 -- the station's own `NEWB`, in slot 1.
     inline constexpr std::uint8_t STATION_SLOT = 1;
 
@@ -709,7 +702,7 @@ namespace Elite
     std::uint8_t energy;
   };
 
-  [[nodiscard]] LaserHit ApplyLaserHit(FlightLoop& _loop, SpawnChildEffects& _spawn, std::uint16_t _blueprint, ShipType _type) noexcept
+  [[nodiscard]] LaserHit ApplyLaserHit(FlightLoop& _loop, SpawnChildEffects& _spawn, const Blueprint& _blueprint, ShipType _type) noexcept
   {
     FlightScreen& screen = _loop.screen;
 
@@ -857,7 +850,7 @@ namespace Elite
        * back only on the path that survives -- `JMP DEATH` from inside `TACTICS` never reaches
        * `MAL3` -- and `DEATH` calls `RES2`, which clears the bubble anyway (§6.122).
        */
-      if (!MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, screen.flight.blueprint,
+      if (!MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, *screen.flight.blueprint,
                     screen.view))
       {
         return LoopOutcome::Died;
@@ -929,7 +922,7 @@ namespace Elite
         }
         else
         {
-          const std::uint8_t nibble = ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + BLUEPRINT_SCOOP));
+          const std::uint8_t nibble = screen.flight.blueprint->cargo;
           const std::uint8_t worth = static_cast<std::uint8_t>(nibble >> 4u);
           if (worth == 0u)
           {
@@ -1086,7 +1079,7 @@ namespace Elite
       {
         FlipAxesForView(screen.work, screen.flight, screen.spaceView); // 6502: JSR PLUT
 
-        if (IsHit(screen.work, screen.math, screen.flight.blueprint, type)) // 6502: JSR HITCH / BCC MA8
+        if (IsHit(screen.work, screen.math, *screen.flight.blueprint, type)) // 6502: JSR HITCH / BCC MA8
         {
           // 6502: LDA MSAR / BEQ MA47 / JSR BEEP / LDX XSAV / LDY #RED2 / JSR ABORT2 -- an armed
           // missile locks onto whatever the sights are on, and the indicator turns red.
@@ -1100,7 +1093,7 @@ namespace Elite
           // 6502: .MA47 LDA LAS / BEQ MA8 -- no laser firing this frame, so nothing is damaged.
           if (screen.status.laserPower != 0u)
           {
-            const LaserHit hit = ApplyLaserHit(_loop, _loop.effects, screen.flight.blueprint, type);
+            const LaserHit hit = ApplyLaserHit(_loop, _loop.effects, *screen.flight.blueprint, type);
             if (hit.stores)
             {
               screen.work.energy = hit.energy; // 6502: .MA14 STA INWK+35
@@ -1121,7 +1114,7 @@ namespace Elite
       if (drawIt)
       {
         DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work, block, _loop.heap,
-                 screen.flight.blueprint, type, _loop.drawing);
+                 *screen.flight.blueprint, type, _loop.drawing);
       }
 
       /*
@@ -1154,12 +1147,11 @@ namespace Elite
         if (quiet)
         {
           // 6502: LDY #10 / LDA (XX0),Y / BEQ KS1S / TAX / INY / LDA (XX0),Y / TAY / JSR MCASH.
-          const std::uint8_t low = ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + BLUEPRINT_BOUNTY_LOW));
+          const std::uint8_t low = static_cast<std::uint8_t>(screen.flight.blueprint->bounty & 0xFFu);
 
           if (low != 0u)
           {
-            const std::uint8_t high = ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + BLUEPRINT_BOUNTY_HIGH));
-            ReceiveCash(commander, static_cast<std::uint16_t>(low | (high << 8)));
+            ReceiveCash(commander, screen.flight.blueprint->bounty);
 
             /*
              * 6502: LDA #0 / JSR MESS.

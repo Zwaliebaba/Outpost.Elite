@@ -16,13 +16,13 @@ namespace Elite
     /// as it stands rather than the assembled one, because the station's entry is written (`NWSPS`).
     [[nodiscard]] std::uint8_t HeapSizeFor(const Bubble& _bubble, ShipType _type) noexcept
     {
-      const std::uint16_t blueprint = BlueprintFor(_bubble, _type);
-      return (blueprint == 0u) ? std::uint8_t{0} : ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
+      const Blueprint* blueprint = BlueprintFor(_bubble, _type);
+      return (blueprint == nullptr) ? std::uint8_t{0} : blueprint->heapBytes;
     }
   } // namespace
 
   void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, Ship& _work, Commander& _commander,
-                SpawnEffects& _effects, std::uint8_t _slot, std::uint16_t& _blueprint) noexcept
+                SpawnEffects& _effects, std::uint8_t _slot, const Blueprint*& _blueprint) noexcept
   {
     // 6502: STX XX4 / LDA MSTG / CMP XX4 / BNE KS5 -- the player's missile was chasing this one,
     // so it is unlocked and the player told.
@@ -177,7 +177,7 @@ namespace Elite
   }
 
   NewShip AddPlanetOrSun(Bubble& _bubble, Ship& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
-                         std::uint16_t& _blueprint) noexcept
+                         const Blueprint*& _blueprint) noexcept
   {
     // 6502: SOS1 -- JSR msblob / LDA #127 / STA INWK+29 / STA INWK+30.
     _effects.ResetMissileIndicators();
@@ -196,7 +196,7 @@ namespace Elite
     return AddShip(_bubble, _work, type, _blueprint);
   }
 
-  NewShip AddStation(Bubble& _bubble, Ship& _work, SpawnEffects& _effects, std::uint8_t _techLevel, std::uint16_t& _blueprint) noexcept
+  NewShip AddStation(Bubble& _bubble, Ship& _work, SpawnEffects& _effects, std::uint8_t _techLevel, const Blueprint*& _blueprint) noexcept
   {
     _effects.ToggleStationIndicator(); // 6502: JSR SPBLB
 
@@ -229,10 +229,10 @@ namespace Elite
      * system after one created in a high-tech system goes back to being a Coriolis, and a port
      * that only wrote on the Dodo branch would leave the Dodo behind for ever.
      */
-    _bubble.stationBlueprint = BlueprintAddress(ShipType::Station);
+    _bubble.stationType = ShipType::Station;
     if (_techLevel >= STATION_DODO_TECH_LEVEL)
     {
-      _bubble.stationBlueprint = BlueprintAddress(ShipType::Dodo);
+      _bubble.stationType = ShipType::Dodo;
     }
 
     // 6502: LDA #LO(LSO) / STA INWK+33 / LDA #HI(LSO) / STA INWK+34 -- the sun's heap, which the
@@ -367,7 +367,7 @@ namespace Elite
   }
 
   NewShip AddDebris(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed, bool _carryIn,
-                    std::uint16_t& _blueprint) noexcept
+                    const Blueprint*& _blueprint) noexcept
   {
     _work.nose.z.hi = DEBRIS_ORIENTATION;                                    // 6502: LDA #&60 / STA INWK+14
     _work.side.x.hi = static_cast<std::uint8_t>(DEBRIS_ORIENTATION | 0x80u); // 6502: ORA #128 / STA INWK+22
@@ -379,7 +379,7 @@ namespace Elite
   }
 
   NewShip SpawnShipAhead(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed, std::uint8_t _missileTarget,
-                         std::uint16_t& _blueprint) noexcept
+                         const Blueprint*& _blueprint) noexcept
   {
     ClearShip(_work); // 6502: JSR ZINF
 
@@ -412,11 +412,11 @@ namespace Elite
   }
 
   NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent, ShipType _parentType,
-                         std::uint8_t _aiFlag, ShipType _shipType, std::uint16_t& _blueprint) noexcept
+                         std::uint8_t _aiFlag, ShipType _shipType, const Blueprint*& _blueprint) noexcept
   {
     // 6502: STA T1 / TXA / PHA / LDA XX0 / PHA ... -- the AI byte kept and the caller's state saved.
     _math.t1 = _aiFlag;
-    const std::uint16_t savedBlueprint = _blueprint;
+    const Blueprint* const savedBlueprint = _blueprint;
 
     // 6502: LDY #NI%-1 / .FRL2 LDA INWK,Y / STA XX3,Y / LDA (INF),Y / STA INWK,Y / DEY / BPL FRL2.
     const Ship saved = _work;
@@ -475,7 +475,7 @@ namespace Elite
   }
 
   NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent, ShipType _parentType,
-                         std::uint16_t& _blueprint) noexcept
+                         const Blueprint*& _blueprint) noexcept
   {
     // 6502: LDX #ESC / LDA #%11111110, and then straight into `SFS1`.
     return SpawnChildShip(_bubble, _work, _rng, _math, _parent, _parentType, SPAWN_CHILD_AI, ShipType::EscapePod, _blueprint);
