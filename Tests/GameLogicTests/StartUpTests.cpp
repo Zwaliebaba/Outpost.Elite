@@ -435,8 +435,8 @@ namespace GameLogicTests
       const Seam BLOB{"msblob", 0, 0, 0};
       const Seam RESET{"RESET", 0, 0, 0};
       const Seam RES2{"RES2", 0, 0, 0};
-      const Seam FIRST{"TITLE", Elite::TITLE_LOAD_TOKEN, Elite::SHIP_COBRA_MK3, Elite::TITLE_COBRA_DISTANCE};
-      const Seam SECOND{"TITLE", Elite::TITLE_START_TOKEN, Elite::SHIP_ADDER, Elite::TITLE_ADDER_DISTANCE};
+      const Seam FIRST{"TITLE", Elite::TITLE_LOAD_TOKEN, Elite::SHIP_TYPE_COBRA_MK3, Elite::TITLE_COBRA_DISTANCE};
+      const Seam SECOND{"TITLE", Elite::TITLE_START_TOKEN, Elite::SHIP_TYPE_ADDER, Elite::TITLE_ADDER_DISTANCE};
 
       const std::vector<Script> SCRIPTS = {
         {"N at the prompt", false, 'N', {}, {ZEK, START, FIRST, BLOB, SECOND, STOP}},

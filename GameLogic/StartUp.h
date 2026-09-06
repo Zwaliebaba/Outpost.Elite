@@ -166,8 +166,6 @@ namespace Elite
   /// 6502: the two title screens BR1 shows, which differ in every argument.
   inline constexpr std::uint8_t TITLE_LOAD_TOKEN = 6;  ///< "LOAD NEW COMMANDER (Y/N)?"
   inline constexpr std::uint8_t TITLE_START_TOKEN = 7; ///< "PRESS FIRE OR SPACE, COMMANDER."
-  inline constexpr std::uint8_t SHIP_COBRA_MK3 = 11;   ///< 6502: CYL
-  inline constexpr std::uint8_t SHIP_ADDER = 20;       ///< 6502: ADA
   inline constexpr std::uint8_t TITLE_COBRA_DISTANCE = 210;
   inline constexpr std::uint8_t TITLE_ADDER_DISTANCE = 48;
 

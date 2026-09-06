@@ -59,7 +59,7 @@ namespace Elite
     _game.effects.StartTheme();
 
     // 6502: LDX #CYL / LDA #6 / LDY #210 / JSR TITLE -- a Cobra Mk III, a long way off.
-    const std::uint8_t answer = _game.effects.ShowTitleScreen(TITLE_LOAD_TOKEN, SHIP_COBRA_MK3, TITLE_COBRA_DISTANCE);
+    const std::uint8_t answer = _game.effects.ShowTitleScreen(TITLE_LOAD_TOKEN, SHIP_TYPE_COBRA_MK3, TITLE_COBRA_DISTANCE);
 
     /*
      * 6502: CMP #YINT / BNE QU5.
@@ -97,7 +97,7 @@ namespace Elite
     _game.effects.ResetMissileIndicators();
 
     // 6502: LDA #7 / LDX #ADA / LDY #48 / JSR TITLE -- an Adder, close up. Its key is discarded.
-    (void)_game.effects.ShowTitleScreen(TITLE_START_TOKEN, SHIP_ADDER, TITLE_ADDER_DISTANCE);
+    (void)_game.effects.ShowTitleScreen(TITLE_START_TOKEN, SHIP_TYPE_ADDER, TITLE_ADDER_DISTANCE);
 
     // 6502: JSR stopat -- the only stop both paths reach.
     _game.effects.StopTheme();

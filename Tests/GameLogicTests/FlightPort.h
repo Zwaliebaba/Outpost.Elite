@@ -80,7 +80,7 @@ namespace GameLogicTests
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
-      universe.flight.blueprint = Elite::BlueprintAddress(Elite::SHIP_COBRA_MK3);
+      universe.flight.blueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_COBRA_MK3);
       universe.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
       universe.LendSunHeap(heap);
       Elite::SetUpLoaderScreen(universe.canvas); // 6502: the loader's palette, without which the screen stays black

@@ -16,6 +16,7 @@ namespace Elite
   {
     // 6502: AND #128 -- the two-bytes-earlier entry point, and the only difference between them.
     std::uint8_t accumulator = _maskSign ? static_cast<std::uint8_t>(_a & 0x80u) : _a;
+    auto axis = _work.PositionAt(_x); // 6502: INWK,X -- the axis the routine was entered with
 
     /*
      * 6502: ASL A / STA S / LDA #0 / ROR A / STA T / LSR S.
@@ -30,29 +31,29 @@ namespace Elite
     bool carry = false;
 
     // 6502: EOR INWK+2,X / BMI MV10 -- A still holds T, so this compares the two signs.
-    if (((_math.t ^ _work[_x + 2u]) & 0x80u) == 0u)
+    if (((_math.t ^ axis.sgn) & 0x80u) == 0u)
     {
       // Same sign: add the magnitudes and keep the sign.
-      const AddResult low = AddWithCarry(_math.r, _work[_x], carry);
-      _work[_x] = low.value;
+      const AddResult low = AddWithCarry(_math.r, axis.lo, carry);
+      axis.lo = low.value;
 
-      const AddResult middle = AddWithCarry(_math.s, _work[_x + 1u], low.carry);
-      _work[_x + 1u] = middle.value;
+      const AddResult middle = AddWithCarry(_math.s, axis.hi, low.carry);
+      axis.hi = middle.value;
 
-      const AddResult high = AddWithCarry(_work[_x + 2u], 0, middle.carry);
-      _work[_x + 2u] = static_cast<std::uint8_t>(high.value | _math.t);
+      const AddResult high = AddWithCarry(axis.sgn, 0, middle.carry);
+      axis.sgn = static_cast<std::uint8_t>(high.value | _math.t);
       return;
     }
 
     // 6502: MV10 -- opposite signs, so subtract, and the answer may come out the other way round.
-    SubResult low = SubtractWithCarry(_work[_x], _math.r, true);
-    _work[_x] = low.value;
+    SubResult low = SubtractWithCarry(axis.lo, _math.r, true);
+    axis.lo = low.value;
 
-    SubResult middle = SubtractWithCarry(_work[_x + 1u], _math.s, low.carry);
-    _work[_x + 1u] = middle.value;
+    SubResult middle = SubtractWithCarry(axis.hi, _math.s, low.carry);
+    axis.hi = middle.value;
 
-    SubResult high = SubtractWithCarry(static_cast<std::uint8_t>(_work[_x + 2u] & 0x7Fu), 0, middle.carry);
-    _work[_x + 2u] = static_cast<std::uint8_t>((high.value | 0x80u) ^ _math.t);
+    SubResult high = SubtractWithCarry(static_cast<std::uint8_t>(axis.sgn & 0x7Fu), 0, middle.carry);
+    axis.sgn = static_cast<std::uint8_t>((high.value | 0x80u) ^ _math.t);
 
     if (high.carry)
     {
@@ -64,14 +65,14 @@ namespace Elite
      * The carry is clear here (the branch above was not taken), which is what makes `1 - n - 1`
      * the two's complement of n.
      */
-    low = SubtractWithCarry(1, _work[_x], false);
-    _work[_x] = low.value;
+    low = SubtractWithCarry(1, axis.lo, false);
+    axis.lo = low.value;
 
-    middle = SubtractWithCarry(0, _work[_x + 1u], low.carry);
-    _work[_x + 1u] = middle.value;
+    middle = SubtractWithCarry(0, axis.hi, low.carry);
+    axis.hi = middle.value;
 
-    high = SubtractWithCarry(0, _work[_x + 2u], middle.carry);
-    _work[_x + 2u] = static_cast<std::uint8_t>((high.value & 0x7Fu) | _math.t);
+    high = SubtractWithCarry(0, axis.sgn, middle.carry);
+    axis.sgn = static_cast<std::uint8_t>((high.value & 0x7Fu) | _math.t);
   }
 
   bool AddShipCoordinateToK(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x) noexcept
@@ -79,17 +80,18 @@ namespace Elite
     // 6502: LDA K+3 / STA S / AND #128 / STA T / EOR INWK+2,X / BMI MV13.
     _math.s = _math.k[3];
     _math.t = static_cast<std::uint8_t>(_math.k[3] & 0x80u);
+    const auto axis = _work.PositionAt(_x); // 6502: INWK,X
 
-    if (((_math.t ^ _work[_x + 2u]) & 0x80u) == 0u)
+    if (((_math.t ^ axis.sgn) & 0x80u) == 0u)
     {
       // 6502: LDA K+1 / CLC / ADC INWK,X ... -- an explicit CLC here, unlike MVT1's LSR.
-      const AddResult low = AddWithCarry(_math.k[1], _work[_x], false);
+      const AddResult low = AddWithCarry(_math.k[1], axis.lo, false);
       _math.k[1] = low.value;
 
-      const AddResult middle = AddWithCarry(_math.k[2], _work[_x + 1u], low.carry);
+      const AddResult middle = AddWithCarry(_math.k[2], axis.hi, low.carry);
       _math.k[2] = middle.value;
 
-      const AddResult high = AddWithCarry(_math.k[3], _work[_x + 2u], middle.carry);
+      const AddResult high = AddWithCarry(_math.k[3], axis.sgn, middle.carry);
       _math.k[3] = static_cast<std::uint8_t>((high.value & 0x7Fu) | _math.t);
       return high.carry; // 6502: the `ADC`'s, which `AND` and `ORA` leave alone
     }
@@ -97,13 +99,13 @@ namespace Elite
     // 6502: MV13 -- LDA S / AND #127 / STA S, then subtract the other way round.
     _math.s = static_cast<std::uint8_t>(_math.s & 0x7Fu);
 
-    SubResult low = SubtractWithCarry(_work[_x], _math.k[1], true);
+    SubResult low = SubtractWithCarry(axis.lo, _math.k[1], true);
     _math.k[1] = low.value;
 
-    SubResult middle = SubtractWithCarry(_work[_x + 1u], _math.k[2], low.carry);
+    SubResult middle = SubtractWithCarry(axis.hi, _math.k[2], low.carry);
     _math.k[2] = middle.value;
 
-    SubResult high = SubtractWithCarry(static_cast<std::uint8_t>(_work[_x + 2u] & 0x7Fu), _math.s, middle.carry);
+    SubResult high = SubtractWithCarry(static_cast<std::uint8_t>(axis.sgn & 0x7Fu), _math.s, middle.carry);
     _math.k[3] = static_cast<std::uint8_t>((high.value | 0x80u) ^ _math.t);
 
     if (high.carry)
@@ -124,23 +126,24 @@ namespace Elite
 
   std::uint8_t AddShipCoordinateToP(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x) noexcept
   {
+    const auto axis = _work.PositionAt(_x); // 6502: INWK,X
     // 6502: TAY / EOR INWK+2,X / BMI MV50 -- Y keeps the incoming A, which is what comes back.
-    if (((_a ^ _work[_x + 2u]) & 0x80u) == 0u)
+    if (((_a ^ axis.sgn) & 0x80u) == 0u)
     {
-      const AddResult low = AddWithCarry(_math.p1, _work[_x], false); // 6502: CLC / ADC
+      const AddResult low = AddWithCarry(_math.p1, axis.lo, false); // 6502: CLC / ADC
       _math.p1 = low.value;
 
-      const AddResult high = AddWithCarry(_math.p2, _work[_x + 1u], low.carry);
+      const AddResult high = AddWithCarry(_math.p2, axis.hi, low.carry);
       _math.p2 = high.value;
 
       return _a; // 6502: TYA / RTS
     }
 
     // 6502: MV50 -- subtract, and if it goes past zero negate and FLIP THE SIGN that comes back.
-    SubResult low = SubtractWithCarry(_work[_x], _math.p1, true);
+    SubResult low = SubtractWithCarry(axis.lo, _math.p1, true);
     _math.p1 = low.value;
 
-    SubResult high = SubtractWithCarry(_work[_x + 1u], _math.p2, low.carry);
+    SubResult high = SubtractWithCarry(axis.hi, _math.p2, low.carry);
     _math.p2 = high.value;
 
     if (high.carry)
@@ -160,40 +163,41 @@ namespace Elite
 
   void RotateShipVector(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _y, std::uint8_t _alpha, std::uint8_t _beta) noexcept
   {
+    auto vector = _work.VectorAt(_y); // 6502: INWK,Y -- the vector the routine was entered with
     // 6502: LDA ALPHA / STA Q ... -- Y = Y - alpha * X, and the subtraction is an EOR #128.
     _math.q = _alpha;
-    _math.r = _work[_y + 2u];
-    _math.s = _work[_y + 3u];
-    _math.p = _work[_y];
-    AddSignedResult result = MultiplyAndAdd(_math, static_cast<std::uint8_t>(_work[_y + 1u] ^ 0x80u));
-    _work[_y + 3u] = result.high;
-    _work[_y + 2u] = result.low;
+    _math.r = vector.yLo;
+    _math.s = vector.yHi;
+    _math.p = vector.xLo;
+    AddSignedResult result = MultiplyAndAdd(_math, static_cast<std::uint8_t>(vector.xHi ^ 0x80u));
+    vector.yHi = result.high;
+    vector.yLo = result.low;
     _math.p = result.low; // 6502: STX P
 
     // 6502: X = X + alpha * Y
-    _math.r = _work[_y];
-    _math.s = _work[_y + 1u];
-    result = MultiplyAndAdd(_math, _work[_y + 3u]);
-    _work[_y + 1u] = result.high;
-    _work[_y] = result.low;
+    _math.r = vector.xLo;
+    _math.s = vector.xHi;
+    result = MultiplyAndAdd(_math, vector.yHi);
+    vector.xHi = result.high;
+    vector.xLo = result.low;
     _math.p = result.low;
 
     // 6502: LDA BETA / STA Q -- Y = Y - beta * Z
     _math.q = _beta;
-    _math.r = _work[_y + 2u];
-    _math.s = _work[_y + 3u];
-    _math.p = _work[_y + 4u];
-    result = MultiplyAndAdd(_math, static_cast<std::uint8_t>(_work[_y + 5u] ^ 0x80u));
-    _work[_y + 3u] = result.high;
-    _work[_y + 2u] = result.low;
+    _math.r = vector.yLo;
+    _math.s = vector.yHi;
+    _math.p = vector.zLo;
+    result = MultiplyAndAdd(_math, static_cast<std::uint8_t>(vector.zHi ^ 0x80u));
+    vector.yHi = result.high;
+    vector.yLo = result.low;
     _math.p = result.low;
 
     // 6502: Z = Z + beta * Y
-    _math.r = _work[_y + 4u];
-    _math.s = _work[_y + 5u];
-    result = MultiplyAndAdd(_math, _work[_y + 3u]);
-    _work[_y + 5u] = result.high;
-    _work[_y + 4u] = result.low;
+    _math.r = vector.zLo;
+    _math.s = vector.zHi;
+    result = MultiplyAndAdd(_math, vector.yHi);
+    vector.zHi = result.high;
+    vector.zLo = result.low;
   }
 
   namespace
@@ -207,20 +211,22 @@ namespace Elite
     [[nodiscard]] AddSignedResult RotateHalf(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _from, std::uint8_t _other,
                                              std::uint8_t _rat2, bool _flip) noexcept
     {
+      const auto from = _work.ComponentAt(_from);   // 6502: INWK,X / INWK+1,X
+      const auto other = _work.ComponentAt(_other); // 6502: INWK,Y / INWK+1,Y
       // 6502: LDA INWK+1,X / AND #127 / LSR A / STA T -- half the magnitude of the high byte...
-      _math.t = static_cast<std::uint8_t>((_work[_from + 1u] & 0x7Fu) >> 1);
+      _math.t = static_cast<std::uint8_t>((from.hi & 0x7Fu) >> 1);
 
       // ...taken off the value, which is what keeps the rotation from growing without bound.
-      const SubResult low = SubtractWithCarry(_work[_from], _math.t, true);
+      const SubResult low = SubtractWithCarry(from.lo, _math.t, true);
       _math.r = low.value;
-      _math.s = SubtractWithCarry(_work[_from + 1u], 0, low.carry).value;
+      _math.s = SubtractWithCarry(from.hi, 0, low.carry).value;
 
       // 6502: LDA INWK,Y / STA P / LDA INWK+1,Y / AND #128 / STA T -- the other value and its sign.
-      _math.p = _work[_other];
-      _math.t = static_cast<std::uint8_t>(_work[_other + 1u] & 0x80u);
+      _math.p = other.lo;
+      _math.t = static_cast<std::uint8_t>(other.hi & 0x80u);
 
       // 6502: LSR A / ROR P, four times -- (A P) divided by sixteen, which is the rotation's angle.
-      std::uint8_t high = static_cast<std::uint8_t>(_work[_other + 1u] & 0x7Fu);
+      std::uint8_t high = static_cast<std::uint8_t>(other.hi & 0x7Fu);
       for (int shift = 0; shift < 4; ++shift)
       {
         const bool carry = (high & 1u) != 0u;
@@ -242,6 +248,8 @@ namespace Elite
 
   void RotateCoordinatePair(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x, std::uint8_t _y, std::uint8_t _rat2) noexcept
   {
+    auto x = _work.ComponentAt(_x); // 6502: the two components MVS5 rotates into each other
+    auto y = _work.ComponentAt(_y);
     // 6502: JSR ADD / STA K+1 / STX K -- the first half is held in K while the second runs.
     const AddSignedResult first = RotateHalf(_work, _math, _x, _y, _rat2, false);
     _math.k[1] = first.high;
@@ -249,13 +257,13 @@ namespace Elite
 
     // 6502: the same with X and Y swapped, and the EOR #128 that makes it a rotation.
     const AddSignedResult second = RotateHalf(_work, _math, _y, _x, _rat2, true);
-    _work[_y + 1u] = second.high;
-    _work[_y] = second.low;
+    y.hi = second.high;
+    y.lo = second.low;
 
     // 6502: LDX Q / LDA K / STA INWK,X / LDA K+1 / STA INWK+1,X -- and only now is X written, so
     // the second half read the value the first half had not yet replaced.
-    _work[_x] = _math.k[0];
-    _work[_x + 1u] = _math.k[1];
+    x.lo = _math.k[0];
+    x.hi = _math.k[1];
   }
 
   std::uint8_t OrientationComponent(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x,
@@ -265,16 +273,16 @@ namespace Elite
     _math.p2 = _a;
 
     // 6502: LDA INWK+10,X / STA Q / LDA INWK+16,X / JSR MULT12 -- (S R) = the first product.
-    _math.q = _work[10u + _x];
-    MultiplySignedToSR(_math, _work[16u + _x]);
+    _math.q = _work.ComponentAt(static_cast<std::uint8_t>(SHIP_NOSE_OFFSET + _x)).hi;
+    MultiplySignedToSR(_math, _work.ComponentAt(static_cast<std::uint8_t>(SHIP_ROOF_OFFSET + _x)).hi);
 
     // 6502: LDX INWK+10,Y / STX Q / LDA INWK+16,Y / JSR MAD -- (A X) = the second, plus the first.
-    _math.q = _work[10u + _y];
-    const AddSignedResult sum = MultiplyAndAdd(_math, _work[16u + _y]);
+    _math.q = _work.ComponentAt(static_cast<std::uint8_t>(SHIP_NOSE_OFFSET + _y)).hi;
+    const AddSignedResult sum = MultiplyAndAdd(_math, _work.ComponentAt(static_cast<std::uint8_t>(SHIP_ROOF_OFFSET + _y)).hi);
 
     // 6502: STX P / LDY P+2 / LDX INWK+10,Y / STX Q / EOR #128, then the fall-through into DVIDT.
     _math.p = sum.low;
-    _math.q = _work[10u + _math.p2];
+    _math.q = _work.ComponentAt(static_cast<std::uint8_t>(SHIP_NOSE_OFFSET + _math.p2)).hi;
 
     return DivideWide(_math, static_cast<std::uint8_t>(sum.high ^ 0x80u));
   }
@@ -285,11 +293,12 @@ namespace Elite
     /// place. `NORM` works on XX15, so the six bytes go out and the three high ones come back.
     void NormaliseVector(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _at) noexcept
     {
-      std::array<std::uint8_t, 3> vector = {_work[_at], _work[_at + 2u], _work[_at + 4u]};
+      auto components = _work.VectorAt(_at); // 6502: the vector at INWK+n, of which NORM reads the three high bytes
+      std::array<std::uint8_t, 3> vector = {components.xHi, components.yHi, components.zHi};
       Normalise(_math, vector);
-      _work[_at] = vector[0];
-      _work[_at + 2u] = vector[1];
-      _work[_at + 4u] = vector[2];
+      components.xHi = vector[0];
+      components.yHi = vector[1];
+      components.zHi = vector[2];
     }
 
     /// 6502: AND #&60 -- is this component big enough to divide by? Bits 5 and 6 of the magnitude,
@@ -303,7 +312,7 @@ namespace Elite
   void TidyOrientation(ShipBlock& _work, MathWorkspace& _math) noexcept
   {
     // 6502: the nose vector, at INWK+10 / +12 / +14.
-    NormaliseVector(_work, _math, 10u);
+    NormaliseVector(_work, _math, SHIP_NOSE_OFFSET);
 
     /*
      * 6502: LDY #4 / LDA XX15 / AND #&60 / BEQ TI1 ... -- recompute ONE component of the roof
@@ -313,23 +322,23 @@ namespace Elite
      * indices are what select the axes. Y is 4 on the first path because it was loaded before the
      * test; `TI2` reaches its own by `TYA`, which is why the value survives that far.
      */
-    if (BigEnoughToDivideBy(_work[10u]))
+    if (BigEnoughToDivideBy(_work.Nose().xHi))
     {
-      _work[16u] = OrientationComponent(_work, _math, 0, 2, 4);
+      _work.Roof().xHi = OrientationComponent(_work, _math, 0, 2, 4);
     }
-    else if (BigEnoughToDivideBy(_work[12u]))
+    else if (BigEnoughToDivideBy(_work.Nose().yHi))
     {
       // 6502: TI1 -- TAX makes X the 0 the accumulator held, and A is 2.
-      _work[18u] = OrientationComponent(_work, _math, 2, 0, 4);
+      _work.Roof().yHi = OrientationComponent(_work, _math, 2, 0, 4);
     }
     else
     {
       // 6502: TI2 -- TYA puts the 4 into A, and Y becomes 2.
-      _work[20u] = OrientationComponent(_work, _math, 4, 0, 2);
+      _work.Roof().zHi = OrientationComponent(_work, _math, 4, 0, 2);
     }
 
     // 6502: TI3 -- the roof vector, now that it has been rebuilt.
-    NormaliseVector(_work, _math, 16u);
+    NormaliseVector(_work, _math, SHIP_ROOF_OFFSET);
 
     /*
      * 6502: the side vector as the CROSS PRODUCT of the other two, one component at a time. Each is
@@ -337,15 +346,15 @@ namespace Elite
      * the second and third run on whatever Q the routines before them left, which is reproduced by
      * calling them in the same order on the same workspace rather than by reasoning about it.
      */
-    _math.q = _work[12u];
-    MultiplySignedToSR(_math, _work[20u]);
-    _work[22u] = static_cast<std::uint8_t>(MultiplyAddDivide96(_math, _work[18u], _work[14u]) ^ 0x80u);
+    _math.q = _work.Nose().yHi;
+    MultiplySignedToSR(_math, _work.Roof().zHi);
+    _work.Side().xHi = static_cast<std::uint8_t>(MultiplyAddDivide96(_math, _work.Roof().yHi, _work.Nose().zHi) ^ 0x80u);
 
-    MultiplySignedToSR(_math, _work[16u]);
-    _work[24u] = static_cast<std::uint8_t>(MultiplyAddDivide96(_math, _work[20u], _work[10u]) ^ 0x80u);
+    MultiplySignedToSR(_math, _work.Roof().xHi);
+    _work.Side().yHi = static_cast<std::uint8_t>(MultiplyAddDivide96(_math, _work.Roof().zHi, _work.Nose().xHi) ^ 0x80u);
 
-    MultiplySignedToSR(_math, _work[18u]);
-    _work[26u] = static_cast<std::uint8_t>(MultiplyAddDivide96(_math, _work[16u], _work[12u]) ^ 0x80u);
+    MultiplySignedToSR(_math, _work.Roof().yHi);
+    _work.Side().zHi = static_cast<std::uint8_t>(MultiplyAddDivide96(_math, _work.Roof().xHi, _work.Nose().yHi) ^ 0x80u);
 
     /*
      * 6502: LDA #0 / LDX #14 / .TIL1 STA INWK+9,X / DEX / DEX / BPL TIL1.
@@ -368,9 +377,9 @@ namespace Elite
   {
     // 6502: LDA ALPHA / EOR #128 / STA Q -- the player's roll, applied the other way round.
     _math.q = static_cast<std::uint8_t>(_alpha ^ 0x80u);
-    _math.p = _work[0];
-    _math.p1 = _work[1];
-    MultiplySignedToK(_math, _work[2]); // 6502: JSR MULT3 -- K = -alpha * x
+    _math.p = _work.X().lo;
+    _math.p1 = _work.X().hi;
+    MultiplySignedToK(_math, _work.X().sgn); // 6502: JSR MULT3 -- K = -alpha * x
     // Discarded: `MV40` runs a second `MULT3` over this result, so nothing reads the flag (§6.126).
     static_cast<void>(AddShipCoordinateToK(_work, _math, 3u)); // 6502: LDX #3 / JSR MVT3 -- K = y - alpha * x
 
@@ -387,10 +396,10 @@ namespace Elite
 
     // 6502: the new z, and P set up for the multiply that follows.
     _math.p = _math.k[1];
-    _work[6] = _math.k[1];
+    _work.Z().lo = _math.k[1];
     _math.p1 = _math.k[2];
-    _work[7] = _math.k[2];
-    _work[8] = _math.k[3];
+    _work.Z().hi = _math.k[2];
+    _work.Z().sgn = _math.k[3];
 
     // 6502: EOR #128 / JSR MULT3 -- K = -beta * z', with Q still holding beta.
     MultiplySignedToK(_math, static_cast<std::uint8_t>(_math.k[3] ^ 0x80u));
@@ -408,11 +417,11 @@ namespace Elite
       bool carry = AddWithCarry(_math.k[0], _math.k2[0], false).carry;
 
       AddResult sum = AddWithCarry(_math.k[1], _math.k2[1], carry);
-      _work[3] = sum.value;
+      _work.Y().lo = sum.value;
       carry = sum.carry;
 
       sum = AddWithCarry(_math.k[2], _math.k2[2], carry);
-      _work[4] = sum.value;
+      _work.Y().hi = sum.value;
       carry = sum.carry;
 
       high = AddWithCarry(_math.k[3], _math.k2[3], carry).value;
@@ -423,11 +432,11 @@ namespace Elite
       bool carry = SubtractWithCarry(_math.k[0], _math.k2[0], true).carry;
 
       SubResult difference = SubtractWithCarry(_math.k[1], _math.k2[1], carry);
-      _work[3] = difference.value;
+      _work.Y().lo = difference.value;
       carry = difference.carry;
 
       difference = SubtractWithCarry(_math.k[2], _math.k2[2], carry);
-      _work[4] = difference.value;
+      _work.Y().hi = difference.value;
       carry = difference.carry;
 
       // 6502: LDA K2+3 / AND #127 / STA P / LDA K+3 / AND #127 / SBC P / STA P -- magnitudes only.
@@ -439,11 +448,11 @@ namespace Elite
       if (!difference.carry)
       {
         // 6502: the subtraction went past zero, so negate all three bytes.
-        SubResult negated = SubtractWithCarry(1, _work[3], false);
-        _work[3] = negated.value;
+        SubResult negated = SubtractWithCarry(1, _work.Y().lo, false);
+        _work.Y().lo = negated.value;
 
-        negated = SubtractWithCarry(0, _work[4], negated.carry);
-        _work[4] = negated.value;
+        negated = SubtractWithCarry(0, _work.Y().hi, negated.carry);
+        _work.Y().hi = negated.value;
 
         negated = SubtractWithCarry(0, _math.p, negated.carry);
         high = static_cast<std::uint8_t>(negated.value | 0x80u);
@@ -451,18 +460,18 @@ namespace Elite
     }
 
     // 6502: MV2 -- EOR T / STA INWK+5, the sign the two blocks agreed on.
-    _work[5] = static_cast<std::uint8_t>(high ^ _math.t);
+    _work.Y().sgn = static_cast<std::uint8_t>(high ^ _math.t);
 
     // 6502: LDA ALPHA / STA Q ... / JSR MULT3 / LDX #0 / JSR MVT3 -- x = x + alpha * y'.
     _math.q = _alpha;
-    _math.p = _work[3];
-    _math.p1 = _work[4];
-    MultiplySignedToK(_math, _work[5]);
+    _math.p = _work.Y().lo;
+    _math.p1 = _work.Y().hi;
+    MultiplySignedToK(_math, _work.Y().sgn);
     static_cast<void>(AddShipCoordinateToK(_work, _math, 0u)); // the flag dies at `MV45` (§6.126)
 
-    _work[0] = _math.k[1];
-    _work[1] = _math.k[2];
-    _work[2] = _math.k[3];
+    _work.X().lo = _math.k[1];
+    _work.X().hi = _math.k[2];
+    _work.X().sgn = _math.k[3];
 
     // 6502: JMP MV45 -- back into MVEIT's tail, which the caller runs.
   }
@@ -504,28 +513,30 @@ namespace Elite
        * one off every iteration. So a ship at full roll holds it and any other roll decays to zero,
        * which is how a ship straightens up after a turn without anything deciding that it should.
        */
-      const std::uint8_t ROLL_AND_PITCH[2] = {30u, 29u};
-      const std::uint8_t VECTORS[2][3] = {{9u, 11u, 13u}, {21u, 23u, 25u}};
+      // 6502: the component offsets MVS5 is handed -- roofv against nosev's x, y and z for the
+      // pitch, and against sidev's for the roll.
+      const std::uint8_t VECTORS[2][3] = {{SHIP_NOSE_OFFSET, SHIP_NOSE_OFFSET + 2u, SHIP_NOSE_OFFSET + 4u},
+                                          {SHIP_SIDE_OFFSET, SHIP_SIDE_OFFSET + 2u, SHIP_SIDE_OFFSET + 4u}};
 
       for (int which = 0; which < 2; ++which)
       {
-        const std::uint8_t at = ROLL_AND_PITCH[which];
-        _flight.rat2 = static_cast<std::uint8_t>(_work[at] & 0x80u);
+        std::uint8_t& counter = (which == 0) ? _work.PitchCounter() : _work.RollCounter(); // 6502: INWK+30, then INWK+29
+        _flight.rat2 = static_cast<std::uint8_t>(counter & 0x80u);
 
-        const std::uint8_t magnitude = static_cast<std::uint8_t>(_work[at] & 0x7Fu);
+        const std::uint8_t magnitude = static_cast<std::uint8_t>(counter & 0x7Fu);
         if (magnitude == 0u)
         {
           continue; // 6502: BEQ MV8 / BEQ MV5 -- no turn, so nothing to apply and nothing to damp
         }
 
         const SubResult damped = SubtractWithCarry(magnitude, 0, magnitude >= 127u);
-        _work[at] = static_cast<std::uint8_t>(damped.value | _flight.rat2);
+        counter = static_cast<std::uint8_t>(damped.value | _flight.rat2);
 
         // 6502: LDX #15 / LDY #9 / JSR MVS5, three times over -- the orientation vectors turned
         // against the ship's own roll or pitch.
-        RotateCoordinatePair(_work, _math, 15u, VECTORS[which][0], _flight.rat2);
-        RotateCoordinatePair(_work, _math, 17u, VECTORS[which][1], _flight.rat2);
-        RotateCoordinatePair(_work, _math, 19u, VECTORS[which][2], _flight.rat2);
+        RotateCoordinatePair(_work, _math, SHIP_ROOF_OFFSET, VECTORS[which][0], _flight.rat2);
+        RotateCoordinatePair(_work, _math, SHIP_ROOF_OFFSET + 2u, VECTORS[which][1], _flight.rat2);
+        RotateCoordinatePair(_work, _math, SHIP_ROOF_OFFSET + 4u, VECTORS[which][2], _flight.rat2);
       }
 
       /*
@@ -534,13 +545,13 @@ namespace Elite
        * Bit 4 is "this ship is drawn on the scanner". A live ship sets it and gets scanned AGAIN --
        * the second call of the iteration -- while an exploding one clears it instead and is not.
        */
-      if ((_work[31] & 0xA0u) != 0u)
+      if ((_work.State() & 0xA0u) != 0u)
       {
-        _work[31] = static_cast<std::uint8_t>(_work[31] & 0xEFu); // 6502: MVD1
+        _work.State() = static_cast<std::uint8_t>(_work.State() & 0xEFu); // 6502: MVD1
         return;
       }
 
-      _work[31] = static_cast<std::uint8_t>(_work[31] | 0x10u);
+      _work.State() = static_cast<std::uint8_t>(_work.State() | 0x10u);
 
       // 6502: JMP SCAN -- a tail call, so it is the last thing done.
       DrawScannerBlip(_canvas, _draw, _work, _flight.type, _view);
@@ -552,7 +563,7 @@ namespace Elite
   {
     // 6502: LDA INWK+31 / AND #&A0 / BNE MV30 -- exploding or already dead, so straight to the
     // scanner. Nothing below moves it, which is why a wreck hangs where it died.
-    if ((_work[31] & 0xA0u) == 0u)
+    if ((_work.State() & 0xA0u) == 0u)
     {
       // 6502: LDA MCNT / EOR XSAV / AND #15 / BNE MV3 / JSR TIDY -- one ship every sixteenth pass.
       if ((static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 15u) == 0u)
@@ -575,7 +586,7 @@ namespace Elite
        * A missile thinks on EVERY iteration and everything else on one in eight, which is the whole
        * reason a missile is frightening and a Krait is not.
        */
-      if ((_work[32] & 0x80u) != 0u &&
+      if ((_work.Ai() & 0x80u) != 0u &&
           (_flight.type == SHIP_TYPE_MISSILE || (static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 7u) == 0u))
       {
         // 6502: JSR TACTICS at MV26 -- and it can end in `JMP DEATH`, which does not come back.
@@ -595,7 +606,7 @@ namespace Elite
      * along the direction it is pointing, and the multiply is the unsigned high-byte one because
      * only the magnitude matters here. The sign comes from the coordinate byte handed to `MVT1-2`.
      */
-    _math.q = static_cast<std::uint8_t>(_work[27] << 2);
+    _math.q = static_cast<std::uint8_t>(_work.Speed() << 2);
 
     const std::uint8_t AXES[3][2] = {{10u, 0u}, {12u, 3u}, {14u, 6u}};
     for (const auto& axis : AXES)
@@ -613,7 +624,7 @@ namespace Elite
      * it is a one-shot each iteration, not a persistent force, which is why a ship that stops being
      * pushed stops accelerating immediately rather than coasting up to speed.
      */
-    AddResult speed = AddWithCarry(_work[27], _work[28], false);
+    AddResult speed = AddWithCarry(_work.Speed(), _work.Acceleration(), false);
     std::uint8_t wanted = ((speed.value & 0x80u) != 0u) ? std::uint8_t{0} : speed.value;
 
     const std::uint8_t maximum = ShipByte(static_cast<std::uint16_t>(_blueprint + 15u));
@@ -621,8 +632,8 @@ namespace Elite
     {
       wanted = maximum;
     }
-    _work[27] = wanted;
-    _work[28] = 0;
+    _work.Speed() = wanted;
+    _work.Acceleration() = 0;
 
     /*
      * 6502: the rotation of the ship's POSITION by the player's roll and pitch -- y -= a*x,
@@ -633,9 +644,9 @@ namespace Elite
      * multiply, which is the second place in this slice that needs both blocks at once.
      */
     _math.q = _flight.alp1; // 6502: LDX ALP1 / JSR MLTU2-2
-    _math.p = static_cast<std::uint8_t>(_work[0] ^ 0xFFu);
-    _math.p2 = MultiplyWide(_math, _work[1]).high;
-    _math.k2[3] = AddShipCoordinateToP(_work, _math, static_cast<std::uint8_t>(_flight.alp2Next ^ _work[2]), 3u);
+    _math.p = static_cast<std::uint8_t>(_work.X().lo ^ 0xFFu);
+    _math.p2 = MultiplyWide(_math, _work.X().hi).high;
+    _math.k2[3] = AddShipCoordinateToP(_work, _math, static_cast<std::uint8_t>(_flight.alp2Next ^ _work.X().sgn), 3u);
 
     _math.k2[1] = _math.p1;
     _math.p = static_cast<std::uint8_t>(_math.p1 ^ 0xFFu);
@@ -643,15 +654,15 @@ namespace Elite
 
     _math.q = _flight.bet1; // 6502: LDX BET1 / JSR MLTU2-2
     _math.p2 = MultiplyWide(_math, _math.p2).high;
-    _work[8] = AddShipCoordinateToP(_work, _math, static_cast<std::uint8_t>(_math.k2[3] ^ _flight.bet2), 6u);
-    _work[6] = _math.p1;
+    _work.Z().sgn = AddShipCoordinateToP(_work, _math, static_cast<std::uint8_t>(_math.k2[3] ^ _flight.bet2), 6u);
+    _work.Z().lo = _math.p1;
     _math.p = static_cast<std::uint8_t>(_math.p1 ^ 0xFFu);
-    _work[7] = _math.p2;
+    _work.Z().hi = _math.p2;
 
     // 6502: JSR MLTU2 -- Q is still BET1, and ITS CARRY is what the arithmetic below runs on.
     const WideResult wide = MultiplyWide(_math, _math.p2);
     _math.p2 = wide.high;
-    _work[5] = _math.k2[3];
+    _work.Y().sgn = _math.k2[3];
 
     /*
      * 6502: EOR BET2 / EOR INWK+8 / BPL MV43.
@@ -661,42 +672,42 @@ namespace Elite
      * every other sign test in this file. Reading it the natural way put the ship's y coordinate one
      * out on the first iteration, which is how it was found.
      */
-    if (((_math.k2[3] ^ _flight.bet2 ^ _work[8]) & 0x80u) != 0u)
+    if (((_math.k2[3] ^ _flight.bet2 ^ _work.Z().sgn) & 0x80u) != 0u)
     {
       /*
        * 6502: `LDA P+1 / ADC K2+1` with NO `CLC`. It runs on the carry `MLTU2` left, because
        * nothing between them touches it -- `STA`, `LDA` and `EOR` do not.
        */
       AddResult sum = AddWithCarry(_math.p1, _math.k2[1], wide.carry);
-      _work[3] = sum.value;
+      _work.Y().lo = sum.value;
       sum = AddWithCarry(_math.p2, _math.k2[2], sum.carry);
-      _work[4] = sum.value;
+      _work.Y().hi = sum.value;
     }
     else
     {
       // 6502: MV43 -- `LDA K2+1 / SBC P+1`, and no `SEC` either, for the same reason.
       SubResult difference = SubtractWithCarry(_math.k2[1], _math.p1, wide.carry);
-      _work[3] = difference.value;
+      _work.Y().lo = difference.value;
       difference = SubtractWithCarry(_math.k2[2], _math.p2, difference.carry);
-      _work[4] = difference.value;
+      _work.Y().hi = difference.value;
 
       if (!difference.carry)
       {
-        SubResult negated = SubtractWithCarry(1, _work[3], false);
-        _work[3] = negated.value;
-        negated = SubtractWithCarry(0, _work[4], negated.carry);
-        _work[4] = negated.value;
-        _work[5] = static_cast<std::uint8_t>(_work[5] ^ 0x80u);
+        SubResult negated = SubtractWithCarry(1, _work.Y().lo, false);
+        _work.Y().lo = negated.value;
+        negated = SubtractWithCarry(0, _work.Y().hi, negated.carry);
+        _work.Y().hi = negated.value;
+        _work.Y().sgn = static_cast<std::uint8_t>(_work.Y().sgn ^ 0x80u);
       }
     }
 
     // 6502: MV44 -- LDX ALP1 / ... / JSR MVT6 -- x = x + alpha * y.
     _math.q = _flight.alp1;
-    _math.p = static_cast<std::uint8_t>(_work[3] ^ 0xFFu);
-    _math.p2 = MultiplyWide(_math, _work[4]).high;
-    _work[2] = AddShipCoordinateToP(_work, _math, static_cast<std::uint8_t>(_flight.alp2 ^ _work[5]), 0u);
-    _work[1] = _math.p2;
-    _work[0] = _math.p1;
+    _math.p = static_cast<std::uint8_t>(_work.Y().lo ^ 0xFFu);
+    _math.p2 = MultiplyWide(_math, _work.Y().hi).high;
+    _work.X().sgn = AddShipCoordinateToP(_work, _math, static_cast<std::uint8_t>(_flight.alp2 ^ _work.Y().sgn), 0u);
+    _work.X().hi = _math.p2;
+    _work.X().lo = _math.p1;
 
     MoveShipTail(_canvas, _draw, _work, _math, _flight, _view); // 6502: falls into MV45
     return true;
@@ -755,12 +766,12 @@ namespace Elite
     _flight.rat = static_cast<std::uint8_t>(_flight.rat2 ^ 0x80u);
 
     // The position, whose low and high bytes swap plainly and whose signs swap with a flip.
-    std::swap(_work[0], _work[6]);
-    std::swap(_work[1], _work[7]);
+    std::swap(_work.X().lo, _work.Z().lo);
+    std::swap(_work.X().hi, _work.Z().hi);
 
-    const std::uint8_t sign = static_cast<std::uint8_t>(_work[2] ^ _flight.rat);
-    _work[2] = static_cast<std::uint8_t>(_work[8] ^ _flight.rat2);
-    _work[8] = sign;
+    const std::uint8_t sign = static_cast<std::uint8_t>(_work.X().sgn ^ _flight.rat);
+    _work.X().sgn = static_cast<std::uint8_t>(_work.Z().sgn ^ _flight.rat2);
+    _work.Z().sgn = sign;
 
     SwapVectorAxes(_work, _flight, 9);
     SwapVectorAxes(_work, _flight, 15);

@@ -53,10 +53,10 @@ namespace Elite
      * load, then the distance -- and `INWK+7` gets 2 on this build where the upstream comment
      * says 1 (`BRIEFING_SHIP_DISTANCE`).
      */
-    screen.work[3] = BRIEFING_SHIP_HEIGHT;
-    screen.work[0] = 0u;
-    screen.work[6] = 0u;
-    screen.work[7] = BRIEFING_SHIP_DISTANCE;
+    screen.work.Y().lo = BRIEFING_SHIP_HEIGHT;
+    screen.work.X().lo = 0u;
+    screen.work.Z().lo = 0u;
+    screen.work.Z().hi = BRIEFING_SHIP_DISTANCE;
 
     // 6502: JSR LL9.
     DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
@@ -92,7 +92,7 @@ namespace Elite
     }
 
     // 6502: LDA #0 / STA INWK+31 -- the ship is no longer drawn, so nothing will rub it out.
-    screen.work[31] = 0u;
+    screen.work.State() = 0u;
 
     // 6502: LDA #1 / JSR TT66 -- the space view again, cleared.
     SetUpScreen(screen, MT9_COLUMN_AND_VIEW);
@@ -256,7 +256,7 @@ namespace Elite
      * file that a `JSR` between two stores is a way of not reloading the accumulator.
      */
     screen.text.column = BRIEFING_START_DISTANCE;
-    screen.work[7] = BRIEFING_START_DISTANCE;
+    screen.work.Z().hi = BRIEFING_START_DISTANCE;
     SetUpScreen(screen, BRIEFING_START_DISTANCE);
 
     // 6502: LDA #64 / STA MCNT.
@@ -267,8 +267,8 @@ namespace Elite
     {
       // 6502: LDX #%01111111 / STX INWK+29 / STX INWK+30, INSIDE the loop: the counters are
       // rewritten every frame, so the damping `MVEIT` applies never gets a chance to take hold.
-      screen.work[29] = BRIEFING_SPIN;
-      screen.work[30] = BRIEFING_SPIN;
+      screen.work.RollCounter() = BRIEFING_SPIN;
+      screen.work.PitchCounter() = BRIEFING_SPIN;
 
       DrawBriefingShip(_mission); // 6502: JSR LL9
       MoveBriefingShip(_mission); // 6502: JSR MVEIT
@@ -285,7 +285,7 @@ namespace Elite
      */
     for (;;)
     {
-      screen.work[0] = static_cast<std::uint8_t>(screen.work[0] >> 1); // 6502: LSR INWK
+      screen.work.X().lo = static_cast<std::uint8_t>(screen.work.X().lo >> 1); // 6502: LSR INWK
 
       /*
        * 6502: INC INWK+6 / BEQ BR2 / INC INWK+6 / BEQ BR2 -- TWICE a frame, tested after each.
@@ -293,25 +293,25 @@ namespace Elite
        * So the ship recedes two units per frame and the loop can end on either half, which is why
        * the exit is not simply "when z_lo wraps on an even frame".
        */
-      screen.work[6] = static_cast<std::uint8_t>(screen.work[6] + 1u);
-      if (screen.work[6] == 0u)
+      screen.work.Z().lo = static_cast<std::uint8_t>(screen.work.Z().lo + 1u);
+      if (screen.work.Z().lo == 0u)
       {
         break;
       }
-      screen.work[6] = static_cast<std::uint8_t>(screen.work[6] + 1u);
-      if (screen.work[6] == 0u)
+      screen.work.Z().lo = static_cast<std::uint8_t>(screen.work.Z().lo + 1u);
+      if (screen.work.Z().lo == 0u)
       {
         break;
       }
 
       // 6502: LDX INWK+3 / INX / CPX #conhieght / BCC P%+4 / LDX #conhieght / STX INWK+3 -- the
       // ship climbs one row a frame and stops at the height the briefing text starts below.
-      std::uint8_t height = static_cast<std::uint8_t>(screen.work[3] + 1u);
+      std::uint8_t height = static_cast<std::uint8_t>(screen.work.Y().lo + 1u);
       if (height >= BRIEFING_SHIP_HEIGHT)
       {
         height = BRIEFING_SHIP_HEIGHT;
       }
-      screen.work[3] = height;
+      screen.work.Y().lo = height;
 
       DrawBriefingShip(_mission); // 6502: JSR LL9
       MoveBriefingShip(_mission); // 6502: JSR MVEIT
@@ -320,7 +320,7 @@ namespace Elite
     }
 
     // 6502: .BR2 INC INWK+7 -- the high byte follows the low one past 255.
-    screen.work[7] = static_cast<std::uint8_t>(screen.work[7] + 1u);
+    screen.work.Z().hi = static_cast<std::uint8_t>(screen.work.Z().hi + 1u);
 
     // 6502: LDA #10 / BNE BRPS -- a branch that is a jump, because ten is never zero.
     return MISSION_1_BRIEFING;

@@ -521,7 +521,7 @@ namespace Elite
 
     // 6502: LDX INWK+14 / BMI P%+4 / EOR #%10000000 -- the branch SKIPS the flip, so it is the
     // POSITIVE roof vector that gets it.
-    if ((_ship[14] & 0x80u) == 0u)
+    if ((_ship.Nose().zHi & 0x80u) == 0u)
     {
       angle = static_cast<std::uint8_t>(angle ^ 0x80u);
     }
@@ -686,8 +686,8 @@ namespace Elite
 
       // 6502: LDA INWK+14 / EOR #%10000000 / STA P / LDA INWK+20 / JSR PLS4 -- where the first
       // meridian starts, from the roof vector against the nose.
-      _math.p = static_cast<std::uint8_t>(_ship[14] ^ 0x80u);
-      SetMeridianAngle(_ship, _math, _ship[20]);
+      _math.p = static_cast<std::uint8_t>(_ship.Nose().zHi ^ 0x80u);
+      SetMeridianAngle(_ship, _math, _ship.Roof().zHi);
 
       AxisResult axis = DivideAxisByZ(_ship, _math, 9);
       _math.k2[0] = axis.value;
@@ -701,8 +701,8 @@ namespace Elite
       DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
 
       // And the second meridian, which shares the first pair of axes and takes a new second pair.
-      _math.p = static_cast<std::uint8_t>(_ship[14] ^ 0x80u);
-      SetMeridianAngle(_ship, _math, _ship[26]);
+      _math.p = static_cast<std::uint8_t>(_ship.Nose().zHi ^ 0x80u);
+      SetMeridianAngle(_ship, _math, _ship.Side().zHi);
 
       LoadTwoAxes(_ship, _math, _geometry, 21);
       DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
@@ -715,7 +715,7 @@ namespace Elite
      *
      * `LDA INWK+20 / BMI PL20` -- the nose pointing away means the crater is on the far side.
      */
-    if ((_ship[20] & 0x80u) != 0u)
+    if ((_ship.Roof().zHi & 0x80u) != 0u)
     {
       return;
     }
@@ -773,7 +773,7 @@ namespace Elite
      * take. Both go to `PL2`, so a rejected planet is ERASED rather than merely skipped -- which is
      * why flying away from one leaves no outline behind.
      */
-    if (_ship[8] >= 48u || (_ship[8] | _ship[7]) == 0u)
+    if (_ship.Z().sgn >= 48u || (_ship.Z().sgn | _ship.Z().hi) == 0u)
     {
       ErasePlanetOrSun(_canvas, _state, _math, _draw, _type);
       return;
@@ -1061,9 +1061,9 @@ namespace Elite
      * 127 because the orientation vectors are unit vectors at a scale of 96, which is the same 96
      * `PLANET` divides by for its radius.
      */
-    _work[18] = 96;
-    _work[22] = 96;
-    _work[14] = static_cast<std::uint8_t>(96u | 0x80u);
+    _work.Roof().yHi = 96;
+    _work.Side().xHi = 96;
+    _work.Nose().zHi = static_cast<std::uint8_t>(96u | 0x80u);
   }
 
   void SeedStardustField(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng, bool _carryIn) noexcept
@@ -1136,7 +1136,7 @@ namespace Elite
        * the slots. The mask clears bits 3, 4 and 6: "drawn on screen", "firing a laser", and the
        * one in between.
        */
-      _bubble.blocks[slot][SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_bubble.blocks[slot][SHIP_STATE_OFFSET] & 0xA7u);
+      _bubble.blocks[slot].State() = static_cast<std::uint8_t>(_bubble.blocks[slot].State() & 0xA7u);
     }
 
     // 6502: WS2 -- LDX #0 / STX LSP / DEX / STX LSX2 / STX LSY2. Note `LSP` goes to ZERO here and

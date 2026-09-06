@@ -787,12 +787,43 @@ a moved record with no defect named is a refactor that changed the game.
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M1-a ShipView** | Named accessors over `ShipBlock` (`Axis()`, `Orientation()`, `State()`, `Ai()`, `HeapAddress()`, `Energy()`, `Newb()`, `RollCounter()`...), `static_assert`ed against the offsets; the 329 literal and 107 constant sites migrated; the duplicate offset and type constants removed. Bytes unchanged. | Oracle suite green; `ship-literal-sites` and `ship-offset-sites` at zero in the ratchet; mutants in `Tactics.cpp`, `Missions.cpp` and `Spawn.cpp` re-anchored and re-run. | 3–4 |
+| **M1-a ShipView** | Named accessors on `ShipBlock` (`X()`, `Y()`, `Z()`, `Nose()`, `Roof()`, `Side()`, `PositionAt()`, `VectorAt()`, `ComponentAt()`, `Speed()` … `Newb()`), the layout named once and `static_assert`ed; every literal and named-offset site migrated; the duplicate offset and type constants removed. Bytes unchanged. | Oracle suite green; `ship-literal-sites` and `ship-offset-sites` at zero in the ratchet; mutants in `Tactics.cpp` and `Missions.cpp` re-anchored and re-run. **Built 2026-09-06** (slice plan and §8 below). | 3–4 |
 | **M1-b ShipType and the flag types** | `enum class ShipType`, `ShipState`, `AiFlags`, `NewbFlags` with the original bit values; the second naming family deleted. | Green; `check_outpost.py` green after the app's constants follow. | 2 |
 | **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become codec calls. Tests migrate to the bridge. | Green through `UniverseImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). | 4–5 |
 | **M1-d Commander** | Typed `Commander` with the seventy-seven-byte codec; `Credits`, `LightYearsTenths`, `Laser`, `Equipment` strong types; `SaveCommander`/`LoadCommander`/checksums over the codec. | `SaveGameTests` and `CommanderTests` green; a commander file from R12's fixture still loads. | 3 |
 | **M1-e Blueprint** | Parsed `Blueprint` table; `ShipByte`/`BlueprintAddress`/`BlueprintFor` removed; `Bubble::stationType`. | `ShipDataTests` green with the three disagreeing ships called out as before; `LL9` suite green. | 3 |
 | **M1-f HeapOffset** | The line heap addressed by offset; `TryReserveHeap` with the exact chain; the sun's heap lent as a span. | `NWSHP`'s refusal sweep green (`ShipSlotTests`); the station-into-sun-heap case (§6.112) green. | 2–3 |
+
+#### M1-a slice plan (written with the build, 2026-09-06; §8 records what the build found)
+
+**The view is on `ShipBlock` itself, and the bytes stay.** `ShipBlock` keeps `bytes` and
+`operator[]`, and gains accessors that are references into the array: `X()`, `Y()`, `Z()` return an
+`AxisBytes` of `lo`, `hi` and `sgn`; `Nose()`, `Roof()`, `Side()` return a `VectorBytes` of six; the
+tail is one accessor per byte, `Speed()` to `Newb()`. Nothing is copied, every write lands where
+`STA INWK+n` landed, and the oracle compares the same bytes it compared before. A struct with a
+codec is M1-c's step; this one changes no layout and so needs no bridge.
+
+**The offsets are the layout, named once.** `SHIP_X_OFFSET` to `SHIP_FLAGS_OFFSET` live in
+`ShipSlot.h` with `static_assert`s between them, and the accessors are built on them. The three
+axis offsets came home from `ShipDraw.h`; the second families — `FlightLoop.cpp`'s ten
+`std::size_t`s, `Combat.cpp`'s two, `Spawn.cpp`'s `SHIP_AI_OFFSET`, `StartUp.h`'s `SHIP_COBRA_MK3`
+and `SHIP_ADDER` — are gone, and the executable's one use follows.
+
+**The routines entered with an offset in a register keep the offset.** `MVT1` with X = 0, 3 or 6,
+`MVS4` with Y = 9, 15 or 21, `MVS5` with two component offsets: their parameters are unchanged (M2
+renames them) and their bodies address the block through `PositionAt`, `VectorAt` and
+`ComponentAt`, taken once at the top as a named view. `TIDY`'s helpers, which indexed the high
+bytes at `10 + n` and `16 + n`, say `SHIP_NOSE_OFFSET` and `SHIP_ROOF_OFFSET`.
+
+**What stays as `operator[]`.** Five wholesale copies — `NWSHP`'s and `MAL2`'s byte loops and the
+two into `K3` — which are the thing M1-c's codec replaces. They index by a loop variable, not a
+number, and the ratchet does not count them.
+
+**The migration was mechanical and the mutants followed it.** One regular expression over the
+receivers a block is reached through (`work`, `_ship`, `block`, `_slot`, `station`, `victim`, the
+`blocks[...]` of a bubble, and the rest) rewrote the fixed sites in the library and the eighteen
+`find`/`replace` fields in `tools/mutants.json` that named one, in the same pass, so that
+`mutate.py --check` was green before the first build.
 
 ### Phase M2 — Explicit calling conventions
 
@@ -941,4 +972,19 @@ shown to catch what the two hand-written functions caught. CI on the same commit
 green, the Windows job's Release suite agreeing with the record the portable runner took. A note on
 method rather than on the tree: a shell loop that waited for the run by `pgrep`-ing its command line
 matched itself and never ended, which is the kind of thing that looks like a hung run and is not.
-M0 is complete; M1-a is next. M0-a is built with this entry; nothing in `GameLogic/` changed.
+M0 is complete; M1-a is next.
+
+**2026-09-06 — M1-a built.** 460 sites, not the 436 the ratchet counted: the regular expression also
+reached the headers (`LineHeap.h`'s heap address) and the `.bytes[...]` spelling in `ShipDraw.cpp`,
+which the counter's receiver list had not. Suite 392 of 392 after the fixed sites, and again after
+the index-parametric routines. **Two of the deleted constants were misnamed, and the bytes they
+named were right**: `FlightLoop.cpp` called byte 14 `SHIP_PITCH_COUNTER` and byte 16
+`SHIP_ROLL_COUNTER`, and part 9's docking test read them as "the pitch counter" in its comment — but
+14 is the nose vector's z high byte and 16 the roof vector's x high byte, which is what `DOENTRY`'s
+`CMP #&D6` and `CMP #&24` test (is the ship pointing down the slot, and is it rolled to it). The
+oracle never noticed because a name is not a behaviour; the view names them `Nose().zHi` and
+`Roof().xHi` and the comment is corrected. The ratchet: `ship-literal-sites` and `ship-offset-sites`
+at zero, the second after its counter stopped counting `counts[SHIP_TYPE_x]`, which indexes the
+per-type tally and never was a byte of a block; `origin-markers` UP from 3,549 to 3,581 because
+every accessor carries the `INWK+n` label the offset it replaces carried (rule 4), and that is the
+one direction rule 5 allows a marker count to move before M6. M0-a is built with this entry; nothing in `GameLogic/` changed.

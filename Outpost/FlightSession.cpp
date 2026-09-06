@@ -102,7 +102,7 @@ namespace Outpost
      * is the title screen's Cobra Mk III, so that is what the pointer would hold.
      */
     m_heaps.stp = LAST_CIRCLE_STEP;
-    m_flight.blueprint = Elite::BlueprintAddress(Elite::SHIP_COBRA_MK3);
+    m_flight.blueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_COBRA_MK3);
 
     /*
      * 6502: XX21+2*SST-2 -- a third byte of the same shape, and this one is not left by a previous

@@ -23,7 +23,7 @@ namespace Elite
 
     // 6502: LDA INWK+31 / AND #%00010000 / BEQ SCR1 -- bit 4 is "show this on the scanner", and
     // it is cleared for the ships that have no blip at all.
-    if ((_ship[31] & 0x10u) == 0u)
+    if ((_ship.State() & 0x10u) == 0u)
     {
       return;
     }
@@ -46,7 +46,7 @@ namespace Elite
      * rather than clip. It is a test of the three ORed together and not of each in turn, which is
      * the same answer for a check of "is any bit 6 or 7 set anywhere".
      */
-    if (((_ship[1] | _ship[4] | _ship[7]) & 0xC0u) != 0u)
+    if (((_ship.X().hi | _ship.Y().hi | _ship.Z().hi) & 0xC0u) != 0u)
     {
       return;
     }
@@ -58,8 +58,8 @@ namespace Elite
      * set therefore lands one pixel right of one at x_hi = 0 without it: 124 rather than 123.
      */
     bool carry = false; // 6502: CLC
-    std::uint8_t across = _ship[1];
-    if ((_ship[2] & 0x80u) != 0u) // 6502: LDX INWK+2 / BPL SC2
+    std::uint8_t across = _ship.X().hi;
+    if ((_ship.X().sgn & 0x80u) != 0u) // 6502: LDX INWK+2 / BPL SC2
     {
       const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(across ^ 0xFFu), 1u, carry);
       across = negated.value;
@@ -76,9 +76,9 @@ namespace Elite
      * `SC` is the byte it goes in and it is NOT the screen pointer here. It becomes one further
      * down, when `CPIX4` overwrites it; until then it is the row the stick is drawn back to.
      */
-    std::uint8_t depth = static_cast<std::uint8_t>(_ship[7] >> 2);
+    std::uint8_t depth = static_cast<std::uint8_t>(_ship.Z().hi >> 2);
     bool depthCarry = false;      // 6502: CLC
-    if ((_ship[8] & 0x80u) != 0u) // 6502: LDX INWK+8 / BPL SC3
+    if ((_ship.Z().sgn & 0x80u) != 0u) // 6502: LDX INWK+8 / BPL SC3
     {
       depth = static_cast<std::uint8_t>(depth ^ 0xFFu);
       depthCarry = true; // 6502: SEC -- so the one's complement and the carry make a negation
@@ -93,9 +93,9 @@ namespace Elite
      * That is not an inconsistency with the depth above: screen rows increase downwards, so a ship
      * above the plane of flight has to move to a smaller row number.
      */
-    std::uint8_t height = static_cast<std::uint8_t>(_ship[4] >> 1);
+    std::uint8_t height = static_cast<std::uint8_t>(_ship.Y().hi >> 1);
     bool heightCarry = false;     // 6502: CLC
-    if ((_ship[5] & 0x80u) == 0u) // 6502: LDX INWK+5 / BMI SCD6
+    if ((_ship.Y().sgn & 0x80u) == 0u) // 6502: LDX INWK+5 / BMI SCD6
     {
       height = static_cast<std::uint8_t>(height ^ 0xFFu);
       heightCarry = true; // 6502: SEC

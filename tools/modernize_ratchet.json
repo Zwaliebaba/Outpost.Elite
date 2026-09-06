@@ -19,17 +19,17 @@
       "slice": "M0-a"
     },
     "ship-literal-sites": {
-      "ceiling": 329,
+      "ceiling": 0,
       "slack": 0,
       "slice": "M0-a"
     },
     "ship-offset-sites": {
-      "ceiling": 107,
+      "ceiling": 0,
       "slack": 0,
       "slice": "M0-a"
     },
     "aggregate-refs": {
-      "ceiling": 78,
+      "ceiling": 89,
       "slack": 0,
       "slice": "M0-a"
     },
@@ -69,7 +69,7 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3549,
+      "ceiling": 3583,
       "slack": 0,
       "slice": "M0-a"
     },

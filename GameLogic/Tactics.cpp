@@ -130,7 +130,7 @@ namespace Elite
 
       // 6502: .TA15 LDY #16 / JSR TAS3 / TAX / EOR #%10000000 / AND #%10000000 / STA INWK+30.
       const AddSignedResult roof = DotProductWithShip(work, screen.draw, math, ORIENTATION_ROOF);
-      work[30] = static_cast<std::uint8_t>((roof.high ^ 0x80u) & 0x80u);
+      work.PitchCounter() = static_cast<std::uint8_t>((roof.high ^ 0x80u) & 0x80u);
 
       /*
        * 6502: TXA / ASL A / CMP RAT2 / BCC TA11 / LDA RAT / ORA INWK+30 / STA INWK+30.
@@ -141,22 +141,22 @@ namespace Elite
        */
       if (static_cast<std::uint8_t>(roof.high << 1u) >= screen.flight.rat2)
       {
-        work[30] = static_cast<std::uint8_t>(screen.flight.rat | work[30]);
+        work.PitchCounter() = static_cast<std::uint8_t>(screen.flight.rat | work.PitchCounter());
       }
 
       // 6502: .TA11 LDA INWK+29 / ASL A / CMP #32 / BCS TA6 -- a ship already rolling hard is left
       // to finish the roll rather than given a new one.
-      if (static_cast<std::uint8_t>(work[29] << 1u) < 32u)
+      if (static_cast<std::uint8_t>(work.RollCounter() << 1u) < 32u)
       {
         // 6502: LDY #22 / JSR TAS3 / TAX / EOR INWK+30 / AND #%10000000 / EOR #%10000000 --
         // the roll's direction is the side dot product XORed with the PITCH just chosen, which is
         // what makes a ship bank into its turn rather than roll and pitch independently.
         const AddSignedResult side = DotProductWithShip(work, screen.draw, math, ORIENTATION_SIDE);
-        work[29] = static_cast<std::uint8_t>((((side.high ^ work[30]) & 0x80u) ^ 0x80u));
+        work.RollCounter() = static_cast<std::uint8_t>((((side.high ^ work.PitchCounter()) & 0x80u) ^ 0x80u));
 
         if (static_cast<std::uint8_t>(side.high << 1u) >= screen.flight.rat2)
         {
-          work[29] = static_cast<std::uint8_t>(screen.flight.rat | work[29]);
+          work.RollCounter() = static_cast<std::uint8_t>(screen.flight.rat | work.RollCounter());
         }
       }
 
@@ -169,7 +169,7 @@ namespace Elite
       const std::uint8_t cnt = math.cnt;
       if ((cnt & 0x80u) == 0u && cnt >= math.cnt2)
       {
-        work[28] = 3u;
+        work.Acceleration() = 3u;
         return;
       }
 
@@ -191,7 +191,7 @@ namespace Elite
        * And reaching here at all means the target is behind or wide (`TA6`'s two branches), so the
        * ship that is pointing AT you is the one that speeds up, three lines above.
        */
-      work[28] = (screen.flight.type == SHIP_TYPE_MISSILE) ? static_cast<std::uint8_t>(0xFFu << 1u) : std::uint8_t{0xFFu};
+      work.Acceleration() = (screen.flight.type == SHIP_TYPE_MISSILE) ? static_cast<std::uint8_t>(0xFFu << 1u) : std::uint8_t{0xFFu};
     }
 
     /// 6502: .TA151 -- one nose dot product, which can throw the turn rate away, then `TA152`.
@@ -248,8 +248,8 @@ namespace Elite
     /// pointing the wrong way.
     void HaltAndTurn(ShipBlock& _work) noexcept
     {
-      _work[28] = 0u; // 6502: LDX #0 / STX INWK+28
-      _work[27] = 1u; // 6502: INX / STX INWK+27
+      _work.Acceleration() = 0u; // 6502: LDX #0 / STX INWK+28
+      _work.Speed() = 1u; // 6502: INX / STX INWK+27
     }
 
     /*
@@ -268,7 +268,7 @@ namespace Elite
      */
     void MarkAsKilled(ShipBlock& _work) noexcept
     {
-      _work[31] = static_cast<std::uint8_t>(_work[31] | 0x80u);
+      _work.State() = static_cast<std::uint8_t>(_work.State() | 0x80u);
     }
 
   } // namespace
@@ -355,7 +355,7 @@ namespace Elite
 
     // 6502: .AN2 LDA K%+NI%+36 / ORA #%00000100 / STA K%+NI%+36 -- the station is always slot 1,
     // so this is a fixed address in the original and a fixed index here.
-    const auto angerStation = [&station]() noexcept { station[36] = static_cast<std::uint8_t>(station[36] | NEWB_HOSTILE); };
+    const auto angerStation = [&station]() noexcept { station.Newb() = static_cast<std::uint8_t>(station.Newb() | NEWB_HOSTILE); };
 
     if (_type == SHIP_TYPE_STATION)
     {
@@ -367,28 +367,28 @@ namespace Elite
 
     // 6502: LDY #36 / LDA (INF),Y / AND #%00100000 / BEQ P%+5 / JSR AN2 -- and it is a `JSR`, so
     // an ally of the station angers the station AND carries on being angered itself.
-    if ((ship[36] & NEWB_STATION_ALLY) != 0u)
+    if ((ship.Newb() & NEWB_STATION_ALLY) != 0u)
     {
       angerStation();
     }
 
     // 6502: LDY #32 / LDA (INF),Y / BEQ HI1 -- and `HI1` is a bare `RTS` inside `HITCH`. A ship
     // with no AI byte is left entirely alone: no acceleration, no dive, no hostile flag.
-    if (ship[32] == 0u)
+    if (ship.Ai() == 0u)
     {
       return;
     }
 
-    ship[32] = static_cast<std::uint8_t>(ship[32] | 0x80u); // 6502: ORA #%10000000 / STA (INF),Y
+    ship.Ai() = static_cast<std::uint8_t>(ship.Ai() | 0x80u); // 6502: ORA #%10000000 / STA (INF),Y
 
     // 6502: LDY #28 / LDA #2 / STA (INF),Y / ASL A / LDY #30 / STA (INF),Y.
-    ship[28] = ANGRY_ACCELERATION;
-    ship[30] = static_cast<std::uint8_t>(ANGRY_ACCELERATION << 1u);
+    ship.Acceleration() = ANGRY_ACCELERATION;
+    ship.PitchCounter() = static_cast<std::uint8_t>(ANGRY_ACCELERATION << 1u);
 
     // 6502: LDA TYPE / CMP #CYL / BCC AN3 -- the LOOP's type byte, not the one in A.
     if (_flight.type >= SHIP_TYPE_COBRA_MK3)
     {
-      ship[36] = static_cast<std::uint8_t>(ship[36] | NEWB_HOSTILE);
+      ship.Newb() = static_cast<std::uint8_t>(ship.Newb() | NEWB_HOSTILE);
     }
   }
 
@@ -420,7 +420,7 @@ namespace Elite
       {
         // 6502: LDA INWK+32 / ASL A / BMI TA34 -- bit 6 of the AI byte says the missile is aimed at
         // US, and the `ASL` reads it by moving it into bit 7.
-        if ((work[32] & 0x40u) != 0u)
+        if ((work.Ai() & 0x40u) != 0u)
         {
           /*
            * 6502: .TA34 LDA #0 / JSR MAS4 / BEQ P%+5 / JMP TN4 -- how far away the missile is, and
@@ -449,7 +449,7 @@ namespace Elite
 
         // 6502: LSR A / TAX / LDA UNIV,X / STA V / LDA UNIV+1,X / JSR VCSUB -- the missile's TARGET
         // slot, out of the AI byte it has been carrying since `FRS1` doubled `MSTG` into it.
-        const std::uint8_t target = static_cast<std::uint8_t>((work[32] & 0x7Fu) >> 1u);
+        const std::uint8_t target = static_cast<std::uint8_t>((work.Ai() & 0x7Fu) >> 1u);
         const bool vectorCarry = SubtractShipAxes(screen.bubble.blocks[target], work, axes, math);
 
         /*
@@ -478,7 +478,7 @@ namespace Elite
              * test the other way round, so a missile set off the ECM of every target that did not
              * have one and steered at the ones that did (§6.126).
              */
-            if ((screen.bubble.blocks[target][32] & 1u) != 0u)
+            if ((screen.bubble.blocks[target].Ai() & 1u) != 0u)
             {
               StartEcm(screen.canvas, screen.status, _loop.effects, false);
               return true;
@@ -493,7 +493,7 @@ namespace Elite
 
         // 6502: LDA INWK+32 / CMP #%10000010 / BEQ TA352 -- a missile that has reached the ship in
         // slot 1 dies rather than exploding, because slot 1 is the station.
-        destroyed = (work[32] == 0x82u);
+        destroyed = (work.Ai() == 0x82u);
 
         if (!destroyed)
         {
@@ -506,9 +506,9 @@ namespace Elite
            * `BIT` against the middle of an instruction (§6.125).
            */
           ShipBlock& victim = screen.bubble.blocks[target];
-          if ((victim[31] & 0x20u) == 0u)
+          if ((victim.State() & 0x20u) == 0u)
           {
-            victim[31] = static_cast<std::uint8_t>(victim[31] | 0x80u);
+            victim.State() = static_cast<std::uint8_t>(victim.State() | 0x80u);
           }
         }
       }
@@ -517,7 +517,7 @@ namespace Elite
       {
         // 6502: .TA352 LDA INWK / ORA INWK+3 / ORA INWK+6 / BNE TA872 / LDA #80 / JSR OOPS -- a
         // missile dying right beside us still hurts, and 80 is a survivable amount.
-        if (static_cast<std::uint8_t>(work[0] | work[3] | work[6]) == 0u)
+        if (static_cast<std::uint8_t>(work.X().lo | work.Y().lo | work.Z().lo) == 0u)
         {
           if (!TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], COLLISION_DAMAGE, false))
           {
@@ -533,7 +533,7 @@ namespace Elite
       }
 
       // 6502: .TA35 LDA INWK / ORA INWK+3 / ORA INWK+6 / BNE TA87 / LDA #80 / JSR OOPS.
-      if (static_cast<std::uint8_t>(work[0] | work[3] | work[6]) == 0u)
+      if (static_cast<std::uint8_t>(work.X().lo | work.Y().lo | work.Z().lo) == 0u)
       {
         if (!TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], COLLISION_DAMAGE, false))
         {
@@ -543,7 +543,7 @@ namespace Elite
 
       // 6502: .TA87 LDA INWK+32 / AND #%01111111 / LSR A / TAX / .TA353 JSR EXNO2 -- the TARGET's
       // slot becomes the type handed to `EXNO2`, which is what makes a big ship a loud explosion.
-      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>((work[32] & 0x7Fu) >> 1u));
+      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>((work.Ai() & 0x7Fu) >> 1u));
       MarkAsKilled(work);
       return true;
     }
@@ -557,7 +557,7 @@ namespace Elite
       std::uint8_t launch = 0;
 
       // 6502: LDA NEWB / AND #%00000100 / BNE TN5 -- the hostile bit `ANGRY` sets.
-      if ((work[36] & NEWB_HOSTILE) == 0u)
+      if ((work.Newb() & NEWB_HOSTILE) == 0u)
       {
         // 6502: LDA MANY+SHU+1 / BNE TA1 -- one Transporter at a time, and `MANY+SHU+1` is the
         // count of the type ABOVE the Shuttle because the two are launched as a pair.
@@ -619,31 +619,31 @@ namespace Elite
        * into the new ship: clearing it first is what stops the pirate inheriting the hermit's AI,
        * and clearing it after is what stops the HERMIT flying off.
        */
-      work[32] = 0u;
-      work[36] = HERMIT_PIRATE_NEWB;
+      work.Ai() = 0u;
+      work.Newb() = HERMIT_PIRATE_NEWB;
 
       // 6502: AND #3 / ADC #SH3 -- and the carry is the `CMP #200`'s, which is SET on this path.
       const std::uint8_t pirate = static_cast<std::uint8_t>((roll.value & 3u) + SHIP_TYPE_SIDEWINDER + 1u);
       (void)SpawnChildShip(screen.bubble, work, screen.rng, math, _slot, type, STATION_LAUNCH_AI, pirate, screen.flight.blueprint);
 
-      work[32] = 0u;
+      work.Ai() = 0u;
       return true;
     }
 
     // 6502: .TA17 LDY #14 / LDA INWK+35 / CMP (XX0),Y / BCS TA21 / INC INWK+35 -- energy regrows
     // one unit a turn up to the blueprint's maximum, which is why a damaged ship you leave alone
     // is a whole ship when you come back.
-    if (work[35] < ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + 14u)))
+    if (work.Energy() < ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + 14u)))
     {
-      ++work[35];
+      ++work.Energy();
     }
 
     // 6502: .TA21 CPX #TGL / BNE TA14 / LDA MANY+THG / BNE TA14 -- a Thargon whose Thargoid is
     // dead loses its AI and half its speed, and drifts.
     if (type == SHIP_TYPE_THARGON && screen.bubble.counts[SHIP_TYPE_THARGOID] == 0u)
     {
-      work[32] = static_cast<std::uint8_t>(work[32] & 0xFEu); // 6502: LSR INWK+32 / ASL INWK+32
-      work[27] = static_cast<std::uint8_t>(work[27] >> 1u);   // 6502: LSR INWK+27
+      work.Ai() = static_cast<std::uint8_t>(work.Ai() & 0xFEu); // 6502: LSR INWK+32 / ASL INWK+32
+      work.Speed() = static_cast<std::uint8_t>(work.Speed() >> 1u);   // 6502: LSR INWK+27
       return true;                                            // 6502: .TA22 RTS
     }
 
@@ -655,7 +655,7 @@ namespace Elite
      * which is why traders mostly ignore you and occasionally do not.
      */
     const RngResult roll = screen.rng.Next(type >= SHIP_TYPE_THARGON);
-    std::uint8_t flags = work[36];
+    std::uint8_t flags = work.Newb();
 
     if ((flags & 1u) != 0u && roll.previous >= TRADER_FLEE_ROLL)
     {
@@ -668,8 +668,8 @@ namespace Elite
     // legal status is over 40. The two `LSR`s put the shifted copy back in step.
     if ((flags & 1u) != 0u && screen.commander.At(Field::LegalStatus) >= BOUNTY_HUNTER_FIST)
     {
-      work[36] = static_cast<std::uint8_t>(work[36] | NEWB_HOSTILE);
-      flags = static_cast<std::uint8_t>(work[36] >> 2u);
+      work.Newb() = static_cast<std::uint8_t>(work.Newb() | NEWB_HOSTILE);
+      flags = static_cast<std::uint8_t>(work.Newb() >> 2u);
     }
     else
     {
@@ -698,7 +698,7 @@ namespace Elite
     // enabled and its target and drops everything else.
     if ((flags & 1u) != 0u && screen.bubble.StationPresent() != 0u)
     {
-      work[32] = static_cast<std::uint8_t>(work[32] & 0x81u);
+      work.Ai() = static_cast<std::uint8_t>(work.Ai() & 0x81u);
     }
 
     // 6502: .TN4 LDX #8 / .TAL1 LDA INWK,X / STA K3,X / DEX / BPL TAL1 -- the ship's own position
@@ -764,7 +764,7 @@ namespace Elite
       {
         // 6502: JSR DORND / ORA #104 -- the carry is `CMP #250`'s, set by definition here.
         const RngResult amount = screen.rng.Next(true);
-        work[29] = static_cast<std::uint8_t>(amount.value | 104u);
+        work.RollCounter() = static_cast<std::uint8_t>(amount.value | 104u);
       }
     }
 
@@ -781,11 +781,11 @@ namespace Elite
      */
     const std::uint8_t maximumEnergy = ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + 14u));
     bool fellFromFleeTest = false;
-    const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work[35];
+    const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work.Energy();
 
     if (!fightsOn)
     {
-      if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work[35])
+      if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work.Energy())
       {
         // 6502: JSR DORND / CMP #230 / BCC ta3 -- the carry is the `CMP INWK+35` above, and
         // reaching here means it did not borrow.
@@ -805,9 +805,9 @@ namespace Elite
              * SLOT as well as to `INWK` -- the one place in `TACTICS` that writes both copies --
              * and then the pod is launched with the standard hostile AI byte.
              */
-            work[36] = static_cast<std::uint8_t>(work[36] & 0xF0u);
-            screen.bubble.blocks[_slot][36] = work[36];
-            work[32] = 0u;
+            work.Newb() = static_cast<std::uint8_t>(work.Newb() & 0xF0u);
+            screen.bubble.blocks[_slot].Newb() = work.Newb();
+            work.Ai() = 0u;
 
             (void)SpawnEscapePod(screen.bubble, work, screen.rng, math, _slot, type, screen.flight.blueprint);
             return true;
@@ -829,7 +829,7 @@ namespace Elite
      *
      * `fightsOn` is `TA7`'s first `BCC TA3` jumping clean over this part -- see the comment there.
      */
-    const std::uint8_t missiles = static_cast<std::uint8_t>(work[31] & 7u);
+    const std::uint8_t missiles = static_cast<std::uint8_t>(work.State() & 7u);
     if (!fightsOn && missiles != 0u)
     {
       math.t = missiles;
@@ -842,13 +842,13 @@ namespace Elite
       // 6502: LDA ECMA / BNE TA3 -- an ECM running stops the launch, and the missile is not spent.
       if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && screen.status.ecmCountdown == 0u)
       {
-        --work[31]; // 6502: DEC INWK+31
+        --work.State(); // 6502: DEC INWK+31
 
         // 6502: LDA TYPE / CMP #THG / BNE TA16 / LDX #TGL / LDA INWK+32 / JMP SFS1 -- a Thargoid
         // launches a Thargon and passes ITS OWN AI byte on, which is why Thargons arrive hostile.
         if (type == SHIP_TYPE_THARGOID)
         {
-          (void)SpawnChildShip(screen.bubble, work, screen.rng, math, _slot, type, work[32], SHIP_TYPE_THARGON, screen.flight.blueprint);
+          (void)SpawnChildShip(screen.bubble, work, screen.rng, math, _slot, type, work.Ai(), SHIP_TYPE_THARGON, screen.flight.blueprint);
           return true;
         }
 
@@ -883,7 +883,7 @@ namespace Elite
         {
           // 6502: LDA INWK+31 / ORA #%01000000 / STA INWK+31 -- bit 6 is "firing", which is what
           // draws the line from its nose in part 11 of the flight loop.
-          work[31] = static_cast<std::uint8_t>(work[31] | 0x40u);
+          work.State() = static_cast<std::uint8_t>(work.State() | 0x40u);
 
           // 6502: CPX #163 / BCC TA4 -- firing is one cone and HITTING is a tighter one.
           if (cnt >= 163u)
@@ -905,7 +905,7 @@ namespace Elite
               return false;
             }
 
-            --work[28]; // 6502: DEC INWK+28 -- it slows down as it fires
+            --work.Acceleration(); // 6502: DEC INWK+28 -- it slows down as it fires
 
             // 6502: LDA ECMA / BNE TA9-1 -- and `TA9-1` is the `RTS` one byte before `TA9`, so an
             // ECM running silences the hit and returns rather than skipping the sound (§6.125).
@@ -930,7 +930,7 @@ namespace Elite
      * it turning away the moment it arrives.
      */
     bool reverse = true;
-    if (work[7] < 3u && (static_cast<std::uint8_t>(work[1] | work[4]) & 0xFEu) == 0u)
+    if (work.Z().hi < 3u && (static_cast<std::uint8_t>(work.X().hi | work.Y().hi) & 0xFEu) == 0u)
     {
       reverse = false;
     }
@@ -940,8 +940,8 @@ namespace Elite
       // forced on, against the AI byte: the more aggressive the ship, the more often it presses in.
       // 6502: .TA5 JSR DORND -- reached from `CMP #3 / BCS TA5`, whose carry is set, or by falling
       // past the `BEQ TA15` below it, where the `AND` left the flag as the compare set it.
-      const RngResult press = screen.rng.Next(work[7] >= 3u);
-      if (static_cast<std::uint8_t>(press.value | 0x80u) >= work[32])
+      const RngResult press = screen.rng.Next(work.Z().hi >= 3u);
+      if (static_cast<std::uint8_t>(press.value | 0x80u) >= work.Ai())
       {
         reverse = false;
       }
@@ -1075,7 +1075,7 @@ namespace Elite
      * lined up and the corrections are made by hand below rather than by the shared steering.
      */
     screen.flight.rat2 = 0u;
-    work[30] = 0u;
+    work.PitchCounter() = 0u;
 
     // 6502: LDA TYPE / BPL PH32 -- and a NEGATIVE type is the player's own docking computer, which
     // `auton` marks by storing &E0 in `TYPE`. A ship being flown in by the AI skips all of this.
@@ -1090,7 +1090,7 @@ namespace Elite
        * decides is its direction.
        */
       const std::uint8_t folded = static_cast<std::uint8_t>(screen.flight.type ^ screen.draw.x1 ^ screen.draw.y1);
-      work[29] = static_cast<std::uint8_t>((2u >> 1u) | ((folded & 0x80u) != 0u ? 0x80u : 0x00u));
+      work.RollCounter() = static_cast<std::uint8_t>((2u >> 1u) | ((folded & 0x80u) != 0u ? 0x80u : 0x00u));
 
       // 6502: LDA XX15 / ASL A / CMP #12 / BCS PH22 -- too far off sideways, so stop and turn.
       if (static_cast<std::uint8_t>(screen.draw.x1 << 1u) >= 12u)
@@ -1100,7 +1100,7 @@ namespace Elite
       }
 
       // 6502: LDA XX15+1 / ASL A / LDA #2 / ROR A / STA INWK+30 -- the same shape for the pitch.
-      work[30] = static_cast<std::uint8_t>((2u >> 1u) | ((screen.draw.y1 & 0x80u) != 0u ? 0x80u : 0x00u));
+      work.PitchCounter() = static_cast<std::uint8_t>((2u >> 1u) | ((screen.draw.y1 & 0x80u) != 0u ? 0x80u : 0x00u));
 
       if (static_cast<std::uint8_t>(screen.draw.y1 << 1u) >= 12u)
       {
@@ -1111,14 +1111,14 @@ namespace Elite
 
     // 6502: .PH32 STX INWK+29 -- and X is still the zero from `PH3`, so the roll the block above
     // may have set is thrown away again for a ship that is lined up.
-    work[29] = 0u;
+    work.RollCounter() = 0u;
 
     // 6502: LDA INWK+22 / STA XX15 ... -- the ship's own SIDE vector into `XX15`, which is asking
     // "is the station's roof lined up with my side", the last thing that has to match to fit
     // through a slot.
-    screen.draw.x1 = work[22];
-    screen.draw.y1 = work[24];
-    screen.draw.x2 = work[26];
+    screen.draw.x1 = work.Side().xHi;
+    screen.draw.y1 = work.Side().yHi;
+    screen.draw.x2 = work.Side().zHi;
 
     // 6502: LDY #16 / JSR TAS4 / ASL A / CMP #66 / BCS TN11.
     const AddSignedResult roll = DotProductWithShip(screen.bubble.blocks[1], screen.draw, math, ORIENTATION_ROOF);
@@ -1126,8 +1126,8 @@ namespace Elite
     {
       // 6502: .TN11 INC INWK+28 / LDA #%01111111 / STA INWK+29 / BNE TN13 -- roll as hard as the
       // byte allows and speed up, which is how a ship spins itself into line with the slot.
-      ++work[28];
-      work[29] = 0x7Fu;
+      ++work.Acceleration();
+      work.RollCounter() = 0x7Fu;
     }
     else
     {
@@ -1152,7 +1152,7 @@ namespace Elite
 
     // 6502: ASL NEWB / SEC / ROR NEWB -- the same three-instruction "set bit 7" as `TA873`, and
     // the same mistake: the shifts cancel (§6.126).
-    work[36] = static_cast<std::uint8_t>(work[36] | 0x80u);
+    work.Newb() = static_cast<std::uint8_t>(work.Newb() | 0x80u);
     return true;
   }
 

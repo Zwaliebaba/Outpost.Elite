@@ -274,11 +274,11 @@ namespace Elite
        * the sign flipped to 128 and the high byte at one, which puts it behind and further off.
        * The station is what you have just left, and this is where it goes.
        */
-      screen.work[8] = static_cast<std::uint8_t>(screen.work[8] + 1u);
+      screen.work.Z().sgn = static_cast<std::uint8_t>(screen.work.Z().sgn + 1u);
       (void)AddPlanetOrSun(screen.bubble, screen.work, spawning, _techLevel, screen.flight.blueprint);
 
-      screen.work[8] = 128u;
-      screen.work[7] = static_cast<std::uint8_t>(screen.work[7] + 1u);
+      screen.work.Z().sgn = 128u;
+      screen.work.Z().hi = static_cast<std::uint8_t>(screen.work.Z().hi + 1u);
       (void)AddStation(screen.bubble, screen.work, spawning, _techLevel, screen.flight.blueprint); // 6502: JSR NWSPS
 
       screen.flight.delta = LAUNCH_SPEED; // 6502: LDA #12 / STA DELTA
@@ -339,10 +339,10 @@ namespace Elite
      * than towards them. The two 127s are the roll and pitch counters at maximum, and they are the
      * whole of why it turns: `MVEIT` steps the orientation by them on every frame.
      */
-    screen.work[14] = TITLE_START_DISTANCE;
-    screen.work[7] = TITLE_START_DISTANCE;
-    screen.work[29] = TITLE_SPIN;
-    screen.work[30] = TITLE_SPIN;
+    screen.work.Nose().zHi = TITLE_START_DISTANCE;
+    screen.work.Z().hi = TITLE_START_DISTANCE;
+    screen.work.RollCounter() = TITLE_SPIN;
+    screen.work.PitchCounter() = TITLE_SPIN;
 
     // 6502: INX / STX QQ17 -- 128, which is sentence case, and it is what the prompt prints in.
     screen.printer.SetCaseFlags(0x80u);
@@ -392,9 +392,9 @@ namespace Elite
     for (;;)
     {
       // 6502: .TLL2 LDA INWK+7 / CMP #1 / BEQ TL1 / DEC INWK+7 -- the ship closes and then holds.
-      if (screen.work[7] != 1u)
+      if (screen.work.Z().hi != 1u)
       {
-        screen.work[7] = static_cast<std::uint8_t>(screen.work[7] - 1u);
+        screen.work.Z().hi = static_cast<std::uint8_t>(screen.work.Z().hi - 1u);
       }
 
       /*
@@ -416,9 +416,9 @@ namespace Elite
        * zero. The `LDA MCNT / AND #3` between them is DEAD -- `LDA #0` overwrites the accumulator
        * before anything can read it.
        */
-      screen.work[6] = _distance;
-      screen.work[0] = 0u;
-      screen.work[3] = 0u;
+      screen.work.Z().lo = _distance;
+      screen.work.X().lo = 0u;
+      screen.work.Y().lo = 0u;
 
       // 6502: JSR LL9.
       DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
@@ -503,32 +503,32 @@ namespace Elite
     {
       const RngResult roll = SeedDebris(screen.work, screen.rng, carry); // 6502: JSR Ze
 
-      screen.work[0] = static_cast<std::uint8_t>(roll.value >> 2); // 6502: LSR A / LSR A / STA INWK
+      screen.work.X().lo = static_cast<std::uint8_t>(roll.value >> 2); // 6502: LSR A / LSR A / STA INWK
 
       // 6502: LDY #0 / STY QQ11 / STY INWK+1 / STY INWK+4 / STY INWK+7 / STY INWK+32.
       screen.view = 0u;
-      screen.work[1] = 0u;
-      screen.work[4] = 0u;
-      screen.work[7] = 0u;
-      screen.work[32] = 0u;
+      screen.work.X().hi = 0u;
+      screen.work.Y().hi = 0u;
+      screen.work.Z().hi = 0u;
+      screen.work.Ai() = 0u;
 
       // 6502: DEY / STY MCNT -- 255, so every timer-based call in the loop is stopped.
       screen.flight.mainLoopCounter = 0xFFu;
 
       // 6502: EOR #%00101010 / STA INWK+3 / ORA #%01010000 / STA INWK+6.
-      const std::uint8_t flipped = static_cast<std::uint8_t>(screen.work[0] ^ 0x2Au);
-      screen.work[3] = flipped;
-      screen.work[6] = static_cast<std::uint8_t>(flipped | 0x50u);
+      const std::uint8_t flipped = static_cast<std::uint8_t>(screen.work.X().lo ^ 0x2Au);
+      screen.work.Y().lo = flipped;
+      screen.work.Z().lo = static_cast<std::uint8_t>(flipped | 0x50u);
 
       // 6502: TXA / AND #%10001111 / STA INWK+29 -- a gentle roll, sign kept.
-      screen.work[29] = static_cast<std::uint8_t>(roll.previous & 0x8Fu);
+      screen.work.RollCounter() = static_cast<std::uint8_t>(roll.previous & 0x8Fu);
 
       screen.status.laserCount = DEATH_FRAMES; // 6502: LDY #64 / STY LASCT
 
       // 6502: SEC / ROR A / AND #%10000111 / STA INWK+30 -- and the `A` is the roll byte above,
       // not the random one: `TXA` left it there.
-      const std::uint8_t pitched = static_cast<std::uint8_t>((screen.work[29] >> 1) | 0x80u);
-      screen.work[30] = static_cast<std::uint8_t>(pitched & 0x87u);
+      const std::uint8_t pitched = static_cast<std::uint8_t>((screen.work.RollCounter() >> 1) | 0x80u);
+      screen.work.PitchCounter() = static_cast<std::uint8_t>(pitched & 0x87u);
 
       /*
        * 6502: LDX #OIL / LDA XX21-1+2*PLT / BEQ D3 / BCC D3 / DEX.
@@ -619,13 +619,13 @@ namespace Elite
      * 194 is the pitch and 97 is both the AI byte and the number of frames below, because the loop
      * counts down through `INWK+32` itself.
      */
-    screen.work[27] = ESCAPE_SPEED;
-    screen.work[30] = ESCAPE_PITCH;
-    screen.work[32] = static_cast<std::uint8_t>(ESCAPE_PITCH >> 1u);
+    screen.work.Speed() = ESCAPE_SPEED;
+    screen.work.PitchCounter() = ESCAPE_PITCH;
+    screen.work.Ai() = static_cast<std::uint8_t>(ESCAPE_PITCH >> 1u);
 
     // 6502: .ESL1 JSR MVEIT / JSR LL9 / DEC INWK+32 / BNE ESL1 -- and the death path `MVEIT` can
     // reach is unreachable here, because the ship flying away is not shooting at anybody.
-    while (screen.work[32] != 0u)
+    while (screen.work.Ai() != 0u)
     {
       static_cast<void>(
         MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, screen.flight.blueprint, screen.view));
@@ -636,7 +636,7 @@ namespace Elite
        */
       DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work,
                screen.bubble.blocks[abandoned.slot], _loop.heap, screen.flight.blueprint, screen.flight.type, _loop.drawing);
-      --screen.work[32];
+      --screen.work.Ai();
     }
 
     // 6502: JSR SCAN -- and it is drawn ONCE, after the loop, so the blip the animation left

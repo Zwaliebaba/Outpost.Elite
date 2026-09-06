@@ -19,11 +19,13 @@ namespace Elite
 
   std::uint8_t DoubleAndAddCoordinate(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _from, std::uint8_t _to) noexcept
   {
+    const auto from = _work.ComponentAt(_from); // 6502: INWK,Y / INWK+1,Y
+    auto to = _work.PositionAt(_to);            // 6502: INWK,X to INWK+2,X
     // 6502: LDA INWK,Y / ASL A / STA K+1 / LDA INWK+1,Y / ROL A / STA K+2.
-    const ShiftResult low = RotateLeftValue(_work[_from], false);
+    const ShiftResult low = RotateLeftValue(from.lo, false);
     _math.k[1] = low.value;
 
-    const ShiftResult high = RotateLeftValue(_work[static_cast<std::size_t>(_from) + 1u], low.carry);
+    const ShiftResult high = RotateLeftValue(from.hi, low.carry);
     _math.k[2] = high.value;
 
     // 6502: LDA #0 / ROR A / STA K+3 -- the bit that fell off the top becomes the sign byte, so the
@@ -35,9 +37,9 @@ namespace Elite
     static_cast<void>(AddShipCoordinateToK(_work, _math, _to)); // 6502: JSR MVT3
 
     // 6502: STA INWK+2,X -- and A is `K+3`, because every path through `MVT3` ends `STA K+3`.
-    _work[static_cast<std::size_t>(_to) + 2u] = _math.k[3];
-    _work[_to] = _math.k[1];                                // 6502: LDY K+1 / STY INWK,X
-    _work[static_cast<std::size_t>(_to) + 1u] = _math.k[2]; // 6502: LDY K+2 / STY INWK+1,X
+    to.sgn = _math.k[3];
+    to.lo = _math.k[1];                                // 6502: LDY K+1 / STY INWK,X
+    to.hi = _math.k[2]; // 6502: LDY K+2 / STY INWK+1,X
 
     return static_cast<std::uint8_t>(_math.k[3] & 0x7Fu); // 6502: AND #%01111111
   }
@@ -52,7 +54,7 @@ namespace Elite
      * (the 6502 cannot multiply by 37 and this port can).
      */
     const ShipBlock& block = _bubble.blocks[_slot];
-    const std::uint8_t together = static_cast<std::uint8_t>(_a | block[2] | block[5] | block[8]);
+    const std::uint8_t together = static_cast<std::uint8_t>(_a | block.X().sgn | block.Y().sgn | block.Z().sgn);
 
     return static_cast<std::uint8_t>(together & 0x7Fu);
   }
@@ -62,11 +64,11 @@ namespace Elite
     const ShipBlock& block = _bubble.blocks[_slot];
 
     // 6502: LDA K%+1,Y / JSR SQUA2 / STA R.
-    _math.r = SquareUnsigned(_math, block[1]).high;
+    _math.r = SquareUnsigned(_math, block.X().hi).high;
 
     // 6502: LDA K%+4,Y / JSR SQUA2 / ADC R / BCS MA30 -- the `ADC` reads `SQUA2`'s exit carry, and
     // that carry is never set (§6.70), so this is the plain addition it looks like.
-    const WideResult second = SquareUnsigned(_math, block[4]);
+    const WideResult second = SquareUnsigned(_math, block.Y().hi);
     const AddResult sum = AddWithCarry(second.high, _math.r, second.carry);
     if (sum.carry)
     {
@@ -76,7 +78,7 @@ namespace Elite
     _math.r = sum.value; // 6502: STA R
 
     // 6502: LDA K%+7,Y / JSR SQUA2 / ADC R / BCC P%+4 -- and the branch skips the saturation.
-    const WideResult third = SquareUnsigned(_math, block[7]);
+    const WideResult third = SquareUnsigned(_math, block.Z().hi);
     const AddResult total = AddWithCarry(third.high, _math.r, third.carry);
 
     return total.carry ? 0xFFu : total.value;
@@ -85,7 +87,7 @@ namespace Elite
   std::uint8_t LargestShipAxis(const ShipBlock& _work, std::uint8_t _a) noexcept
   {
     // 6502: ORA INWK+1 / ORA INWK+4 / ORA INWK+7 -- no mask, unlike `MAS2`.
-    return static_cast<std::uint8_t>(_a | _work[1] | _work[4] | _work[7]);
+    return static_cast<std::uint8_t>(_a | _work.X().hi | _work.Y().hi | _work.Z().hi);
   }
 
   std::uint8_t DampTowardsCentre(std::uint8_t _value, std::uint8_t _dockingComputer, std::uint8_t _dampingDisabled) noexcept
@@ -196,19 +198,19 @@ namespace Elite
     // 6502: CMP INWK+1 / BCC FA1 / CMP INWK+4 / BCC FA1 / CMP INWK+7 / .FA1 RTS -- and the carry
     // out of the LAST compare reached is the answer, which is why the two early exits both leave a
     // clear one.
-    if (_limit < _work[1] || _limit < _work[4])
+    if (_limit < _work.X().hi || _limit < _work.Y().hi)
     {
       return false;
     }
 
-    return _limit >= _work[7];
+    return _limit >= _work.Z().hi;
   }
 
   bool IsHit(const ShipBlock& _work, MathWorkspace& _math, std::uint16_t _blueprint, std::uint8_t _type) noexcept
   {
     // 6502: CLC / LDA INWK+8 / BNE HI1 -- the z sign byte, and anything but zero means the ship is
     // not close enough in front of us to have been hit.
-    if (_work[8] != 0u)
+    if (_work.Z().sgn != 0u)
     {
       return false;
     }
@@ -221,18 +223,18 @@ namespace Elite
 
     // 6502: LDA INWK+31 / AND #%00100000 / ORA INWK+1 / ORA INWK+4 / BNE HI1 -- already exploding,
     // or too far off to either side. Three tests ORed into one branch.
-    if (((_work[31] & 0x20u) | _work[1] | _work[4]) != 0u)
+    if (((_work.State() & 0x20u) | _work.X().hi | _work.Y().hi) != 0u)
     {
       return false;
     }
 
     // 6502: LDA INWK / JSR SQUA2 / STA S / LDA P / STA R.
-    const WideResult across = SquareUnsigned(_math, _work[0]);
+    const WideResult across = SquareUnsigned(_math, _work.X().lo);
     _math.s = across.high;
     _math.r = _math.p;
 
     // 6502: LDA INWK+3 / JSR SQUA2 / TAX / LDA P / ADC R / STA R / TXA / ADC S / BCS TN10.
-    const WideResult down = SquareUnsigned(_math, _work[3]);
+    const WideResult down = SquareUnsigned(_math, _work.Y().lo);
     const AddResult low = AddWithCarry(_math.p, _math.r, across.carry);
     _math.r = low.value;
     const AddResult high = AddWithCarry(down.high, _math.s, low.carry);
@@ -300,7 +302,7 @@ namespace Elite
      * call left them: this stirs the sequence rather than resetting it.
      */
     std::array<std::uint8_t, 4> seed = screen.rng.State();
-    seed[0] = screen.bubble.blocks[0][0];
+    seed[0] = screen.bubble.blocks[0].X().lo;
     screen.rng.SetState(seed);
 
     /*
@@ -615,18 +617,6 @@ namespace Elite
 
   namespace
   {
-    /// 6502: INWK's bytes parts 4 to 12 name by number.
-    inline constexpr std::size_t SHIP_X_LOW = 0;
-    inline constexpr std::size_t SHIP_Y_LOW = 3;
-    inline constexpr std::size_t SHIP_Z_LOW = 6;
-    inline constexpr std::size_t SHIP_Z_HIGH = 7;
-    inline constexpr std::size_t SHIP_SCOOP_FLAGS = 5;
-    inline constexpr std::size_t SHIP_PITCH_COUNTER = 14;
-    inline constexpr std::size_t SHIP_ROLL_COUNTER = 16;
-    inline constexpr std::size_t SHIP_STATE = 31;
-    inline constexpr std::size_t SHIP_ENERGY = 35;
-    inline constexpr std::size_t SHIP_FLAGS = 36; ///< 6502: NEWB, which IS `INWK+36`
-
     /// 6502: the bits of `INWK+31` this half tests and sets.
     inline constexpr std::uint8_t SHIP_KILLED = 0x80;
     inline constexpr std::uint8_t SHIP_EXPLODING = 0x20;
@@ -736,7 +726,7 @@ namespace Elite
     // 6502: LDA TYPE / CMP #SST / BEQ MA14+2.
     if (_type == SHIP_TYPE_STATION)
     {
-      return {false, screen.work[SHIP_ENERGY]};
+      return {false, screen.work.Energy()};
     }
 
     std::uint8_t power = screen.status.laserPower;
@@ -752,7 +742,7 @@ namespace Elite
     {
       if (power != static_cast<std::uint8_t>(LASER_POWER_MILITARY & 0x7Fu))
       {
-        return {false, screen.work[SHIP_ENERGY]};
+        return {false, screen.work.Energy()};
       }
 
       power = static_cast<std::uint8_t>(power >> 1u);
@@ -761,13 +751,13 @@ namespace Elite
     }
 
     // 6502: .BURN LDA INWK+35 / SEC / SBC LAS / BCS MA14 -- it survived with what is left.
-    const SubResult left = SubtractWithCarry(screen.work[SHIP_ENERGY], power, true);
+    const SubResult left = SubtractWithCarry(screen.work.Energy(), power, true);
     if (left.carry)
     {
       return {true, left.value};
     }
 
-    screen.work[SHIP_STATE] = static_cast<std::uint8_t>(screen.work[SHIP_STATE] | SHIP_KILLED);
+    screen.work.State() = static_cast<std::uint8_t>(screen.work.State() | SHIP_KILLED);
 
     /*
      * 6502: LDA TYPE / CMP #AST / BNE nosp / LDA LAS / CMP #Mlas / BNE nosp / JSR DORND / LDX #SPL /
@@ -861,9 +851,9 @@ namespace Elite
          */
         const bool exempt = (type == SHIP_TYPE_STATION) || (type == SHIP_TYPE_THARGOID) || (type >= SHIP_TYPE_CONSTRICTOR);
 
-        if ((commander.At(Field::EnergyBomb) & 0x80u) != 0u && !exempt && (screen.work[SHIP_STATE] & SHIP_EXPLODING) == 0u)
+        if ((commander.At(Field::EnergyBomb) & 0x80u) != 0u && !exempt && (screen.work.State() & SHIP_EXPLODING) == 0u)
         {
-          screen.work[SHIP_STATE] = MarkKilled(screen.work[SHIP_STATE]);
+          screen.work.State() = MarkKilled(screen.work.State());
           (void)RecordKill(screen, _loop.effects, type); // 6502: LDX TYPE / JSR EXNO2
         }
       }
@@ -895,12 +885,12 @@ namespace Elite
       bool scoopable = false;
       bool collision = false;
       {
-        const std::uint8_t seed = static_cast<std::uint8_t>(screen.work[SHIP_STATE] & SHIP_DRAWN_OR_EXPLODING);
+        const std::uint8_t seed = static_cast<std::uint8_t>(screen.work.State() & SHIP_DRAWN_OR_EXPLODING);
 
         if (LargestShipAxis(screen.work, seed) == 0u)
         {
           // 6502: LDA INWK / ORA INWK+3 / ORA INWK+6 / BMI MA65 -- and A survives to the `AND` below.
-          const std::uint8_t low = static_cast<std::uint8_t>(screen.work[SHIP_X_LOW] | screen.work[SHIP_Y_LOW] | screen.work[SHIP_Z_LOW]);
+          const std::uint8_t low = static_cast<std::uint8_t>(screen.work.X().lo | screen.work.Y().lo | screen.work.Z().lo);
 
           if ((low & 0x80u) == 0u && !isBody)
           {
@@ -917,7 +907,7 @@ namespace Elite
                * is "we have scoops AND it is below us" -- scooping only works on things that come
                * up from underneath. Anything else at this range is a collision.
                */
-              const std::uint8_t under = static_cast<std::uint8_t>(commander.At(Field::FuelScoops) & screen.work[SHIP_SCOOP_FLAGS]);
+              const std::uint8_t under = static_cast<std::uint8_t>(commander.At(Field::FuelScoops) & screen.work.Y().sgn);
               scoopable = (under & 0x80u) != 0u;
               collision = !scoopable;
             }
@@ -986,7 +976,7 @@ namespace Elite
 
             // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
             // canister is removed by part 12 rather than by anything here.
-            screen.work[SHIP_FLAGS] = static_cast<std::uint8_t>(screen.work[SHIP_FLAGS] | NEWB_REMOVE);
+            screen.work.Newb() = static_cast<std::uint8_t>(screen.work.Newb() | NEWB_REMOVE);
           }
         }
       }
@@ -995,7 +985,8 @@ namespace Elite
        * ---- part 9: docking, or not ------------------------------------------------------------
        *
        * Four tests and every one of them has to pass. The station must not be hostile, the ship
-       * must be pointing the right way (`INWK+14` is the pitch counter), the player must be lined
+       * must be pointing the right way (`INWK+14` is the nose vector's z high byte -- the port's own
+       * constant called it the pitch counter until Modernize.md M1-a named the byte), the player must be lined
        * up with the slot, and the roll must be slow enough. `SPS1` is called for its side effect:
        * it leaves the normalised vector to the PLANET in `XX15`, and `XX15+2` is what the
        * alignment test reads.
@@ -1004,15 +995,15 @@ namespace Elite
       {
         bool arrived = false;
 
-        const bool hostile = (screen.bubble.blocks[STATION_SLOT][SHIP_FLAGS] & NEWB_HOSTILE) != 0u;
+        const bool hostile = (screen.bubble.blocks[STATION_SLOT].Newb() & NEWB_HOSTILE) != 0u;
 
-        if (!hostile && screen.work[SHIP_PITCH_COUNTER] >= DOCK_MINIMUM_PITCH)
+        if (!hostile && screen.work.Nose().zHi >= DOCK_MINIMUM_PITCH)
         {
           LoadPlanetAxes(screen.bubble, _loop.axes, screen.draw, screen.math); // 6502: JSR SPS1
           NormaliseAxes(_loop.axes, screen.draw, screen.math);                 // the fall-through
 
           if (screen.draw.x2 >= DOCK_MINIMUM_ALIGNMENT &&
-              static_cast<std::uint8_t>(screen.work[SHIP_ROLL_COUNTER] & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
+              static_cast<std::uint8_t>(screen.work.Roof().xHi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
           {
             arrived = true;
           }
@@ -1048,7 +1039,7 @@ namespace Elite
         // 6502: .MA59 JSR EXNO3 -- and the carry is SET, because `BCS MA59` in part 8 is the
         // only way here: a full hold is exactly the carry the capacity test leaves.
         (void)_loop.effects.PlaySound(SOUND_EXPLOSION, true);
-        screen.work[SHIP_STATE] = MarkKilled(screen.work[SHIP_STATE]); // 6502: .MA60
+        screen.work.State() = MarkKilled(screen.work.State()); // 6502: .MA60
         // 6502: .MA61 BNE MA26 -- and `ROR` has just set bit 7, so it always branches.
       }
       else if (collision || docking)
@@ -1063,8 +1054,8 @@ namespace Elite
         }
         else
         {
-          screen.work[SHIP_STATE] = MarkKilled(screen.work[SHIP_STATE]); // 6502: .MA58
-          const ShiftResult halved = RotateRight(screen.work[SHIP_ENERGY], true);
+          screen.work.State() = MarkKilled(screen.work.State()); // 6502: .MA58
+          const ShiftResult halved = RotateRight(screen.work.Energy(), true);
           damage = halved.value;
           carry = halved.carry;
         }
@@ -1092,7 +1083,7 @@ namespace Elite
        * Bit 7 of `NEWB` is "take this out of the bubble" AND "it is on the scanner", one bit doing
        * two jobs: a ship marked for removal has its blip drawn here so that the EOR erases it.
        */
-      if ((screen.work[SHIP_FLAGS] & NEWB_REMOVE) != 0u)
+      if ((screen.work.Newb() & NEWB_REMOVE) != 0u)
       {
         DrawScannerBlip(screen.canvas, screen.draw, screen.work, type, screen.view);
       }
@@ -1120,7 +1111,7 @@ namespace Elite
             const LaserHit hit = ApplyLaserHit(_loop, _loop.effects, screen.flight.blueprint, type);
             if (hit.stores)
             {
-              screen.work[SHIP_ENERGY] = hit.energy; // 6502: .MA14 STA INWK+35
+              screen.work.Energy() = hit.energy; // 6502: .MA14 STA INWK+35
             }
 
             // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too. INF
@@ -1148,11 +1139,11 @@ namespace Elite
        * byte 31 only on the path that keeps the ship. That asymmetry is the routine: a ship being
        * removed has its block shuffled away by `KILLSHP`, so writing its state would be wasted.
        */
-      block[SHIP_ENERGY] = screen.work[SHIP_ENERGY];
+      block.Energy() = screen.work.Energy();
 
-      bool remove = (screen.work[SHIP_FLAGS] & NEWB_REMOVE) != 0u;
+      bool remove = (screen.work.Newb() & NEWB_REMOVE) != 0u;
 
-      if (!remove && (screen.work[SHIP_STATE] & SHIP_KILLED) != 0u && (screen.work[SHIP_STATE] & SHIP_EXPLODING) != 0u)
+      if (!remove && (screen.work.State() & SHIP_KILLED) != 0u && (screen.work.State() & SHIP_EXPLODING) != 0u)
       {
         /*
          * 6502: LDA NEWB / AND #%01000000 / ORA FIST / STA FIST.
@@ -1162,7 +1153,7 @@ namespace Elite
          * cannot become more of one this way.
          */
         commander.At(Field::LegalStatus) =
-          static_cast<std::uint8_t>(commander.At(Field::LegalStatus) | (screen.work[SHIP_FLAGS] & NEWB_INNOCENT));
+          static_cast<std::uint8_t>(commander.At(Field::LegalStatus) | (screen.work.Newb() & NEWB_INNOCENT));
 
         // 6502: LDA DLY / ORA MJ / BNE KS1S -- no bounty while a message is up or in witchspace,
         // because the bounty IS a message and there is nowhere to put it.
@@ -1213,7 +1204,7 @@ namespace Elite
       }
       else
       {
-        block[SHIP_STATE] = screen.work[SHIP_STATE]; // 6502: .MA27 LDY #31 / STA (INF),Y
+        block.State() = screen.work.State(); // 6502: .MA27 LDY #31 / STA (INF),Y
         ++slot;                                      // 6502: LDX XSAV / INX / JMP MAL1
       }
     }

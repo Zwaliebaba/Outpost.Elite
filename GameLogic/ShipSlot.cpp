@@ -66,8 +66,8 @@ namespace Elite
         const std::uint8_t heapHigh = static_cast<std::uint8_t>(highDifference);
         carry = highDifference >= 0x100u;
 
-        _work[SHIP_HEAP_LOW_OFFSET] = heapLow;
-        _work[SHIP_HEAP_HIGH_OFFSET] = heapHigh;
+        _work.HeapLow() = heapLow;
+        _work.HeapHigh() = heapHigh;
 
         /*
          * 6502: LDA INWK+33 / SBC INF / TAY / LDA INWK+34 / SBC INF+1 / BCC NW3+1.
@@ -100,8 +100,8 @@ namespace Elite
       }
 
       // 6502: NW6 -- LDY #14 / LDA (XX0),Y / STA INWK+35, then byte 19 masked to three bits.
-      _work[SHIP_ENERGY_OFFSET] = ShipByte(static_cast<std::uint16_t>(blueprint + 14u));
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(ShipByte(static_cast<std::uint16_t>(blueprint + 19u)) & 7u);
+      _work.Energy() = ShipByte(static_cast<std::uint16_t>(blueprint + 14u));
+      _work.State() = static_cast<std::uint8_t>(ShipByte(static_cast<std::uint16_t>(blueprint + 19u)) & 7u);
     }
 
     // 6502: NW2 -- STA FRIN,X / TAX / BMI NW8. The slot takes the type, and X BECOMES the type.
@@ -139,7 +139,7 @@ namespace Elite
      * which is a defined byte rather than a fault, and reproducing it costs nothing.
      */
     const std::uint8_t defaults = ShipByte(static_cast<std::uint16_t>(SHIP_DEFAULT_FLAGS + _shipType - 1u));
-    _work[SHIP_FLAGS_OFFSET] = static_cast<std::uint8_t>((defaults & 0x6Fu) | _work[SHIP_FLAGS_OFFSET]);
+    _work.Newb() = static_cast<std::uint8_t>((defaults & 0x6Fu) | _work.Newb());
 
     // 6502: LDY #NI%-1 / .NWL3 LDA INWK,Y / STA (INF),Y / DEY / BPL NWL3 / SEC / RTS.
     _bubble.blocks[slot] = _work;

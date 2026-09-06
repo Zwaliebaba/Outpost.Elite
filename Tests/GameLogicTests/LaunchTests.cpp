@@ -1333,7 +1333,7 @@ namespace GameLogicTests
       std::uint32_t dismissed = 0;
       std::uint32_t fired = 0;
 
-      for (const std::uint8_t shipType : {Elite::SHIP_COBRA_MK3, Elite::SHIP_ADDER})
+      for (const std::uint8_t shipType : {Elite::SHIP_TYPE_COBRA_MK3, Elite::SHIP_TYPE_ADDER})
       {
         for (const std::uint8_t distance : {Elite::TITLE_COBRA_DISTANCE, Elite::TITLE_ADDER_DISTANCE})
         {

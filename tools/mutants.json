@@ -114,8 +114,8 @@
         {
           "id": "ta-104",
           "file": "GameLogic/Tactics.cpp",
-          "find": "work[29] = static_cast<std::uint8_t>(amount.value | 104u);",
-          "replace": "work[29] = static_cast<std::uint8_t>(amount.value | 105u);",
+          "find": "work.RollCounter() = static_cast<std::uint8_t>(amount.value | 104u);",
+          "replace": "work.RollCounter() = static_cast<std::uint8_t>(amount.value | 105u);",
           "expect": "caught",
           "note": "ORA #104 on the roll TN7 just made, reachable only through ta-250's branch -- and for a year one value reached it, 125, whose bottom bit is set. Closed by a seed that lands 252 at TN7 and then an EVEN operand (plan section 6.153)."
         },
@@ -130,16 +130,16 @@
         {
           "id": "ta-half",
           "file": "GameLogic/Tactics.cpp",
-          "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work[35];",
-          "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < work[35];",
+          "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work.Energy();",
+          "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < work.Energy();",
           "expect": "caught",
           "note": "TA7's first LSR A -- and its BCC goes to CAPITAL TA3, part SIX, so a ship above half energy skips the missile launch. THIS ONE WAS A DEFECT: the port ran both energy branches into part five. Closed by the fix plus three cases WITH missiles straddling the threshold (plan section 6.153)."
         },
         {
           "id": "ta7-three",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work[35])",
-          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work[35])",
+          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work.Energy())",
+          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work.Energy())",
           "expect": "caught",
           "note": "TA7's second and third LSR A -- an EIGHTH of the maximum, not a quarter."
         },
@@ -170,16 +170,16 @@
         {
           "id": "msl-82",
           "file": "GameLogic/Tactics.cpp",
-          "find": "destroyed = (work[32] == 0x82u);",
-          "replace": "destroyed = (work[32] == 0x83u);",
+          "find": "destroyed = (work.Ai() == 0x82u);",
+          "replace": "destroyed = (work.Ai() == 0x83u);",
           "expect": "caught",
           "note": "The station a missile dies against. Closed by cases that put the target at the missile's own position, which is the only way part 1's tail runs at all."
         },
         {
           "id": "msl-bit5",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if ((victim[31] & 0x20u) == 0u)",
-          "replace": "if ((victim[31] & 0x10u) == 0u)",
+          "find": "if ((victim.State() & 0x20u) == 0u)",
+          "replace": "if ((victim.State() & 0x10u) == 0u)",
           "expect": "caught",
           "note": "BIT M32+1 reads bit 5 out of the middle of an instruction. Closed by a victim marked in bit 4 and not bit 5, which is the only state that tells the two apart."
         },
@@ -194,8 +194,8 @@
         {
           "id": "kill-rotate",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>((work[32] & 0x7Fu) >> 1u));",
-          "replace": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>(work[32] & 0x7Fu));",
+          "find": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>((work.Ai() & 0x7Fu) >> 1u));",
+          "replace": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>(work.Ai() & 0x7Fu));",
           "expect": "caught",
           "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2. Not a coverage gap: TALLY and TALLYL were neither pushed nor compared, so what EXNO2 scores was invisible. Closed by comparing all three bytes (plan section 6.153)."
         }
@@ -411,8 +411,8 @@
         {
           "id": "mi-selftest",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.work[7] = BRIEFING_SHIP_DISTANCE;",
-          "replace": "    screen.work[7] = 0u;",
+          "find": "    screen.work.Z().hi = BRIEFING_SHIP_DISTANCE;",
+          "replace": "    screen.work.Z().hi = 0u;",
           "expect": "caught",
           "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Putting the briefing ship at z_hi = 0 rather than 2 draws it at a two-hundredth of the distance, which the whole-canvas comparison in TheBriefingShipMatchesPAS1 cannot miss. Keep it first and never delete it.",
           "selftest": true
@@ -444,8 +444,8 @@
         {
           "id": "mi-erase",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.work[31] = 0u;",
-          "replace": "    screen.work[31] = 0xFFu;",
+          "find": "    screen.work.State() = 0u;",
+          "replace": "    screen.work.State() = 0xFFu;",
           "expect": "caught",
           "note": "`LDA #0 / STA INWK+31` -- the ship stops being drawn, so the `LL9` after the screen change has nothing to rub out. Leaving the flags set makes that `LL9` erase lines the cleared screen no longer has."
         },
@@ -580,7 +580,7 @@
         {
           "id": "mi-second-inc",
           "file": "GameLogic/Missions.cpp",
-          "find": "      screen.work[6] = static_cast<std::uint8_t>(screen.work[6] + 1u);\n      if (screen.work[6] == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
+          "find": "      screen.work.Z().lo = static_cast<std::uint8_t>(screen.work.Z().lo + 1u);\n      if (screen.work.Z().lo == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
           "replace": "      // 6502: LDX INWK+3",
           "expect": "caught",
           "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on."
@@ -604,7 +604,7 @@
         {
           "id": "mi-inwk7",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.work[7] = static_cast<std::uint8_t>(screen.work[7] + 1u);",
+          "find": "    screen.work.Z().hi = static_cast<std::uint8_t>(screen.work.Z().hi + 1u);",
           "replace": "",
           "expect": "caught",
           "note": "`.BR2 INC INWK+7` -- the high byte following the low one past 255. Without it the ship is 256 units nearer than the briefing text was written for, and `INWK` is compared byte for byte."

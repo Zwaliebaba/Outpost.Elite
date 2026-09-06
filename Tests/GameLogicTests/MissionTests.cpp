@@ -375,7 +375,7 @@ namespace GameLogicTests
 
       std::uint32_t compared = 0;
 
-      for (const std::uint8_t type : {Elite::SHIP_COBRA_MK3, Elite::SHIP_ADDER})
+      for (const std::uint8_t type : {Elite::SHIP_TYPE_COBRA_MK3, Elite::SHIP_TYPE_ADDER})
       {
         for (const std::uint8_t roll : {std::uint8_t{0}, std::uint8_t{0x7Fu}, std::uint8_t{0x80u}})
         {
@@ -449,7 +449,7 @@ namespace GameLogicTests
       {
         for (const std::uint32_t quiet : {std::uint32_t{1}, std::uint32_t{2}, std::uint32_t{5}})
         {
-          const std::uint8_t type = ((held + quiet) & 1u) != 0u ? Elite::SHIP_COBRA_MK3 : Elite::SHIP_ADDER;
+          const std::uint8_t type = ((held + quiet) & 1u) != 0u ? Elite::SHIP_TYPE_COBRA_MK3 : Elite::SHIP_TYPE_ADDER;
 
           LoopUniverse universe;
           Seed(universe.universe, quiet * 17u + held * 5u + type);
