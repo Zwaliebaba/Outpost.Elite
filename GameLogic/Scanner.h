@@ -131,11 +131,12 @@ namespace Elite
    * `XX15` here is `X1`, `Y1` and `X2` -- the same six bytes the line drawing uses, because that is
    * what `XX15` is (§6.37). `SP2` reads all three back.
    */
-  void NormaliseAxes(K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
+  /// Returns the vector's length, which `NORM` leaves in `Q` and `DOCKIT` reads (M2-b).
+  std::uint8_t NormaliseAxes(K3Block& _axes, DrawWorkspace& _work) noexcept;
 
   /// 6502: SPS1 -- three `SPS3` calls for the planet, then a fall-through into `TAS2`. The
   /// fall-through is the routine: `SPS1` has no `RTS` of its own.
-  void LoadPlanetAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
+  void LoadPlanetAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work) noexcept;
 
   /*
    * 6502: SPS4 -- the same for the space station, which is nine bytes copied straight across.
@@ -144,7 +145,7 @@ namespace Elite
    * -- over the sun, which is why the two are never in the bubble together. And the station's
    * coordinates are ordinary sixteen-bit ones, so unlike the planet's there is nothing to drop.
    */
-  void LoadStationAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
+  void LoadStationAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work) noexcept;
 
   /// What `SPS2` hands back: the original returns the signed offset in X and its sign extension in
   /// Y, and `SP2` reads both -- plus the carry, which comes from `DVID4` and lands in an `ADC` and
@@ -164,7 +165,7 @@ namespace Elite
    * then undoes -- it is how the sign gets out of the way: `ASL A` pushes bit 7 into the carry and
    * `LDA #0 / ROR A` catches it, leaving the magnitude in A with nothing above it.
    */
-  [[nodiscard]] CompassOffset ScaleToCompass(MathWorkspace& _math, std::uint8_t _a) noexcept;
+  [[nodiscard]] CompassOffset ScaleToCompass(std::uint8_t _value) noexcept;
 
   /*
    * 6502: SP2 -- put the dot where `XX15` points, and draw it.

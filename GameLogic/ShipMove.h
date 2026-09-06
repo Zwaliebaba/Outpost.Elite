@@ -32,7 +32,9 @@ namespace Elite
    * that read the `LSR` as arithmetic and dropped the flag would be adding an extra one about half
    * the time.
    */
-  void AddToShipCoordinate(Ship& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x, bool _maskSign) noexcept;
+  /// `_high` is A -- a sign, or a whole coordinate byte on the unmasked path -- and `_low` is the R
+  /// the caller staged.
+  void AddToShipCoordinate(Ship& _work, std::uint8_t _high, std::uint8_t _low, std::uint8_t _axis, bool _maskSign) noexcept;
 
   /*
    * 6502: MVT3 -- K(4) = K(4) + INWK+X(3), sign-magnitude, with K's own sign in K+3.
@@ -41,10 +43,16 @@ namespace Elite
    * added, and the answer stays in K. `MV40` -- the planet and sun path through `MVEIT` -- is what
    * reaches it.
    */
-  /// Returns the carry `MVT3` exits with, which is the `ADC`'s on one path, SET on the second, and
-  /// the final `SBC`'s on the third. `VCSUB`'s last call leaves it standing all the way out to
-  /// `TACTICS`, where the `DORND` at `TA64` rotates it in (§6.126).
-  [[nodiscard]] bool AddShipCoordinateToK(const Ship& _work, MathWorkspace& _math, std::uint8_t _x) noexcept;
+  /// What `MVT3` leaves: the block, and the carry it exits with -- which is the `ADC`'s on one
+  /// path, SET on the second, and the final `SBC`'s on the third. `VCSUB`'s last call leaves it
+  /// standing all the way out to `TACTICS`, where the `DORND` at `TA64` rotates it in (§6.126).
+  struct KBlockSum
+  {
+    KBlock value{};
+    bool carry = false;
+  };
+
+  [[nodiscard]] KBlockSum AddShipCoordinateToK(const Ship& _work, KBlock _k, std::uint8_t _axis) noexcept;
 
   /*
    * 6502: MVT6 -- (P+1 P+2) = (P+1 P+2) + INWK+X(2), and the sign comes back in A.
@@ -54,7 +62,9 @@ namespace Elite
    * returns `_a` with its sign flipped, which is the one place in this family where the answer's
    * sign is not the sign that went in.
    */
-  [[nodiscard]] std::uint8_t AddShipCoordinateToP(const Ship& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x) noexcept;
+  /// `_value` is (P+1 P+2) under the sign in A -- a coordinate's shape -- and what comes back is
+  /// the same three bytes after the add, the sign flipped where `MV50` flips it.
+  [[nodiscard]] SignMag24 AddShipCoordinateToP(const Ship& _work, SignMag24 _value, std::uint8_t _axis) noexcept;
 
   /*
    * 6502: MVS4 -- roll and pitch one of a ship's three orientation vectors.
@@ -68,7 +78,7 @@ namespace Elite
    * EOR #128` hands `MAD` the same magnitude with the opposite sign, because these are
    * sign-magnitude numbers and negating one is a single bit.
    */
-  void RotateShipVector(Ship& _work, MathWorkspace& _math, std::uint8_t _y, std::uint8_t _alpha, std::uint8_t _beta) noexcept;
+  void RotateShipVector(Ship& _work, std::uint8_t _y, std::uint8_t _alpha, std::uint8_t _beta) noexcept;
 
   /*
    * 6502: MVS5 -- rotate a PAIR of coordinates by a sixteenth, for the ship's own roll and pitch.
@@ -83,7 +93,7 @@ namespace Elite
    * what stops the rotation from growing without bound. `TIDY` (through `NORM`) is what puts the
    * length back.
    */
-  void RotateCoordinatePair(Ship& _work, MathWorkspace& _math, std::uint8_t _x, std::uint8_t _y, std::uint8_t _rat2) noexcept;
+  void RotateCoordinatePair(Ship& _work, std::uint8_t _x, std::uint8_t _y, std::uint8_t _rat2) noexcept;
 
   /*
    * 6502: TIS3, which FALLS INTO DVIDT -- one component of the third orientation vector, worked out
@@ -97,8 +107,7 @@ namespace Elite
    * The fall-through is not incidental: `TIS3` sets up P, Q and A and then runs off its end into
    * the divider, so a caller of `TIS3` gets a division whether it wanted one or not.
    */
-  [[nodiscard]] std::uint8_t OrientationComponent(const Ship& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x,
-                                                  std::uint8_t _y) noexcept;
+  [[nodiscard]] std::uint8_t OrientationComponent(const Ship& _work, std::uint8_t _a, std::uint8_t _x, std::uint8_t _y) noexcept;
 
   /*
    * 6502: TIDY -- put a ship's orientation vectors back into shape.
@@ -113,7 +122,7 @@ namespace Elite
    * not -- so the routine has three shapes depending on which way the ship happens to be pointing,
    * and a port that always used the first would be right until a ship pointed down an axis.
    */
-  void TidyOrientation(Ship& _work, MathWorkspace& _math) noexcept;
+  void TidyOrientation(Ship& _work) noexcept;
 
   /*
    * 6502: MV40 -- move a PLANET or a SUN, which is the whole of `MVEIT` for a negative ship type.
@@ -124,8 +133,11 @@ namespace Elite
    * the scanner, does not accelerate, and rotates about the player rather than about itself.
    *
    * The arithmetic is the player's roll and pitch applied in the opposite direction, which is what
-   * makes the world turn when the ship does. Both `K` and `K2` are live across it, which is why
-   * `MathWorkspace` carries two blocks.
+   * makes the world turn when the ship does. Both `K` and `K2` are live across it; they are two
+   * locals here, and the workspace is touched for TWO bytes: `K2`'s bottom byte is read, because
+   * the routine never writes it and the carry of its first addition depends on it (the comment at
+   * that line), and `Q` is left holding ALPHA on the way out, because for the sun that is the
+   * frame's Q the altitude check reads (`EndFlightFrame`).
    *
    * ITS ADDITIONS DISCARD THEIR LOW BYTE. `LDA K / CLC / ADC K2` throws the result away and keeps
    * only the carry, because the answer is stored from K+1 upwards -- the bottom byte exists solely
@@ -241,8 +253,10 @@ namespace Elite
    * `_view` is `QQ11`, which `SCAN` reads and `MVEIT` does not: the flight loop sets it, and the
    * port has no single home for it until 3d-d.
    */
-  [[nodiscard]] bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _work, MathWorkspace& _math, FlightState& _flight,
-                              ShipEffects& _effects, const Blueprint& _blueprint, std::uint8_t _view) noexcept;
+  /// `_math` is here for two bytes since M2-b: `MV40` reads `K2`'s bottom byte, and the tail leaves
+  /// `Q` holding the pitch -- the frame's Q -- for the altitude check (`EndFlightFrame`).
+  [[nodiscard]] bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
+                              const Blueprint& _blueprint, std::uint8_t _view) noexcept;
 
   /*
    * 6502: PLUT and PU1 -- flip a ship's axes for the view the player is looking through.

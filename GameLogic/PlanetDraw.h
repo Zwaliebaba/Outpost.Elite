@@ -332,7 +332,8 @@ namespace Elite
 
   /// 6502: PLS4 -- where a meridian starts, as an angle: `ARCTAN` of the ratio, flipped by the
   /// roof vector's sign, and divided by four to index a sixty-fourth of a turn.
-  void SetMeridianAngle(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
+  /// `_numerator` is the P the caller staged and `_denominator` the A it arrived with.
+  void SetMeridianAngle(const Ship& _ship, MathWorkspace& _math, std::uint8_t _numerator, std::uint8_t _denominator) noexcept;
 
   /// 6502: PLS5 -- two axes into `K2+2`/`K2+3` and their signs into `XX16+2`/`XX16+3`.
   void LoadTwoAxes(const Ship& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry, std::uint8_t _at) noexcept;

@@ -98,7 +98,8 @@ namespace Elite
      * all that is wanted is the three seven-bit magnitudes and the fall into `NORM`. The port's
      * `NormaliseAxes` is the whole of `TAS2`, so this is the half of it below the loop.
      */
-    void BuildUnitVector(const K3Block& _axes, DrawWorkspace& _draw, MathWorkspace& _math) noexcept
+    /// Returns the length `NORM` leaves in `Q`, which `DOCKIT` reads as the distance to the station.
+    std::uint8_t BuildUnitVector(const K3Block& _axes, DrawWorkspace& _draw) noexcept
     {
       _draw.x1 = static_cast<std::uint8_t>((_axes[1] >> 1u) | _axes[2]);
       _draw.y1 = static_cast<std::uint8_t>((_axes[4] >> 1u) | _axes[5]);
@@ -106,10 +107,11 @@ namespace Elite
 
       // 6502: and no RTS -- `TA2` falls into `NORM`, exactly as `TAS2` does above it.
       std::array<std::uint8_t, 3> vector = {_draw.x1, _draw.y1, _draw.x2};
-      Normalise(_math, std::span<std::uint8_t, 3>(vector));
+      const std::uint8_t length = Normalise(std::span<std::uint8_t, 3>(vector));
       _draw.x1 = vector[0];
       _draw.y1 = vector[1];
       _draw.x2 = vector[2];
+      return length;
     }
 
     /*
@@ -129,7 +131,7 @@ namespace Elite
       math.cnt = _cnt; // 6502: .TA152 STA CNT
 
       // 6502: .TA15 LDY #16 / JSR TAS3 / TAX / EOR #%10000000 / AND #%10000000 / STA INWK+30.
-      const AddSignedResult roof = DotProductWithShip(work, screen.draw, math, ORIENTATION_ROOF);
+      const AddSignedResult roof = DotProductWithShip(work, screen.draw, ORIENTATION_ROOF);
       work.pitchCounter = static_cast<std::uint8_t>((roof.high ^ 0x80u) & 0x80u);
 
       /*
@@ -151,7 +153,7 @@ namespace Elite
         // 6502: LDY #22 / JSR TAS3 / TAX / EOR INWK+30 / AND #%10000000 / EOR #%10000000 --
         // the roll's direction is the side dot product XORed with the PITCH just chosen, which is
         // what makes a ship bank into its turn rather than roll and pitch independently.
-        const AddSignedResult side = DotProductWithShip(work, screen.draw, math, ORIENTATION_SIDE);
+        const AddSignedResult side = DotProductWithShip(work, screen.draw, ORIENTATION_SIDE);
         work.rollCounter = static_cast<std::uint8_t>((((side.high ^ work.pitchCounter) & 0x80u) ^ 0x80u));
 
         if (static_cast<std::uint8_t>(side.high << 1u) >= screen.flight.rat2)
@@ -200,7 +202,7 @@ namespace Elite
       FlightScreen& screen = _loop.screen;
 
       // 6502: LDY #10 / JSR TAS3 / CMP #&98 / BCC ttt / LDX #0 / STX RAT2.
-      const AddSignedResult nose = DotProductWithShip(screen.work, screen.draw, screen.math, ORIENTATION_NOSE);
+      const AddSignedResult nose = DotProductWithShip(screen.work, screen.draw, ORIENTATION_NOSE);
       if (nose.high >= 0x98u)
       {
         screen.flight.rat2 = 0u;
@@ -226,8 +228,8 @@ namespace Elite
     {
       FlightScreen& screen = _loop.screen;
 
-      NormaliseAxes(_loop.axes, screen.draw, screen.math); // 6502: .TA19 JSR TAS2
-      const AddSignedResult nose = DotProductWithShip(screen.work, screen.draw, screen.math, ORIENTATION_NOSE);
+      (void)NormaliseAxes(_loop.axes, screen.draw); // 6502: .TA19 JSR TAS2
+      const AddSignedResult nose = DotProductWithShip(screen.work, screen.draw, ORIENTATION_NOSE);
 
       NegateVector(screen.draw); // 6502: .TA20 JSR TAS6, reached through part 4's `CMP #MSL`
       SteerTowards(_loop, static_cast<std::uint8_t>(nose.high ^ 0x80u));
@@ -240,7 +242,7 @@ namespace Elite
 
       // 6502: JSR SPS1 / JMP TA151 -- `SPS1` is the compass's own "where is the planet", and it
       // leaves the unit vector in `XX15` exactly where the steering wants it.
-      LoadPlanetAxes(screen.bubble, _loop.axes, screen.draw, screen.math);
+      LoadPlanetAxes(screen.bubble, _loop.axes, screen.draw);
       AimAlongNose(_loop);
     }
 
@@ -273,62 +275,57 @@ namespace Elite
 
   } // namespace
 
-  bool SubtractShipAxis(const Ship& _other, const Ship& _work, K3Block& _axes, MathWorkspace& _math, std::uint8_t _at) noexcept
+  bool SubtractShipAxis(const Ship& _other, const Ship& _work, K3Block& _axes, std::uint8_t _at) noexcept
   {
     // 6502: LDA (V),Y / EOR #%10000000 / STA K+3 -- the other object's sign, negated.
     const SignMag24& axis = _other.PositionAt(_at);
-    _math.k[3] = static_cast<std::uint8_t>(axis.sgn ^ 0x80u);
+    KBlock k;
+    k.top = static_cast<std::uint8_t>(axis.sgn ^ 0x80u);
 
     // 6502: DEY / LDA (V),Y / STA K+2 / DEY / LDA (V),Y / STA K+1.
-    _math.k[2] = axis.hi;
-    _math.k[1] = axis.lo;
+    k.high = axis.hi;
+    k.mid = axis.lo;
 
     // 6502: STY U / LDX U / JSR MVT3 -- K = K + INWK+X, so K is now this ship minus the other.
-    _math.u = _at;
-    const bool carry = AddShipCoordinateToK(_work, _math, _at);
+    const KBlockSum sum = AddShipCoordinateToK(_work, k, _at);
 
     // 6502: STA K3+2,X, and the A it stores is the sign byte `MVT3` left in the register.
-    _axes[_at + 2u] = _math.k[3];
-    _axes[_at + 1u] = _math.k[2];
-    _axes[_at] = _math.k[1];
+    _axes[_at + 2u] = sum.value.top;
+    _axes[_at + 1u] = sum.value.high;
+    _axes[_at] = sum.value.mid;
 
     // 6502: `LDY`, `LDA` and `STA` leave the flag alone, so what `MVT3` exited with is what the
     // caller gets.
-    return carry;
+    return sum.carry;
   }
 
-  bool SubtractShipAxes(const Ship& _other, const Ship& _work, K3Block& _axes, MathWorkspace& _math) noexcept
+  bool SubtractShipAxes(const Ship& _other, const Ship& _work, K3Block& _axes) noexcept
   {
     // 6502: LDY #2 / JSR TAS1 / LDY #5 / JSR TAS1 / LDY #8, and the last one is a fall-through, so
     // the carry the third leaves is the routine's.
-    (void)SubtractShipAxis(_other, _work, _axes, _math, 0u);
-    (void)SubtractShipAxis(_other, _work, _axes, _math, 3u);
-    return SubtractShipAxis(_other, _work, _axes, _math, 6u);
+    (void)SubtractShipAxis(_other, _work, _axes, 0u);
+    (void)SubtractShipAxis(_other, _work, _axes, 3u);
+    return SubtractShipAxis(_other, _work, _axes, 6u);
   }
 
-  bool SubtractStationAxes(const Bubble& _bubble, const Ship& _work, K3Block& _axes, MathWorkspace& _math) noexcept
+  bool SubtractStationAxes(const Bubble& _bubble, const Ship& _work, K3Block& _axes) noexcept
   {
     // 6502: LDA #LO(K%+NI%) / STA V / LDA #HI(K%+NI%), and then straight into `VCSUB`.
-    return SubtractShipAxes(_bubble.blocks[1], _work, _axes, _math);
+    return SubtractShipAxes(_bubble.blocks[1], _work, _axes);
   }
 
-  AddSignedResult DotProductWithShip(const Ship& _block, const DrawWorkspace& _draw, MathWorkspace& _math, std::uint8_t _at) noexcept
+  AddSignedResult DotProductWithShip(const Ship& _block, const DrawWorkspace& _draw, std::uint8_t _at) noexcept
   {
     // 6502: LDX INWK,Y / STX Q / LDA XX15 / JSR MULT12 -- (S R) = vect_x * XX15. Y is 10, 16 or
     // 22: the HIGH byte of the vector's x, so the vector is the one starting a byte earlier.
     const Vector16& vector = _block.VectorAt(static_cast<std::uint8_t>(_at - 1u));
-    _math.q = vector.x.hi;
-    MultiplySignedToSR(_math, _draw.x1);
+    const Product first = MultiplySigned(_draw.x1, vector.x.hi);
 
     // 6502: LDX INWK+2,Y / STX Q / LDA XX15+1 / JSR MAD / STA S / STX R.
-    _math.q = vector.y.hi;
-    const AddSignedResult second = MultiplyAndAdd(_math, _draw.y1);
-    _math.s = second.high;
-    _math.r = second.low;
+    const AddSignedResult second = MultiplyAndAdd(_draw.y1, vector.y.hi, first.Pair());
 
     // 6502: LDX INWK+4,Y / STX Q / LDA XX15+2, and no `JSR` -- it falls into `MAD`.
-    _math.q = vector.z.hi;
-    return MultiplyAndAdd(_math, _draw.x2);
+    return MultiplyAndAdd(_draw.x2, vector.z.hi, second.Pair());
   }
 
   void NegateVector(DrawWorkspace& _draw) noexcept
@@ -461,7 +458,7 @@ namespace Elite
         // 6502: LSR A / TAX / LDA UNIV,X / STA V / LDA UNIV+1,X / JSR VCSUB -- the missile's TARGET
         // slot, out of the AI byte it has been carrying since `FRS1` doubled `MSTG` into it.
         const std::uint8_t target = MissileTargetOf(work.ai);
-        const bool vectorCarry = SubtractShipAxes(screen.bubble.blocks[target], work, axes, math);
+        const bool vectorCarry = SubtractShipAxes(screen.bubble.blocks[target], work, axes);
 
         /*
          * 6502: LDA K3+2 / ORA K3+5 / ORA K3+8 / AND #%01111111 / ORA K3+1 / ORA K3+4 / ORA K3+7 /
@@ -721,8 +718,8 @@ namespace Elite
     }
 
     // 6502: .TA19 JSR TAS2 / LDY #10 / JSR TAS3 / STA CNT, and then part 4.
-    NormaliseAxes(axes, screen.draw, math);
-    const AddSignedResult nose = DotProductWithShip(work, screen.draw, math, ORIENTATION_NOSE);
+    (void)NormaliseAxes(axes, screen.draw);
+    const AddSignedResult nose = DotProductWithShip(work, screen.draw, ORIENTATION_NOSE);
     math.cnt = nose.high;
 
     /*
@@ -993,7 +990,7 @@ namespace Elite
       return true;
     }
 
-    (void)SubtractStationAxes(screen.bubble, work, axes, math); // 6502: JSR VCSU1
+    (void)SubtractStationAxes(screen.bubble, work, axes); // 6502: JSR VCSU1
 
     // 6502: LDA K3+2 / ORA K3+5 / ORA K3+8 / AND #%01111111 / BNE GOPLS -- any axis whose HIGH
     // byte has magnitude at all means the station is far away, and the sign is masked off because
@@ -1012,8 +1009,7 @@ namespace Elite
      * computed in `Q`. So `K` ends up holding how far away the station is, measured on the way to
      * working out which way it is.
      */
-    BuildUnitVector(axes, screen.draw, math);
-    const std::uint8_t distance = math.q;
+    const std::uint8_t distance = BuildUnitVector(axes, screen.draw);
 
     /*
      * 6502: JSR TAS2 -- and this is a SECOND normalisation, of the same `K3`, immediately after the
@@ -1021,11 +1017,11 @@ namespace Elite
      * is the shifted one and not the one the length was taken from. The port did the first call and
      * not the second, and every docking approach came out on the wrong branch (§6.125).
      */
-    NormaliseAxes(axes, screen.draw, math);
+    (void)NormaliseAxes(axes, screen.draw);
 
     // 6502: LDY #10 / JSR TAS4 / BMI PH1 / CMP #35 / BCC PH1 -- the STATION's nose against the
     // vector to it, so this asks "am I in front of the slot", and anything else goes to `PH1`.
-    const AddSignedResult alongSlot = DotProductWithShip(screen.bubble.blocks[1], screen.draw, math, ORIENTATION_NOSE);
+    const AddSignedResult alongSlot = DotProductWithShip(screen.bubble.blocks[1], screen.draw, ORIENTATION_NOSE);
 
     bool fineApproach = false;
     bool wideApproach = false;
@@ -1038,7 +1034,7 @@ namespace Elite
     {
       // 6502: LDY #10 / JSR TAS3 / CMP #&A2 / BCS PH3 -- OUR nose against the same vector, so this
       // asks "am I pointing at it", and &A2 is a wide enough cone to fly straight in.
-      const AddSignedResult ourNose = DotProductWithShip(work, screen.draw, math, ORIENTATION_NOSE);
+      const AddSignedResult ourNose = DotProductWithShip(work, screen.draw, ORIENTATION_NOSE);
       if (ourNose.high >= 0xA2u)
       {
         fineApproach = true;
@@ -1062,10 +1058,10 @@ namespace Elite
        * rather than four. Then `TAS6` turns the vector round, because `TA151` steers along `XX15`
        * and what has been computed is the direction FROM the ship TO the point.
        */
-      (void)SubtractStationAxes(screen.bubble, work, axes, math);
+      (void)SubtractStationAxes(screen.bubble, work, axes);
       OffsetDockingPosition(screen.bubble, axes);
       OffsetDockingPosition(screen.bubble, axes);
-      NormaliseAxes(axes, screen.draw, math);
+      (void)NormaliseAxes(axes, screen.draw);
       NegateVector(screen.draw);
       AimAlongNose(_loop);
       return true;
@@ -1133,7 +1129,7 @@ namespace Elite
     screen.draw.x2 = work.side.z.hi;
 
     // 6502: LDY #16 / JSR TAS4 / ASL A / CMP #66 / BCS TN11.
-    const AddSignedResult roll = DotProductWithShip(screen.bubble.blocks[1], screen.draw, math, ORIENTATION_ROOF);
+    const AddSignedResult roll = DotProductWithShip(screen.bubble.blocks[1], screen.draw, ORIENTATION_ROOF);
     if (static_cast<std::uint8_t>(roll.high << 1u) >= 66u)
     {
       // 6502: .TN11 INC INWK+28 / LDA #%01111111 / STA INWK+29 / BNE TN13 -- roll as hard as the
