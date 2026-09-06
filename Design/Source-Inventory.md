@@ -2,7 +2,7 @@
 
 **Status:** in use since 2026-09-02; **complete against all 710 master-level includes as of
 2026-09-05** — `tools/inventory.py --strict` passes and CI runs it on every push (plan §6.120).
-This is the coverage ledger: every library file the 13 masters include is named in a row, and
+This is the coverage ledger: every library file the <!--count:masters-->twelve masters include is named in a row, and
 the check fails the build when one is not. The check does NOT yet compare a row's *Disposition*
 against its slice; that half of slice 0c's sentence is unbuilt and is said so here rather than
 implied. Two shorthands count as naming (`tools/inventory.py` expands both): any one part of a
