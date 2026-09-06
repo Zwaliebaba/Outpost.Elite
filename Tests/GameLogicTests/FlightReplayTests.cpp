@@ -39,10 +39,12 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
  * (Risk R14).
  *
  * WHEN THE RECORD MAY CHANGE. Never for a refactor: a changed digest is a changed game, and the
- * slice that changed it has found a defect or introduced one. The record is re-taken only when
- * the DIGEST is deliberately widened -- more cells in the image, the sound buffer at M3-a -- and
- * the journal entry says so. The failure message prints the whole new record in the form below,
- * so re-taking it is a paste and a diff, never a retype.
+ * slice that changed it has found a defect or introduced one. The record is re-taken in two cases
+ * and the journal entry says which: the DIGEST is deliberately widened -- more cells in the image,
+ * the sound buffer at M3-a -- or a defect in the port is found and fixed, and the record follows
+ * the fix ("the port was wrong, the record is not needed", Modernize.md section 1 R-e). The failure
+ * message prints the whole new record in the form below, so re-taking it is a paste and a diff,
+ * never a retype.
  */
 namespace GameLogicTests
 {
