@@ -1,6 +1,9 @@
 # Modernize — from a faithful transcription to a modern C++ codebase
 
-**Status:** Proposed · opened 2026-09-06. **The gate ADR-001 §4 set for phase 6 is met**: every oracle
+**Status:** **Accepted in scope · opened 2026-09-06, §1's questions ruled the same day** (all eight, and a
+ninth the owner added: the port is DETACHED from the original at the end — the oracle, the assembler
+source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
+§4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
 (<!--count:tests-->385 tests, oracle present), all <!--count:checks-->twelve repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
@@ -35,7 +38,7 @@ seams most of which exist because a routine had not been ported yet, and the who
 program — the outer loops, the key dispatch, the mode changes — written in the Windows executable
 where no oracle and no Linux job can reach it.
 
-Five moves, in order, each a phase with slices and a fidelity gate:
+Six moves, in order, each a phase with slices and a fidelity gate:
 
 | Phase | Move | What it buys |
 |---|---|---|
@@ -45,10 +48,11 @@ Five moves, in order, each a phase with slices and a fidelity gate:
 | **M3** | **Ownership.** `Elite::World` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
 | **M4** | **Control flow.** The flight frame, the ship renderer, the AI and the docking computer become pipelines of named stages with typed intermediate results; implicit state machines become explicit ones. | The three routines over five hundred lines each become readable in one sitting. |
 | **M5** | **Polish and the ledger.** Strong types for the remaining bytes, `constexpr` where the data allows, the twenty-one stale file names in `Source-Inventory.md`, and the ADRs that record the decisions. | The corpus describes the tree again. |
+| **M6** | **Detach.** The oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
 
-Four rules hold across all of it and are restated in §5: **the oracle decides**; **a byte's width
-and wraparound never change**; **a mutant is re-anchored, never dropped**; **`// 6502:` and the
-ledger survive every rename**.
+Four rules hold across all of it and are restated in §5: **the oracle decides, until M6 records
+it**; **a byte's width and wraparound never change**; **a mutant is re-anchored, never dropped**;
+**`// 6502:` and the ledger survive every rename, until M6 removes them together**.
 
 ---
 
@@ -68,6 +72,23 @@ answer — is not blocked on them.
 | Q6 | **The line heap: an arena with 6502 addresses, or per-ship spans?** `KILLSHP` shuffles every run above a dead ship down; `NWSHP` refuses a ship when the heap would run into the block it is about to write, by comparing two addresses through a carry-dependent subtraction. | Per-ship spans are the clean model and cannot express the refusal without reproducing the same arithmetic. | **Arena kept, addressing changed**: a `HeapOffset` strong type from the top of the arena replaces the raw `std::uint16_t`; the refusal keeps its exact byte chain inside one function (§4.2). |
 | Q7 | **Should the oracle bridge be allowed to grow the label map?** `Where` in `FlightWorld.h` looks up sixty labels by hand. A generic bridge wants the map generated. | `tools/labels.py` already writes `Labels.txt`; a `--fields` mode could emit the C++ table. Generated code is checked in (ADR-004 §3) and needs a `--check`. | **Yes**, as a generated header with a check, like the data tables. |
 | Q8 | **May `clang-tidy`'s `modernize-*` set be widened?** `.clang-tidy` enables two `modernize-` checks. | The rest (`modernize-use-using`, `-loop-convert`, `-avoid-c-arrays`, `-use-designated-initializers`) would mechanise part of M5 and stop regressions. `WarningsAsErrors: '*'` means each one is a decision. | **Widened one check at a time**, each in its own commit with the fixes it demands, never as a batch. |
+
+**Ruled 2026-09-06, owner.** Q1 **C++20**. Q2 **yes**, the tests may be rewritten through the bridge.
+Q3 **yes**, the loops and the dispatch move into `GameLogic`. Q5 **parsed** blueprints. Q6 the **offset
+arena**. Q7 and Q8 fall under the ruling below. Q4 was answered with a decision the table had not
+offered, and it is the one that changes the shape of the plan:
+
+> Remove the link with the assembler code. Remove the dependency on the oracle and on all of the
+> legacy assembler, so that it can be removed.
+
+Clarified the same day into four rulings:
+
+| # | Ruling | What it means for the plan |
+|---|---|---|
+| R-a | **Detach at the end, not first.** The oracle stays the judge through M1–M5; a final phase records its answers as checked-in fixtures, replaces every oracle test with a fixture test, and only then deletes the interpreter, the upstream submodule and the masters. | Phase **M6** (§6). Every earlier slice is still measured against the assembled original, which is the only instrument that can say a refactor changed nothing. |
+| R-b | **Every trace of the original goes**: the `// 6502:` markers and `Source-Inventory.md`; the identifiers that are 6502 labels (`p`, `q`, `xx15`, `k3`, `INWK`-style names); the assembly transcribed in comments (`LDA` / `STA` / `BCC` sequences); `MasterFile/` and `Upstream/` from the tree. | M6-c, M6-d and M6-e. M2 and M4 rename as they go so that M6-c is a sweep of what is left, not a second pass over everything. AGENTS.md R7 and §7 are amended when M6-e lands, not before. |
+| R-c | **The derived data stays**: the generated tables the game cannot run without, and the recorded fixtures the tests cannot run without. That is the accepted residual exposure (Risk R1, restated at M6-f). | Q7 is moot — the label table the bridge needs exists only while the oracle does, and is generated into the test tree for M0-b to M6-a and deleted with it. Q8 stands: `modernize-*` widened one check per commit. |
+| R-d | **History is not rewritten by this plan.** Removing the files at the tip is M6-f; whether the history that carried them is rewritten is a separate owner decision and is not scheduled here. | Recorded in R21 (§7) so that it cannot be mistaken for something M6 did. |
 
 Anything not in this table is a routine judgement call this plan makes itself and records in §6.
 
@@ -315,11 +336,22 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,549 `6502:`
+references in `GameLogic/`'s comments; <!--count:oracle-test-files-->49 of the test translation
+units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
+submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
+`MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
+it, and it is the one pattern that the owner's ruling (§1, R-a to R-d) makes a target: the end state
+builds, tests and reads with none of it present. Until M6 it is also what every other slice is
+measured by, which is why it is counted here and removed last.
+
 **What is not a legacy pattern, and stays.** The 8-bit arithmetic with explicit carries, the
 sign-magnitude coordinates, the extracted tables, the RNG's carry chain, the XOR canvas with the
 C64's byte layout, the line heaps, the ported bugs of ADR-001 §6, the deliberate divergences
 recorded at their call sites (the stardust count of zero, out-of-arena reads as zero), the
-`// 6502:` markers and the commentary. ADR-002 is unchanged by this plan in every clause.
+`// 6502:` markers and the commentary — both until M6, which removes the markers and the transcribed
+assembly but never the reason a byte is handled the way it is (Risk R20). ADR-002 is unchanged by
+this plan in every clause.
 
 ---
 
@@ -557,13 +589,61 @@ tests. Held for Q1: `std::expected` (the `{value, carry}` structs are not errors
 weak), deducing `this` for the typed views, `std::to_underlying`, `std::print` in tools. Nothing
 in the plan depends on any of them.
 
+### 4.10 The detachment: recorded fixtures replace the live oracle
+
+Every oracle test has the same shape: build a 6502 state, `Call(label, state)`, read memory back,
+compare with the port. The interpreter is reached through one object, `OracleImage`, and that is the
+seam the detachment uses — **the tests do not change shape; what answers them does.**
+
+```cpp
+class Oracle                     // Tests/GameLogicTests/Oracle.h
+{
+public:
+  virtual State Call(std::string_view _label, const State& _in) = 0;      // the one method every test uses
+  virtual std::span<const std::uint8_t> Memory() const = 0;
+};
+class LiveOracle final : public Oracle { Cpu6502 ... };                    // today's OracleImage, until M6-b
+class RecordingOracle final : public Oracle                                 // M6-a: wraps a LiveOracle, writes the fixture
+{ /* per call: FNV-1a of (label, _in, the bytes the test reads back) folded into the test's digest;
+     below a size threshold the full (input -> output diff) is written too, for diagnosis */ };
+class RecordedOracle final : public Oracle                                  // M6-b: serves the fixture; no interpreter
+{ /* a call whose input hash the fixture does not hold fails the test loudly: the test asked the
+     original something it was never asked while the original was here */ };
+```
+
+The fixture per test file is `Tests/Fixtures/<Suite>.oracle`: one digest per `TEST_METHOD`, and the
+full input-to-output records for tests whose record is under the threshold M6-a measures (the
+exhaustive 65,536-case sweeps are digests only; a sweep that fails after M6 is re-run against the
+port's previous commit to find the case, which is the diagnosis path the plan accepts in exchange for
+a tree with no interpreter in it). The whole-bitmap comparisons record the bitmap bytes they read, so
+a drawing test after M6 still says which byte differs. The mutation harness needs no change: it runs
+the suite, and the suite no longer needs an oracle to be present — `check_oracle_present` goes with
+it, and with it the one deliberate failure `OracleIsPresent` (R9 closes by construction).
+
+**What a fixture can and cannot pin.** A fixture pins exactly the calls the tests made while the
+original was here. A behaviour no test reached before M6-b is unpinned for ever afterwards, because
+nothing can ask the original again. That is Risk R19, and it is why M6 is last and why M6-a begins
+with a coverage review: every routine the ledger marks *Port* must have a test that calls it before
+its answers are recorded, and the M0-c replay must cover launch, flight, combat, docking, death and
+the escape pod. The data tables' `extract_tables.py --check` becomes a digest of the generated files
+committed beside them; the tables themselves are already the port's own C++.
+
+**What M6 removes, in order**: the label names from identifiers (M6-c), the assembly from the
+comments (M6-d), the markers and the ledger with `inventory.py` and AGENTS.md R7 (M6-e), and then
+`Upstream/`, `MasterFile/`, `Cpu6502`, `OracleImage`, `labels.py`, `c64_source.py`,
+`extract_tables.py`'s assembler half, the BeebAsm steps in both CI jobs, and the count markers that
+described the masters (M6-f). ADR-001 §5 and Risk R1 are restated at M6-f to what is then true: the
+tree carries the original's data and the port's own code, and nothing of its source.
+
 ---
 
 ## 5. Rules every slice obeys
 
-1. **The oracle decides.** A slice ends with the suite green on the portable runner with the
-   oracle present and, before merge, on the Windows job. "Builds, not run" is not a state a slice
-   is left in.
+1. **The oracle decides, until M6 records it.** A slice ends with the suite green on the portable
+   runner with the oracle present and, before merge, on the Windows job. "Builds, not run" is not
+   a state a slice is left in. After M6-b the recorded fixtures decide, and a fixture is never
+   re-recorded — nothing remains to record it from — so a changed fixture is a changed game, by
+   definition, and needs its own ADR under plan §6 Phase 6.
 2. **No width changes.** Every `std::uint8_t` that becomes a typed field keeps eight bits and its
    wraparound; every widening happens inside a helper narrowed the way the original narrowed
    (ADR-002 §3). A codec's `static_assert` round trip is the proof for a struct; the oracle byte
@@ -572,10 +652,11 @@ in the plan depends on any of them.
    updates `tools/mutants.json` in the same commit and re-runs that unit (`mutate.py --unit X
    --runner portable`); the tally goes in the slice's journal entry. `mutate.py --check` in CI is
    the backstop, not the process.
-4. **`// 6502:` and the ledger survive.** A renamed function keeps its label on the declaration; a
-   field that replaces an offset carries the label the offset carried; `Source-Inventory.md`'s
-   *Home* column changes in the same commit as the file, inside the notes column and never as a
-   new cell (`check_docs.py`).
+4. **`// 6502:` and the ledger survive until M6-e, and go together.** Until then a renamed function
+   keeps its label on the declaration, a field that replaces an offset carries the label the offset
+   carried, and `Source-Inventory.md`'s *Home* column changes in the same commit as the file,
+   inside the notes column and never as a new cell (`check_docs.py`). They are the map from the
+   port back to the original, and the map is needed exactly as long as the original is.
 5. **The ratchet only goes down.** `tools/check_modernize.py` fails when any P1–P11 count exceeds
    its recorded ceiling; a slice that lowers a count lowers the ceiling in the same commit. It
    also fails when a ceiling is above the count by more than the slack it records, so the file
@@ -583,14 +664,18 @@ in the plan depends on any of them.
 6. **Every signature change reaches `Outpost/` in the same commit**, and `check_outpost.py` runs.
    Until M3 lands the executable is the caller this environment cannot compile, and a Windows job
    red on a type change is the failure mode; keeping the diff small per slice is the mitigation.
-7. **One pattern per slice.** A slice removes one pattern from one unit. A slice that "while it is
+7. **Rename toward meaning as you go.** A slice in M2 or M4 that touches `_math.q` or `xx15` names
+   it for what it holds in that routine (`divisor`, `unitVector`), so that M6-c is a sweep of what
+   nobody touched rather than a second pass over everything; the `// 6502:` comment keeps the old
+   name beside it until M6-e.
+8. **One pattern per slice.** A slice removes one pattern from one unit. A slice that "while it is
    in there" renames a second thing is two slices and is split before review.
-8. **Original bugs stay ported** (ADR-001 §3, §6). A refactor that would fix one — a typed
+9. **Original bugs stay ported** (ADR-001 §3, §6). A refactor that would fix one — a typed
    `Contact` that cannot express `SHPPT`'s reading of a stale `K3+1` — is wrong, and the ADR row is
    the test that says so.
-9. **New files go in both project files** (`.vcxproj` and `.filters`) and are unique repo-wide;
+10. **New files go in both project files** (`.vcxproj` and `.filters`) and are unique repo-wide;
    `check_projects.py` runs.
-10. **The journal is written as the slice lands** (§8), numbers unmarked, in the plan's convention.
+11. **The journal is written as the slice lands** (§8), numbers unmarked, in the plan's convention.
 
 ---
 
@@ -656,9 +741,22 @@ the journal.
 | **M5-c The ledger** | The <!--count:inventory-stale-files-->21 file names in `Source-Inventory.md` that name no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. | In CI. | 1 |
 | **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture) written from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
 
-**Total: roughly 70 sittings**, which is the same order as the port itself took (plan §7), and the
+### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
+
+| Slice | Scope | Acceptance | Sittings |
+|---|---|---|---|
+| **M6-a Coverage review and the recorder** | Every *Port* row of the ledger has a test that calls it (the review is the ledger's last job); the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | The suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
+| **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed; `extract_tables.py --check` becomes a digest of the generated files. | Green on both legs with no assembler installed and the submodule uninitialised; the five mutation units at their M0-d tallies. | 2 |
+| **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
+| **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. | A ratchet counter over opcode-shaped comment lines at zero; per-file review that no "why" was lost. | 8–10 |
+| **M6-e Markers and the ledger** | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone; `origin-markers` at zero. | 1 |
+| **M6-f The tree** | `Upstream/` (the submodule entry and `.gitmodules`), `MasterFile/`, `Cpu6502`, `OracleImage`, `labels.py`, `c64_source.py` and the master-count markers removed; ADR-001 §5 and Risk R1 restated; `.gitignore`'s upstream rules dropped. | A fresh clone builds and runs the whole suite with nothing but the repository; `origin-tools` at zero. | 1 |
+| **M6-g ADR-008** | The detachment as built: what pins behaviour now, what a fixture is, what changing one means. | Accepted. | 1 |
+
+**Total: roughly 90 sittings**, which is the same order as the port itself took (plan §7), and the
 plan expects the estimate to be wrong in the same direction the port's was: the dense units
-(`LL9`, `MVEIT`, `TACTICS`) cost more and the rest cost less.
+(`LL9`, `MVEIT`, `TACTICS`) cost more and the rest cost less — and M6-d, which is writing rather
+than code, is the least certain number in the table.
 
 ### Appendix — the four-step method on one module, as the template
 
@@ -693,6 +791,9 @@ M1-a's first file and the worked example every later slice copies.
 | **R16** | A typed field silently widens a byte (an `int` promotion in a codec, a `bool` that was `0xFF`). | The codec `static_assert`s and the byte compare. | Rule 2; the ratchet counts `int` arithmetic on model fields as a pattern from M1-c. |
 | **R17** | The mutant corpus degrades under renaming — a `find` that matches once by accident on a different line. | `mutate.py --check` per commit, `--unit` per slice. | Rule 3; the selftest mutant per unit is the harness's `OracleIsPresent`. |
 | **R18** | The ratchet's ceilings are lowered to match the tree rather than the tree lowered to match the plan (a number with no decision behind it). | `check_modernize.py`'s slack check. | Rule 5; a ceiling change needs a journal entry naming the slice. |
+| **R19** | A recorded fixture pins only what the tests asked while the original was here; a behaviour no test reached before M6-b is unpinned for ever. | M6-a's coverage review; the M0-c replay's breadth. | M6 is last; the review is a gate, not a report; a fixture is never re-recorded (rule 1). |
+| **R20** | Rewriting the comments loses the reasons — the commentary records WHY a carry matters, and prose that says only WHAT is worth less than the assembly it replaced. | M6-d, per file. | The rule for M6-d is "keep the reason, drop the transcription"; a comment that cannot be rewritten without losing its reason keeps the instruction sequence as a quotation. |
+| **R21** | Deleting `MasterFile/` and `Upstream/` at the tip leaves them in every commit before M6-f; a reader of the history still finds them. | Not validated by this plan. | Owner decision, out of this plan's scope (§1 R-d); recorded so that M6-f is not mistaken for having done it. |
 
 ---
 
@@ -706,4 +807,18 @@ workspace parameters, 329 numeric ship-byte indices and 107 named ones, 78 refer
 the argument-list structs, 22 abstract seams, 28 carry-in parameters, 18 byte out-parameters,
 1,162 lines in `Main.cpp` reaching 227 `Elite::` names, 21 stale ledger file names. Three of those
 are not the numbers a first grep gave (56, 66 and 26): the greps read comments and missed
-`std::uint8_t&`, which is the argument for a counter with a self-test over a hand count. M0-a is built with this entry; nothing in `GameLogic/` changed.
+`std::uint8_t&`, which is the argument for a counter with a self-test over a hand count.
+
+**2026-09-06 — M0-d: the mutation baseline on Linux.** All five units through
+`mutate.py --runner portable` against a green 385-test baseline: 65 mutants, 61 caught, 4 survived,
+and every one of the four is a recorded equivalent — the run's own verdict was that every mutant did
+what `tools/mutants.json` says. That is the number every re-anchoring slice has to match.
+
+**2026-09-06 — The questions ruled, and the plan reshaped.** All eight of §1's questions answered on
+their recommended defaults, and a ninth ruling given that none of them had asked for: detach the
+port from the original at the end. Phase M6 is added with seven slices; rule 1, rule 4 and a new
+rule 7 say what changes on the way; P12 counts the dependency so that the ratchet can watch it go
+(3,549 `6502:` references, 49 oracle test files, 7 tools); R19 to R21 are added. ADR-001 §4, ADR-003
+and AGENTS.md R7 carry a one-line pointer each so that nothing in `Design/` disagrees with this
+before M6 amends them for real. The total grows from about 70 sittings to about 90, and the least
+certain of the new numbers is the comment rewrite, which is prose and not code. M0-a is built with this entry; nothing in `GameLogic/` changed.

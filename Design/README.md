@@ -56,7 +56,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 | 3 | [Source-Inventory.md](Source-Inventory.md) | every group of original routines, which C++ file it becomes, and whether it is ported, replaced or dropped. The coverage ledger the port is measured against. |
 | 4 | the ADRs below | the decisions the plan rests on. **The ADR wins on *what*, the plan on *when*.** |
 | 5 | [Risk-Register.md](Risk-Register.md) | what is most likely to go wrong, and where each risk is validated early |
-| 6 | [Modernize.md](Modernize.md) | **the modernisation plan** (opened 2026-09-06, Proposed): what the port carries from the 6502 as its architecture, measured; the target C++ shape; five phases of slices, each gated on the oracle; and the eight decisions it needs from the owner. Reads after the plan, because it starts where the plan's build order ends. |
+| 6 | [Modernize.md](Modernize.md) | **the modernisation plan** (opened 2026-09-06, Proposed): what the port carries from the 6502 as its architecture, measured; the target C++ shape; five phases of slices, each gated on the oracle; and the owner's rulings on its eight questions — including the one that ends it: Phase M6 detaches the port from the original, replacing the oracle with recorded fixtures and removing `MasterFile/`, `Upstream/`, the markers and the assembly from the tree. Reads after the plan, because it starts where the plan's build order ends. |
 
 ## Decisions at a glance
 
@@ -77,7 +77,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
   plan for the PROGRAM rather than the game**: [Modernize.md](Modernize.md) restructures the code
   with no behavioural change and its own ratchet (`tools/check_modernize.py`), and every one of
   its slices is gated on the same oracle. The gate ADR-001 §4 set is met; that document is
-  Proposed until the owner answers the questions in its §1.
+  its questions were ruled on 2026-09-06 and its last phase removes the original from the tree.
 - **Not a licence.** The upstream source carries no licence (ADR-001 §5, Risk R1), and the
   owner intends to publish eventually, which makes this the project's largest exposure rather
   than a footnote. Slice **0e** seeks the rights holders' permission. **The repository is

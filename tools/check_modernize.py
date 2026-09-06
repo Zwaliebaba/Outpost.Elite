@@ -74,6 +74,9 @@ CLASS_HEAD = re.compile(r"\b(?:class|struct)\s+[A-Za-z_]\w*\s*(?:final\s*)?(?::[
 PURE_VIRTUAL = re.compile(r"\)\s*(?:const\s*)?(?:noexcept\s*)?=\s*0\s*;")
 ELITE_NAME = re.compile(r"\bElite::([A-Za-z_]\w*)")
 LEDGER_FILE = re.compile(r"`([A-Za-z0-9]+\.(?:h|cpp))`")
+ORIGIN_MARKER = re.compile(r"\b6502:")
+ORACLE_USE = re.compile(r"\bOracleImage\b|\bOracleMissing\b")
+ORIGIN_PATH = re.compile(r"\bUpstream\b|\bMasterFile\b")
 
 
 def count_register_params(_root: Path) -> int:
@@ -170,6 +173,35 @@ def count_inventory_stale_files(_root: Path) -> int:
     return len([name for name in cited if name not in on_disk])
 
 
+def count_origin_markers(_root: Path) -> int:
+    """P12 -- `6502:` references in GameLogic/ -- the `//` markers inventory.py reads and the `*`-prefixed
+    ones inside block comments alike -- read from the RAW text because they are comments."""
+    total = 0
+    for path in headers(_root) + sources(_root):
+        total += len(ORIGIN_MARKER.findall(path.read_text(encoding="utf-8", errors="replace")))
+    return total
+
+
+def count_oracle_test_files(_root: Path) -> int:
+    """P12 -- test translation units that load the assembled original through OracleImage."""
+    tests = _root / "Tests" / "GameLogicTests"
+    return len([path for path in sorted(tests.glob("*Tests.cpp"))
+                if ORACLE_USE.search(strip_comments(path.read_text(encoding="utf-8", errors="replace")))])
+
+
+def count_origin_tools(_root: Path) -> int:
+    """P12 -- scripts in tools/ that read Upstream/ or MasterFile/ (this one reads neither)."""
+    total = 0
+    for path in sorted((_root / "tools").glob("*.py")):
+        if path.name == Path(__file__).name:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+        if ORIGIN_PATH.search(code):
+            total += 1
+    return total
+
+
 COUNTERS = {
     "register-params": (count_register_params, "P1: std::uint8_t _a/_x/_y parameters in GameLogic/*.h"),
     "workspace-params": (count_workspace_params, "P2: zero-page workspace reference parameters in GameLogic/*.h"),
@@ -183,6 +215,9 @@ COUNTERS = {
     "carry-params": (count_carry_params, "P11: bool _carryIn parameters in GameLogic/*.h"),
     "mutants": (count_mutants, "recorded mutants in tools/mutants.json"),
     "inventory-stale-files": (count_inventory_stale_files, "file names Source-Inventory.md cites that are not on disk"),
+    "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
+    "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
+    "origin-tools": (count_origin_tools, "P12: tools that read Upstream/ or MasterFile/"),
 }
 
 
@@ -259,6 +294,7 @@ namespace Elite
     std::uint8_t& view;
   };
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
+  /// 6502: MAS2 -- a marker, which IS counted, from the raw text
   [[nodiscard]] std::uint8_t Mas2(const Bubble& _bubble, std::uint8_t _slot, std::uint8_t _a) noexcept;
   void Spawn(MathWorkspace& _math, std::uint8_t _x, bool _carryIn) noexcept;
   void Launch(std::uint8_t& _docked, std::uint8_t _y) noexcept;
@@ -271,7 +307,7 @@ namespace Elite
 {
   void F(ShipBlock& _work, Bubble& _bubble, std::uint8_t slot)
   {
-    _work[31] = static_cast<std::uint8_t>(_work[31] | 0x20u);   /* work[3] in a comment */
+    _work[31] = static_cast<std::uint8_t>(_work[31] | 0x20u);   /* work[3] in a comment */ // 6502: MV1
     _bubble.blocks[slot][36] = _work[SHIP_FLAGS_OFFSET];
     const std::uint8_t z = _work[8u];
   }
@@ -283,6 +319,11 @@ SAMPLE_MAIN = "#include \"pch.h\"\nint main() { Elite::Game game; Elite::Canvas 
 SAMPLE_MUTANTS = {"units": [{"name": "u", "mutants": [{"id": "a"}, {"id": "b"}]}, {"name": "v", "mutants": [{"id": "c"}]}]}
 
 SAMPLE_LEDGER = "| `ZeroPage.h` | `Present.h` | `Missing.cpp` |\n"
+
+SAMPLE_ORACLE_TEST = "#include \"OracleImage.h\"\nTEST_CLASS(A) { TEST_METHOD(B) { OracleImage::Instance(); } };\n"
+SAMPLE_PLAIN_TEST = "// OracleImage only in a comment\nTEST_CLASS(C) { TEST_METHOD(D) { } };\n"
+SAMPLE_ORIGIN_TOOL = "# Upstream in a comment does not count\nROOT = REPO / \"Upstream\" / \"elite-source-code-library\"\n"
+SAMPLE_PLAIN_TOOL = "# MasterFile mentioned only here\nprint(1)\n"
 
 EXPECTED = {
     "register-params": 3,
@@ -297,6 +338,9 @@ EXPECTED = {
     "carry-params": 1,
     "mutants": 3,
     "inventory-stale-files": 2,
+    "origin-markers": 2,
+    "oracle-test-files": 1,
+    "origin-tools": 1,
 }
 
 
@@ -314,6 +358,11 @@ def self_test() -> list[str]:
         (root / "Outpost" / "Main.cpp").write_text(SAMPLE_MAIN, encoding="utf-8")
         (root / "tools" / "mutants.json").write_text(json.dumps(SAMPLE_MUTANTS), encoding="utf-8")
         (root / "Design" / "Source-Inventory.md").write_text(SAMPLE_LEDGER, encoding="utf-8")
+        (root / "Tests" / "GameLogicTests").mkdir(parents=True)
+        (root / "Tests" / "GameLogicTests" / "ATests.cpp").write_text(SAMPLE_ORACLE_TEST, encoding="utf-8")
+        (root / "Tests" / "GameLogicTests" / "BTests.cpp").write_text(SAMPLE_PLAIN_TEST, encoding="utf-8")
+        (root / "tools" / "labels.py").write_text(SAMPLE_ORIGIN_TOOL, encoding="utf-8")
+        (root / "tools" / "check_docs.py").write_text(SAMPLE_PLAIN_TOOL, encoding="utf-8")
 
         measured = counts(root)
 

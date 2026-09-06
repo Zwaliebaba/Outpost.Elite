@@ -68,6 +68,9 @@ uses plain `camelCase` fields so brace initialization reads naturally.
 
 ### R7 — The port carries its origin (this repository's own rule)
 
+*(Stands until [Design/Modernize.md](Design/Modernize.md) slice M6-e removes the markers, the ledger and
+`inventory.py` together, by owner ruling of 2026-09-06. Until then this rule is unchanged.)*
+
 **Every function ported from 6502 names its original label on the declaration:**
 
 ```cpp
