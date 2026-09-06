@@ -302,7 +302,7 @@ while they existed: "the struct is the argument list".
 <!--count:main-lines-->1,219 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->206 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->205 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
@@ -1618,9 +1618,19 @@ its two setter calls are gone.
 
 **What the app lost.** `FlightSession` held twenty-two members of game state and holds none:
 `Outpost::Game` owns the one `Elite::Universe` and the session takes a reference to it, which took
-`outpost-elite-names` 225 → 206. `main-lines` did not move: `_game.universe.` is longer than
-`_game.` and clang-format rewrapped three statements, and three aliases the slice made redundant
-came out again. The session still builds
+`outpost-elite-names` 225 → 205. `main-lines` did not move: `_game.universe.` is longer than
+`_game.` and clang-format rewrapped what overflowed, and the aliases and doc blocks the slice made
+redundant came out again.
+
+**And the Windows job earned its keep on the first push, twice over** (R15). `Main.cpp` would not
+compile: `recursive.SetCursor(&text)` named a member that had moved, which `check_outpost.py`
+cannot see because a bare identifier in a constructor body is not a `name.member`. Behind it was
+the one that mattered — `Game` still declared `Elite::Commander commander = Elite::DefaultCommander()`
+beside the universe's own, and every reader had been redirected to `universe.commander`, which is
+DEFAULT-CONSTRUCTED. Moving the byte without the initialisation starts the game with no credits, no
+laser and no home system, and no test on either leg would have caught it: the fixtures assign
+`DefaultCommander()` themselves. The dead member is gone and the cold start stores it in `Game`'s
+constructor. The session still builds
 `Ports`, because eight of that struct's ten references are to itself. `origin-markers` fell
 3,954 → 3,937 and every one of the seventeen was a `///< 6502:` on a reference member naming a byte
 `Universe.h` names in the same words — rule 4 is about markers on code, and no code lost one.
