@@ -17,9 +17,9 @@ namespace Elite
     // The `ORA #1` is what makes the divide below safe, and it is deliberate rather than defensive:
     // a ship exactly on the plane of the screen has z_lo = 0, and the difference between dividing
     // by zero and dividing by one is invisible at this scale.
-    _math.q = static_cast<std::uint8_t>(_ship.bytes[SHIP_Z_OFFSET] | 0x01u);
-    _math.r = _ship.bytes[SHIP_Z_OFFSET + 1];
-    _math.s = _ship.bytes[SHIP_Z_OFFSET + 2];
+    _math.q = static_cast<std::uint8_t>(_ship.Z().lo | 0x01u);
+    _math.r = _ship.Z().hi;
+    _math.s = _ship.Z().sgn;
 
     DivideSignedToK(_math);
   }
@@ -66,10 +66,10 @@ namespace Elite
 
   ProjectResult Project(const ShipBlock& _ship, MathWorkspace& _math, Projection& _screen) noexcept
   {
-    _math.p = _ship.bytes[SHIP_X_OFFSET];
-    _math.p1 = _ship.bytes[SHIP_X_OFFSET + 1];
+    _math.p = _ship.X().lo;
+    _math.p1 = _ship.X().hi;
 
-    const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.bytes[SHIP_X_OFFSET + 2]);
+    const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.X().sgn);
     if (across.overflow)
     {
       // 6502: BCS PL2-1, which is PROJ's own RTS one byte before the next routine begins.
@@ -82,10 +82,10 @@ namespace Elite
     const AddResult x1 = AddWithCarry(across.high, 0, x.carry);
     _screen.x1 = x1.value;
 
-    _math.p = _ship.bytes[SHIP_Y_OFFSET];
-    _math.p1 = _ship.bytes[SHIP_Y_OFFSET + 1];
+    _math.p = _ship.Y().lo;
+    _math.p1 = _ship.Y().hi;
 
-    const std::uint8_t upwards = static_cast<std::uint8_t>(_ship.bytes[SHIP_Y_OFFSET + 2] ^ 0x80u);
+    const std::uint8_t upwards = static_cast<std::uint8_t>(_ship.Y().sgn ^ 0x80u);
     const ScreenOffset down = DivideToScreenOffset(_ship, _math, upwards);
     if (down.overflow)
     {
@@ -171,12 +171,12 @@ namespace Elite
 
   void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, const LineHeap& _heap) noexcept
   {
-    if ((_ship[SHIP_STATE_OFFSET] & SHIP_STATE_DRAWN) == 0u)
+    if ((_ship.State() & SHIP_STATE_DRAWN) == 0u)
     {
       return;
     }
 
-    _ship[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_ship[SHIP_STATE_OFFSET] ^ SHIP_STATE_DRAWN);
+    _ship.State() = static_cast<std::uint8_t>(_ship.State() ^ SHIP_STATE_DRAWN);
     DrawShipLines(_canvas, _draw, _heap, ShipHeapAddress(_ship));
   }
 
@@ -201,11 +201,11 @@ namespace Elite
     {
       // 6502: nono -- LDA #%11110111 / AND XX1+31. Reached four ways, and all four leave the ship
       // marked as not on the screen.
-      _ship[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_ship[SHIP_STATE_OFFSET] & 0xF7u);
+      _ship.State() = static_cast<std::uint8_t>(_ship.State() & 0xF7u);
       return;
     }
 
-    _ship[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_ship[SHIP_STATE_OFFSET] | SHIP_STATE_DRAWN);
+    _ship.State() = static_cast<std::uint8_t>(_ship.State() | SHIP_STATE_DRAWN);
     StoreLineCountAndDraw(_canvas, _draw, _heap, heap, 8);
   }
 
@@ -728,19 +728,20 @@ namespace Elite
     void PlaceVertexAxis(std::uint8_t& _low, std::uint8_t& _high, std::uint8_t& _sign, std::uint8_t _productLow, std::uint8_t _productSign,
                          const ShipBlock& _work, std::size_t _axis) noexcept
     {
-      _sign = _work[_axis + 2u];
+      const auto axis = _work.PositionAt(static_cast<std::uint8_t>(_axis)); // 6502: INWK,X to INWK+2,X
+      _sign = axis.sgn;
 
       if (((_sign ^ _productSign) & 0x80u) == 0u)
       {
-        const AddResult sum = AddWithCarry(_productLow, _work[_axis], false);
+        const AddResult sum = AddWithCarry(_productLow, axis.lo, false);
         _low = sum.value;
-        _high = AddWithCarry(_work[_axis + 1u], 0, sum.carry).value;
+        _high = AddWithCarry(axis.hi, 0, sum.carry).value;
         return;
       }
 
-      const SubResult low = SubtractWithCarry(_work[_axis], _productLow, true);
+      const SubResult low = SubtractWithCarry(axis.lo, _productLow, true);
       _low = low.value;
-      const SubResult high = SubtractWithCarry(_work[_axis + 1u], 0, low.carry);
+      const SubResult high = SubtractWithCarry(axis.hi, 0, low.carry);
       _high = high.value;
 
       if (high.carry)
@@ -798,23 +799,23 @@ namespace Elite
     _geometry.xx4 = 31;
 
     // 6502: bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
-    if ((_work[SHIP_FLAGS_OFFSET] & 0x80u) != 0u)
+    if ((_work.Newb() & 0x80u) != 0u)
     {
       EraseShip(_canvas, _draw, _work, _heap);
       return;
     }
 
-    const std::uint8_t entryState = _work[SHIP_STATE_OFFSET];
+    const std::uint8_t entryState = _work.State();
     if ((entryState & SHIP_STATE_EXPLODING) == 0u && (entryState & SHIP_STATE_KILLED) != 0u)
     {
       // Killed and not yet exploding. Bits 6 and 7 are cleared by the same instruction that sets
       // bit 5, so the ship stops firing in the moment it starts to blow up.
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>((SHIP_STATE_EXPLODING | entryState) & 0x3Fu);
+      _work.State() = static_cast<std::uint8_t>((SHIP_STATE_EXPLODING | entryState) & 0x3Fu);
 
       // Written through INF into the ship's block in K% rather than into INWK, so that the
       // caller's copy back does not undo them.
-      _slot[28] = 0;
-      _slot[30] = 0;
+      _slot.Acceleration() = 0;
+      _slot.PitchCounter() = 0;
 
       EraseShip(_canvas, _draw, _work, _heap);
       _effects.SeedExplosionCloud(_heap, ShipHeapAddress(_work), _blueprint);
@@ -823,28 +824,28 @@ namespace Elite
     // 6502: EE28 / EE49 and LL10 -- four ways of being not worth drawing, sharing one exit. The
     // two coordinate tests are sixteen-bit: |x| or |y| at least as large as z puts the ship outside
     // a ninety-degree view whatever the projection would make of it.
-    bool gone = (_work[SHIP_Z_OFFSET + 2] & 0x80u) != 0u;
+    bool gone = (_work.Z().sgn & 0x80u) != 0u;
     if (!gone)
     {
-      gone = _work[SHIP_Z_OFFSET + 1] >= 192u;
+      gone = _work.Z().hi >= 192u;
     }
     for (std::size_t axis = 0; !gone && axis < 2u; ++axis)
     {
-      const std::size_t at = (axis == 0u) ? SHIP_X_OFFSET : SHIP_Y_OFFSET;
-      const SubResult low = SubtractWithCarry(_work[at], _work[SHIP_Z_OFFSET], true);
-      gone = SubtractWithCarry(_work[at + 1u], _work[SHIP_Z_OFFSET + 1], low.carry).carry;
+      const auto other = _work.PositionAt((axis == 0u) ? SHIP_X_OFFSET : SHIP_Y_OFFSET);
+      const SubResult low = SubtractWithCarry(other.lo, _work.Z().lo, true);
+      gone = SubtractWithCarry(other.hi, _work.Z().hi, low.carry).carry;
     }
 
     if (gone)
     {
       // 6502: LL14.
-      if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_EXPLODING) == 0u)
+      if ((_work.State() & SHIP_STATE_EXPLODING) == 0u)
       {
         EraseShip(_canvas, _draw, _work, _heap);
         return;
       }
 
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] & 0xF7u);
+      _work.State() = static_cast<std::uint8_t>(_work.State() & 0xF7u);
       _effects.DrawExplosion();
       return;
     }
@@ -859,8 +860,8 @@ namespace Elite
 
     // z divided by sixteen into (A T), and then by another eight. The `ROR A` after the fourth
     // `LSR A` picks up the carry that shift left, so the two halves are one number and not two.
-    std::uint8_t distanceLow = _work[SHIP_Z_OFFSET];
-    std::uint8_t distanceHigh = _work[SHIP_Z_OFFSET + 1];
+    std::uint8_t distanceLow = _work.Z().lo;
+    std::uint8_t distanceHigh = _work.Z().hi;
     for (int shift = 0; shift < 3; ++shift)
     {
       const bool into = (distanceHigh & 0x01u) != 0u;
@@ -874,8 +875,8 @@ namespace Elite
     {
       _geometry.xx4 = static_cast<std::uint8_t>(RotateRight(distanceLow, spare).value >> 3);
     }
-    else if (ShipByte(static_cast<std::uint16_t>(_blueprint + 13u)) < _work[SHIP_Z_OFFSET + 1] &&
-             (_work[SHIP_STATE_OFFSET] & SHIP_STATE_EXPLODING) == 0u)
+    else if (ShipByte(static_cast<std::uint16_t>(_blueprint + 13u)) < _work.Z().hi &&
+             (_work.State() & SHIP_STATE_EXPLODING) == 0u)
     {
       // 6502: LL13 -- past the blueprint's own visibility distance, so a dot will do.
       DrawShipAsPoint(_canvas, _draw, _work, _heap, _math, _screen);
@@ -896,7 +897,7 @@ namespace Elite
 
     // ---- parts 4 and 5: which faces can be seen --------------------------------------------
 
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_EXPLODING) != 0u)
+    if ((_work.State() & SHIP_STATE_EXPLODING) != 0u)
     {
       // 6502: EE30 -- an exploding ship shows every face and every vertex, so that the whole cloud
       // can be built out of them.
@@ -1093,15 +1094,15 @@ namespace Elite
         // to be pulled in front of it before anything is divided by it.
         if ((_geometry.xx12[5] & 0x80u) == 0u)
         {
-          const AddResult sum = AddWithCarry(_geometry.xx12[4], _work[SHIP_Z_OFFSET], false);
+          const AddResult sum = AddWithCarry(_geometry.xx12[4], _work.Z().lo, false);
           _math.t = sum.value;
-          _math.u = AddWithCarry(_work[SHIP_Z_OFFSET + 1], 0, sum.carry).value;
+          _math.u = AddWithCarry(_work.Z().hi, 0, sum.carry).value;
         }
         else
         {
-          const SubResult low = SubtractWithCarry(_work[SHIP_Z_OFFSET], _geometry.xx12[4], true);
+          const SubResult low = SubtractWithCarry(_work.Z().lo, _geometry.xx12[4], true);
           _math.t = low.value;
-          const SubResult high = SubtractWithCarry(_work[SHIP_Z_OFFSET + 1], 0, low.carry);
+          const SubResult high = SubtractWithCarry(_work.Z().hi, 0, low.carry);
           _math.u = high.value;
 
           if (!high.carry || (high.value == 0u && low.value < 4u))
@@ -1206,28 +1207,28 @@ namespace Elite
 
     // ---- part 9: the ship is on the screen from here, and the laser goes on the heap ---------
 
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_EXPLODING) != 0u)
+    if ((_work.State() & SHIP_STATE_EXPLODING) != 0u)
     {
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] | SHIP_STATE_DRAWN);
+      _work.State() = static_cast<std::uint8_t>(_work.State() | SHIP_STATE_DRAWN);
       _effects.DrawExplosion();
       return;
     }
 
     // 6502: EE31 -- rub out the last frame's ship, then mark this one as being on the screen.
     const std::uint16_t heap = ShipHeapAddress(_work);
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_DRAWN) != 0u)
+    if ((_work.State() & SHIP_STATE_DRAWN) != 0u)
     {
       DrawShipLines(_canvas, _draw, _heap, heap);
     }
-    _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] | SHIP_STATE_DRAWN);
+    _work.State() = static_cast<std::uint8_t>(_work.State() | SHIP_STATE_DRAWN);
 
     _geometry.xx20 = ShipByte(static_cast<std::uint16_t>(_blueprint + 9u));
     _geometry.xx17 = 0;
     _math.u = 1;
 
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_FIRING) != 0u)
+    if ((_work.State() & SHIP_STATE_FIRING) != 0u)
     {
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] & 0xBFu);
+      _work.State() = static_cast<std::uint8_t>(_work.State() & 0xBFu);
 
       const std::size_t muzzle = ShipByte(static_cast<std::uint16_t>(_blueprint + 6u));
       _draw.x1 = _geometry.xx3[muzzle];
@@ -1242,11 +1243,11 @@ namespace Elite
         _draw.xx15Plus4 = 0;
         _draw.xx15Plus5 = 0;
         _geometry.xx12[1] = 0;
-        _geometry.xx12[0] = _work[SHIP_Z_OFFSET];
+        _geometry.xx12[0] = _work.Z().lo;
 
         // The laser fires towards the player, so the far end is the origin -- and to the left of
         // it when the ship is to the left, which is the whole of this `DEC`.
-        if ((_work[SHIP_X_OFFSET + 2] & 0x80u) != 0u)
+        if ((_work.X().sgn & 0x80u) != 0u)
         {
           _draw.xx15Plus4 = 255;
         }

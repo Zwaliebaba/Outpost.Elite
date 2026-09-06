@@ -65,7 +65,7 @@ def sources(_root: Path) -> list[Path]:
 
 REGISTER_PARAM = re.compile(r"\bstd::uint8_t\s+_(?:a|x|y)\b")
 SHIP_LITERAL = re.compile(r"\b(?:_?work|_?block|_?ship|_?other|blocks\[[a-z]+\])\[[0-9]+u?\]")
-SHIP_OFFSET = re.compile(r"\[SHIP_[A-Z_0-9]+\]")
+SHIP_OFFSET = re.compile(r"\[SHIP_(?!TYPE_)[A-Z_0-9]+\]")  # `counts[SHIP_TYPE_x]` is a type, not a byte of a block
 AGGREGATE_REF = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_:<>]*&\s+[a-z][A-Za-z0-9]*;", re.MULTILINE)
 CARRY_PARAM = re.compile(r"\bbool\s+_carryIn\b")
 OUT_PARAM = re.compile(r"\bstd::uint8_t&\s+_[a-z][A-Za-z0-9]*")
@@ -90,7 +90,8 @@ def count_ship_literal_sites(_root: Path) -> int:
 
 
 def count_ship_offset_sites(_root: Path) -> int:
-    """P3 -- a ship block indexed by a named offset constant: `work[SHIP_STATE_OFFSET]`."""
+    """P3 -- a ship block indexed by a named offset constant: `work[SHIP_STATE_OFFSET]`. A ship TYPE in
+    brackets (`counts[SHIP_TYPE_STATION]`) indexes the per-type tally and is not one."""
     return len(SHIP_OFFSET.findall(read_stripped(sources(_root))))
 
 

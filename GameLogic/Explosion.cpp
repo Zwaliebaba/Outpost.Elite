@@ -44,7 +44,7 @@ namespace Elite
 
         // 6502: LDA INWK+7 / CMP #7 -- the compare is made with A already loaded for the register
         // write, so the two answers are chosen before the branch rather than after it.
-        const bool distant = _work[SHIP_Z_OFFSET + 1] >= 7u;
+        const bool distant = _work.Z().hi >= 7u;
         _effects->SetSpriteExpansion(distant ? 0xFDu : 0xFFu);
         sprx = distant ? 44u : 32u;
         spry = distant ? 40u : 30u;
@@ -192,7 +192,7 @@ namespace Elite
         _effects->SetRasterMode(0x04u); // 6502: LDA #%100 / JSR SETL1 -- map the I/O page back out
       }
 
-      state[3] = _bubble.blocks[0][6];
+      state[3] = _bubble.blocks[0].Z().lo;
       _rng.SetState(state);
     }
   } // namespace
@@ -255,7 +255,7 @@ namespace Elite
 
     // 6502: bit 6 of byte 31 -- there is a cloud on the screen from last frame, so draw it again
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_CLOUD_DRAWN) != 0u)
+    if ((_work.State() & SHIP_STATE_CLOUD_DRAWN) != 0u)
     {
       DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
     }
@@ -269,8 +269,8 @@ namespace Elite
      * bit 7 must be clear -- z_hi under 32 shifted twice cannot reach 128 -- and so leaves it
      * CLEAR and the cloud ages by four.
      */
-    _math.t = _work[SHIP_Z_OFFSET];
-    std::uint8_t scaled = _work[SHIP_Z_OFFSET + 1];
+    _math.t = _work.Z().lo;
+    std::uint8_t scaled = _work.Z().hi;
     bool carry = scaled >= 32u;
 
     if (carry)
@@ -302,7 +302,7 @@ namespace Elite
     {
       // 6502: EX2 -- the counter has run off the end, so the explosion is over. Bits 5 and 7 say
       // "exploding" and "killed", and `MVEIT` is what acts on the pair.
-      _work[SHIP_STATE_OFFSET] |= static_cast<std::uint8_t>(SHIP_STATE_EXPLODING | SHIP_STATE_KILLED);
+      _work.State() |= static_cast<std::uint8_t>(SHIP_STATE_EXPLODING | SHIP_STATE_KILLED);
       return;
     }
 
@@ -336,8 +336,8 @@ namespace Elite
 
     // 6502: AND #%10111111 -- not drawn yet. The following `AND #%00001000` reads what that left,
     // so a ship with nothing on the screen returns here with the flag already cleared.
-    _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] & 0xBFu);
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_DRAWN) == 0u)
+    _work.State() = static_cast<std::uint8_t>(_work.State() & 0xBFu);
+    if ((_work.State() & SHIP_STATE_DRAWN) == 0u)
     {
       return; // 6502: BEQ TT48, which is an RTS
     }
@@ -362,7 +362,7 @@ namespace Elite
       --index;
     } while (index != 6u);
 
-    _work[SHIP_STATE_OFFSET] |= SHIP_STATE_CLOUD_DRAWN; // 6502: ORA #%01000000 -- there is a cloud now
+    _work.State() |= SHIP_STATE_CLOUD_DRAWN; // 6502: ORA #%01000000 -- there is a cloud now
 
     /*
      * 6502: LDY frump / CPY #18 -- the counter BEFORE it grew, so this is true on the explosion's

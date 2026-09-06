@@ -32,13 +32,6 @@ namespace Elite
   /// the dashboard starts on, so it is the first row a ship may not occupy.
   inline constexpr std::uint8_t SPACE_VIEW_BOTTOM = 2 * SPACE_VIEW_CENTRE_Y;
 
-  /// 6502: the coordinate bytes of a ship's data block -- x, y and z, each a sixteen-bit magnitude
-  /// and a sign byte. Named here rather than in `ShipSlot.h` because this is the first code that
-  /// reads them as a POSITION rather than as bytes to copy about.
-  inline constexpr std::uint8_t SHIP_X_OFFSET = 0;
-  inline constexpr std::uint8_t SHIP_Y_OFFSET = 3;
-  inline constexpr std::uint8_t SHIP_Z_OFFSET = 6;
-
   /*
    * What `PLS6` leaves behind. The original's contract is "(X K)", a sixteen-bit value split
    * between a register and a zero-page byte, plus the carry -- and plus A, which is not incidental

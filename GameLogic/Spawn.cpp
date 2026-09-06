@@ -12,10 +12,6 @@ namespace Elite
 
   namespace
   {
-    /// 6502: INWK+32 -- a missile's AI byte, which for a locked missile is `%1ttttttt` with the
-    /// target slot in bits 1 to 6. It is not `INWK+31`, the state byte the drawing reads.
-    constexpr std::uint8_t SHIP_AI_OFFSET = 32;
-
     /// 6502: LDY #5 / LDA (XX0),Y -- how many bytes of line heap a type needs. Through the table
     /// as it stands rather than the assembled one, because the station's entry is written (`NWSPS`).
     [[nodiscard]] std::uint8_t HeapSizeFor(const Bubble& _bubble, std::uint8_t _type) noexcept
@@ -58,7 +54,7 @@ namespace Elite
       // 6502: LDA #129 / JSR NWSHP -- and `XX0` is passed rather than kept locally even though this
       // call cannot reach the store: the type is negative, so `BMI NW2` jumps past it. Passing it
       // is what stops the next caller of this path from inheriting the bug `NWSPS` exposed.
-      _work[5] = 6;
+      _work.Y().sgn = 6;
       (void)AddShip(_bubble, _work, 129, _blueprint);
       return;
     }
@@ -93,8 +89,8 @@ namespace Elite
      * where the next ship's heap belongs, and when the walk ends it is the new `SLSP`.
      */
     const ShipBlock& dead = _bubble.blocks[_slot];
-    const AddResult topLow = AddWithCarry(HeapSizeFor(_bubble, type), dead[SHIP_HEAP_LOW_OFFSET], false);
-    const AddResult topHigh = AddWithCarry(dead[SHIP_HEAP_HIGH_OFFSET], 0u, topLow.carry);
+    const AddResult topLow = AddWithCarry(HeapSizeFor(_bubble, type), dead.HeapLow(), false);
+    const AddResult topHigh = AddWithCarry(dead.HeapHigh(), 0u, topLow.carry);
     std::uint16_t top = static_cast<std::uint16_t>(topLow.value | (topHigh.value << 8));
 
     // 6502: KSL1 -- every slot above the dead one comes down by one, and its heap with it.
@@ -116,12 +112,12 @@ namespace Elite
        * same breath as writing the new one, because it needs the old one to copy from.
        */
       const ShipBlock source = _bubble.blocks[into + 1u];
-      const std::uint16_t was = static_cast<std::uint16_t>(source[SHIP_HEAP_LOW_OFFSET] | (source[SHIP_HEAP_HIGH_OFFSET] << 8));
+      const std::uint16_t was = static_cast<std::uint16_t>(source.HeapLow() | (source.HeapHigh() << 8));
 
       ShipBlock& destination = _bubble.blocks[into];
       destination = source;
-      destination[SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(top);
-      destination[SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(top >> 8);
+      destination.HeapLow() = static_cast<std::uint8_t>(top);
+      destination.HeapHigh() = static_cast<std::uint8_t>(top >> 8);
 
       // 6502: KSL3 -- LDY T / DEY / LDA (K),Y / STA (P),Y / TYA / BNE KSL3. Downwards in index,
       // which is what makes an overlapping move safe when the destination is below the source.
@@ -155,7 +151,7 @@ namespace Elite
         continue;
       }
 
-      const std::uint8_t ai = _bubble.blocks[slot][SHIP_AI_OFFSET];
+      const std::uint8_t ai = _bubble.blocks[slot].Ai();
       if ((ai & 0x80u) == 0u)
       {
         continue; // 6502: BPL KSL4 -- not locked on anything
@@ -168,12 +164,12 @@ namespace Elite
       }
       if (target == _slot)
       {
-        _bubble.blocks[slot][SHIP_AI_OFFSET] = 0; // 6502: KS6
+        _bubble.blocks[slot].Ai() = 0; // 6502: KS6
         continue;
       }
 
       // 6502: SBC #1 / ASL A / ORA #%10000000, and the SBC runs on the carry `CMP` left SET.
-      _bubble.blocks[slot][SHIP_AI_OFFSET] = static_cast<std::uint8_t>(((target - 1u) << 1) | 0x80u);
+      _bubble.blocks[slot].Ai() = static_cast<std::uint8_t>(((target - 1u) << 1) | 0x80u);
     }
 
     // 6502: KS3 -- and the heap's bottom is wherever the walk left `P`.
@@ -185,8 +181,8 @@ namespace Elite
   {
     // 6502: SOS1 -- JSR msblob / LDA #127 / STA INWK+29 / STA INWK+30.
     _effects.ResetMissileIndicators();
-    _work[29] = 127;
-    _work[30] = 127;
+    _work.RollCounter() = 127;
+    _work.PitchCounter() = 127;
 
     /*
      * 6502: LDA tek / AND #%00000010 / ORA #%10000000 / JMP NWSHP.
@@ -205,12 +201,12 @@ namespace Elite
     _effects.ToggleStationIndicator(); // 6502: JSR SPBLB
 
     // 6502: LDX #%10000001 / STX INWK+32 -- the AI byte: hostile, and AI enabled.
-    _work[SHIP_AI_OFFSET] = 0x81u;
+    _work.Ai() = 0x81u;
 
-    _work[30] = 0u;                // 6502: LDX #0 / STX INWK+30 -- the pitch counter
-    _work[SHIP_FLAGS_OFFSET] = 0u; // 6502: STX NEWB, which `NWSHP` ORs into rather than sets
+    _work.PitchCounter() = 0u;                // 6502: LDX #0 / STX INWK+30 -- the pitch counter
+    _work.Newb() = 0u; // 6502: STX NEWB, which `NWSHP` ORs into rather than sets
     _bubble.slots[1] = 0u;         // 6502: STX FRIN+1 -- and slot 1 is the SUN's
-    _work[29] = 0xFFu;             // 6502: DEX / STX INWK+29 -- the roll counter, at maximum
+    _work.RollCounter() = 0xFFu;             // 6502: DEX / STX INWK+29 -- the roll counter, at maximum
 
     /*
      * 6502: LDX #10 / JSR NwS1, three times.
@@ -219,10 +215,10 @@ namespace Elite
      * reach 10, 12 and 14 -- the high bytes of the nose vector's three components. Flipping bit 7
      * of each negates the vector, which turns the station to face the way you have just come.
      */
-    for (std::uint8_t at = 10u; at <= 14u; at = static_cast<std::uint8_t>(at + 2u))
-    {
-      _work[at] = static_cast<std::uint8_t>(_work[at] ^ 0x80u);
-    }
+    auto nose = _work.Nose();
+    nose.xHi = static_cast<std::uint8_t>(nose.xHi ^ 0x80u);
+    nose.yHi = static_cast<std::uint8_t>(nose.yHi ^ 0x80u);
+    nose.zHi = static_cast<std::uint8_t>(nose.zHi ^ 0x80u);
 
     /*
      * 6502: LDA spasto / STA XX21+2*SST-2 ... LDA tek / CMP #10 / BCC notadodo / LDA XX21+2*DOD-2.
@@ -242,8 +238,8 @@ namespace Elite
     // 6502: LDA #LO(LSO) / STA INWK+33 / LDA #HI(LSO) / STA INWK+34 -- the sun's heap, which the
     // slot above has just been emptied of. `NWSHP` skips its own allocation for a station, so this
     // is the pointer the block keeps.
-    _work[SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(SUN_HEAP_ADDRESS);
-    _work[SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(SUN_HEAP_ADDRESS >> 8);
+    _work.HeapLow() = static_cast<std::uint8_t>(SUN_HEAP_ADDRESS);
+    _work.HeapHigh() = static_cast<std::uint8_t>(SUN_HEAP_ADDRESS >> 8);
 
     return AddShip(_bubble, _work, SHIP_TYPE_STATION, _blueprint); // 6502: LDA #SST, and no RTS -- it falls in
   }
@@ -315,21 +311,21 @@ namespace Elite
     ClearShipBlock(_work);
 
     const AddResult distance = AddWithCarry(static_cast<std::uint8_t>(_seeds[1] & 0x03u), 3u, odd);
-    _work[8] = distance.value;
+    _work.Z().sgn = distance.value;
     const std::uint8_t offset = RotateRight(distance.value, distance.carry).value;
-    _work[2] = offset;
-    _work[5] = offset;
+    _work.X().sgn = offset;
+    _work.Y().sgn = offset;
 
     (void)AddPlanetOrSun(_bubble, _work, _effects, _techLevel, _flight.blueprint);
 
     // 6502: the sun, from two more seed bytes, and its type is 129 rather than 128 -- the bottom
     // bit is what `PLANET` tests to send it to `SUN` instead of `PL9`.
-    _work[8] = static_cast<std::uint8_t>((_seeds[3] & 0x07u) | 0x81u);
+    _work.Z().sgn = static_cast<std::uint8_t>((_seeds[3] & 0x07u) | 0x81u);
     const std::uint8_t across = static_cast<std::uint8_t>(_seeds[5] & 0x03u);
-    _work[2] = across;
-    _work[1] = across;
-    _work[29] = 0;
-    _work[30] = 0;
+    _work.X().sgn = across;
+    _work.X().hi = across;
+    _work.RollCounter() = 0;
+    _work.PitchCounter() = 0;
 
     const NewShip sun = AddShip(_bubble, _work, 129, _flight.blueprint);
 
@@ -352,20 +348,20 @@ namespace Elite
 
     // 6502: STA T1 / AND #%10000000 / STA INWK+2 -- the x sign, and `T1` is dead here: nothing
     // between this and the `RTS` reads it.
-    _work[2] = static_cast<std::uint8_t>(first.value & 0x80u);
+    _work.X().sgn = static_cast<std::uint8_t>(first.value & 0x80u);
 
     // 6502: TXA / AND #%10000000 / STA INWK+5 -- and X is the PREVIOUS random byte, not this one.
-    _work[5] = static_cast<std::uint8_t>(first.previous & 0x80u);
+    _work.Y().sgn = static_cast<std::uint8_t>(first.previous & 0x80u);
 
     // 6502: LDA #25 / STA INWK+1 / STA INWK+4 / STA INWK+7 -- one distance in all three axes.
-    _work[1] = DEBRIS_DISTANCE;
-    _work[4] = DEBRIS_DISTANCE;
-    _work[7] = DEBRIS_DISTANCE;
+    _work.X().hi = DEBRIS_DISTANCE;
+    _work.Y().hi = DEBRIS_DISTANCE;
+    _work.Z().hi = DEBRIS_DISTANCE;
 
     // 6502: TXA / CMP #245 / ROL A / ORA #%11000000 / STA INWK+32.
     const bool aggressive = first.previous >= DEBRIS_AI_THRESHOLD;
     const std::uint8_t rolled = static_cast<std::uint8_t>((first.previous << 1) | (aggressive ? 1u : 0u));
-    _work[32] = static_cast<std::uint8_t>(rolled | 0xC0u);
+    _work.Ai() = static_cast<std::uint8_t>(rolled | 0xC0u);
 
     // 6502: and no RTS -- it falls into `DORND2`, which is a `CLC` in front of `DORND`. So the
     // second byte always rotates a clear carry in, whatever the `ROL A` above shifted out.
@@ -375,11 +371,11 @@ namespace Elite
   NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed, bool _carryIn,
                     std::uint16_t& _blueprint) noexcept
   {
-    _work[14] = DEBRIS_ORIENTATION;                                    // 6502: LDA #&60 / STA INWK+14
-    _work[22] = static_cast<std::uint8_t>(DEBRIS_ORIENTATION | 0x80u); // 6502: ORA #128 / STA INWK+22
+    _work.Nose().zHi = DEBRIS_ORIENTATION;                                    // 6502: LDA #&60 / STA INWK+14
+    _work.Side().xHi = static_cast<std::uint8_t>(DEBRIS_ORIENTATION | 0x80u); // 6502: ORA #128 / STA INWK+22
 
     // 6502: LDA DELTA / ROL A / STA INWK+27 -- a ROTATE, so the carry comes in at the bottom.
-    _work[27] = static_cast<std::uint8_t>((_speed << 1) | (_carryIn ? 1u : 0u));
+    _work.Speed() = static_cast<std::uint8_t>((_speed << 1) | (_carryIn ? 1u : 0u));
 
     return AddShip(_bubble, _work, _shipType, _blueprint); // 6502: TXA / JMP NWSHP
   }
@@ -391,10 +387,10 @@ namespace Elite
 
     // 6502: LDA #28 / STA INWK+3 / LSR A / STA INWK+6 -- and the 14 is the 28 shifted, so the two
     // distances are one constant. `LSR` also clears the carry, which the `ORA` below does not use.
-    _work[3] = SPAWN_AHEAD_X;
-    _work[6] = SPAWN_AHEAD_Z;
+    _work.Y().lo = SPAWN_AHEAD_X;
+    _work.Z().lo = SPAWN_AHEAD_Z;
 
-    _work[5] = 0x80u; // 6502: LDA #%10000000 / STA INWK+5 -- below us, so it appears in the view
+    _work.Y().sgn = 0x80u; // 6502: LDA #%10000000 / STA INWK+5 -- below us, so it appears in the view
 
     /*
      * 6502: LDA MSTG / ASL A / ORA #%10000000 / STA INWK+32.
@@ -403,7 +399,7 @@ namespace Elite
      * BIT 7 into the carry, where `fq1`'s `ROL A` collects it four instructions later (§6.121).
      */
     const bool carry = (_missileTarget & 0x80u) != 0u;
-    _work[32] = static_cast<std::uint8_t>((_missileTarget << 1u) | 0x80u);
+    _work.Ai() = static_cast<std::uint8_t>((_missileTarget << 1u) | 0x80u);
 
     return AddDebris(_bubble, _work, _shipType, _speed, carry, _blueprint); // 6502: no JSR -- a fall into `fq1`
   }
@@ -432,19 +428,19 @@ namespace Elite
     // not the type being created.
     if (_parentType == SHIP_TYPE_STATION)
     {
-      _work[27] = STATION_CHILD_SPEED; // 6502: LDA #32 / STA INWK+27
+      _work.Speed() = STATION_CHILD_SPEED; // 6502: LDA #32 / STA INWK+27
 
       // 6502: LDX #0 / LDA INWK+10 / JSR SFS2, and twice more -- out along the station's own axes,
       // so a ship leaves through the slot rather than out of the middle of the hull.
-      MoveShipAlongAxis(_work, _math, _work[10], 0u);
-      MoveShipAlongAxis(_work, _math, _work[12], 3u);
-      MoveShipAlongAxis(_work, _math, _work[14], 6u);
+      MoveShipAlongAxis(_work, _math, _work.Nose().xHi, 0u);
+      MoveShipAlongAxis(_work, _math, _work.Nose().yHi, 3u);
+      MoveShipAlongAxis(_work, _math, _work.Nose().zHi, 6u);
     }
 
     // 6502: .rx LDA T1 / STA INWK+32 / LSR INWK+29 / ASL INWK+29 -- the AI byte, then bit 0 of the
     // roll counter cleared, which is what makes the new ship's roll damp rather than lock.
-    _work[32] = _math.t1;
-    _work[29] = static_cast<std::uint8_t>(_work[29] & 0xFEu);
+    _work.Ai() = _math.t1;
+    _work.RollCounter() = static_cast<std::uint8_t>(_work.RollCounter() & 0xFEu);
 
     /*
      * 6502: TXA / CMP #SPL+1 / BCS NOIL / CMP #PLT / BCC NOIL -- the cargo range, plate to
@@ -462,13 +458,13 @@ namespace Elite
        * (§6.121).
        */
       const RngResult roll = _rng.Next(true);
-      _work[30] = static_cast<std::uint8_t>(roll.value << 1u);
-      _work[27] = static_cast<std::uint8_t>(roll.previous & 0x0Fu);
+      _work.PitchCounter() = static_cast<std::uint8_t>(roll.value << 1u);
+      _work.Speed() = static_cast<std::uint8_t>(roll.previous & 0x0Fu);
 
       // 6502: LDA #&FF / ROR A / STA INWK+29 -- and the carry it rotates in is the `ASL A` above,
       // so the pitch counter's sign is bit 7 of the random byte that set the roll.
       const bool carry = (roll.value & 0x80u) != 0u;
-      _work[29] = static_cast<std::uint8_t>((0xFFu >> 1u) | (carry ? 0x80u : 0x00u));
+      _work.RollCounter() = static_cast<std::uint8_t>((0xFFu >> 1u) | (carry ? 0x80u : 0x00u));
     }
 
     const NewShip made = AddShip(_bubble, _work, _shipType, _blueprint); // 6502: .NOIL JSR NWSHP

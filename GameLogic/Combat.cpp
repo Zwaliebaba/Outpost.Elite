@@ -44,11 +44,6 @@ namespace Elite
       return static_cast<std::uint8_t>((level << 4) | 3u);
     }
 
-    /// 6502: INWK+7 -- the z high byte, which is how far away the thing being hit is.
-    inline constexpr std::size_t SHIP_Z_HIGH = 7;
-
-    /// 6502: INWK+8 -- the z sign, which is what `OOPS` reads to pick a shield.
-    inline constexpr std::size_t SHIP_Z_SIGN = 8;
   } // namespace
 
   std::uint8_t ExplosionVolume(std::uint8_t _distance) noexcept
@@ -65,7 +60,7 @@ namespace Elite
 
   std::uint8_t PlayHitSound(const ShipBlock& _work, DashboardEffects& _effects) noexcept
   {
-    const std::uint8_t sustain = ExplosionVolume(_work[SHIP_Z_HIGH]);
+    const std::uint8_t sustain = ExplosionVolume(_work.Z().hi);
 
     // 6502: LDY #sfxhit / LDX #208 / JMP NOISE2.
     (void)_effects.PlaySoundPitched(SOUND_SHIP_EXPLODING, sustain, EXPLOSION_PITCH_HIT);
@@ -104,7 +99,7 @@ namespace Elite
     }
 
     // 6502: davidscockup -- and the noise is the same shape as EXNO's with wider thresholds.
-    const std::uint8_t sustain = KillVolume(_screen.work[SHIP_Z_HIGH]);
+    const std::uint8_t sustain = KillVolume(_screen.work.Z().hi);
     (void)_effects.PlaySoundPitched(SOUND_EXPLOSION, sustain, EXPLOSION_PITCH_KILL);
     return sustain;
   }
@@ -122,7 +117,7 @@ namespace Elite
      * shield loses `_damage` or one more than `_damage` depending on a bit of the thing that hit
      * it (§6.87). `LDX #0` is dead -- both paths that read X load it again first.
      */
-    const bool fromBehind = (_target[SHIP_Z_SIGN] & 0x80u) != 0u;
+    const bool fromBehind = (_target.Z().sgn & 0x80u) != 0u;
     std::uint8_t& shield = fromBehind ? status.aftShield : status.forwardShield;
 
     const SubResult left = SubtractWithCarry(shield, _damage, _carryIn);
