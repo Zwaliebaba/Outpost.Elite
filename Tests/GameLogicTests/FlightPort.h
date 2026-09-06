@@ -30,9 +30,9 @@
 /*
  * A flight with no window behind it (Design/Modernize.md slice M0-c).
  *
- * `Outpost::FlightSession` answers the eight seams the flight code reaches through, and most of
- * its answers are calls back into `GameLogic` -- `RunTactics` runs the ship AI, `DrawPlanetOrSun`
- * draws the planet, `SpawnAhead` is `FRS1`. Only a handful reach the platform: the keyboard, the
+ * `Outpost::FlightSession` answers the seven seams the flight code reaches through, and most of
+ * its answers are calls back into `GameLogic` -- `DrawPlanetOrSun` draws the planet, `SpawnAhead`
+ * is `FRS1`. Only a handful reach the platform: the keyboard, the
  * SID and the raster mode. This is the same object with the platform half replaced by data the
  * script owns: the keys held this frame are an array the test fills, the sound goes into the
  * game's own buffer and log, and the raster mode is remembered. Every game-half answer is the
@@ -46,7 +46,6 @@ namespace GameLogicTests
 {
 
   class FlightPort final : public Elite::FlightLoopEffects,
-                           public Elite::ShipEffects,
                            public Elite::ShipDrawEffects,
                            public Elite::ControlEffects,
                            public Elite::SightEffects,
@@ -70,9 +69,9 @@ namespace GameLogicTests
     static constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
 
     FlightPort()
-      : ports{universe.printer, universe.characters,      universe.characters, *this,           *this,
-              *this,            *this,                    *this,               universe.extendedPrinter,
-              universe.unused,  universe.unused,          universe.unused,     universe.unused, universe.unused}
+      : ports{universe.printer,          universe.characters, universe.characters, *this,           *this,
+              *this,                     *this,               universe.extendedPrinter, universe.unused,
+              universe.unused,           universe.unused,     universe.unused,     universe.unused}
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -199,13 +198,8 @@ namespace GameLogicTests
         .created;
     }
 
-    // ---- Elite::ShipEffects and Elite::ShipDrawEffects ------------------------------------------
+    // ---- Elite::ShipDrawEffects -----------------------------------------------------------------
 
-    [[nodiscard]] bool RunTactics(Elite::Ship& _work) override
-    {
-      static_cast<void>(_work);
-      return Elite::RunTactics(universe, ports, universe.flight.slot);
-    }
     void DrawPlanetOrSun() override
     {
       Elite::DrawPlanetOrSun(universe.canvas, universe.heaps, universe.geometry, universe.math, universe.clip, universe.rng,

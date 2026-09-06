@@ -795,7 +795,7 @@ namespace GameLogicTests
       std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
       std::uint16_t ma3, ma18, escape, frs1, angry, startbd, stopbd, noise;
-      std::uint16_t mainLoop, death, doentry, tactics, doexp, planet, sfs1, noise2;
+      std::uint16_t mainLoop, death, doentry, doexp, planet, sfs1, noise2;
       std::uint16_t setl1, dovdu19, slsp;
 
       explicit LoopWhere(const OracleImage& _oracle)
@@ -837,7 +837,6 @@ namespace GameLogicTests
         ma18 = _oracle.Label("MA18");
         death = _oracle.Label("DEATH");
         doentry = _oracle.Label("DOENTRY");
-        tactics = _oracle.Label("TACTICS");
         doexp = _oracle.Label("DOEXP");
         planet = _oracle.Label("PLANET");
         sfs1 = _oracle.Label("SFS1");
@@ -940,17 +939,11 @@ namespace GameLogicTests
     };
 
     /// What `MVEIT` and `LL9` reach that this slice does not build.
-    struct RecordingUniverse final : Elite::ShipEffects, Elite::ShipDrawEffects
+    struct RecordingUniverse final : Elite::ShipDrawEffects
     {
-      std::vector<std::uint8_t> tactics;
       std::uint32_t planets = 0;
       std::uint32_t explosions = 0;
 
-      bool RunTactics(Elite::Ship& _work) override
-      {
-        tactics.push_back(_work.ai);
-        return true; // the counted double never kills the player -- §6.122's answer for "nothing happened"
-      }
       void DrawPlanetOrSun() override
       {
         ++planets;
@@ -1222,7 +1215,6 @@ namespace GameLogicTests
         cpu.Load(EXITS[index], leave, sizeof(leave));
       }
 
-      cpu.AddTrap(_loop.tactics);
       cpu.AddTrap(_loop.doexp);
       cpu.AddTrap(_loop.planet);
       cpu.AddTrap(_loop.setl1);
@@ -1296,7 +1288,7 @@ namespace GameLogicTests
       const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 8'000'000);
       Assert::IsTrue(run.completed, (_context + L": M% reached an exit").c_str());
 
-      Elite::Ports ports = _frame.universe.PortsWith(_frame.outside, _frame.outside, _frame.effects, _frame.universe.unused);
+      Elite::Ports ports = _frame.universe.PortsWith(_frame.outside, _frame.effects, _frame.universe.unused);
       const Elite::LoopOutcome outcome = (_reach == Reach::Ships)   ? Elite::MoveEveryShip(_frame.universe, ports)
                                          : (_reach == Reach::Tail)  ? Elite::EndFlightFrame(_frame.universe, ports)
                                          : (_reach == Reach::Whole) ? Elite::MainFlightLoop(_frame.universe, ports)
@@ -2387,7 +2379,7 @@ namespace GameLogicTests
       frame.universe.view = 0u;
       frame.universe.spaceView = 0u;
 
-      Elite::Ports ports = frame.universe.PortsWith(frame.outside, frame.outside, frame.effects, frame.universe.unused);
+      Elite::Ports ports = frame.universe.PortsWith(frame.outside, frame.effects, frame.universe.unused);
 
       std::uint8_t docked = 0xFFu;
       Elite::SystemSeeds selected{};
@@ -2450,10 +2442,10 @@ namespace GameLogicTests
      * at the NTSC vertical refresh, which is four to six times too fast.
      *
      * THE TRAPS ARE THE ONES THAT ARE REALLY OUTSIDE, and no others. A trapped call costs nothing
-     * (`CycleTests::ATrappedCallCostsNothing`), so trapping `PLANET` or `TACTICS` -- as the
-     * comparison runs do, because their effects are seams -- would leave out the planet's drawing
-     * and every ship's thinking, which is most of a frame. Here only the sound and the VIC-II
-     * registers are trapped, and everything the 6510 would have computed is computed.
+     * (`CycleTests::ATrappedCallCostsNothing`), so trapping `PLANET` -- as the comparison runs do,
+     * because its effect is a seam -- would leave out the planet's drawing, which is a large part
+     * of a frame. Here only the sound and the VIC-II registers are trapped, and everything the
+     * 6510 would have computed is computed.
      *
      * The measurement is a lower bound all the same, for the two reasons the `cycles` field
      * documents: the trapped sound calls are free here and cost the machine something, and the
@@ -2479,11 +2471,12 @@ namespace GameLogicTests
 
       /*
        * Three scenes, and the FOURTH is missing for a reason worth writing down: `Seed`'s third
-       * slot is a space STATION, and `TACTICS` is trapped in every comparison in this file because
-       * its effects are a seam. Untrapped -- which a cost measurement needs it to be, since a
-       * trapped call costs nothing -- the station's own thinking does not come back inside forty
-       * million instructions. So the crowded end of the range is not measured here, and the port's
-       * rate is derived from what is (§6.114).
+       * slot is a space STATION, and a station's own thinking does not come back inside forty
+       * million instructions. That was written when `TACTICS` was trapped in every comparison in
+       * this file and untrapped only here; M3-b-1c took the seam away and every comparison runs
+       * the AI now, but this measurement is the one that has to run it in FULL -- a comparison
+       * stops at `MA18`, and this does not. So the crowded end of the range is still not measured
+       * here, and the port's rate is derived from what is (§6.114).
        */
       const Scene SCENES[] = {
         {11u, 0u, "an empty bubble"},

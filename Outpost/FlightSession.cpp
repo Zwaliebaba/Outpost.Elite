@@ -207,16 +207,6 @@ namespace Outpost
 
   // ---- the ships ----------------------------------------------------------------------------------
 
-  bool FlightSession::RunTactics(Elite::Ship& _work)
-  {
-    // 6502: JSR TACTICS from `MVEIT`'s `MV26`, with `INF` at the slot being moved -- which is
-    // `XSAV`, the byte the loop keeps for exactly this.
-    (void)_work;
-    // `TACTICS` decides whether the player survived, and a session with no ports attached has no
-    // AI to ask -- which is a composition error rather than a game state, so it answers "alive".
-    return (m_ports != nullptr) ? Elite::RunTactics(m_universe, *m_ports, m_universe.flight.slot) : true;
-  }
-
   void FlightSession::DrawPlanetOrSun()
   {
     // 6502: LL25 -- JMP PLANET, taken for a type with bit 7 set. `INWK` is the body and `TYPE`

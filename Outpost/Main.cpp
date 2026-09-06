@@ -96,10 +96,10 @@ namespace
         extended(characters, recursive, universe.rng, &shell),
         flight(window, universe, sound, music, audio),
         ports{recursive, characters, characters, flight, flight, flight, flight,
-              flight,    extended,   shell,      shell,  shell,  shell,  store}
+              extended,  shell,      shell,      shell,  shell,  store}
     {
-      // The seams the session answers that are calls needing the seams themselves -- `TACTICS` and
-      // `DOCKIT` -- so the composition lends the struct back to the object eight of it point at.
+      // The seam the session answers that is a call needing the seams themselves -- `DOCKIT` --
+      // so the composition lends the struct back to the object seven of it point at.
       flight.AttachPorts(ports);
       shell.AttachPorts(ports);
       recursive.SetValueTokens(&values);

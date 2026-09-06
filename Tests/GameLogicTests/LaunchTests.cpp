@@ -540,12 +540,8 @@ namespace GameLogicTests
       }
     };
 
-    struct RecordingOutside final : Elite::ShipEffects, Elite::ShipDrawEffects
+    struct RecordingOutside final : Elite::ShipDrawEffects
     {
-      bool RunTactics(Elite::Ship&) override
-      {
-        return true;
-      }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
     };
@@ -568,7 +564,7 @@ namespace GameLogicTests
       /// The seams a launch reaches: the AI and the drawing, the sounds, and `RESET`'s own.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(outside, outside, effects, start);
+        return universe.PortsWith(outside, effects, start);
       }
     };
 

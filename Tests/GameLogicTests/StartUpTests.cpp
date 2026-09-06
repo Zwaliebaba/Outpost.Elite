@@ -639,7 +639,7 @@ namespace GameLogicTests
         RecordingStart effects({script.firstAnswer, 0});
         NullSeams nulls;
         Elite::Ports ports{recursive, characters, sink,    nulls, nulls, nulls,       nulls,
-                           nulls,     extended,   effects, keys,  nulls, lineEffects, store};
+                           extended,  effects,    keys,    nulls, lineEffects, store};
 
         const Elite::ForcedKey forced =
           script.coldStart ? Elite::ResetAndStartGame(universe, ports, false) : Elite::StartGame(universe, ports, false);

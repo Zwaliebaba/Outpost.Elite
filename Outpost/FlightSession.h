@@ -53,17 +53,13 @@ namespace Outpost
    * raster mode: the platform, which is what a session was always supposed to be.
    *
    * It does not build `Elite::Ports` either, since M3-a-3: the struct grew the docked half's four
-   * seams, and eight of its fourteen references are then the shell's and the store's rather than
+   * seams, and eight of its thirteen references are then the shell's and the store's rather than
    * this object's. `Outpost::Game` owns it and lends it back through `AttachPorts`, which is what
-   * the two seams below need that take a `Ports&` to answer -- `TACTICS` and `DOCKIT`.
+   * the one seam below needs that takes a `Ports&` to answer -- `DOCKIT`. `TACTICS` was the other
+   * until M3-b-1c, which took the seam away and let `MVEIT` call the routine directly.
    *
    * WHAT IS HONESTLY MISSING, said here rather than left to be found while flying.
    *
-   *   - `TACTICS` and `DOCKIT` are phase 4, so nothing in the bubble fights or flies itself.
-   *   - `FRS1`, `SFS1` and `ANGRY` are phase 4, so a fired missile never appears and a dying ship
-   *     drops no wreckage. `NWSPS` is NOT among them any more: the station is put back on a launch
-   *     and near the planet, so `SSPR` is set and `LoopOutcome::Docked` is reachable.
-   *   - `DOEXP` is phase 4, so a ship that explodes vanishes instead.
    *   - `MVTRIBS` and the whole SID are phase 5, so a flight is silent.
    *   - The laser sights and the Trumbles are VIC-II SPRITES, and the presenter resolves the
    *     bitmap and the two blocks of screen RAM but not the sprite overlay -- so `SIGHT` writes
@@ -74,7 +70,6 @@ namespace Outpost
    * ship renderer and all sixteen parts of `M%`.
    */
   class FlightSession final : public Elite::FlightLoopEffects,
-                              public Elite::ShipEffects,
                               public Elite::ShipDrawEffects,
                               public Elite::ControlEffects,
                               public Elite::SightEffects,
@@ -95,9 +90,9 @@ namespace Outpost
       return m_universe;
     }
 
-    /// The seams, lent back by the composition root once it has built them. Two of this object's
-    /// own answers -- `RunTactics` and `RunDockingComputer` -- are calls that need them, and the
-    /// interfaces they satisfy do not carry them.
+    /// The seams, lent back by the composition root once it has built them. This object's own
+    /// `RunDockingComputer` is a call that needs them, and the interface it satisfies does not
+    /// carry them.
     void AttachPorts(Elite::Ports& _ports) noexcept
     {
       m_ports = &_ports;
@@ -131,9 +126,8 @@ namespace Outpost
     bool Anger(std::uint8_t _slot, Elite::ShipType _type) override;
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override;
 
-    // ---- Elite::ShipEffects and Elite::ShipDrawEffects ------------------------------------------
+    // ---- Elite::ShipDrawEffects -----------------------------------------------------------------
 
-    [[nodiscard]] bool RunTactics(Elite::Ship& _work) override;
     void DrawPlanetOrSun() override;
     void DrawExplosion() override;
 

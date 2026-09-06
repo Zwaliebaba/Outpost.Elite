@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "FlightUniverse.h"
 #include "ShipBytes.h"
 
 #include "Cpu6502.h"
@@ -35,17 +36,6 @@ namespace GameLogicTests
 
   namespace
   {
-    bool OracleMissing()
-    {
-      const OracleImage& oracle = OracleImage::Instance();
-      if (oracle.Available())
-      {
-        return false;
-      }
-      Logger::WriteMessage(("SKIPPED -- oracle absent: " + oracle.Reason()).c_str());
-      return true;
-    }
-
     std::wstring Widen(const std::string& _text)
     {
       return std::wstring(_text.begin(), _text.end());
@@ -610,8 +600,16 @@ namespace GameLogicTests
    * each pass -- and a port that was wrong by one in a byte nothing immediately reads would agree
    * for one iteration and diverge over twenty.
    *
-   * `TACTICS` is trapped and counted on both sides: it is phase 4's, and a port that ran it a
-   * different number of times would be wrong about the loop even if every byte of INWK agreed.
+   * `TACTICS` IS NO LONGER TRAPPED EITHER, for the same reason `SCAN` is not (M3-b-1c). It was
+   * trapped and counted while the AI was phase 4's and this slice was 3a's, and the count proved
+   * one thing: how often `MV26` was reached. Slice 4a-c built the AI, M3-b-1c took the seam away,
+   * and both machines now run it -- so the state it leaves is compared instead, over the whole
+   * universe rather than the ship block. That says how often it ran AND what it did each time.
+   *
+   * WHICH IS WHY THE FIXTURE IS THE SHARED ONE. The AI reads the bubble, the commander, the ECM
+   * countdown, the message line and the generator, and writes ships, sounds and screen bytes; a
+   * `Ship` and a `FlightState` in isolation cannot put any of that into the oracle. `MVEIT` is now
+   * a routine that reaches all of `Universe`, which is what `FlightUniverse.h` exists for.
    *
    * `SCAN` IS NO LONGER TRAPPED, because slice 3d-a built it. The count it used to be asserted
    * against is replaced by the SCREEN, which says more: `MVEIT` scans an ordinary ship twice a
@@ -620,23 +618,6 @@ namespace GameLogicTests
    * scanner ran, where each blip went, and what colour it was -- the count only ever proved the
    * first.
    */
-  namespace
-  {
-    /// Counts the remaining seam instead of performing it, so the comparison covers WHETHER phase
-    /// 4's AI was reached as well as what the arithmetic did.
-    class CountingEffects final : public Elite::ShipEffects
-    {
-    public:
-      bool RunTactics(Elite::Ship&) override
-      {
-        ++tactics;
-        return true;
-      }
-
-      std::uint32_t tactics = 0;
-    };
-  } // namespace
-
   TEST_CLASS(MovingAShip)
   {
   public:
@@ -648,17 +629,14 @@ namespace GameLogicTests
       }
 
       const OracleImage& oracle = OracleImage::Instance();
-      const std::uint16_t inwk = oracle.Label("INWK");
+      const Where at{oracle};
+      const std::uint16_t inwk = at.inwk;
       const std::uint16_t mveit = oracle.Label("MVEIT");
-      const std::uint16_t tactics = oracle.Label("TACTICS");
-      const std::uint16_t xx0 = oracle.Label("XX0");
-      const std::uint16_t qq11 = oracle.Label("QQ11");
+      const std::uint16_t xx0 = at.xx0;
 
       // 6502: SCBASE, which is an assembler constant rather than a label -- ylookup's first entry
       // is it plus the space view's four-cell left margin.
-      const Cpu6502 image = oracle.Fresh();
-      const std::uint16_t screenBase =
-        static_cast<std::uint16_t>((image.memory[oracle.Label("ylookupl")] | (image.memory[oracle.Label("ylookuph")] << 8)) - 0x20);
+      const std::uint16_t screenBase = ScreenBase(oracle);
 
       struct Case
       {
@@ -671,31 +649,25 @@ namespace GameLogicTests
         std::uint8_t hostile;   ///< INWK+32
         std::uint8_t alpha;
         std::uint8_t beta;
-
-        /*
-         * How often tactics is reached in twenty iterations, and it IS the behaviour rather than a
-         * side effect: a missile thinks every pass and everything else one pass in eight.
-         */
-        std::uint32_t tactics;
       };
 
       const std::vector<Case> CASES = {
-        {"a Cobra, still, nobody turning", 11, 0, 0, 0, 0, 0, 0, 0, 0},
-        {"a Cobra under way", 11, 0, 0, 20, 0, 0, 0, 0, 0},
-        {"the player rolling", 11, 0, 0, 20, 0, 0, 12, 0, 0},
-        {"the player pitching", 11, 0, 0, 20, 0, 0, 0, 9, 0},
-        {"both, the other way", 11, 0, 0, 20, 0, 0, 0x8C, 0x89, 0},
-        {"the ship rolling too", 11, 40, 0, 20, 0, 0, 5, 3, 0},
-        {"and pitching", 11, 40, 33, 20, 0, 0, 5, 3, 0},
-        {"roll pinned at 127, which does not decay", 11, 127, 127, 20, 0, 0, 5, 3, 0},
-        {"at full speed, so the clamp bites", 11, 20, 20, 255, 0, 0, 4, 4, 0},
-        {"a HOSTILE ship, so tactics run", 11, 10, 10, 20, 0, 0x80, 4, 4, 3},
-        {"a MISSILE, which thinks every pass", 1, 10, 10, 30, 0, 0x80, 4, 4, 20},
-        {"an EXPLODING ship, which does not move", 11, 40, 40, 20, 0x20, 0x80, 6, 6, 0},
-        {"a dead one", 11, 40, 40, 20, 0x80, 0x80, 6, 6, 0},
-        {"the PLANET, which goes through MV40", 128, 0, 0, 0, 0, 0, 7, 5, 0},
-        {"the SUN, which skips the orientation", 129, 0, 0, 0, 0, 0, 7, 5, 0},
-        {"an Anaconda, whose maximum speed differs", 14, 20, 20, 200, 0, 0, 3, 3, 0},
+        {"a Cobra, still, nobody turning", 11, 0, 0, 0, 0, 0, 0, 0},
+        {"a Cobra under way", 11, 0, 0, 20, 0, 0, 0, 0},
+        {"the player rolling", 11, 0, 0, 20, 0, 0, 12, 0},
+        {"the player pitching", 11, 0, 0, 20, 0, 0, 0, 9},
+        {"both, the other way", 11, 0, 0, 20, 0, 0, 0x8C, 0x89},
+        {"the ship rolling too", 11, 40, 0, 20, 0, 0, 5, 3},
+        {"and pitching", 11, 40, 33, 20, 0, 0, 5, 3},
+        {"roll pinned at 127, which does not decay", 11, 127, 127, 20, 0, 0, 5, 3},
+        {"at full speed, so the clamp bites", 11, 20, 20, 255, 0, 0, 4, 4},
+        {"a HOSTILE ship, so tactics run", 11, 10, 10, 20, 0, 0x80, 4, 4},
+        {"a MISSILE, which thinks every pass", 1, 10, 10, 30, 0, 0x80, 4, 4},
+        {"an EXPLODING ship, which does not move", 11, 40, 40, 20, 0x20, 0x80, 6, 6},
+        {"a dead one", 11, 40, 40, 20, 0x80, 0x80, 6, 6},
+        {"the PLANET, which goes through MV40", 128, 0, 0, 0, 0, 0, 7, 5},
+        {"the SUN, which skips the orientation", 129, 0, 0, 0, 0, 0, 7, 5},
+        {"an Anaconda, whose maximum speed differs", 14, 20, 20, 200, 0, 0, 3, 3},
       };
       constexpr int ITERATIONS = 20;
 
@@ -711,20 +683,29 @@ namespace GameLogicTests
         const std::wstring where = Widen(std::string("MVEIT: ") + item.what);
 
         Cpu6502 cpu = oracle.Fresh();
-        Elite::Ship work;
-        Elite::MathWorkspace math;
-        Elite::FlightState flight;
-        CountingEffects effects;
 
-        Elite::Canvas canvas;
-        Elite::DrawWorkspace draw;
+        /*
+         * The whole universe, because the AI runs for real now and reaches all of it. The four
+         * names below are ALIASES into it rather than objects of their own -- `MoveShip` takes
+         * `(Universe&, Ports&)` since M3-b-1c and the case still pokes the work block by hand.
+         */
+        Universe universe;
+        LoopRecording effects;
+        Elite::Ports ports = universe.PortsWith(effects, effects, universe.unused);
+        Elite::Ship& work = universe.work;
+        Elite::FlightState& flight = universe.flight;
+        Elite::Canvas& canvas = universe.canvas;
 
-        // 6502: the one seam left, trapped so the interpreter returns instead of running phase 4's
-        // AI. `SCAN` runs on both sides now and the screens are compared instead (§6.61).
-        cpu.AddTrap(tactics);
+        // The seams the AI still reaches, trapped on the oracle so both sides do the same nothing:
+        // `SFS1` and `FRS1` answer a carry the recorder answers with a `bool`, and `NOISE` is the
+        // SID. `TACTICS` itself is not among them any more.
+        cpu.AddTrap(oracle.Label("SFS1"), Cpu6502::TrapExit::SetCarry);
+        cpu.AddTrap(oracle.Label("FRS1"), Cpu6502::TrapExit::ClearCarry);
+        cpu.AddTrap(oracle.Label("NOISE"), Cpu6502::TrapExit::SetCarry);
+        cpu.AddTrap(oracle.Label("NOISE2"));
 
         // 6502: QQ11 -- the space view, so `SCAN` has a dashboard to draw on.
-        cpu.memory[qq11] = 0;
+        universe.view = 0;
 
         // A whole ship: position, orientation, speed, roll, pitch and flags, the same on both sides.
         std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
@@ -763,7 +744,9 @@ namespace GameLogicTests
         }
 
         // The blueprint MVEIT reads its maximum speed from, in XX0 on the oracle's side.
-        const Elite::Blueprint* blueprint = Elite::BlueprintOf((item.type & 0x80u) != 0u ? Elite::ShipType::CobraMk3 : Elite::TypeOf(item.type));
+        const Elite::Blueprint* blueprint =
+          Elite::BlueprintOf((item.type & 0x80u) != 0u ? Elite::ShipType::CobraMk3 : Elite::TypeOf(item.type));
+        flight.blueprint = blueprint;
         cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
         cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
@@ -797,24 +780,34 @@ namespace GameLogicTests
         cpu.memory[oracle.Label("XSAV")] = flight.slot;
 
         /*
+         * And everything else, once, before the first pass: the bubble the AI reads its target and
+         * its station out of, the commander, the generator, the message line. The ship block is
+         * written afterwards, because `Mirror` carries `INWK` too and the case has already put its
+         * own pattern there.
+         */
+        Mirror(universe, cpu, at);
+        for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
+        {
+          cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = work.ToBytes()[offset];
+        }
+
+        /*
          * N iterations, with the main loop counter advancing exactly as the game's does -- which is
          * what makes TIDY fire on one pass in sixteen and TACTICS on one in eight rather than never
          * or always.
          */
-        std::uint32_t tacticsRuns = 0;
         for (int iteration = 0; iteration < ITERATIONS; ++iteration)
         {
           const std::uint8_t counter = static_cast<std::uint8_t>(iteration);
-          cpu.memory[oracle.Label("MCNT")] = counter;
+          cpu.memory[at.mcnt] = counter;
           flight.mainLoopCounter = counter;
 
-          // Count the seams on the oracle's side by stepping until it returns, noting each trap.
           cpu.a = 0;
           const Elite::Testing::RunResult run = cpu.CallSubroutine(mveit);
           Assert::IsTrue(run.completed, (where + L": MVEIT returned on iteration " + std::to_wstring(iteration)).c_str());
 
-          Assert::IsTrue(Elite::MoveShip(canvas, work, math, flight, effects, *blueprint, 0u),
-                         L"MVEIT does not kill the player when the tactics double does not");
+          Assert::IsTrue(Elite::MoveShip(universe, ports),
+                         (where + L": MVEIT does not kill the player in this fixture").c_str());
 
           for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
           {
@@ -839,14 +832,18 @@ namespace GameLogicTests
             }
             blips += (ours[offset] != 0u) ? 1u : 0u;
           }
-        }
-        (void)tacticsRuns;
 
-        /*
-         * The tactics count, which is the loop spreading: a missile thinks every pass and
-         * everything else one pass in eight, which with this slot lands three times in twenty.
-         */
-        Assert::AreEqual(item.tactics, effects.tactics, (where + L": how often tactics ran").c_str());
+          /*
+           * And the rest of the universe, which is what the tactics COUNT used to stand in for.
+           *
+           * The count said `MV26` was reached three times in twenty for a hostile ship and twenty
+           * for a missile; this says that AND what the AI did on each of them -- the roll and
+           * pitch counters it wrote, the generator it advanced, the ECM it noticed, the missile it
+           * armed. Compared every iteration for the same reason the screen is: two errors that
+           * cancel would leave the last frame agreeing.
+           */
+          CompareState(cpu, universe, at, where + L": iteration " + std::to_wstring(iteration));
+        }
       }
 
       Assert::IsTrue(blips > 0u, L"and the scanner actually drew something to compare");

@@ -398,8 +398,7 @@ namespace Elite
        * byte 32 to nothing. So the AI cannot run here and cannot kill anybody, and there is no
        * player to kill -- the title screen has no energy banks (§6.122).
        */
-      (void)MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics, *_universe.flight.blueprint,
-                     _universe.view);
+      (void)MoveShip(_universe, _ports);
 
       /*
        * 6502: LDX distaway / STX INWK+6 / LDA MCNT / AND #3 / LDA #0 / STA INWK / STA INWK+3.
@@ -634,8 +633,7 @@ namespace Elite
     // reach is unreachable here, because the ship flying away is not shooting at anybody.
     while (_universe.work.ai != 0u)
     {
-      static_cast<void>(MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics,
-                                 *_universe.flight.blueprint, _universe.view));
+      static_cast<void>(MoveShip(_universe, _ports));
       /*
        * 6502: JSR LL9 -- and the SLOT it writes back to is the one `FRS1` just filled, through
        * `INF`. Handing it slot 0 would have `LL9` writing its bookkeeping into the PLANET, which

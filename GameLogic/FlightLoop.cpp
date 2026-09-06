@@ -849,8 +849,7 @@ namespace Elite
        * back only on the path that survives -- `JMP DEATH` from inside `TACTICS` never reaches
        * `MAL3` -- and `DEATH` calls `RES2`, which clears the bubble anyway (§6.122).
        */
-      if (!MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics, *_universe.flight.blueprint,
-                    _universe.view))
+      if (!MoveShip(_universe, _ports))
       {
         return LoopOutcome::Died;
       }

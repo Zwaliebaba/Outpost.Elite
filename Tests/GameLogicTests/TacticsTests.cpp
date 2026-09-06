@@ -538,7 +538,7 @@ namespace GameLogicTests
      * or make a noise. Running them inside the interpreter would compare a dashboard the fixture
      * does not have, so both sides are trapped and counted and the COUNTS are what agree.
      */
-    struct CountingEffects final : Elite::FlightLoopEffects, Elite::ShipEffects, Elite::ShipDrawEffects
+    struct CountingEffects final : Elite::FlightLoopEffects, Elite::ShipDrawEffects
     {
       std::vector<std::uint8_t> sounds;
       std::vector<std::uint8_t> spawned;
@@ -569,10 +569,6 @@ namespace GameLogicTests
         spawned.push_back(Elite::Byte(_type));
         return true;
       }
-      bool RunTactics(Elite::Ship&) override
-      {
-        return true;
-      }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
     };
@@ -591,7 +587,7 @@ namespace GameLogicTests
       /// The three seams the AI reaches, all counted in one place.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(effects, effects, effects, universe.unused);
+        return universe.PortsWith(effects, effects, universe.unused);
       }
     };
 
