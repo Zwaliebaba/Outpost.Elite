@@ -609,8 +609,10 @@ routine, which is a more precise instrument than the pixel comparison that would
 corollary points the other way here, and this is the first seam in M3-b where it does (§8,
 2026-09-06). `ValueTokens` is the same shape: `StateTokens` is its only production implementation
 and it exists to break a construction cycle inside the library. `PlaySound`'s carry stays inside
-the library where `NOISE` lives. The null port for tests is one class with four interfaces and a
-transcript, which is what `NullShell` and `LoopRecording` are today in two halves.
+the library where `NOISE` lives. The null port for tests is `NullSeams`, one class over six interfaces
+(M3-b-4c). It carries no transcript and must not grow one: a fixture that wants to know a seam was
+reached passes something that counts, and the two things it DOES decide -- whether the store failed
+and whether the bubble had room -- are booleans on it rather than second classes.
 
 ### 4.6 Pipelines with named stages
 
@@ -1400,8 +1402,9 @@ those three claims are wrong and §4.5 above now says so. What the slice actuall
     (§8).
   - **4b ✅ `ControlCodes`**. `DT3`'s dispatch is `Elite::RunControlCode` over `(Universe&, Ports&)`;
     the last thing the shell still owned was `CLYNS`, which is `Elite::ClearMessageRows`.
-  - **4c `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView` and `RecordingDashboard`
-    become one null port.**
+  - **4c ✅ the null port**, and three of the five classes the row named had already gone with their
+    seams. `LoopRecording` was a second null port for one boolean and is folded in; `NullShell` is
+    a RECORDER and stays one, which is the distinction `NullSeams.h` has always insisted on.
   - **`CommanderStore` keeps its name** and `TextSink` and `ValueTokens` stay, for the reasons §4.5
     now records. `effects-seams` stops at the number that leaves them standing rather than the
     ratchet quietly failing to reach zero.
@@ -1742,6 +1745,36 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-4c: the null port was already one class, and the second one was a boolean.**
+The plan's row asks for `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView` and
+`RecordingDashboard` to become one null port. THREE OF THE FIVE HAD ALREADY GONE with the seams they
+answered — `SightEffects` in M3-b-3a, `ViewEffects` and `DashboardEffects` in M3-b-2 — and of the two
+left, one is not a null port and the other was not two things.
+
+`LoopRecording` was named for a recording it had stopped making: two empty draw methods and a
+`SpawnChild` that returned true where `NullSeams` returns false. ONE BOOLEAN, and it is `spawnRoom`
+on the null port now — so §4.5's "one class" is reached by deleting the other rather than by merging
+them. `LoopUniverse` loses a member and two suites lose a name.
+
+`NullShell` is a RECORDER and stays one. `NullSeams.h` has said since M3-a-3 that it is not a
+recorder and must not become one, and folding a transcript into it would be exactly that: a fixture
+that wants to know a seam was reached passes something that counts, and this exists so the seams a
+routine cannot reach cost a fixture nothing to declare. The distinction is the whole value of the
+class and the plan's row would have destroyed it.
+
+**M3-b IS COMPLETE.** Three of §4.5's four ports landed — `SoundSink` (2b), `Presenter` (3b, 3c) and
+`Keyboard` (3d) — and the fourth keeps the name it has, for the reason §4.5 now records. Eleven
+interfaces became four ports and five seams that turned out to be `GameLogic` reached through the
+executable: `TradeScreenEffects`, `TunnelEffects`, `ControlEffects::ScanKeyboard`, `TextEffects` and
+`ControlCodes`. `effects-seams` 22 → 9 across the phase, `aggregate-refs` 39 → 11,
+`outpost-elite-names` 205 → 157, `main-lines` 1,219 → 1,160.
+
+Two seams survive the phase deliberately and are named so nobody has to re-derive it: `TextSink` and
+`ValueTokens` are the text system's own polymorphism and are argued about in §4.5. Two survive
+because a comparison is blocked rather than because they are right: `ShipDrawEffects` needs the
+banking §6.108 found, and `SpawnChildEffects` is M4-a's typed stage result. `StartUpEffects` is down
+to `ClearKeyLogger` and `ShowTitleScreen`, and `ControlEffects` to `RunDockingComputer`.
 
 **2026-09-06 — M3-b-4b: `ControlCodes` goes, and what the seam stood in front of was `GameLogic`
 reaching `GameLogic` through the executable.** `DT3` and its `JMTB` table are the control codes that

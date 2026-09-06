@@ -283,16 +283,6 @@ namespace GameLogicTests
    * this slice decides. Counted rather than ignored, because `LL164` makes a noise and a
    * comparison that dropped it would agree with a port that had lost the hyperspace sound.
    */
-  struct LoopRecording final : Elite::SpawnChildEffects, Elite::ShipDrawEffects
-  {
-    bool SpawnChild(std::uint8_t, Elite::ShipType) override
-    {
-      return true;
-    }
-    void DrawPlanetOrSun() override {}
-    void DrawExplosion() override {}
-  };
-
   /*
    * The port's side of a case: the whole flight universe and the one recorder a frame reaches
    * through.
@@ -303,13 +293,26 @@ namespace GameLogicTests
    */
   struct LoopUniverse
   {
-    Universe universe;
-    LoopRecording effects; ///< the drawing and the sounds, both recorded in one place
+    /*
+     * `LoopRecording` WAS A SECOND CLASS HERE AND IS NOT ANY MORE (M3-b-4c).
+     *
+     * It was named for a recording it had stopped making: two empty draw methods and a `SpawnChild`
+     * that returned true, where `NullSeams` returns false. One boolean, and it is `spawnRoom` on
+     * the null port now -- which is §4.5's "one class" for the tests, arrived at by deleting the
+     * other one rather than by merging two.
+     */
+    LoopUniverse() noexcept
+    {
+      // 6502: SFS1's carry. A frame worth running kills a ship, and a kill spawns debris.
+      universe.unused.spawnRoom = true;
+    }
 
-    /// The seams as `Elite::Ports`: the recorder for the two a frame reaches, nothing for the rest.
+    Universe universe;
+
+    /// The seams as `Elite::Ports`: nothing, and `SFS1` answering that the bubble had room.
     [[nodiscard]] Elite::Ports Ports() noexcept
     {
-      return universe.PortsWith(effects, effects, universe.unused);
+      return universe.PortsWith(universe.unused, universe.unused, universe.unused);
     }
   };
 

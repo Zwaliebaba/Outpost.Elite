@@ -690,8 +690,8 @@ namespace GameLogicTests
          * `(Universe&, Ports&)` since M3-b-1c and the case still pokes the work block by hand.
          */
         Universe universe;
-        LoopRecording effects;
-        Elite::Ports ports = universe.PortsWith(effects, effects, universe.unused);
+        universe.unused.spawnRoom = true; // 6502: SFS1's carry -- `LoopRecording` was this, until M3-b-4c
+        Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, universe.unused);
         Elite::Ship& work = universe.work;
         Elite::FlightState& flight = universe.flight;
         Elite::Canvas& canvas = universe.canvas;

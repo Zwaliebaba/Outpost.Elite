@@ -302,7 +302,7 @@ namespace GameLogicTests
     /// The seams a briefing reaches: the frame's three recorded, and the script answering `TITLE`'s.
     [[nodiscard]] static Elite::Ports PortsOver(LoopUniverse& _universe, ScriptedStart& _start)
     {
-      return _universe.universe.PortsWith(_universe.effects, _universe.effects, _start, _start, _start);
+      return _universe.universe.PortsWith(_universe.universe.unused, _universe.universe.unused, _start, _start, _start);
     }
 
     /// What `Mirror` does not send: the line heap, the flight model's rotation rates, and `INF`.
