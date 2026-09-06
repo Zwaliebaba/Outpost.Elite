@@ -174,6 +174,11 @@ namespace Elite
    */
   inline constexpr std::size_t KEY_CONTROL = 0x06; ///< 6502: KLO+&6 -- CTRL, read by `hyp` and `TT18`
 
+  /// 6502: HINT -- "H", the matrix position `TT102` tests with `BIT KLO+HINT` to reach `hyp`. It is
+  /// read as a key HELD, not as the key that was pressed (`DockedKeys.h`), so the caller of the
+  /// dispatch reads it off the matrix the way `JumpOf` reads CTRL (§6.159).
+  inline constexpr std::size_t KEY_HYPERSPACE = 0x23;
+
   /// 6502: what `TT17` leaves in X and Y -- one signed step per axis, four times as big with
   /// RETURN held. Zero on both when nothing is pressed, which is most passes.
   struct CrosshairStep

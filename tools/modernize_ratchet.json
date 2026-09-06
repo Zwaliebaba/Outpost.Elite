@@ -34,14 +34,14 @@
       "slice": "M0-a"
     },
     "main-lines": {
-      "ceiling": 1199,
+      "ceiling": 1209,
       "slack": 0,
-      "slice": "main 4bab1f8 (merged 2026-09-06)"
+      "slice": "hyperspace key wired 2026-09-06 (plan 6.159): PressKey reads H off the matrix"
     },
     "outpost-elite-names": {
-      "ceiling": 224,
+      "ceiling": 225,
       "slack": 0,
-      "slice": "M1-f"
+      "slice": "hyperspace key wired 2026-09-06 (plan 6.159): PressKey reads H off the matrix"
     },
     "effects-seams": {
       "ceiling": 22,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3720,
+      "ceiling": 3721,
       "slack": 0,
-      "slice": "death-sequence fix 2026-09-06 (plan 6.157, 6.158): the EE55 block, the carries it reads and the hold-or-fitting load, labelled"
+      "slice": "death-sequence fix and hyperspace key 2026-09-06 (plan 6.157-6.159)"
     },
     "oracle-test-files": {
       "ceiling": 50,

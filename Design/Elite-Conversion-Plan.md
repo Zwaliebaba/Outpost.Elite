@@ -510,6 +510,33 @@ routines are *about* rather than from what they *touch*. Before phases 3 and 4 a
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
 
+### 6.159 The hyperspace key was never connected, and a comment on the dispatch said exactly why
+
+The owner: "it looks like I cannot hyperjump. Is the H key even connected?" It was not. `TT102`
+does not compare the key it was handed against H; it tests `BIT KLO+HINT`, the H position of the
+keyboard matrix, and jumps to `hyp` if the key is HELD -- which `DockedKeys.h` records at length,
+and which is why `ActionForKey` takes `_hyperspaceHeld` as an argument rather than reading the key.
+`PressKey` in `Main.cpp` passed that argument as a literal `false`. So H arrived from the window as
+key &23, the dispatch discarded it exactly as the original discards the accumulator, and the one
+input that should have carried it said nobody was holding anything. Every other key worked; the
+game looked wired.
+
+The fix is one read: `Window::Held(KEY_HYPERSPACE)`, live off the matrix at dispatch time, which
+is what `RDKEY` has just put in `KLO` in both loops -- the same arrangement `JumpOf` already used
+for `CTRL` and the galactic drive. `KEY_HYPERSPACE` is `HINT`, &23, checked against the C64
+source. No test could have seen this: `ActionForKey` is compared against the shipped routine over
+16,384 states through its argument, and `Main.cpp` is the one file no suite compiles. The comment
+above `PressKey` said "a game that did nothing for the hyperspace key would look exactly like one
+that had wired it up", and it was describing itself.
+
+And the owner's other expectation -- that near the station the game should say a jump is not
+possible -- is not the C64 game's. `hyp` refuses four things: docked (`dockEd` prints "Docked"),
+a countdown already running, the selected system being the current one, and a system out of
+range, which gets the "range" message. Proximity to the station is not among them; the original
+lets you jump from the docking approach, and the `safehouse` copy of the seeds exists precisely
+to stop the "hyperspace while docking" bug that allowed. What the owner may remember is the
+docking computer's behaviour, or another Elite.
+
 ### 6.158 A typed hold with seventeen slots, and a routine that indexes twenty-two of them
 
 The Debug suite, run whole for §6.157, died in `TheDamageMatchesOOPS` on `std::array`'s bounds
@@ -529,6 +556,14 @@ fittings from seventeen to twenty-one, and the routine and both tests go through
 worth keeping**: a slice that types a byte array has to find every indexed access that ran past the
 array's end ON PURPOSE, because the original's flat layout made "the byte after the hold" a
 legitimate address -- and the Debug configuration is the only one that says so out loud.
+
+The same run then died a second time, in `EveryEffectRendersToItsRecordedHash`, and that one was
+the test's own: its silence baseline played effect 255 "because `NOISE` refuses it", and `NOISE`
+does not -- `SOUX6` masks the number to 127 and reads every effect table at 127, which is the byte
+after the tables on the 6502 and a subscript past sixteen entries here. Release rendered garbage
+and hashed it as silence; Debug asserted. The baseline renders with nothing played now. Two crashes
+in one Debug run of a suite CI runs in Release: the Debug build of the tests is compiled and never
+run (AGENTS.md §6), and this is what that costs.
 
 ### 6.157 The death sequence was corrupt because a seam nobody implemented, and the carry it waited for was never LOIN's
 
@@ -6752,7 +6787,8 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
-| 2026-09-06 | **`OUCH` indexed past a typed hold** (§6.158). The Debug suite run for §6.157 died in `TheDamageMatchesOOPS`: `QQ20,X` runs to twenty-one on purpose, into the five fittings after the hold, and M1-d's `std::array<std::uint8_t, 17>` turned every one of them into an out-of-range subscript -- an assertion in Debug, the right bytes by accident in Release, which is why CI stayed green. `Commander::HoldOrFitting` is the indexed load now, in the routine and in both `OUCH` tests. |
+| 2026-09-06 | **The hyperspace key was never connected** (§6.159). `TT102` reaches `hyp` on `BIT KLO+HINT` -- H held on the matrix, not H as the key pressed -- so `ActionForKey` takes the held flag as an argument, and `Main.cpp`'s `PressKey` passed it as a literal `false`. `Window::Held(KEY_HYPERSPACE)` now, read live at dispatch as `JumpOf` reads CTRL. The original has no refusal near the station: docked, a running countdown, the same system and out of range are the four. |
+| 2026-09-06 | **`OUCH` indexed past a typed hold** (§6.158). The Debug suite run for §6.157 died in `TheDamageMatchesOOPS`: `QQ20,X` runs to twenty-one on purpose, into the five fittings after the hold, and M1-d's `std::array<std::uint8_t, 17>` turned every one of them into an out-of-range subscript -- an assertion in Debug, the right bytes by accident in Release, which is why CI stayed green. `Commander::HoldOrFitting` is the indexed load now, in the routine and in both `OUCH` tests. The same run then died in the synthesiser render test, whose silence baseline played effect 255 on the belief that `NOISE` refuses it; `SOUX6` masks it to 127 and reads the tables there. The baseline plays nothing now. |
 | 2026-09-06 | **The death sequence was corrupt, and every explosion with it** (§6.157). The owner died and saw the title screen with coloured blocks down both borders: line bytes landing in screen RAM from rows past the bottom of the bitmap. The wreckage pieces were replaying, as lines, the `XX3` vertices that a neighbour's explosion had written across their heaps -- because `LL9`'s `EE55` block, which seeds a cloud's six bytes, had been a seam with nothing behind it since slice 3b, and `DOEXP` ran its vertex copy from an unseeded zero down through 255. §6.91's reason for the seam was wrong: the first `DORND`'s carry is `EE51`'s exit, a `CMP`'s, not `LOIN`'s. The block is `LL9`'s code now, `EraseShip` and `Anger` return their exit carries, part 11 derives the flag at `MA8` along its four paths, and the whole-frame harness compares the seeded bytes and the generator it used to skip -- which found the scooped canister's `.oily DORND` running on a clear carry where `CPX #OIL / BEQ` leaves a set one. Replay record re-taken from step 200 (rule 1, second case). Four tests added or widened; 394 green with the oracle present. |
 | 2026-09-06 | **The last things anybody could do without a person** (§6.156). **The corpus's last two mutation survivors are closed**: `hyp-253`'s sweep rolled 252 — one below a boundary that only 253 separates — and `hyp-ctrl-and` hid behind a sentence in its own test saying an interpreter cannot answer `JSR CTRL`, when `CTRL` is `LDX #6` into `LDA KEYLOOK,X / TAX / RTS`. Every recorded mutant is now caught or a proved equivalent. **The three visual sign-offs did not need goldens**: `TheTitleMatchesTITLE` compares the whole bitmap over 48 cases, `TheLaunchMatchesTT110` the same, and the dashboard, planet and stardust suites carry twenty-one more — a stored hash would be strictly weaker than an oracle comparison that runs on both legs. What the sign-offs were about is the PRESENTER, which is not `GameLogic` and is a much smaller surface than the worry had attached itself to. **The sound really did have nothing**, so sixteen effects are rendered and hashed — and the first run produced sixteen identical hashes, because **`SOINT` never writes the master volume**: `COLD` and `BDENTRY` do, the port has neither, and the executable is audible only because the title screen plays music first. `SoundOutput` writes it now. **The rule: a gap recorded about tests nobody has re-read is a guess too, and it is usually pessimistic.** |
 | 2026-09-06 | **Slice 4f: the energy bomb, and a third of a decision that was about nothing** (§6.155). `COMIRQ1`'s VIC-II half, which §6.154 found decided and unbuilt. **`HFX` is not in this build**: upstream's `hfx.asm` says the flag is unused in this version, `DOHFX` has both instructions commented out in the original source, the C64's `LL164` does not write it and its `COMIRQ1` does not read it — so ADR-005 §1 scheduled a per-row shift of the space view that the shipped game never had, and the grouping came from §6.98 naming three bytes together because they sit together. **And `welcome` is not the border**: `VIC+&21` is background colour 0, inside the image, supplying `%00` — so all of this landed in `Resolve` and none in the presenter, the opposite of what the ADR apportioned. What the bomb IS: `moonflower` bit 4 puts the space view into multicolour, so the same bytes decode as four two-bit codes instead of eight one-bit pixels, and `welcome` is the background it flashes — incremented ABOVE the split test, so twice a frame. Compared on the SEQUENCE of VIC writes over 256 interrupts, matched first time; nine mutants, nine caught. `shango`'s `51 + 143` confirms `DASHBOARD_CELL_ROW`. **And the same false claim had been made twice more**: `VideoState.h` said VIC+&1C is never written, so the compositor read a sprite's mode off its definition -- and `santana` and `lotus` are how the original keeps the explosion out of the dashboard, by making it single-colour in colour 0 down there rather than by clipping it. The port had the burst invisible everywhere, and two defects that cancel are harder to see than either alone. **The rule: a decision recorded about code nobody has read is a guess with a date on it — and "nothing writes this register" is the claim to distrust hardest, because the code that would use it cannot falsify it.** |
