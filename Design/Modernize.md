@@ -1205,3 +1205,9 @@ it needs a name, and the equipment bytes carry three different "fitted" values t
 chose. Ratchet: `outpost-elite-names` 226 → 225 (`Elite::Field` left the executable,
 `Elite::CommanderBlock` became `Elite::Commander`), `origin-markers` 3,623 → 3,654 for the field
 labels (rule 4). One mutant re-anchored; the corpus rerun follows.
+
+**2026-09-06 — M1-d closed on the mutants.** 65 mutants on the typed-commander tree: 61 caught, 4
+survived, the four the recorded equivalents — the fifth run of M0-d's tally, with `mi-tally`
+reading `kills.hi` against `kills.lo` and caught by the mission's `TALLY+1` compare as before.
+Rule 3 is met; M1-e — the parsed `Blueprint` table, `XX0` as a pointer to one, the station's
+self-modified entry as `Bubble::stationType` — is next.
