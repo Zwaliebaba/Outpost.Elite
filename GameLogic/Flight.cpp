@@ -420,9 +420,9 @@ namespace Elite
       screen.work.x.lo = 0u;
       screen.work.y.lo = 0u;
 
-      // 6502: JSR LL9.
+      // 6502: JSR LL9 -- the title's ship is never killed, so the carry it is reached with goes unread.
       DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
-               screen.bubble.blocks[slot], loop.heap, *screen.flight.blueprint, screen.flight.type, loop.drawing);
+               screen.bubble.blocks[slot], loop.heap, *screen.flight.blueprint, screen.flight.type, loop.drawing, screen.rng, false);
 
       // 6502: JSR RDKEY / DEC MCNT.
       const TitleKey scan = _title.effects.ScanTitleKeys(_title.keys);
@@ -651,7 +651,8 @@ namespace Elite
        * is what the port did until the oracle disagreed about the planet's speed byte.
        */
       DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work,
-               screen.bubble.blocks[abandoned.slot], _loop.heap, *screen.flight.blueprint, screen.flight.type, _loop.drawing);
+               screen.bubble.blocks[abandoned.slot], _loop.heap, *screen.flight.blueprint, screen.flight.type, _loop.drawing, screen.rng,
+               false); // the pod is never killed, so the carry goes unread
       --screen.work.ai;
     }
 

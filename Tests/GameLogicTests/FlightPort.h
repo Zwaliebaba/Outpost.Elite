@@ -197,9 +197,9 @@ namespace GameLogicTests
                                    universe.flight.blueprint)
         .created;
     }
-    void Anger(std::uint8_t _slot, Elite::ShipType _type) override
+    bool Anger(std::uint8_t _slot, Elite::ShipType _type) override
     {
-      Elite::Anger(universe.bubble, universe.flight, _slot, _type);
+      return Elite::Anger(universe.bubble, universe.flight, _slot, _type);
     }
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
     {
@@ -225,7 +225,6 @@ namespace GameLogicTests
       Elite::DrawExplosionCloud(universe.canvas, universe.draw, universe.math, universe.rng, universe.work, heap, universe.geometry,
                                 universe.bubble, *this);
     }
-    void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override {}
 
     // ---- Elite::ControlEffects ------------------------------------------------------------------
 

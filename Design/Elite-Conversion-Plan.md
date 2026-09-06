@@ -140,7 +140,7 @@ is preserved in the history and was true then.
   `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
   WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
   docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->392 tests in <!--count:test-files-->56 files: the 6502 interpreter with its cycle counter and
+- `Tests/GameLogicTests/` — <!--count:tests-->394 tests in <!--count:test-files-->56 files: the 6502 interpreter with its cycle counter and
   its in-order store log, the oracle fixture over the assembled game and the loader, and the
   suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
@@ -509,6 +509,67 @@ coverage ledger and an unreliable dependency graph, because its rows were writte
 routines are *about* rather than from what they *touch*. Before phases 3 and 4 are planned as
 sittings, one pass over the ledger asking only "what does this read?" would be worth more than
 any amount of re-sequencing.
+
+### 6.157 The death sequence was corrupt because a seam nobody implemented, and the carry it waited for was never LOIN's
+
+The owner died in the game and saw the "energy low" message, then the title screen -- with coloured
+blocks down both borders. The blocks were the diagnosis. They sat in screen RAM at cell offsets a
+pixel write lands on when its y is 208 or more: `ylookup` carries entries past the bottom of the
+bitmap, so a line drawn at row 222 lands in the colour cells of the title screen, and `TT66` never
+clears the four margin columns. Something in the death sequence was drawing lines below the screen.
+
+A frame-by-frame dump of `Die` through the real fixture (`FlightPort`) showed two faults at once:
+the wreckage was never erased, so it piled up, and long diagonal lines crossed the whole view. A
+write hook with a stack trace put every stray byte in `DrawShipLines` -- replaying a piece's line
+heap -- and the heap dump said why: the piece flagged exploding had a count of zero, and the piece
+whose heap began exactly twenty-one bytes above it held `(0,222)-(255,72)`, `(0,82)-(0,44)`,
+`(0,87)-(0,69)`: not lines but `XX3`, the projected vertices, with a cloud size in byte 0.
+
+**`DOEXP` was running on a cloud nobody had seeded.** Slice 3b left `LL9`'s `EE55` block -- `LDY
+#1 / LDA #18 / STA (XX19),Y / LDY #7 / LDA (XX0),Y / LDY #2 / STA (XX19),Y / .EE55 INY / JSR DORND /
+STA (XX19),Y / CPY #6 / BNE EE55` -- behind `ShipDrawEffects::SeedExplosionCloud`, and `FlightSession`'s
+implementation was three `(void)` casts (§6.91). With byte 2 never written, `DOEXP`'s vertex copy
+read it as zero, ran from index 0 down through 255 to 7, and wrote two hundred and fifty bytes of
+`XX3` upward across every heap above the dying ship's. Every explosion in the game had been doing
+this since 4b-b; the death sequence, with five pieces packed twenty-one bytes apart and half of them
+spawned dead, was where it became a picture.
+
+**And §6.91's reason for the seam was wrong.** It held that the first `DORND` runs on "a carry that
+comes out of `LOIN`", which the port could not know. It runs on the carry `EE51` RETURNS, and `EE51`
+is `LL155`, which ends `INY / CPY XX20 / BCC LL27 / RTS`: the compare that ends the loop leaves the
+flag SET whatever the line drawing did, `CMP #4 / BCC LL82` leaves it CLEAR for a heap with no
+line on it, and a ship not on the screen returns through a bare `RTS` with the flag `JSR LL9` was
+reached with. That last one is part 11's: `BCC MA8` clear when `HITCH` misses; `HITCH`'s set when it
+hits and nothing follows; `NOISE`'s exit (§6.86) when `BEEP` sounds for a missile lock, because
+`ABORT2` and `MSBAR` are stores and register moves; and `ANGRY`'s exit when the laser fired, which is
+a `CMP`'s every time -- `CMP #SST` for the station and for a ship with no AI byte, `CMP #CYL`
+against `TYPE` for one with. The other three `DORND`s run on `CPY #6`'s clear. None of it is
+`LOIN`'s, and none of it needed the thirty-two unrolled copies.
+
+**What changed.** `SeedExplosionCloud` is `LL9`'s own code in `ShipDraw.cpp`; the seam is gone and
+`DrawShip` takes the generator and the carry it was reached with. `EraseShip` returns its exit
+carry. `Anger` returns its exit carry, and so does the `FlightLoopEffects` seam that reaches it.
+Part 11 derives the flag at `MA8` along the four paths above. `ErasingAShipMatchesEE51` compares
+the carry on both heaps and both inputs; `TheCloudSeedsLikeEE55` finds the block fourteen bytes
+before `EE55`, checks every byte of it, and compares the six heap bytes and the generator on both
+carries; `TheAngerMatchesANGRY` compares the exit flag on all 450 cases; and
+`TheWreckageStaysInsideTheSpaceView` runs the death through `FlightPort` and asserts, every frame,
+that no piece has more on its heap than its blueprint allows and that nothing outside the space
+view's cells changes.
+
+**Two things the tightened comparison then found.** The whole-frame harness had trapped `ANGRY` and
+skipped the six seeded bytes and the generator on any frame that seeded a cloud; both exclusions
+are gone, `ANGRY` runs on both sides, and "on top of us with scoops" immediately disagreed on `RAND`.
+The scooped canister's `.oily JSR DORND` is reached only by `CPX #OIL / BEQ oily`, and a compare
+that finds its operand equal SETS the carry; the port passed a clear one, on a frame the comparison
+had never looked at because a cloud was seeded on it. Fixed, and the replay record moved from step
+200 -- the scripted flight's first kill seeds a cloud now -- which is rule 1's second case: the port
+was wrong, and the record follows the fix.
+
+**The point worth keeping** is §6.91's own, turned round: a seam scoped before the thing behind it
+existed has to be revisited once it does (§6.73), and a comparison that excludes something by name
+is still a hole -- the difference is only that this one could be seen, and it took a player dying
+to look through it.
 
 ### 6.156 The last things anybody could do without a person, and what they found
 
@@ -3422,6 +3483,10 @@ side of the cloud — is still compared. Closing it means giving `LOIN` an exit 
 **The point worth keeping**: an unclosed seam is a hole in a comparison whether or not the
 comparison mentions it, and the difference between the two is entirely whether anyone can see the
 hole later.
+
+**Superseded 2026-09-06 (§6.157).** The premise was wrong: the carry is not `LOIN`'s but `EE51`'s,
+and `EE51` ends in a compare. The seam is closed, the exclusion is gone, and what the hole had been
+hiding was every explosion in the game writing across its neighbours' heaps.
 
 ### 6.90 A blueprint pointer that is not reset per ship
 
@@ -6667,6 +6732,7 @@ nothing is pushed to a public remote before it closes. See ADR-001 §5 and Risk 
 
 | Date | Change |
 |---|---|
+| 2026-09-06 | **The death sequence was corrupt, and every explosion with it** (§6.157). The owner died and saw the title screen with coloured blocks down both borders: line bytes landing in screen RAM from rows past the bottom of the bitmap. The wreckage pieces were replaying, as lines, the `XX3` vertices that a neighbour's explosion had written across their heaps -- because `LL9`'s `EE55` block, which seeds a cloud's six bytes, had been a seam with nothing behind it since slice 3b, and `DOEXP` ran its vertex copy from an unseeded zero down through 255. §6.91's reason for the seam was wrong: the first `DORND`'s carry is `EE51`'s exit, a `CMP`'s, not `LOIN`'s. The block is `LL9`'s code now, `EraseShip` and `Anger` return their exit carries, part 11 derives the flag at `MA8` along its four paths, and the whole-frame harness compares the seeded bytes and the generator it used to skip -- which found the scooped canister's `.oily DORND` running on a clear carry where `CPX #OIL / BEQ` leaves a set one. Replay record re-taken from step 200 (rule 1, second case). Four tests added or widened; 394 green with the oracle present. |
 | 2026-09-06 | **The last things anybody could do without a person** (§6.156). **The corpus's last two mutation survivors are closed**: `hyp-253`'s sweep rolled 252 — one below a boundary that only 253 separates — and `hyp-ctrl-and` hid behind a sentence in its own test saying an interpreter cannot answer `JSR CTRL`, when `CTRL` is `LDX #6` into `LDA KEYLOOK,X / TAX / RTS`. Every recorded mutant is now caught or a proved equivalent. **The three visual sign-offs did not need goldens**: `TheTitleMatchesTITLE` compares the whole bitmap over 48 cases, `TheLaunchMatchesTT110` the same, and the dashboard, planet and stardust suites carry twenty-one more — a stored hash would be strictly weaker than an oracle comparison that runs on both legs. What the sign-offs were about is the PRESENTER, which is not `GameLogic` and is a much smaller surface than the worry had attached itself to. **The sound really did have nothing**, so sixteen effects are rendered and hashed — and the first run produced sixteen identical hashes, because **`SOINT` never writes the master volume**: `COLD` and `BDENTRY` do, the port has neither, and the executable is audible only because the title screen plays music first. `SoundOutput` writes it now. **The rule: a gap recorded about tests nobody has re-read is a guess too, and it is usually pessimistic.** |
 | 2026-09-06 | **Slice 4f: the energy bomb, and a third of a decision that was about nothing** (§6.155). `COMIRQ1`'s VIC-II half, which §6.154 found decided and unbuilt. **`HFX` is not in this build**: upstream's `hfx.asm` says the flag is unused in this version, `DOHFX` has both instructions commented out in the original source, the C64's `LL164` does not write it and its `COMIRQ1` does not read it — so ADR-005 §1 scheduled a per-row shift of the space view that the shipped game never had, and the grouping came from §6.98 naming three bytes together because they sit together. **And `welcome` is not the border**: `VIC+&21` is background colour 0, inside the image, supplying `%00` — so all of this landed in `Resolve` and none in the presenter, the opposite of what the ADR apportioned. What the bomb IS: `moonflower` bit 4 puts the space view into multicolour, so the same bytes decode as four two-bit codes instead of eight one-bit pixels, and `welcome` is the background it flashes — incremented ABOVE the split test, so twice a frame. Compared on the SEQUENCE of VIC writes over 256 interrupts, matched first time; nine mutants, nine caught. `shango`'s `51 + 143` confirms `DASHBOARD_CELL_ROW`. **And the same false claim had been made twice more**: `VideoState.h` said VIC+&1C is never written, so the compositor read a sprite's mode off its definition -- and `santana` and `lotus` are how the original keeps the explosion out of the dashboard, by making it single-colour in colour 0 down there rather than by clipping it. The port had the burst invisible everywhere, and two defects that cancel are harder to see than either alone. **The rule: a decision recorded about code nobody has read is a guess with a date on it — and "nothing writes this register" is the claim to distrust hardest, because the code that would use it cannot falsify it.** |
 | 2026-09-06 | **R6 signed off by the owner: the synthesiser has been heard and it works.** The last risk that was open on evidence rather than on work. Slice 5a's accept asked for an audible comparison against VICE and 0b-b cancelled VICE, so the only evidence available was a person listening — the same standing as 2e, 3b and 3c, and stated as such rather than dressed up. It settles that `SidSynth` plays the game's sounds and that they are right; it does not settle that they match a 6581 or an 8580, since neither was playing beside it and no filter is implemented. **No render was captured, so CI cannot hear a regression** — the same hole the three visual sign-offs have, and a hashed reference render of the sixteen effects is the cheap way to close it. |

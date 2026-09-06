@@ -54,14 +54,14 @@
       "slice": "M0-a"
     },
     "carry-params": {
-      "ceiling": 28,
+      "ceiling": 31,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "death-sequence fix 2026-09-06 (plan 6.157): EE51, EE55 and LL9 carry their input flag"
     },
     "mutants": {
-      "ceiling": 65,
+      "ceiling": 72,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "death-sequence fix 2026-09-06 (plan 6.157): the cloud-seed unit, seven mutants"
     },
     "inventory-stale-files": {
       "ceiling": 21,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3705,
+      "ceiling": 3718,
       "slack": 0,
-      "slice": "M1-f"
+      "slice": "death-sequence fix 2026-09-06 (plan 6.157): the EE55 block and the carries it reads, labelled"
     },
     "oracle-test-files": {
       "ceiling": 50,

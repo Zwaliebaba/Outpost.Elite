@@ -918,7 +918,11 @@ namespace Elite
 
         if (type == ShipType::Canister)
         {
-          item = static_cast<std::uint8_t>(screen.rng.Next(false).value & 7u); // 6502: oily
+          // 6502: .oily JSR DORND / AND #7 -- and the carry it rolls in is SET, because the only way
+          // here is `CPX #OIL / BEQ oily`, and a compare that finds its operand equal sets it. The
+          // port passed a clear one until 2026-09-06, hidden behind a comparison that skipped the
+          // generator on every frame that also seeded a cloud (§6.157).
+          item = static_cast<std::uint8_t>(screen.rng.Next(true).value & 7u);
         }
         else
         {
@@ -1075,17 +1079,29 @@ namespace Elite
 
       bool drawIt = true;
 
+      /*
+       * The carry `JSR LL9` is reached with, which `LL9` reads on exactly one path: a ship that
+       * arrives killed, not yet exploding and not on the screen seeds its cloud's first `DORND` on
+       * it (§6.157). Every arrival at `MA8` is traced below, and each one is a flag some routine
+       * left rather than one this part sets.
+       */
+      bool carry = false; // 6502: BCC MA8 -- not in the sights, and `HITCH` cleared it saying so
+
       if (screen.view == 0u) // 6502: LDA QQ11 / BNE MA15 -- a chart means no drawing at all
       {
         FlipAxesForView(screen.work, screen.flight, screen.spaceView); // 6502: JSR PLUT
 
         if (IsHit(screen.work, screen.math, *screen.flight.blueprint, type)) // 6502: JSR HITCH / BCC MA8
         {
+          carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it
+
           // 6502: LDA MSAR / BEQ MA47 / JSR BEEP / LDX XSAV / LDY #RED2 / JSR ABORT2 -- an armed
-          // missile locks onto whatever the sights are on, and the indicator turns red.
+          // missile locks onto whatever the sights are on, and the indicator turns red. `BEEP` is
+          // `NOISE`, whose exit carry is the answer here (§6.86); `ABORT2` and `MSBAR` are stores
+          // and register moves and leave it alone.
           if (screen.status.missileArmed != 0u)
           {
-            (void)_loop.effects.PlaySound(SOUND_BEEP, false);
+            carry = _loop.effects.PlaySound(SOUND_BEEP, false);
             SetMissileTarget(screen.canvas, screen.bubble, screen.status.missileArmed, commander.missiles, screen.flight.slot,
                              MISSILE_LOCKED);
           }
@@ -1100,8 +1116,9 @@ namespace Elite
             }
 
             // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too. INF
-            // is this ship's block here, the one the loop is on, so the slot is XSAV's.
-            _loop.effects.Anger(screen.flight.slot, type);
+            // is this ship's block here, the one the loop is on, so the slot is XSAV's. Every laser
+            // path ends in this call, so its exit carry is the one `LL9` gets.
+            carry = _loop.effects.Anger(screen.flight.slot, type);
           }
         }
       }
@@ -1114,7 +1131,7 @@ namespace Elite
       if (drawIt)
       {
         DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work, block, _loop.heap,
-                 *screen.flight.blueprint, type, _loop.drawing);
+                 *screen.flight.blueprint, type, _loop.drawing, screen.rng, carry);
       }
 
       /*

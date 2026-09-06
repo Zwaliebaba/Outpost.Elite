@@ -120,7 +120,7 @@ namespace Outpost
     void StartDockingMusic() override;
     void StopDockingMusic() override;
     [[nodiscard]] bool SpawnAhead(Elite::ShipType _type) override;
-    void Anger(std::uint8_t _slot, Elite::ShipType _type) override;
+    bool Anger(std::uint8_t _slot, Elite::ShipType _type) override;
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override;
 
     // ---- Elite::ShipEffects and Elite::ShipDrawEffects ------------------------------------------
@@ -128,7 +128,6 @@ namespace Outpost
     [[nodiscard]] bool RunTactics(Elite::Ship& _work) override;
     void DrawPlanetOrSun() override;
     void DrawExplosion() override;
-    void SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint8_t _explosionCount) override;
 
     /*
      * 6502: RDKEY, once, into whichever logger the caller owns.

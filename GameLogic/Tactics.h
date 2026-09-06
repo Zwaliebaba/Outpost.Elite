@@ -137,8 +137,13 @@ namespace Elite
    * whatever the loop last moved in `TYPE`, so which ships turn hostile after a missile lock
    * depends on loop state the caller never set. The port keeps both bytes separate because the
    * original does (§6.121).
+   *
+   * RETURNS THE CARRY IT EXITS WITH, which is a `CMP`'s every time and which part 11 of the flight
+   * loop hands to `LL9` (§6.157): `CMP #SST` leaves it SET for the station and set for any type
+   * above it, clear for one below; a ship with no AI byte returns on that; one with an AI byte runs
+   * `ASL A` on the 2 it just stored -- CLEAR -- and then `CMP #CYL` against `TYPE`, the loop's byte.
    */
-  void Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, ShipType _type) noexcept;
+  bool Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, ShipType _type) noexcept;
 
   // ---- slice 4a-c: the AI, and the autopilot that shares its tail ------------------------------
 

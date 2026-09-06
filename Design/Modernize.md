@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->392 tests, oracle present), all <!--count:checks-->twelve repository checks pass,
+(<!--count:tests-->394 tests, oracle present), all <!--count:checks-->twelve repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -236,7 +236,7 @@ Three instruments are in place and every slice below leans on them:
 - **The whole-bitmap comparisons**: `TITLE`, `TT110`, the dashboard, the planet and the stardust
   suites compare the whole `SCBASE` region byte for byte. They see composition where the per-routine
   tests see routines.
-- **The mutants**: <!--count:mutants-->65 recorded edits in seven files, each anchored to a line of
+- **The mutants**: <!--count:mutants-->72 recorded edits in nine files, each anchored to a line of
   source that must match exactly once, each expected to be caught. `mutate.py --check` runs in CI;
   the run itself works through the portable runner on Linux (`--runner portable`).
 
@@ -334,13 +334,13 @@ screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making 
 would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->18 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
 
-**P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->28 `bool
+**P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->31 `bool
 _carryIn` parameters in headers. Inside the kernel (`AddWithCarry`, `Rng::Next`, the multipliers)
 they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThargoidPair`,
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,705 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,718 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1336,3 +1336,16 @@ which this branch had already renamed to `universe` — and the suite was 392 of
 tree before the M1-f work was put back. It moved one count: `main-lines` 1,162 → 1,199, the
 thirty-seven lines the pacing adds to `Main.cpp`. That is the product moving, not a pattern
 coming back, so the ceiling follows it and says so in `slice`; M3 is the slice that takes it down.
+
+**2026-09-06 — The death sequence fix (plan §6.157) moved two counts, and the replay record.**
+`carry-params` 28 → 31: `EraseShip`, `SeedExplosionCloud` and `DrawShip` carry the flag `LL9` is
+reached with, because a newly killed ship's cloud is seeded on it -- a 6502 flag that is live
+across a routine boundary, which is what P11 counts, and which M2's explicit-convention pass will
+fold into a result the way §4.3 folds the others. `origin-markers` 3,705 → 3,718: the `EE55` block
+is `LL9`'s code now and labelled, as rule 4 requires until M6-e. `effects-seams` did not move:
+`SeedExplosionCloud` left `ShipDrawEffects`, but the class still has two pure virtuals. The replay
+record moved from step 200 under rule 1's second case -- the port was wrong: no cloud had ever been
+seeded, and the scripted flight's first kill seeds one now -- and the journal entry names it.
+`mutants` 65 → 72: the `cloud-seed` unit, a selftest and six flags, one per decision the fix made
+(rule 3); the tally is the next run's to report, because `mutate.py` builds HEAD and the fix is
+uncommitted as this is written.

@@ -70,19 +70,19 @@ namespace GameLogicTests
       {0, 0x7d05eea054298f60ull},    // launched from Lave
       {40, 0xb62a1b4cc0eb5509ull},   // coasted
       {100, 0xf9dd621d29fe1c4dull},  // at full speed
-      {200, 0x2124aa80a9f83807ull},
-      {300, 0xb5ff59dd57ed935full},
-      {340, 0x3970ef16567c2cfeull},  // the Viper fought
-      {342, 0x93f5b89f015f14c7ull},  // the docking computer engaged
-      {400, 0x02c6ef29689d6a59ull},
-      {500, 0x7cfe0a648c1a1e83ull},
-      {600, 0x7c54d7c3b68de16aull},
-      {700, 0x21df97e3358bb4d3ull},
-      {800, 0xad3ad6aa75305601ull},
-      {900, 0x6b4f297ade060b03ull},
-      {1000, 0xf1d4082bd5fb6232ull},
-      {1100, 0xe7711095b11e9841ull},
-      {1170, 0x55d3f2f9c30e9a47ull}, // docked
+      {200, 0x79cf7c2053860154ull},  // re-taken 2026-09-06 (§6.157)
+      {300, 0x3aeedfd85df734d5ull},
+      {340, 0x3bad2c109437025cull},  // the Viper fought
+      {342, 0x57e6af3388f0d307ull},  // the docking computer engaged
+      {400, 0x9f74d262265bb987ull},
+      {500, 0x1adca3f73b7ae235ull},
+      {600, 0x955f5e32f8e1fe3eull},
+      {700, 0x5f367374dd2f5c8dull},
+      {800, 0x322a179f2024f781ull},
+      {900, 0x54fa19b2fb1538a5ull},
+      {1000, 0x42025ac553b121cbull},
+      {1100, 0x2a756dbb4e60db77ull},
+      {1170, 0x7bba73354ced21d0ull}, // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;

@@ -677,38 +677,155 @@ namespace GameLogicTests
 
       const std::vector<std::uint8_t> lines = {12, 30, 30, 90, 30, 90, 30, 90, 90, 30, 90, 30, 30};
 
+      // A heap with nothing on it, for `LL155`'s `CMP #4 / BCC LL82` -- the one exit that clears
+      // the carry rather than setting it.
+      const std::vector<std::uint8_t> empty = {0};
+
       std::uint32_t cases = 0;
       std::uint32_t erased = 0;
-      for (const std::uint8_t state : {0x00, 0x08, 0x07, 0x0F, 0xF7, 0xFF})
+      for (const std::vector<std::uint8_t>* heapBytes : {&lines, &empty})
       {
-        Cpu6502 cpu = oracle.Fresh();
-        Elite::Canvas canvas;
-        Elite::DrawWorkspace draw;
-        Elite::LineHeap heap;
-        Elite::Ship ship;
+        for (const bool carryIn : {false, true})
+        {
+          for (const std::uint8_t state : {0x00, 0x08, 0x07, 0x0F, 0xF7, 0xFF})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            Elite::Canvas canvas;
+            Elite::DrawWorkspace draw;
+            Elite::LineHeap heap;
+            Elite::Ship ship;
 
-        SeedHeap(cpu, heap, lines);
-        cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
-        cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-        cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = state;
-        ship.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
-        ship.state = state;
+            SeedHeap(cpu, heap, *heapBytes);
+            cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
+            cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
+            cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = state;
+            ship.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
+            ship.state = state;
 
-        const Elite::Testing::RunResult run = cpu.CallSubroutine(ee51, 500'000);
-        Assert::IsTrue(run.completed, L"EE51 returned");
+            cpu.c = carryIn;
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(ee51, 500'000);
+            Assert::IsTrue(run.completed, L"EE51 returned");
 
-        Elite::EraseShip(canvas, draw, ship, heap);
+            const bool carry = Elite::EraseShip(canvas, draw, ship, heap, carryIn);
 
-        const std::wstring where = L"EE51 state " + std::to_wstring(state);
-        CompareScreens(cpu, screenBase, canvas, where);
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship.state,
-                         (where + L": INWK+31").c_str());
-        erased += ((state & 0x08u) != 0u) ? 1u : 0u;
-        ++cases;
+            const std::wstring where = L"EE51 state " + std::to_wstring(state) + L" heap " + std::to_wstring(heapBytes->size()) +
+                                       L" carry in " + std::to_wstring(carryIn);
+            CompareScreens(cpu, screenBase, canvas, where);
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship.state,
+                             (where + L": INWK+31").c_str());
+
+            // The exit carry is `LL9`'s input to the cloud seeding (§6.157): the caller's when there
+            // was nothing to erase, `CPY XX20`'s when there was, `CMP #4`'s when the heap was bare.
+            Assert::AreEqual(cpu.c, carry, (where + L": the exit carry").c_str());
+
+            erased += ((state & 0x08u) != 0u) ? 1u : 0u;
+            ++cases;
+          }
+        }
       }
 
-      Assert::AreEqual<std::uint32_t>(6u, cases, L"every state ran");
-      Assert::AreEqual<std::uint32_t>(3u, erased, L"three of the six had something to erase");
+      Assert::AreEqual<std::uint32_t>(24u, cases, L"every state ran, with both heaps and both carries");
+      Assert::AreEqual<std::uint32_t>(12u, erased, L"half of them had something to erase");
+    }
+
+    /*
+     * 6502: the six instructions after `JSR EE51` and the `EE55` loop -- a newly killed ship's
+     * cloud, seeded onto its line heap.
+     *
+     * The block has no label of its own, so it is found from `EE55` backwards: fourteen bytes,
+     * `LDY #1 / LDA #18 / STA (XX19),Y / LDY #7 / LDA (XX0),Y / LDY #2 / STA (XX19),Y`, and the
+     * test checks every one of them before trusting the address. It runs to `EE28` because the
+     * block ends by falling into it. Both carries, because the first `DORND` rolls the one `EE51`
+     * left in and the other three run on `CPY #6`'s clear -- a port that fed all four the same flag
+     * would agree on one carry and not the other (§6.157).
+     */
+    TEST_METHOD(TheCloudSeedsLikeEE55)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t ee55 = oracle.Label("EE55");
+      const std::uint16_t ee28 = oracle.Label("EE28");
+      const std::uint16_t xx19 = oracle.Label("XX19");
+      const std::uint16_t xx0 = oracle.Label("XX0");
+      const std::uint16_t rand = oracle.Label("RAND");
+
+      constexpr std::uint16_t BLOCK_BYTES = 14;
+      constexpr std::uint16_t BLUEPRINT_AT = 0x0200; // any page the block never touches: only `(XX0),7` is read
+      const std::uint16_t start = static_cast<std::uint16_t>(ee55 - BLOCK_BYTES);
+
+      {
+        const Cpu6502 cpu = oracle.Fresh();
+        const std::uint8_t expected[BLOCK_BYTES] = {0xA0u, 0x01u,
+                                                    0xA9u, 0x12u,
+                                                    0x91u, static_cast<std::uint8_t>(xx19),
+                                                    0xA0u, 0x07u,
+                                                    0xB1u, static_cast<std::uint8_t>(xx0),
+                                                    0xA0u, 0x02u,
+                                                    0x91u, static_cast<std::uint8_t>(xx19)};
+        for (std::uint16_t byte = 0; byte < BLOCK_BYTES; ++byte)
+        {
+          Assert::AreEqual(expected[byte], cpu.memory[static_cast<std::uint16_t>(start + byte)],
+                           (L"the block before EE55, byte " + std::to_wstring(byte)).c_str());
+        }
+      }
+
+      const std::vector<std::uint8_t> lines = {12, 30, 30, 90, 30, 90, 30, 90, 90, 30, 90, 30, 30};
+
+      std::uint32_t cases = 0;
+      for (const bool carryIn : {false, true})
+      {
+        for (const std::uint8_t count : {std::uint8_t{10}, std::uint8_t{22}, std::uint8_t{58}})
+        {
+          for (std::uint32_t seed = 1; seed <= 4u; ++seed)
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            Elite::LineHeap heap;
+            Elite::Rng rng;
+
+            SeedHeap(cpu, heap, lines);
+            cpu.memory[xx19] = HEAP_AT & 0xFFu;
+            cpu.memory[static_cast<std::uint16_t>(xx19 + 1u)] = HEAP_AT >> 8;
+            cpu.memory[xx0] = BLUEPRINT_AT & 0xFFu;
+            cpu.memory[static_cast<std::uint16_t>(xx0 + 1u)] = BLUEPRINT_AT >> 8;
+            cpu.memory[static_cast<std::uint16_t>(BLUEPRINT_AT + 7u)] = count;
+
+            const std::array<std::uint8_t, 4> state = {static_cast<std::uint8_t>(seed * 37u), static_cast<std::uint8_t>(seed * 91u + 5u),
+                                                       static_cast<std::uint8_t>(seed * 13u + 200u), static_cast<std::uint8_t>(seed * 61u)};
+            for (std::size_t byte = 0; byte < state.size(); ++byte)
+            {
+              cpu.memory[static_cast<std::uint16_t>(rand + byte)] = state[byte];
+            }
+            rng.SetState(state);
+
+            cpu.pc = start;
+            cpu.c = carryIn;
+            std::uint32_t steps = 0;
+            while (cpu.pc != ee28)
+            {
+              Assert::IsTrue(cpu.Step(), L"the block ran");
+              Assert::IsTrue(++steps < 1'000u, L"the block reached EE28");
+            }
+
+            Elite::SeedExplosionCloud(heap, Elite::HeapOffset::FromAddress(HEAP_AT), count, rng, carryIn);
+
+            const std::wstring where =
+              L"EE55 carry " + std::to_wstring(carryIn) + L" count " + std::to_wstring(count) + L" seed " + std::to_wstring(seed);
+            CompareHeaps(cpu, heap, where);
+            for (std::size_t byte = 0; byte < state.size(); ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
+                               (where + L": RAND+" + std::to_wstring(byte)).c_str());
+            }
+            ++cases;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(2u * 3u * 4u, cases, L"the whole sweep ran");
     }
 
     /*
@@ -1435,7 +1552,6 @@ namespace GameLogicTests
     public:
       std::uint32_t planets = 0;
       std::uint32_t explosions = 0;
-      std::uint32_t clouds = 0;
 
       void DrawPlanetOrSun() override
       {
@@ -1444,10 +1560,6 @@ namespace GameLogicTests
       void DrawExplosion() override
       {
         ++explosions;
-      }
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override
-      {
-        ++clouds;
       }
     };
   } // namespace
@@ -1594,6 +1706,7 @@ namespace GameLogicTests
             Elite::Ship slot;
             Elite::LineHeap heap;
             CountingDrawEffects effects;
+            Elite::Rng rng; // no placement here is killed, so the seeding never reads it
 
             cpu.AddTrap(doexp);
             cpu.AddTrap(planet);
@@ -1642,7 +1755,8 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ll9, 4'000'000);
             Assert::IsTrue(run.completed, L"LL9 returned");
 
-            Elite::DrawShip(canvas, draw, geometry, math, clip, screen, work, slot, heap, *blueprint, Elite::TypeOf(shipType), effects);
+            Elite::DrawShip(canvas, draw, geometry, math, clip, screen, work, slot, heap, *blueprint, Elite::TypeOf(shipType), effects, rng,
+                            false);
 
             const std::wstring where = Widen("LL9(type=" + std::to_string(shipType) + "): ") + placement.what;
 
@@ -1688,7 +1802,6 @@ namespace GameLogicTests
                                (where + L": XX3+" + std::to_wstring(byte)).c_str());
             }
 
-            Assert::AreEqual<std::uint32_t>(0u, effects.clouds, (where + L": no cloud was seeded").c_str());
             Assert::AreEqual<std::uint32_t>(0u, effects.planets, (where + L": not a planet").c_str());
             Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.trapHits.size()), effects.explosions,
                                             (where + L": the explosion seam agreed").c_str());

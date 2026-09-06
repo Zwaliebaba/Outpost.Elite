@@ -352,18 +352,22 @@ namespace Elite
     }
   }
 
-  void Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, ShipType _type) noexcept
+  bool Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, ShipType _type) noexcept
   {
     Ship& station = _bubble.blocks[1];
 
     // 6502: .AN2 LDA K%+NI%+36 / ORA #%00000100 / STA K%+NI%+36 -- the station is always slot 1,
-    // so this is a fixed address in the original and a fixed index here.
+    // so this is a fixed address in the original and a fixed index here. None of it touches the
+    // carry, so what `CMP #SST` left is what every path out of here still holds.
     const auto angerStation = [&station]() noexcept { station.newb = With(station.newb, NewbBit::Hostile); };
+
+    // 6502: CMP #SST -- and the flag it sets is the routine's exit on two of the three paths.
+    const bool comparedToStation = _type >= ShipType::Station;
 
     if (_type == ShipType::Station)
     {
       angerStation(); // 6502: CMP #SST / BEQ AN2, and AN2 returns -- nothing else happens
-      return;
+      return comparedToStation;
     }
 
     Ship& ship = _bubble.blocks[_slot];
@@ -379,20 +383,23 @@ namespace Elite
     // with no AI byte is left entirely alone: no acceleration, no dive, no hostile flag.
     if (ship.ai == 0u)
     {
-      return;
+      return comparedToStation;
     }
 
     ship.ai = With(ship.ai, AiBit::Active); // 6502: ORA #%10000000 / STA (INF),Y
 
-    // 6502: LDY #28 / LDA #2 / STA (INF),Y / ASL A / LDY #30 / STA (INF),Y.
+    // 6502: LDY #28 / LDA #2 / STA (INF),Y / ASL A / LDY #30 / STA (INF),Y -- and the `ASL` of a 2
+    // clears the carry, which the compare below then overwrites on every path.
     ship.acceleration = ANGRY_ACCELERATION;
     ship.pitchCounter = static_cast<std::uint8_t>(ANGRY_ACCELERATION << 1u);
 
     // 6502: LDA TYPE / CMP #CYL / BCC AN3 -- the LOOP's type byte, not the one in A.
-    if (_flight.type >= ShipType::CobraMk3)
+    const bool comparedToCobra = _flight.type >= ShipType::CobraMk3;
+    if (comparedToCobra)
     {
       ship.newb = With(ship.newb, NewbBit::Hostile);
     }
+    return comparedToCobra; // 6502: .AN3 RTS, on the flag `CMP #CYL` left
   }
 
   bool RunTactics(FlightLoop& _loop, std::uint8_t _slot) noexcept
