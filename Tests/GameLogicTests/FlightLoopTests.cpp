@@ -794,7 +794,7 @@ namespace GameLogicTests
       std::uint16_t las, lasct, lasx, lasy, msar, mstg, ecmp, moonflower;
       std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
-      std::uint16_t ma3, ma18, escape, frs1, angry, startbd, stopbd, noise;
+      std::uint16_t ma3, ma18, escape, startbd, stopbd, noise;
       std::uint16_t mainLoop, death, doentry, doexp, planet, sfs1, noise2;
       std::uint16_t setl1, dovdu19, slsp;
 
@@ -828,8 +828,6 @@ namespace GameLogicTests
 
         ma3 = _oracle.Label("MA3");
         escape = _oracle.Label("ESCAPE");
-        frs1 = _oracle.Label("FRS1");
-        angry = _oracle.Label("ANGRY");
         startbd = _oracle.Label("startbd");
         stopbd = _oracle.Label("stopbd");
         noise = _oracle.Label("NOISE");
@@ -868,15 +866,12 @@ namespace GameLogicTests
       std::vector<std::uint8_t>& soundCarries;
       std::vector<Pitched> pitched;
       std::vector<std::uint8_t> stopped;
-      std::vector<std::uint8_t> spawned;
       std::uint32_t musicStarts = 0;
       std::uint32_t musicStops = 0;
 
-      /// What `FRS1` answers -- carry set for "there was room", clear for a full bubble.
-      bool spawnSucceeds = true;
-
-      /// The bubble `ANGRY` writes and the loop byte it reads: the routine RUNS here, on both sides
-      /// of the comparison, because `LL9` reads the carry it exits with (§6.157).
+      /// The bubble the sounds are recorded beside. `FRS1` and `ANGRY` were seams on this object
+      /// until M3-b-1d and are calls into `GameLogic` now, so what they write is compared through
+      /// the ship blocks like everything else.
       Universe& universe;
 
       RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries, Universe& _universe) noexcept
@@ -910,18 +905,6 @@ namespace GameLogicTests
       void StopDockingMusic() override
       {
         ++musicStops;
-      }
-      bool SpawnAhead(Elite::ShipType _type) override
-      {
-        spawned.push_back(Elite::Byte(_type));
-        return spawnSucceeds;
-      }
-      bool Anger(std::uint8_t _slot, Elite::ShipType _type) override
-      {
-        // 6502: ANGRY, for real -- it was trapped on the oracle and recorded here until 2026-09-06,
-        // and a trap's exit carry is whatever the caller had, which is not what the routine leaves
-        // for `LL9` (§6.157). Its writes are compared through the ship blocks like everything else.
-        return Elite::Anger(universe.bubble, universe.flight, _slot, _type);
       }
       bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
       {
@@ -1223,7 +1206,6 @@ namespace GameLogicTests
       cpu.AddTrap(_loop.sfs1, _frame.effects.childSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
       cpu.AddTrap(_loop.startbd);
       cpu.AddTrap(_loop.stopbd);
-      cpu.AddTrap(_loop.frs1, _frame.effects.spawnSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
 
       // `NOISE` ends `SEC / RTS` on the path that gives the effect a voice, and `LASLI`'s opening
       // `DORND` rolls that carry into its own answer (§6.86).
@@ -1302,7 +1284,6 @@ namespace GameLogicTests
       std::vector<Elite::Testing::Cpu6502::TrapHit> pitched;
       std::vector<std::uint8_t> sounds;
       std::vector<std::uint8_t> soundCarries;
-      std::vector<std::uint8_t> spawned;
       std::uint32_t starts = 0;
       std::uint32_t stops = 0;
 
@@ -1320,10 +1301,6 @@ namespace GameLogicTests
         {
           sounds.push_back(hit.y);
           soundCarries.push_back(hit.carry ? 1u : 0u);
-        }
-        else if (hit.address == _loop.frs1)
-        {
-          spawned.push_back(hit.x);
         }
         else if (hit.address == _loop.startbd)
         {
@@ -1415,11 +1392,6 @@ namespace GameLogicTests
         Assert::AreEqual(sounds[index], _frame.universe.effects.sounds[index], (_context + L": sound " + std::to_wstring(index)).c_str());
       }
 
-      Assert::AreEqual(spawned.size(), _frame.effects.spawned.size(), (_context + L": FRS1 calls").c_str());
-      for (std::size_t index = 0; index < spawned.size(); ++index)
-      {
-        Assert::AreEqual(spawned[index], _frame.effects.spawned[index], (_context + L": FRS1 type").c_str());
-      }
 
       Assert::AreEqual(starts, _frame.effects.musicStarts, (_context + L": startbd").c_str());
       Assert::AreEqual(stops, _frame.effects.musicStops, (_context + L": stopbd").c_str());
@@ -1626,7 +1598,22 @@ namespace GameLogicTests
         frame.universe.commander.missiles = item.missiles;
         frame.universe.bubble.missileTarget = item.target;
         frame.universe.status.missileArmed = item.armed;
-        frame.effects.spawnSucceeds = item.spawns;
+        /*
+         * "The bubble is full" is now a FULL BUBBLE rather than a trap answering `BCC`.
+         *
+         * `FRS1` was trapped on the oracle with its carry chosen by the case and answered on the
+         * port by a seam that returned the same bool. M3-b-1d took the seam away, so `NWSHP`
+         * decides on both sides -- and the only way to make it refuse is to leave it no slot.
+         * `Seed` fills three; this fills the rest with the type already in slot 2.
+         */
+        if (!item.spawns)
+        {
+          for (std::size_t slot = 3; slot < Elite::MAX_SHIPS; ++slot)
+          {
+            frame.universe.bubble.slots[slot] = frame.universe.bubble.slots[2];
+            ++frame.universe.bubble.counts[frame.universe.bubble.slots[2]];
+          }
+        }
 
         frame.universe.keys[Elite::KEY_UNARM_MISSILE] = item.unarm ? 0xFFu : 0u;
         frame.universe.keys[Elite::KEY_ARM_MISSILE] = item.arm ? 0xFFu : 0u;
@@ -1655,6 +1642,16 @@ namespace GameLogicTests
         if (item.fire && (item.target & 0x80u) == 0u && !item.spawns)
         {
           ++jammed;
+
+          /*
+           * AND THE JAM IS OBSERVED rather than merely counted (M3-b-1d).
+           *
+           * The case used to be "the trap answered `BCC`", which cannot stop being true; it is
+           * "`NWSHP` found no slot" now, which can -- a fixture that quietly stopped filling the
+           * bubble would spawn the missile and this loop would still tick over. `FR1` gives up
+           * before `DEC NOMSL`, so the count still standing is what says the rail kept it.
+           */
+          Assert::AreEqual(item.missiles, frame.universe.commander.missiles, (where + L": the missile stayed on the rail").c_str());
         }
       }
 

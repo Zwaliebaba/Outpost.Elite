@@ -181,16 +181,6 @@ namespace GameLogicTests
     {
       Elite::StopDockingMusic(music, universe.status.titleReset, sound, sidLog);
     }
-    [[nodiscard]] bool SpawnAhead(Elite::ShipType _type) override
-    {
-      return Elite::SpawnShipAhead(universe.bubble, universe.work, _type, universe.flight.delta, universe.bubble.missileTarget,
-                                   universe.flight.blueprint)
-        .created;
-    }
-    bool Anger(std::uint8_t _slot, Elite::ShipType _type) override
-    {
-      return Elite::Anger(universe.bubble, universe.flight, _slot, _type);
-    }
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
     {
       return Elite::SpawnChildShip(universe.bubble, universe.work, universe.rng, universe.flight.slot, universe.flight.type, _aiFlag,

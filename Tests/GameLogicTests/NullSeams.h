@@ -57,8 +57,6 @@ namespace GameLogicTests
     void StopSound(std::uint8_t) override {}
     void StartDockingMusic() override {}
     void StopDockingMusic() override {}
-    bool SpawnAhead(Elite::ShipType) override { return false; }
-    bool Anger(std::uint8_t, Elite::ShipType) override { return false; }
     bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
 
     // Elite::StartUpEffects

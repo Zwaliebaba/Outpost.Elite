@@ -175,28 +175,15 @@ namespace Outpost
   // ---- the bubble ---------------------------------------------------------------------------------
 
   /*
-   * 6502: FRS1, ANGRY and SFS1 -- three seams answered by slice 4a-b, 2026-09-05.
+   * 6502: SFS1, and it is the LAST of three -- `FRS1` and `ANGRY` were seams here until M3-b-1d
+   * and are calls the flight loop makes for itself now.
    *
-   * All three were stubs that said "phase 4", and each had a comment explaining which answer an
-   * empty implementation must give so that its caller stayed honest. Those answers are gone now,
-   * and the routines behind them are compared against the shipped game byte for byte. What is
-   * still missing is not the spawning: it is `TACTICS`, so a ship that `Anger` makes hostile has
-   * nothing to do about it yet.
+   * All three were stubs that said "phase 4" when slice 4a-b answered them, and each carried a
+   * comment explaining which answer an empty implementation had to give so that its caller stayed
+   * honest. Nothing is missing behind them any more: `TACTICS` was the last of that, and M3-b-1c
+   * let `MVEIT` call it, so a ship that `ANGRY` makes hostile does something about it. This one
+   * stays only because `SPIN` and `SPIN2` compare the SEQUENCE of calls, which is M4-a's to fix.
    */
-  bool FlightSession::SpawnAhead(Elite::ShipType _type)
-  {
-    return Elite::SpawnShipAhead(m_universe.bubble, m_universe.work, _type, m_universe.flight.delta, m_universe.bubble.missileTarget,
-                                 m_universe.flight.blueprint)
-      .created;
-  }
-
-  bool FlightSession::Anger(std::uint8_t _slot, Elite::ShipType _type)
-  {
-    // 6502: ANGRY on the block INF points at -- and which block that is, the caller says (§6.142).
-    // The routine's exit carry comes back with it, for the `JSR LL9` that follows (§6.157).
-    return Elite::Anger(m_universe.bubble, m_universe.flight, _slot, _type);
-  }
-
   bool FlightSession::SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type)
   {
     // 6502: SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.

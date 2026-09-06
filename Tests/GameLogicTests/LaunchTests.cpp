@@ -526,14 +526,6 @@ namespace GameLogicTests
       {
         ++musicStops;
       }
-      bool SpawnAhead(Elite::ShipType) override
-      {
-        return true;
-      }
-      bool Anger(std::uint8_t, Elite::ShipType) override
-      {
-        return false; // a trap's answer, and no launch reaches the seeding that reads it
-      }
       bool SpawnChild(std::uint8_t, Elite::ShipType) override
       {
         return true;

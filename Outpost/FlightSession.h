@@ -122,8 +122,6 @@ namespace Outpost
 
     void StartDockingMusic() override;
     void StopDockingMusic() override;
-    [[nodiscard]] bool SpawnAhead(Elite::ShipType _type) override;
-    bool Anger(std::uint8_t _slot, Elite::ShipType _type) override;
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override;
 
     // ---- Elite::ShipDrawEffects -----------------------------------------------------------------

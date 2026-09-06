@@ -556,14 +556,6 @@ namespace GameLogicTests
       void StopSound(std::uint8_t) override {}
       void StartDockingMusic() override {}
       void StopDockingMusic() override {}
-      bool SpawnAhead(Elite::ShipType) override
-      {
-        return false;
-      }
-      bool Anger(std::uint8_t, Elite::ShipType) override
-      {
-        return false; // a trap's answer, and no tactics case reaches the seeding that reads it
-      }
       bool SpawnChild(std::uint8_t, Elite::ShipType _type) override
       {
         spawned.push_back(Elite::Byte(_type));
