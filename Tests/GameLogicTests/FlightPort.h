@@ -48,27 +48,26 @@ namespace GameLogicTests
   class FlightPort final : public Elite::SpawnChildEffects,
                            public Elite::ShipDrawEffects,
                            public Elite::ControlEffects,
-                           public Elite::Presenter
+                           public Elite::Presenter,
+                           public Elite::Keyboard
   {
   public:
     /// 6502: what `CIRCLE` would have left in `STP` -- a launch reads it (§6.95), so the port
     /// starts as `FlightSession` does.
     static constexpr std::uint8_t LAST_CIRCLE_STEP = 4;
 
-    /// 6502: the keys `DOKEY` ignores on every screen but the space view; `RDKEY`'s answer to
-    /// `QQ11 <> 0`, copied from `FlightSession::ScanMatrix`.
-    static constexpr std::size_t NON_STEERING_KEYS[] = {
-      Elite::KEY_ENERGY_BOMB, Elite::KEY_ESCAPE_POD, Elite::KEY_ARM_MISSILE,      Elite::KEY_UNARM_MISSILE,  Elite::KEY_FIRE_MISSILE,
-      Elite::KEY_ECM,         Elite::KEY_WARP,       Elite::KEY_DOCKING_COMPUTER, Elite::KEY_CANCEL_DOCKING,
-    };
-
-    /// 6502: RDKEY's `AND #%11111101` -- sprite 1 off while the matrix is scanned.
-    static constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
+    /*
+     * `NON_STEERING_KEYS` AND `RDKEY_SPRITE_MASK` WERE HERE AND ARE NOT ANY MORE (M3-b-3d).
+     *
+     * They were the second copy of them -- `FlightSession` in the app had the first -- because
+     * `RDKEY` was a seam and every implementation of it had to repeat the whole routine to answer
+     * one question. `Elite::ScanKeyboard` is the routine now and this port answers that question.
+     */
 
     FlightPort()
-      : ports{universe.printer,          universe.characters, universe.characters, *this,           *this,
-              sidLog,                    universe.extendedPrinter, universe.unused, *this,
-              universe.unused,           universe.unused,     universe.unused}
+      : ports{universe.printer,      universe.characters,      universe.characters, *this,  *this,
+              sidLog,                universe.extendedPrinter, universe.unused,     *this,
+              *this,                 universe.unused}
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -178,38 +177,28 @@ namespace GameLogicTests
                                 universe.bubble, universe.video, universe.memoryMap);
     }
 
-    // ---- Elite::ControlEffects ------------------------------------------------------------------
+    // ---- Elite::Keyboard ------------------------------------------------------------------------
 
-    /// 6502: RDKEY, from `held` rather than from a window -- `FlightSession::ScanMatrix` with the
-    /// matrix replaced by the script's array and the same two masks after it.
-    void ScanKeyboard() override
+    /*
+     * 6502: the matrix walk's `LDA &DC01` for one row, from `held` rather than from a window.
+     *
+     * IT WAS THE WHOLE OF `RDKEY` UNTIL M3-b-3d and is one line of it now. The `SETL1` bracket, the
+     * sprite mask, `ZEKTRAN`, the countdown that leaves `thiskey` holding the lowest-numbered key
+     * and the `QQ11` tail are all `Elite::ScanKeyboard`'s, which is the library's and is compared
+     * as such -- so this port and the app's cannot drift apart on any of them, which is what two
+     * transcriptions of the same routine were always going to do.
+     */
+    [[nodiscard]] bool Held(std::size_t _key) override
     {
-      Elite::SetMemoryMap(universe.memoryMap, Elite::MEMORY_MAP_IO); // 6502: LDA #%101 / JSR SETL1
-      Elite::ApplyMaskSprites(universe.video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
-      universe.keys.fill(0u);                                     // 6502: JSR ZEKTRAN
-      for (std::size_t key = universe.keys.size(); key-- > 0u;)
-      {
-        if (held[key] != 0u)
-        {
-          universe.keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
-        }
-      }
-      if (universe.view != 0u)
-      {
-        for (const std::size_t index : NON_STEERING_KEYS)
-        {
-          universe.keys[index] = 0u;
-        }
-      }
-      if (Elite::IsChartView(universe.view))
-      {
-        for (const std::size_t index : {Elite::KEY_ROLL_LEFT, Elite::KEY_ROLL_RIGHT, Elite::KEY_PITCH_UP, Elite::KEY_PITCH_DOWN})
-        {
-          universe.keys[index] = 0u;
-        }
-      }
-      Elite::SetMemoryMap(universe.memoryMap, Elite::MEMORY_MAP_RAM); // 6502: LDA #%100 / JSR SETL1
+      return _key < held.size() && held[_key] != 0u;
     }
+
+    /// 6502: TT217 and FLKB -- the docked half's, which nothing in a flight reaches.
+    [[nodiscard]] std::uint8_t NextKey() override
+    {
+      return 0;
+    }
+    void Flush() override {}
 
     /*
      * 6502: the display, which this port does not have -- so the calls are FORWARDED or dropped.
@@ -240,6 +229,13 @@ namespace GameLogicTests
       if (watching != nullptr)
       {
         watching->HoldFlightFrame(_ships);
+      }
+    }
+    void HoldTitleFrame(std::uint8_t _distance) override
+    {
+      if (watching != nullptr)
+      {
+        watching->HoldTitleFrame(_distance);
       }
     }
 

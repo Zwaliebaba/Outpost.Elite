@@ -169,79 +169,15 @@ namespace Outpost
 
   // ---- the controls -------------------------------------------------------------------------------
 
-  void FlightSession::ScanKeyboard()
-  {
-    (void)ScanMatrix(m_universe.keys); // 6502: JSR RDKEY, whose answer `DOKEY` does not read
-  }
+  /*
+   * `ScanKeyboard` AND `ScanMatrix` WERE HERE AND ARE NOT ANY MORE (M3-b-3d).
+   *
+   * `RDKEY` is `Elite::ScanKeyboard` now, over a `Keyboard` that answers one question: is this key
+   * down. Everything the routine did around that walk was already the library's -- the `SETL1`
+   * bracket is `MemoryMap`, the sprite mask is a `VideoState` write, `ZEKTRAN` is sixty-five bytes
+   * of `Universe`, and the `QQ11` tail was the piece this file's own comment called game logic.
+   */
 
-  Elite::TitleKey FlightSession::ScanMatrix(Elite::KeyLogger& _keys) noexcept
-  {
-    /*
-     * 6502: RDKEY -- the CIA matrix walk, replaced by the window's held-key table (row 145).
-     *
-     * THE LOGGER IS CLEARED FIRST AND THEN DECREMENTED, not stored into: `JSR ZEKTRAN` zeroes all
-     * sixty-five bytes and the scan does `DEC KEYLOOK,X`, so a held key reads 255. Everything
-     * downstream tests for non-zero, but `DOKEY` also WRITES this array when the docking computer
-     * is flying, and a scan that stored rather than cleared would leave the autopilot's synthetic
-     * presses standing for ever.
-     */
-    Elite::SetMemoryMap(m_universe.memoryMap, Elite::MEMORY_MAP_IO); // 6502: LDA #%101 / JSR SETL1
-    Elite::ApplyMaskSprites(m_universe.video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
-    _keys.fill(0u);                                      // 6502: JSR ZEKTRAN
-
-    /*
-     * 6502: LDX #&40 / .Rdi1 ... / DEC KEYLOOK,X / STX thiskey / SEC / .Rdi3 DEX / BMI Rdiex.
-     *
-     * THE WALK COUNTS DOWN and `thiskey` is stored on every hit, so what comes back is the LOWEST
-     * numbered key being held rather than the first one found. `TITLE` returns that byte and `BR1`
-     * compares it against 39, so the direction of this loop is the difference between "Y" opening
-     * the disk menu and not opening it.
-     */
-    Elite::TitleKey answer;
-    for (std::uint8_t key = static_cast<std::uint8_t>(_keys.size()); key-- > 0u;)
-    {
-      if (m_window.Held(key))
-      {
-        _keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
-        answer.pressed = true;
-        answer.key = key;
-      }
-    }
-
-    // 6502: LDA QQ11 / BEQ allkeys -- with anything but the space view up, the nine keys that act
-    // rather than steer are forgotten. This is the one piece of `RDKEY` that is game logic, and it
-    // stays with the scan because it depends on what the scan found.
-    if (m_universe.view != 0u)
-    {
-      for (const std::size_t index : NON_STEERING_KEYS)
-      {
-        _keys[index] = 0u;
-      }
-    }
-
-    /*
-     * AND THE STEERING KEYS GO ON A CHART, which is the port's rule and NOT `RDKEY`'s.
-     *
-     * On a C64 the two sets never collide: `<`, `>`, `X` and `S` steer and the cursor keys move the
-     * crosshairs, so `RDKEY` has no reason to drop the steering entries and does not. This port's
-     * map is a modern one (ADR-005 §4) and the arrows do both jobs, so one of them has to give way
-     * while a chart is up -- and it is the steering, because a chart is the one screen where the
-     * arrows are what you aim with. The alternative is a ship that rolls while you read the map.
-     *
-     * It is here rather than in `KeyMap` because this is where the game itself sorts keys by view,
-     * one statement above; and it is marked as the port's own so nobody looks for it in `RDKEY`.
-     */
-    if (Elite::IsChartView(m_universe.view))
-    {
-      for (const std::size_t index : {Elite::KEY_ROLL_LEFT, Elite::KEY_ROLL_RIGHT, Elite::KEY_PITCH_UP, Elite::KEY_PITCH_DOWN})
-      {
-        _keys[index] = 0u;
-      }
-    }
-
-    Elite::SetMemoryMap(m_universe.memoryMap, Elite::MEMORY_MAP_RAM); // 6502: LDA #%100 / JSR SETL1
-    return answer;
-  }
 
   void FlightSession::RunDockingComputer(Elite::Ship& _work)
   {

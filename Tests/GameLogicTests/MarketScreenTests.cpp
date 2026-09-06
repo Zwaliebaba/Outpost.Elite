@@ -6,6 +6,7 @@
 
 #include "Canvas.h"
 #include "Commander.h"
+#include "Controls.h"
 #include "ExtendedTokens.h"
 #include "Market.h"
 #include "Rng.h"
@@ -25,7 +26,7 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::Canvas;
 using Elite::CharacterPrinter;
 using Elite::DigitResult;
-using Elite::KeySource;
+using Elite::Keyboard;
 using Elite::NumberEntry;
 using Elite::TextState;
 using Elite::Testing::Cpu6502;
@@ -70,7 +71,7 @@ namespace GameLogicTests
      * caught mutation into a dead process with no named failing test. Found exactly that way, by a
      * mutation that asked for a thirteenth key.
      */
-    class ScriptedKeys : public KeySource
+    class ScriptedKeys : public Keyboard
     {
     public:
       explicit ScriptedKeys(std::vector<std::uint8_t> _keys) noexcept
@@ -78,7 +79,14 @@ namespace GameLogicTests
       {
       }
 
-      std::uint8_t NextKey() override
+      /// 6502: the matrix walk and FLKB, which no trading screen reaches -- `TT217` is its input.
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+      void Flush() override {}
+
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         if (m_taken >= m_keys.size())
         {
@@ -249,6 +257,7 @@ namespace GameLogicTests
     public:
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       void WaitFrames(std::uint8_t) override
       {
         log.push_back(0x300u);
@@ -583,7 +592,7 @@ namespace GameLogicTests
         NullSeams nulls;
         Elite::SidWriteLog sid;
         Elite::Ports ports{printer,  characters, sink,    nulls, nulls, sid,
-                           extended, nulls,      effects, keys,  nulls, nulls};
+                           extended, nulls,      effects, keys,  nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
         Elite::BuyScreen(universe, ports, false);
@@ -834,7 +843,7 @@ namespace GameLogicTests
         NullSeams nulls;
         Elite::SidWriteLog sid;
         Elite::Ports ports{printer,  characters, sink,    nulls, nulls, sid,
-                           extended, nulls,      effects, keys,  nulls, nulls};
+                           extended, nulls,      effects, keys,  nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
 
@@ -1088,7 +1097,7 @@ namespace GameLogicTests
         NullSeams nulls;
         Elite::SidWriteLog sid;
         Elite::Ports ports{printer,  characters, sink,    nulls, nulls, sid,
-                           extended, nulls,      effects, keys,  nulls, nulls};
+                           extended, nulls,      effects, keys,  nulls};
 
         const Elite::ShipCondition condition{s.docked, s.junk, s.firstShip, s.energy};
         universe.crosshairX = CROSSHAIR_X; // 6502: QQ9 and QQ10, which the screen reads for `TT111`
@@ -1343,7 +1352,7 @@ namespace GameLogicTests
         NullSeams nulls;
         Elite::SidWriteLog sid;
         Elite::Ports ports{printer,  characters, sink,    nulls, nulls, sid,
-                           extended, nulls,      effects, keys,  nulls, nulls};
+                           extended, nulls,      effects, keys,  nulls};
 
         universe.current.techLevel = s.tech; // 6502: tek -- the byte the shop reads
 

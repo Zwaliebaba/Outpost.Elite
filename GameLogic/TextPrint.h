@@ -235,29 +235,15 @@ namespace Elite
   };
 
   /*
-   * Where a blocking key read comes from.
+   * `KeySource` WAS HERE AND IS `Keyboard::NextKey` SINCE M3-b-3d.
    *
    * 6502: TT217 -- "scan the keyboard until a key is pressed". The game BLOCKS here, inside a
-   * screen's own loop, and that is a genuine architectural problem for this port rather than a
-   * detail: ADR-004 section 1 says GameLogic's input is an `InputFrame`, which is a poll and not a
-   * wait. The two cannot both be true of the same code.
-   *
-   * Slice 2c did not resolve it, and deliberately: the routines that read the keyboard are ported
-   * against this seam, exactly as the charts were ported against the seams for the drawing they
-   * could not yet do. It lives here rather than in Market.h, where it started, because a second
-   * slice needed it -- the commander's name entry -- and a seam two slices apart both reach for
-   * belongs with the text layer rather than with the market. Whoever builds 2e decides how the seam is driven -- a pumped thread, a
-   * coroutine, or rewriting the docked screens as state machines fed by `InputFrame`. The last of
-   * those stops being a line-by-line port, which is the cost worth knowing before choosing it.
+   * screen's own loop, and ADR-004 §1's problem is unchanged by the move: `GameLogic`'s input is
+   * meant to be an `InputFrame`, which is a poll and not a wait, and the two cannot both be true of
+   * the same code. Whoever resolves it decides how the seam is driven -- a pumped thread, a
+   * coroutine, or rewriting the docked screens as state machines. The last of those stops being a
+   * line-by-line port, which is the cost worth knowing before choosing it.
    */
-  class KeySource
-  {
-  public:
-    virtual ~KeySource() = default;
-
-    /// 6502: TT217 -- block until a key is pressed, and return its character.
-    virtual std::uint8_t NextKey() = 0;
-  };
 
   /*
    * The three token wrappers that also move the cursor.

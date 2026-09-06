@@ -74,8 +74,7 @@ namespace GameLogicTests
      * screens declare what they need separately and the shell answers all of it. Building the session
      * this way is the cheapest available check that those declarations are consistent.
      */
-    class NullShell final : public Elite::LineEntryEffects,
-                            public Elite::Presenter,
+    class NullShell final : public Elite::Presenter,
                             public Elite::StartUpEffects,
                             public Elite::ControlCodes
     {
@@ -86,10 +85,11 @@ namespace GameLogicTests
        * Four overrides, and the shape of them is why the seams went: `SetUpTradeScreen` called
        * `ClearToView` and `FlushKeyboard`, and `ClearToView` called `Elite::SetUpTextScreen`. The
        * library does all of that itself now -- `SetUpScreen`, `ClearMessageRows` and `Beep` -- and
-       * only the flush and the wait are left for the platform to answer.
+       * only the flush and the wait were left for the platform to answer. The flush went too in
+       * M3-b-3d: it is `Keyboard::Flush`, so `ScriptedKeys` notes it and this does not.
        */
 
-      // 6502: DELAY, which is `Presenter`'s, and FLKB, which is the line editor's.
+      // 6502: DELAY, which is `Presenter`'s.
       void WaitFrames(std::uint8_t _frames) override
       {
         Note("wait " + std::to_string(_frames));
@@ -102,9 +102,9 @@ namespace GameLogicTests
       {
         Note("hold " + std::to_string(_ships));
       }
-      void FlushKeyboard() override
+      void HoldTitleFrame(std::uint8_t _distance) override
       {
-        Note("flush");
+        Note("spin " + std::to_string(_distance));
       }
 
       // 6502: ZEKTRAN and TITLE. `RESET`, `RES2` and `msblob` were here until M3-b-1e, and
@@ -113,13 +113,6 @@ namespace GameLogicTests
       {
         Note("zektran");
       }
-      /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
-      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
-      {
-        (void)_keys;
-        return {true, 0u};
-      }
-
       std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _ship, std::uint8_t) override
       {
         Note("title " + std::to_string(_token) + "/" + std::to_string(Elite::Byte(_ship)));
@@ -177,14 +170,30 @@ namespace GameLogicTests
       bool written = false;
     };
 
-    class ScriptedKeys final : public Elite::KeySource
+    /*
+     * The keyboard, which answers three questions and used to answer one (M3-b-3d).
+     *
+     * It was a `KeySource` -- `TT217` and nothing else -- because `RDKEY` was a seam on the shell
+     * and `FLKB` was one on the line editor. Both are this port's now, so the script gained a set
+     * of held keys (which nothing docked reads: `RDKEY`'s callers are the title screen and the
+     * flight loop) and the flush the null shell used to note.
+     */
+    class ScriptedKeys final : public Elite::Keyboard
     {
     public:
       explicit ScriptedKeys(std::vector<std::uint8_t> _keys) noexcept
         : m_keys(std::move(_keys))
       {
       }
-      std::uint8_t NextKey() override
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+      void Flush() override
+      {
+        ++flushes;
+      }
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         if (m_taken >= m_keys.size())
         {
@@ -200,6 +209,7 @@ namespace GameLogicTests
         return m_taken;
       }
       bool overran = false;
+      std::uint32_t flushes = 0; ///< 6502: FLKB, which was the null shell's note until M3-b-3d
 
     private:
       std::vector<std::uint8_t> m_keys;
@@ -254,7 +264,7 @@ namespace GameLogicTests
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng, &shell),
           ports{recursive, characters, sink,  nulls, nulls, sid,
-                extended,  shell,      shell, keys,  shell, store}
+                extended,  shell,      shell, keys,  store}
       {
         commander = Elite::DefaultCommander();
         name = Elite::DefaultCommanderName();
@@ -359,7 +369,7 @@ namespace GameLogicTests
         // 6502: TT167 -- and the screen reset above it is TRADEMODE, which the caller does. It was
         // a seam on the shell until M3-b-3b and is `TT66` and a keyboard flush.
         Elite::SetUpScreen(_game.universe, _game.ports, Elite::BUY_CARGO_VIEW);
-        _game.shell.FlushKeyboard();
+        _game.keys.Flush();
         Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.text, _game.current.economy, _game.market, false);
         return "market";
 

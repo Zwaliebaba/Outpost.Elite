@@ -39,8 +39,8 @@ namespace Elite
    *
    *   `ClearToView`       is `TT66`, which is `Elite::SetUpScreen` since slice 3d-d-iii-a.
    *   `SetUpTradeScreen`  is `TRADEMODE`, which is `TT66` and then `FLKB` -- the flush is the only
-   *                       part that is not the library's, and it is `LineEntryEffects`' until
-   *                       M3-b-3c makes it `Keyboard::Flush`.
+   *                       part that is not the library's, and it is `Keyboard::Flush` since
+   *                       M3-b-3d.
    *   `ClearBottomRows`   is `CLYNS`, which is `Elite::ClearMessageRows`.
    *   `BeepAndPause`      is `dn2` -- `JSR BEEP / LDY #50 / JMP DELAY` -- and both halves exist:
    *                       `Elite::Beep` since slice 5a and `Presenter::WaitFrames` since this one.

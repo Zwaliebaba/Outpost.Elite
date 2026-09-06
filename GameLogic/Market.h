@@ -12,6 +12,12 @@ namespace Elite
 {
 
   /*
+   * Declared rather than included: `Keyboard` lives in `Controls.h` beside `RDKEY`, and the flight
+   * controls have no business in a header about prices. A reference parameter needs no more.
+   */
+  class Keyboard;
+
+  /*
    * Elite's economy (slice 2c, the price model).
    *
    * Seventeen goods, and no price is stored for any of them. A price is the item's base, plus a
@@ -260,6 +266,6 @@ namespace Elite
    * typed in purple and the screen goes back to white afterwards -- and it does that on EVERY exit,
    * including the ones that abandon the number.
    */
-  [[nodiscard]] NumberEntry ReadNumber(KeySource& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept;
+  [[nodiscard]] NumberEntry ReadNumber(Keyboard& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept;
 
 } // namespace Elite

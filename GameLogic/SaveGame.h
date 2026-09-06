@@ -82,7 +82,7 @@ namespace Elite
    * sets the carry when the key is 'Y' or higher, and the branch it takes lands on an RTS. So the
    * "yes" answer is the comparison's own flag rather than anything the routine sets.
    */
-  [[nodiscard]] bool AskYesNo(KeySource& _keys) noexcept;
+  [[nodiscard]] bool AskYesNo(Keyboard& _keys) noexcept;
 
   /*
    * 6502: JAMESON -- put the default commander back.

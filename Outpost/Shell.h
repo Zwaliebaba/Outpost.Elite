@@ -50,11 +50,10 @@ namespace Outpost
    * the shell forwards them to `FlightSession` rather than approximating them (§6.73).
    */
   class GameShell final : public Elite::Presenter,
-                          public Elite::LineEntryEffects,
                           public Elite::StartUpEffects,
                           public Elite::ControlCodes,
                           public Elite::TextEffects,
-                          public Elite::KeySource
+                          public Elite::Keyboard
   {
   public:
     GameShell(Window& _window, CanvasPresenter& _presenter, Elite::Canvas& _canvas, std::uint8_t& _view) noexcept
@@ -104,7 +103,11 @@ namespace Outpost
      */
     void HoldFlightFrame(std::uint8_t _ships) override;
 
-    // ---- Elite::KeySource ----------------------------------------------------------------------
+    // ---- Elite::Keyboard -------------------------------------------------------------------------
+
+    /// 6502: the matrix walk's read of one row, which is all of `RDKEY` that is the platform's
+    /// since M3-b-3d -- `Elite::ScanKeyboard` is the rest.
+    [[nodiscard]] bool Held(std::size_t _key) override;
 
     /*
      * 6502: TT217 -- block until a key is pressed.
@@ -138,19 +141,24 @@ namespace Outpost
     /// then. Public because `Main.cpp` changes screens through it.
     void ClearToView(std::uint8_t _view);
 
-    // ---- Elite::Presenter, Elite::LineEntryEffects and Elite::StartUpEffects ---------------------
+    /// 6502: FLKB -- empty the keyboard buffer.
+    void Flush() override;
 
-    void WaitFrames(std::uint8_t _frames) override;
-    void FlushKeyboard() override;
+    // ---- Elite::StartUpEffects --------------------------------------------------------------------
 
     void ClearKeyLogger() override;
-    [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override;
     [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance) override;
 
-    // ---- Elite::Presenter's two display methods ---------------------------------------------------
+    // ---- Elite::Presenter's four ------------------------------------------------------------------
+
+    void WaitFrames(std::uint8_t _frames) override;
 
     /// 6502: the vertical sync the VIC-II was giving `HFS2` for free while it drew the next circle.
     void Present() override;
+
+    /// The title screen's spin, held on its own cost curve -- see `Presenter.h`, and §6.110 for the
+    /// 165 Hz panel that span the ship twenty times too fast when this was a plain present.
+    void HoldTitleFrame(std::uint8_t _distance) override;
 
     // ---- Elite::ControlCodes and Elite::TextEffects ---------------------------------------------
 

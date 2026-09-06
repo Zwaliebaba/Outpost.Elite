@@ -3,6 +3,7 @@
 #include "Market.h"
 
 #include "Arith.h"
+#include "Controls.h"
 #include "EliteTypes.h"
 #include "LookupTables.h"
 
@@ -459,7 +460,7 @@ namespace Elite
     return DigitResult::Accepted;
   }
 
-  NumberEntry ReadNumber(KeySource& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept
+  NumberEntry ReadNumber(Keyboard& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept
   {
     // 6502: LDA #MAG2 / STA COL2 -- purple for what the player types.
     _text.cellColour = TEXT_COLOUR_TYPING;

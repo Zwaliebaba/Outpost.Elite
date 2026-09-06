@@ -107,6 +107,7 @@ namespace GameLogicTests
     public:
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       explicit RecordingStart(std::vector<std::uint8_t> _answers) noexcept
         : m_answers(std::move(_answers))
       {
@@ -115,14 +116,6 @@ namespace GameLogicTests
       void ClearKeyLogger() override
       {
         seams.push_back({"ZEKTRAN", 0, 0, 0});
-      }
-
-      // Reached by DOENTRY rather than by the start sequence, so neither script here should see one.
-      /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
-      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
-      {
-        (void)_keys;
-        return {true, 0u};
       }
 
       void WaitFrames(std::uint8_t _frames) override
@@ -149,14 +142,22 @@ namespace GameLogicTests
       std::size_t m_taken = 0;
     };
 
-    class ScriptedKeys : public Elite::KeySource
+    class ScriptedKeys : public Elite::Keyboard
     {
     public:
       explicit ScriptedKeys(std::vector<std::uint8_t> _keys) noexcept
         : m_keys(std::move(_keys))
       {
       }
-      std::uint8_t NextKey() override
+      /// 6502: FLKB and the matrix walk. `SilentEffects` answered the first until M3-b-3d and the
+      /// start sequence reaches neither: `TITLE` is a seam here and the disk menu only types.
+      void Flush() override {}
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         if (m_taken >= m_keys.size())
         {
@@ -175,12 +176,6 @@ namespace GameLogicTests
       std::vector<std::uint8_t> m_keys;
       std::size_t m_taken = 0;
       std::size_t m_extra = 0;
-    };
-
-    class SilentEffects : public Elite::LineEntryEffects
-    {
-    public:
-      void FlushKeyboard() override {}
     };
 
     class IgnoredControls : public Elite::ControlCodes
@@ -610,7 +605,6 @@ namespace GameLogicTests
         Elite::ExtendedTokenPrinter extended(characters, recursive, rng, &controls);
 
         ScriptedKeys keys(script.menuKeys);
-        SilentEffects lineEffects;
         DeviceStore store;
 
         Elite::Commander& commander = universe.commander;
@@ -627,8 +621,8 @@ namespace GameLogicTests
         RecordingStart effects({script.firstAnswer, 0});
         Elite::SidWriteLog sid; ///< 6502: SID -- what `startat`, `stopat` and `stopbd` write
         NullSeams nulls;
-        Elite::Ports ports{recursive, characters, sink,    nulls, nulls,       sid,
-                           extended,  effects,    effects, keys,  lineEffects, store};
+        Elite::Ports ports{recursive, characters, sink,    nulls, nulls, sid,
+                           extended,  effects,    effects, keys,  store};
 
         /*
          * 6502: msblob -- the one thing the sequence draws, and a count cannot say so any more

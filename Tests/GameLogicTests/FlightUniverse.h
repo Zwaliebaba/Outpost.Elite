@@ -268,10 +268,19 @@ namespace GameLogicTests
     UnusedSeams unused;
 
     [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::SpawnChildEffects& _loop,
+                                         Elite::StartUpEffects& _start, Elite::Presenter& _present,
+                                         Elite::Keyboard& _keyboard) noexcept
+    {
+      return Elite::Ports{printer,         characters, characters, _drawing,  _loop, sid,
+                          extendedPrinter, _start,     _present,   _keyboard, unused};
+    }
+
+    /// The same, for a fixture that does not reach the keyboard -- which `RDKEY` made most of them
+    /// until M3-b-3d, when the walk became `Elite::ScanKeyboard` and its callers started asking.
+    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::SpawnChildEffects& _loop,
                                          Elite::StartUpEffects& _start, Elite::Presenter& _present) noexcept
     {
-      return Elite::Ports{printer, characters, characters, _drawing, _loop,   sid,
-                          extendedPrinter, _start, _present, unused, unused, unused};
+      return PortsWith(_drawing, _loop, _start, _present, unused);
     }
 
     /// The same, for a fixture whose start recorder is its presenter too -- which is most of them,

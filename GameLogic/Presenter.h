@@ -70,6 +70,21 @@ namespace Elite
      * zero-terminated list is game state.
      */
     virtual void HoldFlightFrame(std::uint8_t _ships) = 0;
+
+    /*
+     * The same again for the title screen's spin, and it is a SECOND hold rather than an argument
+     * to the first because the two cost curves are different routines' (M3-b-3d).
+     *
+     * `TITLE` runs `MVEIT` and `LL9` and comes straight back round -- there is no `JSR WSCAN`
+     * anywhere in it (§6.17) -- so the ship turns at whatever rate a 6510 gets through those two,
+     * which is 121,276 cycles once it has arrived and 15,600 while it is still a dot. Presenting
+     * once per turn hands that decision to the display instead, and on a 165 Hz panel the ship
+     * span twenty times too fast (§6.110).
+     *
+     * `_distance` is `INWK+7`, the byte `TLL2` walks down -- so the curve is indexed by the same
+     * counter the original's cost depended on.
+     */
+    virtual void HoldTitleFrame(std::uint8_t _distance) = 0;
   };
 
 } // namespace Elite

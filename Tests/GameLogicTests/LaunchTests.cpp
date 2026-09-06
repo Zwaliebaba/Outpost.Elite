@@ -317,6 +317,7 @@ namespace GameLogicTests
         }
         void WaitFrames(std::uint8_t) override {}
         void HoldFlightFrame(std::uint8_t) override {}
+        void HoldTitleFrame(std::uint8_t) override {}
       };
 
       const OracleImage& oracle = OracleImage::Instance();
@@ -398,6 +399,7 @@ namespace GameLogicTests
         }
         void WaitFrames(std::uint8_t) override {}
         void HoldFlightFrame(std::uint8_t) override {}
+        void HoldTitleFrame(std::uint8_t) override {}
       };
 
       for (const std::uint8_t step : {std::uint8_t{2}, std::uint8_t{4}, std::uint8_t{8}})
@@ -455,37 +457,48 @@ namespace GameLogicTests
      * tunnel as well as everything after it. What remains here is `StartUpEffects` for the
      * routines that still take one; `Launch` no longer does.
      */
-    struct RecordingStart final : Elite::StartUpEffects, Elite::Presenter
+    struct RecordingStart final : Elite::StartUpEffects, Elite::Presenter, Elite::Keyboard
     {
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       void ClearKeyLogger() override {}
+
       /*
-       * 6502: JSR RDKEY inside `TLL2` -- scripted, because the loop it drives is key-driven and
-       * nothing else decides how many frames the title screen runs for.
+       * WHICH KEYS ARE DOWN, scripted, because the loop `RDKEY` drives is key-driven and nothing
+       * else decides how many frames the title screen runs for.
        *
-       * `quiet` passes answer "no key"; the one after it answers `key`, and sets `KY7` first when
-       * `fire` is on so that the loop takes `BMI TL3` instead of `INC JSTK`. The oracle is driven
-       * by a stub written over `RDKEY` that counts the same way.
+       * It answered `TitleKey` until M3-b-3d, when `RDKEY` stopped being a seam: the walk is
+       * `Elite::ScanKeyboard`'s now and this is the one line of it that was ever the platform's.
+       * `quiet` walks answer "nothing down"; the one after holds `key`, and `KY7` too when `fire`
+       * is on so that the loop takes `BMI TL3` instead of `INC JSTK`. The oracle is driven by a
+       * stub written over `RDKEY` that counts the same way.
+       *
+       * A WALK IS COUNTED AT ITS FIRST KEY. `ScanKeyboard` counts DOWN from the top of the logger,
+       * so the highest index is where a scan begins and `scans` still counts scans.
        */
+      static constexpr std::size_t WALK_START = std::tuple_size_v<Elite::KeyLogger> - 1u;
+
       std::uint32_t quiet = 0;
       std::uint8_t key = 0;
       bool fire = false;
       std::uint32_t scans = 0;
 
-      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
+      [[nodiscard]] bool Held(std::size_t _key) override
       {
-        ++scans;
+        if (_key == WALK_START)
+        {
+          ++scans;
+        }
         if (scans <= quiet)
         {
-          return {};
+          return false;
         }
-        if (fire)
-        {
-          _keys[Elite::KEY_FIRE] = 0xFFu;
-        }
-        return {true, key};
+        return (_key == key) || (fire && _key == Elite::KEY_FIRE);
       }
+
+      [[nodiscard]] std::uint8_t NextKey() override { return 0; }
+      void Flush() override {}
 
       void WaitFrames(std::uint8_t) override {}
 
@@ -536,7 +549,7 @@ namespace GameLogicTests
       /// The seams a launch reaches: the AI and the drawing, the sounds, and `RESET`'s own.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(outside, effects, start, start);
+        return universe.PortsWith(outside, effects, start, start, start);
       }
     };
 
@@ -928,6 +941,7 @@ namespace GameLogicTests
         }
         void WaitFrames(std::uint8_t) override {}
         void HoldFlightFrame(std::uint8_t) override {}
+        void HoldTitleFrame(std::uint8_t) override {}
       };
 
       Leaving leaving;
@@ -1302,6 +1316,7 @@ namespace GameLogicTests
 
       void WaitFrames(std::uint8_t) override {}
       void Present() override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       void HoldFlightFrame(std::uint8_t) override
         {
           ++frames;

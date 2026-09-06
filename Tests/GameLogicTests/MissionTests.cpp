@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Controls.h"
 #include "Cpu6502.h"
 #include "FlightUniverse.h"
 #include "OracleImage.h"
@@ -31,10 +32,11 @@ namespace GameLogicTests
      * `quiet` is how many scans answer "no key" before one answers `key`. `PAUSE` needs at least
      * one of each in that order; `PAUSE2` needs the same.
      */
-    struct ScriptedStart final : Elite::StartUpEffects, Elite::Presenter
+    struct ScriptedStart final : Elite::StartUpEffects, Elite::Presenter, Elite::Keyboard
     {
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       std::uint32_t quiet = 0;
       std::uint8_t key = 0;
       std::uint32_t scans = 0;
@@ -55,17 +57,35 @@ namespace GameLogicTests
        */
       bool alternate = false;
 
-      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger&) override
+      /*
+       * WHICH KEYS ARE DOWN, and it answered a `TitleKey` until M3-b-3d.
+       *
+       * `RDKEY` was a seam then. It is `Elite::ScanKeyboard` now, so the script says what the
+       * matrix holds and the library's walk turns that into the carry and `thiskey` -- the same
+       * two answers, arrived at by the routine being ported rather than by this class.
+       *
+       * A WALK IS COUNTED AT ITS FIRST KEY: `ScanKeyboard` counts DOWN from the top of the logger,
+       * so the highest index is where a scan begins and `scans` still counts scans.
+       */
+      static constexpr std::size_t WALK_START = std::tuple_size_v<Elite::KeyLogger> - 1u;
+
+      [[nodiscard]] bool Held(std::size_t _key) override
       {
-        ++scans;
+        if (_key == WALK_START)
+        {
+          ++scans;
+        }
         if (alternate)
         {
-          return ((scans & 1u) == 0u) ? Elite::TitleKey{true, key} : Elite::TitleKey{};
+          return ((scans & 1u) == 0u) && _key == key;
         }
         const std::uint32_t index = scans - 1u;
         const bool pressed = (index < held) || (index >= held + quiet && ((index - held - quiet) % 2u) == 0u);
-        return pressed ? Elite::TitleKey{true, key} : Elite::TitleKey{};
+        return pressed && _key == key;
       }
+
+      [[nodiscard]] std::uint8_t NextKey() override { return 0; }
+      void Flush() override {}
 
       void WaitFrames(std::uint8_t _frames) override
       {
@@ -282,7 +302,7 @@ namespace GameLogicTests
     /// The seams a briefing reaches: the frame's three recorded, and the script answering `TITLE`'s.
     [[nodiscard]] static Elite::Ports PortsOver(LoopUniverse& _universe, ScriptedStart& _start)
     {
-      return _universe.universe.PortsWith(_universe.effects, _universe.effects, _start, _start);
+      return _universe.universe.PortsWith(_universe.effects, _universe.effects, _start, _start, _start);
     }
 
     /// What `Mirror` does not send: the line heap, the flight model's rotation rates, and `INF`.
@@ -1193,14 +1213,20 @@ namespace GameLogicTests
 
   private:
     /// 6502: TT217 -- the one key `YESNO` reads, scripted. "Y" is 89 and anything else is a no.
-    struct ScriptedKeys final : Elite::KeySource
+    /// The matrix and `FLKB` are the other two questions this port answers and `YESNO` asks neither.
+    struct ScriptedKeys final : Elite::Keyboard
     {
       bool yes = false;
       explicit ScriptedKeys(bool _yes) noexcept
         : yes(_yes)
       {
       }
-      std::uint8_t NextKey() override
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+      void Flush() override {}
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         return yes ? std::uint8_t{'Y'} : std::uint8_t{'N'};
       }

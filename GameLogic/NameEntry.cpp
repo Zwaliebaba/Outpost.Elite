@@ -2,6 +2,8 @@
 
 #include "NameEntry.h"
 
+#include "Controls.h"
+
 /*
  * The line editor and the commander's name (slice 2d).
  */
@@ -41,7 +43,7 @@ namespace Elite
     constexpr std::size_t NAME_BYTES = COMMANDER_NAME_SIZE;
   } // namespace
 
-  LineResult ReadLine(KeySource& _keys, TextSink& _screen, TextState& _text, LineEntryEffects& _effects, Presenter& _present,
+  LineResult ReadLine(Keyboard& _keys, TextSink& _screen, TextState& _text, Presenter& _present,
                       std::span<std::uint8_t> _buffer, const LineLimits& _limits) noexcept
   {
     // 6502: LDA #MAG2 / STA COL2 -- purple for what the player types, as gnum does.
@@ -49,7 +51,7 @@ namespace Elite
 
     // 6502: LDY #8 / JSR DELAY / JSR FLKB -- settle, then throw away anything already buffered.
     _present.WaitFrames(SETTLE_FRAMES);
-    _effects.FlushKeyboard();
+    _keys.Flush();
 
     LineResult result{};
 
@@ -156,8 +158,8 @@ namespace Elite
     }
   }
 
-  LineResult AskCommanderName(KeySource& _keys, TextSink& _screen, TextState& _text, ExtendedTokenPrinter& _extended,
-                              LineEntryEffects& _effects, Presenter& _present, std::span<std::uint8_t> _buffer,
+  LineResult AskCommanderName(Keyboard& _keys, TextSink& _screen, TextState& _text, ExtendedTokenPrinter& _extended,
+                              Presenter& _present, std::span<std::uint8_t> _buffer,
                               std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name, LineLimits& _limits) noexcept
   {
     /*
@@ -175,7 +177,7 @@ namespace Elite
     // 6502: LDA #8 / JSR DETOK.
     _extended.Print(NAME_PROMPT_TOKEN);
 
-    const LineResult result = ReadLine(_keys, _screen, _text, _effects, _present, _buffer, _limits);
+    const LineResult result = ReadLine(_keys, _screen, _text, _present, _buffer, _limits);
 
     // 6502: LDA #9 / STA RLINE+2 -- and it is restored whether a name was typed or not.
     _limits.maxLength = LINE_MAX_LENGTH;

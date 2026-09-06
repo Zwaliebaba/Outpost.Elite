@@ -154,7 +154,7 @@ namespace Elite
     {
       PrintThenQuestion(_ports.printer, VIEW_TOKEN);
 
-      const std::uint8_t key = _ports.keys.NextKey();
+      const std::uint8_t key = _ports.keyboard.NextKey();
       const std::uint8_t view = static_cast<std::uint8_t>(key - '0');
       if (view < VIEW_COUNT)
       {
@@ -209,7 +209,7 @@ namespace Elite
     {
       // 6502: LDA #32 / JSR TRADEMODE -- which sets the cursor and the case flags too.
       SetUpScreen(_universe, _ports, EQUIP_SHIP_VIEW);
-      _ports.entry.FlushKeyboard();
+      _ports.keyboard.Flush();
 
       // 6502: LDA #12 / JSR DOXC / LDA #207 / JSR spc / LDA #185 / JSR NLIN3.
       _universe.text.column = TITLE_COLUMN;
@@ -258,7 +258,7 @@ namespace Elite
       ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message);
       PrintThenQuestion(_ports.printer, ITEM_TOKEN);
 
-      const NumberEntry entry = ReadNumber(_ports.keys, _ports.characters, _universe.text, highest);
+      const NumberEntry entry = ReadNumber(_ports.keyboard, _ports.characters, _universe.text, highest);
 
       // 6502: gnum's JMP BAY2 -- a letter leaves without a beep and without the docking bay's
       // usual route.

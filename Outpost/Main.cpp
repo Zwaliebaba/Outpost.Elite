@@ -95,7 +95,7 @@ namespace
                false),
         extended(characters, recursive, universe.rng, &shell),
         flight(window, universe),
-        ports{recursive, characters, characters, flight, flight, audio.Direct(), extended, shell, shell, shell, shell, store}
+        ports{recursive, characters, characters, flight, flight, audio.Direct(), extended, shell, shell, shell, store}
     {
       // The seam the session answers that is a call needing the seams themselves -- `DOCKIT` --
       // so the composition lends the struct back to the object two of it point at.
@@ -896,7 +896,7 @@ namespace
        * `TT102`, once per frame and AFTER it.
        *
        * The queue is the window's rather than the matrix scan's, and it is a different thing from
-       * the key logger `FlightSession::ScanKeyboard` fills: `TT102` wants the key that was pressed
+       * the key logger `Elite::ScanKeyboard` fills: `TT102` wants the key that was pressed
        * and the flight loop wants the keys being held, which is why the game reads the hardware
        * twice per frame and so does this.
        *

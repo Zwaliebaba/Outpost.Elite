@@ -424,7 +424,8 @@ namespace Elite
                _universe.rng, false);
 
       // 6502: JSR RDKEY / DEC MCNT.
-      const TitleKey scan = _ports.start.ScanTitleKeys(_universe.keys);
+      _ports.present.HoldTitleFrame(_universe.work.z.hi); // 6502: TLL2's pace
+      const TitleKey scan = ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard);
       _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);
 
       /*

@@ -22,8 +22,9 @@ namespace Elite
    * `aggregate-refs` ABOVE the ceiling M3-a-3 recorded -- which rule 5 forbids outright, and rightly:
    * a ratchet that can be argued past is not one. So each of M3-b's remaining slices lands its port
    * in the same commit as at least one removal: thirteen before M3-b-2b and thirteen after, TWELVE
-   * after M3-b-3a (which removed `SightEffects` and landed no port), and twelve after M3-b-3b,
-   * where `Presenter` spent that credit and `TradeScreenEffects` went (§8, 2026-09-06).
+   * after M3-b-3a (which removed `SightEffects` and landed no port), twelve after M3-b-3b, where
+   * `Presenter` spent that credit and `TradeScreenEffects` went, and ELEVEN after M3-b-3d, which
+   * landed `Keyboard` over the two seams it replaces (§8, 2026-09-06).
    *
    * THE DECLARATIONS BELOW ARE FORWARD ONES ON PURPOSE. A reference member needs no complete type,
    * and this header including `ViewChange.h` while `ViewChange.h`'s routines take a `Ports&` is a
@@ -37,8 +38,7 @@ namespace Elite
   class SpawnChildEffects;
   class ExtendedTokenPrinter;
   class StartUpEffects;
-  class KeySource;
-  class LineEntryEffects;
+  class Keyboard;
   class Presenter;
   class CommanderStore;
 
@@ -97,17 +97,17 @@ namespace Elite
     /*
      * The four the DOCKED screens need and a flight frame does not (M3-a-3).
      *
-     * `keys` is `TT217`, which blocks until a key is pressed -- the docked half's whole input, where
-     * a flight reads the matrix through `ControlEffects`; `entry` is what the line editor flushes
-     * the keyboard through, and both are §4.5's `Keyboard` waiting for M3-b-3c. `store` is
-     * `SaveStore` under its old name.
+     * §4.5's `Keyboard`, the third of the four to arrive (M3-b-3d), and `SaveStore` under its old
+     * name. `keyboard` answers three questions and no more: is this key down, what is the next one
+     * (`TT217`, which BLOCKS -- ADR-004 §1's open problem), and empty the buffer (`FLKB`). `RDKEY`
+     * itself is `Elite::ScanKeyboard` and runs in the library over the first of those.
      *
-     * `trade` WAS HERE UNTIL M3-b-3b. `TRADEMODE` is `TT66` and a keyboard flush, `ClearToView` is
-     * `TT66`, `ClearBottomRows` is `CLYNS` and `BeepAndPause` is `BEEP` and `DELAY` -- four seams
-     * in front of routines this library has had for slices, which is §6.73 for the ninth time.
+     * `keys` AND `entry` WERE HERE UNTIL M3-b-3d and `trade` until M3-b-3b. `KeySource` was one
+     * method of this port under another name; `LineEntryEffects` was `DELAY` and `FLKB`, which are
+     * `Presenter`'s and this one's; and `TradeScreenEffects` was four calls into routines the
+     * library already had.
      */
-    KeySource& keys;
-    LineEntryEffects& entry;
+    Keyboard& keyboard;
     CommanderStore& store;
   };
 

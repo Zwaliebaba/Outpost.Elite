@@ -29,9 +29,9 @@
       "slice": "M1-a"
     },
     "aggregate-refs": {
-      "ceiling": 12,
+      "ceiling": 11,
       "slack": 0,
-      "slice": "M3-b-3a: SightEffects goes and no port replaces it -- twelve, with credit for Presenter"
+      "slice": "M3-b-3d: Keyboard lands over KeySource and LineEntryEffects -- two out, one in"
     },
     "main-lines": {
       "ceiling": 1161,
@@ -39,14 +39,14 @@
       "slice": "M3-b-3c: Main.cpp's DeathPacing goes -- the library counts the ships and asks the presenter"
     },
     "outpost-elite-names": {
-      "ceiling": 174,
+      "ceiling": 166,
       "slack": 0,
-      "slice": "M3-b-3c: TunnelEffects is not a name the app reaches any more"
+      "slice": "M3-b-3d: RDKEY moves into the library, and the app stops naming what it walked"
     },
     "effects-seams": {
-      "ceiling": 12,
+      "ceiling": 11,
       "slack": 0,
-      "slice": "M3-b-3c: TunnelEffects becomes Presenter's Present and HoldFlightFrame"
+      "slice": "M3-b-3d: LineEntryEffects goes and Keyboard replaces two seams with one"
     },
     "out-params": {
       "ceiling": 17,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3910,
+      "ceiling": 3924,
       "slack": 0,
-      "slice": "M3-b-3b: one marker per call site for dn2 and TRADEMODE, not two"
+      "slice": "M3-b-3d: RDKEY's markers move from Outpost/ into GameLogic/ with the routine (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 50,
