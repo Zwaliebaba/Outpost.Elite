@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->397 tests, oracle present), all <!--count:checks-->thirteen repository checks pass,
+(<!--count:tests-->397 tests, oracle present), all <!--count:checks-->fourteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -730,7 +730,8 @@ tree carries the original's data and the port's own code, and nothing of its sou
    its recorded ceiling; a slice that lowers a count lowers the ceiling in the same commit. It
    also fails when a ceiling is above the count by more than the slack it records, so the file
    cannot quietly stop describing the tree (§6.154's rule, mechanised).
-6. **Every signature change reaches `Outpost/` in the same commit**, and `check_outpost.py` runs.
+6. **Every signature change reaches `Outpost/` in the same commit**, and `check_outpost.py` runs —
+   which since M3-0 checks the members the app names as well as the names and the arities.
    Until M3 lands the executable is the caller this environment cannot compile, and a Windows job
    red on a type change is the failure mode; keeping the diff small per slice is the mitigation.
 7. **Rename toward meaning as you go.** A slice in M2 or M4 that touches `_math.q` or `xx15` names
@@ -1246,6 +1247,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
+| **M3-0 The app's member check** ✅ **built 2026-09-06 (§8)** | `check_outpost.py` gains a third half: every member the app names on an `Elite::`-typed variable, against that type's members as `GameLogic/*.h` declares them, bases closed over. A `--self-test` plants one that cannot resolve. | In CI as the fourteenth check; 111 accesses resolved on the tree as it stands. | 1 |
 | **M3-a Universe** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`JumpState` replaced by `Universe&` (plus the ports) on every routine; `FlightSession` and `Outpost::Game` lend their members to it. | Green on both legs; `aggregate-refs` at zero. **Windows job is the gate** — this slice cannot be compiled here. | 4 |
 | **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at four. | 4 |
 | **M3-c Game** | `Elite::Game` with `Reset`, `Step`, `Frame`, `Sounds`, `StateHash`; `Perform`, `Leave`, the docked pass, `Advance` and `AdvancePaused` moved from `Main.cpp`; `Mode` explicit. `Main.cpp` at its target shape. | `DockedSessionTests` and the M0-c replay drive `Game::Step` and reproduce their stored hashes; `main-lines` in the ratchet under 300. | 4–5 |
@@ -1552,6 +1554,28 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-0: the app's member names are checked, because M3 is about to rename a hundred
+of them in files no Linux runner compiles.** `check_outpost.py` has read every `Elite::Name` the
+executable mentions since slice 3d-b and every call's arity since 3d-c, and its own docstring named
+what was left: "anything reached through a member call rather than a qualified `Elite::` one". M3-a
+moves every byte of game state into one `Elite::Universe` and rewrites `Main.cpp` and
+`FlightSession` around it, which is exactly that — a rename of member names, in the half of the
+tree the portable runner cannot build. The Windows job would find it several minutes after a push,
+which is how `DockedShip` and `ClearMessageRows` were found, twice in one afternoon.
+
+The check reads `struct X { ... }` and `class X { ... }` out of `GameLogic/*.h` with their base
+lists, closes each type's members over its bases, finds every `Elite::Type name` the app declares,
+and checks each `name.member` against that set. Three choices are deliberately conservative: an
+identifier it cannot resolve is skipped, a type it cannot parse is skipped, and an identifier two
+declarations disagree about takes the UNION of their members — a false positive in a check that
+gates the build costs more than a miss. 111 accesses resolve on the tree as it stands, 84 of them
+in `Main.cpp`, and none is wrong. `--self-test` plants an access that cannot resolve and fails if
+it is not reported, because the arity half went a whole slice before anyone had watched it fail.
+
+What it still cannot see is a parameter TYPE that keeps its arity, a member reached through an
+expression rather than a named variable (`_game.flight.Loop().options`), and templates. Compiling
+the app is the only thing that would.
 
 **2026-09-06 — R22 ruled on, and it was not a ruling: half of it was written from the wrong
 machine's commentary, and measuring the other half found a different defect.** The risk said the
