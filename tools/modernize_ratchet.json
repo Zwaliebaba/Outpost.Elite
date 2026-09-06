@@ -39,7 +39,7 @@
       "slice": "M2-c-1: Main.cpp holds the number printer's width byte instead of its workspace"
     },
     "outpost-elite-names": {
-      "ceiling": 206,
+      "ceiling": 205,
       "slack": 0,
       "slice": "M3-a-2: four argument-list structs go, so the app names four fewer types"
     },

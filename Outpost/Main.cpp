@@ -98,13 +98,19 @@ namespace
         flight(window, universe, recursive, characters, extended, shell, sound, music, audio)
     {
       recursive.SetValueTokens(&values);
-      recursive.SetCursor(&text);
+      recursive.SetCursor(&universe.text);
       shell.Attach(recursive, universe.text, characters.state, universe.message);
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, universe.dockedFlag);
       shell.AttachVideo(flight.Video());                            // ADR-005 §1 -- the sprites composite in Resolve
       shell.AttachGalaxy(universe.commander.galaxyNumber); // 6502: GCNT, for MT27 and MT28
       shell.AttachSound(audio, sound, music);
+
+      // 6502: NA% -- the commander the cold start begins from, and a STORE rather than a member
+      // initialiser since M3-a: `Game` held its own `= Elite::DefaultCommander()` and
+      // `Universe::commander` is default-constructed, so moving the byte without the
+      // initialisation would have started the game with no credits and no laser.
+      universe.commander = Elite::DefaultCommander();
 
       // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
       // capital letter of the first screen depends on.
@@ -122,12 +128,9 @@ namespace
      * Every byte of game state, in one place (Modernize.md §4.4, slice M3-a).
      *
      * It was thirteen members of this struct and twenty-two of `FlightSession`, split by which
-     * screen had needed a byte first: the canvas, `QQ11`, the commander, the generator and the
-     * message counters here because the docked screens write them; the arena, the flight model and
-     * the line heap there because a flight does. `Elite::Universe` owns all of it, so the split is
-     * gone and every ported routine takes this object and `flight.Ports()` beside it.
-     *
-     * FIRST IN THE STRUCT, because `shell`, the printers and the session all bind pieces of it.
+     * screen had needed a byte first, and every ported routine takes this object and
+     * `flight.Ports()` beside it now. FIRST IN THE STRUCT, because `shell`, the printers and the
+     * session all bind pieces of it.
      */
     Elite::Universe universe;
 
@@ -147,16 +150,16 @@ namespace
     Outpost::SaveStore store;
 
     // ---- the text system ------------------------------------------------------------------------
-    /// The printers, which are NOT in the universe: two of them take a seam (`TextPrinter` the bell
-    /// and `ExtendedTokenPrinter` the control codes), and a universe that has to copy and hash
-    /// cannot own a pointer to the platform. They travel in `Elite::Ports` instead.
+    /// The printers, which are NOT in the universe: two take a seam (`TextPrinter` the bell and
+    /// `ExtendedTokenPrinter` the control codes) and a universe that copies cannot own a pointer to
+    /// the platform, so they travel in `Elite::Ports`.
     Elite::TextPrinter screen;
     Elite::CharacterPrinter characters;
     Elite::TokenPrinter recursive;
     std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it, which SV1 prints the competition number at
 
-    // ---- the commander and the universe ----------------------------------------------------------
-    Elite::Commander commander = Elite::DefaultCommander();
+    // ---- the commander's FILE, which is not the commander ------------------------------------------
+    // 6502: NA%'s first eight bytes are the NAME, which `universe.commander`'s block does not carry.
     std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
     std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
     std::array<std::uint8_t, 16> buffer{};
@@ -167,8 +170,7 @@ namespace
      *
      * THERE WAS A SECOND COPY OF QQ2 HERE, and it is gone (§6.140). The token printer was bound to
      * it and the start sequence wrote the other one, so the status screen's "Present System" was
-     * blank from the cold start until the first hyperspace jump, which was the one path that copied
-     * across. `current.seeds` is the byte; the printer reads it directly.
+     * blank until the first jump. `universe.current.seeds` is the byte; the printer reads it.
      */
     Elite::SystemSeeds selectedSeeds{};
     Elite::MarketState market;
@@ -326,21 +328,19 @@ namespace
     const Elite::ChartView chart = ChartOf(_game);
     Elite::Universe& universe = _game.universe;
 
-    if (_game.universe.view == Elite::SHORT_RANGE_CHART_VIEW)
+    if (universe.view == Elite::SHORT_RANGE_CHART_VIEW)
     {
       universe.heaps.yx2M1 = Elite::CHART_SCREEN_BOTTOM;
-      _game.universe.clip.dontclip = Elite::CHART_SCREEN_BOTTOM;
+      universe.clip.dontclip = Elite::CHART_SCREEN_BOTTOM;
 
-      Elite::DrawShortRangeChart(_game.universe.canvas, _game.recursive, _game.universe.text, chart, _game.universe.commander.galaxySeeds,
-                                 &_game.flight);
+      Elite::DrawShortRangeChart(universe.canvas, _game.recursive, universe.text, chart, universe.commander.galaxySeeds, &_game.flight);
 
-      _game.universe.clip.dontclip = 0u;
+      universe.clip.dontclip = 0u;
       universe.heaps.yx2M1 = Elite::SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
       return;
     }
 
-    Elite::DrawLongRangeChart(_game.universe.canvas, _game.recursive, _game.universe.text, chart, _game.universe.commander.galaxySeeds,
-                              &_game.flight);
+    Elite::DrawLongRangeChart(universe.canvas, _game.recursive, universe.text, chart, universe.commander.galaxySeeds, &_game.flight);
   }
 
   /// 6502: TT22 and TT23's opening `JSR TT66`, which the routines leave to their caller, and then
