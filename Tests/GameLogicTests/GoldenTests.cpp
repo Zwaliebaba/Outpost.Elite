@@ -187,7 +187,7 @@ namespace GameLogicTests
       state.column = 4;
       state.row = 5;
       state.cellColour = TEXT_CELL_COLOUR;
-      TextPrinter printer(actual, state, nullptr);
+      TextPrinter printer(actual, state);
       for (const char* character = text; *character != 0; ++character)
       {
         printer.Print(static_cast<std::uint8_t>(*character));

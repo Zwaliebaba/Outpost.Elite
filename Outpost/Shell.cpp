@@ -144,13 +144,6 @@ namespace Outpost
     Elite::SetUpScreen(m_flight->Universe(), *m_ports, _view);
   }
 
-  void GameShell::ClearScreen()
-  {
-    // 6502: clss -- CHPR reaching past the last row clears the screen and prints again. The caller
-    // does the printing; this is the clear.
-    ClearToView(m_view);
-  }
-
   // ---- waiting and the keyboard ------------------------------------------------------------------
 
   void GameShell::WaitFrames(std::uint8_t _frames)

@@ -177,7 +177,7 @@ namespace Elite
 
   /// 6502: BEEP, BELL -- `LDY #sfxbeep / BNE NOISE`, a tail call, so the carry it returns is NOISE's.
   /// `BELL` is `LDA #7 / JMP CHPR`, and character 7 in `CHPR` is `R5`, which is `JSR BEEP`: the
-  /// text printer's `TextEffects::Beep` seam reaches this, so the bell has no routine of its own.
+  /// text printer rings it over a `SoundBuffer` since M3-b-2b, so the bell has no routine of its own.
   [[nodiscard]] NoiseResult Beep(SoundBuffer& _buffer, bool _carryIn) noexcept;
 
   /*

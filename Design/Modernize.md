@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->397 tests, oracle present), all <!--count:checks-->fourteen repository checks pass,
+(<!--count:tests-->398 tests, oracle present), all <!--count:checks-->fourteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -303,12 +303,12 @@ the rest existed: "the struct is the argument list".
 <!--count:main-lines-->1,161 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->166 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->165 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->11 abstract classes in
-`GameLogic/*.h`. Some are platform (`TextSink`, `Keyboard`, `Presenter`, `SaveStore` through
-`SaveScreen`). Most are **phase order**:
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->10 abstract classes in
+`GameLogic/*.h`. Some are platform (`Keyboard`, `Presenter`, `CommanderStore`); `TextSink` and
+`ValueTokens` are the text system's own and are argued about in §8 rather than assumed away. Most are **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
 `ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each declared when the routine on the
 far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
@@ -349,7 +349,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,924 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,923 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1722,6 +1722,53 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-4a: `TextEffects` goes, and the seam was answering with the wrong routine.**
+`clss` is what `CHPR` does with a character printed below the last row, and this port had it as a
+one-method seam whose header said it was "the one thing CHPR does that the library still cannot do
+for itself" — because `TT66` reaches the dashboard, the sprites, the border and the colour bands.
+**That is the wrong routine.** `clss` is `JSR TT66simp / LDA K3 / JMP RRafter`, and `TT66simp` is a
+bitmap wipe of character rows 1 to 23 followed by `INY / STY XC / STY YC`: the cursor home to
+(1, 1), with row 0 and the dashboard left alone. `Elite::ClearTextArea` has been that routine, ported
+and compared against the shipped one, since slice 2a. So the seam was in front of a routine the
+library already had — §6.73 for the eleventh time — and the executable was answering it with
+`GameShell::ClearScreen`, which is `ClearToView`, which is the whole of `TT66`: a palette fill, the
+dashboard, the sprites, the border and a `QQ11` write, none of which `clss` performs.
+
+**AND THE NULLABILITY WAS HIDING A SECOND DEFECT, which is §6.149's shape for the third time in this
+milestone.** `TextPrinter` took the seam as a pointer, and a printer built without one did not clear
+AND did not print the character — the overrunning glyph was simply dropped. That was every
+`TextPrinter` in the suite. `ClearTextArea` needs only the canvas and the `TextState` the printer
+already holds, so there is no pointer to be null: the branch is unconditional now.
+
+**NOTHING IN THE SUITE REACHED THE BRANCH, and that is why neither defect had been found.**
+`PrintableCharactersMatchTheShippedRoutine` sweeps rows 0, 1, 11 and 23 — the row after the last one
+is exactly the row it stops before. `TheOffTheBottomPathMatchesClss` is the new method: rows 24, 25
+and 30, three columns, three characters, both screens SEEDED WITH INK first, compared on the whole
+screen plus `XC`, `YC` and the returned character. The seeding is the point — over two blank screens
+the comparison would pass whether the routine cleared everything, nothing, or exactly the right
+band, and those are the three answers being told apart. Falsified twice before it was believed:
+dropping the character reports `screen differs at offset 352 -- game has 0, port has 163`, and
+clearing row 0 as well reports `offset 32 -- game has 227, port has 0`.
+
+**Two findings about what is left of M3-b-4, because the plan's row is wrong about both.**
+
+  - **`SaveStore` IS ALREADY TAKEN.** §4.5 asks for `CommanderStore` to be renamed to `SaveStore`,
+    and `Outpost::SaveStore` has been the executable's implementation of it since slice 2d — so the
+    rename produces `class SaveStore : public Elite::SaveStore`. The name has to move on one side or
+    the other, and `CommanderStore` says what is stored where `SaveStore` says only that saving
+    happens. Recorded here rather than decided unilaterally.
+  - **`TextSink` IS NOT A PLATFORM SEAM AND ITS REASON HAS NOT EXPIRED.** The plan groups it with
+    `ValueTokens` and `ControlCodes` as "the text system's own polymorphism", which is right, and
+    then concludes it should go "since `CHPR` … exist[s]", which does not follow: `TextSink` is not
+    in front of `CHPR`, it is the interface `CHPR` implements. Both production implementations are
+    in `GameLogic` and form a chain — `TokenPrinter` → `CharacterPrinter` → `TextPrinter` → `Canvas`
+    — and seventeen fixtures use it to compare token expansion as a CHARACTER STREAM against the
+    shipped routine, which is a strictly more precise instrument than the pixel comparison that
+    would replace it. §6.73's corollary cuts the other way here for the first time.
+
+`effects-seams` 11 → 10, `outpost-elite-names` 166 → 165, `origin-markers` 3,924 → 3,923, tests
+397 → 398.
 
 **2026-09-06 — M3-b-3d's fix: a member reached through an expression, and a seventh half for
 `check_outpost.py`.** `Main.cpp` called `_game.shell.FlushKeyboard()` in the market-price case, and

@@ -64,26 +64,20 @@ namespace Elite
   };
 
   /*
-   * The one thing CHPR does that the library still cannot do for itself.
+   * `TextEffects` WAS HERE AND IS NOT ANY MORE (M3-b-4a).
    *
-   * A character printed below the last row clears the screen and starts again, which is `TT66simp`
-   * -- and `TT66` reaches the dashboard, the sprites, the border and the colour bands, which are
-   * §4.5's `Presenter` and M3-b-3's. The tests count how often it is reached rather than passing
-   * over it quietly.
+   * It carried one method, `ClearScreen`, and the header said it was "the one thing CHPR does that
+   * the library still cannot do for itself" because `TT66` reaches the dashboard, the sprites, the
+   * border and the colour bands. THAT WAS THE WRONG ROUTINE. `clss` is `JSR TT66simp`, and
+   * `TT66simp` is a bitmap wipe of rows 1 to 23 and a cursor home -- `ClearTextArea` above, ported
+   * and compared against the shipped routine since slice 2a. It is §6.73 for the eleventh time and
+   * the defect it was hiding is in §8.
    *
-   * `Beep` WAS THE OTHER AND IS NOT ANY MORE (M3-b-2b). Character 7 is `R5`, which is `JSR BEEP`,
-   * and `BEEP` has been `Elite::Beep` over a `SoundBuffer` since slice 5a -- so the printer takes
-   * the buffer and rings the bell itself. Every caller on this side drops the carry it answers
-   * with, which is why the call discards it.
+   * `Beep` WAS THE OTHER AND WENT IN M3-b-2b. Character 7 is `R5`, which is `JSR BEEP`, and `BEEP`
+   * has been `Elite::Beep` over a `SoundBuffer` since slice 5a -- so the printer takes the buffer
+   * and rings the bell itself. Every caller on this side drops the carry it answers with, which is
+   * why the call discards it.
    */
-  class TextEffects
-  {
-  public:
-    virtual ~TextEffects() = default;
-
-    /// 6502: clss -- JSR TT66simp, then print the character again on the fresh screen.
-    virtual void ClearScreen() = 0;
-  };
 
   /*
    * 6502: BPRNT -- print a number, right-aligned in a fixed width, with an optional decimal point.
@@ -197,15 +191,18 @@ namespace Elite
   {
   public:
     /*
-     * The buffer is a POINTER beside the seam and not a `Universe&`, for the reason the seam is one:
-     * the printer is built over a canvas and a `TextState` and nothing else, and half the tests that
-     * build one have no universe to hand. A null buffer is a printer whose bell is not connected,
-     * which is what a null `TextEffects` has always meant for the screen clear.
+     * The buffer is a POINTER and not a `Universe&`, because the printer is built over a canvas and
+     * a `TextState` and nothing else, and half the tests that build one have no universe to hand.
+     * A null buffer is a printer whose bell is not connected.
+     *
+     * THE SCREEN CLEAR IS NOT NULLABLE ANY MORE (M3-b-4a). It was, and a printer built without a
+     * `TextEffects` dropped the character that overran row 23 instead of clearing and printing it
+     * -- which was every test that built one. `clss` is `ClearTextArea` now and needs nothing this
+     * object does not already hold.
      */
-    TextPrinter(Canvas& _canvas, TextState& _state, TextEffects* _effects = nullptr, SoundBuffer* _sound = nullptr) noexcept
+    TextPrinter(Canvas& _canvas, TextState& _state, SoundBuffer* _sound = nullptr) noexcept
       : m_canvas(_canvas),
         m_state(_state),
-        m_effects(_effects),
         m_sound(_sound)
     {
     }
@@ -230,7 +227,6 @@ namespace Elite
 
     Canvas& m_canvas;
     TextState& m_state;
-    TextEffects* m_effects = nullptr;
     SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s JSR BEEP fills
   };
 

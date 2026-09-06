@@ -180,18 +180,7 @@ namespace GameLogicTests
      * that contains one, so a port that only counted the call would be one effect short on every
      * energy warning.
      */
-    struct Chars final : Elite::TextEffects
-    {
-      std::uint32_t cleared = 0;
-
-      void ClearScreen() override
-      {
-        ++cleared;
-      }
-    };
-
-    Chars chars;
-    Elite::TextPrinter glyphs{canvas, text, &chars, &sound};
+    Elite::TextPrinter glyphs{canvas, text, &sound};
     Elite::CharacterPrinter characters{glyphs};
     Elite::TokenPrinter printer{characters};
 

@@ -103,9 +103,8 @@ namespace Elite
    * what `Game::StateHash` (M3-c) and the M0-c replay are built on.
    *
    * The two things that are NOT here are the text machinery and the seams, because both need what
-   * this deliberately excludes: `TextPrinter` takes the bell as a `TextEffects*` and
-   * `ExtendedTokenPrinter` the control codes as a `ControlCodes*`, so a universe that owned them
-   * would own a pointer to the platform. They travel beside it in `Ports` (M3-a-2), which is the
+   * this deliberately excludes: `ExtendedTokenPrinter` takes the control codes as a `ControlCodes*`,
+   * so a universe that owned it would own a pointer to the platform. They travel beside it in `Ports` (M3-a-2), which is the
    * struct M3-b collapses to §4.5's four.
    *
    * The order below is §4.4's, which is the order the game's own memory map runs in as nearly as
