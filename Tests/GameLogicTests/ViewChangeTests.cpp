@@ -1010,7 +1010,6 @@ namespace GameLogicTests
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(oracle.Label("SETL1"));
         cpu.AddTrap(oracle.Label("DOVDU19"));
-        cpu.AddTrap(oracle.Label("NOISE"));
         FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
         Mirror(universe, cpu, at);
 
@@ -1025,19 +1024,17 @@ namespace GameLogicTests
         CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
         CompareState(cpu, universe, at, where);
 
-        // The refusal noise is the seam, and the game asking for it is a trap hit at `NOISE`.
-        std::size_t noises = 0;
-        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
-        {
-          noises += (hit.address == oracle.Label("NOISE")) ? 1u : 0u;
-        }
-        Assert::AreEqual<std::size_t>(noises, universe.effects.sounds.size(), (where + L": the same number of refusals").c_str());
-        for (const std::uint8_t effect : universe.effects.sounds)
-        {
-          Assert::AreEqual<std::uint32_t>(Elite::SOUND_BOOP, effect, (where + L": sfxboop").c_str());
-        }
-
-        if (universe.effects.sounds.empty())
+        /*
+         * 6502: LDY #sfxboop / JMP NOISE -- the refusal, and `CompareState` above already carries
+         * it since M3-b-2a.
+         *
+         * It was `ViewEffects::PlaySound`, trapped on the oracle and recorded here, and this
+         * counted the two lists against each other. Both machines run `NOISE` now, so the refusal
+         * is `SOFLG` on the voice `sfxboop` took -- compared byte for byte with the rest of the
+         * universe rather than as a tally, and the coverage counters read it back the same way.
+         */
+        const bool refusedThis = universe.sound.flag[2] != 0u;
+        if (!refusedThis)
         {
           ++jumped;
         }

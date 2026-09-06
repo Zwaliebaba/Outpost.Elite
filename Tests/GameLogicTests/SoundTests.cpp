@@ -355,7 +355,8 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(at.noise, 20'000);
               Assert::IsTrue(run.completed, L"NOISE returned");
 
-              const bool carry = Elite::PlaySoundEffect(ours, static_cast<std::uint8_t>(effect | flagBit), carryIn);
+              const Elite::NoiseResult answer = Elite::PlaySoundEffect(ours, static_cast<std::uint8_t>(effect | flagBit), carryIn);
+              const bool carry = answer.carry;
 
               const std::wstring where = Widen("NOISE state " + std::to_string(state) + " effect " + std::to_string(effect) +
                                                (flagBit ? "+128" : "") + " carry " + std::to_string(carryIn ? 1 : 0));
@@ -414,7 +415,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(at.noise2, 20'000);
             Assert::IsTrue(run.completed, L"NOISE2 returned");
 
-            const bool carry = Elite::PlaySoundEffectPitched(ours, effect, sustain, frequency, (state & 1u) != 0u);
+            const bool carry = Elite::PlaySoundEffectPitched(ours, effect, sustain, frequency, (state & 1u) != 0u).carry;
 
             const std::wstring where = Widen("NOISE2 state " + std::to_string(state) + " effect " + std::to_string(effect) + " frequency " +
                                              std::to_string(frequency));
@@ -464,7 +465,7 @@ namespace GameLogicTests
           LoadBuffer(cpu, at, ours);
           cpu.c = carryIn;
           Assert::IsTrue(cpu.CallSubroutine(at.beep, 20'000).completed, L"BEEP returned");
-          const bool carry = Elite::Beep(ours, carryIn);
+          const bool carry = Elite::Beep(ours, carryIn).carry;
           const std::wstring where = Widen("BEEP state " + std::to_string(state));
           Assert::AreEqual(cpu.c, carry, (where + L": the carry").c_str());
           CompareBuffer(cpu, at, ours, where);
@@ -507,7 +508,8 @@ namespace GameLogicTests
 
         cpu.y = static_cast<std::uint8_t>(effect);
         Assert::IsTrue(cpu.CallSubroutine(at.noise, 20'000).completed, L"NOISE returned");
-        Assert::IsTrue(Elite::PlaySoundEffect(ours, static_cast<std::uint8_t>(effect), false), L"a fresh buffer takes any effect");
+        Assert::IsTrue(Elite::PlaySoundEffect(ours, static_cast<std::uint8_t>(effect), false).carry,
+                       L"a fresh buffer takes any effect");
 
         // The longest effect is the E.C.M. at 255 frames; run past that so every one ends.
         for (std::uint32_t frame = 0; frame < 260u; ++frame)
@@ -569,7 +571,7 @@ namespace GameLogicTests
             cpu.y = effect;
             cpu.c = false;
             Assert::IsTrue(cpu.CallSubroutine(at.noise, 20'000).completed, L"NOISE returned");
-            const bool carry = Elite::PlaySoundEffect(ours, effect, false);
+            const bool carry = Elite::PlaySoundEffect(ours, effect, false).carry;
             Assert::AreEqual(cpu.c, carry, Widen("frame " + std::to_string(frame) + ": NOISE's carry").c_str());
           }
 

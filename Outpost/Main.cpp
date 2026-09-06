@@ -94,7 +94,7 @@ namespace
         values(recursive, universe.text, universe.commander, universe.commanderName, universe.current.seeds, universe.selectedSeeds,
                false),
         extended(characters, recursive, universe.rng, &shell),
-        flight(window, universe, sound, music, audio),
+        flight(window, universe, universe.sound, music, audio),
         ports{recursive, characters, characters, flight, flight, flight, flight,
               extended,  shell,      shell,      shell,  shell,  store}
     {
@@ -109,7 +109,7 @@ namespace
       shell.AttachFlight(flight, universe.dockedFlag);
       shell.AttachVideo(flight.Video());                            // ADR-005 §1 -- the sprites composite in Resolve
       shell.AttachGalaxy(universe.commander.galaxyNumber); // 6502: GCNT, for MT27 and MT28
-      shell.AttachSound(audio, sound, music);
+      shell.AttachSound(audio, universe.sound, music);
 
       // 6502: NA% -- the commander the cold start begins from, and a STORE rather than a member
       // initialiser since M3-a: `Game` held its own `= Elite::DefaultCommander()` and
@@ -140,14 +140,14 @@ namespace
     Elite::Universe universe;
 
     /*
-     * 6502: the sound variables, the music player and the SID they write.
+     * 6502: the music player and the SID it writes, and the BUFFER is not here since M3-b-2a --
+     * `universe.sound` is what `NOISE` fills and `SOINT` drains, the original's own split.
      *
-     * All three are here rather than in the flight session because BOTH halves of the loop make
-     * sound: the docked screens beep and the title screen starts the theme through the shell, and
-     * the flight loop fires lasers through the session. The output is the platform's and is the one
+     * Both are here rather than in the flight session because BOTH halves of the loop make sound:
+     * the docked screens beep and the title screen starts the theme through the shell, and the
+     * flight loop fires lasers through the session. The output is the platform's and is the one
      * object in this struct that can fail to open, in which case the game runs in silence.
      */
-    Elite::SoundBuffer sound;
     Elite::MusicPlayer music;
     Outpost::SoundOutput audio;
 
@@ -581,7 +581,7 @@ namespace
         described.techLevel = _game.universe.current.techLevel;
 
         const Elite::JumpResult jumped = Elite::PerformJump(
-          _game.universe, _game.ports, _game.universe.selectedSeeds, jump, described, _game.universe.market, _game.flight, nullptr,
+          _game.universe, _game.ports, _game.universe.selectedSeeds, jump, described, _game.universe.market, nullptr,
           _game.universe.crosshairX, _game.universe.crosshairY, _game.universe.commander.galaxySeeds,
           _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL)), _game.universe.options.authorNames != 0u);
 
@@ -821,7 +821,7 @@ namespace
         };
 
         DeathPacing pacing(_game);
-        Elite::Die(_game.universe, _game.ports, _game.flight, &pacing);
+        Elite::Die(_game.universe, _game.ports, &pacing);
 
         Elite::ResetShipAndBubble(_game.universe, _game.ports); // 6502: DEATH2's JSR RES2
 
@@ -1002,7 +1002,7 @@ namespace
     }
     else if (pass.music == Elite::MusicChange::Stop)
     {
-      Elite::StopDockingMusic(_game.music, _game.universe.status.titleReset, _game.sound, _game.audio.Direct());
+      Elite::StopDockingMusic(_game.music, _game.universe.status.titleReset, _game.universe.sound, _game.audio.Direct());
     }
 
     /*

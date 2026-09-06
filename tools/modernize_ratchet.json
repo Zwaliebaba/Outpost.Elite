@@ -39,12 +39,12 @@
       "slice": "M3-a-3: Main.cpp holds no state the universe owns and builds no argument list"
     },
     "outpost-elite-names": {
-      "ceiling": 187,
+      "ceiling": 180,
       "slack": 0,
       "slice": "M3-b-1b: the app no longer names ChartShapes or the chart routines' pieces"
     },
     "effects-seams": {
-      "ceiling": 19,
+      "ceiling": 18,
       "slack": 0,
       "slice": "M3-b-1b: ChartShapes goes -- CIRCLE2 is DrawBall and SUN is DrawSun"
     },
@@ -54,7 +54,7 @@
       "slice": "M3-a-3: StatusScreen's QQ15 is a Universe field, not an out parameter"
     },
     "carry-params": {
-      "ceiling": 32,
+      "ceiling": 30,
       "slack": 0,
       "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is \u00a74.3.1)"
     },

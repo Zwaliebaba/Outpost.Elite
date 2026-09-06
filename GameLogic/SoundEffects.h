@@ -124,6 +124,26 @@ namespace Elite
   };
 
   /*
+   * What `NOISE` LEAVES, and A is half of it (M3-b-2a).
+   *
+   * The carry was the whole answer while `DashboardEffects` was a seam, because an interface method
+   * can return one thing and the seam chose the flag. It is not the whole answer: `.MA14 STA
+   * INWK+35` stores what `NOISE2` left in A into the dead ship's ENERGY byte, so the sound system
+   * decides a game value and a port that answered only the carry had to invent one. It invented the
+   * sustain, which is what `EXNO2` had in A on the way IN; the routine overwrites it.
+   *
+   * Three exits and three different accumulators. The path that takes a voice ends `INY / TYA /
+   * ORA #128 / STA SOFLG,X / CLI / SEC` -- so A is the flag byte it just wrote. The priority
+   * refusal is `LDA SFXPR,Y / CMP SOPR,X / BCC SOUR1`, so A is the effect's priority. And with
+   * sound switched off, `LDA DNOIZ / BNE SOUR1` leaves A holding `DNOIZ` and the carry untouched.
+   */
+  struct NoiseResult
+  {
+    bool carry = false; ///< the C flag on return -- set when the effect took a voice
+    std::uint8_t a = 0; ///< A on return, which `.MA14` stores as a ship's energy
+  };
+
+  /*
    * 6502: NOISE -- put effect `_effect` into the buffer, if it is allowed a voice.
    *
    * THREE ANSWERS, and the caller's carry is one of them (§6.99). The routine ends `SEC / RTS` when
@@ -142,7 +162,7 @@ namespace Elite
    * WHICH VOICE: the one already playing this effect, else the lowest priority of the three -- a
    * comparison chain that prefers voice 2 on a tie with voice 1 and voice 3 on a tie with either.
    */
-  [[nodiscard]] bool PlaySoundEffect(SoundBuffer& _buffer, std::uint8_t _effect, bool _carryIn) noexcept;
+  [[nodiscard]] NoiseResult PlaySoundEffect(SoundBuffer& _buffer, std::uint8_t _effect, bool _carryIn) noexcept;
 
   /*
    * 6502: NOISE2 -- NOISE with the sustain byte and the frequency supplied instead of looked up.
@@ -152,13 +172,13 @@ namespace Elite
    * supplied bytes instead of the table's. The `EQUB &50` is a `BVC` that cannot branch, swallowing
    * the `CLV` (§6.79's idiom). So this is one routine with a flag, and the port writes it that way.
    */
-  [[nodiscard]] bool PlaySoundEffectPitched(SoundBuffer& _buffer, std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency,
-                                            bool _carryIn) noexcept;
+  [[nodiscard]] NoiseResult PlaySoundEffectPitched(SoundBuffer& _buffer, std::uint8_t _effect, std::uint8_t _sustain,
+                                                   std::uint8_t _frequency, bool _carryIn) noexcept;
 
   /// 6502: BEEP, BELL -- `LDY #sfxbeep / BNE NOISE`, a tail call, so the carry it returns is NOISE's.
   /// `BELL` is `LDA #7 / JMP CHPR`, and character 7 in `CHPR` is `R5`, which is `JSR BEEP`: the
   /// text printer's `TextEffects::Beep` seam reaches this, so the bell has no routine of its own.
-  [[nodiscard]] bool Beep(SoundBuffer& _buffer, bool _carryIn) noexcept;
+  [[nodiscard]] NoiseResult Beep(SoundBuffer& _buffer, bool _carryIn) noexcept;
 
   /*
    * 6502: NOISEOFF -- find the voice playing `_effect` and run its counter down.

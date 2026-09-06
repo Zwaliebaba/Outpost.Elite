@@ -58,16 +58,22 @@ namespace Elite
     return Volume(_distance, 16u, 8u, 6u, 3u);
   }
 
-  std::uint8_t PlayHitSound(const Ship& _work, DashboardEffects& _effects) noexcept
+  std::uint8_t PlayHitSound(const Ship& _work, SoundBuffer& _sound) noexcept
   {
     const std::uint8_t sustain = ExplosionVolume(_work.z.hi);
 
-    // 6502: LDY #sfxhit / LDX #208 / JMP NOISE2.
-    (void)_effects.PlaySoundPitched(SOUND_SHIP_EXPLODING, sustain, EXPLOSION_PITCH_HIT);
-    return sustain;
+    /*
+     * 6502: LDY #sfxhit / LDX #208 / JMP NOISE2 -- AND THE CARRY IS ALWAYS CLEAR (M3-b-2a).
+     *
+     * `NOISE2` runs on the caller's flag and the seam had no way to carry one, so the port passed
+     * false and the plan recorded the gap. The four `ASL A` in front of `ORA #3` are what set it:
+     * they shift X, which `quiet`'s ladder leaves between 11 and 15, so the value is under 128
+     * before the last shift and the carry that comes out is zero every time. `ORA` touches no flag.
+     */
+    return PlaySoundEffectPitched(_sound, SOUND_SHIP_EXPLODING, sustain, EXPLOSION_PITCH_HIT, false).a;
   }
 
-  std::uint8_t RecordKill(Universe& _universe, Ports& _ports, DashboardEffects& _effects, ShipType _type) noexcept
+  std::uint8_t RecordKill(Universe& _universe, Ports& _ports, ShipType _type) noexcept
   {
     Commander& commander = _universe.commander;
 
@@ -98,13 +104,14 @@ namespace Elite
                   _universe.view);
     }
 
-    // 6502: davidscockup -- and the noise is the same shape as EXNO's with wider thresholds.
+    // `davidscockup` -- the same shape as `EXNO`'s noise with wider thresholds, down to the carry:
+    // `quiet2`'s ladder leaves X between 11 and 15 and four `ASL A` cannot carry out of that, so
+    // `NOISE2` is reached with the flag clear here as well.
     const std::uint8_t sustain = KillVolume(_universe.work.z.hi);
-    (void)_effects.PlaySoundPitched(SOUND_EXPLOSION, sustain, EXPLOSION_PITCH_KILL);
-    return sustain;
+    return PlaySoundEffectPitched(_universe.sound, SOUND_EXPLOSION, sustain, EXPLOSION_PITCH_KILL, false).a;
   }
 
-  bool TakeDamage(Universe& _universe, Ports& _ports, DashboardEffects& _effects, const Ship& _target, std::uint8_t _damage,
+  bool TakeDamage(Universe& _universe, Ports& _ports, const Ship& _target, std::uint8_t _damage,
                   bool _carryIn) noexcept
   {
     FlightStatus& status = _universe.status;
@@ -155,7 +162,7 @@ namespace Elite
      * this line is only reached when the energy addition carried. A silent build passes it
      * straight through (§6.99), so with sound off the roll below is the one a carry of 1 gives.
      */
-    const bool heard = _effects.PlaySound(SOUND_EXPLOSION, true);
+    const bool heard = PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true).carry;
     DamageEquipment(_universe, _ports, heard);
     return true;
   }

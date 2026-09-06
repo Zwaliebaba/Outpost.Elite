@@ -138,34 +138,45 @@ namespace GameLogicTests
       }
     }
 
-    /// The sound seam, recorded in both directions -- `ECBLB2` starts the hum and `ECMOF` stops it,
-    /// and a port that called the wrong one would still put the bulb in the right state.
-    struct RecordingSound final : Elite::DashboardEffects
+    /*
+     * 6502: sound_variables -- what `ECBLB2`'s hum and `ECMOF`'s silence leave behind (M3-b-2a).
+     *
+     * `DashboardEffects` was the seam and this suite recorded which effect went in and which came
+     * out; `NOISE` and `NOISEOFF` run on both sides now, so the buffer is the comparison. It says
+     * more than the list did: a port that called the right routine on the wrong voice, or at the
+     * wrong priority, was invisible to a name.
+     */
+    void CompareSoundBuffer(const Cpu6502& _cpu, const OracleImage& _oracle, const Elite::SoundBuffer& _sound,
+                            const std::wstring& _where)
     {
-      struct Pitched
+      struct Run
       {
-        std::uint8_t effect, sustain, frequency;
+        const char* label;
+        const std::uint8_t* bytes;
+        std::size_t count;
       };
-
-      std::vector<std::uint8_t> started;
-      std::vector<std::uint8_t> stopped;
-      std::vector<Pitched> pitched;
-
-      bool PlaySound(std::uint8_t _effect, bool) override
+      const Run RUNS[] = {
+        {"SOFLG", _sound.flag.data(), _sound.flag.size()},
+        {"SOCNT", _sound.counter.data(), _sound.counter.size()},
+        {"SOPR", _sound.priority.data(), _sound.priority.size()},
+        {"SOFRCH", _sound.frequencyChange.data(), _sound.frequencyChange.size()},
+        {"SOFRQ", _sound.frequency.data(), _sound.frequency.size()},
+        {"SOCR", _sound.control.data(), _sound.control.size()},
+        {"SOATK", _sound.attack.data(), _sound.attack.size()},
+        {"SOSUS", _sound.sustain.data(), _sound.sustain.size()},
+        {"SOVCH", _sound.volumeRate.data(), _sound.volumeRate.size()},
+        {"PULSEW", &_sound.pulseWidth, 1u},
+      };
+      for (const Run& run : RUNS)
       {
-        started.push_back(_effect);
-        return true;
+        const std::uint16_t base = _oracle.Label(run.label);
+        for (std::size_t index = 0; index < run.count; ++index)
+        {
+          Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(base + index)], run.bytes[index],
+                           (_where + L": " + Widen(run.label) + L"+" + std::to_wstring(index)).c_str());
+        }
       }
-      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
-      {
-        pitched.push_back({_effect, _sustain, _frequency});
-        return true;
-      }
-      void StopSound(std::uint8_t _effect) override
-      {
-        stopped.push_back(_effect);
-      }
-    };
+    }
   } // namespace
 
   TEST_CLASS(TheDashboardDials)
@@ -480,29 +491,31 @@ namespace GameLogicTests
       Cpu6502 cpu = oracle.Fresh();
       Elite::Canvas canvas;
 
-      // 6502: JSR NOISE -- the sound is hardware, so it is trapped on one side and recorded on the
-      // other. The trap is what makes the fall-through into `ECBLB` observable at all.
-      cpu.AddTrap(oracle.Label("NOISE"));
-
+      /*
+       * 6502: JSR NOISE -- and it RUNS on both sides since M3-b-2a.
+       *
+       * It was trapped here and recorded through `DashboardEffects`, and the trap hit was what made
+       * the fall-through into `ECBLB` observable. `NOISE` writes `sound_variables` and nothing else,
+       * so both machines run it and the buffer says the same thing with more in it.
+       */
       FillScreens(cpu, canvas, at.screen, 0x00u);
       cpu.memory[at.ecma] = 0x7Bu;
 
       const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("ECBLB2"), 2'000);
       Assert::IsTrue(run.completed, L"ECBLB2 returned");
 
-      RecordingSound effects;
+      Elite::SoundBuffer sound;
 
       Elite::FlightStatus status;
       status.ecmCountdown = 0x7Bu;
-      Elite::StartEcm(canvas, status, effects, false);
+      Elite::StartEcm(canvas, status, sound, false);
 
       (void)CompareScreens(cpu, at.screen, canvas, 0x00u, L"ECBLB2");
       Assert::AreEqual(cpu.memory[at.ecma], status.ecmCountdown, L"ECMA");
-      Assert::AreEqual<std::size_t>(1u, effects.started.size(), L"one sound was asked for");
-      Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, effects.started[0], L"and it is sfxecm");
-      Assert::AreEqual<std::size_t>(0u, effects.stopped.size(), L"and none was stopped");
-      Assert::AreEqual<std::size_t>(1u, cpu.trapHits.size(), L"the game asked for one too");
-      Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, cpu.trapHits[0].y, L"with the same number");
+      CompareSoundBuffer(cpu, oracle, sound, L"ECBLB2");
+      const std::uint8_t wanted = static_cast<std::uint8_t>(0x80u | (Elite::SOUND_ECM + 1u));
+      Assert::IsTrue(sound.flag[0] == wanted || sound.flag[1] == wanted || sound.flag[2] == wanted,
+                     L"and the hum took a voice");
     }
 
     /*
@@ -546,7 +559,6 @@ namespace GameLogicTests
         Cpu6502 cpu = oracle.Fresh();
         Elite::Canvas canvas;
 
-        cpu.AddTrap(oracle.Label("NOISEOFF"));
 
         FillScreens(cpu, canvas, at.screen, item.fill);
         cpu.memory[at.ecma] = item.ecma;
@@ -555,12 +567,12 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("ECMOF"), 2'000);
         Assert::IsTrue(run.completed, L"ECMOF returned");
 
-        RecordingSound effects;
+        Elite::SoundBuffer sound;
 
         Elite::FlightStatus status;
         status.ecmCountdown = item.ecma;
         status.ecmOurs = item.ecmp;
-        Elite::StopEcm(canvas, status, effects);
+        Elite::StopEcm(canvas, status, sound);
 
         const std::wstring where = Widen(std::string("ECMOF (") + item.what + ")");
 
@@ -570,11 +582,7 @@ namespace GameLogicTests
         Assert::AreEqual<std::uint32_t>(0u, status.ecmCountdown, (where + L": ECMA is cleared").c_str());
         Assert::AreEqual<std::uint32_t>(0u, status.ecmOurs, (where + L": ECMP is cleared").c_str());
 
-        Assert::AreEqual<std::size_t>(0u, effects.started.size(), (where + L": nothing started").c_str());
-        Assert::AreEqual<std::size_t>(1u, effects.stopped.size(), (where + L": one sound stopped").c_str());
-        Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, effects.stopped[0], (where + L": and it is sfxecm").c_str());
-        Assert::AreEqual<std::size_t>(1u, cpu.trapHits.size(), (where + L": the game stopped one").c_str());
-        Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, cpu.trapHits[0].y, (where + L": with the same number").c_str());
+        CompareSoundBuffer(cpu, oracle, sound, where);
       }
     }
   };

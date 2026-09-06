@@ -112,9 +112,6 @@ namespace GameLogicTests
         seams.push_back({"stopbd", 0, 0, 0});
       }
       void StartDockingMusic() override {}
-      bool PlaySound(std::uint8_t, bool) override { return false; }
-      bool PlaySoundPitched(std::uint8_t, std::uint8_t, std::uint8_t) override { return false; }
-      void StopSound(std::uint8_t) override {}
       bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
     };
 

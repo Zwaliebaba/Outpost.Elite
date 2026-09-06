@@ -4,6 +4,7 @@
 
 #include "Canvas.h"
 #include "Scanner.h"
+#include "SoundEffects.h"
 #include "ShipDraw.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
@@ -270,66 +271,25 @@ namespace Elite
   inline constexpr std::uint8_t MISSILE_GREEN = 0x57;
 
   /// What `ECBLB2` and `ECMOF` reach outside this slice: the sound, which is hardware.
-  class DashboardEffects
-  {
-  public:
-    virtual ~DashboardEffects() = default;
-
-    /*
-     * 6502: LDY #sfxecm / JSR NOISE -- the E.C.M. hum.
-     *
-     * RETURNS `NOISE`'s CARRY, because one caller reads it. The routine ends `SEC / RTS` on the
-     * path that gives the effect a SID voice, and reaches `SOUR1`'s bare `RTS` with the carry
-     * CLEAR when a higher-priority sound is already playing in all three -- and the flight loop's
-     * `JSR NOISE / JSR LASLI` runs `DORND` on whichever it left, so the laser burst lands a pixel
-     * further down when the shot was heard than when it was drowned out (§6.86).
-     *
-     * `NOISE` has a third exit the seam cannot express: with `DNOIZ` set the very first branch
-     * leaves for `SOUR1` with the caller's own carry untouched. The port has no sound-off option
-     * to reach it, so a bool is complete for what is modelled and would not be if one arrived.
-     */
-    /*
-     * `_carryIn` is the carry the 6502 reaches `JSR NOISE` with, and it is an argument because
-     * `NOISE` has THREE answers where a `bool` return has two (§6.99).
-     *
-     * It ends `SEC / RTS` when a voice took the effect. With sound switched off -- `DNOIZ`
-     * non-zero, a title-screen toggle the player owns -- it branches to `SOUR1`, which is a bare
-     * `RTS`: the carry that comes back is the carry that went in, because `LDA DNOIZ / BNE SOUR1`
-     * touches neither flag. So a silent build returns `_carryIn` and a sounding one returns true,
-     * and §6.88 measured that the difference reaches the player -- `OUCH` opens its `DORND` on
-     * this carry, so which piece of equipment an explosion breaks depends on it.
-     *
-     * WHERE THE CALLER DROPS THE RESULT, `_carryIn` IS NOT OBSERVABLE and those sites pass false.
-     * The two that read it pass what the 6502 has: `EXNO3` is reached through `BCS`, so its carry
-     * is set; `.custard` is reached from a `CMP`, so its carry is the comparison's.
-     */
-    virtual bool PlaySound(std::uint8_t _effect, bool _carryIn) = 0;
-
-    /*
-     * 6502: LDX #n / JMP NOISE2 -- the same sound, with the sustain and the frequency supplied.
-     *
-     * `NOISE2` is `BIT SOUR1 / STA XX15 / STX XX15+1 / EQUB &50` and then straight into `NOISE`
-     * past its `CLV`. The `BIT` on a byte holding `RTS` sets the overflow flag, which is what the
-     * two `BVS`es inside `NOISE` read to take these two bytes instead of the effect table's -- so
-     * `NOISE2` is not a different routine, it is `NOISE` with V set. The `EQUB &50` is a `BVC` that
-     * cannot branch, swallowing the `CLV` that would have cleared it (§6.79's idiom, seventh time).
-     *
-     * The explosions are the only callers in this port's reach, and they differ by pitch as much as
-     * by effect: 208 for a hit and 81 for a kill.
-     */
-    virtual bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) = 0;
-
-    /*
-     * 6502: LDY #sfxecm / JMP NOISEOFF -- stop it again.
-     *
-     * `NOISEOFF` walks the three SID voices looking for the one playing this effect and runs its
-     * counter down, so it is not `PlaySound`'s inverse in any register sense: it takes the effect
-     * NUMBER and finds the voice itself. It also writes `XX15+2` as scratch, which is game
-     * workspace rather than sound state -- harmless here, because nothing `ECMOF` does afterwards
-     * reads it, and worth knowing before the seam is implemented for real.
-     */
-    virtual void StopSound(std::uint8_t _effect) = 0;
-  };
+  /*
+   * `DashboardEffects` WAS HERE AND IS NOT ANY MORE (M3-b-2a).
+   *
+   * `PlaySound` was `NOISE`, `PlaySoundPitched` was `NOISE2` and `StopSound` was `NOISEOFF` --
+   * three routines `SoundEffects.cpp` has had since slice 5a. The seam existed because the SID is
+   * written from a RASTER INTERRUPT rather than from the game, and the port had nowhere to keep
+   * the buffer between them while sound was phase 5's.
+   *
+   * IT IS MEMORY, NOT A PORT, and that is why the removal is a `Universe` member rather than a new
+   * interface. `NOISE` and its relatives put an effect into `sound_variables` -- ten arrays of
+   * three and one byte on its own -- and set a flag; nothing in the game reads the chip back.
+   * `SOINT` is the only thing that touches the SID, it runs once a frame from `COMIRQ1`, and the
+   * platform is what calls it. So `Universe::sound` is the buffer and the port is the TICK.
+   *
+   * `PlaySound`'s carry survives the seam and is the reason it answered a `bool`: `NOISE` ends
+   * `SEC / RTS` on the path that gives the effect a voice and `CLC / RTS` on the path that refuses,
+   * and `LASLI`'s opening `DORND` rolls that flag into its own answer (§6.86, §6.99).
+   * `PlaySoundEffect` answers the same `bool` for the same reason.
+   */
 
   /// 6502: sfxecm -- the effect number `ECBLB2` asks for.
   inline constexpr std::uint8_t SOUND_ECM = 9;
@@ -342,7 +302,7 @@ namespace Elite
    */
   /// `_carryIn` because `ECBLB2` touches no flag on its way to `NOISE`, so what the sound sees
   /// is what this routine was called with (§6.118).
-  void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects, bool _carryIn) noexcept;
+  void StartEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, bool _carryIn) noexcept;
 
   /*
    * 6502: ECMOF -- stop the E.C.M.: clear both flags, put the bulb out, silence the hum.
@@ -357,6 +317,6 @@ namespace Elite
    * branch to as a cheap return -- `BNE ECMOF-1`. Nothing to port, but it means `ECMOF` cannot be
    * moved without breaking two routines that never mention it.
    */
-  void StopEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept;
+  void StopEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound) noexcept;
 
 } // namespace Elite

@@ -127,31 +127,22 @@ namespace GameLogicTests
     std::vector<std::uint8_t> maskedWith;
   };
 
+  /*
+   * 6502: DOVDU19 -- the one thing a screen change still reaches outside the universe.
+   *
+   * It had a `PlaySound` too, until M3-b-2a: `WARP`'s refusal noise was `ViewEffects::PlaySound`
+   * and the same `NOISE` that `DashboardEffects` declared, so the port had one routine behind two
+   * interfaces and the fixtures kept a list of calls to each. Both are `PlaySoundEffect` over
+   * `Universe::sound` now, and what they write is compared through `SOFLG` and its nine
+   * neighbours like every other byte.
+   */
   struct RecordingView final : Elite::ViewEffects
   {
     std::vector<std::uint8_t> palettes;
-    std::vector<std::uint8_t> sounds;
-
-    /*
-     * The carry each `PlaySound` was handed, parallel to `sounds` (§6.99). Both seams that reach
-     * `NOISE` push here, because the 6502 has one routine and the port has two interfaces onto it.
-     *
-     * `std::uint8_t` AND NOT `bool`, which is not a style choice: `std::vector<bool>` is bit-packed
-     * and its `operator[]` hands back a PROXY, and MSVC's `Assert::AreEqual` static-asserts that it
-     * has no `ToString` for one. g++ has no such assertion, so a `vector<bool>` here compiles on the
-     * Ubuntu leg and fails the Windows one -- which is what it did (§6.116).
-     */
-    std::vector<std::uint8_t> soundCarries;
 
     void SetPalette(std::uint8_t _colour) override
     {
       palettes.push_back(_colour);
-    }
-    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
-    {
-      sounds.push_back(_effect);
-      soundCarries.push_back(_carryIn ? 1u : 0u);
-      return true;
     }
   };
 
@@ -162,43 +153,6 @@ namespace GameLogicTests
    * message counters, the laser, the stardust and the dashboard -- and building it twice per test
    * method would be the same eighteen arguments in a different disguise.
    */
-  /*
-   * 6502: the three seams `NOISE`, `NOISE2` and `NOISEOFF` sit behind, recorded rather than played.
-   *
-   * Separate from `RecordingView`, which answers `LOOK1`'s and `WARP`'s single `PlaySound`: this is
-   * the whole sound interface, and `HYPNOISE` is the first routine in the port that needs the
-   * pitched entry as well as the plain one.
-   */
-  struct RecordingDashboard final : Elite::DashboardEffects
-  {
-    struct Pitched
-    {
-      std::uint8_t effect;
-      std::uint8_t sustain;
-      std::uint8_t frequency;
-    };
-
-    std::vector<std::uint8_t> sounds;
-    std::vector<std::uint8_t> carries;
-    std::vector<Pitched> pitched;
-    std::vector<std::uint8_t> stopped;
-
-    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
-    {
-      sounds.push_back(_effect);
-      carries.push_back(_carryIn ? 1u : 0u);
-      return true;
-    }
-    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
-    {
-      pitched.push_back({_effect, _sustain, _frequency});
-      return true;
-    }
-    void StopSound(std::uint8_t _effect) override
-    {
-      stopped.push_back(_effect);
-    }
-  };
 
   /*
    * The seams a screen change never reaches, answered with nothing.
@@ -238,20 +192,27 @@ namespace GameLogicTests
      */
     struct Chars final : Elite::TextEffects
     {
-      std::vector<std::uint8_t>& sounds;
-      std::vector<std::uint8_t>& carries;
+      Elite::SoundBuffer& sound;
       std::uint32_t cleared = 0;
 
-      Chars(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries) noexcept
-        : sounds(_sounds),
-          carries(_carries)
+      explicit Chars(Elite::SoundBuffer& _sound) noexcept
+        : sound(_sound)
       {
       }
 
+      /*
+       * 6502: BEEP -- `LDY #sfxbeep / JMP NOISE`, and it RUNS since M3-b-2a.
+       *
+       * It was recorded into the same list `DashboardEffects` pushed to, because `NOISE` was a
+       * seam and the fixtures compared the calls. `CHPR` is not trapped on the oracle's side here,
+       * so the game's bell reaches the real `NOISE` and writes `sound_variables`; a port that only
+       * counted the call would leave the buffer comparison one effect short. The carry is `CHPR`'s
+       * and `BEEP` touches no flag on its way (§6.118), which is why false is passed and the
+       * answer dropped.
+       */
       void Beep() override
       {
-        sounds.push_back(SOUND_BEEP_EFFECT);
-        carries.push_back(0u); // `BEEP` is `LDY #sfxbeep / JMP NOISE`: the carry is CHPR's (§6.118)
+        (void)Elite::PlaySoundEffect(sound, SOUND_BEEP_EFFECT, false);
       }
       void ClearScreen() override
       {
@@ -262,7 +223,7 @@ namespace GameLogicTests
     /// 6502: sfxbeep -- what `BEEP` asks `NOISE` for.
     static constexpr std::uint8_t SOUND_BEEP_EFFECT = 5;
 
-    Chars chars{effects.sounds, effects.soundCarries};
+    Chars chars{sound};
     Elite::TextPrinter glyphs{canvas, text, &chars};
     Elite::CharacterPrinter characters{glyphs};
     Elite::TokenPrinter printer{characters};
@@ -320,7 +281,6 @@ namespace GameLogicTests
     bool spriteRegistersAreOurs = false;
 
     RecordingSight sight;
-    RecordingDashboard dashboard;
 
     /// 6502: QQ14 -- kept only so the fixtures can name it; the byte the port reads is the
     /// commander block's, because part 15's fuel scooping writes it and a copy would drift.
@@ -363,24 +323,6 @@ namespace GameLogicTests
    */
   struct LoopRecording final : Elite::FlightLoopEffects, Elite::ShipDrawEffects
   {
-    std::vector<std::uint8_t> sounds;
-
-    bool PlaySound(std::uint8_t _effect, bool) override
-    {
-      sounds.push_back(_effect);
-      return true;
-    }
-    /// The sustain is recorded too, because `MLOOP`'s Trumble squeak and its BURN are the same
-    /// effect at two sustains (&80 and &F1), and a list of effect numbers cannot tell them apart.
-    std::vector<std::uint8_t> sustains;
-
-    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t) override
-    {
-      sounds.push_back(_effect);
-      sustains.push_back(_sustain);
-      return true;
-    }
-    void StopSound(std::uint8_t) override {}
     void StartDockingMusic() override {}
     void StopDockingMusic() override {}
     bool SpawnChild(std::uint8_t, Elite::ShipType) override
@@ -535,6 +477,15 @@ namespace GameLogicTests
     std::uint16_t tp, mch, messxc, screen;
     std::uint16_t tek, xx21Station, spasto; ///< 6502: tek, XX21+2*SST-2, and BEGIN's saved copy of it
 
+    /*
+     * 6502: sound_variables -- ten runs of three, one byte on its own, and the toggle (M3-b-2a).
+     *
+     * `NOISE`, `NOISE2` and `NOISEOFF` were seams until then and the fixtures counted their calls;
+     * they are `SoundEffects.cpp`'s routines over `Universe::sound` now, so what they write is
+     * compared like every other byte the frame touches.
+     */
+    std::uint16_t soflg, socnt, sopr, pulsew, sofrch, sofrq, socr, soatk, sosus, sovch, dnoiz;
+
     /// Unresolved -- every address zero -- for the one use that needs none: hashing the image,
     /// which reads cells in table order and never their addresses (`Hash(const Universe&)`).
     Where() = default;
@@ -622,6 +573,17 @@ namespace GameLogicTests
       mch = _oracle.Label("MCH");
       messxc = _oracle.Label("messXC");
       tek = _oracle.Label("tek");
+      soflg = _oracle.Label("SOFLG");
+      socnt = _oracle.Label("SOCNT");
+      sopr = _oracle.Label("SOPR");
+      pulsew = _oracle.Label("PULSEW");
+      sofrch = _oracle.Label("SOFRCH");
+      sofrq = _oracle.Label("SOFRQ");
+      socr = _oracle.Label("SOCR");
+      soatk = _oracle.Label("SOATK");
+      sosus = _oracle.Label("SOSUS");
+      sovch = _oracle.Label("SOVCH");
+      dnoiz = _oracle.Label("DNOIZ");
 
       /*
        * 6502: XX21+2*SST-2 -- the only two bytes of the pointer table the game writes.
@@ -645,6 +607,17 @@ namespace GameLogicTests
    * difference turned into an assertion. Nothing a suite passes has changed.
    */
   void Mirror(const Universe& _universe, Cpu6502& _cpu, const Where& _at);
+
+  /*
+   * 6502: sound_variables, compared on its own (M3-b-2a).
+   *
+   * `CompareState` covers it for the fixtures that call that; this is for the ones that mirror the
+   * universe in and check a handful of things out, which used to assert on a recorded list of
+   * `NOISE` calls. The buffer says more than the list did: which voice took the effect, what
+   * priority it went in at, what the frequency and the envelope are, and what an effect that was
+   * REFUSED left behind.
+   */
+  void CompareSound(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context);
   void CompareState(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context,
                     bool _compareRng = true);
 

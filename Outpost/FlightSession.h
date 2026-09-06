@@ -114,11 +114,7 @@ namespace Outpost
      */
     void SyncVideoRegisters() noexcept;
 
-    // ---- Elite::FlightLoopEffects, and Elite::DashboardEffects under it -------------------------
-
-    bool PlaySound(std::uint8_t _effect, bool _carryIn) override;
-    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override;
-    void StopSound(std::uint8_t _effect) override;
+    // ---- Elite::FlightLoopEffects -----------------------------------------------------------------
 
     void StartDockingMusic() override;
     void StopDockingMusic() override;

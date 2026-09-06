@@ -126,7 +126,7 @@ namespace Elite
    * because it is what slice 3d-e names, and because the alternative was to leave `HFS2` reachable
    * at one step size out of two.
    */
-  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports, DashboardEffects& _sound,
+  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports,
                             TunnelEffects* _pacing) noexcept;
 
   /*
@@ -295,7 +295,7 @@ namespace Elite
    * lets the scene be compared against the shipped routine on the whole bitmap, which a routine
    * that never returns cannot be.
    */
-  void PrepareDeathScene(Universe& _universe, Ports& _ports, DashboardEffects& _sound) noexcept;
+  void PrepareDeathScene(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * `_pacing` IS WHAT MAKES THE DEATH VISIBLE, and it was missing.
@@ -311,6 +311,6 @@ namespace Elite
    * long as the next took to compute (§6.109). Null runs the sequence with nothing shown, which is
    * what the tests want.
    */
-  void Die(Universe& _universe, Ports& _ports, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
+  void Die(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept;
 
 } // namespace Elite

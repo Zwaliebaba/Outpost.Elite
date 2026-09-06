@@ -17,7 +17,8 @@ namespace Elite
     return {(flashing != 0u) ? DIAL_NORMAL : DIAL_DANGER, DIAL_NORMAL};
   }
 
-  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold, DialColours _colours) noexcept
+  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold,
+               DialColours _colours) noexcept
   {
     // 6502: DILX -- four `LSR A`, and the entry point decides how many of them run (§6.63).
     std::uint8_t value = _value;
@@ -205,7 +206,7 @@ namespace Elite
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(STATION_CELL + 40u), BULB_COLOUR);
   }
 
-  void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects, bool _carryIn) noexcept
+  void StartEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, bool _carryIn) noexcept
   {
     /*
      * 6502: ECBLB2 -- `LDA #32 / STA ECMA / LDY #sfxecm / JSR NOISE`, and NOT ONE OF THOSE TOUCHES
@@ -214,16 +215,16 @@ namespace Elite
      * routine above it too (§6.118).
      */
     _status.ecmCountdown = 32u;                    // 6502: LDA #32 / STA ECMA
-    (void)_effects.PlaySound(SOUND_ECM, _carryIn); // 6502: LDY #sfxecm / JSR NOISE
+    (void)PlaySoundEffect(_sound, SOUND_ECM, _carryIn); // 6502: LDY #sfxecm / JSR NOISE
     ToggleEcmIndicator(_canvas);                   // 6502: and no RTS -- it falls into ECBLB
   }
 
-  void StopEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept
+  void StopEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound) noexcept
   {
     _status.ecmCountdown = 0u;     // 6502: LDA #0 / STA ECMA
     _status.ecmOurs = 0u;          // 6502: STA ECMP
     ToggleEcmIndicator(_canvas);   // 6502: JSR ECBLB
-    _effects.StopSound(SOUND_ECM); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
+    StopSoundEffect(_sound, SOUND_ECM); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
   }
 
   void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,

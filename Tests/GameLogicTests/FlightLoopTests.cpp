@@ -794,8 +794,8 @@ namespace GameLogicTests
       std::uint16_t las, lasct, lasx, lasy, msar, mstg, ecmp, moonflower;
       std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
-      std::uint16_t ma3, ma18, escape, startbd, stopbd, noise;
-      std::uint16_t mainLoop, death, doentry, doexp, planet, sfs1, noise2;
+      std::uint16_t ma3, ma18, escape, startbd, stopbd;
+      std::uint16_t mainLoop, death, doentry, doexp, planet, sfs1;
       std::uint16_t setl1, dovdu19, slsp;
 
       explicit LoopWhere(const OracleImage& _oracle)
@@ -830,7 +830,6 @@ namespace GameLogicTests
         escape = _oracle.Label("ESCAPE");
         startbd = _oracle.Label("startbd");
         stopbd = _oracle.Label("stopbd");
-        noise = _oracle.Label("NOISE");
         mainLoop = _oracle.Label("M%");
         ma18 = _oracle.Label("MA18");
         death = _oracle.Label("DEATH");
@@ -838,7 +837,6 @@ namespace GameLogicTests
         doexp = _oracle.Label("DOEXP");
         planet = _oracle.Label("PLANET");
         sfs1 = _oracle.Label("SFS1");
-        noise2 = _oracle.Label("NOISE2");
         setl1 = _oracle.Label("SETL1");
         dovdu19 = _oracle.Label("DOVDU19");
         slsp = _oracle.Label("SLSP");
@@ -859,13 +857,9 @@ namespace GameLogicTests
         std::uint8_t effect, sustain, frequency;
       };
 
-      std::vector<std::uint8_t>& sounds;
 
       /// The universe's carry list, not this object's: the 6502 has ONE `NOISE` and the port reaches
       /// it through two interfaces, so a comparison against one list needs both to write to it.
-      std::vector<std::uint8_t>& soundCarries;
-      std::vector<Pitched> pitched;
-      std::vector<std::uint8_t> stopped;
       std::uint32_t musicStarts = 0;
       std::uint32_t musicStops = 0;
 
@@ -874,30 +868,11 @@ namespace GameLogicTests
       /// the ship blocks like everything else.
       Universe& universe;
 
-      RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries, Universe& _universe) noexcept
-        : sounds(_sounds),
-          soundCarries(_carries),
-          universe(_universe)
+      explicit RecordingLoop(Universe& _universe) noexcept
+        : universe(_universe)
       {
       }
 
-      bool PlaySound(std::uint8_t _effect, bool _carryIn) override
-      {
-        sounds.push_back(_effect);
-        soundCarries.push_back(_carryIn ? 1u : 0u);
-        return true;
-      }
-      /// `NOISE2` is trapped at its own address, so its hits never reach `NOISE` and belong in
-      /// their own list -- putting them in `sounds` as well would double-count every explosion.
-      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
-      {
-        pitched.push_back({_effect, _sustain, _frequency});
-        return true;
-      }
-      void StopSound(std::uint8_t _effect) override
-      {
-        stopped.push_back(_effect);
-      }
       void StartDockingMusic() override
       {
         ++musicStarts;
@@ -944,7 +919,7 @@ namespace GameLogicTests
                          ///< the heap, the clipper's flag, the projection and the axes were eight
                          ///< members here while `FlightLoop` held references to them
       RecordingUniverse outside;
-      RecordingLoop effects{universe.effects.sounds, universe.effects.soundCarries, universe};
+      RecordingLoop effects{universe};
 
       explicit Frame(std::uint32_t _seed)
       {
@@ -1202,14 +1177,10 @@ namespace GameLogicTests
       cpu.AddTrap(_loop.planet);
       cpu.AddTrap(_loop.setl1);
       cpu.AddTrap(_loop.dovdu19);
-      cpu.AddTrap(_loop.noise2);
       cpu.AddTrap(_loop.sfs1, _frame.effects.childSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
       cpu.AddTrap(_loop.startbd);
       cpu.AddTrap(_loop.stopbd);
 
-      // `NOISE` ends `SEC / RTS` on the path that gives the effect a voice, and `LASLI`'s opening
-      // `DORND` rolls that carry into its own answer (§6.86).
-      cpu.AddTrap(_loop.noise, Cpu6502::TrapExit::SetCarry);
 
       /*
        * `MVTRIBS` USED TO BE PATCHED OUT HERE and is not any more (slice 4d-a).
@@ -1281,9 +1252,6 @@ namespace GameLogicTests
       std::uint32_t escaped = 0;
       std::uint32_t died = 0;
       std::uint32_t docked = 0;
-      std::vector<Elite::Testing::Cpu6502::TrapHit> pitched;
-      std::vector<std::uint8_t> sounds;
-      std::vector<std::uint8_t> soundCarries;
       std::uint32_t starts = 0;
       std::uint32_t stops = 0;
 
@@ -1292,15 +1260,6 @@ namespace GameLogicTests
         if (hit.address == _loop.ma3 || hit.address == _loop.ma18)
         {
           ++reachedEnd;
-        }
-        else if (hit.address == _loop.noise2)
-        {
-          pitched.push_back(hit);
-        }
-        else if (hit.address == _loop.noise)
-        {
-          sounds.push_back(hit.y);
-          soundCarries.push_back(hit.carry ? 1u : 0u);
         }
         else if (hit.address == _loop.startbd)
         {
@@ -1327,70 +1286,21 @@ namespace GameLogicTests
           (_context + L": fell through to the next part -- outcome " + std::to_wstring(static_cast<int>(outcome))).c_str());
       }
 
-      Assert::AreEqual(pitched.size(), _frame.effects.pitched.size(), (_context + L": NOISE2 calls").c_str());
-      for (std::size_t index = 0; index < pitched.size(); ++index)
-      {
-        const std::wstring where = _context + L": NOISE2 " + std::to_wstring(index);
-        Assert::AreEqual(pitched[index].y, _frame.effects.pitched[index].effect, (where + L" effect").c_str());
-        Assert::AreEqual(pitched[index].a, _frame.effects.pitched[index].sustain, (where + L" sustain").c_str());
-        Assert::AreEqual(pitched[index].x, _frame.effects.pitched[index].frequency, (where + L" frequency").c_str());
-      }
-
-      // ---- the seams -----------------------------------------------------------------------------
-      {
-        std::wstring wanted;
-        for (const std::uint8_t effect : sounds)
-        {
-          wanted += std::to_wstring(effect) + L" ";
-        }
-        std::wstring got;
-        for (const std::uint8_t effect : _frame.universe.effects.sounds)
-        {
-          got += std::to_wstring(effect) + L" ";
-        }
-        Assert::AreEqual(sounds.size(), _frame.universe.effects.sounds.size(),
-                         (_context + L": sounds asked for -- game [" + wanted + L"] port [" + got + L"]").c_str());
-      }
       /*
-       * THE CARRY GOING IN, compared as well as the effect (§6.99).
+       * 6502: NOISE, NOISE2 and NOISEOFF -- and the BUFFER is what compares them since M3-b-2a.
        *
-       * `NOISE` passes it straight back when sound is off, and `OUCH` and `LASLI` both open a
-       * `DORND` on what comes back -- so a port that asked for the right effect with the wrong
-       * carry would break a different piece of equipment on a silent build and no comparison of
-       * effect numbers alone would say so. The seam could not carry this until it took the
-       * argument; `Cpu6502::TrapHit` could not report it until it recorded the flag.
+       * All three were trapped on the oracle and recorded on the port, and this was a comparison of
+       * two lists: which effect, in what order, with what carry going in. Both machines run the
+       * routines now, so what is compared is `sound_variables` -- ten runs of three plus `PULSEW`
+       * and `DNOIZ` -- through `CompareState` below, along with everything else the frame touches.
+       *
+       * IT SUBSUMES §6.118's GAP rather than losing it. The old comparison could only check the
+       * carry going INTO four hand-picked effects, because every other call passes a flag through
+       * from somewhere the port does not model; the carry coming OUT was never compared at all.
+       * `NOISE`'s answer now comes from two buffers that agree byte for byte, and its consequence
+       * -- `LASLI` and `OUCH` open a `DORND` on it (§6.86, §6.88) -- lands in `RAND`, which this
+       * comparison already carries. Nothing is excluded by name any more.
        */
-      Assert::AreEqual(soundCarries.size(), _frame.universe.effects.soundCarries.size(), (_context + L": carries recorded").c_str());
-      for (std::size_t index = 0; index < soundCarries.size() && index < _frame.universe.effects.soundCarries.size(); ++index)
-      {
-        /*
-         * ONLY THE LASER SOUNDS ARE COMPARED, and the exclusion is named rather than quiet (§6.118).
-         *
-         * The four laser effects are the ones whose carry the port DERIVES: `.custard` is reached
-         * from a `CMP`, so the flag is the laser power measured against `Mlas` or `Armlas`, and
-         * §6.86 is the finding that made it matter. Every other call is a PASS-THROUGH from
-         * somewhere the port does not model -- `ECBLB2` touches no flag, `BEEP` touches no flag,
-         * and `MA63`'s `JSR EXNO3` runs on whatever `OUCH` left several routines deep. Comparing
-         * those would be fitting a constant to whatever this fixture happens to produce.
-         *
-         * Excluded the way §6.91 excludes the explosion cloud's six bytes: in the open, by name,
-         * with the reason beside it. What is left of the gap is §6.118.
-         */
-        const bool derived =
-          index < sounds.size() && (sounds[index] == 0u || sounds[index] == 10u || sounds[index] == 11u || sounds[index] == 12u);
-        if (!derived)
-        {
-          continue;
-        }
-        Assert::AreEqual(
-          soundCarries[index], _frame.universe.effects.soundCarries[index],
-          (_context + L": the carry into NOISE " + std::to_wstring(index) + L" (effect " + std::to_wstring(sounds[index]) + L")").c_str());
-      }
-
-      for (std::size_t index = 0; index < sounds.size(); ++index)
-      {
-        Assert::AreEqual(sounds[index], _frame.universe.effects.sounds[index], (_context + L": sound " + std::to_wstring(index)).c_str());
-      }
 
 
       Assert::AreEqual(starts, _frame.effects.musicStarts, (_context + L": startbd").c_str());
@@ -2509,10 +2419,8 @@ namespace GameLogicTests
         // Sound and the VIC-II only: everything that draws or thinks runs for real.
         cpu.AddTrap(loop.setl1);
         cpu.AddTrap(loop.dovdu19);
-        cpu.AddTrap(loop.noise2);
         cpu.AddTrap(loop.startbd);
         cpu.AddTrap(loop.stopbd);
-        cpu.AddTrap(loop.noise, Cpu6502::TrapExit::SetCarry);
 
         FillScreens(cpu, frame.universe.canvas, at.screen, 0x1Du);
         Mirror(frame.universe, cpu, at);

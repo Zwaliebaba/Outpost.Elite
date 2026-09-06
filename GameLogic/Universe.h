@@ -11,6 +11,7 @@
 #include "Market.h"
 #include "LineHeap.h"
 #include "Rng.h"
+#include "SoundEffects.h"
 #include "Scanner.h"
 #include "ShipDraw.h"
 #include "ShipMove.h"
@@ -225,6 +226,20 @@ namespace Elite
      * arrival, so it belongs to neither half and therefore to the universe.
      */
     CurrentSystem current;
+
+    /*
+     * 6502: sound_variables -- the buffer between the game and the raster interrupt (M3-b-2a).
+     *
+     * `NOISE`, `NOISE2` and `NOISEOFF` write ten arrays of three and one byte on their own, and
+     * nothing in the game reads the SID back: `SOINT` runs once a frame from `COMIRQ1` and is the
+     * only thing that touches the chip. So the buffer is MEMORY the routines own, not a seam --
+     * `DashboardEffects` existed only because the port had nowhere to put it while sound was
+     * phase 5's, and `SoundEffects.cpp` has had the routines since slice 5a.
+     *
+     * IT IS A PLAIN STRUCT, which is why it can live here at all: no reference, no vtable, and it
+     * copies with the rest of the universe.
+     */
+    SoundBuffer sound;
 
     /*
      * 6502: LSO -- the sun's heap, which `NWSPS` hands to the SPACE STATION (§6.112).

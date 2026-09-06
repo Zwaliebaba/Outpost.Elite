@@ -149,7 +149,7 @@ namespace GameLogicTests
                 Cpu6502 cpu = oracle.Fresh();
                 // `TT114` is the chart's own redraw, which `TT18` JUMPS to rather than calls -- the
                 // port hands it back as an outcome for the caller, so here it is a trap.
-                for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY", "TT114"})
+                for (const char* seam : {"MESS", "WSCAN", "DELAY", "TT114"})
                 {
                   std::uint16_t address = 0;
                   if (oracle.TryLabel(seam, address))
@@ -216,7 +216,7 @@ namespace GameLogicTests
               Elite::MarketState market;
 
               const Elite::JumpResult result =
-                Elite::PerformJump(universe.universe, ports, selected, jump, described, market, universe.effects, nullptr,
+                Elite::PerformJump(universe.universe, ports, selected, jump, described, market, nullptr,
                                    cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, controlHeld, patg);
 
               const std::wstring context =
@@ -309,7 +309,7 @@ namespace GameLogicTests
           for (const std::uint8_t galaxy : {std::uint8_t{0}, std::uint8_t{3}, std::uint8_t{7}})
           {
             Cpu6502 cpu = oracle.Fresh();
-            for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY"})
+            for (const char* seam : {"MESS", "WSCAN", "DELAY"})
             {
               std::uint16_t address = 0;
               if (oracle.TryLabel(seam, address))
@@ -429,7 +429,7 @@ namespace GameLogicTests
           // `WSCAN` waits on the VIC-II raster, which never advances in an interpreter -- it is a
           // hardware wait and not code, so it is trapped like the sound seams (ChartTests does the
           // same). Without it `LL164`'s tunnel spins for ever on the first circle.
-          for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY"})
+          for (const char* seam : {"MESS", "WSCAN", "DELAY"})
           {
             std::uint16_t address = 0;
             if (oracle.TryLabel(seam, address))
@@ -447,7 +447,7 @@ namespace GameLogicTests
 
           Elite::Ports ports = universe.Ports();
 
-          Elite::EnterWitchspace(universe.universe, ports, universe.universe.commander, universe.effects, nullptr);
+          Elite::EnterWitchspace(universe.universe, ports, universe.universe.commander, nullptr);
 
           const std::wstring context = WidenText("MJP seed " + std::to_string(seedIndex) + " QQ1 " + std::to_string(systemY));
 
@@ -644,7 +644,7 @@ namespace GameLogicTests
       for (const Case& one : CASES)
       {
         Cpu6502 cpu = oracle.Fresh();
-        for (const char* seam : {"NOISE", "NOISE2", "MESS", "WSCAN", "DELAY", "BELL"})
+        for (const char* seam : {"MESS", "WSCAN", "DELAY", "BELL"})
         {
           std::uint16_t address = 0;
           if (oracle.TryLabel(seam, address))

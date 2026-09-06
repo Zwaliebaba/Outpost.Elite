@@ -125,7 +125,7 @@ namespace Elite
     // 6502: LDA ECMA / BEQ yu / JSR ECMOF.
     if (_universe.status.ecmCountdown != 0u)
     {
-      StopEcm(_universe.canvas, _universe.status, _ports.loop);
+      StopEcm(_universe.canvas, _universe.status, _universe.sound);
     }
 
     // 6502: .yu JSR WPSHPS -- rub every ship off the screen and forget both line heaps.
@@ -178,7 +178,7 @@ namespace Elite
   {
     // 6502: .LAUN LDY #sfxwhosh / JSR NOISE -- and the carry it returns is dropped, because the
     // next instruction is a load. §6.99's third answer costs nothing here.
-    (void)_ports.view.PlaySound(SOUND_MISSILE, false);
+    (void)PlaySoundEffect(_universe.sound, SOUND_MISSILE, false);
 
     // 6502: LDA #8 -- and `HFS2`'s first instruction, `STA STP`, is what receives it. This is the
     // only writer of the step on the launch path, and its absence is what §6.95 was working around.
@@ -217,7 +217,7 @@ namespace Elite
     DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _pacing);
   }
 
-  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
+  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept
   {
     /*
      * 6502: .HYPNOISE -- LDY #sfxhyp1 / LDA #&F5 / LDX #240 / JSR NOISE2, then `sfxwhosh` through
@@ -227,8 +227,14 @@ namespace Elite
      * whether it is already playing", so the second hyperspace sound stacks on the first rather
      * than replacing it. That bit is the argument, not a separate routine.
      */
-    (void)_sound.PlaySoundPitched(SOUND_HYPERSPACE, HYPERSPACE_SUSTAIN, HYPERSPACE_FREQUENCY);
-    (void)_sound.PlaySound(SOUND_MISSILE, false);
+    /*
+     * The carry into `NOISE2` here is the CALLER's -- `LDY`, `LDA` and `LDX` touch no flag -- and
+     * it is unobservable, which is why false is passed rather than threaded through `LL164`.
+     * `NOISE` reads it on one path only, `LDA DNOIZ / BNE SOUR1`, where it becomes the RETURN
+     * value; nothing it writes depends on it, and `HYPNOISE` discards the answer.
+     */
+    (void)PlaySoundEffectPitched(_universe.sound, SOUND_HYPERSPACE, HYPERSPACE_SUSTAIN, HYPERSPACE_FREQUENCY, false);
+    (void)PlaySoundEffect(_universe.sound, SOUND_MISSILE, false);
 
     // 6502: LDY #1 / JSR DELAY -- one vertical sync, which is what the pacing object holds for.
     if (_pacing != nullptr)
@@ -236,7 +242,7 @@ namespace Elite
       _pacing->ShowFrame();
     }
 
-    (void)_sound.PlaySound(static_cast<std::uint8_t>(SOUND_HYPERSPACE + 128u), false);
+    (void)PlaySoundEffect(_universe.sound, static_cast<std::uint8_t>(SOUND_HYPERSPACE + 128u), false);
 
     // 6502: LDA #4 / JSR HFS2 / RTS.
     DrawTunnel(_universe, _ports, HYPERSPACE_TUNNEL_STEP, _pacing);
@@ -440,11 +446,11 @@ namespace Elite
     }
   }
 
-  void PrepareDeathScene(Universe& _universe, Ports& _ports, DashboardEffects& _sound) noexcept
+  void PrepareDeathScene(Universe& _universe, Ports& _ports) noexcept
   {
 
     // 6502: JSR EXNO3 -- `LDY #sfxexpl / BNE NOISE`, and the carry is whatever killed us.
-    (void)_sound.PlaySound(SOUND_EXPLOSION, false);
+    (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, false);
 
     ResetShipAndBubble(_universe, _ports); // 6502: JSR RES2
 
@@ -552,10 +558,10 @@ namespace Elite
     } while (_universe.bubble.slots[DEATH_DEBRIS_SLOT] == 0u);
   }
 
-  void Die(Universe& _universe, Ports& _ports, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
+  void Die(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept
   {
 
-    PrepareDeathScene(_universe, _ports, _sound);
+    PrepareDeathScene(_universe, _ports);
 
     ClearFlightKeys(_universe.keys); // 6502: JSR U%
 

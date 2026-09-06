@@ -238,15 +238,23 @@ namespace Elite
     std::uint8_t frequency = static_cast<std::uint8_t>(voice.value | 0x40u);
     std::uint8_t sustain = 0x80u;
 
-    if (_universe.status.cabinTemperature >= TRUMBLE_BURN_TEMPERATURE)
+    /*
+     * 6502: LDY CABTMP / CPY #&E0 / BCC burnthebastards -- and THAT COMPARE IS THE CARRY (M3-b-2a).
+     *
+     * The branch decides the sustain and the frequency, and the flag it leaves reaches `NOISE2`:
+     * `AND`, `TAX` and `LDA` touch no carry between them and the call. So a burning cabin squeaks
+     * with the flag SET and an ordinary one with it clear -- which is the row the plan recorded as
+     * "dropped at the seam" when `PlaySoundPitched` had nowhere to put it.
+     */
+    const bool burning = _universe.status.cabinTemperature >= TRUMBLE_BURN_TEMPERATURE;
+    if (burning)
     {
       frequency = static_cast<std::uint8_t>(frequency & 0x0Fu);
       sustain = 0xF1u;
     }
 
-    // 6502: LDY #sfxtrib / JSR NOISE2, and then `.NOSQUEEK JSR TT17` -- which is the caller's, the
-    // way the launch below part 4 is.
-    static_cast<void>(_ports.loop.PlaySoundPitched(SOUND_TRUMBLES, sustain, frequency));
+    // 6502: LDY #sfxtrib / JSR NOISE2, and then `.NOSQUEEK JSR TT17`.
+    static_cast<void>(PlaySoundEffectPitched(_universe.sound, SOUND_TRUMBLES, sustain, frequency, burning));
     return requestedFrames;
   }
 

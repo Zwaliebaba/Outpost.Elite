@@ -440,11 +440,19 @@ namespace Elite
             return true;
           }
 
-          // 6502: JSR TA873 / JSR EXNO3 / LDA #250 / JMP OOPS -- it has arrived. The missile is
-          // marked dead, the explosion is heard, and 250 is nearly always fatal.
+          /*
+           * 6502: JSR TA873 / JSR EXNO3 / LDA #250 / JMP OOPS -- it has arrived. The missile is
+           * marked dead, the explosion is heard, and 250 is nearly always fatal.
+           *
+           * AND THE CARRY `EXNO3` LEAVES IS `OOPS`'s, which is §6.87 a second time: `LDA #250`
+           * touches no flag, so `OOPS`'s `SBC` subtracts on whatever `NOISE` returned. The port
+           * passed false here while `PlaySound` was a seam whose answer was discarded (M3-b-2a);
+           * a missile that arrives while the explosion is refused a voice costs one more point
+           * of shield than one that gets one.
+           */
           MarkAsKilled(work);
-          (void)_ports.loop.PlaySound(SOUND_EXPLOSION, false);
-          return TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], MISSILE_DAMAGE, false);
+          const bool heard = PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, false).carry;
+          return TakeDamage(_universe, _ports, _universe.bubble.blocks[_slot], MISSILE_DAMAGE, heard);
         }
 
         // 6502: LSR A / TAX / LDA UNIV,X / STA V / LDA UNIV+1,X / JSR VCSUB -- the missile's TARGET
@@ -485,7 +493,7 @@ namespace Elite
               // hands it straight to `NOISE`, whose only use for it is the value it returns when
               // the sound is switched off -- so it is unobservable, and the port passed `false`
               // until M2-d read the branch (§8).
-              StartEcm(_universe.canvas, _universe.status, _ports.loop, true);
+              StartEcm(_universe.canvas, _universe.status, _universe.sound, true);
               return true;
             }
           }
@@ -524,7 +532,7 @@ namespace Elite
         // missile dying right beside us still hurts, and 80 is a survivable amount.
         if (static_cast<std::uint8_t>(work.x.lo | work.y.lo | work.z.lo) == 0u)
         {
-          if (!TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], COLLISION_DAMAGE, false))
+          if (!TakeDamage(_universe, _ports, _universe.bubble.blocks[_slot], COLLISION_DAMAGE, false))
           {
             return false;
           }
@@ -532,7 +540,7 @@ namespace Elite
 
         // 6502: .TA872 LDX #PLT / BNE TA353 -- and `TA353` is `JSR EXNO2` with X as the type, so
         // the explosion is scored as though a plate had been destroyed.
-        RecordKill(_universe, _ports, _ports.loop, ShipType::AlloyPlate);
+        RecordKill(_universe, _ports, ShipType::AlloyPlate);
         MarkAsKilled(work); // 6502: .TA873 -- falls straight through from `TA353`
         return true;
       }
@@ -540,7 +548,7 @@ namespace Elite
       // 6502: .TA35 LDA INWK / ORA INWK+3 / ORA INWK+6 / BNE TA87 / LDA #80 / JSR OOPS.
       if (static_cast<std::uint8_t>(work.x.lo | work.y.lo | work.z.lo) == 0u)
       {
-        if (!TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], COLLISION_DAMAGE, false))
+        if (!TakeDamage(_universe, _ports, _universe.bubble.blocks[_slot], COLLISION_DAMAGE, false))
         {
           return false;
         }
@@ -548,7 +556,7 @@ namespace Elite
 
       // 6502: .TA87 LDA INWK+32 / AND #%01111111 / LSR A / TAX / .TA353 JSR EXNO2 -- the TARGET's
       // slot becomes the type handed to `EXNO2`, which is what makes a big ship a loud explosion.
-      RecordKill(_universe, _ports, _ports.loop, TypeOf(MissileTargetOf(work.ai)));
+      RecordKill(_universe, _ports, TypeOf(MissileTargetOf(work.ai)));
       MarkAsKilled(work);
       return true;
     }
@@ -868,7 +876,7 @@ namespace Elite
         {
           ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message,
                       MESSAGE_INCOMING_MISSILE, _universe.view);
-          (void)_ports.loop.PlaySound(SOUND_MISSILE, false);
+          (void)PlaySoundEffect(_universe.sound, SOUND_MISSILE, false);
         }
         return true;
       }
@@ -911,7 +919,7 @@ namespace Elite
              */
             const std::uint8_t power = _universe.flight.blueprint->weapons;
             const std::uint8_t damage = static_cast<std::uint8_t>(power >> 1u);
-            if (!TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], damage, (power & 1u) != 0u))
+            if (!TakeDamage(_universe, _ports, _universe.bubble.blocks[_slot], damage, (power & 1u) != 0u))
             {
               return false;
             }
@@ -925,8 +933,8 @@ namespace Elite
               return true;
             }
 
-            (void)_ports.loop.PlaySound(SOUND_HIT_BY_LASER, false);
-            (void)_ports.loop.PlaySound(SOUND_HIT_BY_LASER_2, false);
+            (void)PlaySoundEffect(_universe.sound, SOUND_HIT_BY_LASER, false);
+            (void)PlaySoundEffect(_universe.sound, SOUND_HIT_BY_LASER_2, false);
             return true;
           }
         }

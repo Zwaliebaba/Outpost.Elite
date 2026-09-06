@@ -300,7 +300,7 @@ namespace Elite
     // 6502: DEC NOMSL -- one fewer on the rail.
     _universe.commander.missiles = static_cast<std::uint8_t>(_universe.commander.missiles - 1u);
 
-    (void)_ports.loop.PlaySound(SOUND_MISSILE, false); // 6502: LDY #sfxwhosh / JMP NOISE
+    (void)PlaySoundEffect(_universe.sound, SOUND_MISSILE, false); // 6502: LDY #sfxwhosh / JMP NOISE
   }
 
   LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept
@@ -436,7 +436,7 @@ namespace Elite
     if ((_universe.keys[KEY_UNARM_MISSILE] & commander.missiles) != 0u)
     {
       AbortMissileLock(_universe.canvas, _universe.bubble, _universe.status.missileArmed, commander.missiles, MISSILE_READY);
-      (void)_ports.loop.PlaySound(SOUND_BOOP, false); // 6502: LDY #sfxboop / JSR NOISE
+      (void)PlaySoundEffect(_universe.sound, SOUND_BOOP, false); // 6502: LDY #sfxboop / JSR NOISE
       _universe.status.missileArmed = 0u;                  // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
     }
 
@@ -488,7 +488,7 @@ namespace Elite
           // 6502: LDY #%11010000 / STY moonflower -- the upper half of the screen changes mode, and
           // that IS the effect: no drawing is involved.
           _universe.screen.upperBitmapMode = BOMB_BITMAP_MODE;
-          (void)_ports.loop.PlaySound(SOUND_ENERGY_BOMB, false);
+          (void)PlaySoundEffect(_universe.sound, SOUND_ENERGY_BOMB, false);
         }
       }
 
@@ -526,7 +526,7 @@ namespace Elite
          * carry across the flight loop, so false is what it can honestly supply, and the sound
          * comparison excludes this effect by name rather than pretending to agree.
          */
-        StartEcm(_universe.canvas, _universe.status, _ports.loop, false);
+        StartEcm(_universe.canvas, _universe.status, _universe.sound, false);
       }
     }
 
@@ -613,7 +613,7 @@ namespace Elite
      * that swallows one of the loads. A silent build hands this straight back (§6.99).
      */
     const bool carryIn = ((fitted & 0x80u) != 0u) ? (fitted >= LASER_POWER_MILITARY) : (fitted >= LASER_POWER_MINING);
-    const bool heard = _ports.loop.PlaySound(sound, carryIn);
+    const bool heard = PlaySoundEffect(_universe.sound, sound, carryIn).carry;
 
     // 6502: JSR LASLI -- the burst itself, which draws and heats the gun.
     (void)FireLaser(_universe.canvas, _universe.rng, _universe.burst, _universe.status, _universe.view, heard);
@@ -714,7 +714,7 @@ namespace Elite
   [[nodiscard]] LaserHit ApplyLaserHit(Universe& _universe, Ports& _ports, SpawnChildEffects& _spawn, const Blueprint& _blueprint,
                                        ShipType _type) noexcept
   {
-    (void)PlayHitSound(_universe.work, _ports.loop); // 6502: LDX #15 / JSR EXNO
+    (void)PlayHitSound(_universe.work, _universe.sound); // 6502: LDX #15 / JSR EXNO
 
     // 6502: LDA TYPE / CMP #SST / BEQ MA14+2.
     if (_type == ShipType::Station)
@@ -789,7 +789,7 @@ namespace Elite
 
     // 6502: LDX TYPE / JSR EXNO2 -- and what `.MA14` stores is what NOISE2 left in A (§6.86's
     // dependency again: the dead ship's energy byte comes out of the sound system).
-    return {true, RecordKill(_universe, _ports, _ports.loop, _type)};
+    return {true, RecordKill(_universe, _ports, _type)};
   }
 
   LoopOutcome MoveEveryShip(Universe& _universe, Ports& _ports) noexcept
@@ -841,7 +841,7 @@ namespace Elite
         if ((commander.energyBomb & 0x80u) != 0u && !exempt && !Has(_universe.work.state, ShipStateBit::Exploding))
         {
           _universe.work.state = MarkKilled(_universe.work.state);
-          (void)RecordKill(_universe, _ports, _ports.loop, type); // 6502: LDX TYPE / JSR EXNO2
+          (void)RecordKill(_universe, _ports, type); // 6502: LDX TYPE / JSR EXNO2
         }
       }
 
@@ -1029,7 +1029,7 @@ namespace Elite
       {
         // 6502: .MA59 JSR EXNO3 -- and the carry is SET, because `BCS MA59` in part 8 is the
         // only way here: a full hold is exactly the carry the capacity test leaves.
-        (void)_ports.loop.PlaySound(SOUND_EXPLOSION, true);
+        (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true);
         _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA60
         // 6502: .MA61 BNE MA26 -- and `ROR` has just set bit 7, so it always branches.
       }
@@ -1053,7 +1053,7 @@ namespace Elite
 
         // 6502: .MA63 JSR OOPS / JSR EXNO3 -- and `OOPS` makes the same noise itself on the path
         // that survives, so a hit that costs the banks is heard twice.
-        if (!TakeDamage(_universe, _ports, _ports.loop, block, damage, carry))
+        if (!TakeDamage(_universe, _ports, block, damage, carry))
         {
           return LoopOutcome::Died;
         }
@@ -1063,7 +1063,7 @@ namespace Elite
          * `OOPS` ends `ADC ENERGY / STA ENERGY / BEQ / BCS`, and reaching here at all means the
          * `BCS` was taken, so it is SET. Nothing between the two calls touches the flag.
          */
-        (void)_ports.loop.PlaySound(SOUND_EXPLOSION, true);
+        (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true);
       }
 
       /*
@@ -1107,7 +1107,7 @@ namespace Elite
             // and `BEQ` do not touch. `NOISE` hands it straight back when the sound is switched
             // off, so passing `false` here (which the port did until M2-d) changed the carry `LL9`
             // seeds an explosion cloud on, on a silent build (§8).
-            carry = _ports.loop.PlaySound(SOUND_BEEP, carry);
+            carry = PlaySoundEffect(_universe.sound, SOUND_BEEP, carry).carry;
             SetMissileTarget(_universe.canvas, _universe.bubble, _universe.status.missileArmed, commander.missiles, _universe.flight.slot,
                              MISSILE_LOCKED);
           }
@@ -1265,7 +1265,7 @@ namespace Elite
 
     if (stop)
     {
-      StopEcm(_universe.canvas, _universe.status, _ports.loop); // 6502: .MA70 JSR ECMOF
+      StopEcm(_universe.canvas, _universe.status, _universe.sound); // 6502: .MA70 JSR ECMOF
     }
 
     /*

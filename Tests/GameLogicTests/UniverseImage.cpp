@@ -232,6 +232,27 @@ namespace GameLogicTests
       CellScope::Compared);
 
     Run(cells, L"LSO", _at.lso, _universe.heaps.sun.data(), _universe.heaps.sun.size(), CellScope::Compared);
+
+    /*
+     * 6502: sound_variables -- what `NOISE`, `NOISE2` and `NOISEOFF` write (M3-b-2a).
+     *
+     * They were seams and the fixtures counted the calls; they are routines over `Universe::sound`
+     * now, so the buffer is mirrored in and compared out. `PULSEW` is one byte rather than three
+     * and `DNOIZ` is the pause screen's toggle rather than sound state, which is why both sit
+     * beside the ten runs instead of inside them.
+     */
+    Run(cells, L"SOFLG", _at.soflg, _universe.sound.flag.data(), _universe.sound.flag.size(), CellScope::Compared);
+    Run(cells, L"SOCNT", _at.socnt, _universe.sound.counter.data(), _universe.sound.counter.size(), CellScope::Compared);
+    Run(cells, L"SOPR", _at.sopr, _universe.sound.priority.data(), _universe.sound.priority.size(), CellScope::Compared);
+    Run(cells, L"SOFRCH", _at.sofrch, _universe.sound.frequencyChange.data(), _universe.sound.frequencyChange.size(),
+        CellScope::Compared);
+    Run(cells, L"SOFRQ", _at.sofrq, _universe.sound.frequency.data(), _universe.sound.frequency.size(), CellScope::Compared);
+    Run(cells, L"SOCR", _at.socr, _universe.sound.control.data(), _universe.sound.control.size(), CellScope::Compared);
+    Run(cells, L"SOATK", _at.soatk, _universe.sound.attack.data(), _universe.sound.attack.size(), CellScope::Compared);
+    Run(cells, L"SOSUS", _at.sosus, _universe.sound.sustain.data(), _universe.sound.sustain.size(), CellScope::Compared);
+    Run(cells, L"SOVCH", _at.sovch, _universe.sound.volumeRate.data(), _universe.sound.volumeRate.size(), CellScope::Compared);
+    cells.push_back(Direct(L"PULSEW", _at.pulsew, _universe.sound.pulseWidth, CellScope::Compared));
+    cells.push_back(Direct(L"DNOIZ", _at.dnoiz, _universe.sound.soundOff, CellScope::Compared));
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
     {
       CodecCells(cells, L"K% slot " + std::to_wstring(slot), static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE),
@@ -422,6 +443,46 @@ namespace GameLogicTests
   void Mirror(const Universe& _universe, Cpu6502& _cpu, const Where& _at)
   {
     Materialise(_universe, _cpu, _at);
+  }
+
+  void CompareSound(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context)
+  {
+    struct Run
+    {
+      const wchar_t* name;
+      std::uint16_t base;
+      const std::uint8_t* bytes;
+      std::size_t count;
+    };
+    const Elite::SoundBuffer& sound = _universe.sound;
+    const Run RUNS[] = {
+      {L"SOFLG", _at.soflg, sound.flag.data(), sound.flag.size()},
+      {L"SOCNT", _at.socnt, sound.counter.data(), sound.counter.size()},
+      {L"SOPR", _at.sopr, sound.priority.data(), sound.priority.size()},
+      {L"SOFRCH", _at.sofrch, sound.frequencyChange.data(), sound.frequencyChange.size()},
+      {L"SOFRQ", _at.sofrq, sound.frequency.data(), sound.frequency.size()},
+      {L"SOCR", _at.socr, sound.control.data(), sound.control.size()},
+      {L"SOATK", _at.soatk, sound.attack.data(), sound.attack.size()},
+      {L"SOSUS", _at.sosus, sound.sustain.data(), sound.sustain.size()},
+      {L"SOVCH", _at.sovch, sound.volumeRate.data(), sound.volumeRate.size()},
+      {L"PULSEW", _at.pulsew, &sound.pulseWidth, 1u},
+      {L"DNOIZ", _at.dnoiz, &sound.soundOff, 1u},
+    };
+
+    for (const Run& run : RUNS)
+    {
+      for (std::size_t index = 0; index < run.count; ++index)
+      {
+        const std::uint8_t theirs = _cpu.memory[static_cast<std::uint16_t>(run.base + index)];
+        const std::uint8_t ours = run.bytes[index];
+        if (theirs != ours)
+        {
+          Assert::Fail((_context + L": " + run.name + L"+" + std::to_wstring(index) + L" -- game has " + std::to_wstring(theirs) +
+                        L", port has " + std::to_wstring(ours))
+                         .c_str());
+        }
+      }
+    }
   }
 
   void CompareState(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context, bool _compareRng)
