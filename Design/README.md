@@ -1,16 +1,23 @@
 # Design/ — Outpost: Elite
 
-**Status:** opened 2026-09-02. **Phases 0, 1, 2, 3 and 5 are built as of 2026-09-05**, and phase 4
-is built but for one slice: the kernel, the whole docked game, flight with its 3D pipeline, the
-sound and music, the ship AI and the autopilot, the explosions, the main game loop with hyperspace
-and the spawning rules, and the pause screen with its thirteen option toggles are all ported and
-compared against the assembled original. The executable launches, flies, fights, docks and dies.
-**What is left is slice 4d** — the missions and the Trumbles — plus two pieces of recorded debt:
-thirteen mutation survivors in the ship AI's sweep — measured rather than named, by `python
-tools/mutate.py --unit tactics` (plan §6.125, §6.132, §6.147), and the `VideoState` work that ADR-005 §1's closed decision
-turned out to need (plan §6.133). **A fresh clone needs
+**Status:** opened 2026-09-02. **Phases 0 to 5 are built as of 2026-09-05**: the kernel, the whole
+docked game, flight with its 3D pipeline, the sound and music, the ship AI and the autopilot, the
+explosions, the main game loop with hyperspace and the spawning rules, the pause screen with its
+thirteen option toggles, and — closing phase 4 — the three missions and the Trumbles are all ported
+and compared against the assembled original. The executable launches, flies, fights, docks, takes a
+briefing and dies. **There is no recorded mutation debt left**: the ship AI's thirteen survivors are
+closed and `python tools/mutate.py --unit tactics` is 16 of 16 — the last one was a defect, `TA7`'s
+first `BCC` jumping to part SIX so that a ship above half energy never launches a missile (plan
+§6.152, §6.153) and so are the hyperspace jump's last two, so **every recorded mutant in the corpus
+is caught or a proved equivalent** (§6.156). **What is left needs a person, not a slice**: one
+hand-checked screenshot for the presenter, which is the only part of the picture no oracle reaches,
+and a written answer from the rights holders for 0e. Plan §1.2 has them. Two items left that list on
+2026-09-06 — ADR-005 §1's raster effects, built as slice 4f, where the hyperspace tearing turned out
+not to exist in this build at all (§6.155); and the missing goldens, three of which were already
+covered by whole-bitmap oracle comparisons and the fourth of which is a sound hash now (§6.156).
+**A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->361 tests** and
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->385 tests** and
 CI runs **<!--count:checks-->eleven repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits

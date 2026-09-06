@@ -63,6 +63,9 @@ namespace Outpost
       return;
     }
     m_source = source;
+
+    // 6502: `COLD` sets the master volume before anything plays; so does this.
+    SetBootVolume();
   }
 
   SoundOutput::~SoundOutput()
@@ -84,6 +87,21 @@ namespace Outpost
     {
       CoUninitialize();
     }
+  }
+
+  /*
+   * 6502: LDA #%00001111 / STA SID+&18, out of `COLD` -- the master volume, set once at boot.
+   *
+   * NOTHING IN THE EFFECT PLAYER EVER WRITES IT. `SOINT` programs the three voices and never
+   * touches register &18, so every sound in the game is played at whatever volume something else
+   * left there. Two routines leave 15 in it: `COLD`, which the port does not have (row 32's Kernal
+   * setup is Replace), and `BDENTRY`, which starts the theme -- so in practice the port is audible
+   * only because the title screen plays music first, and would be silent from a start that did not.
+   * The original does not depend on that, and neither should this (§6.156).
+   */
+  void SoundOutput::SetBootVolume() noexcept
+  {
+    m_synth.Write(0x18u, 0x0Fu);
   }
 
   void SoundOutput::Apply(const Elite::SidWriteLog& _log) noexcept

@@ -65,6 +65,8 @@ namespace Elite
     m_screen.fill(0);
     m_colourCells.fill(0);
     m_background = 0;
+    m_spaceViewBackground = 0;
+    m_spaceViewMulticolour = false;
   }
 
   void Canvas::Resolve(std::span<std::uint8_t> _out) const noexcept
@@ -85,11 +87,23 @@ namespace Elite
       const bool lower = m_dashboardShown && (cellRow >= DASHBOARD_CELL_ROW);
       const std::uint16_t cellBase = lower ? DASHBOARD_CELLS : SCREEN_CELLS;
 
+      /*
+       * 6502: moonflower and welcome, the other half of the same interrupt's pair.
+       *
+       * Above the split the mode is `moonflower`'s bit 4 and the background is `welcome`, and both
+       * of them move only while the energy bomb burns -- so for every ordinary frame this is the
+       * standard-mode branch it always was. The cell BLOCK does not follow the mode: `zebop` is
+       * &81 whatever happens, so the upper half is coloured from the first block either way.
+       */
+      const bool multicolour = lower || m_spaceViewMulticolour;
+      const std::uint8_t background = lower ? m_background : m_spaceViewBackground;
+
       for (int cellColumn = 0; cellColumn < CELL_COLUMNS; ++cellColumn)
       {
         const int cell = cellRow * CELL_COLUMNS + cellColumn;
         ResolveCell(_out.data() + static_cast<std::size_t>(cellRow) * 8 * WIDTH + cellColumn * 8, WIDTH,
-                    &m_screen[cellRow * ROW_BYTES + cellColumn * 8], m_screen[cellBase + cell], m_colourCells[cell], m_background, lower);
+                    &m_screen[cellRow * ROW_BYTES + cellColumn * 8], m_screen[cellBase + cell], m_colourCells[cell], background,
+                    multicolour);
       }
     }
   }
@@ -155,32 +169,56 @@ namespace Elite
      * it: the loader leaves it at its power-on value and the game has no instruction that touches
      * it. So there is no priority to model here, only a rule to state.
      */
-    void BlitSprite(std::uint8_t* _out, const std::uint8_t* _definition, bool _multicolour, int _left, int _top, int _scale,
-                    std::uint8_t _colour) noexcept
+    /// What the VIC-II holds about one sprite while it is being drawn: its own colour register, and
+    /// the two the raster split rewrites, each as the pair `COMIRQ1` programs them in.
+    struct SpriteRegisters
     {
-      // A multicolour sprite is twelve pixels of two dots each; a hi-res one is twenty-four of one.
-      // Both are 24 dots wide before expansion, which is why one loop serves.
-      const int steps = _multicolour ? (SPRITE_WIDTH / 2) : SPRITE_WIDTH;
-      const int dots = _multicolour ? 2 : 1;
+      int sprite = 0;                    ///< which of the eight, because &1C is indexed by it
+      std::uint8_t colour = 0;           ///< 6502: VIC+&27 + N -- this sprite's own colour
+      const std::uint8_t* multicolour{}; ///< 6502: santana -- [0] the space view's, [1] the dashboard's
+      const std::uint8_t* explosion{};   ///< 6502: lotus -- VIC+&28, and sprite 1 is the only reader
+    };
 
+    void BlitSprite(std::uint8_t* _out, const std::uint8_t* _definition, const SpriteRegisters& _registers, int _left, int _top,
+                    int _scale) noexcept
+    {
+      /*
+       * ROW BY ROW, AND THE MODE IS DECIDED INSIDE THE LOOP.
+       *
+       * `COMIRQ1` rewrites VIC+&1C and VIC+&28 at the raster split, so a sprite that straddles it
+       * is multicolour on one side and single-colour on the other -- which is not an edge case but
+       * the mechanism that keeps explosions out of the dashboard (§6.155). The VIC-II decides this
+       * as it scans, so the port decides it per SCREEN row: an expanded sprite's two output rows
+       * come from one sprite row and can land either side.
+       *
+       * A multicolour sprite is twelve pixels of two dots each; a hi-res one is twenty-four of one.
+       * Both are 24 dots wide before expansion, which is why one loop serves either way.
+       */
       for (int row = 0; row < SPRITE_ROWS; ++row)
       {
         const std::uint8_t* bytes = _definition + static_cast<std::size_t>(row) * SPRITE_ROW_BYTES;
 
-        for (int step = 0; step < steps; ++step)
+        for (int down = 0; down < _scale; ++down)
         {
-          const int index = _multicolour ? MulticolourPixel(bytes, step, _colour) : HiresPixel(bytes, step, _colour);
-          if (index < 0)
+          const int y = _top + (row * _scale) + down;
+          if (y < 0 || y >= Canvas::HEIGHT)
           {
-            continue; // %00, or a clear bit: the bitmap shows through
+            continue;
           }
 
-          for (int down = 0; down < _scale; ++down)
+          const std::size_t half = (y >= Canvas::SPACE_VIEW_HEIGHT) ? 1u : 0u;
+          const bool multicolour = ((_registers.multicolour[half] >> _registers.sprite) & 1u) != 0u;
+          const std::uint8_t colour = (_registers.sprite == EXPLOSION_SPRITE) ? _registers.explosion[half] : _registers.colour;
+
+          const int steps = multicolour ? (SPRITE_WIDTH / 2) : SPRITE_WIDTH;
+          const int dots = multicolour ? 2 : 1;
+
+          for (int step = 0; step < steps; ++step)
           {
-            const int y = _top + (row * _scale) + down;
-            if (y < 0 || y >= Canvas::HEIGHT)
+            const int index = multicolour ? MulticolourPixel(bytes, step, colour) : HiresPixel(bytes, step, colour);
+            if (index < 0)
             {
-              continue;
+              continue; // %00, or a clear bit: the bitmap shows through
             }
 
             std::uint8_t* line = _out + static_cast<std::size_t>(y) * Canvas::WIDTH;
@@ -231,12 +269,19 @@ namespace Elite
         continue;
       }
 
-      const bool multicolour = static_cast<std::size_t>(definition) >= FIRST_MULTICOLOUR_DEFINITION;
       const int scale = ((_video.expanded & (1u << sprite)) != 0u) ? 2 : 1;
 
-      BlitSprite(_out.data(), SPRITE_DEFINITIONS.data() + static_cast<std::size_t>(definition) * SPRITE_BYTES, multicolour,
-                 static_cast<int>(_video.x[sprite]) - SPRITE_ORIGIN_X, static_cast<int>(_video.y[sprite]) - SPRITE_ORIGIN_Y, scale,
-                 _video.colour[sprite]);
+      /*
+       * 6502: VIC+&1C, and the mode is NOT read off the definition.
+       *
+       * That is what the port used to do, on a claim that the register is never written; `COMIRQ1`
+       * writes it twice a frame and the explosion sprite is the one it moves (§6.155). The
+       * registers go in as the split leaves them and `BlitSprite` picks per screen row.
+       */
+      const SpriteRegisters registers{sprite, _video.colour[sprite], m_spriteMulticolour, m_explosionColour};
+
+      BlitSprite(_out.data(), SPRITE_DEFINITIONS.data() + static_cast<std::size_t>(definition) * SPRITE_BYTES, registers,
+                 static_cast<int>(_video.x[sprite]) - SPRITE_ORIGIN_X, static_cast<int>(_video.y[sprite]) - SPRITE_ORIGIN_Y, scale);
     }
   }
 

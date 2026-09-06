@@ -7,6 +7,7 @@
 #include "Charts.h"
 #include "Flight.h"
 #include "Commander.h"
+#include "Controls.h"
 #include "Hyperspace.h"
 #include "Market.h"
 #include "FlightLoop.h"
@@ -40,7 +41,7 @@ namespace GameLogicTests
       std::uint16_t qq2 = 0, qq3 = 0, qq4 = 0, qq5 = 0, qq28 = 0, tek = 0, gov = 0;
       std::uint16_t qq0 = 0, qq1 = 0, qq9 = 0, qq10 = 0, qq15 = 0, qq21 = 0;
       std::uint16_t safehouse = 0, qq8 = 0, qq22 = 0, qq26 = 0, avl = 0;
-      std::uint16_t ev = 0, rand = 0, gcnt = 0, ghyp = 0, fist = 0, cok = 0, qq14 = 0, patg = 0, qq11 = 0;
+      std::uint16_t ev = 0, rand = 0, gcnt = 0, ghyp = 0, fist = 0, cok = 0, qq14 = 0, patg = 0, qq11 = 0, keylook = 0;
 
       explicit Labels(const OracleImage& _oracle)
       {
@@ -73,6 +74,7 @@ namespace GameLogicTests
         cok = _oracle.Label("COK");
         qq14 = _oracle.Label("QQ14");
         patg = _oracle.Label("PATG");
+        keylook = _oracle.Label("KEYLOOK");
         qq11 = _oracle.Label("QQ11");
       }
     };
@@ -85,9 +87,19 @@ namespace GameLogicTests
      * instruction and the launch below it is a fall-through the caller owns. Running on would
      * compare `TT110` twice, since its own slice already does.
      *
-     * The `ptg` path cannot be reached from here. `JSR CTRL` reads the keyboard, which an
-     * interpreter has no answer for, so the cheat is tested by calling `ptg` directly above. What
-     * IS swept here is the fuel arithmetic, the one-in-256 witchspace roll, and the view mask --
+     * THE `ptg` PATH IS REACHED FROM HERE, and the sentence that said otherwise was wrong.
+     *
+     * It read: "`JSR CTRL` reads the keyboard, which an interpreter has no answer for". `CTRL` is
+     * `LDX #6` falling into `DKS4`, and the C64's `DKS4` is `LDA KEYLOOK,X / TAX / RTS` -- three
+     * instructions over ordinary memory, which an interpreter answers by being handed a byte.
+     * §6.147 established that shape when it made the galactic hyperdrive reachable and nothing came
+     * back to this test, so `hyp-ctrl-and` survived every run: the sweep passed `false, false` and
+     * `AND` and `OR` agree there (§6.156).
+     *
+     * So the cheat is a dimension of the sweep now, all four combinations of the key and the
+     * option, and `TheCheatFlagMatchesPtg` still covers what `ptg` itself does with `COK`.
+     *
+     * Also swept: the fuel arithmetic, the one-in-256 witchspace roll, and the view mask --
      * `AND #%00111111`, which is not "is this a space view" but "are the low six bits clear", and
      * the two differ for exactly the screens the charts use.
      */
@@ -99,13 +111,22 @@ namespace GameLogicTests
       const std::uint16_t tt18 = oracle.Label("TT18");
       const std::uint16_t tt110 = oracle.Label("TT110");
 
-      // Four generator states, chosen so both sides of `CMP #253` are reached -- the assertion at
-      // the end is what says they were.
+      /*
+       * Five generator states, and the fifth is the one that matters.
+       *
+       * The first four reach both sides of `CMP #253` -- they roll 0, 104, 206 and 252 -- and
+       * NONE of them stands on it. 252 is one below the boundary and tells `>=` from `>` no better
+       * than 0 does: the only value that separates them is 253 itself, which is why `hyp-253`
+       * survived a sweep that looked like it had the threshold covered. §6.132's rule in a seventh
+       * instance, and the roll here is the FIRST `DORND` from the seed, so the fifth was found by
+       * inverting one call rather than by searching (§6.156).
+       */
       const std::array<std::uint8_t, 4> SEEDS[] = {
         {0x00u, 0x00u, 0x00u, 0x00u},
         {0x7Fu, 0x41u, 0x13u, 0x8Cu},
         {0xFEu, 0xFFu, 0xFDu, 0xFCu},
         {0x5Au, 0xA5u, 0x3Cu, 0xC3u},
+        {0x2Fu, 0xAFu, 0xD8u, 0x4Du}, ///< rolls exactly 253, with either carry
       };
 
       std::uint32_t compared = 0;
@@ -119,6 +140,12 @@ namespace GameLogicTests
           {
             for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{64}, std::uint8_t{128}})
             {
+              // 6502: JSR CTRL / AND PATG / BMI ptg -- the key AND the option, so all four.
+              for (const int cheat : {0, 1, 2, 3})
+              {
+              const bool controlHeld = (cheat & 1) != 0;
+              const bool patg = (cheat & 2) != 0;
+
               Cpu6502 cpu = oracle.Fresh();
               // `TT114` is the chart's own redraw, which `TT18` JUMPS to rather than calls -- the
               // port hands it back as an outcome for the caller, so here it is a trap.
@@ -157,7 +184,15 @@ namespace GameLogicTests
               cpu.memory[at.qq8] = static_cast<std::uint8_t>(distance & 0xFFu);
               cpu.memory[static_cast<std::uint16_t>(at.qq8 + 1u)] = static_cast<std::uint8_t>(distance >> 8u);
               cpu.memory[at.qq11] = view;
-              cpu.memory[at.patg] = 0u; // the cheat needs the option AND the key; neither is set
+              /*
+               * 6502: KEYLOOK+6 and PATG, both as BYTES with bit 7 the answer.
+               *
+               * `RDKEY` leaves a held key at 255 because it decrements from zero, and `AND PATG /
+               * BMI` reads bit 7 of the two ANDed -- so the cheat needs bit 7 in both, and the
+               * port's pair of bools is that pair of bits.
+               */
+              cpu.memory[static_cast<std::uint16_t>(at.keylook + Elite::KEY_CONTROL)] = controlHeld ? 0xFFu : 0x00u;
+              cpu.memory[at.patg] = patg ? 0x80u : 0x00u;
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
                 cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
@@ -184,10 +219,11 @@ namespace GameLogicTests
               Elite::MarketState market;
 
               const Elite::JumpResult result = Elite::PerformJump(loop, current, selected, jump, described, market, world.effects, nullptr,
-                                                                  cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, false, false);
+                                                                  cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, controlHeld, patg);
 
-              const std::wstring context = WidenText("TT18 seed " + std::to_string(seed[0]) + " fuel " + std::to_string(fuel) + " dist " +
-                                                     std::to_string(distance) + " view " + std::to_string(view));
+              const std::wstring context =
+                WidenText("TT18 seed " + std::to_string(seed[0]) + " fuel " + std::to_string(fuel) + " dist " + std::to_string(distance)
+                          + " view " + std::to_string(view) + " ctrl " + std::to_string(controlHeld) + " patg " + std::to_string(patg));
 
               Assert::AreEqual(cpu.memory[at.qq14], world.world.commander.At(Elite::Field::Fuel), (context + L": QQ14").c_str());
               Assert::AreEqual(cpu.memory[where.mj], world.world.status.midJump, (context + L": MJ").c_str());
@@ -200,12 +236,13 @@ namespace GameLogicTests
 
               outcomes.insert(std::to_string(static_cast<int>(result)) + "/" + std::to_string(world.world.status.midJump));
               ++compared;
+              }
             }
           }
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(4u * 3u * 3u * 4u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::uint32_t>(5u * 3u * 3u * 4u * 4u, compared, L"the whole sweep ran");
       Assert::IsTrue(outcomes.size() >= 3u, L"and it arrived, missed, and jumped from a chart");
     }
 

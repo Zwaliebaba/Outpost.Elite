@@ -62,17 +62,29 @@ namespace Elite
   inline constexpr int SPRITE_ORIGIN_Y = 50;
 
   /*
-   * Which of the seven definitions are HI-RES rather than multicolour.
+   * How many definitions `spritp` holds -- and NOT which of them are multicolour, which is the
+   * correction slice 4f made (§6.155).
    *
-   * `spritp` is written with two macros and the choice is per definition, not per sprite: the four
-   * laser sights and the explosion cloud are `SPRITE2` (one bit per pixel, 24 across) and the two
-   * Trumbles are `SPRITE4` (two bits per pixel, 12 across, each pixel double width). The VIC-II
-   * carries this in bit N of register &1C, which this build never writes -- the loader sets it once
-   * and the game leaves it alone -- so the port takes it from the DEFINITION, which is where the
-   * distinction actually lives, rather than modelling a register nothing writes.
+   * `spritp` is written with two macros: the four laser sights and the explosion cloud are
+   * `SPRITE2` (one bit per pixel, 24 across) and the two Trumbles are `SPRITE4` (two bits per
+   * pixel, 12 across). The port used to read the mode off that, on the stated grounds that VIC+&1C
+   * "this build never writes -- the loader sets it once and the game leaves it alone".
+   *
+   * `COMIRQ1` WRITES IT TWICE A FRAME, from `santana`. The claim was made without reading the
+   * routine, and getting it wrong cost the explosion sprite three ways at once: %11111110 above the
+   * raster split makes sprite 1 MULTICOLOUR even though its definition is `SPRITE2` -- the same
+   * bytes read as pairs, exactly as the energy bomb does to the bitmap -- and %11111100 below it
+   * makes sprite 1 single-colour in colour 0, which is what stops explosions appearing over the
+   * dashboard. Not a clip rectangle: a colour change that renders it invisible.
+   *
+   * So the mode comes from the register now, per SCREEN ROW, because a sprite can straddle the
+   * split. The definition's own macro agrees with the register for the sights and the Trumbles and
+   * disagrees for the explosion, which is the one the register exists to move.
    */
   inline constexpr std::size_t SPRITE_DEFINITION_COUNT = 7;
-  inline constexpr std::size_t FIRST_MULTICOLOUR_DEFINITION = 5;
+
+  /// 6502: the sprite the raster split moves -- `santana` and `lotus` are both about this one.
+  inline constexpr int EXPLOSION_SPRITE = 1;
 
   /// 6502: SPOFF% -- `(SPRITELOC% - SCBASE) / 64`, and `SPRITELOC%` is `SCBASE + &2800`, which is
   /// one byte past everything `Canvas` holds. So a pointer of 160 selects definition 0.

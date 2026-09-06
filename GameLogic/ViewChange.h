@@ -13,6 +13,7 @@
 #include "Stardust.h"
 #include "TextPrint.h"
 #include "Tokens.h"
+#include "Trumbles.h"
 
 namespace Elite
 {
@@ -121,14 +122,31 @@ namespace Elite
     std::uint8_t backgroundFlash = 0;
 
     /*
-     * 6502: HFX -- the hyperspace effect's own flag, which the RASTER HANDLER reads.
+     * 6502: HFX -- AND IT DOES NOTHING IN THIS VERSION, which took a slice to establish (§6.155).
      *
-     * `comirq1` checks it once a frame and scrambles the screen's row addresses while it is set,
-     * which is the tearing a jump ends with. Nothing in `GameLogic` reads it; `ZERO` clears it
-     * and `LL164` sets it, so it is state the port has to carry even though the thing that acts
-     * on it is behind the presentation seam.
+     * On the BBC and the 6502 Second Processor a non-zero `HFX` makes the hyperspace rings
+     * multicoloured, and `IRQ1` is the handler that reads it. This build has neither: upstream's
+     * `hfx.asm` is `SKIP 1` and says in as many words that the flag is unused here; `DOHFX` exists
+     * as a label with both of its instructions commented out in the original source; the C64's
+     * `LL164` is four instructions and does not write it; and the C64's `COMIRQ1` does not read
+     * it. Nothing in the assembled game touches this byte except `ZERO`, which clears `FRIN` to
+     * `de` and catches it in passing at 1161.
+     *
+     * So the field is here because the memory is, and the port clears it where the original does.
+     * ADR-005 §1 scheduled a per-row shift of the space view for it and there is no such effect to
+     * build.
      */
     std::uint8_t hyperspaceEffect = 0;
+
+    /*
+     * 6502: RASTCT -- which half of the raster split the interrupt is setting up next.
+     *
+     * Zero is the space view and one is the dashboard, and `COMIRQ1` reads it as the index into
+     * all seven of its tables before writing `innersec,X` back over it. It is the whole of the
+     * handler's state: everything else it reads is either a constant table or one of the four
+     * bytes above.
+     */
+    std::uint8_t rasterCounter = 0;
   };
 
   /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
@@ -282,9 +300,27 @@ namespace Elite
     Compass& compass;
     Rng& rng;
 
-    CommanderBlock& commander;    ///< 6502: TP -- `SIGHT` only reads it, the flight loop
-                                  ///< writes `NOMSL`, `QQ14`, `QQ20`, `FIST` and `BOMB`
-    std::uint8_t& trumbleSprites; ///< 6502: TRIBCT
+    CommanderBlock& commander; ///< 6502: TP -- `SIGHT` only reads it, the flight loop
+                               ///< writes `NOMSL`, `QQ14`, `QQ20`, `FIST` and `BOMB`
+    /*
+     * 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and the six sprites they steer.
+     *
+     * ONE FIELD RATHER THAN TWO because `TRIBCT` is what indexes the rest: `SIGHT` writes the
+     * count and `MVTRIBS` reads it to decide which sprite this frame moves. It was a bare
+     * `std::uint8_t&` while nothing moved them (slice 3d), which is the same shape `K3Block` had
+     * before a second routine asked for it (§6.121).
+     */
+    TrumbleSprites& trumbles;
+
+    /*
+     * 6502: the VIC-II sprite registers, which `MVTRIBS` READS and not only writes.
+     *
+     * Every other route into them is a write-only seam, which is what `VideoState.h` says they
+     * should be -- a getter would invite a port to compute what the hardware holds. `MVTRIBS` is
+     * the exception the design allows for rather than a hole in it: it loads a sprite's x back out
+     * of the register, adds a velocity to it and stores it again, so the register IS its input.
+     */
+    VideoState& video;
 
     SightEffects& sight;
     ViewEffects& effects;

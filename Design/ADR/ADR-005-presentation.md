@@ -2,7 +2,12 @@
 
 **Status:** Accepted · 2026-09-02 (§5 settled by owner ruling: keep MSIX, drop WinUI 3;
 §1's sprite overlay and VIC-II effects settled 2026-09-05 — both composite in `Canvas::Resolve`
-over a new `VideoState`, with the border the presenter's)
+over a new `VideoState`, with the border the presenter's). **§1's two settled items are both
+built as of 2026-09-06** — the sprite overlay (`VideoState`, `SPRITE.bin`, the compositor in
+`Resolve` — §6.148) and the raster effects (slice 4f — §6.155) — **and the second was wrong about
+two of its three subjects.** `welcome` is `VIC+&21`, the background colour inside the image, not
+the border, so nothing went to the presenter; and `HFX` is not an effect this build has at all. The
+paragraphs below are corrected in place and say which claim was which.
 **Depends on:** ADR-002 (the canvas), ADR-004 (where the code lives)
 **Feeds:** slices 0d, 2e, 5a
 
@@ -44,10 +49,12 @@ main loop that ran as fast as the scene allowed.
   per frame. Which one a routine is, is measured with `Cpu6502`'s cycle counter and not judged
   (§6.109). Vsync on; the DXGI flip-model swap chain from
   Frontier's `GpuSwapChain`.
-- **SETTLED 2026-09-05 — the sprite overlay composites in `Canvas::Resolve`.** The C64 drew eight
-  hardware sprites above the bitmap: the laser crosshairs and the Trumbles, and nothing else the
-  game uses. `SIGHT` is ported and writes the sprite pointers and colour; no code composites them,
-  so the crosshairs do not appear (plan §6.100).
+- **SETTLED 2026-09-05 — the sprite overlay composites in `Canvas::Resolve`. BUILT 2026-09-05
+  (§6.148); the crosshairs, the burst and the Trumbles all appear.** The C64 drew eight hardware
+  sprites above the bitmap: the laser crosshairs, the explosion burst and the Trumbles, and nothing
+  else the game uses. When this was written, `SIGHT` was ported and wrote the sprite pointers and
+  colour and no code composited them, so the crosshairs did not appear (plan §6.100). What follows
+  is the reasoning that decision was taken on, kept as written.
 
   **The reason is not the one the open question gave.** It argued for the canvas because that is
   testable on both CI legs, and that argument is weaker than it looks: compositing has no oracle
@@ -61,25 +68,31 @@ main loop that ran as fast as the scene allowed.
   transformation over the same inputs. Putting them anywhere else splits one function across two
   binaries and buys nothing.
 
-  **What actually makes this a design change, which the open question missed.** `Resolve` today
-  takes only the canvas, and the sprite state is not in it. The pointers are (they are canvas
+  **What actually makes this a design change, which the open question missed.** `Resolve` took only
+  the canvas when this was written, and the sprite state was not in it. The pointers are (they are canvas
   writes at `SIGHT_SPRITE_CELL`, compared byte for byte already), but the enable mask, the colour
-  and the raster mode are `SightEffects` — a WRITE-ONLY seam out to the presenter — and the Trumble
-  positions `MVTRIBS` writes are not modelled at all. **There are now TWO such write-only seams
-  rather than one**: `ExplosionEffects`, added by slice 4b-b for `PTCLS2`'s burst sprite, carries
-  the sprite-expand registers and sprite 1's nine-bit position and enable bit the same way
-  (§6.144). Its test compares the ARGUMENTS against the shipped code's registers, read-modify-writes
-  included, which is as far as a seam can be verified and is the pattern `VideoState` should keep.
-  So this needs the register state to become
-  DATA that `GameLogic` owns and both `Resolve` and the presenter read: an explicit `VideoState`
-  struct, not a getter on `SightEffects`. The reason it must not be a getter is already written on
-  `MaskSprites`: a getter invites a port to compute what the hardware is holding.
+  and the raster mode were `SightEffects` — a WRITE-ONLY seam out to the presenter — and the Trumble
+  positions `MVTRIBS` writes were not modelled at all. **There were TWO such write-only seams rather
+  than one**: `ExplosionEffects`, added by slice 4b-b for `PTCLS2`'s burst sprite, carried the
+  sprite-expand registers and sprite 1's nine-bit position and enable bit the same way (§6.144). Its
+  test compares the ARGUMENTS against the shipped code's registers, read-modify-writes included,
+  which is as far as a seam can be verified and is the pattern `VideoState` kept. So this needed the
+  register state to become DATA that `GameLogic` owns and both `Resolve` and the presenter read: an
+  explicit `VideoState` struct, not a getter on `SightEffects`. The reason it must not be a getter is
+  already written on `MaskSprites`: a getter invites a port to compute what the hardware is holding.
 
-  **Prerequisite, and it should be done first regardless.** `SPRITE.bin` is a fourth assembly
-  `tools/labels.py` does not build — 84 lines of source and 448 bytes, seven sprite definitions.
-  Add it on the `LOADER_ASSEMBLY` pattern (its own reference pair, kept out of the oracle image,
-  because `CODE% = &7C3A`), and the definitions are byte-checked by `extract_tables.py --check`
-  like every other table.
+  **How it came out.** `Elite::VideoState` is the struct, `Elite::Apply*` are the seam calls as free
+  functions so a presenter's override is one line, `Canvas::Resolve(_out, _video)` composites sprite
+  7 first and sprite 0 last, and `FlightSession` owns the struct. Slice 4d-a is the case that proves
+  the shape was right rather than merely tidy: `MVTRIBS` READS a sprite register back before it adds
+  a velocity, so it takes a `VideoState&` and could not have been ported against a write-only seam
+  at all (§6.149).
+
+  **Prerequisite, and it should be done first regardless. Done.** `SPRITE.bin` was a fourth assembly
+  `tools/labels.py` did not build — 84 lines of source and 448 bytes, seven sprite definitions. It is
+  built on the `LOADER_ASSEMBLY` pattern (`SPRITE_ASSEMBLY` in `labels.py`, its own reference pair,
+  kept out of the oracle image because `CODE% = &7C3A`), and the definitions are byte-checked by
+  `extract_tables.py --check` like every other table.
 
   **What stays unverified, said plainly.** The blit rule itself — sprite-over-bitmap priority, the
   multicolour sprite bit pairs, and the x-expand flag. That is documented VIC-II behaviour and it is
@@ -87,7 +100,24 @@ main loop that ran as fast as the scene allowed.
   mitigation is a golden hash plus one hand-checked screenshot on the owner's machine, in the shape
   slice 2e already established — not a claim of oracle coverage.
 - **SETTLED 2026-09-05 — the VIC-II raster effects model in `Canvas::Resolve` too, on the same
-  `VideoState`.** `moonflower` (the energy bomb drops the upper half to standard bitmap mode),
+  `VideoState`. BUILT 2026-09-06 as slice 4f (§6.155) — AND WRONG ABOUT TWO OF ITS THREE
+  SUBJECTS.**
+
+  **`HFX` is not in this build.** Upstream's `hfx.asm` is `SKIP 1` and says the flag is unused in
+  this version; `DOHFX` assembles with both its instructions commented out in the original source;
+  the C64's `LL164` is four instructions and does not write it; and the C64's `COMIRQ1` does not
+  read it. The hyperspace tearing belongs to the BBC and the 6502 Second Processor, whose `IRQ1`
+  really does read the flag. There was never anything here to build, and §6.98 grouped the three
+  bytes because they sit together in memory rather than because one routine reads them all.
+
+  **`welcome` is not the border.** It is `VIC+&21`, background colour 0 — inside the 320×200 image,
+  supplying the `%00` bit pair of every multicolour cell — and the upstream comment on the
+  instruction says "we change the background colour of the space view". `VIC+&20` is the border and
+  the handler never writes it. So the apportionment below is the wrong way round: **all** of this
+  landed in `Canvas::Resolve` and **none** of it in the presenter.
+
+  What was right is the third subject and the reasoning. The paragraphs as written follow;
+  `moonflower` (the energy bomb drops the upper half to standard bitmap mode),
   `welcome` (the border colour it cycles while the bomb runs) and `HFX` (the hyperspace tearing,
   `DOHFX`) are ordinary bytes in `ScreenState` that `FlightSession::SyncVideoRegisters` carries
   outbound and `Canvas::Resolve` has no model for (plan §6.98). A player of the shipped game sees
@@ -105,9 +135,21 @@ main loop that ran as fast as the scene allowed.
   So: `moonflower` and `HFX` in `Resolve`, `welcome` in the presenter as the letterbox colour, and
   all three read from the same `VideoState`. What is NOT open is whether they exist (plan §6.120).
 
+  **CORRECTED 2026-09-06 (§6.155).** Two of those three clauses are wrong and the last sentence is
+  the reason they went unchallenged for a day: "whether they exist" was taken as settled for all
+  three because §6.120 had found the BYTES, and a byte existing is not an effect existing. What is
+  built is `moonflower` and `welcome`, both in `Resolve`, neither on a `VideoState` — the raster
+  registers sit on `Canvas` beside `m_background` and `m_dashboardShown`, which were already there
+  and which `LoaderScreen` writes with no `VideoState` in sight. `VideoState` is the SPRITE
+  registers and its tests are named for that; putting one byte of the raster split in it would have
+  meant threading a sprite struct through the loader.
+
 - **Ordering, so neither of the two rulings above blocks anything.** Neither is on phase 4's
   critical path. The crosshairs need only `SIGHT`, which is built; the Trumbles need `MVTRIBS`
   (slice 4d); `moonflower` and `welcome` need the energy bomb (4b) and `HFX` needs hyperspace (4c).
+  **And that is how the second one got left behind**: every dependency it named was built by
+  2026-09-05, the sprite half went in the same day, and nothing scheduled the rest. Ordering by
+  "blocks nothing" says when work MAY start and never says who starts it.
   The `SPRITE.bin` assembly and the `VideoState` struct are the shared prerequisite and are worth
   doing early, because both are small and everything else waits on them.
 - **The 256-wide space view's horizontal placement** inside the bitmap and the dashboard row
