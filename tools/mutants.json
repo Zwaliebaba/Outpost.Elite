@@ -90,8 +90,8 @@
         {
           "id": "ta-240",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (roll.value < 240u || screen.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
-          "replace": "if (roll.value < 239u || screen.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
+          "find": "if (roll.value < 240u || _universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
+          "replace": "if (roll.value < 239u || _universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
           "expect": "caught",
           "note": "The police roll. Closed by a seed that reads 239 there."
         },
@@ -146,7 +146,7 @@
         {
           "id": "ta3-ecm",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && screen.status.ecmCountdown == 0u)",
+          "find": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && _universe.status.ecmCountdown == 0u)",
           "replace": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles)",
           "expect": "caught",
           "note": "ta3's LDA ECMA / BNE TA3 stops a launch. ECMA was zero in every case that reached it; closed by a pirate with missiles and an ECM running."
@@ -154,8 +154,8 @@
         {
           "id": "ta20-eor",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      SteerTowards(_loop, NegateVector(towards), static_cast<std::uint8_t>(nose.high ^ 0x80u));",
-          "replace": "      SteerTowards(_loop, NegateVector(towards), nose.high);",
+          "find": "      SteerTowards(_universe, _ports, NegateVector(towards), static_cast<std::uint8_t>(nose.high ^ 0x80u));",
+          "replace": "      SteerTowards(_universe, _ports, NegateVector(towards), nose.high);",
           "expect": "caught",
           "note": "TA20's EOR #%10000000, in SteerMissileTowardsTarget. A second, unreachable copy of TA20 stood in part 4 and was deleted (plan section 6.152)."
         },
@@ -186,16 +186,16 @@
         {
           "id": "msl-kill",
           "file": "GameLogic/Tactics.cpp",
-          "find": "        return TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], MISSILE_DAMAGE, false);",
-          "replace": "        return TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], COLLISION_DAMAGE, false);",
+          "find": "          return TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], MISSILE_DAMAGE, false);",
+          "replace": "          return TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], COLLISION_DAMAGE, false);",
           "expect": "caught",
           "note": "250 into OOPS when a missile arrives."
         },
         {
           "id": "kill-rotate",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      RecordKill(screen, _loop.effects, TypeOf(MissileTargetOf(work.ai)));",
-          "replace": "      RecordKill(screen, _loop.effects, TypeOf(static_cast<std::uint8_t>(work.ai & 0x7Fu)));",
+          "find": "      RecordKill(_universe, _ports, _ports.loop, TypeOf(MissileTargetOf(work.ai)));",
+          "replace": "      RecordKill(_universe, _ports, _ports.loop, TypeOf(static_cast<std::uint8_t>(work.ai & 0x7Fu)));",
           "expect": "caught",
           "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2. Not a coverage gap: TALLY and TALLYL were neither pushed nor compared, so what EXNO2 scores was invisible. Closed by comparing all three bytes (plan section 6.153)."
         }
@@ -222,8 +222,8 @@
         {
           "id": "hyp-selftest",
           "file": "GameLogic/Hyperspace.cpp",
-          "find": "    const bool fromSpace = screen.view == 0u;",
-          "replace": "    const bool fromSpace = screen.view != 0u;",
+          "find": "    const bool fromSpace = _universe.view == 0u;",
+          "replace": "    const bool fromSpace = _universe.view != 0u;",
           "expect": "caught",
           "note": "THE HARNESS'S OWN OracleIsPresent. Inverting 'is this a space view' changes whether the hyperspace tunnel is drawn at all, so TheJumpMatchesTT18 cannot miss it. Its job is not to measure the port -- it is to prove that this harness still OBSERVES a catch, applies its edit to the file the build actually compiles, and rebuilds between mutants. Risk R13's realised form was a harness that reported catches it never saw (section 6.119); a run in which this one survives is a run whose every other answer is worthless. Keep it first in the list and never delete it.",
           "selftest": true
@@ -247,8 +247,8 @@
         {
           "id": "hyp-fuel-zero",
           "file": "GameLogic/Hyperspace.cpp",
-          "find": "screen.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0};",
-          "replace": "screen.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0u};",
+          "find": "_universe.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0};",
+          "replace": "_universe.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0u};",
           "expect": "equivalent",
           "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made."
         }
@@ -411,8 +411,8 @@
         {
           "id": "mi-selftest",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.work.z.hi = BRIEFING_SHIP_DISTANCE;",
-          "replace": "    screen.work.z.hi = 0u;",
+          "find": "    _universe.work.z.hi = BRIEFING_SHIP_DISTANCE;",
+          "replace": "    _universe.work.z.hi = 0u;",
           "expect": "caught",
           "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Putting the briefing ship at z_hi = 0 rather than 2 draws it at a two-hundredth of the distance, which the whole-canvas comparison in TheBriefingShipMatchesPAS1 cannot miss. Keep it first and never delete it.",
           "selftest": true
@@ -436,7 +436,7 @@
         {
           "id": "mi-release",
           "file": "GameLogic/Missions.cpp",
-          "find": "    while (ShowBriefingShip(_mission).key != 0u)\n    {\n    }\n",
+          "find": "    while (ShowBriefingShip(_universe, _ports).key != 0u)\n    {\n    }\n",
           "replace": "",
           "expect": "caught",
           "note": "The FIRST of PAUSE's two loops, dropped. `JSR PAS1 / BNE PAUSE` waits for the player to LET GO of the key that turned the previous page; without it one keystroke dismisses every remaining page of a briefing in a single frame. SURVIVED the first run, because the sweep always started with an empty keyboard and the loop is invisible from there -- closed by giving the script a `held` run, which is the state the loop exists for."
@@ -444,32 +444,32 @@
         {
           "id": "mi-erase",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.work.state = 0u;",
-          "replace": "    screen.work.state = 0xFFu;",
+          "find": "    _universe.work.state = 0u;",
+          "replace": "    _universe.work.state = 0xFFu;",
           "expect": "caught",
           "note": "`LDA #0 / STA INWK+31` -- the ship stops being drawn, so the `LL9` after the screen change has nothing to rub out. Leaving the flags set makes that `LL9` erase lines the cleared screen no longer has."
         },
         {
           "id": "mi-mt23-row",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.text.row = MT23_ROW;",
-          "replace": "    screen.text.row = MT29_ROW;",
+          "find": "    _universe.text.row = MT23_ROW;",
+          "replace": "    _universe.text.row = MT29_ROW;",
           "expect": "caught",
           "note": "The row PAUSE's fall-through moves to. MT23 loads 10 and MT29 loads 6, and the `EQUB &2C` between them is what makes the two one routine -- so this is the mutant that proves the port fell through into the right entry point."
         },
         {
           "id": "mi-pause2-loop",
           "file": "GameLogic/Missions.cpp",
-          "find": "      if (_mission.effects.ScanTitleKeys(_mission.keys).key != 0u)\n      {\n        return; // 6502: .newyearseve RTS\n      }\n    }\n  }",
-          "replace": "      while (_mission.effects.ScanTitleKeys(_mission.keys).key == 0u)\n      {\n      }\n      return; // 6502: .newyearseve RTS\n    }\n  }",
+          "find": "      if (_ports.start.ScanTitleKeys(_universe.keys).key != 0u)\n      {\n        return; // 6502: .newyearseve RTS\n      }\n    }\n  }",
+          "replace": "      while (_ports.start.ScanTitleKeys(_universe.keys).key == 0u)\n      {\n      }\n      return; // 6502: .newyearseve RTS\n    }\n  }",
           "expect": "caught",
           "note": "PAUSE2's `BEQ PAUSE2` goes back to the TOP of the routine and not to the scan above it, so an empty second scan re-checks for a release the routine has already had. The mutant turns that into a do-while, which is the reading everybody has first. It shows only when the keyboard goes empty, empty, PRESSED: the real routine treats that third scan as 'still held' and goes round again, and the do-while takes it as the answer. Two scans apart, and nothing is drawn, so the scan count is the only instrument -- which is why the script counts calls in a byte that cannot wrap. The first version of this mutant was `continue` against an inner `while`, and those two ARE the same loop."
         },
         {
           "id": "mi-captain",
           "file": "GameLogic/Missions.cpp",
-          "find": "    PrintMissionToken(m_mission.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN, m_galaxy);",
-          "replace": "    PrintMissionToken(m_mission.tokens, (_code == 27) ? MISSION_PLANET_TOKEN : MISSION_CAPTAIN_TOKEN, m_galaxy);",
+          "find": "      PrintMissionToken(m_ports.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN, m_galaxy);",
+          "replace": "      PrintMissionToken(m_ports.tokens, (_code == 27) ? MISSION_PLANET_TOKEN : MISSION_CAPTAIN_TOKEN, m_galaxy);",
           "expect": "caught",
           "note": "MT27 and MT28 swapped. The two ranges are three apart and OVERLAP, so galaxy 3's captain is galaxy 0's planet -- which means a swap is invisible for exactly one pair of inputs and visible for the rest. The sweep covers all eight galaxies of both."
         },
@@ -484,32 +484,32 @@
         {
           "id": "mi-brief-token",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _mission.tokens.Print(INCOMING_MESSAGE_TOKEN);",
-          "replace": "    _mission.tokens.Print(215u);",
+          "find": "    _ports.tokens.Print(INCOMING_MESSAGE_TOKEN);",
+          "replace": "    _ports.tokens.Print(215u);",
           "expect": "caught",
           "note": "The token `BRIS` prints. 216 is INCOMING MESSAGE and 215 is a carriage return, so this is the mutant for a briefing that opens on a blank screen."
         },
         {
           "id": "mi-brief-frames",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _mission.effects.WaitFrames(INCOMING_MESSAGE_FRAMES);",
-          "replace": "    _mission.effects.WaitFrames(50u);",
+          "find": "    _ports.start.WaitFrames(INCOMING_MESSAGE_FRAMES);",
+          "replace": "    _ports.start.WaitFrames(50u);",
           "expect": "caught",
           "note": "`LDY #100 / JMP DELAY` -- two seconds on PAL. Compared as a number rather than as elapsed time, because neither side has a raster."
         },
         {
           "id": "mi-mt9-view",
           "file": "GameLogic/Missions.cpp",
-          "find": "      m_text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
-          "replace": "      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
+          "find": "      m_universe.text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(m_universe, m_ports, MT9_COLUMN_AND_VIEW);",
+          "replace": "      SetUpScreen(m_universe, m_ports, MT9_COLUMN_AND_VIEW);",
           "expect": "equivalent",
           "note": "MT9's column store, DROPPED -- and it makes no difference, which is not what this mutant was written to show. `LDA #1 / JSR DOXC / JMP TT66` is one load serving as a column and a view, and the port had only the view; adding the store is faithful and is what the routine does. But `TT66` sets `XC` to 1 ITSELF, twice -- once near the top and again at `.tt66 LDX #1 / STX XC / STX YC` -- and nothing between `DOXC` and `TT66` reads the byte, because `JMP TT66` is the next instruction. So the `DOXC` is DEAD, and the port was accidentally right for two slices. Recorded as an equivalent, with the store kept: it is the FIFTH piece of dead code found in the original, after `cntr`'s `REDU`, `.OLDBOX`'s cursor store, `MAS2`'s second entry and `TITLE`'s `LDA MCNT / AND #3`. It must never come back caught -- if it does, something has stopped writing `XC` in `TT66`."
         },
         {
           "id": "mi-tp-set",
           "file": "GameLogic/Missions.cpp",
-          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_mission); // 6502: JSR BRIS",
-          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_mission); // 6502: JSR BRIS",
+          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: JSR BRIS",
+          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_universe, _ports); // 6502: JSR BRIS",
           "expect": "caught",
           "note": "`LSR TP / SEC / ROL TP` sets bit 0; clearing it instead means the Constrictor is offered for ever. The sweep starts from sixteen values of TP so the flag is compared from states where it was already set as well as from states where it was not."
         },
@@ -556,8 +556,8 @@
         {
           "id": "mi-trumble-flag",
           "file": "GameLogic/Missions.cpp",
-          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);\n\n    _mission.tokens.Print(TRUMBLE_OFFER);",
-          "replace": "    _mission.tokens.Print(TRUMBLE_OFFER);\n    progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);",
+          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);\n\n    _ports.tokens.Print(TRUMBLE_OFFER);",
+          "replace": "    _ports.tokens.Print(TRUMBLE_OFFER);\n    progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);",
           "expect": "equivalent",
           "note": "Bit 4 set AFTER the question rather than before it. In the game the order matters -- `BCC BAYSTEP` leaves before the `INC` -- but the flag is set above the `DETOK` and nothing between the two reads it, so moving it past a print that cannot fail is the same program. Recorded as an equivalent so a run exercises that path, and it must never come back caught."
         },
@@ -580,7 +580,7 @@
         {
           "id": "mi-second-inc",
           "file": "GameLogic/Missions.cpp",
-          "find": "      screen.work.z.lo = static_cast<std::uint8_t>(screen.work.z.lo + 1u);\n      if (screen.work.z.lo == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
+          "find": "      _universe.work.z.lo = static_cast<std::uint8_t>(_universe.work.z.lo + 1u);\n      if (_universe.work.z.lo == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
           "replace": "      // 6502: LDX INWK+3",
           "expect": "caught",
           "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on."
@@ -596,7 +596,7 @@
         {
           "id": "mi-dead-counter",
           "file": "GameLogic/Missions.cpp",
-          "find": "      screen.flight.mainLoopCounter = static_cast<std::uint8_t>(screen.flight.mainLoopCounter - 1u);\n    }\n\n    // 6502: .BR2 INC INWK+7",
+          "find": "      _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);\n    }\n\n    // 6502: .BR2 INC INWK+7",
           "replace": "    }\n\n    // 6502: .BR2 INC INWK+7",
           "expect": "caught",
           "note": "`DEC MCNT` in the SECOND loop, which nothing branches on. The counter is live in the first loop and dead in the second, and dropping it there is invisible on screen -- so `MCNT` is compared as state, which is the only place it shows."
@@ -604,7 +604,7 @@
         {
           "id": "mi-inwk7",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.work.z.hi = static_cast<std::uint8_t>(screen.work.z.hi + 1u);",
+          "find": "    _universe.work.z.hi = static_cast<std::uint8_t>(_universe.work.z.hi + 1u);",
           "replace": "",
           "expect": "caught",
           "note": "`.BR2 INC INWK+7` -- the high byte following the low one past 255. Without it the ship is 256 units nearer than the briefing text was written for, and `INWK` is compared byte for byte."
@@ -761,8 +761,8 @@
         {
           "id": "cs-oily",
           "file": "GameLogic/FlightLoop.cpp",
-          "find": "item = static_cast<std::uint8_t>(screen.rng.Next(true).value & 7u);",
-          "replace": "item = static_cast<std::uint8_t>(screen.rng.Next(false).value & 7u);",
+          "find": "item = static_cast<std::uint8_t>(_universe.rng.Next(true).value & 7u);",
+          "replace": "item = static_cast<std::uint8_t>(_universe.rng.Next(false).value & 7u);",
           "expect": "caught",
           "note": ".oily JSR DORND reached only by CPX #OIL / BEQ oily, and an equal compare SETS the carry. This was the port until 2026-09-06, hidden while the comparison skipped the generator on frames that seeded a cloud; ThePerShipLoopMatchesMAL1's 'on top of us with scoops' compares RAND now."
         },

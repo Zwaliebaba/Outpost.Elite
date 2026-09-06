@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Ports.h"
+#include "Universe.h"
+
 #include "Dashboard.h"
 #include "Flight.h"
 #include "StartUp.h"
@@ -91,11 +94,12 @@ namespace Elite
    * called here on its own, where the cold start reaches it twice through two fall-throughs
    * (§6.25) -- so the same routine is one call on arrival and two on a restart.
    *
-   * `LAUN` is the tunnel and it is drawn HERE rather than behind a seam, which is why the screen
-   * and the clipper are arguments: the commander, the status and the flight state came in
-   * separately until the tunnel was ported, and all three are inside `FlightScreen` already.
+   * `LAUN` is the tunnel and it is drawn HERE rather than behind a seam, which is why the universe
+   * is an argument at all: the commander, the status and the flight state came in separately until
+   * the tunnel was ported, and every one of them is inside `Universe` since M3-a.
    */
-  [[nodiscard]] DockingResult DockAtStation(StartUpEffects& _effects, FlightScreen& _screen, ClipState& _clip, TunnelEffects* _pacing,
-                                            std::uint8_t& _dockedFlag, std::uint8_t _view, bool _hyperspaceHeld) noexcept;
+  [[nodiscard]] DockingResult DockAtStation(StartUpEffects& _effects, Universe& _universe, Ports& _ports,
+                                            TunnelEffects* _pacing, std::uint8_t& _dockedFlag, std::uint8_t _view,
+                                            bool _hyperspaceHeld) noexcept;
 
 } // namespace Elite

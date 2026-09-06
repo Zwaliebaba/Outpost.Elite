@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Ports.h"
+#include "Universe.h"
+
 #include "Arith.h"
 #include "Canvas.h"
 #include "EliteTypes.h"
@@ -193,7 +196,7 @@ namespace Elite
    * `MVEIT` calls it for one ship in eight and for a missile every pass, which is the whole reason
    * a missile is frightening and a Krait is not.
    */
-  [[nodiscard]] bool RunTactics(FlightLoop& _loop, std::uint8_t _slot) noexcept;
+  [[nodiscard]] bool RunTactics(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept;
 
   /*
    * 6502: DOCKIT -- the docking computer, and it is the SAME TAIL as the AI.
@@ -211,6 +214,6 @@ namespace Elite
    * visibility of the ELEVENTH FACE OF THE LAST SHIP DRAWN, and whether an NPC completes its
    * docking depends on it (§6.125).
    */
-  [[nodiscard]] bool RunDockingComputer(FlightLoop& _loop, std::uint8_t _slot) noexcept;
+  [[nodiscard]] bool RunDockingComputer(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept;
 
 } // namespace Elite

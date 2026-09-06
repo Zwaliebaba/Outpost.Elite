@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Ports.h"
+#include "Universe.h"
+
 #include "Charts.h"
 #include "FlightLoop.h"
 #include "Market.h"
@@ -62,7 +65,8 @@ namespace Elite
    * compares against is then stored into `NOSTM`: witchspace has three specks of dust instead of
    * the usual eighteen, and the constant is shared between the two on purpose.
    */
-  void EnterWitchspace(FlightLoop& _loop, Commander& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
+  void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander, DashboardEffects& _sound,
+                       TunnelEffects* _pacing) noexcept;
 
   /*
    * 6502: ptg -- `LSR COK / SEC / ROL COK`, and then it FALLS INTO `MJP`.
@@ -74,7 +78,8 @@ namespace Elite
    * `COK` is the competition flags byte, so holding the configuration key through a jump is
    * recorded in the commander file for ever.
    */
-  void EnterWitchspaceCheating(FlightLoop& _loop, Commander& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
+  void EnterWitchspaceCheating(Universe& _universe, Ports& _ports, Commander& _commander, DashboardEffects& _sound,
+                               TunnelEffects* _pacing) noexcept;
 
   /*
    * What `TT18` did, which the original says by WHERE IT ENDS UP -- and that is four places.
@@ -104,7 +109,7 @@ namespace Elite
    * `JSR CTRL / AND PATG / BMI ptg` is the cheat: holding the key with the configuration option on
    * forces witchspace. Then one roll in 256 -- `CMP #253 / BCS MJP` -- does it anyway.
    */
-  [[nodiscard]] JumpResult PerformJump(FlightLoop& _loop, CurrentSystem& _current, SystemSeeds& _selected, JumpState& _jump,
+  [[nodiscard]] JumpResult PerformJump(Universe& _universe, Ports& _ports, SystemSeeds& _selected, JumpState& _jump,
                                        SystemData& _described, MarketState& _market, DashboardEffects& _sound, TunnelEffects* _pacing,
                                        std::uint8_t _crosshairX, std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _controlHeld,
                                        bool _patg) noexcept;
@@ -124,7 +129,7 @@ namespace Elite
    * -- the `ASL A` is there only to put bit 7 in the carry so the `ROL` on MEMORY can bring it back
    * round into bit 0. Two instructions to rotate a byte the 6502 cannot rotate in place.
    */
-  void GalacticJump(FlightLoop& _loop, CurrentSystem& _current, SystemSeeds& _galaxy, SystemSeeds& _selected, JumpState& _jump,
+  void GalacticJump(Universe& _universe, Ports& _ports, SystemSeeds& _galaxy, SystemSeeds& _selected, JumpState& _jump,
                     ChartView& _chart, TunnelEffects* _pacing) noexcept;
 
 } // namespace Elite

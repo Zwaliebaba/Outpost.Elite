@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Ports.h"
+#include "Universe.h"
+
 #include <cstdint>
 
 #include "Commander.h"
@@ -33,7 +36,7 @@ namespace Elite
    * range, and what makes it one range is the layout: a routine that cleared "the bubble" and "the
    * flight status" separately would agree with it today and stop agreeing the moment either grew.
    */
-  void ClearBubbleState(FlightLoop& _loop) noexcept;
+  void ClearBubbleState(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: RES2 -- the ship, the heaps, the dashboard and the stardust, and then straight into ZINF.
@@ -43,7 +46,7 @@ namespace Elite
    * it while the pitch is put back to centre. The ship also starts with `ALPHA`, `ALP1` and `DELTA`
    * all at 3, from one `LDA #3`: a slow roll and a slow drift, which is what a launch looks like.
    */
-  void ResetShipAndBubble(FlightLoop& _loop) noexcept;
+  void ResetShipAndBubble(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: RESET -- the universe, and then `RES2`, which it falls into.
@@ -58,7 +61,7 @@ namespace Elite
    * `YC` instead of the last three, which is the BBC's layout -- the third time a documented range
    * has turned out to be another version's (§6.38, §6.45).
    */
-  void ResetGame(FlightLoop& _loop, std::uint8_t& _docked) noexcept;
+  void ResetGame(Universe& _universe, Ports& _ports, std::uint8_t& _docked) noexcept;
 
   /// 6502: LDA #12 / STA DELTA -- how fast you leave the slot, and it is four times `RES2`'s 3.
   inline constexpr std::uint8_t LAUNCH_SPEED = 12;
@@ -86,7 +89,7 @@ namespace Elite
    * It was a seam on `StartUpEffects` until this slice, for the reason every other one was: the
    * ball line heap it draws through arrived in 3c and nothing revisited the stub (§6.73, again).
    */
-  void DrawLaunchTunnel(FlightScreen& _screen, ClipState& _clip, TunnelEffects* _pacing) noexcept;
+  void DrawLaunchTunnel(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept;
 
   /// 6502: LDA #4 -- the step `LL164` hands `HFS2`, and the rounder of the two. `HFS2`'s header
   /// comment has this pair the wrong way round; see `LAUNCH_TUNNEL_STEP`.
@@ -108,7 +111,7 @@ namespace Elite
    * of it, which is what `HFS2` taking `A` says: the two entry points differ by two instructions.
    * Splitting it out is what lets the hyperspace tunnel exist without copying the launch's body.
    */
-  void DrawTunnel(FlightScreen& _screen, ClipState& _clip, std::uint8_t _step, TunnelEffects* _pacing) noexcept;
+  void DrawTunnel(Universe& _universe, Ports& _ports, std::uint8_t _step, TunnelEffects* _pacing) noexcept;
 
   /*
    * 6502: LL164 -- the hyperspace tunnel, and `HYPNOISE` in front of it.
@@ -123,7 +126,8 @@ namespace Elite
    * because it is what slice 3d-e names, and because the alternative was to leave `HFS2` reachable
    * at one step size out of two.
    */
-  void DrawHyperspaceTunnel(FlightScreen& _screen, ClipState& _clip, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
+  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports, DashboardEffects& _sound,
+                            TunnelEffects* _pacing) noexcept;
 
   /*
    * 6502: TT110 -- leave the station, or refuse to.
@@ -137,8 +141,8 @@ namespace Elite
    * contraband fine is ORed into `FIST` on the way out, so leaving is what levies it rather than
    * being scanned.
    */
-  void Launch(FlightLoop& _loop, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX, std::uint8_t _crosshairY,
-              std::uint8_t _techLevel, SystemSeeds& _selected) noexcept;
+  void Launch(Universe& _universe, Ports& _ports, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX,
+              std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept;
 
   /*
    * 6502: ESCAPE -- abandon ship, and it is the only way to survive a fight you are losing
@@ -168,7 +172,7 @@ namespace Elite
   /// 6502: LDA #70 / STA QQ14 -- seven light years, which is what the pod is worth.
   inline constexpr std::uint8_t ESCAPE_FUEL = 70;
 
-  void AbandonShip(FlightLoop& _loop, std::uint8_t& _fuel) noexcept;
+  void AbandonShip(Universe& _universe, Ports& _ports, std::uint8_t& _fuel) noexcept;
 
   /// 6502: LDA #13 / JSR TT66 / LDA #0 / STA QQ11 -- and it is two values on purpose. `TTX66K`
   /// tail-jumps to `wantdials` for view 0 AND for view 13, so both draw the same pixels; what
@@ -202,23 +206,8 @@ namespace Elite
   inline constexpr std::uint8_t TITLE_AUTHORS_TOKEN = 13;
   inline constexpr std::uint8_t TITLE_BYLINE_TOKEN = 12;
 
-  /*
-   * Everything `TITLE` reaches that `FlightLoop` does not already carry.
-   *
-   * A struct for the fourth time and the same reason as `TradeScreen`, `GameStart` and
-   * `FlightScreen`: the alternative is an eight-argument function. Every field is one 6502 label
-   * or one seam, and `TITLE` genuinely touches all of it -- it resets the universe, prints through
-   * the extended tokeniser, writes a configuration byte and creates a ship.
-   */
-  struct TitleScreen
-  {
-    FlightLoop& loop;
-    StartUpEffects& effects;
-    ExtendedTokenPrinter& tokens; ///< 6502: DETOK, which `TITLE` calls three times
-    ControlOptions& options;      ///< 6502: JSTK, which the dismissing key sets, and PATG
-    KeyLogger& keys;              ///< 6502: KLO -- `ZEKTRAN` clears it and `BIT KY7` reads it
-    std::uint8_t& dockedFlag;     ///< 6502: QQ12, because `RESET` writes it
-  };
+  // `TitleScreen` was an argument list holding a `FlightLoop&` and five more references. Every byte
+  // of it is `Universe`'s since M3-a and every seam is `Ports`'.
 
   /*
    * 6502: TITLE -- the title screen, its rotating ship, and the key that dismisses it.
@@ -242,7 +231,7 @@ namespace Elite
    * Returns `thiskey` -- the key NUMBER, not the character. `BR1` compares it against `KEY_YES_
    * INTERNAL`, which is 39 and not `'Y'`.
    */
-  [[nodiscard]] std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, ShipType _shipType,
+  [[nodiscard]] std::uint8_t ShowTitleShip(Universe& _universe, Ports& _ports, std::uint8_t _token, ShipType _shipType,
                                            std::uint8_t _distance) noexcept;
 
   /*
@@ -306,7 +295,7 @@ namespace Elite
    * lets the scene be compared against the shipped routine on the whole bitmap, which a routine
    * that never returns cannot be.
    */
-  void PrepareDeathScene(FlightLoop& _loop, DashboardEffects& _sound) noexcept;
+  void PrepareDeathScene(Universe& _universe, Ports& _ports, DashboardEffects& _sound) noexcept;
 
   /*
    * `_pacing` IS WHAT MAKES THE DEATH VISIBLE, and it was missing.
@@ -322,6 +311,6 @@ namespace Elite
    * long as the next took to compute (§6.109). Null runs the sequence with nothing shown, which is
    * what the tests want.
    */
-  void Die(FlightLoop& _loop, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
+  void Die(Universe& _universe, Ports& _ports, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
 
 } // namespace Elite

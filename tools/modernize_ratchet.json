@@ -29,9 +29,9 @@
       "slice": "M1-a"
     },
     "aggregate-refs": {
-      "ceiling": 78,
+      "ceiling": 39,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M3-a-2: FlightScreen, FlightLoop, MissionScreen and TitleScreen go; Ports is ten where they were forty-nine"
     },
     "main-lines": {
       "ceiling": 1219,
@@ -39,9 +39,9 @@
       "slice": "M2-c-1: Main.cpp holds the number printer's width byte instead of its workspace"
     },
     "outpost-elite-names": {
-      "ceiling": 225,
+      "ceiling": 206,
       "slack": 0,
-      "slice": "M2-c-1: NumberWorkspace goes, so the app names one fewer type"
+      "slice": "M3-a-2: four argument-list structs go, so the app names four fewer types"
     },
     "effects-seams": {
       "ceiling": 22,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3954,
+      "ceiling": 3937,
       "slack": 0,
-      "slice": "M3-a-1: Universe.h names the labels every field it owns is"
+      "slice": "M3-a-2: the markers on the reference members that named a byte Universe.h already names"
     },
     "oracle-test-files": {
       "ceiling": 50,

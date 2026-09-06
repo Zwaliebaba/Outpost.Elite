@@ -227,8 +227,8 @@ namespace GameLogicTests
           Assert::IsTrue(run.completed, L"EXNO2 returned");
 
           RecordingCombat effects;
-          Elite::FlightScreen screen = universe.Screen();
-          const std::uint8_t ours = Elite::RecordKill(screen, effects, Elite::TypeOf(type));
+          Elite::Ports ports = universe.Ports();
+          const std::uint8_t ours = Elite::RecordKill(universe, ports, effects, Elite::TypeOf(type));
 
           const std::wstring where = WidenText("EXNO2(type " + std::to_string(type) + ", tally " + std::to_string(start.high) + "." +
                                                std::to_string(start.whole) + "." + std::to_string(start.fraction) + ")");
@@ -339,8 +339,8 @@ namespace GameLogicTests
               Assert::IsTrue(run.completed, L"OOPS returned");
 
               RecordingCombat effects;
-              Elite::FlightScreen screen = universe.Screen();
-              const bool alive = Elite::TakeDamage(screen, effects, universe.bubble.blocks[2], damage, carryIn);
+              Elite::Ports ports = universe.Ports();
+              const bool alive = Elite::TakeDamage(universe, ports, effects, universe.bubble.blocks[2], damage, carryIn);
 
               const std::wstring where =
                 WidenText("OOPS(damage " + std::to_string(damage) + ", shield " + std::to_string(shield) + ", banks " +
@@ -457,8 +457,8 @@ namespace GameLogicTests
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(ouch, 400'000);
                 Assert::IsTrue(run.completed, L"OUCH returned");
 
-                Elite::FlightScreen screen = universe.Screen();
-                Elite::DamageEquipment(screen, carry != 0u);
+                Elite::Ports ports = universe.Ports();
+                Elite::DamageEquipment(universe, ports, carry != 0u);
 
                 const std::wstring where =
                   WidenText("OUCH(slot " + std::to_string(slot) + ", toss " + std::to_string(toss) + ", DLY " + std::to_string(already) +

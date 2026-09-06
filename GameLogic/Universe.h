@@ -15,6 +15,7 @@
 #include "ShipMove.h"
 #include "ShipSlot.h"
 #include "Stardust.h"
+#include "StartUp.h"
 #include "TextPrint.h"
 #include "Trumbles.h"
 
@@ -138,6 +139,16 @@ namespace Elite
     std::uint8_t view = 0;      ///< 6502: QQ11 -- which screen is up
     std::uint8_t spaceView = 0; ///< 6502: VIEW -- which way the player is looking, 0 to 3
 
+    /*
+     * 6502: INF -- the ship block `LL9` part 1 writes two bytes of directly, as a slot.
+     *
+     * Only the briefing needs it to outlive a call, which is why it was `MissionScreen::shipSlot`
+     * until M3-a: `PAUSE` runs INSIDE the token `BRIEF` is printing and has to find the ship that
+     * `BRIEF` built several hundred instructions earlier. It is a real zero-page pointer in the
+     * original and a real byte here, rather than a constant zero, because `NWSHP` chooses the slot.
+     */
+    std::uint8_t shipSlot = 0;
+
     // ---- the flight --------------------------------------------------------------------------
     FlightState flight;
     FlightStatus status;
@@ -148,19 +159,25 @@ namespace Elite
     ControlOptions options;  ///< 6502: DAMP, DJD and JSTK
     std::uint8_t explosions = 0; ///< 6502: EV
 
+    /// 6502: QQ12 -- non-zero while docked. State the docked half writes and the title screen, the
+    /// briefings and `RESET` read; a reference into `Main.cpp` until M3-a.
+    std::uint8_t dockedFlag = 0;
+
     // ---- the player --------------------------------------------------------------------------
     Commander commander;
     Rng rng;
 
     /*
-     * 6502: tek -- the current system's tech level.
+     * 6502: QQ2, QQ28, tek and gov -- the system you are IN, as opposed to the one under the
+     * crosshairs.
      *
-     * The flight loop READS it, because part 14 spawns the station and `NWSPS` picks a Coriolis or
-     * a Dodo by this byte; the docked half writes it on arrival. It was a reference into
-     * `CurrentSystem` while the two halves owned separate memory, and is one byte here because
-     * they no longer do. M3-a-2 is where `CurrentSystem` joins it.
+     * The whole struct rather than `tek` alone, and that is the point: M3-a-1 copied the tech level
+     * into the universe as a byte while `CurrentSystem` stayed in the composition root, which made
+     * two bytes out of the one the original has. The flight loop reads it (part 14 spawns the
+     * station and `NWSPS` picks a Coriolis or a Dodo by `tek`) and the docked half writes it on
+     * arrival, so it belongs to neither half and therefore to the universe.
      */
-    std::uint8_t techLevel = 0;
+    CurrentSystem current;
 
     /*
      * 6502: LSO -- the sun's heap, which `NWSPS` hands to the SPACE STATION (§6.112).

@@ -71,18 +71,14 @@ namespace GameLogicTests
     static constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
 
     FlightPort()
-      : screen{universe.canvas,   universe.draw,     universe.math,      universe.geometry, universe.dust,    universe.heaps,
-               universe.bubble,   universe.work,     universe.screen,    universe.text,     universe.characters.state,
-               universe.printer,  universe.characters, universe.message, universe.flight,   universe.status,  universe.compass,
-               universe.rng,      universe.commander, universe.trumbles, universe.video,    *this,            *this,
-               universe.view,     universe.spaceView, universe.explosions, universe.techLevel},
-        loop{screen, keys, control, options, burst, heap, clip, projection, axes, *this, *this, *this}
+      : ports{universe.printer, universe.characters, universe.characters, *this,                    *this,
+              *this,            *this,               *this,               universe.extendedPrinter, universe.unused}
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
       universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
       universe.bubble.stationType = Elite::ShipType::Station;
-      universe.LendSunHeap(heap);
+      universe.LendSunHeap();
       Elite::SetUpLoaderScreen(universe.canvas); // 6502: the loader's palette, without which the screen stays black
     }
 
@@ -91,25 +87,19 @@ namespace GameLogicTests
 
     // ---- the universe and the loop over it ----------------------------------------------------------
 
+    /*
+     * The universe, and it is all of them now: the controls, the keys, the burst, the line heap,
+     * the clipper's flag, the projection and the axes were eight members here because `FlightLoop`
+     * held references to them. `Elite::Universe` owns every one since M3-a, so `universe.keys` is
+     * the byte the app's is.
+     */
     Universe universe;
-
-    Elite::ControlState control;
-    Elite::ControlOptions options;
-    Elite::KeyLogger keys{};
-    Elite::LaserBurst burst{};
-    Elite::LineHeap heap;
-    Elite::ClipState clip;
-    Elite::Projection projection;
-    Elite::K3Block axes{};
 
     /// 6502: the sound variables, the music player and the SID they write -- the game's own
     /// objects, so that a flight makes the same register writes it would make in the app.
     Elite::SoundBuffer sound;
     Elite::MusicPlayer music;
     Elite::SidWriteLog sidLog;
-
-    /// 6502: QQ2, QQ28, tek and gov -- what the spawner reads about the system you are in.
-    Elite::CurrentSystem current;
 
     std::uint8_t docked = 0xFFu;   ///< 6502: QQ12
     std::uint8_t rasterMode = 0;   ///< 6502: L1M -- what `SETL1` last wrote
@@ -128,19 +118,19 @@ namespace GameLogicTests
      */
     [[nodiscard]] Elite::LoopOutcome Step()
     {
-      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(loop); // 6502: JSR M%
+      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(universe, ports); // 6502: JSR M%
       if (outcome != Elite::LoopOutcome::Continued)
       {
         return outcome;
       }
 
-      if (Elite::RunLoopHead(loop, *this) == Elite::LoopHead::Spawn)
+      if (Elite::RunLoopHead(universe, ports, *this) == Elite::LoopHead::Spawn)
       {
-        Elite::RunSpawning(universe.bubble, universe.work, universe.rng, universe.commander, current, universe.status,
+        Elite::RunSpawning(universe.bubble, universe.work, universe.rng, universe.commander, universe.current, universe.status,
                            universe.explosions, universe.flight.blueprint, false);
       }
-      static_cast<void>(Elite::RunLoopTail(loop, universe.commander, options.authorNames, false));
-      static_cast<void>(Elite::ScanFlightControls(loop, *this, universe.view)); // 6502: JSR TT17
+      static_cast<void>(Elite::RunLoopTail(universe, ports, universe.commander, universe.options.authorNames, false));
+      static_cast<void>(Elite::ScanFlightControls(universe, ports, *this, universe.view)); // 6502: JSR TT17
       return Elite::LoopOutcome::Continued;
     }
 
@@ -160,12 +150,13 @@ namespace GameLogicTests
       std::array<std::uint8_t, Elite::LineHeap::SIZE> arena{};
       for (std::size_t offset = 0; offset < arena.size(); ++offset)
       {
-        arena[offset] = heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(Elite::LineHeap::BASE + offset)));
+        arena[offset] = universe.heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(Elite::LineHeap::BASE + offset)));
       }
       digest = FoldBytes(digest, arena);
 
-      const std::array<std::uint8_t, 6> rest = {control.roll,         control.pitch, control.dockingComputer,
-                                                universe.status.hyperspaceCounter, universe.status.ecmOurs, docked};
+      const std::array<std::uint8_t, 6> rest = {universe.control.roll,             universe.control.pitch,
+                                                universe.control.dockingComputer,  universe.status.hyperspaceCounter,
+                                                universe.status.ecmOurs,           docked};
       return FoldBytes(digest, rest);
     }
 
@@ -213,17 +204,17 @@ namespace GameLogicTests
     [[nodiscard]] bool RunTactics(Elite::Ship& _work) override
     {
       static_cast<void>(_work);
-      return Elite::RunTactics(loop, universe.flight.slot);
+      return Elite::RunTactics(universe, ports, universe.flight.slot);
     }
     void DrawPlanetOrSun() override
     {
-      Elite::DrawPlanetOrSun(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, universe.rng,
-                             universe.work, projection, universe.flight.type);
+      Elite::DrawPlanetOrSun(universe.canvas, universe.heaps, universe.geometry, universe.math, universe.clip, universe.rng,
+                             universe.work, universe.projection, universe.flight.type);
     }
     void DrawExplosion() override
     {
-      Elite::DrawExplosionCloud(universe.canvas, universe.math, universe.rng, universe.work, heap, universe.geometry, universe.bubble,
-                                *this);
+      Elite::DrawExplosionCloud(universe.canvas, universe.math, universe.rng, universe.work, universe.heap, universe.geometry,
+                                universe.bubble, *this);
     }
 
     // ---- Elite::ControlEffects ------------------------------------------------------------------
@@ -234,26 +225,26 @@ namespace GameLogicTests
     {
       rasterMode = 0b101;                                         // 6502: LDA #%101 / JSR SETL1
       Elite::ApplyMaskSprites(universe.video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
-      keys.fill(0u);                                              // 6502: JSR ZEKTRAN
-      for (std::size_t key = keys.size(); key-- > 0u;)
+      universe.keys.fill(0u);                                     // 6502: JSR ZEKTRAN
+      for (std::size_t key = universe.keys.size(); key-- > 0u;)
       {
         if (held[key] != 0u)
         {
-          keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
+          universe.keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
         }
       }
       if (universe.view != 0u)
       {
         for (const std::size_t index : NON_STEERING_KEYS)
         {
-          keys[index] = 0u;
+          universe.keys[index] = 0u;
         }
       }
       if (Elite::IsChartView(universe.view))
       {
         for (const std::size_t index : {Elite::KEY_ROLL_LEFT, Elite::KEY_ROLL_RIGHT, Elite::KEY_PITCH_UP, Elite::KEY_PITCH_DOWN})
         {
-          keys[index] = 0u;
+          universe.keys[index] = 0u;
         }
       }
       rasterMode = 0b100; // 6502: LDA #%100 / JSR SETL1
@@ -266,7 +257,7 @@ namespace GameLogicTests
       universe.heaps.lsp = 1u;
       universe.heaps.stp = _circle.step;
       const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-      Elite::DrawBall(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, centre, _circle.radius, false);
+      Elite::DrawBall(universe.canvas, universe.heaps, universe.geometry, universe.math, universe.clip, centre, _circle.radius, false);
     }
     void DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius) override
     {
@@ -278,7 +269,7 @@ namespace GameLogicTests
     void RunDockingComputer(Elite::Ship& _work) override
     {
       static_cast<void>(_work);
-      static_cast<void>(Elite::RunDockingComputer(loop, 0u));
+      static_cast<void>(Elite::RunDockingComputer(universe, ports, 0u));
     }
     /// 6502: CLYNS, which `MLOOP`'s head runs when a message's countdown expires -- what
     /// `GameShell::ClearBottomRows` does.
@@ -318,10 +309,9 @@ namespace GameLogicTests
       ++palettes;
     }
 
-    // ---- the two aggregates, last because every reference in them is bound at construction -----
-
-    Elite::FlightScreen screen;
-    Elite::FlightLoop loop;
+    /// The seams and the text machinery, last because every reference in it is bound at
+    /// construction. Ten where the two aggregates held thirty-nine (M3-a).
+    Elite::Ports ports;
   };
 
 } // namespace GameLogicTests

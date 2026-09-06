@@ -27,6 +27,8 @@
 #include "Raster.h"
 #include "ViewChange.h"
 #include "Music.h"
+#include "Ports.h"
+#include "Universe.h"
 #include "SoundEffects.h"
 
 #include <cstdint>
@@ -36,19 +38,23 @@ namespace Outpost
   class SoundOutput;
 
   /*
-   * The universe a flight happens in, and the six seams the flight code reaches through.
+   * The seams the flight code reaches through, and nothing else since M3-a.
    *
    * `GameShell` is the docked half's answer to the same question and this is the flying half's,
    * separate for one reason: what a shell answers is the PLATFORM -- a window, a presenter, a
    * keyboard -- and most of what this answers is phase 4. Putting them together would hide which
    * stubs are waiting on a machine and which are waiting on a slice.
    *
-   * IT OWNS THE FLIGHT UNIVERSE AND BORROWS THE SCREEN. The canvas, the text system, the commander,
-   * the generator, the flight status, `QQ11` and `EV` all belong to the composition root because
-   * the docked screens write them too; everything below `m_draw` is memory only a flight touches,
-   * and there is nowhere else for it to live. `Elite::FlightScreen` and `Elite::FlightLoop` are
-   * aggregates of references over the two, built once in the constructor rather than per call --
-   * they are the original's globals, and globals do not get rebuilt every frame.
+   * IT OWNS NO GAME STATE AT ALL SINCE M3-a. It held twenty-two members -- the drawing scratch, the
+   * arena, the flight model, the controls, the line heap -- because the memory the flight touches
+   * had to live somewhere and the docked half owned the rest, so which of the two owned a byte
+   * depended on which screen had needed it first. `Elite::Universe` owns every one of them now and
+   * the composition root owns the universe, so what is left here is the window, the sound and the
+   * raster mode: the platform, which is what a session was always supposed to be.
+   *
+   * It still builds `Elite::Ports`, because eight of that struct's ten references are to this
+   * object and the two that are not are the printers the root hands it. `Ports()` is what a caller
+   * passes beside the universe.
    *
    * WHAT IS HONESTLY MISSING, said here rather than left to be found while flying.
    *
@@ -76,23 +82,23 @@ namespace Outpost
                               public Elite::ChartShapes
   {
   public:
-    FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
-                  Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::Commander& _commander, Elite::Rng& _rng,
-                  Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions, std::uint8_t& _techLevel,
-                  Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music, SoundOutput& _audio) noexcept;
+    FlightSession(Window& _window, Elite::Universe& _universe, Elite::TokenPrinter& _printer, Elite::CharacterPrinter& _characters,
+                  Elite::ExtendedTokenPrinter& _tokens, Elite::StartUpEffects& _start, Elite::SoundBuffer& _sound,
+                  Elite::MusicPlayer& _music, SoundOutput& _audio) noexcept;
 
     FlightSession(const FlightSession&) = delete;
     FlightSession& operator=(const FlightSession&) = delete;
 
-    /// The argument lists the ported routines take. Both are references into this object, so a
-    /// caller can hold neither across a destruction and needs to hold neither at all.
-    [[nodiscard]] Elite::FlightScreen& Screen() noexcept
+    /// The universe the routines work on and the seams they reach through -- the two arguments
+    /// every ported routine takes since M3-a. The universe is the composition root's; the ports are
+    /// this object's, and every reference in them is bound at construction.
+    [[nodiscard]] Elite::Universe& Universe() noexcept
     {
-      return m_screen;
+      return m_universe;
     }
-    [[nodiscard]] Elite::FlightLoop& Loop() noexcept
+    [[nodiscard]] Elite::Ports& Ports() noexcept
     {
-      return m_loop;
+      return m_ports;
     }
 
     /*
@@ -170,7 +176,7 @@ namespace Outpost
      */
     [[nodiscard]] const Elite::VideoState& Video() const noexcept
     {
-      return m_video;
+      return m_universe.video;
     }
 
     void SetSightColour(std::uint8_t _colour) override;
@@ -185,7 +191,16 @@ namespace Outpost
 
   private:
     Window& m_window;
-    Elite::Canvas& m_canvas;
+
+    /*
+     * Every byte the flight works on, and it is the DOCKED HALF'S TOO (Modernize.md §4.4).
+     *
+     * A reference rather than twenty-two members, since M3-a. The sprite registers went with them
+     * -- ADR-005 §1 settled that compositing belongs in `Canvas::Resolve`, so they have to be data
+     * rather than private state behind a getter (§6.133, §6.148), and `Video()` is the one line
+     * that hands `m_universe.video` to the presenter.
+     */
+    Elite::Universe& m_universe;
 
     /// 6502: the sound buffer, the music player and the chip they write -- the composition root's,
     /// because the docked half beeps and starts the theme through the shell.
@@ -193,56 +208,11 @@ namespace Outpost
     Elite::MusicPlayer& m_music;
     SoundOutput& m_audio;
 
-    // ---- the flight universe -------------------------------------------------------------------------
-
-    Elite::DrawWorkspace m_draw;
-    Elite::MathWorkspace m_math;
-    Elite::GeometryWorkspace m_geometry;
-
-    Elite::Stardust m_dust;
-    Elite::PlanetSunState m_heaps;
-    Elite::Bubble m_bubble;
-    Elite::Ship m_work{}; ///< 6502: INWK
-
-    Elite::ScreenState m_screenState;
-    Elite::FlightState m_flight;
-    Elite::Compass m_compass;
-    /// 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and the six sprites' coordinate registers. `SIGHT`
-    /// writes the count, `MVTRIBS` walks the rest, and `SyncVideoRegisters` is what shows them.
-    Elite::TrumbleSprites m_trumbles;
-    std::uint8_t m_spaceView = 0;      ///< 6502: VIEW -- which way the player is looking
-
-    Elite::KeyLogger m_keys{}; ///< 6502: KLO
-    Elite::ControlState m_control;
-    Elite::ControlOptions m_options;
-    Elite::LaserBurst m_burst{};
-
-    Elite::LineHeap m_heap;
-    Elite::ClipState m_clip;
-    Elite::Projection m_projection;
-    Elite::K3Block m_axes{};
-
-    /*
-     * 6502: the VIC-II sprite registers, and they are NO LONGER PRIVATE TO THIS CLASS.
-     *
-     * They used to be five members here -- the enable mask, sprite 0's colour, the expand byte and
-     * the burst's position -- written by the two seams and read by nothing at all, which is why the
-     * laser sights, the Trumbles and the explosion sprite never appeared. ADR-005 §1 settled that
-     * compositing belongs in `Canvas::Resolve`, and that needs the registers to be DATA rather than
-     * private state behind a getter (plan §6.133, §6.148).
-     *
-     * So they live in `Elite::VideoState`, the seam methods below are one line each into it, and
-     * `Video()` hands it to the presenter. It is public state on purpose: a getter that computed
-     * anything would be the mistake `SightEffects::MaskSprites` already warns about.
-     */
-    Elite::VideoState m_video{};
-
     std::uint8_t m_rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote into the handler
 
-    /// The two aggregates the ported routines take, over everything above and everything borrowed.
-    /// Declared last because every reference in them is bound at construction.
-    Elite::FlightScreen m_screen;
-    Elite::FlightLoop m_loop;
+    /// The seams, over this object and the two printers the root hands it. Declared last because
+    /// every reference in it is bound at construction.
+    Elite::Ports m_ports;
   };
 
   /*

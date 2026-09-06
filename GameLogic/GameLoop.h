@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Ports.h"
+#include "Universe.h"
+
 #include "Charts.h"
 #include "Commander.h"
 #include "Dashboard.h"
@@ -78,7 +81,7 @@ namespace Elite
    * where it reaches zero. Reading parts 1 to 4 without this makes the bubble fill 256 times too
    * fast, which is the kind of wrong that looks like a working game for the first few seconds.
    */
-  [[nodiscard]] LoopHead RunLoopHead(FlightLoop& _loop, ChartEffects& _rows) noexcept;
+  [[nodiscard]] LoopHead RunLoopHead(Universe& _universe, Ports& _ports, ChartEffects& _rows) noexcept;
 
   /*
    * 6502: MLOOP's first six instructions and `EE20` -- the two countdowns, before the `QQ11` gate.
@@ -129,7 +132,8 @@ namespace Elite
    * decision ADR-005 §3 made for the loop as a whole: the game says how long, the platform decides
    * how to spend it.
    */
-  [[nodiscard]] std::uint8_t RunLoopTail(FlightLoop& _loop, Commander& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept;
+  [[nodiscard]] std::uint8_t RunLoopTail(Universe& _universe, Ports& _ports, Commander& _commander, std::uint8_t _authorNames,
+                                         bool _carryIn) noexcept;
 
   /*
    * 6502: CYL2, COU and PACK -- the three ship types the spawner names that no earlier slice did.

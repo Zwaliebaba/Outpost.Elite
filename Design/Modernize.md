@@ -291,18 +291,18 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->78 reference members
-across the structs `FlightScreen` (twenty-three), `FlightLoop`, `TradeScreen`, `SaveScreen`,
-`GameStart`, `MissionScreen`, `TitleScreen` and `ClipState`'s neighbours. `ViewChange.h` says it
-plainly: "the struct is the argument list". They are built by `FlightSession`'s constructor, by
-`Main.cpp`'s `StartOf`/`ChartOf`/`JumpOf`/`OptionsOf`, and by `FlightUniverse.h`'s `Screen()`, three
-times over.
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->39 reference members,
+and they were seventy-eight until M3-a-2. `FlightScreen`, `FlightLoop`, `MissionScreen` and
+`TitleScreen` held forty-nine of them and are gone: every routine takes `(Universe&, Ports&)`, and
+`Ports` is ten. What is left is the docked half's three — `TradeScreen` (nine), `SaveScreen` (nine)
+and `GameStart` (eleven) — which M3-a's second commit and M3-c take. `ViewChange.h` said it plainly
+while they existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
 <!--count:main-lines-->1,219 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->225 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->206 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
@@ -346,7 +346,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,954 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,937 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1589,6 +1589,50 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-a-2 built: the routines take `(Universe&, Ports&)`, and four argument-list
+structs are gone.** `FlightScreen`, `FlightLoop`, `MissionScreen` and `TitleScreen` held forty-nine
+reference members between them and every ported routine took one of them; each now takes the
+universe and the ports beside it. `Ports` is ten references — the three text objects, which cannot
+live in a universe that has to copy because two of them take a seam, and the seven seams the
+platform answers — and it is a struct of references for exactly one slice: M3-b collapses the seam
+half to §4.5's four ports, and doing it here would be two patterns in one (rule 8). 397 of 397
+still pass and the M0-c replay digests are untouched, which is the property the slice is for.
+
+**The acceptance the slice plan corrected was itself wrong, in the port's favour.** It predicted
+`aggregate-refs` 78 → 47 on a split of thirty-nine flight references and thirty-nine docked ones.
+The real split is forty-nine and twenty-nine, so the number is **78 → 39**: the flight half's
+forty-nine replaced by `Ports`' ten, and `TradeScreen` (nine), `SaveScreen` (nine) and `GameStart`
+(eleven) left for M3-a's docked half and M3-c. Recording the miss rather than the outcome, because
+the plan's number was arithmetic on a count nobody had run.
+
+**M3-a-1 had quietly made two bytes out of one, and this is where it showed.** `Universe` took a
+`std::uint8_t techLevel` while `CurrentSystem` stayed in the composition root — but `tek` reached
+the flight half as a REFERENCE into that struct before M3-a, so the copy was a second byte with the
+same name and no writer keeping them equal. `CurrentSystem` is a member of `Universe` now and
+`PerformJump` and `GalacticJump` lost the parameter, which is the shape §4.4 wanted and the one the
+original has. The same argument moved `INF`: `MissionScreen::shipSlot` carried the briefing ship's
+slot out through `GameShell::SetBriefingShip` and back in through control code 22, because `PAUSE`
+runs inside the token `BRIEF` is printing; it is `Universe::shipSlot` now and the shell's copy and
+its two setter calls are gone.
+
+**What the app lost.** `FlightSession` held twenty-two members of game state and holds none:
+`Outpost::Game` owns the one `Elite::Universe` and the session takes a reference to it, which took
+`outpost-elite-names` 225 → 206. `main-lines` did not move: `_game.universe.` is longer than
+`_game.` and clang-format rewrapped three statements, and three aliases the slice made redundant
+came out again. The session still builds
+`Ports`, because eight of that struct's ten references are to itself. `origin-markers` fell
+3,954 → 3,937 and every one of the seventeen was a `///< 6502:` on a reference member naming a byte
+`Universe.h` names in the same words — rule 4 is about markers on code, and no code lost one.
+
+**Twenty-two of the seventy-two mutants were re-anchored, none dropped** (rule 3): their `find`
+text named `screen.`, `_loop.` or `_mission`, and nine of them had to be rewritten by hand rather
+than by substitution because the call they mutate changed shape as well as spelling. The count
+stays at 72.
+
+**The Windows job is still the gate.** `check_outpost.py` caught nineteen arity and member errors
+in `Main.cpp` and `Shell.cpp` on this slice — the whole point of M3-0, one commit earlier — but it
+reads names and arity and never types, so R15 is unchanged: no Linux runner compiles `Outpost/`.
 
 **2026-09-06 — M3-a-1: `Elite::Universe` exists, and the whole suite ran against it unchanged.**
 `GameLogic/Universe.h` holds the state the flight half's two argument-list structs name, in §4.4's

@@ -67,9 +67,9 @@ namespace Elite
     return sustain;
   }
 
-  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, ShipType _type) noexcept
+  std::uint8_t RecordKill(Universe& _universe, Ports& _ports, DashboardEffects& _effects, ShipType _type) noexcept
   {
-    Commander& commander = _screen.commander;
+    Commander& commander = _universe.commander;
 
     /*
      * 6502: LDA TALLYL / CLC / ADC KWL%-1,X / STA TALLYL / LDA TALLY / ADC KWH%-1,X / STA TALLY /
@@ -94,19 +94,20 @@ namespace Elite
         static_cast<std::uint8_t>(commander.kills.hi + 1u);
 
       // 6502: LDA #101 / JSR MESS -- "RIGHT ON COMMANDER", once every 256 whole kills.
-      ShowMessage(_screen.canvas, _screen.printer, _screen.text, _screen.extended, _screen.message, MESSAGE_RIGHT_ON_COMMANDER,
-                  _screen.view);
+      ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, MESSAGE_RIGHT_ON_COMMANDER,
+                  _universe.view);
     }
 
     // 6502: davidscockup -- and the noise is the same shape as EXNO's with wider thresholds.
-    const std::uint8_t sustain = KillVolume(_screen.work.z.hi);
+    const std::uint8_t sustain = KillVolume(_universe.work.z.hi);
     (void)_effects.PlaySoundPitched(SOUND_EXPLOSION, sustain, EXPLOSION_PITCH_KILL);
     return sustain;
   }
 
-  bool TakeDamage(FlightScreen& _screen, DashboardEffects& _effects, const Ship& _target, std::uint8_t _damage, bool _carryIn) noexcept
+  bool TakeDamage(Universe& _universe, Ports& _ports, DashboardEffects& _effects, const Ship& _target, std::uint8_t _damage,
+                  bool _carryIn) noexcept
   {
-    FlightStatus& status = _screen.status;
+    FlightStatus& status = _universe.status;
 
     /*
      * 6502: STA T / LDX #0 / LDY #8 / LDA (INF),Y / BMI OO1.
@@ -155,14 +156,14 @@ namespace Elite
      * straight through (§6.99), so with sound off the roll below is the one a carry of 1 gives.
      */
     const bool heard = _effects.PlaySound(SOUND_EXPLOSION, true);
-    DamageEquipment(_screen, heard);
+    DamageEquipment(_universe, _ports, heard);
     return true;
   }
 
-  void DamageEquipment(FlightScreen& _screen, bool _carryIn) noexcept
+  void DamageEquipment(Universe& _universe, Ports& _ports, bool _carryIn) noexcept
   {
     // 6502: JSR DORND / BMI out -- half the hits break nothing at all.
-    const RngResult roll = _screen.rng.Next(_carryIn);
+    const RngResult roll = _universe.rng.Next(_carryIn);
     if ((roll.value & 0x80u) != 0u)
     {
       return;
@@ -178,7 +179,7 @@ namespace Elite
     // 6502: QQ20,X -- and X runs to 21, past the seventeen goods into the five fittings after
     // them. `cargoHold[slot]` was that until M1-d typed the hold, and then it was an out-of-range
     // subscript for every fitting `OUCH` could break (plan §6.158).
-    Commander& commander = _screen.commander;
+    Commander& commander = _universe.commander;
     std::uint8_t& held = commander.HoldOrFitting(slot);
 
     // 6502: LDA QQ20,X / BEQ out -- nothing there to break.
@@ -188,12 +189,12 @@ namespace Elite
     }
 
     // 6502: LDA DLY / BNE out -- a message already up suppresses this one, and the routine with it.
-    if (_screen.message.delay != 0u)
+    if (_universe.message.delay != 0u)
     {
       return;
     }
 
-    _screen.message.append = 3u; // 6502: LDY #3 / STY de -- "... DESTROYED"
+    _universe.message.append = 3u; // 6502: LDY #3 / STY de -- "... DESTROYED"
 
     // 6502: STA QQ20,X -- and A is `DLY`, which is zero because that is how we got here.
     held = 0u;
@@ -222,7 +223,7 @@ namespace Elite
       token = static_cast<std::uint8_t>(slot + 94u);
     }
 
-    ShowMessage(_screen.canvas, _screen.printer, _screen.text, _screen.extended, _screen.message, token, _screen.view);
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, token, _universe.view);
   }
 
   void StopEnergyBomb(ScreenState& _screen) noexcept
