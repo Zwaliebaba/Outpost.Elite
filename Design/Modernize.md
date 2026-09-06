@@ -1143,3 +1143,9 @@ been found by reading. The replay's sixteen digests are unchanged, which is M1-c
 78 — the counter had already learned to cut the views it no longer needs to cut. Mutants: the
 anchors moved with the regex and `mutate.py --check` was green before the first build; the corpus
 rerun follows.
+
+**2026-09-06 — M1-c closed on the mutants.** 65 mutants on the struct tree: 61 caught, 4 survived,
+the four the recorded equivalents — M0-d's tally for the fourth time, with the anchors reading
+`work.rollCounter`, `work.energy`, `work.ai` and `screen.work.z.hi`. Rule 3 is met; M1-d — the
+typed `Commander` with the seventy-seven-byte codec, the checksums and the save file over it — is
+next.
