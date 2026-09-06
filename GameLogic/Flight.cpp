@@ -217,7 +217,7 @@ namespace Elite
     _screen.view = saved;
 
     // 6502: falls into HFS1.
-    DrawHyperspaceRings(_screen.canvas, _screen.heaps, _screen.draw, _screen.geometry, _screen.math, _clip, _pacing);
+    DrawHyperspaceRings(_screen.canvas, _screen.heaps, _screen.geometry, _screen.math, _clip, _pacing);
   }
 
   void DrawHyperspaceTunnel(FlightScreen& _screen, ClipState& _clip, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
@@ -296,7 +296,7 @@ namespace Elite
        * `STP` is still the 8 `LAUN` stored, which is the second half of §6.94's answer: the step
        * IS written on this path, by the routine the port had left as a stub (§6.109).
        */
-      DrawHyperspaceRings(screen.canvas, screen.heaps, screen.draw, screen.geometry, screen.math, _loop.clip, _pacing);
+      DrawHyperspaceRings(screen.canvas, screen.heaps, screen.geometry, screen.math, _loop.clip, _pacing);
     }
 
     // 6502: .NLUNCH LDX #0 / STX QQ12 / JMP LOOK1 -- and the X that clears the flag is the X the
@@ -420,7 +420,7 @@ namespace Elite
       screen.work.y.lo = 0u;
 
       // 6502: JSR LL9 -- the title's ship is never killed, so the carry it is reached with goes unread.
-      DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
+      DrawShip(screen.canvas, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
                screen.bubble.blocks[slot], loop.heap, *screen.flight.blueprint, screen.flight.type, loop.drawing, screen.rng, false);
 
       // 6502: JSR RDKEY / DEC MCNT.
@@ -649,7 +649,7 @@ namespace Elite
        * `INF`. Handing it slot 0 would have `LL9` writing its bookkeeping into the PLANET, which
        * is what the port did until the oracle disagreed about the planet's speed byte.
        */
-      DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work,
+      DrawShip(screen.canvas, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work,
                screen.bubble.blocks[abandoned.slot], _loop.heap, *screen.flight.blueprint, screen.flight.type, _loop.drawing, screen.rng,
                false); // the pod is never killed, so the carry goes unread
       --screen.work.ai;

@@ -247,7 +247,7 @@ namespace Outpost
   {
     // 6502: LL25 -- JMP PLANET, taken for a type with bit 7 set. `INWK` is the body and `TYPE`
     // decides which of the two it is, exactly as the tail jump does.
-    Elite::DrawPlanetOrSun(m_canvas, m_heaps, m_draw, m_geometry, m_math, m_clip, m_screen.rng, m_work, m_projection, m_flight.type);
+    Elite::DrawPlanetOrSun(m_canvas, m_heaps, m_geometry, m_math, m_clip, m_screen.rng, m_work, m_projection, m_flight.type);
   }
 
   void FlightSession::DrawExplosion()
@@ -348,7 +348,7 @@ namespace Outpost
     m_math.k[0] = _circle.radius;
 
     const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-    Elite::DrawBall(m_canvas, m_heaps, m_draw, m_geometry, m_math, m_clip, centre, false);
+    Elite::DrawBall(m_canvas, m_heaps, m_geometry, m_math, m_clip, centre, false);
   }
 
   void FlightSession::DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius)
@@ -364,7 +364,7 @@ namespace Outpost
 
     m_math.k[0] = _radius;
     const Elite::Projection centre{_x, 0u, _y, 0u};
-    Elite::DrawSun(m_canvas, m_heaps, m_draw, m_math, m_screen.rng, centre);
+    Elite::DrawSun(m_canvas, m_heaps, m_math, m_screen.rng, centre);
 
     Elite::ClearSunHeap(m_heaps);
   }

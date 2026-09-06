@@ -328,73 +328,22 @@ namespace Elite
   };
 
   /*
-   * The zero-page bytes the clipper and the dashboard keep between calls.
+   * 6502: SC(1 0) -- the screen pointer, and all that is left of the drawing workspace.
    *
-   * Until M2-c this held every byte the drawing routines passed their arguments in -- `COL`, `ZZ`
-   * and `R2` were here -- and those are parameters and locals now. What is left is `XX15`'s six
-   * bytes and `SWAP`, which `LL145` reads and writes and M2-c's second commit takes to a `Line16`
-   * and a `ClipResult`; `SC`, which stays until M4 names the dashboard's cursor; and `T2`.
+   * Everything else that lived here is a value since M2-c: `X1`, `Y1`, `X2` and `Y2` are a `Line`,
+   * `XX15+4` and `XX15+5` its two extra bytes in the clipper's `Line16`, `SWAP` what `LOIN` and the
+   * clipper return, `COL` and `ZZ` the plot's colour and distance, and `T2` and `R2` were the
+   * port's own invention over the kernel's `T` and `R` (§8, M2-c-1).
    *
-   * `T2` AND `R2` WERE HERE AND WERE THE PORT'S OWN INVENTION (M2-c, §8). `HLOIN` and `BOX2` park
-   * their scratch in `T` and `R` -- the kernel's two bytes, which are locals since M2-b -- and the
-   * port wrote `T2` and `R2` instead, following the upstream commentary rather than the C64's own
-   * code. Nothing read either byte, so nothing was wrong on the screen; what it moved was the M0-c
-   * digest, which hashed a byte the game does not write there. Both are locals now and the record
-   * is re-taken under rule 1's second case.
-   *
-   * 6502: X1, Y1, X2, Y2 and XX15+4, XX15+5 as the clipper's six; SWAP; SC.
+   * `SC` STAYS, because the DASHBOARD keeps it between calls (slice 3d-b): `DIALS` sets the screen
+   * pointer once and `DIL`/`DIL2` advance it seven calls running, so where the next dial goes is
+   * what the last one left. The line drawing keeps its own local copy because nothing reads
+   * `LOIN`'s, and `CPIX2` returns its one rather than storing it, because `SCAN` reads it
+   * immediately -- but a value seven calls live is state, not a return. M4 names it.
    */
   struct DrawWorkspace
   {
-    std::uint8_t x1 = 0;
-    std::uint8_t y1 = 0;
-    std::uint8_t x2 = 0;
-    std::uint8_t y2 = 0;
-
-    /*
-     * 6502: SC(1 0) -- the screen pointer, and it is here because the DASHBOARD keeps it between
-     * calls (slice 3d-b).
-     *
-     * `DIALS` sets it once and then calls `DIL` and `DIL2` seven times; each of them advances it by
-     * one character row on the way out, so where the next dial goes is what the last one left. The
-     * line drawing keeps its own local copy because nothing reads `LOIN`'s, and `CPIX2` returns its
-     * one rather than storing it, because `SCAN` reads it immediately -- but a value seven calls
-     * live is state, not a return.
-     */
-    std::uint16_t sc = 0;
-
-    /*
-     * 6502: SWAP -- did the last line come out with its ends the other way round?
-     *
-     * It is here rather than with the clipper because ONE byte at 1780 has two writers and two
-     * readers, and they do not pair up: `LL145` and `LOIN` both write it, and `BLINE` reads what
-     * `LL145` left while `WPLS2` reads what `LOIN` left. Slice 3b modelled it as the clipper's
-     * report and `LOIN` kept its own copy in a local, which agreed with the game until `WPLS2`
-     * asked `LOIN` for it (§6.46).
-     *
-     * It is 0 or 255 rather than a bool because `LOIN` writes it with `DEC` and `WPLS2` tests it
-     * with `BNE`.
-     */
-    std::uint8_t swap = 0;
-
-    /*
-     * 6502: XX15+4 and XX15+5 (slice 3b).
-     *
-     * `X1`, `Y1`, `X2` and `Y2` are not four bytes the line drawing owns -- they are the first four
-     * of `XX15`, which is SIX, and the geometry in `LL9` uses all six. `LL51` reads them as three
-     * sign-magnitude pairs; `LL145` reads them as three sixteen-bit coordinates and returns four
-     * eight-bit screen coordinates in the same place, so `XX15+1` is `x1_hi` going in and `Y1`
-     * coming out. That is a calling convention, not storage reuse: there is no point between the
-     * two meanings at which a copy could be made, so the six bytes are one workspace.
-     *
-     * They are fields rather than an array because nothing in `LL9`, `LL145` or the clipping ever
-     * indexes `XX15` by a register -- every access is `XX15+n` with a literal n. `XX1`, `XX2`,
-     * `XX3`, `XX12`, `XX16` and `XX18` are indexed and are arrays; these two are not (§6.37).
-     *
-     * The original has no separate names for them, so neither does this.
-     */
-    std::uint8_t xx15Plus4 = 0;
-    std::uint8_t xx15Plus5 = 0;
+    std::uint16_t sc = 0; ///< 6502: SC(1 0)
   };
 
   // ---- the pixel primitives (slice 1d-a) ------------------------------------------------------

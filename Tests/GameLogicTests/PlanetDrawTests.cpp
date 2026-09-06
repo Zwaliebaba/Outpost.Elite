@@ -207,7 +207,6 @@ namespace GameLogicTests
           Cpu6502 cpu = oracle.Fresh();
           Elite::PlanetSunState state;
           Elite::MathWorkspace math;
-          Elite::DrawWorkspace draw;
 
           const std::uint8_t row = 91;
           SeedSunHeap(cpu, state, at, 0x71C3492Bu + width);
@@ -224,17 +223,17 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(edges, 20'000);
           Assert::IsTrue(run.completed, L"EDGES returned");
 
-          const bool off = Elite::ClipSunRow(state, math, draw, width, row);
+          const Elite::SunRow clipped = Elite::ClipSunRow(state, math, width, row);
 
           const std::wstring where = Widen("EDGES centre=" + std::to_string(centre) + " width=" + std::to_string(width));
-          Assert::AreEqual(cpu.c, off, (where + L": the carry").c_str());
-          Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": X1").c_str());
-          Assert::AreEqual(cpu.memory[at.x2], draw.x2, (where + L": X2").c_str());
-          Assert::AreEqual(cpu.memory[at.t], math.t, (where + L": T").c_str());
+          Assert::AreEqual(cpu.c, clipped.offScreen, (where + L": the carry").c_str());
+          Assert::AreEqual(cpu.memory[at.x1], clipped.x1, (where + L": X1").c_str());
+          Assert::AreEqual(cpu.memory[at.x2], clipped.x2, (where + L": X2").c_str());
+          // `T` is `EDGES`'s own since M2-c-2: it parks the half-width for the left end's subtraction.
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.lso + row)], state.sun[row], (where + L": the heap row").c_str());
 
           cleared += (state.sun[row] == 0u) ? 1u : 0u;
-          clamped += (!off && (draw.x1 == 0u || draw.x2 == 255u)) ? 1u : 0u;
+          clamped += (!clipped.offScreen && (clipped.x1 == 0u || clipped.x2 == 255u)) ? 1u : 0u;
           ++compared;
         }
       }
@@ -315,7 +314,6 @@ namespace GameLogicTests
           Elite::Canvas canvas;
           Elite::PlanetSunState state;
           Elite::MathWorkspace math;
-          Elite::DrawWorkspace draw;
 
           SeedSunHeap(cpu, state, at, 0x51F3A2C9u + centre);
           SeedBallHeap(cpu, state, at, 0x8D14E703u, 40);
@@ -333,7 +331,7 @@ namespace GameLogicTests
           {
             const Elite::Testing::RunResult run = cpu.CallSubroutine(wpls, 4'000'000);
             Assert::IsTrue(run.completed, L"WPLS returned");
-            Elite::EraseSun(canvas, state, math, draw);
+            Elite::EraseSun(canvas, state, math);
 
             const std::wstring where =
               Widen("WPLS centre=" + std::to_string(centre) + " flag=" + std::to_string(marker) + " pass=" + std::to_string(pass));
@@ -352,7 +350,6 @@ namespace GameLogicTests
         Elite::Canvas canvas;
         Elite::PlanetSunState state;
         Elite::MathWorkspace math;
-        Elite::DrawWorkspace draw;
 
         const std::uint8_t row = 64;
         SeedSunHeap(cpu, state, at, 0xA07B5E26u);
@@ -365,12 +362,13 @@ namespace GameLogicTests
         cpu.a = width;
         cpu.y = row;
         Assert::IsTrue(cpu.CallSubroutine(hloin2, 40'000).completed, L"HLOIN2 returned");
-        Elite::EraseSunRow(canvas, state, math, draw, width, row);
+        Elite::EraseSunRow(canvas, state, math, width, row);
 
         const std::wstring where = Widen("HLOIN2 width=" + std::to_string(width));
         marked += CompareScreens(cpu, at.screen, canvas, where);
         CompareHeaps(cpu, state, at, where);
-        Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": Y1").c_str());
+        // `Y1` is the row `HLOIN` is given and this routine's own since M2-c-2; the pixels above
+        // are what it drew with it.
         ++compared;
       }
 
@@ -412,32 +410,30 @@ namespace GameLogicTests
           Cpu6502 cpu = oracle.Fresh();
           Elite::Canvas canvas;
           Elite::PlanetSunState state;
-          Elite::DrawWorkspace draw;
 
           SeedBallHeap(cpu, state, at, 0x3FCD0841u + lsp, lsp);
           state.SetBallX(0, flag);
           cpu.memory[at.lsx2] = flag;
 
           // LOIN starts from whatever X1/Y1 hold, and the first segment of a run has no
-          // predecessor -- so what the caller left is part of the answer.
-          draw.x1 = 100;
-          draw.y1 = 50;
-          cpu.memory[at.x1] = 100;
-          cpu.memory[at.y1] = 50;
+          // predecessor. `WS2` makes entry 0 a break, so the walk the game reaches starts from a
+          // break and the port starts from a zeroed `Line` (M2-c-2); the oracle is given the same.
+          cpu.memory[at.x1] = 0;
+          cpu.memory[at.y1] = 0;
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(wpls2, 8'000'000);
           Assert::IsTrue(run.completed, L"WPLS2 returned");
           Logger::WriteMessage(("WPLS2 lsp=" + std::to_string(lsp) + " flag=" + std::to_string(flag) + ": " +
                                 std::to_string(run.instructions) + " instructions")
                                  .c_str());
-          Elite::EraseBall(canvas, state, draw);
+          Elite::EraseBall(canvas, state);
 
           const std::wstring where = Widen("WPLS2 lsp=" + std::to_string(lsp) + " flag=" + std::to_string(flag));
-          Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": X1").c_str());
-          Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": Y1").c_str());
-          Assert::AreEqual(cpu.memory[at.x2], draw.x2, (where + L": X2").c_str());
-          Assert::AreEqual(cpu.memory[at.y2], draw.y2, (where + L": Y2").c_str());
-          Assert::AreEqual(cpu.memory[at.swap], draw.swap, (where + L": SWAP").c_str());
+          /*
+           * `X1`, `Y1`, `X2`, `Y2` and `SWAP` are the walk's own since M2-c-2: it hands each segment
+           * to `LOIN` and takes the ends back from it (`DrawnLine`), which the canvas sweep pins
+           * against the game byte for byte. What is compared here is the pixels and the heap.
+           */
           marked += CompareScreens(cpu, at.screen, canvas, where);
           CompareHeaps(cpu, state, at, where);
           ++compared;
@@ -467,7 +463,6 @@ namespace GameLogicTests
         Elite::Canvas canvas;
         Elite::PlanetSunState state;
         Elite::MathWorkspace math;
-        Elite::DrawWorkspace draw;
 
         SeedSunHeap(cpu, state, at, 0x2C6A91B7u);
         SeedBallHeap(cpu, state, at, 0x8D14E703u, 24);
@@ -479,13 +474,15 @@ namespace GameLogicTests
         state.sunX = 128;
         cpu.memory[at.sunx] = 128;
         cpu.memory[at.type] = type;
-        draw.x1 = 100;
-        draw.y1 = 50;
-        cpu.memory[at.x1] = 100;
-        cpu.memory[at.y1] = 50;
+
+        // `WPLS2` walks the ball heap from whatever `X1`/`Y1` hold, and entry 0 is a break, so the
+        // first segment of the walk the game reaches has no predecessor. The port starts from a
+        // zeroed `Line` since M2-c-2; the oracle is given the same rather than a stale pair.
+        cpu.memory[at.x1] = 0;
+        cpu.memory[at.y1] = 0;
 
         Assert::IsTrue(cpu.CallSubroutine(pl2, 8'000'000).completed, L"PL2 returned");
-        Elite::ErasePlanetOrSun(canvas, state, math, draw, Elite::TypeOf(type));
+        Elite::ErasePlanetOrSun(canvas, state, math, Elite::TypeOf(type));
 
         const std::wstring where = Widen("PL2 type=" + std::to_string(type));
         CompareScreens(cpu, at.screen, canvas, where);
@@ -611,7 +608,6 @@ namespace GameLogicTests
             Cpu6502 cpu = oracle.Fresh();
             Elite::Canvas canvas;
             Elite::PlanetSunState state;
-            Elite::DrawWorkspace draw;
             Elite::GeometryWorkspace geometry;
             Elite::MathWorkspace math;
             Elite::ClipState clip;
@@ -644,7 +640,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(circle, 8'000'000);
             Assert::IsTrue(run.completed, L"CIRCLE returned");
 
-            const bool off = Elite::DrawCircle(canvas, state, draw, geometry, math, clip, centre);
+            const bool off = Elite::DrawCircle(canvas, state, geometry, math, clip, centre);
 
             const std::wstring where = Widen("CIRCLE x=" + std::to_string(x) + " y=" + std::to_string(y) + " r=" + std::to_string(radius));
             Assert::AreEqual(cpu.c, off, (where + L": the carry").c_str());
@@ -717,7 +713,6 @@ namespace GameLogicTests
                 Cpu6502 cpu = oracle.Fresh();
                 Elite::Canvas canvas;
                 Elite::PlanetSunState state;
-                Elite::DrawWorkspace draw;
                 Elite::GeometryWorkspace geometry;
                 Elite::MathWorkspace math;
                 Elite::ClipState clip;
@@ -763,7 +758,7 @@ namespace GameLogicTests
                 Assert::IsTrue(run.completed, L"BLINE returned");
 
                 const std::uint8_t got =
-                  Elite::DrawBallLine(canvas, state, draw, geometry, math, clip, centre, static_cast<std::uint8_t>(xIn), carryIn);
+                  Elite::DrawBallLine(canvas, state, geometry, math, clip, centre, static_cast<std::uint8_t>(xIn), carryIn);
 
                 const std::wstring where =
                   Widen("BLINE flag=" + std::to_string(flag) + " carry=" + std::to_string(carryIn ? 1 : 0) + " lsp=" + std::to_string(lsp) +
@@ -892,7 +887,6 @@ namespace GameLogicTests
               Cpu6502 cpu = oracle.Fresh();
               Elite::Canvas canvas;
               Elite::PlanetSunState state;
-              Elite::DrawWorkspace draw;
               Elite::GeometryWorkspace geometry;
               Elite::MathWorkspace math;
               Elite::ClipState clip;
@@ -963,7 +957,7 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(planet, 20'000'000);
               Assert::IsTrue(run.completed, L"PLANET returned");
 
-              Elite::DrawPlanetOrSun(canvas, state, draw, geometry, math, clip, rng, ship, centre, Elite::TypeOf(type));
+              Elite::DrawPlanetOrSun(canvas, state, geometry, math, clip, rng, ship, centre, Elite::TypeOf(type));
 
               const std::wstring label =
                 Widen("PLANET type=" + std::to_string(type) + " pltog=" + std::to_string(detail) + " ") + where.what + L" / " + turned.what;
@@ -1112,7 +1106,6 @@ namespace GameLogicTests
         Cpu6502 cpu = oracle.Fresh();
         Elite::Canvas canvas;
         Elite::PlanetSunState state;
-        Elite::DrawWorkspace draw;
         Elite::MathWorkspace math;
         Elite::Projection centre;
         Elite::Rng rng;
@@ -1159,7 +1152,7 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(sun, 20'000'000);
           Assert::IsTrue(run.completed, L"SUN returned");
 
-          Elite::DrawSun(canvas, state, draw, math, rng, centre);
+          Elite::DrawSun(canvas, state, math, rng, centre);
 
           const std::wstring label = std::wstring(drift.what) + Widen(" frame=" + std::to_string(frame));
           marked += CompareScreens(cpu, at.screen, canvas, label);
@@ -1280,7 +1273,6 @@ namespace GameLogicTests
             {
               Cpu6502 cpu = oracle.Fresh();
               Elite::Canvas canvas;
-              Elite::DrawWorkspace draw;
               Elite::Stardust dust;
               Elite::Rng rng;
               Elite::PlanetSunState state;

@@ -166,7 +166,7 @@ namespace GameLogicTests
                             std::to_wstring(run.instructions) + L", stoppedAt " + std::to_wstring(run.stoppedAt))
                              .c_str());
 
-            Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, draw, geometry, math, clip, nullptr);
+            Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, geometry, math, clip, nullptr);
           }
 
           const std::wstring where = WidenText("HFS1 (STP " + std::to_string(step) + ", " + std::to_string(pass + 1u) + " pass(es))");
@@ -421,7 +421,7 @@ namespace GameLogicTests
 
         Elite::ClipState clip;
         Counting counting;
-        Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, universe.draw, universe.geometry, universe.math, clip, &counting);
+        Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, &counting);
 
         Assert::AreEqual<std::uint32_t>(34u, counting.circles, (WidenText("STP " + std::to_string(step)) + L": circles shown").c_str());
       }
@@ -443,8 +443,8 @@ namespace GameLogicTests
       Elite::ClipState clipA;
       Elite::ClipState clipB;
       Counting counting;
-      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.draw, unpaced.geometry, unpaced.math, clipA, nullptr);
-      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.draw, paced.geometry, paced.math, clipB, &counting);
+      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.geometry, unpaced.math, clipA, nullptr);
+      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.geometry, paced.math, clipB, &counting);
 
       const std::span<const std::uint8_t> quiet = unpaced.canvas.Screen();
       const std::span<const std::uint8_t> watched = paced.canvas.Screen();

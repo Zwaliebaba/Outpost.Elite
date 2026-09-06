@@ -217,7 +217,7 @@ namespace GameLogicTests
     }
     void DrawPlanetOrSun() override
     {
-      Elite::DrawPlanetOrSun(universe.canvas, universe.heaps, universe.draw, universe.geometry, universe.math, clip, universe.rng,
+      Elite::DrawPlanetOrSun(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, universe.rng,
                              universe.work, projection, universe.flight.type);
     }
     void DrawExplosion() override
@@ -267,14 +267,14 @@ namespace GameLogicTests
       universe.heaps.stp = _circle.step;
       universe.math.k[0] = _circle.radius;
       const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-      Elite::DrawBall(universe.canvas, universe.heaps, universe.draw, universe.geometry, universe.math, clip, centre, false);
+      Elite::DrawBall(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, centre, false);
     }
     void DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius) override
     {
       Elite::ClearSunHeap(universe.heaps);
       universe.math.k[0] = _radius;
       const Elite::Projection centre{_x, 0u, _y, 0u};
-      Elite::DrawSun(universe.canvas, universe.heaps, universe.draw, universe.math, universe.rng, centre);
+      Elite::DrawSun(universe.canvas, universe.heaps, universe.math, universe.rng, centre);
       Elite::ClearSunHeap(universe.heaps);
     }
     void RunDockingComputer(Elite::Ship& _work) override

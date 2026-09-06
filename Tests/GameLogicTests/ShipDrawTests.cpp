@@ -576,7 +576,6 @@ namespace GameLogicTests
       {
         Cpu6502 cpu = oracle.Fresh();
         Elite::Canvas canvas;
-        Elite::DrawWorkspace draw;
         Elite::LineHeap heap;
 
         std::vector<std::uint8_t> seeded = lines;
@@ -621,7 +620,6 @@ namespace GameLogicTests
       {
         Cpu6502 cpu = oracle.Fresh();
         Elite::Canvas canvas;
-        Elite::DrawWorkspace draw;
         Elite::LineHeap heap;
 
         SeedHeap(cpu, heap, lines);
@@ -675,7 +673,6 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             Elite::Canvas canvas;
-            Elite::DrawWorkspace draw;
             Elite::LineHeap heap;
             Elite::Ship ship;
 
@@ -869,7 +866,6 @@ namespace GameLogicTests
 
       Cpu6502 cpu = oracle.Fresh();
       Elite::Canvas canvas;
-      Elite::DrawWorkspace draw;
       Elite::LineHeap heap;
       Elite::MathWorkspace math;
       Elite::Projection screen;
@@ -998,17 +994,11 @@ namespace GameLogicTests
       for (const std::array<std::uint8_t, 24>& block : cases)
       {
         Cpu6502 cpu = oracle.Fresh();
-        Elite::DrawWorkspace draw;
         Elite::GeometryWorkspace geometry;
 
-        // XX15 is the first six; XX16 is the eighteen after it.
+        // XX15 is the first six -- a `Vector16` since M2-c-2; XX16 is the eighteen after it.
         const std::uint8_t* const vector = block.data();
-        draw.x1 = vector[0];
-        draw.y1 = vector[1];
-        draw.x2 = vector[2];
-        draw.y2 = vector[3];
-        draw.xx15Plus4 = vector[4];
-        draw.xx15Plus5 = vector[5];
+        const Elite::Vector16 xx15Value{{vector[0], vector[1]}, {vector[2], vector[3]}, {vector[4], vector[5]}};
         for (std::size_t byte = 0; byte < 6u; ++byte)
         {
           cpu.memory[static_cast<std::uint16_t>(xx15 + byte)] = vector[byte];
@@ -1022,7 +1012,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll51, 200'000);
         Assert::IsTrue(run.completed, L"LL51 returned");
 
-        Elite::DotProducts(draw, geometry);
+        Elite::DotProducts(xx15Value, geometry);
 
         const std::wstring where = Widen("LL51 case " + std::to_string(compared));
         for (std::size_t byte = 0; byte < 6u; ++byte)
@@ -1102,9 +1092,6 @@ namespace GameLogicTests
                   for (int which = 0; which < 3; ++which)
                   {
                     Cpu6502 cpu = oracle.Fresh();
-                    Elite::DrawWorkspace draw;
-                    Elite::GeometryWorkspace geometry;
-                    Elite::MathWorkspace math;
 
                     cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
                     cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
@@ -1112,12 +1099,12 @@ namespace GameLogicTests
                     cpu.memory[rr] = r;
                     cpu.memory[ss] = s;
                     cpu.memory[xx15] = x1;
-                    geometry.xx12[2] = gradient;
-                    geometry.xx12[3] = direction;
-                    math.t = steep;
-                    math.r = r;
-                    math.s = s;
-                    draw.x1 = x1;
+
+                    // Since M2-c-2 the three routines take the slope and the distance as values:
+                    // `XX12+2`, `XX12+3` and `T` are one `Slope`, `(S R)` is a `SignMag16`, and
+                    // `XX15` is the point's own low byte that `LL120` overwrites `R` with.
+                    const Elite::Slope slope{gradient, direction, steep};
+                    const Elite::SignMag16 distance{r, s};
 
                     const std::uint16_t routine = (which == 0) ? ll129 : ((which == 1) ? ll120 : ll123);
                     const Elite::Testing::RunResult run = cpu.CallSubroutine(routine, 200'000);
@@ -1130,15 +1117,23 @@ namespace GameLogicTests
 
                     if (which == 0)
                     {
-                      const std::uint8_t sign = Elite::PrepareSlope(math, geometry);
-                      Assert::AreEqual(cpu.a, sign, (where + L": A").c_str());
+                      const Elite::PreparedSlope prepared = Elite::PrepareSlope(slope, distance);
+                      Assert::AreEqual(cpu.a, prepared.sign, (where + L": A").c_str());
+                      Assert::AreEqual(cpu.memory[qq], prepared.divisor, (where + L": Q").c_str());
+                      Assert::AreEqual(cpu.memory[rr], prepared.magnitude.lo, (where + L": R").c_str());
+                      Assert::AreEqual(cpu.memory[ss], prepared.magnitude.hi, (where + L": S").c_str());
                     }
                     else
                     {
                       const Elite::SlopeStep step =
-                        (which == 1) ? Elite::StepAlongX(math, geometry, draw) : Elite::StepAlongY(math, geometry);
+                        (which == 1) ? Elite::StepAlongX(slope, s, x1) : Elite::StepAlongY(slope, distance);
                       Assert::AreEqual(cpu.x, step.low, (where + L": X").c_str());
                       Assert::AreEqual(cpu.y, step.high, (where + L": Y").c_str());
+
+                      // The frame's `Q` survives the call and is compared; `R` and `S` do not --
+                      // they are the helpers' own since M2-c-2, and the census says nothing reads
+                      // them across the call. What the oracle leaves in them is not modelled.
+                      Assert::AreEqual(cpu.memory[qq], step.divisorLeft, (where + L": Q").c_str());
 
                       if (step.low != 0u || step.high != 0u)
                       {
@@ -1150,9 +1145,6 @@ namespace GameLogicTests
                       divided += isMultiply ? 0u : 1u;
                     }
 
-                    Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
-                    Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-                    Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
                     ++compared;
                   }
                 }
@@ -1187,8 +1179,6 @@ namespace GameLogicTests
       const std::uint16_t xx15 = oracle.Label("XX15");
       const std::uint16_t xx12 = oracle.Label("XX12");
       const std::uint16_t qq = oracle.Label("Q");
-      const std::uint16_t rr = oracle.Label("R");
-      const std::uint16_t ss = oracle.Label("S");
       const std::uint16_t tt = oracle.Label("T");
       const std::uint16_t ll118 = oracle.Label("LL118");
 
@@ -1218,8 +1208,6 @@ namespace GameLogicTests
                   for (const std::uint8_t steep : {0x00, 0xFF})
                   {
                     Cpu6502 cpu = oracle.Fresh();
-                    Elite::DrawWorkspace draw;
-                    Elite::GeometryWorkspace geometry;
                     Elite::MathWorkspace math;
 
                     const std::uint8_t point[4] = {x1Low, x1High, y1Low, y1High};
@@ -1227,37 +1215,35 @@ namespace GameLogicTests
                     {
                       cpu.memory[static_cast<std::uint16_t>(xx15 + byte)] = point[byte];
                     }
-                    draw.x1 = x1Low;
-                    draw.y1 = x1High;
-                    draw.x2 = y1Low;
-                    draw.y2 = y1High;
+                    Elite::Point16 moved{x1Low, x1High, y1Low, y1High};
 
                     cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
                     cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
                     cpu.memory[tt] = steep;
-                    geometry.xx12[2] = gradient;
-                    geometry.xx12[3] = direction;
-                    math.t = steep;
+                    const Elite::Slope slope{gradient, direction, steep};
 
                     const Elite::Testing::RunResult run = cpu.CallSubroutine(ll118, 200'000);
                     Assert::IsTrue(run.completed, L"LL118 returned");
 
-                    Elite::MovePointOnScreen(draw, geometry, math);
+                    Elite::MovePointOnScreen(moved, slope, math);
 
                     const std::wstring where =
                       Widen("LL118(x1=" + std::to_string(x1Low) + "/" + std::to_string(x1High) + ", y1=" + std::to_string(y1Low) + "/" +
                             std::to_string(y1High) + ", grad=" + std::to_string(gradient) + ", dir=" + std::to_string(direction) +
                             ", T=" + std::to_string(steep) + ")");
 
-                    const std::uint8_t ours[4] = {draw.x1, draw.y1, draw.x2, draw.y2};
+                    const std::uint8_t ours[4] = {moved.xLow, moved.xHigh, moved.yLow, moved.yHigh};
                     for (std::size_t byte = 0; byte < 4u; ++byte)
                     {
                       Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + byte)], ours[byte],
                                        (where + L": XX15+" + std::to_wstring(byte)).c_str());
                     }
+
+                    // `Q` is the frame's and is still compared -- each clamp leaves it where its
+                    // multiply or divide stopped, and the altitude check reads it (§8, R22). `R`
+                    // and `S` are the helpers' own since M2-c-2 and are not modelled across the
+                    // call.
                     Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
-                    Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-                    Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
 
                     // Which clamps the inputs asked for, decided from the inputs and not from the
                     // port, so a port that skipped one still counts as having been asked.
@@ -1316,9 +1302,6 @@ namespace GameLogicTests
       const std::uint16_t swap = oracle.Label("SWAP");
       const std::uint16_t dontclip = oracle.Label("dontclip");
       const std::uint16_t qq = oracle.Label("Q");
-      const std::uint16_t rr = oracle.Label("R");
-      const std::uint16_t ss = oracle.Label("S");
-      const std::uint16_t tt = oracle.Label("T");
       const std::uint16_t ll145 = oracle.Label("LL145");
       const std::uint16_t ll147 = oracle.Label("LL147");
 
@@ -1358,7 +1341,6 @@ namespace GameLogicTests
                 const std::uint8_t seededSwap = (entry == 0) ? std::uint8_t{0} : std::uint8_t{3};
 
                 Cpu6502 cpu = oracle.Fresh();
-                Elite::DrawWorkspace draw;
                 Elite::GeometryWorkspace geometry;
                 Elite::MathWorkspace math;
                 Elite::ClipState clip;
@@ -1371,12 +1353,11 @@ namespace GameLogicTests
                 {
                   cpu.memory[static_cast<std::uint16_t>(xx15 + byte)] = block[byte];
                 }
-                draw.x1 = block[0];
-                draw.y1 = block[1];
-                draw.x2 = block[2];
-                draw.y2 = block[3];
-                draw.xx15Plus4 = block[4];
-                draw.xx15Plus5 = block[5];
+                // Since M2-c-2 the six bytes go in as a `Line16` -- two sixteen-bit points, the
+                // second's y coming from `XX12(1 0)` rather than from `XX15`, exactly as the
+                // original's eight bytes of line are laid out across the two workspaces.
+                const Elite::Line16 line{{block[0], block[1], block[2], block[3]},
+                                         {block[4], block[5], static_cast<std::uint8_t>(y2), static_cast<std::uint8_t>(y2 >> 8)}};
 
                 cpu.memory[xx12] = static_cast<std::uint8_t>(y2);
                 cpu.memory[static_cast<std::uint16_t>(xx12 + 1)] = static_cast<std::uint8_t>(y2 >> 8);
@@ -1386,7 +1367,6 @@ namespace GameLogicTests
                 cpu.memory[dontclip] = off;
                 cpu.memory[swap] = seededSwap;
                 clip.dontclip = off;
-                draw.swap = seededSwap;
 
                 // LL147 is entered with XX15+5 in the accumulator, which is where its only caller
                 // leaves it.
@@ -1394,8 +1374,10 @@ namespace GameLogicTests
                 const Elite::Testing::RunResult run = cpu.CallSubroutine((entry == 0) ? ll145 : ll147, 400'000);
                 Assert::IsTrue(run.completed, L"the clipper returned");
 
-                const bool missed = (entry == 0) ? Elite::ClipLine(draw, geometry, math, clip)
-                                                 : Elite::ClipLineKeepingSwap(draw, geometry, math, clip, block[5]);
+                const Elite::ClipResult clipped = (entry == 0)
+                                                    ? Elite::ClipLine(line, geometry, math, clip)
+                                                    : Elite::ClipLineKeepingSwap(line, geometry, math, clip, seededSwap, block[5]);
+                const bool missed = clipped.rejected;
 
                 const std::wstring where =
                   Widen(std::string(entry == 0 ? "LL145" : "LL147") + "(x1=" + std::to_string(x1) + ", y1=" + std::to_string(y1) +
@@ -1403,23 +1385,49 @@ namespace GameLogicTests
 
                 Assert::AreEqual(cpu.c, missed, (where + L": C").c_str());
 
-                const std::uint8_t ours[6] = {draw.x1, draw.y1, draw.x2, draw.y2, draw.xx15Plus4, draw.xx15Plus5};
-                for (std::size_t byte = 0; byte < 6u; ++byte)
+                /*
+                 * Four bytes, not six. `LL146` repacks the two clipped points into `X1`, `Y1`,
+                 * `X2` and `Y2` -- which ARE `XX15`'s first four -- and that is the routine's
+                 * answer, `ClipResult::line` since M2-c-2. `XX15+4` and `XX15+5` are working
+                 * bytes `LL109`'s swap steps on and nothing reads afterwards, so the port does
+                 * not model what the original leaves in them.
+                 */
+                if (!missed)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + byte)], ours[byte],
-                                   (where + L": XX15+" + std::to_wstring(byte)).c_str());
+                  const std::uint8_t ours[4] = {clipped.line.x1, clipped.line.y1, clipped.line.x2, clipped.line.y2};
+                  for (std::size_t byte = 0; byte < 4u; ++byte)
+                  {
+                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + byte)], ours[byte],
+                                     (where + L": XX15+" + std::to_wstring(byte)).c_str());
+                  }
                 }
-                for (std::size_t byte = 0; byte < 6u; ++byte)
+                /*
+                 * `XX12+2` upwards, not the whole six. `XX12(1 0)` is the second end's y on the
+                 * way IN and one of the four bytes `LLX117` exchanges, so the original leaves the
+                 * FIRST end's y there -- and nothing reads it: `LL9` parts 9, 10 and 11 and
+                 * `BLINE` each write both bytes before every call, which is what makes the two
+                 * ends' y an argument rather than a channel. Since M2-c-2 they travel in `Line16`
+                 * and the swap is `std::swap` on the value, so the port does not write them back.
+                 * `XX12+2` up is a different matter: `LL83` and `LL115` work in those bytes and
+                 * `LL118` reads them, so they are still the workspace's until M2-c-3.
+                 *
+                 * And the four coordinates are only compared for a line that was ACCEPTED. `LL109`
+                 * returns with the carry set and no answer -- the original leaves `X1`..`Y2` half
+                 * written, `ClipResult` leaves them zero, and neither is a value any caller reads:
+                 * `LL9` part 10 and `BLINE` both branch on the carry first.
+                 */
+                for (std::size_t byte = 2; byte < 6u; ++byte)
                 {
                   Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx12 + byte)], geometry.xx12[byte],
                                    (where + L": XX12+" + std::to_wstring(byte)).c_str());
                 }
-                Assert::AreEqual(cpu.memory[xx13], clip.xx13, (where + L": XX13").c_str());
-                Assert::AreEqual(cpu.memory[swap], draw.swap, (where + L": SWAP").c_str());
+                Assert::AreEqual(cpu.memory[xx13], clipped.ends, (where + L": XX13").c_str());
+                Assert::AreEqual(cpu.memory[swap], clipped.swap, (where + L": SWAP").c_str());
+
+                // `Q` is the frame's and survives the call (§8, R22): `LL115` leaves its divisor
+                // and each of `LL118`'s clamps leaves whatever its loop stopped on. `R`, `S` and
+                // `T` are the slope helpers' own since M2-c-2 and are not modelled across it.
                 Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
-                Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-                Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
-                Assert::AreEqual(cpu.memory[tt], math.t, (where + L": T").c_str());
 
                 if ((off & 0x80u) != 0u)
                 {
@@ -1432,8 +1440,8 @@ namespace GameLogicTests
                 else
                 {
                   ++fitted;
-                  swapped += (draw.swap != seededSwap) ? 1u : 0u;
-                  untouched += (clip.xx13 == 0u && draw.swap == seededSwap) ? 1u : 0u;
+                  swapped += (clipped.swap != seededSwap) ? 1u : 0u;
+                  untouched += (clipped.ends == 0u && clipped.swap == seededSwap) ? 1u : 0u;
                 }
                 ++compared;
               }
@@ -1676,7 +1684,6 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             Elite::Canvas canvas;
-            Elite::DrawWorkspace draw;
             Elite::GeometryWorkspace geometry;
             Elite::MathWorkspace math;
             Elite::ClipState clip;
@@ -1734,7 +1741,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ll9, 4'000'000);
             Assert::IsTrue(run.completed, L"LL9 returned");
 
-            Elite::DrawShip(canvas, draw, geometry, math, clip, screen, work, slot, heap, *blueprint, Elite::TypeOf(shipType), effects, rng,
+            Elite::DrawShip(canvas, geometry, math, clip, screen, work, slot, heap, *blueprint, Elite::TypeOf(shipType), effects, rng,
                             false);
 
             const std::wstring where = Widen("LL9(type=" + std::to_string(shipType) + "): ") + placement.what;
