@@ -1714,6 +1714,34 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-06 — M3-b-3c's fix: the braces a scripted deletion took were the ones holding a `case`
+label off a declaration, and a sixth half of `check_outpost.py` is what says so now.** Removing
+`DeathPacing` took the block that had enclosed it, and the `switch` in `Perform` was left with
+`const Elite::ForcedKey begun = Elite::StartGame(...)` bare in its body. A `switch` body is ONE
+scope, so the two labels below that line jump past an initialisation and the file does not compile:
+`Main.cpp(794,5): error C2360: initialization of 'begun' is skipped by 'case' label`, twice, from
+the Windows job and nothing else. The scope is restored — the case is braced, as every other case
+in that switch that declares anything already was.
+
+**IT IS THE FIFTH TIME A SCRIPTED DELETION IN `Outpost/` HAS BROKEN ONLY THE WINDOWS LEG, AND THE
+FIRST THAT `check_braces` SHOULD HAVE CAUGHT AND COULD NOT.** The braces balanced. That check
+counts delimiters and by construction cannot tell one nesting from another, so a deletion that
+removes a matched PAIR is exactly the shape it is blind to — which makes this the second lesson of
+the same afternoon: a cheap half of a parse catches the mistakes it was written for and no others.
+
+So `check_switch_scopes` reads each `switch (...) { ... }` body, tracks depth over both kinds of
+bracket, and fails a declaration-with-initialiser at depth zero when a `case` or `default` label
+follows it there. It is deliberately narrow: a braced case may declare what it likes, and so may
+the last case of a switch, because neither is a shape a compiler objects to. The self-test plants
+all three — a legal braced declaration, the illegal bare one, and a legal bare one below the final
+label — and requires that only the middle be reported, so a check that simply hated declarations in
+switches would fail its own test. Reverting the braces on the tree reproduces the Windows error
+here, in a tenth of a second, which is the point.
+
+`main-lines` stays at 1,161 and the ratchet is why the entry is worth reading: bracing the case is
+two lines, and paying for them meant rewrapping the comment above it to the width the rest of the
+file already uses. A ceiling with zero slack makes every fix name its own cost.
+
 **2026-09-06 — M3-b-3c: one seam was carrying three answers, and the executable was choosing between
 them.** `TunnelEffects::ShowFrame` is `Presenter`'s now, and it did not survive the move as one
 method. The interface had exactly one, threaded as a NULLABLE POINTER through eleven routines, and
