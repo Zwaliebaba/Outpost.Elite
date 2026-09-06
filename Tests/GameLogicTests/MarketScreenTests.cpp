@@ -234,26 +234,22 @@ namespace GameLogicTests
              std::to_wstring(_port.size()) + L"; game " + window(_game, at) + L", port " + window(_port, at);
     }
 
-    /// The seams a trading screen reaches, recorded rather than performed -- so the two sides can be
-    /// compared on WHEN they were reached as well as on what was printed.
-    class RecordingEffects : public Elite::TradeScreenEffects
+    /*
+     * What is left of the seams a trading screen reaches, which is the WAIT (M3-b-3b).
+     *
+     * `TRADEMODE`, `CLYNS` and `TT66` were three more entries in this log and are `SetUpScreen` and
+     * `ClearMessageRows` now, so they run on both machines and land in the character stream the
+     * sweep already compares. `dn2` is half gone: `JSR BEEP` runs on both sides, and `JMP DELAY`
+     * cannot -- `DELAY` calls `WSCAN`, which waits for a raster line that a flat-memory interpreter
+     * never reaches, so the oracle keeps its trap on `dn2` and this counts the port's wait against
+     * it. That is `Presenter`'s reason for existing, stated by a test that would hang without it.
+     */
+    class RecordingEffects : public Elite::Presenter
     {
     public:
-      void SetUpTradeScreen(std::uint8_t _view) override
-      {
-        log.push_back(static_cast<std::uint32_t>(0x100u + _view));
-      }
-      void ClearBottomRows() override
-      {
-        log.push_back(0x200u);
-      }
-      void BeepAndPause() override
+      void WaitFrames(std::uint8_t) override
       {
         log.push_back(0x300u);
-      }
-      void ClearToView(std::uint8_t _view) override
-      {
-        log.push_back(static_cast<std::uint32_t>(0x400u + _view));
       }
 
       std::vector<std::uint32_t> log;
@@ -430,8 +426,6 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t chpr = oracle.Label("CHPR");
       const std::uint16_t tt217 = oracle.Label("TT217");
-      const std::uint16_t trademode = oracle.Label("TRADEMODE");
-      const std::uint16_t clyns = oracle.Label("CLYNS");
       const std::uint16_t dn2 = oracle.Label("dn2");
 
       struct Scenario
@@ -473,8 +467,6 @@ namespace GameLogicTests
         // ---- the shipped routine ------------------------------------------------------------
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
-        cpu.AddTrap(trademode);
-        cpu.AddTrap(clyns);
         cpu.AddTrap(dn2);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
@@ -518,7 +510,8 @@ namespace GameLogicTests
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ20") + item)] = scenario.alreadyHeld;
         }
 
-        // The state TRADEMODE would have left, since it is trapped on both sides.
+        // The state TRADEMODE leaves -- seeded because the screens are entered below TRADEMODE
+        // rather than through it, and it is what the port's `SetUpScreen` writes on entry.
         cpu.memory[oracle.Label("QQ17")] = 0;
         cpu.memory[oracle.Label("XC")] = 1;
         cpu.memory[oracle.Label("YC")] = 1;
@@ -544,14 +537,6 @@ namespace GameLogicTests
           {
             expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8) |
                                (static_cast<std::uint32_t>(hit.watched[1]) << 16));
-          }
-          else if (hit.address == trademode)
-          {
-            gameEffects.push_back(0x100u + hit.a);
-          }
-          else if (hit.address == clyns)
-          {
-            gameEffects.push_back(0x200u);
           }
           else if (hit.address == dn2)
           {
@@ -595,8 +580,8 @@ namespace GameLogicTests
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
         Elite::SidWriteLog sid;
-        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, sid,
-                           extended, nulls,      keys,  effects, nulls, nulls};
+        Elite::Ports ports{printer,  characters, sink,    nulls, nulls, sid,
+                           extended, nulls,      effects, keys,  nulls, nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
         Elite::BuyScreen(universe, ports, false);
@@ -665,8 +650,6 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t chpr = oracle.Label("CHPR");
       const std::uint16_t tt217 = oracle.Label("TT217");
-      const std::uint16_t trademode = oracle.Label("TRADEMODE");
-      const std::uint16_t clyns = oracle.Label("CLYNS");
       const std::uint16_t dn2 = oracle.Label("dn2");
       const std::uint16_t rand = oracle.Label("RAND");
 
@@ -725,8 +708,6 @@ namespace GameLogicTests
         // ---- the shipped routine ------------------------------------------------------------
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
-        cpu.AddTrap(trademode);
-        cpu.AddTrap(clyns);
         cpu.AddTrap(dn2);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
@@ -815,14 +796,6 @@ namespace GameLogicTests
             expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8) |
                                (static_cast<std::uint32_t>(hit.watched[1]) << 16));
           }
-          else if (hit.address == trademode)
-          {
-            gameEffects.push_back(0x100u + hit.a);
-          }
-          else if (hit.address == clyns)
-          {
-            gameEffects.push_back(0x200u);
-          }
           else if (hit.address == dn2)
           {
             gameEffects.push_back(0x300u);
@@ -858,8 +831,8 @@ namespace GameLogicTests
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
         Elite::SidWriteLog sid;
-        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, sid,
-                           extended, nulls,      keys,  effects, nulls, nulls};
+        Elite::Ports ports{printer,  characters, sink,    nulls, nulls, sid,
+                           extended, nulls,      effects, keys,  nulls, nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
 
@@ -935,7 +908,6 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t chpr = oracle.Label("CHPR");
-      const std::uint16_t trademode = oracle.Label("TRADEMODE");
 
       struct Situation
       {
@@ -1010,7 +982,6 @@ namespace GameLogicTests
         // ---- the shipped routine -----------------------------------------------------------
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
-        cpu.AddTrap(trademode);
         cpu.AddTrap(oracle.Label("NLIN"));
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
@@ -1114,8 +1085,8 @@ namespace GameLogicTests
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
         Elite::SidWriteLog sid;
-        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, sid,
-                           extended, nulls,      keys,  effects, nulls, nulls};
+        Elite::Ports ports{printer,  characters, sink,    nulls, nulls, sid,
+                           extended, nulls,      effects, keys,  nulls, nulls};
 
         const Elite::ShipCondition condition{s.docked, s.junk, s.firstShip, s.energy};
         universe.crosshairX = CROSSHAIR_X; // 6502: QQ9 and QQ10, which the screen reads for `TT111`
@@ -1176,10 +1147,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t chpr = oracle.Label("CHPR");
       const std::uint16_t tt217 = oracle.Label("TT217");
-      const std::uint16_t trademode = oracle.Label("TRADEMODE");
-      const std::uint16_t clyns = oracle.Label("CLYNS");
       const std::uint16_t dn2 = oracle.Label("dn2");
-      const std::uint16_t tt66 = oracle.Label("TT66");
       const std::uint16_t msblob = oracle.Label("msblob");
 
       struct Scenario
@@ -1287,10 +1255,7 @@ namespace GameLogicTests
         // ---- the shipped routine ------------------------------------------------------------
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
-        cpu.AddTrap(trademode);
-        cpu.AddTrap(clyns);
         cpu.AddTrap(dn2);
-        cpu.AddTrap(tt66);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
         cpu.memory[oracle.Label("tek")] = s.tech;
@@ -1341,21 +1306,9 @@ namespace GameLogicTests
             expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8) |
                                (static_cast<std::uint32_t>(hit.watched[1]) << 16));
           }
-          else if (hit.address == trademode)
-          {
-            gameEffects.push_back(0x100u + hit.a);
-          }
-          else if (hit.address == clyns)
-          {
-            gameEffects.push_back(0x200u);
-          }
           else if (hit.address == dn2)
           {
             gameEffects.push_back(0x300u);
-          }
-          else if (hit.address == tt66)
-          {
-            gameEffects.push_back(0x400u + hit.a);
           }
         }
 
@@ -1387,8 +1340,8 @@ namespace GameLogicTests
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
         Elite::SidWriteLog sid;
-        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, sid,
-                           extended, nulls,      keys,  effects, nulls, nulls};
+        Elite::Ports ports{printer,  characters, sink,    nulls, nulls, sid,
+                           extended, nulls,      effects, keys,  nulls, nulls};
 
         universe.current.techLevel = s.tech; // 6502: tek -- the byte the shop reads
 

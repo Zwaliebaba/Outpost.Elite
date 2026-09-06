@@ -133,7 +133,7 @@ namespace Elite
     _ports.tokens.Print(INCOMING_MESSAGE_TOKEN);
 
     // 6502: LDY #100 / JMP DELAY.
-    _ports.start.WaitFrames(INCOMING_MESSAGE_FRAMES);
+    _ports.present.WaitFrames(INCOMING_MESSAGE_FRAMES);
   }
 
   void PrintMissionToken(ExtendedTokenPrinter& _tokens, std::uint8_t _base, std::uint8_t _galaxy) noexcept

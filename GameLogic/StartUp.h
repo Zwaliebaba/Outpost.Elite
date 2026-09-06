@@ -151,13 +151,14 @@ namespace Elite
     [[nodiscard]] virtual TitleKey ScanTitleKeys(KeyLogger& _keys) = 0;
 
     /*
-     * 6502: DELAY -- wait for _frames VERTICAL SYNCS.
+     * `WaitFrames` WAS HERE AND IS `Presenter`'s SINCE M3-b-3b.
      *
-     * Declared here as well as on `LineEntryEffects`, deliberately, and for the reason that one
-     * says: two independent statements of what a routine needs rather than one interface
-     * pretending to be shared. The executable satisfies both with one object.
+     * It was declared here AND on `LineEntryEffects`, deliberately -- "two independent statements
+     * of what a routine needs rather than one interface pretending to be shared", and the
+     * executable satisfied both with one method. That was the right call while the alternative was
+     * a shared interface invented to hold it; §4.5's `Presenter` is not that, and there is one
+     * `DELAY` in the game.
      */
-    virtual void WaitFrames(std::uint8_t _frames) = 0;
 
     /*
      * 6502: TITLE -- a rotating ship, a token under it, and a wait for a key.

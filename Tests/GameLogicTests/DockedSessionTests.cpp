@@ -70,50 +70,26 @@ namespace GameLogicTests
      * The null presenter: everything the game reaches for outside GameLogic, doing nothing and
      * remembering that it was asked.
      *
-     * One object satisfying five interfaces, which is what ADR-004 says the executable does -- the
+     * One object satisfying four interfaces, which is what ADR-004 says the executable does -- the
      * screens declare what they need separately and the shell answers all of it. Building the session
-     * this way is the cheapest available check that those five declarations are consistent.
+     * this way is the cheapest available check that those declarations are consistent.
      */
-    class NullShell final : public Elite::TradeScreenEffects,
-                            public Elite::ChartEffects,
-                            public Elite::LineEntryEffects,
+    class NullShell final : public Elite::LineEntryEffects,
+                            public Elite::Presenter,
                             public Elite::StartUpEffects,
                             public Elite::ControlCodes
     {
     public:
-      // 6502: TRADEMODE, CLYNS, TT66, msblob and dn2.
       /*
-       * 6502: TRADEMODE -- TT66, a keyboard flush and a palette write.
+       * `TRADEMODE`, `CLYNS`, `TT66` and `dn2` WERE ANSWERED HERE AND ARE NOT ANY MORE (M3-b-3b).
        *
-       * The text state is `SetUpTextScreen`, which is TT66's own and is compared against the shipped
-       * routine by `TheScreenSeamsMatchTheShippedRoutines`. It used to be four lines written here
-       * from a comment, and they were nearly right: XC, YC and QQ17 were correct and DTW1, DTW2 and
-       * DTW6 were not set at all, which no assertion in this file could have noticed.
+       * Four overrides, and the shape of them is why the seams went: `SetUpTradeScreen` called
+       * `ClearToView` and `FlushKeyboard`, and `ClearToView` called `Elite::SetUpTextScreen`. The
+       * library does all of that itself now -- `SetUpScreen`, `ClearMessageRows` and `Beep` -- and
+       * only the flush and the wait are left for the platform to answer.
        */
-      void SetUpTradeScreen(std::uint8_t _view) override
-      {
-        ClearToView(_view);
-        FlushKeyboard();
-        Note("view " + std::to_string(_view));
-      }
-      void ClearBottomRows() override
-      {
-        Note("clyns");
-      }
-      void BeepAndPause() override
-      {
-        Note("beep");
-      }
-      void ClearToView(std::uint8_t _view) override
-      {
-        view = _view;
-        if (cursor != nullptr && printer != nullptr && extended != nullptr)
-        {
-          Elite::SetUpTextScreen(*printer, *cursor, *extended);
-        }
-        Note("clear " + std::to_string(_view));
-      }
-      // 6502: DELAY and FLKB, from two interfaces that both want them.
+
+      // 6502: DELAY, which is `Presenter`'s, and FLKB, which is the line editor's.
       void WaitFrames(std::uint8_t _frames) override
       {
         Note("wait " + std::to_string(_frames));
@@ -270,7 +246,7 @@ namespace GameLogicTests
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng, &shell),
           ports{recursive, characters, sink,  nulls, nulls, sid,
-                extended,  shell,      keys,  shell, shell, store}
+                extended,  shell,      shell, keys,  shell, store}
       {
         commander = Elite::DefaultCommander();
         name = Elite::DefaultCommanderName();
@@ -372,9 +348,10 @@ namespace GameLogicTests
       }
 
       case Elite::KeyAction::MarketPrice:
-        // 6502: TT167 -- and the screen reset above it is TRADEMODE, which the caller does. That is
-        // the one place the port's split between a screen and its seam is visible from here.
-        _game.shell.SetUpTradeScreen(Elite::BUY_CARGO_VIEW);
+        // 6502: TT167 -- and the screen reset above it is TRADEMODE, which the caller does. It was
+        // a seam on the shell until M3-b-3b and is `TT66` and a keyboard flush.
+        Elite::SetUpScreen(_game.universe, _game.ports, Elite::BUY_CARGO_VIEW);
+        _game.shell.FlushKeyboard();
         Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.text, _game.current.economy, _game.market, false);
         return "market";
 

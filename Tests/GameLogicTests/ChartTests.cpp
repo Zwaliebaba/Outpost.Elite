@@ -72,6 +72,7 @@ namespace GameLogicTests
       std::uint16_t qq22 = 0;
       std::uint16_t safehouse = 0;
       std::uint16_t klo = 0;
+      std::uint16_t yc = 0; ///< 6502: YC -- the row CLYNS leaves the cursor on
       std::uint16_t screen = 0;
 
       explicit Scratch(const OracleImage& _oracle)
@@ -92,7 +93,8 @@ namespace GameLogicTests
           qq12(_oracle.Label("QQ12")),
           qq22(_oracle.Label("QQ22")),
           safehouse(_oracle.Label("safehouse")),
-          klo(_oracle.Label("KLO"))
+          klo(_oracle.Label("KLO")),
+          yc(_oracle.Label("YC"))
       {
         const Cpu6502 cpu = _oracle.Fresh();
         const std::uint16_t low = _oracle.Label("ylookupl");
@@ -257,15 +259,14 @@ namespace GameLogicTests
       Elite::Ports ports;
     };
 
-    /// 6502: CLYNS, which clears screen memory the port has no canvas for.
-    struct CountedEffects : public Elite::ChartEffects
-    {
-      void ClearBottomRows() override
-      {
-        ++cleared;
-      }
-      std::uint32_t cleared = 0;
-    };
+    /*
+     * `CountedEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3b).
+     *
+     * It counted `CLYNS`, which was trapped on the oracle so that neither machine ran it -- and
+     * `Elite::ClearMessageRows` has been that routine since slice 1d. Both run it now, so what is
+     * compared is the three rows it clears and the cursor it leaves, through `CompareScreens` and
+     * the text state, rather than a tally of one (§6.73's corollary).
+     */
 
     class CapturingSink : public Elite::TextSink
     {
@@ -893,17 +894,17 @@ namespace GameLogicTests
             chart.cursorY = static_cast<std::uint8_t>(255u - cursor);
 
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(oracle.Label("CLYNS"));
             LoadSeeds(cpu, zp.qq21, galaxy);
             SeedChart(cpu, zp, chart);
             cpu.a = cpu.x = cpu.y = 0;
             cpu.sp = 0xFD;
             Assert::IsTrue(cpu.CallSubroutine(oracle.Label("hm"), 2'000'000).completed, L"hm should return");
 
-            Canvas canvas;
-                  CountedEffects effects;
+            PortScreen port;
+            Canvas& canvas = port.canvas;
             ChartView ours = chart;
-            const Elite::NearestSystem nearest = Elite::SelectNearestSystem(canvas, ours, galaxy, &effects);
+            const Elite::NearestSystem nearest = Elite::SelectNearestSystem(canvas, port.printer, port.text, port.characters.state,
+                                                                           port.universe.message, ours, galaxy);
 
             const std::wstring where = Where(L"hm", chart) + L" galaxy " + std::to_wstring(galaxyNumber);
             Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq9], ours.cursorX, (where + L": QQ9").c_str());
@@ -911,7 +912,9 @@ namespace GameLogicTests
             Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq8], static_cast<std::uint8_t>(nearest.distance), (where + L": QQ8").c_str());
             Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.qq8 + 1)],
                                             static_cast<std::uint8_t>(nearest.distance >> 8), (where + L": QQ8+1").c_str());
-            Assert::AreEqual<std::uint32_t>(1u, effects.cleared, (where + L": CLYNS reached once").c_str());
+            // 6502: JMP CLYNS -- it runs on both sides since M3-b-3b, so the rows it clears and the
+            // row it leaves the cursor on are compared rather than counted.
+            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.yc], port.text.row, (where + L": YC after CLYNS").c_str());
             CompareScreens(cpu, zp.screen, canvas, where);
             ++compared;
           }
@@ -972,7 +975,6 @@ namespace GameLogicTests
 
                     Cpu6502 cpu = oracle.Fresh();
                     cpu.AddTrap(oracle.Label("CHPR"), Cpu6502::TrapExit::ClearCarry);
-                    cpu.AddTrap(oracle.Label("CLYNS"));
                     cpu.AddTrap(ghy);
                     LoadSeeds(cpu, zp.qq21, galaxy);
                     SeedChart(cpu, zp, chart);
@@ -1006,7 +1008,6 @@ namespace GameLogicTests
 
                     PortScreen port(static_cast<std::uint8_t>(galaxyNumber - 1));
                     port.screen.draw = false; // the oracle's CHPR is trapped, so neither side draws
-                    CountedEffects effects;
                     Elite::JumpState jump;
                     jump.docked = static_cast<std::uint8_t>(docked);
                     jump.countdown = static_cast<std::uint8_t>(countdown);
@@ -1014,8 +1015,9 @@ namespace GameLogicTests
                     jump.controlHeld = control != 0;
 
                     ChartView ours = chart;
-                    const Elite::JumpOutcome outcome = Elite::RequestHyperspace(port.canvas, port.printer, port.extended,
-                                                                                port.text, ours, jump, galaxy, &effects);
+                    const Elite::JumpOutcome outcome =
+                      Elite::RequestHyperspace(port.canvas, port.printer, port.extended, port.text, port.characters.state,
+                                               port.universe.message, ours, jump, galaxy);
 
                     const std::wstring where = Where(L"hyp", chart) + L" docked=" + std::to_wstring(docked) + L" count=" +
                                                std::to_wstring(countdown) + L" ctrl=" + std::to_wstring(control) + L" galaxy=" +

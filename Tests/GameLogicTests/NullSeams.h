@@ -6,6 +6,7 @@
 #include "Dashboard.h"
 #include "FlightLoop.h"
 #include "MarketScreen.h"
+#include "Presenter.h"
 #include "NameEntry.h"
 #include "SaveGame.h"
 #include "ShipDraw.h"
@@ -30,9 +31,10 @@
  * a fixture nothing to declare. `CommanderStore` answering false is the one place it makes a
  * CHOICE, and false is the branch a fixture that reached it would have to explain.
  *
- * `WaitFrames` satisfies `StartUpEffects` and `LineEntryEffects` with one override, because
- * `DELAY` is one routine in the game and the two interfaces are two views of it -- the arrangement
- * `SetRasterMode` had across `SightEffects` and `ExplosionEffects` until M3-b-3a took both.
+ * `WaitFrames` used to satisfy `StartUpEffects` and `LineEntryEffects` with one override, because
+ * `DELAY` is one routine in the game and the two interfaces were two views of it. It is
+ * `Presenter`'s alone since M3-b-3b, which is that observation made in the library rather than in
+ * every implementation of it.
  */
 namespace GameLogicTests
 {
@@ -41,8 +43,8 @@ namespace GameLogicTests
                      Elite::SpawnChildEffects,
                      Elite::StartUpEffects,
                      Elite::KeySource,
-                     Elite::TradeScreenEffects,
                      Elite::LineEntryEffects,
+                     Elite::Presenter,
                      Elite::CommanderStore
   {
     // Elite::ShipDrawEffects
@@ -55,18 +57,16 @@ namespace GameLogicTests
     // Elite::StartUpEffects
     void ClearKeyLogger() override {}
     Elite::TitleKey ScanTitleKeys(Elite::KeyLogger&) override { return {}; }
-    void WaitFrames(std::uint8_t) override {}
     std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override { return 0; }
+
+    // Elite::Presenter
+    void WaitFrames(std::uint8_t) override {}
 
     // Elite::KeySource -- `TT217` BLOCKS in the game, so a fixture that reached it would hang
     // rather than fail; this answers a key nothing dispatches.
     std::uint8_t NextKey() override { return 0; }
 
-    // Elite::TradeScreenEffects, and Elite::LineEntryEffects's FlushKeyboard under it
-    void SetUpTradeScreen(std::uint8_t) override {}
-    void ClearBottomRows() override {}
-    void ClearToView(std::uint8_t) override {}
-    void BeepAndPause() override {}
+    // Elite::LineEntryEffects
     void FlushKeyboard() override {}
 
     // Elite::CommanderStore -- no fixture here touches a file, and false is "the device failed".

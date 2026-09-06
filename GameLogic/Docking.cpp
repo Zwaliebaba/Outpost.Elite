@@ -181,7 +181,7 @@ namespace Elite
     _universe.status.energy = 0xFF;
 
     // 6502: LDY #44 / JSR DELAY.
-    _ports.start.WaitFrames(DOCKING_PAUSE_FRAMES);
+    _ports.present.WaitFrames(DOCKING_PAUSE_FRAMES);
 
     DockingResult result{};
     result.outcome = MissionOnDocking(_universe.commander);

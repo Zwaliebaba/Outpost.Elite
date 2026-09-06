@@ -7,6 +7,7 @@
 #include "Tokens.h"
 #include "Ports.h"
 #include "Universe.h"
+#include "ViewChange.h"
 
 /*
  * The Data on System screen (slice 2a).
@@ -133,7 +134,8 @@ namespace Elite
   void SystemDataScreen(Universe& _universe, Ports& _ports, const SystemData& _data, std::uint16_t _distance) noexcept
   {
     // 6502: LDA #1 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    _ports.trade.SetUpTradeScreen(DATA_ON_SYSTEM_VIEW);
+    SetUpScreen(_universe, _ports, DATA_ON_SYSTEM_VIEW);
+    _ports.entry.FlushKeyboard();
 
     // 6502: LDA #9 / JSR DOXC / LDA #163 / JSR NLIN3 -- the rule NLIN3 falls into is the canvas's,
     // and a caller draws it, exactly as the market screen and the status screen do.

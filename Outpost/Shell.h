@@ -37,8 +37,8 @@ namespace Outpost
    * builds the same shape out of a null presenter and asserts that the declarations are mutually
    * consistent, so the arrangement here is verified before this file compiles.
    *
-   * Two of the methods below appear on two interfaces each -- `ClearBottomRows` on the trade
-   * screens and the charts, `WaitFrames` on the line editor and the start sequence. One definition
+   * `WaitFrames` used to appear on two interfaces at once -- the line editor's and the start
+   * sequence's -- and is `Presenter`'s alone since M3-b-3b. One definition
    * overrides both in each case, which is the language's own rule and is deliberate rather than
    * lucky: two independent statements of what a routine needs, satisfied by one thing.
    * `ResetMissileIndicators` was a third until M3-b-1e, which took `msblob` off both.
@@ -49,8 +49,7 @@ namespace Outpost
    * yet. Three that WERE such comments no longer are: `RESET`, `RES2` and `msblob` are ported, and
    * the shell forwards them to `FlightSession` rather than approximating them (§6.73).
    */
-  class GameShell final : public Elite::TradeScreenEffects,
-                          public Elite::ChartEffects,
+  class GameShell final : public Elite::Presenter,
                           public Elite::LineEntryEffects,
                           public Elite::StartUpEffects,
                           public Elite::ControlCodes,
@@ -125,14 +124,22 @@ namespace Outpost
      */
     std::uint8_t NextKey() override;
 
-    // ---- Elite::TradeScreenEffects and Elite::ChartEffects -------------------------------------
+    /*
+     * `TradeScreenEffects` AND `ChartEffects` WERE ANSWERED HERE AND ARE NOT ANY MORE (M3-b-3b).
+     *
+     * `SetUpTradeScreen` was `ClearToView` and `FlushKeyboard`; `ClearToView` was
+     * `Elite::SetUpScreen`; `ClearBottomRows` was `Elite::ClearMessageRows`; `BeepAndPause` was
+     * `Elite::Beep` and `WaitFrames`. Four seams, and every one of them a forwarding call.
+     *
+     * `ClearToView` SURVIVES AS A PRIVATE HELPER, because `Run(9)` and this file's own screen
+     * changes need it before the composition root has lent the shell its ports.
+     */
 
-    void SetUpTradeScreen(std::uint8_t _view) override;
-    void ClearToView(std::uint8_t _view) override;
-    void ClearBottomRows() override;
-    void BeepAndPause() override;
+    /// 6502: TT66 -- `Elite::SetUpScreen` once the ports are lent, and `STA QQ11` alone before
+    /// then. Public because `Main.cpp` changes screens through it.
+    void ClearToView(std::uint8_t _view);
 
-    // ---- Elite::LineEntryEffects and Elite::StartUpEffects --------------------------------------
+    // ---- Elite::Presenter, Elite::LineEntryEffects and Elite::StartUpEffects ---------------------
 
     void WaitFrames(std::uint8_t _frames) override;
     void FlushKeyboard() override;

@@ -191,7 +191,9 @@ namespace GameLogicTests
           for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}})
           {
             Cpu6502 cpu = oracle.Fresh();
-            for (const char* seam : {"WSCAN", "DELAY", "CLYNS"})
+            // `CLYNS` is not trapped since M3-b-3b -- both machines run it. `WSCAN` and `DELAY`
+            // still are: `DELAY` waits for a raster line a flat-memory interpreter never reaches.
+            for (const char* seam : {"WSCAN", "DELAY"})
             {
               std::uint16_t address = 0;
               if (oracle.TryLabel(seam, address))
@@ -214,16 +216,9 @@ namespace GameLogicTests
 
             Elite::Ports ports = universe.Ports();
 
-            struct Rows final : Elite::ChartEffects
-            {
-              std::uint32_t cleared = 0;
-              void ClearBottomRows() override
-              {
-                ++cleared;
-              }
-            } rows;
-
-            const Elite::LoopHead decided = Elite::RunLoopHead(universe.universe, ports, rows);
+            // 6502: JSR CLYNS -- a seam counted here until M3-b-3b, and `ClearMessageRows` on both
+            // sides now, so what it did is in `CompareState` below with the rest of the universe.
+            const Elite::LoopHead decided = Elite::RunLoopHead(universe.universe, ports);
 
             const std::wstring context =
               WidenText("TT100 dly " + std::to_string(delay) + " mcnt " + std::to_string(counter) + " view " + std::to_string(view));
@@ -242,7 +237,7 @@ namespace GameLogicTests
             static_cast<void>(ytq);
 
             outcomes.insert(std::to_string(decided == Elite::LoopHead::Spawn ? 1 : 0) + "/" +
-                            std::to_string(universe.universe.message.delay) + "/" + std::to_string(rows.cleared));
+                            std::to_string(universe.universe.message.delay) + "/" + std::to_string(universe.universe.text.row));
             ++compared;
           }
         }

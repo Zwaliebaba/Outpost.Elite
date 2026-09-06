@@ -31,55 +31,30 @@ namespace Elite
    * independent statements of what a screen needs rather than one interface pretending to be
    * shared, and the executable satisfies both with one object.
    */
-  class TradeScreenEffects
-  {
-  public:
-    virtual ~TradeScreenEffects() = default;
+  /*
+   * `TradeScreenEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3b).
+   *
+   * All four of its methods were in front of routines the library already had, and the executable's
+   * implementations were forwarding calls with a null check in front of them:
+   *
+   *   `ClearToView`       is `TT66`, which is `Elite::SetUpScreen` since slice 3d-d-iii-a.
+   *   `SetUpTradeScreen`  is `TRADEMODE`, which is `TT66` and then `FLKB` -- the flush is the only
+   *                       part that is not the library's, and it is `LineEntryEffects`' until
+   *                       M3-b-3c makes it `Keyboard::Flush`.
+   *   `ClearBottomRows`   is `CLYNS`, which is `Elite::ClearMessageRows`.
+   *   `BeepAndPause`      is `dn2` -- `JSR BEEP / LDY #50 / JMP DELAY` -- and both halves exist:
+   *                       `Elite::Beep` since slice 5a and `Presenter::WaitFrames` since this one.
+   *
+   * THE TEXT STATE `TTX66` ENDS ON STAYS THE ROUTINE'S, and the comment that used to be here is
+   * worth keeping because it took a redrawing screen to see it: the equipment shop loops back to
+   * the top after every purchase and carries the cursor and the case flags over from the first
+   * pass, so a caller that reset them would print its title in the wrong place and in the wrong
+   * case. `SetUpScreen` does what `TTX66` does, which is why the callers do not.
+   */
 
-    /*
-     * 6502: TRADEMODE -- TT66 (set QQ11, clear the screen, draw the border box), FLKB (flush the
-     * keyboard buffer) and DOVDU19 (a palette change this build does not act on).
-     *
-     * ALL of it is the seam's, including the text state TTX66 ends on -- `LDX #1 / STX XC / STX YC
-     * / DEX / STX QQ17`, so column 1, row 1, ALL CAPS. An earlier draft had the screens set those
-     * themselves on the grounds that pixels are the seam's and state is the port's, which is the
-     * split CLYNS uses. It is wrong here, and only a screen that REDRAWS ITSELF shows why: the
-     * equipment shop loops back to the top after every purchase, and on the second pass the game
-     * carries the cursor and the case flags over from the first. A port that reset them would print
-     * its title in the wrong place and in the wrong case, and the three screens that run once would
-     * never have noticed.
-     *
-     * What TTX66 also does to the ball line heap, the laser, DLY and `de` is flight state and
-     * belongs to phase 3.
-     */
-    virtual void SetUpTradeScreen(std::uint8_t _view) = 0;
-
-    /// 6502: CLYNS -- clear the bottom three text rows of the upper screen.
-    virtual void ClearBottomRows() = 0;
-
-    /*
-     * 6502: TT66 on its own -- set QQ11, clear the screen, draw the border box.
-     *
-     * Separate from SetUpTradeScreen above because TRADEMODE is TT66 plus a keyboard flush plus a
-     * palette write, and the equipment shop's view menu calls the bare TT66. The flush is invisible
-     * to a test that scripts its keys, which is exactly why it is worth keeping the two apart
-     * rather than letting one stand in for the other.
-     */
-    virtual void ClearToView(std::uint8_t _view) = 0;
-
-    /// `msblob` WAS A SEAM HERE, on this interface and on `StartUpEffects` both, and is gone
-    /// (M3-b-1e): the dashboard was phase 3's when it was written and `Dashboard.cpp` has had
-    /// `ResetMissileIndicators` since slice 3d-d-iii-b, which `KILLSHP` already calls directly.
-
-    /*
-     * 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.
-     *
-     * Fifty VERTICAL SYNCS, not a duration: DELAY is one of the three routines in the C64 build
-     * that calls WSCAN (§6.17), so this is one second on PAL and five sixths of one on NTSC. A
-     * presenter that implemented it as a wall-clock second would be right on one machine only.
-     */
-    virtual void BeepAndPause() = 0;
-  };
+  /// 6502: dn2's `LDY #50` -- fifty VERTICAL SYNCS and not a second (§6.17), which is why
+  /// `Presenter::WaitFrames` counts frames.
+  inline constexpr std::uint8_t BEEP_PAUSE_FRAMES = 50;
 
   /*
    * Everything a trading screen prints, draws and reads through.

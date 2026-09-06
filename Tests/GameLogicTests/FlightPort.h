@@ -47,8 +47,7 @@ namespace GameLogicTests
 
   class FlightPort final : public Elite::SpawnChildEffects,
                            public Elite::ShipDrawEffects,
-                           public Elite::ControlEffects,
-                           public Elite::ChartEffects
+                           public Elite::ControlEffects
   {
   public:
     /// 6502: what `CIRCLE` would have left in `STP` -- a launch reads it (§6.95), so the port
@@ -120,7 +119,7 @@ namespace GameLogicTests
         return outcome;
       }
 
-      if (Elite::RunLoopHead(universe, ports, *this) == Elite::LoopHead::Spawn)
+      if (Elite::RunLoopHead(universe, ports) == Elite::LoopHead::Spawn)
       {
         Elite::RunSpawning(universe.bubble, universe.work, universe.rng, universe.commander, universe.current, universe.status,
                            universe.explosions, universe.flight.blueprint, false);
@@ -211,19 +210,15 @@ namespace GameLogicTests
       Elite::SetMemoryMap(universe.memoryMap, Elite::MEMORY_MAP_RAM); // 6502: LDA #%100 / JSR SETL1
     }
 
-    // ---- Elite::ChartEffects, and Elite::ControlEffects's docking computer ----------------------
+    // ---- Elite::ControlEffects's docking computer -------------------------------------------------
 
     void RunDockingComputer(Elite::Ship& _work) override
     {
       static_cast<void>(_work);
       static_cast<void>(Elite::RunDockingComputer(universe, ports, 0u));
     }
-    /// 6502: CLYNS, which `MLOOP`'s head runs when a message's countdown expires -- what
-    /// `GameShell::ClearBottomRows` does.
-    void ClearBottomRows() override
-    {
-      Elite::ClearMessageRows(universe.canvas, universe.printer, universe.text, universe.characters.state, universe.message);
-    }
+    // `ClearBottomRows` WAS ANSWERED HERE AND IS NOT ANY MORE (M3-b-3b): `CLYNS` is
+    // `Elite::ClearMessageRows`, which `MLOOP`'s head calls itself when a message's countdown ends.
 
     /*
      * `SightEffects` AND `ExplosionEffects` WERE ANSWERED HERE AND ARE NOT ANY MORE (M3-b-3a).

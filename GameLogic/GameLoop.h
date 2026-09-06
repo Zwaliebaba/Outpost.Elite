@@ -81,7 +81,7 @@ namespace Elite
    * where it reaches zero. Reading parts 1 to 4 without this makes the bubble fill 256 times too
    * fast, which is the kind of wrong that looks like a working game for the first few seconds.
    */
-  [[nodiscard]] LoopHead RunLoopHead(Universe& _universe, Ports& _ports, ChartEffects& _rows) noexcept;
+  [[nodiscard]] LoopHead RunLoopHead(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: MLOOP's first six instructions and `EE20` -- the two countdowns, before the `QQ11` gate.

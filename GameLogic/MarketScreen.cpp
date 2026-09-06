@@ -5,6 +5,10 @@
 #include "EliteTypes.h"
 #include "Ports.h"
 #include "Universe.h"
+#include "ViewChange.h"
+#include "TextPrint.h"
+#include "SoundEffects.h"
+#include "Presenter.h"
 
 /*
  * The docked trading screens (slice 2c).
@@ -87,7 +91,8 @@ namespace Elite
     {
       PrintSpace(_ports.printer);
       PrintThenSpace(_ports.printer, CASH_LINE_TOKEN);
-      _ports.trade.BeepAndPause();
+      (void)Beep(_universe.sound, false);
+      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
     }
 
     /*
@@ -100,14 +105,16 @@ namespace Elite
     {
       PrintSpace(_ports.printer);
       PrintThenQuestion(_ports.printer, _token);
-      _ports.trade.BeepAndPause();
+      (void)Beep(_universe.sound, false);
+      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
     }
   } // namespace
 
   void BuyScreen(Universe& _universe, Ports& _ports, bool _misJumped) noexcept
   {
     // 6502: LDA #2 / JSR TRADEMODE.
-    _ports.trade.SetUpTradeScreen(BUY_CARGO_VIEW);
+    SetUpScreen(_universe, _ports, BUY_CARGO_VIEW);
+    _ports.entry.FlushKeyboard();
 
     _universe.text.column = 1;
     _universe.text.row = 1;
@@ -150,7 +157,7 @@ namespace Elite
         for (;;)
         {
           // 6502: JSR CLYNS.
-          _ports.trade.ClearBottomRows();
+          ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message);
 
           // 6502: LDA #204 / JSR TT27 -- "QUANTITY OF ".
           _ports.printer.Print(QUANTITY_OF_TOKEN);
@@ -311,7 +318,8 @@ namespace Elite
           // 6502: NWDAV4 -- JSR TT67 / LDA #176 / JSR prq / JSR dn2 / LDY QQ29 / JMP NWDAVxx.
           PrintNewline(_ports.printer);
           PrintThenQuestion(_ports.printer, ITEM_TOKEN);
-          _ports.trade.BeepAndPause();
+          (void)Beep(_universe.sound, false);
+          _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
           continue;
         }
 
@@ -360,7 +368,9 @@ namespace Elite
      */
     if (_view == SELL_CARGO_VIEW)
     {
-      _ports.trade.BeepAndPause();
+      // 6502: .dn2 JSR BEEP / LDY #50 / JMP DELAY
+      (void)Beep(_universe.sound, false);
+      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
       return;
     }
 
@@ -407,7 +417,8 @@ namespace Elite
   void InventoryScreen(Universe& _universe, Ports& _ports) noexcept
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    _ports.trade.SetUpTradeScreen(INVENTORY_VIEW);
+    SetUpScreen(_universe, _ports, INVENTORY_VIEW);
+    _ports.entry.FlushKeyboard();
 
     // 6502: LDA #11 / JSR DOXC / LDA #164 / JSR TT60 -- and TT60 is four routines deep.
     _universe.text.column = INVENTORY_TITLE_COLUMN;

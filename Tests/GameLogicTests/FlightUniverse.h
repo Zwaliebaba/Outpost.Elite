@@ -268,16 +268,24 @@ namespace GameLogicTests
     UnusedSeams unused;
 
     [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::SpawnChildEffects& _loop,
-                                         Elite::StartUpEffects& _start) noexcept
+                                         Elite::StartUpEffects& _start, Elite::Presenter& _present) noexcept
     {
-      return Elite::Ports{printer, characters, characters, _drawing, _loop, sid,
-                          extendedPrinter, _start, unused, unused, unused, unused};
+      return Elite::Ports{printer, characters, characters, _drawing, _loop,   sid,
+                          extendedPrinter, _start, _present, unused, unused, unused};
     }
 
-    /// The three a screen change never reaches, answered with nothing.
+    /// The same, for a fixture whose start recorder is its presenter too -- which is most of them,
+    /// because `DELAY` is declared beside `TITLE` in the game.
+    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::SpawnChildEffects& _loop,
+                                         Elite::StartUpEffects& _start) noexcept
+    {
+      return PortsWith(_drawing, _loop, _start, unused);
+    }
+
+    /// The four a screen change never reaches, answered with nothing.
     [[nodiscard]] Elite::Ports Ports() noexcept
     {
-      return PortsWith(unused, unused, unused);
+      return PortsWith(unused, unused, unused, unused);
     }
   };
 

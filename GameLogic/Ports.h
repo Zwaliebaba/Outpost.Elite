@@ -21,9 +21,9 @@ namespace Elite
    * here before the seams it replaces can go, so a slice that lands one and removes none would put
    * `aggregate-refs` ABOVE the ceiling M3-a-3 recorded -- which rule 5 forbids outright, and rightly:
    * a ratchet that can be argued past is not one. So each of M3-b's remaining slices lands its port
-   * in the same commit as at least one removal: thirteen before M3-b-2b and thirteen after, and
-   * TWELVE after M3-b-3a, which removed `SightEffects` and landed no port at all -- so the credit
-   * is there for `Presenter` and `Keyboard` to spend (§8, 2026-09-06).
+   * in the same commit as at least one removal: thirteen before M3-b-2b and thirteen after, TWELVE
+   * after M3-b-3a (which removed `SightEffects` and landed no port), and twelve after M3-b-3b,
+   * where `Presenter` spent that credit and `TradeScreenEffects` went (§8, 2026-09-06).
    *
    * THE DECLARATIONS BELOW ARE FORWARD ONES ON PURPOSE. A reference member needs no complete type,
    * and this header including `ViewChange.h` while `ViewChange.h`'s routines take a `Ports&` is a
@@ -38,8 +38,8 @@ namespace Elite
   class ExtendedTokenPrinter;
   class StartUpEffects;
   class KeySource;
-  class TradeScreenEffects;
   class LineEntryEffects;
+  class Presenter;
   class CommanderStore;
 
   struct SidWriteLog; // SoundEffects.h -- a plain aggregate, so this cannot be a class declaration
@@ -86,16 +86,27 @@ namespace Elite
     StartUpEffects& start;
 
     /*
+     * 6502: DELAY -- §4.5's `Presenter`, and the second of the four to arrive (M3-b-3b).
+     *
+     * It is here rather than beside `SidWriteLog` because both halves of the loop wait: the docked
+     * screens pause after a beep and the title sequence between its frames. `Presenter.h` has why
+     * this one is a port where `TT66`, `CLYNS`, `TRADEMODE` and `dn2` were not.
+     */
+    Presenter& present;
+
+    /*
      * The four the DOCKED screens need and a flight frame does not (M3-a-3).
      *
      * `keys` is `TT217`, which blocks until a key is pressed -- the docked half's whole input, where
-     * a flight reads the matrix through `ControlEffects`. `trade` is `TRADEMODE`, the screen change
-     * every trading screen opens with, and `entry` is the two the line editor waits and flushes
-     * through. `store` is §4.5's `SaveStore` under its old name, and the one of the four that is a
-     * port rather than a call into a routine that now exists.
+     * a flight reads the matrix through `ControlEffects`; `entry` is what the line editor flushes
+     * the keyboard through, and both are §4.5's `Keyboard` waiting for M3-b-3c. `store` is
+     * `SaveStore` under its old name.
+     *
+     * `trade` WAS HERE UNTIL M3-b-3b. `TRADEMODE` is `TT66` and a keyboard flush, `ClearToView` is
+     * `TT66`, `ClearBottomRows` is `CLYNS` and `BeepAndPause` is `BEEP` and `DELAY` -- four seams
+     * in front of routines this library has had for slices, which is §6.73 for the ninth time.
      */
     KeySource& keys;
-    TradeScreenEffects& trade;
     LineEntryEffects& entry;
     CommanderStore& store;
   };

@@ -145,6 +145,9 @@
     <ClInclude Include="MemoryMap.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="Presenter.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="ViewChange.h">
       <Filter>Universe</Filter>
     </ClInclude>

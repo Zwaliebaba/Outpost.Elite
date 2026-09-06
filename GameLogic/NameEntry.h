@@ -2,6 +2,7 @@
 
 #include "Commander.h"
 #include "ExtendedTokens.h"
+#include "Presenter.h"
 #include "TextPrint.h"
 
 #include <cstdint>
@@ -61,9 +62,8 @@ namespace Elite
   public:
     virtual ~LineEntryEffects() = default;
 
-    /// 6502: LDY #8 / JSR DELAY -- eight VERTICAL SYNCS before the first key is read, which is
-    /// 0.16 seconds on PAL and 0.13 on NTSC. §6.17 records why that distinction is not pedantry.
-    virtual void WaitFrames(std::uint8_t _frames) = 0;
+    /// `WaitFrames` WAS HERE UNTIL M3-b-3b and is `Presenter`'s: `LDY #8 / JSR DELAY`, eight
+    /// VERTICAL SYNCS before the first key is read, which is 0.16 seconds on PAL and 0.13 on NTSC.
 
     /// 6502: FLKB -- empty the keyboard buffer, so a key pressed before the prompt is discarded.
     virtual void FlushKeyboard() = 0;
@@ -91,7 +91,7 @@ namespace Elite
    * eight bytes rather than a length and seven characters.
    */
   [[nodiscard]] LineResult ReadLine(KeySource& _keys, TextSink& _screen, TextState& _text, LineEntryEffects& _effects,
-                                    std::span<std::uint8_t> _buffer, const LineLimits& _limits) noexcept;
+                                    Presenter& _present, std::span<std::uint8_t> _buffer, const LineLimits& _limits) noexcept;
 
   /*
    * 6502: TRNME, which FALLS INTO TR1 -- store the typed name, then read it straight back.
@@ -129,7 +129,7 @@ namespace Elite
    * with nothing in front of it.
    */
   [[nodiscard]] LineResult AskCommanderName(KeySource& _keys, TextSink& _screen, TextState& _text, ExtendedTokenPrinter& _extended,
-                                            LineEntryEffects& _effects, std::span<std::uint8_t> _buffer,
+                                            LineEntryEffects& _effects, Presenter& _present, std::span<std::uint8_t> _buffer,
                                             std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name, LineLimits& _limits) noexcept;
 
 } // namespace Elite

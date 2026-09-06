@@ -5,6 +5,7 @@
 #include "EliteTypes.h"
 #include "Ports.h"
 #include "Universe.h"
+#include "ViewChange.h"
 
 /*
  * The Status Mode screen (slice 2c).
@@ -139,7 +140,8 @@ namespace Elite
   void StatusScreen(Universe& _universe, Ports& _ports, const ShipCondition& _condition) noexcept
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    _ports.trade.SetUpTradeScreen(INVENTORY_VIEW);
+    SetUpScreen(_universe, _ports, INVENTORY_VIEW);
+    _ports.entry.FlushKeyboard();
 
     /*
      * 6502: JSR TT111 -- the system nearest the crosshairs, whose seeds the title line then prints.
