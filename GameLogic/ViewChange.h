@@ -201,10 +201,14 @@ namespace Elite
     /// register. `LOOK1` makes it the first thing it does, before it has even looked at the view.
     virtual void SetPalette(std::uint8_t _colour) = 0;
 
-    /// 6502: LDY #sfxboop / JMP NOISE -- the refusal noise `WARP` makes when it will not warp.
-    /// Takes and returns the carry, as `DashboardEffects::PlaySound` does and for the reason
-    /// written out there (§6.99); `WARP` tail-calls and drops both, so its `_carryIn` is false.
-    virtual bool PlaySound(std::uint8_t _effect, bool _carryIn) = 0;
+    /*
+     * `PlaySound` WAS HERE AND IS NOT ANY MORE (M3-b-2a).
+     *
+     * It was `LDY #sfxboop / JMP NOISE` -- the refusal noise `WARP` makes when it will not warp --
+     * and it was the SECOND declaration of one routine, `DashboardEffects` having the other. Both
+     * are `PlaySoundEffect` over `Universe::sound` now. `WARP` tail-calls and drops the carry both
+     * ways, which is why its caller passed false and discarded the answer (§6.99).
+     */
   };
 
   /// 6502: sfxboop -- the effect number `WARP` asks for when it refuses.

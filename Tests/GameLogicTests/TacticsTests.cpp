@@ -523,11 +523,12 @@ namespace GameLogicTests
    * from IDENTICAL starting conditions. Anything narrower would pass on the branch it happened to
    * take.
    *
-   * THE SEAMS ARE TRAPPED RATHER THAN IMPLEMENTED. `OOPS`, `EXNO2`, `EXNO3`, `ECBLB2`, `NOISE` and
-   * `MESS` are ported and reachable, but they touch the dashboard, the sound and the screen, and
-   * running them inside a 6502 interpreter that has no dashboard would compare the wrong thing.
-   * Each is trapped and COUNTED, and the counts are compared -- so a port that took the same branch
-   * for a different reason still fails.
+   * THE SEAMS ARE TRAPPED RATHER THAN IMPLEMENTED. `OOPS`, `EXNO2`, `EXNO3`, `ECBLB2` and `MESS`
+   * are ported and reachable, but they touch the dashboard and the screen, and running them inside
+   * a 6502 interpreter that has no dashboard would compare the wrong thing. Each is trapped and
+   * COUNTED, and the counts are compared -- so a port that took the same branch for a different
+   * reason still fails. `NOISE` and `NOISE2` were among them until M3-b-2a and are not: they write
+   * `sound_variables` and nothing else, so both machines run them and the buffer is compared.
    */
   namespace
   {
@@ -540,20 +541,8 @@ namespace GameLogicTests
      */
     struct CountingEffects final : Elite::FlightLoopEffects, Elite::ShipDrawEffects
     {
-      std::vector<std::uint8_t> sounds;
       std::vector<std::uint8_t> spawned;
 
-      bool PlaySound(std::uint8_t _effect, bool) override
-      {
-        sounds.push_back(_effect);
-        return true;
-      }
-      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t, std::uint8_t) override
-      {
-        sounds.push_back(_effect);
-        return true;
-      }
-      void StopSound(std::uint8_t) override {}
       void StartDockingMusic() override {}
       void StopDockingMusic() override {}
       bool SpawnChild(std::uint8_t, Elite::ShipType _type) override
@@ -1084,7 +1073,7 @@ namespace GameLogicTests
            */
             const std::uint16_t death = oracle.Label("DEATH");
             for (const std::uint16_t seam :
-                 {oracle.Label("NOISE"), oracle.Label("NOISE2"), oracle.Label("MESS"), oracle.Label("ECBLB2"), death})
+                 {oracle.Label("MESS"), oracle.Label("ECBLB2"), death})
             {
               cpu.AddTrap(seam);
             }

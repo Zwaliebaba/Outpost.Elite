@@ -96,7 +96,9 @@ namespace GameLogicTests
 
     /// 6502: the sound variables, the music player and the SID they write -- the game's own
     /// objects, so that a flight makes the same register writes it would make in the app.
-    Elite::SoundBuffer sound;
+    /// 6502: sound_variables -- the universe's since M3-b-2a, and this is the name the
+    /// interrupt tick and the replay hash already used.
+    Elite::SoundBuffer& sound = universe.sound;
     Elite::MusicPlayer music;
     Elite::SidWriteLog sidLog;
 
@@ -159,20 +161,8 @@ namespace GameLogicTests
       return FoldBytes(digest, rest);
     }
 
-    // ---- Elite::FlightLoopEffects, and Elite::DashboardEffects under it -------------------------
+    // ---- Elite::FlightLoopEffects -----------------------------------------------------------------
 
-    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
-    {
-      return Elite::PlaySoundEffect(sound, _effect, _carryIn);
-    }
-    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
-    {
-      return Elite::PlaySoundEffectPitched(sound, _effect, _sustain, _frequency, false);
-    }
-    void StopSound(std::uint8_t _effect) override
-    {
-      Elite::StopSoundEffect(sound, _effect); // 6502: NOISEOFF
-    }
     void StartDockingMusic() override
     {
       Elite::StartDockingMusic(music, sidLog);

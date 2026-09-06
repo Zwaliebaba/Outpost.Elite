@@ -99,67 +99,7 @@ namespace Outpost
 
   void FlightSession::SyncVideoRegisters() noexcept
   {
-    /*
-     * 6502: COMIRQ1's VIC-II half, BOTH PASSES, once per presented frame (slice 4f).
-     *
-     * The handler runs twice a frame on the real machine -- once at the top of the space view and
-     * once at the top of the dashboard -- and each pass programs the registers for the half below
-     * it. The port has no raster to interrupt, so it runs the same two passes here and keeps what
-     * each of them would have put on the screen; `TickRasterInterrupt` advances `RASTCT` itself, so
-     * two calls are a frame however this one is entered.
-     *
-     * AND THE COUNT MATTERS RATHER THAN BEING TIDY. `BIT BOMB / INC welcome` sits above the split
-     * test, so a burning bomb moves the background colour on EVERY pass: running this once a frame
-     * would halve the flash rate.
-     */
-    const std::uint8_t bomb = m_universe.commander.energyBomb; // 6502: BOMB
-    const Elite::RasterRegisters first = Elite::TickRasterInterrupt(m_universe.screen, bomb);
-    const Elite::RasterRegisters second = Elite::TickRasterInterrupt(m_universe.screen, bomb);
-
-    const Elite::RasterRegisters& spaceView = first.spaceView ? first : second;
-    const Elite::RasterRegisters& dashboard = first.spaceView ? second : first;
-
-    // 6502: LDA abraxas / STA VIC+&18 -- and &91 is the dashboard's block, which is also the only
-    // state in which its rows are multicolour.
-    m_universe.canvas.SetDashboardShown(dashboard.memoryPointers == Elite::COLOUR_BANK_DASHBOARD);
-    m_universe.canvas.SetBackground(dashboard.background);
-
-    // 6502: moonflower and welcome -- the energy bomb.
-    m_universe.canvas.SetSpaceViewMulticolour((spaceView.control2 & Elite::BITMAP_MODE_MULTICOLOUR) != 0u);
-    m_universe.canvas.SetSpaceViewBackground(spaceView.background);
-
-    // 6502: santana and lotus -- the explosion sprite, which is multicolour and red above the
-    // split and single-colour in colour 0 below it, so it never draws over the dashboard.
-    m_universe.canvas.SetSpriteMulticolour(spaceView.spriteMulticolour, dashboard.spriteMulticolour);
-    m_universe.canvas.SetExplosionColour(spaceView.explosionColour, dashboard.explosionColour);
-  }
-
-  // ---- the sound ----------------------------------------------------------------------------------
-
-  bool FlightSession::PlaySound(std::uint8_t _effect, bool _carryIn)
-  {
-    /*
-     * 6502: NOISE, for real (slice 5a).
-     *
-     * The seam took its carry argument before there was anything to hand it to (§6.99, §6.118), and
-     * this is the day that paid off: the three answers `NOISE` gives are the port's now, and nothing
-     * above this line had to change to receive them.
-     */
-    return Elite::PlaySoundEffect(m_sound, _effect, _carryIn);
-  }
-
-  bool FlightSession::PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency)
-  {
-    // 6502: NOISE2. Its callers -- EXNO and EXNO2 -- reach it by JMP and their own callers drop the
-    // carry, so the entry carry is not observable here and false is what the seam's contract says.
-    return Elite::PlaySoundEffectPitched(m_sound, _effect, _sustain, _frequency, false);
-  }
-
-  void FlightSession::StopSound(std::uint8_t _effect)
-  {
-    Elite::StopSoundEffect(m_sound, _effect); // 6502: NOISEOFF
-  }
-
+  
   void FlightSession::StartDockingMusic()
   {
     // 6502: startbd -- BDENTRY's writes go to the output's direct log, ahead of the next interrupt.

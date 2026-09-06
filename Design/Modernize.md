@@ -303,12 +303,12 @@ the rest existed: "the struct is the argument list".
 <!--count:main-lines-->1,198 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->187 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->180 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->19 abstract classes in
-`GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `DashboardEffects::PlaySound`,
-`TunnelEffects::ShowFrame`, `SaveStore` through `SaveScreen`). Most are **phase order**:
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->18 abstract classes in
+`GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `TunnelEffects::ShowFrame`,
+`SaveStore` through `SaveScreen`). Most are **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
 `ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each declared when the routine on the
 far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
@@ -340,7 +340,7 @@ screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making 
 would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->17 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
 
-**P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->32 `bool
+**P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->30 `bool
 _carryIn` parameters in headers. Inside the kernel (`AddWithCarry`, `Rng::Next`, the multipliers)
 they are the numeric model and stay. The other twenty-four are a routine boundary that happens to
 be where a 6502 flag was live, and this pattern's original entry said "every caller passes a
@@ -515,7 +515,7 @@ the flag. Three classes come out, and three of the twenty-four were being passed
 | the missile-lock `Beep` at `MA47` | `HITCH`'s `SEC`, which `LDA MSAR` and `BEQ` do not touch | `false`, beside a local already set to `true` for the same flag | **Wrong, fixed.** Observable on a silent build: `NOISE` hands it back and `LL9` seeds a cloud on it (§6.157) |
 | `TakeDamage` (`OOPS`), `DamageEquipment`, `FireLaser` (`LASLI`), `SeedExplosionCloud`, `EraseShip`, `DrawShip` (`LL9`), `DrawBall`/`DrawBallLine`, `SeedDebris` (`Ze`), `SpawnThargoidPair` (`GTHG`), `AddDebris` (`fq1`), `SeedStardustAndClearShips` | a computed flag: a compare, a shift, or a callee's answer | the same flag, computed | **Live and modelled.** The parameter is the routine's operand and stays |
 | `RunSpawning` (`MTT1`), `RunLoopTail` (part 5), `BuildSystem` (`SOLAR`), `StartEcm` from the flight loop's E.C.M. key | inherited from before anything the port models: `M%`'s exit for the spawner, `RES2`'s (and `ZERO`'s) for `SOLAR`, and possibly `WARP`'s for the key | `false` at every caller | **Honest assumption.** The parameter is what puts it at the call site instead of inside the routine; `false` is what the port can supply. Collapsing it would hide the assumption, which is why M2-d does not |
-| `PlaySoundEffectPitched` (`NOISE2`) | `CPY #&E0` at the Trumble squeak: set for a burning cabin, clear otherwise | `false`, because `DashboardEffects::PlaySoundPitched` has no flag | **Dropped at the seam**, and unobservable: the only reader is `NOISE`'s sound-off return and every caller discards it. M3-b's seams are where it would go |
+| `PlaySoundEffectPitched` (`NOISE2`) | `CPY #&E0` at the Trumble squeak: set for a burning cabin, clear otherwise | the compare, since M3-b-2a | **Restored when the seam went.** `DashboardEffects::PlaySoundPitched` had no flag to carry; the routine takes one now, and `EXNO`/`EXNO2` were audited with it — four `ASL A` on an X between 11 and 15 cannot carry out, so both reach `NOISE2` clear |
 
 **Why the count went up rather than down.** The M2-d row promised `carry-params` "at the kernel's
 floor". The audit is the reason it is not: twenty of the twenty-four are the routine's operand, and
@@ -1691,6 +1691,47 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-2a: `DashboardEffects` goes, and the sound system was deciding a ship's energy
+byte behind it.** `PlaySound` was `NOISE`, `PlaySoundPitched` was `NOISE2` and `StopSound` was
+`NOISEOFF` -- three routines `SoundEffects.cpp` has had since slice 5a. `ViewEffects::PlaySound` was
+the SAME routine declared a second time and went with them. `Universe` gains `SoundBuffer sound`,
+which is where the seam's reason went: the SID is written from a raster interrupt and not from the
+game, `NOISE` fills a buffer and `SOINT` drains it, and the port had nowhere to keep the buffer
+between them. It is memory, not a port. `effects-seams` 19 → 18, `outpost-elite-names` 187 → 180,
+`carry-params` 32 → 30.
+
+**`.MA14 STA INWK+35` STORES WHAT `NOISE2` LEFT IN A, AND THAT IS NOT THE SUSTAIN.** The dead
+ship's energy byte comes out of the sound system -- the port's own comment said so -- but a seam
+method returns one thing and `DashboardEffects::PlaySoundPitched` returned the carry, so `RecordKill`
+answered the sustain it went IN with. `NOISE`'s successful exit is `INY / TYA / ORA #128 /
+STA SOFLG,X / CLI / SEC`: A is the flag byte it just wrote. The oracle said `game has 132, port has
+243` on three ships at once the first time `NOISE2` ran on both sides. `PlaySoundEffect` and its
+pitched twin answer a `NoiseResult` now -- the carry AND the accumulator -- and the two refusal
+paths carry their own: the priority byte the failed `CMP` was made on, and `DNOIZ` with the sound
+switched off.
+
+**And `EXNO3`'s carry is `OOPS`'s, which is §6.87 a second time.** A missile that arrives runs
+`JSR EXNO3 / LDA #250 / JMP OOPS`, and `LDA` touches no flag -- so `OOPS` subtracts on whatever
+`NOISE` returned. The port passed false while the seam's answer was discarded. `FSH` was one point
+out on a missile that touched us, which is what the oracle reported.
+
+**Two carries came back that the plan had written off.** §5's table recorded `NOISE2`'s Trumble
+squeak carry as "dropped at the seam ... M3-b's seams are where it would go", and this is where:
+`LDY CABTMP / CPY #&E0 / BCC burnthebastards` is the flag, so a burning cabin squeaks with it set.
+Auditing the other two `NOISE2` callers with it found both are always CLEAR and said why -- four
+`ASL A` on an X the volume ladder leaves between 11 and 15 cannot carry out.
+
+**The suites stopped counting `NOISE` and started comparing `sound_variables`.** `Where` gains the
+ten runs plus `PULSEW` and `DNOIZ`, so `CompareState` carries the buffer for every fixture that uses
+it and a new `CompareSound` does the same for the ones that mirror in and check a handful of things
+out. It subsumes §6.118's documented gap rather than losing it: the old comparison could check the
+carry going INTO four hand-picked effects and never the one coming out; `NOISE`'s answer now comes
+from two buffers that agree byte for byte, and its consequence -- `LASLI` and `OUCH` open a `DORND`
+on it -- lands in `RAND`, which was already compared. Nothing is excluded by name any more.
+
+**The M0-c replay record moves, under rule 1's second case.** Two port defects found and fixed, the
+same 1,170 steps and the same `Docked` outcome, every digest different.
 
 **2026-09-06 — M3-b-1e: the reset half of `StartUpEffects` goes, and untrapping `RES2` found a
 routine hidden behind a trap's address.** `ResetUniverse` was `RESET`, `ResetShip` was `RES2` and

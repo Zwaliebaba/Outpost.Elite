@@ -51,10 +51,7 @@ namespace GameLogicTests
     void DrawPlanetOrSun() override {}
     void DrawExplosion() override {}
 
-    // Elite::FlightLoopEffects, and Elite::DashboardEffects and Elite::SpawnChildEffects under it
-    bool PlaySound(std::uint8_t, bool) override { return false; }
-    bool PlaySoundPitched(std::uint8_t, std::uint8_t, std::uint8_t) override { return false; }
-    void StopSound(std::uint8_t) override {}
+    // Elite::FlightLoopEffects, and Elite::SpawnChildEffects under it
     void StartDockingMusic() override {}
     void StopDockingMusic() override {}
     bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
@@ -73,7 +70,7 @@ namespace GameLogicTests
     void SetSpritesEnabled(std::uint8_t) override {}
     void MaskSprites(std::uint8_t) override {}
 
-    // Elite::ViewEffects -- `PlaySound` is `DashboardEffects`' as well, one `NOISE` in the game
+    // Elite::ViewEffects
     void SetPalette(std::uint8_t) override {}
 
     // Elite::KeySource -- `TT217` BLOCKS in the game, so a fixture that reached it would hang

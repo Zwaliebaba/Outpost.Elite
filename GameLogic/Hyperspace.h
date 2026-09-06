@@ -65,7 +65,7 @@ namespace Elite
    * compares against is then stored into `NOSTM`: witchspace has three specks of dust instead of
    * the usual eighteen, and the constant is shared between the two on purpose.
    */
-  void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander, DashboardEffects& _sound,
+  void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander,
                        TunnelEffects* _pacing) noexcept;
 
   /*
@@ -78,7 +78,7 @@ namespace Elite
    * `COK` is the competition flags byte, so holding the configuration key through a jump is
    * recorded in the commander file for ever.
    */
-  void EnterWitchspaceCheating(Universe& _universe, Ports& _ports, Commander& _commander, DashboardEffects& _sound,
+  void EnterWitchspaceCheating(Universe& _universe, Ports& _ports, Commander& _commander,
                                TunnelEffects* _pacing) noexcept;
 
   /*
@@ -110,7 +110,7 @@ namespace Elite
    * forces witchspace. Then one roll in 256 -- `CMP #253 / BCS MJP` -- does it anyway.
    */
   [[nodiscard]] JumpResult PerformJump(Universe& _universe, Ports& _ports, SystemSeeds& _selected, JumpState& _jump,
-                                       SystemData& _described, MarketState& _market, DashboardEffects& _sound, TunnelEffects* _pacing,
+                                       SystemData& _described, MarketState& _market, TunnelEffects* _pacing,
                                        std::uint8_t _crosshairX, std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _controlHeld,
                                        bool _patg) noexcept;
 

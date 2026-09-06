@@ -30,28 +30,6 @@ namespace GameLogicTests
 
   namespace
   {
-    struct RecordingCombat final : Elite::DashboardEffects
-    {
-      struct Pitched
-      {
-        std::uint8_t effect, sustain, frequency;
-      };
-
-      std::vector<std::uint8_t> sounds;
-      std::vector<Pitched> pitched;
-
-      bool PlaySound(std::uint8_t _effect, bool) override
-      {
-        sounds.push_back(_effect);
-        return true;
-      }
-      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
-      {
-        pitched.push_back({_effect, _sustain, _frequency});
-        return true;
-      }
-      void StopSound(std::uint8_t) override {}
-    };
   } // namespace
 
   TEST_CLASS(TheExplosions)
@@ -209,7 +187,6 @@ namespace GameLogicTests
           universe.work.z.hi = static_cast<std::uint8_t>(type * 7u);
 
           Cpu6502 cpu = oracle.Fresh();
-          cpu.AddTrap(noise2);
           FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
           Mirror(universe, cpu, at);
           cpu.memory[tallyl] = start.fraction;
@@ -226,17 +203,31 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(exno2, 400'000);
           Assert::IsTrue(run.completed, L"EXNO2 returned");
 
-          RecordingCombat effects;
           Elite::Ports ports = universe.Ports();
-          const std::uint8_t ours = Elite::RecordKill(universe, ports, effects, Elite::TypeOf(type));
+          const std::uint8_t ours = Elite::RecordKill(universe, ports, Elite::TypeOf(type));
 
           const std::wstring where = WidenText("EXNO2(type " + std::to_string(type) + ", tally " + std::to_string(start.high) + "." +
                                                std::to_string(start.whole) + "." + std::to_string(start.fraction) + ")");
 
-          Assert::AreEqual<std::size_t>(1u, cpu.trapHits.size(), (where + L": one NOISE2").c_str());
-          Assert::AreEqual(cpu.trapHits[0].a, ours, (where + L": sustain").c_str());
-          Assert::AreEqual<std::uint8_t>(Elite::EXPLOSION_PITCH_KILL, cpu.trapHits[0].x, (where + L": frequency").c_str());
-          Assert::AreEqual<std::uint8_t>(Elite::SOUND_EXPLOSION, cpu.trapHits[0].y, (where + L": effect").c_str());
+          /*
+           * 6502: NOISE2 -- and the BUFFER says what it did since M3-b-2a.
+           *
+           * It was trapped here and its three arguments read off the trap hit. The routine runs on
+           * both sides now, so `SOSUS` carries the sustain this call returns, `SOFRQ` the pitch and
+           * `SOFLG` the effect -- and the priority and the voice, which a trap could not report.
+           */
+          CompareSound(cpu, universe, at, where);
+
+          /*
+           * AND WHAT IT ANSWERS IS THE FLAG BYTE, not the sustain -- M3-b-2a's defect.
+           *
+           * `EXNO2` ends `JMP NOISE2` and `.MA14 STA INWK+35` stores what that left in A into the
+           * dead ship's energy. The port answered the sustain it went in WITH, because the seam
+           * could return one thing and chose the carry; `NOISE`'s successful exit is
+           * `INY / TYA / ORA #128 / STA SOFLG,X / CLI / SEC`, so A is the flag it just wrote.
+           */
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.soflg + 2u)], ours,
+                           (where + L": what NOISE2 left in A").c_str());
 
           Assert::AreEqual(cpu.memory[tallyl], universe.commander.killsFraction, (where + L": TALLYL").c_str());
           Assert::AreEqual(cpu.memory[tally], universe.commander.kills.lo, (where + L": TALLY").c_str());
@@ -322,7 +313,6 @@ namespace GameLogicTests
               universe.rng.SetState({0u, static_cast<std::uint8_t>((damage + shield + banks + shape) % 30u), 0u, 0u});
 
               Cpu6502 cpu = oracle.Fresh();
-              cpu.AddTrap(noise, Cpu6502::TrapExit::SetCarry);
               cpu.AddTrap(death);
               FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
               Mirror(universe, cpu, at);
@@ -338,9 +328,8 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(oops, 400'000);
               Assert::IsTrue(run.completed, L"OOPS returned");
 
-              RecordingCombat effects;
               Elite::Ports ports = universe.Ports();
-              const bool alive = Elite::TakeDamage(universe, ports, effects, universe.bubble.blocks[2], damage, carryIn);
+              const bool alive = Elite::TakeDamage(universe, ports, universe.bubble.blocks[2], damage, carryIn);
 
               const std::wstring where =
                 WidenText("OOPS(damage " + std::to_string(damage) + ", shield " + std::to_string(shield) + ", banks " +

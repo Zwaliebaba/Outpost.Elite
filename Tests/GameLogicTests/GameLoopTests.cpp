@@ -191,7 +191,7 @@ namespace GameLogicTests
           for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}})
           {
             Cpu6502 cpu = oracle.Fresh();
-            for (const char* seam : {"NOISE", "NOISE2", "WSCAN", "DELAY", "CLYNS"})
+            for (const char* seam : {"WSCAN", "DELAY", "CLYNS"})
             {
               std::uint16_t address = 0;
               if (oracle.TryLabel(seam, address))
@@ -307,7 +307,7 @@ namespace GameLogicTests
           for (const std::uint8_t carryIn : {std::uint8_t{0}, std::uint8_t{1}})
           {
             Cpu6502 cpu = oracle.Fresh();
-            for (const char* seam : {"NOISE", "NOISE2", "MESS", "WSCAN", "DELAY"})
+            for (const char* seam : {"MESS", "WSCAN", "DELAY"})
             {
               std::uint16_t address = 0;
               if (oracle.TryLabel(seam, address))
@@ -360,9 +360,19 @@ namespace GameLogicTests
                                (context + L": RAND+" + std::to_wstring(byte)).c_str());
             }
 
-            outcomes.insert(std::to_string(frames) + "/" + std::to_string(universe.universe.status.laserCount) + "/" +
-                            std::to_string(universe.effects.sounds.size()) + "/" +
-                            (universe.effects.sustains.empty() ? std::string("-") : std::to_string(universe.effects.sustains.front())));
+            /*
+             * The buffer rather than a list of calls (M3-b-2a): `SOFLG` says which voices are busy
+             * and `SOSUS` what the Trumble squeak's sustain was, which is the byte that used to be
+             * recorded. `CompareState` above has already checked both against the shipped game;
+             * this is the coverage tally that says the sweep reached different answers.
+             */
+            std::string voices;
+            for (std::size_t voice = 0; voice < Elite::SID_VOICE_COUNT; ++voice)
+            {
+              voices += "." + std::to_string(universe.universe.sound.flag[voice]) + ":" +
+                        std::to_string(universe.universe.sound.sustain[voice]);
+            }
+            outcomes.insert(std::to_string(frames) + "/" + std::to_string(universe.universe.status.laserCount) + "/" + voices);
             ++compared;
           }
         }

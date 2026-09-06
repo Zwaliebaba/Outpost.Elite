@@ -186,16 +186,16 @@
         {
           "id": "msl-kill",
           "file": "GameLogic/Tactics.cpp",
-          "find": "          return TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], MISSILE_DAMAGE, false);",
-          "replace": "          return TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], COLLISION_DAMAGE, false);",
+          "find": "          return TakeDamage(_universe, _ports, _universe.bubble.blocks[_slot], MISSILE_DAMAGE, heard);",
+          "replace": "          return TakeDamage(_universe, _ports, _universe.bubble.blocks[_slot], COLLISION_DAMAGE, heard);",
           "expect": "caught",
           "note": "250 into OOPS when a missile arrives."
         },
         {
           "id": "kill-rotate",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      RecordKill(_universe, _ports, _ports.loop, TypeOf(MissileTargetOf(work.ai)));",
-          "replace": "      RecordKill(_universe, _ports, _ports.loop, TypeOf(static_cast<std::uint8_t>(work.ai & 0x7Fu)));",
+          "find": "      RecordKill(_universe, _ports, TypeOf(MissileTargetOf(work.ai)));",
+          "replace": "      RecordKill(_universe, _ports, TypeOf(static_cast<std::uint8_t>(work.ai & 0x7Fu)));",
           "expect": "caught",
           "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2. Not a coverage gap: TALLY and TALLYL were neither pushed nor compared, so what EXNO2 scores was invisible. Closed by comparing all three bytes (plan section 6.153)."
         }

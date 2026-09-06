@@ -366,8 +366,15 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint8_t>(0u, universe.flight.delta, L"and stopped the ship");
 
       Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, universe.heaps.stp, L"LAUN stored the step");
-      Assert::AreEqual<std::size_t>(1u, universe.effects.sounds.size(), L"LAUN made one noise");
-      Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, universe.effects.sounds.front(), L"and it is sfxwhosh");
+      /*
+       * 6502: LDY #sfxwhosh / JSR NOISE -- and the BUFFER says so since M3-b-2a.
+       *
+       * It was a recorded list of one; `PlaySoundEffect` writes `sound_variables` now, and `SOFLG`
+       * holds the effect number PLUS ONE with bit 7 set for "new, not yet started". So the flag on
+       * the voice `sfxwhosh` takes is what says the noise was made, and which voice took it.
+       */
+      Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(0x80u | (Elite::SOUND_MISSILE + 1u)), universe.sound.flag[2],
+                                     L"LAUN made the sfxwhosh noise");
 
       std::uint8_t frames = 0;
       for (const Cpu6502::TrapHit& hit : cpu.trapHits)

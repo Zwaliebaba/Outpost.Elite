@@ -242,11 +242,12 @@ namespace Elite
   /*
    * What the flight loop reaches that phase 4 owns, plus the sound.
    *
-   * It IS a `DashboardEffects`, because part 3 starts the E.C.M. through `ECBLB2` and part 16 stops
-   * it through `ECMOF`, and both of those already had a seam for the SID. And it IS a
-   * `SpawnChildEffects`, because part 11's `SPIN` and `SPIN2` drop wreckage through `SFS1`.
+   * It WAS a `DashboardEffects` and is not since M3-b-2a: the E.C.M.'s two calls and the frame's
+   * sounds are `SoundEffects.cpp`'s routines over `Universe::sound`. It IS still a
+   * `SpawnChildEffects`, because part 11's `SPIN` and `SPIN2` drop wreckage through `SFS1`, which
+   * is M4-a's to take away.
    */
-  class FlightLoopEffects : public DashboardEffects, public SpawnChildEffects
+  class FlightLoopEffects : public SpawnChildEffects
   {
   public:
     /// 6502: JSR startbd and JSR stopbd -- the docking music, which is a second interrupt handler.
