@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->395 tests, oracle present), all <!--count:checks-->thirteen repository checks pass,
+(<!--count:tests-->397 tests, oracle present), all <!--count:checks-->thirteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -479,7 +479,7 @@ never global.
 <!--census:start-->
 | Field | 6502 | Written by | Read before written, from the caller | Read after a call | Verdict |
 |---|---|---|---|---|---|
-| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail | EndFlightFrame | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. `LOIN`'s is the one this port has never modelled -- R22, and the owner's to rule on. |
+| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail | EndFlightFrame | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
 | `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
 | `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
 | `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
@@ -1149,6 +1149,7 @@ leave (`DIALS`'s `T1`, `PLANET`'s `K`) go the same way where the byte was the ke
 `XX`, `YY`, the clipper's `(S R)` and `T` — stays in `MathWorkspace` for M2-c, and so does
 `NumberWorkspace`, which the census had pencilled in for M2-b but which is `PrintNumber`'s, not the
 kernel's; the boundary carries are M2-d's; `LOIN`'s `Q` (R22) is nobody's until the owner rules.
+(It turned out to be nobody's at all: `LOIN` never writes `Q` in this build — R22, closed below.)
 
 #### M2-c slice plan (written before the build, 2026-09-06; three commits; §8 records what each found)
 
@@ -1321,7 +1322,7 @@ M1-a's first file and the worked example every later slice copies.
 | **R19** | A recorded fixture pins only what the tests asked while the original was here; a behaviour no test reached before M6-b is unpinned for ever. | M6-a's coverage review; the M0-c replay's breadth. | M6 is last; the review is a gate, not a report; a fixture is never re-recorded (rule 1). |
 | **R20** | Rewriting the comments loses the reasons — the commentary records WHY a carry matters, and prose that says only WHAT is worth less than the assembly it replaced. | M6-d, per file. | The rule for M6-d is "keep the reason, drop the transcription"; a comment that cannot be rewritten without losing its reason keeps the instruction sequence as a quotation. |
 | **R21** | Deleting `MasterFile/` and `Upstream/` at the tip leaves them in every commit before M6-f; a reader of the history still finds them. | Not validated by this plan. | Owner decision, out of this plan's scope (§1 R-d); recorded so that M6-f is not mistaken for having done it. |
-| **R22** | The altitude's radicand low byte is a stale scratch byte the port never modelled faithfully: `MA23`'s `LL5` takes `(R Q)` with `Q` whatever the frame last left, and `LOIN` — which writes `Q` on every line it draws — has kept it local since slice 1d. | The M0-c replay, which caught M2-b changing it; the five writers the port does model, named at their lines. | M2-b kept the port's own value (the record proves it) and named the byte "the frame's Q"; the fix — `LOIN` publishing its last height, or an ADR-001 §6 row accepting the divergence — is the owner's ruling (§8, M2-b). |
+| **R22** ✅ **closed 2026-09-06** | The altitude's radicand low byte is a stale scratch byte: `MA23`'s `LL5` takes `(R Q)` with `Q` whatever the frame last left. The risk as written also said `LOIN` writes `Q` on every line and the port keeps it local — **and that half was false**: this build's `LOIN` works in `P2`, `Q2`, `R2`, `S2` at 188–191 and never touches `Q` at 154. The claim came from the BBC commentary, which is where M2-c-1's `T`/`T2` defect came from too. | `TheAltitudeMatchesMA23` seeds `Q` on both sides over eight values and eight distances; `TheFramesOwnQReachesTheAltitude` runs the whole of `M%` with the planet in range over six bubble shapes and lets each side decide `Q` for itself. `ALTIT` is in the compared image. | **Closed by measurement, not by ruling.** Neither fix was needed: `LOIN` had nothing to publish, and the frame's `Q` agrees with the game's on every shape the sweep covers. The fixture found a different defect on the way — `MA23` reaches `SBC #36` with the carry CLEAR, so the planet's radius costs 37 — which is fixed and the replay re-taken (§8). |
 
 ---
 
@@ -1551,6 +1552,42 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — R22 ruled on, and it was not a ruling: half of it was written from the wrong
+machine's commentary, and measuring the other half found a different defect.** The risk said the
+altitude's radicand takes its low byte from whatever the frame last left in `Q`, and that `LOIN`
+writes `Q` on every line it draws while this port keeps it local — so the owner was to choose
+between `LOIN` publishing its last height and an ADR-001 §6 row accepting the divergence. **Neither
+was needed.** A search of the whole disassembly for writes to `Q` — zero page 154 — finds
+eighty-eight instructions and not one of them is inside `LOIN`: this build's line drawer works in
+`P2`, `Q2`, `R2` and `S2` at 188 to 191, which are a second set of scratch bytes, and touches `Q`,
+`R`, `S` and `T` nowhere. The claim came from the upstream commentary, which is the BBC's — the
+same source that had this port writing `T2` where the game writes `T` until M2-c-1 (§8). There was
+nothing for `LOIN` to publish.
+
+**And the half that was real was never measured.** The radicand's low byte genuinely is inherited:
+`MA23` does `SBC #36 / STA R / JSR LL5` and writes `R` alone, so `Q` is the frame's. Every frame
+sweep in the suite puts the planet at a high byte of 0x20, which makes `MAS2` answer non-zero, so
+`ALTIT` stays 255 and the square root has never run in a test. Two sweeps now do it:
+`TheAltitudeMatchesMA23` seeds `Q` on both sides over eight values and eight distances — the
+distances chosen so `SBC #36` leaves a small difference, because that is what makes `Q` the whole
+radicand — and `TheFramesOwnQReachesTheAltitude` runs the whole of `M%` with the planet in range
+over six bubble shapes (nothing else there, ships too far to draw, wireframes, dots, an explosion,
+a sun) and lets each side decide `Q` for itself. `ALTIT` is in the compared image, so a port whose
+frame left a different byte says so. It does not. **R22 is closed by measurement.**
+
+**What the fixture found instead.** The first case failed with the ORACLE dead and the port alive.
+`MA23` reaches `SBC #36` with the carry **clear**: `MAS3` returns the flag its last `ADC` left, and
+the only path that sets it is the saturation the `BCS MA23` two instructions above has already sent
+away. So the planet's radius costs thirty-seven, and the port had been subtracting thirty-six — an
+altitude one unit too generous everywhere it is computed, and a death radius one unit too small.
+Four slices of drawing work and a full-flight replay never saw it because no fixture put a planet
+close enough. Fixed, and the M0-c replay **re-taken under rule 1's second case**: seven of the
+sixteen digests moved and not one step did — the same 1,170 steps to the same dock.
+
+**A hook on the frame comparison.** `CompareFrames` takes an optional seeder that runs after the
+mirror and before the call, for a byte `UniverseImage` does not carry. Since M2-c that is
+`MathWorkspace`'s two, and this is the first fixture that needed one.
 
 **2026-09-06 — M2-d built: the boundary carries walked back to the instructions that set them,
 and three of them were wrong.** Twenty-four `bool _carryIn` parameters cross a non-kernel boundary,

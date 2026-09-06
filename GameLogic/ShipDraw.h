@@ -64,7 +64,7 @@ namespace Elite
   /// `_numerator` is (A P+1 P) -- a coordinate's shape, the sign in the top byte -- and the
   /// quotient is left in `K`, where `PLS1`, `PLS6` and `PLANET` read it (M2-c takes it further).
   /// Returns `K(3 2 1 0)`, the quotient -- a value since M2-c-3. `_math` is still here for one
-  /// byte: `DV9`'s `STA Q`, which is the frame's `Q` (Modernize.md section 8, risk R22).
+  /// byte: `DV9`'s `STA Q`, which is the frame's `Q` (Modernize.md section 8; risk R22, closed).
   KBlock DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
 
   /*

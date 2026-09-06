@@ -23,13 +23,15 @@ namespace Elite
   struct MathWorkspace
   {
     /*
-     * 6502: Q -- the frame's `Q` (Modernize.md section 8, risk R22).
+     * 6502: Q -- the frame's `Q` (Modernize.md section 8; risk R22, closed).
      *
      * `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte.
      * `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two
      * routines and the clipper's `LL115` and `LL118` write it for that read, as the original's
-     * `STA Q`s do. `LOIN` writes it in the original and has kept it local here since slice 1d,
-     * which is the one place this port's `Q` is not the game's -- R22, and the owner's to rule on.
+     * `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled; it is not -- this
+     * build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154,
+     * and the risk was written from the BBC commentary. The frame's `Q` is compared against the
+     * game's over six bubble shapes by `TheFramesOwnQReachesTheAltitude`.
      */
     std::uint8_t q = 0;
 

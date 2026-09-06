@@ -67,30 +67,37 @@ namespace GameLogicTests
 
     /// The record. Empty is a failure, so a tree can never carry an unpinned replay.
     /*
-     * RE-TAKEN 2026-09-06 (M2-c, Modernize.md rule 1's second case: the port was wrong).
+     * RE-TAKEN TWICE, both under Modernize.md rule 1's second case (the port was wrong).
      *
-     * Every digest moved and not one step did: the flight is the same 1,170 steps to the same
-     * dock, and what changed is the SHAPE of the image the digest is taken over. `UniverseImage`
-     * hashed a `T2` cell holding a byte the game does not write -- `HLOIN` and `BOX2` park their
-     * scratch in `T`, and the port had followed the BBC commentary's `T2`/`R2` naming instead.
-     * Both are locals now, the cell is gone, and every digest below is one byte narrower.
+     * 2026-09-06, M2-c-1: every digest moved and not one step did. What changed was the SHAPE of
+     * the image the digest is taken over -- `UniverseImage` hashed a `T2` cell holding a byte the
+     * game does not write, because `HLOIN` and `BOX2` park their scratch in `T` and the port had
+     * followed the BBC commentary's `T2`/`R2` naming. Both are locals now and the cell is gone.
+     *
+     * 2026-09-06, R22's ruling: SEVEN of the sixteen moved, and again not one step did. `MA23`
+     * reaches `SBC #36` with the carry CLEAR, because `MAS3` returns the flag its last `ADC` left
+     * and the only path that sets it is the saturation the `BCS MA23` above has already sent away.
+     * So the planet's radius costs THIRTY-SEVEN and the port had been subtracting thirty-six --
+     * an altitude one unit too generous, and a death radius one unit too small, on the seven
+     * checkpoints where a planet was close enough for the check to run at all. Nothing measured it
+     * until the fixture that closed R22 put a planet in range (§8).
      */
     constexpr Checkpoint RECORDED[] = {
       {0, 0x793d19aaf960deaaull},    // launched from Lave
-      {40, 0x8c08ff3c1805bfd5ull},   // coasted
+      {40, 0x7c561464552416eaull},   // coasted
       {100, 0x8baad0a1c0327247ull},  // at full speed
-      {200, 0x35d9bf19cf6c2e90ull},
+      {200, 0xde794078d3bcc625ull},
       {300, 0x24449bcf0ec9102bull},
-      {340, 0x19982d918af825e4ull},  // the Viper fought
-      {342, 0x586a396d95e105f5ull},  // the docking computer engaged
-      {400, 0x3ada7522d3376ce9ull},
+      {340, 0xf02931e617d3b123ull},  // the Viper fought
+      {342, 0xa1eaa872c5890536ull},  // the docking computer engaged
+      {400, 0x773168b7e3089bbcull},
       {500, 0x8a8e79201b21842dull},
       {600, 0x1898d3e20b42ab22ull},
-      {700, 0x55cb1c673764c46dull},
+      {700, 0x62b7db8c2dde9aa4ull},
       {800, 0x11ed5553a41da45full},
       {900, 0x4aba4549a9d9dfe9ull},
       {1000, 0x72d94ce3ca9f3d4dull},
-      {1100, 0xa3db6fc7d6ce54a7ull},
+      {1100, 0x3ef58b79f6b0084eull},
       {1170, 0xe9a05a7fe9c76544ull}, // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;

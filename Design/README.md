@@ -17,7 +17,7 @@ not to exist in this build at all (§6.155); and the missing goldens, three of w
 covered by whole-bitmap oracle comparisons and the fourth of which is a sound hash now (§6.156).
 **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->395 tests** and
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->397 tests** and
 CI runs **<!--count:checks-->thirteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
