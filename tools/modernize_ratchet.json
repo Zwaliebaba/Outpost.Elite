@@ -34,7 +34,7 @@
       "slice": "M3-a-3: TradeScreen, SaveScreen, GameStart and MissionBay go; what is left IS Ports"
     },
     "main-lines": {
-      "ceiling": 1199,
+      "ceiling": 1198,
       "slack": 0,
       "slice": "M3-a-3: Main.cpp holds no state the universe owns and builds no argument list"
     },

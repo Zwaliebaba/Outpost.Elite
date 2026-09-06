@@ -300,7 +300,7 @@ interfaces with four ports without touching a signature again. `ViewChange.h` sa
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
-<!--count:main-lines-->1,199 lines, most of them the dispatch, the exits and the two loops. Plan
+<!--count:main-lines-->1,198 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
 the executable reaches <!--count:outpost-elite-names-->199 distinct `Elite::` names that
@@ -1595,6 +1595,26 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — the Windows job on M3-a-3, and a fourth half for `check_outpost.py`.** `Main.cpp`
+would not compile: `Game`'s constructor still initialised `trade` and `save` and still named
+`name`, `selectedSeeds` and `numberWidth` bare, all five in the MEMBER-INITIALISER LIST, which is
+the one place none of the tool's three checks could see. That is the second consecutive slice to
+fail this way — M3-a-2's was `recursive.SetCursor(&text)` in the same constructor — and twice is a
+pattern rather than a slip.
+
+The tool has a fourth check now: **every name a constructor's initialiser list initialises must be
+a member of its own type, a base of it, or the type itself.** That is exactly MSVC's C2614, and it
+is the half a regex can settle soundly; the C2065s that come with it — a bare identifier used as an
+argument inside one of those initialisers — need a real parser, and both times they arrived
+together, so catching the one catches the commit.
+
+**Its own first draft would have passed the tree it was written to fail**, which is why the
+self-test now plants a brace initialiser before the bad one. `ports{a, b}` opens a brace at depth
+zero exactly as the constructor's body does, so the list-finder stopped at the first
+brace-initialised member and read the rest of the list as empty — and `Game`'s two bad entries are
+brace-initialised. The difference is what precedes the brace: an initialiser's follows its name,
+the body's follows whitespace. Fourteen initialisers are read on the tree as it stands.
 
 **2026-09-06 — M3-a-3 built, and M3-a is done: all seven argument-list structs are gone and what
 is left IS `Ports`.** `TradeScreen`, `SaveScreen`, `GameStart` and `MissionBay` went the way the

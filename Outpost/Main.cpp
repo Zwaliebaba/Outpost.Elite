@@ -91,10 +91,9 @@ namespace
         screen(universe.canvas, universe.text, &shell),
         characters(screen),
         recursive(characters),
-        values(recursive, universe.text, universe.commander, name, universe.current.seeds, selectedSeeds, false),
+        values(recursive, universe.text, universe.commander, universe.commanderName, universe.current.seeds, universe.selectedSeeds,
+               false),
         extended(characters, recursive, universe.rng, &shell),
-        trade{recursive, characters, extended, universe.text, shell, shell, universe.rng},
-        save{recursive, characters, extended, screen, universe.text, shell, shell, store, numberWidth},
         flight(window, universe, sound, music, audio),
         ports{recursive, characters, characters, flight, flight, flight, flight,
               flight,    extended,   shell,      shell,  shell,  shell,  store}
