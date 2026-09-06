@@ -1436,8 +1436,16 @@ namespace Elite
         const std::uint8_t squares = SumOfSquares(screen.bubble, 0u);
         if (squares != 0xFFu)
         {
-          // 6502: SBC #36 / BCC MA28 -- inside the planet's own radius, so this is the ground.
-          const SubResult above = SubtractWithCarry(squares, ALTITUDE_PLANET_RADIUS, true);
+          /*
+           * 6502: SBC #36 / BCC MA28 -- inside the planet's own radius, so this is the ground.
+           *
+           * AND THE CARRY IS CLEAR, so the subtraction takes THIRTY-SEVEN. `MAS3` returns with the
+           * flag its last `ADC` left -- set only when the sum saturated, which is the case the
+           * `BCS MA23` two instructions above has already sent away -- so every arrival here has a
+           * borrow to pay. The port subtracted 36 until the R22 fixture put a planet close enough
+           * to reach this line, and the oracle died where the port did not (§8).
+           */
+          const SubResult above = SubtractWithCarry(squares, ALTITUDE_PLANET_RADIUS, false);
           if (!above.carry)
           {
             return LoopOutcome::Died; // 6502: .MA28 JMP DEATH
@@ -1451,12 +1459,15 @@ namespace Elite
            * low bits come from the last routine of the frame that used the scratch byte: `MVS4`'s
            * `STA Q` of BETA for a ship the loop moved and did not draw, `LL9`'s vertex distance or
            * the clipper's for one it drew, `DVID3B`'s scaled divisor for a dot, `SUN`'s last row's
-           * root. Since M2-b the kernel keeps its scratch to itself, so those five routines write
-           * `MathWorkspace::q` for this read alone -- the "frame's Q" -- and the replay record is
-           * what proves the value is the one the port always read (§8, M2-b). What NONE of them
-           * models is `LOIN`'s `STA Q`, which this port has kept local since slice 1d: on a frame
-           * whose last ship drew lines the original's byte is the last line's height and this
-           * port's is not. That gap is older than M2 and is the owner's to rule on (§7, R22).
+           * root. Since M2-b the kernel keeps its scratch to itself, so those routines write
+           * `MathWorkspace::q` for this read alone -- the "frame's Q".
+           *
+           * R22 said there was a tenth writer the port never modelled, `LOIN`'s `STA Q`. There is
+           * not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never
+           * touches `Q` at 154, and the risk was written from the BBC commentary -- the same source
+           * that gave M2-c-1 its `T`/`T2` defect. What the byte holds is now compared against the
+           * game rather than argued about, by `TheFramesOwnQReachesTheAltitude` over six bubble
+           * shapes and by `TheAltitudeMatchesMA23` with the byte seeded on both sides (§8).
            */
           screen.status.altitude = SquareRoot(above.value, screen.math.q).value;
         }

@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <set>
 #include <string>
 #include <vector>
@@ -1191,8 +1192,11 @@ namespace GameLogicTests
       Whole,
     };
 
+    /// `_seed` runs after the mirror and before the call: the one hook for a byte `UniverseImage`
+    /// does not carry, which since M2-c is `MathWorkspace`'s two (the altitude's `Q`, and `MV40`'s
+    /// `K2`). Everything else in the frame goes through the image.
     void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at, const LoopWhere& _loop, const std::wstring& _context,
-                       Reach _reach = Reach::Opening)
+                       Reach _reach = Reach::Opening, const std::function<void(Cpu6502&)>& _seed = {})
     {
       Cpu6502 cpu = _oracle.Fresh();
 
@@ -1287,6 +1291,11 @@ namespace GameLogicTests
       }
       cpu.memory[_loop.slsp] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom.Address() & 0xFFu);
       cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom.Address() >> 8);
+
+      if (_seed)
+      {
+        _seed(cpu);
+      }
 
       const std::uint16_t entry = (_reach == Reach::Ships) ? _loop.ma3 : (_reach == Reach::Tail) ? _loop.ma18 : _loop.mainLoop;
 
@@ -2123,6 +2132,189 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint32_t>(20u * 2u, compared, L"the whole sweep ran");
       Assert::IsTrue(scooped > 0u, L"the tank filled on some passes");
       Assert::IsTrue(cooked > 0u, L"and the Trumbles died on some");
+    }
+  };
+
+  /*
+   * 6502: MA23's altitude, and the byte it takes its low half from (risk R22).
+   *
+   * `MA93` reaches `LDY #&FF / STY ALTIT / INY / JSR m / BNE MA23` on step 10 of the thirty-two,
+   * and if the planet's three sign bytes are clear and `MAS3`'s sum of squares is between 36 and
+   * 254 it goes on to `SBC #36 / STA R / JSR LL5 / LDA Q / STA ALTIT`. **`Q` IS NOT WRITTEN
+   * THERE.** `LL5` takes `(R Q)` as its radicand and `MAS2`/`MAS3` do not touch `Q`, so the low
+   * half of what the altitude is a square root of is whatever the frame last left in that byte.
+   *
+   * That is the whole of R22, and until this fixture nothing measured it: every frame sweep in
+   * this file puts the planet at a high byte of 0x20, so `MAS2` answers non-zero, `ALTIT` stays
+   * 255 and the square root never runs. The port's `MathWorkspace::q` could have held anything.
+   *
+   * The sweep below picks distances that make `SBC #36` leave a SMALL number, because that is what
+   * makes `Q` visible: with the difference at zero the radicand IS `Q` and `ALTIT` is its square
+   * root, so the fixture reads a byte through a function that loses only the bottom bits of it.
+   */
+  TEST_CLASS(TheAltitude)
+  {
+  public:
+    TEST_METHOD(TheAltitudeMatchesMA23)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+      const std::uint16_t qq = oracle.Label("Q");
+
+      /*
+       * `MAS3` squares each high byte with `SQUA2` (the top byte of the square) and adds, so a
+       * high byte of h contributes h*h/256 -- and 36 is the planet's own radius. 96 gives 36
+       * exactly, which is the difference of zero the sweep wants; the rest step up from there.
+       */
+      const std::uint8_t DISTANCES[] = {96, 97, 100, 110, 128, 160, 200, 255};
+
+      std::uint32_t compared = 0;
+      std::uint32_t measured = 0;
+      std::set<std::uint8_t> altitudes;
+
+      for (const std::uint8_t distance : DISTANCES)
+      {
+        for (const std::uint8_t seeded : {0u, 1u, 63u, 64u, 127u, 128u, 200u, 255u})
+        {
+          Frame frame(distance * 7u + seeded);
+          PopulateBubble(frame, 0x20u, 0x00u, false);
+
+          // The planet in slot 0, straight ahead on one axis so that `MAS2` answers zero and
+          // `MAS3` measures one square rather than three.
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> planet = frame.universe.bubble.blocks[0].ToBytes();
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            planet[byte] = 0u;
+          }
+          frame.universe.bubble.blocks[0] = Elite::Ship::FromBytes(planet);
+          frame.universe.bubble.blocks[0].z.hi = distance;
+
+          frame.universe.flight.mainLoopCounter = 10u; // 6502: MCNT AND 31 == 10
+          frame.universe.status.midJump = 0u;
+          frame.universe.status.energy = 200u; // above the warning, so no message is printed
+
+          /*
+           * The frame's `Q`, seeded on BOTH sides. `UniverseImage` does not carry `MathWorkspace`
+           * -- it is scratch, and M2-c took all of it but this byte and one other -- so the sweep
+           * mirrors it by hand, the way `CompareFrames` mirrors `RAND`.
+           */
+          frame.universe.math.q = static_cast<std::uint8_t>(seeded);
+
+          const std::wstring where = WidenText("MA23 (planet at " + std::to_string(distance) + ", Q " + std::to_string(seeded) + ")");
+          CompareFrames(frame, oracle, at, loop, where, Reach::Tail, [&](Cpu6502& _cpu) { _cpu.memory[qq] = static_cast<std::uint8_t>(seeded); });
+
+          if (frame.universe.status.altitude != 0xFFu)
+          {
+            ++measured;
+            altitudes.insert(frame.universe.status.altitude);
+          }
+          ++compared;
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(8u * 8u, compared, L"the whole sweep ran");
+      Assert::IsTrue(measured > 0u, L"the square root actually ran");
+      Assert::IsTrue(altitudes.size() > 4u, L"and the seeded Q moved the answer");
+    }
+
+    /*
+     * And the half R22 is actually about: `Q` decided by the FRAME rather than seeded.
+     *
+     * The sweep above proves the port takes the same square root of the same `(R Q)` as the game.
+     * This one runs the whole of `M%` with the planet close enough for the root to run, over
+     * bubbles that make different routines the last to touch `Q` -- a bubble with nothing in it, a
+     * ship the loop moves and does not draw (`MVS4`'s `STA Q` of BETA), one it draws as a
+     * wireframe (`LL9`'s last vertex distance, or the clipper's divisor), one it draws as a dot
+     * (`DVID3B`'s), one exploding (`DOEXP`'s cloud size) and a sun (`SUN`'s last row).
+     *
+     * `ALTIT` is in the compared image, so a port whose frame left a different byte there than the
+     * game's says so here. Nothing seeds `Q` on either side: that is the point.
+     */
+    TEST_METHOD(TheFramesOwnQReachesTheAltitude)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+
+      struct Case
+      {
+        const char* what;
+        std::uint8_t distance; ///< the OTHER ships' high bytes, which decides how they are drawn
+        std::uint8_t state;    ///< 6502: INWK+31
+        bool empty;
+        bool sun;
+      };
+
+      const std::vector<Case> CASES = {
+        {"nothing else in the bubble", 0x20, 0x00, true, false},
+        {"ships too far to draw", 0x70, 0x00, false, false},
+        {"ships drawn as wireframes", 0x02, 0x00, false, false},
+        {"ships drawn as dots", 0x18, 0x00, false, false},
+        {"a ship exploding", 0x02, 0x20, false, false},
+        {"a sun close enough to draw", 0x02, 0x00, false, true},
+      };
+
+      // 96 puts `MAS3` at exactly the planet's radius, which is the case the difference of zero
+      // makes `Q` the whole radicand; the rest step the difference up so the root moves with it.
+      const std::uint8_t DISTANCES[] = {97, 100, 110, 128, 180, 255};
+
+      std::uint32_t compared = 0;
+      std::uint32_t measured = 0;
+      std::set<std::uint8_t> altitudes;
+
+      for (const Case& item : CASES)
+      {
+        for (const std::uint8_t distance : DISTANCES)
+        {
+          Frame frame(distance * 11u + static_cast<std::uint8_t>(item.distance));
+          PopulateBubble(frame, item.distance, item.state, item.empty);
+
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> planet = frame.universe.bubble.blocks[0].ToBytes();
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            planet[byte] = 0u;
+          }
+          frame.universe.bubble.blocks[0] = Elite::Ship::FromBytes(planet);
+          frame.universe.bubble.slots[0] = 128u;
+          frame.universe.bubble.blocks[0].z.hi = distance;
+
+          if (!item.sun)
+          {
+            // Take the sun out, so the only body the frame draws is the planet.
+            frame.universe.bubble.slots[1] = 0u;
+          }
+
+          frame.universe.flight.mainLoopCounter = 10u;
+          frame.universe.status.midJump = 0u;
+          frame.universe.status.energy = 200u;
+          frame.universe.view = 0u;
+
+          const std::wstring where = WidenText(std::string("MA23 whole frame (") + item.what + ", planet at " + std::to_string(distance) + ")");
+          CompareFrames(frame, oracle, at, loop, where, Reach::Whole);
+
+          if (frame.universe.status.altitude != 0xFFu)
+          {
+            ++measured;
+            altitudes.insert(frame.universe.status.altitude);
+          }
+          ++compared;
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(6u * 6u, compared, L"the whole sweep ran");
+      Assert::IsTrue(measured > 0u, L"the square root ran on frames the loop itself filled");
+      Assert::IsTrue(altitudes.size() > 2u, L"and the answers were not all the same");
     }
   };
 
