@@ -4,7 +4,8 @@
 ruling) · amended 2026-09-05 (§4: the mutation baseline rule) · **moved from Proposed to Accepted
 2026-09-05**, on the evidence rather than by decree: twenty-five of the plan's twenty-six slices were
 built against this ADR and every one of them found defects the oracle caught and nothing else would
-have. The two `Labels.json`/`Oracle.json` references below were stale draft names and are corrected.
+have. **All twenty-six as of the same day**, and the twenty-sixth kept the record intact: slice 4d
+found three (§6.149, §6.150, §6.151). The two `Labels.json`/`Oracle.json` references below were stale draft names and are corrected.
 **Depends on:** ADR-001 (fidelity), ADR-002 (exact semantics — without it there is nothing to compare)
 **Feeds:** the acceptance column of every slice in the plan; ADR-004 (test project shape)
 

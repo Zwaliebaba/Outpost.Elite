@@ -14,12 +14,27 @@ THE MARKER, AND WHY THERE IS ONE. This corpus is largely a JOURNAL. The plan say
 are; only a handful of sentences are claims about NOW. A checker that scanned for "N tests" would
 fail on the history, so instead a live claim marks itself:
 
-    the suite is <!--count:tests-->349 tests
+    the suite is <!--count:tests-->377 tests
 
 The marker renders as nothing on GitHub, and it is the point rather than the plumbing: it says out
 loud which numbers are claims about the current tree. An unmarked number is history, and history is
 not checked. So this does not make every number in the corpus true -- it makes the LIVE ones
 checkable, and leaves the rest visibly what they are.
+
+A MARKER IS A CLAIM WHEREVER IT SITS, INCLUDING INSIDE A FENCE OR A CODE SPAN. The first version of
+this file skipped fenced blocks ("a fenced block shows the SYNTAX; it never states a count") and
+blanked code spans ("a marker in backticks is an EXAMPLE"), and both exclusions were wrong in
+practice: `Tests/PortableRunner/README.md` states the suite size in a shell comment inside a fenced
+block, and `AGENTS.md` states it inside backticks while teaching the convention. Both said 349 to a
+tree holding 377, and this check reported OK on 20 of 24 markers without saying which four it had
+not looked at (section 6.154). That is exactly Risk R13's shape -- a green check over evidence
+nobody gathered -- so the exclusions are gone and every marker is read.
+
+WHICH LEAVES ONE THING TO SPELL: how to SHOW the syntax without making a claim. Write the
+placeholder in capitals -- `<!--count:NAME-->` -- which the pattern below does not match, so it is
+inert by construction rather than by an exclusion somebody has to remember. The documents that
+teach the convention use it, and so does any journal entry that quotes a marker, because a journal
+entry must never turn into a live claim that a later change breaks.
 
 The number after a marker may be digits (`349`, `5,577`) or English words (`nine`, `twenty-six`),
 because the documents use both and neither spelling should have to change to be checked.
@@ -179,19 +194,11 @@ def check_markers(_known: dict[str, tuple[int, str]]) -> tuple[list[str], int]:
 
     for path in markdown_files():
         lines = path.read_text(encoding="utf-8", errors="replace").split("\n")
-        fenced = False
         for number, line in enumerate(lines, 1):
-            if line.lstrip().startswith("```"):
-                fenced = not fenced
-                continue
-            if fenced:
-                continue  # a fenced block shows the SYNTAX; it never states a count
-
-            # A marker inside `backticks` is an EXAMPLE of the syntax, not a claim -- which is how
-            # the documents describe this check to a reader. Blank the code spans and the rest of
-            # the line keeps its offsets, so a complaint still points at the right column.
-            scannable = re.sub(r"`[^`]*`", lambda span: " " * len(span.group(0)), line)
-            for match in MARKER.finditer(scannable):
+            # No exclusions. A fenced block and a code span each hid a rotted number from the
+            # first version of this check -- see the note at the top of the file. The syntax is
+            # shown with the inert `<!--count:NAME-->` spelling instead, which MARKER cannot match.
+            for match in MARKER.finditer(line):
                 where = f"{path.relative_to(REPO).as_posix()}:{number}"
                 name = match.group(1)
 
