@@ -54,7 +54,6 @@ namespace Outpost
                           public Elite::StartUpEffects,
                           public Elite::ControlCodes,
                           public Elite::TextEffects,
-                          public Elite::TunnelEffects,
                           public Elite::KeySource
   {
   public:
@@ -91,7 +90,7 @@ namespace Outpost
      * One FLIGHT-LOOP frame has been drawn: show it for as long as the shipped loop took to
      * compute the next one.
      *
-     * NOT THE SAME THING AS `ShowFrame`, and the difference is five times over. `ShowFrame` is
+     * NOT THE SAME THING AS `Present`, and the difference is five times over. `Present` is
      * `DELAY` with a count of one -- a single vertical sync, which is what the launch and
      * hyperspace tunnels ask for because the original spells `JSR DELAY` inside them. `DEATH`'s
      * `.D2 JSR M% / DEC LASCT / BNE D2` asks for nothing of the kind: it runs the flight loop flat
@@ -103,7 +102,7 @@ namespace Outpost
      * The accumulator is the title screen's, for the same reason and with the same backlog rule:
      * a stall costs a frame rather than being repaid by running faster to catch up.
      */
-    void HoldFlightFrame(std::uint8_t _ships);
+    void HoldFlightFrame(std::uint8_t _ships) override;
 
     // ---- Elite::KeySource ----------------------------------------------------------------------
 
@@ -148,10 +147,10 @@ namespace Outpost
     [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override;
     [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance) override;
 
-    // ---- Elite::TunnelEffects -------------------------------------------------------------------
+    // ---- Elite::Presenter's two display methods ---------------------------------------------------
 
     /// 6502: the vertical sync the VIC-II was giving `HFS2` for free while it drew the next circle.
-    void ShowFrame() override;
+    void Present() override;
 
     // ---- Elite::ControlCodes and Elite::TextEffects ---------------------------------------------
 

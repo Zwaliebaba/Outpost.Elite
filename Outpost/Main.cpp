@@ -464,7 +464,7 @@ namespace
        * `_selected` comes back written: the launch runs `TT111` for the SEEDS rather than for the
        * distance, because the planet's appearance is generated from the system you are leaving.
        */
-      Elite::Launch(_game.universe, _game.ports, &_game.shell, _game.universe.dockedFlag, _game.universe.crosshairX,
+      Elite::Launch(_game.universe, _game.ports, _game.universe.dockedFlag, _game.universe.crosshairX,
                     _game.universe.crosshairY, _game.universe.selectedSeeds);
       return;
 
@@ -578,7 +578,7 @@ namespace
         described.techLevel = _game.universe.current.techLevel;
 
         const Elite::JumpResult jumped = Elite::PerformJump(
-          _game.universe, _game.ports, _game.universe.selectedSeeds, jump, described, _game.universe.market, nullptr,
+          _game.universe, _game.ports, _game.universe.selectedSeeds, jump, described, _game.universe.market,
           _game.universe.crosshairX, _game.universe.crosshairY, _game.universe.commander.galaxySeeds,
           _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL)), _game.universe.options.authorNames != 0u);
 
@@ -587,7 +587,7 @@ namespace
         if (jumped == Elite::JumpResult::Arrived)
         {
           // 6502: the fall-through into `TT110`, which is the launch the arrival ends with.
-          Elite::Launch(_game.universe, _game.ports, nullptr, _game.universe.dockedFlag, _game.universe.crosshairX,
+          Elite::Launch(_game.universe, _game.ports, _game.universe.dockedFlag, _game.universe.crosshairX,
                         _game.universe.crosshairY, _game.universe.selectedSeeds);
         }
       }
@@ -633,7 +633,7 @@ namespace
          * of it.
          */
         Elite::SystemSeeds galaxy = _game.universe.commander.galaxySeeds;
-        Elite::GalacticJump(_game.universe, _game.ports, galaxy, _game.universe.selectedSeeds, jump, chart, nullptr);
+        Elite::GalacticJump(_game.universe, _game.ports, galaxy, _game.universe.selectedSeeds, jump, chart);
 
         for (int byte = 0; byte < 6; ++byte)
         {
@@ -747,7 +747,7 @@ namespace
        * is here anyway because the routine is built and the alternative is a hole that looks like
        * a decision.
        */
-      const Elite::DockingResult arrival = Elite::DockAtStation(_game.universe, _game.ports, &_game.shell,
+      const Elite::DockingResult arrival = Elite::DockAtStation(_game.universe, _game.ports,
                                                                 _game.universe.dockedFlag, _game.universe.view, false);
 
       /*
@@ -780,51 +780,15 @@ namespace
        * Neither routine restores the energy banks. That is the game's behaviour and not an
        * omission here: `RESET` fills them and only the COLD start calls it (ADR-003).
        */
-      {
-        /*
-         * The pacing, and it is NOT the shell's `ShowFrame`.
-         *
-         * `DEATH` runs the flight loop sixty-five times and the original waits for nothing between
-         * them (§6.17): each frame was on screen for as long as the next took to compute, which the
-         * cost model puts at about 12.7 a second. Handing this the shell would pace it by vertical
-         * sync instead, and the sixty-four frames would go past in a second -- which is what the
-         * first version did, and it read as a glitch rather than as a death (§6.149).
-         *
-         * The ship count is read FRESH on every frame because the bubble empties as the wreckage
-         * flies past, so the rate rises through the sequence exactly as the original's did.
-         */
-        struct DeathPacing final : Elite::TunnelEffects
-        {
-          Game& game;
+      // 6502: DEATH's `.D2 JSR M% / DEC LASCT / BNE D2` -- and `Presenter::HoldFlightFrame` is what
+      // shows each of the sixty-five frames for as long as the next takes, which is §6.149's bug
+      // and the reason it is not `Present`. The library counts the ships; `FRIN` is its byte.
+      Elite::Die(_game.universe, _game.ports);
 
-          explicit DeathPacing(Game& _game) noexcept
-            : game(_game)
-          {
-          }
+      Elite::ResetShipAndBubble(_game.universe, _game.ports); // 6502: DEATH2's JSR RES2
 
-          void ShowFrame() override
-          {
-            std::uint8_t ships = 0;
-            for (const std::uint8_t type : game.universe.bubble.slots)
-            {
-              if (type == 0u)
-              {
-                break; // 6502: FRIN's zero terminates the list
-              }
-              ++ships;
-            }
-            game.shell.HoldFlightFrame(ships);
-          }
-        };
-
-        DeathPacing pacing(_game);
-        Elite::Die(_game.universe, _game.ports, &pacing);
-
-        Elite::ResetShipAndBubble(_game.universe, _game.ports); // 6502: DEATH2's JSR RES2
-
-        const Elite::ForcedKey begun = Elite::StartGame(_game.universe, _game.ports, false);
-        Perform(_game, begun.outcome);
-      }
+      const Elite::ForcedKey begun = Elite::StartGame(_game.universe, _game.ports, false);
+      Perform(_game, begun.outcome);
       return;
 
     case Elite::LoopOutcome::Escaped:

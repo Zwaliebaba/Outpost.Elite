@@ -105,6 +105,8 @@ namespace GameLogicTests
     class RecordingStart : public Elite::StartUpEffects, public Elite::Presenter
     {
     public:
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
       explicit RecordingStart(std::vector<std::uint8_t> _answers) noexcept
         : m_answers(std::move(_answers))
       {

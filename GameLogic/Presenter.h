@@ -22,10 +22,13 @@ namespace Elite
    * wall-clock second would be right on one machine and wrong on the other, and the game would be
    * unable to say which.
    *
-   * `Present` IS M3-b-3c's. `TunnelEffects::ShowFrame` is the same idea under an older name -- the
-   * vertical sync the VIC-II gave `HFS2` for free while it drew the next circle -- and it is
-   * threaded through ten routines as a nullable `TunnelEffects*` that this port replaces. Doing
-   * both here would be two patterns in one slice (rule 8).
+   * `TunnelEffects` WAS THE OTHER HALF AND IS THIS ONE SINCE M3-b-3c, and it did not survive the
+   * move unchanged: it was ONE method threaded as a nullable pointer through eleven routines, and
+   * the pointer was carrying three different answers. `ShowFrame` from the shell was one vertical
+   * sync; `ShowFrame` from `Main.cpp`'s own `DeathPacing` was a frame held for as long as the next
+   * took to compute; and a null pointer was no present at all. Two of those are what the game asks
+   * for and are the two methods below. The third was for the oracle, and is a `Presenter` that does
+   * nothing (§8).
    */
   class Presenter
   {
@@ -40,6 +43,33 @@ namespace Elite
      * two interfaces were two views of it, which the executable answered with one method (§8).
      */
     virtual void WaitFrames(std::uint8_t _frames) = 0;
+
+    /*
+     * The vertical sync the VIC-II gave a tunnel for free while it drew the next circle.
+     *
+     * `DELAY` with a count of one, and named for the FRAME rather than the circle because two
+     * routines want it: `HFL2` after every circle, which is the pacing §6.109 measured, and
+     * `HYPNOISE`'s own `LDY #1 / JSR DELAY`, which is the same thing for the same length.
+     */
+    virtual void Present() = 0;
+
+    /*
+     * What the death sequence's flight-loop frames are shown with -- see `Die` in `Flight.h`, whose
+     * loop this paces, and the point is that the original asks for NO wait between them.
+     *
+     * It is a second method rather than `Present` because the 6502 waits for nothing between those
+     * sixty-five frames: the VIC-II was reading the bitmap the whole time, so each was on screen
+     * for exactly as long as the next took to compute -- about 12.7 a second at the measured cost.
+     * Paced by vertical sync instead, the sixty-four frames of a death go past in one second and
+     * read as a glitch rather than as a death, which is the bug §6.149 found and this signature
+     * is what stops it coming back.
+     *
+     * `_ships` is how many the bubble holds, because the cost of a frame depends on it and the
+     * bubble EMPTIES as the wreckage flies past -- so the rate rises through the sequence exactly
+     * as the original's did. It is counted here rather than by the presenter because `FRIN`'s
+     * zero-terminated list is game state.
+     */
+    virtual void HoldFlightFrame(std::uint8_t _ships) = 0;
   };
 
 } // namespace Elite

@@ -1191,7 +1191,7 @@ namespace Elite
   }
 
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                          ClipState& _clip, const Projection& _centre, std::uint8_t _index, TunnelEffects* _pacing) noexcept
+                          ClipState& _clip, const Projection& _centre, std::uint8_t _index, Presenter& _present) noexcept
   {
     // 6502: .HFL1 LDA XX4 / AND #7 / CLC / ADC #8 / STA K -- the ring's starting radius, and this
     // routine's own since M2-c-3: it fills `K` and nothing else reads the block while it runs.
@@ -1215,10 +1215,7 @@ namespace Elite
        * showing anything until somebody presents, so the pacing goes where the machine's own
        * pause was -- between one circle and the one that erases it.
        */
-      if (_pacing != nullptr)
-      {
-        _pacing->ShowFrame();
-      }
+      _present.Present();
 
       // 6502: ASL K / BCS HF8 -- a radius past 128 doubles out of the byte and ends the ring.
       const ShiftResult doubled = RotateLeftValue(radius, false);
@@ -1239,7 +1236,7 @@ namespace Elite
   }
 
   void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
-                           MathWorkspace& _math, ClipState& _clip, TunnelEffects* _pacing) noexcept
+                           MathWorkspace& _math, ClipState& _clip, Presenter& _present) noexcept
   {
     // 6502: LDX #X / STX K3 / LDX #Y / STX K4 / LDX #0 / STX XX4 / STX K3+1 / STX K4+1.
     Projection centre{};
@@ -1253,7 +1250,7 @@ namespace Elite
     // eight the loop leaves is dead. A local since M2-c-3, with `LL9`'s own four.
     for (std::uint8_t index = 0; index < 8u; ++index)
     {
-      DrawHyperspaceRing(_canvas, _state, _geometry, _math, _clip, centre, index, _pacing);
+      DrawHyperspaceRing(_canvas, _state, _geometry, _math, _clip, centre, index, _present);
     }
   }
 

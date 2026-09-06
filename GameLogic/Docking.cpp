@@ -157,14 +157,14 @@ namespace Elite
     return TrumblesOrBay(_commander);
   }
 
-  DockingResult DockAtStation(Universe& _universe, Ports& _ports, TunnelEffects* _pacing, std::uint8_t& _dockedFlag,
+  DockingResult DockAtStation(Universe& _universe, Ports& _ports,  std::uint8_t& _dockedFlag,
                               std::uint8_t _view, bool _hyperspaceHeld) noexcept
   {
     // 6502: JSR RES2 -- once here, where the cold start reaches it twice (§6.25).
     ResetShipAndBubble(_universe, _ports);
 
     // 6502: JSR LAUN -- the routine rather than a seam, since this slice ported it.
-    DrawLaunchTunnel(_universe, _ports, _pacing);
+    DrawLaunchTunnel(_universe, _ports);
 
     /*
      * 6502: LDA #0 / STA DELTA / STA GNTMP / STA QQ22+1 / LDA #&FF / STA FSH / STA ASH / STA ENERGY.

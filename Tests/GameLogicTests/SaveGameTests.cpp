@@ -499,6 +499,8 @@ namespace GameLogicTests
     class MenuEffects : public Elite::LineEntryEffects, public Elite::Presenter
     {
     public:
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
       void WaitFrames(std::uint8_t) override
       {
         ++waits;

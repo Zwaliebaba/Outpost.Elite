@@ -65,6 +65,8 @@ namespace GameLogicTests
     class RecordingEffects : public Elite::StartUpEffects, public Elite::Presenter
     {
     public:
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
       void ClearKeyLogger() override
       {
         seams.push_back("ZEKTRAN");
@@ -331,7 +333,7 @@ namespace GameLogicTests
       std::uint8_t dockedFlag = 0;
 
       Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, effects, effects);
-      const Elite::DockingResult result = Elite::DockAtStation(universe, ports, nullptr, dockedFlag, 0, false);
+      const Elite::DockingResult result = Elite::DockAtStation(universe, ports, dockedFlag, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome), L"this commander earns no briefing");
 
@@ -413,7 +415,7 @@ namespace GameLogicTests
       std::uint8_t earnerDocked = 0;
       Elite::Ports earnerPorts = earnerUniverse.PortsWith(earnerUniverse.unused, earnerUniverse.unused, briefed, briefed);
       const Elite::DockingResult briefing =
-        Elite::DockAtStation(earnerUniverse, earnerPorts, nullptr, earnerDocked, 0, false);
+        Elite::DockAtStation(earnerUniverse, earnerPorts, earnerDocked, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::BriefMission1), static_cast<int>(briefing.outcome),
                        L"this commander has earned the Constrictor mission");

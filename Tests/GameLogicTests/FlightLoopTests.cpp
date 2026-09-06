@@ -2253,7 +2253,7 @@ namespace GameLogicTests
 
       std::uint8_t docked = 0xFFu;
       Elite::SystemSeeds selected{};
-      Elite::Launch(frame.universe, ports, nullptr, docked, frame.universe.commander.systemX, frame.universe.commander.systemY, selected);
+      Elite::Launch(frame.universe, ports, docked, frame.universe.commander.systemX, frame.universe.commander.systemY, selected);
 
       Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.Count(Elite::ShipType::Station),
                                       L"the launch leaves the station in the bubble");

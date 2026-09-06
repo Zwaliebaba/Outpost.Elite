@@ -143,7 +143,7 @@ namespace GameLogicTests
 
       Prepare(_port);
       Elite::SystemSeeds selected{};
-      Elite::Launch(_port.universe, _port.ports, nullptr, _port.docked, _port.universe.commander.systemX,
+      Elite::Launch(_port.universe, _port.ports, _port.docked, _port.universe.commander.systemX,
                     _port.universe.commander.systemY, selected); // 6502: TT110
       checkpoint();
 

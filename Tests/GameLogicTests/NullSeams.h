@@ -61,6 +61,8 @@ namespace GameLogicTests
 
     // Elite::Presenter
     void WaitFrames(std::uint8_t) override {}
+    void Present() override {}
+    void HoldFlightFrame(std::uint8_t) override {}
 
     // Elite::KeySource -- `TT217` BLOCKS in the game, so a fixture that reached it would hang
     // rather than fail; this answers a key nothing dispatches.
