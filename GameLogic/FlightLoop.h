@@ -253,25 +253,21 @@ namespace Elite
     virtual void StartDockingMusic() = 0;
     virtual void StopDockingMusic() = 0;
 
-    /// 6502: JSR FRS1 with X = the type -- phase 4's "put a ship right in front of us". The carry
-    /// says whether it fitted, and `FRMIS` gives up when it did not.
-    [[nodiscard]] virtual bool SpawnAhead(ShipType _type) = 0;
-
     /*
-     * 6502: JSR ANGRY with A = the type and INF pointing at the ship -- "that ship has noticed".
+     * `FRS1` AND `ANGRY` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-1d).
      *
-     * THE SLOT IS AN ARGUMENT BECAUSE THE TWO CALLERS POINT `INF` AT DIFFERENT SHIPS. Part 3 fires a
-     * missile and angers its TARGET: `LDX MSTG / JSR GINF` first, so INF is the locked ship's block.
-     * Part 11 angers the ship OUR LASER has just hit, and there INF is the ship the loop is on --
-     * `XSAV`'s slot -- with nothing locked at all in the common case. A seam that took only the type
-     * had to guess which, guessed `MSTG`, and read block 255 the first time a laser landed without
-     * a missile lock (§6.142).
+     * `SpawnAhead` was `JSR FRS1` with X = the type -- "put a ship right in front of us" -- and
+     * `Anger` was `JSR ANGRY` with the ship's slot and type. Slice 4a-b built both, in `Spawn.cpp`
+     * and `Tactics.cpp`, and the flight loop calls them: §6.73's rule again.
      *
-     * RETURNS THE CARRY `ANGRY` EXITS WITH, because part 11 falls from it into `JSR LL9` and a ship
-     * the laser has just killed seeds its explosion cloud on that flag (§6.157). `Elite::Anger` says
-     * what the flag is; an implementation that does not run the routine answers for a trap.
+     * TWO THINGS THEY TAUGHT SURVIVE THEM. `ANGRY`'s SLOT had to be an argument because the two
+     * callers point `INF` at different ships -- part 3 angers the missile's TARGET (`LDX MSTG /
+     * JSR GINF`) and part 11 the ship OUR LASER hit (`XSAV`'s) -- and the seam that took only the
+     * type guessed `MSTG` and read block 255 the first time a laser landed without a lock (§6.142).
+     * And `ANGRY`'s EXIT CARRY is part 11's, because it falls from there into `JSR LL9` and a ship
+     * the laser has just killed seeds its explosion cloud on that flag (§6.157). `Elite::Anger`
+     * takes the slot and answers the carry; the seam only ever forwarded to it.
      */
-    virtual bool Anger(std::uint8_t _slot, ShipType _type) = 0;
   };
 
   /*

@@ -303,17 +303,17 @@ the rest existed: "the struct is the argument list".
 <!--count:main-lines-->1,198 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->191 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->189 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->19 abstract classes in
 `GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `DashboardEffects::PlaySound`,
 `TunnelEffects::ShowFrame`, `SaveStore` through `SaveScreen`). Most are **phase order**:
-`ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `FlightLoopEffects::SpawnAhead` and `Anger`,
-`SpawnChildEffects::SpawnChild`, `ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each
-declared when the routine on the far side was "phase 4's" and kept after it landed, which §6.73
-already names as a mistake made four times. `SpawnEffects`, `ChartShapes` and
-`ShipEffects::RunTactics` were three more and are gone (M3-b-1a, M3-b-1b, M3-b-1c). Three methods
+`ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
+`ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each declared when the routine on the
+far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
+times. `SpawnEffects`, `ChartShapes`, `ShipEffects::RunTactics` and `FlightLoopEffects`'s
+`SpawnAhead` and `Anger` are gone (M3-b-1a to M3-b-1d). Three methods
 are declared on two interfaces each and one override satisfies both, which is
 the language's rule and a smell. One seam carries a CPU flag across the platform boundary:
 `PlaySound(std::uint8_t _effect, bool _carryIn)` returns a carry because `NOISE` does (§6.99), and
@@ -348,7 +348,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,920 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,918 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1688,6 +1688,30 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-1d: the spawn half of `FlightLoopEffects` goes, and "the bubble is full" stops
+being a trap's answer.** `SpawnAhead` was `JSR FRS1` and `Anger` was `JSR ANGRY`; slice 4a-b built
+both, in `Spawn.cpp` and `Tactics.cpp`, and the flight loop calls them. `outpost-elite-names`
+191 → 189.
+
+**`Anger` had already stopped being a seam without anybody removing it.** §6.157 made every
+implementation forward to `Elite::Anger`, because a trap's exit carry is the caller's and part 11
+falls from `ANGRY` into `JSR LL9` where that flag seeds an explosion cloud. So the interface was a
+dispatch to one function from four places that all wrote the same line. Taking it out changed no
+behaviour and removed the last place where an implementation could get it wrong.
+
+**`SpawnAhead` was still real, and the test that counted it now fills the bubble instead.**
+`FRS1` was trapped on the oracle with `TrapExit::SetCarry` or `ClearCarry` chosen by the case, and
+answered on the port by a seam returning the same `bool` — both sides told what to say. With the
+seam gone `NWSHP` decides, and the only way to make it refuse is to leave it no slot: `M% (fire with
+a lock, bubble full)` now fills every one of the ten. That is a stronger case in two directions —
+the refusal is the routine's rather than the fixture's, and the frame that follows runs a full
+bubble.
+
+**And the jam is OBSERVED rather than counted.** The old case could not stop being true; the new one
+can, because a fixture that quietly stopped filling the bubble would spawn the missile and the loop
+would still tick over. `FR1` gives up before `DEC NOMSL`, so the count still standing is what says
+the rail kept it — checked by removing the fill and watching `expected 3 actual 2` come back.
 
 **2026-09-06 — M3-b-1c: `ShipEffects` goes, and `MVEIT` becomes a routine that reaches all of
 `Universe`.** One method — `RunTactics` — and it is the seam that stood longest for the plainest

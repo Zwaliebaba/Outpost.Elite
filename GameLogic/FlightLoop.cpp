@@ -12,6 +12,7 @@
 #include "Scanner.h"
 #include "ShipDraw.h"
 #include "Spawn.h"
+#include "Tactics.h"
 #include "Stardust.h"
 
 #include <algorithm>
@@ -278,7 +279,9 @@ namespace Elite
   {
 
     // 6502: LDX #MSL / JSR FRS1 / BCC FR1 -- a full bubble means the missile stays on the rail.
-    if (!_ports.loop.SpawnAhead(ShipType::Missile))
+    if (!SpawnShipAhead(_universe.bubble, _universe.work, ShipType::Missile, _universe.flight.delta, _universe.bubble.missileTarget,
+                        _universe.flight.blueprint)
+           .created)
     {
       // 6502: .FR1 LDA #201 / JMP MESS -- "MISSILE JAMMED".
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, MESSAGE_MISSILE_JAMMED,
@@ -289,7 +292,7 @@ namespace Elite
     // 6502: LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY -- the TARGET's slot and type, not the
     // missile's.
     const std::uint8_t target = _universe.bubble.missileTarget;
-    _ports.loop.Anger(target, TypeOf(_universe.bubble.slots[target]));
+    (void)Anger(_universe.bubble, _universe.flight, target, TypeOf(_universe.bubble.slots[target]));
 
     // 6502: LDY #BLACK2 / JSR ABORT -- the lock is gone and so is the indicator.
     AbortMissileLock(_universe.canvas, _universe.bubble, _universe.status.missileArmed, _universe.commander.missiles, MISSILE_NONE);
@@ -1121,7 +1124,7 @@ namespace Elite
             // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too. INF
             // is this ship's block here, the one the loop is on, so the slot is XSAV's. Every laser
             // path ends in this call, so its exit carry is the one `LL9` gets.
-            carry = _ports.loop.Anger(_universe.flight.slot, type);
+            carry = Anger(_universe.bubble, _universe.flight, _universe.flight.slot, type);
           }
         }
       }
