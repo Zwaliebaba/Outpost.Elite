@@ -69,14 +69,6 @@ namespace GameLogicTests
       _cells.push_back(std::move(high));
     }
 
-    /*
-     * The FNV-1a offset basis and prime, 64-bit. Any stable hash would do; this one is
-     * constexpr-friendly, has no dependency, and is the same choice `GoldenCanvas` would make
-     * if it hashed bytes rather than pixels.
-     */
-    constexpr std::uint64_t FNV_OFFSET = 14695981039346656037ull;
-    constexpr std::uint64_t FNV_PRIME = 1099511628211ull;
-
   } // namespace
 
   std::vector<Cell> ImageCells(Universe& _universe, const Where& _at)
@@ -365,6 +357,12 @@ namespace GameLogicTests
       hash *= FNV_PRIME;
     }
     return hash;
+  }
+
+  std::uint64_t Hash(const Universe& _universe)
+  {
+    const Where unresolved{};
+    return Hash(_universe, unresolved);
   }
 
   // ---- the two names the suites already use --------------------------------------------------------

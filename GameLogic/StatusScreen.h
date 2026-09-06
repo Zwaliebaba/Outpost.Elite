@@ -2,7 +2,7 @@
 
 #include "Commander.h"
 #include "MarketScreen.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <cstdint>
 

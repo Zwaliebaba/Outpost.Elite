@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -92,5 +93,28 @@ namespace GameLogicTests
 
   /// FNV-1a over the image's bytes in table order, seeded cells excluded.
   [[nodiscard]] std::uint64_t Hash(const Universe& _universe, const Where& _at);
+
+  /// The same, with no oracle to resolve the addresses: the cells are read in table order and
+  /// their addresses are never used. This is the hash a replay stores (slice M0-c).
+  [[nodiscard]] std::uint64_t Hash(const Universe& _universe);
+
+  /*
+   * The FNV-1a offset basis and prime, 64-bit. Any stable hash would do; this one is
+   * constexpr-friendly, has no dependency, and is the same choice `GoldenCanvas` would make if it
+   * hashed bytes rather than pixels. `FoldBytes` is the step, exposed so that a replay can widen
+   * the image's hash with bytes the image does not carry.
+   */
+  inline constexpr std::uint64_t FNV_OFFSET = 14695981039346656037ull;
+  inline constexpr std::uint64_t FNV_PRIME = 1099511628211ull;
+
+  [[nodiscard]] inline std::uint64_t FoldBytes(std::uint64_t _hash, std::span<const std::uint8_t> _bytes) noexcept
+  {
+    for (const std::uint8_t byte : _bytes)
+    {
+      _hash ^= byte;
+      _hash *= FNV_PRIME;
+    }
+    return _hash;
+  }
 
 } // namespace GameLogicTests

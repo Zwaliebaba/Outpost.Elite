@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include "Arith.h"
 #include "EliteTypes.h"

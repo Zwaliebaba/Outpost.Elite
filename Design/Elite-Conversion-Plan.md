@@ -140,7 +140,7 @@ is preserved in the history and was true then.
   `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
   WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
   docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->389 tests in <!--count:test-files-->55 files: the 6502 interpreter with its cycle counter and
+- `Tests/GameLogicTests/` — <!--count:tests-->392 tests in <!--count:test-files-->56 files: the 6502 interpreter with its cycle counter and
   its in-order store log, the oracle fixture over the assembled game and the loader, and the
   suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
@@ -267,7 +267,7 @@ Only the shape; the full label-by-label mapping is in
 | Kernel | `EliteTypes.h`, `Arith.h/.cpp`, `Rng.h/.cpp`, `LookupTables.h`, `SineTable.cpp`, `ArctanTable.cpp`, `LogTables.cpp` | zero-page workspace, `MULT*`, `MULTU`, `FMLTU`, `DVID*`, `LL28`, `ARCTAN`, `SQUA`, `DORND`, `SNE`, `ACT`, `LOG`/`ANTILOG` |
 | Text | `Tokens.h/.cpp`, `ExtendedTokens.h/.cpp`, `TokenTables.cpp`, `TextPrint.h/.cpp`, `Font.cpp` | `QQ18`, `TT27`, `TKN1`, `DETOK`, `MT1`–`MT29`, `TT26`/`CHPR`, `DTW*`, `BPRNT`, `C.FONT.bin` |
 | Canvas | `Canvas.h/.cpp`, `Lines.cpp`, `Circles.cpp` | `LOIN` 1–7, `HLOIN`, `PIXEL`, `CPIX*`, `CIRCLE`, `CIRCLE2`, `BLINE`, `TT66`/`BOX`, `CLYNS` |
-| Universe | `Universe.h/.cpp`, `SystemData.h/.cpp`, `Charts.h/.cpp` | `TT20`, `TT54`, `TT24`, `TT25`, `cpl`, `TT111`, `TT22`, `TT23`, `TT18` |
+| Universe | `Galaxy.h/.cpp` (was `Universe.h/.cpp` until 2026-09-06), `SystemData.h/.cpp`, `Charts.h/.cpp` | `TT20`, `TT54`, `TT24`, `TT25`, `cpl`, `TT111`, `TT22`, `TT23`, `TT18` |
 | Commander | `Commander.h/.cpp`, `Market.h/.cpp`, `Equipment.h/.cpp`, `SaveBlock.cpp` | `NA%`, `QQ23`, `TT151`, `var`, `TT219`, `TT210`, `EQSHP`, `prx`, `qv`, `CHK`/`CHK2`/`CHK3` |
 | Screens | `Screens.h/.cpp`, `StatusScreen.cpp`, `MarketScreen.cpp`, `ChartScreens.cpp`, `TitleScreen.cpp` | `STATUS`, `TT167`, `TT213`, `TT22`/`TT23`, `TITLE`, `TT167`… |
 | Ships | `ShipBlueprints.h`, `ShipBlueprintData.cpp`, `ShipSlot.h`, `Bubble.h/.cpp` | `XX21`, `VERTEX`/`EDGE`/`FACE`, `INWK`/`K%`, `FRIN`, `MANY`, `UNIV`, `NWSHP`, `KILLSHP`, `ZINF` |

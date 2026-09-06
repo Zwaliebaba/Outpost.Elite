@@ -3,7 +3,7 @@
 #include "Controls.h"
 #include "DockedKeys.h"
 #include "SaveGame.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <cstdint>
 #include <span>

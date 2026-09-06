@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->389 tests, oracle present), all <!--count:checks-->twelve repository checks pass,
+(<!--count:tests-->392 tests, oracle present), all <!--count:checks-->twelve repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -693,7 +693,7 @@ the journal.
 |---|---|---|---|
 | **M0-a Ratchet** | `tools/check_modernize.py` counting P1–P11 with `tools/modernize_ratchet.json` as the ceilings; wired into `check_all.py`, the workflow and `check_counts.py`'s names so this document's numbers are checked. | In CI; a deliberately raised count fails `--self-test`. **Built 2026-09-06 with this document** (§8). | 1 |
 | **M0-b UniverseImage** | `Materialise`/`Absorb`/`Compare`/`Hash` over the fixture's `Universe`, as one table of cells with the labels resolved at runtime (the slice plan below says why there is no generated table). `FlightUniverse.h`'s `Mirror`/`CompareState` become calls into it. | Every existing flight-universe test passes unchanged through the bridge; `Hash` is stable across two runs; four tests of the bridge itself. **Built 2026-09-06** (§8). | 2–3 |
-| **M0-c Flight replay** | A scripted flight through the null port (launch, fly, fight a seeded Viper, dock) hashed at every step through `Hash`, with the hashes stored beside the docked transcript. | Green; a one-byte mutation anywhere in the flight universe changes a stored hash (the harness's own selftest). | 2 |
+| **M0-c Flight replay** | A scripted flight through a test-side port that answers every seam with the routine the executable calls (launch from Lave, coast, accelerate, fight a hostile Viper, dock on the autopilot), digested at every hundredth step and every turn of the script, the record stored in the suite. | Green; the same script twice gives the same digests; a one-byte change in four places each changes the record (the harness's own selftest). **Built 2026-09-06** (§8). | 2 |
 | **M0-d Mutation baseline on Linux** | `mutate.py --runner portable` for all five units, tallies journaled, so the re-anchoring in later slices has a number to match. | Five units, zero survivors beyond the recorded equivalents. | 1 |
 
 #### M0-b slice plan (written 2026-09-06, before the build; §8 records what the build found)
@@ -730,11 +730,48 @@ compared set is a later, deliberate change with a finding behind it.
 at all: the oracle holds them in hardware registers rather than memory, so they enter the hash at
 M3-a as port-side bytes when `Elite::Universe` owns them.
 
+**Rename, done ahead of M3-a.** `GameLogic/Universe.h/.cpp` is `Galaxy.h/.cpp` since 2026-09-06 (owner
+ruling with M0-c), `UniverseTests.cpp` is `GalaxyTests.cpp`, and the ledger's *Home* column follows.
+
 **Acceptance, as built:** the suite unchanged and green through the bridge on the portable runner;
 four new tests in `UniverseImageTests.cpp` (every cell resolves to an address; a round trip through
 memory loses nothing, the nine-bit sprite x included; the hash is stable across two seeds and notices
 one byte; what is written is what is compared, and one changed byte is one named difference);
 `check_all` green.
+
+#### M0-c slice plan (written 2026-09-06 with the build; §8 records what the flight found)
+
+**The port.** `Tests/GameLogicTests/FlightPort.h` is `Outpost::FlightSession` with the platform half
+replaced by data the script owns: the keys held this frame are an array, the sound goes into the
+game's own `SoundBuffer` and `SidWriteLog`, the raster mode is remembered. Every game-half answer —
+`RunTactics`, `DrawPlanetOrSun`, `SpawnAhead`, `Anger`, `SpawnChild`, `DrawExplosion`, the chart
+shapes, the docking computer, `CLYNS` for the message countdown — is the routine the executable
+calls with the same arguments, so that a flight through the port is the flight the app would run.
+`Step()` is one pass of `TT100` as `Main.cpp`'s `Advance` performs it, without the pacing and the
+window's key queue. It is the second copy of `FlightSession`'s wiring and says so; M3-b replaces both
+with direct calls, and this port is what makes M3-b measurable before it lands.
+
+**The digest.** The universe image (`Hash(const Universe&)`, oracle-free: a `Where` with every address
+zero, because the hash reads cells in table order and never their addresses) widened with what the
+image does not carry and a flight changes — the pixels, the ship line heap, the flight controls —
+because the image leaves those to the oracle's other comparisons and a replay has no oracle. Every
+part is a byte layout ADR-002 fixes. Not in the digest, and said so: the sound buffer, the SID log,
+`VideoState` beyond the sprites, and `ScreenState`'s raster half, which the executable ticks at the
+display's rate rather than the frame's. They enter at M3-a with `Elite::Universe`, and that is the one
+re-recording the plan allows for.
+
+**The script.** Launch from Lave (the default commander, a docking computer bought for the last
+phase, `RESET`, `TT110`); forty frames coasting; sixty at full speed with a roll for the first
+twenty; a hostile Viper straight ahead (`FRS1`, then `ANGRY`) and two hundred and forty frames of a
+pulsing laser and a pitch; the docking computer engaged; and the autopilot until the frame that
+docks or a cap of four thousand. The spawner runs on the way — `MCNT` wraps four times in the
+record — so traders and pirates the script never named are in the digest too. Digests every
+hundredth step and at every turn of the script, stored as constants in the suite; an empty record
+fails, so the tree can never carry an unpinned replay; the failure message prints the whole new
+record in paste-able form.
+
+**When the record may change.** Never for a refactor. Only when the digest is deliberately widened,
+with a journal entry that says so; there is no re-record for "the numbers moved".
 
 ### Phase M1 — Typed data
 
@@ -874,4 +911,15 @@ are 370 and the sun's heap 200, and `CompareState`'s first-failure message now s
 differ as well as which was first — the one visible change, and an improvement.
 The ratchet's `oracle-test-files` ceiling goes UP by one, from 49 to 50, and this entry is the
 record rule 5 asks for: `UniverseImageTests.cpp` loads the oracle because it tests the bridge to
-it, which is the instrument M6-b retires — the file goes with the interpreter, not before. M0-a is built with this entry; nothing in `GameLogic/` changed.
+it, which is the instrument M6-b retires — the file goes with the interpreter, not before.
+
+**2026-09-06 — `Universe.h` is `Galaxy.h`, and M0-c is built.** The rename first, by owner ruling and
+ahead of M3-a: eleven headers and a test file changed their include, the projects and the ledger
+follow, and the file's own comment now says it is the galaxy generator. Then the replay. The
+scripted flight through `FlightPort` launches, fights and DOCKS — the autopilot brings the ship into
+the Coriolis's slot at step 1,170, which the plan had not promised — and the record is sixteen
+digests. The three tests it needed all pass on the first run that had a record to compare against:
+the same script twice agrees digest for digest, and each of four one-byte changes after the launch
+(the planet's x, a generator byte, the fuel, a speck of stardust) changes the record. What the
+first run found: a checkpoint taken twice at step 100, once as a hundredth step and once as the end
+of a phase, which the script now takes once. Nothing in `GameLogic/` changed for any of this. M0-a is built with this entry; nothing in `GameLogic/` changed.
