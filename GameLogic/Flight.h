@@ -11,7 +11,7 @@
 #include "Universe.h"
 
 /*
- * Getting into flight, and getting the world ready for it.
+ * Getting into flight, and getting the universe ready for it.
  *
  * Four routines the docked half reaches and the flight half assumes: two resets, and the launch
  * that runs one of them. `RES2` was a seam on `StartUpEffects` until this slice -- it was scoped

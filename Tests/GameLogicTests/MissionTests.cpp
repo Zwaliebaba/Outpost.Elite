@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
-#include "FlightWorld.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Missions.h"
@@ -230,17 +230,17 @@ namespace GameLogicTests
     }
 
     /// A Constrictor-shaped ship in slot 0, turning, which is what `BRIEF` leaves for `PAS1`.
-    static void SetUpBriefingShip(LoopWorld& _world, std::uint8_t _type, std::uint8_t _roll, std::uint8_t _pitch)
+    static void SetUpBriefingShip(LoopUniverse& _universe, std::uint8_t _type, std::uint8_t _roll, std::uint8_t _pitch)
     {
-      World& world = _world.world;
+      Universe& universe = _universe.universe;
 
-      world.flight.type = _type;
-      world.flight.blueprint = Elite::BlueprintAddress(_type);
-      world.bubble.slots[0] = _type;
-      world.bubble.slots[1] = 0u;
-      world.bubble.slots[2] = 0u;
-      world.view = 1u;      // 6502: QQ11 -- the briefing runs on the space view `BRIEF` set up
-      world.spaceView = 0u; // 6502: VIEW -- forwards
+      universe.flight.type = _type;
+      universe.flight.blueprint = Elite::BlueprintAddress(_type);
+      universe.bubble.slots[0] = _type;
+      universe.bubble.slots[1] = 0u;
+      universe.bubble.slots[2] = 0u;
+      universe.view = 1u;      // 6502: QQ11 -- the briefing runs on the space view `BRIEF` set up
+      universe.spaceView = 0u; // 6502: VIEW -- forwards
 
       /*
        * 6502: what `ZINF` and `NWSHP` leave, plus the roll and pitch `BRL1` writes.
@@ -250,22 +250,22 @@ namespace GameLogicTests
        */
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        world.work[byte] = 0u;
+        universe.work[byte] = 0u;
       }
       /*
        * 6502: what `ZINF` leaves -- 96 in the roof's y and the side's x, and 96 WITH THE SIGN BIT
        * in the nose's z, so the ship faces the player. `TITLE` writes a bare 96 over that third one
        * and gets a ship facing away; a briefing does not, because `BRIEF` never touches it.
        */
-      world.work[14] = 0xE0u;
-      world.work[18] = 96u;
-      world.work[22] = 96u;
+      universe.work[14] = 0xE0u;
+      universe.work[18] = 96u;
+      universe.work[22] = 96u;
 
-      world.flight.slot = 0u; // 6502: XSAV -- which slot `MVEIT` thinks it is moving
-      world.work[29] = _roll;
-      world.work[30] = _pitch;
-      world.work[31] = 0u;
-      world.work[32] = 0u;
+      universe.flight.slot = 0u; // 6502: XSAV -- which slot `MVEIT` thinks it is moving
+      universe.work[29] = _roll;
+      universe.work[30] = _pitch;
+      universe.work[31] = 0u;
+      universe.work[32] = 0u;
 
       /*
        * 6502: INWK+33 and INWK+34 -- the ship's OWN line heap, which `NWSHP` allocates.
@@ -277,38 +277,38 @@ namespace GameLogicTests
        * scribbled were the whole of the disagreement.
        */
       const std::uint16_t heap = static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 0x100u);
-      world.work[Elite::SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(heap & 0xFFu);
-      world.work[Elite::SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(heap >> 8);
-      world.bubble.heapBottom = heap;
+      universe.work[Elite::SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(heap & 0xFFu);
+      universe.work[Elite::SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(heap >> 8);
+      universe.bubble.heapBottom = heap;
 
-      world.bubble.blocks[0] = world.work;
+      universe.bubble.blocks[0] = universe.work;
     }
 
-    /// `FlightLoop` over a `LoopWorld`, which is twelve references nobody should type twice.
-    [[nodiscard]] static Elite::FlightLoop LoopOver(LoopWorld& _world, Elite::FlightScreen& _screen)
+    /// `FlightLoop` over a `LoopUniverse`, which is twelve references nobody should type twice.
+    [[nodiscard]] static Elite::FlightLoop LoopOver(LoopUniverse& _universe, Elite::FlightScreen& _screen)
     {
-      return Elite::FlightLoop{_screen,     _world.keys,       _world.control, _world.options, _world.burst,   _world.heap,
-                               _world.clip, _world.projection, _world.axes,    _world.effects, _world.effects, _world.effects};
+      return Elite::FlightLoop{_screen,     _universe.keys,       _universe.control, _universe.options, _universe.burst,   _universe.heap,
+                               _universe.clip, _universe.projection, _universe.axes,    _universe.effects, _universe.effects, _universe.effects};
     }
 
     /// What `Mirror` does not send: the line heap, the flight model's rotation rates, and `INF`.
-    void MirrorMission(const LoopWorld& _world, Cpu6502& _cpu, const Where& _at, const MissionWhere& _to, std::uint8_t _slot)
+    void MirrorMission(const LoopUniverse& _universe, Cpu6502& _cpu, const Where& _at, const MissionWhere& _to, std::uint8_t _slot)
     {
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        _cpu.memory[address] = _world.heap.Read(address);
+        _cpu.memory[address] = _universe.heap.Read(address);
       }
-      _cpu.memory[_at.lsp] = _world.world.heaps.lsp;
+      _cpu.memory[_at.lsp] = _universe.universe.heaps.lsp;
 
       // 6502: SLSP -- the bottom of the ship line heap, which `NWSHP` allocates downwards from.
-      _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(_world.world.bubble.heapBottom & 0xFFu);
-      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(_world.world.bubble.heapBottom >> 8);
+      _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom & 0xFFu);
+      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom >> 8);
 
-      _cpu.memory[_to.alpha] = _world.world.flight.alpha;
-      _cpu.memory[_to.alp2Next] = _world.world.flight.alp2Next;
-      _cpu.memory[_to.bet2] = _world.world.flight.bet2;
-      _cpu.memory[_to.bet2Next] = _world.world.flight.bet2Next;
-      _cpu.memory[_to.typeByte] = _world.world.flight.type;
+      _cpu.memory[_to.alpha] = _universe.universe.flight.alpha;
+      _cpu.memory[_to.alp2Next] = _universe.universe.flight.alp2Next;
+      _cpu.memory[_to.bet2] = _universe.universe.flight.bet2;
+      _cpu.memory[_to.bet2Next] = _universe.universe.flight.bet2Next;
+      _cpu.memory[_to.typeByte] = _universe.universe.flight.type;
       _cpu.memory[_to.xsav] = _slot;
 
       // 6502: INF -- the pointer `LL9` writes the block through, which is `K% + slot * NI%`.
@@ -319,21 +319,21 @@ namespace GameLogicTests
 
     /// 6502: INWK, byte for byte, and it is asserted BEFORE the pixels on purpose: a divergence in
     /// the block and one in the bitmap look the same through a canvas compare and are not.
-    void CompareBlock(const Cpu6502& _cpu, const LoopWorld& _world, const Where& _at, const std::wstring& _where)
+    void CompareBlock(const Cpu6502& _cpu, const LoopUniverse& _universe, const Where& _at, const std::wstring& _where)
     {
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)], _world.world.work[byte],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)], _universe.universe.work[byte],
                          (_where + L": INWK+" + std::to_wstring(byte)).c_str());
       }
     }
 
     /// 6502: the ship line heap, which `LL9` writes through `XX19`.
-    void CompareHeap(const Cpu6502& _cpu, const LoopWorld& _world, const std::wstring& _where)
+    void CompareHeap(const Cpu6502& _cpu, const LoopUniverse& _universe, const std::wstring& _where)
     {
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        Assert::AreEqual(_cpu.memory[address], _world.heap.Read(address), (_where + L": heap " + std::to_wstring(address)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _universe.heap.Read(address), (_where + L": heap " + std::to_wstring(address)).c_str());
       }
     }
   } // namespace
@@ -381,37 +381,37 @@ namespace GameLogicTests
         {
           for (const std::uint8_t pitch : {std::uint8_t{0}, std::uint8_t{0x7Fu}})
           {
-            LoopWorld world;
-            Seed(world.world, type * 31u + roll + pitch);
-            world.world.LendSunHeap(world.heap);
-            world.world.trumbles.count = 0u;
+            LoopUniverse universe;
+            Seed(universe.universe, type * 31u + roll + pitch);
+            universe.universe.LendSunHeap(universe.heap);
+            universe.universe.trumbles.count = 0u;
 
-            SetUpBriefingShip(world, type, roll, pitch);
+            SetUpBriefingShip(universe, type, roll, pitch);
 
             Cpu6502 cpu = oracle.Fresh();
             Trap(cpu, to);
             ScriptRdkey(cpu, to.rdkey, 0u, 0u, 0x27u);
-            FillScreens(cpu, world.world.canvas, at.screen, 0x1Du);
-            Mirror(world.world, cpu, at);
-            MirrorMission(world, cpu, at, to, 0u);
+            FillScreens(cpu, universe.universe.canvas, at.screen, 0x1Du);
+            Mirror(universe.universe, cpu, at);
+            MirrorMission(universe, cpu, at, to, 0u);
 
             Assert::IsTrue(cpu.CallSubroutine(to.pas1, 2'000'000).completed, L"PAS1 returned");
 
             ScriptedStart start;
             start.key = 0x27u;
-            Elite::FlightScreen screen = world.world.Screen();
-            Elite::FlightLoop loop = LoopOver(world, screen);
-            Elite::MissionScreen mission{loop, start, world.world.extendedPrinter, world.keys, 0u};
+            Elite::FlightScreen screen = universe.universe.Screen();
+            Elite::FlightLoop loop = LoopOver(universe, screen);
+            Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
             const Elite::TitleKey answer = Elite::ShowBriefingShip(mission);
 
             const std::wstring where =
               WidenText("PAS1 (ship " + std::to_string(type) + ", roll " + std::to_string(roll) + ", pitch " + std::to_string(pitch) + ")");
 
             Assert::AreEqual<std::uint32_t>(0x27u, answer.key, (where + L": thiskey").c_str());
-            CompareBlock(cpu, world, at, where);
-            CompareState(cpu, world.world, at, where);
-            CompareScreens(cpu, at.screen, world.world.canvas, 0x1Du, where);
-            CompareHeap(cpu, world, where);
+            CompareBlock(cpu, universe, at, where);
+            CompareState(cpu, universe.universe, at, where);
+            CompareScreens(cpu, at.screen, universe.universe.canvas, 0x1Du, where);
+            CompareHeap(cpu, universe, where);
             ++compared;
           }
         }
@@ -451,21 +451,21 @@ namespace GameLogicTests
         {
           const std::uint8_t type = ((held + quiet) & 1u) != 0u ? Elite::SHIP_COBRA_MK3 : Elite::SHIP_ADDER;
 
-          LoopWorld world;
-          Seed(world.world, quiet * 17u + held * 5u + type);
-          world.world.LendSunHeap(world.heap);
-          world.world.trumbles.count = 0u;
-          world.world.text.row = 0x17u; // so MT23's row 10 is a change rather than a coincidence
-          world.world.text.column = 0x1Du;
+          LoopUniverse universe;
+          Seed(universe.universe, quiet * 17u + held * 5u + type);
+          universe.universe.LendSunHeap(universe.heap);
+          universe.universe.trumbles.count = 0u;
+          universe.universe.text.row = 0x17u; // so MT23's row 10 is a change rather than a coincidence
+          universe.universe.text.column = 0x1Du;
 
-          SetUpBriefingShip(world, type, 0x7Fu, 0x7Fu);
+          SetUpBriefingShip(universe, type, 0x7Fu, 0x7Fu);
 
           Cpu6502 cpu = oracle.Fresh();
           Trap(cpu, to);
           ScriptRdkey(cpu, to.rdkey, held, quiet, 0x27u);
-          FillScreens(cpu, world.world.canvas, at.screen, 0x1Du);
-          Mirror(world.world, cpu, at);
-          MirrorMission(world, cpu, at, to, 0u);
+          FillScreens(cpu, universe.universe.canvas, at.screen, 0x1Du);
+          Mirror(universe.universe, cpu, at);
+          MirrorMission(universe, cpu, at, to, 0u);
 
           Assert::IsTrue(cpu.CallSubroutine(to.pause, 20'000'000).completed, L"PAUSE returned");
           const std::uint32_t theirScans = RdkeyCalls(cpu, to.rdkey);
@@ -474,12 +474,12 @@ namespace GameLogicTests
           start.held = held;
           start.quiet = quiet;
           start.key = 0x27u;
-          Elite::FlightScreen screen = world.world.Screen();
-          Elite::FlightLoop loop = LoopOver(world, screen);
+          Elite::FlightScreen screen = universe.universe.Screen();
+          Elite::FlightLoop loop = LoopOver(universe, screen);
           std::uint8_t galaxy = 0;
-          Elite::MissionScreen mission{loop, start, world.world.extendedPrinter, world.keys, 0u};
-          Elite::MissionCodes codes{mission, world.world.text, galaxy};
-          world.world.codes.to = &codes;
+          Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+          Elite::MissionCodes codes{mission, universe.universe.text, galaxy};
+          universe.universe.codes.to = &codes;
 
           /*
            * Through the PRINTER rather than by calling `PauseForKey`, because the fall-through into
@@ -487,7 +487,7 @@ namespace GameLogicTests
            * text system's. `DETOK2` with A = 22 is what the oracle runs, and this is its opposite
            * number.
            */
-          world.world.extendedPrinter.PrintByte(22u);
+          universe.universe.extendedPrinter.PrintByte(22u);
 
           const std::wstring where =
             WidenText("PAUSE (" + std::to_string(held) + " held, " + std::to_string(quiet) + " quiet, ship " + std::to_string(type) + ")");
@@ -502,13 +502,13 @@ namespace GameLogicTests
           Assert::AreEqual<std::uint32_t>(held + quiet + 1u, theirScans, (where + L": the oracle's RDKEY calls").c_str());
           Assert::AreEqual<std::uint32_t>(theirScans, start.scans, (where + L": RDKEY calls").c_str());
 
-          Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], world.world.text.row, (where + L": YC after MT23").c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], world.world.text.column, (where + L": XC, which MT23 leaves alone").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], universe.universe.text.row, (where + L": YC after MT23").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], universe.universe.text.column, (where + L": XC, which MT23 leaves alone").c_str());
 
-          CompareBlock(cpu, world, at, where);
-          CompareState(cpu, world.world, at, where);
-          CompareScreens(cpu, at.screen, world.world.canvas, 0x1Du, where);
-          CompareHeap(cpu, world, where);
+          CompareBlock(cpu, universe, at, where);
+          CompareState(cpu, universe.universe, at, where);
+          CompareScreens(cpu, at.screen, universe.universe.canvas, 0x1Du, where);
+          CompareHeap(cpu, universe, where);
           ++compared;
         }
       }
@@ -555,10 +555,10 @@ namespace GameLogicTests
           start.quiet = quiet;
           start.key = 0x27u;
 
-          LoopWorld world;
-          Elite::FlightScreen screen = world.world.Screen();
-          Elite::FlightLoop loop = LoopOver(world, screen);
-          Elite::MissionScreen mission{loop, start, world.world.extendedPrinter, world.keys, 0u};
+          LoopUniverse universe;
+          Elite::FlightScreen screen = universe.universe.Screen();
+          Elite::FlightLoop loop = LoopOver(universe, screen);
+          Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
           Elite::WaitForKeyPress(mission);
 
           const std::wstring where = WidenText("PAUSE2 (" + std::to_string(held) + " held, " + std::to_string(quiet) + " quiet)");
@@ -590,17 +590,17 @@ namespace GameLogicTests
       const Where at(oracle);
       const MissionWhere to(oracle);
 
-      LoopWorld world;
-      Seed(world.world, 0x4Du);
-      world.world.LendSunHeap(world.heap);
-      world.world.trumbles.count = 0u;
+      LoopUniverse universe;
+      Seed(universe.universe, 0x4Du);
+      universe.universe.LendSunHeap(universe.heap);
+      universe.universe.trumbles.count = 0u;
 
       Cpu6502 cpu = oracle.Fresh();
       Trap(cpu, to);
       cpu.AddTrap(to.delay);
-      FillScreens(cpu, world.world.canvas, at.screen, 0x1Du);
-      Mirror(world.world, cpu, at);
-      MirrorMission(world, cpu, at, to, 0u);
+      FillScreens(cpu, universe.universe.canvas, at.screen, 0x1Du);
+      Mirror(universe.universe, cpu, at);
+      MirrorMission(universe, cpu, at, to, 0u);
 
       Assert::IsTrue(cpu.CallSubroutine(to.bris, 4'000'000).completed, L"BRIS returned");
 
@@ -617,11 +617,11 @@ namespace GameLogicTests
 
       ScriptedStart start;
       std::uint8_t galaxy = 0;
-      Elite::FlightScreen screen = world.world.Screen();
-      Elite::FlightLoop loop = LoopOver(world, screen);
-      Elite::MissionScreen mission{loop, start, world.world.extendedPrinter, world.keys, 0u};
-      Elite::MissionCodes codes{mission, world.world.text, galaxy};
-      world.world.codes.to = &codes;
+      Elite::FlightScreen screen = universe.universe.Screen();
+      Elite::FlightLoop loop = LoopOver(universe, screen);
+      Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+      Elite::MissionCodes codes{mission, universe.universe.text, galaxy};
+      universe.universe.codes.to = &codes;
 
       Elite::ShowIncomingMessage(mission);
 
@@ -635,10 +635,10 @@ namespace GameLogicTests
        * the screen and moves the cursor, and comparing a character stream would leave out the two
        * things the code actually does. Both sides run the real character printer into the bitmap.
        */
-      CompareState(cpu, world.world, at, L"BRIS");
-      CompareScreens(cpu, at.screen, world.world.canvas, 0x1Du, L"BRIS");
-      Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], world.world.text.column, L"BRIS: XC");
-      Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], world.world.text.row, L"BRIS: YC");
+      CompareState(cpu, universe.universe, at, L"BRIS");
+      CompareScreens(cpu, at.screen, universe.universe.canvas, 0x1Du, L"BRIS");
+      Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], universe.universe.text.column, L"BRIS: XC");
+      Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], universe.universe.text.row, L"BRIS: YC");
     }
 
     /*
@@ -669,19 +669,19 @@ namespace GameLogicTests
 
       for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{4}, std::uint8_t{64}})
       {
-        LoopWorld world;
-        Seed(world.world, view * 13u + 7u);
-        world.world.LendSunHeap(world.heap);
-        world.world.trumbles.count = 0u;
-        world.world.view = view;
-        world.world.text.column = 0x1Du; // 6502: XC -- neither 1 nor 6, so both answers are visible
-        world.world.text.row = 0x11u;
+        LoopUniverse universe;
+        Seed(universe.universe, view * 13u + 7u);
+        universe.universe.LendSunHeap(universe.heap);
+        universe.universe.trumbles.count = 0u;
+        universe.universe.view = view;
+        universe.universe.text.column = 0x1Du; // 6502: XC -- neither 1 nor 6, so both answers are visible
+        universe.universe.text.row = 0x11u;
 
         Cpu6502 cpu = oracle.Fresh();
         Trap(cpu, to);
-        FillScreens(cpu, world.world.canvas, at.screen, 0x1Du);
-        Mirror(world.world, cpu, at);
-        MirrorMission(world, cpu, at, to, 0u);
+        FillScreens(cpu, universe.universe.canvas, at.screen, 0x1Du);
+        Mirror(universe.universe, cpu, at);
+        MirrorMission(universe, cpu, at, to, 0u);
 
         // 6502: DETOK2 with A = 9 -- the dispatch, rather than `MT9` on its own, because that is
         // how a token reaches it and the port's half of the split lives in the printer.
@@ -692,19 +692,19 @@ namespace GameLogicTests
 
         ScriptedStart start;
         std::uint8_t galaxy = 0;
-        Elite::FlightScreen screen = world.world.Screen();
-        Elite::FlightLoop loop = LoopOver(world, screen);
-        Elite::MissionScreen mission{loop, start, world.world.extendedPrinter, world.keys, 0u};
-        Elite::MissionCodes codes{mission, world.world.text, galaxy};
-        world.world.codes.to = &codes;
+        Elite::FlightScreen screen = universe.universe.Screen();
+        Elite::FlightLoop loop = LoopOver(universe, screen);
+        Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+        Elite::MissionCodes codes{mission, universe.universe.text, galaxy};
+        universe.universe.codes.to = &codes;
 
-        world.world.extendedPrinter.PrintByte(9u);
+        universe.universe.extendedPrinter.PrintByte(9u);
 
         const std::wstring where = WidenText("MT9 (from view " + std::to_string(view) + ")");
-        Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], world.world.text.column, (where + L": XC").c_str());
-        Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], world.world.text.row, (where + L": YC").c_str());
-        CompareState(cpu, world.world, at, where);
-        CompareScreens(cpu, at.screen, world.world.canvas, 0x1Du, where);
+        Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], universe.universe.text.column, (where + L": XC").c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], universe.universe.text.row, (where + L": YC").c_str());
+        CompareState(cpu, universe.universe, at, where);
+        CompareScreens(cpu, at.screen, universe.universe.canvas, 0x1Du, where);
         ++compared;
       }
 
@@ -796,12 +796,12 @@ namespace GameLogicTests
           }
 
           // ---- and the text, for the three where the token is a name -------------------------------
-          LoopWorld world;
-          Seed(world.world, galaxy * 7u + (captain ? 1u : 0u));
-          world.world.LendSunHeap(world.heap);
-          world.world.trumbles.count = 0u;
-          world.world.text.column = 1u; // 6502: XC -- `Seed` leaves it at 31, which is off the edge
-          world.world.text.row = 10u;   // 6502: YC -- where MT23 would have put it
+          LoopUniverse universe;
+          Seed(universe.universe, galaxy * 7u + (captain ? 1u : 0u));
+          universe.universe.LendSunHeap(universe.heap);
+          universe.universe.trumbles.count = 0u;
+          universe.universe.text.column = 1u; // 6502: XC -- `Seed` leaves it at 31, which is off the edge
+          universe.universe.text.row = 10u;   // 6502: YC -- where MT23 would have put it
 
           /*
            * 6502: GCNT, and it is `TP+15` -- INSIDE the commander block, one field along from
@@ -812,34 +812,34 @@ namespace GameLogicTests
            * This one did, and every galaxy above zero was silently compared against galaxy zero's
            * token until the two character streams were dumped side by side.
            */
-          world.world.commander.At(Elite::Field::GalaxyNumber) = galaxy;
+          universe.universe.commander.At(Elite::Field::GalaxyNumber) = galaxy;
 
           Cpu6502 cpu = oracle.Fresh();
           Trap(cpu, to);
-          FillScreens(cpu, world.world.canvas, at.screen, 0x1Du);
-          Mirror(world.world, cpu, at);
-          MirrorMission(world, cpu, at, to, 0u);
+          FillScreens(cpu, universe.universe.canvas, at.screen, 0x1Du);
+          Mirror(universe.universe, cpu, at);
+          MirrorMission(universe, cpu, at, to, 0u);
 
           Assert::IsTrue(cpu.CallSubroutine(captain ? to.mt27 : to.mt28, 4'000'000).completed, (where + L": printed").c_str());
 
           ScriptedStart start;
-          Elite::FlightScreen screen = world.world.Screen();
-          Elite::FlightLoop loop = LoopOver(world, screen);
-          Elite::MissionScreen mission{loop, start, world.world.extendedPrinter, world.keys, 0u};
-          Elite::MissionCodes codes{mission, world.world.text, world.world.commander.At(Elite::Field::GalaxyNumber)};
-          world.world.codes.to = &codes;
+          Elite::FlightScreen screen = universe.universe.Screen();
+          Elite::FlightLoop loop = LoopOver(universe, screen);
+          Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+          Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.At(Elite::Field::GalaxyNumber)};
+          universe.universe.codes.to = &codes;
 
           /*
            * Through the control-code dispatch rather than by calling `PrintMissionToken` -- these
            * ARE control codes 27 and 28, and running them the way a token does is what checks that
            * the dispatch reaches them with the right base.
            */
-          world.world.extendedPrinter.PrintByte(captain ? std::uint8_t{27u} : std::uint8_t{28u});
+          universe.universe.extendedPrinter.PrintByte(captain ? std::uint8_t{27u} : std::uint8_t{28u});
 
-          CompareState(cpu, world.world, at, where);
-          CompareScreens(cpu, at.screen, world.world.canvas, 0x1Du, where);
-          Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], world.world.text.column, (where + L": XC").c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], world.world.text.row, (where + L": YC").c_str());
+          CompareState(cpu, universe.universe, at, where);
+          CompareScreens(cpu, at.screen, universe.universe.canvas, 0x1Du, where);
+          Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], universe.universe.text.column, (where + L": XC").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], universe.universe.text.row, (where + L": YC").c_str());
           ++printed;
         }
       }
@@ -904,16 +904,16 @@ namespace GameLogicTests
       {
         for (std::uint32_t progress = 0; progress < 16u; ++progress)
         {
-          LoopWorld world;
-          Seed(world.world, progress * 5u + item.entry);
-          world.world.commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(progress * 17u);
+          LoopUniverse universe;
+          Seed(universe.universe, progress * 5u + item.entry);
+          universe.universe.commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(progress * 17u);
 
           Cpu6502 cpu = oracle.Fresh();
           cpu.AddTrap(to.detok);
           cpu.AddTrap(to.bay);
           for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
           {
-            cpu.memory[static_cast<std::uint16_t>(to.tp + byte)] = world.world.commander.bytes[byte];
+            cpu.memory[static_cast<std::uint16_t>(to.tp + byte)] = universe.universe.commander.bytes[byte];
           }
 
           Assert::IsTrue(cpu.CallSubroutine(item.entry, 200'000).completed, L"the mission returned");
@@ -949,12 +949,12 @@ namespace GameLogicTests
           start.key = 0x27u;
 
           std::uint8_t dockedFlag = 0;
-          Elite::FlightScreen screen = world.world.Screen();
-          Elite::FlightLoop loop = LoopOver(world, screen);
-          Elite::MissionScreen mission{loop, start, world.world.extendedPrinter, world.keys, 0u};
-          Elite::MissionBay bay{world.world.commander, dockedFlag, 0u, 0u, false};
-          Elite::MissionCodes codes{mission, world.world.text, world.world.commander.At(Elite::Field::GalaxyNumber)};
-          world.world.codes.to = &codes;
+          Elite::FlightScreen screen = universe.universe.Screen();
+          Elite::FlightLoop loop = LoopOver(universe, screen);
+          Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+          Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
+          Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.At(Elite::Field::GalaxyNumber)};
+          universe.universe.codes.to = &codes;
 
           const Elite::ForcedKey key = item.run(mission, bay);
 
@@ -968,7 +968,7 @@ namespace GameLogicTests
 
           for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], world.world.commander.bytes[byte],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], universe.universe.commander.bytes[byte],
                              (where + L": TP+" + std::to_wstring(byte)).c_str());
           }
           ++compared;
@@ -1010,9 +1010,9 @@ namespace GameLogicTests
         {
           for (std::uint32_t progress = 0; progress < 16u; ++progress)
           {
-            LoopWorld world;
-            Seed(world.world, progress * 11u + (accept ? 2u : 0u) + (rich ? 1u : 0u));
-            world.world.commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(progress * 17u);
+            LoopUniverse universe;
+            Seed(universe.universe, progress * 11u + (accept ? 2u : 0u) + (rich ? 1u : 0u));
+            universe.universe.commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(progress * 17u);
 
             /*
              * 6502: CASH -- four bytes, big-endian, in tenths of a credit. 100,000 tenths is
@@ -1022,10 +1022,10 @@ namespace GameLogicTests
             const std::uint32_t cash = rich ? 100000u : 100u;
             for (std::size_t byte = 0; byte < 4u; ++byte)
             {
-              world.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + byte] =
+              universe.universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + byte] =
                 static_cast<std::uint8_t>(cash >> (8u * (3u - byte)));
             }
-            world.world.commander.At(Elite::Field::Tribbles) = 0u;
+            universe.universe.commander.At(Elite::Field::Tribbles) = 0u;
 
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(to.detok);
@@ -1033,7 +1033,7 @@ namespace GameLogicTests
             cpu.AddTrap(to.yesno, accept ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
             for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
             {
-              cpu.memory[static_cast<std::uint16_t>(to.tp + byte)] = world.world.commander.bytes[byte];
+              cpu.memory[static_cast<std::uint16_t>(to.tp + byte)] = universe.universe.commander.bytes[byte];
             }
 
             Assert::IsTrue(cpu.CallSubroutine(to.tbrief, 200'000).completed, L"TBRIEF returned");
@@ -1060,12 +1060,12 @@ namespace GameLogicTests
 
             ScriptedKeys keys{accept};
             std::uint8_t dockedFlag = 0;
-            Elite::FlightScreen screen = world.world.Screen();
-            Elite::FlightLoop loop = LoopOver(world, screen);
-            Elite::MissionScreen mission{loop, start, world.world.extendedPrinter, world.keys, 0u};
-            Elite::MissionBay bay{world.world.commander, dockedFlag, 0u, 0u, false};
-            Elite::MissionCodes codes{mission, world.world.text, world.world.commander.At(Elite::Field::GalaxyNumber)};
-            world.world.codes.to = &codes;
+            Elite::FlightScreen screen = universe.universe.Screen();
+            Elite::FlightLoop loop = LoopOver(universe, screen);
+            Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+            Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
+            Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.At(Elite::Field::GalaxyNumber)};
+            universe.universe.codes.to = &codes;
 
             static_cast<void>(Elite::OfferTrumble(mission, bay, keys));
 
@@ -1079,19 +1079,19 @@ namespace GameLogicTests
 
             for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], world.world.commander.bytes[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], universe.universe.commander.bytes[byte],
                                (where + L": TP+" + std::to_wstring(byte)).c_str());
             }
 
             if (accept)
             {
-              Assert::AreEqual<std::uint32_t>(1u, world.world.commander.At(Elite::Field::Tribbles), (where + L": one Trumble").c_str());
+              Assert::AreEqual<std::uint32_t>(1u, universe.universe.commander.At(Elite::Field::Tribbles), (where + L": one Trumble").c_str());
               bought += rich ? 1u : 0u;
               freeTrumbles += rich ? 0u : 1u;
             }
             else
             {
-              Assert::AreEqual<std::uint32_t>(0u, world.world.commander.At(Elite::Field::Tribbles), (where + L": no Trumble").c_str());
+              Assert::AreEqual<std::uint32_t>(0u, universe.universe.commander.At(Elite::Field::Tribbles), (where + L": no Trumble").c_str());
             }
             ++compared;
           }
@@ -1135,36 +1135,36 @@ namespace GameLogicTests
 
       for (std::uint32_t progress = 0; progress < 4u; ++progress)
       {
-        LoopWorld world;
-        Seed(world.world, progress * 23u + 5u);
-        world.world.LendSunHeap(world.heap);
-        world.world.trumbles.count = 0u;
-        world.world.commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(progress * 85u);
+        LoopUniverse universe;
+        Seed(universe.universe, progress * 23u + 5u);
+        universe.universe.LendSunHeap(universe.heap);
+        universe.universe.trumbles.count = 0u;
+        universe.universe.commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(progress * 85u);
 
         /*
          * An EMPTY bubble, because `NWSHP` is what puts the Constrictor in it and a briefing runs
          * on the docked game's ship list. `Seed` fills three slots with a fleet, which would send
          * the Constrictor to slot 3 and leave three other ships for `LL9` to trip over.
          */
-        for (std::size_t slot = 0; slot < world.world.bubble.slots.size(); ++slot)
+        for (std::size_t slot = 0; slot < universe.universe.bubble.slots.size(); ++slot)
         {
-          world.world.bubble.slots[slot] = 0u;
+          universe.universe.bubble.slots[slot] = 0u;
         }
-        for (std::size_t type = 0; type < world.world.bubble.counts.size(); ++type)
+        for (std::size_t type = 0; type < universe.universe.bubble.counts.size(); ++type)
         {
-          world.world.bubble.counts[type] = 0u;
+          universe.universe.bubble.counts[type] = 0u;
         }
-        world.world.bubble.junk = 0u;
-        world.world.bubble.heapBottom = Elite::SHIP_HEAP_TOP;
+        universe.universe.bubble.junk = 0u;
+        universe.universe.bubble.heapBottom = Elite::SHIP_HEAP_TOP;
 
         Cpu6502 cpu = oracle.Fresh();
         Trap(cpu, to);
         cpu.AddTrap(to.delay); // 6502: BRIS's `LDY #100 / JMP DELAY`, which is `WSCAN` in a loop
         cpu.AddTrap(to.brp);   // where both sides stop
 
-        FillScreens(cpu, world.world.canvas, at.screen, 0x1Du);
-        Mirror(world.world, cpu, at);
-        MirrorMission(world, cpu, at, to, 0u);
+        FillScreens(cpu, universe.universe.canvas, at.screen, 0x1Du);
+        Mirror(universe.universe, cpu, at);
+        MirrorMission(universe, cpu, at, to, 0u);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.brief, 200'000'000);
         Assert::IsTrue(run.completed, L"BRIEF reached BRP");
@@ -1185,12 +1185,12 @@ namespace GameLogicTests
         start.key = 0x27u;
 
         std::uint8_t dockedFlag = 0;
-        Elite::FlightScreen screen = world.world.Screen();
-        Elite::FlightLoop loop = LoopOver(world, screen);
-        Elite::MissionScreen mission{loop, start, world.world.extendedPrinter, world.keys, 0u};
-        Elite::MissionBay bay{world.world.commander, dockedFlag, 0u, 0u, false};
-        Elite::MissionCodes codes{mission, world.world.text, world.world.commander.At(Elite::Field::GalaxyNumber)};
-        world.world.codes.to = &codes;
+        Elite::FlightScreen screen = universe.universe.Screen();
+        Elite::FlightLoop loop = LoopOver(universe, screen);
+        Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+        Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
+        Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.At(Elite::Field::GalaxyNumber)};
+        universe.universe.codes.to = &codes;
 
         const std::uint8_t ourToken = Elite::RunConstrictorBriefing(mission, bay);
 
@@ -1205,17 +1205,17 @@ namespace GameLogicTests
 
         for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], world.world.commander.bytes[byte],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], universe.universe.commander.bytes[byte],
                            (where + L": TP+" + std::to_wstring(byte)).c_str());
         }
 
-        Assert::AreEqual(cpu.memory[to.mcnt], world.world.flight.mainLoopCounter, (where + L": MCNT").c_str());
-        Assert::AreEqual(cpu.memory[to.typeByte], world.world.flight.type, (where + L": TYPE").c_str());
+        Assert::AreEqual(cpu.memory[to.mcnt], universe.universe.flight.mainLoopCounter, (where + L": MCNT").c_str());
+        Assert::AreEqual(cpu.memory[to.typeByte], universe.universe.flight.type, (where + L": TYPE").c_str());
 
-        CompareBlock(cpu, world, at, where);
-        CompareState(cpu, world.world, at, where);
-        CompareScreens(cpu, at.screen, world.world.canvas, 0x1Du, where);
-        CompareHeap(cpu, world, where);
+        CompareBlock(cpu, universe, at, where);
+        CompareState(cpu, universe.universe, at, where);
+        CompareScreens(cpu, at.screen, universe.universe.canvas, 0x1Du, where);
+        CompareHeap(cpu, universe, where);
         ++compared;
       }
 

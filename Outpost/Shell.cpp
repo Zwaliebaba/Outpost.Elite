@@ -145,7 +145,7 @@ namespace Outpost
      */
     if (m_flight == nullptr)
     {
-      m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the world
+      m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the universe
       return;
     }
 
@@ -397,8 +397,8 @@ namespace Outpost
       /*
        * 6502: MT8 -- LDA #6 / JSR DOXC, answered here only when there is no flight session.
        *
-       * The docked screens print tokens before the world is built, and this is the one code among
-       * them that a screen with no world can still honour: it is a number into a byte.
+       * The docked screens print tokens before the universe is built, and this is the one code among
+       * them that a screen with no universe can still honour: it is a number into a byte.
        */
       if (m_text != nullptr)
       {

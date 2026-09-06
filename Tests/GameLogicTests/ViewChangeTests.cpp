@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
-#include "FlightWorld.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Arith.h"
@@ -813,29 +813,29 @@ namespace GameLogicTests
         {
           for (const std::uint8_t countdown : {std::uint8_t{0}, std::uint8_t{3}, std::uint8_t{15}})
           {
-            World world;
-            Seed(world, view * 97u + spaceView * 13u + countdown);
-            world.spaceView = spaceView;
-            world.view = 0xEEu; // whatever was up before, which `TT66` overwrites
-            world.status.hyperspaceCountdown = countdown;
+            Universe universe;
+            Seed(universe, view * 97u + spaceView * 13u + countdown);
+            universe.spaceView = spaceView;
+            universe.view = 0xEEu; // whatever was up before, which `TT66` overwrites
+            universe.status.hyperspaceCountdown = countdown;
 
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(oracle.Label("SETL1"));
-            FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-            Mirror(world, cpu, at);
+            FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+            Mirror(universe, cpu, at);
 
             cpu.a = view;
             const Elite::Testing::RunResult run = cpu.CallSubroutine(tt66, 900'000);
             Assert::IsTrue(run.completed, L"TT66 returned");
 
-            Elite::FlightScreen screen = world.Screen();
+            Elite::FlightScreen screen = universe.Screen();
             Elite::SetUpScreen(screen, view);
 
             const std::wstring where = WidenText("TT66(QQ11 " + std::to_string(view) + ", VIEW " + std::to_string(spaceView) + ", QQ22+1 " +
                                                  std::to_string(countdown) + ")");
 
-            CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
-            CompareState(cpu, world, at, where);
+            CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
+            CompareState(cpu, universe, at, where);
 
             named += (view == 0u) ? 1u : 0u;
             counted += (countdown != 0u) ? 1u : 0u;
@@ -878,33 +878,33 @@ namespace GameLogicTests
         {
           for (std::uint8_t to = 0; to < 4u; ++to)
           {
-            World world;
-            Seed(world, view * 31u + from * 7u + to);
-            world.view = view;
-            world.spaceView = from;
+            Universe universe;
+            Seed(universe, view * 31u + from * 7u + to);
+            universe.view = view;
+            universe.spaceView = from;
 
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
-            FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-            Mirror(world, cpu, at);
+            FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+            Mirror(universe, cpu, at);
 
             cpu.x = to;
             const Elite::Testing::RunResult run = cpu.CallSubroutine(look1, 900'000);
             Assert::IsTrue(run.completed, L"LOOK1 returned");
 
-            Elite::FlightScreen screen = world.Screen();
+            Elite::FlightScreen screen = universe.Screen();
             Elite::ChangeView(screen, to);
 
             const std::wstring where =
               WidenText("LOOK1(QQ11 " + std::to_string(view) + ", VIEW " + std::to_string(from) + " -> " + std::to_string(to) + ")");
 
-            CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
-            CompareState(cpu, world, at, where);
+            CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
+            CompareState(cpu, universe, at, where);
 
             // The palette change happens on every path, including the one that does nothing else.
-            Assert::AreEqual<std::size_t>(1u, world.effects.palettes.size(), (where + L": one palette change").c_str());
-            Assert::AreEqual<std::uint32_t>(0u, world.effects.palettes[0], (where + L": and it asks for zero").c_str());
+            Assert::AreEqual<std::size_t>(1u, universe.effects.palettes.size(), (where + L": one palette change").c_str());
+            Assert::AreEqual<std::uint32_t>(0u, universe.effects.palettes[0], (where + L": and it asks for zero").c_str());
 
             if (view == 0u && to == from)
             {
@@ -981,52 +981,52 @@ namespace GameLogicTests
 
       for (const Case& item : CASES)
       {
-        World world;
-        Seed(world, 0x5Au);
-        world.view = 0u;
-        world.spaceView = 1u;
-        world.bubble.junk = item.junk;
-        world.bubble.counts[Elite::SHIP_TYPE_STATION] = item.station;
-        world.status.midJump = item.midJump;
+        Universe universe;
+        Seed(universe, 0x5Au);
+        universe.view = 0u;
+        universe.spaceView = 1u;
+        universe.bubble.junk = item.junk;
+        universe.bubble.counts[Elite::SHIP_TYPE_STATION] = item.station;
+        universe.status.midJump = item.midJump;
 
-        for (std::size_t slot = 0; slot < world.bubble.slots.size(); ++slot)
+        for (std::size_t slot = 0; slot < universe.bubble.slots.size(); ++slot)
         {
-          world.bubble.slots[slot] = 0u;
+          universe.bubble.slots[slot] = 0u;
         }
-        world.bubble.slots[0] = 128u; // the planet
-        world.bubble.slots[1] = 129u; // the sun
+        universe.bubble.slots[0] = 128u; // the planet
+        universe.bubble.slots[1] = 129u; // the sun
         const std::size_t above = static_cast<std::size_t>(item.junk) + 2u;
-        if (above < world.bubble.slots.size())
+        if (above < universe.bubble.slots.size())
         {
-          world.bubble.slots[above] = item.occupant;
+          universe.bubble.slots[above] = item.occupant;
         }
 
-        world.bubble.blocks[0][2] = 0u;
-        world.bubble.blocks[0][5] = 0u;
-        world.bubble.blocks[0][8] = item.planetSign;
-        world.bubble.blocks[0][7] = item.planetHigh;
-        world.bubble.blocks[1][2] = 0u;
-        world.bubble.blocks[1][5] = 0u;
-        world.bubble.blocks[1][8] = item.sunSign;
-        world.bubble.blocks[1][7] = item.sunHigh;
+        universe.bubble.blocks[0][2] = 0u;
+        universe.bubble.blocks[0][5] = 0u;
+        universe.bubble.blocks[0][8] = item.planetSign;
+        universe.bubble.blocks[0][7] = item.planetHigh;
+        universe.bubble.blocks[1][2] = 0u;
+        universe.bubble.blocks[1][5] = 0u;
+        universe.bubble.blocks[1][8] = item.sunSign;
+        universe.bubble.blocks[1][7] = item.sunHigh;
 
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(oracle.Label("SETL1"));
         cpu.AddTrap(oracle.Label("DOVDU19"));
         cpu.AddTrap(oracle.Label("NOISE"));
-        FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-        Mirror(world, cpu, at);
+        FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+        Mirror(universe, cpu, at);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(warp, 900'000);
         Assert::IsTrue(run.completed, L"WARP returned");
 
-        Elite::FlightScreen screen = world.Screen();
+        Elite::FlightScreen screen = universe.Screen();
         Elite::Warp(screen);
 
         const std::wstring where = WidenText(std::string("WARP (") + item.what + ")");
 
-        CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
-        CompareState(cpu, world, at, where);
+        CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
+        CompareState(cpu, universe, at, where);
 
         // The refusal noise is the seam, and the game asking for it is a trap hit at `NOISE`.
         std::size_t noises = 0;
@@ -1034,13 +1034,13 @@ namespace GameLogicTests
         {
           noises += (hit.address == oracle.Label("NOISE")) ? 1u : 0u;
         }
-        Assert::AreEqual<std::size_t>(noises, world.effects.sounds.size(), (where + L": the same number of refusals").c_str());
-        for (const std::uint8_t effect : world.effects.sounds)
+        Assert::AreEqual<std::size_t>(noises, universe.effects.sounds.size(), (where + L": the same number of refusals").c_str());
+        for (const std::uint8_t effect : universe.effects.sounds)
         {
           Assert::AreEqual<std::uint32_t>(Elite::SOUND_BOOP, effect, (where + L": sfxboop").c_str());
         }
 
-        if (world.effects.sounds.empty())
+        if (universe.effects.sounds.empty())
         {
           ++jumped;
         }
@@ -1170,18 +1170,18 @@ namespace GameLogicTests
      */
     TEST_METHOD(TheTitleScreenComesOutInColour)
     {
-      World world;
-      Elite::SetUpLoaderScreen(world.canvas);
+      Universe universe;
+      Elite::SetUpLoaderScreen(universe.canvas);
 
-      Elite::FlightScreen screen = world.Screen();
+      Elite::FlightScreen screen = universe.Screen();
       Elite::SetUpScreen(screen, 13u);
 
       // 6502: comirq1 reading `abraxas` -- the raster split, which the shell does once a frame.
-      Assert::AreEqual<std::uint32_t>(Elite::COLOUR_BANK_DASHBOARD, world.screen.colourBank, L"view 13 asks for the dashboard");
-      world.canvas.SetDashboardShown(true);
+      Assert::AreEqual<std::uint32_t>(Elite::COLOUR_BANK_DASHBOARD, universe.screen.colourBank, L"view 13 asks for the dashboard");
+      universe.canvas.SetDashboardShown(true);
 
       std::array<std::uint8_t, static_cast<std::size_t>(Elite::Canvas::WIDTH) * Elite::Canvas::HEIGHT> resolved{};
-      world.canvas.Resolve(resolved);
+      universe.canvas.Resolve(resolved);
 
       /*
        * The border box's left edge. `BOXS2` sets the two low bits of cell 3, so the pixels are x =
@@ -1238,7 +1238,7 @@ namespace GameLogicTests
        */
       std::size_t ink = 0;
       std::size_t hidden = 0;
-      const std::span<const std::uint8_t> planes = world.canvas.Screen();
+      const std::span<const std::uint8_t> planes = universe.canvas.Screen();
 
       for (int cellRow = Elite::Canvas::DASHBOARD_CELL_ROW; cellRow < Elite::Canvas::CELL_ROWS; ++cellRow)
       {
@@ -1247,7 +1247,7 @@ namespace GameLogicTests
           const int cell = cellRow * Elite::Canvas::CELL_COLUMNS + column;
           const std::uint8_t cellByte = planes[Elite::Canvas::DASHBOARD_CELLS + cell];
           const std::uint8_t palette[4] = {0u, static_cast<std::uint8_t>(cellByte >> 4), static_cast<std::uint8_t>(cellByte & 0x0Fu),
-                                           static_cast<std::uint8_t>(world.canvas.CellColour(cell) & 0x0Fu)};
+                                           static_cast<std::uint8_t>(universe.canvas.CellColour(cell) & 0x0Fu)};
 
           for (int sub = 0; sub < 8; ++sub)
           {

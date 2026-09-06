@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
-#include "FlightWorld.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Commander.h"
@@ -197,21 +197,21 @@ namespace GameLogicTests
               }
             }
 
-            LoopWorld world;
-            Seed(world.world, 4u);
-            world.world.message.delay = delay;
-            world.world.message.token = 200u; // 6502: MCH -- the message `me2` re-sends to erase it
-            world.world.flight.mainLoopCounter = counter;
-            world.world.view = view;
+            LoopUniverse universe;
+            Seed(universe.universe, 4u);
+            universe.universe.message.delay = delay;
+            universe.universe.message.token = 200u; // 6502: MCH -- the message `me2` re-sends to erase it
+            universe.universe.flight.mainLoopCounter = counter;
+            universe.universe.view = view;
 
-            Mirror(world.world, cpu, where);
+            Mirror(universe.universe, cpu, where);
 
             // Stopped at `ytq` -- the skip's own `JMP` -- so a spawn is the run that goes PAST it.
             const Elite::Testing::RunResult run = cpu.CallSubroutine(head, 4'000'000, ytq);
 
-            Elite::FlightScreen screen = world.world.Screen();
-            Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
-                                   world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+            Elite::FlightScreen screen = universe.universe.Screen();
+            Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
+                                   universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
 
             struct Rows final : Elite::ChartEffects
             {
@@ -237,10 +237,10 @@ namespace GameLogicTests
                                  screen.flight.blueprint, false);
             }
 
-            CompareState(cpu, world.world, where, context);
+            CompareState(cpu, universe.universe, where, context);
             static_cast<void>(ytq);
 
-            outcomes.insert(std::to_string(decided == Elite::LoopHead::Spawn ? 1 : 0) + "/" + std::to_string(world.world.message.delay) +
+            outcomes.insert(std::to_string(decided == Elite::LoopHead::Spawn ? 1 : 0) + "/" + std::to_string(universe.universe.message.delay) +
                             "/" + std::to_string(rows.cleared));
             ++compared;
           }
@@ -260,7 +260,7 @@ namespace GameLogicTests
      *
      * The sweep is over what the routine branches on and nothing else -- the two countdowns, the
      * view, the author-names option, the Trumble population and the cabin temperature -- and the
-     * whole world is compared, because `DIALS` draws. What it exists to catch is the shape §6.138
+     * whole universe is compared, because `DIALS` draws. What it exists to catch is the shape §6.138
      * found: three player-visible behaviours that were transcribed into the executable by hand, two
      * of which were never actually there.
      */
@@ -315,16 +315,16 @@ namespace GameLogicTests
               }
             }
 
-            LoopWorld world;
-            Seed(world.world, 3u);
-            world.world.status.laserTemperature = one.laser;
-            world.world.status.laserCount = one.count;
-            world.world.status.cabinTemperature = one.cabin;
-            world.world.view = one.view;
-            world.world.commander.At(Elite::Field::Tribbles) = one.tribbleLow;
-            world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)) = one.tribbleHigh;
+            LoopUniverse universe;
+            Seed(universe.universe, 3u);
+            universe.universe.status.laserTemperature = one.laser;
+            universe.universe.status.laserCount = one.count;
+            universe.universe.status.cabinTemperature = one.cabin;
+            universe.universe.view = one.view;
+            universe.universe.commander.At(Elite::Field::Tribbles) = one.tribbleLow;
+            universe.universe.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)) = one.tribbleHigh;
 
-            Mirror(world.world, cpu, where);
+            Mirror(universe.universe, cpu, where);
             cpu.memory[patg] = one.authors;
             cpu.memory[tribble] = one.tribbleLow;
             cpu.memory[static_cast<std::uint16_t>(tribble + 1u)] = one.tribbleHigh;
@@ -337,22 +337,22 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(mloop, 4'000'000, tt17);
             Assert::IsTrue(run.completed, L"MLOOP reached TT17");
 
-            Elite::FlightScreen screen = world.world.Screen();
-            Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
-                                   world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+            Elite::FlightScreen screen = universe.universe.Screen();
+            Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
+                                   universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
             screen.rng.SetState(seed);
 
-            const std::uint8_t frames = Elite::RunLoopTail(loop, world.world.commander, one.authors, carryIn != 0u);
+            const std::uint8_t frames = Elite::RunLoopTail(loop, universe.universe.commander, one.authors, carryIn != 0u);
 
             const std::wstring context =
               WidenText("MLOOP laser " + std::to_string(one.laser) + " lasct " + std::to_string(one.count) + " view " +
                         std::to_string(one.view) + " trib " + std::to_string(one.tribbleHigh) + " cab " + std::to_string(one.cabin) +
                         " seed " + std::to_string(seed[0]) + " carry " + std::to_string(carryIn));
 
-            CompareState(cpu, world.world, where, context);
-            Assert::AreEqual(cpu.memory[tribble], world.world.commander.At(Elite::Field::Tribbles), (context + L": TRIBBLE").c_str());
+            CompareState(cpu, universe.universe, where, context);
+            Assert::AreEqual(cpu.memory[tribble], universe.universe.commander.At(Elite::Field::Tribbles), (context + L": TRIBBLE").c_str());
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tribble + 1u)],
-                             world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)),
+                             universe.universe.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)),
                              (context + L": TRIBBLE+1").c_str());
             for (std::size_t byte = 0; byte < 4u; ++byte)
             {
@@ -360,9 +360,9 @@ namespace GameLogicTests
                                (context + L": RAND+" + std::to_wstring(byte)).c_str());
             }
 
-            outcomes.insert(std::to_string(frames) + "/" + std::to_string(world.world.status.laserCount) + "/" +
-                            std::to_string(world.effects.sounds.size()) + "/" +
-                            (world.effects.sustains.empty() ? std::string("-") : std::to_string(world.effects.sustains.front())));
+            outcomes.insert(std::to_string(frames) + "/" + std::to_string(universe.universe.status.laserCount) + "/" +
+                            std::to_string(universe.effects.sounds.size()) + "/" +
+                            (universe.effects.sustains.empty() ? std::string("-") : std::to_string(universe.effects.sustains.front())));
             ++compared;
           }
         }

@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->385 tests, oracle present), all <!--count:checks-->twelve repository checks pass,
+(<!--count:tests-->389 tests, oracle present), all <!--count:checks-->twelve repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -45,7 +45,7 @@ Six moves, in order, each a phase with slices and a fidelity gate:
 | **M0** | **The safety net.** A ratchet on the patterns this plan removes; a layout-independent image of the game state for the oracle to compare and the replay to hash; the mutants re-runnable on Linux (they already are). | Every later slice is measured by the same instruments the port was, plus one that sees composition rather than routines. |
 | **M1** | **Typed data.** `Ship`, `Commander`, `Blueprint`, `ShipType`, ship-state flags — each with a byte codec that reproduces the original layout exactly, so the oracle compare stays a byte compare. | Three hundred and twenty-nine numeric byte indices become names; the bytes stop being the model and become the wire format. |
 | **M2** | **Explicit calling conventions.** Value in, value out; the zero-page scratch structs shrink to the handful of channels that genuinely cross routine boundaries, each named. | A reader can see what a routine consumes and produces without knowing what `P` held three files away. |
-| **M3** | **Ownership.** `Elite::World` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
+| **M3** | **Ownership.** `Elite::Universe` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
 | **M4** | **Control flow.** The flight frame, the ship renderer, the AI and the docking computer become pipelines of named stages with typed intermediate results; implicit state machines become explicit ones. | The three routines over five hundred lines each become readable in one sitting. |
 | **M5** | **Polish and the ledger.** Strong types for the remaining bytes, `constexpr` where the data allows, the twenty-one stale file names in `Source-Inventory.md`, and the ADRs that record the decisions. | The corpus describes the tree again. |
 | **M6** | **Detach.** The oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
@@ -70,7 +70,7 @@ answer — is not blocked on them.
 | Q4 | **Do `// 6502:` markers and the ledger stay mandatory after modernisation?** A typed `Ship` has no natural place for `INWK+31`. | Traceability is what lets "where did `TA7` go" be a grep. Dropping it would also break `inventory.py --strict`, which CI runs. | **Yes.** The marker moves to the field or the function that replaces the offset; the ledger's *Home* column follows the file. |
 | Q5 | **Blueprints: parsed or addressed?** `ShipBlueprint.h` argues that a struct "would have to decide what a blueprint IS", because `LL9` walks the vertex bytes through a pointer it advances. | A parsed `Blueprint` with `std::span`s over vertices, edges and faces removes `ShipByte(address)` and the `XX21` self-modification model; the three blueprints whose header disagrees with their extent (`ShipDataTests`) are the risk. | **Parsed**, with the extent taken from the header exactly as `ShipBlueprintExtent` takes it today and the three disagreeing ships carried as they are — the port reads what the header says, so the parse reads the same. |
 | Q6 | **The line heap: an arena with 6502 addresses, or per-ship spans?** `KILLSHP` shuffles every run above a dead ship down; `NWSHP` refuses a ship when the heap would run into the block it is about to write, by comparing two addresses through a carry-dependent subtraction. | Per-ship spans are the clean model and cannot express the refusal without reproducing the same arithmetic. | **Arena kept, addressing changed**: a `HeapOffset` strong type from the top of the arena replaces the raw `std::uint16_t`; the refusal keeps its exact byte chain inside one function (§4.2). |
-| Q7 | **Should the oracle bridge be allowed to grow the label map?** `Where` in `FlightWorld.h` looks up sixty labels by hand. A generic bridge wants the map generated. | `tools/labels.py` already writes `Labels.txt`; a `--fields` mode could emit the C++ table. Generated code is checked in (ADR-004 §3) and needs a `--check`. | **Yes**, as a generated header with a check, like the data tables. |
+| Q7 | **Should the oracle bridge be allowed to grow the label map?** `Where` in `FlightUniverse.h` looks up sixty labels by hand. A generic bridge wants the map generated. | `tools/labels.py` already writes `Labels.txt`; a `--fields` mode could emit the C++ table. Generated code is checked in (ADR-004 §3) and needs a `--check`. | **Yes**, as a generated header with a check, like the data tables. |
 | Q8 | **May `clang-tidy`'s `modernize-*` set be widened?** `.clang-tidy` enables two `modernize-` checks. | The rest (`modernize-use-using`, `-loop-convert`, `-avoid-c-arrays`, `-use-designated-initializers`) would mechanise part of M5 and stop regressions. `WarningsAsErrors: '*'` means each one is a decision. | **Widened one check at a time**, each in its own commit with the fixes it demands, never as a batch. |
 
 **Ruled 2026-09-06, owner.** Q1 **C++20**. Q2 **yes**, the tests may be rewritten through the bridge.
@@ -227,8 +227,8 @@ never built because there is no object to hash.
 Three instruments are in place and every slice below leans on them:
 
 - **The oracle**, per routine: a test sets the same bytes on both sides, runs both, compares the
-  bytes the routine's commentary lists plus the flags its callers read. For the flight world this
-  is `FlightWorld.h`'s `Mirror` (port → 6502 memory, by label) and `CompareState` (6502 memory →
+  bytes the routine's commentary lists plus the flags its callers read. For the flight universe this
+  is `FlightUniverse.h`'s `Mirror` (port → 6502 memory, by label) and `CompareState` (6502 memory →
   port), which already know where sixty labels live. **That pair is the seed of the bridge in
   §4.7**: it is written once per fixture and against the port's *current* struct layout, which is
   why a layout change today would touch it.
@@ -289,7 +289,7 @@ reproduces exactly and must keep reproducing (§4.2).
 across the structs `FlightScreen` (twenty-three), `FlightLoop`, `TradeScreen`, `SaveScreen`,
 `GameStart`, `MissionScreen`, `TitleScreen` and `ClipState`'s neighbours. `ViewChange.h` says it
 plainly: "the struct is the argument list". They are built by `FlightSession`'s constructor, by
-`Main.cpp`'s `StartOf`/`ChartOf`/`JumpOf`/`OptionsOf`, and by `FlightWorld.h`'s `Screen()`, three
+`Main.cpp`'s `StartOf`/`ChartOf`/`JumpOf`/`OptionsOf`, and by `FlightUniverse.h`'s `Screen()`, three
 times over.
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
@@ -337,7 +337,7 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 6502 flag was live, and every caller passes a literal.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,549 `6502:`
-references in `GameLogic/`'s comments; <!--count:oracle-test-files-->49 of the test translation
+references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
 `MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
@@ -366,13 +366,13 @@ Game           Elite::Game -- the mode machine, the outer loops, the key dispatc
    ▲
 Systems        Flight (M%), Render (LL9, PLANET, SUN, STARS), Tactics, Spawn, Docked screens, Text, Sound players, Missions
    ▲
-Model          World { Commander, Bubble{Ship[10]}, LineHeap, Stardust, FlightState, FlightStatus, Screen, Options, Rng ... }   -- owns every byte
+Model          Universe { Commander, Bubble{Ship[10]}, LineHeap, Stardust, FlightState, FlightStatus, Screen, Options, Rng ... }   -- owns every byte
    ▲
 Kernel         EliteTypes (Byte, carry, SignMag24), Arith (value in / value out), Rng, LookupTables, Canvas, Tokens
 ```
 
 Edges point down only. `Systems` never include each other's private workspaces; they communicate
-through `World` and through typed stage results. `Game` is the only thing that knows there are two
+through `Universe` and through typed stage results. `Game` is the only thing that knows there are two
 halves. Nothing below `Ports` includes a Windows header, as now.
 
 ### 4.2 The data model
@@ -454,12 +454,12 @@ way. `Flags` stays for the routines whose callers read `C` or `V` (`TwistSeeds`'
 The `_a`/`_x`/`_y` parameters are renamed for what they carry (`_seed`, `_axisOffset`, `_highBits`)
 at the same time; the `// 6502:` comment keeps the register.
 
-### 4.4 `World`, `Game`, and the mode machine
+### 4.4 `Universe`, `Game`, and the mode machine
 
 ```cpp
 namespace Elite
 {
-  struct World            // every byte of game state, and nothing else. Plain aggregate, value-copyable, hashable.
+  struct Universe            // every byte of game state, and nothing else. Plain aggregate, value-copyable, hashable.
   {
     Commander commander;  CurrentSystem current;  SystemSeeds selected;  Market market;
     Bubble bubble;        LineHeap heap;          PlanetSunState heaps;  Stardust dust;
@@ -477,10 +477,10 @@ namespace Elite
     void Step(const InputFrame& _input);              // one pass of FRCE: a docked pass, a flight frame, or a paused pass
     [[nodiscard]] const Canvas& Frame() const noexcept;
     [[nodiscard]] std::span<const SoundEvent> Sounds() const noexcept;
-    [[nodiscard]] std::uint64_t StateHash() const noexcept;  // over WorldImage (§4.7), so it survives refactors
-    [[nodiscard]] const World& State() const noexcept;
+    [[nodiscard]] std::uint64_t StateHash() const noexcept;  // over UniverseImage (§4.7), so it survives refactors
+    [[nodiscard]] const Universe& State() const noexcept;
   private:
-    World m_world;  Ports& m_ports;
+    Universe m_universe;  Ports& m_ports;
   };
 }
 ```
@@ -554,16 +554,18 @@ order the fall-through runs them, and `OOPS`'s three paths become `Decision::Fat
 
 ### 4.7 The oracle bridge and the replay hash
 
-`Tests/GameLogicTests/WorldImage.h`: one function pair over `World` and the label map —
+`Tests/GameLogicTests/UniverseImage.h`: one function pair over `Universe` and the label map —
 
 ```cpp
-void Materialise(const Elite::World&, Cpu6502&, const Labels&);      // port -> 6502 memory, every label the game has
-void Absorb(const Cpu6502&, Elite::World&, const Labels&);           // and back
-[[nodiscard]] std::uint64_t Hash(const Elite::World&);               // FNV-1a over Materialise's bytes
+void Materialise(const Elite::Universe&, Cpu6502&, const Labels&);      // port -> 6502 memory, every label the game has
+void Absorb(const Cpu6502&, Elite::Universe&, const Labels&);           // and back
+[[nodiscard]] std::uint64_t Hash(const Elite::Universe&);               // FNV-1a over Materialise's bytes
 ```
 
-— which is `FlightWorld.h`'s `Mirror`/`CompareState` promoted to cover the whole state and driven
-by a generated table (`Labels.h`, from `tools/labels.py --fields`, checked like the data tables).
+— which is `FlightUniverse.h`'s `Mirror`/`CompareState` promoted to one table of cells. **Amended at M0-b:**
+there is no generated `Labels.h`. The table maps port fields to label NAMES and sizes, which
+`Labels.txt` cannot supply, and the addresses are looked up at runtime through `OracleImage::Label`
+exactly as `Where` does; Q7 closes as "not needed".
 The invariant every M1–M4 slice is measured by: **`Materialise` produces the same bytes before and
 after the slice for the same game**, and every oracle test compares through it rather than through
 `math.k[3]`. `Game::StateHash` is `Hash`, so the replay suite ADR-003 §3 asked for — the docked
@@ -576,7 +578,7 @@ layout-independent by construction and is the one instrument that sees compositi
 `Presentation.h`'s pacing, and gains one `Platform` class implementing the four ports. `Main.cpp`
 becomes: create the window and the device, build `Game` over `Platform`, and loop `PlanSteps` →
 `game.Step(input)` → present, with `Guarded` around it — the two hundred lines ADR-004 §1
-described. `FlightSession` and `GameShell` are absorbed: the world half into `World`, the eight-
+described. `FlightSession` and `GameShell` are absorbed: the universe half into `Universe`, the eight-
 interface halves into `Platform`. `check_outpost.py` keeps running and has almost nothing to check.
 
 ### 4.9 C++20 used, C++23 held
@@ -690,9 +692,49 @@ the journal.
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
 | **M0-a Ratchet** | `tools/check_modernize.py` counting P1–P11 with `tools/modernize_ratchet.json` as the ceilings; wired into `check_all.py`, the workflow and `check_counts.py`'s names so this document's numbers are checked. | In CI; a deliberately raised count fails `--self-test`. **Built 2026-09-06 with this document** (§8). | 1 |
-| **M0-b WorldImage** | `Materialise`/`Absorb`/`Hash` over the current structs, driven by a generated `Labels.h` (`labels.py --fields`, `--check` in CI). `FlightWorld.h`'s `Mirror`/`CompareState` become calls into it. | Every existing flight-world test passes unchanged through the bridge; `Hash` is stable across two runs and across Debug/Release on the Windows job. | 2–3 |
-| **M0-c Flight replay** | A scripted flight through the null port (launch, fly, fight a seeded Viper, dock) hashed at every step through `Hash`, with the hashes stored beside the docked transcript. | Green; a one-byte mutation anywhere in the flight world changes a stored hash (the harness's own selftest). | 2 |
+| **M0-b UniverseImage** | `Materialise`/`Absorb`/`Compare`/`Hash` over the fixture's `Universe`, as one table of cells with the labels resolved at runtime (the slice plan below says why there is no generated table). `FlightUniverse.h`'s `Mirror`/`CompareState` become calls into it. | Every existing flight-universe test passes unchanged through the bridge; `Hash` is stable across two runs; four tests of the bridge itself. **Built 2026-09-06** (§8). | 2–3 |
+| **M0-c Flight replay** | A scripted flight through the null port (launch, fly, fight a seeded Viper, dock) hashed at every step through `Hash`, with the hashes stored beside the docked transcript. | Green; a one-byte mutation anywhere in the flight universe changes a stored hash (the harness's own selftest). | 2 |
 | **M0-d Mutation baseline on Linux** | `mutate.py --runner portable` for all five units, tallies journaled, so the re-anchoring in later slices has a number to match. | Five units, zero survivors beyond the recorded equivalents. | 1 |
+
+#### M0-b slice plan (written 2026-09-06, before the build; §8 records what the build found)
+
+**Name.** The aggregate is `Universe`, by owner ruling of 2026-09-06 ("we are in space"): the fixture
+`FlightWorld.h` becomes `FlightUniverse.h`, `struct World` becomes `Universe`, `LoopWorld` becomes
+`LoopUniverse`, the bridge is `UniverseImage`, and M3-a's `Elite::World` is `Elite::Universe`. Two
+consequences. `GameLogic/Universe.h` today holds the seed twisting (`TT20`, `TT54`, `TT24`, `TT111`,
+`cpl`, `PDESC`) and file names are unique repo-wide, so **M3-a renames that pair to `Galaxy.h/.cpp`**
+— it is the galaxy generator, and the ledger's *Home* column follows it. And the word "world" where
+it means a PLANET (`Market.h`'s "an agricultural world", `Spawn.cpp`'s meridians, `Universe.cpp`'s
+"two worlds a light year apart", `TheWorldTurningMatchesMV`) is left alone: that is a different noun.
+
+**Decision 1 — where the label table comes from.** Nowhere: it is not a table of addresses. What the
+bridge needs is the map from a port field to a label NAME and a byte count, and that is C++ that
+`Labels.txt` cannot generate. The addresses are resolved at runtime through `OracleImage::Label`, as
+`Where` already resolves sixty of them, and `Where` stays as that cache because thirteen suites read
+its fields directly. §4.7 is amended; Q7 closes.
+
+**Decision 2 — what "the whole state" is before M3-a.** The fixture's `Universe` plus what the suites
+already mirror into it. When M3-a lands, `ImageCells` is re-pointed at `Elite::Universe` in one
+commit; the cell names and addresses do not change, so the stored replay hashes of M0-c survive it —
+which is the property the whole design exists for.
+
+**Decision 3 — the call sites.** `Mirror` and `CompareState` keep their signatures and become the
+bridge's `Materialise` and `Compare`; the forty-nine calls in seven suites are untouched. A cell
+carries its scope — `Seeded`, `Image` or `Compared` — so that the asymmetry the two functions had
+(`Mirror` wrote a superset of what `CompareState` checked) is preserved exactly, and widening the
+compared set is a later, deliberate change with a finding behind it.
+
+**Decision 4 — what the hash covers.** Every cell the image writes except the seeded constants
+(`spasto`). The VIC-II sprite coordinates only when the fixture claims them, because they alias
+`XX21` in the flat image (§6.108). The sound buffer and the rest of `VideoState` are not in the image
+at all: the oracle holds them in hardware registers rather than memory, so they enter the hash at
+M3-a as port-side bytes when `Elite::Universe` owns them.
+
+**Acceptance, as built:** the suite unchanged and green through the bridge on the portable runner;
+four new tests in `UniverseImageTests.cpp` (every cell resolves to an address; a round trip through
+memory loses nothing, the nine-bit sprite x included; the hash is stable across two seeds and notices
+one byte; what is written is what is compared, and one changed byte is one named difference);
+`check_all` green.
 
 ### Phase M1 — Typed data
 
@@ -700,7 +742,7 @@ the journal.
 |---|---|---|---|
 | **M1-a ShipView** | Named accessors over `ShipBlock` (`Axis()`, `Orientation()`, `State()`, `Ai()`, `HeapAddress()`, `Energy()`, `Newb()`, `RollCounter()`...), `static_assert`ed against the offsets; the 329 literal and 107 constant sites migrated; the duplicate offset and type constants removed. Bytes unchanged. | Oracle suite green; `ship-literal-sites` and `ship-offset-sites` at zero in the ratchet; mutants in `Tactics.cpp`, `Missions.cpp` and `Spawn.cpp` re-anchored and re-run. | 3–4 |
 | **M1-b ShipType and the flag types** | `enum class ShipType`, `ShipState`, `AiFlags`, `NewbFlags` with the original bit values; the second naming family deleted. | Green; `check_outpost.py` green after the app's constants follow. | 2 |
-| **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become codec calls. Tests migrate to the bridge. | Green through `WorldImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). | 4–5 |
+| **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become codec calls. Tests migrate to the bridge. | Green through `UniverseImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). | 4–5 |
 | **M1-d Commander** | Typed `Commander` with the seventy-seven-byte codec; `Credits`, `LightYearsTenths`, `Laser`, `Equipment` strong types; `SaveCommander`/`LoadCommander`/checksums over the codec. | `SaveGameTests` and `CommanderTests` green; a commander file from R12's fixture still loads. | 3 |
 | **M1-e Blueprint** | Parsed `Blueprint` table; `ShipByte`/`BlueprintAddress`/`BlueprintFor` removed; `Bubble::stationType`. | `ShipDataTests` green with the three disagreeing ships called out as before; `LL9` suite green. | 3 |
 | **M1-f HeapOffset** | The line heap addressed by offset; `TryReserveHeap` with the exact chain; the sun's heap lent as a span. | `NWSHP`'s refusal sweep green (`ShipSlotTests`); the station-into-sun-heap case (§6.112) green. | 2–3 |
@@ -718,7 +760,7 @@ the journal.
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M3-a World** | `Elite::World` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`JumpState` replaced by `World&` (plus the ports) on every routine; `FlightSession` and `Outpost::Game` lend their members to it. | Green on both legs; `aggregate-refs` at zero. **Windows job is the gate** — this slice cannot be compiled here. | 4 |
+| **M3-a Universe** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`JumpState` replaced by `Universe&` (plus the ports) on every routine; `FlightSession` and `Outpost::Game` lend their members to it. | Green on both legs; `aggregate-refs` at zero. **Windows job is the gate** — this slice cannot be compiled here. | 4 |
 | **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at four. | 4 |
 | **M3-c Game** | `Elite::Game` with `Reset`, `Step`, `Frame`, `Sounds`, `StateHash`; `Perform`, `Leave`, the docked pass, `Advance` and `AdvancePaused` moved from `Main.cpp`; `Mode` explicit. `Main.cpp` at its target shape. | `DockedSessionTests` and the M0-c replay drive `Game::Step` and reproduce their stored hashes; `main-lines` in the ratchet under 300. | 4–5 |
 | **M3-d ADR-007** | State ownership and the replay hash, written from M3-a..c as built. | Accepted. | 1 |
@@ -821,4 +863,15 @@ rule 7 say what changes on the way; P12 counts the dependency so that the ratche
 (3,549 `6502:` references, 49 oracle test files, 7 tools); R19 to R21 are added. ADR-001 §4, ADR-003
 and AGENTS.md R7 carry a one-line pointer each so that nothing in `Design/` disagrees with this
 before M6 amends them for real. The total grows from about 70 sittings to about 90, and the least
-certain of the new numbers is the comment rewrite, which is prose and not code. M0-a is built with this entry; nothing in `GameLogic/` changed.
+certain of the new numbers is the comment rewrite, which is prose and not code.
+
+**2026-09-06 — M0-b built, and `World` is `Universe`.** `Tests/GameLogicTests/UniverseImage.h/.cpp`
+hold the table of cells and its four walks; `Mirror` and `CompareState` are the bridge's wrappers and
+no suite changed a line for it. The rename touched fifteen test files, the two project files, the
+executable's comments where "world" meant the aggregate, and this document; where the word means a
+planet it stays. What the build found: the table is about a thousand cells, of which the ship blocks
+are 370 and the sun's heap 200, and `CompareState`'s first-failure message now says how many cells
+differ as well as which was first — the one visible change, and an improvement.
+The ratchet's `oracle-test-files` ceiling goes UP by one, from 49 to 50, and this entry is the
+record rule 5 asks for: `UniverseImageTests.cpp` loads the oracle because it tests the bridge to
+it, which is the instrument M6-b retires — the file goes with the interpreter, not before. M0-a is built with this entry; nothing in `GameLogic/` changed.

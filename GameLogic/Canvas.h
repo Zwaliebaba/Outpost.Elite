@@ -279,7 +279,7 @@ namespace Elite
      * `Canvas` supplies two of the three inputs already: the sprite POINTERS are screen-RAM bytes
      * it holds and has compared since section 6.73, and the bitmap underneath is its own. The
      * third is `VideoState`, which is the registers, and it is a parameter because it belongs to
-     * the game world rather than to the screen memory.
+     * the game universe rather than to the screen memory.
      *
      * This is the first drawing in the port with NO oracle behind it, and the honest reason is in
      * `VideoState.h`: the game never rendered a composited image into memory, so there is nothing
