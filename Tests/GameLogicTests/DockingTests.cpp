@@ -69,14 +69,6 @@ namespace GameLogicTests
       {
         seams.push_back("ZEKTRAN");
       }
-      void StartTheme() override
-      {
-        seams.push_back("startat");
-      }
-      void StopTheme() override
-      {
-        seams.push_back("stopat");
-      }
       /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
       [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
       {

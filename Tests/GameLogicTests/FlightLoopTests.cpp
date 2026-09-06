@@ -794,7 +794,7 @@ namespace GameLogicTests
       std::uint16_t las, lasct, lasx, lasy, msar, mstg, ecmp, moonflower;
       std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
-      std::uint16_t ma3, ma18, escape, startbd, stopbd;
+      std::uint16_t ma3, ma18, escape;
       std::uint16_t mainLoop, death, doentry, doexp, planet, sfs1;
       std::uint16_t setl1, dovdu19, slsp;
 
@@ -828,8 +828,6 @@ namespace GameLogicTests
 
         ma3 = _oracle.Label("MA3");
         escape = _oracle.Label("ESCAPE");
-        startbd = _oracle.Label("startbd");
-        stopbd = _oracle.Label("stopbd");
         mainLoop = _oracle.Label("M%");
         ma18 = _oracle.Label("MA18");
         death = _oracle.Label("DEATH");
@@ -844,28 +842,16 @@ namespace GameLogicTests
     };
 
     /*
-     * The flight loop's own seams, recording into the universe's sound list.
+     * The flight loop's ONE remaining seam, which is `SFS1`.
      *
-     * One list, because `NOISE` is one routine: the loop reaches it through `FlightLoopEffects` and
-     * `WARP` reaches it through `ViewEffects`, and a frame that boops for a refused warp and then
-     * whooshes for a missile has to compare in that order against the oracle's trap hits.
+     * It was the sounds too, and then the music: `startbd` and `stopbd` were counted here against
+     * the oracle's trap hits until M3-b-2b, and both machines run the player now -- so whether a
+     * tune is playing is `MUPLA`, which `ImageCells` mirrors in and `CompareState` compares out
+     * with everything else the frame touches. `FRS1` and `ANGRY` went the same way in M3-b-1d.
      */
-    struct RecordingLoop final : Elite::FlightLoopEffects
+    struct RecordingLoop final : Elite::SpawnChildEffects
     {
-      struct Pitched
-      {
-        std::uint8_t effect, sustain, frequency;
-      };
-
-
-      /// The universe's carry list, not this object's: the 6502 has ONE `NOISE` and the port reaches
-      /// it through two interfaces, so a comparison against one list needs both to write to it.
-      std::uint32_t musicStarts = 0;
-      std::uint32_t musicStops = 0;
-
-      /// The bubble the sounds are recorded beside. `FRS1` and `ANGRY` were seams on this object
-      /// until M3-b-1d and are calls into `GameLogic` now, so what they write is compared through
-      /// the ship blocks like everything else.
+      /// The bubble the spawns are recorded beside.
       Universe& universe;
 
       explicit RecordingLoop(Universe& _universe) noexcept
@@ -873,14 +859,6 @@ namespace GameLogicTests
       {
       }
 
-      void StartDockingMusic() override
-      {
-        ++musicStarts;
-      }
-      void StopDockingMusic() override
-      {
-        ++musicStops;
-      }
       bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
       {
         children.push_back({_aiFlag, Elite::Byte(_type)});
@@ -1178,8 +1156,6 @@ namespace GameLogicTests
       cpu.AddTrap(_loop.setl1);
       cpu.AddTrap(_loop.dovdu19);
       cpu.AddTrap(_loop.sfs1, _frame.effects.childSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
-      cpu.AddTrap(_loop.startbd);
-      cpu.AddTrap(_loop.stopbd);
 
 
       /*
@@ -1252,22 +1228,12 @@ namespace GameLogicTests
       std::uint32_t escaped = 0;
       std::uint32_t died = 0;
       std::uint32_t docked = 0;
-      std::uint32_t starts = 0;
-      std::uint32_t stops = 0;
 
       for (const Cpu6502::TrapHit& hit : cpu.trapHits)
       {
         if (hit.address == _loop.ma3 || hit.address == _loop.ma18)
         {
           ++reachedEnd;
-        }
-        else if (hit.address == _loop.startbd)
-        {
-          ++starts;
-        }
-        else if (hit.address == _loop.stopbd)
-        {
-          ++stops;
         }
       }
 
@@ -1301,10 +1267,6 @@ namespace GameLogicTests
        * -- `LASLI` and `OUCH` open a `DORND` on it (§6.86, §6.88) -- lands in `RAND`, which this
        * comparison already carries. Nothing is excluded by name any more.
        */
-
-
-      Assert::AreEqual(starts, _frame.effects.musicStarts, (_context + L": startbd").c_str());
-      Assert::AreEqual(stops, _frame.effects.musicStops, (_context + L": stopbd").c_str());
 
       // ---- the universe -----------------------------------------------------------------------------
       CompareScreens(cpu, _at.screen, _frame.universe.canvas, 0x1Du, _context);
@@ -1545,7 +1507,8 @@ namespace GameLogicTests
         if (item.fire && (item.target & 0x80u) != 0u)
         {
           ++skipped;
-          Assert::AreEqual<std::uint32_t>(0u, frame.effects.musicStops, (where + L": the cancel key was skipped").c_str());
+          Assert::AreEqual<std::uint8_t>(0xFFu, frame.universe.control.dockingComputer,
+                                         (where + L": the cancel key was skipped").c_str());
           Assert::AreEqual<std::uint8_t>(1u, frame.universe.commander.energyBomb,
                                          (where + L": and so was the bomb").c_str());
         }
@@ -2419,8 +2382,6 @@ namespace GameLogicTests
         // Sound and the VIC-II only: everything that draws or thinks runs for real.
         cpu.AddTrap(loop.setl1);
         cpu.AddTrap(loop.dovdu19);
-        cpu.AddTrap(loop.startbd);
-        cpu.AddTrap(loop.stopbd);
 
         FillScreens(cpu, frame.universe.canvas, at.screen, 0x1Du);
         Mirror(frame.universe, cpu, at);

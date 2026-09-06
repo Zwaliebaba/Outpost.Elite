@@ -42,6 +42,9 @@ namespace GameLogicTests
 
   namespace
   {
+    /// 6502: SID -- the chip's registers, which the interpreter treats as memory.
+    constexpr std::uint16_t SID_BASE = 0xD400;
+
     bool OracleMissing()
     {
       const OracleImage& oracle = OracleImage::Instance();
@@ -89,31 +92,14 @@ namespace GameLogicTests
     }
 
     /*
-     * 6502: stopbd, which `RES2` opens with -- and it is a `FlightLoopEffects` rather than a
-     * `StartUpEffects`, so it needs its own recorder (M3-b-1e).
+     * `RecordingMusic` WAS HERE AND IS NOT ANY MORE (M3-b-2b).
      *
-     * `RESET` and `RES2` were seams on `StartUpEffects` until then, and the sequence's list said
-     * they had been reached. They are `Flight.cpp`'s routines now and run on both sides, so what
-     * the list carries is what THEY reach: one `JSR stopbd` each. On the oracle it has to be
-     * trapped at its own address rather than left to fall through into `stopat`, which is the
-     * next routine in the binary and the theme's stop.
+     * It recorded `RES2`'s `JSR stopbd` into the same list as the theme's `startat` and `stopat`,
+     * and the oracle side trapped all three so that neither machine ran them. Both run them now --
+     * `Music.cpp`'s routines over `Universe::music` -- so what the two sides are compared on is the
+     * PLAYER'S STATE and the SID WRITES it makes, which is a byte comparison rather than a tally
+     * (§6.73's corollary: a seam is what a suite counts, and the count goes with it).
      */
-    struct RecordingMusic final : Elite::FlightLoopEffects
-    {
-      std::vector<Seam>& seams;
-
-      explicit RecordingMusic(std::vector<Seam>& _seams) noexcept
-        : seams(_seams)
-      {
-      }
-
-      void StopDockingMusic() override
-      {
-        seams.push_back({"stopbd", 0, 0, 0});
-      }
-      void StartDockingMusic() override {}
-      bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
-    };
 
     /// The port's side: every seam recorded, and the title screen answering from a script.
     class RecordingStart : public Elite::StartUpEffects
@@ -127,14 +113,6 @@ namespace GameLogicTests
       void ClearKeyLogger() override
       {
         seams.push_back({"ZEKTRAN", 0, 0, 0});
-      }
-      void StartTheme() override
-      {
-        seams.push_back({"startat", 0, 0, 0});
-      }
-      void StopTheme() override
-      {
-        seams.push_back({"stopat", 0, 0, 0});
       }
 
       // Reached by DOENTRY rather than by the start sequence, so neither script here should see one.
@@ -447,28 +425,17 @@ namespace GameLogicTests
                                         L"RESET should fall into RES2 rather than returning");
 
       const Seam ZEK{"ZEKTRAN", 0, 0, 0};
-      const Seam START{"startat", 0, 0, 0};
-      const Seam STOP{"stopat", 0, 0, 0};
-      const Seam BD{"stopbd", 0, 0, 0};
       const Seam FIRST{"TITLE", Elite::TITLE_LOAD_TOKEN, Elite::Byte(Elite::ShipType::CobraMk3), Elite::TITLE_COBRA_DISTANCE};
       const Seam SECOND{"TITLE", Elite::TITLE_START_TOKEN, Elite::Byte(Elite::ShipType::Adder), Elite::TITLE_ADDER_DISTANCE};
 
       const std::vector<Script> SCRIPTS = {
-        {"N at the prompt", false, 'N', {}, {ZEK, START, FIRST, SECOND, STOP}},
-        {"a key that is not Y", false, ' ', {}, {ZEK, START, FIRST, SECOND, STOP}},
-        {"no key at all", false, 0, {}, {ZEK, START, FIRST, SECOND, STOP}},
-        {"Y, then leave the menu", false, Elite::KEY_YES_INTERNAL, {'5'}, {ZEK, START, FIRST, STOP, START, SECOND, STOP}},
-        {"Y, toggle the media, then leave",
-         false,
-         Elite::KEY_YES_INTERNAL,
-         {'3', '5'},
-         {ZEK, START, FIRST, STOP, START, SECOND, STOP}},
-        {"a cold start", true, 'N', {}, {BD, BD, ZEK, START, FIRST, SECOND, STOP}},
-        {"a cold start into the menu",
-         true,
-         Elite::KEY_YES_INTERNAL,
-         {'5'},
-         {BD, BD, ZEK, START, FIRST, STOP, START, SECOND, STOP}},
+        {"N at the prompt", false, 'N', {}, {ZEK, FIRST, SECOND}},
+        {"a key that is not Y", false, ' ', {}, {ZEK, FIRST, SECOND}},
+        {"no key at all", false, 0, {}, {ZEK, FIRST, SECOND}},
+        {"Y, then leave the menu", false, Elite::KEY_YES_INTERNAL, {'5'}, {ZEK, FIRST, SECOND}},
+        {"Y, toggle the media, then leave", false, Elite::KEY_YES_INTERNAL, {'3', '5'}, {ZEK, FIRST, SECOND}},
+        {"a cold start", true, 'N', {}, {ZEK, FIRST, SECOND}},
+        {"a cold start into the menu", true, Elite::KEY_YES_INTERNAL, {'5'}, {ZEK, FIRST, SECOND}},
       };
 
       std::uint32_t compared = 0;
@@ -496,9 +463,13 @@ namespace GameLogicTests
         constexpr std::uint16_t KERNAL_SAVE = 0xFFD8;
         constexpr std::uint16_t KERNAL_LOAD = 0xFFD5;
 
+        /*
+         * ONE TRAP WHERE THERE WERE FOUR (M3-b-2b). `startat`, `stopat` and `stopbd` are trapped
+         * nowhere now: both machines run the music player, and the SID writes below are what the
+         * comparison is made of.
+         */
         std::vector<std::pair<std::uint16_t, std::string>> named = {
-          {oracle.Label("ZEKTRAN"), "ZEKTRAN"}, {oracle.Label("startat"), "startat"},
-          {oracle.Label("stopat"), "stopat"},    {oracle.Label("stopbd"), "stopbd"},
+          {oracle.Label("ZEKTRAN"), "ZEKTRAN"},
         };
         for (const auto& entry : named)
         {
@@ -510,6 +481,9 @@ namespace GameLogicTests
         {
           cpu.AddTrap(oracle.Label(seam));
         }
+
+        // 6502: SID -- every store the music makes, in order, which is what the port's log holds.
+        cpu.LogStores(SID_BASE, static_cast<std::uint16_t>(SID_BASE + 0x18));
 
         for (std::size_t index = 0; index < image.size(); ++index)
         {
@@ -650,10 +624,10 @@ namespace GameLogicTests
         std::uint8_t& dockedFlag = universe.dockedFlag;
 
         RecordingStart effects({script.firstAnswer, 0});
-        RecordingMusic music(effects.seams); ///< `RES2`'s `JSR stopbd`, in the same list and order
+        Elite::SidWriteLog sid; ///< 6502: SID -- what `startat`, `stopat` and `stopbd` write
         NullSeams nulls;
-        Elite::Ports ports{recursive, characters, sink,    nulls, nulls, nulls,       music,
-                           extended,  effects,    keys,    nulls, lineEffects, store};
+        Elite::Ports ports{recursive, characters, sink,  nulls,       nulls, nulls, sid,
+                           extended,  effects,    keys,  nulls,       lineEffects, store};
 
         /*
          * 6502: msblob -- the one thing the sequence draws, and a count cannot say so any more
@@ -692,6 +666,27 @@ namespace GameLogicTests
             seams[index] == effects.seams[index] && seams[index] == script.expected[index],
             (where + L": seam " + std::to_wstring(index) + L" -- game " + Describe(seams) + L", port " + Describe(effects.seams)).c_str());
         }
+
+        /*
+         * 6502: SID and MUPLA -- what the music did, on both machines, since neither is trapped.
+         *
+         * The order matters and the picture does not (`SoundEffects.h`): `BDENTRY` runs the chip's
+         * registers down and then sets four of them, which a real SID hears as a gate falling and
+         * rising. So the writes are compared one at a time rather than as a final state.
+         */
+        Assert::AreEqual<std::size_t>(0, sid.dropped, (where + L": the port's SID log overflowed").c_str());
+        Assert::AreEqual<std::size_t>(cpu.stores.size(), sid.count, (where + L": how many SID writes").c_str());
+        for (std::size_t index = 0; index < sid.count; ++index)
+        {
+          const std::wstring at = where + L" SID write " + std::to_wstring(index);
+          Assert::AreEqual<int>(cpu.stores[index].address - SID_BASE, sid.writes[index].reg, (at + L": register").c_str());
+          Assert::AreEqual<int>(cpu.stores[index].value, sid.writes[index].value, (at + L": value").c_str());
+        }
+
+        Assert::AreEqual<std::uint8_t>(cpu.memory[oracle.Label("MUPLA")], universe.music.playing,
+                                       (where + L": MUPLA -- whether a tune is playing").c_str());
+        Assert::AreEqual<std::uint8_t>(cpu.memory[oracle.Label("MULIE")], universe.status.titleReset,
+                                       (where + L": MULIE -- the title screen's bracket").c_str());
 
         // 6502: LDA #3 / JSR DOXC, which is the port's text.column and not a seam.
         Assert::IsTrue(sawColumn, (where + L": the game should set the prompt column").c_str());

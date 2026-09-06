@@ -45,12 +45,11 @@
 namespace GameLogicTests
 {
 
-  class FlightPort final : public Elite::FlightLoopEffects,
+  class FlightPort final : public Elite::SpawnChildEffects,
                            public Elite::ShipDrawEffects,
                            public Elite::ControlEffects,
                            public Elite::SightEffects,
                            public Elite::ExplosionEffects,
-                           public Elite::ViewEffects,
                            public Elite::ChartEffects
   {
   public:
@@ -70,7 +69,7 @@ namespace GameLogicTests
 
     FlightPort()
       : ports{universe.printer,          universe.characters, universe.characters, *this,           *this,
-              *this,                     *this,               universe.extendedPrinter, universe.unused,
+              *this,                     sidLog,              universe.extendedPrinter, universe.unused,
               universe.unused,           universe.unused,     universe.unused,     universe.unused}
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
@@ -99,12 +98,11 @@ namespace GameLogicTests
     /// 6502: sound_variables -- the universe's since M3-b-2a, and this is the name the
     /// interrupt tick and the replay hash already used.
     Elite::SoundBuffer& sound = universe.sound;
-    Elite::MusicPlayer music;
+    Elite::MusicPlayer& music = universe.music;
     Elite::SidWriteLog sidLog;
 
-    std::uint8_t docked = 0xFFu;   ///< 6502: QQ12
-    std::uint8_t rasterMode = 0;   ///< 6502: L1M -- what `SETL1` last wrote
-    std::uint32_t palettes = 0;    ///< `DOVDU19` calls, counted because the port has no VIC to write
+    std::uint8_t docked = 0xFFu; ///< 6502: QQ12
+    std::uint8_t rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote
 
     /// The keyboard as the script holds it: one entry per C64 matrix position, non-zero for held.
     /// `ScanKeyboard` turns it into `keys` the way `RDKEY` fills `KLO`.
@@ -161,16 +159,8 @@ namespace GameLogicTests
       return FoldBytes(digest, rest);
     }
 
-    // ---- Elite::FlightLoopEffects -----------------------------------------------------------------
+    // ---- Elite::SpawnChildEffects ------------------------------------------------------------------
 
-    void StartDockingMusic() override
-    {
-      Elite::StartDockingMusic(music, sidLog);
-    }
-    void StopDockingMusic() override
-    {
-      Elite::StopDockingMusic(music, universe.status.titleReset, sound, sidLog);
-    }
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
     {
       return Elite::SpawnChildShip(universe.bubble, universe.work, universe.rng, universe.flight.slot, universe.flight.type, _aiFlag,
@@ -238,7 +228,7 @@ namespace GameLogicTests
       Elite::ClearMessageRows(universe.canvas, universe.printer, universe.text, universe.characters.state, universe.message);
     }
 
-    // ---- Elite::SightEffects, Elite::ExplosionEffects and Elite::ViewEffects --------------------
+    // ---- Elite::SightEffects and Elite::ExplosionEffects ----------------------------------------
 
     void SetRasterMode(std::uint8_t _mode) override
     {
@@ -264,13 +254,8 @@ namespace GameLogicTests
     {
       Elite::ApplyMaskSprites(universe.video, _mask);
     }
-    void SetPalette(std::uint8_t) override
-    {
-      ++palettes;
-    }
-
     /// The seams and the text machinery, last because every reference in it is bound at
-    /// construction. Ten where the two aggregates held thirty-nine (M3-a).
+    /// construction. Thirteen where the two aggregates held thirty-nine (M3-a).
     Elite::Ports ports;
   };
 

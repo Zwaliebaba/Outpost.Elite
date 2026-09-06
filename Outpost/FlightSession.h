@@ -69,16 +69,14 @@ namespace Outpost
    * What DOES work is the frame itself: the controls, the stardust, the dashboard, the planet, the
    * ship renderer and all sixteen parts of `M%`.
    */
-  class FlightSession final : public Elite::FlightLoopEffects,
+  class FlightSession final : public Elite::SpawnChildEffects,
                               public Elite::ShipDrawEffects,
                               public Elite::ControlEffects,
                               public Elite::SightEffects,
-                              public Elite::ExplosionEffects,
-                              public Elite::ViewEffects
+                              public Elite::ExplosionEffects
   {
   public:
-    FlightSession(Window& _window, Elite::Universe& _universe, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music,
-                  SoundOutput& _audio) noexcept;
+    FlightSession(Window& _window, Elite::Universe& _universe) noexcept;
 
     FlightSession(const FlightSession&) = delete;
     FlightSession& operator=(const FlightSession&) = delete;
@@ -114,10 +112,8 @@ namespace Outpost
      */
     void SyncVideoRegisters() noexcept;
 
-    // ---- Elite::FlightLoopEffects -----------------------------------------------------------------
+    // ---- Elite::SpawnChildEffects ------------------------------------------------------------------
 
-    void StartDockingMusic() override;
-    void StopDockingMusic() override;
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override;
 
     // ---- Elite::ShipDrawEffects -----------------------------------------------------------------
@@ -144,7 +140,7 @@ namespace Outpost
     // universe's own heaps and the comparison is the chart's pixels.
     void RunDockingComputer(Elite::Ship& _work) override;
 
-    // ---- Elite::SightEffects and Elite::ViewEffects ----------------------------------------------
+    // ---- Elite::SightEffects ----------------------------------------------------------------------
 
     /// `SetRasterMode` is `Elite::ExplosionEffects`'s as well as `SightEffects`'s -- one `SETL1` in
     /// the game, one method here, and one override satisfying both interfaces.
@@ -165,7 +161,6 @@ namespace Outpost
     void SetSightColour(std::uint8_t _colour) override;
     void SetSpritesEnabled(std::uint8_t _mask) override;
     void MaskSprites(std::uint8_t _mask) override;
-    void SetPalette(std::uint8_t _colour) override;
 
     // ---- Elite::ExplosionEffects ----------------------------------------------------------------
 
@@ -187,9 +182,6 @@ namespace Outpost
 
     /// 6502: the sound buffer, the music player and the chip they write -- the composition root's,
     /// because the docked half beeps and starts the theme through the shell.
-    Elite::SoundBuffer& m_sound;
-    Elite::MusicPlayer& m_music;
-    SoundOutput& m_audio;
 
     std::uint8_t m_rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote into the handler
 

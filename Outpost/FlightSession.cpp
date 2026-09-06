@@ -54,13 +54,9 @@ namespace Outpost
     constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
   } // namespace
 
-  FlightSession::FlightSession(Window& _window, Elite::Universe& _universe, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music,
-                               SoundOutput& _audio) noexcept
+  FlightSession::FlightSession(Window& _window, Elite::Universe& _universe) noexcept
     : m_window(_window),
-      m_universe(_universe),
-      m_sound(_sound),
-      m_music(_music),
-      m_audio(_audio)
+      m_universe(_universe)
   {
     /*
      * TWO BYTES THE GAME WOULD HAVE HAD AND A FRESH C++ OBJECT DOES NOT (§6.95).
@@ -132,18 +128,6 @@ namespace Outpost
     // split and single-colour in colour 0 below it, so it never draws over the dashboard.
     m_universe.canvas.SetSpriteMulticolour(spaceView.spriteMulticolour, dashboard.spriteMulticolour);
     m_universe.canvas.SetExplosionColour(spaceView.explosionColour, dashboard.explosionColour);
-  }
-
-  void FlightSession::StartDockingMusic()
-  {
-    // 6502: startbd -- BDENTRY's writes go to the output's direct log, ahead of the next interrupt.
-    Elite::StartDockingMusic(m_music, m_audio.Direct());
-  }
-
-  void FlightSession::StopDockingMusic()
-  {
-    // 6502: stopbd -- which reads MULIE, the title screen's bracket around its RESET.
-    Elite::StopDockingMusic(m_music, m_universe.status.titleReset, m_sound, m_audio.Direct());
   }
 
   // ---- the bubble ---------------------------------------------------------------------------------
@@ -321,14 +305,6 @@ namespace Outpost
   void FlightSession::MaskSprites(std::uint8_t _mask)
   {
     Elite::ApplyMaskSprites(m_universe.video, _mask); // 6502: LDA VIC+&15 / AND #.. / STA VIC+&15
-  }
-
-  void FlightSession::SetPalette(std::uint8_t _colour)
-  {
-    // 6502: DOVDU19 -- a mode-1 palette command for the BBC's I/O processor, and the upstream
-    // source says in as many words that it does nothing in this version. `LOOK1` calls it with
-    // A = 0 before it has even looked at the view, so the port keeps the call and not an effect.
-    (void)_colour;
   }
 
 } // namespace Outpost

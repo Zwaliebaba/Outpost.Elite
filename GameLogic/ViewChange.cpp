@@ -352,7 +352,8 @@ namespace Elite
 
   void ChangeView(Universe& _universe, Ports& _ports, std::uint8_t _to) noexcept
   {
-    _ports.view.SetPalette(0u); // 6502: LDA #0 / JSR DOVDU19
+    // 6502: LDA #0 / JSR DOVDU19 -- an RTS on this build, and `LOOK1` makes it the first thing it
+    // does, before it has even looked at the view.
 
     // 6502: LDY QQ11 / BNE LQ -- a chart or a text screen takes the short path.
     if (_universe.view != 0u)

@@ -9,6 +9,7 @@
 #include "ExtendedTokens.h"
 #include "Lasers.h"
 #include "Market.h"
+#include "Music.h"
 #include "LineHeap.h"
 #include "Rng.h"
 #include "SoundEffects.h"
@@ -240,6 +241,20 @@ namespace Elite
      * copies with the rest of the universe.
      */
     SoundBuffer sound;
+
+    /*
+     * 6502: music_variables and MUPLA -- the docking music and the title theme (M3-b-2b).
+     *
+     * The same argument as the buffer above and one step further out: `startbd`, `stopbd`, `startat`
+     * and `stopat` are `Music.cpp`'s routines over this struct, and what makes them a PORT rather
+     * than pure memory is that they write the SID directly -- `BDENTRY` zeroes the chip and `stopat`
+     * runs its twenty-five registers down -- where `NOISE` only fills a buffer. So the state is
+     * here and the register writes go to `Ports::sid`, which is §4.5's `SoundSink`.
+     *
+     * `MusicOptions` travels inside it because the pause screen's four toggles are what `startbd`
+     * reads to decide whether to play at all, and they are the player's rather than the screen's.
+     */
+    MusicPlayer music;
 
     /*
      * 6502: LSO -- the sun's heap, which `NWSPS` hands to the SPACE STATION (§6.112).

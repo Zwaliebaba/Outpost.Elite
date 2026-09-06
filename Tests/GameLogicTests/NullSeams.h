@@ -18,7 +18,7 @@
 #include <span>
 
 /*
- * The ten seams `Elite::Ports` names, all answered with nothing (slice M3-a-3).
+ * The seams `Elite::Ports` names, all answered with nothing (slice M3-a-3).
  *
  * `Ports` is one struct over the whole library, so every fixture has to supply every reference in
  * it -- and most fixtures reach four or five. This is what the rest get: an object that satisfies
@@ -38,10 +38,9 @@ namespace GameLogicTests
 {
 
   struct NullSeams : Elite::ShipDrawEffects,
-                     Elite::FlightLoopEffects,
+                     Elite::SpawnChildEffects,
                      Elite::StartUpEffects,
                      Elite::SightEffects,
-                     Elite::ViewEffects,
                      Elite::KeySource,
                      Elite::TradeScreenEffects,
                      Elite::LineEntryEffects,
@@ -51,15 +50,11 @@ namespace GameLogicTests
     void DrawPlanetOrSun() override {}
     void DrawExplosion() override {}
 
-    // Elite::FlightLoopEffects, and Elite::SpawnChildEffects under it
-    void StartDockingMusic() override {}
-    void StopDockingMusic() override {}
+    // Elite::SpawnChildEffects
     bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
 
     // Elite::StartUpEffects
     void ClearKeyLogger() override {}
-    void StartTheme() override {}
-    void StopTheme() override {}
     Elite::TitleKey ScanTitleKeys(Elite::KeyLogger&) override { return {}; }
     void WaitFrames(std::uint8_t) override {}
     std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override { return 0; }
@@ -69,9 +64,6 @@ namespace GameLogicTests
     void SetSightColour(std::uint8_t) override {}
     void SetSpritesEnabled(std::uint8_t) override {}
     void MaskSprites(std::uint8_t) override {}
-
-    // Elite::ViewEffects
-    void SetPalette(std::uint8_t) override {}
 
     // Elite::KeySource -- `TT217` BLOCKS in the game, so a fixture that reached it would hang
     // rather than fail; this answers a key nothing dispatches.

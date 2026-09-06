@@ -539,12 +539,10 @@ namespace GameLogicTests
      * or make a noise. Running them inside the interpreter would compare a dashboard the fixture
      * does not have, so both sides are trapped and counted and the COUNTS are what agree.
      */
-    struct CountingEffects final : Elite::FlightLoopEffects, Elite::ShipDrawEffects
+    struct CountingEffects final : Elite::SpawnChildEffects, Elite::ShipDrawEffects
     {
       std::vector<std::uint8_t> spawned;
 
-      void StartDockingMusic() override {}
-      void StopDockingMusic() override {}
       bool SpawnChild(std::uint8_t, Elite::ShipType _type) override
       {
         spawned.push_back(Elite::Byte(_type));

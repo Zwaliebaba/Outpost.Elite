@@ -123,19 +123,11 @@ namespace GameLogicTests
         Note("flush");
       }
 
-      // 6502: ZEKTRAN, startat, stopat and TITLE. `RESET`, `RES2` and `msblob` were here until
-      // M3-b-1e and are calls into `GameLogic` now.
+      // 6502: ZEKTRAN and TITLE. `RESET`, `RES2` and `msblob` were here until M3-b-1e, and
+      // `startat` and `stopat` until M3-b-2b; all five are calls into `GameLogic` now.
       void ClearKeyLogger() override
       {
         Note("zektran");
-      }
-      void StartTheme() override
-      {
-        Note("music on");
-      }
-      void StopTheme() override
-      {
-        Note("music off");
       }
       /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
       [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
@@ -277,7 +269,7 @@ namespace GameLogicTests
           recursive(characters),
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng, &shell),
-          ports{recursive, characters, sink,  nulls, nulls, nulls, nulls,
+          ports{recursive, characters, sink,  nulls, nulls, nulls, sid,
                 extended,  shell,      keys,  shell, shell, store}
       {
         commander = Elite::DefaultCommander();
@@ -338,6 +330,7 @@ namespace GameLogicTests
       Elite::StateTokens values;
       Elite::ExtendedTokenPrinter extended;
       NullSeams nulls;
+      Elite::SidWriteLog sid; ///< 6502: SID -- the docked half's own writes, which are none
 
       /// The seams, over the shell and the store. Last, because every reference in it is bound at
       /// construction. `NullShell` answers four of them, which is what it is for.

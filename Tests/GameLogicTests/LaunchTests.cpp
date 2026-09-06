@@ -456,8 +456,6 @@ namespace GameLogicTests
     struct RecordingStart final : Elite::StartUpEffects
     {
       void ClearKeyLogger() override {}
-      void StartTheme() override {}
-      void StopTheme() override {}
       /*
        * 6502: JSR RDKEY inside `TLL2` -- scripted, because the loop it drives is key-driven and
        * nothing else decides how many frames the title screen runs for.
@@ -493,15 +491,17 @@ namespace GameLogicTests
       }
     };
 
-    struct RecordingLaunch final : Elite::FlightLoopEffects
+    /*
+     * `StopDockingMusic` WAS COUNTED HERE AND IS NOT ANY MORE (M3-b-2b).
+     *
+     * `RES2` opens with `JSR stopbd` and the seam counted it, with the oracle trapped at `stopbd`
+     * so that neither machine ran it. Both run it now, and on this path it does nothing on either:
+     * no tune is playing, so `stopbd` falls to `stopat` and `stopat`'s first test returns. That is
+     * an assertion about SILENCE rather than about a call, and `CompareMusic` below is where it is
+     * made -- against the oracle's own `MUPLA` and its own SID writes, which are also none.
+     */
+    struct RecordingLaunch final : Elite::SpawnChildEffects
     {
-      std::uint32_t musicStops = 0;
-
-      void StartDockingMusic() override {}
-      void StopDockingMusic() override
-      {
-        ++musicStops;
-      }
       bool SpawnChild(std::uint8_t, Elite::ShipType) override
       {
         return true;
@@ -541,7 +541,7 @@ namespace GameLogicTests
     {
       std::uint16_t nostm, lsx2, lsy2, mstg, jstx, jsty, alp2Next, bet2, bet2Next;
       std::uint16_t col2, dontclip, yx2m1, slsp, bomb, qq12, qq22, hfx, autoByte;
-      std::uint16_t inwk, fist, stp, res2, reset, tt110, stopbd, noise;
+      std::uint16_t inwk, fist, stp, res2, reset, tt110, noise;
 
       explicit LaunchWhere(const OracleImage& _oracle)
       {
@@ -569,7 +569,6 @@ namespace GameLogicTests
         res2 = _oracle.Label("RES2");
         reset = _oracle.Label("RESET");
         tt110 = _oracle.Label("TT110");
-        stopbd = _oracle.Label("stopbd");
         noise = _oracle.Label("NOISE");
       }
     };
@@ -728,7 +727,6 @@ namespace GameLogicTests
         leaving.universe.commander.energyBomb = ((shape & 4u) != 0u) ? 0xC0u : 0x40u;
 
         Cpu6502 cpu = oracle.Fresh();
-        cpu.AddTrap(to.stopbd);
         FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
         Mirror(leaving.universe, cpu, at);
         MirrorLeaving(leaving, cpu, at, to, 0xFFu);
@@ -744,8 +742,6 @@ namespace GameLogicTests
         CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
         CompareState(cpu, leaving.universe, at, where);
         CompareLeaving(cpu, leaving, to, 0xFFu, where);
-
-        Assert::AreEqual<std::uint32_t>(1u, leaving.effects.musicStops, (where + L": stopbd").c_str());
 
         bulbs += ((shape & 1u) != 0u) ? 1u : 0u;
         bombs += ((shape & 4u) != 0u) ? 1u : 0u;
@@ -784,7 +780,6 @@ namespace GameLogicTests
         leaving.universe.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
 
         Cpu6502 cpu = oracle.Fresh();
-        cpu.AddTrap(to.stopbd);
         FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
         Mirror(leaving.universe, cpu, at);
         MirrorLeaving(leaving, cpu, at, to, 0u);
@@ -857,8 +852,7 @@ namespace GameLogicTests
             leaving.universe.view = 1u;
 
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(to.stopbd);
-                cpu.AddTrap(oracle.Label("SETL1"));
+                    cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
 
             /*
@@ -1436,8 +1430,7 @@ namespace GameLogicTests
                  * trapping the routine is what makes the two sides agree rather than a convenience.
                  */
                 cpu.AddTrap(oracle.Label("NOSPRITES"));
-                cpu.AddTrap(to.stopbd);
-        
+                
                 /*
                  * The counted `RDKEY`, written over the real one.
                  *

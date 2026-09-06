@@ -2,6 +2,7 @@
 
 #include "Canvas.h"
 #include "ExtendedTokens.h"
+#include "SoundEffects.h"
 #include "Tokens.h"
 
 #include <array>
@@ -63,20 +64,22 @@ namespace Elite
   };
 
   /*
-   * The two things CHPR does that this slice cannot finish.
+   * The one thing CHPR does that the library still cannot do for itself.
    *
-   * Character 7 rings the bell, which is a sound event and belongs to phase 5; and a character
-   * printed below the last row clears the screen and starts again, which needs TT66 and lands in
-   * 1d-c. Both are seams rather than stubs -- the printer around them is complete -- and the tests
-   * count how often they are reached rather than passing over them quietly.
+   * A character printed below the last row clears the screen and starts again, which is `TT66simp`
+   * -- and `TT66` reaches the dashboard, the sprites, the border and the colour bands, which are
+   * §4.5's `Presenter` and M3-b-3's. The tests count how often it is reached rather than passing
+   * over it quietly.
+   *
+   * `Beep` WAS THE OTHER AND IS NOT ANY MORE (M3-b-2b). Character 7 is `R5`, which is `JSR BEEP`,
+   * and `BEEP` has been `Elite::Beep` over a `SoundBuffer` since slice 5a -- so the printer takes
+   * the buffer and rings the bell itself. Every caller on this side drops the carry it answers
+   * with, which is why the call discards it.
    */
   class TextEffects
   {
   public:
     virtual ~TextEffects() = default;
-
-    /// 6502: R5 -- JSR BEEP.
-    virtual void Beep() = 0;
 
     /// 6502: clss -- JSR TT66simp, then print the character again on the fresh screen.
     virtual void ClearScreen() = 0;
@@ -193,10 +196,17 @@ namespace Elite
   class TextPrinter : public TextSink
   {
   public:
-    TextPrinter(Canvas& _canvas, TextState& _state, TextEffects* _effects = nullptr) noexcept
+    /*
+     * The buffer is a POINTER beside the seam and not a `Universe&`, for the reason the seam is one:
+     * the printer is built over a canvas and a `TextState` and nothing else, and half the tests that
+     * build one have no universe to hand. A null buffer is a printer whose bell is not connected,
+     * which is what a null `TextEffects` has always meant for the screen clear.
+     */
+    TextPrinter(Canvas& _canvas, TextState& _state, TextEffects* _effects = nullptr, SoundBuffer* _sound = nullptr) noexcept
       : m_canvas(_canvas),
         m_state(_state),
-        m_effects(_effects)
+        m_effects(_effects),
+        m_sound(_sound)
     {
     }
 
@@ -221,6 +231,7 @@ namespace Elite
     Canvas& m_canvas;
     TextState& m_state;
     TextEffects* m_effects = nullptr;
+    SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s JSR BEEP fills
   };
 
   /*

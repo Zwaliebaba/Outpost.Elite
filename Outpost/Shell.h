@@ -138,8 +138,6 @@ namespace Outpost
     void FlushKeyboard() override;
 
     void ClearKeyLogger() override;
-    void StartTheme() override;
-    void StopTheme() override;
     [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override;
     [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance) override;
 
@@ -151,7 +149,6 @@ namespace Outpost
     // ---- Elite::ControlCodes and Elite::TextEffects ---------------------------------------------
 
     void Run(std::uint8_t _code) override;
-    void Beep() override;
     void ClearScreen() override;
 
     /// 6502: QQ11 -- which screen is showing. See `m_view`: the byte is the composition root's,

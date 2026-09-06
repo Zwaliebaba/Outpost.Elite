@@ -300,13 +300,13 @@ interfaces with four ports without touching a signature again. `ViewChange.h` sa
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
-<!--count:main-lines-->1,198 lines, most of them the dispatch, the exits and the two loops. Plan
+<!--count:main-lines-->1,197 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->184 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->180 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->18 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->16 abstract classes in
 `GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `TunnelEffects::ShowFrame`,
 `SaveStore` through `SaveScreen`). Most are **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
@@ -349,7 +349,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,915 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,911 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1343,6 +1343,15 @@ ship coexist in one frame, which `Universe::spriteRegistersAreOurs` exists to wo
 already owns `SoundBuffer`, the music player and the tables; what it lacks is somewhere to put them,
 so `Universe` gains the two objects and the port is what `SidWriteLog` already is.
 
+**AND THE SLICE HAS TO PAY FOR THE PORT IT LANDS, which this plan did not say and M3-b-2b found.**
+Every M3-b slice before it only REMOVED from `Ports`, so the struct sits on `aggregate-refs`'s
+ceiling of thirteen with no slack; a slice that adds `SoundSink` and removes nothing puts the count
+at fourteen, and rule 5 fails a count above its ceiling with no exception — rightly, since a ratchet
+that can be argued past is not one. The four ports of §4.5 all have to arrive before the eleven
+seams they replace can go, so **each of M3-b-2b, M3-b-3 and M3-b-4 lands its port in the same commit
+as at least one removal**, and the count leaves the phase at four without ever going up. 2b pays with
+`ViewEffects`, which the §4.5 table already names in the `SoundSink` row (§8, 2026-09-06).
+
 **M3-b-3 — `Presenter` and `Keyboard`.** `TunnelEffects::ShowFrame`, `LineEntryEffects::WaitFrames`,
 `StartUpEffects::WaitFrames` and `TradeScreenEffects::ClearToView`'s pixels become `Presenter`;
 `KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys` and `FlushKeyboard`
@@ -1691,6 +1700,59 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-2b: the music comes inside, and one of the two seams it removed was in front of
+an `RTS`.** `FlightLoopEffects::Start/StopDockingMusic` were `JSR startbd` and `JSR stopbd`,
+`StartUpEffects::Start/StopTheme` were `JSR startat` and `JSR stopat`, and `TextEffects::Beep` was
+`R5`'s `JSR BEEP` -- five seams in front of routines `Music.cpp` and `SoundEffects.cpp` have had
+since slice 5. `Universe` gains `MusicPlayer music` for the same reason it gained `SoundBuffer` in
+2a: the player is memory the game writes and the interrupt reads. `Ports` gains `SidWriteLog& sid`,
+which is §4.5's `SoundSink` and the first of the four to arrive -- the handful of writes the GAME
+side makes between interrupts, which the executable applies ahead of the next tick. `effects-seams`
+18 → 16, `outpost-elite-names` 184 → 180, `origin-markers` 3,915 → 3,911, `main-lines` 1,198 → 1,197,
+and `aggregate-refs` thirteen before and thirteen after.
+
+**THE PLAN PUT THIS SLICE BEFORE THE ONES THAT PAY FOR IT, AND THE RATCHET SAID SO.** Every M3-b
+slice up to here only removed from `Ports`, so it sits on `aggregate-refs`'s ceiling of thirteen with
+zero slack; adding the sink and removing nothing is fourteen, which rule 5 fails outright. Three ways
+out were weighed and two rejected. Threading the sink as a parameter is M3-a's pattern run backwards.
+Putting `SidWriteLog` in `Universe` is worse than it looks: the log is not state -- nothing in the
+library reads it back, it is drained every frame, and the M0-c replay HASHES the universe, so a
+growing write log would be in the digest. What is left is to make the slice pay, and §4.5's own
+`SoundSink` row names the payer.
+
+**`ViewEffects` WAS THAT PAYER, AND ITS LAST METHOD WAS IN FRONT OF NOTHING AT ALL.** After 2a took
+`PlaySound` it held only `SetPalette`, which is `DOVDU19` -- and the C64 build assembles that label
+and an `RTS` and nothing between them: `setvdu19-dovdu19.asm` guards the `STA VNT3+1` with
+`IF _6502SP_VERSION OR _MASTER_VERSION`, and the call sites say "this doesn't actually do anything in
+this version of Elite" in as many words. The port's header claimed it "writes a VIC-II colour
+register" (the Master's reading); `Outpost`'s implementation was an empty function with the right
+comment on it. So the seam was a claim that something is outside the library which was never true --
+§6.73 arriving from the other side, where what was scoped too early was the READING and not the
+routine. The two `JSR`s are comments now.
+
+**FOUR ORACLE SUITES STOPPED COUNTING AND STARTED COMPARING.** `StartUpTests` trapped `ZEKTRAN`,
+`startat`, `stopat` and `stopbd` on the 6502 and matched the four against the port's list; it traps
+`ZEKTRAN` alone now, logs every store to `SID`..`SID+&18`, and compares the write sequence against
+`Ports::sid` write for write -- order and all, because a new tune zeroes the chip and then sets four
+registers, which a real SID hears as a gate falling and rising. `FlightLoopTests` counted `startbd`
+and `stopbd` trap hits against two integers on its recorder; `LaunchTests` counted `RES2`'s single
+`stopbd`; `DockedSessionTests` and `DockingTests` noted "music on"/"music off" in a transcript. All
+of them are `MUPLA` and `MULIE` in `ImageCells` now, mirrored in and compared out with every other
+byte, so the whole oracle suite carries the music rather than five suites carrying a tally of calls.
+`LaunchTests`'s case is the sharpest: `RES2`'s `stopbd` writes NOTHING on either machine, because no
+tune is playing and `stopat` returns on its first test -- an assertion about silence, which a count
+of calls could never have made.
+
+**The M0-c replay record moves, and it is rule 1's first case rather than its second.** `MUPLA` and
+`MULIE` are two new cells in the universe image, so the digest is two bytes wider at step 0 --
+before a frame has run. No comparison in the suite changed answer, the flight is still 1,170 steps
+to `Docked`, and every oracle sweep is green.
+
+**`TextPrinter` holds a `SoundBuffer*` beside its `TextEffects*` and that is a wart worth naming.**
+`CHPR`'s bell needs the buffer and its screen clear still needs the seam, so the printer takes both;
+the pointer is null in the tests that build a printer with no universe. It goes when M3-b-3 turns
+`ClearScreen` into `Presenter` and the printer takes one object again.
 
 **2026-09-06 — M3-b-2a's fix: one brace, sixteen errors, and a check that would have caught it.**
 The script that deleted `FlightSession`'s three sound methods began its cut at the `/*` above them,

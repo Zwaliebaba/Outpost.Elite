@@ -179,10 +179,6 @@ namespace Elite
   /// differs is that `TT66` prints the view's NAME for a zero, and the title screen has none.
   inline constexpr std::uint8_t TITLE_CLEAR_VIEW = 13;
 
-  /// 6502: LDA #32 / JSR DOVDU19 -- a mode-1 palette command, and the upstream source says in as
-  /// many words that it does nothing in this version.
-  inline constexpr std::uint8_t TITLE_PALETTE = 32;
-
   /// 6502: LDA #96 / STA INWK+14 and STA INWK+7 -- the nose vector's z high byte, and the ship's
   /// own z high byte. The second is what `TLL2` walks down, so it is where the ship starts.
   inline constexpr std::uint8_t TITLE_START_DISTANCE = 96;

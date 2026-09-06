@@ -899,9 +899,14 @@ namespace GameLogicTests
             CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
             CompareState(cpu, universe, at, where);
 
-            // The palette change happens on every path, including the one that does nothing else.
-            Assert::AreEqual<std::size_t>(1u, universe.effects.palettes.size(), (where + L": one palette change").c_str());
-            Assert::AreEqual<std::uint32_t>(0u, universe.effects.palettes[0], (where + L": and it asks for zero").c_str());
+            /*
+             * 6502: LDA #0 / JSR DOVDU19 -- ASSERTED HERE UNTIL M3-b-2b, AND IT ASSERTED NOTHING.
+             *
+             * `DOVDU19` is a bare `RTS` on this build; the two lines that stood here counted the
+             * port's calls to a seam whose every implementation was empty, on both sides of a
+             * comparison that could not see the difference. `CompareScreens` and `CompareState`
+             * above are what the routine's palette change is worth, which is nothing.
+             */
 
             if (view == 0u && to == from)
             {

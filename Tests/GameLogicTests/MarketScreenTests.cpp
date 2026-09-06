@@ -594,7 +594,8 @@ namespace GameLogicTests
         Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
-        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, nulls,
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, sid,
                            extended, nulls,      keys,  effects, nulls, nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
@@ -856,7 +857,8 @@ namespace GameLogicTests
         rng.SetState(SEED);
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
-        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, nulls,
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, sid,
                            extended, nulls,      keys,  effects, nulls, nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
@@ -1111,7 +1113,8 @@ namespace GameLogicTests
         Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
-        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, nulls,
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, sid,
                            extended, nulls,      keys,  effects, nulls, nulls};
 
         const Elite::ShipCondition condition{s.docked, s.junk, s.firstShip, s.energy};
@@ -1383,7 +1386,8 @@ namespace GameLogicTests
         Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
-        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, nulls,
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, sid,
                            extended, nulls,      keys,  effects, nulls, nulls};
 
         universe.current.techLevel = s.tech; // 6502: tek -- the byte the shop reads
