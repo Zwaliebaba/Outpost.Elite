@@ -3,6 +3,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "NullSeams.h"
 #include "OracleImage.h"
 
 #include "Arith.h"
@@ -200,45 +201,13 @@ namespace GameLogicTests
   };
 
   /*
-   * The four seams a fixture that is not running a frame never reaches, answered with nothing.
+   * The seams a screen change never reaches, answered with nothing.
    *
-   * `Ports` binds ten references and a screen-change test supplies two of them; without this the
-   * other eight would have to be written out at every call site, which is the argument list M3-a
-   * exists to remove. A test that WANTS to see one of these passes its own through `PortsWith`.
+   * `NullSeams` since M3-a-3, when `Ports` grew the docked half's four and every fixture had to
+   * name ten. It is in its own header because the docked suites need it too and they must not
+   * drag the oracle in with it.
    */
-  struct UnusedSeams final : Elite::ShipEffects,
-                             Elite::ShipDrawEffects,
-                             Elite::FlightLoopEffects,
-                             Elite::StartUpEffects
-  {
-    // Elite::ShipEffects
-    bool RunTactics(Elite::Ship&) override { return false; }
-
-    // Elite::ShipDrawEffects
-    void DrawPlanetOrSun() override {}
-    void DrawExplosion() override {}
-
-    // Elite::FlightLoopEffects, and Elite::DashboardEffects and Elite::SpawnChildEffects under it
-    bool PlaySound(std::uint8_t, bool) override { return false; }
-    bool PlaySoundPitched(std::uint8_t, std::uint8_t, std::uint8_t) override { return false; }
-    void StopSound(std::uint8_t) override {}
-    void StartDockingMusic() override {}
-    void StopDockingMusic() override {}
-    bool SpawnAhead(Elite::ShipType) override { return false; }
-    bool Anger(std::uint8_t, Elite::ShipType) override { return false; }
-    bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
-
-    // Elite::StartUpEffects
-    void ResetUniverse() override {}
-    void ResetShip() override {}
-    void ClearKeyLogger() override {}
-    void StartTheme() override {}
-    void StopTheme() override {}
-    void ResetMissileIndicators() override {}
-    Elite::TitleKey ScanTitleKeys(Elite::KeyLogger&) override { return {}; }
-    void WaitFrames(std::uint8_t) override {}
-    std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override { return 0; }
-  };
+  using UnusedSeams = NullSeams;
 
   /*
    * The fixture's universe: `Elite::Universe`'s bytes, plus what a test needs beside them.
@@ -375,7 +344,8 @@ namespace GameLogicTests
     [[nodiscard]] Elite::Ports PortsWith(Elite::ShipEffects& _tactics, Elite::ShipDrawEffects& _drawing,
                                          Elite::FlightLoopEffects& _loop, Elite::StartUpEffects& _start) noexcept
     {
-      return Elite::Ports{printer, characters, characters, sight, effects, _tactics, _drawing, _loop, extendedPrinter, _start};
+      return Elite::Ports{printer,   characters, characters, sight,  effects, _tactics, _drawing, _loop,
+                          extendedPrinter, _start, unused, unused, unused, unused};
     }
 
     /// The four a screen change never reaches, answered with nothing.

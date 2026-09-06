@@ -532,24 +532,24 @@
         {
           "id": "mi-reward",
           "file": "GameLogic/Missions.cpp",
-          "find": "    ReceiveCash(_bay.commander, MISSION_REWARD);",
-          "replace": "    ReceiveCash(_bay.commander, 5000u);",
+          "find": "    ReceiveCash(_universe.commander, MISSION_REWARD);",
+          "replace": "    ReceiveCash(_universe.commander, 5000u);",
           "expect": "caught",
           "note": "5,000 CREDITS IS 50,000 TENTHS. The cash is held in tenths of a credit throughout, so a reward written in credits pays a tenth of what the game pays -- and the whole commander block is compared, so it is the four cash bytes that say so."
         },
         {
           "id": "mi-engy",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _bay.commander.energyUnit = NAVY_ENERGY_UNIT;",
-          "replace": "    _bay.commander.energyUnit = 1u;",
+          "find": "    _universe.commander.energyUnit = NAVY_ENERGY_UNIT;",
+          "replace": "    _universe.commander.energyUnit = 1u;",
           "expect": "caught",
           "note": "`LDA #2 / STA ENGY` -- the navy's energy unit, which the flight loop reads as three units a pass where the shop's one gives two. A 1 is the shop's."
         },
         {
           "id": "mi-tally",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _bay.commander.kills.hi = static_cast<std::uint8_t>(_bay.commander.kills.hi + 1u);",
-          "replace": "    _bay.commander.kills.lo = static_cast<std::uint8_t>(_bay.commander.kills.lo + 1u);",
+          "find": "    _universe.commander.kills.hi = static_cast<std::uint8_t>(_universe.commander.kills.hi + 1u);",
+          "replace": "    _universe.commander.kills.lo = static_cast<std::uint8_t>(_universe.commander.kills.lo + 1u);",
           "expect": "caught",
           "note": "`INC TALLY+1` -- the HIGH byte, so the reward is 256 kills and a whole combat rank rather than one kill. This pair is low byte first, unlike the cash above it, which is exactly the trap."
         },

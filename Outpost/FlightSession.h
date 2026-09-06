@@ -52,9 +52,10 @@ namespace Outpost
    * the composition root owns the universe, so what is left here is the window, the sound and the
    * raster mode: the platform, which is what a session was always supposed to be.
    *
-   * It still builds `Elite::Ports`, because eight of that struct's ten references are to this
-   * object and the two that are not are the printers the root hands it. `Ports()` is what a caller
-   * passes beside the universe.
+   * It does not build `Elite::Ports` either, since M3-a-3: the struct grew the docked half's four
+   * seams, and eight of its fourteen references are then the shell's and the store's rather than
+   * this object's. `Outpost::Game` owns it and lends it back through `AttachPorts`, which is what
+   * the two seams below need that take a `Ports&` to answer -- `TACTICS` and `DOCKIT`.
    *
    * WHAT IS HONESTLY MISSING, said here rather than left to be found while flying.
    *
@@ -82,23 +83,25 @@ namespace Outpost
                               public Elite::ChartShapes
   {
   public:
-    FlightSession(Window& _window, Elite::Universe& _universe, Elite::TokenPrinter& _printer, Elite::CharacterPrinter& _characters,
-                  Elite::ExtendedTokenPrinter& _tokens, Elite::StartUpEffects& _start, Elite::SoundBuffer& _sound,
-                  Elite::MusicPlayer& _music, SoundOutput& _audio) noexcept;
+    FlightSession(Window& _window, Elite::Universe& _universe, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music,
+                  SoundOutput& _audio) noexcept;
 
     FlightSession(const FlightSession&) = delete;
     FlightSession& operator=(const FlightSession&) = delete;
 
-    /// The universe the routines work on and the seams they reach through -- the two arguments
-    /// every ported routine takes since M3-a. The universe is the composition root's; the ports are
-    /// this object's, and every reference in them is bound at construction.
+    /// The universe the routines work on, which is the composition root's -- as is the `Ports&`
+    /// that goes beside it in every signature, since M3-a-3.
     [[nodiscard]] Elite::Universe& Universe() noexcept
     {
       return m_universe;
     }
-    [[nodiscard]] Elite::Ports& Ports() noexcept
+
+    /// The seams, lent back by the composition root once it has built them. Two of this object's
+    /// own answers -- `RunTactics` and `RunDockingComputer` -- are calls that need them, and the
+    /// interfaces they satisfy do not carry them.
+    void AttachPorts(Elite::Ports& _ports) noexcept
     {
-      return m_ports;
+      m_ports = &_ports;
     }
 
     /*
@@ -210,9 +213,8 @@ namespace Outpost
 
     std::uint8_t m_rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote into the handler
 
-    /// The seams, over this object and the two printers the root hands it. Declared last because
-    /// every reference in it is bound at construction.
-    Elite::Ports m_ports;
+    /// 6502: the seams, null until the composition root attaches them -- see `AttachPorts`.
+    Elite::Ports* m_ports = nullptr;
   };
 
   /*

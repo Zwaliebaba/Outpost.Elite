@@ -29,19 +29,19 @@
       "slice": "M1-a"
     },
     "aggregate-refs": {
-      "ceiling": 39,
+      "ceiling": 14,
       "slack": 0,
-      "slice": "M3-a-2: FlightScreen, FlightLoop, MissionScreen and TitleScreen go; Ports is ten where they were forty-nine"
+      "slice": "M3-a-3: TradeScreen, SaveScreen, GameStart and MissionBay go; what is left IS Ports"
     },
     "main-lines": {
-      "ceiling": 1219,
+      "ceiling": 1199,
       "slack": 0,
-      "slice": "M2-c-1: Main.cpp holds the number printer's width byte instead of its workspace"
+      "slice": "M3-a-3: Main.cpp holds no state the universe owns and builds no argument list"
     },
     "outpost-elite-names": {
-      "ceiling": 205,
+      "ceiling": 199,
       "slack": 0,
-      "slice": "M3-a-2: four argument-list structs go, so the app names four fewer types"
+      "slice": "M3-a-3: three more argument-list structs go"
     },
     "effects-seams": {
       "ceiling": 22,
@@ -49,9 +49,9 @@
       "slice": "M0-a"
     },
     "out-params": {
-      "ceiling": 18,
+      "ceiling": 17,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M3-a-3: StatusScreen's QQ15 is a Universe field, not an out parameter"
     },
     "carry-params": {
       "ceiling": 32,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3937,
+      "ceiling": 3925,
       "slack": 0,
-      "slice": "M3-a-2: the markers on the reference members that named a byte Universe.h already names"
+      "slice": "M3-a-3: the markers on the reference members that named a byte Universe.h already names"
     },
     "oracle-test-files": {
       "ceiling": 50,

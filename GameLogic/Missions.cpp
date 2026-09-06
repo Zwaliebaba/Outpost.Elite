@@ -207,7 +207,7 @@ namespace Elite
 
   // ---- the missions themselves (slice 4d-c) ---------------------------------------------------
 
-  ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, MissionBay& _bay, std::uint8_t _token) noexcept
+  ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, std::uint8_t _token) noexcept
   {
     // 6502: JSR DETOK -- and `BAYSTEP`, the entry that skips it, is the caller passing no token.
     if (_token != 0u)
@@ -216,10 +216,10 @@ namespace Elite
     }
 
     // 6502: .BAYSTEP JMP BAY -- a tail call, so what a mission returns is what `BAY` returns.
-    return EnterDockingBay(_bay.dockedFlag, _bay.view, _bay.countdown, _bay.hyperspaceHeld);
+    return EnterDockingBay(_universe.dockedFlag, _universe.view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
   }
 
-  std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
 
     /*
@@ -229,7 +229,7 @@ namespace Elite
      * all back with a one going into bit 0. Every other bit ends where it started, so it is
      * `ORA #1` written for a machine whose author preferred shifts.
      */
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);
 
     ShowIncomingMessage(_universe, _ports); // 6502: JSR BRIS
@@ -320,22 +320,22 @@ namespace Elite
     return MISSION_1_BRIEFING;
   }
 
-  ForcedKey BriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey BriefMission1(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
-    return PrintAndEnterBay(_universe, _ports, _bay, RunConstrictorBriefing(_universe, _ports, _bay));
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, RunConstrictorBriefing(_universe, _ports, _hyperspaceHeld));
   }
 
-  ForcedKey BriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey BriefMission2(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     // 6502: LDA TP / ORA #%00000100 / STA TP -- in progress, plans not yet collected.
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_2_STARTED);
 
     // 6502: LDA #11 -- and then a FALL-THROUGH into BRP rather than a branch.
-    return PrintAndEnterBay(_universe, _ports, _bay, MISSION_2_CONTACT);
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, MISSION_2_CONTACT);
   }
 
-  ForcedKey CollectPlans(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey CollectPlans(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     /*
      * 6502: LDA TP / AND #%11110000 / ORA #%00001010 / STA TP.
@@ -344,13 +344,13 @@ namespace Elite
      * both its bits go, not just the "in progress" one. Bit 1 is then set again by the `ORA`, which
      * is what `MissionOnDocking` reads as "mission 1 finished and paid", and bit 3 is the plans.
      */
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>((progress & MISSION_2_KEEP) | MISSION_2_PLANS);
 
-    return PrintAndEnterBay(_universe, _ports, _bay, MISSION_2_BRIEFING);
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, MISSION_2_BRIEFING);
   }
 
-  ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     /*
      * 6502: LSR TP / ASL TP -- clear bit 0 and nothing else.
@@ -363,38 +363,38 @@ namespace Elite
      * `\INC TALLY+1` sits between the two halves of this routine, commented out in the original,
      * so the Constrictor is worth no kill points. Not ported, because it does not run.
      */
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);
 
     // 6502: LDX #LO(50000) / LDY #HI(50000) / JSR MCASH -- 5,000 credits.
-    ReceiveCash(_bay.commander, MISSION_REWARD);
+    ReceiveCash(_universe.commander, MISSION_REWARD);
 
     // 6502: LDA #15 / .BRPS BNE BRP.
-    return PrintAndEnterBay(_universe, _ports, _bay, MISSION_1_DEBRIEFING);
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, MISSION_1_DEBRIEFING);
   }
 
-  ForcedKey DebriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey DebriefMission2(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     // 6502: LDA TP / ORA #%00000100 / STA TP -- bit 2 again, so 2 and 3 are both up and the pair
     // reads as "complete".
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_2_STARTED);
 
     // 6502: LDA #2 / STA ENGY -- the navy's energy unit.
-    _bay.commander.energyUnit = NAVY_ENERGY_UNIT;
+    _universe.commander.energyUnit = NAVY_ENERGY_UNIT;
 
     // 6502: INC TALLY+1 -- 256 kill points, into the HIGH byte, so the low one is untouched and
     // the combat rank jumps by a whole step.
-    _bay.commander.kills.hi = static_cast<std::uint8_t>(_bay.commander.kills.hi + 1u);
+    _universe.commander.kills.hi = static_cast<std::uint8_t>(_universe.commander.kills.hi + 1u);
 
-    return PrintAndEnterBay(_universe, _ports, _bay, MISSION_2_DEBRIEFING);
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, MISSION_2_DEBRIEFING);
   }
 
-  ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, MissionBay& _bay, KeySource& _keys) noexcept
+  ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, KeySource& _keys) noexcept
   {
     // 6502: LDA TP / ORA #%00010000 / STA TP -- BEFORE the question, so declining still counts as
     // having been asked and the Trumble is never offered again.
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);
 
     _ports.tokens.Print(TRUMBLE_OFFER); // 6502: LDA #199 / JSR DETOK
@@ -403,7 +403,7 @@ namespace Elite
     // is what `BAYSTEP` is for.
     if (!AskYesNo(_keys))
     {
-      return PrintAndEnterBay(_universe, _ports, _bay, 0u);
+      return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, 0u);
     }
 
     /*
@@ -412,13 +412,13 @@ namespace Elite
      * `INC TRIBBLE` follows unconditionally and `LCASH` puts the money back when it cannot afford
      * the spend, so a commander who is short gets the Trumble for nothing (ADR-001 §6).
      */
-    static_cast<void>(SpendCash(_bay.commander, MISSION_REWARD));
+    static_cast<void>(SpendCash(_universe.commander, MISSION_REWARD));
 
     // 6502: INC TRIBBLE -- the LOW byte, from nothing to one, and `MLOOP` breeds the rest.
-    std::uint8_t& trumbles = _bay.commander.tribbles.lo;
+    std::uint8_t& trumbles = _universe.commander.tribbles.lo;
     trumbles = static_cast<std::uint8_t>(trumbles + 1u);
 
-    return PrintAndEnterBay(_universe, _ports, _bay, 0u); // 6502: JMP BAY
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, 0u); // 6502: JMP BAY
   }
 
 } // namespace Elite

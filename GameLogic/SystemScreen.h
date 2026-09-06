@@ -8,6 +8,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because it names types these headers declare
+  struct Ports;    // Ports.h, likewise
+
   /*
    * The Data on System screen (slice 2a).
    *
@@ -50,7 +53,7 @@ namespace Elite
    * radius is between 2,816 and 6,911 km, which is why no planet in Elite is a gas giant and none
    * is an asteroid.
    */
-  void SystemDataScreen(TradeScreen& _screen, SystemSeeds& _seeds, const SystemData& _data, std::uint16_t _distance) noexcept;
+  void SystemDataScreen(Universe& _universe, Ports& _ports, const SystemData& _data, std::uint16_t _distance) noexcept;
 
   /*
    * 6502: TT146 -- the distance line, and the branch that decides there is not one.

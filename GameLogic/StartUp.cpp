@@ -3,6 +3,8 @@
 #include "StartUp.h"
 
 #include "Commander.h"
+#include "Ports.h"
+#include "Universe.h"
 
 /*
  * Starting a game, and going back to the docking bay (slice 2e).
@@ -47,19 +49,19 @@ namespace Elite
     return ForceKey(KEY_STATUS, _dockedFlag, _view, _countdown, _hyperspaceHeld);
   }
 
-  ForcedKey StartGame(GameStart& _game) noexcept
+  ForcedKey StartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     // 6502: JSR ZEKTRAN -- the key logger, before anything can be typed at it.
-    _game.effects.ClearKeyLogger();
+    _ports.start.ClearKeyLogger();
 
     // 6502: LDA #3 / JSR DOXC.
-    _game.text.column = TITLE_PROMPT_COLUMN;
+    _universe.text.column = TITLE_PROMPT_COLUMN;
 
     // 6502: JSR startat.
-    _game.effects.StartTheme();
+    _ports.start.StartTheme();
 
     // 6502: LDX #CYL / LDA #6 / LDY #210 / JSR TITLE -- a Cobra Mk III, a long way off.
-    const std::uint8_t answer = _game.effects.ShowTitleScreen(TITLE_LOAD_TOKEN, ShipType::CobraMk3, TITLE_COBRA_DISTANCE);
+    const std::uint8_t answer = _ports.start.ShowTitleScreen(TITLE_LOAD_TOKEN, ShipType::CobraMk3, TITLE_COBRA_DISTANCE);
 
     /*
      * 6502: CMP #YINT / BNE QU5.
@@ -70,12 +72,12 @@ namespace Elite
     if (answer == KEY_YES_INTERNAL)
     {
       // 6502: JSR stopat / JSR DFAULT / JSR SVE / JSR startat.
-      _game.effects.StopTheme();
+      _ports.start.StopTheme();
 
       // 6502: JSR DFAULT -- so the menu has a commander to print a name for.
-      (void)LoadCommander(_game.image, _game.commander, _game.name);
+      (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
-      (void)DiskAccessMenu(_game.save, _game.commander, _game.name, _game.image, _game.buffer, _game.useDisk);
+      (void)DiskAccessMenu(_universe, _ports);
 
       /*
        * 6502: JSR startat -- and the theme restarts from the beginning.
@@ -84,23 +86,23 @@ namespace Elite
        * restarting the game and returning to the bay; here both answers lead to the same next
        * instruction, because `QU5`'s DFAULT below installs whatever the menu left in the image.
        */
-      _game.effects.StartTheme();
+      _ports.start.StartTheme();
     }
 
     /*
      * 6502: QU5 -- JSR DFAULT, and this label is reached from three places: the "not Y" branch
      * above, the fall-through from the disk menu, and TT102's `JMP QU5` when a load succeeded.
      */
-    (void)LoadCommander(_game.image, _game.commander, _game.name);
+    (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
     // 6502: JSR msblob.
-    _game.effects.ResetMissileIndicators();
+    _ports.start.ResetMissileIndicators();
 
     // 6502: LDA #7 / LDX #ADA / LDY #48 / JSR TITLE -- an Adder, close up. Its key is discarded.
-    (void)_game.effects.ShowTitleScreen(TITLE_START_TOKEN, ShipType::Adder, TITLE_ADDER_DISTANCE);
+    (void)_ports.start.ShowTitleScreen(TITLE_START_TOKEN, ShipType::Adder, TITLE_ADDER_DISTANCE);
 
     // 6502: JSR stopat -- the only stop both paths reach.
-    _game.effects.StopTheme();
+    _ports.start.StopTheme();
 
     /*
      * 6502: JSR ping / JSR TT111 / JSR jmp -- and this SNAPS the commander's position.
@@ -110,18 +112,18 @@ namespace Elite
      * they are copied into the commander. A file whose coordinates fall between two systems starts
      * the game at whichever one was nearest.
      */
-    CrosshairsToCurrentSystem(_game.commander, _game.crosshairX, _game.crosshairY);
+    CrosshairsToCurrentSystem(_universe.commander, _universe.crosshairX, _universe.crosshairY);
 
-    const NearestSystem found = FindNearestSystem(_game.commander.galaxySeeds, _game.crosshairX, _game.crosshairY,
-                                                  _game.commander.systemX, _game.commander.systemY);
-    _game.selected = found.seeds;
-    _game.crosshairX = found.x;
-    _game.crosshairY = found.y;
+    const NearestSystem found = FindNearestSystem(_universe.commander.galaxySeeds, _universe.crosshairX, _universe.crosshairY,
+                                                  _universe.commander.systemX, _universe.commander.systemY);
+    _universe.selectedSeeds = found.seeds;
+    _universe.crosshairX = found.x;
+    _universe.crosshairY = found.y;
 
-    CurrentSystemToCrosshairs(_game.commander, _game.crosshairX, _game.crosshairY);
+    CurrentSystemToCrosshairs(_universe.commander, _universe.crosshairX, _universe.crosshairY);
 
     // 6502: LDX #5 / likeTT112: LDA QQ15,X / STA QQ2,X / DEX / BPL likeTT112.
-    _game.current.seeds = _game.selected;
+    _universe.current.seeds = _universe.selectedSeeds;
 
     /*
      * 6502: INX / STX EV.
@@ -130,7 +132,7 @@ namespace Elite
      * So this is `EV = 0` written as an increment of whatever the last loop left, which is four
      * bytes cheaper than an LDA and is the only reason it reads the way it does.
      */
-    _game.explosionCount = 0;
+    _universe.explosions = 0;
 
     /*
      * 6502: LDA QQ3 / STA QQ28 / LDA QQ5 / STA tek / LDA QQ4 / STA gov.
@@ -139,24 +141,24 @@ namespace Elite
      * three stores are caching them, not computing them, and the order (economy, TECH, government)
      * is not the order TT24 produced them in.
      */
-    _game.current.economy = found.data.economy;
-    _game.current.techLevel = found.data.techLevel;
-    _game.current.government = found.data.government;
+    _universe.current.economy = found.data.economy;
+    _universe.current.techLevel = found.data.techLevel;
+    _universe.current.government = found.data.government;
 
     // 6502: and then BR1 runs off its end into BAY, which is the next routine in the binary.
-    return EnterDockingBay(_game.dockedFlag, _game.view, _game.countdown, _game.hyperspaceHeld);
+    return EnterDockingBay(_universe.dockedFlag, _universe.view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
   }
 
-  ForcedKey ResetAndStartGame(GameStart& _game) noexcept
+  ForcedKey ResetAndStartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     // 6502: TT170 -- LDX #&FF / TXS / JSR RESET, and RESET runs off its end into RES2.
-    _game.effects.ResetUniverse();
+    _ports.start.ResetUniverse();
 
     // 6502: the fall-through into DEATH2 -- LDX #&FF / TXS / JSR RES2, a SECOND time.
-    _game.effects.ResetShip();
+    _ports.start.ResetShip();
 
     // 6502: and then into BR1.
-    return StartGame(_game);
+    return StartGame(_universe, _ports, _hyperspaceHeld);
   }
 
 } // namespace Elite

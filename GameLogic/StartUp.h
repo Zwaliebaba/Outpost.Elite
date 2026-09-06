@@ -11,6 +11,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because Universe.h includes this one for `CurrentSystem`
+  struct Ports;    // Ports.h, likewise
+
   /*
    * Starting a game, and going back to the docking bay (slice 2e).
    *
@@ -198,43 +201,11 @@ namespace Elite
   [[nodiscard]] ForcedKey ForceKey(std::uint8_t _key, std::uint8_t _dockedFlag, std::uint8_t _view, std::uint8_t _countdown,
                                    bool _hyperspaceHeld) noexcept;
 
-  /*
-   * Everything the start sequence works on.
-   *
-   * One struct for the reason `TradeScreen` and `SaveScreen` are structs: the alternative is a
-   * function with a dozen arguments, written twice. `save` is here because BR1 offers the disk
-   * menu, which is the one place the title screen reaches all the way into slice 2d.
-   */
-  struct GameStart
-  {
-    StartUpEffects& effects;
-    SaveScreen& save;
-    TextState& text;
-
-    Commander& commander;                          ///< 6502: TP, through NAME
-    std::span<std::uint8_t, COMMANDER_NAME_SIZE> name;  ///< 6502: NAME
-    std::span<std::uint8_t, COMMANDER_FILE_SIZE> image; ///< 6502: NA%
-    std::span<std::uint8_t> buffer;                     ///< 6502: INWK+5, the line editor's
-    std::uint8_t& useDisk;                              ///< 6502: DISK -- a byte, not a flag: it is
-                                                        ///< one of the pause screen's thirteen toggles
-
-    CurrentSystem& current;
-    SystemSeeds& selected;        ///< 6502: QQ15
-    std::uint8_t& crosshairX;     ///< 6502: QQ9
-    std::uint8_t& crosshairY;     ///< 6502: QQ10
-    std::uint8_t& explosionCount; ///< 6502: EV
-
-    /*
-     * What the fall-through into BAY needs, which is the dispatch's state rather than the start
-     * sequence's. None of it can change the answer for the key BAY forces -- "8" is settled in
-     * TT102's first block, above every test of a view or a counter -- but the port passes what the
-     * original would have had rather than assuming that stays true.
-     */
-    std::uint8_t& dockedFlag;    ///< 6502: QQ12
-    std::uint8_t view = 0;       ///< 6502: QQ11
-    std::uint8_t countdown = 0;  ///< 6502: QQ22+1
-    bool hyperspaceHeld = false; ///< 6502: KLO+HINT
-  };
+  // `GameStart` was fourteen references and four values, and it went with `SaveScreen` in M3-a-3:
+  // it held one, because `BR1` offers the disk menu, and could not outlive it. Every byte of it is
+  // `Universe`'s and the one seam is `Ports::start`. The last of the four values is the argument
+  // below: what `KLO+HINT` held when the key was pressed, which the fall-through into `BAY` reads
+  // and nothing in the universe carries.
 
   /*
    * 6502: BR1 -- the title sequence, and the start of a game.
@@ -262,7 +233,7 @@ namespace Elite
    * docking bay are one instruction stream: the last thing the title sequence does is press "8" on
    * the player's behalf and enter the docked main loop. That is why this hands back a ForcedKey.
    */
-  [[nodiscard]] ForcedKey StartGame(GameStart& _game) noexcept;
+  [[nodiscard]] ForcedKey StartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: TT170, which falls through DEATH2 into BR1 -- the cold start.
@@ -277,7 +248,7 @@ namespace Elite
    * is how the original discards whatever frames the death or the start left behind. There is no
    * port equivalent and none is needed: the port's callers return normally.
    */
-  [[nodiscard]] ForcedKey ResetAndStartGame(GameStart& _game) noexcept;
+  [[nodiscard]] ForcedKey ResetAndStartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: BAY -- go to the docking bay.

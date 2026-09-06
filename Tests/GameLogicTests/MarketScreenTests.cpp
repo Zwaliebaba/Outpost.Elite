@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "OracleImage.h"
 
 #include "Canvas.h"
@@ -480,14 +482,23 @@ namespace GameLogicTests
         cpu.AddTrap(dn2);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
-        Elite::Commander commander = Elite::DefaultCommander();
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * The screens take `(Universe&, Ports&)` since M3-a-3, so every byte one of them reads has
+         * to be this object's; the aliases keep the rest of the fixture reading as it did, and a
+         * test that assigned to one of them would be writing the byte the routine reads.
+         */
+        Elite::Universe universe;
+        universe.commander = Elite::DefaultCommander();
+        Elite::Commander& commander = universe.commander;
         commander.cash.tenths = (scenario.cash);
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
           commander.cargoHold[item] = scenario.alreadyHeld;
         }
 
-        Elite::MarketState market;
+        Elite::MarketState& market = universe.market;
         market.randomiser = RANDOMISER;
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
@@ -554,7 +565,7 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         RecordingSink sink;
-        Elite::TextState text;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0;
@@ -573,8 +584,10 @@ namespace GameLogicTests
          * has one TT27 and one QQ17: a screen that owned its own would be a second token printer.
          */
         static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> NAME = {'J', 'A', 'M', 'E', 'S', 'O', 'N', 13};
-        Elite::SystemSeeds current = commander.galaxySeeds;
-        Elite::SystemSeeds selected = commander.galaxySeeds;
+        Elite::SystemSeeds& current = universe.current.seeds;
+        current = commander.galaxySeeds;
+        Elite::SystemSeeds& selected = universe.selectedSeeds;
+        selected = commander.galaxySeeds;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(NAME), current,
                                   selected, false);
         printer.SetValueTokens(&values);
@@ -582,11 +595,14 @@ namespace GameLogicTests
 
         ScriptedKeys keys(scenario.keys);
         RecordingEffects effects;
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
-        Elite::TradeScreen screen{printer, characters, extended, text, keys, effects, rng};
+        NullSeams nulls;
+        Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
+                           nulls,   extended,   nulls, keys,  effects, nulls, nulls};
 
-        Elite::BuyScreen(screen, commander, market, ECONOMY, false);
+        universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
+        Elite::BuyScreen(universe, ports, false);
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
@@ -717,7 +733,16 @@ namespace GameLogicTests
         cpu.AddTrap(dn2);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
-        Elite::Commander commander = Elite::DefaultCommander();
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * The screens take `(Universe&, Ports&)` since M3-a-3, so every byte one of them reads has
+         * to be this object's; the aliases keep the rest of the fixture reading as it did, and a
+         * test that assigned to one of them would be writing the byte the routine reads.
+         */
+        Elite::Universe universe;
+        universe.commander = Elite::DefaultCommander();
+        Elite::Commander& commander = universe.commander;
         commander.cash.tenths = (1000);
         commander.cargoCapacity = scenario.capacity;
         commander.tribbles.lo = static_cast<std::uint8_t>(scenario.trumbles & 0xFFu);
@@ -727,7 +752,7 @@ namespace GameLogicTests
           commander.cargoHold[item] = scenario.held;
         }
 
-        Elite::MarketState market;
+        Elite::MarketState& market = universe.market;
         market.randomiser = RANDOMISER;
         for (auto& stock : market.availability)
         {
@@ -809,7 +834,7 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         RecordingSink sink;
-        Elite::TextState text;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0;
@@ -820,8 +845,10 @@ namespace GameLogicTests
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-        Elite::SystemSeeds current = seeds;
-        Elite::SystemSeeds selected = seeds;
+        Elite::SystemSeeds& current = universe.current.seeds;
+        current = seeds;
+        Elite::SystemSeeds& selected = universe.selectedSeeds;
+        selected = seeds;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
@@ -829,18 +856,22 @@ namespace GameLogicTests
 
         ScriptedKeys keys(scenario.keys);
         RecordingEffects effects;
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         rng.SetState(SEED);
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
-        Elite::TradeScreen screen{printer, characters, extended, text, keys, effects, rng};
+        NullSeams nulls;
+        Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
+                           nulls,   extended,   nulls, keys,  effects, nulls, nulls};
+
+        universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
 
         if (inventory)
         {
-          Elite::InventoryScreen(screen, commander, market, ECONOMY);
+          Elite::InventoryScreen(universe, ports);
         }
         else
         {
-          Elite::ListCargo(screen, commander, market, ECONOMY, scenario.view);
+          Elite::ListCargo(universe, ports, scenario.view);
         }
 
         // ---- compare -------------------------------------------------------------------------
@@ -950,7 +981,16 @@ namespace GameLogicTests
       {
         const std::wstring where = Widen(std::string("STATUS: ") + s.what);
 
-        Elite::Commander commander = Elite::DefaultCommander();
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * The screens take `(Universe&, Ports&)` since M3-a-3, so every byte one of them reads has
+         * to be this object's; the aliases keep the rest of the fixture reading as it did, and a
+         * test that assigned to one of them would be writing the byte the routine reads.
+         */
+        Elite::Universe universe;
+        universe.commander = Elite::DefaultCommander();
+        Elite::Commander& commander = universe.commander;
         commander.legalStatus = s.legal;
         commander.kills.lo = static_cast<std::uint8_t>(s.kills & 0xFFu);
         commander.kills.hi = static_cast<std::uint8_t>(s.kills >> 8);
@@ -1050,7 +1090,7 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         RecordingSink sink;
-        Elite::TextState text;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0;
@@ -1061,8 +1101,10 @@ namespace GameLogicTests
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-        Elite::SystemSeeds current = galaxy;
-        Elite::SystemSeeds selected = galaxy;
+        Elite::SystemSeeds& current = universe.current.seeds;
+        current = galaxy;
+        Elite::SystemSeeds& selected = universe.selectedSeeds;
+        selected = galaxy;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
@@ -1070,12 +1112,16 @@ namespace GameLogicTests
 
         ScriptedKeys keys({});
         RecordingEffects effects;
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
-        Elite::TradeScreen screen{printer, characters, extended, text, keys, effects, rng};
+        NullSeams nulls;
+        Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
+                           nulls,   extended,   nulls, keys,  effects, nulls, nulls};
 
         const Elite::ShipCondition condition{s.docked, s.junk, s.firstShip, s.energy};
-        Elite::StatusScreen(screen, commander, condition, CROSSHAIR_X, CROSSHAIR_Y, selected);
+        universe.crosshairX = CROSSHAIR_X; // 6502: QQ9 and QQ10, which the screen reads for `TT111`
+        universe.crosshairY = CROSSHAIR_Y;
+        Elite::StatusScreen(universe, ports, condition);
 
         if (sink.stamped != expected)
         {
@@ -1213,7 +1259,16 @@ namespace GameLogicTests
       {
         const std::wstring where = Widen(std::string("EQSHP: ") + s.what);
 
-        Elite::Commander commander = Elite::DefaultCommander();
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * The screens take `(Universe&, Ports&)` since M3-a-3, so every byte one of them reads has
+         * to be this object's; the aliases keep the rest of the fixture reading as it did, and a
+         * test that assigned to one of them would be writing the byte the routine reads.
+         */
+        Elite::Universe universe;
+        universe.commander = Elite::DefaultCommander();
+        Elite::Commander& commander = universe.commander;
         commander.cash.tenths = (s.cash);
         commander.fuel = s.fuel;
         commander.cargoCapacity = s.capacity;
@@ -1312,7 +1367,7 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         RecordingSink sink;
-        Elite::TextState text;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0;
@@ -1323,8 +1378,10 @@ namespace GameLogicTests
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-        Elite::SystemSeeds current = commander.galaxySeeds;
-        Elite::SystemSeeds selected = commander.galaxySeeds;
+        Elite::SystemSeeds& current = universe.current.seeds;
+        current = commander.galaxySeeds;
+        Elite::SystemSeeds& selected = universe.selectedSeeds;
+        selected = commander.galaxySeeds;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
@@ -1332,11 +1389,14 @@ namespace GameLogicTests
 
         ScriptedKeys keys(s.keys);
         RecordingEffects effects;
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
-        Elite::TradeScreen screen{printer, characters, extended, text, keys, effects, rng};
+        NullSeams nulls;
+        Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
+                           nulls,   extended,   nulls, keys,  effects, nulls, nulls};
 
-        Elite::EquipShipScreen(screen, commander, s.tech);
+        universe.current.techLevel = s.tech; // 6502: tek -- the byte the shop reads
+        Elite::EquipShipScreen(universe, ports);
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
@@ -1374,7 +1434,8 @@ namespace GameLogicTests
         };
         for (const Check& check : CHECKS)
         {
-          Assert::AreEqual(cpu.memory[check.address], commander.ToBytes()[static_cast<std::size_t>(check.field)], (where + L": " + Widen(check.name)).c_str());
+          Assert::AreEqual(cpu.memory[check.address], commander.ToBytes()[static_cast<std::size_t>(check.field)],
+                           (where + L": " + Widen(check.name)).c_str());
         }
         for (std::size_t mount = 0; mount < 4; ++mount)
         {

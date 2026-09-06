@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "Canvas.h"
 #include "Charts.h"
 #include "Commander.h"
@@ -287,9 +289,11 @@ namespace GameLogicTests
           recursive(characters),
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng, &shell),
-          trade{recursive, characters, extended, text, keys, shell, rng},
-          save{recursive, characters, extended, sink, text, keys, shell, store, numberWidth}
+          ports{recursive, characters, sink,  nulls, nulls, nulls, nulls,
+                nulls,     extended,   shell, keys,  shell, shell, store}
       {
+        commander = Elite::DefaultCommander();
+        name = Elite::DefaultCommanderName();
         recursive.SetValueTokens(&values);
         recursive.SetCursor(&text);
         shell.cursor = &text;
@@ -306,37 +310,50 @@ namespace GameLogicTests
       MemoryStore store;
       ScriptedKeys keys{{}};
 
+      /*
+       * Every byte of game state, in one object, and the names under it are ALIASES INTO IT.
+       *
+       * This struct is the docked half's `Outpost::Game`, and `Game` owns one `Elite::Universe`
+       * since M3-a; the screens take `(Universe&, Ports&)` since M3-a-3, so a session that kept
+       * its own commander beside the universe's would be driving the screens from different bytes
+       * from the ones it asserts on -- which is the defect M3-a-2's Windows build found in the app.
+       */
+      Elite::Universe universe;
+
       // ---- the text system ---------------------------------------------------------------------
       TranscriptSink sink;
-      Elite::TextState text;
+      Elite::TextState& text = universe.text;
       Elite::CharacterPrinter characters;
       Elite::TokenPrinter recursive;
-      Elite::Rng rng;
-      std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it (M2-c)
+      Elite::Rng& rng = universe.rng;
+      std::uint8_t& numberWidth = universe.numberWidth; // 6502: U as the last BPRNT left it (M2-c)
 
       // ---- the commander and the universe -------------------------------------------------------
-      Elite::Commander commander = Elite::DefaultCommander();
-      std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
-      std::array<std::uint8_t, 16> buffer{};
-      std::uint8_t useDisk = 0;
+      Elite::Commander& commander = universe.commander;
+      std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE>& name = universe.commanderName;
+      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE>& image = universe.commanderFile;
+      std::array<std::uint8_t, 16>& buffer = universe.lineBuffer;
+      std::uint8_t& useDisk = universe.useDisk;
 
-      Elite::SystemSeeds currentSeeds{};
-      Elite::SystemSeeds selectedSeeds{};
-      Elite::CurrentSystem current;
-      Elite::MarketState market;
-      Elite::FlightStatus status;
+      Elite::SystemSeeds& currentSeeds = universe.current.seeds;
+      Elite::SystemSeeds& selectedSeeds = universe.selectedSeeds;
+      Elite::CurrentSystem& current = universe.current;
+      Elite::MarketState& market = universe.market;
+      Elite::FlightStatus& status = universe.status;
 
-      std::uint8_t crosshairX = 0;
-      std::uint8_t crosshairY = 0;
-      std::uint8_t explosionCount = 0;
-      std::uint8_t dockedFlag = 0;
-      std::uint8_t view = 0; ///< 6502: QQ11
+      std::uint8_t& crosshairX = universe.crosshairX;
+      std::uint8_t& crosshairY = universe.crosshairY;
+      std::uint8_t& explosionCount = universe.explosions;
+      std::uint8_t& dockedFlag = universe.dockedFlag;
+      std::uint8_t& view = universe.view; ///< 6502: QQ11
 
       Elite::StateTokens values;
       Elite::ExtendedTokenPrinter extended;
-      Elite::TradeScreen trade;
-      Elite::SaveScreen save;
+      NullSeams nulls;
+
+      /// The seams, over the shell and the store. Last, because every reference in it is bound at
+      /// construction. `NullShell` answers four of them, which is what it is for.
+      Elite::Ports ports;
     };
 
     /*
@@ -358,7 +375,7 @@ namespace GameLogicTests
       case Elite::KeyAction::StatusMode:
       {
         const Elite::ShipCondition condition{_game.dockedFlag, 0, 0, _game.status.energy};
-        Elite::StatusScreen(_game.trade, _game.commander, condition, _game.crosshairX, _game.crosshairY, _game.selectedSeeds);
+        Elite::StatusScreen(_game.universe, _game.ports, condition);
         return "status";
       }
 
@@ -369,7 +386,7 @@ namespace GameLogicTests
           Elite::FindNearestSystem(_game.commander.galaxySeeds, _game.crosshairX, _game.crosshairY,
                                    _game.commander.systemX, _game.commander.systemY);
         _game.selectedSeeds = found.seeds;
-        Elite::SystemDataScreen(_game.trade, _game.selectedSeeds, found.data, found.distance);
+        Elite::SystemDataScreen(_game.universe, _game.ports, found.data, found.distance);
         return "data on system";
       }
 
@@ -381,25 +398,25 @@ namespace GameLogicTests
         return "market";
 
       case Elite::KeyAction::BuyCargo:
-        Elite::BuyScreen(_game.trade, _game.commander, _game.market, _game.current.economy, false);
+        Elite::BuyScreen(_game.universe, _game.ports, false);
         return "buy";
 
       case Elite::KeyAction::SellCargo:
-        Elite::ListCargo(_game.trade, _game.commander, _game.market, _game.current.economy, Elite::SELL_CARGO_VIEW);
+        Elite::ListCargo(_game.universe, _game.ports, Elite::SELL_CARGO_VIEW);
         return "sell";
 
       case Elite::KeyAction::Inventory:
-        Elite::InventoryScreen(_game.trade, _game.commander, _game.market, _game.current.economy);
+        Elite::InventoryScreen(_game.universe, _game.ports);
         return "inventory";
 
       case Elite::KeyAction::EquipShip:
-        Elite::EquipShipScreen(_game.trade, _game.commander, _game.current.techLevel);
+        Elite::EquipShipScreen(_game.universe, _game.ports);
         return "equip";
 
       case Elite::KeyAction::DiskAccess:
       {
         const Elite::DiskMenuResult menu =
-          Elite::DiskAccessMenu(_game.save, _game.commander, _game.name, _game.image, _game.buffer, _game.useDisk);
+          Elite::DiskAccessMenu(_game.universe, _game.ports);
         // 6502: BCC P%+5 / JMP QU5 / JMP BAY -- and QU5 is DFAULT, which installs the image.
         if (menu.newCommander)
         {
@@ -465,13 +482,9 @@ namespace GameLogicTests
       game->commander.cargoHold[3u] = 2; // radioactives
       Elite::SaveCommander(game->commander, game->name, game->image);
 
-      Elite::GameStart start{game->shell,      game->save,       game->text,           game->commander, game->name,
-                             game->image,      game->buffer,     game->useDisk,        game->current,   game->selectedSeeds,
-                             game->crosshairX, game->crosshairY, game->explosionCount, game->dockedFlag};
-
       // 6502: TT170 -- the cold start, which ends by pressing "8" on the player's behalf.
       game->shell.titleAnswer = 'N';
-      const Elite::ForcedKey begun = Elite::ResetAndStartGame(start);
+      const Elite::ForcedKey begun = Elite::ResetAndStartGame(game->universe, game->ports, false);
 
       Assert::AreEqual(static_cast<int>(Elite::KeyAction::StatusMode), static_cast<int>(begun.outcome.action),
                        L"a new game opens on the status screen");
@@ -617,10 +630,7 @@ namespace GameLogicTests
       game->commander.cargoHold[3u] = 2;
       Elite::SaveCommander(game->commander, game->name, game->image);
 
-      Elite::GameStart start{game->shell,      game->save,       game->text,           game->commander, game->name,
-                             game->image,      game->buffer,     game->useDisk,        game->current,   game->selectedSeeds,
-                             game->crosshairX, game->crosshairY, game->explosionCount, game->dockedFlag};
-      (void)Elite::ResetAndStartGame(start);
+      (void)Elite::ResetAndStartGame(game->universe, game->ports, false);
       Elite::GenerateMarket(game->rng, game->current.economy, game->market);
 
       game->keys = ScriptedKeys({'2', 13, 13, 13, 13, 13, 13, 'Q', 'N', 'N', 13});
