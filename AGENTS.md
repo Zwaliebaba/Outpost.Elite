@@ -68,6 +68,9 @@ uses plain `camelCase` fields so brace initialization reads naturally.
 
 ### R7 — The port carries its origin (this repository's own rule)
 
+*(Stands until [Design/Modernize.md](Design/Modernize.md) slice M6-e removes the markers, the ledger and
+`inventory.py` together, by owner ruling of 2026-09-06. Until then this rule is unchanged.)*
+
 **Every function ported from 6502 names its original label on the declaration:**
 
 ```cpp
@@ -204,7 +207,7 @@ and always run.
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all eleven in CI's order and takes no
+**Run them with `python tools/check_all.py`**, which runs all twelve in CI's order and takes no
 arguments. Do not retype the list into a loop: that is how a push went red on 2026-09-05 with the
 one check that would have caught it left out (§6.127). What it runs:
 
@@ -215,6 +218,7 @@ python tools/check_projects.py                # .vcxproj paths resolve; nothing 
 python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
 python tools/check_docs.py                    # no table row is wider than its header
 python tools/check_counts.py                  # every <!--count:NAME--> number in a document matches the tree
+python tools/check_modernize.py               # the legacy-pattern counts Design/Modernize.md states sit at their recorded ceilings
 python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
 python tools/mutate.py --check                # every recorded mutant still applies to the code it names
 python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles
@@ -223,7 +227,7 @@ python tools/extract_tables.py --check        # the generated tables match the a
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->385 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->395 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.

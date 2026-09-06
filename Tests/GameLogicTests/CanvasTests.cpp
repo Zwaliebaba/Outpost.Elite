@@ -11,7 +11,6 @@
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::Canvas;
-using Elite::DrawWorkspace;
 using Elite::Testing::Cpu6502;
 using Elite::Testing::OracleImage;
 
@@ -60,6 +59,8 @@ namespace GameLogicTests
       std::uint16_t x2 = 0;
       std::uint16_t col = 0;
       std::uint16_t zz = 0;
+      std::uint16_t y2 = 0;
+      std::uint16_t swap = 0;
       std::uint16_t screen = 0;
 
       explicit Scratch(const OracleImage& _oracle)
@@ -67,7 +68,9 @@ namespace GameLogicTests
           y1(_oracle.Label("Y1")),
           x2(_oracle.Label("X2")),
           col(_oracle.Label("COL")),
-          zz(_oracle.Label("ZZ"))
+          zz(_oracle.Label("ZZ")),
+          y2(_oracle.Label("Y2")),
+          swap(_oracle.Label("SWAP"))
       {
         const Cpu6502 cpu = _oracle.Fresh();
         const std::uint16_t low = _oracle.Label("ylookupl");
@@ -179,9 +182,7 @@ namespace GameLogicTests
             Assert::IsTrue(run.completed, L"PIXEL should return");
 
             Canvas canvas;
-            DrawWorkspace work;
-            work.zz = static_cast<std::uint8_t>(zz);
-            Elite::PlotPixel(canvas, work, static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y));
+            Elite::PlotPixel(canvas, static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y), static_cast<std::uint8_t>(zz));
 
             CompareScreens(cpu, zp.screen, canvas, Context(L"PIXEL", x, y, zz));
           }
@@ -229,11 +230,7 @@ namespace GameLogicTests
           Assert::IsTrue(run.completed, L"PIXEL2 should return");
 
           Canvas canvas;
-          DrawWorkspace work;
-          work.x1 = static_cast<std::uint8_t>(x1);
-          work.y1 = static_cast<std::uint8_t>(y1);
-          work.zz = zz;
-          const bool carry = Elite::PlotRelativePixel(canvas, work);
+          const bool carry = Elite::PlotRelativePixel(canvas, static_cast<std::uint8_t>(x1), static_cast<std::uint8_t>(y1), zz);
 
           CompareScreens(cpu, zp.screen, canvas, Context(L"PIXEL2", x1, y1));
           Assert::AreEqual(cpu.c, carry, Context(L"the exit carry", x1, y1).c_str());
@@ -280,24 +277,19 @@ namespace GameLogicTests
               Assert::IsTrue(run.completed, (Widen(name) + L" should return").c_str());
 
               Canvas canvas;
-              DrawWorkspace work;
-              work.x1 = static_cast<std::uint8_t>(x);
-              work.y1 = static_cast<std::uint8_t>(y);
-              work.col = colour;
-
               if (isBlock)
               {
-                Elite::PlotBlock(canvas, work);
+                (void)Elite::PlotBlock(canvas, static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y), colour);
               }
               else
               {
-                Elite::PlotDash(canvas, work);
+                (void)Elite::PlotDash(canvas, static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y), colour);
               }
 
               CompareScreens(cpu, zp.screen, canvas, Context(Widen(name).c_str(), x, y, colour));
 
-              // Y1 is left where the routine left it, and CPIX4's callers rely on that.
-              Assert::AreEqual<std::uint32_t>(cpu.memory[zp.y1], work.y1, Context(L"Y1 afterwards", x, y, colour).c_str());
+              // `Y1` is left decremented by `CPIX4` in the original; no caller reads it, and since
+              // M2-c the routine takes the point as a value, so there is nothing to compare.
             }
           }
         }
@@ -336,17 +328,20 @@ namespace GameLogicTests
             Assert::IsTrue(run.completed, L"HLOIN should return");
 
             Canvas canvas;
-            DrawWorkspace work;
-            work.x1 = static_cast<std::uint8_t>(x1);
-            work.x2 = static_cast<std::uint8_t>(x2);
-            work.y1 = static_cast<std::uint8_t>(y);
-            Elite::DrawHorizontalLine(canvas, work);
+            Elite::DrawHorizontalLine(canvas, static_cast<std::uint8_t>(x1), static_cast<std::uint8_t>(x2), static_cast<std::uint8_t>(y));
 
             CompareScreens(cpu, zp.screen, canvas, Context(L"HLOIN", x1, x2, y));
 
-            // The routine swaps its ends and decrements the right one, and leaves both that way.
-            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.x1], work.x1, Context(L"X1 afterwards", x1, x2, y).c_str());
-            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.x2], work.x2, Context(L"X2 afterwards", x1, x2, y).c_str());
+            /*
+             * The routine swaps its ends and decrements the right one in place, and no caller reads
+             * either afterwards; since M2-c the ends are values.
+             *
+             * `T` AND `R` ARE NOT `T2` AND `R2`, which is what this sweep found (§8, M2-c): the
+             * port wrote the BBC commentary's names into two zero-page bytes the C64's `HLOIN`
+             * never touches. Both are the kernel's and locals since M2-b, and the single-byte path
+             * leaves `T` holding the right-hand mask rather than the alignment -- scratch either
+             * way, which is why the screens agreed all along.
+             */
           }
         }
       }
@@ -397,12 +392,17 @@ namespace GameLogicTests
               Assert::IsTrue(run.completed, L"LOIN should return");
 
               Canvas canvas;
-              DrawWorkspace work;
-              work.x1 = static_cast<std::uint8_t>(x1);
-              work.y1 = static_cast<std::uint8_t>(y1);
-              work.x2 = static_cast<std::uint8_t>(x2);
-              work.y2 = static_cast<std::uint8_t>(y2);
-              Elite::DrawLine(canvas, work);
+              const Elite::DrawnLine drawn = Elite::DrawLine(
+                canvas, Elite::Line{static_cast<std::uint8_t>(x1), static_cast<std::uint8_t>(y1), static_cast<std::uint8_t>(x2),
+                                    static_cast<std::uint8_t>(y2)});
+
+              // 6502: X1, Y1, X2, Y2 and SWAP as LOIN leaves them -- the ends the other way round when
+              // it drew right to left or bottom to top, which `WPLS2` reads.
+              Assert::AreEqual<std::uint32_t>(cpu.memory[zp.x1], drawn.ends.x1, L"X1 afterwards");
+              Assert::AreEqual<std::uint32_t>(cpu.memory[zp.y1], drawn.ends.y1, L"Y1 afterwards");
+              Assert::AreEqual<std::uint32_t>(cpu.memory[zp.x2], drawn.ends.x2, L"X2 afterwards");
+              Assert::AreEqual<std::uint32_t>(cpu.memory[zp.y2], drawn.ends.y2, L"Y2 afterwards");
+              Assert::AreEqual<std::uint32_t>(cpu.memory[zp.swap], drawn.swapped ? 0xFFu : 0u, L"SWAP afterwards");
 
               CompareScreens(cpu, zp.screen, canvas,
                              L"LOIN (" + std::to_wstring(x1) + L"," + std::to_wstring(y1) + L") to (" + std::to_wstring(x2) + L"," +
@@ -472,12 +472,7 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"LOIN should return");
 
         Canvas canvas;
-        DrawWorkspace work;
-        work.x1 = x1;
-        work.y1 = y1;
-        work.x2 = x2;
-        work.y2 = y2;
-        Elite::DrawLine(canvas, work);
+        (void)Elite::DrawLine(canvas, Elite::Line{x1, y1, x2, y2});
 
         CompareScreens(cpu, zp.screen, canvas,
                        L"LOIN (" + std::to_wstring(x1) + L"," + std::to_wstring(y1) + L") to (" + std::to_wstring(x2) + L"," +
@@ -500,18 +495,10 @@ namespace GameLogicTests
     TEST_METHOD(EveryPrimitiveErasesItself)
     {
       Canvas canvas;
-      DrawWorkspace work;
 
-      work.zz = 0;
-      Elite::PlotPixel(canvas, work, 137, 61);
-      work.x1 = 90;
-      work.y1 = 44;
-      work.col = 0xAA;
-      Elite::PlotDash(canvas, work);
-      work.x1 = 10;
-      work.x2 = 55;
-      work.y1 = 33;
-      Elite::DrawHorizontalLine(canvas, work);
+      Elite::PlotPixel(canvas, 137, 61, 0);
+      (void)Elite::PlotDash(canvas, 90, 44, 0xAAu);
+      Elite::DrawHorizontalLine(canvas, 10, 55, 33);
 
       bool anythingDrawn = false;
       for (const std::uint8_t byte : canvas.Screen())
@@ -520,17 +507,9 @@ namespace GameLogicTests
       }
       Assert::IsTrue(anythingDrawn, L"the setup should have drawn something to erase");
 
-      work = DrawWorkspace{};
-      work.zz = 0;
-      Elite::PlotPixel(canvas, work, 137, 61);
-      work.x1 = 90;
-      work.y1 = 44;
-      work.col = 0xAA;
-      Elite::PlotDash(canvas, work);
-      work.x1 = 10;
-      work.x2 = 55;
-      work.y1 = 33;
-      Elite::DrawHorizontalLine(canvas, work);
+      Elite::PlotPixel(canvas, 137, 61, 0);
+      (void)Elite::PlotDash(canvas, 90, 44, 0xAAu);
+      Elite::DrawHorizontalLine(canvas, 10, 55, 33);
 
       for (std::size_t offset = 0; offset < Canvas::SCREEN_SIZE; ++offset)
       {
@@ -556,10 +535,8 @@ namespace GameLogicTests
       canvas.SetBackground(0);
       canvas.SetDashboardShown(true);
 
-      DrawWorkspace work;
-      work.zz = 255;
-      Elite::PlotPixel(canvas, work, 66, Y);
-      Elite::PlotPixel(canvas, work, 68, Y);
+      Elite::PlotPixel(canvas, 66, Y, 255);
+      Elite::PlotPixel(canvas, 68, Y, 255);
 
       // 6502: a screen RAM byte -- high nibble is the colour for %01, low nibble for %10.
       const int cell = (Y / 8) * Canvas::CELL_COLUMNS + (Canvas::SPACE_VIEW_MARGIN + 64) / 8;

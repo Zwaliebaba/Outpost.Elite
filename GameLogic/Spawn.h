@@ -60,8 +60,8 @@ namespace Elite
    * The space station is the exception and it does not shuffle anything: `KS4` clears the bubble
    * back to just a sun.
    */
-  void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, ShipBlock& _work, CommanderBlock& _commander,
-                SpawnEffects& _effects, std::uint8_t _slot, std::uint16_t& _blueprint) noexcept;
+  void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, Ship& _work, Commander& _commander,
+                SpawnEffects& _effects, std::uint8_t _slot, const Blueprint*& _blueprint) noexcept;
 
   /*
    * 6502: SOS1 -- put the system's planet or sun into the bubble.
@@ -71,19 +71,16 @@ namespace Elite
    * crater (§6.53's other half). The 127s in `INWK+29` and `INWK+30` are the maximum roll and
    * pitch counters, which is what makes a planet rotate.
    */
-  [[nodiscard]] NewShip AddPlanetOrSun(Bubble& _bubble, ShipBlock& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
-                                       std::uint16_t& _blueprint) noexcept;
+  [[nodiscard]] NewShip AddPlanetOrSun(Bubble& _bubble, Ship& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
+                                       const Blueprint*& _blueprint) noexcept;
 
   /// 6502: DOD -- the Dodo station's ship type, which is the last blueprint this build carries.
   /// Measured rather than counted: entry 33 of the pointer table is 60973, and `SHIP_DODO` is at
   /// 60973 in the assembled image.
-  inline constexpr std::uint8_t SHIP_TYPE_DODO = 33;
+  /// `ShipType::Dodo` is the enumerator; this note stays for the measurement.
 
   /// 6502: LDA tek / CMP #10 / BCC notadodo -- a system this advanced has a Dodo, not a Coriolis.
   inline constexpr std::uint8_t STATION_DODO_TECH_LEVEL = 10;
-
-  /// 6502: LDA #LO(LSO) / STA INWK+33 -- `LSO`, the SUN's line heap, handed to the station.
-  inline constexpr std::uint16_t SUN_HEAP_ADDRESS = 1408;
 
   /*
    * 6502: NWSPS -- put the space station into the bubble, and NwS1 with it.
@@ -104,8 +101,8 @@ namespace Elite
    * 7 and steps X by two -- so what it negates is the three HIGH bytes of the nose vector, turning
    * the station round to face the player it has just let go.
    */
-  [[nodiscard]] NewShip AddStation(Bubble& _bubble, ShipBlock& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
-                                   std::uint16_t& _blueprint) noexcept;
+  [[nodiscard]] NewShip AddStation(Bubble& _bubble, Ship& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
+                                   const Blueprint*& _blueprint) noexcept;
 
   /*
    * 6502: SOLAR -- build the system: a sun, a planet, and however many Trumbles have bred.
@@ -124,8 +121,8 @@ namespace Elite
    * arriving in a new system fills the stardust, clears the ships and resets both line heaps as
    * part of the same call (§6.58).
    */
-  void BuildSystem(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work,
-                   CommanderBlock& _commander, Rng& _rng, FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
+  void BuildSystem(Canvas& _canvas, Stardust& _dust, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
+                   Commander& _commander, Rng& _rng, FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
                    const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _view, bool _carryIn) noexcept;
 
   /*
@@ -158,7 +155,7 @@ namespace Elite
   /// 6502: LDA #&60 -- the orientation `fq1` gives every piece: nose along z, side along x.
   inline constexpr std::uint8_t DEBRIS_ORIENTATION = 0x60;
 
-  [[nodiscard]] RngResult SeedDebris(ShipBlock& _work, Rng& _rng, bool _carryIn) noexcept;
+  [[nodiscard]] RngResult SeedDebris(Ship& _work, Rng& _rng, bool _carryIn) noexcept;
 
   /*
    * 6502: fq1 -- point a ship along the z axis, give it the player's speed, and create it.
@@ -171,8 +168,8 @@ namespace Elite
    * upstream comment says "double DELTA speed (i.e. 6)", which is neither the rotate nor the 12
    * that `DELTA` actually holds by then. `TXA / JMP NWSHP` makes the type the caller's X.
    */
-  [[nodiscard]] NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed, bool _carryIn,
-                                  std::uint16_t& _blueprint) noexcept;
+  [[nodiscard]] NewShip AddDebris(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed, bool _carryIn,
+                                  const Blueprint*& _blueprint) noexcept;
 
   // ---- slice 4a-b: putting a ship into the bubble from inside the bubble ------------------------
 
@@ -202,8 +199,8 @@ namespace Elite
    * The answer is `NWSHP`'s carry: clear means the bubble was full, and `FRMIS` shows "MISSILE
    * JAMMED" rather than spending the missile.
    */
-  [[nodiscard]] NewShip SpawnShipAhead(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed,
-                                       std::uint8_t _missileTarget, std::uint16_t& _blueprint) noexcept;
+  [[nodiscard]] NewShip SpawnShipAhead(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed,
+                                       std::uint8_t _missileTarget, const Blueprint*& _blueprint) noexcept;
 
   /*
    * 6502: SFS2 -- move a ship along one axis by twice A, sign and all.
@@ -212,7 +209,7 @@ namespace Elite
    * the sign into the carry, `LDA #0 / ROR A` catches it. Then `JMP MVT1` rather than `TAS7`'s own
    * arithmetic, so this one adds to a SHIP COORDINATE where that one adds to `K3`.
    */
-  void MoveShipAlongAxis(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _amount, std::uint8_t _axis) noexcept;
+  void MoveShipAlongAxis(Ship& _work, std::uint8_t _amount, std::uint8_t _axis) noexcept;
 
   /*
    * 6502: SFS1 -- spawn a child from the ship in slot `_parent`: wreckage, a Viper out of a
@@ -234,12 +231,12 @@ namespace Elite
    * `SFRMIS` enters at `SFS1-2` -- the `LDA #%11111110` -- so all three share one body and differ
    * only in what they arrive holding.
    */
-  [[nodiscard]] NewShip SpawnChildShip(Bubble& _bubble, ShipBlock& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
-                                       std::uint8_t _parentType, std::uint8_t _aiFlag, std::uint8_t _shipType,
-                                       std::uint16_t& _blueprint) noexcept;
+  [[nodiscard]] NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent,
+                                       ShipType _parentType, std::uint8_t _aiFlag, ShipType _shipType,
+                                       const Blueprint*& _blueprint) noexcept;
 
   /// 6502: SESCP -- `SFS1` with the escape pod's type and the standard AI byte already loaded.
-  [[nodiscard]] NewShip SpawnEscapePod(Bubble& _bubble, ShipBlock& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
-                                       std::uint8_t _parentType, std::uint16_t& _blueprint) noexcept;
+  [[nodiscard]] NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent,
+                                       ShipType _parentType, const Blueprint*& _blueprint) noexcept;
 
 } // namespace Elite

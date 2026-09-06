@@ -3,7 +3,7 @@
 #include "Commander.h"
 #include "TextPrint.h"
 #include "Tokens.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <array>
 #include <cstdint>
@@ -38,7 +38,7 @@ namespace Elite
      * printing a name twists the seeds, what comes back is not what went in. So both sets are
      * state this can change, and the caller sees the change.
      */
-    StateTokens(TokenPrinter& _printer, TextState& _text, const CommanderBlock& _commander,
+    StateTokens(TokenPrinter& _printer, TextState& _text, const Commander& _commander,
                 std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name, SystemSeeds& _current, SystemSeeds& _selected,
                 bool _misJumped) noexcept
       : m_printer(_printer),
@@ -62,7 +62,7 @@ namespace Elite
 
     TokenPrinter& m_printer;
     TextState& m_text;
-    const CommanderBlock& m_commander;
+    const Commander& m_commander;
     std::span<const std::uint8_t, COMMANDER_NAME_SIZE> m_name;
     SystemSeeds& m_current;
     SystemSeeds& m_selected;

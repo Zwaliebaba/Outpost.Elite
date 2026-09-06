@@ -3,7 +3,7 @@
 #include "Controls.h"
 #include "DockedKeys.h"
 #include "SaveGame.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <cstdint>
 #include <span>
@@ -55,7 +55,7 @@ namespace Elite
    * The crosshairs to where the ship is, both coordinates, counting DOWN -- so the loop moves the y
    * first. It reads the COMMANDER, because QQ0 and QQ1 are two of its bytes.
    */
-  void CrosshairsToCurrentSystem(const CommanderBlock& _commander, std::uint8_t& _crosshairX, std::uint8_t& _crosshairY) noexcept;
+  void CrosshairsToCurrentSystem(const Commander& _commander, std::uint8_t& _crosshairX, std::uint8_t& _crosshairY) noexcept;
 
   /*
    * 6502: jmp -- the other direction, and it is what makes a hyperspace jump arrive.
@@ -64,7 +64,7 @@ namespace Elite
    * routines return through that. And it writes into the commander: arriving somewhere is a change
    * to the saved game, not to a variable beside it.
    */
-  void CurrentSystemToCrosshairs(CommanderBlock& _commander, std::uint8_t _crosshairX, std::uint8_t _crosshairY) noexcept;
+  void CurrentSystemToCrosshairs(Commander& _commander, std::uint8_t _crosshairX, std::uint8_t _crosshairY) noexcept;
 
   /*
    * What the start sequence reaches for outside GameLogic.
@@ -160,14 +160,12 @@ namespace Elite
      * screen; `_distance` is how far away it settles once it has finished moving towards the
      * viewer, and it is 210 for the Cobra and 48 for the Adder.
      */
-    [[nodiscard]] virtual std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance) = 0;
+    [[nodiscard]] virtual std::uint8_t ShowTitleScreen(std::uint8_t _token, ShipType _shipType, std::uint8_t _distance) = 0;
   };
 
   /// 6502: the two title screens BR1 shows, which differ in every argument.
   inline constexpr std::uint8_t TITLE_LOAD_TOKEN = 6;  ///< "LOAD NEW COMMANDER (Y/N)?"
   inline constexpr std::uint8_t TITLE_START_TOKEN = 7; ///< "PRESS FIRE OR SPACE, COMMANDER."
-  inline constexpr std::uint8_t SHIP_COBRA_MK3 = 11;   ///< 6502: CYL
-  inline constexpr std::uint8_t SHIP_ADDER = 20;       ///< 6502: ADA
   inline constexpr std::uint8_t TITLE_COBRA_DISTANCE = 210;
   inline constexpr std::uint8_t TITLE_ADDER_DISTANCE = 48;
 
@@ -213,7 +211,7 @@ namespace Elite
     SaveScreen& save;
     TextState& text;
 
-    CommanderBlock& commander;                          ///< 6502: TP, through NAME
+    Commander& commander;                          ///< 6502: TP, through NAME
     std::span<std::uint8_t, COMMANDER_NAME_SIZE> name;  ///< 6502: NAME
     std::span<std::uint8_t, COMMANDER_FILE_SIZE> image; ///< 6502: NA%
     std::span<std::uint8_t> buffer;                     ///< 6502: INWK+5, the line editor's

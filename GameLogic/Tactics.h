@@ -20,7 +20,7 @@ namespace Elite
    * the whole of what phase 3 was missing before an AI could be written. They are here rather than
    * in `Scanner.h` -- which owns `K3` and the compass routines that fill it -- because their
    * callers are the tactics and the autopilot; and they are here rather than in `Arith.h` because
-   * every one of them reads a `ShipBlock`, which the arithmetic kernel does not know about.
+   * every one of them reads a `Ship`, which the arithmetic kernel does not know about.
    *
    * `K3` IS THE SAME TEN BYTES THE COMPASS USES, and `K3Block` is now its name in both places
    * (§6.121). The original shares the zero page between `SPS1`, `CIRCLE2` and these, and nothing
@@ -40,12 +40,12 @@ namespace Elite
    * The subtraction is `EOR #%10000000` on the other object's sign and then `MVT3`, which ADDS --
    * negate one side and add is how sign-magnitude subtracts. `MVT3` leaves its answer's sign byte
    * in A as well as in `K+3`, and the `STA K3+2,X` right after the call is reading that register;
-   * the port reads `_math.k[3]`, which is the same byte.
+   * the port reads the block `MVT3` hands back, which is the same byte.
    *
-   * `LDY U` after the call restores Y for a caller that wants it, and no caller in this build does.
+   * `STY U / LDX U ... LDY U` parks Y for a caller that wants it back, and no caller in this build
+   * does; the port has no register to park.
    */
-  [[nodiscard]] bool SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math,
-                                      std::uint8_t _at) noexcept;
+  [[nodiscard]] bool SubtractShipAxis(const Ship& _other, const Ship& _work, K3Block& _axes, std::uint8_t _at) noexcept;
 
   /*
    * 6502: VCSUB -- all three axes, so `K3` becomes the vector FROM the other object TO this ship.
@@ -58,10 +58,10 @@ namespace Elite
    */
   /// Returns the carry the LAST of the three `MVT3`s exits with, which `TACTICS` rotates into the
   /// `DORND` at `TA64`: nothing between the two touches the flag (§6.126).
-  [[nodiscard]] bool SubtractShipAxes(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
+  [[nodiscard]] bool SubtractShipAxes(const Ship& _other, const Ship& _work, K3Block& _axes) noexcept;
 
   /// 6502: VCSU1 -- `VCSUB` with `V` pointing at `K%+NI%`, which is where `NWSPS` puts the station.
-  [[nodiscard]] bool SubtractStationAxes(const Bubble& _bubble, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
+  [[nodiscard]] bool SubtractStationAxes(const Bubble& _bubble, const Ship& _work, K3Block& _axes) noexcept;
 
   /*
    * 6502: TAS3 and TAS4 -- the dot product of `XX15` with one of a ship's orientation vectors.
@@ -75,17 +75,16 @@ namespace Elite
    * It ends by falling into `MAD` rather than calling it, so the answer is `MAD`'s (A X) pair:
    * the dot product as a sign-magnitude sixteen-bit value, with the sign in A's bit 7.
    */
-  [[nodiscard]] AddSignedResult DotProductWithShip(const ShipBlock& _block, const DrawWorkspace& _draw, MathWorkspace& _math,
-                                                   std::uint8_t _at) noexcept;
+  [[nodiscard]] AddSignedResult DotProductWithShip(const Ship& _block, UnitVector _vector, std::uint8_t _at) noexcept;
 
   /*
    * 6502: TAS6 -- point `XX15` the other way.
    *
    * Three `EOR #%10000000`s, which is what negation is in sign-magnitude: the magnitude is
-   * untouched and only the sign bit moves. `XX15` is `X1`, `Y1` and `X2` in the draw workspace
-   * (§6.37), the same six bytes `TAS2` and the line drawing share.
+   * untouched and only the sign bit moves. `XX15` is `X1`, `Y1` and `X2` (§6.37), the same six
+   * bytes `TAS2` and the line drawing share, and since M2-c the vector goes in and comes back.
    */
-  void NegateVector(DrawWorkspace& _draw) noexcept;
+  [[nodiscard]] UnitVector NegateVector(UnitVector _vector) noexcept;
 
   /*
    * 6502: DCS1 -- move `K3` from the station to the IDEAL DOCKING POSITION, which is out in front
@@ -126,11 +125,6 @@ namespace Elite
   /// at four, and the four is the two doubled rather than a second constant.
   inline constexpr std::uint8_t ANGRY_ACCELERATION = 2;
 
-  /// 6502: bit 5 of NEWB -- "this ship is on the station's side", so hitting it angers the station
-  /// as well; and bit 2, which is the hostile flag `ANGRY` sets.
-  inline constexpr std::uint8_t NEWB_STATION_ALLY = 0x20;
-  inline constexpr std::uint8_t NEWB_HOSTILE = 0x04;
-
   /*
    * 6502: ANGRY -- tell the ship in slot `_slot` that we just hit it.
    *
@@ -142,8 +136,13 @@ namespace Elite
    * whatever the loop last moved in `TYPE`, so which ships turn hostile after a missile lock
    * depends on loop state the caller never set. The port keeps both bytes separate because the
    * original does (§6.121).
+   *
+   * RETURNS THE CARRY IT EXITS WITH, which is a `CMP`'s every time and which part 11 of the flight
+   * loop hands to `LL9` (§6.157): `CMP #SST` leaves it SET for the station and set for any type
+   * above it, clear for one below; a ship with no AI byte returns on that; one with an AI byte runs
+   * `ASL A` on the 2 it just stored -- CLEAR -- and then `CMP #CYL` against `TYPE`, the loop's byte.
    */
-  void Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, std::uint8_t _type) noexcept;
+  bool Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, ShipType _type) noexcept;
 
   // ---- slice 4a-c: the AI, and the autopilot that shares its tail ------------------------------
 
@@ -167,7 +166,7 @@ namespace Elite
   /// 6502: LDA #%11110001 -- the AI byte a station gives the ship it launches, and
   /// `LDX #%00100100` the `NEWB` a rock hermit gives the pirate it turns into.
   inline constexpr std::uint8_t STATION_LAUNCH_AI = 0xF1;
-  inline constexpr std::uint8_t HERMIT_PIRATE_NEWB = 0x24;
+  inline constexpr std::uint8_t HERMIT_PIRATE_NEWB = Mask(NewbBit::Innocent, NewbBit::Hostile);
 
   /// 6502: CPX #4 / BCS TA22 -- a station launches Vipers until there are four of them.
   inline constexpr std::uint8_t MAXIMUM_POLICE = 4;

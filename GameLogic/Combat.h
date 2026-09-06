@@ -54,7 +54,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t KillVolume(std::uint8_t _distance) noexcept;
 
   /// 6502: EXNO -- play it. `_work` is `INWK`, and byte 7 is what picks the volume.
-  std::uint8_t PlayHitSound(const ShipBlock& _work, DashboardEffects& _effects) noexcept;
+  std::uint8_t PlayHitSound(const Ship& _work, DashboardEffects& _effects) noexcept;
 
   /*
    * 6502: EXNO2 -- add a kill to the tally, and make the bigger noise.
@@ -67,7 +67,7 @@ namespace Elite
    *
    * Returns the byte `NOISE2` gets, which part 11 stores into the dead ship's energy.
    */
-  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, std::uint8_t _type) noexcept;
+  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, ShipType _type) noexcept;
 
   /*
    * 6502: OOPS -- take `_damage`, on the shield the hit came from, and the banks under it.
@@ -81,7 +81,7 @@ namespace Elite
    *
    * Returns false when the energy banks have gone -- `JMP DEATH` -- so the caller ends the frame.
    */
-  [[nodiscard]] bool TakeDamage(FlightScreen& _screen, DashboardEffects& _effects, const ShipBlock& _target, std::uint8_t _damage,
+  [[nodiscard]] bool TakeDamage(FlightScreen& _screen, DashboardEffects& _effects, const Ship& _target, std::uint8_t _damage,
                                 bool _carryIn) noexcept;
 
   /*

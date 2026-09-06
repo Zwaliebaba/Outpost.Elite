@@ -9,67 +9,88 @@
 
 namespace Elite
 {
+  /// 6502: LDA #18 -- what byte 1 of a fresh cloud's heap starts at, the counter `DOEXP` ages.
+  inline constexpr std::uint8_t EXPLOSION_COUNTER_START = 18;
 
-  void DivideByShipZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
+  namespace
   {
-    _math.p2 = _a;
+    /// 6502: DVL6 / DV9 -- the denominator's top byte, shifted up (at least once, with the bytes
+    /// below it) until its top bit is set: what `DVID3B` stores in `Q` and leaves there.
+    [[nodiscard]] std::uint8_t ScaledDivisorTop(SignMag24 _divisor) noexcept
+    {
+      std::uint8_t low = _divisor.lo;
+      std::uint8_t middle = _divisor.hi;
+      std::uint8_t top = static_cast<std::uint8_t>(_divisor.sgn & 0x7Fu);
+      do
+      {
+        const ShiftResult first = RotateLeftValue(low, false);
+        low = first.value;
+        const ShiftResult second = RotateLeftValue(middle, first.carry);
+        middle = second.value;
+        top = RotateLeftValue(top, second.carry).value;
+      } while ((top & 0x80u) == 0u);
+      return top;
+    }
+  } // namespace
 
+  KBlock DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept
+  {
     // The `ORA #1` is what makes the divide below safe, and it is deliberate rather than defensive:
     // a ship exactly on the plane of the screen has z_lo = 0, and the difference between dividing
     // by zero and dividing by one is invisible at this scale.
-    _math.q = static_cast<std::uint8_t>(_ship.bytes[SHIP_Z_OFFSET] | 0x01u);
-    _math.r = _ship.bytes[SHIP_Z_OFFSET + 1];
-    _math.s = _ship.bytes[SHIP_Z_OFFSET + 2];
+    const SignMag24 distance{static_cast<std::uint8_t>(_ship.z.lo | 0x01u), _ship.z.hi, _ship.z.sgn};
 
-    DivideSignedToK(_math);
+    // 6502: DV9's STA Q -- the divide leaves the scaled divisor in `Q`, and for a ship drawn as a
+    // dot that is the frame's Q the altitude check reads (`EndFlightFrame`). The kernel keeps its
+    // scratch since M2-b; this byte is recomputed here for that one reader, and `K` is the block
+    // this routine returns since M2-c-3.
+    _math.q = ScaledDivisorTop(distance);
+    return DivideSigned24(_numerator, distance);
   }
 
-  ScreenOffset DivideToScreenOffset(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
+  ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept
   {
-    DivideByShipZ(_ship, _math, _a);
+    const KBlock k = DivideByShipZ(_ship, _math, _numerator);
 
     // The top two bytes of the quotient, sign removed. Anything at all up there is already past
     // 65,536 and there is nothing to say about where it would be on a 256-pixel view.
-    const std::uint8_t top = static_cast<std::uint8_t>((_math.k[3] & 0x7Fu) | _math.k[2]);
+    const std::uint8_t top = static_cast<std::uint8_t>((k.top & 0x7Fu) | k.high);
     if (top != 0u)
     {
       // 6502: PL21 -- SEC and return. X is not touched on this path.
-      return ScreenOffset{_math.k[0], 0, top, true};
+      return ScreenOffset{k.low, 0, top, true};
     }
 
-    const std::uint8_t high = _math.k[1];
+    const std::uint8_t high = k.mid;
     if (high >= 4u)
     {
       // 6502: the CPX that overflows at 1024, returning through PL6's RTS with the carry the
       // comparison set. A is still the zero the test above left, which is why `SHPPT` -- which
       // reads A and not the carry -- can miss this and does.
-      return ScreenOffset{_math.k[0], high, 0, true};
+      return ScreenOffset{k.low, high, 0, true};
     }
 
-    if ((_math.k[3] & 0x80u) == 0u)
+    if ((k.top & 0x80u) == 0u)
     {
       // Positive, and the carry is already clear: the comparison above did not set it.
-      return ScreenOffset{_math.k[0], high, 0, false};
+      return ScreenOffset{k.low, high, 0, false};
     }
 
     // 6502: the two's complement negation. `ADC #1` runs with the carry the CPX left CLEAR, so it
     // adds exactly one -- the one place in this file where the incoming carry is not part of the
-    // sum, and the only one where reading it as `+ 1 + C` would still be right.
-    const AddResult low = AddWithCarry(static_cast<std::uint8_t>(_math.k[0] ^ 0xFFu), 1, false);
-    _math.k[0] = low.value;
-
+    // sum, and the only one where reading it as `+ 1 + C` would still be right. The original writes
+    // the negated low byte back into `K`; nothing reads it there, and it is the returned value.
+    const AddResult low = AddWithCarry(static_cast<std::uint8_t>(k.low ^ 0xFFu), 1, false);
     const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(high ^ 0xFFu), 0, low.carry);
 
     // 6502: PL44 -- CLC, then PL6's RTS.
-    return ScreenOffset{_math.k[0], negated.value, negated.value, false};
+    return ScreenOffset{low.value, negated.value, negated.value, false};
   }
 
-  ProjectResult Project(const ShipBlock& _ship, MathWorkspace& _math, Projection& _screen) noexcept
+  ProjectResult Project(const Ship& _ship, MathWorkspace& _math, Projection& _screen) noexcept
   {
-    _math.p = _ship.bytes[SHIP_X_OFFSET];
-    _math.p1 = _ship.bytes[SHIP_X_OFFSET + 1];
-
-    const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.bytes[SHIP_X_OFFSET + 2]);
+    // 6502: LDA INWK / STA P / LDA INWK+1 / STA P+1 / LDA INWK+2 / JSR PLS6 -- the x coordinate.
+    const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.x);
     if (across.overflow)
     {
       // 6502: BCS PL2-1, which is PROJ's own RTS one byte before the next routine begins.
@@ -82,11 +103,9 @@ namespace Elite
     const AddResult x1 = AddWithCarry(across.high, 0, x.carry);
     _screen.x1 = x1.value;
 
-    _math.p = _ship.bytes[SHIP_Y_OFFSET];
-    _math.p1 = _ship.bytes[SHIP_Y_OFFSET + 1];
-
-    const std::uint8_t upwards = static_cast<std::uint8_t>(_ship.bytes[SHIP_Y_OFFSET + 2] ^ 0x80u);
-    const ScreenOffset down = DivideToScreenOffset(_ship, _math, upwards);
+    // 6502: the y coordinate, with its sign flipped: up the screen is down the axis.
+    const std::uint8_t upwards = static_cast<std::uint8_t>(_ship.y.sgn ^ 0x80u);
+    const ScreenOffset down = DivideToScreenOffset(_ship, _math, SignMag24{_ship.y.lo, _ship.y.hi, upwards});
     if (down.overflow)
     {
       return ProjectResult{true, down.a};
@@ -113,11 +132,11 @@ namespace Elite
      * it returns to SHPPT's caller with the ship marked as not drawn. A bool and an early return say
      * the same thing without needing a stack.
      */
-    bool StorePoint(LineHeap& _heap, std::uint16_t _address, const Projection& _screen, std::uint8_t _y, std::uint8_t _a) noexcept
+    bool StorePoint(LineHeap& _heap, HeapOffset _run, const Projection& _screen, std::uint8_t _y, std::uint8_t _a) noexcept
     {
-      _heap.Write(static_cast<std::uint16_t>(_address + _y), _a);
-      _heap.Write(static_cast<std::uint16_t>(_address + _y + 2), _a);
-      _heap.Write(static_cast<std::uint16_t>(_address + _y + 1), _screen.x);
+      _heap.Write(_run.Byte(_y), _a);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_y + 2u)), _a);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_y + 1u)), _screen.x);
 
       // The carry is clear here on both calls: on the first because the `CMP` that let us past the
       // bottom-of-screen test left it clear, and on the second because the first call would have
@@ -128,15 +147,15 @@ namespace Elite
         return false;
       }
 
-      _heap.Write(static_cast<std::uint16_t>(_address + _y - 1), right.value);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_y - 1u)), right.value);
       return true;
     }
 
   } // namespace
 
-  void DrawShipLines(Canvas& _canvas, DrawWorkspace& _draw, const LineHeap& _heap, std::uint16_t _address) noexcept
+  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run) noexcept
   {
-    const std::uint8_t length = _heap.Read(_address);
+    const std::uint8_t length = _heap.Read(_run);
     if (length < 4u)
     {
       return;
@@ -152,38 +171,58 @@ namespace Elite
     std::uint8_t y = 1;
     do
     {
-      _draw.x1 = _heap.Read(static_cast<std::uint16_t>(_address + y));
-      _draw.y1 = _heap.Read(static_cast<std::uint16_t>(_address + y + 1));
-      _draw.x2 = _heap.Read(static_cast<std::uint16_t>(_address + y + 2));
-      _draw.y2 = _heap.Read(static_cast<std::uint16_t>(_address + y + 3));
+      Line line;
+      line.x1 = _heap.Read(_run.Byte(y));
+      line.y1 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 1u)));
+      line.x2 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 2u)));
+      line.y2 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 3u)));
 
-      DrawLine(_canvas, _draw);
+      (void)DrawLine(_canvas, line);
 
       y = static_cast<std::uint8_t>(y + 4);
     } while (y < length);
   }
 
-  void StoreLineCountAndDraw(Canvas& _canvas, DrawWorkspace& _draw, LineHeap& _heap, std::uint16_t _address, std::uint8_t _count) noexcept
+  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept
   {
-    _heap.Write(_address, _count);
-    DrawShipLines(_canvas, _draw, _heap, _address);
+    _heap.Write(_run, _count);
+    DrawShipLines(_canvas, _heap, _run);
   }
 
-  void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, const LineHeap& _heap) noexcept
+  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept
   {
-    if ((_ship[SHIP_STATE_OFFSET] & SHIP_STATE_DRAWN) == 0u)
+    if (!Has(_ship.state, ShipStateBit::OnScreen))
     {
-      return;
+      return _carryIn; // 6502: BEQ LL10-1 -- a bare RTS, and the flag is the caller's
     }
 
-    _ship[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_ship[SHIP_STATE_OFFSET] ^ SHIP_STATE_DRAWN);
-    DrawShipLines(_canvas, _draw, _heap, ShipHeapAddress(_ship));
+    _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
+    DrawShipLines(_canvas, _heap, _ship.heap);
+
+    // 6502: LL155's exit -- `CMP #4 / BCC LL82` clears it for a heap with no line on it, and the
+    // `CPY XX20 / BCC LL27` that ends the loop leaves it set for every heap that had one.
+    return _heap.Read(_ship.heap) >= 4u;
   }
 
-  void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, LineHeap& _heap, MathWorkspace& _math,
-                       Projection& _screen) noexcept
+  void SeedExplosionCloud(LineHeap& _heap, HeapOffset _run, std::uint8_t _explosionCount, Rng& _rng, bool _carryIn) noexcept
   {
-    EraseShip(_canvas, _draw, _ship, _heap);
+    _heap.Write(_run.Byte(1u), EXPLOSION_COUNTER_START); // 6502: LDY #1 / LDA #18 / STA (XX19),Y
+    _heap.Write(_run.Byte(2u), _explosionCount);         // 6502: LDY #7 / LDA (XX0),Y / LDY #2 / STA (XX19),Y
+
+    // 6502: .EE55 INY / JSR DORND / STA (XX19),Y / CPY #6 / BNE EE55 -- the first roll takes the
+    // carry `EE51` left, and each later one the clear that `CPY #6` leaves while Y is under six.
+    bool carry = _carryIn;
+    for (std::uint16_t byte = 3u; byte <= 6u; ++byte)
+    {
+      _heap.Write(_run.Byte(byte), _rng.Next(carry).value);
+      carry = false;
+    }
+  }
+
+  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen) noexcept
+  {
+    // The flag `EE51` returns goes nowhere from here: `SHPPT` overwrites it in `PROJ`'s arithmetic.
+    static_cast<void>(EraseShip(_canvas, _ship, _heap, false));
 
     const ProjectResult projected = Project(_ship, _math, _screen);
 
@@ -191,7 +230,7 @@ namespace Elite
     // visible whenever `PLS6` overflows on its second test rather than its first.
     const bool offScreen = (projected.a | _screen.x1) != 0u || _screen.y >= static_cast<std::uint8_t>(SPACE_VIEW_BOTTOM - 2);
 
-    const std::uint16_t heap = ShipHeapAddress(_ship);
+    const HeapOffset heap = _ship.heap;
 
     // The two stores write as they go and can fail half way, which is what the original does: the
     // first four bytes of the entry are already on the heap when the second call gives up. Nothing
@@ -201,19 +240,19 @@ namespace Elite
     {
       // 6502: nono -- LDA #%11110111 / AND XX1+31. Reached four ways, and all four leave the ship
       // marked as not on the screen.
-      _ship[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_ship[SHIP_STATE_OFFSET] & 0xF7u);
+      _ship.state = Without(_ship.state, ShipStateBit::OnScreen);
       return;
     }
 
-    _ship[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_ship[SHIP_STATE_OFFSET] | SHIP_STATE_DRAWN);
-    StoreLineCountAndDraw(_canvas, _draw, _heap, heap, 8);
+    _ship.state = With(_ship.state, ShipStateBit::OnScreen);
+    StoreLineCountAndDraw(_canvas, _heap, heap, 8);
   }
 
-  void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+  void DotProducts(Vector16 _vector, GeometryWorkspace& _geometry) noexcept
   {
     // The six bytes of XX15, as the three sign-magnitude pairs the dot product treats them as.
-    const std::uint8_t magnitude[3] = {_draw.x1, _draw.x2, _draw.xx15Plus4};
-    const std::uint8_t sign[3] = {_draw.y1, _draw.y2, _draw.xx15Plus5};
+    const std::uint8_t magnitude[3] = {_vector.x.lo, _vector.y.lo, _vector.z.lo};
+    const std::uint8_t sign[3] = {_vector.x.hi, _vector.y.hi, _vector.z.hi};
 
     // Three vectors of six, and the loop in the original ends on `CMP #17 / BCC`, so it runs for
     // X = 0, 6 and 12 and stops at 18 rather than testing a count.
@@ -223,44 +262,41 @@ namespace Elite
 
       // The first term sets S, which is the sign the whole sum is accumulated against -- `LL38`
       // FLIPS it when a subtraction goes past zero, so what comes out at the end is the sign of the
-      // answer and not of the first product.
-      _math.q = magnitude[0];
-      const std::uint8_t first = MultiplyByLog(_math, _geometry.xx16[base], false).high;
-      _math.t = first;
-      _math.s = static_cast<std::uint8_t>(sign[0] ^ _geometry.xx16[base + 1]);
+      // answer and not of the first product. 6502: STA Q / JSR FMLTU / STA T ... STA S.
+      SignMag16 total{MultiplyByLog(_geometry.xx16[base], magnitude[0], false).value,
+                      static_cast<std::uint8_t>(sign[0] ^ _geometry.xx16[base + 1])};
 
-      // Q is set twice on purpose and the first is not dead: `FMLTU` reads Q as one operand and
-      // the original stores the product straight back over it. `STA Q / JSR FMLTU / STA Q`.
-      _math.q = magnitude[1];
-      _math.q = MultiplyByLog(_math, _geometry.xx16[base + 2], false).high;
-      _math.r = _math.t;
-      _math.t = CombineSigned(_math, static_cast<std::uint8_t>(sign[1] ^ _geometry.xx16[base + 3])).value;
+      // 6502: STA Q / JSR FMLTU / STA Q -- the second product goes straight back over its own
+      // multiplier, and `LL38` combines it with the total under the two signs.
+      std::uint8_t term = MultiplyByLog(_geometry.xx16[base + 2], magnitude[1], false).value;
+      SignedSum combined = CombineSigned(static_cast<std::uint8_t>(sign[1] ^ _geometry.xx16[base + 3]), term, total);
+      total = SignMag16{combined.value, combined.sign}; // 6502: STA T ... LDA T / STA R
 
-      _math.q = magnitude[2];
-      _math.q = MultiplyByLog(_math, _geometry.xx16[base + 4], false).high;
-      _math.r = _math.t;
+      term = MultiplyByLog(_geometry.xx16[base + 4], magnitude[2], false).value;
+      combined = CombineSigned(static_cast<std::uint8_t>(sign[2] ^ _geometry.xx16[base + 5]), term, total);
 
-      _geometry.xx12[vector * 2u] = CombineSigned(_math, static_cast<std::uint8_t>(sign[2] ^ _geometry.xx16[base + 5])).value;
-      _geometry.xx12[vector * 2u + 1u] = _math.s;
+      _geometry.xx12[vector * 2u] = combined.value;
+      _geometry.xx12[vector * 2u + 1u] = combined.sign;
     }
   }
 
-  std::uint8_t PrepareSlope(MathWorkspace& _math, const GeometryWorkspace& _geometry) noexcept
+  PreparedSlope PrepareSlope(Slope _slope, SignMag16 _distance) noexcept
   {
-    _math.q = _geometry.xx12[2];
+    PreparedSlope prepared{_distance, _slope.gradient, 0}; // 6502: LDA XX12+2 / STA Q
 
-    const std::uint8_t original = _math.s;
+    const std::uint8_t original = _distance.hi; // 6502: S
     if ((original & 0x80u) != 0u)
     {
       // (S R) = -(S R). The low byte is `LDA #0 / SEC / SBC R`, and the high byte's `ADC #0` runs
       // on that subtraction's carry, so the two are one sixteen-bit negation and not two eight-bit
       // ones.
-      const SubResult low = SubtractWithCarry(0, _math.r, true);
-      _math.r = low.value;
-      _math.s = AddWithCarry(static_cast<std::uint8_t>(original ^ 0xFFu), 0, low.carry).value;
+      const SubResult low = SubtractWithCarry(0, _distance.lo, true);
+      prepared.magnitude.lo = low.value;
+      prepared.magnitude.hi = AddWithCarry(static_cast<std::uint8_t>(original ^ 0xFFu), 0, low.carry).value;
     }
 
-    return static_cast<std::uint8_t>(original ^ _geometry.xx12[3]);
+    prepared.sign = static_cast<std::uint8_t>(original ^ _slope.direction);
+    return prepared;
   }
 
   namespace
@@ -269,21 +305,21 @@ namespace Elite
     /// 6502: LL122 -- (Y X) = (S R) * Q, shift-and-add, with the first shift happening BEFORE any
     /// addition so the product comes out halved. That is not an error to correct: the caller wants
     /// the step for half a pixel.
-    SlopeStep MultiplySlope(MathWorkspace& _math) noexcept
+    SlopeStep MultiplySlope(PreparedSlope _prepared) noexcept
     {
       std::uint8_t low = 0;
       std::uint8_t high = 0;
 
       // `LSR S / ROR R / ASL Q` -- one shift of the multiplicand and one bit off the top of the
-      // multiplier.
-      const auto step = [&_math]() noexcept
+      // multiplier. All three bytes are this routine's own since M2-c-2.
+      const auto step = [&_prepared]() noexcept
       {
-        const bool intoR = (_math.s & 0x01u) != 0u;
-        _math.s = static_cast<std::uint8_t>(_math.s >> 1);
-        _math.r = RotateRight(_math.r, intoR).value;
+        const bool intoR = (_prepared.magnitude.hi & 0x01u) != 0u;
+        _prepared.magnitude.hi = static_cast<std::uint8_t>(_prepared.magnitude.hi >> 1);
+        _prepared.magnitude.lo = RotateRight(_prepared.magnitude.lo, intoR).value;
 
-        const ShiftResult multiplier = RotateLeftValue(_math.q, false);
-        _math.q = multiplier.value;
+        const ShiftResult multiplier = RotateLeftValue(_prepared.divisor, false);
+        _prepared.divisor = multiplier.value;
         return multiplier.carry;
       };
 
@@ -299,41 +335,41 @@ namespace Elite
       {
         if (add)
         {
-          const AddResult sum = AddWithCarry(low, _math.r, false);
+          const AddResult sum = AddWithCarry(low, _prepared.magnitude.lo, false);
           low = sum.value;
-          high = AddWithCarry(high, _math.s, sum.carry).value;
+          high = AddWithCarry(high, _prepared.magnitude.hi, sum.carry).value;
         }
 
         add = step();
-        if (!add && _math.q == 0u)
+        if (!add && _prepared.divisor == 0u)
         {
           break;
         }
       }
 
-      return SlopeStep{low, high};
+      return SlopeStep{low, high, _prepared.divisor};
     }
 
     /// 6502: LL121 -- (Y X) = (S R) / Q, restoring division, with (Y X) starting at &FFFE as the bit
     /// counter in the same trick `LL31` uses: the quotient bits push the set bits out of the top.
-    SlopeStep DivideSlope(MathWorkspace& _math) noexcept
+    SlopeStep DivideSlope(PreparedSlope _prepared) noexcept
     {
       std::uint8_t low = 0xFE;
       std::uint8_t high = 0xFF;
 
       for (;;)
       {
-        const ShiftResult shifted = RotateLeftValue(_math.r, false);
-        _math.r = shifted.value;
-        const ShiftResult raised = RotateLeft(_math.s, shifted.carry);
-        _math.s = raised.value;
+        const ShiftResult shifted = RotateLeftValue(_prepared.magnitude.lo, false);
+        _prepared.magnitude.lo = shifted.value;
+        const ShiftResult raised = RotateLeft(_prepared.magnitude.hi, shifted.carry);
+        _prepared.magnitude.hi = raised.value;
 
         bool bit = raised.carry;
-        if (raised.carry || _math.s >= _math.q)
+        if (raised.carry || _prepared.magnitude.hi >= _prepared.divisor)
         {
-          const SubResult difference = SubtractWithCarry(_math.s, _math.q, true);
-          _math.s = difference.value;
-          _math.r = SubtractWithCarry(_math.r, 0, difference.carry).value;
+          const SubResult difference = SubtractWithCarry(_prepared.magnitude.hi, _prepared.divisor, true);
+          _prepared.magnitude.hi = difference.value;
+          _prepared.magnitude.lo = SubtractWithCarry(_prepared.magnitude.lo, 0, difference.carry).value;
           bit = true;
         }
 
@@ -348,7 +384,7 @@ namespace Elite
         }
       }
 
-      return SlopeStep{low, high};
+      return SlopeStep{low, high, _prepared.divisor};
     }
 
     /// 6502: LL133 -- negate (Y X). Both loops exit with the carry clear, so the `ADC #1` adds one.
@@ -356,7 +392,7 @@ namespace Elite
     {
       const AddResult low = AddWithCarry(static_cast<std::uint8_t>(_step.low ^ 0xFFu), 1, false);
       const AddResult high = AddWithCarry(static_cast<std::uint8_t>(_step.high ^ 0xFFu), 0, low.carry);
-      return SlopeStep{low.value, high.value};
+      return SlopeStep{low.value, high.value, _step.divisorLeft};
     }
 
     /// The tail both entry points share: run one of the two loops, then take the sign from the byte
@@ -368,20 +404,19 @@ namespace Elite
 
   } // namespace
 
-  SlopeStep StepAlongX(MathWorkspace& _math, const GeometryWorkspace& _geometry, const DrawWorkspace& _draw) noexcept
+  SlopeStep StepAlongX(Slope _slope, std::uint8_t _distanceHigh, std::uint8_t _xLow) noexcept
   {
-    _math.r = _draw.x1;
-
-    const std::uint8_t sign = PrepareSlope(_math, _geometry);
-    const SlopeStep step = (_math.t != 0u) ? DivideSlope(_math) : MultiplySlope(_math);
-    return FinishStep(step, sign);
+    // 6502: LL120 -- LDA XX15 / STA R, so whatever the caller left in `R` is dead here.
+    const PreparedSlope prepared = PrepareSlope(_slope, SignMag16{_xLow, _distanceHigh});
+    const SlopeStep step = (_slope.steep != 0u) ? DivideSlope(prepared) : MultiplySlope(prepared);
+    return FinishStep(step, prepared.sign);
   }
 
-  SlopeStep StepAlongY(MathWorkspace& _math, const GeometryWorkspace& _geometry) noexcept
+  SlopeStep StepAlongY(Slope _slope, SignMag16 _distance) noexcept
   {
-    const std::uint8_t sign = PrepareSlope(_math, _geometry);
-    const SlopeStep step = (_math.t != 0u) ? MultiplySlope(_math) : DivideSlope(_math);
-    return FinishStep(step, sign);
+    const PreparedSlope prepared = PrepareSlope(_slope, _distance);
+    const SlopeStep step = (_slope.steep != 0u) ? MultiplySlope(prepared) : DivideSlope(prepared);
+    return FinishStep(step, prepared.sign);
   }
 
   namespace
@@ -389,8 +424,10 @@ namespace Elite
 
     /// The move every one of `LL118`'s four clamps ends with: add the sixteen-bit step to the OTHER
     /// coordinate. `TXA / CLC / ADC lo / STA lo` then `TYA / ADC hi / STA hi`.
-    void AddStep(SlopeStep _step, std::uint8_t& _low, std::uint8_t& _high) noexcept
+    /// `_math` takes the leftover `Q` with it: see `SlopeStep::divisorLeft`.
+    void AddStep(SlopeStep _step, std::uint8_t& _low, std::uint8_t& _high, MathWorkspace& _math) noexcept
     {
+      _math.q = _step.divisorLeft;
       const AddResult sum = AddWithCarry(_step.low, _low, false);
       _low = sum.value;
       _high = AddWithCarry(_step.high, _high, sum.carry).value;
@@ -398,20 +435,19 @@ namespace Elite
 
   } // namespace
 
-  void MovePointOnScreen(DrawWorkspace& _draw, const GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+  void MovePointOnScreen(Point16& _point, Slope _slope, MathWorkspace& _math) noexcept
   {
     // The accumulator threads through the first two clamps: the left-edge branch ends `TAX` with A
     // zero, and the right-edge test below is `BEQ` on that same A. So clamping to the left edge is
     // what stops the right-edge clamp running as well.
-    std::uint8_t a = _draw.y1;
+    std::uint8_t a = _point.xHigh;
 
     if ((a & 0x80u) != 0u)
     {
       // x1_hi is negative, so the point is off the LEFT edge. Step to x = 0.
-      _math.s = a;
-      AddStep(StepAlongX(_math, _geometry, _draw), _draw.x2, _draw.y2);
-      _draw.x1 = 0;
-      _draw.y1 = 0;
+      AddStep(StepAlongX(_slope, a, _point.xLow), _point.yLow, _point.yHigh, _math);
+      _point.xLow = 0;
+      _point.xHigh = 0;
       a = 0;
     }
 
@@ -419,29 +455,24 @@ namespace Elite
     // is what makes the step land on 255 rather than 256.
     if (a != 0u)
     {
-      _math.s = static_cast<std::uint8_t>(a - 1u);
-      AddStep(StepAlongX(_math, _geometry, _draw), _draw.x2, _draw.y2);
-      _draw.x1 = 255;
-      _draw.y1 = 0;
+      AddStep(StepAlongX(_slope, static_cast<std::uint8_t>(a - 1u), _point.xLow), _point.yLow, _point.yHigh, _math);
+      _point.xLow = 255;
+      _point.xHigh = 0;
     }
 
     // 6502: LL134 -- y1_hi is negative, so the point is off the TOP. Step to y = 0.
-    if ((_draw.y2 & 0x80u) != 0u)
+    if ((_point.yHigh & 0x80u) != 0u)
     {
-      _math.s = _draw.y2;
-      _math.r = _draw.x2;
-      AddStep(StepAlongY(_math, _geometry), _draw.x1, _draw.y1);
-      _draw.x2 = 0;
-      _draw.y2 = 0;
+      AddStep(StepAlongY(_slope, SignMag16{_point.yLow, _point.yHigh}), _point.xLow, _point.xHigh, _math);
+      _point.yLow = 0;
+      _point.yHigh = 0;
     }
 
     // 6502: LL135 -- and the bottom, which is a subtraction rather than a sign test because the
-    // edge is 144 and not zero. R and S are left holding the difference whether or not the clamp
-    // runs, because that difference IS the step's argument.
-    const SubResult overshoot = SubtractWithCarry(_draw.x2, SPACE_VIEW_BOTTOM, true);
-    _math.r = overshoot.value;
-    const SubResult beyond = SubtractWithCarry(_draw.y2, 0, overshoot.carry);
-    _math.s = beyond.value;
+    // edge is 144 and not zero. R and S hold the difference whether or not the clamp runs, because
+    // that difference IS the step's argument.
+    const SubResult overshoot = SubtractWithCarry(_point.yLow, SPACE_VIEW_BOTTOM, true);
+    const SubResult beyond = SubtractWithCarry(_point.yHigh, 0, overshoot.carry);
 
     if (!beyond.carry)
     {
@@ -449,49 +480,46 @@ namespace Elite
     }
 
     // 6502: LL139 -- and 143 rather than 144, for the same reason the right edge is 255.
-    AddStep(StepAlongY(_math, _geometry), _draw.x1, _draw.y1);
-    _draw.x2 = static_cast<std::uint8_t>(SPACE_VIEW_BOTTOM - 1);
-    _draw.y2 = 0;
+    AddStep(StepAlongY(_slope, SignMag16{overshoot.value, beyond.value}), _point.xLow, _point.xHigh, _math);
+    _point.yLow = static_cast<std::uint8_t>(SPACE_VIEW_BOTTOM - 1);
+    _point.yHigh = 0;
   }
 
   namespace
   {
 
-    /// 6502: LL146 -- repack the three sixteen-bit coordinates into the four eight-bit ones the line
-    /// drawing wants. The order matters: `XX15+2` is read into `XX15+1` before it is overwritten.
-    void RepackClipped(DrawWorkspace& _draw, const GeometryWorkspace& _geometry) noexcept
+    /// 6502: LL146 -- repack the two clipped points into the four eight-bit coordinates the line
+    /// drawing wants. The order matters in the original: `XX15+2` is read into `XX15+1` before it
+    /// is overwritten, which is what the four bytes' aliasing makes of it.
+    [[nodiscard]] Line RepackClipped(Line16 _line) noexcept
     {
-      _draw.y1 = _draw.x2;
-      _draw.x2 = _draw.xx15Plus4;
-      _draw.y2 = _geometry.xx12[0];
+      return Line{_line.first.xLow, _line.first.yLow, _line.second.xLow, _line.second.yLow};
     }
 
     /// 6502: the four swaps at LLX117 -- exchange the two ends of the line.
-    void SwapEnds(DrawWorkspace& _draw, GeometryWorkspace& _geometry) noexcept
+    void SwapEnds(Line16& _line) noexcept
     {
-      std::swap(_draw.x1, _draw.xx15Plus4);
-      std::swap(_draw.y1, _draw.xx15Plus5);
-      std::swap(_draw.x2, _geometry.xx12[0]);
-      std::swap(_draw.y2, _geometry.xx12[1]);
+      std::swap(_line.first, _line.second);
     }
 
     /// True when both ends are so far off the same side that no part of the line can be on screen.
     /// 6502: the four `BPL LL109` / `BMI LL109` tests at LL83, which are only reached when neither
-    /// end is on the screen.
-    bool BothEndsBeyondTheSameEdge(DrawWorkspace& _draw, GeometryWorkspace& _geometry) noexcept
+    /// end is on the screen. `XX12+2` is the byte the original works in and `LL115` overwrites it
+    /// on every path that gets past here; the port keeps writing it until M2-c-3 takes `XX12`.
+    bool BothEndsBeyondTheSameEdge(Line16 _line, GeometryWorkspace& _geometry) noexcept
     {
-      if (((_draw.y1 & _draw.xx15Plus5) & 0x80u) != 0u)
+      if (((_line.first.xHigh & _line.second.xHigh) & 0x80u) != 0u)
       {
         return true; // both x high bytes negative -- off the left
       }
-      if (((_draw.y2 & _geometry.xx12[1]) & 0x80u) != 0u)
+      if (((_line.first.yHigh & _line.second.yHigh) & 0x80u) != 0u)
       {
         return true; // both y high bytes negative -- above
       }
 
       // Both x coordinates past 255: the high bytes minus one are still positive.
-      _geometry.xx12[2] = static_cast<std::uint8_t>(_draw.xx15Plus5 - 1u);
-      const std::uint8_t left = static_cast<std::uint8_t>(_draw.y1 - 1u);
+      _geometry.xx12[2] = static_cast<std::uint8_t>(_line.second.xHigh - 1u);
+      const std::uint8_t left = static_cast<std::uint8_t>(_line.first.xHigh - 1u);
       if (((left | _geometry.xx12[2]) & 0x80u) == 0u)
       {
         return true;
@@ -499,32 +527,32 @@ namespace Elite
 
       // And both below the bottom. The `CMP #Y*2` is only there for its carry -- the byte it
       // produces is thrown away and the `SBC #0` under it is what gets kept.
-      const SubResult firstLow = SubtractWithCarry(_draw.x2, SPACE_VIEW_BOTTOM, true);
-      _geometry.xx12[2] = SubtractWithCarry(_draw.y2, 0, firstLow.carry).value;
+      const SubResult firstLow = SubtractWithCarry(_line.first.yLow, SPACE_VIEW_BOTTOM, true);
+      _geometry.xx12[2] = SubtractWithCarry(_line.first.yHigh, 0, firstLow.carry).value;
 
-      const SubResult secondLow = SubtractWithCarry(_geometry.xx12[0], SPACE_VIEW_BOTTOM, true);
-      const std::uint8_t second = SubtractWithCarry(_geometry.xx12[1], 0, secondLow.carry).value;
+      const SubResult secondLow = SubtractWithCarry(_line.second.yLow, SPACE_VIEW_BOTTOM, true);
+      const std::uint8_t second = SubtractWithCarry(_line.second.yHigh, 0, secondLow.carry).value;
 
       return ((second | _geometry.xx12[2]) & 0x80u) == 0u;
     }
 
     /// 6502: LL115 to LL114 -- the line's gradient, scaled so that both differences fit in a byte,
     /// with `T` saying which axis it is measured along.
-    void MeasureSlope(DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+    [[nodiscard]] Slope MeasureSlope(Line16 _line, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
     {
-      const SubResult acrossLow = SubtractWithCarry(_draw.xx15Plus4, _draw.x1, true);
+      const SubResult acrossLow = SubtractWithCarry(_line.second.xLow, _line.first.xLow, true);
       _geometry.xx12[2] = acrossLow.value;
-      const SubResult acrossHigh = SubtractWithCarry(_draw.xx15Plus5, _draw.y1, acrossLow.carry);
+      const SubResult acrossHigh = SubtractWithCarry(_line.second.xHigh, _line.first.xHigh, acrossLow.carry);
       _geometry.xx12[3] = acrossHigh.value;
 
-      const SubResult downLow = SubtractWithCarry(_geometry.xx12[0], _draw.x2, true);
+      const SubResult downLow = SubtractWithCarry(_line.second.yLow, _line.first.yLow, true);
       _geometry.xx12[4] = downLow.value;
-      const SubResult downHigh = SubtractWithCarry(_geometry.xx12[1], _draw.y2, downLow.carry);
+      const SubResult downHigh = SubtractWithCarry(_line.second.yHigh, _line.first.yHigh, downLow.carry);
       _geometry.xx12[5] = downHigh.value;
 
       // The direction of the slope, which is the two differences' signs EOR'd -- taken now, because
-      // both are about to be made positive.
-      _math.s = static_cast<std::uint8_t>(downHigh.value ^ _geometry.xx12[3]);
+      // both are about to be made positive. 6502: STA S, and `LL116` stores it in `XX12+3`.
+      const std::uint8_t direction = static_cast<std::uint8_t>(downHigh.value ^ _geometry.xx12[3]);
 
       if ((_geometry.xx12[5] & 0x80u) != 0u)
       {
@@ -558,100 +586,110 @@ namespace Elite
         _geometry.xx12[4] = RotateRight(_geometry.xx12[4], intoDown).value;
       }
 
-      // 6502: LL113 -- X is the now-zero high byte, so T starts at zero and the steep branch
-      // decrements it to 255.
-      _math.t = 0;
-
+      /*
+       * 6502: LL113 -- X is the now-zero high byte, so T starts at zero and the steep branch
+       * decrements it to 255.
+       *
+       * `Q` IS WRITTEN AS WELL AS USED. The divisor stays there, and for a frame whose last ship
+       * drew lines it is the byte the altitude check reads as its radicand's low half -- the
+       * frame's `Q` (M2-b, §8; risk R22). `R`, the quotient, is the gradient the helpers take as a
+       * value since M2-c-2.
+       */
       if (_geometry.xx12[2] >= _geometry.xx12[4])
       {
         _math.q = _geometry.xx12[2];
-        (void)DivideToR(_math, _geometry.xx12[4]);
-        return;
+        return Slope{DivideByLog(_geometry.xx12[4], _math.q).value, direction, 0};
       }
 
-      // 6502: LL114 -- steep.
+      // 6502: LL114 -- steep, so `T` comes out as 255.
       _math.q = _geometry.xx12[4];
-      (void)DivideToR(_math, _geometry.xx12[2]);
-      _math.t = static_cast<std::uint8_t>(_math.t - 1u);
+      return Slope{DivideByLog(_geometry.xx12[2], _math.q).value, direction, 0xFFu};
     }
 
   } // namespace
 
-  bool ClipLineKeepingSwap(DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                           std::uint8_t _a) noexcept
+  ClipResult ClipLineKeepingSwap(Line16 _line, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip,
+                                 std::uint8_t _swapIn, std::uint8_t _secondXHigh) noexcept
   {
+    ClipResult result;
+    result.swap = _swapIn;
+
     if ((_clip.dontclip & 0x80u) != 0u)
     {
-      RepackClipped(_draw, _geometry);
-      return false;
+      result.line = RepackClipped(_line);
+      return result;
     }
 
     // 6502: LL107 -- is the FAR end on the screen? Both its high bytes zero and its y under 144.
     constexpr std::uint8_t LAST_ROW = static_cast<std::uint8_t>(SPACE_VIEW_BOTTOM - 1);
     std::uint8_t state = LAST_ROW;
-    if ((_a | _geometry.xx12[1]) == 0u && LAST_ROW >= _geometry.xx12[0])
+    if ((_secondXHigh | _line.second.yHigh) == 0u && LAST_ROW >= _line.second.yLow)
     {
       state = 0;
     }
-    _clip.xx13 = state;
+    result.ends = state;
 
     // And the near end, by the same test. If both are on screen there is nothing to do; if only
     // the near one is, the state is halved, which is what turns 143 into 71 and clears bit 7.
-    if ((_draw.y1 | _draw.y2) == 0u && LAST_ROW >= _draw.x2)
+    if ((_line.first.xHigh | _line.first.yHigh) == 0u && LAST_ROW >= _line.first.yLow)
     {
-      if (_clip.xx13 == 0u)
+      if (result.ends == 0u)
       {
-        RepackClipped(_draw, _geometry);
-        return false;
+        result.line = RepackClipped(_line);
+        return result;
       }
-      _clip.xx13 = static_cast<std::uint8_t>(_clip.xx13 >> 1);
+      result.ends = static_cast<std::uint8_t>(result.ends >> 1);
     }
 
     // 6502: LL83 -- with neither end on screen, four cheap rejections before any arithmetic.
-    if ((_clip.xx13 & 0x80u) != 0u && BothEndsBeyondTheSameEdge(_draw, _geometry))
+    if ((result.ends & 0x80u) != 0u && BothEndsBeyondTheSameEdge(_line, _geometry))
     {
-      return true;
+      result.rejected = true;
+      return result;
     }
 
-    MeasureSlope(_draw, _geometry, _math);
+    const Slope slope = MeasureSlope(_line, _geometry, _math);
 
-    // 6502: LL116 -- the gradient and its direction, where LL118 and LL120/LL123 will read them.
-    _geometry.xx12[2] = _math.r;
-    _geometry.xx12[3] = _math.s;
+    // 6502: LL116 -- the gradient and its direction, where LL118 and LL120/LL123 read them. They
+    // are the `Slope` value since M2-c-2; the two bytes are still written because `XX12` is what
+    // the original works in and M2-c-3 is what takes it.
+    _geometry.xx12[2] = slope.gradient;
+    _geometry.xx12[3] = slope.direction;
 
-    const bool nearEndOnScreen = _clip.xx13 != 0u && (_clip.xx13 & 0x80u) == 0u;
+    const bool nearEndOnScreen = result.ends != 0u && (result.ends & 0x80u) == 0u;
     if (!nearEndOnScreen)
     {
       // 6502: LL138 -- clip the near end.
-      MovePointOnScreen(_draw, _geometry, _math);
+      MovePointOnScreen(_line.first, slope, _math);
 
-      if ((_clip.xx13 & 0x80u) == 0u)
+      if ((result.ends & 0x80u) == 0u)
       {
         // The far end was already on screen, so one clip was the whole job.
-        RepackClipped(_draw, _geometry);
-        return false;
+        result.line = RepackClipped(_line);
+        return result;
       }
 
       // 6502: LL117 -- and if clipping did not actually bring it on screen, the line misses.
-      if ((_draw.y1 | _draw.y2) != 0u || _draw.x2 >= SPACE_VIEW_BOTTOM)
+      if ((_line.first.xHigh | _line.first.yHigh) != 0u || _line.first.yLow >= SPACE_VIEW_BOTTOM)
       {
-        return true;
+        result.rejected = true;
+        return result;
       }
     }
 
     // 6502: LLX117 -- put the other end in the near slot and clip that too.
-    SwapEnds(_draw, _geometry);
-    MovePointOnScreen(_draw, _geometry, _math);
-    _draw.swap = static_cast<std::uint8_t>(_draw.swap - 1u);
+    SwapEnds(_line);
+    MovePointOnScreen(_line.first, slope, _math);
+    result.swap = static_cast<std::uint8_t>(result.swap - 1u); // 6502: DEC SWAP
 
-    RepackClipped(_draw, _geometry);
-    return false;
+    result.line = RepackClipped(_line);
+    return result;
   }
 
-  bool ClipLine(DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip) noexcept
+  ClipResult ClipLine(Line16 _line, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip) noexcept
   {
-    _draw.swap = 0;
-    return ClipLineKeepingSwap(_draw, _geometry, _math, _clip, _draw.xx15Plus5);
+    // 6502: LL145 -- LDA #0 / STA SWAP, which `LL147` does not do.
+    return ClipLineKeepingSwap(_line, _geometry, _math, _clip, 0u, _line.second.xHigh);
   }
 
   namespace
@@ -660,23 +698,23 @@ namespace Elite
     /// 6502: LL15 and LL21 -- copy the ship's three orientation vectors into XX16 and scale each
     /// magnitude down by 197. The `ASL A` on the magnitude puts its top bit into the carry and the
     /// `ROL A` on the sign byte rotates it in, so what gets divided is the pair read as nine bits.
-    void ScaleOrientation(const ShipBlock& _work, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+    void ScaleOrientation(const Ship& _work, GeometryWorkspace& _geometry) noexcept
     {
+      const std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _work.ToBytes();
       for (int byte = 5; byte >= 0; --byte)
       {
         const std::size_t at = static_cast<std::size_t>(byte);
-        _geometry.xx16[at] = _work[21u + at];
-        _geometry.xx16[at + 6u] = _work[15u + at];
-        _geometry.xx16[at + 12u] = _work[9u + at];
+        _geometry.xx16[at] = bytes[SHIP_SIDE_OFFSET + at];
+        _geometry.xx16[at + 6u] = bytes[SHIP_ROOF_OFFSET + at];
+        _geometry.xx16[at + 12u] = bytes[SHIP_NOSE_OFFSET + at];
       }
 
-      _math.q = 197;
+      constexpr std::uint8_t SCALE = 197; // 6502: LDA #197 / STA Q
       for (int index = 16; index >= 0; index -= 2)
       {
         const std::size_t at = static_cast<std::size_t>(index);
         const ShiftResult raised = RotateLeftValue(_geometry.xx16[at], false);
-        (void)DivideToR(_math, RotateLeft(_geometry.xx16[at + 1u], raised.carry).value);
-        _geometry.xx16[at] = _math.r;
+        _geometry.xx16[at] = DivideByLog(RotateLeft(_geometry.xx16[at + 1u], raised.carry).value, SCALE).value;
       }
     }
 
@@ -696,24 +734,21 @@ namespace Elite
     /// 6502: LL89 -- the dot product of a face's normal in XX12 with the position in XX15, whose SIGN
     /// decides whether the face is drawn. What gets stored is the MAGNITUDE, so a face seen exactly
     /// edge-on comes out invisible.
-    std::uint8_t FaceVisibility(const DrawWorkspace& _draw, const GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+    std::uint8_t FaceVisibility(Vector16 _vector, const GeometryWorkspace& _geometry) noexcept
     {
-      _math.q = _geometry.xx12[0];
-      _math.t = MultiplyByLog(_math, _draw.x1, false).high;
-      _math.s = static_cast<std::uint8_t>(_geometry.xx12[1] ^ _draw.y1);
+      // 6502: STA Q / JSR FMLTU / STA T ... STA S -- the first product and the sign it is summed under.
+      SignMag16 total{MultiplyByLog(_vector.x.lo, _geometry.xx12[0], false).value,
+                      static_cast<std::uint8_t>(_geometry.xx12[1] ^ _vector.x.hi)};
 
-      _math.q = _geometry.xx12[2];
-      _math.q = MultiplyByLog(_math, _draw.x2, false).high;
-      _math.r = _math.t;
-      _math.t = CombineSigned(_math, static_cast<std::uint8_t>(_geometry.xx12[3] ^ _draw.y2)).value;
+      std::uint8_t term = MultiplyByLog(_vector.y.lo, _geometry.xx12[2], false).value;
+      SignedSum combined = CombineSigned(static_cast<std::uint8_t>(_geometry.xx12[3] ^ _vector.y.hi), term, total);
+      total = SignMag16{combined.value, combined.sign};
 
-      _math.q = _geometry.xx12[4];
-      _math.q = MultiplyByLog(_math, _draw.xx15Plus4, false).high;
-      _math.r = _math.t;
-      const std::uint8_t magnitude = CombineSigned(_math, static_cast<std::uint8_t>(_draw.xx15Plus5 ^ _geometry.xx12[5])).value;
+      term = MultiplyByLog(_vector.z.lo, _geometry.xx12[4], false).value;
+      combined = CombineSigned(static_cast<std::uint8_t>(_vector.z.hi ^ _geometry.xx12[5]), term, total);
 
       // `BIT S / BMI P%+4 / LDA #0` -- the branch skips the zero, so a negative S keeps the answer.
-      return ((_math.s & 0x80u) != 0u) ? magnitude : std::uint8_t{0};
+      return ((combined.sign & 0x80u) != 0u) ? combined.value : std::uint8_t{0};
     }
 
     /*
@@ -725,51 +760,57 @@ namespace Elite
      * `EOR #FF / ADC #1`, and the sign flip on opposite sides of the branch that increments the high
      * byte -- and they compute the same thing, which is why one function serves both.
      */
-    void PlaceVertexAxis(std::uint8_t& _low, std::uint8_t& _high, std::uint8_t& _sign, std::uint8_t _productLow, std::uint8_t _productSign,
-                         const ShipBlock& _work, std::size_t _axis) noexcept
+    [[nodiscard]] SignMag24 PlaceVertexAxis(std::uint8_t _productLow, std::uint8_t _productSign, const Ship& _work,
+                                            std::size_t _axis) noexcept
     {
-      _sign = _work[_axis + 2u];
+      const auto axis = _work.PositionAt(static_cast<std::uint8_t>(_axis)); // 6502: INWK,X to INWK+2,X
 
-      if (((_sign ^ _productSign) & 0x80u) == 0u)
+      // 6502: XX15(2 1 0) for x and XX15(5 4 3) for y -- the same six bytes, read as two 24-bit
+      // sign-magnitude coordinates once the dot products are done with them (M2-c-2: a value).
+      SignMag24 placed;
+      placed.sgn = axis.sgn;
+
+      if (((placed.sgn ^ _productSign) & 0x80u) == 0u)
       {
-        const AddResult sum = AddWithCarry(_productLow, _work[_axis], false);
-        _low = sum.value;
-        _high = AddWithCarry(_work[_axis + 1u], 0, sum.carry).value;
-        return;
+        const AddResult sum = AddWithCarry(_productLow, axis.lo, false);
+        placed.lo = sum.value;
+        placed.hi = AddWithCarry(axis.hi, 0, sum.carry).value;
+        return placed;
       }
 
-      const SubResult low = SubtractWithCarry(_work[_axis], _productLow, true);
-      _low = low.value;
-      const SubResult high = SubtractWithCarry(_work[_axis + 1u], 0, low.carry);
-      _high = high.value;
+      const SubResult low = SubtractWithCarry(axis.lo, _productLow, true);
+      placed.lo = low.value;
+      const SubResult high = SubtractWithCarry(axis.hi, 0, low.carry);
+      placed.hi = high.value;
 
       if (high.carry)
       {
-        return;
+        return placed;
       }
 
-      _high = static_cast<std::uint8_t>(high.value ^ 0xFFu);
+      placed.hi = static_cast<std::uint8_t>(high.value ^ 0xFFu);
 
-      const SubResult negated = SubtractWithCarry(1, _low, high.carry);
-      _low = negated.value;
+      const SubResult negated = SubtractWithCarry(1, placed.lo, high.carry);
+      placed.lo = negated.value;
 
       // `BCC P%+4 / INC XX15+1`, so the increment happens when the negation did NOT borrow -- which
       // is only when the low byte was zero and the carry rippled all the way up.
       if (negated.carry)
       {
-        _high = static_cast<std::uint8_t>(_high + 1u);
+        placed.hi = static_cast<std::uint8_t>(placed.hi + 1u);
       }
 
-      _sign = static_cast<std::uint8_t>(_sign ^ 0x80u);
+      placed.sgn = static_cast<std::uint8_t>(placed.sgn ^ 0x80u);
+      return placed;
     }
 
     /// 6502: LL80 -- put a clipped line's four bytes on the ship's line heap.
-    void PushHeapLine(LineHeap& _heap, std::uint16_t _address, const DrawWorkspace& _draw, std::uint8_t& _next) noexcept
+    void PushHeapLine(LineHeap& _heap, HeapOffset _run, Line _line, std::uint8_t& _next) noexcept
     {
-      _heap.Write(static_cast<std::uint16_t>(_address + _next), _draw.x1);
-      _heap.Write(static_cast<std::uint16_t>(_address + _next + 1u), _draw.y1);
-      _heap.Write(static_cast<std::uint16_t>(_address + _next + 2u), _draw.x2);
-      _heap.Write(static_cast<std::uint16_t>(_address + _next + 3u), _draw.y2);
+      _heap.Write(_run.Byte(_next), _line.x1);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_next + 1u)), _line.y1);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_next + 2u)), _line.x2);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_next + 3u)), _line.y2);
       _next = static_cast<std::uint8_t>(_next + 4u);
     }
 
@@ -782,69 +823,82 @@ namespace Elite
 
   } // namespace
 
-  void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                Projection& _screen, ShipBlock& _work, ShipBlock& _slot, LineHeap& _heap, std::uint16_t _blueprint, std::uint8_t _type,
-                ShipDrawEffects& _effects) noexcept
+  void DrawShip(Canvas& _canvas, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip,
+                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
+                ShipDrawEffects& _effects, Rng& _rng, bool _carryIn) noexcept
   {
+    /*
+     * `XX4`, `XX17`, `XX18`, `XX20` and `V` are LOCALS since M2-c-3, and the four bytes the frame
+     * keeps -- `XX2`, `XX3`, `XX12` and `XX16` -- are the stage results parts 3 to 11 hand each
+     * other, two of them with a reader outside the routine (§4.3). These five never were: they
+     * had to be zero page because parts 1 to 11 are eleven entry points sharing one workspace,
+     * and this port is one function.
+     */
+    std::uint8_t detailThreshold = 31;      ///< 6502: XX4 -- how much detail the distance allows
+    std::array<std::uint8_t, 9> shipPosition{}; ///< 6502: XX18 -- the position, halved, then rotated
+    std::uint16_t walker = 0;               ///< 6502: V(1 0) -- the blueprint walker, an index since M1-e
+    std::uint8_t heapLimit = 0;             ///< 6502: T1 -- how many heap bytes this blueprint allows
+
     // ---- part 1: is there anything to draw at all? ------------------------------------------
 
     // 6502: LL25 -- a negative type is the planet or the sun, which is a different routine.
-    if ((_type & 0x80u) != 0u)
+    if (IsBody(_type))
     {
       _effects.DrawPlanetOrSun();
       return;
     }
 
-    _geometry.xx4 = 31;
-
     // 6502: bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
-    if ((_work[SHIP_FLAGS_OFFSET] & 0x80u) != 0u)
+    if (Has(_work.newb, NewbBit::Remove))
     {
-      EraseShip(_canvas, _draw, _work, _heap);
+      // 6502: BMI EE51 -- a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
+      static_cast<void>(EraseShip(_canvas, _work, _heap, _carryIn));
       return;
     }
 
-    const std::uint8_t entryState = _work[SHIP_STATE_OFFSET];
-    if ((entryState & SHIP_STATE_EXPLODING) == 0u && (entryState & SHIP_STATE_KILLED) != 0u)
+    const std::uint8_t entryState = _work.state;
+    if (!Has(entryState, ShipStateBit::Exploding) && Has(entryState, ShipStateBit::Killed))
     {
       // Killed and not yet exploding. Bits 6 and 7 are cleared by the same instruction that sets
       // bit 5, so the ship stops firing in the moment it starts to blow up.
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>((SHIP_STATE_EXPLODING | entryState) & 0x3Fu);
+      _work.state = Without(With(entryState, ShipStateBit::Exploding), ShipStateBit::Firing, ShipStateBit::Killed);
 
       // Written through INF into the ship's block in K% rather than into INWK, so that the
       // caller's copy back does not undo them.
-      _slot[28] = 0;
-      _slot[30] = 0;
+      _slot.acceleration = 0;
+      _slot.pitchCounter = 0;
 
-      EraseShip(_canvas, _draw, _work, _heap);
-      _effects.SeedExplosionCloud(_heap, ShipHeapAddress(_work), _blueprint);
+      // 6502: JSR EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
+      // carry the erase returns, which is the caller's when there was nothing to erase (§6.157).
+      const bool carry = EraseShip(_canvas, _work, _heap, _carryIn);
+      SeedExplosionCloud(_heap, _work.heap, _blueprint.explosionCount, _rng, carry); // 6502: (XX0),7
     }
 
     // 6502: EE28 / EE49 and LL10 -- four ways of being not worth drawing, sharing one exit. The
     // two coordinate tests are sixteen-bit: |x| or |y| at least as large as z puts the ship outside
     // a ninety-degree view whatever the projection would make of it.
-    bool gone = (_work[SHIP_Z_OFFSET + 2] & 0x80u) != 0u;
+    bool gone = (_work.z.sgn & 0x80u) != 0u;
     if (!gone)
     {
-      gone = _work[SHIP_Z_OFFSET + 1] >= 192u;
+      gone = _work.z.hi >= 192u;
     }
     for (std::size_t axis = 0; !gone && axis < 2u; ++axis)
     {
-      const std::size_t at = (axis == 0u) ? SHIP_X_OFFSET : SHIP_Y_OFFSET;
-      const SubResult low = SubtractWithCarry(_work[at], _work[SHIP_Z_OFFSET], true);
-      gone = SubtractWithCarry(_work[at + 1u], _work[SHIP_Z_OFFSET + 1], low.carry).carry;
+      const auto other = _work.PositionAt((axis == 0u) ? SHIP_X_OFFSET : SHIP_Y_OFFSET);
+      const SubResult low = SubtractWithCarry(other.lo, _work.z.lo, true);
+      gone = SubtractWithCarry(other.hi, _work.z.hi, low.carry).carry;
     }
 
     if (gone)
     {
       // 6502: LL14.
-      if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_EXPLODING) == 0u)
+      if (!Has(_work.state, ShipStateBit::Exploding))
       {
-        EraseShip(_canvas, _draw, _work, _heap);
+        static_cast<void>(EraseShip(_canvas, _work, _heap, false)); // 6502: JMP EE51 -- and the flag is `LL9`'s exit
         return;
       }
 
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] & 0xF7u);
+      _work.state = Without(_work.state, ShipStateBit::OnScreen);
       _effects.DrawExplosion();
       return;
     }
@@ -853,14 +907,14 @@ namespace Elite
 
     // Blueprint byte 6 is a vertex's offset in XX3, and 255 there means "this one did not
     // project". The laser line in part 9 reads it back and gives up when it is still 255.
-    const std::uint8_t laserVertex = ShipByte(static_cast<std::uint16_t>(_blueprint + 6u));
+    const std::uint8_t laserVertex = _blueprint.laserVertex;
     _geometry.xx3[laserVertex] = 255;
     _geometry.xx3[static_cast<std::size_t>(laserVertex) + 1u] = 255;
 
     // z divided by sixteen into (A T), and then by another eight. The `ROR A` after the fourth
     // `LSR A` picks up the carry that shift left, so the two halves are one number and not two.
-    std::uint8_t distanceLow = _work[SHIP_Z_OFFSET];
-    std::uint8_t distanceHigh = _work[SHIP_Z_OFFSET + 1];
+    std::uint8_t distanceLow = _work.z.lo;
+    std::uint8_t distanceHigh = _work.z.hi;
     for (int shift = 0; shift < 3; ++shift)
     {
       const bool into = (distanceHigh & 0x01u) != 0u;
@@ -872,31 +926,32 @@ namespace Elite
 
     if (distanceHigh == 0u)
     {
-      _geometry.xx4 = static_cast<std::uint8_t>(RotateRight(distanceLow, spare).value >> 3);
+      detailThreshold = static_cast<std::uint8_t>(RotateRight(distanceLow, spare).value >> 3);
     }
-    else if (ShipByte(static_cast<std::uint16_t>(_blueprint + 13u)) < _work[SHIP_Z_OFFSET + 1] &&
-             (_work[SHIP_STATE_OFFSET] & SHIP_STATE_EXPLODING) == 0u)
+    else if (_blueprint.visibility < _work.z.hi &&
+             !Has(_work.state, ShipStateBit::Exploding))
     {
       // 6502: LL13 -- past the blueprint's own visibility distance, so a dot will do.
-      DrawShipAsPoint(_canvas, _draw, _work, _heap, _math, _screen);
+      DrawShipAsPoint(_canvas, _work, _heap, _math, _screen);
       return;
     }
 
     // ---- part 3: the orientation vectors, scaled -------------------------------------------
 
-    ScaleOrientation(_work, _geometry, _math);
+    ScaleOrientation(_work, _geometry);
 
+    const std::array<std::uint8_t, SHIP_BLOCK_SIZE> position = _work.ToBytes();
     for (int byte = 8; byte >= 0; --byte)
     {
-      _geometry.xx18[static_cast<std::size_t>(byte)] = _work[static_cast<std::size_t>(byte)];
+      shipPosition[static_cast<std::size_t>(byte)] = position[static_cast<std::size_t>(byte)];
     }
     _geometry.xx2[15] = 255;
 
-    const std::uint8_t faceBytes = ShipByte(static_cast<std::uint16_t>(_blueprint + 12u));
+    const std::uint8_t faceBytes = _blueprint.faceBytes;
 
     // ---- parts 4 and 5: which faces can be seen --------------------------------------------
 
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_EXPLODING) != 0u)
+    if (Has(_work.state, ShipStateBit::Exploding))
     {
       // 6502: EE30 -- an exploding ship shows every face and every vertex, so that the whole cloud
       // can be built out of them.
@@ -904,65 +959,56 @@ namespace Elite
       {
         _geometry.xx2[static_cast<std::size_t>(face)] = 255;
       }
-      _geometry.xx4 = 0;
+      detailThreshold = 0;
     }
     else if (faceBytes != 0u)
     {
       // 6502: EE29 -- halve the ship's position until its z fits in a byte, counting the halvings
       // on top of the blueprint's own scale in byte 18.
-      _geometry.xx20 = faceBytes;
-
-      std::uint8_t shifts = ShipByte(static_cast<std::uint16_t>(_blueprint + 18u));
-      std::uint8_t z = _geometry.xx18[7];
+      std::uint8_t shifts = _blueprint.normalShifts;
+      std::uint8_t z = shipPosition[7];
       while (z != 0u)
       {
         ++shifts;
 
-        const bool intoY = (_geometry.xx18[4] & 0x01u) != 0u;
-        _geometry.xx18[4] = static_cast<std::uint8_t>(_geometry.xx18[4] >> 1);
-        _geometry.xx18[3] = RotateRight(_geometry.xx18[3], intoY).value;
+        const bool intoY = (shipPosition[4] & 0x01u) != 0u;
+        shipPosition[4] = static_cast<std::uint8_t>(shipPosition[4] >> 1);
+        shipPosition[3] = RotateRight(shipPosition[3], intoY).value;
 
-        const bool intoX = (_geometry.xx18[1] & 0x01u) != 0u;
-        _geometry.xx18[1] = static_cast<std::uint8_t>(_geometry.xx18[1] >> 1);
-        _geometry.xx18[0] = RotateRight(_geometry.xx18[0], intoX).value;
+        const bool intoX = (shipPosition[1] & 0x01u) != 0u;
+        shipPosition[1] = static_cast<std::uint8_t>(shipPosition[1] >> 1);
+        shipPosition[0] = RotateRight(shipPosition[0], intoX).value;
 
         const bool intoZ = (z & 0x01u) != 0u;
         z = static_cast<std::uint8_t>(z >> 1);
-        _geometry.xx18[6] = RotateRight(_geometry.xx18[6], intoZ).value;
+        shipPosition[6] = RotateRight(shipPosition[6], intoZ).value;
       }
-      _geometry.xx17 = shifts;
 
-      // 6502: LL91 -- the position, rotated into the ship's own frame.
-      _draw.xx15Plus5 = _geometry.xx18[8];
-      _draw.x1 = _geometry.xx18[0];
-      _draw.y1 = _geometry.xx18[2];
-      _draw.x2 = _geometry.xx18[3];
-      _draw.y2 = _geometry.xx18[5];
-      _draw.xx15Plus4 = _geometry.xx18[6];
-      DotProducts(_draw, _geometry, _math);
-      _geometry.xx18[0] = _geometry.xx12[0];
-      _geometry.xx18[2] = _geometry.xx12[1];
-      _geometry.xx18[3] = _geometry.xx12[2];
-      _geometry.xx18[5] = _geometry.xx12[3];
-      _geometry.xx18[6] = _geometry.xx12[4];
-      _geometry.xx18[8] = _geometry.xx12[5];
+      // 6502: LL91 -- the position, rotated into the ship's own frame. `XX15`'s six bytes are the
+      // three sign-magnitude pairs `LL51` reads, which is a `Vector16` since M2-c-2.
+      DotProducts(Vector16{SignMag16{shipPosition[0], shipPosition[2]}, SignMag16{shipPosition[3], shipPosition[5]},
+                           SignMag16{shipPosition[6], shipPosition[8]}},
+                  _geometry);
+      shipPosition[0] = _geometry.xx12[0];
+      shipPosition[2] = _geometry.xx12[1];
+      shipPosition[3] = _geometry.xx12[2];
+      shipPosition[5] = _geometry.xx12[3];
+      shipPosition[6] = _geometry.xx12[4];
+      shipPosition[8] = _geometry.xx12[5];
 
-      const AddResult faceLow =
-        AddWithCarry(ShipByte(static_cast<std::uint16_t>(_blueprint + 4u)), static_cast<std::uint8_t>(_blueprint), false);
-      const std::uint8_t faceHigh =
-        AddWithCarry(ShipByte(static_cast<std::uint16_t>(_blueprint + 17u)), static_cast<std::uint8_t>(_blueprint >> 8), faceLow.carry)
-          .value;
-      _geometry.v = static_cast<std::uint16_t>(faceLow.value | (faceHigh << 8));
+      // 6502: LDY #4 / LDA (XX0),Y / CLC / ADC XX0 / STA V / LDY #17 / LDA (XX0),Y / ADC XX0+1 /
+      // STA V+1 -- V is the faces, which the blueprint carries as a span; V's index starts at 0.
+      walker = 0;
 
       std::uint8_t at = 0;
       do
       {
         // 6502: LL86 -- a face whose own distance is under the ship's is taken as visible without
         // the arithmetic.
-        const std::uint8_t flags = ShipByte(static_cast<std::uint16_t>(_geometry.v + at));
+        const std::uint8_t flags = _blueprint.faces[at];
         _geometry.xx12[1] = flags;
 
-        if ((flags & 0x1Fu) < _geometry.xx4)
+        if ((flags & 0x1Fu) < detailThreshold)
         {
           _geometry.xx2[static_cast<std::size_t>(at >> 2)] = 255;
           at = static_cast<std::uint8_t>(at + 4u);
@@ -972,19 +1018,17 @@ namespace Elite
         // 6502: LL87 -- the face's normal, with its three sign bits spread out by doubling.
         _geometry.xx12[3] = static_cast<std::uint8_t>(flags << 1);
         _geometry.xx12[5] = static_cast<std::uint8_t>(flags << 2);
-        _geometry.xx12[0] = ShipByte(static_cast<std::uint16_t>(_geometry.v + at + 1u));
-        _geometry.xx12[2] = ShipByte(static_cast<std::uint16_t>(_geometry.v + at + 2u));
-        _geometry.xx12[4] = ShipByte(static_cast<std::uint16_t>(_geometry.v + at + 3u));
+        _geometry.xx12[0] = _blueprint.faces[at + 1u];
+        _geometry.xx12[2] = _blueprint.faces[at + 2u];
+        _geometry.xx12[4] = _blueprint.faces[at + 3u];
 
-        if (_geometry.xx17 >= 4u)
+        Vector16 normal; // 6502: XX15's six bytes, the face's normal plus the ship's position
+
+        if (shifts >= 4u) // 6502: XX17, the shift count part 3 left
         {
           // 6502: LL143 -- the position is already small enough to use as it stands.
-          _draw.x1 = _geometry.xx18[0];
-          _draw.y1 = _geometry.xx18[2];
-          _draw.x2 = _geometry.xx18[3];
-          _draw.y2 = _geometry.xx18[5];
-          _draw.xx15Plus4 = _geometry.xx18[6];
-          _draw.xx15Plus5 = _geometry.xx18[8];
+          normal = Vector16{SignMag16{shipPosition[0], shipPosition[2]}, SignMag16{shipPosition[3], shipPosition[5]},
+                            SignMag16{shipPosition[6], shipPosition[8]}};
         }
         else
         {
@@ -997,208 +1041,207 @@ namespace Elite
            * times, and the partial results it leaves behind on the way are what the original
            * leaves too.
            */
-          std::uint8_t scale = _geometry.xx17;
+          std::uint8_t scale = shifts;
           for (;;)
           {
-            _draw.x1 = _geometry.xx12[0];
-            _draw.x2 = _geometry.xx12[2];
+            std::uint8_t first = _geometry.xx12[0];
+            std::uint8_t second = _geometry.xx12[2];
             std::uint8_t third = _geometry.xx12[4];
             for (std::uint8_t left = scale; left != 0u; --left)
             {
-              _draw.x1 = static_cast<std::uint8_t>(_draw.x1 >> 1);
-              _draw.x2 = static_cast<std::uint8_t>(_draw.x2 >> 1);
+              first = static_cast<std::uint8_t>(first >> 1);
+              second = static_cast<std::uint8_t>(second >> 1);
               third = static_cast<std::uint8_t>(third >> 1);
             }
 
-            _math.r = third;
-            _math.s = _geometry.xx12[5];
-            _math.q = _geometry.xx18[6];
-            const SignedSum alongZ = CombineSigned(_math, _geometry.xx18[8]);
+            // 6502: STA R / LDA XX12+5 / STA S / LDA XX18+6 / STA Q / LDA XX18+8 / JSR LL38, and the
+            // same for x and y: each is the halved coordinate under the ship's sign, plus the vertex.
+            const SignedSum alongZ = CombineSigned(shipPosition[8], shipPosition[6], SignMag16{third, _geometry.xx12[5]});
             if (!alongZ.carry)
             {
-              _draw.xx15Plus4 = alongZ.value;
-              _draw.xx15Plus5 = _math.s;
+              normal.z = SignMag16{alongZ.value, alongZ.sign};
 
-              _math.r = _draw.x1;
-              _math.s = _geometry.xx12[1];
-              _math.q = _geometry.xx18[0];
-              const SignedSum alongX = CombineSigned(_math, _geometry.xx18[2]);
+              const SignedSum alongX = CombineSigned(shipPosition[2], shipPosition[0], SignMag16{first, _geometry.xx12[1]});
               if (!alongX.carry)
               {
-                _draw.x1 = alongX.value;
-                _draw.y1 = _math.s;
+                normal.x = SignMag16{alongX.value, alongX.sign};
 
-                _math.r = _draw.x2;
-                _math.s = _geometry.xx12[3];
-                _math.q = _geometry.xx18[3];
-                const SignedSum alongY = CombineSigned(_math, _geometry.xx18[5]);
+                const SignedSum alongY = CombineSigned(shipPosition[5], shipPosition[3], SignMag16{second, _geometry.xx12[3]});
                 if (!alongY.carry)
                 {
-                  _draw.x2 = alongY.value;
-                  _draw.y2 = _math.s;
+                  normal.y = SignMag16{alongY.value, alongY.sign};
                   break;
                 }
               }
             }
 
             // 6502: ovflw.
-            _geometry.xx18[0] = static_cast<std::uint8_t>(_geometry.xx18[0] >> 1);
-            _geometry.xx18[6] = static_cast<std::uint8_t>(_geometry.xx18[6] >> 1);
-            _geometry.xx18[3] = static_cast<std::uint8_t>(_geometry.xx18[3] >> 1);
+            shipPosition[0] = static_cast<std::uint8_t>(shipPosition[0] >> 1);
+            shipPosition[6] = static_cast<std::uint8_t>(shipPosition[6] >> 1);
+            shipPosition[3] = static_cast<std::uint8_t>(shipPosition[3] >> 1);
             scale = 1;
           }
         }
 
-        _geometry.xx2[static_cast<std::size_t>(at >> 2)] = FaceVisibility(_draw, _geometry, _math);
+        _geometry.xx2[static_cast<std::size_t>(at >> 2)] = FaceVisibility(normal, _geometry);
         at = static_cast<std::uint8_t>(at + 4u);
-      } while (at < _geometry.xx20);
+      } while (at < faceBytes); // 6502: XX20
     }
 
     // ---- parts 6 to 8: project the vertices the visible faces touch --------------------------
 
     TransposeOrientation(_geometry);
 
-    _geometry.xx20 = ShipByte(static_cast<std::uint16_t>(_blueprint + 8u));
-    _geometry.v = static_cast<std::uint16_t>(_blueprint + 20u);
-    _math.cnt = 0;
+    walker = 0; // 6502: XX0+20 -- the vertices, which the blueprint carries as a span
+
+    /*
+     * 6502: CNT -- where in `XX3` the next projected vertex goes, four bytes at a time.
+     *
+     * Its carry is load-bearing: `LL50` adds four to it and then adds six to `XX17` ON THAT CARRY,
+     * so a heap that has filled past 255 ends the vertex loop. Both are locals since M2-c-3 and
+     * the addition is written out below, carry and all.
+     */
+    std::uint8_t vertexSlot = 0;
 
     for (std::uint8_t vertex = 0;;)
     {
-      _geometry.xx17 = vertex;
+      const std::uint8_t flags = _blueprint.vertices[vertex + 3u];
 
-      _draw.x1 = ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex));
-      _draw.x2 = ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 1u));
-      _draw.xx15Plus4 = ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 2u));
-      const std::uint8_t flags = ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 3u));
-
-      const bool nearEnough = (flags & 0x1Fu) >= _geometry.xx4;
-      const bool visible = nearEnough && (EitherFaceVisible(_geometry, ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 4u))) ||
-                                          EitherFaceVisible(_geometry, ShipByte(static_cast<std::uint16_t>(_geometry.v + vertex + 5u))));
+      const bool nearEnough = (flags & 0x1Fu) >= detailThreshold;
+      const bool visible = nearEnough && (EitherFaceVisible(_geometry, _blueprint.vertices[vertex + 4u]) ||
+                                          EitherFaceVisible(_geometry, _blueprint.vertices[vertex + 5u]));
 
       if (visible)
       {
         // 6502: LL49 -- the vertex's three sign bits, spread out by doubling, then rotated into
         // the player's frame and added to the ship's own position.
-        _draw.y1 = flags;
-        _draw.y2 = static_cast<std::uint8_t>(flags << 1);
-        _draw.xx15Plus5 = static_cast<std::uint8_t>(flags << 2);
+        DotProducts(Vector16{SignMag16{_blueprint.vertices[vertex], flags},
+                             SignMag16{_blueprint.vertices[vertex + 1u], static_cast<std::uint8_t>(flags << 1)},
+                             SignMag16{_blueprint.vertices[vertex + 2u], static_cast<std::uint8_t>(flags << 2)}},
+                    _geometry);
 
-        DotProducts(_draw, _geometry, _math);
-
-        PlaceVertexAxis(_draw.x1, _draw.y1, _draw.x2, _geometry.xx12[0], _geometry.xx12[1], _work, SHIP_X_OFFSET);
-        PlaceVertexAxis(_draw.y2, _draw.xx15Plus4, _draw.xx15Plus5, _geometry.xx12[2], _geometry.xx12[3], _work, SHIP_Y_OFFSET);
+        // 6502: XX15's six bytes again, now as x in (2 1 0) and y in (5 4 3).
+        SignMag24 across = PlaceVertexAxis(_geometry.xx12[0], _geometry.xx12[1], _work, SHIP_X_OFFSET);
+        SignMag24 down = PlaceVertexAxis(_geometry.xx12[2], _geometry.xx12[3], _work, SHIP_Y_OFFSET);
 
         // 6502: LL55 / LL56 / LL140 -- and z, which is a plain sixteen-bit add or subtract with a
         // floor of four rather than a sign-magnitude one, because a vertex behind the player has
-        // to be pulled in front of it before anything is divided by it.
+        // to be pulled in front of it before anything is divided by it. `(U T)` is this loop's own
+        // since M2-c-3.
+        SignMag16 depth{}; // 6502: (U T) -- the vertex's distance
         if ((_geometry.xx12[5] & 0x80u) == 0u)
         {
-          const AddResult sum = AddWithCarry(_geometry.xx12[4], _work[SHIP_Z_OFFSET], false);
-          _math.t = sum.value;
-          _math.u = AddWithCarry(_work[SHIP_Z_OFFSET + 1], 0, sum.carry).value;
+          const AddResult sum = AddWithCarry(_geometry.xx12[4], _work.z.lo, false);
+          depth.lo = sum.value;
+          depth.hi = AddWithCarry(_work.z.hi, 0, sum.carry).value;
         }
         else
         {
-          const SubResult low = SubtractWithCarry(_work[SHIP_Z_OFFSET], _geometry.xx12[4], true);
-          _math.t = low.value;
-          const SubResult high = SubtractWithCarry(_work[SHIP_Z_OFFSET + 1], 0, low.carry);
-          _math.u = high.value;
+          const SubResult low = SubtractWithCarry(_work.z.lo, _geometry.xx12[4], true);
+          depth.lo = low.value;
+          const SubResult high = SubtractWithCarry(_work.z.hi, 0, low.carry);
+          depth.hi = high.value;
 
           if (!high.carry || (high.value == 0u && low.value < 4u))
           {
-            _math.u = 0;
-            _math.t = 4;
+            depth.hi = 0;
+            depth.lo = 4;
           }
         }
 
         // 6502: LL57 -- halve all three until the two coordinates and the distance fit in a byte
         // each, so that the division below is an eight-bit one.
-        while ((_math.u | _draw.y1 | _draw.xx15Plus4) != 0u)
+        while ((depth.hi | across.hi | down.hi) != 0u)
         {
-          const bool intoX = (_draw.y1 & 0x01u) != 0u;
-          _draw.y1 = static_cast<std::uint8_t>(_draw.y1 >> 1);
-          _draw.x1 = RotateRight(_draw.x1, intoX).value;
+          const bool intoX = (across.hi & 0x01u) != 0u;
+          across.hi = static_cast<std::uint8_t>(across.hi >> 1);
+          across.lo = RotateRight(across.lo, intoX).value;
 
-          const bool intoY = (_draw.xx15Plus4 & 0x01u) != 0u;
-          _draw.xx15Plus4 = static_cast<std::uint8_t>(_draw.xx15Plus4 >> 1);
-          _draw.y2 = RotateRight(_draw.y2, intoY).value;
+          const bool intoY = (down.hi & 0x01u) != 0u;
+          down.hi = static_cast<std::uint8_t>(down.hi >> 1);
+          down.lo = RotateRight(down.lo, intoY).value;
 
-          const bool intoZ = (_math.u & 0x01u) != 0u;
-          _math.u = static_cast<std::uint8_t>(_math.u >> 1);
-          _math.t = RotateRight(_math.t, intoZ).value;
+          const bool intoZ = (depth.hi & 0x01u) != 0u;
+          depth.hi = static_cast<std::uint8_t>(depth.hi >> 1);
+          depth.lo = RotateRight(depth.lo, intoZ).value;
         }
 
         // 6502: LL60 to LL70 -- the projection itself, and the only place in the port where the
         // divide is picked by which of two routines can do it: LL28 when the coordinate is smaller
         // than the distance, LL61 when it is not.
-        std::uint8_t x = _math.cnt;
+        std::uint8_t x = vertexSlot;
 
-        _math.q = _math.t;
-        if (_draw.x1 < _math.q)
+        // 6502: LDA T / STA Q -- the distance, and the divide is (U R) = 256 * x / distance. `LL28`
+        // leaves U as it was, which is the zero the halving loop above ended on. `Q` is written as
+        // well as read here because, for the last vertex of the last ship drawn, it is the frame's Q
+        // the altitude check reads (`EndFlightFrame`) -- unless the clipper writes it after.
+        const std::uint8_t distance = depth.lo;
+        _math.q = distance;
+        Quotient16 projectedX{depth.hi, 0};
+        if (across.lo < distance)
         {
-          (void)DivideToR(_math, _draw.x1);
+          projectedX.low = DivideByLog(across.lo, distance).value;
         }
         else
         {
-          DivideToUR(_math, _draw.x1);
+          projectedX = DivideWideByLog(across.lo, distance, depth.hi);
         }
 
-        if ((_draw.x2 & 0x80u) != 0u)
+        if ((across.sgn & 0x80u) != 0u)
         {
           // 6502: LL62 -- 128 - (U R), for a vertex to the left of centre.
-          const SubResult low = SubtractWithCarry(128, _math.r, true);
+          const SubResult low = SubtractWithCarry(128, projectedX.low, true);
           _geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = SubtractWithCarry(0, _math.u, low.carry).value;
+          _geometry.xx3[x] = SubtractWithCarry(0, projectedX.high, low.carry).value;
         }
         else
         {
-          const AddResult low = AddWithCarry(_math.r, 128, false);
+          const AddResult low = AddWithCarry(projectedX.low, 128, false);
           _geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = AddWithCarry(_math.u, 0, low.carry).value;
+          _geometry.xx3[x] = AddWithCarry(projectedX.high, 0, low.carry).value;
         }
 
         // 6502: LL66 -- and the same again for y, with U cleared first because `LL28` does not
         // write it and the last vertex's value would otherwise be added in.
-        _math.u = 0;
-        _math.q = _math.t;
-        if (_draw.y2 < _math.q)
+        Quotient16 projectedY{0, 0};
+        if (down.lo < distance)
         {
-          (void)DivideToR(_math, _draw.y2);
+          projectedY.low = DivideByLog(down.lo, distance).value;
         }
         else
         {
-          DivideToUR(_math, _draw.y2);
+          projectedY = DivideWideByLog(down.lo, distance, 0);
         }
 
         ++x;
-        if ((_draw.xx15Plus5 & 0x80u) != 0u)
+        if ((down.sgn & 0x80u) != 0u)
         {
           // 6502: LL70 -- below the centre of the view.
-          const AddResult low = AddWithCarry(SPACE_VIEW_CENTRE_Y, _math.r, false);
+          const AddResult low = AddWithCarry(SPACE_VIEW_CENTRE_Y, projectedY.low, false);
           _geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = AddWithCarry(0, _math.u, low.carry).value;
+          _geometry.xx3[x] = AddWithCarry(0, projectedY.high, low.carry).value;
         }
         else
         {
-          const SubResult low = SubtractWithCarry(SPACE_VIEW_CENTRE_Y, _math.r, true);
+          const SubResult low = SubtractWithCarry(SPACE_VIEW_CENTRE_Y, projectedY.low, true);
           _geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = SubtractWithCarry(0, _math.u, low.carry).value;
+          _geometry.xx3[x] = SubtractWithCarry(0, projectedY.high, low.carry).value;
         }
       }
 
       // 6502: LL50 -- on to the next vertex, six bytes along, and stop when the count runs out or
       // the index wraps. The carry out of CNT's addition is what feeds XX17's, so a heap that has
       // filled past 255 ends the loop as well.
-      const AddResult nextCnt = AddWithCarry(_math.cnt, 4, false);
-      _math.cnt = nextCnt.value;
-      const AddResult nextVertex = AddWithCarry(_geometry.xx17, 6, nextCnt.carry);
+      const AddResult nextCnt = AddWithCarry(vertexSlot, 4, false);
+      vertexSlot = nextCnt.value;
+      const AddResult nextVertex = AddWithCarry(vertex, 6, nextCnt.carry);
       vertex = nextVertex.value;
 
-      if (nextVertex.carry || vertex >= _geometry.xx20)
+      if (nextVertex.carry || vertex >= _blueprint.vertexBytes) // 6502: XX20
       {
         break;
       }
@@ -1206,95 +1249,112 @@ namespace Elite
 
     // ---- part 9: the ship is on the screen from here, and the laser goes on the heap ---------
 
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_EXPLODING) != 0u)
+    if (Has(_work.state, ShipStateBit::Exploding))
     {
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] | SHIP_STATE_DRAWN);
+      _work.state = With(_work.state, ShipStateBit::OnScreen);
       _effects.DrawExplosion();
       return;
     }
 
     // 6502: EE31 -- rub out the last frame's ship, then mark this one as being on the screen.
-    const std::uint16_t heap = ShipHeapAddress(_work);
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_DRAWN) != 0u)
+    const HeapOffset heap = _work.heap;
+    if (Has(_work.state, ShipStateBit::OnScreen))
     {
-      DrawShipLines(_canvas, _draw, _heap, heap);
+      DrawShipLines(_canvas, _heap, heap);
     }
-    _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] | SHIP_STATE_DRAWN);
+    _work.state = With(_work.state, ShipStateBit::OnScreen);
 
-    _geometry.xx20 = ShipByte(static_cast<std::uint16_t>(_blueprint + 9u));
-    _geometry.xx17 = 0;
-    _math.u = 1;
+    // 6502: U -- how many bytes of the heap this ship has used, which starts at one because byte 0
+    // is the count itself. A local since M2-c-3, and `XX17`/`XX20` with it.
+    std::uint8_t heapUsed = 1;
+    std::uint8_t edgeIndex = 0; // 6502: XX17
 
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_FIRING) != 0u)
+    if (Has(_work.state, ShipStateBit::Firing))
     {
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] & 0xBFu);
+      _work.state = Without(_work.state, ShipStateBit::Firing);
 
-      const std::size_t muzzle = ShipByte(static_cast<std::uint16_t>(_blueprint + 6u));
-      _draw.x1 = _geometry.xx3[muzzle];
-      _draw.y1 = _geometry.xx3[muzzle + 1u];
+      const std::size_t muzzle = _blueprint.laserVertex;
+      Line16 beam;
+      beam.first.xLow = _geometry.xx3[muzzle];
+      beam.first.xHigh = _geometry.xx3[muzzle + 1u];
 
       // Both bytes are tested by incrementing them, so 255 -- which is what part 2 wrote there and
       // what a vertex that did not project leaves -- is the one value that means "no laser".
-      if (static_cast<std::uint8_t>(_draw.x1 + 1u) != 0u && static_cast<std::uint8_t>(_draw.y1 + 1u) != 0u)
+      if (static_cast<std::uint8_t>(beam.first.xLow + 1u) != 0u && static_cast<std::uint8_t>(beam.first.xHigh + 1u) != 0u)
       {
-        _draw.x2 = _geometry.xx3[muzzle + 2u];
-        _draw.y2 = _geometry.xx3[muzzle + 3u];
-        _draw.xx15Plus4 = 0;
-        _draw.xx15Plus5 = 0;
+        beam.first.yLow = _geometry.xx3[muzzle + 2u];
+        beam.first.yHigh = _geometry.xx3[muzzle + 3u];
+        beam.second.xLow = 0;
+        beam.second.xHigh = 0;
+
+        // 6502: the far end's y is `XX12(1 0)`, which is where `LL145` reads it and where the port
+        // keeps writing it: `XX12` is `LL9`'s frame until M2-c-3.
         _geometry.xx12[1] = 0;
-        _geometry.xx12[0] = _work[SHIP_Z_OFFSET];
+        _geometry.xx12[0] = _work.z.lo;
+        beam.second.yLow = _geometry.xx12[0];
+        beam.second.yHigh = _geometry.xx12[1];
 
         // The laser fires towards the player, so the far end is the origin -- and to the left of
         // it when the ship is to the left, which is the whole of this `DEC`.
-        if ((_work[SHIP_X_OFFSET + 2] & 0x80u) != 0u)
+        if ((_work.x.sgn & 0x80u) != 0u)
         {
-          _draw.xx15Plus4 = 255;
+          beam.second.xLow = 255;
         }
 
-        if (!ClipLine(_draw, _geometry, _math, _clip))
+        const ClipResult clipped = ClipLine(beam, _geometry, _math, _clip);
+        if (!clipped.rejected)
         {
-          std::uint8_t next = _math.u;
-          PushHeapLine(_heap, heap, _draw, next);
-          _math.u = next;
+          PushHeapLine(_heap, heap, clipped.line, heapUsed);
         }
       }
     }
 
     // ---- parts 10 and 11: the edges ---------------------------------------------------------
 
-    const AddResult edgeLow =
-      AddWithCarry(ShipByte(static_cast<std::uint16_t>(_blueprint + 3u)), static_cast<std::uint8_t>(_blueprint), false);
-    const std::uint8_t edgeHigh =
-      AddWithCarry(ShipByte(static_cast<std::uint16_t>(_blueprint + 16u)), static_cast<std::uint8_t>(_blueprint >> 8), edgeLow.carry).value;
-    _geometry.v = static_cast<std::uint16_t>(edgeLow.value | (edgeHigh << 8));
-    _math.t1 = ShipByte(static_cast<std::uint16_t>(_blueprint + 5u));
+    // 6502: LDY #3 / LDA (XX0),Y / CLC / ADC XX0 / STA V / LDY #16 / LDA (XX0),Y / ADC XX0+1 /
+    // STA V+1 -- V is the edges, which the blueprint carries as a span; V's index starts at 0.
+    walker = 0;
+    heapLimit = _blueprint.heapBytes;
+
+    // 6502: SWAP, which `LL147` decrements and nothing in `LL9` reads: `LOIN` zeroes it before it
+    // sets it again, and `WPLS2`'s reader is the ball's. The accumulation is the byte's, so the
+    // port carries it (M2-c-2).
+    std::uint8_t swap = 0;
 
     for (;;)
     {
       // 6502: LL75 -- four bytes per edge: how far away it stays visible, the two faces it joins,
       // and the two vertices it runs between.
-      const std::uint8_t distance = ShipByte(_geometry.v);
-      if (distance >= _geometry.xx4 && EitherFaceVisible(_geometry, ShipByte(static_cast<std::uint16_t>(_geometry.v + 1u))))
+      const std::uint8_t distance = _blueprint.edges[walker];
+      if (distance >= detailThreshold && EitherFaceVisible(_geometry, _blueprint.edges[walker + 1u]))
       {
-        const std::size_t from = ShipByte(static_cast<std::uint16_t>(_geometry.v + 2u));
-        const std::size_t to = ShipByte(static_cast<std::uint16_t>(_geometry.v + 3u));
+        const std::size_t from = _blueprint.edges[walker + 2u];
+        const std::size_t to = _blueprint.edges[walker + 3u];
 
-        _draw.y1 = _geometry.xx3[from + 1u];
-        _draw.x1 = _geometry.xx3[from];
-        _draw.x2 = _geometry.xx3[from + 2u];
-        _draw.y2 = _geometry.xx3[from + 3u];
-        _draw.xx15Plus4 = _geometry.xx3[to];
+        Line16 edge;
+        edge.first.xHigh = _geometry.xx3[from + 1u];
+        edge.first.xLow = _geometry.xx3[from];
+        edge.first.yLow = _geometry.xx3[from + 2u];
+        edge.first.yHigh = _geometry.xx3[from + 3u];
+        edge.second.xLow = _geometry.xx3[to];
+
+        // 6502: `XX12(1 0)` again -- the far end's y, in `LL9`'s frame until M2-c-3.
         _geometry.xx12[1] = _geometry.xx3[to + 3u];
         _geometry.xx12[0] = _geometry.xx3[to + 2u];
-        _draw.xx15Plus5 = _geometry.xx3[to + 1u];
+        edge.second.yHigh = _geometry.xx12[1];
+        edge.second.yLow = _geometry.xx12[0];
+        edge.second.xHigh = _geometry.xx3[to + 1u];
 
-        if (!ClipLineKeepingSwap(_draw, _geometry, _math, _clip, _draw.xx15Plus5))
+        // 6502: `LL147` is entered with `XX15+5` in the accumulator, and `SWAP` accumulates across
+        // the edges rather than being zeroed for each.
+        const ClipResult clipped = ClipLineKeepingSwap(edge, _geometry, _math, _clip, swap, edge.second.xHigh);
+        swap = clipped.swap;
+
+        if (!clipped.rejected)
         {
           // 6502: LL80 -- and stop as soon as the heap this blueprint asked for is full.
-          std::uint8_t next = _math.u;
-          PushHeapLine(_heap, heap, _draw, next);
-          _math.u = next;
-          if (next >= _math.t1)
+          PushHeapLine(_heap, heap, clipped.line, heapUsed);
+          if (heapUsed >= heapLimit)
           {
             break;
           }
@@ -1302,16 +1362,16 @@ namespace Elite
       }
 
       // 6502: LL78.
-      _geometry.xx17 = static_cast<std::uint8_t>(_geometry.xx17 + 1u);
-      if (_geometry.xx17 >= _geometry.xx20)
+      edgeIndex = static_cast<std::uint8_t>(edgeIndex + 1u);
+      if (edgeIndex >= _blueprint.edgeCount) // 6502: XX20
       {
         break;
       }
-      _geometry.v = static_cast<std::uint16_t>(_geometry.v + 4u);
+      walker = static_cast<std::uint16_t>(walker + 4u);
     }
 
     // 6502: LL81 -- the heap's length goes in byte 0, and then it is drawn.
-    StoreLineCountAndDraw(_canvas, _draw, _heap, heap, _math.u);
+    StoreLineCountAndDraw(_canvas, _heap, heap, heapUsed);
   }
 
 } // namespace Elite

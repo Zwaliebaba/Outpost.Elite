@@ -8,10 +8,10 @@
 #include "PlanetDraw.h"
 #include "Spawn.h"
 #include "StartUp.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 /*
- * Getting into flight, and getting the world ready for it.
+ * Getting into flight, and getting the universe ready for it.
  *
  * Four routines the docked half reaches and the flight half assumes: two resets, and the launch
  * that runs one of them. `RES2` was a seam on `StartUpEffects` until this slice -- it was scoped
@@ -242,7 +242,7 @@ namespace Elite
    * Returns `thiskey` -- the key NUMBER, not the character. `BR1` compares it against `KEY_YES_
    * INTERNAL`, which is 39 and not `'Y'`.
    */
-  [[nodiscard]] std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, std::uint8_t _shipType,
+  [[nodiscard]] std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, ShipType _shipType,
                                            std::uint8_t _distance) noexcept;
 
   /*

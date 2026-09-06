@@ -47,7 +47,7 @@ namespace Elite
    * Returns the exit carry, because `LL30` leaves one and the flight loop's next instruction is an
    * `ADC`. The port returns it rather than guessing.
    */
-  [[nodiscard]] bool FireLaser(Canvas& _canvas, DrawWorkspace& _draw, Rng& _rng, LaserBurst& _burst, FlightStatus& _status,
+  [[nodiscard]] bool FireLaser(Canvas& _canvas, Rng& _rng, LaserBurst& _burst, FlightStatus& _status,
                                std::uint8_t _view, bool _carryIn) noexcept;
 
   /*
@@ -56,6 +56,6 @@ namespace Elite
    * `LDA QQ11 / BNE LASLI-1` -- and `LASLI-1` is the byte before the routine, which is the previous
    * one's `RTS` borrowed as a branch target. So a chart on screen means no laser at all.
    */
-  [[nodiscard]] bool DrawLaserLines(Canvas& _canvas, DrawWorkspace& _draw, const LaserBurst& _burst, std::uint8_t _view) noexcept;
+  [[nodiscard]] bool DrawLaserLines(Canvas& _canvas, const LaserBurst& _burst, std::uint8_t _view) noexcept;
 
 } // namespace Elite

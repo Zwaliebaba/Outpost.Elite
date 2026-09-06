@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
-#include "FlightWorld.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Arith.h"
@@ -196,8 +196,7 @@ namespace GameLogicTests
         cpu.x = row;
         Assert::IsTrue(cpu.CallSubroutine(boxs, 20'000).completed, L"BOXS returned");
 
-        Elite::DrawWorkspace draw;
-        Elite::DrawScreenRule(canvas, draw, row);
+        Elite::DrawScreenRule(canvas, row);
 
         const std::wstring where = WidenText("BOXS(row " + std::to_string(row) + ")");
         Assert::IsTrue(CompareScreens(cpu, screen, canvas, 0x11u, where) > 0u, (where + L": something was drawn").c_str());
@@ -333,13 +332,14 @@ namespace GameLogicTests
         cpu.x = item.preset ? item.rows : std::uint8_t{0xA5u};
         Assert::IsTrue(cpu.CallSubroutine(item.entry, 60'000).completed, L"BOX2 returned");
 
-        Elite::DrawWorkspace draw;
-        draw.t2 = 0x99u;
-        Elite::DrawBorder(canvas, draw, item.rows);
+        Elite::DrawBorder(canvas, item.rows);
 
         const std::wstring where = WidenText(std::string("BOX2 (") + item.what + ")");
         Assert::IsTrue(CompareScreens(cpu, screen, canvas, 0x4Du, where) > 0u, (where + L": something was drawn").c_str());
-        Assert::AreEqual(cpu.memory[t2], draw.t2, (where + L": T2").c_str());
+
+        // `T` carries the row count from one edge to the other and `HLOIN` overwrites it on the way
+        // out; it is the kernel's byte and a local since M2-b, so there is nothing left to compare
+        // (§8, M2-c -- the port used to write `T2` here, which the game does not).
       }
     }
     /*
@@ -381,14 +381,16 @@ namespace GameLogicTests
 
         for (std::size_t slot = 0; slot < bubble.blocks.size(); ++slot)
         {
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             // Every byte marked, and byte 31 with bit 4 set, so clearing it is visible and
             // clearing anything else is a failure.
             const std::uint8_t value = (byte == 31u) ? 0xFFu : static_cast<std::uint8_t>(0x40u + byte + slot);
-            bubble.blocks[slot][byte] = value;
+            shipBytes[byte] = value;
             cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
           }
+          bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
         }
 
         Assert::IsTrue(cpu.CallSubroutine(zonk, 40'000).completed, L"zonkscanners returned");
@@ -400,7 +402,7 @@ namespace GameLogicTests
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             const std::uint16_t at = static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte);
-            Assert::AreEqual(cpu.memory[at], bubble.blocks[slot][byte],
+            Assert::AreEqual(cpu.memory[at], bubble.blocks[slot].ToBytes()[byte],
                              (where + L": K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte)).c_str());
           }
         }
@@ -516,8 +518,8 @@ namespace GameLogicTests
           cpu.memory[at.t2] = 0x77u;
 
           Elite::Bubble bubble;
-          bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
-          cpu.memory[static_cast<std::uint16_t>(at.many + Elite::SHIP_TYPE_STATION)] = 1u;
+          bubble.Count(Elite::ShipType::Station) = 1u;
+          cpu.memory[static_cast<std::uint16_t>(at.many + Elite::Byte(Elite::ShipType::Station))] = 1u;
 
           // Two ships in the bubble, both with bit 4 of byte 31 set, so `zonkscanners` has
           // something to forget -- and the DFLAG case that skips it has to leave it alone.
@@ -531,13 +533,15 @@ namespace GameLogicTests
           std::uint32_t state = 0x77C1A305u ^ (counter * 0x9E3779B9u) ^ already;
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               state = state * 1103515245u + 12345u;
               const std::uint8_t value = (byte == 31u) ? 0xFFu : static_cast<std::uint8_t>(state >> 17);
-              bubble.blocks[slot][byte] = value;
+              shipBytes[byte] = value;
               cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
             }
+            bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
           }
 
           Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
@@ -549,11 +553,8 @@ namespace GameLogicTests
           Assert::IsTrue(run.completed, L"wantdials returned");
 
           Elite::DrawWorkspace draw;
-          Elite::MathWorkspace math;
-          Elite::GeometryWorkspace geometry;
           Elite::ScreenState screenState;
           screenState.dashboardShown = already;
-          draw.t2 = 0x77u;
 
           Elite::FlightState flight;
           flight.delta = READINGS[0];
@@ -573,7 +574,7 @@ namespace GameLogicTests
           status.damageFlash = READINGS[12];
 
           Recorder effects;
-          Elite::ShowDashboard(canvas, draw, math, geometry, screenState, bubble, flight, status, READINGS[8], compass, effects);
+          Elite::ShowDashboard(canvas, draw, screenState, bubble, flight, status, READINGS[8], compass, effects);
 
           const std::wstring where = WidenText("wantdials(DFLAG " + std::to_string(already) + ", MCNT " + std::to_string(counter) + ")");
 
@@ -585,14 +586,13 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
           Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
           Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
-          Assert::AreEqual(cpu.memory[at.t2], draw.t2, (where + L": T2").c_str());
 
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               const std::uint16_t address = static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte);
-              Assert::AreEqual(cpu.memory[address], bubble.blocks[slot][byte],
+              Assert::AreEqual(cpu.memory[address], bubble.blocks[slot].ToBytes()[byte],
                                (where + L": K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte)).c_str());
             }
           }
@@ -694,8 +694,8 @@ namespace GameLogicTests
           cpu.memory[comy] = 0x9Cu;
 
           Elite::Bubble bubble;
-          bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
-          cpu.memory[static_cast<std::uint16_t>(many + Elite::SHIP_TYPE_STATION)] = 1u;
+          bubble.Count(Elite::ShipType::Station) = 1u;
+          cpu.memory[static_cast<std::uint16_t>(many + Elite::Byte(Elite::ShipType::Station))] = 1u;
 
           const std::uint8_t TYPES[] = {3u, 5u};
           for (std::size_t slot = 0; slot < 2u; ++slot)
@@ -707,21 +707,21 @@ namespace GameLogicTests
           std::uint32_t state = 0x2B91D6C5u ^ (view * 0x9E3779B9u) ^ already;
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               state = state * 1103515245u + 12345u;
               const std::uint8_t value = (byte == 31u) ? 0xFFu : static_cast<std::uint8_t>(state >> 17);
-              bubble.blocks[slot][byte] = value;
+              shipBytes[byte] = value;
               cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
             }
+            bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
           }
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(ttx66k, 400'000);
           Assert::IsTrue(run.completed, L"TTX66K returned");
 
           Elite::DrawWorkspace draw;
-          Elite::MathWorkspace math;
-          Elite::GeometryWorkspace geometry;
           Elite::TextState textState;
           Elite::ScreenState screenState;
           Elite::Compass compass{0xC3u, 0x9Cu, 0x55u};
@@ -734,10 +734,8 @@ namespace GameLogicTests
           screenState.dashboardShown = already;
           textState.column = 0x66u;
           textState.row = 0x77u;
-          draw.t2 = 0x88u;
 
-          Elite::SetUpScreenPixels(canvas, draw, math, geometry, textState, screenState, bubble, flight, status, 0u, compass, effects,
-                                   view);
+          Elite::SetUpScreenPixels(canvas, draw, textState, screenState, bubble, flight, status, 0u, compass, effects, view);
 
           const std::wstring where = WidenText("TTX66K(QQ11 " + std::to_string(view) + ", DFLAG " + std::to_string(already) + ")");
 
@@ -748,14 +746,13 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[comc], compass.colour, (where + L": COMC").c_str());
           Assert::AreEqual(cpu.memory[xc], textState.column, (where + L": XC").c_str());
           Assert::AreEqual(cpu.memory[yc], textState.row, (where + L": YC").c_str());
-          Assert::AreEqual(cpu.memory[t2], draw.t2, (where + L": T2").c_str());
 
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               const std::uint16_t address = static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte);
-              Assert::AreEqual(cpu.memory[address], bubble.blocks[slot][byte],
+              Assert::AreEqual(cpu.memory[address], bubble.blocks[slot].ToBytes()[byte],
                                (where + L": K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte)).c_str());
             }
           }
@@ -813,29 +810,29 @@ namespace GameLogicTests
         {
           for (const std::uint8_t countdown : {std::uint8_t{0}, std::uint8_t{3}, std::uint8_t{15}})
           {
-            World world;
-            Seed(world, view * 97u + spaceView * 13u + countdown);
-            world.spaceView = spaceView;
-            world.view = 0xEEu; // whatever was up before, which `TT66` overwrites
-            world.status.hyperspaceCountdown = countdown;
+            Universe universe;
+            Seed(universe, view * 97u + spaceView * 13u + countdown);
+            universe.spaceView = spaceView;
+            universe.view = 0xEEu; // whatever was up before, which `TT66` overwrites
+            universe.status.hyperspaceCountdown = countdown;
 
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(oracle.Label("SETL1"));
-            FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-            Mirror(world, cpu, at);
+            FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+            Mirror(universe, cpu, at);
 
             cpu.a = view;
             const Elite::Testing::RunResult run = cpu.CallSubroutine(tt66, 900'000);
             Assert::IsTrue(run.completed, L"TT66 returned");
 
-            Elite::FlightScreen screen = world.Screen();
+            Elite::FlightScreen screen = universe.Screen();
             Elite::SetUpScreen(screen, view);
 
             const std::wstring where = WidenText("TT66(QQ11 " + std::to_string(view) + ", VIEW " + std::to_string(spaceView) + ", QQ22+1 " +
                                                  std::to_string(countdown) + ")");
 
-            CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
-            CompareState(cpu, world, at, where);
+            CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
+            CompareState(cpu, universe, at, where);
 
             named += (view == 0u) ? 1u : 0u;
             counted += (countdown != 0u) ? 1u : 0u;
@@ -878,33 +875,33 @@ namespace GameLogicTests
         {
           for (std::uint8_t to = 0; to < 4u; ++to)
           {
-            World world;
-            Seed(world, view * 31u + from * 7u + to);
-            world.view = view;
-            world.spaceView = from;
+            Universe universe;
+            Seed(universe, view * 31u + from * 7u + to);
+            universe.view = view;
+            universe.spaceView = from;
 
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
-            FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-            Mirror(world, cpu, at);
+            FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+            Mirror(universe, cpu, at);
 
             cpu.x = to;
             const Elite::Testing::RunResult run = cpu.CallSubroutine(look1, 900'000);
             Assert::IsTrue(run.completed, L"LOOK1 returned");
 
-            Elite::FlightScreen screen = world.Screen();
+            Elite::FlightScreen screen = universe.Screen();
             Elite::ChangeView(screen, to);
 
             const std::wstring where =
               WidenText("LOOK1(QQ11 " + std::to_string(view) + ", VIEW " + std::to_string(from) + " -> " + std::to_string(to) + ")");
 
-            CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
-            CompareState(cpu, world, at, where);
+            CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
+            CompareState(cpu, universe, at, where);
 
             // The palette change happens on every path, including the one that does nothing else.
-            Assert::AreEqual<std::size_t>(1u, world.effects.palettes.size(), (where + L": one palette change").c_str());
-            Assert::AreEqual<std::uint32_t>(0u, world.effects.palettes[0], (where + L": and it asks for zero").c_str());
+            Assert::AreEqual<std::size_t>(1u, universe.effects.palettes.size(), (where + L": one palette change").c_str());
+            Assert::AreEqual<std::uint32_t>(0u, universe.effects.palettes[0], (where + L": and it asks for zero").c_str());
 
             if (view == 0u && to == from)
             {
@@ -981,52 +978,52 @@ namespace GameLogicTests
 
       for (const Case& item : CASES)
       {
-        World world;
-        Seed(world, 0x5Au);
-        world.view = 0u;
-        world.spaceView = 1u;
-        world.bubble.junk = item.junk;
-        world.bubble.counts[Elite::SHIP_TYPE_STATION] = item.station;
-        world.status.midJump = item.midJump;
+        Universe universe;
+        Seed(universe, 0x5Au);
+        universe.view = 0u;
+        universe.spaceView = 1u;
+        universe.bubble.junk = item.junk;
+        universe.bubble.Count(Elite::ShipType::Station) = item.station;
+        universe.status.midJump = item.midJump;
 
-        for (std::size_t slot = 0; slot < world.bubble.slots.size(); ++slot)
+        for (std::size_t slot = 0; slot < universe.bubble.slots.size(); ++slot)
         {
-          world.bubble.slots[slot] = 0u;
+          universe.bubble.slots[slot] = 0u;
         }
-        world.bubble.slots[0] = 128u; // the planet
-        world.bubble.slots[1] = 129u; // the sun
+        universe.bubble.slots[0] = 128u; // the planet
+        universe.bubble.slots[1] = 129u; // the sun
         const std::size_t above = static_cast<std::size_t>(item.junk) + 2u;
-        if (above < world.bubble.slots.size())
+        if (above < universe.bubble.slots.size())
         {
-          world.bubble.slots[above] = item.occupant;
+          universe.bubble.slots[above] = item.occupant;
         }
 
-        world.bubble.blocks[0][2] = 0u;
-        world.bubble.blocks[0][5] = 0u;
-        world.bubble.blocks[0][8] = item.planetSign;
-        world.bubble.blocks[0][7] = item.planetHigh;
-        world.bubble.blocks[1][2] = 0u;
-        world.bubble.blocks[1][5] = 0u;
-        world.bubble.blocks[1][8] = item.sunSign;
-        world.bubble.blocks[1][7] = item.sunHigh;
+        universe.bubble.blocks[0].x.sgn = 0u;
+        universe.bubble.blocks[0].y.sgn = 0u;
+        universe.bubble.blocks[0].z.sgn = item.planetSign;
+        universe.bubble.blocks[0].z.hi = item.planetHigh;
+        universe.bubble.blocks[1].x.sgn = 0u;
+        universe.bubble.blocks[1].y.sgn = 0u;
+        universe.bubble.blocks[1].z.sgn = item.sunSign;
+        universe.bubble.blocks[1].z.hi = item.sunHigh;
 
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(oracle.Label("SETL1"));
         cpu.AddTrap(oracle.Label("DOVDU19"));
         cpu.AddTrap(oracle.Label("NOISE"));
-        FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-        Mirror(world, cpu, at);
+        FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+        Mirror(universe, cpu, at);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(warp, 900'000);
         Assert::IsTrue(run.completed, L"WARP returned");
 
-        Elite::FlightScreen screen = world.Screen();
+        Elite::FlightScreen screen = universe.Screen();
         Elite::Warp(screen);
 
         const std::wstring where = WidenText(std::string("WARP (") + item.what + ")");
 
-        CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
-        CompareState(cpu, world, at, where);
+        CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
+        CompareState(cpu, universe, at, where);
 
         // The refusal noise is the seam, and the game asking for it is a trap hit at `NOISE`.
         std::size_t noises = 0;
@@ -1034,13 +1031,13 @@ namespace GameLogicTests
         {
           noises += (hit.address == oracle.Label("NOISE")) ? 1u : 0u;
         }
-        Assert::AreEqual<std::size_t>(noises, world.effects.sounds.size(), (where + L": the same number of refusals").c_str());
-        for (const std::uint8_t effect : world.effects.sounds)
+        Assert::AreEqual<std::size_t>(noises, universe.effects.sounds.size(), (where + L": the same number of refusals").c_str());
+        for (const std::uint8_t effect : universe.effects.sounds)
         {
           Assert::AreEqual<std::uint32_t>(Elite::SOUND_BOOP, effect, (where + L": sfxboop").c_str());
         }
 
-        if (world.effects.sounds.empty())
+        if (universe.effects.sounds.empty())
         {
           ++jumped;
         }
@@ -1170,18 +1167,18 @@ namespace GameLogicTests
      */
     TEST_METHOD(TheTitleScreenComesOutInColour)
     {
-      World world;
-      Elite::SetUpLoaderScreen(world.canvas);
+      Universe universe;
+      Elite::SetUpLoaderScreen(universe.canvas);
 
-      Elite::FlightScreen screen = world.Screen();
+      Elite::FlightScreen screen = universe.Screen();
       Elite::SetUpScreen(screen, 13u);
 
       // 6502: comirq1 reading `abraxas` -- the raster split, which the shell does once a frame.
-      Assert::AreEqual<std::uint32_t>(Elite::COLOUR_BANK_DASHBOARD, world.screen.colourBank, L"view 13 asks for the dashboard");
-      world.canvas.SetDashboardShown(true);
+      Assert::AreEqual<std::uint32_t>(Elite::COLOUR_BANK_DASHBOARD, universe.screen.colourBank, L"view 13 asks for the dashboard");
+      universe.canvas.SetDashboardShown(true);
 
       std::array<std::uint8_t, static_cast<std::size_t>(Elite::Canvas::WIDTH) * Elite::Canvas::HEIGHT> resolved{};
-      world.canvas.Resolve(resolved);
+      universe.canvas.Resolve(resolved);
 
       /*
        * The border box's left edge. `BOXS2` sets the two low bits of cell 3, so the pixels are x =
@@ -1238,7 +1235,7 @@ namespace GameLogicTests
        */
       std::size_t ink = 0;
       std::size_t hidden = 0;
-      const std::span<const std::uint8_t> planes = world.canvas.Screen();
+      const std::span<const std::uint8_t> planes = universe.canvas.Screen();
 
       for (int cellRow = Elite::Canvas::DASHBOARD_CELL_ROW; cellRow < Elite::Canvas::CELL_ROWS; ++cellRow)
       {
@@ -1247,7 +1244,7 @@ namespace GameLogicTests
           const int cell = cellRow * Elite::Canvas::CELL_COLUMNS + column;
           const std::uint8_t cellByte = planes[Elite::Canvas::DASHBOARD_CELLS + cell];
           const std::uint8_t palette[4] = {0u, static_cast<std::uint8_t>(cellByte >> 4), static_cast<std::uint8_t>(cellByte & 0x0Fu),
-                                           static_cast<std::uint8_t>(world.canvas.CellColour(cell) & 0x0Fu)};
+                                           static_cast<std::uint8_t>(universe.canvas.CellColour(cell) & 0x0Fu)};
 
           for (int sub = 0; sub < 8; ++sub)
           {

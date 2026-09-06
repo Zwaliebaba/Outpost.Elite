@@ -144,7 +144,7 @@ namespace Outpost
     void StartTheme() override;
     void StopTheme() override;
     [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override;
-    [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance) override;
+    [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance) override;
 
     // ---- Elite::TunnelEffects -------------------------------------------------------------------
 
@@ -172,7 +172,7 @@ namespace Outpost
     }
 
     /*
-     * The flight world, for `RESET`, `RES2` and the raster handler.
+     * The flight universe, for `RESET`, `RES2` and the raster handler.
      *
      * The start sequence reaches both resets through this object and both of them are ported now,
      * so what was a stub is a forward (§6.73 again: a seam scoped before the thing behind it

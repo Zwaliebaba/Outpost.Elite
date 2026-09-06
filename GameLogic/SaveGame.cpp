@@ -66,7 +66,7 @@ namespace Elite
     }
   } // namespace
 
-  CompetitionNumber MakeCompetitionNumber(const CommanderBlock& _image) noexcept
+  CompetitionNumber MakeCompetitionNumber(const Commander& _image) noexcept
   {
     /*
      * 6502: PHA / ORA #%10000000 / STA K / EOR COK / STA K+2 / EOR CASH+2 / STA K+1 /
@@ -82,22 +82,22 @@ namespace Elite
      * little between saves gets a visibly different competition number; one who spent nothing gets
      * the same one.
      */
-    const std::uint8_t checksum = _image.At(Field::ChecksumByte);
+    const std::uint8_t checksum = _image.checksum;
 
     CompetitionNumber result{};
 
     std::uint8_t accumulator = static_cast<std::uint8_t>(checksum | COMPETITION_HIGH_BIT);
     result.value[0] = accumulator;
 
-    accumulator = static_cast<std::uint8_t>(accumulator ^ _image.At(Field::Competition));
+    accumulator = static_cast<std::uint8_t>(accumulator ^ _image.competition);
     result.value[2] = accumulator;
 
     // 6502: EOR CASH+2 -- the third byte of the four, counting from the most significant.
-    accumulator = static_cast<std::uint8_t>(accumulator ^ _image.bytes[static_cast<std::size_t>(Field::Cash) + 2u]);
+    accumulator = static_cast<std::uint8_t>(accumulator ^ _image.cash.Byte(2u));
     result.value[1] = accumulator;
 
     accumulator = static_cast<std::uint8_t>(accumulator ^ COMPETITION_MIX);
-    accumulator = static_cast<std::uint8_t>(accumulator ^ _image.bytes[static_cast<std::size_t>(Field::Kills) + 1u]);
+    accumulator = static_cast<std::uint8_t>(accumulator ^ _image.kills.hi);
     result.value[3] = accumulator;
 
     // 6502: PLA / EOR #&A9 / STA CHK2 -- the checksum as it was BEFORE the chain above touched it.
@@ -139,7 +139,7 @@ namespace Elite
     }
   }
 
-  SaveOutcome SaveCommanderTo(CommanderStore& _store, CommanderBlock& _block,
+  SaveOutcome SaveCommanderTo(CommanderStore& _store, Commander& _block,
                               std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept
   {
     /*
@@ -149,7 +149,7 @@ namespace Elite
      * the live commander that changes here, not the file image, which is why this takes the block
      * by reference where SaveCommander takes it by const.
      */
-    _block.At(Field::SaveCount) = static_cast<std::uint8_t>(_block.At(Field::SaveCount) >> 1);
+    _block.saveCount = static_cast<std::uint8_t>(_block.saveCount >> 1);
 
     std::array<std::uint8_t, COMMANDER_FILE_SIZE> file{};
     SaveCommander(_block, _name, file);
@@ -158,11 +158,7 @@ namespace Elite
 
     // The competition number reads the file's checksums, so it is worked out from the image rather
     // than from the block -- the same distinction SaveCommander's header makes.
-    CommanderBlock image;
-    for (std::size_t index = 0; index < COMMANDER_BLOCK_SIZE; ++index)
-    {
-      image.bytes[index] = file[BLOCK_IN_FILE + index];
-    }
+    const Commander image = Commander::FromBytes(std::span<const std::uint8_t, COMMANDER_BLOCK_SIZE>{file.data() + BLOCK_IN_FILE, COMMANDER_BLOCK_SIZE});
     outcome.competition = MakeCompetitionNumber(image);
 
     // 6502: NA% -- kept because DFAULT reads it back, not because the write needs it.
@@ -172,7 +168,7 @@ namespace Elite
     return outcome;
   }
 
-  bool LoadCommanderFrom(CommanderStore& _store, CommanderBlock& _outBlock, std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept
+  bool LoadCommanderFrom(CommanderStore& _store, Commander& _outBlock, std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept
   {
     std::array<std::uint8_t, COMMANDER_FILE_SIZE> file{};
     if (!_store.Read(_name, file))
@@ -184,7 +180,7 @@ namespace Elite
     return LoadCommander(file, _outBlock, _name);
   }
 
-  DiskMenuResult DiskAccessMenu(SaveScreen& _screen, CommanderBlock& _block, std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name,
+  DiskMenuResult DiskAccessMenu(SaveScreen& _screen, Commander& _block, std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name,
                                 std::span<std::uint8_t, COMMANDER_FILE_SIZE> _image, std::span<std::uint8_t> _buffer,
                                 std::uint8_t& _useDisk) noexcept
   {
@@ -342,11 +338,12 @@ namespace Elite
          * So a save the device refuses still shows a number, and the number it shows is the one
          * the refused file would have had.
          */
+        NumberBytes competition{};
         for (std::size_t index = 0; index < saved.competition.value.size(); ++index)
         {
-          _screen.numbers.k[index] = saved.competition.value[index];
+          competition[index] = saved.competition.value[index];
         }
-        PrintNumber(_screen.characters, _screen.numbers, false);
+        _screen.numberWidth = PrintNumber(_screen.characters, competition, _screen.numberWidth, false);
 
         // 6502: JSR TT67 / JSR TT67 -- two of them, so the number gets a blank line under it.
         PrintNewline(_screen.printer);

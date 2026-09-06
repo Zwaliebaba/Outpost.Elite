@@ -258,7 +258,6 @@ namespace GameLogicTests
       Cpu6502 cpu = oracle.Fresh();
       Elite::Canvas canvas;
       Elite::DrawWorkspace draw;
-      Elite::MathWorkspace math;
 
       std::uint32_t compared = 0;
       std::uint32_t drawn = 0;
@@ -289,17 +288,14 @@ namespace GameLogicTests
               Assert::IsTrue(run.completed, L"DIL returned");
 
               draw.sc = start;
-              math.t1 = threshold;
-              math.k[0] = pair[0];
-              math.k[1] = pair[1];
-              Elite::DrawBar(canvas, draw, math, static_cast<std::uint8_t>(value), entry.shifts);
+              Elite::DrawBar(canvas, draw, static_cast<std::uint8_t>(value), entry.shifts, threshold, Elite::DialColours{pair[0], pair[1]});
 
               const std::wstring where = Widen(std::string(entry.what) + "(" + std::to_string(value) + ", T1=" + std::to_string(threshold) +
                                                ", K=" + std::to_string(pair[0]) + "/" + std::to_string(pair[1]) + ")");
 
               drawn += CompareScreens(cpu, at.screen, canvas, 0x3Cu, where);
-              Assert::AreEqual(cpu.memory[at.col], draw.col, (where + L": COL").c_str());
-              Assert::AreEqual(cpu.memory[at.q], math.q, (where + L": Q").c_str());
+              // `COL` and `Q` are `DIL`'s own since M2-c -- the colour it picked and the reading it
+              // deals out -- and what they produced is the pixels compared above.
 
               // 6502: SC comes out one character row further down, which is how four calls in a row
               // draw four dials.
@@ -307,7 +303,7 @@ namespace GameLogicTests
                 static_cast<std::uint16_t>((cpu.memory[at.sc] | (cpu.memory[static_cast<std::uint16_t>(at.sc + 1)] << 8)) - at.screen);
               Assert::AreEqual<std::uint32_t>(exit, draw.sc, (where + L": SC on the way out").c_str());
 
-              colours.insert(draw.col);
+              colours.insert(cpu.memory[at.col]); // the colour the ORIGINAL picked, so the sweep still counts four
               ++compared;
             }
           }
@@ -334,7 +330,6 @@ namespace GameLogicTests
       Cpu6502 cpu = oracle.Fresh();
       Elite::Canvas canvas;
       Elite::DrawWorkspace draw;
-      Elite::MathWorkspace math;
 
       std::uint32_t drawn = 0;
 
@@ -352,11 +347,11 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"DIL2 returned");
 
         draw.sc = start;
-        Elite::DrawIndicator(canvas, draw, math, static_cast<std::uint8_t>(value));
+        Elite::DrawIndicator(canvas, draw, static_cast<std::uint8_t>(value));
 
         const std::wstring where = Widen("DIL2(" + std::to_string(value) + ")");
         drawn += CompareScreens(cpu, at.screen, canvas, 0xA7u, where);
-        Assert::AreEqual(cpu.memory[at.q], math.q, (where + L": Q").c_str());
+        // `Q` is `DIL2`'s own since M2-c: the countdown that finds the lit block, and 255 after it.
 
         const std::uint16_t exit =
           static_cast<std::uint16_t>((cpu.memory[at.sc] | (cpu.memory[static_cast<std::uint16_t>(at.sc + 1)] << 8)) - at.screen);
@@ -662,8 +657,6 @@ namespace GameLogicTests
       Cpu6502 cpu = oracle.Fresh();
       Elite::Canvas canvas;
       Elite::DrawWorkspace draw;
-      Elite::MathWorkspace math;
-      Elite::GeometryWorkspace geometry;
 
       std::uint32_t compared = 0;
       std::uint32_t drawn = 0;
@@ -692,19 +685,21 @@ namespace GameLogicTests
 
             // The compass, which `DIALS` ends by calling. `SSPR` is `MANY+SST` (§6.58).
             Elite::Bubble bubble;
-            bubble.counts[Elite::SHIP_TYPE_STATION] = stations;
-            cpu.memory[static_cast<std::uint16_t>(at.many + Elite::SHIP_TYPE_STATION)] = stations;
+            bubble.Count(Elite::ShipType::Station) = stations;
+            cpu.memory[static_cast<std::uint16_t>(at.many + Elite::Byte(Elite::ShipType::Station))] = stations;
 
             std::uint32_t state = 0x5C31A70Fu ^ (counter * 0x9E3779B9u) ^ (stations * 0x85EBCA6Bu);
             for (std::size_t slot = 0; slot < 2u; ++slot)
             {
+              std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
                 state = state * 1103515245u + 12345u;
                 const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-                bubble.blocks[slot][byte] = value;
+                shipBytes[byte] = value;
                 cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
               }
+              bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
             }
 
             Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
@@ -712,11 +707,11 @@ namespace GameLogicTests
             cpu.memory[at.comy] = compass.y;
             cpu.memory[at.comc] = compass.colour;
 
-            // `XX12` is scratch that part 3 clears before it reads, so both sides start it dirty.
+            // `XX12` is scratch that part 3 clears before it reads, so the oracle's starts dirty;
+            // the port's four bytes are `DIALS`'s own array since M2-c.
             for (std::size_t byte = 0; byte < 4u; ++byte)
             {
               cpu.memory[static_cast<std::uint16_t>(at.xx12 + byte)] = static_cast<std::uint8_t>(0x9Du + byte);
-              geometry.xx12[byte] = static_cast<std::uint8_t>(0x9Du + byte);
             }
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(dials, 200'000);
@@ -739,7 +734,7 @@ namespace GameLogicTests
             status.altitude = item.altit;
             status.damageFlash = item.flash;
 
-            Elite::DrawDials(canvas, draw, math, geometry, flight, status, item.fuel, compass, bubble);
+            Elite::DrawDials(canvas, draw, flight, status, item.fuel, compass, bubble);
 
             const std::wstring where =
               Widen(std::string("DIALS: ") + item.what + ", MCNT " + std::to_string(counter) + (stations ? ", station" : ", planet"));
@@ -749,16 +744,12 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
             Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
             Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
-            Assert::AreEqual(cpu.memory[at.k], math.k[0], (where + L": K").c_str());
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k + 1)], math.k[1], (where + L": K+1").c_str());
-            Assert::AreEqual(cpu.memory[at.t1], math.t1, (where + L": T1").c_str());
-            Assert::AreEqual(cpu.memory[at.col], draw.col, (where + L": COL").c_str());
-
-            for (std::size_t byte = 0; byte < 4u; ++byte)
-            {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.xx12 + byte)], geometry.xx12[byte],
-                               (where + L": XX12+" + std::to_wstring(byte)).c_str());
-            }
+            /*
+             * `K`, `K+1`, `T1`, `COL` and `XX12` are not compared, and each for the same reason: they
+             * are what `DIALS` hands `DIL` and what `DIL` hands itself, values since M2-c and M2-b.
+             * `DIL`'s own sweep above pins every one of them against the original, and what they
+             * produce here is the dashboard compared pixel for pixel.
+             */
 
             energyPasses += ((counter & 3u) == 0u) ? 1u : 0u;
             ++compared;

@@ -31,7 +31,11 @@ done at once, because the second has no definition of "correct" until the first 
    a named constant. The list lives in this ADR's §6 and grows as they are found. Fixing any of
    them is a phase-6 option with the fix *off* by default, so the fidelity suites keep meaning
    what they say.
-4. **Modernisation comes after, and each item is its own decision.** Resolution, smoothing,
+4. **Modernisation comes after, and each item is its own decision.** *(Amended 2026-09-06, owner
+   ruling: the gate below is met, the modernisation of the PROGRAM is planned in
+   [Design/Modernize.md](../Modernize.md), and its last phase detaches the port from the original —
+   the oracle becomes recorded fixtures and `MasterFile/` and `Upstream/` leave the tree (Modernize.md
+   §1 R-a to R-d, Phase M6). Every clause of this ADR stands until that phase amends §5 for real.)* Resolution, smoothing,
    input remapping, gamepad, save UI, timing options — none is designed in this corpus. The
    gate for starting phase 6 is: every oracle suite, every golden and the replay suite green on
    the faithful build.

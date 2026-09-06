@@ -17,7 +17,7 @@
 #include "SystemScreen.h"
 #include "TextPrint.h"
 #include "Tokens.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <array>
 #include <cstdint>
@@ -154,9 +154,9 @@ namespace GameLogicTests
         return {true, 0u};
       }
 
-      std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _ship, std::uint8_t) override
+      std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _ship, std::uint8_t) override
       {
-        Note("title " + std::to_string(_token) + "/" + std::to_string(_ship));
+        Note("title " + std::to_string(_token) + "/" + std::to_string(Elite::Byte(_ship)));
         return titleAnswer;
       }
 
@@ -288,7 +288,7 @@ namespace GameLogicTests
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng, &shell),
           trade{recursive, characters, extended, text, keys, shell, rng},
-          save{recursive, characters, extended, sink, text, keys, shell, store, numbers}
+          save{recursive, characters, extended, sink, text, keys, shell, store, numberWidth}
       {
         recursive.SetValueTokens(&values);
         recursive.SetCursor(&text);
@@ -312,10 +312,10 @@ namespace GameLogicTests
       Elite::CharacterPrinter characters;
       Elite::TokenPrinter recursive;
       Elite::Rng rng;
-      Elite::NumberWorkspace numbers;
+      std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it (M2-c)
 
       // ---- the commander and the universe -------------------------------------------------------
-      Elite::CommanderBlock commander = Elite::DefaultCommander();
+      Elite::Commander commander = Elite::DefaultCommander();
       std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
       std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
       std::array<std::uint8_t, 16> buffer{};
@@ -366,8 +366,8 @@ namespace GameLogicTests
       {
         // 6502: JSR TT111 / JMP TT25 -- the screen reads what the search leaves behind.
         const Elite::NearestSystem found =
-          Elite::FindNearestSystem(_game.commander.GalaxySeeds(), _game.crosshairX, _game.crosshairY,
-                                   _game.commander.At(Elite::Field::SystemX), _game.commander.At(Elite::Field::SystemY));
+          Elite::FindNearestSystem(_game.commander.galaxySeeds, _game.crosshairX, _game.crosshairY,
+                                   _game.commander.systemX, _game.commander.systemY);
         _game.selectedSeeds = found.seeds;
         Elite::SystemDataScreen(_game.trade, _game.selectedSeeds, found.data, found.distance);
         return "data on system";
@@ -461,8 +461,8 @@ namespace GameLogicTests
        * The commander the session starts from, with cargo in the hold -- otherwise the sell screen
        * has nothing to offer and prints four words, which would look like a working screen.
        */
-      game->commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + 0u] = 5; // food
-      game->commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + 3u] = 2; // radioactives
+      game->commander.cargoHold[0u] = 5; // food
+      game->commander.cargoHold[3u] = 2; // radioactives
       Elite::SaveCommander(game->commander, game->name, game->image);
 
       Elite::GameStart start{game->shell,      game->save,       game->text,           game->commander, game->name,
@@ -489,7 +489,7 @@ namespace GameLogicTests
        * the screen prints through, so asking it here is asking the same question the player reads.
        */
       const std::uint32_t quotedFoodPrice = Elite::TotalPrice(Elite::MarketPrice(0, game->current.economy, game->market.randomiser), 1);
-      const std::uint32_t startingCash = game->commander.Cash();
+      const std::uint32_t startingCash = game->commander.cash.tenths;
 
       struct Step
       {
@@ -586,10 +586,10 @@ namespace GameLogicTests
        * quoted -- three routines, three tests of their own, and nothing that checks they are talking
        * about the same tonne of food.
        */
-      Assert::AreEqual<std::uint8_t>(7, game->commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold)],
+      Assert::AreEqual<std::uint8_t>(7, game->commander.cargoHold[0],
                                      L"five tonnes of food in the hold, plus the two just bought");
-      Assert::IsTrue(game->commander.Cash() < startingCash, L"and the money for them has left the commander");
-      Assert::AreEqual<std::uint32_t>(startingCash - game->commander.Cash(), 2u * quotedFoodPrice,
+      Assert::IsTrue(game->commander.cash.tenths < startingCash, L"and the money for them has left the commander");
+      Assert::AreEqual<std::uint32_t>(startingCash - game->commander.cash.tenths, 2u * quotedFoodPrice,
                                       L"exactly twice the price the market quoted");
 
       /*
@@ -613,8 +613,8 @@ namespace GameLogicTests
     TEST_METHOD(TheScreensDoNotPrintTheSameThingAsEachOther)
     {
       auto game = std::make_unique<Session>();
-      game->commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + 0u] = 5;
-      game->commander.bytes[static_cast<std::size_t>(Elite::Field::CargoHold) + 3u] = 2;
+      game->commander.cargoHold[0u] = 5;
+      game->commander.cargoHold[3u] = 2;
       Elite::SaveCommander(game->commander, game->name, game->image);
 
       Elite::GameStart start{game->shell,      game->save,       game->text,           game->commander, game->name,

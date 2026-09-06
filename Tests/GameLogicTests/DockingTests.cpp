@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "FlightWorld.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Commander.h"
@@ -32,8 +32,8 @@ namespace GameLogicTests
 
   namespace
   {
-    // `OracleMissing` is `FlightWorld.h`'s, which this file now includes for `World` -- one copy
-    // rather than two identical ones, since the tunnel made a whole flight world an argument here.
+    // `OracleMissing` is `FlightUniverse.h`'s, which this file now includes for `Universe` -- one copy
+    // rather than two identical ones, since the tunnel made a whole flight universe an argument here.
 
     std::wstring Widen(const std::string& _text)
     {
@@ -101,7 +101,7 @@ namespace GameLogicTests
         seams.push_back("DELAY");
         frames = _frames;
       }
-      std::uint8_t ShowTitleScreen(std::uint8_t, std::uint8_t, std::uint8_t) override
+      std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override
       {
         seams.push_back("TITLE");
         return 0;
@@ -191,13 +191,13 @@ namespace GameLogicTests
             {
               for (const std::uint32_t money : CASH_VALUES)
               {
-                Elite::CommanderBlock commander = Elite::DefaultCommander();
-                commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(missions);
-                commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = rank;
-                commander.At(Elite::Field::GalaxyNumber) = galaxy;
-                commander.At(Elite::Field::SystemX) = place.x;
-                commander.At(Elite::Field::SystemY) = place.y;
-                commander.SetCash(money);
+                Elite::Commander commander = Elite::DefaultCommander();
+                commander.missionProgress = static_cast<std::uint8_t>(missions);
+                commander.kills.hi = rank;
+                commander.galaxyNumber = galaxy;
+                commander.systemX = place.x;
+                commander.systemY = place.y;
+                commander.cash.tenths = (money);
 
                 // ---- the shipped routine -------------------------------------------------------
                 Cpu6502 cpu = oracle.Fresh();
@@ -213,7 +213,7 @@ namespace GameLogicTests
                 for (std::size_t index = 0; index < 4; ++index)
                 {
                   cpu.memory[static_cast<std::uint16_t>(cash + index)] =
-                    commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+                    commander.cash.Byte(index);
                 }
 
                 cpu.a = cpu.x = cpu.y = 0;
@@ -291,10 +291,10 @@ namespace GameLogicTests
       cpu.AddTrap(delay);
 
       // A commander that earns nothing, so the run reaches BAY and every store above it has run.
-      Elite::CommanderBlock commander = Elite::DefaultCommander();
-      commander.At(Elite::Field::MissionProgress) = 0x02;
-      commander.At(Elite::Field::GalaxyNumber) = 7;
-      commander.SetCash(0);
+      Elite::Commander commander = Elite::DefaultCommander();
+      commander.missionProgress = 0x02;
+      commander.galaxyNumber = 7;
+      commander.cash.tenths = (0);
       cpu.memory[oracle.Label("TP")] = 0x02;
       cpu.memory[oracle.Label("GCNT")] = 7;
 
@@ -323,7 +323,7 @@ namespace GameLogicTests
 
       // ---- the port ----------------------------------------------------------------------------
       /*
-       * A whole world rather than three loose blocks, because `DOENTRY` draws the tunnel now.
+       * A whole universe rather than three loose blocks, because `DOENTRY` draws the tunnel now.
        *
        * `LAUN` is ported (§6.109), so `DockAtStation` takes the screen it draws on instead of the
        * commander, the status and the flight state separately -- all three were already inside
@@ -332,28 +332,28 @@ namespace GameLogicTests
        * changes neither. The drawing itself is compared in `LaunchTests`.
        */
       RecordingEffects effects;
-      World world;
+      Universe universe;
       Elite::ClipState clip;
-      world.commander = commander;
+      universe.commander = commander;
 
       /*
        * §6.95, and it is this fixture's job as much as the app's: a default-constructed flight
-       * world is a state the game cannot be in. `STP` defaults to zero, `CIRCLE2` walks a circle
+       * universe is a state the game cannot be in. `STP` defaults to zero, `CIRCLE2` walks a circle
        * `STP` at a time and cannot terminate on a zero, and `DOENTRY` draws circles now -- so
        * without a step the game could have left, a port that DROPPED `LAUN`'s store would hang
        * this test rather than fail it. Four is what a middling planet's disc leaves behind.
        */
-      world.heaps.stp = 4u;
+      universe.heaps.stp = 4u;
 
-      world.flight.delta = 0x5C;
-      world.status.laserTemperature = 0x5C;
-      world.status.hyperspaceCountdown = 0x5C;
-      world.status.forwardShield = 0x5C;
-      world.status.aftShield = 0x5C;
-      world.status.energy = 0x5C;
+      universe.flight.delta = 0x5C;
+      universe.status.laserTemperature = 0x5C;
+      universe.status.hyperspaceCountdown = 0x5C;
+      universe.status.forwardShield = 0x5C;
+      universe.status.aftShield = 0x5C;
+      universe.status.energy = 0x5C;
       std::uint8_t dockedFlag = 0;
 
-      Elite::FlightScreen screen = world.Screen();
+      Elite::FlightScreen screen = universe.Screen();
       const Elite::DockingResult result = Elite::DockAtStation(effects, screen, clip, nullptr, dockedFlag, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome), L"this commander earns no briefing");
@@ -372,9 +372,9 @@ namespace GameLogicTests
        * a seam. What it leaves behind says so instead: the step it stores and the noise it makes.
        * Without this, deleting the call from `DOENTRY` would pass every other assertion here.
        */
-      Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, world.heaps.stp, L"LAUN stored the step");
-      Assert::AreEqual<std::size_t>(1u, world.effects.sounds.size(), L"LAUN made one noise");
-      Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, world.effects.sounds.front(), L"and it is sfxwhosh");
+      Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, universe.heaps.stp, L"LAUN stored the step");
+      Assert::AreEqual<std::size_t>(1u, universe.effects.sounds.size(), L"LAUN made one noise");
+      Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, universe.effects.sounds.front(), L"and it is sfxwhosh");
 
       std::uint8_t frames = 0;
       for (const Cpu6502::TrapHit& hit : cpu.trapHits)
@@ -387,12 +387,12 @@ namespace GameLogicTests
       Assert::AreEqual(frames, effects.frames, L"how long the pause is");
       Assert::AreEqual<std::uint8_t>(Elite::DOCKING_PAUSE_FRAMES, frames, L"forty-four vertical syncs");
 
-      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], world.flight.delta, L"DELTA");
-      Assert::AreEqual(cpu.memory[oracle.Label("GNTMP")], world.status.laserTemperature, L"GNTMP");
-      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ22") + 1)], world.status.hyperspaceCountdown, L"QQ22+1");
-      Assert::AreEqual(cpu.memory[oracle.Label("FSH")], world.status.forwardShield, L"FSH");
-      Assert::AreEqual(cpu.memory[oracle.Label("ASH")], world.status.aftShield, L"ASH");
-      Assert::AreEqual(cpu.memory[oracle.Label("ENERGY")], world.status.energy, L"ENERGY");
+      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], universe.flight.delta, L"DELTA");
+      Assert::AreEqual(cpu.memory[oracle.Label("GNTMP")], universe.status.laserTemperature, L"GNTMP");
+      Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ22") + 1)], universe.status.hyperspaceCountdown, L"QQ22+1");
+      Assert::AreEqual(cpu.memory[oracle.Label("FSH")], universe.status.forwardShield, L"FSH");
+      Assert::AreEqual(cpu.memory[oracle.Label("ASH")], universe.status.aftShield, L"ASH");
+      Assert::AreEqual(cpu.memory[oracle.Label("ENERGY")], universe.status.energy, L"ENERGY");
 
       // 6502: BAY's own stores, which the JMP tail reaches.
       Assert::AreEqual<std::uint8_t>(0xFF, dockedFlag, L"BAY sets the docked flag");
@@ -409,18 +409,18 @@ namespace GameLogicTests
        * BAY's stores on every path would set the docked flag before the mission screen had drawn.
        */
       RecordingEffects briefed;
-      Elite::CommanderBlock earner = Elite::DefaultCommander();
-      earner.At(Elite::Field::MissionProgress) = 0x00;
-      earner.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = 4;
-      earner.At(Elite::Field::GalaxyNumber) = 0;
-      earner.SetCash(0);
+      Elite::Commander earner = Elite::DefaultCommander();
+      earner.missionProgress = 0x00;
+      earner.kills.hi = 4;
+      earner.galaxyNumber = 0;
+      earner.cash.tenths = (0);
 
-      World earnerWorld;
+      Universe earnerUniverse;
       Elite::ClipState earnerClip;
-      earnerWorld.commander = earner;
-      earnerWorld.heaps.stp = 4u; // §6.95, as above
+      earnerUniverse.commander = earner;
+      earnerUniverse.heaps.stp = 4u; // §6.95, as above
       std::uint8_t earnerDocked = 0;
-      Elite::FlightScreen earnerScreen = earnerWorld.Screen();
+      Elite::FlightScreen earnerScreen = earnerUniverse.Screen();
       const Elite::DockingResult briefing = Elite::DockAtStation(briefed, earnerScreen, earnerClip, nullptr, earnerDocked, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::BriefMission1), static_cast<int>(briefing.outcome),
@@ -435,7 +435,7 @@ namespace GameLogicTests
 
       // The state above the dispatch is reset either way -- the shields and the pause are not the
       // mission's business.
-      Assert::AreEqual<std::uint8_t>(0xFF, earnerWorld.status.energy, L"the energy banks are recharged anyway");
+      Assert::AreEqual<std::uint8_t>(0xFF, earnerUniverse.status.energy, L"the energy banks are recharged anyway");
       Assert::AreEqual<std::uint8_t>(Elite::DOCKING_PAUSE_FRAMES, briefed.frames, L"and the pause happens anyway");
     }
     /*
@@ -485,10 +485,10 @@ namespace GameLogicTests
 
         // A commander with mission 1 finished and paid, in a galaxy where mission 2 cannot start,
         // so the only decision left is this one.
-        Elite::CommanderBlock commander = Elite::DefaultCommander();
-        commander.At(Elite::Field::MissionProgress) = 0x02;
-        commander.At(Elite::Field::GalaxyNumber) = 7;
-        commander.SetCash(item.tenths);
+        Elite::Commander commander = Elite::DefaultCommander();
+        commander.missionProgress = 0x02;
+        commander.galaxyNumber = 7;
+        commander.cash.tenths = (item.tenths);
 
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(oracle.Label("RES2"));
@@ -498,7 +498,7 @@ namespace GameLogicTests
         cpu.memory[oracle.Label("GCNT")] = 7;
         for (std::size_t index = 0; index < 4; ++index)
         {
-          cpu.memory[static_cast<std::uint16_t>(cash + index)] = commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+          cpu.memory[static_cast<std::uint16_t>(cash + index)] = commander.cash.Byte(index);
         }
         cpu.a = cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;

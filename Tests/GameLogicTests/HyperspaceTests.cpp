@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
-#include "FlightWorld.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Charts.h"
@@ -11,7 +11,7 @@
 #include "Hyperspace.h"
 #include "Market.h"
 #include "FlightLoop.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <array>
 #include <set>
@@ -146,23 +146,23 @@ namespace GameLogicTests
               const bool controlHeld = (cheat & 1) != 0;
               const bool patg = (cheat & 2) != 0;
 
-              Cpu6502 cpu = oracle.Fresh();
-              // `TT114` is the chart's own redraw, which `TT18` JUMPS to rather than calls -- the
-              // port hands it back as an outcome for the caller, so here it is a trap.
-              for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY", "TT114"})
-              {
-                std::uint16_t address = 0;
-                if (oracle.TryLabel(seam, address))
+                Cpu6502 cpu = oracle.Fresh();
+                // `TT114` is the chart's own redraw, which `TT18` JUMPS to rather than calls -- the
+                // port hands it back as an outcome for the caller, so here it is a trap.
+                for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY", "TT114"})
                 {
-                  cpu.AddTrap(address);
+                  std::uint16_t address = 0;
+                  if (oracle.TryLabel(seam, address))
+                  {
+                    cpu.AddTrap(address);
+                  }
                 }
-              }
 
-              LoopWorld world;
-              Seed(world.world, 5u);
-              world.world.commander.At(Elite::Field::Fuel) = fuel;
-              world.world.view = view;
-              world.world.status.midJump = 0u;
+              LoopUniverse universe;
+              Seed(universe.universe, 5u);
+              universe.universe.commander.fuel = fuel;
+              universe.universe.view = view;
+              universe.universe.status.midJump = 0u;
 
               Elite::SystemSeeds galaxySeeds{};
               for (std::size_t byte = 0; byte < 6u; ++byte)
@@ -179,7 +179,7 @@ namespace GameLogicTests
                 cpu.memory[static_cast<std::uint16_t>(at.safehouse + byte)] = value;
               }
 
-              Mirror(world.world, cpu, where);
+              Mirror(universe.universe, cpu, where);
               cpu.memory[at.qq14] = fuel;
               cpu.memory[at.qq8] = static_cast<std::uint8_t>(distance & 0xFFu);
               cpu.memory[static_cast<std::uint16_t>(at.qq8 + 1u)] = static_cast<std::uint8_t>(distance >> 8u);
@@ -206,9 +206,9 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(tt18, 40'000'000, tt110);
               Assert::IsTrue(run.completed, L"TT18 reached its end");
 
-              Elite::FlightScreen screen = world.world.Screen();
-              Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
-                                     world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+              Elite::FlightScreen screen = universe.universe.Screen();
+              Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
+                                     universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
 
               Elite::Rng rng;
               rng.SetState(seed);
@@ -218,23 +218,23 @@ namespace GameLogicTests
               Elite::SystemSeeds selected{};
               Elite::MarketState market;
 
-              const Elite::JumpResult result = Elite::PerformJump(loop, current, selected, jump, described, market, world.effects, nullptr,
+              const Elite::JumpResult result = Elite::PerformJump(loop, current, selected, jump, described, market, universe.effects, nullptr,
                                                                   cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, controlHeld, patg);
 
               const std::wstring context =
                 WidenText("TT18 seed " + std::to_string(seed[0]) + " fuel " + std::to_string(fuel) + " dist " + std::to_string(distance)
                           + " view " + std::to_string(view) + " ctrl " + std::to_string(controlHeld) + " patg " + std::to_string(patg));
 
-              Assert::AreEqual(cpu.memory[at.qq14], world.world.commander.At(Elite::Field::Fuel), (context + L": QQ14").c_str());
-              Assert::AreEqual(cpu.memory[where.mj], world.world.status.midJump, (context + L": MJ").c_str());
-              Assert::AreEqual(cpu.memory[at.qq11], world.world.view, (context + L": QQ11").c_str());
+              Assert::AreEqual(cpu.memory[at.qq14], universe.universe.commander.fuel, (context + L": QQ14").c_str());
+              Assert::AreEqual(cpu.memory[where.mj], universe.universe.status.midJump, (context + L": MJ").c_str());
+              Assert::AreEqual(cpu.memory[at.qq11], universe.universe.view, (context + L": QQ11").c_str());
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + byte)], screen.rng.State()[byte],
                                  (context + L": RAND+" + std::to_wstring(byte)).c_str());
               }
 
-              outcomes.insert(std::to_string(static_cast<int>(result)) + "/" + std::to_string(world.world.status.midJump));
+              outcomes.insert(std::to_string(static_cast<int>(result)) + "/" + std::to_string(universe.universe.status.midJump));
               ++compared;
               }
             }
@@ -274,11 +274,11 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ptg, 10'000, mjp);
         Assert::IsTrue(run.completed, L"ptg reached MJP");
 
-        Elite::CommanderBlock commander{};
-        commander.At(Elite::Field::Competition) = static_cast<std::uint8_t>(value);
-        commander.At(Elite::Field::Competition) = static_cast<std::uint8_t>(commander.At(Elite::Field::Competition) | 1u);
+        Elite::Commander commander{};
+        commander.competition = static_cast<std::uint8_t>(value);
+        commander.competition = static_cast<std::uint8_t>(commander.competition | 1u);
 
-        Assert::AreEqual(cpu.memory[at.cok], commander.At(Elite::Field::Competition), (L"ptg COK " + std::to_wstring(value)).c_str());
+        Assert::AreEqual(cpu.memory[at.cok], commander.competition, (L"ptg COK " + std::to_wstring(value)).c_str());
         ++compared;
       }
 
@@ -320,11 +320,11 @@ namespace GameLogicTests
               }
             }
 
-            LoopWorld world;
-            Seed(world.world, seedIndex);
-            world.world.commander.At(Elite::Field::GalacticDrive) = fitted;
-            world.world.commander.At(Elite::Field::GalaxyNumber) = galaxy;
-            world.world.commander.At(Elite::Field::LegalStatus) = 40u;
+            LoopUniverse universe;
+            Seed(universe.universe, seedIndex);
+            universe.universe.commander.galacticDrive = fitted;
+            universe.universe.commander.galaxyNumber = galaxy;
+            universe.universe.commander.legalStatus = 40u;
 
             Elite::SystemSeeds galaxySeeds{};
             for (std::size_t byte = 0; byte < 6u; ++byte)
@@ -338,7 +338,7 @@ namespace GameLogicTests
             chart.cursorX = 10u;
             chart.cursorY = 20u;
 
-            Mirror(world.world, cpu, where);
+            Mirror(universe.universe, cpu, where);
             cpu.memory[at.ghyp] = fitted;
             cpu.memory[at.gcnt] = galaxy;
             cpu.memory[at.fist] = 40u;
@@ -348,9 +348,9 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ghy, 40'000'000);
             Assert::IsTrue(run.completed, L"Ghy returned");
 
-            Elite::FlightScreen screen = world.world.Screen();
-            Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
-                                   world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+            Elite::FlightScreen screen = universe.universe.Screen();
+            Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
+                                   universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
 
             Elite::CurrentSystem current;
             Elite::SystemSeeds selected{};
@@ -361,9 +361,9 @@ namespace GameLogicTests
             const std::wstring context = WidenText("Ghy seed " + std::to_string(seedIndex) + (fitted != 0u ? " fitted" : " none") +
                                                    " galaxy " + std::to_string(galaxy));
 
-            Assert::AreEqual(cpu.memory[at.ghyp], world.world.commander.At(Elite::Field::GalacticDrive), (context + L": GHYP").c_str());
-            Assert::AreEqual(cpu.memory[at.fist], world.world.commander.At(Elite::Field::LegalStatus), (context + L": FIST").c_str());
-            Assert::AreEqual(cpu.memory[at.gcnt], world.world.commander.At(Elite::Field::GalaxyNumber), (context + L": GCNT").c_str());
+            Assert::AreEqual(cpu.memory[at.ghyp], universe.universe.commander.galacticDrive, (context + L": GHYP").c_str());
+            Assert::AreEqual(cpu.memory[at.fist], universe.universe.commander.legalStatus, (context + L": FIST").c_str());
+            Assert::AreEqual(cpu.memory[at.gcnt], universe.universe.commander.galaxyNumber, (context + L": GCNT").c_str());
             for (std::size_t byte = 0; byte < 6u; ++byte)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.qq21 + byte)], galaxySeeds.bytes[byte],
@@ -371,9 +371,10 @@ namespace GameLogicTests
             }
             Assert::AreEqual(cpu.memory[at.qq9], chart.cursorX, (context + L": QQ9").c_str());
             Assert::AreEqual(cpu.memory[at.qq10], chart.cursorY, (context + L": QQ10").c_str());
-            Assert::AreEqual(cpu.memory[at.qq0], world.world.commander.At(Elite::Field::SystemX), (context + L": QQ0").c_str());
-            Assert::AreEqual(cpu.memory[at.qq1], world.world.commander.At(Elite::Field::SystemY), (context + L": QQ1").c_str());
+            Assert::AreEqual(cpu.memory[at.qq0], universe.universe.commander.systemX, (context + L": QQ0").c_str());
+            Assert::AreEqual(cpu.memory[at.qq1], universe.universe.commander.systemY, (context + L": QQ1").c_str());
             Assert::AreEqual(cpu.memory[at.qq22 + 1], jump.countdown, (context + L": QQ22+1").c_str());
+            Assert::AreEqual(cpu.memory[at.qq22], jump.counter, (context + L": QQ22 -- wW2 stores both bytes (§6.159)").c_str());
             Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.qq8] | (cpu.memory[at.qq8 + 1] << 8)), jump.distance,
                                             (context + L": QQ8").c_str());
             for (std::size_t byte = 0; byte < 6u; ++byte)
@@ -382,8 +383,8 @@ namespace GameLogicTests
                                (context + L": safehouse+" + std::to_wstring(byte)).c_str());
             }
 
-            galaxies.insert(std::to_string(world.world.commander.At(Elite::Field::GalaxyNumber)) + "/" +
-                            std::to_string(world.world.commander.At(Elite::Field::GalacticDrive)));
+            galaxies.insert(std::to_string(universe.universe.commander.galaxyNumber) + "/" +
+                            std::to_string(universe.universe.commander.galacticDrive));
             ++compared;
           }
         }
@@ -423,10 +424,10 @@ namespace GameLogicTests
         {
           Cpu6502 cpu = oracle.Fresh();
 
-          LoopWorld world;
-          Seed(world.world, seedIndex);
-          world.world.commander.At(Elite::Field::SystemY) = systemY;
-          world.world.status.midJump = 0u;
+          LoopUniverse universe;
+          Seed(universe.universe, seedIndex);
+          universe.universe.commander.systemY = systemY;
+          universe.universe.status.midJump = 0u;
 
           // The sound and the message are seams on the port's side, so they are traps on the
           // oracle's -- otherwise the comparison would be against a routine that made a noise.
@@ -442,26 +443,26 @@ namespace GameLogicTests
             }
           }
 
-          Mirror(world.world, cpu, where);
+          Mirror(universe.universe, cpu, where);
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(mjp, 40'000'000);
           Assert::IsTrue(run.completed, (L"MJP returned, stopped at " + std::to_wstring(run.stoppedAt) + L" after " +
                                          std::to_wstring(run.instructions) + L" instructions")
                                           .c_str());
 
-          Elite::FlightScreen screen = world.world.Screen();
-          Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
-                                 world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+          Elite::FlightScreen screen = universe.universe.Screen();
+          Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
+                                 universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
 
-          Elite::EnterWitchspace(loop, world.world.commander, world.effects, nullptr);
+          Elite::EnterWitchspace(loop, universe.universe.commander, universe.effects, nullptr);
 
           const std::wstring context = WidenText("MJP seed " + std::to_string(seedIndex) + " QQ1 " + std::to_string(systemY));
 
-          CompareState(cpu, world.world, where, context);
-          Assert::AreEqual(cpu.memory[at.qq1], world.world.commander.At(Elite::Field::SystemY), (context + L": QQ1").c_str());
+          CompareState(cpu, universe.universe, where, context);
+          Assert::AreEqual(cpu.memory[at.qq1], universe.universe.commander.systemY, (context + L": QQ1").c_str());
 
-          outcomes.insert(std::to_string(world.world.status.midJump) + "/" + std::to_string(world.world.dust.count) + "/" +
-                          std::to_string(world.world.bubble.counts[Elite::SHIP_TYPE_THARGOID]));
+          outcomes.insert(std::to_string(universe.universe.status.midJump) + "/" + std::to_string(universe.universe.dust.count) + "/" +
+                          std::to_string(universe.universe.bubble.Count(Elite::ShipType::Thargoid)));
           ++compared;
         }
       }
@@ -544,7 +545,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 400'000);
             Assert::IsTrue(run.completed, L"hyp1 returned");
 
-            Elite::CommanderBlock commander{};
+            Elite::Commander commander{};
             Elite::CurrentSystem current;
             Elite::SystemSeeds selected{};
             Elite::MarketState market;
@@ -576,8 +577,8 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.memory[at.tek], current.techLevel, (context + L": tek").c_str());
             Assert::AreEqual(cpu.memory[at.gov], current.government, (context + L": gov").c_str());
             Assert::AreEqual(cpu.memory[at.ev], explosions, (context + L": EV").c_str());
-            Assert::AreEqual(cpu.memory[at.qq0], commander.At(Elite::Field::SystemX), (context + L": QQ0").c_str());
-            Assert::AreEqual(cpu.memory[at.qq1], commander.At(Elite::Field::SystemY), (context + L": QQ1").c_str());
+            Assert::AreEqual(cpu.memory[at.qq0], commander.systemX, (context + L": QQ0").c_str());
+            Assert::AreEqual(cpu.memory[at.qq1], commander.systemY, (context + L": QQ1").c_str());
 
             // What `GVL` produced, which is the half of this routine that is not a copy.
             Assert::AreEqual(cpu.memory[at.qq26], market.randomiser, (context + L": QQ26").c_str());
@@ -660,20 +661,19 @@ namespace GameLogicTests
         }
         cpu.AddTrap(goin); // 6502: JMP GOIN -- the docking, which is the caller's
 
-        LoopWorld world;
-        Seed(world.world, one.seed);
-        world.world.commander.At(Elite::Field::Tribbles) = one.tribbleLow;
-        world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)) = one.tribbleHigh;
-        world.world.commander.At(Elite::Field::LegalStatus) = one.legal;
-        world.world.commander.At(Elite::Field::EscapePod) = 0xFFu;
-        world.world.commander.At(Elite::Field::Fuel) = one.fuel;
+        LoopUniverse universe;
+        Seed(universe.universe, one.seed);
+        universe.universe.commander.tribbles.lo = one.tribbleLow;
+        universe.universe.commander.tribbles.hi = one.tribbleHigh;
+        universe.universe.commander.legalStatus = one.legal;
+        universe.universe.commander.escapePod = 0xFFu;
+        universe.universe.commander.fuel = one.fuel;
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
-          world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + static_cast<int>(item))) =
-            static_cast<std::uint8_t>(3u + item);
+          universe.universe.commander.cargoHold[item] = static_cast<std::uint8_t>(3u + item);
         }
 
-        Mirror(world.world, cpu, where);
+        Mirror(universe.universe, cpu, where);
         cpu.memory[tribble] = one.tribbleLow;
         cpu.memory[static_cast<std::uint16_t>(tribble + 1u)] = one.tribbleHigh;
         cpu.memory[fist] = one.legal;
@@ -687,9 +687,9 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(escape, 40'000'000);
         Assert::IsTrue(run.completed, L"ESCAPE reached GOIN");
 
-        Elite::FlightScreen screen = world.world.Screen();
-        Elite::FlightLoop loop{screen,     world.keys,       world.control, world.options, world.burst,   world.heap,
-                               world.clip, world.projection, world.axes,    world.effects, world.effects, world.effects};
+        Elite::FlightScreen screen = universe.universe.Screen();
+        Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
+                               universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
 
         std::uint8_t fuel = one.fuel;
         Elite::AbandonShip(loop, fuel);
@@ -697,25 +697,25 @@ namespace GameLogicTests
         const std::wstring context = WidenText("ESCAPE seed " + std::to_string(one.seed) + " trib " + std::to_string(one.tribbleHigh) +
                                                "/" + std::to_string(one.tribbleLow));
 
-        CompareState(cpu, world.world, where, context);
+        CompareState(cpu, universe.universe, where, context);
 
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
           Assert::AreEqual(
             cpu.memory[static_cast<std::uint16_t>(qq20 + item)],
-            world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + static_cast<int>(item))),
+            universe.universe.commander.cargoHold[item],
             (context + L": QQ20+" + std::to_wstring(item)).c_str());
         }
-        Assert::AreEqual(cpu.memory[fist], world.world.commander.At(Elite::Field::LegalStatus), (context + L": FIST").c_str());
-        Assert::AreEqual(cpu.memory[escp], world.world.commander.At(Elite::Field::EscapePod), (context + L": ESCP").c_str());
-        Assert::AreEqual(cpu.memory[tribble], world.world.commander.At(Elite::Field::Tribbles), (context + L": TRIBBLE").c_str());
+        Assert::AreEqual(cpu.memory[fist], universe.universe.commander.legalStatus, (context + L": FIST").c_str());
+        Assert::AreEqual(cpu.memory[escp], universe.universe.commander.escapePod, (context + L": ESCP").c_str());
+        Assert::AreEqual(cpu.memory[tribble], universe.universe.commander.tribbles.lo, (context + L": TRIBBLE").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tribble + 1u)],
-                         world.world.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)),
+                         universe.universe.commander.tribbles.hi,
                          (context + L": TRIBBLE+1").c_str());
         Assert::AreEqual(cpu.memory[qq14], fuel, (context + L": QQ14").c_str());
 
-        outcomes.insert(std::to_string(world.world.commander.At(Elite::Field::Tribbles)) + "/" +
-                        std::to_string(world.world.bubble.slots[0]));
+        outcomes.insert(std::to_string(universe.universe.commander.tribbles.lo) + "/" +
+                        std::to_string(universe.universe.bubble.slots[0]));
         ++compared;
       }
 
@@ -733,7 +733,7 @@ namespace GameLogicTests
       Assert::AreEqual<std::size_t>(2u, outcomes.size(), L"the Trumbles survived and were absent");
       for (const std::string& one : outcomes)
       {
-        Assert::IsTrue(one.find("/" + std::to_string(Elite::SHIP_TYPE_COBRA_MK3)) != std::string::npos,
+        Assert::IsTrue(one.find("/" + std::to_string(Elite::Byte(Elite::ShipType::CobraMk3))) != std::string::npos,
                        L"and the ship left behind is always the Cobra, never the pirate");
       }
     }

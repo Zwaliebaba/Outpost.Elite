@@ -60,7 +60,7 @@ namespace GameLogicTests
      * arithmetic to check rather than two, and its collision behaviour is irrelevant here because
      * what it is asked is "did this change", not "is this unique".
      */
-    std::uint64_t RenderEffect(std::uint8_t _effect)
+    std::uint64_t RenderEffect(std::uint8_t _effect, bool _play = true)
     {
       Elite::SoundBuffer buffer;
       Elite::MusicPlayer music;
@@ -79,7 +79,10 @@ namespace GameLogicTests
        */
       synth.Write(0x18u, 0x0Fu);
 
-      (void)Elite::PlaySoundEffect(buffer, _effect, false);
+      if (_play)
+      {
+        (void)Elite::PlaySoundEffect(buffer, _effect, false);
+      }
 
       std::uint64_t hash = 14695981039346656037ull;
       std::vector<std::int16_t> samples(FRAME_SAMPLES);
@@ -146,9 +149,17 @@ namespace GameLogicTests
       }
       Logger::WriteMessage(("SidSynth: " + recorded).c_str());
 
-      // 255 is not an effect: `NOISE` refuses it, so nothing is ever written and every sample is
-      // zero. It is the silence to measure the sixteen against.
-      const std::uint64_t silence = RenderEffect(255u);
+      /*
+       * The silence to measure the sixteen against: the same chip, the same volume, the same two
+       * hundred and sixty frames, and no effect played.
+       *
+       * This was `RenderEffect(255u)` on the belief that `NOISE` refuses 255. It does not: `SOUX6`
+       * masks it to 127 and reads `SFXCNT,Y` and the rest of the tables at 127, which on the 6502
+       * is whatever sits after them and in the port is a subscript past a sixteen-entry table --
+       * an assertion in Debug, garbage in Release, and a "silence" hash made of that garbage
+       * (plan §6.158).
+       */
+      const std::uint64_t silence = RenderEffect(0u, false);
       std::size_t silent = 0;
 
       for (std::uint8_t effect = 0; effect < 16u; ++effect)

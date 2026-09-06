@@ -70,7 +70,7 @@ namespace Elite
    * Takes the FILE image rather than the live block, because the checksum it folds in is the one
    * SaveCommander wrote into the file and not anything the commander at TP holds.
    */
-  [[nodiscard]] CompetitionNumber MakeCompetitionNumber(const CommanderBlock& _image) noexcept;
+  [[nodiscard]] CompetitionNumber MakeCompetitionNumber(const Commander& _image) noexcept;
 
   /*
    * 6502: YESNO -- wait for "Y" or "N", and ignore everything else.
@@ -117,7 +117,7 @@ namespace Elite
     std::array<std::uint8_t, COMMANDER_FILE_SIZE> image{};
   };
 
-  [[nodiscard]] SaveOutcome SaveCommanderTo(CommanderStore& _store, CommanderBlock& _block,
+  [[nodiscard]] SaveOutcome SaveCommanderTo(CommanderStore& _store, Commander& _block,
                                             std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept;
 
   /*
@@ -128,7 +128,7 @@ namespace Elite
    * distinguish them either: DFAULT's `BNE doitagain` spins for ever on a bad checksum, and
    * LoadCommander's header records why the port returns instead.
    */
-  [[nodiscard]] bool LoadCommanderFrom(CommanderStore& _store, CommanderBlock& _outBlock,
+  [[nodiscard]] bool LoadCommanderFrom(CommanderStore& _store, Commander& _outBlock,
                                        std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name) noexcept;
 
   /*
@@ -150,15 +150,17 @@ namespace Elite
     CommanderStore& store;
 
     /*
-     * 6502: K and U -- and U is the reason this is a reference rather than a local.
+     * 6502: U -- and it is a reference because it outlives the call.
      *
      * SV1 prints the competition number with `CLC / JSR BPRNT` and never sets U, which is BPRNT's
      * field width. U is a scratch byte in zero page that ZERO does not clear, so the number is
      * printed to whatever width the last caller of BPRNT happened to leave behind. The upstream
      * source says so in as many words. It is harmless -- the number always has ten digits, so all
      * that varies is a leading space -- but a port that chose a width here would be inventing one.
+     * Since M2-c `PrintNumber` takes the width and returns the byte it leaves, and this is where
+     * the save screen keeps it between saves (§8, M2-c: the port's other prints keep their own).
      */
-    NumberWorkspace& numbers;
+    std::uint8_t& numberWidth;
   };
 
   /// How the menu ended. 6502: which label it reached, and the carry it left.
@@ -240,7 +242,7 @@ namespace Elite
    * from INWK+5, which is where MT26 just wrote. On the load path TRNME has not run yet, so a
    * player who types a new name loads from THAT file while the image still holds the old one.
    */
-  [[nodiscard]] DiskMenuResult DiskAccessMenu(SaveScreen& _screen, CommanderBlock& _block,
+  [[nodiscard]] DiskMenuResult DiskAccessMenu(SaveScreen& _screen, Commander& _block,
                                               std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name,
                                               std::span<std::uint8_t, COMMANDER_FILE_SIZE> _image, std::span<std::uint8_t> _buffer,
                                               std::uint8_t& _useDisk) noexcept;

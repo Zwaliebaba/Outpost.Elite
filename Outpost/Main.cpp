@@ -33,7 +33,7 @@
 #include "SystemScreen.h"
 #include "TextPrint.h"
 #include "Tokens.h"
-#include "Universe.h"
+#include "Galaxy.h"
 #include "ViewChange.h"
 
 #include <array>
@@ -94,7 +94,7 @@ namespace
         values(recursive, text, commander, name, current.seeds, selectedSeeds, false),
         extended(characters, recursive, rng, &shell),
         trade{recursive, characters, extended, text, shell, shell, rng},
-        save{recursive, characters, extended, screen, text, shell, shell, store, numbers},
+        save{recursive, characters, extended, screen, text, shell, shell, store, numberWidth},
         flight(window, canvas, text, characters, recursive, message, commander, rng, status, view, explosionCount, current.techLevel, sound,
                music, audio)
     {
@@ -104,7 +104,7 @@ namespace
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, dockedFlag);
       shell.AttachVideo(flight.Video());                            // ADR-005 §1 -- the sprites composite in Resolve
-      shell.AttachGalaxy(commander.At(Elite::Field::GalaxyNumber)); // 6502: GCNT, for MT27 and MT28
+      shell.AttachGalaxy(commander.galaxyNumber); // 6502: GCNT, for MT27 and MT28
       shell.AttachSound(audio, sound, music);
 
       // 6502: DTW2 -- the extended printer starts between sentences, which is what the first
@@ -150,10 +150,10 @@ namespace
     Elite::CharacterPrinter characters;
     Elite::TokenPrinter recursive;
     Elite::Rng rng;
-    Elite::NumberWorkspace numbers;
+    std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it, which SV1 prints the competition number at
 
     // ---- the commander and the universe ----------------------------------------------------------
-    Elite::CommanderBlock commander = Elite::DefaultCommander();
+    Elite::Commander commander = Elite::DefaultCommander();
     std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
     std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
     std::array<std::uint8_t, 16> buffer{};
@@ -258,10 +258,10 @@ namespace
     Elite::ChartView view;
     view.cursorX = _game.crosshairX;
     view.cursorY = _game.crosshairY;
-    view.homeX = _game.commander.At(Elite::Field::SystemX);
-    view.homeY = _game.commander.At(Elite::Field::SystemY);
+    view.homeX = _game.commander.systemX;
+    view.homeY = _game.commander.systemY;
     view.view = _game.view;
-    view.fuel = _game.commander.At(Elite::Field::Fuel);
+    view.fuel = _game.commander.fuel;
     return view;
   }
 
@@ -307,6 +307,7 @@ namespace
     Elite::JumpState jump;
     jump.docked = _game.dockedFlag;
     jump.countdown = _game.status.hyperspaceCountdown;
+    jump.counter = _game.status.hyperspaceCounter;
     jump.distance = _game.jumpDistance;
     // 6502: JSR CTRL -- key-logger entry 6, read LIVE, because that is when the original reads it.
     jump.controlHeld = _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL));
@@ -332,15 +333,14 @@ namespace
       screen.heaps.yx2M1 = Elite::CHART_SCREEN_BOTTOM;
       _game.flight.Loop().clip.dontclip = Elite::CHART_SCREEN_BOTTOM;
 
-      Elite::DrawShortRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.GalaxySeeds(),
-                                 &_game.flight);
+      Elite::DrawShortRangeChart(_game.canvas, _game.recursive, _game.text, chart, _game.commander.galaxySeeds, &_game.flight);
 
       _game.flight.Loop().clip.dontclip = 0u;
       screen.heaps.yx2M1 = Elite::SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
       return;
     }
 
-    Elite::DrawLongRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.GalaxySeeds(), &_game.flight);
+    Elite::DrawLongRangeChart(_game.canvas, _game.recursive, _game.text, chart, _game.commander.galaxySeeds, &_game.flight);
   }
 
   /// 6502: TT22 and TT23's opening `JSR TT66`, which the routines leave to their caller, and then
@@ -407,8 +407,8 @@ namespace
     {
       // 6502: JSR TT111 / JMP TT25 -- the screen reads what the search leaves behind.
       const Elite::NearestSystem found =
-        Elite::FindNearestSystem(_game.commander.GalaxySeeds(), _game.crosshairX, _game.crosshairY,
-                                 _game.commander.At(Elite::Field::SystemX), _game.commander.At(Elite::Field::SystemY));
+        Elite::FindNearestSystem(_game.commander.galaxySeeds, _game.crosshairX, _game.crosshairY,
+                                 _game.commander.systemX, _game.commander.systemY);
       _game.selectedSeeds = found.seeds;
       Elite::SystemDataScreen(_game.trade, _game.selectedSeeds, found.data, found.distance);
       return;
@@ -517,12 +517,12 @@ namespace
       Elite::FlightScreen& screen = _game.flight.Screen();
       Elite::ChartView chart = ChartOf(_game);
 
-      Elite::DrawTargetCrosshairs(_game.canvas, screen.draw, chart);
+      Elite::DrawTargetCrosshairs(_game.canvas, chart);
       Elite::CrosshairsToCurrentSystem(_game.commander, _game.crosshairX, _game.crosshairY);
 
       chart.cursorX = _game.crosshairX;
       chart.cursorY = _game.crosshairY;
-      Elite::DrawTargetCrosshairs(_game.canvas, screen.draw, chart);
+      Elite::DrawTargetCrosshairs(_game.canvas, chart);
       return;
     }
 
@@ -539,7 +539,7 @@ namespace
       Elite::FlightScreen& screen = _game.flight.Screen();
       Elite::ChartView chart = ChartOf(_game);
 
-      Elite::MoveCrosshairs(_game.canvas, screen.draw, chart, _game.crosshairStep.x, _game.crosshairStep.y);
+      Elite::MoveCrosshairs(_game.canvas, chart, _game.crosshairStep.x, _game.crosshairStep.y);
 
       _game.crosshairX = chart.cursorX;
       _game.crosshairY = chart.cursorY;
@@ -597,7 +597,7 @@ namespace
 
         const Elite::JumpResult jumped = Elite::PerformJump(
           _game.flight.Loop(), _game.current, _game.selectedSeeds, jump, described, _game.market, _game.flight, nullptr, _game.crosshairX,
-          _game.crosshairY, _game.commander.GalaxySeeds(), _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL)),
+          _game.crosshairY, _game.commander.galaxySeeds, _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL)),
           _game.flight.Loop().options.authorNames != 0u);
 
         _game.jumpDistance = jump.distance;
@@ -627,10 +627,11 @@ namespace
       Elite::JumpState jump = JumpOf(_game);
       Elite::FlightScreen& screen = _game.flight.Screen();
 
-      const Elite::JumpOutcome decided = Elite::RequestHyperspace(_game.canvas, screen.draw, _game.recursive, _game.extended, _game.text,
-                                                                  chart, jump, _game.commander.GalaxySeeds(), &_game.shell);
+      const Elite::JumpOutcome decided = Elite::RequestHyperspace(_game.canvas, _game.recursive, _game.extended, _game.text, chart, jump,
+                                                                  _game.commander.galaxySeeds, &_game.shell);
 
       _game.status.hyperspaceCountdown = jump.countdown;
+      _game.status.hyperspaceCounter = jump.counter; // 6502: STA QQ22 -- and it was never copied back (§6.159)
       _game.jumpDistance = jump.distance;
       _game.jumpTarget = jump.target;
       _game.crosshairX = chart.cursorX;
@@ -649,16 +650,17 @@ namespace
          * one at a time afterwards, because the block is the storage and `SystemSeeds` is a view
          * of it.
          */
-        Elite::SystemSeeds galaxy = _game.commander.GalaxySeeds();
+        Elite::SystemSeeds galaxy = _game.commander.galaxySeeds;
         Elite::GalacticJump(_game.flight.Loop(), _game.current, galaxy, _game.selectedSeeds, jump, chart, nullptr);
 
         for (int byte = 0; byte < 6; ++byte)
         {
-          _game.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::GalaxySeeds) + byte)) =
+          _game.commander.galaxySeeds.bytes[byte] =
             galaxy.bytes[static_cast<std::size_t>(byte)];
         }
 
         _game.status.hyperspaceCountdown = jump.countdown;
+        _game.status.hyperspaceCounter = jump.counter; // 6502: `Ghy` falls into `wW`, which stores QQ22 as well
         _game.jumpTarget = jump.target;
         _game.jumpDistance = jump.distance;
         _game.crosshairX = chart.cursorX;
@@ -685,7 +687,17 @@ namespace
   /// and hands back what the dispatch made of it, so it has already decided by the time it returns.
   void PressKey(Game& _game, std::uint8_t _key)
   {
-    Perform(_game, Elite::ActionForKey(_key, _game.dockedFlag, _game.shell.View(), _game.status.hyperspaceCountdown, false));
+    /*
+     * 6502: BIT KLO+HINT -- the dispatch tests whether H is HELD on the matrix, not whether H is the
+     * key that arrived, and `RDKEY` has just filled the logger from the matrix in both loops. So it
+     * is read live off the window here, the way `JumpOf` reads CTRL for the galactic drive.
+     *
+     * THIS WAS A CONSTANT FALSE until 2026-09-06, so no key the player pressed could ever reach
+     * `hyp`: H arrived as key &23, the dispatch discarded it as the original does, and the flag that
+     * should have carried it said nobody was holding anything (§6.159).
+     */
+    const bool hyperspaceHeld = _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_HYPERSPACE));
+    Perform(_game, Elite::ActionForKey(_key, _game.dockedFlag, _game.shell.View(), _game.status.hyperspaceCountdown, hyperspaceHeld));
   }
 
   /*
@@ -847,7 +859,7 @@ namespace
        * way `TT18`'s fall into `TT110` was. A default commander cannot reach here at all: `KY13` is
        * ANDed with `ESCP`, so it needs one that has bought a pod.
        */
-      Elite::AbandonShip(_game.flight.Loop(), _game.commander.At(Elite::Field::Fuel));
+      Elite::AbandonShip(_game.flight.Loop(), _game.commander.fuel);
 
       // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
       _game.flight.StopDockingMusic();
@@ -952,22 +964,30 @@ namespace
        */
       (void)Elite::ScanFlightControls(_game.flight.Loop(), _game.flight, _game.flight.Screen().view);
 
+      /*
+       * 6502: JSR TT102 -- EVERY PASS, with A = `thiskey`, which is zero when nothing was pressed.
+       *
+       * The dispatch is not only for keys. A key nothing matches falls through `HME1` into `TT107`,
+       * and that is how the hyperspace countdown ticks: once per pass of the main loop, whether or
+       * not the player touched anything. Until 2026-09-06 this dispatched only when the window had
+       * a key, so a countdown started in flight sat at 15 until the next keypress, and advanced by
+       * one tick per key after that (§6.159). The docked loop below already dispatched the zero.
+       */
       std::uint8_t key = 0;
-      if (_game.window.TakeKey(key))
-      {
-        /*
-         * 6502: `DOKEY` FALLS INTO `DK4`, which the port has never followed -- `Controls.cpp` says
-         * so in a comment and slice 4e is what answers it. `CPX #&40 / BNE DK2`: the pause key
-         * freezes the game and everything else carries on to the dispatch.
-         */
-        if (key == Elite::PAUSE_KEY)
-        {
-          _game.paused = true;
-          return;
-        }
+      (void)_game.window.TakeKey(key);
 
-        PressKey(_game, key);
+      /*
+       * 6502: `DOKEY` FALLS INTO `DK4`, which the port has never followed -- `Controls.cpp` says
+       * so in a comment and slice 4e is what answers it. `CPX #&40 / BNE DK2`: the pause key
+       * freezes the game and everything else carries on to the dispatch.
+       */
+      if (key == Elite::PAUSE_KEY)
+      {
+        _game.paused = true;
+        return;
       }
+
+      PressKey(_game, key);
     }
   }
 

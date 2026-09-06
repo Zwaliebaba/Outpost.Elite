@@ -105,7 +105,10 @@
     <ClInclude Include="Cpu6502.h" />
     <ClInclude Include="OracleImage.h" />
     <ClInclude Include="GoldenCanvas.h" />
-    <ClInclude Include="FlightWorld.h" />
+    <ClInclude Include="FlightPort.h" />
+    <ClInclude Include="FlightUniverse.h" />
+    <ClInclude Include="ShipBytes.h" />
+    <ClInclude Include="UniverseImage.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
@@ -130,7 +133,10 @@
     <ClCompile Include="GoldenCanvas.cpp" />
     <ClCompile Include="GoldenTests.cpp" />
     <ClCompile Include="NumberTests.cpp" />
-    <ClCompile Include="UniverseTests.cpp" />
+    <ClCompile Include="GalaxyTests.cpp" />
+    <ClCompile Include="UniverseImage.cpp" />
+    <ClCompile Include="UniverseImageTests.cpp" />
+    <ClCompile Include="FlightReplayTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MissionTests.cpp" />
     <ClCompile Include="MarketScreenTests.cpp" />

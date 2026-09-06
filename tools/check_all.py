@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run every repository check, in the order CI runs them.
 
-WHY THIS EXISTS. The checks are eight separate scripts and AGENTS.md lists them, and on
+WHY THIS EXISTS. The checks are ten separate scripts and AGENTS.md lists them, and on
 2026-09-05 a push went red because the list was retyped from memory with one entry missing --
 `check_gamelogic.py` without `--self-test`, which is the one that catches a `GameLogic` file
 declaring `far` or `near`. It had caught exactly that, and nobody ran it (plan section 6.127).
@@ -33,10 +33,12 @@ CHECKS: list[list[str]] = [
     ["check_outpost.py"],
     ["check_docs.py"],
     ["check_counts.py"],
+    ["check_modernize.py"],
     ["mutate.py", "--check"],
     ["c64_source.py", "--check-all"],
     ["inventory.py", "--strict"],
     ["extract_tables.py", "--check"],
+    ["channel_census.py", "--check"],
 ]
 
 

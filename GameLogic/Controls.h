@@ -174,6 +174,11 @@ namespace Elite
    */
   inline constexpr std::size_t KEY_CONTROL = 0x06; ///< 6502: KLO+&6 -- CTRL, read by `hyp` and `TT18`
 
+  /// 6502: HINT -- "H", the matrix position `TT102` tests with `BIT KLO+HINT` to reach `hyp`. It is
+  /// read as a key HELD, not as the key that was pressed (`DockedKeys.h`), so the caller of the
+  /// dispatch reads it off the matrix the way `JumpOf` reads CTRL (§6.159).
+  inline constexpr std::size_t KEY_HYPERSPACE = 0x23;
+
   /// 6502: what `TT17` leaves in X and Y -- one signed step per axis, four times as big with
   /// RETURN held. Zero on both when nothing is pressed, which is most passes.
   struct CrosshairStep
@@ -219,7 +224,7 @@ namespace Elite
 
     /// 6502: JSR DOCKIT -- phase 4's docking autopilot. It reads the ship block and writes
     /// `INWK+27` to `INWK+30`, which is how it steers: as an acceleration and three rates.
-    virtual void RunDockingComputer(ShipBlock& _work) = 0;
+    virtual void RunDockingComputer(Ship& _work) = 0;
   };
 
   /*
@@ -242,7 +247,7 @@ namespace Elite
    *
    * The routine ends by falling into `DK4`, the docked dispatcher, which is not this unit's.
    */
-  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, ShipBlock& _work, FlightState& _flight,
+  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, Ship& _work, FlightState& _flight,
                           ControlEffects& _effects) noexcept;
 
   /*
@@ -327,7 +332,7 @@ namespace Elite
    * instead. A port that wrote a pointer of 160 and then disabled the sprite would look the same
    * on screen and differ on every byte.
    */
-  void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const CommanderBlock& _commander, TrumbleSprites& _trumbles,
+  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles,
                        std::uint8_t _view, SightEffects& _effects) noexcept;
 
 } // namespace Elite

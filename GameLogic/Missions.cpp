@@ -20,8 +20,9 @@ namespace Elite
     {
       FlightLoop& loop = _mission.loop;
       FlightScreen& screen = loop.screen;
-      DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
-               screen.bubble.blocks[_mission.shipSlot], loop.heap, screen.flight.blueprint, screen.flight.type, loop.drawing);
+      DrawShip(screen.canvas, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
+               screen.bubble.blocks[_mission.shipSlot], loop.heap, *screen.flight.blueprint, screen.flight.type, loop.drawing, screen.rng,
+               false); // a briefing's ship is never killed, so the carry goes unread
     }
 
     /*
@@ -36,7 +37,7 @@ namespace Elite
       FlightLoop& loop = _mission.loop;
       FlightScreen& screen = loop.screen;
       static_cast<void>(
-        MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, screen.flight.blueprint, screen.view));
+        MoveShip(screen.canvas, screen.work, screen.math, screen.flight, loop.tactics, *screen.flight.blueprint, screen.view));
     }
   } // namespace
 
@@ -53,14 +54,15 @@ namespace Elite
      * load, then the distance -- and `INWK+7` gets 2 on this build where the upstream comment
      * says 1 (`BRIEFING_SHIP_DISTANCE`).
      */
-    screen.work[3] = BRIEFING_SHIP_HEIGHT;
-    screen.work[0] = 0u;
-    screen.work[6] = 0u;
-    screen.work[7] = BRIEFING_SHIP_DISTANCE;
+    screen.work.y.lo = BRIEFING_SHIP_HEIGHT;
+    screen.work.x.lo = 0u;
+    screen.work.z.lo = 0u;
+    screen.work.z.hi = BRIEFING_SHIP_DISTANCE;
 
-    // 6502: JSR LL9.
-    DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
-             screen.bubble.blocks[_mission.shipSlot], loop.heap, screen.flight.blueprint, screen.flight.type, loop.drawing);
+    // 6502: JSR LL9 -- a briefing's ship is never killed, so the carry it is reached with goes unread.
+    DrawShip(screen.canvas, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
+             screen.bubble.blocks[_mission.shipSlot], loop.heap, *screen.flight.blueprint, screen.flight.type, loop.drawing, screen.rng,
+             false);
 
     /*
      * 6502: JSR MVEIT.
@@ -69,7 +71,7 @@ namespace Elite
      * a ship whose `INWK+32` has bit 7 set, and the Constrictor `BRIEF` builds is made by `ZINF`
      * and `NWSHP` with no AI byte set, so there is nothing for the AI to do and nobody to do it to.
      */
-    (void)MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, screen.flight.blueprint, screen.view);
+    (void)MoveShip(screen.canvas, screen.work, screen.math, screen.flight, loop.tactics, *screen.flight.blueprint, screen.view);
 
     // 6502: JMP RDKEY -- a tail call, so what `PAS1` returns is what `RDKEY` returns.
     return _mission.effects.ScanTitleKeys(_mission.keys);
@@ -92,7 +94,7 @@ namespace Elite
     }
 
     // 6502: LDA #0 / STA INWK+31 -- the ship is no longer drawn, so nothing will rub it out.
-    screen.work[31] = 0u;
+    screen.work.state = 0u;
 
     // 6502: LDA #1 / JSR TT66 -- the space view again, cleared.
     SetUpScreen(screen, MT9_COLUMN_AND_VIEW);
@@ -235,17 +237,17 @@ namespace Elite
      * all back with a one going into bit 0. Every other bit ends where it started, so it is
      * `ORA #1` written for a machine whose author preferred shifts.
      */
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);
 
     ShowIncomingMessage(_mission); // 6502: JSR BRIS
 
-    ClearShipBlock(screen.work); // 6502: JSR ZINF
+    ClearShip(screen.work); // 6502: JSR ZINF
 
     // 6502: LDA #CON / STA TYPE / JSR NWSHP -- into the DOCKED game's bubble, which is why `RES2`
     // is what clears it up afterwards rather than anything here.
-    screen.flight.type = SHIP_TYPE_CONSTRICTOR;
-    const NewShip created = AddShip(screen.bubble, screen.work, SHIP_TYPE_CONSTRICTOR, screen.flight.blueprint);
+    screen.flight.type = ShipType::Constrictor;
+    const NewShip created = AddShip(screen.bubble, screen.work, ShipType::Constrictor, screen.flight.blueprint);
     _mission.shipSlot = created.created ? created.slot : std::uint8_t{0};
 
     /*
@@ -256,7 +258,7 @@ namespace Elite
      * file that a `JSR` between two stores is a way of not reloading the accumulator.
      */
     screen.text.column = BRIEFING_START_DISTANCE;
-    screen.work[7] = BRIEFING_START_DISTANCE;
+    screen.work.z.hi = BRIEFING_START_DISTANCE;
     SetUpScreen(screen, BRIEFING_START_DISTANCE);
 
     // 6502: LDA #64 / STA MCNT.
@@ -267,8 +269,8 @@ namespace Elite
     {
       // 6502: LDX #%01111111 / STX INWK+29 / STX INWK+30, INSIDE the loop: the counters are
       // rewritten every frame, so the damping `MVEIT` applies never gets a chance to take hold.
-      screen.work[29] = BRIEFING_SPIN;
-      screen.work[30] = BRIEFING_SPIN;
+      screen.work.rollCounter = BRIEFING_SPIN;
+      screen.work.pitchCounter = BRIEFING_SPIN;
 
       DrawBriefingShip(_mission); // 6502: JSR LL9
       MoveBriefingShip(_mission); // 6502: JSR MVEIT
@@ -285,7 +287,7 @@ namespace Elite
      */
     for (;;)
     {
-      screen.work[0] = static_cast<std::uint8_t>(screen.work[0] >> 1); // 6502: LSR INWK
+      screen.work.x.lo = static_cast<std::uint8_t>(screen.work.x.lo >> 1); // 6502: LSR INWK
 
       /*
        * 6502: INC INWK+6 / BEQ BR2 / INC INWK+6 / BEQ BR2 -- TWICE a frame, tested after each.
@@ -293,25 +295,25 @@ namespace Elite
        * So the ship recedes two units per frame and the loop can end on either half, which is why
        * the exit is not simply "when z_lo wraps on an even frame".
        */
-      screen.work[6] = static_cast<std::uint8_t>(screen.work[6] + 1u);
-      if (screen.work[6] == 0u)
+      screen.work.z.lo = static_cast<std::uint8_t>(screen.work.z.lo + 1u);
+      if (screen.work.z.lo == 0u)
       {
         break;
       }
-      screen.work[6] = static_cast<std::uint8_t>(screen.work[6] + 1u);
-      if (screen.work[6] == 0u)
+      screen.work.z.lo = static_cast<std::uint8_t>(screen.work.z.lo + 1u);
+      if (screen.work.z.lo == 0u)
       {
         break;
       }
 
       // 6502: LDX INWK+3 / INX / CPX #conhieght / BCC P%+4 / LDX #conhieght / STX INWK+3 -- the
       // ship climbs one row a frame and stops at the height the briefing text starts below.
-      std::uint8_t height = static_cast<std::uint8_t>(screen.work[3] + 1u);
+      std::uint8_t height = static_cast<std::uint8_t>(screen.work.y.lo + 1u);
       if (height >= BRIEFING_SHIP_HEIGHT)
       {
         height = BRIEFING_SHIP_HEIGHT;
       }
-      screen.work[3] = height;
+      screen.work.y.lo = height;
 
       DrawBriefingShip(_mission); // 6502: JSR LL9
       MoveBriefingShip(_mission); // 6502: JSR MVEIT
@@ -320,7 +322,7 @@ namespace Elite
     }
 
     // 6502: .BR2 INC INWK+7 -- the high byte follows the low one past 255.
-    screen.work[7] = static_cast<std::uint8_t>(screen.work[7] + 1u);
+    screen.work.z.hi = static_cast<std::uint8_t>(screen.work.z.hi + 1u);
 
     // 6502: LDA #10 / BNE BRPS -- a branch that is a jump, because ten is never zero.
     return MISSION_1_BRIEFING;
@@ -334,7 +336,7 @@ namespace Elite
   ForcedKey BriefMission2(MissionScreen& _mission, MissionBay& _bay) noexcept
   {
     // 6502: LDA TP / ORA #%00000100 / STA TP -- in progress, plans not yet collected.
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_2_STARTED);
 
     // 6502: LDA #11 -- and then a FALL-THROUGH into BRP rather than a branch.
@@ -350,7 +352,7 @@ namespace Elite
      * both its bits go, not just the "in progress" one. Bit 1 is then set again by the `ORA`, which
      * is what `MissionOnDocking` reads as "mission 1 finished and paid", and bit 3 is the plans.
      */
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>((progress & MISSION_2_KEEP) | MISSION_2_PLANS);
 
     return PrintAndEnterBay(_mission, _bay, MISSION_2_BRIEFING);
@@ -369,7 +371,7 @@ namespace Elite
      * `\INC TALLY+1` sits between the two halves of this routine, commented out in the original,
      * so the Constrictor is worth no kill points. Not ported, because it does not run.
      */
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);
 
     // 6502: LDX #LO(50000) / LDY #HI(50000) / JSR MCASH -- 5,000 credits.
@@ -383,16 +385,15 @@ namespace Elite
   {
     // 6502: LDA TP / ORA #%00000100 / STA TP -- bit 2 again, so 2 and 3 are both up and the pair
     // reads as "complete".
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_2_STARTED);
 
     // 6502: LDA #2 / STA ENGY -- the navy's energy unit.
-    _bay.commander.At(Field::EnergyUnit) = NAVY_ENERGY_UNIT;
+    _bay.commander.energyUnit = NAVY_ENERGY_UNIT;
 
     // 6502: INC TALLY+1 -- 256 kill points, into the HIGH byte, so the low one is untouched and
     // the combat rank jumps by a whole step.
-    const std::size_t tally = static_cast<std::size_t>(Field::Kills);
-    _bay.commander.bytes[tally + 1u] = static_cast<std::uint8_t>(_bay.commander.bytes[tally + 1u] + 1u);
+    _bay.commander.kills.hi = static_cast<std::uint8_t>(_bay.commander.kills.hi + 1u);
 
     return PrintAndEnterBay(_mission, _bay, MISSION_2_DEBRIEFING);
   }
@@ -401,7 +402,7 @@ namespace Elite
   {
     // 6502: LDA TP / ORA #%00010000 / STA TP -- BEFORE the question, so declining still counts as
     // having been asked and the Trumble is never offered again.
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);
 
     _mission.tokens.Print(TRUMBLE_OFFER); // 6502: LDA #199 / JSR DETOK
@@ -422,7 +423,7 @@ namespace Elite
     static_cast<void>(SpendCash(_bay.commander, MISSION_REWARD));
 
     // 6502: INC TRIBBLE -- the LOW byte, from nothing to one, and `MLOOP` breeds the rest.
-    std::uint8_t& trumbles = _bay.commander.At(Field::Tribbles);
+    std::uint8_t& trumbles = _bay.commander.tribbles.lo;
     trumbles = static_cast<std::uint8_t>(trumbles + 1u);
 
     return PrintAndEnterBay(_mission, _bay, 0u); // 6502: JMP BAY

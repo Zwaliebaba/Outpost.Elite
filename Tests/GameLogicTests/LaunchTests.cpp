@@ -1,7 +1,8 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
-#include "FlightWorld.h"
+#include "FlightPort.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Commander.h"
@@ -13,6 +14,7 @@
 #include "ShipDraw.h"
 
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <vector>
 #include <string>
@@ -72,11 +74,10 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(bad, 4000);
             Assert::IsTrue(run.completed, L"BAD returned");
 
-            Elite::CommanderBlock commander;
-            const std::size_t hold = static_cast<std::size_t>(Elite::Field::CargoHold);
-            commander.bytes[hold + 3u] = slaves;
-            commander.bytes[hold + 6u] = narcotics;
-            commander.bytes[hold + 10u] = firearms;
+            Elite::Commander commander;
+            commander.cargoHold[3] = slaves;
+            commander.cargoHold[6] = narcotics;
+            commander.cargoHold[10] = firearms;
 
             const std::wstring where = WidenText("BAD(slaves " + std::to_string(slaves) + ", narcotics " + std::to_string(narcotics) +
                                                  ", firearms " + std::to_string(firearms) + ")");
@@ -133,20 +134,20 @@ namespace GameLogicTests
       {
         for (std::uint8_t pass = 0; pass < 2u; ++pass)
         {
-          World world;
-          Seed(world, 0x2Bu);
-          world.heaps.yx2M1 = 143u;
-          world.heaps.lsp = 0u;
-          world.heaps.stp = step;
-          for (std::size_t index = 0; index < world.heaps.ball.size(); ++index)
+          Universe universe;
+          Seed(universe, 0x2Bu);
+          universe.heaps.yx2M1 = 143u;
+          universe.heaps.lsp = 0u;
+          universe.heaps.stp = step;
+          for (std::size_t index = 0; index < universe.heaps.ball.size(); ++index)
           {
-            world.heaps.ball[index] = 0xFFu;
+            universe.heaps.ball[index] = 0xFFu;
           }
 
           Cpu6502 cpu = oracle.Fresh();
-          FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-          Mirror(world, cpu, at);
-          cpu.memory[yx2m1] = world.heaps.yx2M1;
+          FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+          Mirror(universe, cpu, at);
+          cpu.memory[yx2m1] = universe.heaps.yx2M1;
           cpu.memory[dontclip] = 0u;
           cpu.memory[stp] = step;
 
@@ -165,7 +166,7 @@ namespace GameLogicTests
                             std::to_wstring(run.instructions) + L", stoppedAt " + std::to_wstring(run.stoppedAt))
                              .c_str());
 
-            Elite::DrawHyperspaceRings(world.canvas, world.heaps, draw, geometry, math, clip, nullptr);
+            Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, geometry, math, clip, nullptr);
           }
 
           const std::wstring where = WidenText("HFS1 (STP " + std::to_string(step) + ", " + std::to_string(pass + 1u) + " pass(es))");
@@ -177,7 +178,7 @@ namespace GameLogicTests
        * The count is asserted both ways because "drew something" alone would pass for a routine
        * that drew and never cleaned up.
        */
-          const std::uint32_t touched = CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where);
+          const std::uint32_t touched = CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
 
           if (pass == 0u)
           {
@@ -188,10 +189,10 @@ namespace GameLogicTests
             Assert::AreEqual<std::uint32_t>(0u, touched, (where + L": and drawing it twice erases it").c_str());
           }
 
-          Assert::AreEqual(cpu.memory[at.lsp], world.heaps.lsp, (where + L": LSP").c_str());
-          for (std::size_t index = 0; index < world.heaps.ball.size(); ++index)
+          Assert::AreEqual(cpu.memory[at.lsp], universe.heaps.lsp, (where + L": LSP").c_str());
+          for (std::size_t index = 0; index < universe.heaps.ball.size(); ++index)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.lsx2 + index)], world.heaps.ball[index],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.lsx2 + index)], universe.heaps.ball[index],
                              (where + L": ball heap byte " + std::to_wstring(index)).c_str());
           }
         }
@@ -229,24 +230,24 @@ namespace GameLogicTests
       // because `LAUN` is called from `DOENTRY` while a docked screen is still up.
       for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{4}, std::uint8_t{13}, std::uint8_t{255}})
       {
-        World world;
-        Seed(world, 0x71u);
-        world.view = view;
-        world.heaps.yx2M1 = 143u;
-        world.heaps.lsp = 0u;
+        Universe universe;
+        Seed(universe, 0x71u);
+        universe.view = view;
+        universe.heaps.yx2M1 = 143u;
+        universe.heaps.lsp = 0u;
 
         /*
          * `STP` starts at something the launch must overwrite. Four is the value §6.95 had the app
          * seeding precisely because nothing on this path wrote one -- and `LAUN` is what writes it,
          * so the seed stops being load-bearing the moment this routine exists.
          */
-        world.heaps.stp = 4u;
+        universe.heaps.stp = 4u;
 
         Elite::ClipState clip;
 
         Cpu6502 cpu = oracle.Fresh();
-        FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-        Mirror(world, cpu, at);
+        FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+        Mirror(universe, cpu, at);
         cpu.memory[oracle.Label("Yx2M1")] = 143u;
         cpu.memory[oracle.Label("dontclip")] = 0u;
         cpu.memory[stp] = 4u;
@@ -263,7 +264,7 @@ namespace GameLogicTests
                                        std::to_wstring(run.stoppedAt))
                                         .c_str());
 
-        Elite::FlightScreen screen = world.Screen();
+        Elite::FlightScreen screen = universe.Screen();
         Elite::DrawLaunchTunnel(screen, clip, nullptr);
 
         const std::wstring where = WidenText("LAUN (QQ11 " + std::to_string(view) + ")");
@@ -275,19 +276,19 @@ namespace GameLogicTests
           whooshes += (hit.address == noise) ? 1u : 0u;
         }
         Assert::AreEqual<std::uint32_t>(1u, whooshes, (where + L": the shipped routine makes one noise").c_str());
-        Assert::AreEqual<std::size_t>(1u, world.effects.sounds.size(), (where + L": and so does the port").c_str());
-        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, world.effects.sounds.front(), (where + L": sfxwhosh").c_str());
+        Assert::AreEqual<std::size_t>(1u, universe.effects.sounds.size(), (where + L": and so does the port").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, universe.effects.sounds.front(), (where + L": sfxwhosh").c_str());
 
         // 6502: LDA #8 / STA STP -- the step, which is the whole of §6.94's missing writer.
         Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, cpu.memory[stp], (where + L": the shipped STP").c_str());
-        Assert::AreEqual(cpu.memory[stp], world.heaps.stp, (where + L": STP").c_str());
+        Assert::AreEqual(cpu.memory[stp], universe.heaps.stp, (where + L": STP").c_str());
 
         // 6502: LDA QQ11 / PHA / ... / PLA / STA QQ11 -- the view survives the TT66 inside.
-        Assert::AreEqual(cpu.memory[at.qq11], world.view, (where + L": QQ11").c_str());
-        Assert::AreEqual<std::uint8_t>(view, world.view, (where + L": and it is the one that went in").c_str());
+        Assert::AreEqual(cpu.memory[at.qq11], universe.view, (where + L": QQ11").c_str());
+        Assert::AreEqual<std::uint8_t>(view, universe.view, (where + L": and it is the one that went in").c_str());
 
-        Assert::IsTrue(CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where) > 0u, (where + L": something was drawn").c_str());
-        CompareState(cpu, world, at, where);
+        Assert::IsTrue(CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where) > 0u, (where + L": something was drawn").c_str());
+        CompareState(cpu, universe, at, where);
       }
     }
 
@@ -334,18 +335,18 @@ namespace GameLogicTests
 
       for (const std::uint8_t view : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{255}})
       {
-        World world;
-        Seed(world, 0x5Eu);
-        world.view = view;
-        world.heaps.yx2M1 = 143u;
-        world.heaps.lsp = 0u;
-        world.heaps.stp = 8u; // the launch's step, so a routine that forgot to store 4 is visible
+        Universe universe;
+        Seed(universe, 0x5Eu);
+        universe.view = view;
+        universe.heaps.yx2M1 = 143u;
+        universe.heaps.lsp = 0u;
+        universe.heaps.stp = 8u; // the launch's step, so a routine that forgot to store 4 is visible
 
         Elite::ClipState clip;
 
         Cpu6502 cpu = oracle.Fresh();
-        FillScreens(cpu, world.canvas, at.screen, 0x1Du);
-        Mirror(world, cpu, at);
+        FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
+        Mirror(universe, cpu, at);
         cpu.memory[oracle.Label("Yx2M1")] = 143u;
         cpu.memory[oracle.Label("dontclip")] = 0u;
         cpu.memory[stp] = 8u;
@@ -361,14 +362,14 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"LL164 returned");
 
         Counting counting;
-        Elite::FlightScreen screen = world.Screen();
-        Elite::DrawHyperspaceTunnel(screen, clip, world.dashboard, &counting);
+        Elite::FlightScreen screen = universe.Screen();
+        Elite::DrawHyperspaceTunnel(screen, clip, universe.dashboard, &counting);
 
         const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
 
         // 6502: LDA #4 / JSR HFS2 -- the step, which is the whole reason this is not `LAUN`.
         Assert::AreEqual<std::uint8_t>(Elite::HYPERSPACE_TUNNEL_STEP, cpu.memory[stp], (where + L": the shipped STP").c_str());
-        Assert::AreEqual(cpu.memory[stp], world.heaps.stp, (where + L": STP").c_str());
+        Assert::AreEqual(cpu.memory[stp], universe.heaps.stp, (where + L": STP").c_str());
 
         // 6502: LDY #1 / JSR DELAY -- one vertical sync, plus one frame for each circle drawn.
         std::uint32_t delays = 0;
@@ -386,16 +387,16 @@ namespace GameLogicTests
         Assert::AreEqual<std::uint32_t>(35u, counting.frames, (where + L": 34 circles and the DELAY").c_str());
 
         // The sounds, in order: pitched sfxhyp1, sfxwhosh, then sfxhyp1 layered with bit 7 set.
-        Assert::AreEqual<std::size_t>(2u, world.dashboard.sounds.size(), (where + L": sounds").c_str());
-        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, world.dashboard.sounds[0], (where + L": sfxwhosh").c_str());
-        Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(Elite::SOUND_HYPERSPACE + 128u), world.dashboard.sounds[1],
+        Assert::AreEqual<std::size_t>(2u, universe.dashboard.sounds.size(), (where + L": sounds").c_str());
+        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, universe.dashboard.sounds[0], (where + L": sfxwhosh").c_str());
+        Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(Elite::SOUND_HYPERSPACE + 128u), universe.dashboard.sounds[1],
                                        (where + L": sfxhyp1 layered").c_str());
-        Assert::AreEqual<std::size_t>(1u, world.dashboard.pitched.size(), (where + L": one pitched sound").c_str());
+        Assert::AreEqual<std::size_t>(1u, universe.dashboard.pitched.size(), (where + L": one pitched sound").c_str());
 
         // 6502: QQ11 is saved across the TT66 inside HFS2, exactly as the launch's is.
-        Assert::AreEqual(cpu.memory[at.qq11], world.view, (where + L": QQ11").c_str());
+        Assert::AreEqual(cpu.memory[at.qq11], universe.view, (where + L": QQ11").c_str());
 
-        Assert::IsTrue(CompareScreens(cpu, at.screen, world.canvas, 0x1Du, where) > 0u, (where + L": something was drawn").c_str());
+        Assert::IsTrue(CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where) > 0u, (where + L": something was drawn").c_str());
       }
     }
 
@@ -412,28 +413,28 @@ namespace GameLogicTests
 
       for (const std::uint8_t step : {std::uint8_t{2}, std::uint8_t{4}, std::uint8_t{8}})
       {
-        World world;
-        Seed(world, 0x71u);
-        world.heaps.yx2M1 = 143u;
-        world.heaps.lsp = 0u;
-        world.heaps.stp = step;
+        Universe universe;
+        Seed(universe, 0x71u);
+        universe.heaps.yx2M1 = 143u;
+        universe.heaps.lsp = 0u;
+        universe.heaps.stp = step;
 
         Elite::ClipState clip;
         Counting counting;
-        Elite::DrawHyperspaceRings(world.canvas, world.heaps, world.draw, world.geometry, world.math, clip, &counting);
+        Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, &counting);
 
         Assert::AreEqual<std::uint32_t>(34u, counting.circles, (WidenText("STP " + std::to_string(step)) + L": circles shown").c_str());
       }
 
       // And a null pacing is the same drawing with nobody watching, which is what the oracle
       // comparisons pass: the count above must not be reachable through a screen difference.
-      World unpaced;
+      Universe unpaced;
       Seed(unpaced, 0x71u);
       unpaced.heaps.yx2M1 = 143u;
       unpaced.heaps.lsp = 0u;
       unpaced.heaps.stp = 8u;
 
-      World paced;
+      Universe paced;
       Seed(paced, 0x71u);
       paced.heaps.yx2M1 = 143u;
       paced.heaps.lsp = 0u;
@@ -442,8 +443,8 @@ namespace GameLogicTests
       Elite::ClipState clipA;
       Elite::ClipState clipB;
       Counting counting;
-      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.draw, unpaced.geometry, unpaced.math, clipA, nullptr);
-      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.draw, paced.geometry, paced.math, clipB, &counting);
+      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.geometry, unpaced.math, clipA, nullptr);
+      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.geometry, paced.math, clipB, &counting);
 
       const std::span<const std::uint8_t> quiet = unpaced.canvas.Screen();
       const std::span<const std::uint8_t> watched = paced.canvas.Screen();
@@ -502,7 +503,7 @@ namespace GameLogicTests
 
       void WaitFrames(std::uint8_t) override {}
 
-      std::uint8_t ShowTitleScreen(std::uint8_t, std::uint8_t, std::uint8_t) override
+      std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override
       {
         return 0;
       }
@@ -529,12 +530,15 @@ namespace GameLogicTests
       {
         ++musicStops;
       }
-      bool SpawnAhead(std::uint8_t) override
+      bool SpawnAhead(Elite::ShipType) override
       {
         return true;
       }
-      void Anger(std::uint8_t, std::uint8_t) override {}
-      bool SpawnChild(std::uint8_t, std::uint8_t) override
+      bool Anger(std::uint8_t, Elite::ShipType) override
+      {
+        return false; // a trap's answer, and no launch reaches the seeding that reads it
+      }
+      bool SpawnChild(std::uint8_t, Elite::ShipType) override
       {
         return true;
       }
@@ -542,19 +546,18 @@ namespace GameLogicTests
 
     struct RecordingOutside final : Elite::ShipEffects, Elite::ShipDrawEffects
     {
-      bool RunTactics(Elite::ShipBlock&) override
+      bool RunTactics(Elite::Ship&) override
       {
         return true;
       }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
     };
 
     /// Everything the launch works on, and the oracle's memory beside it.
     struct Leaving
     {
-      World world;
+      Universe universe;
       Elite::ControlState control;
       Elite::ControlOptions options;
       Elite::KeyLogger keys{};
@@ -571,7 +574,7 @@ namespace GameLogicTests
       // arena has to be lent that window or the station's lines go nowhere (§6.112).
       Leaving()
       {
-        world.LendSunHeap(heap);
+        universe.LendSunHeap(heap);
       }
     };
 
@@ -613,56 +616,56 @@ namespace GameLogicTests
       }
     };
 
-    /// A world with something in every byte the reset is supposed to clear.
+    /// A universe with something in every byte the reset is supposed to clear.
     void Occupy(Leaving& _leaving, std::uint32_t _seed)
     {
-      World& world = _leaving.world;
-      Seed(world, _seed);
+      Universe& universe = _leaving.universe;
+      Seed(universe, _seed);
 
-      world.commander.At(Elite::Field::Fuel) = world.fuel;
-      world.message.token = 101u;
-      world.message.column = 9u;
-      world.message.append = 1u;
-      world.message.delay = 12u;
-      world.flight.blueprint = Elite::BlueprintAddress(11u);
+      universe.commander.fuel = universe.fuel;
+      universe.message.token = 101u;
+      universe.message.column = 9u;
+      universe.message.append = 1u;
+      universe.message.delay = 12u;
+      universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
 
-      world.bubble.heapBottom = static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 64u);
-      world.heaps.yx2M1 = 199u;
-      world.heaps.lsp = 0x20u;
-      world.status.ecmCountdown = 20u;
-      world.status.ecmOurs = 0xFFu;
-      world.status.hyperspaceCounter = 5u;
-      world.status.hyperspaceCountdown = 9u;
-      world.screen.hyperspaceEffect = 0xFFu;
-      world.trumbles.count = 0x5Au;
-      world.spaceView = 2u;
-      world.explosions = 0x66u;
+      universe.bubble.heapBottom = Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 64u));
+      universe.heaps.yx2M1 = 199u;
+      universe.heaps.lsp = 0x20u;
+      universe.status.ecmCountdown = 20u;
+      universe.status.ecmOurs = 0xFFu;
+      universe.status.hyperspaceCounter = 5u;
+      universe.status.hyperspaceCountdown = 9u;
+      universe.screen.hyperspaceEffect = 0xFFu;
+      universe.trumbles.count = 0x5Au;
+      universe.spaceView = 2u;
+      universe.explosions = 0x66u;
 
       _leaving.control.roll = 200u;
       _leaving.control.pitch = 40u;
       _leaving.control.dockingComputer = 0xFFu;
       _leaving.clip.dontclip = 0x80u;
-      world.heaps.stp = 4u; // what the short-range chart's fuel circle leaves behind
+      universe.heaps.stp = 4u; // what the short-range chart's fuel circle leaves behind
     }
 
     /// Send everything `Mirror` does not, and everything the launch reads.
     void MirrorLeaving(const Leaving& _leaving, Cpu6502& _cpu, const Where& _at, const LaunchWhere& _to, std::uint8_t _docked)
     {
-      const World& world = _leaving.world;
+      const Universe& universe = _leaving.universe;
 
-      _cpu.memory[_to.nostm] = world.dust.count;
-      _cpu.memory[_to.mstg] = world.bubble.missileTarget;
+      _cpu.memory[_to.nostm] = universe.dust.count;
+      _cpu.memory[_to.mstg] = universe.bubble.missileTarget;
       _cpu.memory[_to.jstx] = _leaving.control.roll;
       _cpu.memory[_to.jsty] = _leaving.control.pitch;
       _cpu.memory[_to.autoByte] = _leaving.control.dockingComputer;
-      _cpu.memory[_to.alp2Next] = world.flight.alp2Next;
-      _cpu.memory[_to.bet2] = world.flight.bet2;
-      _cpu.memory[_to.bet2Next] = world.flight.bet2Next;
-      _cpu.memory[_to.col2] = world.text.cellColour;
+      _cpu.memory[_to.alp2Next] = universe.flight.alp2Next;
+      _cpu.memory[_to.bet2] = universe.flight.bet2;
+      _cpu.memory[_to.bet2Next] = universe.flight.bet2Next;
+      _cpu.memory[_to.col2] = universe.text.cellColour;
       _cpu.memory[_to.dontclip] = _leaving.clip.dontclip;
-      _cpu.memory[_to.yx2m1] = world.heaps.yx2M1;
-      _cpu.memory[_to.qq22] = world.status.hyperspaceCounter;
-      _cpu.memory[_to.hfx] = world.screen.hyperspaceEffect;
+      _cpu.memory[_to.yx2m1] = universe.heaps.yx2M1;
+      _cpu.memory[_to.qq22] = universe.status.hyperspaceCounter;
+      _cpu.memory[_to.hfx] = universe.screen.hyperspaceEffect;
       _cpu.memory[_to.qq12] = _docked;
 
       /*
@@ -672,18 +675,18 @@ namespace GameLogicTests
        * writer in the whole game is `CIRCLE` -- which the docked screens reach exactly once, in
        * the short-range chart's fuel radius. A four is what the chart leaves.
        */
-      _cpu.memory[_to.stp] = world.heaps.stp;
+      _cpu.memory[_to.stp] = universe.heaps.stp;
 
-      _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(world.bubble.heapBottom & 0xFFu);
-      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(world.bubble.heapBottom >> 8);
+      _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() & 0xFFu);
+      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(universe.bubble.heapBottom.Address() >> 8);
 
       for (std::size_t index = 0; index < Elite::BALL_HEAP_SIZE * 2u; ++index)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_to.lsx2 + index)] = world.heaps.ball[index];
+        _cpu.memory[static_cast<std::uint16_t>(_to.lsx2 + index)] = universe.heaps.ball[index];
       }
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)] = world.work[byte];
+        _cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)] = universe.work.ToBytes()[byte];
       }
     }
 
@@ -691,40 +694,40 @@ namespace GameLogicTests
     void CompareLeaving(const Cpu6502& _cpu, const Leaving& _leaving, const LaunchWhere& _to, std::uint8_t _docked,
                         const std::wstring& _context)
     {
-      const World& world = _leaving.world;
+      const Universe& universe = _leaving.universe;
 
       auto same = [&](std::uint16_t _address, std::uint8_t _ours, const std::wstring& _name)
       { Assert::AreEqual(_cpu.memory[_address], _ours, (_context + L": " + _name).c_str()); };
 
-      same(_to.nostm, world.dust.count, L"NOSTM");
-      same(_to.mstg, world.bubble.missileTarget, L"MSTG");
+      same(_to.nostm, universe.dust.count, L"NOSTM");
+      same(_to.mstg, universe.bubble.missileTarget, L"MSTG");
       same(_to.jstx, _leaving.control.roll, L"JSTX");
       same(_to.jsty, _leaving.control.pitch, L"JSTY");
       same(_to.autoByte, _leaving.control.dockingComputer, L"auto");
-      same(_to.alp2Next, world.flight.alp2Next, L"ALP2+1");
-      same(_to.bet2, world.flight.bet2, L"BET2");
-      same(_to.bet2Next, world.flight.bet2Next, L"BET2+1");
-      same(_to.col2, world.text.cellColour, L"COL2");
+      same(_to.alp2Next, universe.flight.alp2Next, L"ALP2+1");
+      same(_to.bet2, universe.flight.bet2, L"BET2");
+      same(_to.bet2Next, universe.flight.bet2Next, L"BET2+1");
+      same(_to.col2, universe.text.cellColour, L"COL2");
       same(_to.dontclip, _leaving.clip.dontclip, L"dontclip");
-      same(_to.yx2m1, world.heaps.yx2M1, L"Yx2M1");
-      same(_to.qq22, world.status.hyperspaceCounter, L"QQ22");
-      same(_to.hfx, world.screen.hyperspaceEffect, L"HFX");
+      same(_to.yx2m1, universe.heaps.yx2M1, L"Yx2M1");
+      same(_to.qq22, universe.status.hyperspaceCounter, L"QQ22");
+      same(_to.hfx, universe.screen.hyperspaceEffect, L"HFX");
       same(_to.qq12, _docked, L"QQ12");
-      same(_to.bomb, world.commander.At(Elite::Field::EnergyBomb), L"BOMB");
-      same(_to.fist, world.commander.At(Elite::Field::LegalStatus), L"FIST");
+      same(_to.bomb, universe.commander.energyBomb, L"BOMB");
+      same(_to.fist, universe.commander.legalStatus, L"FIST");
 
       const std::uint16_t bottom =
         static_cast<std::uint16_t>(_cpu.memory[_to.slsp] | (_cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] << 8));
-      Assert::AreEqual<std::uint32_t>(bottom, world.bubble.heapBottom, (_context + L": SLSP").c_str());
+      Assert::AreEqual<std::uint32_t>(bottom, universe.bubble.heapBottom.Address(), (_context + L": SLSP").c_str());
 
       for (std::size_t index = 0; index < Elite::BALL_HEAP_SIZE * 2u; ++index)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_to.lsx2 + index)], world.heaps.ball[index],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_to.lsx2 + index)], universe.heaps.ball[index],
                          (_context + L": ball heap byte " + std::to_wstring(index)).c_str());
       }
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)], world.work[byte],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)], universe.work.ToBytes()[byte],
                          (_context + L": INWK byte " + std::to_wstring(byte)).c_str());
       }
     }
@@ -762,29 +765,29 @@ namespace GameLogicTests
         Leaving leaving;
         Occupy(leaving, shape * 17u + 3u);
 
-        leaving.world.bubble.counts[Elite::SHIP_TYPE_STATION] = ((shape & 1u) != 0u) ? 1u : 0u;
-        leaving.world.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
-        leaving.world.commander.At(Elite::Field::EnergyBomb) = ((shape & 4u) != 0u) ? 0xC0u : 0x40u;
+        leaving.universe.bubble.Count(Elite::ShipType::Station) = ((shape & 1u) != 0u) ? 1u : 0u;
+        leaving.universe.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
+        leaving.universe.commander.energyBomb = ((shape & 4u) != 0u) ? 0xC0u : 0x40u;
 
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(to.stopbd);
         cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
-        FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
-        Mirror(leaving.world, cpu, at);
+        FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+        Mirror(leaving.universe, cpu, at);
         MirrorLeaving(leaving, cpu, at, to, 0xFFu);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.res2, 2'000'000);
         Assert::IsTrue(run.completed, L"RES2 returned");
 
-        Elite::FlightScreen screen = leaving.world.Screen();
+        Elite::FlightScreen screen = leaving.universe.Screen();
         Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
                                leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
         Elite::ResetShipAndBubble(loop);
 
         const std::wstring where = WidenText("RES2 (shape " + std::to_string(shape) + ")");
 
-        CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
-        CompareState(cpu, leaving.world, at, where);
+        CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
+        CompareState(cpu, leaving.universe, at, where);
         CompareLeaving(cpu, leaving, to, 0xFFu, where);
 
         Assert::AreEqual<std::uint32_t>(1u, leaving.effects.musicStops, (where + L": stopbd").c_str());
@@ -822,20 +825,20 @@ namespace GameLogicTests
         Leaving leaving;
         Occupy(leaving, shape * 31u + 11u);
 
-        leaving.world.bubble.counts[Elite::SHIP_TYPE_STATION] = ((shape & 1u) != 0u) ? 1u : 0u;
-        leaving.world.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
+        leaving.universe.bubble.Count(Elite::ShipType::Station) = ((shape & 1u) != 0u) ? 1u : 0u;
+        leaving.universe.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
 
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(to.stopbd);
         cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
-        FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
-        Mirror(leaving.world, cpu, at);
+        FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+        Mirror(leaving.universe, cpu, at);
         MirrorLeaving(leaving, cpu, at, to, 0u);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.reset, 2'000'000);
         Assert::IsTrue(run.completed, L"RESET returned");
 
-        Elite::FlightScreen screen = leaving.world.Screen();
+        Elite::FlightScreen screen = leaving.universe.Screen();
         Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
                                leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
 
@@ -844,14 +847,14 @@ namespace GameLogicTests
 
         const std::wstring where = WidenText("RESET (shape " + std::to_string(shape) + ")");
 
-        CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
-        CompareState(cpu, leaving.world, at, where);
+        CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
+        CompareState(cpu, leaving.universe, at, where);
         CompareLeaving(cpu, leaving, to, docked, where);
 
         Assert::AreEqual<std::uint8_t>(0xFFu, docked, (where + L": QQ12 is the loop's leftover").c_str());
-        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.world.status.forwardShield, (where + L": FSH").c_str());
-        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.world.status.aftShield, (where + L": ASH").c_str());
-        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.world.status.energy, (where + L": ENERGY").c_str());
+        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.status.forwardShield, (where + L": FSH").c_str());
+        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.status.aftShield, (where + L": ASH").c_str());
+        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.status.energy, (where + L": ENERGY").c_str());
       }
     }
   };
@@ -894,14 +897,12 @@ namespace GameLogicTests
           {
             Leaving leaving;
             Occupy(leaving, docked + techLevel * 7u + contraband);
-            leaving.world.techLevel = techLevel; // 6502: tek, which `Mirror` sends to the oracle
-
-            const std::size_t hold = static_cast<std::size_t>(Elite::Field::CargoHold);
-            leaving.world.commander.bytes[hold + 3u] = contraband;
-            leaving.world.commander.bytes[hold + 10u] = contraband;
-            leaving.world.commander.At(Elite::Field::LegalStatus) = 2u;
-            leaving.world.commander.At(Elite::Field::EnergyBomb) = 0x40u;
-            leaving.world.view = 1u;
+            leaving.universe.techLevel = techLevel; // 6502: tek, which `Mirror` sends to the oracle
+            leaving.universe.commander.cargoHold[3] = contraband;
+            leaving.universe.commander.cargoHold[10] = contraband;
+            leaving.universe.commander.legalStatus = 2u;
+            leaving.universe.commander.energyBomb = 0x40u;
+            leaving.universe.view = 1u;
 
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(to.stopbd);
@@ -917,27 +918,27 @@ namespace GameLogicTests
              * refuse and the two sides disagree about the bubble rather than about the drawing.
              */
             cpu.AddTrap(oracle.Label("NOSPRITES"));
-            FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
-            Mirror(leaving.world, cpu, at);
+            FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+            Mirror(leaving.universe, cpu, at);
             MirrorLeaving(leaving, cpu, at, to, docked);
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(to.tt110, 8'000'000);
             Assert::IsTrue(run.completed, L"TT110 returned");
 
-            Elite::FlightScreen screen = leaving.world.Screen();
+            Elite::FlightScreen screen = leaving.universe.Screen();
             Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
                                    leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
 
             std::uint8_t flag = docked;
             Elite::SystemSeeds selected{};
-            Elite::Launch(loop, nullptr, flag, leaving.world.commander.At(Elite::Field::SystemX),
-                          leaving.world.commander.At(Elite::Field::SystemY), techLevel, selected);
+            Elite::Launch(loop, nullptr, flag, leaving.universe.commander.systemX,
+                          leaving.universe.commander.systemY, techLevel, selected);
 
             const std::wstring where = WidenText("TT110 (" + std::string(docked != 0u ? "docked" : "in flight") + ", tek " +
                                                  std::to_string(techLevel) + ", contraband " + std::to_string(contraband) + ")");
 
-            CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
-            CompareState(cpu, leaving.world, at, where);
+            CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
+            CompareState(cpu, leaving.universe, at, where);
             CompareLeaving(cpu, leaving, to, flag, where);
 
             Assert::AreEqual<std::uint8_t>(0u, flag, (where + L": QQ12 is cleared on both paths").c_str());
@@ -983,32 +984,32 @@ namespace GameLogicTests
 
       Leaving leaving;
       Occupy(leaving, 0x4Du);
-      leaving.world.view = 1u;
+      leaving.universe.view = 1u;
 
-      Elite::FlightScreen screen = leaving.world.Screen();
+      Elite::FlightScreen screen = leaving.universe.Screen();
       Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
                              leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
 
       Counting counting;
       std::uint8_t flag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
       Elite::SystemSeeds selected{};
-      Elite::Launch(loop, &counting, flag, leaving.world.commander.At(Elite::Field::SystemX),
-                    leaving.world.commander.At(Elite::Field::SystemY), 7u, selected);
+      Elite::Launch(loop, &counting, flag, leaving.universe.commander.systemX,
+                    leaving.universe.commander.systemY, 7u, selected);
 
       Assert::AreEqual<std::uint32_t>(68u, counting.circles, L"both tunnels are paced, not just the second");
 
       // And the refusal path draws nothing at all, so it asks the platform for nothing either.
       Leaving flying;
       Occupy(flying, 0x4Du);
-      Elite::FlightScreen flyingScreen = flying.world.Screen();
+      Elite::FlightScreen flyingScreen = flying.universe.Screen();
       Elite::FlightLoop flyingLoop{flyingScreen, flying.keys,       flying.control, flying.options, flying.burst,   flying.heap,
                                    flying.clip,  flying.projection, flying.axes,    flying.outside, flying.outside, flying.effects};
 
       Counting none;
       std::uint8_t inFlight = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
       Elite::SystemSeeds ignored{};
-      Elite::Launch(flyingLoop, &none, inFlight, flying.world.commander.At(Elite::Field::SystemX),
-                    flying.world.commander.At(Elite::Field::SystemY), 7u, ignored);
+      Elite::Launch(flyingLoop, &none, inFlight, flying.universe.commander.systemX,
+                    flying.universe.commander.systemY, 7u, ignored);
 
       Assert::AreEqual<std::uint32_t>(0u, none.circles, L"pressing 1 in flight is a view change and draws no tunnel");
     }
@@ -1104,12 +1105,12 @@ namespace GameLogicTests
 
       Leaving leaving;
       Occupy(leaving, 0x2Fu);
-      leaving.world.view = 0u;
-      leaving.world.heaps.stp = 4u;
+      leaving.universe.view = 0u;
+      leaving.universe.heaps.stp = 4u;
 
       Cpu6502 cpu = oracle.Fresh();
-      FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
-      Mirror(leaving.world, cpu, at);
+      FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+      Mirror(leaving.universe, cpu, at);
       MirrorLeaving(leaving, cpu, at, LaunchWhere(oracle), 0u);
 
       cpu.AddTrap(oracle.Label("EXNO3"), Cpu6502::TrapExit::SetCarry);
@@ -1136,20 +1137,20 @@ namespace GameLogicTests
       }
       Assert::IsTrue(reached, L"DEATH should reach its JSR U%");
 
-      Elite::FlightScreen screen = leaving.world.Screen();
+      Elite::FlightScreen screen = leaving.universe.Screen();
       Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
                              leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
 
-      Elite::PrepareDeathScene(loop, leaving.world.dashboard);
+      Elite::PrepareDeathScene(loop, leaving.universe.dashboard);
 
       const std::wstring where = L"DEATH (the scene)";
 
-      CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
+      CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
 
       // 6502: FRIN -- five pieces of wreckage, and the same types in the same slots.
       for (std::size_t slot = 0; slot < 8u; ++slot)
       {
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.frin + slot)], leaving.world.bubble.slots[slot],
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.frin + slot)], leaving.universe.bubble.slots[slot],
                          (where + L": FRIN " + std::to_wstring(slot)).c_str());
       }
 
@@ -1164,13 +1165,13 @@ namespace GameLogicTests
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
-                           leaving.world.bubble.blocks[slot][byte],
+                           leaving.universe.bubble.blocks[slot].ToBytes()[byte],
                            (where + L": K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte)).c_str());
         }
       }
 
       // 6502: STY QQ11 with Y = 0, once per piece of wreckage -- the view the scene ends on.
-      Assert::AreEqual(cpu.memory[at.qq11], leaving.world.view, (where + L": QQ11").c_str());
+      Assert::AreEqual(cpu.memory[at.qq11], leaving.universe.view, (where + L": QQ11").c_str());
 
       // 6502: JSR EXNO3 -- one explosion, and it is the one the shipped routine makes.
       std::uint32_t explosions = 0;
@@ -1178,12 +1179,12 @@ namespace GameLogicTests
       {
         explosions += (hit.address == oracle.Label("EXNO3")) ? 1u : 0u;
       }
-      Assert::AreEqual<std::size_t>(explosions, leaving.world.dashboard.sounds.size(), (where + L": sounds").c_str());
-      Assert::AreEqual<std::uint8_t>(Elite::SOUND_EXPLOSION, leaving.world.dashboard.sounds.front(), (where + L": sfxexpl").c_str());
+      Assert::AreEqual<std::size_t>(explosions, leaving.universe.dashboard.sounds.size(), (where + L": sounds").c_str());
+      Assert::AreEqual<std::uint8_t>(Elite::SOUND_EXPLOSION, leaving.universe.dashboard.sounds.front(), (where + L": sfxexpl").c_str());
 
-      Assert::AreEqual(cpu.memory[oracle.Label("LASCT")], leaving.world.status.laserCount, (where + L": LASCT").c_str());
-      Assert::AreEqual(cpu.memory[oracle.Label("MCNT")], leaving.world.flight.mainLoopCounter, (where + L": MCNT").c_str());
-      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], leaving.world.flight.delta, (where + L": DELTA").c_str());
+      Assert::AreEqual(cpu.memory[oracle.Label("LASCT")], leaving.universe.status.laserCount, (where + L": LASCT").c_str());
+      Assert::AreEqual(cpu.memory[oracle.Label("MCNT")], leaving.universe.flight.mainLoopCounter, (where + L": MCNT").c_str());
+      Assert::AreEqual(cpu.memory[oracle.Label("DELTA")], leaving.universe.flight.delta, (where + L": DELTA").c_str());
     }
 
     /*
@@ -1205,23 +1206,23 @@ namespace GameLogicTests
       const Where at(oracle);
       const std::uint16_t box = oracle.Label("BOX");
 
-      World world;
-      Seed(world, 0x19u);
+      Universe universe;
+      Seed(universe, 0x19u);
 
       Cpu6502 cpu = oracle.Fresh();
-      FillScreens(cpu, world.canvas, at.screen, 0x00u);
-      Mirror(world, cpu, at);
+      FillScreens(cpu, universe.canvas, at.screen, 0x00u);
+      Mirror(universe, cpu, at);
 
       const Elite::Testing::RunResult run = cpu.CallSubroutine(box, 2'000'000);
       Assert::IsTrue(run.completed, L"BOX returned");
 
-      Elite::DrawFullBorder(world.canvas, world.draw);
+      Elite::DrawFullBorder(universe.canvas);
 
-      const std::uint32_t touched = CompareScreens(cpu, at.screen, world.canvas, 0x00u, L"BOX");
+      const std::uint32_t touched = CompareScreens(cpu, at.screen, universe.canvas, 0x00u, L"BOX");
       Assert::IsTrue(touched > 0u, L"BOX: something was drawn");
 
       // 6502: LDA #&FF / STA SCBASE+&1F1F -- the corner byte the rule cannot reach, STORED not EORed.
-      Assert::AreEqual<std::uint8_t>(0xFFu, world.canvas.Read(Elite::BOTTOM_RIGHT_CORNER), L"BOX: the bottom right corner");
+      Assert::AreEqual<std::uint8_t>(0xFFu, universe.canvas.Read(Elite::BOTTOM_RIGHT_CORNER), L"BOX: the bottom right corner");
     }
 
     /*
@@ -1277,17 +1278,17 @@ namespace GameLogicTests
     {
       Leaving leaving;
       Occupy(leaving, 0x2Fu);
-      leaving.world.heaps.stp = 4u;
+      leaving.universe.heaps.stp = 4u;
       for (std::size_t index = 0; index < leaving.keys.size(); ++index)
       {
         leaving.keys[index] = 0xFFu;
       }
 
-      Elite::FlightScreen screen = leaving.world.Screen();
+      Elite::FlightScreen screen = leaving.universe.Screen();
       Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
                              leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
 
-      Elite::Die(loop, leaving.world.dashboard, nullptr);
+      Elite::Die(loop, leaving.universe.dashboard, nullptr);
 
       Assert::AreEqual<std::uint8_t>(0xFFu, leaving.keys[0], L"KLO+0 is below U%'s range and is untouched");
       for (std::size_t index = 1; index <= Elite::FLIGHT_KEYS_CLEARED; ++index)
@@ -1295,8 +1296,125 @@ namespace GameLogicTests
         Assert::AreEqual<std::uint8_t>(0u, leaving.keys[index], (L"U% cleared KLO+" + std::to_wstring(index)).c_str());
       }
       Assert::AreEqual<std::uint8_t>(0xFFu, leaving.keys[64], L"and the byte above U%'s range is untouched");
-      Assert::AreEqual<std::uint8_t>(0u, leaving.world.status.laserCount, L"LASCT counted down to zero");
-      Assert::IsTrue(leaving.world.flight.delta <= 1u, L"STA DELTA stopped the ship before the loop ran");
+      Assert::AreEqual<std::uint8_t>(0u, leaving.universe.status.laserCount, L"LASCT counted down to zero");
+      Assert::IsTrue(leaving.universe.flight.delta <= 1u, L"STA DELTA stopped the ship before the loop ran");
+    }
+
+    /*
+     * The wreckage stays inside the space view, on every one of the sixty-five frames.
+     *
+     * A `FlightPort`, because the fault this pins needed every routine real. Half the wreckage is
+     * spawned dead and `DOEXP` runs on it -- and until 2026-09-06 the cloud it grew had never been
+     * seeded: byte 2 of the heap read as zero, the vertex copy ran from index 0 down through 255 to
+     * 7, and two hundred and fifty bytes of `XX3` landed across every line heap above the dying
+     * piece's. The pieces owning those heaps drew them as lines, past the bottom of the bitmap into
+     * screen RAM -- the coloured blocks in the border -- and their own lines were never erased, so
+     * the screen filled with wreckage that did not move (§6.157). `Leaving` could not have shown
+     * it: its explosion is a counter.
+     *
+     * So three things, every frame: no piece that is not exploding has more on its heap than its
+     * blueprint gave it; after the first frame, nothing in screen RAM outside the space view's
+     * thirty-two columns changes; and the dashboard's block of screen RAM does not change at all.
+     */
+    TEST_METHOD(TheWreckageStaysInsideTheSpaceView)
+    {
+      auto port = std::make_unique<FlightPort>();
+      port->universe.commander = Elite::DefaultCommander();
+      Elite::ResetGame(port->loop, port->docked); // 6502: RESET
+
+      Elite::SystemSeeds selected{};
+      Elite::Launch(port->loop, nullptr, port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
+                    port->universe.techLevel, selected); // 6502: TT110
+
+      // Some way out from the station at speed, so `ASL DELTA` twice has something to work on.
+      for (int step = 0; step < 60; ++step)
+      {
+        port->held.fill(0u);
+        port->held[Elite::KEY_SPEED_UP] = 1u;
+        Assert::IsTrue(port->Step() == Elite::LoopOutcome::Continued, L"flying");
+      }
+
+      /*
+       * The checks RECORD their first failure and the test asserts it after `Die` returns: this
+       * callback is reached from `noexcept` code, and an assertion that throws from inside it ends
+       * the process rather than the test -- which is what the mutation harness saw when the cloud's
+       * vertex count was zeroed (the run aborted with no summary, on both runners' shims).
+       */
+      struct Watching final : Elite::TunnelEffects
+      {
+        FlightPort& port;
+        std::vector<std::uint8_t> cells;
+        std::uint32_t frames = 0;
+        std::wstring failure; // the first frame that went wrong, and how
+
+        explicit Watching(FlightPort& _port) noexcept
+          : port(_port)
+        {
+        }
+
+        void ShowFrame() override
+        {
+          ++frames;
+          if (!failure.empty())
+          {
+            return; // the first failure is the one worth reading
+          }
+          const std::wstring where = L"death frame " + std::to_wstring(frames);
+
+          for (std::size_t slot = 0; slot < port.universe.bubble.slots.size(); ++slot)
+          {
+            const std::uint8_t type = port.universe.bubble.slots[slot];
+            if (type == 0u)
+            {
+              break;
+            }
+            const Elite::Ship& piece = port.universe.bubble.blocks[slot];
+            if (Elite::Has(piece.state, Elite::ShipStateBit::Exploding))
+            {
+              continue; // a cloud's byte 0 is its size, not a line count
+            }
+            const std::uint8_t allowed = Elite::BlueprintOf(Elite::TypeOf(type))->heapBytes;
+            if (port.heap.Read(piece.heap) > allowed)
+            {
+              failure = where + L": slot " + std::to_wstring(slot) + L" has more on its heap than its blueprint allows";
+              return;
+            }
+          }
+
+          const auto screen = port.universe.canvas.Screen();
+          if (frames == 1u)
+          {
+            cells.assign(screen.begin() + Elite::Canvas::SCREEN_CELLS, screen.end());
+            return;
+          }
+
+          for (std::size_t offset = 0; offset < cells.size(); ++offset)
+          {
+            const std::size_t at = Elite::Canvas::SCREEN_CELLS + offset;
+            const bool firstBlock = at < Elite::Canvas::DASHBOARD_CELLS;
+            const std::size_t column = offset % Elite::Canvas::CELL_COLUMNS;
+            const bool spaceView = firstBlock &&
+                                   offset < static_cast<std::size_t>(Elite::Canvas::CELL_COLUMNS * Elite::Canvas::CELL_ROWS) &&
+                                   column >= 4u && column < 36u;
+            if (spaceView)
+            {
+              continue;
+            }
+            if (cells[offset] != screen[at])
+            {
+              failure = where + L": screen RAM byte " + std::to_wstring(at) + L" outside the space view changed -- was " +
+                        std::to_wstring(cells[offset]) + L", is " + std::to_wstring(screen[at]);
+              return;
+            }
+          }
+        }
+      };
+
+      Watching watching(*port);
+      Elite::Die(port->loop, *port, &watching);
+
+      Assert::IsTrue(watching.failure.empty(), watching.failure.c_str());
+      Assert::AreEqual<std::uint32_t>(Elite::DEATH_FRAMES + 1u, watching.frames, L"every frame of the sequence was shown");
     }
   };
 
@@ -1333,7 +1451,7 @@ namespace GameLogicTests
       std::uint32_t dismissed = 0;
       std::uint32_t fired = 0;
 
-      for (const std::uint8_t shipType : {Elite::SHIP_COBRA_MK3, Elite::SHIP_ADDER})
+      for (const Elite::ShipType shipType : {Elite::ShipType::CobraMk3, Elite::ShipType::Adder})
       {
         for (const std::uint8_t distance : {Elite::TITLE_COBRA_DISTANCE, Elite::TITLE_ADDER_DISTANCE})
         {
@@ -1344,7 +1462,7 @@ namespace GameLogicTests
               for (const std::uint8_t authors : {std::uint8_t{0}, std::uint8_t{0xFF}})
               {
                 Leaving leaving;
-                Occupy(leaving, shipType * 13u + distance + frames + (fire ? 1u : 0u) + authors);
+                Occupy(leaving, Elite::Byte(shipType) * 13u + distance + frames + (fire ? 1u : 0u) + authors);
 
                 leaving.options.authorNames = authors;
                 leaving.start.quiet = frames - 1u;
@@ -1411,28 +1529,28 @@ namespace GameLogicTests
                                                static_cast<std::uint8_t>(frames)};
                 cpu.Load(rdkey, stub, sizeof(stub));
 
-                FillScreens(cpu, leaving.world.canvas, at.screen, 0x1Du);
-                Mirror(leaving.world, cpu, at);
+                FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+                Mirror(leaving.universe, cpu, at);
                 MirrorLeaving(leaving, cpu, at, to, 0xFFu);
                 cpu.memory[patg] = authors;
 
                 cpu.a = Elite::TITLE_START_TOKEN;
-                cpu.x = shipType;
+                cpu.x = Elite::Byte(shipType);
                 cpu.y = distance;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(title, 20'000'000);
                 Assert::IsTrue(run.completed, L"TITLE returned");
 
-                Elite::FlightScreen screen = leaving.world.Screen();
+                Elite::FlightScreen screen = leaving.universe.Screen();
                 Elite::FlightLoop loop{screen,        leaving.keys,    leaving.control, leaving.options,
                                        leaving.burst, leaving.heap,    leaving.clip,    leaving.projection,
                                        leaving.axes,  leaving.outside, leaving.outside, leaving.effects};
 
                 std::uint8_t flag = 0xFFu;
-                Elite::TitleScreen titleScreen{loop, leaving.start, leaving.world.extendedPrinter, leaving.options, leaving.keys, flag};
+                Elite::TitleScreen titleScreen{loop, leaving.start, leaving.universe.extendedPrinter, leaving.options, leaving.keys, flag};
                 const std::uint8_t answer = Elite::ShowTitleShip(titleScreen, Elite::TITLE_START_TOKEN, shipType, distance);
 
                 const std::wstring where =
-                  WidenText("TITLE (ship " + std::to_string(shipType) + ", distance " + std::to_string(distance) + ", " +
+                  WidenText("TITLE (ship " + std::to_string(Elite::Byte(shipType)) + ", distance " + std::to_string(distance) + ", " +
                             std::to_string(frames) + " frames, " + (fire ? "fire" : "key") + ", PATG " + std::to_string(authors) + ")");
 
                 /*
@@ -1442,19 +1560,19 @@ namespace GameLogicTests
                  */
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.inwk + byte)], leaving.world.work[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.inwk + byte)], leaving.universe.work.ToBytes()[byte],
                                    (where + L": INWK+" + std::to_wstring(byte)).c_str());
                 }
 
                 Assert::AreEqual(cpu.a, answer, (where + L": thiskey").c_str());
-                Assert::IsTrue(leaving.world.codes.ran.empty(), (where + L": no token reached a control code").c_str());
+                Assert::IsTrue(leaving.universe.codes.ran.empty(), (where + L": no token reached a control code").c_str());
 
-                CompareState(cpu, leaving.world, at, where);
+                CompareState(cpu, leaving.universe, at, where);
                 CompareLeaving(cpu, leaving, to, flag, where);
-                CompareScreens(cpu, at.screen, leaving.world.canvas, 0x1Du, where);
+                CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
 
                 Assert::AreEqual(cpu.memory[jstk], leaving.options.joystick, (where + L": JSTK").c_str());
-                Assert::AreEqual(cpu.memory[mulie], leaving.world.status.titleReset, (where + L": MULIE").c_str());
+                Assert::AreEqual(cpu.memory[mulie], leaving.universe.status.titleReset, (where + L": MULIE").c_str());
 
                 dismissed += fire ? 0u : 1u;
                 fired += fire ? 1u : 0u;

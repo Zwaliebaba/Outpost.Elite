@@ -123,10 +123,18 @@ def count_includes(_under_library: bool) -> int:
 
 
 def counts() -> dict[str, tuple[int, str]]:
-    """Every checkable count: name -> (value, what it means)."""
+    """Every checkable count: name -> (value, what it means).
+
+    The modernisation plan's pattern counts (Design/Modernize.md section 3) come from
+    `check_modernize.py`, which owns the counters and the ratchet over them; they are merged in
+    here so that a marker in that document is checked by the same run as every other marker.
+    """
     game_logic = REPO / "GameLogic"
     tests = REPO / "Tests" / "GameLogicTests"
-    return {
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_modernize  # noqa: E402  -- beside this file, imported here so --list stays cheap
+
+    own = {
         "tests": (count_tests(), "TEST_METHOD declarations in Tests/GameLogicTests/"),
         "test-files": (len(list(tests.glob("*Tests.cpp"))), "test translation units"),
         "checks": (count_checks(), "entries in check_all.py's CHECKS"),
@@ -144,6 +152,7 @@ def counts() -> dict[str, tuple[int, str]]:
         "library-includes": (count_includes(True), "those of them under library/"),
         "tools": (len(list((REPO / "tools").glob("*.py"))), "scripts in tools/"),
     }
+    return {**own, **check_modernize.counts()}
 
 
 # ---- reading a number a document wrote ----------------------------------------------------------

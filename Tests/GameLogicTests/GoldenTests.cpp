@@ -12,7 +12,6 @@
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::Canvas;
-using Elite::DrawWorkspace;
 using Elite::TextPrinter;
 using Elite::TextState;
 using Elite::Testing::Cpu6502;
@@ -179,14 +178,9 @@ namespace GameLogicTests
         actual.SetCellColour(cell, COLOUR_RAM);
       }
 
-      DrawWorkspace draw;
       for (const Line& line : frame)
       {
-        draw.x1 = line.x1;
-        draw.y1 = line.y1;
-        draw.x2 = line.x2;
-        draw.y2 = line.y2;
-        Elite::DrawLine(actual, draw);
+        (void)Elite::DrawLine(actual, Elite::Line{line.x1, line.y1, line.x2, line.y2});
       }
 
       TextState state;

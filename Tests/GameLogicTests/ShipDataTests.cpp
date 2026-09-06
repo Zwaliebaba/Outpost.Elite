@@ -60,7 +60,8 @@ namespace GameLogicTests
       std::set<std::uint16_t> distinct;
       for (int type = 1; type <= Elite::SHIP_TYPE_COUNT; ++type)
       {
-        const std::uint16_t address = Elite::BlueprintAddress(static_cast<std::uint8_t>(type));
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(static_cast<std::uint8_t>(type)));
+        const std::uint16_t address = (blueprint == nullptr) ? std::uint16_t{0} : blueprint->address;
         if (address != 0)
         {
           distinct.insert(address);
@@ -95,7 +96,10 @@ namespace GameLogicTests
         const std::uint16_t expected = static_cast<std::uint16_t>(cpu.memory[entry] | (cpu.memory[entry + 1] << 8));
 
         const std::wstring where = Widen("ship type " + std::to_string(type));
-        Assert::AreEqual(expected, Elite::BlueprintAddress(static_cast<std::uint8_t>(type)), (where + L": the blueprint address").c_str());
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(static_cast<std::uint8_t>(type)));
+        Assert::IsNotNull(blueprint, (where + L": carried").c_str());
+        Assert::AreEqual(expected, blueprint->address, (where + L": the blueprint address").c_str());
+        Assert::IsTrue(Elite::BlueprintAt(expected) == blueprint, (where + L": and the address finds it again").c_str());
 
         if (expected != 0)
         {
@@ -121,10 +125,10 @@ namespace GameLogicTests
        */
       for (const int beyond : {Elite::SHIP_TYPE_COUNT + 1, Elite::SHIP_TYPE_COUNT + 2, 39, 255})
       {
-        Assert::AreEqual<std::uint16_t>(0, Elite::BlueprintAddress(static_cast<std::uint8_t>(beyond)),
-                                        L"a type this build does not carry has no blueprint");
+        Assert::IsNull(Elite::BlueprintOf(Elite::TypeOf(static_cast<std::uint8_t>(beyond))), L"a type this build does not carry has no blueprint");
       }
-      Assert::AreEqual<std::uint16_t>(0, Elite::BlueprintAddress(0), L"and nor does the empty slot");
+      Assert::IsNull(Elite::BlueprintOf(Elite::ShipType::None), L"and nor does the empty slot");
+      Assert::IsTrue(Elite::BlueprintAt(0) == &Elite::NO_BLUEPRINT, L"and XX0 = 0 is the blueprint of nothing");
     }
 
     /*
@@ -157,7 +161,7 @@ namespace GameLogicTests
       {
         const std::uint16_t start = blueprints[index];
         const int gap = static_cast<int>(blueprints[index + 1]) - static_cast<int>(start);
-        const int extent = static_cast<int>(Elite::ShipBlueprintExtent(start));
+        const int extent = static_cast<int>(Elite::BlueprintAt(start)->Extent());
 
         if (gap != extent)
         {
@@ -183,7 +187,7 @@ namespace GameLogicTests
         const auto found = std::find(blueprints.begin(), blueprints.end(), start);
         Assert::IsTrue(found != blueprints.end(), L"the overrunning blueprint is still there");
         const int gap = static_cast<int>(*(found + 1)) - static_cast<int>(start);
-        Assert::IsTrue(Elite::ShipBlueprintExtent(start) > gap, Widen("blueprint at " + std::to_string(start) + " still overruns").c_str());
+        Assert::IsTrue(Elite::BlueprintAt(start)->Extent() > gap, Widen("blueprint at " + std::to_string(start) + " still overruns").c_str());
       }
     }
 
@@ -201,20 +205,19 @@ namespace GameLogicTests
       for (std::size_t offset = 0; offset < Elite::SHIP_DATA.size(); ++offset)
       {
         const std::uint16_t address = static_cast<std::uint16_t>(Elite::SHIP_DATA_BASE + offset);
-        if (cpu.memory[address] != Elite::ShipByte(address))
+        if (cpu.memory[address] != Elite::SHIP_DATA[offset])
         {
           Assert::Fail(Widen("ship data differs at " + std::to_string(address)).c_str());
         }
       }
 
-      Assert::AreEqual<std::uint8_t>(0, Elite::ShipByte(Elite::SHIP_DATA_BASE - 1), L"below the region reads zero");
-      Assert::AreEqual<std::uint8_t>(0, Elite::ShipByte(static_cast<std::uint16_t>(Elite::SHIP_DATA_BASE + Elite::SHIP_DATA.size())),
-                                     L"and above it");
+      Assert::IsNull(Elite::BlueprintAt(Elite::SHIP_DATA_BASE - 1), L"below the region there is no blueprint");
+      Assert::IsNull(Elite::BlueprintAt(static_cast<std::uint16_t>(Elite::SHIP_DATA_BASE + Elite::SHIP_DATA.size())), L"and nor above it");
 
       // 6502: E% -- the per-type default flags NWSHP ORs into NEWB. Inside the region, which is why
       // it does not need extracting separately.
       Assert::AreEqual<std::uint16_t>(oracle.Label("E%"), Elite::SHIP_DEFAULT_FLAGS, L"E% is where the constant says");
-      Assert::AreEqual(cpu.memory[oracle.Label("E%")], Elite::ShipByte(Elite::SHIP_DEFAULT_FLAGS), L"and reads back through the region");
+      Assert::AreEqual(cpu.memory[oracle.Label("E%")], Elite::DefaultNewbFor(Elite::ShipType::Missile), L"and reads back as the missile's default NEWB");
     }
   };
 
@@ -262,7 +265,7 @@ namespace GameLogicTests
 
       // 6502: INWK is at zero page 9 and is NI% bytes, so it ends at 9 + 37.
       Assert::AreEqual<std::uint16_t>(9, oracle.Label("INWK"), L"INWK is where the port assumes");
-      Assert::AreEqual<std::size_t>(Elite::SHIP_BLOCK_SIZE, Elite::ShipBlock{}.bytes.size(), L"a ship block is NI% bytes");
+      Assert::AreEqual<std::size_t>(Elite::SHIP_BLOCK_SIZE, Elite::Ship{}.ToBytes().size(), L"a ship block is NI% bytes");
 
       // The counter is indexed by ship type, so it has to reach the last one.
       Elite::Bubble bubble;
@@ -274,10 +277,10 @@ namespace GameLogicTests
     {
       Elite::Bubble bubble;
 
-      std::set<Elite::ShipBlock*> distinct;
+      std::set<Elite::Ship*> distinct;
       for (std::uint8_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
       {
-        Elite::ShipBlock* block = Elite::SlotBlock(bubble, slot);
+        Elite::Ship* block = Elite::SlotBlock(bubble, slot);
         Assert::IsNotNull(block, L"every slot in range has a block");
         distinct.insert(block);
       }
@@ -324,11 +327,11 @@ namespace GameLogicTests
 
       const std::vector<Case> CASES = {
         {"a Cobra into an empty bubble", 11, 0, Elite::SHIP_HEAP_TOP},
-        {"the space station, which keeps no heap", Elite::SHIP_TYPE_STATION, 0, Elite::SHIP_HEAP_TOP},
+        {"the space station, which keeps no heap", Elite::Byte(Elite::ShipType::Station), 0, Elite::SHIP_HEAP_TOP},
         {"a missile", 1, 0, Elite::SHIP_HEAP_TOP},
         {"a canister, which is junk", 5, 0, Elite::SHIP_HEAP_TOP},
         {"an escape pod, the first junk type", 3, 0, Elite::SHIP_HEAP_TOP},
-        {"a rock hermit, junk by name only", Elite::SHIP_TYPE_HERMIT, 0, Elite::SHIP_HEAP_TOP},
+        {"a rock hermit, junk by name only", Elite::Byte(Elite::ShipType::RockHermit), 0, Elite::SHIP_HEAP_TOP},
         {"a shuttle, one below the junk limit", 9, 0, Elite::SHIP_HEAP_TOP},
         {"type 11, one past it", 11, 0, Elite::SHIP_HEAP_TOP},
         {"the planet", 128, 0, Elite::SHIP_HEAP_TOP},
@@ -355,7 +358,7 @@ namespace GameLogicTests
 
         // 6502: XX21+2*SST-2 -- the entry `NWSPS` writes and `NWSHP` reads. The oracle's copy is
         // the assembled one, so the port's has to be too or the station case refuses the ship.
-        bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+        bubble.stationType = Elite::ShipType::Station;
 
         // The same starting bubble on both sides: `occupied` slots holding a Viper.
         for (std::uint8_t filled = 0; filled < item.occupied; ++filled)
@@ -366,24 +369,26 @@ namespace GameLogicTests
 
         cpu.memory[slsp] = static_cast<std::uint8_t>(item.heapBottom & 0xFFu);
         cpu.memory[static_cast<std::uint16_t>(slsp + 1)] = static_cast<std::uint8_t>(item.heapBottom >> 8);
-        bubble.heapBottom = item.heapBottom;
+        bubble.heapBottom = Elite::HeapOffset::FromAddress(item.heapBottom);
 
         // A recognisable INWK on both sides, so the copy into the slot is checked rather than
         // assumed -- a routine that wrote nothing would agree with one that wrote zeroes.
-        Elite::ShipBlock work;
+        Elite::Ship work;
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
         for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
         {
           const std::uint8_t value = static_cast<std::uint8_t>(0xA0u + offset);
           cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = value;
-          work[offset] = value;
+          shipBytes[offset] = value;
         }
+        work = Elite::Ship::FromBytes(shipBytes);
 
         cpu.a = item.type;
         const Elite::Testing::RunResult run = cpu.CallSubroutine(nwshp);
         Assert::IsTrue(run.completed, (where + L": NWSHP returned").c_str());
 
-        std::uint16_t blueprint = 0; // 6502: XX0, which NWSHP writes
-        const Elite::NewShip created = Elite::AddShip(bubble, work, item.type, blueprint);
+        const Elite::Blueprint* blueprint = &Elite::NO_BLUEPRINT; // 6502: XX0, which NWSHP writes
+        const Elite::NewShip created = Elite::AddShip(bubble, work, Elite::TypeOf(item.type), blueprint);
 
         // The carry is the answer, and both refusals clear it.
         Assert::AreEqual(cpu.c, created.created, (where + L": whether the ship was created").c_str());
@@ -404,22 +409,22 @@ namespace GameLogicTests
         }
 
         const std::uint16_t heap = static_cast<std::uint16_t>(cpu.memory[slsp] | (cpu.memory[static_cast<std::uint16_t>(slsp + 1)] << 8));
-        Assert::AreEqual(heap, bubble.heapBottom, (where + L": SLSP").c_str());
+        Assert::AreEqual(heap, bubble.heapBottom.Address(), (where + L": SLSP").c_str());
 
         // INWK as the routine left it, including NEWB at offset 36 and the heap pointer at 33/34.
         for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work[offset],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work.ToBytes()[offset],
                            (where + L": INWK+" + std::to_wstring(offset)).c_str());
         }
 
         // And the block that was written into the slot, when one was.
         if (created.created)
         {
-          const std::uint16_t block = Elite::SlotAddress(created.slot);
+          const std::uint16_t block = static_cast<std::uint16_t>(Elite::SHIP_BLOCK_BASE + (created.slot) * Elite::SHIP_BLOCK_SIZE);
           for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(block + offset)], bubble.blocks[created.slot][offset],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(block + offset)], bubble.blocks[created.slot].ToBytes()[offset],
                              (where + L": the slot's block at +" + std::to_wstring(offset)).c_str());
           }
         }
@@ -476,8 +481,7 @@ namespace GameLogicTests
             Assert::IsTrue(run.completed, L"NORM returned");
 
             std::array<std::uint8_t, 3> vector = {x, y, z};
-            Elite::MathWorkspace work;
-            Elite::Normalise(work, vector);
+            (void)Elite::Normalise(vector);
 
             const std::wstring where = Widen("NORM(" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + ")");
             Assert::AreEqual(cpu.memory[xx15], vector[0], (where + L": x").c_str());
@@ -525,18 +529,14 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(mult3);
               Assert::IsTrue(run.completed, L"MULT3 returned");
 
-              Elite::MathWorkspace work;
-              work.p = p0;
-              work.p1 = p1;
-              work.q = q;
-              Elite::MultiplySignedToK(work, a);
+              const Elite::KBlock k = Elite::MultiplySigned24(Elite::SignMag24{p0, p1, a}, q);
+              const std::uint8_t bytes[4] = {k.low, k.mid, k.high, k.top};
 
               const std::wstring where =
                 Widen("MULT3(" + std::to_string(a) + " " + std::to_string(p1) + " " + std::to_string(p0) + " * " + std::to_string(q) + ")");
               for (int byte = 0; byte < 4; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], work.k[byte],
-                                 (where + L": K+" + std::to_wstring(byte)).c_str());
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], bytes[byte], (where + L": K+" + std::to_wstring(byte)).c_str());
               }
               ++compared;
             }

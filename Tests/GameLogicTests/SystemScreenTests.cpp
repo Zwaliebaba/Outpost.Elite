@@ -9,7 +9,7 @@
 #include "SystemScreen.h"
 #include "TextPrint.h"
 #include "Tokens.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <array>
 #include <cstdint>
@@ -241,8 +241,8 @@ namespace GameLogicTests
           printer.SetCaseFlags(0);
           printer.SetCursor(&text);
 
-          Elite::CommanderBlock commander = Elite::DefaultCommander();
-          commander.At(Elite::Field::GalaxyNumber) = galaxyNumber;
+          Elite::Commander commander = Elite::DefaultCommander();
+          commander.galaxyNumber = galaxyNumber;
           const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
           SystemSeeds current = seeds;
           SystemSeeds selected = seeds;

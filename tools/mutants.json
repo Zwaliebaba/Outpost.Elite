@@ -73,8 +73,8 @@
         {
           "id": "ta-selftest",
           "file": "GameLogic/Tactics.cpp",
-          "find": "    _draw.y1 = static_cast<std::uint8_t>(_draw.y1 ^ 0x80u);",
-          "replace": "    _draw.y1 = static_cast<std::uint8_t>(_draw.y1 ^ 0x00u);",
+          "find": "    _vector.y = static_cast<std::uint8_t>(_vector.y ^ 0x80u);",
+          "replace": "    _vector.y = static_cast<std::uint8_t>(_vector.y ^ 0x00u);",
           "expect": "caught",
           "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Dropping one of TAS6's three EOR #%10000000s leaves the negated vector wrong on the y axis, and TheNegationMatchesTAS6 compares all three against the shipped routine. Its job is to prove this run OBSERVES a catch -- without it, fifteen 'survivors' below could all be a harness that never rebuilt. Keep it first and never delete it.",
           "selftest": true
@@ -90,8 +90,8 @@
         {
           "id": "ta-240",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (roll.value < 240u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
-          "replace": "if (roll.value < 239u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
+          "find": "if (roll.value < 240u || screen.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
+          "replace": "if (roll.value < 239u || screen.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
           "expect": "caught",
           "note": "The police roll. Closed by a seed that reads 239 there."
         },
@@ -114,8 +114,8 @@
         {
           "id": "ta-104",
           "file": "GameLogic/Tactics.cpp",
-          "find": "work[29] = static_cast<std::uint8_t>(amount.value | 104u);",
-          "replace": "work[29] = static_cast<std::uint8_t>(amount.value | 105u);",
+          "find": "work.rollCounter = static_cast<std::uint8_t>(amount.value | 104u);",
+          "replace": "work.rollCounter = static_cast<std::uint8_t>(amount.value | 105u);",
           "expect": "caught",
           "note": "ORA #104 on the roll TN7 just made, reachable only through ta-250's branch -- and for a year one value reached it, 125, whose bottom bit is set. Closed by a seed that lands 252 at TN7 and then an EVEN operand (plan section 6.153)."
         },
@@ -130,16 +130,16 @@
         {
           "id": "ta-half",
           "file": "GameLogic/Tactics.cpp",
-          "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work[35];",
-          "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < work[35];",
+          "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work.energy;",
+          "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < work.energy;",
           "expect": "caught",
           "note": "TA7's first LSR A -- and its BCC goes to CAPITAL TA3, part SIX, so a ship above half energy skips the missile launch. THIS ONE WAS A DEFECT: the port ran both energy branches into part five. Closed by the fix plus three cases WITH missiles straddling the threshold (plan section 6.153)."
         },
         {
           "id": "ta7-three",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work[35])",
-          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work[35])",
+          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work.energy)",
+          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work.energy)",
           "expect": "caught",
           "note": "TA7's second and third LSR A -- an EIGHTH of the maximum, not a quarter."
         },
@@ -154,8 +154,8 @@
         {
           "id": "ta20-eor",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      SteerTowards(_loop, static_cast<std::uint8_t>(nose.high ^ 0x80u));",
-          "replace": "      SteerTowards(_loop, nose.high);",
+          "find": "      SteerTowards(_loop, NegateVector(towards), static_cast<std::uint8_t>(nose.high ^ 0x80u));",
+          "replace": "      SteerTowards(_loop, NegateVector(towards), nose.high);",
           "expect": "caught",
           "note": "TA20's EOR #%10000000, in SteerMissileTowardsTarget. A second, unreachable copy of TA20 stood in part 4 and was deleted (plan section 6.152)."
         },
@@ -170,16 +170,16 @@
         {
           "id": "msl-82",
           "file": "GameLogic/Tactics.cpp",
-          "find": "destroyed = (work[32] == 0x82u);",
-          "replace": "destroyed = (work[32] == 0x83u);",
+          "find": "destroyed = (work.ai == MissileAiFor(1u));",
+          "replace": "destroyed = (work.ai == With(MissileAiFor(1u), AiBit::HasEcm));",
           "expect": "caught",
           "note": "The station a missile dies against. Closed by cases that put the target at the missile's own position, which is the only way part 1's tail runs at all."
         },
         {
           "id": "msl-bit5",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if ((victim[31] & 0x20u) == 0u)",
-          "replace": "if ((victim[31] & 0x10u) == 0u)",
+          "find": "if (!Has(victim.state, ShipStateBit::Exploding))",
+          "replace": "if (!Has(victim.state, ShipStateBit::OnScanner))",
           "expect": "caught",
           "note": "BIT M32+1 reads bit 5 out of the middle of an instruction. Closed by a victim marked in bit 4 and not bit 5, which is the only state that tells the two apart."
         },
@@ -194,8 +194,8 @@
         {
           "id": "kill-rotate",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>((work[32] & 0x7Fu) >> 1u));",
-          "replace": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>(work[32] & 0x7Fu));",
+          "find": "      RecordKill(screen, _loop.effects, TypeOf(MissileTargetOf(work.ai)));",
+          "replace": "      RecordKill(screen, _loop.effects, TypeOf(static_cast<std::uint8_t>(work.ai & 0x7Fu)));",
           "expect": "caught",
           "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2. Not a coverage gap: TALLY and TALLYL were neither pushed nor compared, so what EXNO2 scores was invisible. Closed by comparing all three bytes (plan section 6.153)."
         }
@@ -247,8 +247,8 @@
         {
           "id": "hyp-fuel-zero",
           "file": "GameLogic/Hyperspace.cpp",
-          "find": "screen.commander.At(Field::Fuel) = fuel.carry ? fuel.value : std::uint8_t{0};",
-          "replace": "screen.commander.At(Field::Fuel) = fuel.carry ? fuel.value : std::uint8_t{0u};",
+          "find": "screen.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0};",
+          "replace": "screen.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0u};",
           "expect": "equivalent",
           "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made."
         }
@@ -411,8 +411,8 @@
         {
           "id": "mi-selftest",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.work[7] = BRIEFING_SHIP_DISTANCE;",
-          "replace": "    screen.work[7] = 0u;",
+          "find": "    screen.work.z.hi = BRIEFING_SHIP_DISTANCE;",
+          "replace": "    screen.work.z.hi = 0u;",
           "expect": "caught",
           "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Putting the briefing ship at z_hi = 0 rather than 2 draws it at a two-hundredth of the distance, which the whole-canvas comparison in TheBriefingShipMatchesPAS1 cannot miss. Keep it first and never delete it.",
           "selftest": true
@@ -444,8 +444,8 @@
         {
           "id": "mi-erase",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.work[31] = 0u;",
-          "replace": "    screen.work[31] = 0xFFu;",
+          "find": "    screen.work.state = 0u;",
+          "replace": "    screen.work.state = 0xFFu;",
           "expect": "caught",
           "note": "`LDA #0 / STA INWK+31` -- the ship stops being drawn, so the `LL9` after the screen change has nothing to rub out. Leaving the flags set makes that `LL9` erase lines the cleared screen no longer has."
         },
@@ -540,16 +540,16 @@
         {
           "id": "mi-engy",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _bay.commander.At(Field::EnergyUnit) = NAVY_ENERGY_UNIT;",
-          "replace": "    _bay.commander.At(Field::EnergyUnit) = 1u;",
+          "find": "    _bay.commander.energyUnit = NAVY_ENERGY_UNIT;",
+          "replace": "    _bay.commander.energyUnit = 1u;",
           "expect": "caught",
           "note": "`LDA #2 / STA ENGY` -- the navy's energy unit, which the flight loop reads as three units a pass where the shop's one gives two. A 1 is the shop's."
         },
         {
           "id": "mi-tally",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _bay.commander.bytes[tally + 1u] = static_cast<std::uint8_t>(_bay.commander.bytes[tally + 1u] + 1u);",
-          "replace": "    _bay.commander.bytes[tally] = static_cast<std::uint8_t>(_bay.commander.bytes[tally] + 1u);",
+          "find": "    _bay.commander.kills.hi = static_cast<std::uint8_t>(_bay.commander.kills.hi + 1u);",
+          "replace": "    _bay.commander.kills.lo = static_cast<std::uint8_t>(_bay.commander.kills.lo + 1u);",
           "expect": "caught",
           "note": "`INC TALLY+1` -- the HIGH byte, so the reward is 256 kills and a whole combat rank rather than one kill. This pair is low byte first, unlike the cash above it, which is exactly the trap."
         },
@@ -580,7 +580,7 @@
         {
           "id": "mi-second-inc",
           "file": "GameLogic/Missions.cpp",
-          "find": "      screen.work[6] = static_cast<std::uint8_t>(screen.work[6] + 1u);\n      if (screen.work[6] == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
+          "find": "      screen.work.z.lo = static_cast<std::uint8_t>(screen.work.z.lo + 1u);\n      if (screen.work.z.lo == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
           "replace": "      // 6502: LDX INWK+3",
           "expect": "caught",
           "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on."
@@ -604,7 +604,7 @@
         {
           "id": "mi-inwk7",
           "file": "GameLogic/Missions.cpp",
-          "find": "    screen.work[7] = static_cast<std::uint8_t>(screen.work[7] + 1u);",
+          "find": "    screen.work.z.hi = static_cast<std::uint8_t>(screen.work.z.hi + 1u);",
           "replace": "",
           "expect": "caught",
           "note": "`.BR2 INC INWK+7` -- the high byte following the low one past 255. Without it the ship is 256 units nearer than the briefing text was written for, and `INWK` is compared byte for byte."
@@ -705,6 +705,82 @@
           "replace": "          const std::size_t half = 0u;",
           "expect": "caught",
           "note": "Deciding a sprite's mode once instead of per screen row. The VIC-II decides it as it scans, which is why a burst that straddles the split is drawn on one side only; pinning the half to the space view's draws the whole thing over the dashboard."
+        }
+      ]
+    },
+    {
+      "name": "cloud-seed",
+      "slice": "death-sequence fix 2026-09-06 (plan section 6.157)",
+      "filter": [
+        "TheShipLineHeap",
+        "TheDeathScreen",
+        "TheFlightFrameShips",
+        "TheTacticsVectors"
+      ],
+      "tests": 17,
+      "note": [
+        "The EE55 cloud seeding, the carries it reads and the two defects the tightened comparison",
+        "found beside it (plan section 6.157). Every decision here is a flag: which carry the first",
+        "DORND rolls in, what the other three get, what EE51 leaves, what ANGRY leaves, what the",
+        "scooped canister's roll gets. Each mutant flips one and names the oracle test that sees it."
+      ],
+      "mutants": [
+        {
+          "id": "cs-selftest",
+          "file": "GameLogic/ShipDraw.cpp",
+          "find": "_heap.Write(_run.Byte(2u), _explosionCount);",
+          "replace": "_heap.Write(_run.Byte(2u), 0u);",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Byte 2 is the vertex count DOEXP loops down from; zero is the unseeded value that wrote 250 bytes across the neighbouring heaps, so TheCloudSeedsLikeEE55 sees the byte and TheWreckageStaysInsideTheSpaceView sees the corruption. Keep it first in the list and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "cs-later-carries",
+          "file": "GameLogic/ShipDraw.cpp",
+          "find": "      _heap.Write(_run.Byte(byte), _rng.Next(carry).value);\n      carry = false;",
+          "replace": "      _heap.Write(_run.Byte(byte), _rng.Next(carry).value);\n      carry = true;",
+          "expect": "caught",
+          "note": "CPY #6 / BNE EE55 -- Y is under six on the way round, so the second, third and fourth DORND roll in a CLEAR carry whatever the first one had. Feeding them the first one's flag agrees on the clear-carry cases and not on the set-carry ones; TheCloudSeedsLikeEE55 runs both."
+        },
+        {
+          "id": "cs-ee51-exit",
+          "file": "GameLogic/ShipDraw.cpp",
+          "find": "return _heap.Read(_ship.heap) >= 4u;",
+          "replace": "return true;",
+          "expect": "caught",
+          "note": "LL155's CMP #4 / BCC LL82 -- a heap with no line on it leaves the carry CLEAR, and ErasingAShipMatchesEE51 runs an empty heap against the oracle's exit flag."
+        },
+        {
+          "id": "cs-counter",
+          "file": "GameLogic/ShipDraw.cpp",
+          "find": "EXPLOSION_COUNTER_START = 18;",
+          "replace": "EXPLOSION_COUNTER_START = 17;",
+          "expect": "caught",
+          "note": "LDA #18 -- the counter DOEXP ages, and the CPY #18 that decides the burst sprite's one frame reads it. TheCloudSeedsLikeEE55 compares heap byte 1."
+        },
+        {
+          "id": "cs-oily",
+          "file": "GameLogic/FlightLoop.cpp",
+          "find": "item = static_cast<std::uint8_t>(screen.rng.Next(true).value & 7u);",
+          "replace": "item = static_cast<std::uint8_t>(screen.rng.Next(false).value & 7u);",
+          "expect": "caught",
+          "note": ".oily JSR DORND reached only by CPX #OIL / BEQ oily, and an equal compare SETS the carry. This was the port until 2026-09-06, hidden while the comparison skipped the generator on frames that seeded a cloud; ThePerShipLoopMatchesMAL1's 'on top of us with scoops' compares RAND now."
+        },
+        {
+          "id": "cs-angry-station",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "const bool comparedToStation = _type >= ShipType::Station;",
+          "replace": "const bool comparedToStation = _type > ShipType::Station;",
+          "expect": "caught",
+          "note": "CMP #SST with the station itself in A leaves the carry SET (equal), and BEQ AN2 returns on it. TheAngerMatchesANGRY compares the exit flag on every case, and a third of them call with the station."
+        },
+        {
+          "id": "cs-ll9-carry-hit",
+          "file": "GameLogic/FlightLoop.cpp",
+          "find": "carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it",
+          "replace": "carry = false; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it",
+          "expect": "caught",
+          "note": "HITCH's SEC is the flag JSR LL9 gets for a ship in the sights with no missile armed and no laser firing, and a ship that arrives there killed and not on the screen seeds its first DORND on it. ThePerShipLoopMatchesMAL1's 'in the sights, already dead' is that ship, and its RAND is compared -- 'on top of us' is not, because MVEIT takes the player's speed off z before HITCH looks, and the generator was not compared by the frame tests until this mutant survived (2026-09-06)."
         }
       ]
     }
