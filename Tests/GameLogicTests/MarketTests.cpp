@@ -26,7 +26,7 @@ using Elite::Testing::OracleImage;
  *
  * The thing being guarded is the sign of the economy gradient, which subtracts from a price and
  * adds to a quantity. Getting it the same way round in both gives a game where agricultural
- * universes sell machinery cheaply, which is wrong in a way no test of a single number would catch.
+ * worlds sell machinery cheaply, which is wrong in a way no test of a single number would catch.
  */
 namespace GameLogicTests
 {
@@ -332,7 +332,7 @@ namespace GameLogicTests
      */
     TEST_METHOD(TheEconomyGradientPushesPriceAndQuantityOppositeWays)
     {
-      // Item 0 is Food, whose gradient is negative: cheap and plentiful on agricultural universes.
+      // Item 0 is Food, whose gradient is negative: cheap and plentiful on agricultural worlds.
       const Elite::MarketItem food = Elite::MarketItemAt(0);
       Assert::IsTrue((food.gradient & 0x80u) != 0u, L"item 0 should have a negative gradient");
 
