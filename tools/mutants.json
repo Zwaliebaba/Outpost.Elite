@@ -617,19 +617,20 @@
       "filter": [
         "TheRasterInterrupt"
       ],
-      "tests": 5,
+      "tests": 7,
       "note": [
         "COMIRQ1's VIC-II half (plan section 6.155). Written with the slice, so this unit is a",
         "measurement from its first run rather than a test of a reconstruction.",
         "",
-        "WHAT MAKES THE MUTANTS WORTH RUNNING HERE is that four of the handler's six registers do",
-        "not reach anything a player sees. `shango`, `santana`, `lotus` and the memory pointers are",
-        "programmed correctly by the port and consumed by nothing, so only the oracle's write-order",
-        "comparison can tell a right value from a wrong one -- which is the whole reason that",
-        "comparison is a sequence rather than a final state.",
+        "FOUR of the handler's six registers reach the screen and they are two effects. `moonflower`",
+        "and `welcome` are the energy bomb; `santana` and `lotus` are how the explosion sprite is kept",
+        "out of the dashboard, which is a colour change rather than a clip. The other two -- `shango`",
+        "and the memory pointers -- are programmed correctly and consumed by nothing, so only the",
+        "oracle's write-ORDER comparison can tell a right value from a wrong one there. That is why",
+        "the comparison is a sequence and not a final state.",
         "",
-        "The two that DO reach the screen are `moonflower` and `welcome`, and they are the energy",
-        "bomb. `ra-bomb-bit` and `ra-flash-half` are the mutants on them."
+        "`ra-blit-per-sprite` is the one mutant outside `Raster.cpp`, and it is here rather than in a",
+        "canvas unit because what it breaks is this routine's output being read per screen row."
       ],
       "mutants": [
         {
@@ -682,12 +683,28 @@
           "note": "zebop is a CONSTANT and abraxas is state, which is the whole reason that pair is not a table. Reading the variable for both halves would colour the space view from the dashboard's block whenever the dashboard is up -- invisible in the port today, because Resolve takes the upper half's block as fixed, and caught only by the oracle's VIC+&18 write."
         },
         {
-          "id": "ra-sprite-colour",
+          "id": "ra-explosion-colour",
           "file": "GameLogic/Raster.cpp",
-          "find": "    out.spriteColour = RASTER_SPRITE_COLOUR_TABLE[index];",
-          "replace": "    out.spriteColour = RASTER_SPRITE_COLOUR_TABLE[1u - index];",
+          "find": "    out.explosionColour = RASTER_SPRITE_COLOUR_TABLE[index];",
+          "replace": "    out.explosionColour = RASTER_SPRITE_COLOUR_TABLE[1u - index];",
           "expect": "caught",
-          "note": "lotus read the wrong way round. One of the four registers nothing in the port consumes yet, so this mutant exists to prove the sequence comparison is what is holding them: swap the two entries and only the oracle notices."
+          "note": "lotus read the wrong way round: VIC+&28 is SPRITE 1's colour, so this swaps the explosion's red into the dashboard half and its invisibility into the space view. Caught by the oracle's write order AND by the two compositing tests, which is the point -- until slice 4f this register reached nothing and only the first would have."
+        },
+        {
+          "id": "ra-sprite-mask",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.spriteMulticolour = RASTER_SPRITE_MULTICOLOUR_TABLE[index];",
+          "replace": "    out.spriteMulticolour = RASTER_SPRITE_MULTICOLOUR_TABLE[0];",
+          "expect": "caught",
+          "note": "santana, which differs between the halves in exactly one bit -- sprite 1's. Taking the space view's mask for both halves leaves the explosion multicolour over the dashboard, which is the defect the port had before 4f read the register at all."
+        },
+        {
+          "id": "ra-blit-per-sprite",
+          "file": "GameLogic/Canvas.cpp",
+          "find": "          const std::size_t half = (y >= Canvas::SPACE_VIEW_HEIGHT) ? 1u : 0u;",
+          "replace": "          const std::size_t half = 0u;",
+          "expect": "caught",
+          "note": "Deciding a sprite's mode once instead of per screen row. The VIC-II decides it as it scans, which is why a burst that straddles the split is drawn on one side only; pinning the half to the space view's draws the whole thing over the dashboard."
         }
       ]
     }

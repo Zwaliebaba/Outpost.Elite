@@ -33,9 +33,16 @@ namespace Elite
     // 6502: LDA shango,X / STA VIC+&12 -- where the NEXT interrupt fires, which is what alternates.
     out.nextRasterLine = RASTER_NEXT_LINE_TABLE[index];
 
-    // 6502: LDA santana,X / STA VIC+&1C and LDA lotus,X / STA VIC+&28.
+    /*
+     * 6502: LDA santana,X / STA VIC+&1C and LDA lotus,X / STA VIC+&28.
+     *
+     * The pair that clips the explosion. `santana` is %11111110 for the space view and %11111100
+     * for the dashboard, so sprite 1 alone changes mode across the split; `lotus` is 2 and 0, and
+     * VIC+&28 is sprite 1's own colour register. Multicolour in red above, single-colour in colour
+     * 0 below -- and a single-colour sprite in colour 0 draws nothing.
+     */
     out.spriteMulticolour = RASTER_SPRITE_MULTICOLOUR_TABLE[index];
-    out.spriteColour = RASTER_SPRITE_COLOUR_TABLE[index];
+    out.explosionColour = RASTER_SPRITE_COLOUR_TABLE[index];
 
     /*
      * 6502: BIT BOMB / BPL nobombef / INC welcome.

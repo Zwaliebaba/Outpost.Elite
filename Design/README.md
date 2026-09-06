@@ -14,7 +14,7 @@ rights holders. Plan §1.2 lists the three in one place. ADR-005 §1's raster ef
 list until 2026-09-06 and are built now, as slice 4f — the energy bomb shows, and the hyperspace
 tearing turned out not to exist in this build at all (§6.155). **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->382 tests** and
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->384 tests** and
 CI runs **<!--count:checks-->eleven repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits

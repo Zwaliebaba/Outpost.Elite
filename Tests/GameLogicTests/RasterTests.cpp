@@ -4,6 +4,7 @@
 #include "OracleImage.h"
 #include "Canvas.h"
 #include "Raster.h"
+#include "VideoState.h"
 
 #include <array>
 #include <string>
@@ -108,7 +109,7 @@ namespace GameLogicTests
         {VIC_BASE + 0x16, _registers.control2},
         {VIC_BASE + 0x12, _registers.nextRasterLine},
         {VIC_BASE + 0x1C, _registers.spriteMulticolour},
-        {VIC_BASE + 0x28, _registers.spriteColour},
+        {VIC_BASE + 0x28, _registers.explosionColour},
         {VIC_BASE + 0x21, _registers.background},
       }};
     }
@@ -302,6 +303,101 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint32_t>(13, loud[5], L"and is two columns wide");
       Assert::AreEqual<std::uint32_t>(2, loud[6], L"%01 takes the cell's high nibble");
       Assert::AreEqual<std::uint32_t>(2, loud[7], L"and is two columns wide");
+    }
+
+    /*
+     * 6502: santana and lotus -- how the original keeps explosions out of the dashboard.
+     *
+     * NOT A CLIP RECTANGLE. `COMIRQ1` writes %11111110 to VIC+&1C above the split, which makes
+     * sprite 1 multicolour, and 2 to VIC+&28, which is red; below the split it writes %11111100 and
+     * 0, which makes the same sprite single-colour in colour 0. A single-colour sprite in colour 0
+     * paints nothing, so the burst simply stops existing at row 144 -- and the upstream comment
+     * says that is the point.
+     *
+     * The port read the mode off the DEFINITION until slice 4f, on the stated grounds that the game
+     * never writes VIC+&1C. It writes it twice a frame. So the explosion was drawn hi-res in colour
+     * 0 -- invisible everywhere -- and would have drawn over the dashboard the moment a colour was
+     * given to it (§6.155).
+     */
+    TEST_METHOD(TheExplosionIsMulticolourAboveTheSplitAndGoneBelowIt)
+    {
+      Elite::Canvas canvas;
+
+      // 6502: SPOFF% + 4 -- the explosion cloud is the fifth of the seven definitions.
+      canvas.Write(static_cast<std::uint16_t>(Elite::Canvas::SCREEN_CELLS + 0x3F8u + Elite::EXPLOSION_SPRITE),
+                   static_cast<std::uint8_t>(Elite::SPRITE_POINTER_ORIGIN + 4u));
+
+      Elite::VideoState video{};
+      Elite::ApplySpritesEnabled(video, 1u << Elite::EXPLOSION_SPRITE);
+
+      std::array<std::uint8_t, Elite::Canvas::WIDTH * Elite::Canvas::HEIGHT> image{};
+
+      // High in the space view: multicolour, and `lotus`'s red is what %10 takes.
+      video.x[Elite::EXPLOSION_SPRITE] = Elite::SPRITE_ORIGIN_X + 100u;
+      video.y[Elite::EXPLOSION_SPRITE] = Elite::SPRITE_ORIGIN_Y + 40u;
+      canvas.Resolve(image, video);
+
+      std::size_t painted = 0;
+      bool red = false;
+      for (const std::uint8_t pixel : image)
+      {
+        painted += (pixel != 0u) ? 1u : 0u;
+        red = red || (pixel == 2u);
+      }
+      Assert::IsTrue(painted > 0u, L"the burst is drawn in the space view");
+      Assert::IsTrue(red, L"and lotus's red is on the screen");
+
+      // Wholly below the split: single colour, and that colour is zero.
+      video.y[Elite::EXPLOSION_SPRITE] =
+        static_cast<std::uint8_t>(Elite::SPRITE_ORIGIN_Y + Elite::Canvas::SPACE_VIEW_HEIGHT + 4);
+      image.fill(0u);
+      canvas.Resolve(image, video);
+
+      for (const std::uint8_t pixel : image)
+      {
+        Assert::AreEqual<std::uint32_t>(0u, pixel, L"below the split the burst paints nothing at all");
+      }
+    }
+
+    /*
+     * And a burst that straddles the split is drawn on one side of it only.
+     *
+     * The VIC-II decides the mode as it scans, so one sprite is two sprites when it crosses row
+     * 144. The port decides per screen row for that reason, and this is the assertion that a model
+     * deciding once per sprite would fail whichever way it decided.
+     */
+    TEST_METHOD(ABurstAcrossTheSplitIsCutOffAtIt)
+    {
+      Elite::Canvas canvas;
+      canvas.Write(static_cast<std::uint16_t>(Elite::Canvas::SCREEN_CELLS + 0x3F8u + Elite::EXPLOSION_SPRITE),
+                   static_cast<std::uint8_t>(Elite::SPRITE_POINTER_ORIGIN + 4u));
+
+      Elite::VideoState video{};
+      Elite::ApplySpritesEnabled(video, 1u << Elite::EXPLOSION_SPRITE);
+      video.x[Elite::EXPLOSION_SPRITE] = Elite::SPRITE_ORIGIN_X + 100u;
+
+      // Ten rows above the split, so eleven of the sprite's twenty-one land below it.
+      video.y[Elite::EXPLOSION_SPRITE] = static_cast<std::uint8_t>(Elite::SPRITE_ORIGIN_Y + Elite::Canvas::SPACE_VIEW_HEIGHT - 10);
+
+      std::array<std::uint8_t, Elite::Canvas::WIDTH * Elite::Canvas::HEIGHT> image{};
+      canvas.Resolve(image, video);
+
+      std::size_t above = 0;
+      std::size_t below = 0;
+      for (int y = 0; y < Elite::Canvas::HEIGHT; ++y)
+      {
+        for (int x = 0; x < Elite::Canvas::WIDTH; ++x)
+        {
+          if (image[static_cast<std::size_t>(y) * Elite::Canvas::WIDTH + x] == 0u)
+          {
+            continue;
+          }
+          ((y < Elite::Canvas::SPACE_VIEW_HEIGHT) ? above : below) += 1u;
+        }
+      }
+
+      Assert::IsTrue(above > 0u, L"the rows in the space view are drawn");
+      Assert::AreEqual<std::size_t>(0u, below, L"and the rows over the dashboard are not");
     }
 
     /*

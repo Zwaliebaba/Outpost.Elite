@@ -217,6 +217,30 @@ namespace Elite
     }
 
     /*
+     * 6502: VIC+&1C and VIC+&28 as `COMIRQ1` leaves them -- index 0 is the space view's pass and
+     * index 1 the dashboard's.
+     *
+     * `santana` is which sprites are multicolour and `lotus` is sprite 1's colour, and the pair
+     * exists to do ONE thing: keep the explosion inside the space view. Above the split sprite 1 is
+     * multicolour and red; below it, single-colour in colour 0, which draws nothing. The port takes
+     * both per screen row, because a burst near the bottom of the view straddles the split and the
+     * VIC-II decides this as it scans (§6.155).
+     *
+     * The defaults are the values `santana` and `lotus` hold, so a canvas nobody has wired to the
+     * raster tick still composites the way the hardware does.
+     */
+    void SetSpriteMulticolour(std::uint8_t _spaceView, std::uint8_t _dashboard) noexcept
+    {
+      m_spriteMulticolour[0] = _spaceView;
+      m_spriteMulticolour[1] = _dashboard;
+    }
+    void SetExplosionColour(std::uint8_t _spaceView, std::uint8_t _dashboard) noexcept
+    {
+      m_explosionColour[0] = _spaceView;
+      m_explosionColour[1] = _dashboard;
+    }
+
+    /*
      * 6502: DFLAG, and the `abraxas` / `caravanserai` pair it drives -- is the dashboard on screen?
      *
      * ONE FLAG, TWO EFFECTS, and they always move together: with the dashboard shown, character
@@ -282,6 +306,10 @@ namespace Elite
     std::uint8_t m_background = 0;
     std::uint8_t m_spaceViewBackground = 0;
     bool m_spaceViewMulticolour = false;
+
+    /// 6502: santana and lotus -- see `SetSpriteMulticolour`. Initialised to what the game holds.
+    std::uint8_t m_spriteMulticolour[2] = {0xFEu, 0xFCu};
+    std::uint8_t m_explosionColour[2] = {0x02u, 0x00u};
     bool m_dashboardShown = false;
   };
 

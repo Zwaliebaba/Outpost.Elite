@@ -19,11 +19,13 @@ namespace Elite
    * registers from them. Four of the seven are constants (`LookupTables.h`); the other three have a
    * second byte that is a separately named variable something writes, so they are `ScreenState`.
    *
-   * WHAT THIS IS FOR, since the port has no interrupts. Two of those registers are the energy
-   * bomb: `moonflower` puts the SPACE VIEW into multicolour mode while the bomb burns, and
-   * `welcome` is the background colour the handler increments on every pass, which is the flashing.
-   * Neither is reachable any other way -- both are written by the flight loop and read only here --
-   * so without this the port carries the bomb's state and never shows it (§6.155).
+   * WHAT THIS IS FOR, since the port has no interrupts. FOUR of the six registers reach the screen
+   * and they are two effects. `moonflower` and `welcome` are the ENERGY BOMB: the first puts the
+   * space view into multicolour while the bomb burns and the second is the background colour the
+   * handler increments on every pass, which is the flashing. `santana` and `lotus` are the
+   * EXPLOSION SPRITE, and together they are how the original keeps it out of the dashboard --
+   * multicolour and red above the raster split, single-colour in colour 0 below it, which paints
+   * nothing. Not a clip rectangle; a colour change (§6.155).
    *
    * The sound half of the same handler is `RunSoundInterrupt` (§6.129), and the two are deliberately
    * separate: `COMIRQ1` reaches the sound only on the pass that leaves `RASTCT` at zero, and the
@@ -52,8 +54,8 @@ namespace Elite
     std::uint8_t memoryPointers = 0;     ///< 6502: VIC+&18 -- zebop / abraxas
     std::uint8_t control2 = 0;           ///< 6502: VIC+&16 -- moonflower / caravanserai
     std::uint8_t nextRasterLine = 0;     ///< 6502: VIC+&12 -- shango
-    std::uint8_t spriteMulticolour = 0;  ///< 6502: VIC+&1C -- santana
-    std::uint8_t spriteColour = 0;       ///< 6502: VIC+&28 -- lotus
+    std::uint8_t spriteMulticolour = 0;  ///< 6502: VIC+&1C -- santana, which sprites are multicolour
+    std::uint8_t explosionColour = 0;    ///< 6502: VIC+&28 -- lotus, and &28 is SPRITE 1's colour
     std::uint8_t background = 0;         ///< 6502: VIC+&21 -- welcome
 
     /// True on the pass that sets up the space view, which is `RASTCT` = 0.
