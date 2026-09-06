@@ -39,14 +39,14 @@
       "slice": "M3-b-3c: Main.cpp's DeathPacing goes -- the library counts the ships and asks the presenter"
     },
     "outpost-elite-names": {
-      "ceiling": 166,
+      "ceiling": 165,
       "slack": 0,
-      "slice": "M3-b-3d: RDKEY moves into the library, and the app stops naming what it walked"
+      "slice": "M3-b-4a: TextEffects is not a name the app reaches any more"
     },
     "effects-seams": {
-      "ceiling": 11,
+      "ceiling": 10,
       "slack": 0,
-      "slice": "M3-b-3d: LineEntryEffects goes and Keyboard replaces two seams with one"
+      "slice": "M3-b-4a: clss is ClearTextArea, which the library has had since slice 2a"
     },
     "out-params": {
       "ceiling": 17,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3924,
+      "ceiling": 3923,
       "slack": 0,
-      "slice": "M3-b-3d: RDKEY's markers move from Outpost/ into GameLogic/ with the routine (rule 4)"
+      "slice": "M3-b-4a: one marker for clss where the seam and the printer each had one"
     },
     "oracle-test-files": {
       "ceiling": 50,

@@ -379,12 +379,19 @@ namespace Elite
 
     if (m_state.row >= 24)
     {
-      // 6502: JMP clss -- off the bottom, so clear the screen and print the character again.
-      if (m_effects != nullptr)
-      {
-        m_effects->ClearScreen();
-        PrintGlyph(_character);
-      }
+      /*
+       * 6502: JMP clss -- `JSR TT66simp`, then `LDA K3 / JMP RRafter`, which is the character
+       * printed again on the fresh screen.
+       *
+       * IT IS `TT66simp` AND NOT `TT66`, and until M3-b-4a this was a seam the executable answered
+       * with the whole of `TT66` -- the palette, the dashboard, the sprites, the border and `QQ11`
+       * (§8). `ClearTextArea` is the routine: rows 1 to 23 of the bitmap and the cursor home to
+       * (1, 1), with row 0 and the dashboard left alone.
+       *
+       * The recursion terminates because the clear leaves `YC` at 1.
+       */
+      ClearTextArea(m_canvas, m_state);
+      PrintGlyph(_character);
       return;
     }
 

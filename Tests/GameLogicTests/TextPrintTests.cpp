@@ -126,7 +126,7 @@ namespace GameLogicTests
               state.column = static_cast<std::uint8_t>(column);
               state.row = static_cast<std::uint8_t>(row);
               state.cellColour = colour;
-              TextPrinter printer(canvas, state, nullptr);
+              TextPrinter printer(canvas, state);
               const std::uint8_t returned = printer.Print(static_cast<std::uint8_t>(character));
 
               const std::wstring context = L"CHPR '" + std::to_wstring(character) + L"' at (" + std::to_wstring(column) + L"," +
@@ -144,6 +144,81 @@ namespace GameLogicTests
 
       Logger::WriteMessage(("CHPR: " + std::to_string(compared) + " printable characters compared\n").c_str());
       Assert::AreEqual<std::uint32_t>(2u * 4u * 7u * 96u, compared, L"the sweep should not have been narrowed");
+    }
+
+    /*
+     * 6502: clss -- a character printed below the last row, which is the path M3-b-4a un-seamed.
+     *
+     * THE SWEEP ABOVE STOPS AT ROW 23 and this is the row after it, which is the whole reason this
+     * method exists: `clss` was a `TextEffects` seam until M3-b-4a, the executable answered it with
+     * the whole of `TT66` where the game runs `TT66simp`, and no test reached the branch to say so
+     * (§8). Both sides run their own routine now and the comparison is the screen.
+     *
+     * BOTH SCREENS ARE SEEDED WITH INK FIRST. `TT66simp` clears rows 1 to 23 and leaves row 0 and
+     * the dashboard alone, so a comparison over two blank screens would pass whether the routine
+     * cleared everything, nothing, or exactly the right band -- which is the difference this is
+     * for. The pattern is the offset itself, so a byte that moved is a byte that names where it
+     * came from.
+     */
+    TEST_METHOD(TheOffTheBottomPathMatchesClss)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+      const OracleImage& oracle = OracleImage::Instance();
+      const Scratch zp(oracle);
+      const std::uint16_t routine = oracle.Label("CHPR");
+
+      std::uint32_t compared = 0;
+
+      for (const std::uint32_t row : {24u, 25u, 30u})
+      {
+        for (const std::uint32_t column : {1u, 15u, 30u})
+        {
+          for (const std::uint8_t character : {std::uint8_t{' '}, std::uint8_t{'A'}, std::uint8_t{'~'}})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            Canvas canvas;
+            for (std::uint16_t offset = 0; offset < Canvas::SCREEN_SIZE; ++offset)
+            {
+              const std::uint8_t ink = static_cast<std::uint8_t>((offset * 7u) + 3u);
+              cpu.memory[static_cast<std::uint16_t>(zp.screen + offset)] = ink;
+              canvas.Write(offset, ink);
+            }
+
+            cpu.memory[zp.xc] = static_cast<std::uint8_t>(column);
+            cpu.memory[zp.yc] = static_cast<std::uint8_t>(row);
+            cpu.memory[zp.qq17] = 0;
+            cpu.memory[zp.col2] = 0x40;
+            cpu.a = character;
+            cpu.x = cpu.y = 0;
+            cpu.sp = 0xFD;
+
+            const auto run = cpu.CallSubroutine(routine, 200'000);
+            Assert::IsTrue(run.completed, L"CHPR should return through clss");
+
+            TextState state;
+            state.column = static_cast<std::uint8_t>(column);
+            state.row = static_cast<std::uint8_t>(row);
+            state.cellColour = 0x40;
+            TextPrinter printer(canvas, state);
+            const std::uint8_t returned = printer.Print(character);
+
+            const std::wstring context = L"clss '" + std::to_wstring(character) + L"' at (" + std::to_wstring(column) + L"," +
+                                         std::to_wstring(row) + L")";
+
+            CompareScreens(cpu, zp.screen, canvas, context);
+            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.xc], state.column, (context + L": XC").c_str());
+            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.yc], state.row, (context + L": YC").c_str());
+            Assert::AreEqual<std::uint32_t>(cpu.a, returned, (context + L": returned character").c_str());
+            ++compared;
+          }
+        }
+      }
+
+      Logger::WriteMessage(("clss: " + std::to_string(compared) + " off-the-bottom prints compared on the whole screen\n").c_str());
+      Assert::AreEqual<std::uint32_t>(3u * 3u * 3u, compared, L"the sweep should not have been narrowed");
     }
 
     /*
@@ -187,7 +262,7 @@ namespace GameLogicTests
             TextState state;
             state.column = static_cast<std::uint8_t>(column);
             state.row = static_cast<std::uint8_t>(row);
-            TextPrinter printer(canvas, state, nullptr);
+            TextPrinter printer(canvas, state);
             printer.Print(static_cast<std::uint8_t>(code));
 
             const std::wstring context =
@@ -285,7 +360,7 @@ namespace GameLogicTests
       state.column = 1;
       state.row = 1;
       state.cellColour = Elite::TEXT_COLOUR_WHITE;
-      TextPrinter printer(canvas, state, nullptr);
+      TextPrinter printer(canvas, state);
       printer.Print('A');
 
       std::array<std::uint8_t, static_cast<std::size_t>(Canvas::WIDTH) * Canvas::HEIGHT> resolved{};
@@ -329,7 +404,7 @@ namespace GameLogicTests
         state.column = 4;
         state.row = 6;
         state.caseFlags = 0xFF;
-        TextPrinter printer(canvas, state, nullptr);
+        TextPrinter printer(canvas, state);
         printer.Print(static_cast<std::uint8_t>(character));
 
         CompareScreens(cpu, zp.screen, canvas, L"suppressed " + std::to_wstring(character));

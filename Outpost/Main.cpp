@@ -88,7 +88,7 @@ namespace
   {
     Game()
       : shell(window, presenter, universe.canvas, universe.view),
-        screen(universe.canvas, universe.text, &shell, &universe.sound),
+        screen(universe.canvas, universe.text, &universe.sound),
         characters(screen),
         recursive(characters),
         values(recursive, universe.text, universe.commander, universe.commanderName, universe.current.seeds, universe.selectedSeeds,

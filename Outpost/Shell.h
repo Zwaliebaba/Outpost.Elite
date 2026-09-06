@@ -52,7 +52,6 @@ namespace Outpost
   class GameShell final : public Elite::Presenter,
                           public Elite::StartUpEffects,
                           public Elite::ControlCodes,
-                          public Elite::TextEffects,
                           public Elite::Keyboard
   {
   public:
@@ -160,10 +159,9 @@ namespace Outpost
     /// 165 Hz panel that span the ship twenty times too fast when this was a plain present.
     void HoldTitleFrame(std::uint8_t _distance) override;
 
-    // ---- Elite::ControlCodes and Elite::TextEffects ---------------------------------------------
+    // ---- Elite::ControlCodes -----------------------------------------------------------------------
 
     void Run(std::uint8_t _code) override;
-    void ClearScreen() override;
 
     /// 6502: QQ11 -- which screen is showing. See `m_view`: the byte is the composition root's,
     /// because the flight half writes it too.
