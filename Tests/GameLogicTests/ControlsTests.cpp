@@ -340,13 +340,15 @@ namespace GameLogicTests
           cpu.memory[static_cast<std::uint16_t>(klo + slot)] = keys[slot];
         }
 
-        Elite::ShipBlock work{};
+        Elite::Ship work{};
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           // A block that is not already zero, so `ZINF` has something to clear.
-          work[byte] = static_cast<std::uint8_t>(0x5Au + byte);
-          cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+          shipBytes[byte] = static_cast<std::uint8_t>(0x5Au + byte);
+          cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = shipBytes[byte];
         }
+        work = Elite::Ship::FromBytes(shipBytes);
 
         cpu.memory[autoPilot] = item.docking;
         cpu.memory[jstk] = item.joystick;
@@ -371,12 +373,12 @@ namespace GameLogicTests
           {
             ++scans;
           }
-          void RunDockingComputer(Elite::ShipBlock& _work) override
+          void RunDockingComputer(Elite::Ship& _work) override
           {
-            _work[27] = static_cast<std::uint8_t>(_work[27] ^ answer.speed);
-            _work[28] = answer.acceleration;
-            _work[29] = answer.roll;
-            _work[30] = answer.pitch;
+            _work.speed = static_cast<std::uint8_t>(_work.speed ^ answer.speed);
+            _work.acceleration = answer.acceleration;
+            _work.rollCounter = answer.roll;
+            _work.pitchCounter = answer.pitch;
             ++runs;
           }
         } effects;
@@ -393,7 +395,7 @@ namespace GameLogicTests
 
         Elite::FlightState flight;
         flight.delta = 7u;
-        flight.type = 0u;
+        flight.type = Elite::ShipType::None;
 
         Elite::ReadFlightControls(keys, control, options, work, flight, effects);
 
@@ -406,7 +408,7 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.memory[jstx], control.roll, (where + L": JSTX").c_str());
         Assert::AreEqual(cpu.memory[jsty], control.pitch, (where + L": JSTY").c_str());
         Assert::AreEqual(cpu.memory[delta], flight.delta, (where + L": DELTA").c_str());
-        Assert::AreEqual(cpu.memory[type], flight.type, (where + L": TYPE").c_str());
+        Assert::AreEqual(cpu.memory[type], Elite::Byte(flight.type), (where + L": TYPE").c_str());
 
         for (std::size_t slot = 0; slot < keys.size(); ++slot)
         {
@@ -415,7 +417,7 @@ namespace GameLogicTests
         }
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                            (where + L": INWK+" + std::to_wstring(byte)).c_str());
         }
 
@@ -505,17 +507,17 @@ namespace GameLogicTests
 
             FillScreens(cpu, canvas, screen, 0x6Du);
 
-            Elite::CommanderBlock commander;
+            Elite::Commander commander;
             for (std::uint8_t slot = 0; slot < 4u; ++slot)
             {
               // A different laser on every other view, so a port that ignored VIEW would be caught.
               const std::uint8_t fitted = (slot == which) ? laser : Elite::LASER_BEAM;
-              commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + slot] = fitted;
+              commander.lasers[slot] = fitted;
               cpu.memory[static_cast<std::uint16_t>(laserBase + slot)] = fitted;
             }
 
-            commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)] = 0x77u;
-            commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = population;
+            commander.tribbles.lo = 0x77u;
+            commander.tribbles.hi = population;
             cpu.memory[tribble] = 0x77u;
             cpu.memory[static_cast<std::uint16_t>(tribble + 1)] = population;
 
@@ -551,18 +553,17 @@ namespace GameLogicTests
               void MaskSprites(std::uint8_t) override {}
             } effects;
 
-            Elite::MathWorkspace math;
-            math.t = 0x9Cu;
             Elite::TrumbleSprites trumbles;
             trumbles.count = 0x9Cu;
-            Elite::DrawLaserSights(canvas, math, commander, trumbles, which, effects);
+            Elite::DrawLaserSights(canvas, commander, trumbles, which, effects);
 
             const std::wstring where = Widen("SIGHT(laser " + std::to_string(laser) + " on view " + std::to_string(which) + ", Trumbles " +
                                              std::to_string(population) + ")");
 
             CompareScreens(cpu, screen, canvas, where);
             Assert::AreEqual(cpu.memory[tribct], trumbles.count, (where + L": TRIBCT").c_str());
-            Assert::AreEqual(cpu.memory[t], math.t, (where + L": T").c_str());
+            // `T` is `SIGHT`'s own since M2-c-3 -- one if a laser was found, zero if not -- and
+            // what it produced is the sprite-enable byte compared on the next line.
             Assert::AreEqual(cpu.memory[vicEnable], effects.enabled, (where + L": VIC+&15").c_str());
 
             // The colour register is only written when a laser was found, so a case with none

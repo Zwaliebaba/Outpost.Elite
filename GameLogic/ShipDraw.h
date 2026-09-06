@@ -3,6 +3,7 @@
 #include "Arith.h"
 #include "Canvas.h"
 #include "LineHeap.h"
+#include "Rng.h"
 #include "ShipSlot.h"
 
 #include <array>
@@ -32,13 +33,6 @@ namespace Elite
   /// the dashboard starts on, so it is the first row a ship may not occupy.
   inline constexpr std::uint8_t SPACE_VIEW_BOTTOM = 2 * SPACE_VIEW_CENTRE_Y;
 
-  /// 6502: the coordinate bytes of a ship's data block -- x, y and z, each a sixteen-bit magnitude
-  /// and a sign byte. Named here rather than in `ShipSlot.h` because this is the first code that
-  /// reads them as a POSITION rather than as bytes to copy about.
-  inline constexpr std::uint8_t SHIP_X_OFFSET = 0;
-  inline constexpr std::uint8_t SHIP_Y_OFFSET = 3;
-  inline constexpr std::uint8_t SHIP_Z_OFFSET = 6;
-
   /*
    * What `PLS6` leaves behind. The original's contract is "(X K)", a sixteen-bit value split
    * between a register and a zero-page byte, plus the carry -- and plus A, which is not incidental
@@ -67,7 +61,11 @@ namespace Elite
    * the projection -- it exists to divide by a ship's distance, and its callers are `PLS6` here
    * and `PLANET`/`PLS1` in slice 3c. Nothing in the movement code calls it.
    */
-  void DivideByShipZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
+  /// `_numerator` is (A P+1 P) -- a coordinate's shape, the sign in the top byte -- and the
+  /// quotient is left in `K`, where `PLS1`, `PLS6` and `PLANET` read it (M2-c takes it further).
+  /// Returns `K(3 2 1 0)`, the quotient -- a value since M2-c-3. `_math` is still here for one
+  /// byte: `DV9`'s `STA Q`, which is the frame's `Q` (Modernize.md section 8, risk R22).
+  KBlock DivideByShipZ(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
 
   /*
    * 6502: PLS6 (with its PL21, PL44 and PL6 exits) -- (X K) = (A P+1 P) / z, overflowing at 1024.
@@ -81,7 +79,7 @@ namespace Elite
    * where a sign-magnitude number is converted, because a screen coordinate is an offset from the
    * centre and has to be added to it.
    */
-  [[nodiscard]] ScreenOffset DivideToScreenOffset(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
+  [[nodiscard]] ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, SignMag24 _numerator) noexcept;
 
   /// 6502: K3(1 0) and K4(1 0) -- where a point landed on the screen, as sixteen bits per axis so
   /// that a shape whose centre is off the edge still has somewhere to be drawn from. These are the
@@ -120,7 +118,7 @@ namespace Elite
    * stored and K4 has not, and the original leaves it that way; no caller reads either after an
    * overflow, but a port that computed both and assigned at the end would be a different routine.
    */
-  ProjectResult Project(const ShipBlock& _ship, MathWorkspace& _math, Projection& _screen) noexcept;
+  ProjectResult Project(const Ship& _ship, MathWorkspace& _math, Projection& _screen) noexcept;
 
   /*
    * 6502: LL155, with the LL27 loop it is the head of -- draw every line on a ship's line heap.
@@ -128,12 +126,12 @@ namespace Elite
    * Byte 0 of the heap is its length in bytes, and under four there is not a whole line there, so
    * nothing is drawn. Everything after it is groups of four: x1, y1, x2, y2, which are `XX15` to
    * `XX15+3` -- the SAME zero-page bytes as `X1`, `Y1`, `X2`, `Y2`, so the loop writes straight into
-   * `LOIN`'s arguments and calls it. `DrawWorkspace` is those four bytes here.
+   * `LOIN`'s arguments and calls it. Each group is one `Line` here.
    *
    * `LOIN` plots by EOR, so this both draws a ship and rubs it out; which one it is depends only on
    * whether the same lines are already on the screen. That is the whole of Elite's ship animation.
    */
-  void DrawShipLines(Canvas& _canvas, DrawWorkspace& _draw, const LineHeap& _heap, std::uint16_t _address) noexcept;
+  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run) noexcept;
 
   /*
    * 6502: LL81 -- store the heap's length in byte 0 and fall straight into `LL155`.
@@ -143,7 +141,7 @@ namespace Elite
    * already in A. Both then draw. Ported as one function with the length as a parameter, because
    * the difference between the two entry points is only where the byte came from.
    */
-  void StoreLineCountAndDraw(Canvas& _canvas, DrawWorkspace& _draw, LineHeap& _heap, std::uint16_t _address, std::uint8_t _count) noexcept;
+  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept;
 
   /*
    * 6502: EE51 -- take the ship off the screen, if it is on it.
@@ -152,8 +150,32 @@ namespace Elite
    * screen. The routine clears it with an `EOR` (not an `AND`, because A already holds the mask and
    * the bit is known set) and redraws, which erases. If the bit is clear there is nothing there and
    * it returns through `LL10-1`, an `RTS` that belongs to the routine before it.
+   *
+   * RETURNS THE CARRY IT EXITS WITH, because the `EE55` block reads it (§6.157). It is not `LOIN`'s:
+   * `LL155` ends `INY / CPY XX20 / BCC LL27 / RTS`, so a heap with lines on it leaves the flag SET
+   * by the compare that ended the loop, whatever the line drawing did before it; a heap under four
+   * bytes leaves `CMP #4 / BCC LL82` -- CLEAR; and a ship that was not on the screen returns through
+   * a bare `RTS` with the flag the caller arrived with, which is `_carryIn`.
    */
-  void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, const LineHeap& _heap) noexcept;
+  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept;
+
+  /*
+   * 6502: the six instructions after `JSR EE51` in `LL9` part 1, and the `EE55` loop -- set up a
+   * newly killed ship's explosion cloud on its line heap.
+   *
+   * Byte 1 is 18, the counter `DOEXP` ages; byte 2 is `(XX0),7`, how many vertices the cloud
+   * blooms from, which arrives as the blueprint's `explosionCount`; bytes 3 to 6 are `DORND`. The
+   * FIRST `DORND` rolls in the carry `EE51` returned, and the other three run on the CLEAR that
+   * `CPY #6` leaves while Y is still under six.
+   *
+   * THIS WAS A SEAM WITH NOTHING BEHIND IT UNTIL 2026-09-06, on the belief that the carry came out
+   * of `LOIN` and could not be known (§6.91). With the six bytes never written, `DOEXP` read byte 2
+   * as zero, ran its vertex copy from index 0 down through 255 to 7, and wrote two hundred and
+   * fifty bytes of `XX3` over every line heap above the dying ship's -- which the ships owning those
+   * heaps then drew as lines, all over the screen and past the bottom of the bitmap into screen
+   * RAM. The death sequence was where it showed (§6.157).
+   */
+  void SeedExplosionCloud(LineHeap& _heap, HeapOffset _run, std::uint8_t _explosionCount, Rng& _rng, bool _carryIn) noexcept;
 
   /*
    * 6502: SHPPT, with its `Shpt` helper and its `nono` exit -- a distant ship, drawn as a dot.
@@ -168,8 +190,7 @@ namespace Elite
    * last one was, and reproducing that is why `_screen` is a parameter that outlives the call
    * rather than a local. It is a bug in the original, forty years old and shipped.
    */
-  void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, LineHeap& _heap, MathWorkspace& _math,
-                       Projection& _screen) noexcept;
+  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen) noexcept;
 
   /*
    * 6502: XX16 and XX12 -- the workspace `LL9`'s geometry runs in (slice 3b).
@@ -214,27 +235,19 @@ namespace Elite
      */
     std::array<std::uint8_t, 260> xx3{};
 
-    /// 6502: XX4 -- the ship's distance, as the visibility test's units. Thirty-one until part 2
-    /// works out the real one, and zero while the ship is exploding so that everything is drawn.
-    std::uint8_t xx4 = 0;
-
-    /// 6502: XX17 -- how far each of `LL9`'s three loops has walked, in its own units: vertices in
-    /// part 6, edges in part 10, and a shift count in part 5.
-    std::uint8_t xx17 = 0;
-
-    /// 6502: XX18 -- the ship's position copied out of `INWK`, halved until it fits, and then
-    /// replaced by its own dot products with the orientation vectors.
-    std::array<std::uint8_t, 9> xx18{};
-
-    /// 6502: XX20 -- what each loop counts up to, taken from the blueprint's header.
-    std::uint8_t xx20 = 0;
-
-    // 6502: CNT -- where the next projected vertex goes in `XX3`, in bytes -- is on
-    // `MathWorkspace`. It is not this workspace's byte: fourteen routines share it (§6.49).
-
-    /// 6502: V(1 0) -- a walker into the blueprint. An address here, because the blueprints are one
-    /// address-indexed region (§6.32) rather than an array per ship.
-    std::uint16_t v = 0;
+    /*
+     * 6502: XX4, XX17, XX18, XX20, V(1 0) and CNT went with M2-c-3.
+     *
+     * They are `LL9`'s own -- the distance threshold, the three loops' counters, the position it
+     * halves, the loops' bounds, the blueprint walker and where the next vertex goes in `XX3` --
+     * and they were zero page because parts 1 to 11 are eleven entry points sharing one workspace.
+     * `DrawShip` is one function, so they are its locals. `HFL5`'s `XX4` went with them: it counts
+     * the hyperspace rings and `LL9` part 1 overwrites the eight it leaves before reading it.
+     *
+     * What is left in this struct is the four stage results parts 3 to 11 hand each other, two of
+     * which have a reader outside the routine -- `DOEXP`'s copy of `XX3` and `DOCKIT`'s `XX2+10`
+     * (§6.125). That is why the frame is still a struct and not four more locals.
+     */
   };
 
   /*
@@ -251,7 +264,7 @@ namespace Elite
    * `XX15` and `XX16`. Those exist as part of `LL9`, it is called from `LL9` and nowhere else, and
    * it is built here (§6.37).
    */
-  void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept;
+  void DotProducts(Vector16 _vector, GeometryWorkspace& _geometry) noexcept;
 
   /*
    * The line clipper's arithmetic (slice 3b).
@@ -267,6 +280,89 @@ namespace Elite
   {
     std::uint8_t low = 0;  ///< 6502: X
     std::uint8_t high = 0; ///< 6502: Y
+
+    /*
+     * 6502: Q as the loop leaves it -- 0 after `LL122`, still the gradient after `LL121`.
+     *
+     * Not part of the step, and here because it is not the helpers' scratch either: `Q` is the
+     * frame's, and the altitude check reads whatever the frame last left in it (M2-b, §8; risk
+     * R22). `LL129` writes it and `LL122` shifts it, so a ship whose lines are clipped leaves a
+     * different `Q` behind than one whose are not -- which is observable, so it is carried out
+     * rather than made local with `R` and `S`.
+     */
+    std::uint8_t divisorLeft = 0;
+  };
+
+  /*
+   * 6502: XX15(1 0) and XX15(3 2) -- one end of a line, sixteen bits an axis, as `LL118` clamps it.
+   *
+   * It goes in as two sixteen-bit coordinates and comes out as two eight-bit ones in the same
+   * bytes: `xLow` and `yLow` hold the answer and the two high bytes are cleared. That aliasing is
+   * `XX15`'s own and is why the port keeps the four bytes together rather than as two integers.
+   */
+  struct Point16
+  {
+    std::uint8_t xLow = 0;  ///< 6502: XX15
+    std::uint8_t xHigh = 0; ///< 6502: XX15+1
+    std::uint8_t yLow = 0;  ///< 6502: XX15+2
+    std::uint8_t yHigh = 0; ///< 6502: XX15+3
+  };
+
+  /*
+   * 6502: XX15's six bytes with XX12(1 0) -- the line `LL145` takes.
+   *
+   * The second end's y is in `XX12(1 0)` and not in `XX15`, because `XX15` is six bytes and a line
+   * of two sixteen-bit points needs eight. `LL9` part 10 fills both, and so does `BLINE`.
+   */
+  struct Line16
+  {
+    Point16 first;  ///< 6502: XX15(1 0) and XX15(3 2)
+    Point16 second; ///< 6502: XX15(5 4) and XX12(1 0)
+  };
+
+  /*
+   * 6502: what `LL145` answers with -- the clipped line, the carry, `SWAP` and `XX13`.
+   *
+   * `ends` is `XX13`: 0 if the far end is on screen, 143 if neither end is, 71 if only the near one
+   * is. The upstream header gives 0, 95 and 191, which are the BBC's -- they are `Y*2-1` and half
+   * of it, and the C64's Y is 72 rather than 96. 143 has bit 7 SET, which is what `LL83` reads.
+   * `BLINE` reads it after the call, which is why it is here and not a local.
+   */
+  struct ClipResult
+  {
+    Line line;             ///< 6502: X1, Y1, X2, Y2 -- the same bytes as `XX15`, four of them
+    bool rejected = false; ///< 6502: the carry -- the line cannot be made to fit
+
+    /*
+     * 6502: SWAP, and a BYTE rather than a bool because `LL147` decrements it.
+     *
+     * `LL145` zeroes it first, so its answer is 0 or 255 and reads as "were the ends exchanged".
+     * `LL147` does not, and `LL9` part 10 clips edge after edge through it -- so the byte walks
+     * 255, 254, ... A `bool` would be right for the reader (`BLINE` tests it with `BNE`) and wrong
+     * for the byte, and the byte is what the sweep compares.
+     */
+    std::uint8_t swap = 0;
+
+    std::uint8_t ends = 0; ///< 6502: XX13
+  };
+
+  /*
+   * 6502: XX12+2, XX12+3 and T -- the line's gradient, its direction and which axis it is measured
+   * along, which is what `LL115` computes and `LL118`'s four clamps walk the point with.
+   */
+  struct Slope
+  {
+    std::uint8_t gradient = 0;  ///< 6502: XX12+2 -- `LL28`'s quotient, the smaller span over the larger
+    std::uint8_t direction = 0; ///< 6502: XX12+3 -- the two spans' signs EOR'd
+    std::uint8_t steep = 0;     ///< 6502: T -- 0 when the line moves further across than down, 255 when it does not
+  };
+
+  /// What `LL129` leaves: the divisor in `Q`, the magnitude in `(S R)`, and the sign in A.
+  struct PreparedSlope
+  {
+    SignMag16 magnitude;        ///< 6502: (S R), made positive -- `lo` is R and `hi` is S
+    std::uint8_t divisor = 0;   ///< 6502: Q, which is the gradient
+    std::uint8_t sign = 0;      ///< 6502: A -- the original S EOR'd with the slope's direction
   };
 
   /*
@@ -276,7 +372,7 @@ namespace Elite
    * the magnitude is made positive. Both callers push it and use it at the very end to decide
    * whether to negate, so it is a return value here rather than a side effect.
    */
-  [[nodiscard]] std::uint8_t PrepareSlope(MathWorkspace& _math, const GeometryWorkspace& _geometry) noexcept;
+  [[nodiscard]] PreparedSlope PrepareSlope(Slope _slope, SignMag16 _distance) noexcept;
 
   /*
    * 6502: LL120 and LL123, which are the same code with the dispatch the other way round.
@@ -288,8 +384,10 @@ namespace Elite
    * The result takes the OPPOSITE sign to the slope direction, which is why both end by negating
    * when `LL129`'s byte came out positive rather than negative.
    */
-  [[nodiscard]] SlopeStep StepAlongX(MathWorkspace& _math, const GeometryWorkspace& _geometry, const DrawWorkspace& _draw) noexcept;
-  [[nodiscard]] SlopeStep StepAlongY(MathWorkspace& _math, const GeometryWorkspace& _geometry) noexcept;
+  /// `_distance` is `(S R)`: how far off the edge the point is. `LL120` overwrites `R` with the
+  /// point's own low byte first, which is what `_xLow` is.
+  [[nodiscard]] SlopeStep StepAlongX(Slope _slope, std::uint8_t _distanceHigh, std::uint8_t _xLow) noexcept;
+  [[nodiscard]] SlopeStep StepAlongY(Slope _slope, SignMag16 _distance) noexcept;
 
   /*
    * 6502: LL118 -- move a point along its line until it is on the screen.
@@ -298,35 +396,27 @@ namespace Elite
    * are, then set the coordinate to the edge". The step is `LL120` for the x edges and `LL123` for
    * the y ones, which is the same code under a different reading of `T`.
    *
-   * The point goes IN as two sixteen-bit coordinates in `XX15(1 0)` and `XX15(3 2)` and comes out
-   * as two eight-bit ones in `XX15` and `XX15+2` -- so in this port's field names, x1 in `x1` and
-   * y1 in `x2`. That is `XX15`'s aliasing doing its work: `Y1` and `Y2` hold the high bytes going
-   * in and are cleared on the way out.
+   * The point goes IN as two sixteen-bit coordinates and comes out as two eight-bit ones in the
+   * same bytes -- `Point16`'s two high bytes are cleared on the way out, which is `XX15`'s aliasing
+   * doing its work.
+   *
+   * `_math` is here for one byte: each clamp leaves `Q` where its multiply or divide stopped, and
+   * that is the frame's `Q` (R22). `R` and `S` are the helpers' own and stop here.
    */
-  void MovePointOnScreen(DrawWorkspace& _draw, const GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept;
+  void MovePointOnScreen(Point16& _point, Slope _slope, MathWorkspace& _math) noexcept;
 
   /*
    * 6502: XX13 and dontclip -- what `LL145` reports, and the one flag that switches it off.
    *
-   * `dontclip` is NOT the clipper's own state: `TT23` sets it to 199 so that the short-range chart
-   * can use the whole screen instead of being clipped to the space view, and `RES2` clears it
-   * again. It is a slice-2 routine reaching into a slice-3b one, which the ledger's row does not
-   * say, so it is a parameter here rather than a constant. `TT23` writes `Yx2M1` in the same two
-   * instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` writes both.
-   *
-   * `SWAP` used to be here and is now on `DrawWorkspace`: `LOIN` writes the same byte and `WPLS2`
-   * reads what `LOIN` left, so it is not the clipper's to own (§6.46).
+   * `dontclip` is NOT the clipper's own scratch: `TT23` sets it to 199 so that the short-range
+   * chart can use the whole screen instead of being clipped to the space view, and `RES2` clears
+   * it again -- state one screen writes and another screen's clipper reads, which is why it is
+   * still a struct after M2-c-2 while `XX13` and `SWAP` became `ClipResult`'s fields. `TT23` writes
+   * `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice
+   * wires `TT23` writes both, and that is where this byte belongs with it.
    */
   struct ClipState
   {
-    /*
-     * 6502: XX13 -- 0 if the far end is on screen, 143 if neither end is, 71 if only the near one
-     * is. The upstream header gives 0, 95 and 191, which are the BBC's: they are `Y*2-1` and half
-     * of it, and the C64's Y is 72 rather than 96. 143 has bit 7 SET, which is what the test at
-     * `LL83` reads.
-     */
-    std::uint8_t xx13 = 0;
-
     /// 6502: dontclip -- bit 7 set means return the line unclipped.
     std::uint8_t dontclip = 0;
   };
@@ -334,29 +424,34 @@ namespace Elite
   /*
    * 6502: LL145 and LL147 -- clip a line to the screen.
    *
-   * In: three sixteen-bit coordinates, x1 in `XX15(1 0)`, y1 in `XX15(3 2)` and x2 in `XX15(5 4)`,
-   * with y2 in `XX12(1 0)`. Out: four eight-bit ones in `X1`, `Y1`, `X2`, `Y2` -- the SAME bytes,
-   * which is why `XX15` cannot be split into a geometry vector and a line (§6.37).
+   * In: two sixteen-bit points, which the original holds in `XX15`'s six bytes and `XX12(1 0)`.
+   * Out: four eight-bit coordinates in the SAME bytes, which is why `XX15` cannot be split into a
+   * geometry vector and a line (§6.37) -- and since M2-c-2 both are values.
    *
-   * Returns true when the line cannot be made to fit, which is the carry the original sets.
+   * `rejected` is the carry: the line cannot be made to fit.
    *
    * `LL147` is the second entry point and differs in ONE thing: it does not zero `SWAP` first, so a
-   * caller that clips several segments in a row accumulates the flag. `LL9` part 10 is its only
-   * caller and it happens to have `XX15+5` in the accumulator at the call, so the byte is passed
-   * explicitly here rather than assumed.
+   * caller that clips several segments in a row accumulates the flag -- `_swappedIn` is what it
+   * accumulates onto. `LL9` part 10 is its only caller and it happens to have `XX15+5` in the
+   * accumulator at the call, so `_secondXHigh` is passed explicitly rather than assumed.
+   * `_swapIn` is the `SWAP` byte `LL147` decrements onto and `LL145` ignores.
+   *
+   * `_math` is here for one byte: `Q`. `LL115` leaves its divisor there and each of `LL118`'s
+   * clamps leaves whatever its multiply or divide stopped on, and that is the frame's `Q` -- the
+   * byte the altitude check reads (M2-b, §8; risk R22). `R`, `S` and `T` are the helpers' own since
+   * M2-c-2 and no longer reach it.
    */
-  [[nodiscard]] bool ClipLine(DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip) noexcept;
-  [[nodiscard]] bool ClipLineKeepingSwap(DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                                         std::uint8_t _a) noexcept;
+  [[nodiscard]] ClipResult ClipLine(Line16 _line, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip) noexcept;
+  [[nodiscard]] ClipResult ClipLineKeepingSwap(Line16 _line, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip,
+                                               std::uint8_t _swapIn, std::uint8_t _secondXHigh) noexcept;
 
   /*
    * The two places `LL9` leaves its own code (slice 3b).
    *
    * `PLANET` is a tail jump taken when the type is negative, and belongs to 3c. `DOEXP` is the
-   * explosion, filed under `Explosion.cpp`; `SeedExplosionCloud` is the six instructions that set
-   * one up, and they are behind the seam rather than in `LL9` for two reasons -- what they write is
-   * `DOEXP`'s state, and the `JSR DORND` among them runs on whatever carry `LOIN` last left, which
-   * this port cannot say without reading all thirty-two of `LOIN`'s unrolled copies.
+   * explosion, filed under `Explosion.cpp`. The `EE55` block was a third seam here until
+   * 2026-09-06 and is `SeedExplosionCloud` above now: it is `LL9`'s own code, its carry is `EE51`'s
+   * and known, and a seam nobody implemented was the death sequence's corruption (§6.157).
    */
   class ShipDrawEffects
   {
@@ -368,10 +463,6 @@ namespace Elite
 
     /// 6502: LL14's JMP DOEXP -- redraw the explosion cloud, which is how it is erased.
     virtual void DrawExplosion() = 0;
-
-    /// 6502: the EE55 block -- byte 1 of the heap is the cloud's size, byte 2 its particle count
-    /// from the blueprint, and bytes 3 to 6 are random.
-    virtual void SeedExplosionCloud(LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint) = 0;
   };
 
   /*
@@ -388,9 +479,16 @@ namespace Elite
    * A ship too far away is drawn as a dot by `SHPPT` instead, and one behind the player or wider
    * than it is distant is rubbed out and abandoned. Both are `LL9` deciding not to draw, not the
    * caller.
+   *
+   * `_rng` and `_carryIn` are for one thing: a ship that arrives here killed and not yet exploding
+   * has its cloud seeded with four `DORND`s, and the first of them rolls in the carry `JSR LL9` was
+   * reached with when the ship was not on the screen to be erased (§6.157). Nothing between `LL9`'s
+   * first instruction and `EE51` touches the flag -- `LDA`, `BIT`, `ORA`, `AND`, stores -- so the
+   * caller's carry is the block's. Part 11 of the flight loop derives it; the title, the briefings
+   * and the escape pod draw ships that are never killed, and pass a value nothing reads.
    */
-  void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                Projection& _screen, ShipBlock& _work, ShipBlock& _slot, LineHeap& _heap, std::uint16_t _blueprint, std::uint8_t _type,
-                ShipDrawEffects& _effects) noexcept;
+  void DrawShip(Canvas& _canvas, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip,
+                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
+                ShipDrawEffects& _effects, Rng& _rng, bool _carryIn) noexcept;
 
 } // namespace Elite

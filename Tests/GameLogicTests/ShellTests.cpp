@@ -556,8 +556,8 @@ namespace GameLogicTests
         // The steering keys, whose characters are the C64 keys they stand in for.
         {0x25, ',', "Left -- the C64's \"<\""},
         {0x27, '.', "Right -- the C64's \">\""},
-        {0x26, 'X', "Up -- the C64's \"X\""},
-        {0x28, 'S', "Down -- the C64's \"S\""},
+        {0x26, 'S', "Up -- the C64's \"S\", the dive (swapped 2026-09-06 at the owner's request)"},
+        {0x28, 'X', "Down -- the C64's \"X\", the climb"},
         {0xBE, ' ', "period -- the C64's Space"},
         {0x20, ' ', "Space -- the C64's Space itself, which the title screen asks for"},
         {0xBC, '/', "comma -- the C64's \"?\""},

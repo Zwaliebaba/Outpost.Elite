@@ -16,6 +16,10 @@
  * The other thing to know before reading: the multiplier is decremented before the loop and the
  * addition is done with carry set, so the two cancel and each step adds the true multiplier.
  * That saves an instruction in the original and looks like an off-by-one here if you skim it.
+ *
+ * Every routine here takes its operands as values and returns what it leaves (Modernize.md
+ * M2-b). Where the original stored a scratch byte -- `T`, `T1`, `U`, `widget` -- the port holds a
+ * local of the same name, so the listing beside each routine still reads against the code.
  */
 
 namespace Elite
@@ -47,67 +51,65 @@ namespace Elite
 
   } // namespace
 
-  WideResult MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept
+  Product MultiplyUnguarded(std::uint8_t _multiplicand, std::uint8_t _multiplier) noexcept
   {
-    _work.t = static_cast<std::uint8_t>(_x - 1);
+    // 6502: DEX / STX T -- the decremented multiplier, which the set carry below puts back.
+    const std::uint8_t t = static_cast<std::uint8_t>(_multiplier - 1);
 
     std::uint8_t a = 0;
 
-    // The first multiplier bit is shifted out before the loop starts.
-    bool carry = (_work.p & 0x01u) != 0u;
-    _work.p = static_cast<std::uint8_t>(_work.p >> 1);
+    // 6502: LSR P -- the first multiplier bit is shifted out before the loop starts.
+    bool carry = (_multiplicand & 0x01u) != 0u;
+    std::uint8_t low = static_cast<std::uint8_t>(_multiplicand >> 1);
 
     for (int step = 0; step < 8; ++step)
     {
-      ShiftAndAddStep(a, _work.p, _work.t, carry);
+      ShiftAndAddStep(a, low, t, carry);
     }
 
     // The carry is the last `ROR P`'s, and three callers read it before doing anything that would
-    // set it themselves. See the note on WideResult.
-    return WideResult{a, carry};
+    // set it themselves. See the note on Product.
+    return Product{a, low, carry};
   }
 
-  WideResult MultiplyUnsigned(MathWorkspace& _work) noexcept
+  Product MultiplyUnsigned(std::uint8_t _multiplicand, std::uint8_t _multiplier) noexcept
   {
-    const std::uint8_t multiplier = _work.q;
-
-    if (multiplier == 0)
+    if (_multiplier == 0)
     {
       // 6502: MU1 -- `CLC / STX P / TXA / RTS`, so the zero case clears both halves AND the carry.
       // The `CLC` is the part a port drops, and it is what stops a zero multiply looking like an
       // overflow to the caller below it.
-      _work.p = 0;
-      return WideResult{0, false};
+      return Product{0, 0, false};
     }
 
-    return MultiplyByX(_work, multiplier);
+    return MultiplyUnguarded(_multiplicand, _multiplier);
   }
 
-  WideResult MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept
+  Product MultiplyMagnitude(std::uint8_t _value, std::uint8_t _multiplier) noexcept
   {
-    _work.p = static_cast<std::uint8_t>(_a & 0x7Fu);
-    return MultiplyUnsigned(_work);
+    // 6502: AND #%01111111 / STA P / JMP MULTU.
+    return MultiplyUnsigned(static_cast<std::uint8_t>(_value & 0x7Fu), _multiplier);
   }
 
-  std::uint8_t MultiplySigned(MathWorkspace& _work, std::uint8_t _a) noexcept
+  Product MultiplySigned(std::uint8_t _value, std::uint8_t _multiplier) noexcept
   {
     // The sign of the product is decided up front and re-applied at the very end.
-    _work.t = static_cast<std::uint8_t>((_a ^ _work.q) & 0x80u);
+    const std::uint8_t t = static_cast<std::uint8_t>((_value ^ _multiplier) & 0x80u);
 
     // P starts as |A| >> 1, and the bit shifted out is the first multiplier bit.
-    std::uint8_t magnitude = static_cast<std::uint8_t>(_a & 0x7Fu);
+    const std::uint8_t magnitude = static_cast<std::uint8_t>(_value & 0x7Fu);
     bool carry = (magnitude & 0x01u) != 0u;
-    _work.p = static_cast<std::uint8_t>(magnitude >> 1);
+    std::uint8_t low = static_cast<std::uint8_t>(magnitude >> 1);
 
-    const std::uint8_t multiplier = static_cast<std::uint8_t>(_work.q & 0x7Fu);
+    const std::uint8_t multiplier = static_cast<std::uint8_t>(_multiplier & 0x7Fu);
     if (multiplier == 0)
     {
-      // 6502: mu10 -- a zero multiplier zeroes the low byte and returns zero, sign and all.
-      _work.p = 0;
-      return 0;
+      // 6502: mu10 -- a zero multiplier zeroes the low byte and returns zero, sign and all. The
+      // carry is the `LSR A`'s above: nothing between it and the `RTS` touches the flag.
+      return Product{0, 0, carry};
     }
 
-    _work.t1 = static_cast<std::uint8_t>(multiplier - 1);
+    const std::uint8_t t1 = static_cast<std::uint8_t>(multiplier - 1);
 
     std::uint8_t a = 0;
 
@@ -115,68 +117,61 @@ namespace Elite
     // the final shift below completes it.
     for (int step = 0; step < 7; ++step)
     {
-      ShiftAndAddStep(a, _work.p, _work.t1, carry);
+      ShiftAndAddStep(a, low, t1, carry);
     }
 
     carry = (a & 0x01u) != 0u;
     a = static_cast<std::uint8_t>(a >> 1);
 
-    const ShiftResult rotatedLow = RotateRight(_work.p, carry);
-    _work.p = rotatedLow.value;
+    // 6502: ROR P / ORA T -- the last rotate's carry out is the routine's, `ORA` leaves it alone.
+    const ShiftResult rotatedLow = RotateRight(low, carry);
+    low = rotatedLow.value;
 
-    return static_cast<std::uint8_t>(a | _work.t);
+    return Product{static_cast<std::uint8_t>(a | t), low, rotatedLow.carry};
   }
 
-  void MultiplySignedToSR(MathWorkspace& _work, std::uint8_t _a) noexcept
+  Product SquareUnsigned(std::uint8_t _value) noexcept
   {
-    const std::uint8_t high = MultiplySigned(_work, _a);
-    _work.s = high;
-    _work.r = _work.p;
-  }
-
-  WideResult SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept
-  {
-    _work.p = _a;
-
-    if (_a == 0)
+    if (_value == 0)
     {
       // 6502: MU1 -- CLC / STX P / TXA / RTS. It falls into the same zero tail the unsigned
       // multiply uses, and that tail CLEARS the carry, which is half of why `MAS3` can read one.
-      _work.p = 0;
-      return {0, false};
+      return Product{0, 0, false};
     }
 
-    return MultiplyByX(_work, _a);
+    // 6502: STA P / TAX / BNE MU11 -- the value is both operands.
+    return MultiplyUnguarded(_value, _value);
   }
 
-  WideResult Square(MathWorkspace& _work, std::uint8_t _a) noexcept
+  Product Square(std::uint8_t _value) noexcept
   {
-    return SquareUnsigned(_work, static_cast<std::uint8_t>(_a & 0x7Fu));
+    return SquareUnsigned(static_cast<std::uint8_t>(_value & 0x7Fu));
   }
 
-  AddSignedResult AddSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
+  AddSignedResult AddSigned(SignMag16 _value, SignMag16 _addend) noexcept
   {
-    _work.t1 = _a;
-    _work.t = static_cast<std::uint8_t>(_a & 0x80u);
+    // 6502: STA T1 / AND #128 / STA T -- the first operand's high byte and its sign.
+    const std::uint8_t t1 = _value.hi;
+    const std::uint8_t t = static_cast<std::uint8_t>(_value.hi & 0x80u);
 
-    if (((_work.t ^ _work.s) & 0x80u) == 0u)
+    if (((t ^ _addend.hi) & 0x80u) == 0u)
     {
       // Signs agree, so the magnitudes simply add and the shared sign is put back on top.
-      const AddResult low = AddWithCarry(_work.r, _work.p, false);
-      const AddResult high = AddWithCarry(_work.s, _work.t1, low.carry);
+      const AddResult low = AddWithCarry(_addend.lo, _value.lo, false);
+      const AddResult high = AddWithCarry(_addend.hi, t1, low.carry);
       // 6502: `ORA T` does not touch the carry, so what `ADC T1` produced is what the caller gets.
-      return AddSignedResult{static_cast<std::uint8_t>(high.value | _work.t), low.value, high.carry};
+      return AddSignedResult{static_cast<std::uint8_t>(high.value | t), low.value, high.carry};
     }
 
     // 6502: MU8 -- signs differ, so this is a subtraction of magnitudes that may come out
     // negative, in which case the result is negated and marked.
-    _work.u = static_cast<std::uint8_t>(_work.s & 0x7Fu);
+    std::uint8_t u = static_cast<std::uint8_t>(_addend.hi & 0x7Fu);
 
-    const std::uint16_t lowDifference = static_cast<std::uint16_t>(_work.p) - _work.r;
+    const std::uint16_t lowDifference = static_cast<std::uint16_t>(_value.lo) - _addend.lo;
     std::uint8_t low = static_cast<std::uint8_t>(lowDifference);
     bool borrowClear = lowDifference < 0x100u;
 
-    const std::uint16_t highDifference = static_cast<std::uint16_t>(_work.t1 & 0x7Fu) - _work.u - (borrowClear ? 0u : 1u);
+    const std::uint16_t highDifference = static_cast<std::uint16_t>(t1 & 0x7Fu) - u - (borrowClear ? 0u : 1u);
     std::uint8_t high = static_cast<std::uint8_t>(highDifference);
     borrowClear = highDifference < 0x100u;
 
@@ -186,63 +181,50 @@ namespace Elite
     if (!borrowClear)
     {
       // 6502: the branch that turns a negative difference back into sign-magnitude form.
-      _work.u = high;
+      u = high;
 
       const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(low ^ 0xFFu), 1u, false);
       low = negated.value;
 
-      const std::uint16_t negatedHigh = 0u - _work.u - (negated.carry ? 0u : 1u);
+      const std::uint16_t negatedHigh = 0u - u - (negated.carry ? 0u : 1u);
       high = static_cast<std::uint8_t>(static_cast<std::uint8_t>(negatedHigh) | 0x80u);
       exitCarry = negatedHigh < 0x100u; // 6502: the second `SBC U`
     }
 
     // 6502: MU9 -- fold in the sign the first operand arrived with. `EOR T` leaves the carry.
-    return AddSignedResult{static_cast<std::uint8_t>(high ^ _work.t), low, exitCarry};
+    return AddSignedResult{static_cast<std::uint8_t>(high ^ t), low, exitCarry};
   }
 
-  AddSignedResult MultiplyAndAdd(MathWorkspace& _work, std::uint8_t _a) noexcept
+  AddSignedResult MultiplyAndAdd(std::uint8_t _value, std::uint8_t _multiplier, SignMag16 _addend) noexcept
   {
     // In the original this is one call followed by a fall-through into the addition, which is
     // why the multiply's low byte is left where the addition expects to find it.
-    const std::uint8_t product = MultiplySigned(_work, _a);
-    return AddSigned(_work, product);
+    const Product product = MultiplySigned(_value, _multiplier);
+    return AddSigned(product.Pair(), _addend);
   }
 
-  void FillK(MathWorkspace& _work, std::uint8_t _a) noexcept
+  Product MultiplyScaled(std::uint8_t _multiplicand, std::uint8_t _value) noexcept
   {
-    _work.k[0] = _a;
-    _work.k[1] = _a;
-    _work.k[2] = _a;
-    _work.k[3] = _a;
-  }
+    const std::uint8_t t = static_cast<std::uint8_t>(_value & 0x80u);
 
-  void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept
-  {
-    _work.p1 = _a;
-    _work.p = _a;
-  }
-
-  std::uint8_t MultiplyScaled(MathWorkspace& _work, std::uint8_t _a) noexcept
-  {
-    _work.t = static_cast<std::uint8_t>(_a & 0x80u);
-
-    const std::uint8_t multiplier = static_cast<std::uint8_t>(_a & 0x7Fu);
+    const std::uint8_t multiplier = static_cast<std::uint8_t>(_value & 0x7Fu);
     if (multiplier == 0)
     {
-      SetPairP(_work, 0);
-      return 0;
+      // 6502: BEQ MU6 -- STA P+1 / STA P / RTS, with A zero. The carry is whatever the caller
+      // arrived with, and no caller reads it: `ADD` and `MULT1` both set their own.
+      return Product{0, 0, false};
     }
 
-    _work.t1 = static_cast<std::uint8_t>(multiplier - 1);
+    const std::uint8_t t1 = static_cast<std::uint8_t>(multiplier - 1);
 
     std::uint8_t a = 0;
-    bool carry = (_work.p & 0x01u) != 0u;
-    _work.p = static_cast<std::uint8_t>(_work.p >> 1);
+    bool carry = (_multiplicand & 0x01u) != 0u;
+    std::uint8_t low = static_cast<std::uint8_t>(_multiplicand >> 1);
 
     // Only five of the eight bits get an addition.
     for (int step = 0; step < 5; ++step)
     {
-      ShiftAndAddStep(a, _work.p, _work.t1, carry);
+      ShiftAndAddStep(a, low, t1, carry);
     }
 
     // The remaining three are shifted through without one, which is what scales the result down.
@@ -250,27 +232,27 @@ namespace Elite
     {
       carry = (a & 0x01u) != 0u;
       a = static_cast<std::uint8_t>(a >> 1);
-      const ShiftResult rotated = RotateRight(_work.p, carry);
-      _work.p = rotated.value;
+      const ShiftResult rotated = RotateRight(low, carry);
+      low = rotated.value;
       carry = rotated.carry;
     }
 
-    return static_cast<std::uint8_t>(a | _work.t);
+    return Product{static_cast<std::uint8_t>(a | t), low, carry};
   }
 
-  WideResult MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept
+  Product24 MultiplyWide(std::uint8_t _high, std::uint8_t _low, std::uint8_t _multiplier) noexcept
   {
     // The multiplier arrives complemented, which turns the usual add-on-a-set-bit test into an
     // add-on-a-clear-bit one and saves the routine an instruction per step.
-    const std::uint8_t complemented = static_cast<std::uint8_t>(_a ^ 0xFFu);
+    const std::uint8_t complemented = static_cast<std::uint8_t>(_high ^ 0xFFu);
 
     bool carry = (complemented & 0x01u) != 0u;
-    _work.p1 = static_cast<std::uint8_t>(complemented >> 1);
+    std::uint8_t mid = static_cast<std::uint8_t>(complemented >> 1);
 
     std::uint8_t a = 0;
 
-    const ShiftResult seeded = RotateRight(_work.p, carry);
-    _work.p = seeded.value;
+    const ShiftResult seeded = RotateRight(_low, carry);
+    std::uint8_t low = seeded.value;
     carry = seeded.carry;
 
     for (int step = 0; step < 16; ++step)
@@ -283,7 +265,7 @@ namespace Elite
       }
       else
       {
-        const AddResult sum = AddWithCarry(a, _work.q, false);
+        const AddResult sum = AddWithCarry(a, _multiplier, false);
         a = sum.value;
         carry = sum.carry;
 
@@ -292,29 +274,29 @@ namespace Elite
         carry = rotated.carry;
       }
 
-      const ShiftResult rotatedMiddle = RotateRight(_work.p1, carry);
-      _work.p1 = rotatedMiddle.value;
+      const ShiftResult rotatedMiddle = RotateRight(mid, carry);
+      mid = rotatedMiddle.value;
       carry = rotatedMiddle.carry;
 
-      const ShiftResult rotatedLow = RotateRight(_work.p, carry);
-      _work.p = rotatedLow.value;
+      const ShiftResult rotatedLow = RotateRight(low, carry);
+      low = rotatedLow.value;
       carry = rotatedLow.carry;
     }
 
     // The carry is the one the final `ROR P` left, which is what MVEIT reads. See the header.
-    return WideResult{a, carry};
+    return Product24{a, mid, low, carry};
   }
 
-  std::uint8_t DivideBy96(MathWorkspace& _work, std::uint8_t _a) noexcept
+  std::uint8_t DivideBy96(std::uint8_t _value) noexcept
   {
-    _work.t = static_cast<std::uint8_t>(_a & 0x80u);
+    const std::uint8_t t = static_cast<std::uint8_t>(_value & 0x80u);
 
-    std::uint8_t a = static_cast<std::uint8_t>(_a & 0x7Fu);
+    std::uint8_t a = static_cast<std::uint8_t>(_value & 0x7Fu);
 
     // The counter doubles as the result: it is seeded with seven set bits, and each rotation
     // both shifts a quotient bit in at the bottom and pushes a marker out of the top. When the
     // markers run out the loop is done, so no separate counter is needed.
-    _work.t1 = 0xFEu;
+    std::uint8_t t1 = 0xFEu;
 
     bool looping = true;
     while (looping)
@@ -328,86 +310,85 @@ namespace Elite
         a = static_cast<std::uint8_t>(a - 96u);
       }
 
-      const ShiftResult counter = RotateLeftValue(_work.t1, quotientBit);
-      _work.t1 = counter.value;
+      const ShiftResult counter = RotateLeftValue(t1, quotientBit);
+      t1 = counter.value;
       looping = counter.carry;
     }
 
-    return static_cast<std::uint8_t>(_work.t1 | _work.t);
+    return static_cast<std::uint8_t>(t1 | t);
   }
 
-  std::uint8_t MultiplyAddDivide96(MathWorkspace& _work, std::uint8_t _a, std::uint8_t _x) noexcept
+  std::uint8_t MultiplyAddDivide96(std::uint8_t _value, std::uint8_t _multiplier, SignMag16 _addend) noexcept
   {
-    _work.q = _x;
+    // 6502: STX Q, then flipping the sign bit is what turns the accumulate into a subtract.
+    const AddSignedResult combined = MultiplyAndAdd(static_cast<std::uint8_t>(_value ^ 0x80u), _multiplier, _addend);
 
-    // Flipping the sign bit is what turns the accumulate into a subtract.
-    const AddSignedResult combined = MultiplyAndAdd(_work, static_cast<std::uint8_t>(_a ^ 0x80u));
-
-    return DivideBy96(_work, combined.high);
+    return DivideBy96(combined.high);
   }
 
-  std::uint8_t DivideByQ(MathWorkspace& _work, std::uint8_t _a) noexcept
+  std::uint8_t DivideSigned(std::uint8_t _value, std::uint8_t _divisor) noexcept
   {
-    const std::uint8_t sign = static_cast<std::uint8_t>(_a & 0x80u);
-    std::uint8_t a = static_cast<std::uint8_t>(_a & 0x7Fu);
+    const std::uint8_t sign = static_cast<std::uint8_t>(_value & 0x80u);
+    std::uint8_t a = static_cast<std::uint8_t>(_value & 0x7Fu);
 
-    if (a >= _work.q)
+    if (a >= _divisor)
     {
       // 6502: TI4 -- the magnitude is too large to divide, so the result saturates.
       return static_cast<std::uint8_t>(sign | 96u);
     }
 
-    _work.t = 0xFEu;
+    std::uint8_t t = 0xFEu;
 
     bool looping = true;
     while (looping)
     {
       a = static_cast<std::uint8_t>(a << 1);
 
-      bool quotientBit = a >= _work.q;
+      bool quotientBit = a >= _divisor;
       if (quotientBit)
       {
-        a = static_cast<std::uint8_t>(a - _work.q);
+        a = static_cast<std::uint8_t>(a - _divisor);
       }
 
-      const ShiftResult counter = RotateLeftValue(_work.t, quotientBit);
-      _work.t = counter.value;
+      const ShiftResult counter = RotateLeftValue(t, quotientBit);
+      t = counter.value;
       looping = counter.carry;
     }
 
     // The quotient is then scaled by a shift-and-add rather than a second division.
-    std::uint8_t value = _work.t;
+    std::uint8_t value = t;
     bool carry = (value & 0x01u) != 0u;
     value = static_cast<std::uint8_t>(value >> 1);
     carry = (value & 0x01u) != 0u;
     value = static_cast<std::uint8_t>(value >> 1);
-    _work.t = value;
+    t = value;
 
     carry = (value & 0x01u) != 0u;
     value = static_cast<std::uint8_t>(value >> 1);
 
-    const AddResult scaled = AddWithCarry(value, _work.t, carry);
-    _work.t = scaled.value;
+    const AddResult scaled = AddWithCarry(value, t, carry);
+    t = scaled.value;
 
-    return static_cast<std::uint8_t>(sign | _work.t);
+    return static_cast<std::uint8_t>(sign | t);
   }
 
-  std::uint8_t DivideWide(MathWorkspace& _work, std::uint8_t _a) noexcept
+  WideQuotient DivideWide(std::uint8_t _high, std::uint8_t _low, std::uint8_t _divisor) noexcept
   {
-    _work.p1 = _a;
-    _work.t = static_cast<std::uint8_t>((_a ^ _work.q) & 0x80u);
+    // 6502: STA P+1 / EOR Q / AND #128 / STA T.
+    std::uint8_t high = _high;
+    const std::uint8_t t = static_cast<std::uint8_t>((_high ^ _divisor) & 0x80u);
 
     std::uint8_t a = 0;
 
     // Shift the dividend up one and clear the divisor's sign bit, so the comparison below is
     // between magnitudes. Clearing the sign bit costs a shift up and back down, which also
     // leaves the carry clear -- and that clear carry is what the first rotate below shifts in.
-    bool carry = (_work.p & 0x80u) != 0u;
-    _work.p = static_cast<std::uint8_t>(_work.p << 1);
-    const ShiftResult rolled = RotateLeftValue(_work.p1, carry);
-    _work.p1 = rolled.value;
+    bool carry = (_low & 0x80u) != 0u;
+    std::uint8_t low = static_cast<std::uint8_t>(_low << 1);
+    const ShiftResult rolled = RotateLeftValue(high, carry);
+    high = rolled.value;
 
-    _work.q = static_cast<std::uint8_t>(_work.q & 0x7Fu);
+    const std::uint8_t divisor = static_cast<std::uint8_t>(_divisor & 0x7Fu);
     carry = false;
 
     for (int step = 0; step < 16; ++step)
@@ -418,21 +399,21 @@ namespace Elite
       const ShiftResult shifted = RotateLeftValue(a, carry);
       a = shifted.value;
 
-      const bool quotientBit = a >= _work.q;
+      const bool quotientBit = a >= divisor;
       if (quotientBit)
       {
-        a = static_cast<std::uint8_t>(a - _work.q);
+        a = static_cast<std::uint8_t>(a - divisor);
       }
 
-      const ShiftResult low = RotateLeftValue(_work.p, quotientBit);
-      _work.p = low.value;
+      const ShiftResult lowStep = RotateLeftValue(low, quotientBit);
+      low = lowStep.value;
 
-      const ShiftResult high = RotateLeftValue(_work.p1, low.carry);
-      _work.p1 = high.value;
-      carry = high.carry;
+      const ShiftResult highStep = RotateLeftValue(high, lowStep.carry);
+      high = highStep.value;
+      carry = highStep.carry;
     }
 
-    return static_cast<std::uint8_t>(_work.p | _work.t);
+    return WideQuotient{high, low, t};
   }
 
   /*
@@ -445,10 +426,8 @@ namespace Elite
    * results are right about half the time, which is the worst possible failure mode.
    */
 
-  WideResult MultiplyByLog(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept
+  LogProduct MultiplyByLog(std::uint8_t _value, std::uint8_t _multiplier, bool _carryIn) noexcept
   {
-    _work.widget = _a;
-
     /*
      * 6502: TAX / BEQ MU3, and LDX Q / BEQ MU3again -- the two zero exits, and neither of them
      * touches the carry. `MU3` is `LDX P / RTS` with A still zero; `MU3again` is `LDA #0 / LDX P /
@@ -459,85 +438,85 @@ namespace Elite
      * tell. Two do -- `DOEXP` (`JSR FMLTU / ADC R`) and `CIRCLE2` through `FMLTU2` -- and the
      * others follow the call with a `STA`.
      */
-    if (_a == 0 || _work.q == 0)
+    if (_value == 0 || _multiplier == 0)
     {
-      return {0, _carryIn};
+      return LogProduct{0, _carryIn};
     }
 
-    const AddResult low = AddWithCarry(LOG_LOW_TABLE[_a], LOG_LOW_TABLE[_work.q], false);
+    // 6502: STA widget -- the first operand, parked while X addresses the tables.
+    const AddResult low = AddWithCarry(LOG_LOW_TABLE[_value], LOG_LOW_TABLE[_multiplier], false);
     const bool useOddTable = (low.value & 0x80u) != 0u;
 
-    const AddResult high = AddWithCarry(LOG_TABLE[_work.q], LOG_TABLE[_a], low.carry);
+    const AddResult high = AddWithCarry(LOG_TABLE[_multiplier], LOG_TABLE[_value], low.carry);
     if (!high.carry)
     {
-      return {0, false}; // 6502: BCC MU3again -- the branch is taken, so the carry is clear
+      return LogProduct{0, false}; // 6502: BCC MU3again -- the branch is taken, so the carry is clear
     }
 
     // 6502: the two antilog exits, reached because the BCC above was NOT taken.
-    return {useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value], true};
+    return LogProduct{useOddTable ? ANTILOG_ODD_TABLE[high.value] : ANTILOG_TABLE[high.value], true};
   }
 
-  /*
-   * 6502: LL28's body, from the STA widget onwards -- the part after the "does it fit" guard.
-   *
-   * It is a helper because the shipped game has this code TWICE: once inside LL28, and once
-   * unlabelled at the end of DVID4, which falls into it. The second copy is byte-identical except
-   * that it has no guard in front, so the two share this and differ only in what precedes it.
-   */
-  bool DivideByLogarithms(MathWorkspace& _work, std::uint8_t _a) noexcept
+  namespace
   {
-    _work.widget = _a;
 
-    if (_a == 0)
+    /*
+     * 6502: LL28's body, from the STA widget onwards -- the part after the "does it fit" guard.
+     *
+     * It is a helper because the shipped game has this code TWICE: once inside LL28, and once
+     * unlabelled at the end of DVID4, which falls into it. The second copy is byte-identical except
+     * that it has no guard in front, so the two share this and differ only in what precedes it.
+     */
+    Quotient DivideByLogUnguarded(std::uint8_t _dividend, std::uint8_t _divisor) noexcept
     {
-      _work.r = 0;
-      return false;
+      if (_dividend == 0)
+      {
+        return Quotient{0, false};
+      }
+
+      const std::uint16_t lowDifference = static_cast<std::uint16_t>(LOG_LOW_TABLE[_dividend]) - LOG_LOW_TABLE[_divisor];
+      const std::uint8_t lowResult = static_cast<std::uint8_t>(lowDifference);
+      const bool borrowClear = lowDifference < 0x100u;
+      const bool useOddTable = (lowResult & 0x80u) != 0u;
+
+      const std::uint16_t highDifference = static_cast<std::uint16_t>(LOG_TABLE[_dividend]) - LOG_TABLE[_divisor] - (borrowClear ? 0u : 1u);
+
+      if (highDifference < 0x100u)
+      {
+        // No borrow means the quotient overflowed a byte, which is the saturating case again.
+        return Quotient{255, true};
+      }
+
+      const std::uint8_t index = static_cast<std::uint8_t>(highDifference);
+      return Quotient{useOddTable ? ANTILOG_ODD_TABLE[index] : ANTILOG_TABLE[index], false};
     }
 
-    const std::uint16_t lowDifference = static_cast<std::uint16_t>(LOG_LOW_TABLE[_a]) - LOG_LOW_TABLE[_work.q];
-    const std::uint8_t lowResult = static_cast<std::uint8_t>(lowDifference);
-    const bool borrowClear = lowDifference < 0x100u;
-    const bool useOddTable = (lowResult & 0x80u) != 0u;
+  } // namespace
 
-    const std::uint16_t highDifference = static_cast<std::uint16_t>(LOG_TABLE[_a]) - LOG_TABLE[_work.q] - (borrowClear ? 0u : 1u);
-
-    if (highDifference < 0x100u)
-    {
-      // No borrow means the quotient overflowed a byte, which is the saturating case again.
-      _work.r = 255;
-      return true;
-    }
-
-    const std::uint8_t index = static_cast<std::uint8_t>(highDifference);
-    _work.r = useOddTable ? ANTILOG_ODD_TABLE[index] : ANTILOG_TABLE[index];
-    return false;
-  }
-
-  bool DivideToR(MathWorkspace& _work, std::uint8_t _a) noexcept
+  Quotient DivideByLog(std::uint8_t _dividend, std::uint8_t _divisor) noexcept
   {
-    if (_a >= _work.q)
+    if (_dividend >= _divisor)
     {
       // 6502: LL2 -- the ratio does not fit in a byte, so it pins at the maximum. The carry the
       // comparison left is set, and callers read it.
-      _work.r = 255;
-      return true;
+      return Quotient{255, true};
     }
 
-    return DivideByLogarithms(_work, _a);
+    return DivideByLogUnguarded(_dividend, _divisor);
   }
 
-  SignedSum CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept
+  SignedSum CombineSigned(std::uint8_t _termSign, std::uint8_t _term, SignMag16 _total) noexcept
   {
-    if (((_a ^ _work.s) & 0x80u) == 0u)
+    if (((_termSign ^ _total.hi) & 0x80u) == 0u)
     {
       // Signs agree, so the two parts add -- and this is the ONLY path that can return a set
       // carry, which is what makes the flag mean "overflowed".
-      const AddResult sum = AddWithCarry(_work.q, _work.r, false);
-      return SignedSum{sum.value, sum.carry};
+      const AddResult sum = AddWithCarry(_term, _total.lo, false);
+      return SignedSum{sum.value, _total.hi, sum.carry};
     }
 
     // 6502: LL39 -- signs differ, so they subtract, and a borrow means the answer changed sign.
-    const std::uint16_t difference = static_cast<std::uint16_t>(_work.r) - _work.q;
+    const std::uint16_t difference = static_cast<std::uint16_t>(_total.lo) - _term;
     const std::uint8_t result = static_cast<std::uint8_t>(difference);
 
     if (difference < 0x100u)
@@ -545,15 +524,15 @@ namespace Elite
       // The original's `CLC` here looks dead -- the `SBC` above it left the carry set, and nothing
       // in this branch reads it. It is not dead: it is what stops a subtraction being reported as
       // an overflow.
-      return SignedSum{result, false};
+      return SignedSum{result, _total.hi, false};
     }
 
     // 6502: LL40 -- flip the sign held in S and negate the magnitude. The negation's own carry can
     // only be set for a zero magnitude, which an underflow cannot produce, so this exit is always
     // carry clear.
-    _work.s = static_cast<std::uint8_t>(_work.s ^ 0x80u);
+    const std::uint8_t flipped = static_cast<std::uint8_t>(_total.hi ^ 0x80u);
     const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(result ^ 0xFFu), 1u, false);
-    return SignedSum{negated.value, negated.carry};
+    return SignedSum{negated.value, flipped, negated.carry};
   }
 
   namespace
@@ -567,11 +546,9 @@ namespace Elite
       bool carry = false;
     };
 
-    RatioAngle AngleOfRatio(MathWorkspace& _work, std::uint8_t _a) noexcept
+    RatioAngle AngleOfRatio(std::uint8_t _dividend, std::uint8_t _divisor) noexcept
     {
-      (void)DivideToR(_work, _a);
-
-      std::uint8_t value = _work.r;
+      std::uint8_t value = DivideByLog(_dividend, _divisor).value;
       bool carry = false;
       for (int shift = 0; shift < 3; ++shift)
       {
@@ -584,33 +561,31 @@ namespace Elite
 
   } // namespace
 
-  std::uint8_t Arctan(MathWorkspace& _work) noexcept
+  std::uint8_t Arctan(std::uint8_t _numerator, std::uint8_t _denominator) noexcept
   {
-    _work.t1 = static_cast<std::uint8_t>(_work.p ^ _work.q);
+    // 6502: LDA P / EOR Q / STA T1 -- the operands' signs, which decide the quadrant at the end.
+    const std::uint8_t t1 = static_cast<std::uint8_t>(_numerator ^ _denominator);
 
-    if (_work.q == 0)
+    if (_denominator == 0)
     {
       // 6502: AR2 -- a zero denominator is a right angle by convention.
       return 63;
     }
 
-    const std::uint8_t denominator = static_cast<std::uint8_t>(_work.q << 1);
-    const std::uint8_t numerator = static_cast<std::uint8_t>(_work.p << 1);
-    _work.q = denominator;
+    const std::uint8_t denominator = static_cast<std::uint8_t>(_denominator << 1);
+    const std::uint8_t numerator = static_cast<std::uint8_t>(_numerator << 1);
 
     std::uint8_t angle = 0;
     bool carry = false;
 
     if (numerator >= denominator)
     {
-      // 6502: AR1 -- the ratio is the wrong way up, so it is inverted and the angle reflected.
-      _work.q = numerator;
-      _work.p = denominator;
+      // 6502: AR1 -- the ratio is the wrong way up, so it is inverted and the angle reflected:
+      // `STA Q / ... STA P`, and ARS1 divides the old denominator by the new one.
+      const RatioAngle ratio = AngleOfRatio(denominator, numerator);
+      const std::uint8_t t = ratio.angle;
 
-      const RatioAngle ratio = AngleOfRatio(_work, denominator);
-      _work.t = ratio.angle;
-
-      const std::uint16_t reflected = 64u - _work.t - (ratio.carry ? 0u : 1u);
+      const std::uint16_t reflected = 64u - t - (ratio.carry ? 0u : 1u);
       if (reflected >= 0x100u)
       {
         return 63;
@@ -621,30 +596,29 @@ namespace Elite
     }
     else
     {
-      angle = AngleOfRatio(_work, numerator).angle;
+      angle = AngleOfRatio(numerator, denominator).angle;
       carry = true;
     }
 
     // 6502: AR4 -- the operands' signs decided the quadrant before any of this ran.
-    if ((_work.t1 & 0x80u) != 0u)
+    if ((t1 & 0x80u) != 0u)
     {
-      _work.t = angle;
-      const std::uint16_t opposite = 128u - _work.t - (carry ? 0u : 1u);
+      const std::uint8_t t = angle;
+      const std::uint16_t opposite = 128u - t - (carry ? 0u : 1u);
       return static_cast<std::uint8_t>(opposite);
     }
 
     return angle;
   }
 
-  WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept
+  LogProduct MultiplyBySine(std::uint8_t _value, std::uint8_t _angle, bool _carryIn) noexcept
   {
     // 6502: FMLTU2's own three instructions. It then falls through into FMLTU with K in A, so the
     // multiplicand is K and the multiplier is the sine it just put in Q.
-    _work.q = SINE_TABLE[_a & 0x1Fu];
-    return MultiplyByLog(_work, _work.k[0], _carryIn);
+    return MultiplyByLog(_value, SINE_TABLE[_angle & 0x1Fu], _carryIn);
   }
 
-  ScaledDivision DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept
+  ScaledDivision DivideAndScale(std::uint8_t _dividend, std::uint8_t _divisor) noexcept
   {
     // 6502: DVID4. Restoring division: shift the dividend up a bit at a time, and after each
     // shift subtract the divisor if it fits, recording whether it did as the next quotient bit.
@@ -655,8 +629,8 @@ namespace Elite
     // instead, carry is clear and the ROL shifts a 0. One flag doing two jobs, which is why the
     // port keeps the comparison and the shift adjacent rather than tidying them apart.
     // 6502: ASL A -- a left shift is a rotate with no carry coming in.
-    const ShiftResult shifted = RotateLeftValue(_a, false);
-    _work.p = shifted.value;
+    const ShiftResult shifted = RotateLeftValue(_dividend, false);
+    std::uint8_t whole = shifted.value;
 
     std::uint8_t remainder = 0;
     bool carry = shifted.carry;
@@ -668,14 +642,14 @@ namespace Elite
 
       // 6502: CMP Q / BCC / SBC Q -- subtract only when it fits, and the comparison's carry is
       // both the decision and the quotient bit.
-      carry = remainder >= _work.q;
+      carry = remainder >= _divisor;
       if (carry)
       {
-        remainder = static_cast<std::uint8_t>(remainder - _work.q);
+        remainder = static_cast<std::uint8_t>(remainder - _divisor);
       }
 
-      const ShiftResult quotient = RotateLeftValue(_work.p, carry);
-      _work.p = quotient.value;
+      const ShiftResult quotient = RotateLeftValue(whole, carry);
+      whole = quotient.value;
       carry = quotient.carry;
     }
 
@@ -691,11 +665,11 @@ namespace Elite
      * remainder scaled up by the same divisor. Returning only the remainder, as an eight-step
      * divide would, is not what the game does.
      */
-    const bool exitCarry = DivideByLogarithms(_work, remainder);
-    return {_work.r, exitCarry};
+    const Quotient fraction = DivideByLogUnguarded(remainder, _divisor);
+    return ScaledDivision{whole, fraction.value, fraction.carry};
   }
 
-  bool SquareRoot(MathWorkspace& _work) noexcept
+  Root SquareRoot(std::uint8_t _high, std::uint8_t _low) noexcept
   {
     /*
      * 6502: LL5. The radicand is (R Q); Y and X hold the running remainder, S the bits still to be
@@ -706,21 +680,21 @@ namespace Elite
      * and then relies on the carry that comparison left to make the SBC below correct. Both halves
      * are kept as flags here for that reason.
      */
-    std::uint8_t y = _work.r;
-    std::uint8_t s = _work.q;
+    std::uint8_t y = _high;
+    std::uint8_t s = _low;
     std::uint8_t x = 0;
+    std::uint8_t q = 0;
     bool exitCarry = false;
-    _work.q = 0;
 
     for (int round = 0; round < 8; ++round)
     {
       // 6502: CPX Q / BCC LL7 / BNE / CPY #64 / BCC LL7 -- does (Q 0x40) fit into (X Y)?
       bool fits = false;
-      if (x > _work.q)
+      if (x > q)
       {
         fits = true;
       }
-      else if (x == _work.q && y >= 0x40u)
+      else if (x == q && y >= 0x40u)
       {
         fits = true;
       }
@@ -731,13 +705,13 @@ namespace Elite
         // subtraction borrows nothing on its first half.
         const std::uint16_t low = static_cast<std::uint16_t>(y) - 0x40u;
         y = static_cast<std::uint8_t>(low);
-        const std::uint16_t high = static_cast<std::uint16_t>(x) - _work.q - (low < 0x100u ? 0u : 1u);
+        const std::uint16_t high = static_cast<std::uint16_t>(x) - q - (low < 0x100u ? 0u : 1u);
         x = static_cast<std::uint8_t>(high);
       }
 
       // 6502: LL7 -- ROL Q brings in the answer bit, which is the carry the comparison left set
       // exactly when the candidate fitted.
-      _work.q = RotateLeftValue(_work.q, fits).value;
+      q = RotateLeftValue(q, fits).value;
 
       // 6502: two rounds of ASL S / ROL A / ROL A -- two more bits of the radicand into (X Y).
       for (int pair = 0; pair < 2; ++pair)
@@ -759,28 +733,25 @@ namespace Elite
      * operand -- so the sun's ragged edge is seeded by the last bit to fall out of the square root
      * (§6.55). The tenth dropped flag.
      */
-    return exitCarry;
+    return Root{q, exitCarry};
   }
 
-  void MultiplySignedToK(MathWorkspace& _work, std::uint8_t _a) noexcept
+  KBlock MultiplySigned24(SignMag24 _value, std::uint8_t _multiplier) noexcept
   {
     // 6502: STA R / AND #127 / STA K+2 -- R keeps the sign, K+2 takes the magnitude.
-    _work.r = _a;
-    _work.k[2] = static_cast<std::uint8_t>(_a & 0x7Fu);
+    const std::uint8_t r = _value.sgn;
+    KBlock k;
+    k.high = static_cast<std::uint8_t>(_value.sgn & 0x7Fu);
 
-    const std::uint8_t magnitude = static_cast<std::uint8_t>(_work.q & 0x7Fu);
+    const std::uint8_t magnitude = static_cast<std::uint8_t>(_multiplier & 0x7Fu);
     if (magnitude == 0u)
     {
       // 6502: BEQ MU5 -- and MU5 zeroes all four bytes of K, sign included.
-      _work.k[0] = 0;
-      _work.k[1] = 0;
-      _work.k[2] = 0;
-      _work.k[3] = 0;
-      return;
+      return KBlock::Filled(0);
     }
 
     // 6502: SEC / SBC #1 / STA T. See the header: the missing one comes back as the carry.
-    _work.t = static_cast<std::uint8_t>(magnitude - 1u);
+    const std::uint8_t t = static_cast<std::uint8_t>(magnitude - 1u);
 
     /*
      * 6502: LDA P+1 / LSR K+2 / ROR A / STA K+1 / LDA P / ROR A / STA K.
@@ -788,16 +759,14 @@ namespace Elite
      * One right shift of the whole twenty-four bit magnitude, which seeds the loop with the first
      * bit already in the carry.
      */
-    bool carry = (_work.k[2] & 1u) != 0u;
-    _work.k[2] = static_cast<std::uint8_t>(_work.k[2] >> 1);
+    bool carry = (k.high & 1u) != 0u;
+    k.high = static_cast<std::uint8_t>(k.high >> 1);
 
-    std::uint8_t shifted = static_cast<std::uint8_t>((_work.p1 >> 1) | (carry ? 0x80u : 0u));
-    carry = (_work.p1 & 1u) != 0u;
-    _work.k[1] = shifted;
+    k.mid = static_cast<std::uint8_t>((_value.hi >> 1) | (carry ? 0x80u : 0u));
+    carry = (_value.hi & 1u) != 0u;
 
-    shifted = static_cast<std::uint8_t>((_work.p >> 1) | (carry ? 0x80u : 0u));
-    carry = (_work.p & 1u) != 0u;
-    _work.k[0] = shifted;
+    k.low = static_cast<std::uint8_t>((_value.lo >> 1) | (carry ? 0x80u : 0u));
+    carry = (_value.lo & 1u) != 0u;
 
     // 6502: LDA #0 / LDX #24 / .MUL2
     std::uint8_t accumulator = 0;
@@ -806,7 +775,7 @@ namespace Elite
       if (carry)
       {
         // 6502: ADC T -- with the carry set, so this adds |Q| rather than |Q| - 1.
-        const std::uint16_t sum = static_cast<std::uint16_t>(accumulator) + _work.t + 1u;
+        const std::uint16_t sum = static_cast<std::uint16_t>(accumulator) + t + 1u;
         accumulator = static_cast<std::uint8_t>(sum);
         carry = sum > 0xFFu;
       }
@@ -816,68 +785,73 @@ namespace Elite
       carry = (accumulator & 1u) != 0u;
       accumulator = static_cast<std::uint8_t>((accumulator >> 1) | (intoAccumulator ? 0x80u : 0u));
 
-      for (int byte = 2; byte >= 0; --byte)
+      for (std::uint8_t* const byte : {&k.high, &k.mid, &k.low})
       {
-        const bool next = (_work.k[byte] & 1u) != 0u;
-        _work.k[byte] = static_cast<std::uint8_t>((_work.k[byte] >> 1) | (carry ? 0x80u : 0u));
+        const bool next = (*byte & 1u) != 0u;
+        *byte = static_cast<std::uint8_t>((*byte >> 1) | (carry ? 0x80u : 0u));
         carry = next;
       }
     }
 
     // 6502: STA T / LDA R / EOR Q / AND #128 / ORA T / STA K+3 -- the sign is the two operands'.
-    _work.t = accumulator;
-    _work.k[3] = static_cast<std::uint8_t>(accumulator | ((_work.r ^ _work.q) & 0x80u));
+    k.top = static_cast<std::uint8_t>(accumulator | ((r ^ _multiplier) & 0x80u));
+    return k;
   }
 
-  void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcept
+  std::uint8_t Normalise(std::span<std::uint8_t, 3> _vector) noexcept
   {
     /*
      * 6502: LDA XX15 / JSR SQUA / STA R / LDA P / STA Q, then the same for the other two with the
      * running sum added in. The additions are `ADC` with no `CLC`, so the carry SQUA leaves is part
      * of them -- see the header.
      */
-    _work.r = Square(_work, _vector[0]).high;
-    _work.q = _work.p;
+    const Product first = Square(_vector[0]);
+    std::uint8_t r = first.high;
+    std::uint8_t q = first.low;
 
     bool carry = false;
     for (int axis = 1; axis < 3; ++axis)
     {
-      _work.t = Square(_work, _vector[axis]).high;
+      const Product squared = Square(_vector[axis]);
+      const std::uint8_t t = squared.high;
 
-      const std::uint16_t low = static_cast<std::uint16_t>(_work.p) + _work.q + (carry ? 1u : 0u);
-      _work.q = static_cast<std::uint8_t>(low);
+      const std::uint16_t low = static_cast<std::uint16_t>(squared.low) + q + (carry ? 1u : 0u);
+      q = static_cast<std::uint8_t>(low);
       carry = low > 0xFFu;
 
-      const std::uint16_t high = static_cast<std::uint16_t>(_work.t) + _work.r + (carry ? 1u : 0u);
-      _work.r = static_cast<std::uint8_t>(high);
+      const std::uint16_t high = static_cast<std::uint16_t>(t) + r + (carry ? 1u : 0u);
+      r = static_cast<std::uint8_t>(high);
       carry = high > 0xFFu;
     }
 
     // 6502: JSR LL5 -- Q = sqrt(R Q). The exit carry is not read here.
-    (void)SquareRoot(_work);
+    const std::uint8_t length = SquareRoot(r, q).value;
 
     // 6502: LDA XX15,n / JSR TIS2 / STA XX15,n -- each component scaled to a length of 96.
     for (int axis = 0; axis < 3; ++axis)
     {
-      _vector[axis] = DivideByQ(_work, _vector[axis]);
+      _vector[axis] = DivideSigned(_vector[axis], length);
     }
+
+    return length;
   }
 
-  void DivideSignedToK(MathWorkspace& _work) noexcept
+  KBlock DivideSigned24(SignMag24 _numerator, SignMag24 _denominator) noexcept
   {
     // P(2 1 0) is forced to at least 1, for the same reason Q is: the scaling loop below shifts
     // until a set bit arrives, and an all-zero numerator has none to give it.
-    _work.p = static_cast<std::uint8_t>(_work.p | 0x01u);
+    std::uint8_t p = static_cast<std::uint8_t>(_numerator.lo | 0x01u);
+    std::uint8_t p1 = _numerator.hi;
 
     // The sign of the answer, put aside now because the division that follows is on magnitudes.
-    _work.t = static_cast<std::uint8_t>((_work.p2 ^ _work.s) & 0x80u);
+    const std::uint8_t t = static_cast<std::uint8_t>((_numerator.sgn ^ _denominator.sgn) & 0x80u);
 
     // The scale factor, counted UP by the numerator's shifts and DOWN by the denominator's, so
     // what is left at the end is the difference -- and a byte, so it wraps rather than going
     // negative, which is why the test below is on bit 7 and not on a comparison.
     std::uint8_t y = 0;
 
-    std::uint8_t a = static_cast<std::uint8_t>(_work.p2 & 0x7Fu);
+    std::uint8_t a = static_cast<std::uint8_t>(_numerator.sgn & 0x7Fu);
 
     // 6502: DVL9 -- shift the numerator up until its top byte reaches 64.
     //
@@ -888,10 +862,10 @@ namespace Elite
     // wrong answer. Cheaper to keep than to argue about.
     while (a < 64u)
     {
-      const ShiftResult low = RotateLeftValue(_work.p, false);
-      _work.p = low.value;
-      const ShiftResult middle = RotateLeftValue(_work.p1, low.carry);
-      _work.p1 = middle.value;
+      const ShiftResult low = RotateLeftValue(p, false);
+      p = low.value;
+      const ShiftResult middle = RotateLeftValue(p1, low.carry);
+      p1 = middle.value;
       const ShiftResult high = RotateLeftValue(a, middle.carry);
       a = high.value;
       ++y;
@@ -901,27 +875,29 @@ namespace Elite
       }
     }
 
-    _work.p2 = a;
+    const std::uint8_t p2 = a;
 
     // 6502: DVL6 -- and the denominator up until its top BIT is set. The decrement is at the top
     // of the loop and the test at the bottom, so this always runs at least once.
-    a = static_cast<std::uint8_t>(_work.s & 0x7Fu);
+    std::uint8_t q = _denominator.lo;
+    std::uint8_t r = _denominator.hi;
+    a = static_cast<std::uint8_t>(_denominator.sgn & 0x7Fu);
     do
     {
       --y;
-      const ShiftResult low = RotateLeftValue(_work.q, false);
-      _work.q = low.value;
-      const ShiftResult middle = RotateLeftValue(_work.r, low.carry);
-      _work.r = middle.value;
+      const ShiftResult low = RotateLeftValue(q, false);
+      q = low.value;
+      const ShiftResult middle = RotateLeftValue(r, low.carry);
+      r = middle.value;
       const ShiftResult high = RotateLeftValue(a, middle.carry);
       a = high.value;
     } while ((a & 0x80u) == 0u);
 
     // 6502: DV9 -- the two top bytes are now as large as they will go, so the ratio can be had
     // from them alone.
-    _work.q = a;
-    _work.r = 254;
-    a = _work.p2;
+    q = a;
+    r = 254;
+    a = p2;
 
     // 6502: LL31new / LL29new -- LL31's body, inlined in the original and a loop here. R is both
     // the answer and the counter: the eight bits shifted in push the seven set bits out, and the
@@ -936,17 +912,17 @@ namespace Elite
       {
         // The numerator has a ninth bit, so the subtraction cannot borrow and the original does
         // not bother testing -- it subtracts and forces the quotient bit with a `SEC`.
-        a = SubtractWithCarry(a, _work.q, true).value;
+        a = SubtractWithCarry(a, q, true).value;
         bit = true;
       }
-      else if (a >= _work.q)
+      else if (a >= q)
       {
-        a = SubtractWithCarry(a, _work.q, true).value;
+        a = SubtractWithCarry(a, q, true).value;
         bit = true;
       }
 
-      const ShiftResult quotient = RotateLeft(_work.r, bit);
-      _work.r = quotient.value;
+      const ShiftResult quotient = RotateLeft(r, bit);
+      r = quotient.value;
       if (!quotient.carry)
       {
         break;
@@ -955,98 +931,94 @@ namespace Elite
 
     // 6502: LL312new -- the answer is the byte in R, and all that is left is to put it back on
     // the scale the two loops above took it off.
-    _work.k[1] = 0;
-    _work.k[2] = 0;
-    _work.k[3] = 0;
+    KBlock k;
 
     if ((y & 0x80u) != 0u)
     {
       // 6502: DVL8 -- Y came out negative, so the denominator was shifted further than the
       // numerator and the answer is scaled back UP, through all four bytes of K.
-      a = _work.r;
+      a = r;
       do
       {
         const ShiftResult low = RotateLeftValue(a, false);
         a = low.value;
-        const ShiftResult k1 = RotateLeft(_work.k[1], low.carry);
-        _work.k[1] = k1.value;
-        const ShiftResult k2 = RotateLeft(_work.k[2], k1.carry);
-        _work.k[2] = k2.value;
-        _work.k[3] = RotateLeft(_work.k[3], k2.carry).value;
+        const ShiftResult k1 = RotateLeft(k.mid, low.carry);
+        k.mid = k1.value;
+        const ShiftResult k2 = RotateLeft(k.high, k1.carry);
+        k.high = k2.value;
+        k.top = RotateLeft(k.top, k2.carry).value;
         ++y;
       } while (y != 0u);
 
-      _work.k[0] = a;
+      k.low = a;
 
       // The sign is ORed in here and STORED on the other two paths, because only this one can
       // have shifted something into K+3 that is worth keeping.
-      _work.k[3] = static_cast<std::uint8_t>(_work.k[3] | _work.t);
-      return;
+      k.top = static_cast<std::uint8_t>(k.top | t);
+      return k;
     }
 
     if (y == 0u)
     {
       // 6502: DV13 -- the two scalings cancelled, so R is already the answer.
-      _work.k[0] = _work.r;
-      _work.k[3] = _work.t;
-      return;
+      k.low = r;
+      k.top = t;
+      return k;
     }
 
     // 6502: DVL10 -- Y is positive, so the answer is scaled back DOWN. The top three bytes stay
     // zero: nothing shifted right out of the lowest byte can reach them.
-    a = _work.r;
+    a = r;
     do
     {
       a = static_cast<std::uint8_t>(a >> 1);
       --y;
     } while (y != 0u);
 
-    _work.k[0] = a;
-    _work.k[3] = _work.t;
+    k.low = a;
+    k.top = t;
+    return k;
   }
 
-  void DivideToUR(MathWorkspace& _work, std::uint8_t _a) noexcept
+  Quotient16 DivideWideByLog(std::uint8_t _dividend, std::uint8_t _divisor, std::uint8_t _high) noexcept
   {
     // 6502: LL84 -- the divisor is zero, so there is no answer to give.
-    if (_work.q == 0u)
+    if (_divisor == 0u)
     {
-      _work.r = 50;
-      _work.u = 50;
-      return;
+      return Quotient16{50, 50};
     }
 
     // 6502: LL63 -- halve A until LL28 will take it. The shift happens before the test, so an A
     // that is already smaller than Q is still halved once and the count is still one.
     std::uint8_t shifts = 0;
-    std::uint8_t value = _a;
+    std::uint8_t value = _dividend;
     do
     {
       value = static_cast<std::uint8_t>(value >> 1);
       ++shifts;
-    } while (value >= _work.q);
+    } while (value >= _divisor);
 
-    _work.s = shifts;
-    (void)DivideToR(_work, value);
+    // 6502: STX S / JSR LL28 -- the count parked in S, which LL28 leaves alone.
+    std::uint8_t doubled = DivideByLog(value, _divisor).value;
 
     // 6502: LL64 -- and double the answer back, through U. The sign test is on U after the rotate,
     // so an answer that needs seventeen bits is an overflow and takes the same exit as a zero
-    // divisor does.
-    std::uint8_t doubled = _work.r;
+    // divisor does. U is whatever the caller left there, and the rotate brings its old bits back
+    // up: LL9 clears it before the y divide for exactly that reason.
+    std::uint8_t high = _high;
     for (std::uint8_t remaining = shifts; remaining != 0u; --remaining)
     {
       const ShiftResult shifted = RotateLeftValue(doubled, false);
       doubled = shifted.value;
-      _work.u = RotateLeft(_work.u, shifted.carry).value;
+      high = RotateLeft(high, shifted.carry).value;
 
-      if ((_work.u & 0x80u) != 0u)
+      if ((high & 0x80u) != 0u)
       {
-        _work.r = 50;
-        _work.u = 50;
-        return;
+        return Quotient16{50, 50};
       }
     }
 
-    _work.r = doubled;
+    return Quotient16{high, doubled};
   }
 
 } // namespace Elite

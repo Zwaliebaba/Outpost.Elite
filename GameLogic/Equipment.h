@@ -54,7 +54,7 @@ namespace Elite
    * them falls through to the mining laser's price, which is the same "anything else is the last
    * one" shape the status screen uses to name lasers.
    */
-  void Refund(CommanderBlock& _commander, std::uint8_t _view, std::uint8_t _newPower, std::uint8_t _fuel) noexcept;
+  void Refund(Commander& _commander, std::uint8_t _view, std::uint8_t _newPower, std::uint8_t _fuel) noexcept;
 
   /*
    * 6502: EQSHP -- the Equip Ship screen.
@@ -75,6 +75,6 @@ namespace Elite
    * branches then hand it back with MCASH -- so buying an escape pod you already own moves the
    * money out and back rather than never moving it.
    */
-  void EquipShipScreen(TradeScreen& _screen, CommanderBlock& _commander, std::uint8_t _techLevel) noexcept;
+  void EquipShipScreen(TradeScreen& _screen, Commander& _commander, std::uint8_t _techLevel) noexcept;
 
 } // namespace Elite

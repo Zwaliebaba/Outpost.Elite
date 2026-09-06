@@ -11,7 +11,8 @@ namespace Elite
 {
 
   /*
-   * The universe, which is not stored anywhere (slice 2a).
+   * The galaxy generator -- a universe that is not stored anywhere (slice 2a). `Galaxy.h` since
+   * 2026-09-06, when `Universe` became the name of the whole game state (Design/Modernize.md M0-b).
    *
    * Elite's eight galaxies of 256 systems are not a table. They are six bytes of seed and a
    * twisting rule: twist four times and you are at the next system, and everything about a system

@@ -39,7 +39,7 @@ namespace Elite
    * stores `K+3` and the port needs nothing returned from the call. Returns the high byte with the
    * sign cleared, which is what the caller compares against a distance.
    */
-  [[nodiscard]] std::uint8_t DoubleAndAddCoordinate(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _from, std::uint8_t _to) noexcept;
+  [[nodiscard]] std::uint8_t DoubleAndAddCoordinate(Ship& _work, std::uint8_t _from, std::uint8_t _to) noexcept;
 
   /*
    * 6502: MAS2, and `m` above it -- OR the three sign bytes of a ship block together and drop the
@@ -64,11 +64,11 @@ namespace Elite
    * the additions are the plain ones they look like. That is measured over all 512 inputs rather
    * than assumed, and it is why `MAS3` needed no change when the flag was modelled (§6.70).
    */
-  [[nodiscard]] std::uint8_t SumOfSquares(const Bubble& _bubble, MathWorkspace& _math, std::uint8_t _slot) noexcept;
+  [[nodiscard]] std::uint8_t SumOfSquares(const Bubble& _bubble, std::uint8_t _slot) noexcept;
 
   /// 6502: MAS4 -- the same OR as `MAS2` but over `INWK`'s high bytes rather than a slot's sign
   /// bytes, and without the mask. Four instructions, and it is here because the loop calls it.
-  [[nodiscard]] std::uint8_t LargestShipAxis(const ShipBlock& _work, std::uint8_t _a) noexcept;
+  [[nodiscard]] std::uint8_t LargestShipAxis(const Ship& _work, std::uint8_t _a) noexcept;
 
   /*
    * 6502: cntr -- creep a centre-based control reading one step towards 128.
@@ -124,10 +124,10 @@ namespace Elite
    * inside the box, clear when any axis is outside it. `FAROF` is `LDA #224` and then this, which
    * is the distance at which the flight loop stops caring about a ship at all.
    */
-  [[nodiscard]] bool WithinRange(const ShipBlock& _work, std::uint8_t _limit) noexcept;
+  [[nodiscard]] bool WithinRange(const Ship& _work, std::uint8_t _limit) noexcept;
 
   /// 6502: FAROF -- `WithinRange` at the limit the loop uses, which is 224.
-  [[nodiscard]] inline bool WithinLoopRange(const ShipBlock& _work) noexcept
+  [[nodiscard]] inline bool WithinLoopRange(const Ship& _work) noexcept
   {
     return WithinRange(_work, 224u);
   }
@@ -145,7 +145,7 @@ namespace Elite
    * own, which says "no" for a sum too big to compare rather than for a ship too far to the side --
    * the same answer by a different route, and the port keeps them apart because the original does.
    */
-  [[nodiscard]] bool IsHit(const ShipBlock& _work, MathWorkspace& _math, std::uint16_t _blueprint, std::uint8_t _type) noexcept;
+  [[nodiscard]] bool IsHit(const Ship& _work, const Blueprint& _blueprint, ShipType _type) noexcept;
 
   /// 6502: SFS1 -- phase 4's "spawn a child ship from this one", which is where the wreckage
   /// actually comes from. It is here rather than in `Spawn.h` because the only thing in this slice
@@ -157,7 +157,7 @@ namespace Elite
 
     /// 6502: JSR SFS1 with A = the AI flag and X = the type. It returns a carry saying whether the
     /// ship fitted; `SPIN` does not look at it, and this slice has no other caller.
-    [[nodiscard]] virtual bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) = 0;
+    [[nodiscard]] virtual bool SpawnChild(std::uint8_t _aiFlag, ShipType _type) = 0;
   };
 
   /*
@@ -183,7 +183,9 @@ namespace Elite
    * kept the test inside the loop would agree with the game on every input and be a different
    * routine.
    */
-  void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, std::uint8_t _type, std::uint8_t _count) noexcept;
+  /// Returns the exit carry, which is the caller's own when the count is zero and the last
+  /// `SFS1`'s -- `NWSHP`'s "was it made" -- otherwise. `SPIN` and `.nosp` both read it (M2-d).
+  bool SpawnItems(SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count, bool _carryIn) noexcept;
 
   /*
    * 6502: SPIN -- a destroyed ship drops some of its cargo, or does not.
@@ -198,8 +200,9 @@ namespace Elite
    * The port had it the obvious way round and the oracle disagreed on the first blueprint whose
    * byte 0 differed from the roll (§6.74).
    */
-  void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects, std::uint16_t _blueprint, std::uint8_t _type,
-                   bool _carryIn) noexcept;
+  /// Returns the exit carry: `DORND`'s when the roll drops nothing, else `SPIN2`'s. `MA47` runs
+  /// the second `JSR SPIN` on what the first one left (M2-d).
+  bool SpawnDebris(Rng& _rng, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept;
 
   /*
    * 6502: KY12 to KY20 -- the flight keys the loop reads that `DOKEY` does not.
@@ -249,7 +252,7 @@ namespace Elite
 
     /// 6502: JSR FRS1 with X = the type -- phase 4's "put a ship right in front of us". The carry
     /// says whether it fitted, and `FRMIS` gives up when it did not.
-    [[nodiscard]] virtual bool SpawnAhead(std::uint8_t _type) = 0;
+    [[nodiscard]] virtual bool SpawnAhead(ShipType _type) = 0;
 
     /*
      * 6502: JSR ANGRY with A = the type and INF pointing at the ship -- "that ship has noticed".
@@ -260,8 +263,12 @@ namespace Elite
      * `XSAV`'s slot -- with nothing locked at all in the common case. A seam that took only the type
      * had to guess which, guessed `MSTG`, and read block 255 the first time a laser landed without
      * a missile lock (§6.142).
+     *
+     * RETURNS THE CARRY `ANGRY` EXITS WITH, because part 11 falls from it into `JSR LL9` and a ship
+     * the laser has just killed seeds its explosion cloud on that flag (§6.157). `Elite::Anger` says
+     * what the flag is; an implementation that does not run the routine answers for a trap.
      */
-    virtual void Anger(std::uint8_t _slot, std::uint8_t _type) = 0;
+    virtual bool Anger(std::uint8_t _slot, ShipType _type) = 0;
   };
 
   /*
@@ -269,7 +276,7 @@ namespace Elite
    *
    * Slice 3d-d-iii-b left it behind one because the fourteen instructions above its fall into
    * `NWSHP` self-modify `XX21`, and the port's blueprint region is `const` -- so what it needed was
-   * a decision about where the mutable entry lives, not a transcription. `Bubble::stationBlueprint`
+   * a decision about where the mutable entry lives, not a transcription. `Bubble::stationType`
    * is that decision, and it is measured rather than guessed: `NWSPS` is the ONLY writer of the
    * table in the whole build, and it writes one entry. `Spawn.h` has the routine now, and both
    * callers -- part 14 and `TT110` -- run it for real. §6.73 for the fourth time.

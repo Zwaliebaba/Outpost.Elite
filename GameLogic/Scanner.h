@@ -9,7 +9,6 @@
 namespace Elite
 {
 
-  struct MathWorkspace;
 
   /*
    * The scanner and the compass (slice 3d-a).
@@ -45,12 +44,12 @@ namespace Elite
    * const -- `WPSHPS` clears bits 3, 4 and 6 of byte 31 itself, in the SLOT rather than in `INWK`,
    * after this returns.
    *
-   * WHAT IT LEAVES BEHIND: `X1` is the stick's pixel mask and not an x coordinate by the time this
-   * returns, `Y1` is one less than the blip's row because `CPIX4` decrements it, and `COL` is the
-   * type's scanner colour. All three are the original's, and `SCAN` is a leaf that nobody reads
-   * them back from -- but the port keeps them because it keeps the workspace.
+   * WHAT IT LEAVES BEHIND in the original: `X1` is the stick's pixel mask and not an x coordinate
+   * by the time it returns, `Y1` is one less than the blip's row because `CPIX4` decrements it,
+   * and `COL` is the type's scanner colour. `SCAN` is a leaf that nobody reads them back from, and
+   * since M2-c they are its locals.
    */
-  void DrawScannerBlip(Canvas& _canvas, DrawWorkspace& _work, const ShipBlock& _ship, std::uint8_t _type, std::uint8_t _view) noexcept;
+  void DrawScannerBlip(Canvas& _canvas, const Ship& _ship, ShipType _type, std::uint8_t _view) noexcept;
 
   // ---- the compass ----------------------------------------------------------------------------
 
@@ -92,6 +91,31 @@ namespace Elite
   using K3Block = std::array<std::uint8_t, 10>;
 
   /*
+   * 6502: XX15, XX15+1, XX15+2 as `TAS2` and `NORM` leave them -- a unit vector, three
+   * sign-magnitude bytes with seven bits of magnitude and the sign on top, scaled to a length of
+   * 96. `SP2` reads it for the compass, `TAS3`/`TAS4` take its dot product with an orientation
+   * vector, `TAS6` turns it round, and `MA3` part 9 reads its z for the docking check.
+   *
+   * A value since M2-c. The three bytes are the first three of `XX15`, which the line drawing and
+   * the clipper use as a line (§6.37); a routine that produces one hands it back rather than
+   * leaving it in the shared bytes.
+   */
+  struct UnitVector
+  {
+    std::uint8_t x = 0; ///< 6502: XX15
+    std::uint8_t y = 0; ///< 6502: XX15+1
+    std::uint8_t z = 0; ///< 6502: XX15+2
+  };
+
+  /// What `TAS2` (and `TA2`, the tail `DOCKIT` enters at) hand back: the vector, and the length
+  /// `NORM` computed on the way and left in `Q`, which `DOCKIT` reads as the distance.
+  struct NormalisedVector
+  {
+    UnitVector vector;
+    std::uint8_t length = 0; ///< 6502: Q, as `NORM` leaves it
+  };
+
+  /*
    * 6502: DOT -- draw the compass dot where `COMX`, `COMY` and `COMC` say it is.
    *
    * The colour decides the SHAPE. `CMP #YELLOW / BNE CPIX2` falls through into `CPIX4` when the
@@ -99,7 +123,7 @@ namespace Elite
    * four-pixel block and one pointing backwards is a two-pixel dash. That is not a separate
    * decision from the colour: it is the same byte read twice.
    */
-  void DrawCompassDot(Canvas& _canvas, DrawWorkspace& _work, const Compass& _compass) noexcept;
+  void DrawCompassDot(Canvas& _canvas, const Compass& _compass) noexcept;
 
   /*
    * 6502: SPS3 -- copy one of the planet's coordinates into `K3`, as (mid, high, sign).
@@ -109,7 +133,7 @@ namespace Elite
    * below it -- so this takes bytes 1 and 2 as a sixteen-bit magnitude and keeps the sign apart.
    * The planet is millions of units away; the bottom eight bits of that are not a direction.
    */
-  void LoadPlanetAxis(const ShipBlock& _planet, K3Block& _axes, std::uint8_t _at) noexcept;
+  void LoadPlanetAxis(const Ship& _planet, K3Block& _axes, std::uint8_t _at) noexcept;
 
   /*
    * 6502: TAS2 -- turn the three coordinates in `K3` into a unit vector in `XX15`.
@@ -118,24 +142,26 @@ namespace Elite
    * high byte, halve it, and put the sign back on top -- so what comes out is three sign-magnitude
    * bytes with seven bits of magnitude, pointing the same way the input did.
    *
-   * AND THEN IT FALLS INTO `NORM`, which is why this takes a `MathWorkspace`: `TAS2` has no `RTS`,
-   * so the three bytes the shifting produces are an intermediate and the answer is that vector
-   * scaled to a length of 96. Slice 3d-a's first sweep caught it -- `K3` agreed byte for byte and
-   * `XX15` did not, which is the signature of a fall-through rather than of arithmetic (§6.62).
+   * AND THEN IT FALLS INTO `NORM`: `TAS2` has no `RTS`, so the three bytes the shifting produces
+   * are an intermediate and the answer is that vector scaled to a length of 96. Slice 3d-a's first
+   * sweep caught it -- `K3` agreed byte for byte and `XX15` did not, which is the signature of a
+   * fall-through rather than of arithmetic (§6.62).
    *
    * THE TENTH BYTE IS THE SHIFT COUNTER, spelled as data. `K3+9` starts as the three low bytes
    * ORed together with bit 0 forced on, and the loop rotates it and the ORed high bytes as one
    * sixteen-bit value: the forced bit is what guarantees the loop ends, because it reaches bit 7
-   * and falls out within sixteen turns however small the coordinates are.
+   * and falls out within sixteen turns however small the coordinates are. It is this routine's
+   * local since M2-c; the nine bytes below it are shifted in place and the callers read them.
    *
    * `XX15` here is `X1`, `Y1` and `X2` -- the same six bytes the line drawing uses, because that is
-   * what `XX15` is (§6.37). `SP2` reads all three back.
+   * what `XX15` is (§6.37) -- and since M2-c it comes back as the `UnitVector`.
    */
-  void NormaliseAxes(K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
+  [[nodiscard]] NormalisedVector NormaliseAxes(K3Block& _axes) noexcept;
 
   /// 6502: SPS1 -- three `SPS3` calls for the planet, then a fall-through into `TAS2`. The
-  /// fall-through is the routine: `SPS1` has no `RTS` of its own.
-  void LoadPlanetAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
+  /// fall-through is the routine: `SPS1` has no `RTS` of its own. `_axes` is the `K3` it leaves,
+  /// which `MA3` part 9 normalises a second time.
+  [[nodiscard]] UnitVector LoadPlanetAxes(const Bubble& _bubble, K3Block& _axes) noexcept;
 
   /*
    * 6502: SPS4 -- the same for the space station, which is nine bytes copied straight across.
@@ -144,7 +170,7 @@ namespace Elite
    * -- over the sun, which is why the two are never in the bubble together. And the station's
    * coordinates are ordinary sixteen-bit ones, so unlike the planet's there is nothing to drop.
    */
-  void LoadStationAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept;
+  [[nodiscard]] UnitVector LoadStationAxes(const Bubble& _bubble, K3Block& _axes) noexcept;
 
   /// What `SPS2` hands back: the original returns the signed offset in X and its sign extension in
   /// Y, and `SP2` reads both -- plus the carry, which comes from `DVID4` and lands in an `ADC` and
@@ -164,7 +190,7 @@ namespace Elite
    * then undoes -- it is how the sign gets out of the way: `ASL A` pushes bit 7 into the carry and
    * `LDA #0 / ROR A` catches it, leaving the magnitude in A with nothing above it.
    */
-  [[nodiscard]] CompassOffset ScaleToCompass(MathWorkspace& _math, std::uint8_t _a) noexcept;
+  [[nodiscard]] CompassOffset ScaleToCompass(std::uint8_t _value) noexcept;
 
   /*
    * 6502: SP2 -- put the dot where `XX15` points, and draw it.
@@ -173,12 +199,11 @@ namespace Elite
    * The colour comes from the sign of the third coordinate alone: ahead is yellow and behind is
    * green, and `DOT` reads that same byte again to decide whether to draw a block or a dash.
    */
-  void DrawCompass(Canvas& _canvas, DrawWorkspace& _work, MathWorkspace& _math, Compass& _compass) noexcept;
+  void DrawCompass(Canvas& _canvas, Compass& _compass, UnitVector _towards) noexcept;
 
   /// 6502: SP1 -- `JSR SPS4` and then a fall-through into `SP2`. Aim the compass at the station
   /// and draw it.
-  void AimCompassAtStation(Canvas& _canvas, DrawWorkspace& _work, MathWorkspace& _math, Compass& _compass, const Bubble& _bubble,
-                           K3Block& _axes) noexcept;
+  void AimCompassAtStation(Canvas& _canvas, Compass& _compass, const Bubble& _bubble, K3Block& _axes) noexcept;
 
   /*
    * 6502: COMPAS -- erase the old dot, work out the new one, draw it.
@@ -191,6 +216,6 @@ namespace Elite
    * count, not a flag of its own (§6.58). So the compass points at the station whenever there is
    * one and at the planet otherwise.
    */
-  void UpdateCompass(Canvas& _canvas, DrawWorkspace& _work, MathWorkspace& _math, Compass& _compass, const Bubble& _bubble) noexcept;
+  void UpdateCompass(Canvas& _canvas, Compass& _compass, const Bubble& _bubble) noexcept;
 
 } // namespace Elite

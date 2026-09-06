@@ -96,11 +96,11 @@ namespace Elite
    * borrowed the routine FALLS THROUGH into MCASH, which adds the same amount straight back. So
    * the commander is briefly in debt, and no caller can tell.
    */
-  [[nodiscard]] bool SpendCash(CommanderBlock& _commander, std::uint16_t _tenths) noexcept;
+  [[nodiscard]] bool SpendCash(Commander& _commander, std::uint16_t _tenths) noexcept;
 
   /// 6502: MCASH -- receive an amount. Cannot fail, and returns with the carry clear so that a
   /// caller sharing LCASH's exit reads it as "not affordable".
-  void ReceiveCash(CommanderBlock& _commander, std::uint16_t _tenths) noexcept;
+  void ReceiveCash(Commander& _commander, std::uint16_t _tenths) noexcept;
 
   /*
    * 6502: GCASH -- what a quantity costs, in tenths.
@@ -127,7 +127,7 @@ namespace Elite
    * Tribbles are cargo too. Two hundred and fifty-six of them weigh a tonne, so the HIGH byte of
    * the tribble count is added in, and its addition takes the carry the loop left.
    */
-  [[nodiscard]] bool CargoFits(const CommanderBlock& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept;
+  [[nodiscard]] bool CargoFits(const Commander& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept;
 
   /*
    * 6502: BAD -- what the hold is worth in trouble, from three of its seventeen slots.
@@ -142,7 +142,7 @@ namespace Elite
    * `TT110` ORs the answer into `FIST` on every launch, so the fine is levied by leaving the
    * station rather than by being scanned.
    */
-  [[nodiscard]] std::uint8_t ContrabandPenalty(const CommanderBlock& _commander) noexcept;
+  [[nodiscard]] std::uint8_t ContrabandPenalty(const Commander& _commander) noexcept;
 
   /*
    * 6502: TT152 -- the units an item is sold in, from two bits of its own gradient byte.

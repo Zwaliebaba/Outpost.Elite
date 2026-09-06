@@ -24,10 +24,10 @@ namespace Elite
      * 6502: PTCLS and PTCLS2, which are one body -- see the header. `_effects` is null for `PTCLS`
      * and the seam for `PTCLS2`.
      */
-    void DrawParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const ShipBlock& _work, LineHeap& _heap,
-                       const Bubble& _bubble, ExplosionEffects* _effects) noexcept
+    void DrawParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap, const Bubble& _bubble,
+                       ExplosionEffects* _effects) noexcept
     {
-      const std::uint16_t address = ShipHeapAddress(_work);
+      const HeapOffset address = _work.heap;
 
       /*
        * 6502: sprx and spry -- where the burst sits relative to the cloud's centre.
@@ -44,13 +44,21 @@ namespace Elite
 
         // 6502: LDA INWK+7 / CMP #7 -- the compare is made with A already loaded for the register
         // write, so the two answers are chosen before the branch rather than after it.
-        const bool distant = _work[SHIP_Z_OFFSET + 1] >= 7u;
+        const bool distant = _work.z.hi >= 7u;
         _effects->SetSpriteExpansion(distant ? 0xFDu : 0xFFu);
         sprx = distant ? 44u : 32u;
         spry = distant ? 40u : 30u;
       }
 
-      _math.q = _heap.Read(address); // 6502: byte 0 of the heap -- this frame's cloud size
+      /*
+       * 6502: byte 0 of the heap -- this frame's cloud size, and `STA Q`.
+       *
+       * `Q` stays in the workspace where `T`, `U`, `CNT` and `TGT` became locals, for the same
+       * reason the clipper's did (M2-c-2): it is the frame's `Q`, and the altitude check takes
+       * whatever the frame last left there as its radicand's low byte (§8, R22). `DOEXP` runs
+       * inside `LL9` part 9, so on a frame whose last ship exploded this is that byte.
+       */
+      _math.q = _heap.Read(address);
 
       /*
        * 6502: byte 1, the cloud counter, turned into a particle count.
@@ -59,13 +67,15 @@ namespace Elite
        * is complemented, so the count walks 1..7 up and 7..1 back down over the explosion's life.
        * Four shifts rather than the cassette version's three -- the C64 draws half as many.
        */
-      std::uint8_t counter = _heap.Read(static_cast<std::uint16_t>(address + 1u));
+      std::uint8_t counter = _heap.Read(address.Byte(static_cast<std::uint16_t>(1u)));
       if ((counter & 0x80u) != 0u)
       {
         counter ^= 0xFFu;
       }
-      _math.u = static_cast<std::uint8_t>((counter >> 4) | 1u); // 6502: LSR A x4 / ORA #1 / STA U
-      _math.tgt = _heap.Read(static_cast<std::uint16_t>(address + 2u));
+      // `U`, `TGT` and `CNT` are `PTCLS`'s own since M2-c-3: it fills each before its first read
+      // and `DOEXP` is the last thing that happens to a ship in a frame. `Q` is not -- see below.
+      const std::uint8_t particles = static_cast<std::uint8_t>((counter >> 4) | 1u); // 6502: LSR A x4 / ORA #1 / STA U
+      const std::uint8_t lastVertex = _heap.Read(address.Byte(static_cast<std::uint16_t>(2u))); // 6502: TGT
 
       // 6502: LDA RAND+1 / PHA -- kept across the whole routine, because everything below
       // deliberately destroys the generator's state and one byte of it has to survive.
@@ -88,9 +98,9 @@ namespace Elite
         for (int index = 3; index >= 0; --index)
         {
           ++vertex;
-          k3[static_cast<std::size_t>(index)] = _heap.Read(static_cast<std::uint16_t>(address + vertex));
+          k3[static_cast<std::size_t>(index)] = _heap.Read(address.Byte(static_cast<std::uint16_t>(vertex)));
         }
-        _math.cnt = vertex; // 6502: STY CNT
+        const std::uint8_t cnt = vertex; // 6502: STY CNT
 
         if (_effects != nullptr)
         {
@@ -128,20 +138,20 @@ namespace Elite
         std::array<std::uint8_t, 4> seeds{};
         for (std::size_t byte = 0; byte < 4u; ++byte)
         {
-          seeds[byte] = static_cast<std::uint8_t>(_heap.Read(static_cast<std::uint16_t>(address + 3u + byte)) ^ _math.cnt);
+          seeds[byte] = static_cast<std::uint8_t>(_heap.Read(address.Byte(static_cast<std::uint16_t>(3u + byte))) ^ cnt);
         }
         _rng.SetState(seeds);
 
         // 6502: LDY U / EXL4 ... DEY / BPL EXL4 -- so the body runs U + 1 times, not U.
-        std::uint8_t particle = _math.u;
+        std::uint8_t particle = particles;
         for (;;)
         {
           // 6502: JSR DORND2 / STA ZZ -- how far away the particle is, which is what decides
-          // whether `PIXEL` draws one mark, two, or a square.
-          _draw.zz = _rng.NextRepeatable().value;
+          // whether `PIXEL` draws one mark, two, or a square. `ZZ` and `Y1` are this loop's own (M2-c).
+          const std::uint8_t distance = _rng.NextRepeatable().value;
 
-          _math.r = k3[1];
-          const ExplosionOffset offsetY = OffsetByCloud(_math, _rng, k3[0]);
+          // 6502: LDA K3+1 / STA R / LDA K3 / JSR EXS1 -- the vertex's y, against the cloud in Q.
+          const ExplosionOffset offsetY = OffsetByCloud(_rng, k3[0], k3[1], _math.q);
 
           if (offsetY.high != 0u || offsetY.low >= EXPLOSION_PARTICLE_BOTTOM)
           {
@@ -155,14 +165,13 @@ namespace Elite
           }
           else
           {
-            _draw.y1 = offsetY.low; // 6502: STX Y1
+            const std::uint8_t y1 = offsetY.low; // 6502: STX Y1
 
-            _math.r = k3[3];
-            const ExplosionOffset offsetX = OffsetByCloud(_math, _rng, k3[2]);
+            const ExplosionOffset offsetX = OffsetByCloud(_rng, k3[2], k3[3], _math.q);
 
             if (offsetX.high == 0u)
             {
-              PlotPixel(_canvas, _draw, offsetX.low, _draw.y1);
+              PlotPixel(_canvas, offsetX.low, y1, distance);
             }
           }
 
@@ -173,8 +182,8 @@ namespace Elite
           }
         }
 
-        vertex = _math.cnt; // 6502: LDY CNT
-      } while (vertex < _math.tgt);
+        vertex = cnt; // 6502: LDY CNT
+      } while (vertex < lastVertex);
 
       /*
        * 6502: PLA / STA RAND+1, then LDA K%+6 / STA RAND+3.
@@ -192,14 +201,14 @@ namespace Elite
         _effects->SetRasterMode(0x04u); // 6502: LDA #%100 / JSR SETL1 -- map the I/O page back out
       }
 
-      state[3] = _bubble.blocks[0][6];
+      state[3] = _bubble.blocks[0].z.lo;
       _rng.SetState(state);
     }
   } // namespace
 
-  ExplosionOffset OffsetByCloud(MathWorkspace& _math, Rng& _rng, std::uint8_t _a) noexcept
+  ExplosionOffset OffsetByCloud(Rng& _rng, std::uint8_t _high, std::uint8_t _low, std::uint8_t _size) noexcept
   {
-    _math.s = _a; // 6502: STA S -- the high byte of the vertex, kept for the tail
+    const std::uint8_t s = _high; // 6502: STA S -- the high byte of the vertex, kept for the tail
 
     // 6502: the inlined copy of DORND2 -- the C64 spells the routine out here rather than calling
     // it, which changes the timing and nothing else.
@@ -212,52 +221,52 @@ namespace Elite
      * byte. `FMLTU` parks X there to preserve it and every exit reloads it, which leaves `P`
      * holding a register value nothing goes on to read. See `MultiplyByLog` in `Arith.h`.
      */
-    _math.p = random.previous;
+    (void)random.previous;
 
     if (doubled.carry)
     {
       // 6502: EX5 -- the negative half. The carry is SET here BECAUSE the branch was taken, and
       // `FMLTU` passes an entry carry straight through on its two zero exits, so it matters.
-      const WideResult product = MultiplyByLog(_math, doubled.value, true);
-      _math.t = product.high;
+      const LogProduct product = MultiplyByLog(doubled.value, _size, true);
+      const std::uint8_t t = product.value;
 
       // 6502: LDA R / SBC T / TAX / LDA S / SBC #0 -- and the borrow going in is whatever `FMLTU`
       // left, not a `SEC`.
-      const SubResult low = SubtractWithCarry(_math.r, _math.t, product.carry);
-      const SubResult high = SubtractWithCarry(_math.s, 0, low.carry);
+      const SubResult low = SubtractWithCarry(_low, t, product.carry);
+      const SubResult high = SubtractWithCarry(s, 0, low.carry);
       return ExplosionOffset{high.value, low.value};
     }
 
     // 6502: JSR FMLTU / ADC R / TAX / LDA S / ADC #0 -- the positive half, and the same borrowed
     // carry the other way round. §6.42 recorded this call as one of the two that read it.
-    const WideResult product = MultiplyByLog(_math, doubled.value, false);
-    const AddResult low = AddWithCarry(product.high, _math.r, product.carry);
-    const AddResult high = AddWithCarry(_math.s, 0, low.carry);
+    const LogProduct product = MultiplyByLog(doubled.value, _size, false);
+    const AddResult low = AddWithCarry(product.value, _low, product.carry);
+    const AddResult high = AddWithCarry(s, 0, low.carry);
     return ExplosionOffset{high.value, low.value};
   }
 
-  void DrawExplosionParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const ShipBlock& _work,
-                              LineHeap& _heap, const Bubble& _bubble) noexcept
+  void DrawExplosionParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
+                              const Bubble& _bubble) noexcept
   {
-    DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr);
   }
 
-  void DrawExplosionParticlesWithSprite(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const ShipBlock& _work,
-                                        LineHeap& _heap, const Bubble& _bubble, ExplosionEffects& _effects) noexcept
+  void DrawExplosionParticlesWithSprite(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
+                                        const Bubble& _bubble, ExplosionEffects& _effects) noexcept
   {
-    DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, &_effects);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_effects);
   }
 
-  void DrawExplosionCloud(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, ShipBlock& _work, LineHeap& _heap,
-                          const GeometryWorkspace& _geometry, const Bubble& _bubble, ExplosionEffects& _effects) noexcept
+  void DrawExplosionCloud(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap, const GeometryWorkspace& _geometry,
+                          const Bubble& _bubble, ExplosionEffects& _effects) noexcept
   {
-    const std::uint16_t address = ShipHeapAddress(_work);
+    const HeapOffset address = _work.heap;
 
     // 6502: bit 6 of byte 31 -- there is a cloud on the screen from last frame, so draw it again
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_CLOUD_DRAWN) != 0u)
+    if (Has(_work.state, ShipStateBit::CloudDrawn))
     {
-      DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
+      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr);
     }
 
     /*
@@ -269,8 +278,8 @@ namespace Elite
      * bit 7 must be clear -- z_hi under 32 shifted twice cannot reach 128 -- and so leaves it
      * CLEAR and the cloud ages by four.
      */
-    _math.t = _work[SHIP_Z_OFFSET];
-    std::uint8_t scaled = _work[SHIP_Z_OFFSET + 1];
+    std::uint8_t t = _work.z.lo; // 6502: T -- `DOEXP`'s own since M2-c-3, the low half of the scale
+    std::uint8_t scaled = _work.z.hi;
     bool carry = scaled >= 32u;
 
     if (carry)
@@ -281,8 +290,8 @@ namespace Elite
     {
       for (int pass = 0; pass < 2; ++pass)
       {
-        const ShiftResult low = RotateLeftValue(_math.t, false); // 6502: ASL T
-        _math.t = low.value;
+        const ShiftResult low = RotateLeftValue(t, false); // 6502: ASL T
+        t = low.value;
         scaled = RotateLeftValue(scaled, low.carry).value; // 6502: ROL A
       }
 
@@ -295,18 +304,18 @@ namespace Elite
 
     _math.q = scaled; // 6502: STA Q -- the distance the cloud size is divided by
 
-    const std::uint8_t frump = _heap.Read(static_cast<std::uint16_t>(address + 1u));
+    const std::uint8_t frump = _heap.Read(address.Byte(static_cast<std::uint16_t>(1u)));
     const AddResult grown = AddWithCarry(frump, 4u, carry);
 
     if (grown.carry)
     {
       // 6502: EX2 -- the counter has run off the end, so the explosion is over. Bits 5 and 7 say
       // "exploding" and "killed", and `MVEIT` is what acts on the pair.
-      _work[SHIP_STATE_OFFSET] |= static_cast<std::uint8_t>(SHIP_STATE_EXPLODING | SHIP_STATE_KILLED);
+      _work.state = With(_work.state, ShipStateBit::Exploding, ShipStateBit::Killed);
       return;
     }
 
-    _heap.Write(static_cast<std::uint16_t>(address + 1u), grown.value);
+    _heap.Write(address.Byte(static_cast<std::uint16_t>(1u)), grown.value);
 
     /*
      * 6502: JSR DVID4 -- (P R) = 256 * counter / distance, then times eight, capped at 254.
@@ -315,19 +324,20 @@ namespace Elite
      * branch on it. `ASL R / ROL A` three times shifts the sixteen-bit answer up rather than the
      * byte, which is why R is a workspace byte here and not a discarded remainder.
      */
-    static_cast<void>(DivideAndScale(_math, grown.value));
+    const ScaledDivision divided = DivideAndScale(grown.value, _math.q);
 
-    std::uint8_t size = _math.p;
+    std::uint8_t size = divided.whole;
     if (size >= 0x1Cu)
     {
       size = 0xFEu;
     }
     else
     {
+      std::uint8_t fraction = divided.fraction;
       for (int pass = 0; pass < 3; ++pass)
       {
-        const ShiftResult low = RotateLeftValue(_math.r, false); // 6502: ASL R
-        _math.r = low.value;
+        const ShiftResult low = RotateLeftValue(fraction, false); // 6502: ASL R
+        fraction = low.value;
         size = RotateLeftValue(size, low.carry).value; // 6502: ROL A
       }
     }
@@ -336,8 +346,8 @@ namespace Elite
 
     // 6502: AND #%10111111 -- not drawn yet. The following `AND #%00001000` reads what that left,
     // so a ship with nothing on the screen returns here with the flag already cleared.
-    _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(_work[SHIP_STATE_OFFSET] & 0xBFu);
-    if ((_work[SHIP_STATE_OFFSET] & SHIP_STATE_DRAWN) == 0u)
+    _work.state = Without(_work.state, ShipStateBit::CloudDrawn);
+    if (!Has(_work.state, ShipStateBit::OnScreen))
     {
       return; // 6502: BEQ TT48, which is an RTS
     }
@@ -354,15 +364,15 @@ namespace Elite
      * produces -- the smallest explosion count in the thirty-three is ten. The port reads zero
      * there rather than inventing a neighbour it does not model.
      */
-    std::uint8_t index = _heap.Read(static_cast<std::uint16_t>(address + 2u));
+    std::uint8_t index = _heap.Read(address.Byte(static_cast<std::uint16_t>(2u)));
     do
     {
       const std::size_t at = static_cast<std::size_t>(index) - 7u;
-      _heap.Write(static_cast<std::uint16_t>(address + index), (at < _geometry.xx3.size()) ? _geometry.xx3[at] : std::uint8_t{0});
+      _heap.Write(address.Byte(static_cast<std::uint16_t>(index)), (at < _geometry.xx3.size()) ? _geometry.xx3[at] : std::uint8_t{0});
       --index;
     } while (index != 6u);
 
-    _work[SHIP_STATE_OFFSET] |= SHIP_STATE_CLOUD_DRAWN; // 6502: ORA #%01000000 -- there is a cloud now
+    _work.state = With(_work.state, ShipStateBit::CloudDrawn); // 6502: ORA #%01000000 -- there is a cloud now
 
     /*
      * 6502: LDY frump / CPY #18 -- the counter BEFORE it grew, so this is true on the explosion's
@@ -371,11 +381,11 @@ namespace Elite
      */
     if (frump == EXPLOSION_CLOUD_START)
     {
-      DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, &_effects);
+      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_effects);
       return;
     }
 
-    DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr);
   }
 
 } // namespace Elite

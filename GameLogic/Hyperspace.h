@@ -4,7 +4,7 @@
 #include "FlightLoop.h"
 #include "Market.h"
 #include "StartUp.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <cstdint>
 
@@ -46,7 +46,7 @@ namespace Elite
    * sources: a port that derived the cache from the seeds it just copied matched the oracle on
    * `QQ2` and disagreed on `QQ28` for the first crosshair position tried.
    */
-  void ArriveAtSystem(CommanderBlock& _commander, CurrentSystem& _current, SystemSeeds& _selected, const SystemSeeds& _target,
+  void ArriveAtSystem(Commander& _commander, CurrentSystem& _current, SystemSeeds& _selected, const SystemSeeds& _target,
                       SystemData& _described, MarketState& _market, Rng& _rng, std::uint8_t& _explosionCount, std::uint8_t _crosshairX,
                       std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _findNearest) noexcept;
 
@@ -62,7 +62,7 @@ namespace Elite
    * compares against is then stored into `NOSTM`: witchspace has three specks of dust instead of
    * the usual eighteen, and the constant is shared between the two on purpose.
    */
-  void EnterWitchspace(FlightLoop& _loop, CommanderBlock& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
+  void EnterWitchspace(FlightLoop& _loop, Commander& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
 
   /*
    * 6502: ptg -- `LSR COK / SEC / ROL COK`, and then it FALLS INTO `MJP`.
@@ -74,7 +74,7 @@ namespace Elite
    * `COK` is the competition flags byte, so holding the configuration key through a jump is
    * recorded in the commander file for ever.
    */
-  void EnterWitchspaceCheating(FlightLoop& _loop, CommanderBlock& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
+  void EnterWitchspaceCheating(FlightLoop& _loop, Commander& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
 
   /*
    * What `TT18` did, which the original says by WHERE IT ENDS UP -- and that is four places.

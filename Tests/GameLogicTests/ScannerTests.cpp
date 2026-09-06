@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "ShipBytes.h"
+
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
@@ -134,17 +136,17 @@ namespace GameLogicTests
     }
 
     /// One ship's nine coordinate bytes plus its state and type, written to both sides.
-    void PlaceShip(Cpu6502& _cpu, const Labels& _at, Elite::ShipBlock& _ship, const std::array<std::uint8_t, 6>& _position,
+    void PlaceShip(Cpu6502& _cpu, const Labels& _at, Elite::Ship& _ship, const std::array<std::uint8_t, 6>& _position,
                    std::uint8_t _state, std::uint8_t _type) noexcept
     {
       const std::uint8_t OFFSETS[6] = {1u, 2u, 4u, 5u, 7u, 8u};
-      _ship = Elite::ShipBlock{};
+      _ship = Elite::Ship{};
       for (int which = 0; which < 6; ++which)
       {
-        _ship[OFFSETS[which]] = _position[static_cast<std::size_t>(which)];
+        PokeShip(_ship, OFFSETS[which], _position[static_cast<std::size_t>(which)]);
         _cpu.memory[static_cast<std::uint16_t>(_at.inwk + OFFSETS[which])] = _position[static_cast<std::size_t>(which)];
       }
-      _ship[31] = _state;
+      _ship.state = _state;
       _cpu.memory[static_cast<std::uint16_t>(_at.inwk + 31)] = _state;
       _cpu.memory[_at.type] = _type;
     }
@@ -181,8 +183,7 @@ namespace GameLogicTests
       cpu.memory[at.qq11] = 0;
 
       Elite::Canvas canvas;
-      Elite::DrawWorkspace draw;
-      Elite::ShipBlock ship;
+      Elite::Ship ship;
 
       std::uint32_t compared = 0;
       std::uint32_t up = 0;
@@ -211,7 +212,7 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(scan, 20'000);
               Assert::IsTrue(run.completed, L"SCAN returned");
 
-              Elite::DrawScannerBlip(canvas, draw, ship, 11u, 0u);
+              Elite::DrawScannerBlip(canvas, ship, Elite::ShipType::CobraMk3, 0u);
 
               const std::wstring where = Widen("SCAN z=" + std::to_string(depth) + (depthSign ? "-" : "+") +
                                                " y=" + std::to_string(height) + (heightSign ? "-" : "+"));
@@ -219,20 +220,19 @@ namespace GameLogicTests
               const Marks marks = CompareAndMeasure(cpu, at.screen, canvas, where);
 
               /*
-               * The three bytes it leaves behind, which are not incidental: `X1` stops being a
-               * coordinate and becomes the stick's pixel pattern, `Y1` comes back one less than
-               * the row because `CPIX4` decrements it, and `COL` is the type's scanner colour.
+               * The three bytes the original leaves behind -- `X1` as the stick's pixel pattern, `Y1`
+               * one less than the row because `CPIX4` decrements it, `COL` as the type's scanner
+               * colour -- are `SCAN`'s own since M2-c: nothing reads them after, so nothing is compared.
                */
-              Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": X1").c_str());
-              Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": Y1").c_str());
-              Assert::AreEqual(cpu.memory[at.col], draw.col, (where + L": COL").c_str());
 
               /*
                * Which shape of stick this case drew, measured from the marks. The dot occupies the
                * blip's row and the one above it, so anything below is a downward stick and
                * anything two rows above is an upward one.
                */
-              const int blip = static_cast<int>(draw.y1) + 1;
+              // The blip's row: the original's `Y1`, which `CPIX4` left one short of it. The port's
+              // is `SCAN`'s own local since M2-c, so the measurement reads the game's byte.
+              const int blip = static_cast<int>(cpu.memory[at.y1]) + 1;
               if (marks.bottom > blip)
               {
                 ++down;
@@ -296,8 +296,7 @@ namespace GameLogicTests
       cpu.memory[at.qq11] = 0;
 
       Elite::Canvas canvas;
-      Elite::DrawWorkspace draw;
-      Elite::ShipBlock ship;
+      Elite::Ship ship;
 
       struct Depth
       {
@@ -331,7 +330,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(scan, 20'000);
             Assert::IsTrue(run.completed, L"SCAN returned");
 
-            Elite::DrawScannerBlip(canvas, draw, ship, 11u, 0u);
+            Elite::DrawScannerBlip(canvas, ship, Elite::ShipType::CobraMk3, 0u);
 
             const std::wstring where =
               Widen("SCAN x=" + std::to_string(across) + (sign ? "-" : "+") + " depth " + std::to_string(item.depth));
@@ -339,17 +338,15 @@ namespace GameLogicTests
             const Marks marks = CompareAndMeasure(cpu, at.screen, canvas, where);
             marked += marks.bytes;
 
-            Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": X1").c_str());
-
             /*
              * 6502: LDA CTWOS2+2,X / BPL CP1. `X1` comes back holding the stick's pixel pattern,
              * which is `CTWOS2+2,X AND COL` -- so the pattern IS the alignment, and the one that
              * says the dot's second pixel crossed into the next cell is the negative mask 0xC0.
-             * Counting them here needs nothing worked out from x: the byte the routine left says
-             * which case it took, and it is compared against the game's on the line above.
+             * The byte is `SCAN`'s own since M2-c and the pixels it drew are compared above, so the
+             * count of cases reached is measured from the game's byte.
              */
-            patterns.insert(draw.x1);
-            wrapped += (draw.x1 == static_cast<std::uint8_t>(0xC0u & Elite::SCANNER_COLOUR_TABLE[11])) ? 1u : 0u;
+            patterns.insert(cpu.memory[at.x1]);
+            wrapped += (cpu.memory[at.x1] == static_cast<std::uint8_t>(0xC0u & Elite::SCANNER_COLOUR_TABLE[11])) ? 1u : 0u;
             ++compared;
           }
         }
@@ -381,8 +378,7 @@ namespace GameLogicTests
 
       Cpu6502 cpu = oracle.Fresh();
       Elite::Canvas canvas;
-      Elite::DrawWorkspace draw;
-      Elite::ShipBlock ship;
+      Elite::Ship ship;
 
       struct Case
       {
@@ -421,7 +417,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(scan, 20'000);
         Assert::IsTrue(run.completed, L"SCAN returned");
 
-        Elite::DrawScannerBlip(canvas, draw, ship, item.type, item.view);
+        Elite::DrawScannerBlip(canvas, ship, Elite::TypeOf(item.type), item.view);
 
         const std::wstring where = Widen(std::string("SCAN: ") + item.what);
         const Marks marks = CompareAndMeasure(cpu, at.screen, canvas, where);
@@ -443,11 +439,11 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(scan, 20'000);
         Assert::IsTrue(run.completed, L"SCAN returned");
 
-        Elite::DrawScannerBlip(canvas, draw, ship, static_cast<std::uint8_t>(type), 0u);
+        Elite::DrawScannerBlip(canvas, ship, Elite::TypeOf(static_cast<std::uint8_t>(type)), 0u);
 
         const std::wstring where = Widen("SCAN type " + std::to_string(type));
         (void)CompareAndMeasure(cpu, at.screen, canvas, where);
-        Assert::AreEqual(cpu.memory[at.col], draw.col, (where + L": COL from scacol").c_str());
+        // `COL` is `SCAN`'s own since M2-c; the colour shows in the screen comparison above.
         ++colours;
       }
 
@@ -515,20 +511,21 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(tas2, 20'000);
               Assert::IsTrue(run.completed, L"TAS2 returned");
 
-              Elite::DrawWorkspace draw;
-              Elite::MathWorkspace math;
-              Elite::NormaliseAxes(axes, draw, math);
+              const Elite::NormalisedVector normalised = Elite::NormaliseAxes(axes);
 
               const std::wstring where = Widen("TAS2 highs " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z) +
                                                " variant " + std::to_string(variant));
-              for (std::size_t byte = 0; byte < 10u; ++byte)
+              // Nine bytes: `K3+9` is the shift counter `TAS2` builds for itself, its own local since
+              // M2-c, so the scribble above stays where the port put it and the original's is not compared.
+              for (std::size_t byte = 0; byte < 9u; ++byte)
               {
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], axes[byte],
                                  (where + L": K3+" + std::to_wstring(byte)).c_str());
               }
-              Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": XX15").c_str());
-              Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": XX15+1").c_str());
-              Assert::AreEqual(cpu.memory[at.x2], draw.x2, (where + L": XX15+2").c_str());
+              Assert::AreEqual(cpu.memory[at.x1], normalised.vector.x, (where + L": XX15").c_str());
+              Assert::AreEqual(cpu.memory[at.y1], normalised.vector.y, (where + L": XX15+1").c_str());
+              Assert::AreEqual(cpu.memory[at.x2], normalised.vector.z, (where + L": XX15+2").c_str());
+              Assert::AreEqual(cpu.memory[at.q], normalised.length, (where + L": Q, the length NORM leaves").c_str());
               ++compared;
             }
           }
@@ -571,16 +568,12 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(sps2, 20'000);
           Assert::IsTrue(run.completed, L"SPS2 returned");
 
-          Elite::MathWorkspace math;
-          math.q = 0x5Au;
-          const Elite::CompassOffset offset = Elite::ScaleToCompass(math, static_cast<std::uint8_t>(value));
+          const Elite::CompassOffset offset = Elite::ScaleToCompass(static_cast<std::uint8_t>(value));
 
           const std::wstring where = Widen("SPS2(" + std::to_string(value) + ", carry " + std::to_string(carryIn ? 1 : 0) + ")");
           Assert::AreEqual(cpu.x, offset.offset, (where + L": X").c_str());
           Assert::AreEqual(cpu.y, offset.sign, (where + L": Y").c_str());
           Assert::AreEqual(cpu.c, offset.carry, (where + L": the exit carry").c_str());
-          Assert::AreEqual(cpu.memory[at.p], math.p, (where + L": P").c_str());
-          Assert::AreEqual(cpu.memory[at.q], math.q, (where + L": Q").c_str());
           carried += offset.carry ? 1u : 0u;
         }
       }
@@ -622,13 +615,15 @@ namespace GameLogicTests
         // A deterministic spread of nine-byte positions, including the ones with the sign bit set
         // and the ones whose sign byte carries seven more bits of magnitude.
         std::uint32_t state = 0x1F35C7B1u ^ (seed * 0x9E3779B9u);
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[0].ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           state = state * 1103515245u + 12345u;
           const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-          bubble.blocks[0][byte] = value;
+          shipBytes[byte] = value;
           cpu.memory[static_cast<std::uint16_t>(at.kPercent + byte)] = value;
         }
+        bubble.blocks[0] = Elite::Ship::FromBytes(shipBytes);
 
         for (std::size_t byte = 0; byte < 10u; ++byte)
         {
@@ -639,19 +634,17 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(sps1, 20'000);
         Assert::IsTrue(run.completed, L"SPS1 returned");
 
-        Elite::DrawWorkspace draw;
-        Elite::MathWorkspace math;
-        Elite::LoadPlanetAxes(bubble, axes, draw, math);
+        const Elite::UnitVector towards = Elite::LoadPlanetAxes(bubble, axes);
 
         const std::wstring where = Widen("SPS1 seed " + std::to_string(seed));
-        for (std::size_t byte = 0; byte < 10u; ++byte)
+        for (std::size_t byte = 0; byte < 9u; ++byte) // K3+9 is TAS2's local since M2-c
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], axes[byte],
                            (where + L": K3+" + std::to_wstring(byte)).c_str());
         }
-        Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": XX15").c_str());
-        Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": XX15+1").c_str());
-        Assert::AreEqual(cpu.memory[at.x2], draw.x2, (where + L": XX15+2").c_str());
+        Assert::AreEqual(cpu.memory[at.x1], towards.x, (where + L": XX15").c_str());
+        Assert::AreEqual(cpu.memory[at.y1], towards.y, (where + L": XX15+1").c_str());
+        Assert::AreEqual(cpu.memory[at.x2], towards.z, (where + L": XX15+2").c_str());
         ++compared;
       }
 
@@ -685,13 +678,15 @@ namespace GameLogicTests
         std::uint32_t state = 0x77A31D05u ^ (seed * 0x85EBCA6Bu);
         for (std::size_t slot = 0; slot < 2u; ++slot)
         {
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             state = state * 1103515245u + 12345u;
             const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-            bubble.blocks[slot][byte] = value;
+            shipBytes[byte] = value;
             cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
           }
+          bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
         }
 
         for (std::size_t byte = 0; byte < 10u; ++byte)
@@ -703,19 +698,17 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(sps4, 20'000);
         Assert::IsTrue(run.completed, L"SPS4 returned");
 
-        Elite::DrawWorkspace draw;
-        Elite::MathWorkspace math;
-        Elite::LoadStationAxes(bubble, axes, draw, math);
+        const Elite::UnitVector towards = Elite::LoadStationAxes(bubble, axes);
 
         const std::wstring where = Widen("SPS4 seed " + std::to_string(seed));
-        for (std::size_t byte = 0; byte < 10u; ++byte)
+        for (std::size_t byte = 0; byte < 9u; ++byte) // K3+9 is TAS2's local since M2-c
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], axes[byte],
                            (where + L": K3+" + std::to_wstring(byte)).c_str());
         }
-        Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": XX15").c_str());
-        Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": XX15+1").c_str());
-        Assert::AreEqual(cpu.memory[at.x2], draw.x2, (where + L": XX15+2").c_str());
+        Assert::AreEqual(cpu.memory[at.x1], towards.x, (where + L": XX15").c_str());
+        Assert::AreEqual(cpu.memory[at.y1], towards.y, (where + L": XX15+1").c_str());
+        Assert::AreEqual(cpu.memory[at.x2], towards.z, (where + L": XX15+2").c_str());
         ++compared;
       }
 
@@ -763,15 +756,14 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(dot, 20'000);
             Assert::IsTrue(run.completed, L"DOT returned");
 
-            Elite::DrawCompassDot(canvas, draw, compass);
+            Elite::DrawCompassDot(canvas, compass);
 
             const std::wstring where =
               Widen("DOT(" + std::to_string(x) + ", " + std::to_string(y) + ", colour " + std::to_string(colour) + ")");
             const Marks marks = CompareAndMeasure(cpu, at.screen, canvas, where);
 
-            Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": X1").c_str());
-            Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": Y1").c_str());
-            Assert::AreEqual(cpu.memory[at.col], draw.col, (where + L": COL").c_str());
+            // `X1`, `Y1` and `COL` are the compass's own bytes copied into the plot's since M2-c:
+            // the dot takes them as values, so what the original leaves in them is not read.
 
             if (colour == Elite::COMPASS_AHEAD)
             {
@@ -834,19 +826,16 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(sp2, 20'000);
           Assert::IsTrue(run.completed, L"SP2 returned");
 
-          Elite::MathWorkspace math;
           Elite::Compass compass;
-          draw.x1 = static_cast<std::uint8_t>(across);
-          draw.y1 = static_cast<std::uint8_t>(down);
-          draw.x2 = depth;
-          Elite::DrawCompass(canvas, draw, math, compass);
+          const Elite::UnitVector towards{static_cast<std::uint8_t>(across), static_cast<std::uint8_t>(down), depth};
+          Elite::DrawCompass(canvas, compass, towards);
 
           const std::wstring where = Widen("SP2(" + std::to_string(across) + ", " + std::to_string(down) + ")");
 
           Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
           Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
           Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
-          Assert::AreEqual(cpu.memory[at.t], math.t, (where + L": T").c_str());
+          // `T` is `SP2`'s own since M2-c: it parks the vertical offset for one subtraction.
           (void)CompareAndMeasure(cpu, at.screen, canvas, where);
 
           ahead += (compass.colour == Elite::COMPASS_AHEAD) ? 1u : 0u;
@@ -901,19 +890,21 @@ namespace GameLogicTests
           cpu.memory[at.comc] = compass.colour;
 
           // 6502: SSPR is MANY+SST, so setting the count IS setting the flag (§6.58).
-          bubble.counts[Elite::SHIP_TYPE_STATION] = stations;
-          cpu.memory[static_cast<std::uint16_t>(at.many + Elite::SHIP_TYPE_STATION)] = stations;
+          bubble.Count(Elite::ShipType::Station) = stations;
+          cpu.memory[static_cast<std::uint16_t>(at.many + Elite::Byte(Elite::ShipType::Station))] = stations;
 
           std::uint32_t state = 0x2C41A9F7u ^ (seed * 0xC2B2AE35u);
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               state = state * 1103515245u + 12345u;
               const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-              bubble.blocks[slot][byte] = value;
+              shipBytes[byte] = value;
               cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
             }
+            bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
           }
 
           for (int frame = 0; frame < 2; ++frame)
@@ -921,8 +912,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(compas, 40'000);
             Assert::IsTrue(run.completed, L"COMPAS returned");
 
-            Elite::MathWorkspace math;
-            Elite::UpdateCompass(canvas, draw, math, compass, bubble);
+            Elite::UpdateCompass(canvas, compass, bubble);
 
             const std::wstring where =
               Widen("COMPAS seed " + std::to_string(seed) + (stations ? " station" : " planet") + " frame " + std::to_string(frame));

@@ -106,6 +106,12 @@ jobs:
       - name: The numbers the documents state are the numbers the tree has
         run: python tools/check_counts.py
 
+      # Design/Modernize.md names the legacy patterns the port still carries and measures each
+      # one. The ceilings in tools/modernize_ratchet.json only go down: a count above its ceiling
+      # is a pattern a slice removed coming back, and a count below it is a ceiling nobody lowered.
+      - name: The modernisation ratchet still describes the tree
+        run: python tools/check_modernize.py
+
       # The mutation RUN is minutes per mutant and belongs to whoever is finishing a slice. What
       # runs here is the cheap half: every recorded mutant still points at code that exists. A
       # mutant whose `find` has rotted out of its file is a stale record, and a stale record is
@@ -124,6 +130,12 @@ jobs:
       # the mode to be run; 101 files had no row when it first was (plan section 6.120).
       - name: Coverage ledger
         run: python tools/inventory.py --strict
+
+      # Modernize.md section 4.3 lists, for every zero-page workspace field, who writes it and who
+      # reads it before writing it, with a verdict each; this regenerates the table from the tree
+      # and fails when the two differ or a field has no verdict (Modernize.md M2-a).
+      - name: The channel census still describes the tree
+        run: python tools/channel_census.py --check
 
   # -------------------------------------------------------------------------------------------
   # The suite on Linux, through Tests/PortableRunner. Same test files, same oracle, g++ instead

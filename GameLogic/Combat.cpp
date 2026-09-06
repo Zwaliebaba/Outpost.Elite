@@ -44,11 +44,6 @@ namespace Elite
       return static_cast<std::uint8_t>((level << 4) | 3u);
     }
 
-    /// 6502: INWK+7 -- the z high byte, which is how far away the thing being hit is.
-    inline constexpr std::size_t SHIP_Z_HIGH = 7;
-
-    /// 6502: INWK+8 -- the z sign, which is what `OOPS` reads to pick a shield.
-    inline constexpr std::size_t SHIP_Z_SIGN = 8;
   } // namespace
 
   std::uint8_t ExplosionVolume(std::uint8_t _distance) noexcept
@@ -63,18 +58,18 @@ namespace Elite
     return Volume(_distance, 16u, 8u, 6u, 3u);
   }
 
-  std::uint8_t PlayHitSound(const ShipBlock& _work, DashboardEffects& _effects) noexcept
+  std::uint8_t PlayHitSound(const Ship& _work, DashboardEffects& _effects) noexcept
   {
-    const std::uint8_t sustain = ExplosionVolume(_work[SHIP_Z_HIGH]);
+    const std::uint8_t sustain = ExplosionVolume(_work.z.hi);
 
     // 6502: LDY #sfxhit / LDX #208 / JMP NOISE2.
     (void)_effects.PlaySoundPitched(SOUND_SHIP_EXPLODING, sustain, EXPLOSION_PITCH_HIT);
     return sustain;
   }
 
-  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, std::uint8_t _type) noexcept
+  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, ShipType _type) noexcept
   {
-    CommanderBlock& commander = _screen.commander;
+    Commander& commander = _screen.commander;
 
     /*
      * 6502: LDA TALLYL / CLC / ADC KWL%-1,X / STA TALLYL / LDA TALLY / ADC KWH%-1,X / STA TALLY /
@@ -85,18 +80,18 @@ namespace Elite
      * screen prints. The carry out of the middle byte is what reaches the top one, and the label
      * the original gives that branch says what its author thought of the arrangement.
      */
-    const std::uint16_t table = static_cast<std::uint16_t>(SHIP_KILL_FRACTION + _type - 1u);
-    const AddResult fraction = AddWithCarry(commander.At(Field::KillsLow), ShipByte(table), false);
-    commander.At(Field::KillsLow) = fraction.value;
+    const KillWorth worth = KillWorthFor(_type);
+    const AddResult fraction = AddWithCarry(commander.killsFraction, worth.fraction, false);
+    commander.killsFraction = fraction.value;
 
     const AddResult whole =
-      AddWithCarry(commander.At(Field::Kills), ShipByte(static_cast<std::uint16_t>(table + SHIP_TYPE_COUNT)), fraction.carry);
-    commander.At(Field::Kills) = whole.value;
+      AddWithCarry(commander.kills.lo, worth.whole, fraction.carry);
+    commander.kills.lo = whole.value;
 
     if (whole.carry)
     {
-      commander.bytes[static_cast<std::size_t>(Field::Kills) + 1u] =
-        static_cast<std::uint8_t>(commander.bytes[static_cast<std::size_t>(Field::Kills) + 1u] + 1u);
+      commander.kills.hi =
+        static_cast<std::uint8_t>(commander.kills.hi + 1u);
 
       // 6502: LDA #101 / JSR MESS -- "RIGHT ON COMMANDER", once every 256 whole kills.
       ShowMessage(_screen.canvas, _screen.printer, _screen.text, _screen.extended, _screen.message, MESSAGE_RIGHT_ON_COMMANDER,
@@ -104,12 +99,12 @@ namespace Elite
     }
 
     // 6502: davidscockup -- and the noise is the same shape as EXNO's with wider thresholds.
-    const std::uint8_t sustain = KillVolume(_screen.work[SHIP_Z_HIGH]);
+    const std::uint8_t sustain = KillVolume(_screen.work.z.hi);
     (void)_effects.PlaySoundPitched(SOUND_EXPLOSION, sustain, EXPLOSION_PITCH_KILL);
     return sustain;
   }
 
-  bool TakeDamage(FlightScreen& _screen, DashboardEffects& _effects, const ShipBlock& _target, std::uint8_t _damage, bool _carryIn) noexcept
+  bool TakeDamage(FlightScreen& _screen, DashboardEffects& _effects, const Ship& _target, std::uint8_t _damage, bool _carryIn) noexcept
   {
     FlightStatus& status = _screen.status;
 
@@ -122,7 +117,7 @@ namespace Elite
      * shield loses `_damage` or one more than `_damage` depending on a bit of the thing that hit
      * it (§6.87). `LDX #0` is dead -- both paths that read X load it again first.
      */
-    const bool fromBehind = (_target[SHIP_Z_SIGN] & 0x80u) != 0u;
+    const bool fromBehind = (_target.z.sgn & 0x80u) != 0u;
     std::uint8_t& shield = fromBehind ? status.aftShield : status.forwardShield;
 
     const SubResult left = SubtractWithCarry(shield, _damage, _carryIn);
@@ -180,11 +175,14 @@ namespace Elite
       return;
     }
 
-    CommanderBlock& commander = _screen.commander;
-    const std::size_t byte = static_cast<std::size_t>(Field::CargoHold) + slot;
+    // 6502: QQ20,X -- and X runs to 21, past the seventeen goods into the five fittings after
+    // them. `cargoHold[slot]` was that until M1-d typed the hold, and then it was an out-of-range
+    // subscript for every fitting `OUCH` could break (plan §6.158).
+    Commander& commander = _screen.commander;
+    std::uint8_t& held = commander.HoldOrFitting(slot);
 
     // 6502: LDA QQ20,X / BEQ out -- nothing there to break.
-    if (commander.bytes[byte] == 0u)
+    if (held == 0u)
     {
       return;
     }
@@ -198,7 +196,7 @@ namespace Elite
     _screen.message.append = 3u; // 6502: LDY #3 / STY de -- "... DESTROYED"
 
     // 6502: STA QQ20,X -- and A is `DLY`, which is zero because that is how we got here.
-    commander.bytes[byte] = 0u;
+    held = 0u;
 
     /*
      * 6502: CPX #17 / BCS ou1 / TXA / ADC #208 -- and the carry the compare left is part of the

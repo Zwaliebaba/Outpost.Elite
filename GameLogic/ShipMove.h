@@ -2,6 +2,7 @@
 
 #include "Arith.h"
 #include "Canvas.h"
+#include "ShipBlueprint.h"
 #include "ShipSlot.h"
 
 #include <cstdint>
@@ -31,7 +32,9 @@ namespace Elite
    * that read the `LSR` as arithmetic and dropped the flag would be adding an extra one about half
    * the time.
    */
-  void AddToShipCoordinate(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x, bool _maskSign) noexcept;
+  /// `_high` is A -- a sign, or a whole coordinate byte on the unmasked path -- and `_low` is the R
+  /// the caller staged.
+  void AddToShipCoordinate(Ship& _work, std::uint8_t _high, std::uint8_t _low, std::uint8_t _axis, bool _maskSign) noexcept;
 
   /*
    * 6502: MVT3 -- K(4) = K(4) + INWK+X(3), sign-magnitude, with K's own sign in K+3.
@@ -40,10 +43,16 @@ namespace Elite
    * added, and the answer stays in K. `MV40` -- the planet and sun path through `MVEIT` -- is what
    * reaches it.
    */
-  /// Returns the carry `MVT3` exits with, which is the `ADC`'s on one path, SET on the second, and
-  /// the final `SBC`'s on the third. `VCSUB`'s last call leaves it standing all the way out to
-  /// `TACTICS`, where the `DORND` at `TA64` rotates it in (§6.126).
-  [[nodiscard]] bool AddShipCoordinateToK(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x) noexcept;
+  /// What `MVT3` leaves: the block, and the carry it exits with -- which is the `ADC`'s on one
+  /// path, SET on the second, and the final `SBC`'s on the third. `VCSUB`'s last call leaves it
+  /// standing all the way out to `TACTICS`, where the `DORND` at `TA64` rotates it in (§6.126).
+  struct KBlockSum
+  {
+    KBlock value{};
+    bool carry = false;
+  };
+
+  [[nodiscard]] KBlockSum AddShipCoordinateToK(const Ship& _work, KBlock _k, std::uint8_t _axis) noexcept;
 
   /*
    * 6502: MVT6 -- (P+1 P+2) = (P+1 P+2) + INWK+X(2), and the sign comes back in A.
@@ -53,7 +62,9 @@ namespace Elite
    * returns `_a` with its sign flipped, which is the one place in this family where the answer's
    * sign is not the sign that went in.
    */
-  [[nodiscard]] std::uint8_t AddShipCoordinateToP(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x) noexcept;
+  /// `_value` is (P+1 P+2) under the sign in A -- a coordinate's shape -- and what comes back is
+  /// the same three bytes after the add, the sign flipped where `MV50` flips it.
+  [[nodiscard]] SignMag24 AddShipCoordinateToP(const Ship& _work, SignMag24 _value, std::uint8_t _axis) noexcept;
 
   /*
    * 6502: MVS4 -- roll and pitch one of a ship's three orientation vectors.
@@ -67,7 +78,7 @@ namespace Elite
    * EOR #128` hands `MAD` the same magnitude with the opposite sign, because these are
    * sign-magnitude numbers and negating one is a single bit.
    */
-  void RotateShipVector(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _y, std::uint8_t _alpha, std::uint8_t _beta) noexcept;
+  void RotateShipVector(Ship& _work, std::uint8_t _y, std::uint8_t _alpha, std::uint8_t _beta) noexcept;
 
   /*
    * 6502: MVS5 -- rotate a PAIR of coordinates by a sixteenth, for the ship's own roll and pitch.
@@ -82,7 +93,7 @@ namespace Elite
    * what stops the rotation from growing without bound. `TIDY` (through `NORM`) is what puts the
    * length back.
    */
-  void RotateCoordinatePair(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _x, std::uint8_t _y, std::uint8_t _rat2) noexcept;
+  void RotateCoordinatePair(Ship& _work, std::uint8_t _x, std::uint8_t _y, std::uint8_t _rat2) noexcept;
 
   /*
    * 6502: TIS3, which FALLS INTO DVIDT -- one component of the third orientation vector, worked out
@@ -96,8 +107,7 @@ namespace Elite
    * The fall-through is not incidental: `TIS3` sets up P, Q and A and then runs off its end into
    * the divider, so a caller of `TIS3` gets a division whether it wanted one or not.
    */
-  [[nodiscard]] std::uint8_t OrientationComponent(const ShipBlock& _work, MathWorkspace& _math, std::uint8_t _a, std::uint8_t _x,
-                                                  std::uint8_t _y) noexcept;
+  [[nodiscard]] std::uint8_t OrientationComponent(const Ship& _work, std::uint8_t _a, std::uint8_t _x, std::uint8_t _y) noexcept;
 
   /*
    * 6502: TIDY -- put a ship's orientation vectors back into shape.
@@ -112,7 +122,7 @@ namespace Elite
    * not -- so the routine has three shapes depending on which way the ship happens to be pointing,
    * and a port that always used the first would be right until a ship pointed down an axis.
    */
-  void TidyOrientation(ShipBlock& _work, MathWorkspace& _math) noexcept;
+  void TidyOrientation(Ship& _work) noexcept;
 
   /*
    * 6502: MV40 -- move a PLANET or a SUN, which is the whole of `MVEIT` for a negative ship type.
@@ -123,15 +133,18 @@ namespace Elite
    * the scanner, does not accelerate, and rotates about the player rather than about itself.
    *
    * The arithmetic is the player's roll and pitch applied in the opposite direction, which is what
-   * makes the world turn when the ship does. Both `K` and `K2` are live across it, which is why
-   * `MathWorkspace` carries two blocks.
+   * makes the world turn when the ship does. Both `K` and `K2` are live across it; they are two
+   * locals here, and the workspace is touched for TWO bytes: `K2`'s bottom byte is read, because
+   * the routine never writes it and the carry of its first addition depends on it (the comment at
+   * that line), and `Q` is left holding ALPHA on the way out, because for the sun that is the
+   * frame's Q the altitude check reads (`EndFlightFrame`).
    *
    * ITS ADDITIONS DISCARD THEIR LOW BYTE. `LDA K / CLC / ADC K2` throws the result away and keeps
    * only the carry, because the answer is stored from K+1 upwards -- the bottom byte exists solely
    * to carry into the byte above it. A port that stored it would be writing a fourth byte nothing
    * reads, and one that skipped the addition would lose the carry.
    */
-  void MovePlanetOrSun(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _alpha, std::uint8_t _beta) noexcept;
+  void MovePlanetOrSun(Ship& _work, MathWorkspace& _math, std::uint8_t _alpha, std::uint8_t _beta) noexcept;
 
   /*
    * What `MVEIT` still reaches outside itself.
@@ -159,7 +172,7 @@ namespace Elite
      *
      * False means the player died and the caller must stop the frame.
      */
-    [[nodiscard]] virtual bool RunTactics(ShipBlock& _work) = 0;
+    [[nodiscard]] virtual bool RunTactics(Ship& _work) = 0;
   };
 
   /*
@@ -194,7 +207,7 @@ namespace Elite
     std::uint8_t mainLoopCounter = 0;
     std::uint8_t slot = 0;
 
-    std::uint8_t type = 0; ///< 6502: TYPE -- negative for the planet and the sun
+    ShipType type = ShipType::None; ///< 6502: TYPE -- negative (`IsBody`) for the planet and the sun
 
     /*
      * 6502: XX0(1 0) -- the blueprint the loop is working from, AND IT IS NOT RESET PER SHIP.
@@ -205,16 +218,29 @@ namespace Elite
      * when it is exploding or dead. It is loop state and not ship state, which is why it sits here
      * beside `TYPE` and `XSAV` rather than being passed down (§6.90).
      */
-    std::uint16_t blueprint = 0;
+    const Blueprint* blueprint = &NO_BLUEPRINT;
 
     /// 6502: RAT and RAT2 -- scratch, but `MVEIT` leaves `RAT2` set and `PLUT` writes both as sign
     /// masks. Two routines, two meanings, the same two bytes; they are never live together because
     /// `PLUT` runs when the view changes and `MVS5` while a ship moves.
     std::uint8_t rat = 0;
     std::uint8_t rat2 = 0;
+
+    /*
+     * 6502: CNT2 -- how wide a cone counts as "pointing at it", and the third byte of the same
+     * setting as `RAT` and `RAT2`.
+     *
+     * `TACTICS` writes all three in three instructions and `DOCKIT` overwrites all three, which is
+     * the whole difference between a ship flying itself and one being flown; `TA6` reads all three
+     * deep inside the steering. So it sits here with them rather than becoming a fourth parameter
+     * threaded through `TA151`, `GOPL` and `TA152` (M2-c-3, and the one place that slice's plan
+     * said "parameter" and the tree says otherwise). The ellipse walk's `CNT2` is a different
+     * meaning in the same byte and is `PLS22`'s parameter.
+     */
+    std::uint8_t steerCone = 0;
   };
 
-  // 6502: MSL -- `SHIP_TYPE_MISSILE` is in `ShipSlot.h` with the other type numbers. `MVEIT`
+  // 6502: MSL -- `ShipType::Missile` is in `ShipSlot.h` with the other type numbers. `MVEIT`
   // singles it out so that a missile runs its tactics on EVERY iteration rather than one in eight;
   // a missile that thought once every eighth of a second would be trivial to outrun.
 
@@ -240,8 +266,10 @@ namespace Elite
    * `_view` is `QQ11`, which `SCAN` reads and `MVEIT` does not: the flight loop sets it, and the
    * port has no single home for it until 3d-d.
    */
-  [[nodiscard]] bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _work, MathWorkspace& _math, FlightState& _flight,
-                              ShipEffects& _effects, std::uint16_t _blueprint, std::uint8_t _view) noexcept;
+  /// `_math` is here for two bytes since M2-b: `MV40` reads `K2`'s bottom byte, and the tail leaves
+  /// `Q` holding the pitch -- the frame's Q -- for the altitude check (`EndFlightFrame`).
+  [[nodiscard]] bool MoveShip(Canvas& _canvas, Ship& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
+                              const Blueprint& _blueprint, std::uint8_t _view) noexcept;
 
   /*
    * 6502: PLUT and PU1 -- flip a ship's axes for the view the player is looking through.
@@ -260,7 +288,7 @@ namespace Elite
    * `LO2` -- the first byte of the next routine's file. The upstream comment says it falls into
    * `LOOK1`, which is thirteen bytes further on; it is `LO2` that returns it.
    */
-  void FlipAxesForView(ShipBlock& _work, FlightState& _flight, std::uint8_t _view) noexcept;
-  void FlipAxes(ShipBlock& _work, FlightState& _flight, std::uint8_t _view) noexcept;
+  void FlipAxesForView(Ship& _work, FlightState& _flight, std::uint8_t _view) noexcept;
+  void FlipAxes(Ship& _work, FlightState& _flight, std::uint8_t _view) noexcept;
 
 } // namespace Elite

@@ -6,6 +6,10 @@ ruling) · amended 2026-09-05 (§4: the mutation baseline rule) · **moved from 
 built against this ADR and every one of them found defects the oracle caught and nothing else would
 have. **All twenty-six as of the same day**, and the twenty-sixth kept the record intact: slice 4d
 found three (§6.149, §6.150, §6.151). The two `Labels.json`/`Oracle.json` references below were stale draft names and are corrected.
+**Amended in prospect 2026-09-06 (owner ruling, [Modernize.md](../Modernize.md) §1 R-a):** the oracle is
+the judge through the modernisation's phases M1–M5 and is then RECORDED — Phase M6 replaces every
+live comparison with a checked-in fixture and retires the interpreter, the assembler and the
+submodule. Nothing below changes until M6-b lands; ADR-008 will say what pins behaviour after it.
 **Depends on:** ADR-001 (fidelity), ADR-002 (exact semantics — without it there is nothing to compare)
 **Feeds:** the acceptance column of every slice in the plan; ADR-004 (test project shape)
 

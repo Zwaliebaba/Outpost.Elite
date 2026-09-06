@@ -129,7 +129,7 @@ namespace Elite
    * decision ADR-005 §3 made for the loop as a whole: the game says how long, the platform decides
    * how to spend it.
    */
-  [[nodiscard]] std::uint8_t RunLoopTail(FlightLoop& _loop, CommanderBlock& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept;
+  [[nodiscard]] std::uint8_t RunLoopTail(FlightLoop& _loop, Commander& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept;
 
   /*
    * 6502: CYL2, COU and PACK -- the three ship types the spawner names that no earlier slice did.
@@ -137,8 +137,8 @@ namespace Elite
    * `PACK` is not a type of its own: the source says `PACK = SH3`, so the pack hunters are the
    * eight blueprints from the Sidewinder up, and part 4 picks one with `AND #7 / ADC #PACK`.
    */
-  inline constexpr std::uint8_t SHIP_TYPE_COUGAR = 32;                       ///< 6502: COU
-  inline constexpr std::uint8_t SHIP_TYPE_PACK_FIRST = SHIP_TYPE_SIDEWINDER; ///< 6502: PACK = SH3
+  /// 6502: PACK = SH3 -- the pack hunters begin at the Sidewinder (`ShipType::Sidewinder`), and the
+  /// Cougar is `ShipType::Cougar`; both live in the enumeration now.
 
   /// 6502: LDY #2 / JSR DELAY -- two vertical syncs on a docked screen with the author-names
   /// option off, which is the only frame cap anywhere in the main loop (§6.17).
@@ -186,7 +186,7 @@ namespace Elite
    * the `CLC`. A port that returned `true`/`false` from the compares would be right here and would
    * have lost the idiom; this returns the flag, like `SubtractShipAxis` does (§6.126).
    */
-  [[nodiscard]] bool AtConstrictorSystem(const CommanderBlock& _commander) noexcept;
+  [[nodiscard]] bool AtConstrictorSystem(const Commander& _commander) noexcept;
 
   /*
    * 6502: GTHG -- a Thargoid and its Thargon, which is the only pair the game spawns together.
@@ -196,7 +196,7 @@ namespace Elite
    * creation returned and the Thargoid's answer is discarded -- a full bubble gets the mothership
    * and no escort, and the port reproduces that rather than tidying it.
    */
-  NewShip SpawnThargoidPair(Bubble& _bubble, ShipBlock& _work, Rng& _rng, std::uint16_t& _blueprint, bool _carryIn) noexcept;
+  NewShip SpawnThargoidPair(Bubble& _bubble, Ship& _work, Rng& _rng, const Blueprint*& _blueprint, bool _carryIn) noexcept;
 
   /*
    * Main game loop parts 1 to 4: everything that arrives in the bubble on its own.
@@ -204,7 +204,7 @@ namespace Elite
    * `_carryIn` is the flag the first `DORND` rotates in, which is whatever `Main.cpp` reached the
    * spawner with -- §6.121 is the reason it is a parameter rather than an assumption.
    */
-  void RunSpawning(Bubble& _bubble, ShipBlock& _work, Rng& _rng, CommanderBlock& _commander, const CurrentSystem& _current,
-                   const FlightStatus& _status, std::uint8_t& _explosionCount, std::uint16_t& _blueprint, bool _carryIn) noexcept;
+  void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, Commander& _commander, const CurrentSystem& _current,
+                   const FlightStatus& _status, std::uint8_t& _explosionCount, const Blueprint*& _blueprint, bool _carryIn) noexcept;
 
 } // namespace Elite

@@ -141,7 +141,7 @@ namespace Elite
    * 6502: LCASH and MCASH -- one routine with two entry points, because the failure path of the
    * first IS the second.
    */
-  bool SpendCash(CommanderBlock& _commander, std::uint16_t _tenths) noexcept
+  bool SpendCash(Commander& _commander, std::uint16_t _tenths) noexcept
   {
     /*
      * 6502: four SBCs from the low byte up, then BCS.
@@ -152,10 +152,10 @@ namespace Elite
      * subtract. Elsewhere the chains matter because a shift or a comparison feeds them; here
      * nothing does.
      */
-    const std::uint32_t cash = _commander.Cash();
+    const std::uint32_t cash = _commander.cash.tenths;
     if (cash >= _tenths)
     {
-      _commander.SetCash(cash - _tenths);
+      _commander.cash.tenths = (cash - _tenths);
       return true;
     }
 
@@ -164,36 +164,34 @@ namespace Elite
     return false;
   }
 
-  void ReceiveCash(CommanderBlock& _commander, std::uint16_t _tenths) noexcept
+  void ReceiveCash(Commander& _commander, std::uint16_t _tenths) noexcept
   {
     // 6502: MCASH -- four ADCs from the low byte up. Cash wraps at four bytes rather than
     // saturating, which no legitimate amount reaches.
-    _commander.SetCash(_commander.Cash() + _tenths);
+    _commander.cash.tenths = (_commander.cash.tenths + _tenths);
   }
 
   std::uint16_t TotalPrice(std::uint8_t _price, std::uint8_t _quantity) noexcept
   {
     // 6502: JSR MULTU -- (A P) = P * Q. Which operand is which does not matter to the product, and
     // the callers do not agree on it either.
-    MathWorkspace work;
-    work.p = _price;
-    work.q = _quantity;
-    std::uint8_t high = MultiplyUnsigned(work).high;
+    const Product product = MultiplyUnsigned(_price, _quantity);
+    std::uint8_t high = product.high;
+    std::uint8_t low = product.low;
 
     // 6502: GC2 -- ASL P / ROL A, twice.
     for (int shift = 0; shift < 2; ++shift)
     {
-      const ShiftResult low = RotateLeft(work.p, false);
-      work.p = low.value;
-      high = RotateLeft(high, low.carry).value;
+      const ShiftResult doubled = RotateLeft(low, false);
+      low = doubled.value;
+      high = RotateLeft(high, doubled.carry).value;
     }
 
-    return static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | work.p);
+    return static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | low);
   }
 
-  bool CargoFits(const CommanderBlock& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept
+  bool CargoFits(const Commander& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept
   {
-    const std::size_t hold = static_cast<std::size_t>(Field::CargoHold);
 
     // 6502: LDX #12 / CPX QQ29 / BCC kg.
     constexpr std::uint8_t LAST_TONNE_ITEM = 12;
@@ -208,7 +206,7 @@ namespace Elite
        * which is the original's behaviour and not something a caller can reach, because the buy
        * screen will not offer more than the market holds.
        */
-      const AddResult sum = AddWithCarry(_amount, _commander.bytes[hold + _item], false);
+      const AddResult sum = AddWithCarry(_amount, _commander.cargoHold[_item], false);
       return sum.value < 200u;
     }
 
@@ -221,30 +219,29 @@ namespace Elite
 
     for (int item = LAST_TONNE_ITEM; item >= 0; --item)
     {
-      const AddResult sum = AddWithCarry(total, _commander.bytes[hold + static_cast<std::size_t>(item)], carry);
+      const AddResult sum = AddWithCarry(total, _commander.cargoHold[static_cast<std::size_t>(item)], carry);
       total = sum.value;
       carry = sum.carry;
     }
 
     // 6502: ADC TRIBBLE+1 -- and it takes the loop's last carry, not a cleared one.
-    total = AddWithCarry(total, _commander.bytes[static_cast<std::size_t>(Field::Tribbles) + 1u], carry).value;
+    total = AddWithCarry(total, _commander.tribbles.hi, carry).value;
 
     // 6502: CMP CRGO -- carry set means A >= CRGO, which the routine reports as "no room".
-    return total < _commander.At(Field::CargoCapacity);
+    return total < _commander.cargoCapacity;
   }
 
-  std::uint8_t ContrabandPenalty(const CommanderBlock& _commander) noexcept
+  std::uint8_t ContrabandPenalty(const Commander& _commander) noexcept
   {
-    const std::size_t hold = static_cast<std::size_t>(Field::CargoHold);
 
     // 6502: LDA QQ20+3 / CLC / ADC QQ20+6 -- slaves plus narcotics, and the `CLC` is real: this
     // is the only addition in the routine that does not read a carry it was handed.
-    const AddResult illegal = AddWithCarry(_commander.bytes[hold + 3u], _commander.bytes[hold + 6u], false);
+    const AddResult illegal = AddWithCarry(_commander.cargoHold[3], _commander.cargoHold[6], false);
 
     // 6502: ASL A / ADC QQ20+10 -- the pair doubled, and the shift's carry out is read by the add.
     const ShiftResult doubled = RotateLeftValue(illegal.value, false);
 
-    return AddWithCarry(doubled.value, _commander.bytes[hold + 10u], doubled.carry).value;
+    return AddWithCarry(doubled.value, _commander.cargoHold[10], doubled.carry).value;
   }
 
   void PrintMarketUnits(TokenPrinter& _printer, CharacterPrinter& _characters, std::uint8_t _gradient) noexcept
@@ -321,16 +318,15 @@ namespace Elite
      * one after the point. That is where the quoted price comes from: the byte holds four-tenths of
      * a credit each.
      */
-    MathWorkspace work;
-    work.p = price;
+    std::uint8_t low = price; // 6502: P, and this routine's own since M2-c-3
     std::uint8_t high = 0;
     for (int shift = 0; shift < 2; ++shift)
     {
-      const ShiftResult low = RotateLeft(work.p, false);
-      work.p = low.value;
-      high = RotateLeft(high, low.carry).value;
+      const ShiftResult shifted = RotateLeft(low, false);
+      low = shifted.value;
+      high = RotateLeft(high, shifted.carry).value;
     }
-    PrintValue(_characters, static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | work.p), 5, true);
+    PrintValue(_characters, static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | low), 5, true);
 
     // 6502: LDY QQ19+4 / LDA #5 / LDX AVL,Y / STX QQ25 / CLC / BEQ TT172.
     const std::uint8_t available = _market.availability[static_cast<std::size_t>(_item)];

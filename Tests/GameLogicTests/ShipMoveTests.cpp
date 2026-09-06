@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "ShipBytes.h"
+
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
@@ -92,32 +94,30 @@ namespace GameLogicTests
                 for (const std::uint8_t high : EDGES)
                 {
                   Cpu6502 cpu = oracle.Fresh();
-                  Elite::ShipBlock work;
-                  Elite::MathWorkspace math;
+                  Elite::Ship work;
 
                   // The three bytes of the coordinate, and the addend's low byte in R.
                   const std::uint8_t bytes[3] = {low, high, static_cast<std::uint8_t>(a ^ 0x55u)};
                   for (int byte = 0; byte < 3; ++byte)
                   {
                     cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)] = bytes[byte];
-                    work[axis + byte] = bytes[byte];
+                    PokeShip(work, axis + byte, bytes[byte]);
                   }
                   cpu.memory[rr] = r;
-                  math.r = r;
 
                   cpu.a = a;
                   cpu.x = axis;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(masked ? static_cast<std::uint16_t>(mvt1 - 2) : mvt1);
                   Assert::IsTrue(run.completed, L"MVT1 returned");
 
-                  Elite::AddToShipCoordinate(work, math, a, axis, masked);
+                  Elite::AddToShipCoordinate(work, a, r, axis, masked);
 
                   const std::wstring where =
                     Widen(std::string(masked ? "MVT1-2" : "MVT1") + "(a=" + std::to_string(a) + ", r=" + std::to_string(r) +
                           ", x=" + std::to_string(axis) + ", coord=" + std::to_string(low) + "/" + std::to_string(high) + ")");
                   for (int byte = 0; byte < 3; ++byte)
                   {
-                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)], work[axis + byte],
+                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)], PeekShip(work, axis + byte),
                                      (where + L": INWK+" + std::to_wstring(axis + byte)).c_str());
                   }
                   ++compared;
@@ -156,33 +156,33 @@ namespace GameLogicTests
               for (const std::uint8_t low : EDGES)
               {
                 Cpu6502 cpu = oracle.Fresh();
-                Elite::ShipBlock work;
-                Elite::MathWorkspace math;
+                Elite::Ship work;
 
                 const std::uint8_t bytes[3] = {low, static_cast<std::uint8_t>(low ^ 0x3Cu), k3};
                 for (int byte = 0; byte < 3; ++byte)
                 {
                   cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)] = bytes[byte];
-                  work[axis + byte] = bytes[byte];
+                  PokeShip(work, axis + byte, bytes[byte]);
                 }
                 const std::uint8_t k[4] = {0, k1, k2, k3};
                 for (int byte = 0; byte < 4; ++byte)
                 {
                   cpu.memory[static_cast<std::uint16_t>(kk + byte)] = k[byte];
-                  math.k[byte] = k[byte];
                 }
 
                 cpu.x = axis;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvt3);
                 Assert::IsTrue(run.completed, L"MVT3 returned");
 
-                const bool carry = Elite::AddShipCoordinateToK(work, math, axis);
+                const Elite::KBlockSum sum = Elite::AddShipCoordinateToK(work, Elite::KBlock{0, k1, k2, k3}, axis);
+                const bool carry = sum.carry;
+                const std::uint8_t ours[4] = {sum.value.low, sum.value.mid, sum.value.high, sum.value.top};
 
                 const std::wstring where = Widen("MVT3(K=" + std::to_string(k1) + "/" + std::to_string(k2) + "/" + std::to_string(k3) +
                                                  ", x=" + std::to_string(axis) + ")");
                 for (int byte = 0; byte < 4; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], math.k[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], ours[byte],
                                    (where + L": K+" + std::to_wstring(byte)).c_str());
                 }
 
@@ -232,32 +232,29 @@ namespace GameLogicTests
               for (const std::uint8_t low : EDGES)
               {
                 Cpu6502 cpu = oracle.Fresh();
-                Elite::ShipBlock work;
-                Elite::MathWorkspace math;
+                Elite::Ship work;
 
                 const std::uint8_t bytes[3] = {low, static_cast<std::uint8_t>(low ^ 0x81u), a};
                 for (int byte = 0; byte < 3; ++byte)
                 {
                   cpu.memory[static_cast<std::uint16_t>(inwk + axis + byte)] = bytes[byte];
-                  work[axis + byte] = bytes[byte];
+                  PokeShip(work, axis + byte, bytes[byte]);
                 }
                 cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
                 cpu.memory[static_cast<std::uint16_t>(pp + 2)] = p2;
-                math.p1 = p1;
-                math.p2 = p2;
 
                 cpu.a = a;
                 cpu.x = axis;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvt6);
                 Assert::IsTrue(run.completed, L"MVT6 returned");
 
-                const std::uint8_t sign = Elite::AddShipCoordinateToP(work, math, a, axis);
+                const Elite::SignMag24 moved = Elite::AddShipCoordinateToP(work, Elite::SignMag24{p1, p2, a}, axis);
 
                 const std::wstring where = Widen("MVT6(a=" + std::to_string(a) + ", P=" + std::to_string(p1) + "/" + std::to_string(p2) +
                                                  ", x=" + std::to_string(axis) + ")");
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 1)], math.p1, (where + L": P+1").c_str());
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 2)], math.p2, (where + L": P+2").c_str());
-                Assert::AreEqual(cpu.a, sign, (where + L": the sign it hands back").c_str());
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 1)], moved.lo, (where + L": P+1").c_str());
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 2)], moved.hi, (where + L": P+2").c_str());
+                Assert::AreEqual(cpu.a, moved.sgn, (where + L": the sign it hands back").c_str());
                 ++compared;
               }
             }
@@ -307,15 +304,14 @@ namespace GameLogicTests
             for (const std::uint8_t seed : EDGES)
             {
               Cpu6502 cpu = oracle.Fresh();
-              Elite::ShipBlock work;
-              Elite::MathWorkspace math;
+              Elite::Ship work;
 
               // Six bytes of vector, spread so the three axes differ from one another.
               for (std::uint8_t byte = 0; byte < 6u; ++byte)
               {
                 const std::uint8_t value = static_cast<std::uint8_t>(seed ^ (byte * 0x27u));
                 cpu.memory[static_cast<std::uint16_t>(inwk + vector + byte)] = value;
-                work[vector + byte] = value;
+                PokeShip(work, vector + byte, value);
               }
               cpu.memory[alpha] = a;
               cpu.memory[beta] = b;
@@ -324,13 +320,13 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(mvs4);
               Assert::IsTrue(run.completed, L"MVS4 returned");
 
-              Elite::RotateShipVector(work, math, vector, a, b);
+              Elite::RotateShipVector(work, vector, a, b);
 
               const std::wstring where = Widen("MVS4(y=" + std::to_string(vector) + ", alpha=" + std::to_string(a) +
                                                ", beta=" + std::to_string(b) + ", seed=" + std::to_string(seed) + ")");
               for (std::uint8_t byte = 0; byte < 6u; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + vector + byte)], work[vector + byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + vector + byte)], PeekShip(work, vector + byte),
                                  (where + L": INWK+" + std::to_wstring(vector + byte)).c_str());
               }
               ++compared;
@@ -379,8 +375,7 @@ namespace GameLogicTests
               for (const std::uint8_t yLow : EDGES)
               {
                 Cpu6502 cpu = oracle.Fresh();
-                Elite::ShipBlock work;
-                Elite::MathWorkspace math;
+                Elite::Ship work;
 
                 const std::uint8_t yHigh = static_cast<std::uint8_t>(yLow ^ 0x93u);
                 const std::uint8_t bytes[4] = {xLow, xHigh, yLow, yHigh};
@@ -389,7 +384,7 @@ namespace GameLogicTests
                 for (int index = 0; index < 4; ++index)
                 {
                   cpu.memory[static_cast<std::uint16_t>(inwk + at[index])] = bytes[index];
-                  work[at[index]] = bytes[index];
+                  PokeShip(work, at[index], bytes[index]);
                 }
                 cpu.memory[rat2] = direction;
 
@@ -398,14 +393,14 @@ namespace GameLogicTests
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvs5);
                 Assert::IsTrue(run.completed, L"MVS5 returned");
 
-                Elite::RotateCoordinatePair(work, math, pair.first, pair.second, direction);
+                Elite::RotateCoordinatePair(work, pair.first, pair.second, direction);
 
                 const std::wstring where = Widen("MVS5(x=" + std::to_string(pair.first) + ", y=" + std::to_string(pair.second) +
                                                  ", rat2=" + std::to_string(direction) + ", " + std::to_string(xLow) + "/" +
                                                  std::to_string(xHigh) + " " + std::to_string(yLow) + ")");
                 for (int index = 0; index < 4; ++index)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + at[index])], work[at[index]],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + at[index])], PeekShip(work, at[index]),
                                    (where + L": INWK+" + std::to_wstring(at[index])).c_str());
                 }
                 ++compared;
@@ -473,35 +468,38 @@ namespace GameLogicTests
         for (const std::uint8_t roofSeed : {std::uint8_t{0}, std::uint8_t{40}, std::uint8_t{200}})
         {
           Cpu6502 cpu = oracle.Fresh();
-          Elite::ShipBlock work;
+          Elite::Ship work;
 
           // The whole orientation area, INWK+9 to INWK+26, so the low bytes the routine clears are
           // non-zero going in and the clearing is visible rather than assumed.
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
           for (std::uint8_t offset = 9; offset <= 26u; ++offset)
           {
             const std::uint8_t value = static_cast<std::uint8_t>(roofSeed ^ (offset * 0x11u));
             cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = value;
-            work[offset] = value;
+            shipBytes[offset] = value;
           }
+          work = Elite::Ship::FromBytes(shipBytes);
 
           // The nose vector's high bytes are what select the branch.
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> noseBytes = work.ToBytes();
           for (int axis = 0; axis < 3; ++axis)
           {
             const std::uint8_t at = static_cast<std::uint8_t>(10u + axis * 2);
             cpu.memory[static_cast<std::uint16_t>(inwk + at)] = item.nose[axis];
-            work[at] = item.nose[axis];
+            noseBytes[at] = item.nose[axis];
           }
+          work = Elite::Ship::FromBytes(noseBytes);
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(tidy);
           Assert::IsTrue(run.completed, L"TIDY returned");
 
-          Elite::MathWorkspace math;
-          Elite::TidyOrientation(work, math);
+          Elite::TidyOrientation(work);
 
           const std::wstring where = Widen(std::string("TIDY: ") + item.what + ", roof seed " + std::to_string(roofSeed));
           for (std::uint8_t offset = 9; offset <= 26u; ++offset)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work[offset],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work.ToBytes()[offset],
                              (where + L": INWK+" + std::to_wstring(offset)).c_str());
           }
           ++compared;
@@ -563,19 +561,21 @@ namespace GameLogicTests
           for (const std::uint8_t seed : EDGES)
           {
             Cpu6502 cpu = oracle.Fresh();
-            Elite::ShipBlock work;
+            Elite::Ship work;
             Elite::MathWorkspace math;
 
             // 6502: JMP MV45 -- stop there rather than running MVEIT's tail as well.
             cpu.AddTrap(mv45);
 
             // The nine bytes of position: three axes of three bytes each, all different.
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
             for (std::uint8_t offset = 0; offset < 9u; ++offset)
             {
               const std::uint8_t value = static_cast<std::uint8_t>(seed ^ (offset * 0x35u));
               cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = value;
-              work[offset] = value;
+              shipBytes[offset] = value;
             }
+            work = Elite::Ship::FromBytes(shipBytes);
             cpu.memory[alpha] = a;
             cpu.memory[beta] = b;
 
@@ -588,7 +588,7 @@ namespace GameLogicTests
               Widen("MV40(alpha=" + std::to_string(a) + ", beta=" + std::to_string(b) + ", seed=" + std::to_string(seed) + ")");
             for (std::uint8_t offset = 0; offset < 9u; ++offset)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work[offset],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work.ToBytes()[offset],
                                (where + L": INWK+" + std::to_wstring(offset)).c_str());
             }
             ++compared;
@@ -627,7 +627,7 @@ namespace GameLogicTests
     class CountingEffects final : public Elite::ShipEffects
     {
     public:
-      bool RunTactics(Elite::ShipBlock&) override
+      bool RunTactics(Elite::Ship&) override
       {
         ++tactics;
         return true;
@@ -711,7 +711,7 @@ namespace GameLogicTests
         const std::wstring where = Widen(std::string("MVEIT: ") + item.what);
 
         Cpu6502 cpu = oracle.Fresh();
-        Elite::ShipBlock work;
+        Elite::Ship work;
         Elite::MathWorkspace math;
         Elite::FlightState flight;
         CountingEffects effects;
@@ -727,19 +727,21 @@ namespace GameLogicTests
         cpu.memory[qq11] = 0;
 
         // A whole ship: position, orientation, speed, roll, pitch and flags, the same on both sides.
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
         for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
         {
           const std::uint8_t value = static_cast<std::uint8_t>((offset * 0x1Du) ^ 0x41u);
           cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = value;
-          work[offset] = value;
+          shipBytes[offset] = value;
         }
+        work = Elite::Ship::FromBytes(shipBytes);
 
         /*
          * The position, chosen so the ship is ON the scanner rather than off the end of it: the
          * pattern above puts bit 6 in every high byte, which `SCAN`'s `AND #%11000000` rejects, so
          * with it the screen comparison would be a comparison of two blank screens.
          *
-         * `_work[31]`'s bit 4 comes from the case's own `exploding` byte, so the ships that the
+         * `_work.state`'s bit 4 comes from the case's own `exploding` byte, so the ships that the
          * game does not scan still are not scanned.
          */
         const std::uint8_t FIXED[][2] = {{1u, 0x12u},
@@ -757,13 +759,13 @@ namespace GameLogicTests
         for (const auto& set : FIXED)
         {
           cpu.memory[static_cast<std::uint16_t>(inwk + set[0])] = set[1];
-          work[set[0]] = set[1];
+          PokeShip(work, set[0], set[1]);
         }
 
         // The blueprint MVEIT reads its maximum speed from, in XX0 on the oracle's side.
-        const std::uint16_t blueprint = Elite::BlueprintAddress((item.type & 0x80u) != 0u ? std::uint8_t{11} : item.type);
-        cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
-        cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf((item.type & 0x80u) != 0u ? Elite::ShipType::CobraMk3 : Elite::TypeOf(item.type));
+        cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
         // The player's roll and pitch, in all three of the forms MVEIT reads them in.
         flight.alpha = item.alpha;
@@ -774,7 +776,7 @@ namespace GameLogicTests
         flight.bet1 = static_cast<std::uint8_t>(item.beta & 0x7Fu);
         flight.bet2 = static_cast<std::uint8_t>(item.beta & 0x80u);
         flight.delta = 14;
-        flight.type = item.type;
+        flight.type = Elite::TypeOf(item.type);
         flight.slot = 3;
 
         const std::uint8_t NAMES[][2] = {
@@ -811,12 +813,12 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(mveit);
           Assert::IsTrue(run.completed, (where + L": MVEIT returned on iteration " + std::to_wstring(iteration)).c_str());
 
-          Assert::IsTrue(Elite::MoveShip(canvas, draw, work, math, flight, effects, blueprint, 0u),
+          Assert::IsTrue(Elite::MoveShip(canvas, work, math, flight, effects, *blueprint, 0u),
                          L"MVEIT does not kill the player when the tactics double does not");
 
           for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work[offset],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work.ToBytes()[offset],
                              (where + L": iteration " + std::to_wstring(iteration) + L", INWK+" + std::to_wstring(offset)).c_str());
           }
 
@@ -896,15 +898,17 @@ namespace GameLogicTests
           }
 
           Cpu6502 cpu = oracle.Fresh();
-          Elite::ShipBlock work;
+          Elite::Ship work;
           Elite::FlightState flight;
 
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             const std::uint8_t value = static_cast<std::uint8_t>(byte * 7u + 3u);
             cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = value;
-            work[byte] = value;
+            shipBytes[byte] = value;
           }
+          work = Elite::Ship::FromBytes(shipBytes);
           cpu.memory[view] = which;
           cpu.memory[rat] = 0x11;
           cpu.memory[rat2] = 0x22;
@@ -927,7 +931,7 @@ namespace GameLogicTests
           const std::wstring where = Widen(std::string(entry == 0 ? "PLUT" : "PU1") + "(view=" + std::to_string(which) + ")");
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                              (where + L": INWK+" + std::to_wstring(byte)).c_str());
           }
           Assert::AreEqual(cpu.memory[rat], flight.rat, (where + L": RAT").c_str());

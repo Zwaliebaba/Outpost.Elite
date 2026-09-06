@@ -5,12 +5,14 @@
 
 #include "Canvas.h"
 #include "Controls.h"
+#include "LoaderScreen.h"
 #include "LookupTables.h"
 #include "VideoState.h"
 
 #include <array>
 #include <cstdint>
 #include <set>
+#include <string>
 #include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -201,6 +203,73 @@ namespace GameLogicTests
   TEST_CLASS(TheSpriteOverlay)
   {
   public:
+    /*
+     * 6502: the loader's part 4 -- where the sights sit before the game has written a thing.
+     *
+     * `SIGHT` writes sprite 0's pointer and colour and switches it on; it never writes a position,
+     * because the loader put the sprite at (161, 101) and nothing moves it. A `VideoState` that
+     * starts from zeros puts it 24 pixels left of and 50 above the screen, switched on and
+     * invisible -- which is what the owner saw, a space view with no sights (§6.160). So: the
+     * loader's values, and then the picture -- every painted pixel inside the 48 by 42 box the
+     * doubled sprite covers, and that box centred on the space view's own centre.
+     */
+    TEST_METHOD(TheLoaderPutsTheSightsInTheCentreOfTheView)
+    {
+      Elite::VideoState video;
+      Elite::SetUpLoaderVideo(video);
+
+      Assert::AreEqual<std::uint8_t>(0u, video.enabled, L"all eight sprites start switched off");
+      Assert::AreEqual<std::uint8_t>(0xFFu, video.expanded, L"and all eight double size");
+      Assert::AreEqual<std::uint16_t>(161u, video.x[0], L"VIC+0");
+      Assert::AreEqual<std::uint8_t>(101u, video.y[0], L"VIC+1");
+      Assert::AreEqual<std::uint16_t>(18u, video.x[1], L"VIC+2 -- the explosion sprite");
+      Assert::AreEqual<std::uint16_t>(144u, video.x[4], L"VIC+8 -- Trumble 2");
+      Assert::AreEqual<std::uint16_t>(56u, video.x[7], L"VIC+14 -- Trumble 5");
+      Assert::AreEqual<std::uint8_t>(12u, video.y[7], L"VIC+15 -- the top row for every one");
+      Assert::AreEqual<std::uint8_t>(12u, video.colour[3], L"VIC+&2A -- Trumble 1 is grey");
+      Assert::AreEqual<std::uint8_t>(0u, video.colour[0], L"and the sights' colour is SIGHT's to write");
+
+      // 6502: SIGHT, for the pulse laser -- the pointer is already the loader's in PointedCanvas.
+      const Elite::Canvas canvas = PointedCanvas();
+      Elite::ApplySightColour(video, 0x07u);
+      Elite::ApplySpritesEnabled(video, 0x01u);
+
+      Image plain{};
+      Image composited{};
+      canvas.Resolve(plain);
+      canvas.Resolve(composited, video);
+
+      const int left = 161 - Elite::SPRITE_ORIGIN_X;
+      const int top = 101 - Elite::SPRITE_ORIGIN_Y;
+      const int right = left + Elite::SPRITE_WIDTH * 2;
+      const int bottom = top + Elite::SPRITE_ROWS * 2;
+
+      std::size_t painted = 0;
+      for (int y = 0; y < Elite::Canvas::HEIGHT; ++y)
+      {
+        for (int x = 0; x < Elite::Canvas::WIDTH; ++x)
+        {
+          const std::size_t at = static_cast<std::size_t>(y) * Elite::Canvas::WIDTH + static_cast<std::size_t>(x);
+          if (plain[at] == composited[at])
+          {
+            continue;
+          }
+          ++painted;
+          Assert::IsTrue(
+            x >= left && x < right && y >= top && y < bottom,
+            (L"a painted pixel at (" + std::to_wstring(x) + L", " + std::to_wstring(y) + L") is outside the sights' box").c_str());
+        }
+      }
+
+      Assert::IsTrue(painted > 0u, L"the sights are on the screen");
+
+      // The box's centre against the space view's: 256 wide from cell 4, 144 tall from row 0. The
+      // loader's 161 puts the 48-wide box half a pixel right of dead centre, which is the game's.
+      const int centreX = static_cast<int>(Elite::Canvas::SPACE_VIEW_MARGIN) + 128;
+      Assert::IsTrue((left + right) / 2 >= centreX && (left + right) / 2 <= centreX + 1, L"centred across the view, to the pixel");
+      Assert::AreEqual(Elite::Canvas::SPACE_VIEW_HEIGHT / 2, (top + bottom) / 2, L"centred down the view");
+    }
+
     /// Nothing enabled draws nothing, which is what every golden hash depends on.
     TEST_METHOD(NoSpritesEnabledLeavesTheBitmapExactlyAsItWas)
     {

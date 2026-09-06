@@ -57,8 +57,8 @@ namespace Elite
      *
      * `STARS2` stores the divide's quotient here and compares against it thirty instructions later,
      * by which time nothing else still holds it. It is the only byte of the movers' scratch that is
-     * genuinely the stardust's: `XX` and `YY` looked like it and are not (§6.45), so they live in
-     * `MathWorkspace` where `EDGES` and the sun can reach them.
+     * genuinely the stardust's: `XX` and `YY` looked like it and are not (§6.45) -- they are the
+     * sun's, and are `EDGES`'s parameter and `SUN`'s locals since M2-c.
      */
     std::uint8_t newzp = 0;
   };
@@ -66,46 +66,40 @@ namespace Elite
   // ---- the wrappers, which are one or two instructions and a fall-through -------------------
   //
   // Seven routines in the ledger, and none of them is more than four bytes of setup before it runs
-  // into something already ported. They are functions here rather than inlined because the ledger
-  // counts them and because each is a named entry point the oracle can be called at (§6.20).
+  // into something already ported. Four are functions here because each is a named entry point the
+  // oracle can be called at (§6.20); the other three -- `MLS2`, `MUT1` and `MUT2` -- were nothing
+  // but "(S R) = XX(1 0)" in front of a multiply, and since M2-b the multiply takes its addend as a
+  // value, so they are the `SignMag16{xx, xxNext}` at each of their call sites in the movers.
 
-  /// 6502: DV41 -- Q = A, then (P R) = DELTA / Q through `DVID4`.
-  [[nodiscard]] std::uint8_t DivideSpeedBy(MathWorkspace& _math, const FlightState& _flight, std::uint8_t _a) noexcept;
+  /// 6502: DV41 -- Q = A, then (P R) = DELTA / Q through `DVID4`: the whole part and the fraction,
+  /// and the fraction is what comes back in A.
+  [[nodiscard]] ScaledDivision DivideSpeedBy(const FlightState& _flight, std::uint8_t _divisor) noexcept;
 
   /// 6502: DV42 -- the same for a particle's own distance.
-  [[nodiscard]] std::uint8_t DivideSpeedByDistance(MathWorkspace& _math, const FlightState& _flight, const Stardust& _dust,
-                                                   std::uint8_t _at) noexcept;
+  [[nodiscard]] ScaledDivision DivideSpeedByDistance(const FlightState& _flight, const Stardust& _dust, std::uint8_t _at) noexcept;
 
   /// 6502: MLU1 -- Y1 = SY, then (A P) = |SY| * Q through `MLU2`. The carry is part of the answer:
   /// the front view adds `SYL` to it and the rear view subtracts, neither with a `CLC` or a `SEC`.
-  [[nodiscard]] WideResult MultiplyByHeight(MathWorkspace& _math, DrawWorkspace& _draw, const Stardust& _dust, std::uint8_t _at) noexcept;
+  /// The `Y1` it stages is the speck's own height, which the movers read from the speck (M2-c).
+  [[nodiscard]] Product MultiplyByHeight(const Stardust& _dust, std::uint8_t _at, std::uint8_t _multiplier) noexcept;
 
-  /// 6502: MLS1 -- P = ALP1, then `MULTS`. And `MULTS-2`, which is the same without the `LDX`,
-  /// reached by the movers with the multiplier already in X.
-  [[nodiscard]] std::uint8_t MultiplyByRoll(MathWorkspace& _math, const FlightState& _flight, std::uint8_t _a) noexcept;
-  [[nodiscard]] std::uint8_t MultiplyScaledBy(MathWorkspace& _math, std::uint8_t _x, std::uint8_t _a) noexcept;
-
-  /*
-   * 6502: MLS2 -- (S R) = XX(1 0), then `MLS1`. And MUT1 and MUT2 -- R = XX, and S = XX+1 as well,
-   * then `MULT1`.
-   *
-   * These three are in this file and take no `Stardust`, which is not a contradiction. Their only
-   * callers in the whole build are `STARS1` and `STARS6`, so this is where they belong; the bytes
-   * they read are shared with the sun, so `MathWorkspace` is what they take. Where a routine lives
-   * and what it reads are separate questions and the ledger has conflated them seven times now.
-   */
-  [[nodiscard]] std::uint8_t MultiplyPositionByRoll(MathWorkspace& _math, const FlightState& _flight, std::uint8_t _a) noexcept;
-  [[nodiscard]] std::uint8_t MultiplyPosition(MathWorkspace& _math, std::uint8_t _a) noexcept;
-  [[nodiscard]] std::uint8_t MultiplyPositionSigned(MathWorkspace& _math, std::uint8_t _a) noexcept;
+  /// 6502: MLS1 -- P = ALP1, then `MULTS`. (6502: MULTS-2 is the same without the `LDX`, reached by
+  /// the movers with the multiplier already in X -- which is `MultiplyScaled` called directly.)
+  [[nodiscard]] Product MultiplyByRoll(const FlightState& _flight, std::uint8_t _value) noexcept;
 
   /*
    * 6502: PIX1 -- `ADD`, keep the answer as the particle's new y, and plot it.
    *
+   * `_value` is (A P) and `_addend` is (S R), as `ADD` takes them: the movers hand it the pitch
+   * or the roll over a zero low byte, and the particle's y. `_across`, `_down` and `_distance` are
+   * the `X1`, `Y1` and `ZZ` the mover had staged, which is the speck's OLD position -- `PIXEL2`
+   * plots by EOR, so this is the erase. Returns the sum's high byte, `YY+1`, which the mover reads.
+   *
    * The ledger marked this ported with the rest of the pixel routines in slice 1d-a and it was not
    * (§6.41): it writes `SYL`, and the stardust arrays did not exist then.
    */
-  void PlotStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Stardust& _dust, std::uint8_t _at,
-                    std::uint8_t _a) noexcept;
+  [[nodiscard]] std::uint8_t PlotStardust(Canvas& _canvas, Stardust& _dust, std::uint8_t _at, SignMag16 _value, SignMag16 _addend,
+                                          std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
   /*
    * 6502: FLIP -- swap every speck's x and y, which reflects the whole field in the line x = y,
@@ -116,7 +110,7 @@ namespace Elite
    * see that the new dust is the old dust mirrored in the diagonal. `LOOK1` is slice 3d's; this is
    * here because the workspace is.
    */
-  void FlipStardust(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust) noexcept;
+  void FlipStardust(Canvas& _canvas, Stardust& _dust) noexcept;
 
   /*
    * 6502: STARS1, STARS2 and STARS6 -- move and redraw the whole field, once per frame.
@@ -134,19 +128,15 @@ namespace Elite
    * each roll a new one at the far edge, which is why the field never thins out. That makes the
    * random generator part of the routine's answer rather than a detail, so it is a parameter.
    */
-  void MoveStardustAhead(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, const FlightState& _flight, Stardust& _dust,
-                         Rng& _rng) noexcept;
-  void MoveStardustAstern(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, const FlightState& _flight, Stardust& _dust,
-                          Rng& _rng) noexcept;
-  void MoveStardustSideways(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, FlightState& _flight, Stardust& _dust, Rng& _rng,
-                            std::uint8_t _view) noexcept;
+  void MoveStardustAhead(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng) noexcept;
+  void MoveStardustAstern(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng) noexcept;
+  void MoveStardustSideways(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view) noexcept;
 
   /*
    * 6502: STARS -- pick one of the three by the view.
    *
    * `STARS2` takes the view in X because it has to know left from right; the other two do not care.
    */
-  void MoveStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, FlightState& _flight, Stardust& _dust, Rng& _rng,
-                    std::uint8_t _view) noexcept;
+  void MoveStardust(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view) noexcept;
 
 } // namespace Elite

@@ -21,25 +21,26 @@ namespace Elite
      * arguments arrive in A and Y rather than on the stack: `LDA #32 / LDY #224 / JSR las` and then
      * `LDA #48 / LDY #208` running straight on.
      */
-    bool DrawLaserPair(Canvas& _canvas, DrawWorkspace& _draw, const LaserBurst& _burst, std::uint8_t _left, std::uint8_t _right) noexcept
+    bool DrawLaserPair(Canvas& _canvas, const LaserBurst& _burst, std::uint8_t _left, std::uint8_t _right) noexcept
     {
-      _draw.x2 = _left;                   // 6502: STA X2
-      _draw.x1 = _burst.x;                // 6502: LDA LASX / STA X1
-      _draw.y1 = _burst.y;                // 6502: LDA LASY / STA Y1
-      _draw.y2 = 2u * VIEW_CENTRE_Y - 1u; // 6502: LDA #2*Y-1 / STA Y2
-      DrawLine(_canvas, _draw);           // 6502: JSR LL30
+      Line beam;
+      beam.x2 = _left;                   // 6502: STA X2
+      beam.x1 = _burst.x;                // 6502: LDA LASX / STA X1
+      beam.y1 = _burst.y;                // 6502: LDA LASY / STA Y1
+      beam.y2 = 2u * VIEW_CENTRE_Y - 1u; // 6502: LDA #2*Y-1 / STA Y2
+      (void)DrawLine(_canvas, beam);     // 6502: JSR LL30
 
-      _draw.x1 = _burst.x;
-      _draw.y1 = _burst.y;
-      _draw.x2 = _right; // 6502: STY X2
-      _draw.y2 = 2u * VIEW_CENTRE_Y - 1u;
-      DrawLine(_canvas, _draw); // 6502: JMP LL30 -- a tail call
+      beam.x1 = _burst.x;
+      beam.y1 = _burst.y;
+      beam.x2 = _right; // 6502: STY X2
+      beam.y2 = 2u * VIEW_CENTRE_Y - 1u;
+      (void)DrawLine(_canvas, beam); // 6502: JMP LL30 -- a tail call
 
       return false;
     }
   } // namespace
 
-  bool DrawLaserLines(Canvas& _canvas, DrawWorkspace& _draw, const LaserBurst& _burst, std::uint8_t _view) noexcept
+  bool DrawLaserLines(Canvas& _canvas, const LaserBurst& _burst, std::uint8_t _view) noexcept
   {
     // 6502: LASLI2 -- LDA QQ11 / BNE LASLI-1, and that is the previous routine's RTS borrowed.
     if (_view != 0u)
@@ -48,11 +49,11 @@ namespace Elite
     }
 
     // 6502: LDA #32 / LDY #224 / JSR las, then LDA #48 / LDY #208 falling into it again.
-    (void)DrawLaserPair(_canvas, _draw, _burst, 32u, 224u);
-    return DrawLaserPair(_canvas, _draw, _burst, 48u, 208u);
+    (void)DrawLaserPair(_canvas, _burst, 32u, 224u);
+    return DrawLaserPair(_canvas, _burst, 48u, 208u);
   }
 
-  bool FireLaser(Canvas& _canvas, DrawWorkspace& _draw, Rng& _rng, LaserBurst& _burst, FlightStatus& _status, std::uint8_t _view,
+  bool FireLaser(Canvas& _canvas, Rng& _rng, LaserBurst& _burst, FlightStatus& _status, std::uint8_t _view,
                  bool _carryIn) noexcept
   {
     /*
@@ -84,7 +85,7 @@ namespace Elite
     (void)DrainEnergy(_status);
 
     // 6502: and no RTS -- LASLI runs straight on into LASLI2.
-    return DrawLaserLines(_canvas, _draw, _burst, _view);
+    return DrawLaserLines(_canvas, _burst, _view);
   }
 
 } // namespace Elite

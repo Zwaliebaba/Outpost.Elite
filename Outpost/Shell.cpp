@@ -145,7 +145,7 @@ namespace Outpost
      */
     if (m_flight == nullptr)
     {
-      m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the world
+      m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the universe
       return;
     }
 
@@ -191,7 +191,7 @@ namespace Outpost
     if (m_flight != nullptr)
     {
       const Elite::FlightScreen& screen = m_flight->Screen();
-      Elite::ResetMissileIndicators(m_canvas, screen.commander.At(Elite::Field::Missiles));
+      Elite::ResetMissileIndicators(m_canvas, screen.commander.missiles);
     }
   }
 
@@ -365,7 +365,7 @@ namespace Outpost
        * 121,276 cycles. `INWK+7` is the byte `TLL2` walks down, so it is what the curve is indexed
        * by -- the port is reading the same counter the original's cost depends on.
        */
-      const double period = TitleTurnSeconds(m_flight->Screen().work[7]);
+      const double period = TitleTurnSeconds(m_flight->Screen().work.z.hi);
 
       m_spinLeftover += elapsed;
       if (m_spinLeftover >= period)
@@ -380,7 +380,7 @@ namespace Outpost
     return (m_flight != nullptr) ? m_flight->ScanMatrix(_keys) : Elite::TitleKey{true, 0u};
   }
 
-  std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance)
+  std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance)
   {
     /*
      * 6502: TITLE -- ported in full now, so this is a forward rather than a placeholder.
@@ -434,8 +434,8 @@ namespace Outpost
       /*
        * 6502: MT8 -- LDA #6 / JSR DOXC, answered here only when there is no flight session.
        *
-       * The docked screens print tokens before the world is built, and this is the one code among
-       * them that a screen with no world can still honour: it is a number into a byte.
+       * The docked screens print tokens before the universe is built, and this is the one code among
+       * them that a screen with no universe can still honour: it is a number into a byte.
        */
       if (m_text != nullptr)
       {

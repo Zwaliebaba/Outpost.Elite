@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
-#include "FlightWorld.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Arith.h"
@@ -11,6 +11,7 @@
 #include "Dashboard.h"
 #include "ShipBlueprint.h"
 #include "ShipSlot.h"
+#include "Tactics.h"
 
 #include <array>
 #include <cstdint>
@@ -58,13 +59,15 @@ namespace GameLogicTests
         {
           Elite::Bubble bubble;
           std::uint32_t state = 0x2C7B41A5u ^ (seed * 0x9E3779B9u) ^ slot;
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             state = state * 1103515245u + 12345u;
             const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-            bubble.blocks[slot][byte] = value;
+            shipBytes[byte] = value;
             cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
           }
+          bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
 
           for (std::uint32_t seedByte = 0; seedByte < 256; ++seedByte)
           {
@@ -108,15 +111,17 @@ namespace GameLogicTests
 
       for (std::uint32_t seed = 0; seed < 16; ++seed)
       {
-        Elite::ShipBlock work;
+        Elite::Ship work;
         std::uint32_t state = 0x71A3C25Fu ^ (seed * 0x85EBCA6Bu);
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           state = state * 1103515245u + 12345u;
           const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-          work[byte] = value;
+          shipBytes[byte] = value;
           cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = value;
         }
+        work = Elite::Ship::FromBytes(shipBytes);
 
         for (std::uint32_t seedByte = 0; seedByte < 256; ++seedByte)
         {
@@ -165,19 +170,20 @@ namespace GameLogicTests
           {
             Elite::Bubble bubble;
             const std::uint8_t BYTES[3] = {x, y, z};
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[0].ToBytes();
             for (int axis = 0; axis < 3; ++axis)
             {
               const std::size_t at = static_cast<std::size_t>(axis) * 3u + 1u;
-              bubble.blocks[0][at] = BYTES[axis];
+              shipBytes[at] = BYTES[axis];
               cpu.memory[static_cast<std::uint16_t>(kPercent + at)] = BYTES[axis];
             }
+            bubble.blocks[0] = Elite::Ship::FromBytes(shipBytes);
 
             cpu.y = 0;
             const Elite::Testing::RunResult run = cpu.CallSubroutine(mas3, 5'000);
             Assert::IsTrue(run.completed, L"MAS3 returned");
 
-            Elite::MathWorkspace math;
-            const std::uint8_t ours = Elite::SumOfSquares(bubble, math, 0);
+            const std::uint8_t ours = Elite::SumOfSquares(bubble, 0);
 
             const std::wstring where = WidenText("MAS3(" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + ")");
             Assert::AreEqual(cpu.a, ours, where.c_str());
@@ -229,22 +235,24 @@ namespace GameLogicTests
           {
             for (const std::uint8_t target : VALUES)
             {
-              Elite::ShipBlock work;
+              Elite::Ship work;
+              std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                work[byte] = 0;
+                shipBytes[byte] = 0;
               }
+              work = Elite::Ship::FromBytes(shipBytes);
 
               // The source coordinate at INWK+9, and the destination at INWK+0.
-              work[9] = low;
-              work[10] = high;
-              work[0] = target;
-              work[1] = static_cast<std::uint8_t>(target ^ 0x5Au);
-              work[2] = sign;
+              work.nose.x.lo = low;
+              work.nose.x.hi = high;
+              work.x.lo = target;
+              work.x.hi = static_cast<std::uint8_t>(target ^ 0x5Au);
+              work.x.sgn = sign;
 
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+                cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work.ToBytes()[byte];
               }
 
               cpu.y = 9;
@@ -252,8 +260,7 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(mas1, 5'000);
               Assert::IsTrue(run.completed, L"MAS1 returned");
 
-              Elite::MathWorkspace math;
-              const std::uint8_t ours = Elite::DoubleAndAddCoordinate(work, math, 9, 0);
+              const std::uint8_t ours = Elite::DoubleAndAddCoordinate(work, 9, 0);
 
               const std::wstring where = WidenText("MAS1(low " + std::to_string(low) + ", high " + std::to_string(high) + ", sign " +
                                                    std::to_string(sign) + ", target " + std::to_string(target) + ")");
@@ -261,7 +268,7 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.a, ours, (where + L": the returned magnitude").c_str());
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                                  (where + L": INWK+" + std::to_wstring(byte)).c_str());
               }
 
@@ -386,20 +393,26 @@ namespace GameLogicTests
       const std::uint16_t xx0 = oracle.Label("XX0");
       const std::uint16_t rand = oracle.Label("RAND");
 
+      /*
+       * `SFS1`'s exit carry is `NWSHP`'s -- `NW3`'s `CLC` for a full bubble, `NWL3`'s `SEC` for a
+       * ship that was made -- because everything between the `JSR NWSHP` and `SFS1`'s `RTS` is
+       * pulls and stores. `SPIN` hands that flag back to `MA47`, whose second `JSR SPIN` runs on
+       * it (M2-d), so the trap ends `SEC` and the seam here answers the same.
+       */
       struct Recorder final : Elite::SpawnChildEffects
       {
         std::vector<std::uint8_t> flags;
         std::vector<std::uint8_t> types;
-        bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override
+        bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
         {
           flags.push_back(_aiFlag);
-          types.push_back(_type);
-          return false; // `SFS1`'s carry, which a trap leaves clear and `SPIN` ignores
+          types.push_back(Elite::Byte(_type));
+          return true;
         }
       };
 
       Cpu6502 cpu = oracle.Fresh();
-      cpu.AddTrap(sfs1);
+      cpu.AddTrap(sfs1, Cpu6502::TrapExit::SetCarry);
 
       // ---- SPIN2 on its own --------------------------------------------------------------------
       std::uint32_t placed = 0;
@@ -407,19 +420,21 @@ namespace GameLogicTests
       {
         for (const std::uint8_t type : {std::uint8_t{3}, std::uint8_t{5}, std::uint8_t{17}})
         {
+          // `oh` is a bare `RTS`, so a count of zero hands the caller's own carry straight back --
+          // which only a sweep that varies it can see.
+          const bool carryIn = (count & 1u) != 0u;
           cpu.ClearTrapHits();
           cpu.memory[cnt] = 0xEEu;
           cpu.a = static_cast<std::uint8_t>(count);
           cpu.x = type;
           cpu.z = (count == 0u); // what the caller's own `AND` has just left behind
+          cpu.c = carryIn;
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(spin2, 20'000);
           Assert::IsTrue(run.completed, L"SPIN2 returned");
 
           Recorder effects;
-          Elite::MathWorkspace math;
-          math.cnt = 0xEEu;
-          Elite::SpawnItems(math, effects, type, static_cast<std::uint8_t>(count));
+          const bool exit = Elite::SpawnItems(effects, Elite::TypeOf(type), static_cast<std::uint8_t>(count), carryIn);
 
           const std::wstring where = WidenText("SPIN2(count " + std::to_string(count) + ", type " + std::to_string(type) + ")");
 
@@ -429,7 +444,9 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit], (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
             Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit], (where + L": the type of #" + std::to_wstring(hit)).c_str());
           }
-          Assert::AreEqual(cpu.memory[cnt], math.cnt, (where + L": CNT").c_str());
+          // `CNT` is `SPIN2`'s loop counter and its own since M2-c-3. How many times it went round
+          // is what the seam above records, spawn for spawn.
+          Assert::AreEqual(cpu.c, exit, (where + L": the exit carry").c_str());
 
           placed += static_cast<std::uint32_t>(cpu.trapHits.size());
         }
@@ -444,8 +461,8 @@ namespace GameLogicTests
 
       for (std::uint8_t type = 1; type <= Elite::SHIP_TYPE_COUNT; ++type)
       {
-        const std::uint16_t blueprint = Elite::BlueprintAddress(type);
-        if (blueprint == 0u)
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(type));
+        if (blueprint == nullptr)
         {
           continue;
         }
@@ -465,8 +482,8 @@ namespace GameLogicTests
 
             cpu.ClearTrapHits();
             cpu.memory[cnt] = 0xEEu;
-            cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
-            cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+            cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
+            cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
             cpu.y = type;
             cpu.c = carry;
 
@@ -474,11 +491,9 @@ namespace GameLogicTests
             Assert::IsTrue(run.completed, L"SPIN returned");
 
             Recorder effects;
-            Elite::MathWorkspace math;
-            math.cnt = 0xEEu;
             Elite::Rng rng;
             rng.SetState(bytes);
-            Elite::SpawnDebris(rng, math, effects, blueprint, type, carry);
+            const bool exit = Elite::SpawnDebris(rng, effects, *blueprint, Elite::TypeOf(type), carry);
 
             const std::wstring where = WidenText("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed) + ", carry " +
                                                  std::to_string(carry ? 1 : 0) + ")");
@@ -489,7 +504,8 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit], (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
               Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit], (where + L": the type of #" + std::to_wstring(hit)).c_str());
             }
-            Assert::AreEqual(cpu.memory[cnt], math.cnt, (where + L": CNT").c_str());
+            // `CNT` is `SPIN2`'s own since M2-c-3; the seam records every spawn it made.
+            Assert::AreEqual(cpu.c, exit, (where + L": the exit carry").c_str());
             for (std::size_t byte = 0; byte < bytes.size(); ++byte)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
@@ -629,13 +645,13 @@ namespace GameLogicTests
         {
           for (const std::uint8_t z : AXES)
           {
-            Elite::ShipBlock work{};
-            work[1] = x;
-            work[4] = y;
-            work[7] = z;
+            Elite::Ship work{};
+            work.x.hi = x;
+            work.y.hi = y;
+            work.z.hi = z;
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
-              cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+              cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work.ToBytes()[byte];
             }
 
             // `FAROF` first, which is `LDA #224` and then the body.
@@ -696,8 +712,8 @@ namespace GameLogicTests
 
       for (std::uint8_t shipType = 1; shipType <= Elite::SHIP_TYPE_COUNT; ++shipType)
       {
-        const std::uint16_t blueprint = Elite::BlueprintAddress(shipType);
-        if (blueprint == 0u)
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(shipType));
+        if (blueprint == nullptr)
         {
           continue;
         }
@@ -710,24 +726,23 @@ namespace GameLogicTests
             {
               for (const std::uint8_t exploding : {std::uint8_t{0}, std::uint8_t{0x20}})
               {
-                Elite::ShipBlock work{};
-                work[0] = across;
-                work[3] = down;
-                work[8] = behind;
-                work[31] = exploding;
+                Elite::Ship work{};
+                work.x.lo = across;
+                work.y.lo = down;
+                work.z.sgn = behind;
+                work.state = exploding;
 
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
-                  cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+                  cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work.ToBytes()[byte];
                 }
-                cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
-                cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+                cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
+                cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
                 cpu.memory[type] = shipType;
 
                 Assert::IsTrue(cpu.CallSubroutine(hitch, 5'000).completed, L"HITCH returned");
 
-                Elite::MathWorkspace math;
-                const bool ours = Elite::IsHit(work, math, blueprint, shipType);
+                const bool ours = Elite::IsHit(work, *blueprint, Elite::TypeOf(shipType));
 
                 const std::wstring where =
                   WidenText("HITCH(type " + std::to_string(shipType) + ", x " + std::to_string(across) + ", y " + std::to_string(down) +
@@ -833,7 +848,7 @@ namespace GameLogicTests
     };
 
     /*
-     * The flight loop's own seams, recording into the world's sound list.
+     * The flight loop's own seams, recording into the universe's sound list.
      *
      * One list, because `NOISE` is one routine: the loop reaches it through `FlightLoopEffects` and
      * `WARP` reaches it through `ViewEffects`, and a frame that boops for a refused warp and then
@@ -848,22 +863,26 @@ namespace GameLogicTests
 
       std::vector<std::uint8_t>& sounds;
 
-      /// The world's carry list, not this object's: the 6502 has ONE `NOISE` and the port reaches
+      /// The universe's carry list, not this object's: the 6502 has ONE `NOISE` and the port reaches
       /// it through two interfaces, so a comparison against one list needs both to write to it.
       std::vector<std::uint8_t>& soundCarries;
       std::vector<Pitched> pitched;
       std::vector<std::uint8_t> stopped;
       std::vector<std::uint8_t> spawned;
-      std::vector<std::uint8_t> angered;
       std::uint32_t musicStarts = 0;
       std::uint32_t musicStops = 0;
 
       /// What `FRS1` answers -- carry set for "there was room", clear for a full bubble.
       bool spawnSucceeds = true;
 
-      RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries) noexcept
+      /// The bubble `ANGRY` writes and the loop byte it reads: the routine RUNS here, on both sides
+      /// of the comparison, because `LL9` reads the carry it exits with (§6.157).
+      Universe& universe;
+
+      RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries, Universe& _universe) noexcept
         : sounds(_sounds),
-          soundCarries(_carries)
+          soundCarries(_carries),
+          universe(_universe)
       {
       }
 
@@ -892,19 +911,21 @@ namespace GameLogicTests
       {
         ++musicStops;
       }
-      bool SpawnAhead(std::uint8_t _type) override
+      bool SpawnAhead(Elite::ShipType _type) override
       {
-        spawned.push_back(_type);
+        spawned.push_back(Elite::Byte(_type));
         return spawnSucceeds;
       }
-      void Anger(std::uint8_t _slot, std::uint8_t _type) override
+      bool Anger(std::uint8_t _slot, Elite::ShipType _type) override
       {
-        (void)_slot; // the oracle's trap records A, which is the type; the slot is INF's and not compared here
-        angered.push_back(_type);
+        // 6502: ANGRY, for real -- it was trapped on the oracle and recorded here until 2026-09-06,
+        // and a trap's exit carry is whatever the caller had, which is not what the routine leaves
+        // for `LL9` (§6.157). Its writes are compared through the ship blocks like everything else.
+        return Elite::Anger(universe.bubble, universe.flight, _slot, _type);
       }
-      bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override
+      bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
       {
-        children.push_back({_aiFlag, _type});
+        children.push_back({_aiFlag, Elite::Byte(_type)});
         return childSucceeds;
       }
 
@@ -918,16 +939,15 @@ namespace GameLogicTests
     };
 
     /// What `MVEIT` and `LL9` reach that this slice does not build.
-    struct RecordingWorld final : Elite::ShipEffects, Elite::ShipDrawEffects
+    struct RecordingUniverse final : Elite::ShipEffects, Elite::ShipDrawEffects
     {
       std::vector<std::uint8_t> tactics;
       std::uint32_t planets = 0;
       std::uint32_t explosions = 0;
-      std::uint32_t clouds = 0;
 
-      bool RunTactics(Elite::ShipBlock& _work) override
+      bool RunTactics(Elite::Ship& _work) override
       {
-        tactics.push_back(_work[32]);
+        tactics.push_back(_work.ai);
         return true; // the counted double never kills the player -- §6.122's answer for "nothing happened"
       }
       void DrawPlanetOrSun() override
@@ -938,19 +958,12 @@ namespace GameLogicTests
       {
         ++explosions;
       }
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t _address, std::uint16_t) override
-      {
-        seeded.push_back(_address);
-        ++clouds;
-      }
-
-      std::vector<std::uint16_t> seeded;
     };
 
-    /// Everything one frame needs that the shared `World` does not carry.
+    /// Everything one frame needs that the shared `Universe` does not carry.
     struct Frame
     {
-      World world;
+      Universe universe;
       Elite::ControlState control;
       Elite::ControlOptions options;
       Elite::KeyLogger keys{};
@@ -959,12 +972,12 @@ namespace GameLogicTests
       Elite::ClipState clip;
       Elite::Projection projection;
       Elite::K3Block axes{};
-      RecordingWorld outside;
-      RecordingLoop effects{world.effects.sounds, world.effects.soundCarries};
+      RecordingUniverse outside;
+      RecordingLoop effects{universe.effects.sounds, universe.effects.soundCarries, universe};
 
       explicit Frame(std::uint32_t _seed)
       {
-        Seed(world, _seed);
+        Seed(universe, _seed);
 
         /*
          * 6502: TRIBCT -- ZERO here, and `Seed` leaves it at 90 (slice 4d-a).
@@ -977,10 +990,10 @@ namespace GameLogicTests
          * wants Trumbles has to stop before the ships, and `TheControlRatesMatchM` is the one that
          * does.
          */
-        world.trumbles.count = 0u;
+        universe.trumbles.count = 0u;
 
-        // 6502: LSO -- the station draws into the SUN's heap, which lives in the world (§6.112).
-        world.LendSunHeap(heap);
+        // 6502: LSO -- the station draws into the SUN's heap, which lives in the universe (§6.112).
+        universe.LendSunHeap(heap);
 
         /*
          * A message already up, and a REAL one.
@@ -990,10 +1003,10 @@ namespace GameLogicTests
          * prints the player's cash. The game cannot reach that: `MCH` is written only by `MESS`
          * itself, and the erase only runs when `DLY` is non-zero, which only `MESS` makes it.
          */
-        world.message.token = 101u;
-        world.message.column = 9u;
-        world.message.append = 1u;
-        world.message.delay = 12u;
+        universe.message.token = 101u;
+        universe.message.column = 9u;
+        universe.message.append = 1u;
+        universe.message.delay = 12u;
 
         /*
          * 6502: XX0 -- a REAL blueprint, because zero is not a state the game reaches.
@@ -1003,24 +1016,24 @@ namespace GameLogicTests
          * zero the game reads `(XX0),15` out of its own zero page and the port reads a guarded zero,
          * which is a disagreement about an address neither would ever form.
          */
-        world.flight.blueprint = Elite::BlueprintAddress(11u);
-        world.screen.upperBitmapMode = 0xC0u;
-        world.status.laserCount = 0u;
-        world.status.laserPower = 0u;
-        world.status.missileArmed = 0u;
-        world.status.ecmOurs = 0u;
-        world.bubble.missileTarget = 0xFFu;
-        world.flight.delt4 = 0u;
-        world.flight.delt4Next = 0u;
+        universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
+        universe.screen.upperBitmapMode = 0xC0u;
+        universe.status.laserCount = 0u;
+        universe.status.laserPower = 0u;
+        universe.status.missileArmed = 0u;
+        universe.status.ecmOurs = 0u;
+        universe.bubble.missileTarget = 0xFFu;
+        universe.flight.delt4 = 0u;
+        universe.flight.delt4Next = 0u;
         control.roll = 128u;
         control.pitch = 128u;
       }
     };
 
-    /// The port's world into the oracle, for everything past what `Mirror` covers.
+    /// The port's universe into the oracle, for everything past what `Mirror` covers.
     void MirrorFrame(const Frame& _frame, Cpu6502& _cpu, const Where& _at, const LoopWhere& _loop)
     {
-      const World& world = _frame.world;
+      const Universe& universe = _frame.universe;
 
       for (std::size_t slot = 0; slot < _frame.keys.size(); ++slot)
       {
@@ -1034,19 +1047,19 @@ namespace GameLogicTests
       _cpu.memory[_loop.djd] = _frame.options.recentreDisabled;
       _cpu.memory[_loop.jstk] = _frame.options.joystick;
 
-      _cpu.memory[_loop.alpha] = world.flight.alpha;
-      _cpu.memory[_loop.alp2Next] = world.flight.alp2Next;
-      _cpu.memory[_loop.bet2] = world.flight.bet2;
-      _cpu.memory[_loop.bet2Next] = world.flight.bet2Next;
-      _cpu.memory[_loop.delt4] = world.flight.delt4;
-      _cpu.memory[static_cast<std::uint16_t>(_loop.delt4 + 1u)] = world.flight.delt4Next;
+      _cpu.memory[_loop.alpha] = universe.flight.alpha;
+      _cpu.memory[_loop.alp2Next] = universe.flight.alp2Next;
+      _cpu.memory[_loop.bet2] = universe.flight.bet2;
+      _cpu.memory[_loop.bet2Next] = universe.flight.bet2Next;
+      _cpu.memory[_loop.delt4] = universe.flight.delt4;
+      _cpu.memory[static_cast<std::uint16_t>(_loop.delt4 + 1u)] = universe.flight.delt4Next;
 
-      _cpu.memory[_loop.las] = world.status.laserPower;
-      _cpu.memory[_loop.lasct] = world.status.laserCount;
-      _cpu.memory[_loop.msar] = world.status.missileArmed;
-      _cpu.memory[_loop.mstg] = world.bubble.missileTarget;
-      _cpu.memory[_loop.ecmp] = world.status.ecmOurs;
-      _cpu.memory[_loop.moonflower] = world.screen.upperBitmapMode;
+      _cpu.memory[_loop.las] = universe.status.laserPower;
+      _cpu.memory[_loop.lasct] = universe.status.laserCount;
+      _cpu.memory[_loop.msar] = universe.status.missileArmed;
+      _cpu.memory[_loop.mstg] = universe.bubble.missileTarget;
+      _cpu.memory[_loop.ecmp] = universe.status.ecmOurs;
+      _cpu.memory[_loop.moonflower] = universe.screen.upperBitmapMode;
 
       _cpu.memory[_loop.lasx] = _frame.burst.x;
       _cpu.memory[_loop.lasy] = _frame.burst.y;
@@ -1055,7 +1068,7 @@ namespace GameLogicTests
     /// Every byte the frame's opening can write, beyond what `CompareState` already covers.
     void CompareFrame(const Cpu6502& _cpu, const Frame& _frame, const LoopWhere& _loop, const std::wstring& _context)
     {
-      const World& world = _frame.world;
+      const Universe& universe = _frame.universe;
 
       auto same = [&](std::uint16_t _address, std::uint8_t _ours, const wchar_t* _name)
       { Assert::AreEqual(_cpu.memory[_address], _ours, (_context + L": " + _name).c_str()); };
@@ -1064,30 +1077,30 @@ namespace GameLogicTests
       same(_loop.jsty, _frame.control.pitch, L"JSTY");
       same(_loop.autoByte, _frame.control.dockingComputer, L"auto");
 
-      same(_loop.alpha, world.flight.alpha, L"ALPHA");
-      same(_loop.alp2Next, world.flight.alp2Next, L"ALP2+1");
-      same(_loop.bet2, world.flight.bet2, L"BET2");
-      same(_loop.bet2Next, world.flight.bet2Next, L"BET2+1");
-      same(_loop.delt4, world.flight.delt4, L"DELT4");
-      same(static_cast<std::uint16_t>(_loop.delt4 + 1u), world.flight.delt4Next, L"DELT4+1");
+      same(_loop.alpha, universe.flight.alpha, L"ALPHA");
+      same(_loop.alp2Next, universe.flight.alp2Next, L"ALP2+1");
+      same(_loop.bet2, universe.flight.bet2, L"BET2");
+      same(_loop.bet2Next, universe.flight.bet2Next, L"BET2+1");
+      same(_loop.delt4, universe.flight.delt4, L"DELT4");
+      same(static_cast<std::uint16_t>(_loop.delt4 + 1u), universe.flight.delt4Next, L"DELT4+1");
 
-      same(_loop.las, world.status.laserPower, L"LAS");
-      same(_loop.lasct, world.status.laserCount, L"LASCT");
+      same(_loop.las, universe.status.laserPower, L"LAS");
+      same(_loop.lasct, universe.status.laserCount, L"LASCT");
       same(_loop.lasx, _frame.burst.x, L"LASX");
       same(_loop.lasy, _frame.burst.y, L"LASY");
-      same(_loop.msar, world.status.missileArmed, L"MSAR");
-      same(_loop.mstg, world.bubble.missileTarget, L"MSTG");
-      same(_loop.ecmp, world.status.ecmOurs, L"ECMP");
-      same(_loop.moonflower, world.screen.upperBitmapMode, L"moonflower");
+      same(_loop.msar, universe.status.missileArmed, L"MSAR");
+      same(_loop.mstg, universe.bubble.missileTarget, L"MSTG");
+      same(_loop.ecmp, universe.status.ecmOurs, L"ECMP");
+      same(_loop.moonflower, universe.screen.upperBitmapMode, L"moonflower");
 
-      same(_loop.mch, world.message.token, L"MCH");
-      same(_loop.messxc, world.message.column, L"messXC");
-      same(_loop.gntmp, world.status.laserTemperature, L"GNTMP");
-      same(_loop.energy, world.status.energy, L"ENERGY");
+      same(_loop.mch, universe.message.token, L"MCH");
+      same(_loop.messxc, universe.message.column, L"messXC");
+      same(_loop.gntmp, universe.status.laserTemperature, L"GNTMP");
+      same(_loop.energy, universe.status.energy, L"ENERGY");
 
       for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_loop.tp + index)], world.commander.bytes[index],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_loop.tp + index)], universe.commander.ToBytes()[index],
                          (_context + L": commander byte " + std::to_wstring(index)).c_str());
       }
     }
@@ -1101,20 +1114,20 @@ namespace GameLogicTests
      */
     void PopulateBubble(Frame& _frame, std::uint8_t _distance, std::uint8_t _state, bool _empty)
     {
-      World& world = _frame.world;
+      Universe& universe = _frame.universe;
 
-      for (std::size_t slot = 0; slot < world.bubble.slots.size(); ++slot)
+      for (std::size_t slot = 0; slot < universe.bubble.slots.size(); ++slot)
       {
-        world.bubble.slots[slot] = 0u;
+        universe.bubble.slots[slot] = 0u;
       }
-      for (std::size_t type = 0; type < world.bubble.counts.size(); ++type)
+      for (std::size_t type = 0; type < universe.bubble.counts.size(); ++type)
       {
-        world.bubble.counts[type] = 0u;
+        universe.bubble.counts[type] = 0u;
       }
 
       if (_empty)
       {
-        world.bubble.junk = 0u;
+        universe.bubble.junk = 0u;
         return;
       }
 
@@ -1122,36 +1135,38 @@ namespace GameLogicTests
 
       for (std::size_t slot = 0; slot < 5u; ++slot)
       {
-        world.bubble.slots[slot] = TYPES[slot];
+        universe.bubble.slots[slot] = TYPES[slot];
         if (TYPES[slot] < 34u)
         {
-          ++world.bubble.counts[TYPES[slot]];
+          ++universe.bubble.counts[TYPES[slot]];
         }
 
-        Elite::ShipBlock& block = world.bubble.blocks[slot];
+        Elite::Ship& block = universe.bubble.blocks[slot];
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = block.ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
-          block[byte] = 0u;
+          shipBytes[byte] = 0u;
         }
+        block = Elite::Ship::FromBytes(shipBytes);
 
-        block[1] = _distance; // x high
-        block[4] = _distance; // y high
+        block.x.hi = _distance; // x high
+        block.y.hi = _distance; // y high
 
         /*
          * The z high byte separates the ships EXCEPT at zero, where it must not: parts 7 to 12 branch
          * on all three high bytes being zero together, so spreading them out would mean no case in
          * the sweep ever collided with anything.
          */
-        block[7] = (_distance == 0u) ? std::uint8_t{0} : static_cast<std::uint8_t>(_distance + slot);
-        block[14] = 20u; // pitch counter
-        block[27] = 20u; // speed
-        block[31] = _state;
-        block[32] = 0u;    // no AI, so `TACTICS` is not reached
-        block[34] = 0x0Cu; // the heap pointer's high byte
-        block[35] = 60u;   // energy
+        block.z.hi = (_distance == 0u) ? std::uint8_t{0} : static_cast<std::uint8_t>(_distance + slot);
+        block.nose.z.hi = 20u; // pitch counter
+        block.speed = 20u; // speed
+        block.state = _state;
+        block.ai = 0u;    // no AI, so `TACTICS` is not reached
+        block.heap = Elite::HeapOffset::FromAddress(0x0C00u); // the heap pointer's high byte
+        block.energy = 60u;   // energy
       }
 
-      world.bubble.junk = 0u;
+      universe.bubble.junk = 0u;
     }
 
     /*
@@ -1218,7 +1233,6 @@ namespace GameLogicTests
       cpu.AddTrap(_loop.sfs1, _frame.effects.childSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
       cpu.AddTrap(_loop.startbd);
       cpu.AddTrap(_loop.stopbd);
-      cpu.AddTrap(_loop.angry);
       cpu.AddTrap(_loop.frs1, _frame.effects.spawnSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
 
       // `NOISE` ends `SEC / RTS` on the path that gives the effect a voice, and `LASLI`'s opening
@@ -1242,9 +1256,23 @@ namespace GameLogicTests
        * sets `TRIBCT`, and it runs the frame's head.
        */
 
-      FillScreens(cpu, _frame.world.canvas, _at.screen, 0x1Du);
-      Mirror(_frame.world, cpu, _at);
+      FillScreens(cpu, _frame.universe.canvas, _at.screen, 0x1Du);
+      Mirror(_frame.universe, cpu, _at);
       MirrorFrame(_frame, cpu, _at, _loop);
+
+      /*
+       * 6502: RAND -- the generator goes in with the frame and is compared on the way out.
+       *
+       * `Mirror` does not carry it, and until 2026-09-06 no frame here did: a frame that seeds an
+       * explosion cloud runs `DORND` four times, the first on the carry `LL9` was reached with, and
+       * with the fixture's heap pointers outside the arena the seeds it writes are compared nowhere.
+       * The generator's state after the frame is the one place that carry is visible, and the
+       * `cs-ll9-carry-hit` mutant is what found the comparison missing.
+       */
+      for (std::size_t index = 0; index < 4u; ++index)
+      {
+        cpu.memory[static_cast<std::uint16_t>(_at.rand + index)] = _frame.universe.rng.State()[index];
+      }
 
       /*
        * The ship line heap, which the port keeps apart from the blocks and the original does not.
@@ -1255,17 +1283,17 @@ namespace GameLogicTests
        */
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        cpu.memory[address] = _frame.heap.Read(address);
+        cpu.memory[address] = _frame.heap.Read(Elite::HeapOffset::FromAddress(address));
       }
-      cpu.memory[_loop.slsp] = static_cast<std::uint8_t>(_frame.world.bubble.heapBottom & 0xFFu);
-      cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] = static_cast<std::uint8_t>(_frame.world.bubble.heapBottom >> 8);
+      cpu.memory[_loop.slsp] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom.Address() & 0xFFu);
+      cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom.Address() >> 8);
 
       const std::uint16_t entry = (_reach == Reach::Ships) ? _loop.ma3 : (_reach == Reach::Tail) ? _loop.ma18 : _loop.mainLoop;
 
       const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 8'000'000);
       Assert::IsTrue(run.completed, (_context + L": M% reached an exit").c_str());
 
-      Elite::FlightScreen screen = _frame.world.Screen();
+      Elite::FlightScreen screen = _frame.universe.Screen();
       Elite::FlightLoop loop{screen,      _frame.keys,       _frame.control, _frame.options, _frame.burst,   _frame.heap,
                              _frame.clip, _frame.projection, _frame.axes,    _frame.outside, _frame.outside, _frame.effects};
       const Elite::LoopOutcome outcome = (_reach == Reach::Ships)   ? Elite::MoveEveryShip(loop)
@@ -1282,7 +1310,6 @@ namespace GameLogicTests
       std::vector<std::uint8_t> sounds;
       std::vector<std::uint8_t> soundCarries;
       std::vector<std::uint8_t> spawned;
-      std::vector<std::uint8_t> angered;
       std::uint32_t starts = 0;
       std::uint32_t stops = 0;
 
@@ -1304,10 +1331,6 @@ namespace GameLogicTests
         else if (hit.address == _loop.frs1)
         {
           spawned.push_back(hit.x);
-        }
-        else if (hit.address == _loop.angry)
-        {
-          angered.push_back(hit.a);
         }
         else if (hit.address == _loop.startbd)
         {
@@ -1351,11 +1374,11 @@ namespace GameLogicTests
           wanted += std::to_wstring(effect) + L" ";
         }
         std::wstring got;
-        for (const std::uint8_t effect : _frame.world.effects.sounds)
+        for (const std::uint8_t effect : _frame.universe.effects.sounds)
         {
           got += std::to_wstring(effect) + L" ";
         }
-        Assert::AreEqual(sounds.size(), _frame.world.effects.sounds.size(),
+        Assert::AreEqual(sounds.size(), _frame.universe.effects.sounds.size(),
                          (_context + L": sounds asked for -- game [" + wanted + L"] port [" + got + L"]").c_str());
       }
       /*
@@ -1367,8 +1390,8 @@ namespace GameLogicTests
        * effect numbers alone would say so. The seam could not carry this until it took the
        * argument; `Cpu6502::TrapHit` could not report it until it recorded the flag.
        */
-      Assert::AreEqual(soundCarries.size(), _frame.world.effects.soundCarries.size(), (_context + L": carries recorded").c_str());
-      for (std::size_t index = 0; index < soundCarries.size() && index < _frame.world.effects.soundCarries.size(); ++index)
+      Assert::AreEqual(soundCarries.size(), _frame.universe.effects.soundCarries.size(), (_context + L": carries recorded").c_str());
+      for (std::size_t index = 0; index < soundCarries.size() && index < _frame.universe.effects.soundCarries.size(); ++index)
       {
         /*
          * ONLY THE LASER SOUNDS ARE COMPARED, and the exclusion is named rather than quiet (§6.118).
@@ -1390,13 +1413,13 @@ namespace GameLogicTests
           continue;
         }
         Assert::AreEqual(
-          soundCarries[index], _frame.world.effects.soundCarries[index],
+          soundCarries[index], _frame.universe.effects.soundCarries[index],
           (_context + L": the carry into NOISE " + std::to_wstring(index) + L" (effect " + std::to_wstring(sounds[index]) + L")").c_str());
       }
 
       for (std::size_t index = 0; index < sounds.size(); ++index)
       {
-        Assert::AreEqual(sounds[index], _frame.world.effects.sounds[index], (_context + L": sound " + std::to_wstring(index)).c_str());
+        Assert::AreEqual(sounds[index], _frame.universe.effects.sounds[index], (_context + L": sound " + std::to_wstring(index)).c_str());
       }
 
       Assert::AreEqual(spawned.size(), _frame.effects.spawned.size(), (_context + L": FRS1 calls").c_str());
@@ -1405,62 +1428,47 @@ namespace GameLogicTests
         Assert::AreEqual(spawned[index], _frame.effects.spawned[index], (_context + L": FRS1 type").c_str());
       }
 
-      Assert::AreEqual(angered.size(), _frame.effects.angered.size(), (_context + L": ANGRY calls").c_str());
-      for (std::size_t index = 0; index < angered.size(); ++index)
-      {
-        Assert::AreEqual(angered[index], _frame.effects.angered[index], (_context + L": ANGRY type").c_str());
-      }
-
       Assert::AreEqual(starts, _frame.effects.musicStarts, (_context + L": startbd").c_str());
       Assert::AreEqual(stops, _frame.effects.musicStops, (_context + L": stopbd").c_str());
 
-      // ---- the world -----------------------------------------------------------------------------
-      CompareScreens(cpu, _at.screen, _frame.world.canvas, 0x1Du, _context);
-      CompareState(cpu, _frame.world, _at, _context, _frame.outside.clouds == 0u);
+      // ---- the universe -----------------------------------------------------------------------------
+      CompareScreens(cpu, _at.screen, _frame.universe.canvas, 0x1Du, _context);
+      CompareState(cpu, _frame.universe, _at, _context);
       CompareFrame(cpu, _frame, _loop, _context);
 
       /*
-       * The heap, minus what an unseeded explosion cloud owns.
+       * The heap, ALL of it, and the generator with it.
        *
-       * `LL9`'s `EE55` block writes six bytes at the head of a newly killed ship's run and four of
-       * them come from `DORND` -- on a carry that arrives out of `LOIN`, through `EE51`, and the port
-       * has no exit carry for `LOIN` to give it. So the cloud stays behind `SeedExplosionCloud`, and
-       * the six bytes it owns plus the generator are the only things this comparison leaves out
-       * (§6.91). Everything else on a frame that kills a ship is still compared.
+       * Until 2026-09-06 this stepped over the six bytes at the head of a newly killed ship's run
+       * and skipped the generator on any frame that seeded a cloud, on §6.91's belief that the
+       * seeding's first `DORND` ran on a carry out of `LOIN` the port could not know. It runs on
+       * `EE51`'s, which is a `CMP`'s, and the port derives it now (§6.157) -- so a frame that kills
+       * a ship is compared whole, seeds included.
        */
-      auto seededHere = [&](std::uint16_t _address)
-      {
-        for (const std::uint16_t cloud : _frame.outside.seeded)
-        {
-          if (_address >= static_cast<std::uint16_t>(cloud + 1u) && _address <= static_cast<std::uint16_t>(cloud + 6u))
-          {
-            return true;
-          }
-        }
-        return false;
-      };
-
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        if (seededHere(address))
-        {
-          continue;
-        }
-        Assert::AreEqual(cpu.memory[address], _frame.heap.Read(address), (_context + L": heap byte " + std::to_wstring(address)).c_str());
+        Assert::AreEqual(cpu.memory[address], _frame.heap.Read(Elite::HeapOffset::FromAddress(address)),
+                         (_context + L": heap byte " + std::to_wstring(address)).c_str());
       }
 
       const std::uint16_t bottom =
         static_cast<std::uint16_t>(cpu.memory[_loop.slsp] | (cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] << 8));
-      Assert::AreEqual<std::uint32_t>(bottom, _frame.world.bubble.heapBottom, (_context + L": SLSP").c_str());
+      Assert::AreEqual<std::uint32_t>(bottom, _frame.universe.bubble.heapBottom.Address(), (_context + L": SLSP").c_str());
 
-      for (std::size_t slot = 0; slot < _frame.world.bubble.slots.size(); ++slot)
+      for (std::size_t index = 0; index < 4u; ++index)
       {
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.frin + slot)], _frame.world.bubble.slots[slot],
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.rand + index)], _frame.universe.rng.State()[index],
+                         (_context + L": RAND+" + std::to_wstring(index)).c_str());
+      }
+
+      for (std::size_t slot = 0; slot < _frame.universe.bubble.slots.size(); ++slot)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.frin + slot)], _frame.universe.bubble.slots[slot],
                          (_context + L": FRIN " + std::to_wstring(slot)).c_str());
       }
-      for (std::size_t type = 0; type < _frame.world.bubble.counts.size(); ++type)
+      for (std::size_t type = 0; type < _frame.universe.bubble.counts.size(); ++type)
       {
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.many + type)], _frame.world.bubble.counts[type],
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.many + type)], _frame.universe.bubble.counts[type],
                          (_context + L": MANY " + std::to_wstring(type)).c_str());
       }
     }
@@ -1512,19 +1520,19 @@ namespace GameLogicTests
              * `MCNT` at zero, `MVTRIBS` moves sprite 0 and takes a random number for it, which is
              * why the generator's state is part of what `CompareState` checks.
              */
-            frame.world.spriteRegistersAreOurs = true;
-            frame.world.trumbles.count = ((roll & 1u) != 0u) ? 0u : 3u;
+            frame.universe.spriteRegistersAreOurs = true;
+            frame.universe.trumbles.count = ((roll & 1u) != 0u) ? 0u : 3u;
             for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
             {
-              frame.world.video.x[sprite] = static_cast<std::uint16_t>(0x20u + 0x10u * sprite);
-              frame.world.video.y[sprite] = static_cast<std::uint8_t>(0x40u + 0x10u * sprite);
+              frame.universe.video.x[sprite] = static_cast<std::uint16_t>(0x20u + 0x10u * sprite);
+              frame.universe.video.y[sprite] = static_cast<std::uint8_t>(0x40u + 0x10u * sprite);
             }
 
             const std::wstring where =
               WidenText("M% (JSTX " + std::to_string(roll) + ", JSTY " + std::to_string(pitch) + ", mode " + std::to_string(mode) + ")");
             CompareFrames(frame, oracle, at, loop, where);
 
-            moved += (frame.world.trumbles.count != 0u) ? 1u : 0u;
+            moved += (frame.universe.trumbles.count != 0u) ? 1u : 0u;
             ++compared;
           }
         }
@@ -1561,7 +1569,7 @@ namespace GameLogicTests
         for (std::uint8_t keys = 0; keys < 4u; ++keys)
         {
           Frame frame(speed + keys * 101u);
-          frame.world.flight.delta = speed;
+          frame.universe.flight.delta = speed;
           frame.keys[Elite::KEY_SPEED_UP] = ((keys & 1u) != 0u) ? 0xFFu : 0u;
           frame.keys[Elite::KEY_SLOW_DOWN] = ((keys & 2u) != 0u) ? 0xFFu : 0u;
 
@@ -1622,9 +1630,9 @@ namespace GameLogicTests
       for (const Case& item : CASES)
       {
         Frame frame(0x31u);
-        frame.world.commander.At(Elite::Field::Missiles) = item.missiles;
-        frame.world.bubble.missileTarget = item.target;
-        frame.world.status.missileArmed = item.armed;
+        frame.universe.commander.missiles = item.missiles;
+        frame.universe.bubble.missileTarget = item.target;
+        frame.universe.status.missileArmed = item.armed;
         frame.effects.spawnSucceeds = item.spawns;
 
         frame.keys[Elite::KEY_UNARM_MISSILE] = item.unarm ? 0xFFu : 0u;
@@ -1636,9 +1644,9 @@ namespace GameLogicTests
         frame.keys[Elite::KEY_CANCEL_DOCKING] = 0xFFu;
         frame.keys[Elite::KEY_ESCAPE_POD] = 0xFFu;
         frame.keys[Elite::KEY_ECM] = 0xFFu;
-        frame.world.commander.At(Elite::Field::EnergyBomb) = 1u;
-        frame.world.commander.At(Elite::Field::EscapePod) = 0u; // or the frame would end at ESCAPE
-        frame.world.commander.At(Elite::Field::Ecm) = 0xFFu;
+        frame.universe.commander.energyBomb = 1u;
+        frame.universe.commander.escapePod = 0u; // or the frame would end at ESCAPE
+        frame.universe.commander.ecm = 0xFFu;
         frame.control.dockingComputer = 0xFFu;
 
         const std::wstring where = WidenText(std::string("M% (") + item.what + ")");
@@ -1648,7 +1656,7 @@ namespace GameLogicTests
         {
           ++skipped;
           Assert::AreEqual<std::uint32_t>(0u, frame.effects.musicStops, (where + L": the cancel key was skipped").c_str());
-          Assert::AreEqual<std::uint8_t>(1u, frame.world.commander.At(Elite::Field::EnergyBomb),
+          Assert::AreEqual<std::uint8_t>(1u, frame.universe.commander.energyBomb,
                                          (where + L": and so was the bomb").c_str());
         }
         if (item.fire && (item.target & 0x80u) == 0u && !item.spawns)
@@ -1714,13 +1722,13 @@ namespace GameLogicTests
         Frame frame(0x77u);
         frame.keys[item.key] = 0xFFu;
         frame.keys[Elite::KEY_PITCH_UP] = item.pitchUp;
-        frame.world.commander.At(Elite::Field::EnergyBomb) = item.bomb;
-        frame.world.commander.At(Elite::Field::EscapePod) = (item.key == Elite::KEY_ESCAPE_POD) ? item.fitting : 0u;
-        frame.world.commander.At(Elite::Field::Ecm) = (item.key == Elite::KEY_ECM) ? item.fitting : 0u;
-        frame.world.commander.At(Elite::Field::DockingComputer) =
+        frame.universe.commander.energyBomb = item.bomb;
+        frame.universe.commander.escapePod = (item.key == Elite::KEY_ESCAPE_POD) ? item.fitting : 0u;
+        frame.universe.commander.ecm = (item.key == Elite::KEY_ECM) ? item.fitting : 0u;
+        frame.universe.commander.dockingComputer =
           (item.key == Elite::KEY_DOCKING_COMPUTER || item.key == Elite::KEY_PITCH_UP) ? item.fitting : 0u;
-        frame.world.status.ecmCountdown = item.ecmCountdown;
-        frame.world.status.midJump = item.midJump;
+        frame.universe.status.ecmCountdown = item.ecmCountdown;
+        frame.universe.status.midJump = item.midJump;
         frame.control.dockingComputer = item.dockingComputer;
 
         const std::wstring where = WidenText(std::string("M% (") + item.what + ")");
@@ -1767,21 +1775,21 @@ namespace GameLogicTests
             for (const std::uint8_t count : COUNTS)
             {
               Frame frame(view * 13u + fitted + heat + count);
-              frame.world.spaceView = view;
-              frame.world.view = 0u;
-              frame.world.status.laserTemperature = heat;
-              frame.world.status.laserCount = count;
+              frame.universe.spaceView = view;
+              frame.universe.view = 0u;
+              frame.universe.status.laserTemperature = heat;
+              frame.universe.status.laserCount = count;
               frame.keys[Elite::KEY_FIRE] = 0xFFu;
               for (std::size_t index = 0; index < 4u; ++index)
               {
-                frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + index] = (index == view) ? fitted : 0u;
+                frame.universe.commander.lasers[index] = (index == view) ? fitted : 0u;
               }
 
               const std::wstring where = WidenText("M% (VIEW " + std::to_string(view) + ", LASER " + std::to_string(fitted) + ", GNTMP " +
                                                    std::to_string(heat) + ", LASCT " + std::to_string(count) + ")");
               CompareFrames(frame, oracle, at, loop, where);
 
-              fired += (frame.world.status.laserPower != 0u) ? 1u : 0u;
+              fired += (frame.universe.status.laserPower != 0u) ? 1u : 0u;
               ++compared;
             }
           }
@@ -1813,11 +1821,11 @@ namespace GameLogicTests
       for (const std::uint8_t view : {std::uint8_t{64}, std::uint8_t{128}, std::uint8_t{255}})
       {
         Frame frame(view);
-        frame.world.view = view;
-        frame.world.spaceView = 0u;
-        frame.world.status.laserTemperature = 40u;
+        frame.universe.view = view;
+        frame.universe.spaceView = 0u;
+        frame.universe.status.laserTemperature = 40u;
         frame.keys[Elite::KEY_FIRE] = 0xFFu;
-        frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] = Elite::LASER_BEAM;
+        frame.universe.commander.lasers[0] = Elite::LASER_BEAM;
 
         CompareFrames(frame, oracle, at, loop, WidenText("M% (QQ11 " + std::to_string(view) + ", firing)"));
       }
@@ -1844,10 +1852,10 @@ namespace GameLogicTests
       for (const std::uint8_t energy : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{2}, std::uint8_t{200}})
       {
         Frame frame(energy + 5u);
-        frame.world.status.energy = energy;
-        frame.world.status.laserTemperature = 40u;
+        frame.universe.status.energy = energy;
+        frame.universe.status.laserTemperature = 40u;
         frame.keys[Elite::KEY_FIRE] = 0xFFu;
-        frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] = Elite::LASER_PULSE;
+        frame.universe.commander.lasers[0] = Elite::LASER_PULSE;
 
         CompareFrames(frame, oracle, at, loop, WidenText("M% (ENERGY " + std::to_string(energy) + ", firing)"));
       }
@@ -1887,6 +1895,18 @@ namespace GameLogicTests
         std::uint8_t scoops;   ///< 6502: BST
         std::uint8_t view;     ///< 6502: QQ11
         bool empty;
+        bool inSights = false; ///< dead ahead and close: what `HITCH` says yes to
+
+        /*
+         * 6502: INWK+35 and TYPE -- what it takes to reach `BURN`'s kill and the two `JSR SPIN`s
+         * after it, which no case here reached until M2-d went looking for the carry they run on.
+         *
+         * `energy` under `LAS` is what makes the subtraction borrow; `asteroids` makes the three
+         * shootable ships type 7, because only an asteroid meets the `CMP #AST` that leads to the
+         * splinter roll -- and that roll is a `DORND` whose carry the port had wrong.
+         */
+        std::uint8_t energy = 60;
+        bool asteroids = false;
       };
 
       const std::vector<Case> CASES = {
@@ -1898,12 +1918,16 @@ namespace GameLogicTests
         {"on top of us with scoops", 0x00, 0x00, 0, 0, 0xFF, 0, false},
         {"on top of us, exploding", 0x00, 0x20, 0, 0, 0, 0, false},
         {"on top of us, already dead", 0x00, 0x80, 0, 0, 0, 0, false},
+        {"in the sights, already dead", 0x00, 0x80, 0, 0, 0, 0, false, true},
         {"the energy bomb going off", 0x20, 0x00, 0, 0xFF, 0, 0, false},
         {"the bomb with the laser on", 0x00, 0x00, 15, 0xFF, 0, 0, false},
         {"far enough to leave", 0xF0, 0x00, 0, 0, 0, 0, false},
         {"a beam laser at close range", 0x00, 0x00, 143 & 0x7F, 0, 0, 0, false},
         {"a mining laser at close range", 0x00, 0x00, 50, 0, 0, 0, false},
         {"a military laser at close range", 0x00, 0x00, 151 & 0x7F, 0, 0, 0, false},
+        {"in the sights and shot to bits", 0x00, 0x00, 50, 0, 0, 0, false, true, 8},
+        {"an asteroid in the sights, shot to bits", 0x00, 0x00, 50, 0, 0, 0, false, true, 8, true},
+        {"an asteroid shot with the wrong laser", 0x00, 0x00, 15, 0, 0, 0, false, true, 8, true},
       };
 
       std::uint32_t compared = 0;
@@ -1915,18 +1939,50 @@ namespace GameLogicTests
         {
           Frame frame(0x4Du);
           PopulateBubble(frame, item.distance, item.state, item.empty);
-          frame.world.status.laserPower = item.laser;
-          frame.world.status.missileArmed = missileArmed;
-          frame.world.commander.At(Elite::Field::EnergyBomb) = item.bomb;
-          frame.world.commander.At(Elite::Field::FuelScoops) = item.scoops;
-          frame.world.view = item.view;
-          frame.world.commander.At(Elite::Field::Missiles) = 3u;
+
+          /*
+           * "On top of us" is BEHIND us by the time `HITCH` looks: `MVEIT` takes the player's speed
+           * off z first, so a ship at the origin has a negative z and the sights never close on it.
+           * Two units ahead survives the move with x and y still under a byte, so `HITCH` sets the
+           * carry -- and a ship that arrives at `LL9` killed seeds its cloud's first `DORND` on
+           * that carry (§6.157), which is what the `cs-ll9-carry-hit` mutant watches for.
+           */
+          if (item.inSights)
+          {
+            for (std::size_t slot = 2; slot < 5u; ++slot)
+            {
+              frame.universe.bubble.blocks[slot].z.hi = 2u;
+            }
+          }
+
+          // 6502: INWK+35 and FRIN/MANY -- what a laser has to get through, and what it is shooting.
+          for (std::size_t slot = 2; slot < 5u; ++slot)
+          {
+            frame.universe.bubble.blocks[slot].energy = item.energy;
+            if (item.asteroids)
+            {
+              const std::uint8_t was = frame.universe.bubble.slots[slot];
+              if (was < 34u && frame.universe.bubble.counts[was] != 0u)
+              {
+                --frame.universe.bubble.counts[was];
+              }
+              frame.universe.bubble.slots[slot] = Elite::Byte(Elite::ShipType::Asteroid);
+              ++frame.universe.bubble.counts[Elite::Byte(Elite::ShipType::Asteroid)];
+            }
+          }
+
+          frame.universe.status.laserPower = item.laser;
+          frame.universe.status.missileArmed = missileArmed;
+          frame.universe.commander.energyBomb = item.bomb;
+          frame.universe.commander.fuelScoops = item.scoops;
+          frame.universe.view = item.view;
+          frame.universe.commander.missiles = 3u;
 
           const std::wstring where = WidenText(std::string("MAL1 (") + item.what + (missileArmed != 0u ? ", missile armed)" : ")"));
           CompareFrames(frame, oracle, at, loop, where, Reach::Ships);
 
           std::uint32_t left = 0;
-          for (const std::uint8_t occupant : frame.world.bubble.slots)
+          for (const std::uint8_t occupant : frame.universe.bubble.slots)
           {
             left += (occupant != 0u) ? 1u : 0u;
           }
@@ -1935,7 +1991,7 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(14u * 2u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::uint32_t>(18u * 2u, compared, L"the whole sweep ran");
       Assert::IsTrue(killed > 0u, L"some bubbles emptied");
     }
   };
@@ -1972,21 +2028,21 @@ namespace GameLogicTests
           Frame frame(counter * 5u + shape);
           PopulateBubble(frame, 0x20u, 0x00u, false);
 
-          frame.world.flight.mainLoopCounter = counter;
-          frame.world.status.midJump = ((shape & 1u) != 0u) ? 0xFFu : 0u;
-          frame.world.status.energy = ((shape & 2u) != 0u) ? 200u : 40u;
-          frame.world.commander.At(Elite::Field::EnergyBomb) = (counter & 1u) != 0u ? 0xC0u : 0u;
-          frame.world.commander.At(Elite::Field::EnergyUnit) = 1u;
-          frame.world.commander.At(Elite::Field::FuelScoops) = 0xFFu;
-          frame.world.status.viewLaser = 0x4Cu;
-          frame.world.status.laserCount = static_cast<std::uint8_t>(counter & 15u);
-          frame.world.status.ecmOurs = ((counter & 4u) != 0u) ? 0xFFu : 0u;
-          frame.world.status.ecmCountdown = ((counter & 8u) != 0u) ? 1u : 0u;
+          frame.universe.flight.mainLoopCounter = counter;
+          frame.universe.status.midJump = ((shape & 1u) != 0u) ? 0xFFu : 0u;
+          frame.universe.status.energy = ((shape & 2u) != 0u) ? 200u : 40u;
+          frame.universe.commander.energyBomb = (counter & 1u) != 0u ? 0xC0u : 0u;
+          frame.universe.commander.energyUnit = 1u;
+          frame.universe.commander.fuelScoops = 0xFFu;
+          frame.universe.status.viewLaser = 0x4Cu;
+          frame.universe.status.laserCount = static_cast<std::uint8_t>(counter & 15u);
+          frame.universe.status.ecmOurs = ((counter & 4u) != 0u) ? 0xFFu : 0u;
+          frame.universe.status.ecmCountdown = ((counter & 8u) != 0u) ? 1u : 0u;
 
           const std::wstring where = WidenText("MA18 (MCNT " + std::to_string(counter) + ", shape " + std::to_string(shape) + ")");
           CompareFrames(frame, oracle, at, loop, where, Reach::Tail);
 
-          bombEnded += (frame.world.commander.At(Elite::Field::EnergyBomb) == 0x80u) ? 1u : 0u;
+          bombEnded += (frame.universe.commander.energyBomb == 0x80u) ? 1u : 0u;
           ++compared;
         }
       }
@@ -2033,31 +2089,33 @@ namespace GameLogicTests
           PopulateBubble(frame, 0x20u, 0x00u, false);
 
           // The sun in slot 1 at `distance` on every axis, and no station, so part 15 measures it.
-          frame.world.bubble.slots[1] = 129u;
-          frame.world.bubble.counts[Elite::SHIP_TYPE_STATION] = 0u;
+          frame.universe.bubble.slots[1] = 129u;
+          frame.universe.bubble.Count(Elite::ShipType::Station) = 0u;
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = frame.universe.bubble.blocks[1].ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
-            frame.world.bubble.blocks[1][byte] = 0u;
+            shipBytes[byte] = 0u;
           }
-          frame.world.bubble.blocks[1][1] = distance;
-          frame.world.bubble.blocks[1][4] = distance;
-          frame.world.bubble.blocks[1][7] = distance;
+          frame.universe.bubble.blocks[1] = Elite::Ship::FromBytes(shipBytes);
+          frame.universe.bubble.blocks[1].x.hi = distance;
+          frame.universe.bubble.blocks[1].y.hi = distance;
+          frame.universe.bubble.blocks[1].z.hi = distance;
 
-          frame.world.flight.mainLoopCounter = 20u;
-          frame.world.status.midJump = 0u;
-          frame.world.commander.At(Elite::Field::FuelScoops) = scoops;
-          frame.world.commander.At(Elite::Field::Fuel) = 40u;
-          frame.world.fuel = 40u;
-          frame.world.commander.At(Elite::Field::Tribbles) = 0x40u;
-          frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = 0x21u;
-          frame.world.flight.delt4Next = 0xC0u;
+          frame.universe.flight.mainLoopCounter = 20u;
+          frame.universe.status.midJump = 0u;
+          frame.universe.commander.fuelScoops = scoops;
+          frame.universe.commander.fuel = 40u;
+          frame.universe.fuel = 40u;
+          frame.universe.commander.tribbles.lo = 0x40u;
+          frame.universe.commander.tribbles.hi = 0x21u;
+          frame.universe.flight.delt4Next = 0xC0u;
 
           const std::wstring where =
             WidenText("MA33 (sun at " + std::to_string(distance) + (scoops != 0u ? ", scoops fitted)" : ", no scoops)"));
           CompareFrames(frame, oracle, at, loop, where, Reach::Tail);
 
-          scooped += (frame.world.commander.At(Elite::Field::Fuel) > 40u) ? 1u : 0u;
-          cooked += (frame.world.sight.maskedWith.empty() ? 0u : 1u);
+          scooped += (frame.universe.commander.fuel > 40u) ? 1u : 0u;
+          cooked += (frame.universe.sight.maskedWith.empty() ? 0u : 1u);
           ++compared;
         }
       }
@@ -2100,14 +2158,14 @@ namespace GameLogicTests
             Frame frame(counter * 7u + distance + shape);
             PopulateBubble(frame, distance, 0x00u, false);
 
-            frame.world.flight.mainLoopCounter = static_cast<std::uint8_t>(counter * 4u + shape);
+            frame.universe.flight.mainLoopCounter = static_cast<std::uint8_t>(counter * 4u + shape);
             frame.control.roll = static_cast<std::uint8_t>(100u + counter * 5u);
             frame.control.pitch = static_cast<std::uint8_t>(150u - counter * 3u);
             frame.keys[Elite::KEY_FIRE] = ((shape & 1u) != 0u) ? 0xFFu : 0u;
             frame.keys[Elite::KEY_SPEED_UP] = ((shape & 2u) != 0u) ? 0xFFu : 0u;
-            frame.world.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] = Elite::LASER_PULSE;
-            frame.world.commander.At(Elite::Field::Missiles) = 3u;
-            frame.world.commander.At(Elite::Field::EnergyUnit) = 1u;
+            frame.universe.commander.lasers[0] = Elite::LASER_PULSE;
+            frame.universe.commander.missiles = 3u;
+            frame.universe.commander.energyUnit = 1u;
 
             const std::wstring where = WidenText("M% whole (MCNT " + std::to_string(counter * 4u + shape) + ", distance " +
                                                  std::to_string(distance) + ", shape " + std::to_string(shape) + ")");
@@ -2137,29 +2195,29 @@ namespace GameLogicTests
 
       // A clean bubble, because the launch builds its own: `RES2` empties it and then the two
       // spawns fill it, and a fixture's fleet would be a third thing that is not the game's.
-      frame.world.bubble.slots.fill(0u);
-      frame.world.bubble.counts.fill(0u);
-      frame.world.bubble.junk = 0u;
-      frame.world.view = 0u;
-      frame.world.spaceView = 0u;
+      frame.universe.bubble.slots.fill(0u);
+      frame.universe.bubble.counts.fill(0u);
+      frame.universe.bubble.junk = 0u;
+      frame.universe.view = 0u;
+      frame.universe.spaceView = 0u;
 
-      Elite::FlightScreen screen = frame.world.Screen();
+      Elite::FlightScreen screen = frame.universe.Screen();
       Elite::FlightLoop loop{screen,     frame.keys,       frame.control, frame.options, frame.burst,   frame.heap,
                              frame.clip, frame.projection, frame.axes,    frame.outside, frame.outside, frame.effects};
 
       std::uint8_t docked = 0xFFu;
       Elite::SystemSeeds selected{};
-      Elite::Launch(loop, nullptr, docked, frame.world.commander.At(Elite::Field::SystemX), frame.world.commander.At(Elite::Field::SystemY),
+      Elite::Launch(loop, nullptr, docked, frame.universe.commander.systemX, frame.universe.commander.systemY,
                     5u, selected);
 
-      Assert::AreEqual<std::uint32_t>(1u, frame.world.bubble.counts[Elite::SHIP_TYPE_STATION],
+      Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.Count(Elite::ShipType::Station),
                                       L"the launch leaves the station in the bubble");
 
       // 6502: LOOK1, which the launch ends with -- the front view, and `QQ11` back to zero.
-      frame.world.view = 0u;
+      frame.universe.view = 0u;
 
       // 6502: LOOK1 with X = 1 -- the rear view, which is where a station you have just left is.
-      frame.world.spaceView = 1u;
+      frame.universe.spaceView = 1u;
 
       for (int pass = 0; pass < 40; ++pass)
       {
@@ -2167,7 +2225,7 @@ namespace GameLogicTests
         Assert::IsTrue(outcome == Elite::LoopOutcome::Continued,
                        (L"frame " + std::to_wstring(pass) + L" should not end the flight").c_str());
 
-        Assert::AreEqual<std::uint32_t>(1u, frame.world.bubble.counts[Elite::SHIP_TYPE_STATION],
+        Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.Count(Elite::ShipType::Station),
                                         (L"the station is still there after " + std::to_wstring(pass + 1) + L" frames").c_str());
       }
 
@@ -2180,9 +2238,9 @@ namespace GameLogicTests
        * still counted it, and the rear view was empty. So this asserts the LINES: a station in the
        * heap it was given, and pixels on the canvas from drawing them.
        */
-      const std::uint16_t heapAt = Elite::ShipHeapAddress(frame.world.bubble.blocks[1]);
+      const std::uint16_t heapAt = frame.universe.bubble.blocks[1].heap.Address();
       Assert::AreEqual<std::uint32_t>(Elite::SUN_HEAP_ADDRESS, heapAt, L"the station draws through the sun's heap");
-      Assert::IsTrue(frame.heap.Read(heapAt) > 1u, L"and the heap holds the lines it last drew");
+      Assert::IsTrue(frame.heap.Read(Elite::HeapOffset::FromAddress(heapAt)) > 1u, L"and the heap holds the lines it last drew");
 
       std::size_t lit = 0;
       for (int y = 0; y < Elite::Canvas::SPACE_VIEW_HEIGHT; ++y)
@@ -2190,7 +2248,7 @@ namespace GameLogicTests
         for (int column = 0; column < Elite::Canvas::CELL_COLUMNS; ++column)
         {
           lit +=
-            (frame.world.canvas.Read(static_cast<std::uint16_t>(y / 8 * Elite::Canvas::ROW_BYTES + column * 8 + (y % 8))) != 0u) ? 1u : 0u;
+            (frame.universe.canvas.Read(static_cast<std::uint16_t>(y / 8 * Elite::Canvas::ROW_BYTES + column * 8 + (y % 8))) != 0u) ? 1u : 0u;
         }
       }
       Assert::IsTrue(lit > 20u, L"and the space view has the station drawn in it");
@@ -2257,7 +2315,7 @@ namespace GameLogicTests
         // terminator moves with it -- `FRIN`'s zero is what makes it a list.
         for (std::size_t slot = scene.ships; slot < 3u; ++slot)
         {
-          frame.world.bubble.slots[slot] = 0u;
+          frame.universe.bubble.slots[slot] = 0u;
         }
 
         Cpu6502 cpu = oracle.Fresh();
@@ -2282,16 +2340,16 @@ namespace GameLogicTests
         cpu.AddTrap(loop.stopbd);
         cpu.AddTrap(loop.noise, Cpu6502::TrapExit::SetCarry);
 
-        FillScreens(cpu, frame.world.canvas, at.screen, 0x1Du);
-        Mirror(frame.world, cpu, at);
+        FillScreens(cpu, frame.universe.canvas, at.screen, 0x1Du);
+        Mirror(frame.universe, cpu, at);
         MirrorFrame(frame, cpu, at, loop);
 
         for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
         {
-          cpu.memory[address] = frame.heap.Read(address);
+          cpu.memory[address] = frame.heap.Read(Elite::HeapOffset::FromAddress(address));
         }
-        cpu.memory[loop.slsp] = static_cast<std::uint8_t>(frame.world.bubble.heapBottom & 0xFFu);
-        cpu.memory[static_cast<std::uint16_t>(loop.slsp + 1u)] = static_cast<std::uint8_t>(frame.world.bubble.heapBottom >> 8);
+        cpu.memory[loop.slsp] = static_cast<std::uint8_t>(frame.universe.bubble.heapBottom.Address() & 0xFFu);
+        cpu.memory[static_cast<std::uint16_t>(loop.slsp + 1u)] = static_cast<std::uint8_t>(frame.universe.bubble.heapBottom.Address() >> 8);
 
         const std::uint64_t before = cpu.cycles;
         const Elite::Testing::RunResult run = cpu.CallSubroutine(loop.mainLoop, 40'000'000);

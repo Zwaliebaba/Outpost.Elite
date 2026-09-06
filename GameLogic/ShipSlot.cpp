@@ -5,13 +5,68 @@
 namespace Elite
 {
 
-  std::uint16_t BlueprintFor(const Bubble& _bubble, std::uint8_t _shipType) noexcept
+  namespace
   {
-    // 6502: the table is RAM and only the station's entry is ever written into. See `Bubble`.
-    return (_shipType == SHIP_TYPE_STATION) ? _bubble.stationBlueprint : BlueprintAddress(_shipType);
+    /// 6502: what GINF computes -- the ADDRESS of slot X's block, which is what `NWSHP` compares the
+    /// heap against. The blocks are an array; this is the address the original would have used, and
+    /// `TryReserveHeap` is the one place that needs it.
+    [[nodiscard]] constexpr std::uint16_t SlotAddress(std::uint8_t _slot) noexcept
+    {
+      return static_cast<std::uint16_t>(SHIP_BLOCK_BASE + _slot * SHIP_BLOCK_SIZE);
+    }
+  } // namespace
+
+  Bubble::HeapReservation Bubble::TryReserveHeap(std::uint8_t _slot, std::uint8_t _bytes) noexcept
+  {
+    const std::uint16_t block = SlotAddress(_slot);
+    const std::uint16_t bottom = heapBottom.Address();
+
+    // 6502: LDA SLSP / SEC / SBC T1 / STA INWK+33 / LDA SLSP+1 / SBC #0 / STA INWK+34.
+    const std::uint16_t lowDifference = static_cast<std::uint16_t>((bottom & 0xFFu) + 0x100u - _bytes);
+    const std::uint8_t heapLow = static_cast<std::uint8_t>(lowDifference);
+    bool carry = lowDifference >= 0x100u;
+
+    const std::uint16_t highDifference = static_cast<std::uint16_t>((bottom >> 8) + 0xFFu + (carry ? 1u : 0u));
+    const std::uint8_t heapHigh = static_cast<std::uint8_t>(highDifference);
+    carry = highDifference >= 0x100u;
+
+    HeapReservation reservation{HeapOffset::FromAddress(static_cast<std::uint16_t>(heapLow | (heapHigh << 8))), false};
+
+    // 6502: LDA INWK+33 / SBC INF / LDA INWK+34 / SBC INF+1 / BCC NW3+1 -- the heap would run below
+    // the block.
+    const std::uint16_t lowGap = static_cast<std::uint16_t>(heapLow + 0xFFu + (carry ? 1u : 0u) - (block & 0xFFu));
+    const std::uint8_t gapLow = static_cast<std::uint8_t>(lowGap);
+    carry = lowGap >= 0x100u;
+
+    const std::uint16_t highGap = static_cast<std::uint16_t>(heapHigh + 0xFFu + (carry ? 1u : 0u) - (block >> 8));
+    const std::uint8_t gapHigh = static_cast<std::uint8_t>(highGap);
+    carry = highGap >= 0x100u;
+
+    if (!carry)
+    {
+      return reservation;
+    }
+
+    // 6502: BNE NW4 / CPY #NI% / BCC NW3+1 -- within the same page, the gap must be a whole block.
+    // Y still holds the LOW byte of the difference, which is what CPY compares.
+    if (gapHigh == 0u && gapLow < SHIP_BLOCK_SIZE)
+    {
+      return reservation;
+    }
+
+    // 6502: NW4 -- the allocation is committed.
+    heapBottom = reservation.start;
+    reservation.fits = true;
+    return reservation;
   }
 
-  ShipBlock* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept
+  const Blueprint* BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept
+  {
+    // 6502: the table is RAM and only the station's entry is ever written into. See `Bubble`.
+    return BlueprintOf((_shipType == ShipType::Station) ? _bubble.stationType : _shipType);
+  }
+
+  Ship* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept
   {
     // The original has no bound here: `UNIV` is `NOSH` entries and `GINF` reads whatever the index
     // lands on. Nothing asks for a slot it has not just found free, so this is a guard against a
@@ -19,7 +74,7 @@ namespace Elite
     return (_slot < MAX_SHIPS) ? &_bubble.blocks[_slot] : nullptr;
   }
 
-  NewShip AddShip(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint16_t& _blueprint) noexcept
+  NewShip AddShip(Bubble& _bubble, Ship& _work, ShipType _shipType, const Blueprint*& _blueprint) noexcept
   {
     // 6502: STA T / LDX #0 / .NWL1 LDA FRIN,X / BEQ NW1 / INX / CPX #NOSH / BCC NWL1.
     std::uint8_t slot = 0;
@@ -32,11 +87,8 @@ namespace Elite
       return {}; // 6502: NW3 -- CLC / RTS
     }
 
-    // 6502: JSR GINF -- INF, which the heap check below compares against.
-    const std::uint16_t block = SlotAddress(slot);
-
     // 6502: LDA T / BMI NW2 -- the planet and the sun have no blueprint and no heap.
-    if ((_shipType & 0x80u) == 0u)
+    if (!IsBody(_shipType))
     {
       /*
        * 6502: LDA XX21-1,Y / BEQ NW3 / STA XX0+1 / LDA XX21-2,Y / STA XX0.
@@ -45,69 +97,35 @@ namespace Elite
        * `XX0+1` alone as well -- the `BEQ` is taken before the `STA`. And the store happens at all,
        * which is what makes `XX0` an output of this routine rather than a local.
        */
-      const std::uint16_t blueprint = BlueprintFor(_bubble, _shipType);
-      if (blueprint == 0u)
+      const Blueprint* blueprint = BlueprintFor(_bubble, _shipType);
+      if (blueprint == nullptr)
       {
         return {}; // 6502: BEQ NW3 -- a type this build does not carry
       }
       _blueprint = blueprint;
 
       // 6502: CPY #2*SST / BEQ NW6 -- the space station keeps no line heap of its own.
-      if (_shipType != SHIP_TYPE_STATION)
+      if (_shipType != ShipType::Station)
       {
-        const std::uint8_t heapSize = ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
-
-        // 6502: LDA SLSP / SEC / SBC T1 / STA INWK+33 / LDA SLSP+1 / SBC #0 / STA INWK+34.
-        const std::uint16_t lowDifference = static_cast<std::uint16_t>((_bubble.heapBottom & 0xFFu) + 0x100u - heapSize);
-        const std::uint8_t heapLow = static_cast<std::uint8_t>(lowDifference);
-        bool carry = lowDifference >= 0x100u;
-
-        const std::uint16_t highDifference = static_cast<std::uint16_t>((_bubble.heapBottom >> 8) + 0xFFu + (carry ? 1u : 0u));
-        const std::uint8_t heapHigh = static_cast<std::uint8_t>(highDifference);
-        carry = highDifference >= 0x100u;
-
-        _work[SHIP_HEAP_LOW_OFFSET] = heapLow;
-        _work[SHIP_HEAP_HIGH_OFFSET] = heapHigh;
-
-        /*
-         * 6502: LDA INWK+33 / SBC INF / TAY / LDA INWK+34 / SBC INF+1 / BCC NW3+1.
-         *
-         * NO `SEC` -- the source's is commented out -- so this runs on the carry the `SBC #0` above
-         * left. See the header: reproduced rather than assumed.
-         */
-        const std::uint16_t lowGap = static_cast<std::uint16_t>(heapLow + 0xFFu + (carry ? 1u : 0u) - (block & 0xFFu));
-        const std::uint8_t gapLow = static_cast<std::uint8_t>(lowGap);
-        carry = lowGap >= 0x100u;
-
-        const std::uint16_t highGap = static_cast<std::uint16_t>(heapHigh + 0xFFu + (carry ? 1u : 0u) - (block >> 8));
-        const std::uint8_t gapHigh = static_cast<std::uint8_t>(highGap);
-        carry = highGap >= 0x100u;
-
-        if (!carry)
+        // 6502: JSR GINF, then the heap check -- INWK+33/34 take the new pointer whether or not the
+        // ship is admitted, and SLSP moves only when it is.
+        const Bubble::HeapReservation reservation = _bubble.TryReserveHeap(slot, blueprint->heapBytes);
+        _work.heap = reservation.start;
+        if (!reservation.fits)
         {
-          return {}; // 6502: BCC NW3+1 -- the heap would run below the block
+          return {}; // 6502: BCC NW3+1 -- the heap would run below the block, or not a whole block clear
         }
-
-        // 6502: BNE NW4 / CPY #NI% / BCC NW3+1 -- within the same page, the gap must be a whole
-        // block. Y still holds the LOW byte of the difference, which is what CPY compares.
-        if (gapHigh == 0u && gapLow < SHIP_BLOCK_SIZE)
-        {
-          return {};
-        }
-
-        // 6502: NW4 -- the allocation is committed.
-        _bubble.heapBottom = static_cast<std::uint16_t>(heapLow | (heapHigh << 8));
       }
 
       // 6502: NW6 -- LDY #14 / LDA (XX0),Y / STA INWK+35, then byte 19 masked to three bits.
-      _work[SHIP_ENERGY_OFFSET] = ShipByte(static_cast<std::uint16_t>(blueprint + 14u));
-      _work[SHIP_STATE_OFFSET] = static_cast<std::uint8_t>(ShipByte(static_cast<std::uint16_t>(blueprint + 19u)) & 7u);
+      _work.energy = blueprint->maxEnergy;
+      _work.state = MissilesOf(blueprint->weapons);
     }
 
     // 6502: NW2 -- STA FRIN,X / TAX / BMI NW8. The slot takes the type, and X BECOMES the type.
-    _bubble.slots[slot] = _shipType;
+    _bubble.slots[slot] = Byte(_shipType);
 
-    if ((_shipType & 0x80u) == 0u)
+    if (!IsBody(_shipType))
     {
       /*
        * 6502: CPX #HER / BEQ gangbang / CPX #JL / BCC NW7 / CPX #JH / BCS NW7 / INC JUNK.
@@ -115,15 +133,15 @@ namespace Elite
        * The rock hermit is counted as junk even though its type is nowhere near the junk range,
        * which is what the extra comparison is for -- it looks like an asteroid until it opens fire.
        */
-      if (_shipType == SHIP_TYPE_HERMIT || (_shipType >= JUNK_TYPE_FIRST && _shipType < JUNK_TYPE_LIMIT))
+      if (IsJunk(_shipType))
       {
         ++_bubble.junk;
       }
 
       // 6502: NW7 -- INC MANY,X.
-      if (_shipType < _bubble.counts.size())
+      if (Byte(_shipType) < _bubble.counts.size())
       {
-        ++_bubble.counts[_shipType];
+        ++_bubble.Count(_shipType);
       }
     }
 
@@ -138,8 +156,8 @@ namespace Elite
      * 128 or 129, well past the thirty-three entries. It lands elsewhere in the ship data region,
      * which is a defined byte rather than a fault, and reproducing it costs nothing.
      */
-    const std::uint8_t defaults = ShipByte(static_cast<std::uint16_t>(SHIP_DEFAULT_FLAGS + _shipType - 1u));
-    _work[SHIP_FLAGS_OFFSET] = static_cast<std::uint8_t>((defaults & 0x6Fu) | _work[SHIP_FLAGS_OFFSET]);
+    const std::uint8_t defaults = DefaultNewbFor(_shipType);
+    _work.newb = static_cast<std::uint8_t>(Without(defaults, NewbBit::Docking, NewbBit::Remove) | _work.newb);
 
     // 6502: LDY #NI%-1 / .NWL3 LDA INWK,Y / STA (INF),Y / DEY / BPL NWL3 / SEC / RTS.
     _bubble.blocks[slot] = _work;

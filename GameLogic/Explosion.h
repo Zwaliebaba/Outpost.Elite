@@ -123,7 +123,8 @@ namespace Elite
     std::uint8_t low = 0;  ///< 6502: X
   };
 
-  [[nodiscard]] ExplosionOffset OffsetByCloud(MathWorkspace& _math, Rng& _rng, std::uint8_t _a) noexcept;
+  /// `_high` is A, the vertex's high byte; `_low` is R and `_size` is Q, which the caller staged.
+  [[nodiscard]] ExplosionOffset OffsetByCloud(Rng& _rng, std::uint8_t _high, std::uint8_t _low, std::uint8_t _size) noexcept;
 
   /*
    * 6502: PTCLS -- draw one frame of the cloud, and PTCLS2 -- the same with the burst sprite.
@@ -143,11 +144,11 @@ namespace Elite
    * are left wherever the last particle put them. Three different fates for four bytes, and the
    * next `DORND` anywhere in the game runs on the result.
    */
-  void DrawExplosionParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const ShipBlock& _work,
-                              LineHeap& _heap, const Bubble& _bubble) noexcept;
+  void DrawExplosionParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
+                              const Bubble& _bubble) noexcept;
 
-  void DrawExplosionParticlesWithSprite(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const ShipBlock& _work,
-                                        LineHeap& _heap, const Bubble& _bubble, ExplosionEffects& _effects) noexcept;
+  void DrawExplosionParticlesWithSprite(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
+                                        const Bubble& _bubble, ExplosionEffects& _effects) noexcept;
 
   /*
    * 6502: DOEXP (with EX2, EXL1 and TT48) -- age the cloud by one frame and draw it.
@@ -169,7 +170,7 @@ namespace Elite
    * The C64 draws the first frame -- and only the first, `CPY #18` against the counter BEFORE it
    * grew -- through `PTCLS2`, so the burst sprite appears once and is never moved again.
    */
-  void DrawExplosionCloud(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, ShipBlock& _work, LineHeap& _heap,
-                          const GeometryWorkspace& _geometry, const Bubble& _bubble, ExplosionEffects& _effects) noexcept;
+  void DrawExplosionCloud(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap, const GeometryWorkspace& _geometry,
+                          const Bubble& _bubble, ExplosionEffects& _effects) noexcept;
 
 } // namespace Elite

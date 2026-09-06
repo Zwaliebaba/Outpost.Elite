@@ -131,7 +131,7 @@ namespace GameLogicTests
       for (std::uint16_t offset = 0; offset < 256u; ++offset)
       {
         const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
-        Assert::AreEqual(_cpu.memory[address], _heap.Read(address), (_context + L": heap byte " + std::to_wstring(offset)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _heap.Read(Elite::HeapOffset::FromAddress(address)), (_context + L": heap byte " + std::to_wstring(offset)).c_str());
       }
     }
 
@@ -147,8 +147,7 @@ namespace GameLogicTests
     }
 
     /// The workspace bytes `DOEXP`, `PTCLS` and `EXS1` leave behind between them.
-    void CompareWorkspace(const Cpu6502& _cpu, const OracleImage& _oracle, const Elite::MathWorkspace& _math,
-                          const Elite::DrawWorkspace& _draw, const std::wstring& _context)
+    void CompareWorkspace(const Cpu6502& _cpu, const OracleImage& _oracle, const Elite::MathWorkspace& _math, const std::wstring& _context)
     {
       const auto same = [&](const char* _name, std::uint8_t _ours)
       {
@@ -156,16 +155,22 @@ namespace GameLogicTests
         Assert::AreEqual(_cpu.memory[at], _ours, (_context + L": " + Widen(_name)).c_str());
       };
 
+      /*
+       * `Q` alone since M2-c-3, and it is compared for a reason that is not `DOEXP`'s: it is the
+       * frame's `Q`, which `MA23`'s altitude check reads as its radicand's low byte (§8, R22), and
+       * `DOEXP` runs inside `LL9` part 9. So what this routine leaves there is observable outside
+       * it and is pinned here.
+       *
+       * `U`, `CNT`, `TGT` and `T` were compared until M2-c-3 and are the routines' own locals now
+       * -- the particle count, the vertex the loop is on, the last vertex and the low half of the
+       * distance scale. Each is written before its first read inside one routine, and what they
+       * produced is the screen, the heap and the sprite seam, all compared. `P`, `R` and `S` went
+       * the same way with M2-b.
+       */
       same("Q", _math.q);
-      same("R", _math.r);
-      same("P", _math.p);
-      same("S", _math.s);
-      same("T", _math.t);
-      same("U", _math.u);
-      same("CNT", _math.cnt);
-      same("TGT", _math.tgt);
-      same("ZZ", _draw.zz);
-      same("Y1", _draw.y1);
+
+      // `ZZ` and `Y1` are the particle loop's own since M2-c -- the distance each particle is
+      // plotted at and the row it landed on -- and what they produced is the screen comparison.
     }
 
     /*
@@ -375,7 +380,6 @@ namespace GameLogicTests
       const std::uint16_t rand = oracle.Label("RAND");
       const std::uint16_t qq = oracle.Label("Q");
       const std::uint16_t rr = oracle.Label("R");
-      const std::uint16_t ss = oracle.Label("S");
       const std::uint16_t tt = oracle.Label("T");
 
       // The cloud sizes are the interesting ones: zero is `FMLTU`'s second early exit, and the
@@ -432,30 +436,25 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(exs1, 20'000);
               Assert::IsTrue(run.completed, L"EXS1 returned");
 
-              Elite::MathWorkspace math;
               Elite::Rng rng;
-              math.q = size;
-              math.r = low;
-              math.t = 0x5Cu;
               rng.SetState(seed);
 
-              const Elite::ExplosionOffset offset = Elite::OffsetByCloud(math, rng, high);
+              const Elite::ExplosionOffset offset = Elite::OffsetByCloud(rng, high, low, size);
 
               const std::wstring where = Widen("EXS1(Q=" + std::to_string(size) + ", A=" + std::to_string(high) +
                                                ", R=" + std::to_string(low) + ", seed=" + std::to_string(seed[0]) + "): ");
 
               Assert::AreEqual(cpu.a, offset.high, (where + L"the high byte").c_str());
               Assert::AreEqual(cpu.x, offset.low, (where + L"the low byte").c_str());
-              Assert::AreEqual(cpu.memory[ss], math.s, (where + L"S").c_str());
-              Assert::AreEqual(cpu.memory[tt], math.t, (where + L"T").c_str());
-              Assert::AreEqual(cpu.memory[rr], math.r, (where + L"R").c_str());
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
                                  (where + L"RAND+" + std::to_wstring(byte)).c_str());
               }
 
-              if (math.t != 0x5Cu)
+              // The sentinel is read on the ORACLE's side: the port's subtracting half keeps its
+              // product as a local since M2-b.
+              if (cpu.memory[tt] != 0x5Cu)
               {
                 ++subtracted;
               }
@@ -525,11 +524,10 @@ namespace GameLogicTests
         {
           Cpu6502 cpu = oracle.Fresh();
           Elite::Canvas canvas;
-          Elite::DrawWorkspace draw;
           Elite::MathWorkspace math;
           Elite::GeometryWorkspace geometry;
           Elite::Rng rng;
-          Elite::ShipBlock work{};
+          Elite::Ship work{};
           Elite::LineHeap heap;
           Elite::Bubble bubble;
           RecordingBurst burst;
@@ -547,7 +545,7 @@ namespace GameLogicTests
             const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
             const std::uint8_t value = (offset < bytes.size()) ? bytes[offset] : std::uint8_t{0};
             cpu.memory[address] = value;
-            heap.Write(address, value);
+            heap.Write(Elite::HeapOffset::FromAddress(address), value);
           }
 
           const std::vector<std::uint8_t> vertices = Vertices(scene.count, layout);
@@ -558,15 +556,19 @@ namespace GameLogicTests
             geometry.xx3[byte] = value;
           }
 
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = 0;
-            work[byte] = 0;
+            shipBytes[byte] = 0;
           }
+          work = Elite::Ship::FromBytes(shipBytes);
           const auto poke = [&](std::size_t _offset, std::uint8_t _value)
           {
             cpu.memory[static_cast<std::uint16_t>(inwk + _offset)] = _value;
-            work[_offset] = _value;
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> bytes = work.ToBytes();
+            bytes[_offset] = _value;
+            work = Elite::Ship::FromBytes(bytes);
           };
           poke(Elite::SHIP_Z_OFFSET, scene.zLow);
           poke(Elite::SHIP_Z_OFFSET + 1u, scene.zHigh);
@@ -575,7 +577,7 @@ namespace GameLogicTests
           poke(Elite::SHIP_HEAP_HIGH_OFFSET, HEAP_AT >> 8);
 
           cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 6u)] = PLANET_Z_LOW;
-          bubble.blocks[0][6] = PLANET_Z_LOW;
+          bubble.blocks[0].z.lo = PLANET_Z_LOW;
 
           for (std::size_t byte = 0; byte < 4u; ++byte)
           {
@@ -588,29 +590,29 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(doexp);
           Assert::IsTrue(run.completed, L"DOEXP returned");
 
-          Elite::DrawExplosionCloud(canvas, draw, math, rng, work, heap, geometry, bubble, burst);
+          Elite::DrawExplosionCloud(canvas, math, rng, work, heap, geometry, bubble, burst);
 
           const std::wstring where = std::wstring(scene.what) + L", " + layout.what;
 
           CompareScreens(cpu, screenBase, canvas, where);
           CompareHeaps(cpu, heap, where);
           CompareSeeds(cpu, oracle, rng, where);
-          CompareWorkspace(cpu, oracle, math, draw, where);
+          CompareWorkspace(cpu, oracle, math, where);
           CompareBurstRegisters(cpu, burst, where);
 
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                              (where + L": INWK+" + std::to_wstring(byte)).c_str());
           }
 
           // Which of the routine's four endings this scene reached, counted so that a sweep which
           // stopped exercising one of them says so.
-          if (heap.Read(static_cast<std::uint16_t>(HEAP_AT + 1u)) == scene.counter)
+          if (heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(HEAP_AT + 1u))) == scene.counter)
           {
             ++finished;
           }
-          else if ((scene.state & Elite::SHIP_STATE_DRAWN) == 0u)
+          else if (!Elite::Has(scene.state, Elite::ShipStateBit::OnScreen))
           {
             ++offScreen;
           }
@@ -627,7 +629,7 @@ namespace GameLogicTests
               ++burstsRefused;
             }
           }
-          if (scene.zHigh >= 32u && heap.Read(static_cast<std::uint16_t>(HEAP_AT + 1u)) != scene.counter)
+          if (scene.zHigh >= 32u && heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(HEAP_AT + 1u))) != scene.counter)
           {
             ++agedByFive;
           }
@@ -639,9 +641,9 @@ namespace GameLogicTests
            * `8 * P + bits` for a P below 28, so it cannot exceed 223, and 254 in byte 0 of the heap
            * can only be the `LDA #&FE`.
            */
-          if (heap.Read(static_cast<std::uint16_t>(HEAP_AT + 1u)) != scene.counter)
+          if (heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(HEAP_AT + 1u))) != scene.counter)
           {
-            if (heap.Read(HEAP_AT) == 0xFEu)
+            if (heap.Read(Elite::HeapOffset::FromAddress(HEAP_AT)) == 0xFEu)
             {
               ++cappedSize;
             }
@@ -723,10 +725,9 @@ namespace GameLogicTests
             {
               Cpu6502 cpu = oracle.Fresh();
               Elite::Canvas canvas;
-              Elite::DrawWorkspace draw;
               Elite::MathWorkspace math;
               Elite::Rng rng;
-              Elite::ShipBlock work{};
+              Elite::Ship work{};
               Elite::LineHeap heap;
               Elite::Bubble bubble;
               RecordingBurst burst;
@@ -743,25 +744,26 @@ namespace GameLogicTests
                 const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
                 const std::uint8_t value = (offset < bytes.size()) ? bytes[offset] : std::uint8_t{0};
                 cpu.memory[address] = value;
-                heap.Write(address, value);
+                heap.Write(Elite::HeapOffset::FromAddress(address), value);
               }
 
+              std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
                 cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = 0;
-                work[byte] = 0;
+                shipBytes[byte] = 0;
               }
+              work = Elite::Ship::FromBytes(shipBytes);
               // z_hi decides the burst's size, and it is read by `PTCLS2` alone.
               const std::uint8_t zHigh = static_cast<std::uint8_t>((size & 1u) != 0u ? 4u : 12u);
               cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + 1u)] = zHigh;
-              work[Elite::SHIP_Z_OFFSET + 1u] = zHigh;
+              work.z.hi = zHigh;
               cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
               cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-              work[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
-              work[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
+              work.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
 
               cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 6u)] = PLANET_Z_LOW;
-              bubble.blocks[0][6] = PLANET_Z_LOW;
+              bubble.blocks[0].z.lo = PLANET_Z_LOW;
 
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
@@ -776,11 +778,11 @@ namespace GameLogicTests
 
               if (withSprite != 0)
               {
-                Elite::DrawExplosionParticlesWithSprite(canvas, draw, math, rng, work, heap, bubble, burst);
+                Elite::DrawExplosionParticlesWithSprite(canvas, math, rng, work, heap, bubble, burst);
               }
               else
               {
-                Elite::DrawExplosionParticles(canvas, draw, math, rng, work, heap, bubble);
+                Elite::DrawExplosionParticles(canvas, math, rng, work, heap, bubble);
               }
 
               const std::wstring where =
@@ -790,17 +792,17 @@ namespace GameLogicTests
               CompareScreens(cpu, screenBase, canvas, where);
               CompareHeaps(cpu, heap, where);
               CompareSeeds(cpu, oracle, rng, where);
-              CompareWorkspace(cpu, oracle, math, draw, where);
+              CompareWorkspace(cpu, oracle, math, where);
               CompareBurstRegisters(cpu, burst, where);
               Assert::AreEqual<std::uint32_t>(0u, refused.calls, (where + L": PTCLS has no sprite in it").c_str());
 
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                                  (where + L": INWK+" + std::to_wstring(byte)).c_str());
               }
 
-              if (canvas.Screen()[0x1000] != 0u || draw.zz != 0u)
+              if (canvas.Screen()[0x1000] != 0u || cpu.memory[oracle.Label("ZZ")] != 0u)
               {
                 ++plotted;
               }

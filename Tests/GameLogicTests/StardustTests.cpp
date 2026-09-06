@@ -284,87 +284,129 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             Elite::Stardust dust;
-            Elite::MathWorkspace math;
-            Elite::DrawWorkspace draw;
             Elite::FlightState flight;
 
-            // Everything each wrapper might read, on both sides.
+            // Everything each wrapper might read, on the oracle's side; the port's side is what the
+            // movers hand each routine as a value since M2-b.
             SeedField(cpu, dust, at, 12, 0x51F3A2C9u + operand);
             cpu.memory[at.delta] = operand;
             flight.delta = operand;
             cpu.memory[at.alp1] = operand;
             flight.alp1 = operand;
             cpu.memory[at.q] = operand;
-            math.q = operand;
             cpu.memory[at.p] = a;
-            math.p = a;
             cpu.memory[at.r] = operand;
-            math.r = operand;
             cpu.memory[at.s] = a;
-            math.s = a;
             cpu.memory[at.xx] = operand;
-            math.xx = operand;
             cpu.memory[static_cast<std::uint16_t>(at.xx + 1)] = a;
-            math.xxNext = a;
 
             const std::uint8_t slot = 5;
             cpu.y = slot;
             cpu.x = operand;
             cpu.a = a;
 
+            // A on the way out, and the byte the wrapper leaves in P: `DVID4`'s whole part for the
+            // two dividers, the product's low byte for the six multipliers.
             std::uint8_t got = 0;
+            std::uint8_t low = 0;
+            bool positionStaged = false; // (S R) = XX(1 0) on the oracle's side, a `SignMag16` on the port's
             const wchar_t* name = L"";
             switch (which)
             {
             case 0:
+            {
               name = L"DV41";
               cpu.CallSubroutine(oracle.Label("DV41"), 20'000);
-              got = Elite::DivideSpeedBy(math, flight, a);
+              const Elite::ScaledDivision divided = Elite::DivideSpeedBy(flight, a);
+              got = divided.fraction;
+              low = divided.whole;
               break;
+            }
             case 1:
+            {
               name = L"DV42";
               cpu.CallSubroutine(oracle.Label("DV42"), 20'000);
-              got = Elite::DivideSpeedByDistance(math, flight, dust, slot);
+              const Elite::ScaledDivision divided = Elite::DivideSpeedByDistance(flight, dust, slot);
+              got = divided.fraction;
+              low = divided.whole;
               break;
+            }
             case 2:
+            {
               name = L"MLU1";
               cpu.CallSubroutine(oracle.Label("MLU1"), 20'000);
-              got = Elite::MultiplyByHeight(math, draw, dust, slot).high;
+              const Elite::Product product = Elite::MultiplyByHeight(dust, slot, operand);
+              got = product.high;
+              low = product.low;
               break;
+            }
             case 3:
+            {
               name = L"MLS1";
               cpu.CallSubroutine(oracle.Label("MLS1"), 20'000);
-              got = Elite::MultiplyByRoll(math, flight, a);
+              const Elite::Product product = Elite::MultiplyByRoll(flight, a);
+              got = product.high;
+              low = product.low;
               break;
+            }
             case 4:
+            {
+              // 6502: MLS2 -- (S R) = XX(1 0), then MLS1. The movers pass `SignMag16{xx, xxNext}` to the
+              // `ADD` that follows, so what is pinned here is that the staging IS that pair.
               name = L"MLS2";
               cpu.CallSubroutine(oracle.Label("MLS2"), 20'000);
-              got = Elite::MultiplyPositionByRoll(math, flight, a);
+              const Elite::Product product = Elite::MultiplyByRoll(flight, a);
+              got = product.high;
+              low = product.low;
+              positionStaged = true;
               break;
+            }
             case 5:
+            {
+              // 6502: MUT1 -- R = XX, then MULT1 with Q as the multiplier.
               name = L"MUT1";
               cpu.CallSubroutine(oracle.Label("MUT1"), 20'000);
-              got = Elite::MultiplyPosition(math, a);
+              const Elite::Product product = Elite::MultiplySigned(a, operand);
+              got = product.high;
+              low = product.low;
               break;
+            }
             case 6:
+            {
+              // 6502: MUT2 -- S = XX+1 as well, then MUT1.
               name = L"MUT2";
               cpu.CallSubroutine(oracle.Label("MUT2"), 20'000);
-              got = Elite::MultiplyPositionSigned(math, a);
+              const Elite::Product product = Elite::MultiplySigned(a, operand);
+              got = product.high;
+              low = product.low;
+              positionStaged = true;
               break;
+            }
             default:
+            {
               name = L"MULTS-2";
               cpu.CallSubroutine(static_cast<std::uint16_t>(oracle.Label("MULTS") - 2), 20'000);
-              got = Elite::MultiplyScaledBy(math, operand, a);
+              const Elite::Product product = Elite::MultiplyScaled(operand, a);
+              got = product.high;
+              low = product.low;
               break;
+            }
             }
 
             const std::wstring where = std::wstring(name) + L"(a=" + std::to_wstring(a) + L", x=" + std::to_wstring(operand) + L")";
             Assert::AreEqual(cpu.a, got, (where + L": A").c_str());
-            Assert::AreEqual(cpu.memory[at.p], math.p, (where + L": P").c_str());
-            Assert::AreEqual(cpu.memory[at.q], math.q, (where + L": Q").c_str());
-            Assert::AreEqual(cpu.memory[at.r], math.r, (where + L": R").c_str());
-            Assert::AreEqual(cpu.memory[at.s], math.s, (where + L": S").c_str());
-            Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": Y1").c_str());
+            Assert::AreEqual(cpu.memory[at.p], low, (where + L": P").c_str());
+            // `Y1` is `MLU1`'s own store of the speck's height since M2-c; the movers read the same
+            // byte out of the field, and the product above is what the wrapper answers with.
+            if (positionStaged)
+            {
+              Assert::AreEqual(cpu.memory[at.r], operand, (where + L": R is XX").c_str());
+              Assert::AreEqual(cpu.memory[at.s], a, (where + L": S is XX+1").c_str());
+            }
+            else if (which == 5)
+            {
+              Assert::AreEqual(cpu.memory[at.r], operand, (where + L": R is XX").c_str());
+            }
             ++compared;
           }
         }
@@ -480,8 +522,6 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             Elite::Canvas canvas;
-            Elite::DrawWorkspace draw;
-            Elite::MathWorkspace math;
             Elite::FlightState state;
             Elite::Stardust dust;
             Elite::Rng rng;
@@ -504,19 +544,19 @@ namespace GameLogicTests
 
               if (_through)
               {
-                Elite::MoveStardust(canvas, draw, math, state, dust, rng, _view);
+                Elite::MoveStardust(canvas, state, dust, rng, _view);
               }
               else if (_view == 0u)
               {
-                Elite::MoveStardustAhead(canvas, draw, math, state, dust, rng);
+                Elite::MoveStardustAhead(canvas, state, dust, rng);
               }
               else if (_view == 1u)
               {
-                Elite::MoveStardustAstern(canvas, draw, math, state, dust, rng);
+                Elite::MoveStardustAstern(canvas, state, dust, rng);
               }
               else
               {
-                Elite::MoveStardustSideways(canvas, draw, math, state, dust, rng, _view);
+                Elite::MoveStardustSideways(canvas, state, dust, rng, _view);
               }
 
               const std::wstring where =

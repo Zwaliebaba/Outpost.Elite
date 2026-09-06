@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "ShipBytes.h"
+
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
@@ -91,7 +93,7 @@ namespace GameLogicTests
         const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
         const std::uint8_t value = (offset < _bytes.size()) ? _bytes[offset] : std::uint8_t{0};
         _cpu.memory[address] = value;
-        _heap.Write(address, value);
+        _heap.Write(Elite::HeapOffset::FromAddress(address), value);
       }
     }
 
@@ -100,7 +102,7 @@ namespace GameLogicTests
       for (std::uint16_t offset = 0; offset < 256u; ++offset)
       {
         const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
-        Assert::AreEqual(_cpu.memory[address], _heap.Read(address), (_context + L": heap byte " + std::to_wstring(offset)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _heap.Read(Elite::HeapOffset::FromAddress(address)), (_context + L": heap byte " + std::to_wstring(offset)).c_str());
       }
     }
   } // namespace
@@ -159,7 +161,6 @@ namespace GameLogicTests
                   }
 
                   Cpu6502 cpu = oracle.Fresh();
-                  Elite::MathWorkspace math;
 
                   cpu.memory[pp] = p;
                   cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
@@ -167,36 +168,21 @@ namespace GameLogicTests
                   cpu.memory[qq] = q;
                   cpu.memory[rr] = r;
                   cpu.memory[ss] = s;
-                  math.p = p;
-                  math.p1 = p1;
-                  math.p2 = p2;
-                  math.q = q;
-                  math.r = r;
-                  math.s = s;
 
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(dvid3b);
                   Assert::IsTrue(run.completed, L"DVID3B returned");
 
-                  Elite::DivideSignedToK(math);
+                  const Elite::KBlock k = Elite::DivideSigned24(Elite::SignMag24{p, p1, p2}, Elite::SignMag24{q, r, s});
+                  const std::uint8_t bytes[4] = {k.low, k.mid, k.high, k.top};
 
                   const std::wstring where =
                     Widen("DVID3B(P=" + std::to_string(p) + "/" + std::to_string(p1) + "/" + std::to_string(p2) +
                           ", Q=" + std::to_string(q) + ", R=" + std::to_string(r) + ", S=" + std::to_string(s) + ")");
                   for (int byte = 0; byte < 4; ++byte)
                   {
-                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], math.k[byte],
+                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], bytes[byte],
                                      (where + L": K+" + std::to_wstring(byte)).c_str());
                   }
-
-                  // The scratch bytes too. Nothing downstream reads them today, but they are what
-                  // a later routine reaching this through a different entry point would see, and a
-                  // divergence here is a divergence in the loop counts above it.
-                  Assert::AreEqual(cpu.memory[tt], math.t, (where + L": T").c_str());
-                  Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
-                  Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-                  Assert::AreEqual(cpu.memory[pp], math.p, (where + L": P").c_str());
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 1)], math.p1, (where + L": P+1").c_str());
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 2)], math.p2, (where + L": P+2").c_str());
 
                   /*
                    * Which of the three tails ran, decided from the answer rather than from the
@@ -205,16 +191,20 @@ namespace GameLogicTests
                    * either something reaches the top three bytes or the low byte grew. `DVL10`
                    * shifts it RIGHT at least once, so the low byte shrank and nothing can reach
                    * the top three. A zero quotient looks like all three and is counted apart.
+                   *
+                   * The quotient is the ORACLE's R: the port's divider keeps it as a local since
+                   * M2-b, and the scratch bytes it used to leave are no longer compared.
                    */
-                  if (math.r == 0u)
+                  const std::uint8_t quotient = cpu.memory[rr];
+                  if (quotient == 0u)
                   {
                     ++unclassified;
                   }
-                  else if ((math.k[1] | math.k[2] | (math.k[3] & 0x7Fu)) != 0u || math.k[0] > math.r)
+                  else if ((k.mid | k.high | (k.top & 0x7Fu)) != 0u || k.low > quotient)
                   {
                     ++scaledUp;
                   }
-                  else if (math.k[0] == math.r)
+                  else if (k.low == quotient)
                   {
                     ++unscaled;
                   }
@@ -270,32 +260,32 @@ namespace GameLogicTests
                   // No denominator is skipped here, and that is the point of the sweep: the
                   // `ORA #1` makes every one of them terminate, z = 0 included.
                   Cpu6502 cpu = oracle.Fresh();
-                  Elite::ShipBlock ship;
+                  Elite::Ship ship;
                   Elite::MathWorkspace math;
 
                   const std::uint8_t z[3] = {zLow, zHigh, zSign};
                   for (int byte = 0; byte < 3; ++byte)
                   {
                     cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + byte)] = z[byte];
-                    ship[Elite::SHIP_Z_OFFSET + byte] = z[byte];
+                    PokeShip(ship, Elite::SHIP_Z_OFFSET + byte, z[byte]);
                   }
                   cpu.memory[pp] = p;
                   cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
-                  math.p = p;
-                  math.p1 = p1;
 
                   cpu.a = a;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(dvid3b2);
                   Assert::IsTrue(run.completed, L"DVID3B2 returned");
 
-                  Elite::DivideByShipZ(ship, math, a);
+                  const Elite::KBlock k = Elite::DivideByShipZ(ship, math, Elite::SignMag24{p, p1, a});
 
                   const std::wstring where =
                     Widen("DVID3B2(a=" + std::to_string(a) + ", P=" + std::to_string(p) + "/" + std::to_string(p1) +
                           ", z=" + std::to_string(zLow) + "/" + std::to_string(zHigh) + "/" + std::to_string(zSign) + ")");
+                  // `K(3 2 1 0)` is the value this routine returns since M2-c-3.
+                  const std::uint8_t ours[4] = {k.low, k.mid, k.high, k.top};
                   for (int byte = 0; byte < 4; ++byte)
                   {
-                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], math.k[byte],
+                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], ours[static_cast<std::size_t>(byte)],
                                      (where + L": K+" + std::to_wstring(byte)).c_str());
                   }
 
@@ -359,25 +349,23 @@ namespace GameLogicTests
                 for (const std::uint8_t zSign : EDGES)
                 {
                   Cpu6502 cpu = oracle.Fresh();
-                  Elite::ShipBlock ship;
+                  Elite::Ship ship;
                   Elite::MathWorkspace math;
 
                   const std::uint8_t z[3] = {zLow, zHigh, zSign};
                   for (int byte = 0; byte < 3; ++byte)
                   {
                     cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + byte)] = z[byte];
-                    ship[Elite::SHIP_Z_OFFSET + byte] = z[byte];
+                    PokeShip(ship, Elite::SHIP_Z_OFFSET + byte, z[byte]);
                   }
                   cpu.memory[pp] = p;
                   cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
-                  math.p = p;
-                  math.p1 = p1;
 
                   cpu.a = a;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(pls6);
                   Assert::IsTrue(run.completed, L"PLS6 returned");
 
-                  const Elite::ScreenOffset offset = Elite::DivideToScreenOffset(ship, math, a);
+                  const Elite::ScreenOffset offset = Elite::DivideToScreenOffset(ship, math, Elite::SignMag24{p, p1, a});
 
                   const std::wstring where =
                     Widen("PLS6(a=" + std::to_string(a) + ", P=" + std::to_string(p) + "/" + std::to_string(p1) +
@@ -478,7 +466,7 @@ namespace GameLogicTests
                     for (const std::uint8_t zSign : SIGNS)
                     {
                       Cpu6502 cpu = oracle.Fresh();
-                      Elite::ShipBlock ship;
+                      Elite::Ship ship;
                       Elite::MathWorkspace math;
                       Elite::Projection screen;
 
@@ -486,7 +474,7 @@ namespace GameLogicTests
                       for (int byte = 0; byte < 9; ++byte)
                       {
                         cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = block[byte];
-                        ship[static_cast<std::size_t>(byte)] = block[byte];
+                        PokeShip(ship, static_cast<std::size_t>(byte), block[byte]);
                       }
 
                       // The sentinel that makes a half-written answer visible.
@@ -590,7 +578,6 @@ namespace GameLogicTests
       {
         Cpu6502 cpu = oracle.Fresh();
         Elite::Canvas canvas;
-        Elite::DrawWorkspace draw;
         Elite::LineHeap heap;
 
         std::vector<std::uint8_t> seeded = lines;
@@ -603,7 +590,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll155, 500'000);
         Assert::IsTrue(run.completed, L"LL155 returned");
 
-        Elite::DrawShipLines(canvas, draw, heap, HEAP_AT);
+        Elite::DrawShipLines(canvas, heap, Elite::HeapOffset::FromAddress(HEAP_AT));
 
         CompareScreens(cpu, screenBase, canvas, L"LL155 length " + std::to_wstring(length));
         CompareHeaps(cpu, heap, L"LL155 length " + std::to_wstring(length));
@@ -635,7 +622,6 @@ namespace GameLogicTests
       {
         Cpu6502 cpu = oracle.Fresh();
         Elite::Canvas canvas;
-        Elite::DrawWorkspace draw;
         Elite::LineHeap heap;
 
         SeedHeap(cpu, heap, lines);
@@ -646,7 +632,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll81, 500'000);
         Assert::IsTrue(run.completed, L"LL81 returned");
 
-        Elite::StoreLineCountAndDraw(canvas, draw, heap, HEAP_AT, count);
+        Elite::StoreLineCountAndDraw(canvas, heap, Elite::HeapOffset::FromAddress(HEAP_AT), count);
 
         CompareScreens(cpu, screenBase, canvas, L"LL81 count " + std::to_wstring(count));
         CompareHeaps(cpu, heap, L"LL81 count " + std::to_wstring(count));
@@ -675,39 +661,154 @@ namespace GameLogicTests
 
       const std::vector<std::uint8_t> lines = {12, 30, 30, 90, 30, 90, 30, 90, 90, 30, 90, 30, 30};
 
+      // A heap with nothing on it, for `LL155`'s `CMP #4 / BCC LL82` -- the one exit that clears
+      // the carry rather than setting it.
+      const std::vector<std::uint8_t> empty = {0};
+
       std::uint32_t cases = 0;
       std::uint32_t erased = 0;
-      for (const std::uint8_t state : {0x00, 0x08, 0x07, 0x0F, 0xF7, 0xFF})
+      for (const std::vector<std::uint8_t>* heapBytes : {&lines, &empty})
       {
-        Cpu6502 cpu = oracle.Fresh();
-        Elite::Canvas canvas;
-        Elite::DrawWorkspace draw;
-        Elite::LineHeap heap;
-        Elite::ShipBlock ship;
+        for (const bool carryIn : {false, true})
+        {
+          for (const std::uint8_t state : {0x00, 0x08, 0x07, 0x0F, 0xF7, 0xFF})
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            Elite::Canvas canvas;
+            Elite::LineHeap heap;
+            Elite::Ship ship;
 
-        SeedHeap(cpu, heap, lines);
-        cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
-        cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-        cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = state;
-        ship[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
-        ship[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
-        ship[Elite::SHIP_STATE_OFFSET] = state;
+            SeedHeap(cpu, heap, *heapBytes);
+            cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
+            cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
+            cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = state;
+            ship.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
+            ship.state = state;
 
-        const Elite::Testing::RunResult run = cpu.CallSubroutine(ee51, 500'000);
-        Assert::IsTrue(run.completed, L"EE51 returned");
+            cpu.c = carryIn;
+            const Elite::Testing::RunResult run = cpu.CallSubroutine(ee51, 500'000);
+            Assert::IsTrue(run.completed, L"EE51 returned");
 
-        Elite::EraseShip(canvas, draw, ship, heap);
+            const bool carry = Elite::EraseShip(canvas, ship, heap, carryIn);
 
-        const std::wstring where = L"EE51 state " + std::to_wstring(state);
-        CompareScreens(cpu, screenBase, canvas, where);
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship[Elite::SHIP_STATE_OFFSET],
-                         (where + L": INWK+31").c_str());
-        erased += ((state & 0x08u) != 0u) ? 1u : 0u;
-        ++cases;
+            const std::wstring where = L"EE51 state " + std::to_wstring(state) + L" heap " + std::to_wstring(heapBytes->size()) +
+                                       L" carry in " + std::to_wstring(carryIn);
+            CompareScreens(cpu, screenBase, canvas, where);
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship.state,
+                             (where + L": INWK+31").c_str());
+
+            // The exit carry is `LL9`'s input to the cloud seeding (§6.157): the caller's when there
+            // was nothing to erase, `CPY XX20`'s when there was, `CMP #4`'s when the heap was bare.
+            Assert::AreEqual(cpu.c, carry, (where + L": the exit carry").c_str());
+
+            erased += ((state & 0x08u) != 0u) ? 1u : 0u;
+            ++cases;
+          }
+        }
       }
 
-      Assert::AreEqual<std::uint32_t>(6u, cases, L"every state ran");
-      Assert::AreEqual<std::uint32_t>(3u, erased, L"three of the six had something to erase");
+      Assert::AreEqual<std::uint32_t>(24u, cases, L"every state ran, with both heaps and both carries");
+      Assert::AreEqual<std::uint32_t>(12u, erased, L"half of them had something to erase");
+    }
+
+    /*
+     * 6502: the six instructions after `JSR EE51` and the `EE55` loop -- a newly killed ship's
+     * cloud, seeded onto its line heap.
+     *
+     * The block has no label of its own, so it is found from `EE55` backwards: fourteen bytes,
+     * `LDY #1 / LDA #18 / STA (XX19),Y / LDY #7 / LDA (XX0),Y / LDY #2 / STA (XX19),Y`, and the
+     * test checks every one of them before trusting the address. It runs to `EE28` because the
+     * block ends by falling into it. Both carries, because the first `DORND` rolls the one `EE51`
+     * left in and the other three run on `CPY #6`'s clear -- a port that fed all four the same flag
+     * would agree on one carry and not the other (§6.157).
+     */
+    TEST_METHOD(TheCloudSeedsLikeEE55)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t ee55 = oracle.Label("EE55");
+      const std::uint16_t ee28 = oracle.Label("EE28");
+      const std::uint16_t xx19 = oracle.Label("XX19");
+      const std::uint16_t xx0 = oracle.Label("XX0");
+      const std::uint16_t rand = oracle.Label("RAND");
+
+      constexpr std::uint16_t BLOCK_BYTES = 14;
+      constexpr std::uint16_t BLUEPRINT_AT = 0x0200; // any page the block never touches: only `(XX0),7` is read
+      const std::uint16_t start = static_cast<std::uint16_t>(ee55 - BLOCK_BYTES);
+
+      {
+        const Cpu6502 cpu = oracle.Fresh();
+        const std::uint8_t expected[BLOCK_BYTES] = {0xA0u, 0x01u,
+                                                    0xA9u, 0x12u,
+                                                    0x91u, static_cast<std::uint8_t>(xx19),
+                                                    0xA0u, 0x07u,
+                                                    0xB1u, static_cast<std::uint8_t>(xx0),
+                                                    0xA0u, 0x02u,
+                                                    0x91u, static_cast<std::uint8_t>(xx19)};
+        for (std::uint16_t byte = 0; byte < BLOCK_BYTES; ++byte)
+        {
+          Assert::AreEqual(expected[byte], cpu.memory[static_cast<std::uint16_t>(start + byte)],
+                           (L"the block before EE55, byte " + std::to_wstring(byte)).c_str());
+        }
+      }
+
+      const std::vector<std::uint8_t> lines = {12, 30, 30, 90, 30, 90, 30, 90, 90, 30, 90, 30, 30};
+
+      std::uint32_t cases = 0;
+      for (const bool carryIn : {false, true})
+      {
+        for (const std::uint8_t count : {std::uint8_t{10}, std::uint8_t{22}, std::uint8_t{58}})
+        {
+          for (std::uint32_t seed = 1; seed <= 4u; ++seed)
+          {
+            Cpu6502 cpu = oracle.Fresh();
+            Elite::LineHeap heap;
+            Elite::Rng rng;
+
+            SeedHeap(cpu, heap, lines);
+            cpu.memory[xx19] = HEAP_AT & 0xFFu;
+            cpu.memory[static_cast<std::uint16_t>(xx19 + 1u)] = HEAP_AT >> 8;
+            cpu.memory[xx0] = BLUEPRINT_AT & 0xFFu;
+            cpu.memory[static_cast<std::uint16_t>(xx0 + 1u)] = BLUEPRINT_AT >> 8;
+            cpu.memory[static_cast<std::uint16_t>(BLUEPRINT_AT + 7u)] = count;
+
+            const std::array<std::uint8_t, 4> state = {static_cast<std::uint8_t>(seed * 37u), static_cast<std::uint8_t>(seed * 91u + 5u),
+                                                       static_cast<std::uint8_t>(seed * 13u + 200u), static_cast<std::uint8_t>(seed * 61u)};
+            for (std::size_t byte = 0; byte < state.size(); ++byte)
+            {
+              cpu.memory[static_cast<std::uint16_t>(rand + byte)] = state[byte];
+            }
+            rng.SetState(state);
+
+            cpu.pc = start;
+            cpu.c = carryIn;
+            std::uint32_t steps = 0;
+            while (cpu.pc != ee28)
+            {
+              Assert::IsTrue(cpu.Step(), L"the block ran");
+              Assert::IsTrue(++steps < 1'000u, L"the block reached EE28");
+            }
+
+            Elite::SeedExplosionCloud(heap, Elite::HeapOffset::FromAddress(HEAP_AT), count, rng, carryIn);
+
+            const std::wstring where =
+              L"EE55 carry " + std::to_wstring(carryIn) + L" count " + std::to_wstring(count) + L" seed " + std::to_wstring(seed);
+            CompareHeaps(cpu, heap, where);
+            for (std::size_t byte = 0; byte < state.size(); ++byte)
+            {
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
+                               (where + L": RAND+" + std::to_wstring(byte)).c_str());
+            }
+            ++cases;
+          }
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(2u * 3u * 4u, cases, L"the whole sweep ran");
     }
 
     /*
@@ -767,17 +868,15 @@ namespace GameLogicTests
 
       Cpu6502 cpu = oracle.Fresh();
       Elite::Canvas canvas;
-      Elite::DrawWorkspace draw;
       Elite::LineHeap heap;
       Elite::MathWorkspace math;
       Elite::Projection screen;
-      Elite::ShipBlock ship;
+      Elite::Ship ship;
 
       SeedHeap(cpu, heap, {});
       cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
       cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-      ship[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
-      ship[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
+      ship.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
 
       // K3 and K4 start where the machine starts them, and the port has to agree from there --
       // the stale-coordinate path reads them before anything has written them.
@@ -792,30 +891,32 @@ namespace GameLogicTests
       {
         const Elite::Projection before = screen;
 
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = ship.ToBytes();
         for (std::uint8_t byte = 0; byte < 9u; ++byte)
         {
           cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = position.block[byte];
-          ship[byte] = position.block[byte];
+          shipBytes[byte] = position.block[byte];
         }
+        ship = Elite::Ship::FromBytes(shipBytes);
         cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = position.state;
-        ship[Elite::SHIP_STATE_OFFSET] = position.state;
+        ship.state = position.state;
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(shppt, 500'000);
         Assert::IsTrue(run.completed, L"SHPPT returned");
 
-        Elite::DrawShipAsPoint(canvas, draw, ship, heap, math, screen);
+        Elite::DrawShipAsPoint(canvas, ship, heap, math, screen);
 
         const std::wstring where = std::wstring(L"SHPPT: ") + position.what;
         CompareScreens(cpu, screenBase, canvas, where);
         CompareHeaps(cpu, heap, where);
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship[Elite::SHIP_STATE_OFFSET],
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship.state,
                          (where + L": INWK+31").c_str());
         Assert::AreEqual(cpu.memory[k3], screen.x, (where + L": K3").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k3 + 1)], screen.x1, (where + L": K3+1").c_str());
         Assert::AreEqual(cpu.memory[k4], screen.y, (where + L": K4").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k4 + 1)], screen.y1, (where + L": K4+1").c_str());
 
-        const bool nowDrawn = (ship[Elite::SHIP_STATE_OFFSET] & Elite::SHIP_STATE_DRAWN) != 0u;
+        const bool nowDrawn = Elite::Has(ship.state, Elite::ShipStateBit::OnScreen);
         drawn += nowDrawn ? 1u : 0u;
 
         // The case the sequence exists for: `PROJ` stored K3, then gave up on K4, so the ship is
@@ -895,18 +996,11 @@ namespace GameLogicTests
       for (const std::array<std::uint8_t, 24>& block : cases)
       {
         Cpu6502 cpu = oracle.Fresh();
-        Elite::DrawWorkspace draw;
         Elite::GeometryWorkspace geometry;
-        Elite::MathWorkspace math;
 
-        // XX15 is the first six; XX16 is the eighteen after it.
+        // XX15 is the first six -- a `Vector16` since M2-c-2; XX16 is the eighteen after it.
         const std::uint8_t* const vector = block.data();
-        draw.x1 = vector[0];
-        draw.y1 = vector[1];
-        draw.x2 = vector[2];
-        draw.y2 = vector[3];
-        draw.xx15Plus4 = vector[4];
-        draw.xx15Plus5 = vector[5];
+        const Elite::Vector16 xx15Value{{vector[0], vector[1]}, {vector[2], vector[3]}, {vector[4], vector[5]}};
         for (std::size_t byte = 0; byte < 6u; ++byte)
         {
           cpu.memory[static_cast<std::uint16_t>(xx15 + byte)] = vector[byte];
@@ -920,7 +1014,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll51, 200'000);
         Assert::IsTrue(run.completed, L"LL51 returned");
 
-        Elite::DotProducts(draw, geometry, math);
+        Elite::DotProducts(xx15Value, geometry);
 
         const std::wstring where = Widen("LL51 case " + std::to_string(compared));
         for (std::size_t byte = 0; byte < 6u; ++byte)
@@ -1000,9 +1094,6 @@ namespace GameLogicTests
                   for (int which = 0; which < 3; ++which)
                   {
                     Cpu6502 cpu = oracle.Fresh();
-                    Elite::DrawWorkspace draw;
-                    Elite::GeometryWorkspace geometry;
-                    Elite::MathWorkspace math;
 
                     cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
                     cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
@@ -1010,12 +1101,12 @@ namespace GameLogicTests
                     cpu.memory[rr] = r;
                     cpu.memory[ss] = s;
                     cpu.memory[xx15] = x1;
-                    geometry.xx12[2] = gradient;
-                    geometry.xx12[3] = direction;
-                    math.t = steep;
-                    math.r = r;
-                    math.s = s;
-                    draw.x1 = x1;
+
+                    // Since M2-c-2 the three routines take the slope and the distance as values:
+                    // `XX12+2`, `XX12+3` and `T` are one `Slope`, `(S R)` is a `SignMag16`, and
+                    // `XX15` is the point's own low byte that `LL120` overwrites `R` with.
+                    const Elite::Slope slope{gradient, direction, steep};
+                    const Elite::SignMag16 distance{r, s};
 
                     const std::uint16_t routine = (which == 0) ? ll129 : ((which == 1) ? ll120 : ll123);
                     const Elite::Testing::RunResult run = cpu.CallSubroutine(routine, 200'000);
@@ -1028,15 +1119,23 @@ namespace GameLogicTests
 
                     if (which == 0)
                     {
-                      const std::uint8_t sign = Elite::PrepareSlope(math, geometry);
-                      Assert::AreEqual(cpu.a, sign, (where + L": A").c_str());
+                      const Elite::PreparedSlope prepared = Elite::PrepareSlope(slope, distance);
+                      Assert::AreEqual(cpu.a, prepared.sign, (where + L": A").c_str());
+                      Assert::AreEqual(cpu.memory[qq], prepared.divisor, (where + L": Q").c_str());
+                      Assert::AreEqual(cpu.memory[rr], prepared.magnitude.lo, (where + L": R").c_str());
+                      Assert::AreEqual(cpu.memory[ss], prepared.magnitude.hi, (where + L": S").c_str());
                     }
                     else
                     {
                       const Elite::SlopeStep step =
-                        (which == 1) ? Elite::StepAlongX(math, geometry, draw) : Elite::StepAlongY(math, geometry);
+                        (which == 1) ? Elite::StepAlongX(slope, s, x1) : Elite::StepAlongY(slope, distance);
                       Assert::AreEqual(cpu.x, step.low, (where + L": X").c_str());
                       Assert::AreEqual(cpu.y, step.high, (where + L": Y").c_str());
+
+                      // The frame's `Q` survives the call and is compared; `R` and `S` do not --
+                      // they are the helpers' own since M2-c-2, and the census says nothing reads
+                      // them across the call. What the oracle leaves in them is not modelled.
+                      Assert::AreEqual(cpu.memory[qq], step.divisorLeft, (where + L": Q").c_str());
 
                       if (step.low != 0u || step.high != 0u)
                       {
@@ -1048,9 +1147,6 @@ namespace GameLogicTests
                       divided += isMultiply ? 0u : 1u;
                     }
 
-                    Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
-                    Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-                    Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
                     ++compared;
                   }
                 }
@@ -1085,8 +1181,6 @@ namespace GameLogicTests
       const std::uint16_t xx15 = oracle.Label("XX15");
       const std::uint16_t xx12 = oracle.Label("XX12");
       const std::uint16_t qq = oracle.Label("Q");
-      const std::uint16_t rr = oracle.Label("R");
-      const std::uint16_t ss = oracle.Label("S");
       const std::uint16_t tt = oracle.Label("T");
       const std::uint16_t ll118 = oracle.Label("LL118");
 
@@ -1116,8 +1210,6 @@ namespace GameLogicTests
                   for (const std::uint8_t steep : {0x00, 0xFF})
                   {
                     Cpu6502 cpu = oracle.Fresh();
-                    Elite::DrawWorkspace draw;
-                    Elite::GeometryWorkspace geometry;
                     Elite::MathWorkspace math;
 
                     const std::uint8_t point[4] = {x1Low, x1High, y1Low, y1High};
@@ -1125,37 +1217,35 @@ namespace GameLogicTests
                     {
                       cpu.memory[static_cast<std::uint16_t>(xx15 + byte)] = point[byte];
                     }
-                    draw.x1 = x1Low;
-                    draw.y1 = x1High;
-                    draw.x2 = y1Low;
-                    draw.y2 = y1High;
+                    Elite::Point16 moved{x1Low, x1High, y1Low, y1High};
 
                     cpu.memory[static_cast<std::uint16_t>(xx12 + 2)] = gradient;
                     cpu.memory[static_cast<std::uint16_t>(xx12 + 3)] = direction;
                     cpu.memory[tt] = steep;
-                    geometry.xx12[2] = gradient;
-                    geometry.xx12[3] = direction;
-                    math.t = steep;
+                    const Elite::Slope slope{gradient, direction, steep};
 
                     const Elite::Testing::RunResult run = cpu.CallSubroutine(ll118, 200'000);
                     Assert::IsTrue(run.completed, L"LL118 returned");
 
-                    Elite::MovePointOnScreen(draw, geometry, math);
+                    Elite::MovePointOnScreen(moved, slope, math);
 
                     const std::wstring where =
                       Widen("LL118(x1=" + std::to_string(x1Low) + "/" + std::to_string(x1High) + ", y1=" + std::to_string(y1Low) + "/" +
                             std::to_string(y1High) + ", grad=" + std::to_string(gradient) + ", dir=" + std::to_string(direction) +
                             ", T=" + std::to_string(steep) + ")");
 
-                    const std::uint8_t ours[4] = {draw.x1, draw.y1, draw.x2, draw.y2};
+                    const std::uint8_t ours[4] = {moved.xLow, moved.xHigh, moved.yLow, moved.yHigh};
                     for (std::size_t byte = 0; byte < 4u; ++byte)
                     {
                       Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + byte)], ours[byte],
                                        (where + L": XX15+" + std::to_wstring(byte)).c_str());
                     }
+
+                    // `Q` is the frame's and is still compared -- each clamp leaves it where its
+                    // multiply or divide stopped, and the altitude check reads it (§8, R22). `R`
+                    // and `S` are the helpers' own since M2-c-2 and are not modelled across the
+                    // call.
                     Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
-                    Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-                    Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
 
                     // Which clamps the inputs asked for, decided from the inputs and not from the
                     // port, so a port that skipped one still counts as having been asked.
@@ -1214,9 +1304,6 @@ namespace GameLogicTests
       const std::uint16_t swap = oracle.Label("SWAP");
       const std::uint16_t dontclip = oracle.Label("dontclip");
       const std::uint16_t qq = oracle.Label("Q");
-      const std::uint16_t rr = oracle.Label("R");
-      const std::uint16_t ss = oracle.Label("S");
-      const std::uint16_t tt = oracle.Label("T");
       const std::uint16_t ll145 = oracle.Label("LL145");
       const std::uint16_t ll147 = oracle.Label("LL147");
 
@@ -1256,7 +1343,6 @@ namespace GameLogicTests
                 const std::uint8_t seededSwap = (entry == 0) ? std::uint8_t{0} : std::uint8_t{3};
 
                 Cpu6502 cpu = oracle.Fresh();
-                Elite::DrawWorkspace draw;
                 Elite::GeometryWorkspace geometry;
                 Elite::MathWorkspace math;
                 Elite::ClipState clip;
@@ -1269,12 +1355,11 @@ namespace GameLogicTests
                 {
                   cpu.memory[static_cast<std::uint16_t>(xx15 + byte)] = block[byte];
                 }
-                draw.x1 = block[0];
-                draw.y1 = block[1];
-                draw.x2 = block[2];
-                draw.y2 = block[3];
-                draw.xx15Plus4 = block[4];
-                draw.xx15Plus5 = block[5];
+                // Since M2-c-2 the six bytes go in as a `Line16` -- two sixteen-bit points, the
+                // second's y coming from `XX12(1 0)` rather than from `XX15`, exactly as the
+                // original's eight bytes of line are laid out across the two workspaces.
+                const Elite::Line16 line{{block[0], block[1], block[2], block[3]},
+                                         {block[4], block[5], static_cast<std::uint8_t>(y2), static_cast<std::uint8_t>(y2 >> 8)}};
 
                 cpu.memory[xx12] = static_cast<std::uint8_t>(y2);
                 cpu.memory[static_cast<std::uint16_t>(xx12 + 1)] = static_cast<std::uint8_t>(y2 >> 8);
@@ -1284,7 +1369,6 @@ namespace GameLogicTests
                 cpu.memory[dontclip] = off;
                 cpu.memory[swap] = seededSwap;
                 clip.dontclip = off;
-                draw.swap = seededSwap;
 
                 // LL147 is entered with XX15+5 in the accumulator, which is where its only caller
                 // leaves it.
@@ -1292,8 +1376,10 @@ namespace GameLogicTests
                 const Elite::Testing::RunResult run = cpu.CallSubroutine((entry == 0) ? ll145 : ll147, 400'000);
                 Assert::IsTrue(run.completed, L"the clipper returned");
 
-                const bool missed = (entry == 0) ? Elite::ClipLine(draw, geometry, math, clip)
-                                                 : Elite::ClipLineKeepingSwap(draw, geometry, math, clip, block[5]);
+                const Elite::ClipResult clipped = (entry == 0)
+                                                    ? Elite::ClipLine(line, geometry, math, clip)
+                                                    : Elite::ClipLineKeepingSwap(line, geometry, math, clip, seededSwap, block[5]);
+                const bool missed = clipped.rejected;
 
                 const std::wstring where =
                   Widen(std::string(entry == 0 ? "LL145" : "LL147") + "(x1=" + std::to_string(x1) + ", y1=" + std::to_string(y1) +
@@ -1301,23 +1387,49 @@ namespace GameLogicTests
 
                 Assert::AreEqual(cpu.c, missed, (where + L": C").c_str());
 
-                const std::uint8_t ours[6] = {draw.x1, draw.y1, draw.x2, draw.y2, draw.xx15Plus4, draw.xx15Plus5};
-                for (std::size_t byte = 0; byte < 6u; ++byte)
+                /*
+                 * Four bytes, not six. `LL146` repacks the two clipped points into `X1`, `Y1`,
+                 * `X2` and `Y2` -- which ARE `XX15`'s first four -- and that is the routine's
+                 * answer, `ClipResult::line` since M2-c-2. `XX15+4` and `XX15+5` are working
+                 * bytes `LL109`'s swap steps on and nothing reads afterwards, so the port does
+                 * not model what the original leaves in them.
+                 */
+                if (!missed)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + byte)], ours[byte],
-                                   (where + L": XX15+" + std::to_wstring(byte)).c_str());
+                  const std::uint8_t ours[4] = {clipped.line.x1, clipped.line.y1, clipped.line.x2, clipped.line.y2};
+                  for (std::size_t byte = 0; byte < 4u; ++byte)
+                  {
+                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx15 + byte)], ours[byte],
+                                     (where + L": XX15+" + std::to_wstring(byte)).c_str());
+                  }
                 }
-                for (std::size_t byte = 0; byte < 6u; ++byte)
+                /*
+                 * `XX12+2` upwards, not the whole six. `XX12(1 0)` is the second end's y on the
+                 * way IN and one of the four bytes `LLX117` exchanges, so the original leaves the
+                 * FIRST end's y there -- and nothing reads it: `LL9` parts 9, 10 and 11 and
+                 * `BLINE` each write both bytes before every call, which is what makes the two
+                 * ends' y an argument rather than a channel. Since M2-c-2 they travel in `Line16`
+                 * and the swap is `std::swap` on the value, so the port does not write them back.
+                 * `XX12+2` up is a different matter: `LL83` and `LL115` work in those bytes and
+                 * `LL118` reads them, so they are still the workspace's until M2-c-3.
+                 *
+                 * And the four coordinates are only compared for a line that was ACCEPTED. `LL109`
+                 * returns with the carry set and no answer -- the original leaves `X1`..`Y2` half
+                 * written, `ClipResult` leaves them zero, and neither is a value any caller reads:
+                 * `LL9` part 10 and `BLINE` both branch on the carry first.
+                 */
+                for (std::size_t byte = 2; byte < 6u; ++byte)
                 {
                   Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx12 + byte)], geometry.xx12[byte],
                                    (where + L": XX12+" + std::to_wstring(byte)).c_str());
                 }
-                Assert::AreEqual(cpu.memory[xx13], clip.xx13, (where + L": XX13").c_str());
-                Assert::AreEqual(cpu.memory[swap], draw.swap, (where + L": SWAP").c_str());
+                Assert::AreEqual(cpu.memory[xx13], clipped.ends, (where + L": XX13").c_str());
+                Assert::AreEqual(cpu.memory[swap], clipped.swap, (where + L": SWAP").c_str());
+
+                // `Q` is the frame's and survives the call (§8, R22): `LL115` leaves its divisor
+                // and each of `LL118`'s clamps leaves whatever its loop stopped on. `R`, `S` and
+                // `T` are the slope helpers' own since M2-c-2 and are not modelled across it.
                 Assert::AreEqual(cpu.memory[qq], math.q, (where + L": Q").c_str());
-                Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-                Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
-                Assert::AreEqual(cpu.memory[tt], math.t, (where + L": T").c_str());
 
                 if ((off & 0x80u) != 0u)
                 {
@@ -1330,8 +1442,8 @@ namespace GameLogicTests
                 else
                 {
                   ++fitted;
-                  swapped += (draw.swap != seededSwap) ? 1u : 0u;
-                  untouched += (clip.xx13 == 0u && draw.swap == seededSwap) ? 1u : 0u;
+                  swapped += (clipped.swap != seededSwap) ? 1u : 0u;
+                  untouched += (clipped.ends == 0u && clipped.swap == seededSwap) ? 1u : 0u;
                 }
                 ++compared;
               }
@@ -1383,30 +1495,26 @@ namespace GameLogicTests
         for (std::uint32_t a = 0; a < 256u; ++a)
         {
           Cpu6502 cpu = oracle.Fresh();
-          Elite::MathWorkspace math;
 
           // Not zero: `ROL U` brings the old bits back up, so a cleared U would hide a port that
-          // dropped the rotate and assigned instead.
+          // dropped the rotate and assigned instead. Since M2-b the incoming U is a parameter.
           const std::uint8_t seededU = static_cast<std::uint8_t>((a * 7u + q * 13u) & 0x3Fu);
 
           cpu.memory[qq] = static_cast<std::uint8_t>(q);
           cpu.memory[uu] = seededU;
-          math.q = static_cast<std::uint8_t>(q);
-          math.u = seededU;
 
           cpu.a = static_cast<std::uint8_t>(a);
           const Elite::Testing::RunResult run = cpu.CallSubroutine(ll61, 100'000);
           Assert::IsTrue(run.completed, L"LL61 returned");
 
-          Elite::DivideToUR(math, static_cast<std::uint8_t>(a));
+          const Elite::Quotient16 quotient = Elite::DivideWideByLog(static_cast<std::uint8_t>(a), static_cast<std::uint8_t>(q), seededU);
 
           const std::wstring where =
             Widen("LL61(a=" + std::to_string(a) + ", Q=" + std::to_string(q) + ", U=" + std::to_string(seededU) + ")");
-          Assert::AreEqual(cpu.memory[rr], math.r, (where + L": R").c_str());
-          Assert::AreEqual(cpu.memory[uu], math.u, (where + L": U").c_str());
-          Assert::AreEqual(cpu.memory[ss], math.s, (where + L": S").c_str());
+          Assert::AreEqual(cpu.memory[rr], quotient.low, (where + L": R").c_str());
+          Assert::AreEqual(cpu.memory[uu], quotient.high, (where + L": U").c_str());
 
-          if (math.r == 50u && math.u == 50u)
+          if (quotient.low == 50u && quotient.high == 50u)
           {
             ++failed;
           }
@@ -1433,7 +1541,6 @@ namespace GameLogicTests
     public:
       std::uint32_t planets = 0;
       std::uint32_t explosions = 0;
-      std::uint32_t clouds = 0;
 
       void DrawPlanetOrSun() override
       {
@@ -1442,10 +1549,6 @@ namespace GameLogicTests
       void DrawExplosion() override
       {
         ++explosions;
-      }
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override
-      {
-        ++clouds;
       }
     };
   } // namespace
@@ -1566,8 +1669,8 @@ namespace GameLogicTests
 
       for (std::uint8_t shipType = 1; shipType <= Elite::SHIP_TYPE_COUNT; ++shipType)
       {
-        const std::uint16_t blueprint = Elite::BlueprintAddress(shipType);
-        if (blueprint == 0u)
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(shipType));
+        if (blueprint == nullptr)
         {
           continue;
         }
@@ -1583,15 +1686,15 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             Elite::Canvas canvas;
-            Elite::DrawWorkspace draw;
             Elite::GeometryWorkspace geometry;
             Elite::MathWorkspace math;
             Elite::ClipState clip;
             Elite::Projection screen;
-            Elite::ShipBlock work;
-            Elite::ShipBlock slot;
+            Elite::Ship work;
+            Elite::Ship slot;
             Elite::LineHeap heap;
             CountingDrawEffects effects;
+            Elite::Rng rng; // no placement here is killed, so the seeding never reads it
 
             cpu.AddTrap(doexp);
             cpu.AddTrap(planet);
@@ -1608,38 +1711,40 @@ namespace GameLogicTests
               cpu.memory[static_cast<std::uint16_t>(xx2 + byte)] = 0;
             }
 
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
             for (std::size_t byte = 0; byte < 9u; ++byte)
             {
               cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = placement.position[byte];
-              work[byte] = placement.position[byte];
+              shipBytes[byte] = placement.position[byte];
             }
+            work = Elite::Ship::FromBytes(shipBytes);
             for (std::size_t byte = 0; byte < 18u; ++byte)
             {
               cpu.memory[static_cast<std::uint16_t>(inwk + 9u + byte)] = orientation[byte];
-              work[9u + byte] = orientation[byte];
+              PokeShip(work, 9u + byte, orientation[byte]);
             }
             cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = placement.state;
-            work[Elite::SHIP_STATE_OFFSET] = placement.state;
+            work.state = placement.state;
             cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
             cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-            work[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
-            work[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
+            work.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
 
-            cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint);
-            cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+            cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address);
+            cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
             cpu.memory[inf] = static_cast<std::uint8_t>(SLOT_AT);
             cpu.memory[static_cast<std::uint16_t>(inf + 1)] = static_cast<std::uint8_t>(SLOT_AT >> 8);
             cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)] = 0x5A;
             cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 30)] = 0xA5;
-            slot[28] = 0x5A;
-            slot[30] = 0xA5;
+            slot.acceleration = 0x5A;
+            slot.pitchCounter = 0xA5;
             cpu.memory[type] = shipType;
             cpu.memory[dontclip] = 0;
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ll9, 4'000'000);
             Assert::IsTrue(run.completed, L"LL9 returned");
 
-            Elite::DrawShip(canvas, draw, geometry, math, clip, screen, work, slot, heap, blueprint, shipType, effects);
+            Elite::DrawShip(canvas, geometry, math, clip, screen, work, slot, heap, *blueprint, Elite::TypeOf(shipType), effects, rng,
+                            false);
 
             const std::wstring where = Widen("LL9(type=" + std::to_string(shipType) + "): ") + placement.what;
 
@@ -1648,19 +1753,21 @@ namespace GameLogicTests
 
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                                (where + L": INWK+" + std::to_wstring(byte)).c_str());
             }
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)], slot[28], (where + L": the slot's byte 28").c_str());
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 30)], slot[30], (where + L": the slot's byte 30").c_str());
-            // `XX18` is the ship's position as the face loop leaves it, and the `ovflw` retry is
-            // the only thing that changes it after the dot products -- so comparing it is how a
-            // retry that ran, or failed to, is seen from outside the routine.
-            for (std::size_t byte = 0; byte < 9u; ++byte)
-            {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("XX18") + byte)], geometry.xx18[byte],
-                               (where + L": XX18+" + std::to_wstring(byte)).c_str());
-            }
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)], slot.acceleration, (where + L": the slot's byte 28").c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 30)], slot.pitchCounter, (where + L": the slot's byte 30").c_str());
+            /*
+             * `XX18` was compared here until M2-c-3, because the `ovflw` retry is the only thing
+             * that changes it after the dot products and comparing it was how a retry that ran, or
+             * failed to, could be seen from outside. It is `LL9`'s own scratch and is a local now,
+             * so what pins the retry is `XX2` below: every face's visibility is the magnitude of a
+             * dot product taken with the position the retry left, so a retry that ran when it
+             * should not have, or halved the wrong byte, changes the answer for that face. Over
+             * thirty-three blueprints and five placements a systematically wrong retry cannot
+             * leave all of them alone -- and the heap and the screen are compared as well.
+             */
 
             /*
              * Twelve of `XX2`'s sixteen bytes, and the four left out are the ones it SHARES with
@@ -1685,7 +1792,6 @@ namespace GameLogicTests
                                (where + L": XX3+" + std::to_wstring(byte)).c_str());
             }
 
-            Assert::AreEqual<std::uint32_t>(0u, effects.clouds, (where + L": no cloud was seeded").c_str());
             Assert::AreEqual<std::uint32_t>(0u, effects.planets, (where + L": not a planet").c_str());
             Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.trapHits.size()), effects.explosions,
                                             (where + L": the explosion seam agreed").c_str());
@@ -1693,15 +1799,15 @@ namespace GameLogicTests
             // Did the edge loop stop because the blueprint's own heap allowance ran out? That is
             // the one path in `LL9` a whole-heap comparison cannot distinguish from the loop simply
             // finishing, so it is counted.
-            if (heap.Read(HEAP_AT) >= Elite::ShipByte(static_cast<std::uint16_t>(blueprint + 5u)))
+            if (heap.Read(Elite::HeapOffset::FromAddress(HEAP_AT)) >= blueprint->heapBytes)
             {
               ++heapFilled;
             }
-            if (heap.Read(HEAP_AT) == 8u)
+            if (heap.Read(Elite::HeapOffset::FromAddress(HEAP_AT)) == 8u)
             {
               ++asPoints;
             }
-            else if (heap.Read(HEAP_AT) >= 4u)
+            else if (heap.Read(Elite::HeapOffset::FromAddress(HEAP_AT)) >= 4u)
             {
               ++drawn;
             }

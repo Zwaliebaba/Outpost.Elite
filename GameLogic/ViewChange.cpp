@@ -47,13 +47,10 @@ namespace Elite
     }
   }
 
-  void DrawScreenRule(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _row) noexcept
+  void DrawScreenRule(Canvas& _canvas, std::uint8_t _row) noexcept
   {
-    _draw.y1 = _row; // 6502: STX Y1
-    _draw.x1 = 0u;   // 6502: LDX #0 / STX X1
-    _draw.x2 = 255u; // 6502: DEX / STX X2
-
-    DrawHorizontalLine(_canvas, _draw); // 6502: JMP HLOIN, a tail call
+    // 6502: STX Y1 / LDX #0 / STX X1 / DEX / STX X2 / JMP HLOIN -- a tail call.
+    DrawHorizontalLine(_canvas, 0u, 255u, _row);
   }
 
   void ToggleVerticalEdge(Canvas& _canvas, std::uint16_t _cell, std::uint8_t _pattern, std::uint8_t _rows) noexcept
@@ -74,16 +71,16 @@ namespace Elite
     }
   }
 
-  void DrawFullBorder(Canvas& _canvas, DrawWorkspace& _draw) noexcept
+  void DrawFullBorder(Canvas& _canvas) noexcept
   {
-    DrawScreenRule(_canvas, _draw, BOTTOM_RULE_ROW); // 6502: LDX #199 / JSR BOXS
+    DrawScreenRule(_canvas, BOTTOM_RULE_ROW); // 6502: LDX #199 / JSR BOXS
 
     // 6502: LDA #&FF / STA SCBASE+&1F1F -- the corner byte the rule stops one short of. The
     // canvas is laid out from SCBASE contiguously, so the address IS the offset.
     _canvas.Write(BOTTOM_RIGHT_CORNER, 0xFFu);
 
     // 6502: LDX #25 / EQUB &2C -- and 25 is what falls through into `BOX2` (§6.79).
-    DrawBorder(_canvas, _draw, BORDER_ROWS_TEXT_SCREEN);
+    DrawBorder(_canvas, BORDER_ROWS_TEXT_SCREEN);
   }
 
   void DrawColourBand(Canvas& _canvas, std::uint16_t _cell) noexcept
@@ -108,21 +105,21 @@ namespace Elite
     DrawColourBand(_canvas, 37u * 8u); // 6502: SCBASE+37*8, and it FALLS INTO BLUEBANDS
   }
 
-  void DrawBorder(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _rows) noexcept
+  void DrawBorder(Canvas& _canvas, std::uint8_t _rows) noexcept
   {
-    _draw.t2 = _rows; // 6502: STX T2
+    const std::uint8_t t = _rows; // 6502: STX T -- the kernel's byte, a local since M2-b
 
     // 6502: LDY #LO(SCBASE+3*8) / STY SC / LDY #HI(SCBASE+3*8) / LDA #%00000011 / JSR BOXS2.
     ToggleVerticalEdge(_canvas, 3u * 8u, 0x03u, _rows);
 
     // 6502: the same again at cell 36 with the opposite two pixels, and the count comes back out
     // of `T2` rather than out of X -- `BOXS2` leaves X at zero.
-    ToggleVerticalEdge(_canvas, 36u * 8u, 0xC0u, _draw.t2);
+    ToggleVerticalEdge(_canvas, 36u * 8u, 0xC0u, t);
 
     // 6502: LDA #1 / STA SCBASE+&118 -- one byte, in cell 35 of the top character row.
     _canvas.Write(0x118u, 1u);
 
-    DrawScreenRule(_canvas, _draw, 0u); // 6502: LDX #0, and it falls into BOXS
+    DrawScreenRule(_canvas, 0u); // 6502: LDX #0, and it falls into BOXS
   }
 
   void ForgetScannerBlips(Bubble& _bubble) noexcept
@@ -144,8 +141,8 @@ namespace Elite
       }
 
       // 6502: JSR GINF / LDY #31 / LDA (INF),Y / AND #%11101111 / STA (INF),Y.
-      ShipBlock& block = _bubble.blocks[slot];
-      block[31] = static_cast<std::uint8_t>(block[31] & 0xEFu);
+      Ship& block = _bubble.blocks[slot];
+      block.state = Without(block.state, ShipStateBit::OnScanner);
     }
   }
 
@@ -156,12 +153,11 @@ namespace Elite
     _effects.SetRasterMode(0x04u);  // 6502: LDA #%100, and it falls into SETL1
   }
 
-  void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, GeometryWorkspace& _geometry, ScreenState& _screen,
-                     Bubble& _bubble, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,
-                     SightEffects& _effects) noexcept
+  void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
+                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, SightEffects& _effects) noexcept
   {
     // 6502: JSR BOX2 -- at its label, so eighteen rows: the space view's height (§6.79).
-    DrawBorder(_canvas, _draw, BORDER_ROWS_SPACE_VIEW);
+    DrawBorder(_canvas, BORDER_ROWS_SPACE_VIEW);
 
     _screen.colourBank = COLOUR_BANK_DASHBOARD; // 6502: LDA #&91 / STA abraxas
     _screen.bitmapMode = BITMAP_MODE_DASHBOARD; // 6502: LDA #%11010000 / STA caravanserai
@@ -184,7 +180,7 @@ namespace Elite
 
       // 6502: JSR DIALS -- all seven dials and the compass, on a dashboard that has just arrived
       // as a picture with every bar empty.
-      DrawDials(_canvas, _draw, _math, _geometry, _flight, _status, _fuel, _compass, _bubble);
+      DrawDials(_canvas, _draw, _flight, _status, _fuel, _compass, _bubble);
     }
 
     DrawColourBands(_canvas); // 6502: .nearlyxmas JSR BLUEBAND
@@ -193,9 +189,9 @@ namespace Elite
     _screen.dashboardShown = 0xFFu; // 6502: LDA #&FF / STA DFLAG
   }
 
-  void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, GeometryWorkspace& _geometry, TextState& _text,
-                         ScreenState& _screen, Bubble& _bubble, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
-                         Compass& _compass, SightEffects& _effects, std::uint8_t _view) noexcept
+  void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
+                         const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,
+                         SightEffects& _effects, std::uint8_t _view) noexcept
   {
     /*
      * 6502: LDA #&04 / STA SC / LDA #&60 / STA SC+1 / LDX #24 / .BOL3 LDA #&10 / LDY #31 /
@@ -243,7 +239,7 @@ namespace Elite
     // so the space view and view 13 never reach anything below this.
     if (_view == 0u || _view == 13u)
     {
-      ShowDashboard(_canvas, _draw, _math, _geometry, _screen, _bubble, _flight, _status, _fuel, _compass, _effects);
+      ShowDashboard(_canvas, _draw, _screen, _bubble, _flight, _status, _fuel, _compass, _effects);
       return;
     }
 
@@ -282,13 +278,13 @@ namespace Elite
       }
     }
 
-    DrawScreenRule(_canvas, _draw, 199u); // 6502: .BOX LDX #199 / JSR BOXS
+    DrawScreenRule(_canvas, 199u); // 6502: .BOX LDX #199 / JSR BOXS
 
     _canvas.Write(0x1F1Fu, 0xFFu); // 6502: LDA #&FF / STA SCBASE+&1F1F
 
     // 6502: LDX #25 / EQUB &2C -- and the `&2C` eats `BOX2`'s own `LDX #18`, so the border is the
     // whole screen's height rather than the space view's (§6.79).
-    DrawBorder(_canvas, _draw, BORDER_ROWS_TEXT_SCREEN);
+    DrawBorder(_canvas, BORDER_ROWS_TEXT_SCREEN);
   }
 
   void SetUpScreen(FlightScreen& _screen, std::uint8_t _view) noexcept
@@ -324,9 +320,8 @@ namespace Elite
     _screen.text.column = 1u; // 6502: LDA #1 / STA XC
     _screen.text.row = 1u;    // 6502: STA YC
 
-    SetUpScreenPixels(_screen.canvas, _screen.draw, _screen.math, _screen.geometry, _screen.text, _screen.screen, _screen.bubble,
-                      _screen.flight, _screen.status, _screen.commander.At(Field::Fuel), _screen.compass, _screen.sight,
-                      _screen.view); // 6502: JSR TTX66K
+    SetUpScreenPixels(_screen.canvas, _screen.draw, _screen.text, _screen.screen, _screen.bubble, _screen.flight, _screen.status,
+                      _screen.commander.fuel, _screen.compass, _screen.sight, _screen.view); // 6502: JSR TTX66K
 
     // 6502: LDX QQ22+1 / BEQ OLDBOX / JSR ee3 -- the hyperspace countdown outlives a screen change
     // and is reprinted, because the screen it was on has just been wiped.
@@ -365,12 +360,12 @@ namespace Elite
       _screen.spaceView = _to;  // 6502: .LQ STX VIEW
       SetUpScreen(_screen, 0u); // 6502: JSR TT66, with A zero, so it becomes the space view
 
-      DrawLaserSights(_screen.canvas, _screen.math, _screen.commander, _screen.trumbles, _screen.spaceView,
+      DrawLaserSights(_screen.canvas, _screen.commander, _screen.trumbles, _screen.spaceView,
                       _screen.sight); // 6502: JSR SIGHT
 
       // 6502: JMP NWSTARS -- a whole new field, because there was no space view to keep.
-      SeedStardustAndClearShips(_screen.canvas, _screen.draw, _screen.dust, _screen.rng, _screen.heaps, _screen.bubble, _screen.work,
-                                _screen.flight, _screen.view, false);
+      SeedStardustAndClearShips(_screen.canvas, _screen.dust, _screen.rng, _screen.heaps, _screen.bubble, _screen.work, _screen.flight,
+                                _screen.view, false);
       return;
     }
 
@@ -386,12 +381,12 @@ namespace Elite
 
     // 6502: JSR FLIP -- the dust is MIRRORED rather than replaced, which is why the stars look
     // familiar for a moment after a view change.
-    FlipStardust(_screen.canvas, _screen.draw, _screen.dust);
+    FlipStardust(_screen.canvas, _screen.dust);
 
     // 6502: JSR WPSHPS, and then it falls into SIGHT.
-    ClearAllShips(_screen.canvas, _screen.draw, _screen.heaps, _screen.bubble, _screen.work, _screen.flight, _screen.view);
+    ClearAllShips(_screen.canvas, _screen.heaps, _screen.bubble, _screen.work, _screen.flight, _screen.view);
 
-    DrawLaserSights(_screen.canvas, _screen.math, _screen.commander, _screen.trumbles, _screen.spaceView, _screen.sight);
+    DrawLaserSights(_screen.canvas, _screen.commander, _screen.trumbles, _screen.spaceView, _screen.sight);
   }
 
   void Warp(FlightScreen& _screen) noexcept
@@ -405,7 +400,7 @@ namespace Elite
      */
     const std::size_t slot = static_cast<std::size_t>(_screen.bubble.junk) + 2u;
     const std::uint8_t occupied = (slot < _screen.bubble.slots.size()) ? _screen.bubble.slots[slot] : 0u;
-    const std::uint8_t station = _screen.bubble.counts[SHIP_TYPE_STATION];
+    const std::uint8_t station = _screen.bubble.Count(ShipType::Station);
 
     if ((occupied | station | _screen.status.midJump) != 0u)
     {
@@ -423,7 +418,7 @@ namespace Elite
      * A negative z is a body BEHIND you, and you cannot warp into something behind you, so its
      * distance is not tested at all.
      */
-    if ((_screen.bubble.blocks[0][8] & 0x80u) == 0u)
+    if ((_screen.bubble.blocks[0].z.sgn & 0x80u) == 0u)
     {
       if (LargestAxis(_screen.bubble, 0u) < 2u)
       {
@@ -434,7 +429,7 @@ namespace Elite
 
     // 6502: .WA3 LDY K%+NI%+8 / BMI WA2 / LDY #NI% / JSR m / CMP #2 / BCC WA1 -- the same for the
     // sun, through `m` rather than `MAS2` because there is no accumulator worth keeping this time.
-    if ((_screen.bubble.blocks[1][8] & 0x80u) == 0u)
+    if ((_screen.bubble.blocks[1].z.sgn & 0x80u) == 0u)
     {
       if (LargestAxis(_screen.bubble, 1u) < 2u)
       {
@@ -444,14 +439,13 @@ namespace Elite
     }
 
     // 6502: .WA2 LDA #&81 / STA S / STA R / STA P -- &81 is -1 in sign-magnitude with the low bit
-    // set, so `ADD` subtracts the same fixed amount from each body's z.
-    _screen.math.s = 0x81u;
-    _screen.math.r = 0x81u;
-    _screen.math.p = 0x81u;
+    // set, so `ADD` subtracts the same fixed amount from each body's z: (A P) is the sign byte
+    // over &81, and (S R) is &81 twice.
+    constexpr SignMag16 WARP_STEP{0x81u, 0x81u};
 
     // 6502: LDA K%+8 / JSR ADD / STA K%+8, and the same for the sun.
-    _screen.bubble.blocks[0][8] = AddSigned(_screen.math, _screen.bubble.blocks[0][8]).high;
-    _screen.bubble.blocks[1][8] = AddSigned(_screen.math, _screen.bubble.blocks[1][8]).high;
+    _screen.bubble.blocks[0].z.sgn = AddSigned(SignMag16{0x81u, _screen.bubble.blocks[0].z.sgn}, WARP_STEP).high;
+    _screen.bubble.blocks[1].z.sgn = AddSigned(SignMag16{0x81u, _screen.bubble.blocks[1].z.sgn}, WARP_STEP).high;
 
     /*
      * 6502: LDA #1 / STA QQ11 / STA MCNT / LSR A / STA EV / LDX VIEW / JMP LOOK1.

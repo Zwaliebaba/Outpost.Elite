@@ -159,10 +159,10 @@ namespace Elite
     }
   }
 
-  void Refund(CommanderBlock& _commander, std::uint8_t _view, std::uint8_t _newPower, std::uint8_t _fuel) noexcept
+  void Refund(Commander& _commander, std::uint8_t _view, std::uint8_t _newPower, std::uint8_t _fuel) noexcept
   {
-    const std::size_t mount = static_cast<std::size_t>(Field::Lasers) + static_cast<std::size_t>(_view);
-    const std::uint8_t existing = _commander.bytes[mount];
+    std::uint8_t& mount = _commander.lasers[_view];
+    const std::uint8_t existing = mount;
 
     /*
      * 6502: LDA LASER,X / BEQ ref3 -- an empty mount is refunded nothing, and the chain of CMPs is
@@ -189,10 +189,10 @@ namespace Elite
     }
 
     // 6502: ref3 -- LDA T1 / STA LASER,X.
-    _commander.bytes[mount] = _newPower;
+    mount = _newPower;
   }
 
-  void EquipShipScreen(TradeScreen& _screen, CommanderBlock& _commander, std::uint8_t _techLevel) noexcept
+  void EquipShipScreen(TradeScreen& _screen, Commander& _commander, std::uint8_t _techLevel) noexcept
   {
     /*
      * 6502: et11's `JMP EQSHP` -- the screen redraws itself after every purchase, so this is a loop
@@ -225,7 +225,7 @@ namespace Elite
         highest = TECH_CAP_VALUE;
       }
 
-      const std::uint8_t fuel = _commander.At(Field::Fuel);
+      const std::uint8_t fuel = _commander.fuel;
 
       // 6502: EQL1 -- LDX #1 and count up to Q, so the fuel line is item 1 on screen and item 0 in
       // the table.
@@ -305,13 +305,13 @@ namespace Elite
       // 6502: BNE et0 -- item 0 is fuel, and a full tank is not an error.
       if (item == 0)
       {
-        _commander.At(Field::Fuel) = FULL_TANK;
+        _commander.fuel = FULL_TANK;
       }
 
       // 6502: et0 -- CMP #1, the missile.
       if (!alreadyFitted && item == 1)
       {
-        const std::uint8_t missiles = static_cast<std::uint8_t>(_commander.At(Field::Missiles) + 1u);
+        const std::uint8_t missiles = static_cast<std::uint8_t>(_commander.missiles + 1u);
         complaint = ALL_TOKEN;
         if (missiles >= MAX_MISSILES)
         {
@@ -319,7 +319,7 @@ namespace Elite
         }
         else
         {
-          _commander.At(Field::Missiles) = missiles;
+          _commander.missiles = missiles;
           _screen.effects.ResetMissileIndicators();
         }
       }
@@ -330,13 +330,13 @@ namespace Elite
         complaint = LARGE_CARGO_TOKEN;
         if (item == 2)
         {
-          if (_commander.At(Field::CargoCapacity) == LARGE_HOLD_CAPACITY)
+          if (_commander.cargoCapacity == LARGE_HOLD_CAPACITY)
           {
             alreadyFitted = true;
           }
           else
           {
-            _commander.At(Field::CargoCapacity) = LARGE_HOLD_CAPACITY;
+            _commander.cargoCapacity = LARGE_HOLD_CAPACITY;
           }
         }
       }
@@ -345,13 +345,13 @@ namespace Elite
       if (!alreadyFitted && item == 3)
       {
         ++complaint;
-        if (_commander.At(Field::Ecm) != 0)
+        if (_commander.ecm != 0)
         {
           alreadyFitted = true;
         }
         else
         {
-          _commander.At(Field::Ecm) = 0xFF;
+          _commander.ecm = 0xFF;
         }
       }
 
@@ -369,13 +369,13 @@ namespace Elite
         complaint = FUEL_SCOOPS_TOKEN;
         if (item == 6)
         {
-          if (_commander.At(Field::FuelScoops) != 0)
+          if (_commander.fuelScoops != 0)
           {
             alreadyFitted = true;
           }
           else
           {
-            _commander.At(Field::FuelScoops) = 0xFF;
+            _commander.fuelScoops = 0xFF;
           }
         }
       }
@@ -387,15 +387,15 @@ namespace Elite
       struct Fitting
       {
         std::uint8_t item;
-        Field field;
+        std::uint8_t Commander::* field; ///< the equipment byte the item fits into
         std::uint8_t fittedValue;
       };
       static constexpr Fitting FITTINGS[] = {
-        {7, Field::EscapePod, 0xFF}, // 6502: DEC ESCP
-        {8, Field::EnergyBomb, ENERGY_BOMB_FITTED},
-        {9, Field::EnergyUnit, 1}, // 6502: INC ENGY, from a known zero
-        {10, Field::DockingComputer, 0xFF},
-        {11, Field::GalacticDrive, 0xFF},
+        {7, &Commander::escapePod, 0xFF}, // 6502: DEC ESCP
+        {8, &Commander::energyBomb, ENERGY_BOMB_FITTED},
+        {9, &Commander::energyUnit, 1}, // 6502: INC ENGY, from a known zero
+        {10, &Commander::dockingComputer, 0xFF},
+        {11, &Commander::galacticDrive, 0xFF},
       };
 
       for (const Fitting& fitting : FITTINGS)
@@ -409,13 +409,13 @@ namespace Elite
         {
           continue;
         }
-        if (_commander.At(fitting.field) != 0)
+        if (_commander.*fitting.field != 0)
         {
           alreadyFitted = true;
         }
         else
         {
-          _commander.At(fitting.field) = fitting.fittedValue;
+          _commander.*fitting.field = fitting.fittedValue;
         }
       }
 

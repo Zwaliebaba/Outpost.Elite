@@ -47,8 +47,9 @@ namespace Elite
    * that, and the reason it is cleared rather than tested is that everything after the first digit
    * prints even when it is a zero.
    */
-  void PrintNumber(TextSink& _sink, NumberWorkspace& _work, bool _withPoint) noexcept
+  std::uint8_t PrintNumber(TextSink& _sink, NumberBytes _value, std::uint8_t _digits, bool _withPoint) noexcept
   {
+    std::uint8_t u = _digits; // 6502: U, which the routine rewrites and leaves
     /*
      * 6502: LDX #11 / STX T / PHP / BCC TT30.
      *
@@ -61,13 +62,13 @@ namespace Elite
     if (_withPoint)
     {
       --t;
-      --_work.u;
+      --u;
     }
 
     // 6502: TT30. XX17 counts the digits down; U becomes the position the point falls at.
     std::uint8_t xx17 = 11;
-    _work.u = static_cast<std::uint8_t>(11u - _work.u);
-    ++_work.u;
+    u = static_cast<std::uint8_t>(11u - u);
+    ++u;
 
     std::uint8_t s = 0;
     std::uint8_t digit = 0;
@@ -81,7 +82,8 @@ namespace Elite
         bool noBorrow = true;
         for (int index = 3; index >= 0; --index)
         {
-          const std::uint16_t difference = static_cast<std::uint16_t>(_work.k[index]) - TEN_TO_THE_ELEVENTH[index] - (noBorrow ? 0u : 1u);
+          const std::uint16_t difference = static_cast<std::uint16_t>(_value[static_cast<std::size_t>(index)]) - TEN_TO_THE_ELEVENTH[index] -
+                                           (noBorrow ? 0u : 1u);
           remainder[index] = static_cast<std::uint8_t>(difference);
           noBorrow = difference < 0x100u;
         }
@@ -95,7 +97,7 @@ namespace Elite
 
         for (int index = 0; index < 4; ++index)
         {
-          _work.k[index] = remainder[index];
+          _value[static_cast<std::size_t>(index)] = remainder[index];
         }
         s = static_cast<std::uint8_t>(top);
         ++digit;
@@ -117,8 +119,8 @@ namespace Elite
       }
       else
       {
-        --_work.u;
-        if ((_work.u & 0x80u) == 0u)
+        --u;
+        if ((u & 0x80u) == 0u)
         {
           // 6502: BPL TT34 -- still inside the number's own width, so nothing is printed at all.
           print = false;
@@ -143,8 +145,8 @@ namespace Elite
       --xx17;
       if ((xx17 & 0x80u) != 0u)
       {
-        // 6502: rT10 -- eleven digits done.
-        return;
+        // 6502: rT10 -- eleven digits done, and `U` goes back as the routine leaves it.
+        return u;
       }
 
       if (xx17 == 0 && _withPoint)
@@ -166,8 +168,8 @@ namespace Elite
         bool carry = false;
         for (int index = 3; index >= 0; --index)
         {
-          const ShiftResult shifted = RotateLeftValue(_work.k[index], carry);
-          _work.k[index] = shifted.value;
+          const ShiftResult shifted = RotateLeftValue(_value[static_cast<std::size_t>(index)], carry);
+          _value[static_cast<std::size_t>(index)] = shifted.value;
           carry = shifted.carry;
         }
         s = RotateLeftValue(s, carry).value;
@@ -176,7 +178,7 @@ namespace Elite
       shiftLeft();
       for (int index = 0; index < 4; ++index)
       {
-        copy[index] = _work.k[index];
+        copy[index] = _value[static_cast<std::size_t>(index)];
       }
       copyHigh = s;
 
@@ -186,8 +188,8 @@ namespace Elite
       bool carry = false;
       for (int index = 3; index >= 0; --index)
       {
-        const AddResult sum = AddWithCarry(_work.k[index], copy[index], carry);
-        _work.k[index] = sum.value;
+        const AddResult sum = AddWithCarry(_value[static_cast<std::size_t>(index)], copy[index], carry);
+        _value[static_cast<std::size_t>(index)] = sum.value;
         carry = sum.carry;
       }
       s = AddWithCarry(copyHigh, s, carry).value;
@@ -200,11 +202,8 @@ namespace Elite
   {
     // 6502: TT11 -- STA U / LDA #0 / STA K / STA K+1 / STY K+2 / STX K+3. Only the low two bytes
     // carry a value; the caller's sixteen bits arrive in Y and X.
-    NumberWorkspace work;
-    work.u = _digits;
-    work.k[2] = static_cast<std::uint8_t>(_value >> 8);
-    work.k[3] = static_cast<std::uint8_t>(_value);
-    PrintNumber(_sink, work, _withPoint);
+    const NumberBytes value = {0u, 0u, static_cast<std::uint8_t>(_value >> 8), static_cast<std::uint8_t>(_value)};
+    (void)PrintNumber(_sink, value, _digits, _withPoint);
   }
 
   void PrintByteValue(TextSink& _sink, std::uint8_t _value, bool _withPoint) noexcept

@@ -9,137 +9,76 @@ namespace Elite
 {
 
   /*
-   * The zero-page scratch bytes the arithmetic routines share.
+   * The two zero-page bytes that are still a channel between routines, and nothing else.
    *
-   * In the original these are fixed addresses that every routine reads and writes by name, and
-   * callers set some of them up before a call and read others afterwards. The port keeps that
-   * shape rather than converting each routine to parameters and return values, because the
-   * calling convention *is* part of the behaviour being verified: a routine that leaves P holding
-   * the low byte is relied upon by its caller three files away.
+   * In the original these are fixed addresses every routine reads and writes by name, and callers
+   * set some of them up before a call and read others afterwards. M2-b took the arithmetic kernel
+   * off them -- it takes its operands as values and hands its answers back as structs (`Product`,
+   * `Quotient`, `SignedSum` and kin below) -- and M2-c took the drawing. What is left is two bytes
+   * that OUTLIVE their writer on purpose, both named in Modernize.md section 8, and this struct
+   * exists to say so rather than to hold scratch.
    *
-   * 6502: P, Q, R, S, T, T1, U.
+   * 6502: Q and K2.
    */
   struct MathWorkspace
   {
-    // P is a three-byte block in the original, and the wider routines use all of it.
-    std::uint8_t p = 0;
-    std::uint8_t p1 = 0;
-    std::uint8_t p2 = 0;
-
+    /*
+     * 6502: Q -- the frame's `Q` (Modernize.md section 8, risk R22).
+     *
+     * `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte.
+     * `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two
+     * routines and the clipper's `LL115` and `LL118` write it for that read, as the original's
+     * `STA Q`s do. `LOIN` writes it in the original and has kept it local here since slice 1d,
+     * which is the one place this port's `Q` is not the game's -- R22, and the owner's to rule on.
+     */
     std::uint8_t q = 0;
-    std::uint8_t r = 0;
-    std::uint8_t s = 0;
-    std::uint8_t t = 0;
-    std::uint8_t t1 = 0;
-    std::uint8_t u = 0;
 
     /*
-     * 6502: CNT -- zero page 170, a counter with FOURTEEN users.
+     * 6502: K2 -- the BOTTOM BYTE of the second four-byte block, and only that byte.
      *
-     * `LL9` parts 6 and 8, `BLINE`, `CIRCLE2`, `PLS22`, `SUN` parts 1 and 3, `TACTICS`, `DOEXP`,
-     * `PTCLS2`, `SPIN` and `STATUS` all write it and read it back. Every one of them initialises it
-     * before reading, so nothing hands it between units and separate copies would be unobservable
-     * -- which is the argument that kept `XX2` and `K3` apart. Here it costs one field to be right
-     * instead of unobservably-not-wrong, so it lives here rather than in the first workspace that
-     * happened to need it (§6.49).
+     * `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its
+     * first addition, so what it gets is whatever the last planet or sun drawer left there a frame
+     * ago (M2-b, section 8). `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is,
+     * for that read alone; the other three bytes of the block are the ellipse's axes and travel as
+     * an `EllipseAxes` value since M2-c-3.
      */
-    std::uint8_t cnt = 0;
-
-    /*
-     * 6502: TGT and CNT2 -- 168 and 171, and shared the same way `CNT` is (§6.49).
-     *
-     * `TGT` is what a walk counts up to: `PLS2` sets it to 31 for a meridian, `PL9` to 64 for a
-     * crater, `SUN` to its own, and `DOEXP` and `PTCLS2` to theirs. `CNT2` is the angle a walk is
-     * at, and `TACTICS`, `DOCKIT` and `TITLE` use it for something else entirely.
-     *
-     * They are here for the same reason and with the same argument: every user sets them before
-     * reading, so separate copies would be unobservable, and one field costs less than the proof.
-     */
-    std::uint8_t tgt = 0;
-    std::uint8_t cnt2 = 0;
-
-    /*
-     * 6502: XX(1 0) and YY(1 0) -- two sixteen-bit scratch values at zero page 93 and 95.
-     *
-     * They are here rather than with the stardust, which is where they were first put and where
-     * only their FIRST caller lives (§6.45). `EDGES`, `WPLS` and three of `SUN`'s four parts read
-     * and write the same two labels, and `SUNX` sits immediately after them at 97 -- so they are a
-     * shared coordinate pair, not a workspace one routine owns. The two users are never live at
-     * the same time, which is exactly why nothing would ever have failed.
-     */
-    std::uint8_t xx = 0;
-    std::uint8_t xxNext = 0;
-    std::uint8_t yy = 0;
-    std::uint8_t yyNext = 0;
-
-    // 6502: widget -- a scratch byte the logarithm routines use to hold their first operand
-    // while the index register is busy addressing a table.
-    std::uint8_t widget = 0;
-
-    // 6502: K, a four-byte result block that several routines fill.
-    std::uint8_t k[4] = {0, 0, 0, 0};
-
-    /*
-     * 6502: K2 -- a SECOND four-byte block, and separate storage rather than a second use of K.
-     *
-     * `MV40` is what settles that: it holds a partial result in K2 while `MULT3` overwrites K, and
-     * then adds the two together. They are live at the same time, so folding them into one would
-     * lose the first. The original agrees -- K is at zero page 119 and K2 at 178, nowhere near each
-     * other.
-     */
-    std::uint8_t k2[4] = {0, 0, 0, 0};
+    std::uint8_t k2Low = 0;
   };
 
+  // ---- what the kernel answers with ------------------------------------------------------------
+
   /*
-   * What the shift-and-add multipliers leave behind, and the carry is not incidental.
+   * 6502: (A P) and the carry -- what the shift-and-add multipliers leave behind.
    *
    * Every one of them ends on a `ROR P` and neither the `DEX / BNE` above it nor the `RTS` below
    * touches the carry, so what a caller sees is that rotate's carry out -- the low bit of P before
    * the last shift. Three callers read it in an `ADC` or `SBC` with no `CLC`/`SEC` in between:
    * `MVEIT` after `MLTU2`, and the stardust after `MLU1` and `MLU2`. The port returned only the
    * byte until `MVEIT` came out one adrift in a ship's y coordinate (§6.33), and the stardust
-   * needed the same thing from a different multiplier.
+   * needed the same thing from a different multiplier. The LOW byte was left in `P` until M2-b, for
+   * `ADD` and the stardust to read from the workspace; it is a field now.
    */
-  struct WideResult
+  struct Product
   {
-    std::uint8_t high = 0;
+    std::uint8_t high = 0; ///< 6502: A
+    std::uint8_t low = 0;  ///< 6502: P
     bool carry = false;
+
+    /// The product as the sixteen-bit sign-magnitude pair `ADD` takes: (A P), high byte first.
+    [[nodiscard]] constexpr SignMag16 Pair() const noexcept
+    {
+      return SignMag16{low, high};
+    }
   };
 
-  /// 6502: MU11 -- (A P) = P * X, unsigned. Returns the high byte and the carry; the low byte is
-  /// left in P.
-  [[nodiscard]] WideResult MultiplyByX(MathWorkspace& _work, std::uint8_t _x) noexcept;
-
-  /// 6502: MULTU -- (A P) = P * Q, unsigned.
-  [[nodiscard]] WideResult MultiplyUnsigned(MathWorkspace& _work) noexcept;
-
-  /// 6502: MLU2 -- (A P) = |A| * Q, unsigned. The stardust reads its carry.
-  [[nodiscard]] WideResult MultiplyMagnitudeByQ(MathWorkspace& _work, std::uint8_t _a) noexcept;
-
-  /// 6502: MULT1 -- (A P) = Q * A for sign-magnitude operands. Returns the high byte, which
-  /// carries the sign; the low byte is left in P.
-  [[nodiscard]] std::uint8_t MultiplySigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
-
-  /// 6502: MULT12 -- (S R) = Q * A, sign-magnitude. The result is left in the workspace.
-  void MultiplySignedToSR(MathWorkspace& _work, std::uint8_t _a) noexcept;
-
-  /*
-   * 6502: SQUA2 -- (A P) = A * A for an A already known to be positive.
-   *
-   * Returns the carry, because `MAS3` reads it: it sums three squares with `JSR SQUA2 / ADC R` and
-   * no `CLC` between them, twice over. The fifteenth dropped flag -- and it is ALWAYS CLEAR, over
-   * every input either entry point can be given, which the exhaustive sweep asserts rather than
-   * argues. `MU1`, taken when A is zero, opens `CLC`; `MU11` ends on a `ROR P` that never carries
-   * out for a square.
-   *
-   * So `MAS3` was already right before this was modelled: an `ADC` cannot see a clear carry, which
-   * is §6.65's question answered the harmless way. `DVID4`'s carry is the same shape (§6.60);
-   * `DIL2`'s is not, because there it lands in an `SBC` (§6.70).
-   */
-  [[nodiscard]] WideResult SquareUnsigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
-
-  /// 6502: SQUA -- (A P) = |A| * |A|, clearing the sign bit first. Carries the same flag.
-  [[nodiscard]] WideResult Square(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  /// 6502: (A P+1 P) and the carry -- the sixteen-step multiply's twenty-four bit product.
+  struct Product24
+  {
+    std::uint8_t high = 0; ///< 6502: A
+    std::uint8_t mid = 0;  ///< 6502: P+1
+    std::uint8_t low = 0;  ///< 6502: P
+    bool carry = false;
+  };
 
   /// What the sign-magnitude addition hands back: the original returns the high byte in A and
   /// the low byte in X, and callers use both.
@@ -160,41 +99,186 @@ namespace Elite
      * every other caller reads `high` and `low` alone.
      */
     bool carry = false;
+
+    /// The sum as the pair the next `ADD` or `MAD` takes as its (S R).
+    [[nodiscard]] constexpr SignMag16 Pair() const noexcept
+    {
+      return SignMag16{low, high};
+    }
   };
 
-  /// 6502: ADD (with its MU8 and MU9 branches) -- (A X) = (A P) + (S R), sign-magnitude.
-  [[nodiscard]] AddSignedResult AddSigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  /// 6502: R and the carry -- the logarithm divide's answer, which `LL9` branches on.
+  struct Quotient
+  {
+    std::uint8_t value = 0; ///< 6502: R
+    bool carry = false;
+  };
 
-  /// 6502: MAD -- (A X) = Q * A + (S R). The multiply-accumulate the geometry code runs on.
-  [[nodiscard]] AddSignedResult MultiplyAndAdd(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  /// 6502: (U R) -- the sixteen-bit answer of `LL61`, which `LL9`'s projection reads both halves of.
+  struct Quotient16
+  {
+    std::uint8_t high = 0; ///< 6502: U
+    std::uint8_t low = 0;  ///< 6502: R
+  };
 
-  /// 6502: MU5 -- fills the four-byte K block with A. The original also clears carry; nothing
-  /// downstream reads that, so it is not modelled.
-  void FillK(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  /// 6502: (P+1 P) and T -- the long division's quotient and the sign it applies on the way out.
+  struct WideQuotient
+  {
+    std::uint8_t high = 0; ///< 6502: P+1
+    std::uint8_t low = 0;  ///< 6502: P
+    std::uint8_t sign = 0; ///< 6502: T -- the operands' signs, EORed, in bit 7
 
-  /// 6502: MU6 -- sets both low bytes of P to A.
-  void SetPairP(MathWorkspace& _work, std::uint8_t _a) noexcept;
+    /// 6502: LDA P / ORA T -- what the routine returns in A: the low byte with the sign on top.
+    [[nodiscard]] constexpr std::uint8_t Signed() const noexcept
+    {
+      return static_cast<std::uint8_t>(low | sign);
+    }
+  };
+
+  /// 6502: A and the carry from the logarithm multiply -- a byte scaled by another over 256.
+  struct LogProduct
+  {
+    std::uint8_t value = 0; ///< 6502: A
+    bool carry = false;
+  };
+
+  /*
+   * What `LL38` leaves behind, and the carry is part of it.
+   *
+   * The routine's own header says "C flag: set if the addition overflowed, clear otherwise", and it
+   * goes to some trouble to make that true -- the subtracting branch has an explicit `CLC` before
+   * its `RTS` that would otherwise be dead. `LL9`'s face-visibility loop reads it: a `BCS ovflw`
+   * there halves the ship's position and starts the face again. The port returned only the byte
+   * until `LL9` needed the flag, which is the third time a dropped register has come back (§6.33).
+   * `sign` is `S` on the way out -- flipped when the subtraction went past zero -- which the
+   * callers used to read back from the workspace.
+   */
+  struct SignedSum
+  {
+    std::uint8_t value = 0; ///< 6502: A
+    std::uint8_t sign = 0;  ///< 6502: S, afterwards
+    bool carry = false;
+  };
+
+  /// What `DVID4` leaves: the whole part in `P`, the fraction in `R`, and the carry `SPS2` passes
+  /// on to `SP2` (§6.60).
+  struct ScaledDivision
+  {
+    std::uint8_t whole = 0;    ///< 6502: P
+    std::uint8_t fraction = 0; ///< 6502: R -- the remainder scaled up by the divisor, through LL28's body
+    bool carry = false;
+  };
+
+  /// 6502: Q and the carry -- the square root, and the last bit to fall out of it.
+  struct Root
+  {
+    std::uint8_t value = 0; ///< 6502: Q
+    bool carry = false;
+  };
+
+  /*
+   * 6502: K(3 2 1 0) -- the four-byte block `MULT3` and `DVID3B` answer with and `MVT3` adds to.
+   *
+   * Three bytes of magnitude, low first, and a fourth holding the sign in bit 7 over the
+   * magnitude's top seven bits. Bytes 1 to 3 have the shape of a ship's coordinate, which is how
+   * `MV40` reads them: the bottom byte exists to carry into the one above it, and the answer is
+   * stored from K+1 upwards.
+   */
+  struct KBlock
+  {
+    std::uint8_t low = 0;  ///< 6502: K
+    std::uint8_t mid = 0;  ///< 6502: K+1
+    std::uint8_t high = 0; ///< 6502: K+2
+    std::uint8_t top = 0;  ///< 6502: K+3 -- seven bits of magnitude under the sign
+
+    /// 6502: MU5 -- fills the four-byte K block with A. The original also clears carry; nothing
+    /// downstream reads that, so it is not modelled.
+    [[nodiscard]] static constexpr KBlock Filled(std::uint8_t _value) noexcept
+    {
+      return KBlock{_value, _value, _value, _value};
+    }
+
+    /// 6502: K+1 to K+3 as INWK reads them -- the coordinate the block holds from its second byte.
+    [[nodiscard]] constexpr SignMag24 Coordinate() const noexcept
+    {
+      return SignMag24{mid, high, top};
+    }
+
+    [[nodiscard]] constexpr bool operator==(const KBlock&) const noexcept = default;
+  };
+
+  // ---- the multipliers ---------------------------------------------------------------------------
+
+  /// 6502: MU11 -- (A P) = P * X, unsigned, with no guard on a zero multiplier: `MULTU` is the
+  /// entry point that checks, and a zero here multiplies by 255 as the original would.
+  [[nodiscard]] Product MultiplyUnguarded(std::uint8_t _multiplicand, std::uint8_t _multiplier) noexcept;
+
+  /// 6502: MULTU -- (A P) = P * Q, unsigned.
+  [[nodiscard]] Product MultiplyUnsigned(std::uint8_t _multiplicand, std::uint8_t _multiplier) noexcept;
+
+  /// 6502: MLU2 -- (A P) = |A| * Q, unsigned. The stardust reads its carry.
+  [[nodiscard]] Product MultiplyMagnitude(std::uint8_t _value, std::uint8_t _multiplier) noexcept;
+
+  /*
+   * 6502: MULT1 -- (A P) = Q * A for sign-magnitude operands; the high byte carries the sign.
+   *
+   * 6502: MULT12 -- the same product stored as (S R). A caller that went on to `MAD` or `ADD` used
+   * to find it in the workspace; it hands the `Product`'s pair over instead.
+   */
+  [[nodiscard]] Product MultiplySigned(std::uint8_t _value, std::uint8_t _multiplier) noexcept;
+
+  /*
+   * 6502: SQUA2 -- (A P) = A * A for an A already known to be positive.
+   *
+   * Returns the carry, because `MAS3` reads it: it sums three squares with `JSR SQUA2 / ADC R` and
+   * no `CLC` between them, twice over. The fifteenth dropped flag -- and it is ALWAYS CLEAR, over
+   * every input either entry point can be given, which the exhaustive sweep asserts rather than
+   * argues. `MU1`, taken when A is zero, opens `CLC`; `MU11` ends on a `ROR P` that never carries
+   * out for a square.
+   *
+   * So `MAS3` was already right before this was modelled: an `ADC` cannot see a clear carry, which
+   * is §6.65's question answered the harmless way. `DVID4`'s carry is the same shape (§6.60);
+   * `DIL2`'s is not, because there it lands in an `SBC` (§6.70).
+   */
+  [[nodiscard]] Product SquareUnsigned(std::uint8_t _value) noexcept;
+
+  /// 6502: SQUA -- (A P) = |A| * |A|, clearing the sign bit first. Carries the same flag.
+  [[nodiscard]] Product Square(std::uint8_t _value) noexcept;
 
   /// 6502: MULTS -- (A P) = P * |A|, scaled: only five of the eight bits get an addition and the
   /// remaining three are shifted through, which divides the result down. Used where one operand
-  /// is known to be small.
-  [[nodiscard]] std::uint8_t MultiplyScaled(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  /// is known to be small. (6502: MU6 is its zero exit, which clears P and P+1; nothing reads the
+  /// second byte, so the port has no field for it.)
+  [[nodiscard]] Product MultiplyScaled(std::uint8_t _multiplicand, std::uint8_t _value) noexcept;
 
-  /// 6502: MLTU2 -- (A P+1 P) = (~A P) * Q, sixteen steps through the complemented multiplier.
-  [[nodiscard]] WideResult MultiplyWide(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  /// 6502: MLTU2 -- (A P+1 P) = (~A P) * Q, sixteen steps through the complemented multiplier:
+  /// `_high` arrives as the ONES' COMPLEMENT of the multiplicand's high byte, as the routine reads it.
+  [[nodiscard]] Product24 MultiplyWide(std::uint8_t _high, std::uint8_t _low, std::uint8_t _multiplier) noexcept;
+
+  // ---- the sign-magnitude adders -----------------------------------------------------------------
+
+  /// 6502: ADD (with its MU8 and MU9 branches) -- (A X) = (A P) + (S R), sign-magnitude. `_value`
+  /// is (A P) and `_addend` is (S R), each with its sign in the high byte's bit 7.
+  [[nodiscard]] AddSignedResult AddSigned(SignMag16 _value, SignMag16 _addend) noexcept;
+
+  /// 6502: MAD -- (A X) = Q * A + (S R). The multiply-accumulate the geometry code runs on.
+  [[nodiscard]] AddSignedResult MultiplyAndAdd(std::uint8_t _value, std::uint8_t _multiplier, SignMag16 _addend) noexcept;
+
+  // ---- the dividers ------------------------------------------------------------------------------
 
   /// 6502: DVID96 -- A = A / 96, keeping the sign bit. The tail TIS1 shares.
-  [[nodiscard]] std::uint8_t DivideBy96(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  [[nodiscard]] std::uint8_t DivideBy96(std::uint8_t _value) noexcept;
 
-  /// 6502: TIS1 -- (A ?) = (-X * A + (S R)) / 96, sign-magnitude.
-  [[nodiscard]] std::uint8_t MultiplyAddDivide96(MathWorkspace& _work, std::uint8_t _a, std::uint8_t _x) noexcept;
+  /// 6502: TIS1 -- (A ?) = (-X * A + (S R)) / 96, sign-magnitude. `_multiplier` is X, which the
+  /// routine stores in Q on the way in.
+  [[nodiscard]] std::uint8_t MultiplyAddDivide96(std::uint8_t _value, std::uint8_t _multiplier, SignMag16 _addend) noexcept;
 
   /// 6502: TIS2 -- A = A / Q, sign-magnitude, saturating at 96 when the magnitude is too large.
-  [[nodiscard]] std::uint8_t DivideByQ(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  [[nodiscard]] std::uint8_t DivideSigned(std::uint8_t _value, std::uint8_t _divisor) noexcept;
 
-  /// 6502: DVIDT -- (P+1 P) = (A P+1) / Q, sixteen-step long division. Returns the low byte with
-  /// the sign of the quotient applied.
-  [[nodiscard]] std::uint8_t DivideWide(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  /// 6502: DVIDT -- (P+1 P) = (A P+1) / Q, sixteen-step long division. `_high` is A and `_low` is
+  /// the P the caller staged; the answer's `Signed()` is the byte the routine returns.
+  [[nodiscard]] WideQuotient DivideWide(std::uint8_t _high, std::uint8_t _low, std::uint8_t _divisor) noexcept;
 
   // ---- the logarithm-table routines -----------------------------------------------------
   //
@@ -207,8 +291,8 @@ namespace Elite
    *
    * IT CLOBBERS `P`. The routine opens `STX P` and every one of its four exits ends `LDX P`, so it
    * preserves the caller's X by parking it in `P` -- and `P` keeps that register value afterwards.
-   * A port that does not model registers cannot say what X was, so this leaves `_work.p` alone and
-   * the fact is written here rather than lost.
+   * A port that does not model registers cannot say what X was, so this port has never written it,
+   * and the fact is written here rather than lost.
    *
    * Nothing in the shipped build reads `P` after an `FMLTU` without writing it first: the six
    * callers are `MVEIT` part 3, `CIRCLE2` through `FMLTU2`, `LL51`, `PLS22`, `LL9` part 5 and
@@ -217,11 +301,11 @@ namespace Elite
    * compared `P` after `PTCLS` (§6.144). `EXS1` is the one call site that can prove what X was --
    * the generator's previous byte, two instructions earlier -- and it writes `P` itself.
    */
-  [[nodiscard]] WideResult MultiplyByLog(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept;
+  [[nodiscard]] LogProduct MultiplyByLog(std::uint8_t _value, std::uint8_t _multiplier, bool _carryIn) noexcept;
 
   /// 6502: LL28 -- R = 256 * A / Q, saturating at 255 when A is not smaller than Q. Returns the
   /// carry the routine leaves, because its callers branch on it.
-  [[nodiscard]] bool DivideToR(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  [[nodiscard]] Quotient DivideByLog(std::uint8_t _dividend, std::uint8_t _divisor) noexcept;
 
   /*
    * 6502: LL61 (with its LL84 error exit) -- (U R) = 256 * A / Q, for an A that is NOT smaller
@@ -235,32 +319,23 @@ namespace Elite
    * of the doubling. Fifty is not a rounding of anything -- it is a value `LL9` treats as "this
    * vertex is roughly here", and the ship still gets drawn.
    *
-   * `S` is used as scratch for the shift count and is LEFT there. `LL28` does not touch it, which
-   * is what makes that safe, and a port that gave `LL28` a use for `S` would break this quietly.
-   */
-  void DivideToUR(MathWorkspace& _work, std::uint8_t _a) noexcept;
-
-  /*
-   * What `LL38` leaves behind, and the carry is part of it.
+   * `S` was used as scratch for the shift count and left there; it is a local now, and `LL28` not
+   * touching it is what made that safe in the original.
    *
-   * The routine's own header says "C flag: set if the addition overflowed, clear otherwise", and it
-   * goes to some trouble to make that true -- the subtracting branch has an explicit `CLC` before
-   * its `RTS` that would otherwise be dead. `LL9`'s face-visibility loop reads it: a `BCS ovflw`
-   * there halves the ship's position and starts the face again. The port returned only the byte
-   * until `LL9` needed the flag, which is the third time a dropped register has come back (§6.33).
+   * `_high` IS AN INPUT: the doubling is `ROL U`, which rotates whatever the caller left in `U` up
+   * under the answer. `LL9` clears it before the y divide for exactly that reason, and arrives at
+   * the x divide with the zero its halving loop ended on -- so both callers hand it a zero, and the
+   * sweep hands it something else to prove the rotate is a rotate.
    */
-  struct SignedSum
-  {
-    std::uint8_t value = 0;
-    bool carry = false;
-  };
+  [[nodiscard]] Quotient16 DivideWideByLog(std::uint8_t _dividend, std::uint8_t _divisor, std::uint8_t _high) noexcept;
 
   /// 6502: LL38 (with its LL39 and LL40 branches) -- combines Q and R under the signs in A and S,
-  /// flipping S when the result turns negative.
-  [[nodiscard]] SignedSum CombineSigned(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  /// flipping S when the result turns negative. `_termSign` is A (a sign in bit 7), `_term` is Q,
+  /// and `_total` is (S R): the running sum and its sign, which comes back as `SignedSum::sign`.
+  [[nodiscard]] SignedSum CombineSigned(std::uint8_t _termSign, std::uint8_t _term, SignMag16 _total) noexcept;
 
   /// 6502: ARCTAN -- the angle of the ratio P over Q, as a byte turn.
-  [[nodiscard]] std::uint8_t Arctan(MathWorkspace& _work) noexcept;
+  [[nodiscard]] std::uint8_t Arctan(std::uint8_t _numerator, std::uint8_t _denominator) noexcept;
 
   /*
    * 6502: FMLTU2 -- A = K * sin(A) / 256, where the sine comes from SNE indexed by the low five
@@ -272,15 +347,7 @@ namespace Elite
    * (§6.43). The eighth dropped flag, and again the exhaustive sweep that already existed verified
    * the wider model for the price of one line (§6.42).
    */
-  [[nodiscard]] WideResult MultiplyKBySine(MathWorkspace& _work, std::uint8_t _a, bool _carryIn) noexcept;
-
-  /// What `DVID4` leaves: `R`, and the carry `SPS2` passes on to `SP2` (§6.60). `P` is in the
-  /// workspace, as the original leaves it.
-  struct ScaledDivision
-  {
-    std::uint8_t r = 0;
-    bool carry = false;
-  };
+  [[nodiscard]] LogProduct MultiplyBySine(std::uint8_t _value, std::uint8_t _angle, bool _carryIn) noexcept;
 
   /*
    * 6502: DVID4 -- an 8.8 fixed-point divide. P comes out as the whole part of A / Q, and R as
@@ -300,7 +367,7 @@ namespace Elite
    * The shipped C64 build unrolls the eight steps rather than looping; that changes nothing about
    * the result, which is why this reads as a loop.
    */
-  [[nodiscard]] ScaledDivision DivideAndScale(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  [[nodiscard]] ScaledDivision DivideAndScale(std::uint8_t _dividend, std::uint8_t _divisor) noexcept;
 
   /*
    * 6502: LL5 -- Q = square root of (R Q), by the schoolbook bitwise method.
@@ -312,22 +379,21 @@ namespace Elite
    * The inventory grouped this with the state-dependent helpers and deferred it to 3a. It is not
    * state-dependent -- it takes R and Q and leaves Q -- and TT111 needs it, so it lands here.
    */
-  [[nodiscard]] bool SquareRoot(MathWorkspace& _work) noexcept;
+  [[nodiscard]] Root SquareRoot(std::uint8_t _high, std::uint8_t _low) noexcept;
 
   /*
    * 6502: MULT3 -- K(4) = (A P+1 P) * Q, a twenty-four bit magnitude by an eight bit one, signed
-   * (slice 3a).
+   * (slice 3a). `_value` is (A P+1 P) as the sign-magnitude coordinate it always is at the one
+   * caller: the sign in `sgn`'s bit 7 over the magnitude's top bits.
    *
    * The shift-and-add is the usual one with a trick in it worth naming, because it looks like an
    * off-by-one: the routine stores |Q| - 1 in T and then adds it with `ADC` at a point where the
    * carry is always SET, so what actually gets added is |Q|. The subtraction and the carry cancel,
    * and a port that "corrected" the `SBC #1` would be wrong by one on every partial product.
    *
-   * `MVEIT` reaches this through `MV40`, the path a planet or a sun takes. The name follows
-   * `MultiplySignedToSR` (`MULT12`), because what distinguishes these from the other multipliers is
-   * where they leave the answer rather than what they do to it.
+   * `MVEIT` reaches this through `MV40`, the path a planet or a sun takes.
    */
-  void MultiplySignedToK(MathWorkspace& _work, std::uint8_t _a) noexcept;
+  [[nodiscard]] KBlock MultiplySigned24(SignMag24 _value, std::uint8_t _multiplier) noexcept;
 
   /*
    * 6502: NORM -- scale the three-byte vector in XX15 to a length of 96 (slice 3a).
@@ -340,12 +406,16 @@ namespace Elite
    * one thing here a port can quietly get wrong: `LDA P / ADC Q` follows `JSR SQUA`, so whatever
    * carry `SQUA` exits with is part of the sum. `TheNormaliserMatchesNORM` sweeps the vector space
    * against the shipped routine, which is what settles it rather than reading the multiplier.
+   *
+   * RETURNS THE LENGTH, which the original leaves in `Q`: `DOCKIT` reads it after `TA2` falls in
+   * here (`JSR TA2 / LDA Q / STA K`), so it is part of the answer and not scratch.
    */
-  void Normalise(MathWorkspace& _work, std::span<std::uint8_t, 3> _vector) noexcept;
+  [[nodiscard]] std::uint8_t Normalise(std::span<std::uint8_t, 3> _vector) noexcept;
 
   /*
    * 6502: DVID3B -- sign-magnitude, twenty-four bits over twenty-four (slice 3b). This is the
-   * divide the whole of the projection runs through.
+   * divide the whole of the projection runs through. `_numerator` is P(2 1 0) and `_denominator`
+   * is (S R Q), each with its sign in the top byte's bit 7.
    *
    * IT RETURNS 256 TIMES THE RATIO. The upstream summary and the routine's own name both say
    * `K(3 2 1 0) = P(2 1 0) / (S R Q)`, and that is the ratio with a scale left off: the eight-bit
@@ -381,6 +451,6 @@ namespace Elite
    * zero denominator the original spins forever waiting for a bit that never arrives -- so this
    * does too, rather than inventing an answer the game has never seen.
    */
-  void DivideSignedToK(MathWorkspace& _work) noexcept;
+  [[nodiscard]] KBlock DivideSigned24(SignMag24 _numerator, SignMag24 _denominator) noexcept;
 
 } // namespace Elite

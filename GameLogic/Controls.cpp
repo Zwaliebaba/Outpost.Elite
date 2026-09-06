@@ -81,7 +81,7 @@ namespace Elite
     return moved;
   }
 
-  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, ShipBlock& _work, FlightState& _flight,
+  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, Ship& _work, FlightState& _flight,
                           ControlEffects& _effects) noexcept
   {
     _effects.ScanKeyboard(); // 6502: JSR RDKEY
@@ -90,7 +90,7 @@ namespace Elite
     // player is holding down.
     if (_control.dockingComputer != 0u)
     {
-      ClearShipBlock(_work); // 6502: JSR ZINF
+      ClearShip(_work); // 6502: JSR ZINF
 
       /*
        * 6502: LDA #96 / STA INWK+14 / ORA #%10000000 / STA INWK+22 / STA TYPE.
@@ -99,31 +99,31 @@ namespace Elite
        * this puts them back the other way round -- so the block the autopilot is handed is not the
        * one `ZINF` makes, and the two instructions that differ are easy to read as a repeat.
        */
-      _work[14] = 96u;
-      _work[22] = static_cast<std::uint8_t>(96u | 0x80u);
-      _flight.type = static_cast<std::uint8_t>(96u | 0x80u);
+      _work.nose.z.hi = 96u;
+      _work.side.x.hi = static_cast<std::uint8_t>(96u | 0x80u);
+      _flight.type = TypeOf(static_cast<std::uint8_t>(96u | 0x80u));
 
-      _work[27] = _flight.delta;          // 6502: LDA DELTA / STA INWK+27
+      _work.speed = _flight.delta;          // 6502: LDA DELTA / STA INWK+27
       _effects.RunDockingComputer(_work); // 6502: JSR DOCKIT
 
       // 6502: LDA INWK+27 / CMP #22 / BCC P%+4 / LDA #22 / STA DELTA -- the autopilot is not
       // allowed to fly faster than 22, whatever it asked for.
-      _flight.delta = (_work[27] < 22u) ? _work[27] : std::uint8_t{22u};
+      _flight.delta = (_work.speed < 22u) ? _work.speed : std::uint8_t{22u};
 
       // 6502: LDA #&FF / LDX #(KY1-KLO) / LDY INWK+28 / BEQ DK11 / BMI P%+4 / LDX #(KY2-KLO) /
       // STA KLO,X -- the acceleration becomes "?" held down or Space held down, and neither if it
       // is zero.
-      if (_work[28] != 0u)
+      if (_work.acceleration != 0u)
       {
-        const std::size_t slot = ((_work[28] & 0x80u) != 0u) ? KEY_SLOW_DOWN : KEY_SPEED_UP;
+        const std::size_t slot = ((_work.acceleration & 0x80u) != 0u) ? KEY_SLOW_DOWN : KEY_SPEED_UP;
         _keys[slot] = 0xFFu;
       }
 
       // ---- .DK11: the roll ------------------------------------------------------------------
       //
       // 6502: LDA #128 / LDX #(KY3-KLO) / ASL INWK+29 / BEQ DK12.
-      const ShiftResult roll = RotateLeftValue(_work[29], false);
-      _work[29] = roll.value;
+      const ShiftResult roll = RotateLeftValue(_work.rollCounter, false);
+      _work.rollCounter = roll.value;
 
       if (roll.value == 0u)
       {
@@ -155,8 +155,8 @@ namespace Elite
       //
       // No `BIT` and no direct write: the pitch has no large-request path, and the carry test is
       // the other way round from the roll's.
-      const ShiftResult pitch = RotateLeftValue(_work[30], false);
-      _work[30] = pitch.value;
+      const ShiftResult pitch = RotateLeftValue(_work.pitchCounter, false);
+      _work.pitchCounter = pitch.value;
 
       if (pitch.value == 0u)
       {
@@ -224,13 +224,13 @@ namespace Elite
     // unit's. A caller of `DOKEY` gets that as well, and the call site does not say so.
   }
 
-  void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const CommanderBlock& _commander, TrumbleSprites& _trumbles,
+  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles,
                        std::uint8_t _view, SightEffects& _effects) noexcept
   {
     _effects.SetRasterMode(0x05u); // 6502: LDA #%101 / JSR SETL1
 
     // 6502: LDY VIEW / LDA LASER,Y / BEQ SIG3.
-    const std::uint8_t laser = _commander.bytes[static_cast<std::size_t>(Field::Lasers) + _view];
+    const std::uint8_t laser = _commander.lasers[_view];
 
     if (laser != 0u)
     {
@@ -265,17 +265,17 @@ namespace Elite
     }
 
     // 6502: LDA #1 / .SIG3 STA T -- one if a laser was found, and the zero `LDA LASER,Y` left if
-    // not, which is the whole of how the sights get switched off.
-    _math.t = (laser != 0u) ? std::uint8_t{1u} : std::uint8_t{0u};
+    // not, which is the whole of how the sights get switched off. `SIGHT`'s own since M2-c-3.
+    const std::uint8_t sightsBit = (laser != 0u) ? std::uint8_t{1u} : std::uint8_t{0u};
 
     // 6502: LDA TRIBBLE+1 / AND #%01111111 / LSR A x4 / TAX.
-    const std::uint8_t population = _commander.bytes[static_cast<std::size_t>(Field::Tribbles) + 1u];
+    const std::uint8_t population = _commander.tribbles.hi;
     const std::size_t index = static_cast<std::size_t>((population & 0x7Fu) >> 4u);
 
     _trumbles.count = TRUMBLE_COUNT_TABLE[index]; // 6502: LDA TRIBTA,X / STA TRIBCT
 
     // 6502: LDA TRIBMA,X / ORA T / STA VIC+&15 -- the sights and the Trumbles in one byte.
-    _effects.SetSpritesEnabled(static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | _math.t));
+    _effects.SetSpritesEnabled(static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | sightsBit));
 
     _effects.SetRasterMode(0x04u); // 6502: LDA #%100 / JMP SETL1, a tail call
   }

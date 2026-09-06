@@ -1,6 +1,8 @@
 #include "pch.h"
 
 #include "FlightSession.h"
+
+#include "LoaderScreen.h"
 #include "SoundOutput.h"
 
 #include "Tactics.h"
@@ -15,7 +17,7 @@ namespace Outpost
   namespace
   {
     /*
-     * 6502: what `CIRCLE` would have left in `STP`, for a flight world that has never drawn one.
+     * 6502: what `CIRCLE` would have left in `STP`, for a flight universe that has never drawn one.
      *
      * §6.95: `HFS1` walks a circle `STP` at a time and cannot terminate on a zero, and nothing on
      * the path from a cold start to the first launch was writing one. `CIRCLE` stores 8, 4 or 2 by
@@ -27,7 +29,7 @@ namespace Outpost
      * `LAUN`, which was a stub when §6.95 was written: its `LDA #8` is the step, and both `TT110`
      * and `DOENTRY` run it before any circle is drawn. §6.95 diagnosed a missing write as a state
      * the object could not start in, and the honest cause was a routine the port had not built.
-     * The seed stays because §6.95's RULE stands -- a default-constructed flight world is still a
+     * The seed stays because §6.95's RULE stands -- a default-constructed flight universe is still a
      * state the game cannot be in -- but nothing reads this particular byte before `LAUN` sets it.
      */
     constexpr std::uint8_t LAST_CIRCLE_STEP = 4;
@@ -53,7 +55,7 @@ namespace Outpost
   } // namespace
 
   FlightSession::FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
-                               Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::CommanderBlock& _commander,
+                               Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::Commander& _commander,
                                Elite::Rng& _rng, Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions,
                                std::uint8_t& _techLevel, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music,
                                SoundOutput& _audio) noexcept
@@ -102,14 +104,18 @@ namespace Outpost
      * is the title screen's Cobra Mk III, so that is what the pointer would hold.
      */
     m_heaps.stp = LAST_CIRCLE_STEP;
-    m_flight.blueprint = Elite::BlueprintAddress(Elite::SHIP_COBRA_MK3);
+    m_flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
+
+    // 6502: the loader's part 4 -- the sprite positions, sizes and colours the game inherits and
+    // never writes. Without it the sights are switched on at (0, 0), off the screen (§6.160).
+    Elite::SetUpLoaderVideo(m_video);
 
     /*
      * 6502: XX21+2*SST-2 -- a third byte of the same shape, and this one is not left by a previous
      * screen at all: `BEGIN` writes it at boot and only `NWSPS` writes it afterwards. Zero is what
      * `NWSHP` refuses, so an unseeded session would silently never build a station.
      */
-    m_bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+    m_bubble.stationType = Elite::ShipType::Station;
 
     /*
      * 6502: LSO -- and the station's line heap is IT, not a run carved out of `SLSP` (§6.112).
@@ -119,7 +125,7 @@ namespace Outpost
      * somewhere; without it every one of them is written out of range and dropped, and the station
      * you have just launched from is invisible in the rear view.
      */
-    m_heap.AttachSunHeap(Elite::SUN_HEAP_ADDRESS, m_heaps.sun);
+    m_heap.AttachSunHeap(m_heaps.sun);
   }
 
   void FlightSession::SyncVideoRegisters() noexcept
@@ -137,7 +143,7 @@ namespace Outpost
      * test, so a burning bomb moves the background colour on EVERY pass: running this once a frame
      * would halve the flash rate.
      */
-    const std::uint8_t bomb = m_screen.commander.At(Elite::Field::EnergyBomb); // 6502: BOMB
+    const std::uint8_t bomb = m_screen.commander.energyBomb; // 6502: BOMB
     const Elite::RasterRegisters first = Elite::TickRasterInterrupt(m_screenState, bomb);
     const Elite::RasterRegisters second = Elite::TickRasterInterrupt(m_screenState, bomb);
 
@@ -208,27 +214,28 @@ namespace Outpost
    * still missing is not the spawning: it is `TACTICS`, so a ship that `Anger` makes hostile has
    * nothing to do about it yet.
    */
-  bool FlightSession::SpawnAhead(std::uint8_t _type)
+  bool FlightSession::SpawnAhead(Elite::ShipType _type)
   {
     return Elite::SpawnShipAhead(m_bubble, m_work, _type, m_flight.delta, m_bubble.missileTarget, m_flight.blueprint).created;
   }
 
-  void FlightSession::Anger(std::uint8_t _slot, std::uint8_t _type)
+  bool FlightSession::Anger(std::uint8_t _slot, Elite::ShipType _type)
   {
     // 6502: ANGRY on the block INF points at -- and which block that is, the caller says (§6.142).
-    Elite::Anger(m_bubble, m_flight, _slot, _type);
+    // The routine's exit carry comes back with it, for the `JSR LL9` that follows (§6.157).
+    return Elite::Anger(m_bubble, m_flight, _slot, _type);
   }
 
-  bool FlightSession::SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type)
+  bool FlightSession::SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type)
   {
     // 6502: SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.
-    return Elite::SpawnChildShip(m_bubble, m_work, m_screen.rng, m_math, m_flight.slot, m_flight.type, _aiFlag, _type, m_flight.blueprint)
+    return Elite::SpawnChildShip(m_bubble, m_work, m_screen.rng, m_flight.slot, m_flight.type, _aiFlag, _type, m_flight.blueprint)
       .created;
   }
 
   // ---- the ships ----------------------------------------------------------------------------------
 
-  bool FlightSession::RunTactics(Elite::ShipBlock& _work)
+  bool FlightSession::RunTactics(Elite::Ship& _work)
   {
     // 6502: JSR TACTICS from `MVEIT`'s `MV26`, with `INF` at the slot being moved -- which is
     // `XSAV`, the byte the loop keeps for exactly this.
@@ -240,7 +247,7 @@ namespace Outpost
   {
     // 6502: LL25 -- JMP PLANET, taken for a type with bit 7 set. `INWK` is the body and `TYPE`
     // decides which of the two it is, exactly as the tail jump does.
-    Elite::DrawPlanetOrSun(m_canvas, m_heaps, m_draw, m_geometry, m_math, m_clip, m_screen.rng, m_work, m_projection, m_flight.type);
+    Elite::DrawPlanetOrSun(m_canvas, m_heaps, m_geometry, m_math, m_clip, m_screen.rng, m_work, m_projection, m_flight.type);
   }
 
   void FlightSession::DrawExplosion()
@@ -248,21 +255,7 @@ namespace Outpost
     // 6502: LL14's JMP DOEXP -- age the cloud by one frame and draw it, which is how the last
     // frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
     // vertices `LL9` part 8 projected, which `DOEXP` copies onto the ship's line heap.
-    Elite::DrawExplosionCloud(m_canvas, m_draw, m_math, m_screen.rng, m_work, m_heap, m_geometry, m_bubble, *this);
-  }
-
-  void FlightSession::SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint)
-  {
-    /*
-     * 6502: the `EE55` block -- six instructions, and they are behind a seam rather than in `LL9`
-     * for two reasons: what they write is `DOEXP`'s state, and the `JSR DORND` among them runs on
-     * whatever carry `LOIN` last left. The port cannot say what that carry is without reading all
-     * thirty-two of `LOIN`'s unrolled copies (§6.91), so seeding a cloud nothing draws would
-     * consume generator state the oracle does not.
-     */
-    (void)_heap;
-    (void)_address;
-    (void)_blueprint;
+    Elite::DrawExplosionCloud(m_canvas, m_math, m_screen.rng, m_work, m_heap, m_geometry, m_bubble, *this);
   }
 
   // ---- the controls -------------------------------------------------------------------------------
@@ -352,10 +345,9 @@ namespace Outpost
      */
     m_heaps.lsp = 1u;
     m_heaps.stp = _circle.step;
-    m_math.k[0] = _circle.radius;
 
     const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-    Elite::DrawBall(m_canvas, m_heaps, m_draw, m_geometry, m_math, m_clip, centre, false);
+    Elite::DrawBall(m_canvas, m_heaps, m_geometry, m_math, m_clip, centre, _circle.radius, false);
   }
 
   void FlightSession::DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius)
@@ -369,14 +361,13 @@ namespace Outpost
      */
     Elite::ClearSunHeap(m_heaps);
 
-    m_math.k[0] = _radius;
     const Elite::Projection centre{_x, 0u, _y, 0u};
-    Elite::DrawSun(m_canvas, m_heaps, m_draw, m_math, m_screen.rng, centre);
+    Elite::DrawSun(m_canvas, m_heaps, m_math, m_screen.rng, centre, _radius);
 
     Elite::ClearSunHeap(m_heaps);
   }
 
-  void FlightSession::RunDockingComputer(Elite::ShipBlock& _work)
+  void FlightSession::RunDockingComputer(Elite::Ship& _work)
   {
     /*
      * 6502: JSR DOCKIT from `DOKEY`'s `auton` path.
