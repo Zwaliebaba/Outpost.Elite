@@ -286,7 +286,7 @@ namespace Elite
     Stardust& dust;
     PlanetSunState& heaps;
     Bubble& bubble;
-    ShipBlock& work; ///< 6502: INWK
+    Ship& work; ///< 6502: INWK
 
     ScreenState& screen;
     TextState& text;

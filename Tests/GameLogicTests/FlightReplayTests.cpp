@@ -321,7 +321,7 @@ namespace GameLogicTests
       const Trace unperturbed = Fly(*baseline);
 
       const std::vector<std::pair<const wchar_t*, Perturbation>> perturbations = {
-        {L"the planet's x", [](FlightPort& _port) { _port.universe.bubble.blocks[0][0] = static_cast<std::uint8_t>(_port.universe.bubble.blocks[0][0] ^ 0x01u); }},
+        {L"the planet's x", [](FlightPort& _port) { _port.universe.bubble.blocks[0].x.lo = static_cast<std::uint8_t>(_port.universe.bubble.blocks[0].x.lo ^ 0x01u); }},
         {L"the generator", [](FlightPort& _port)
          {
            std::array<std::uint8_t, 4> state = _port.universe.rng.State();

@@ -24,7 +24,7 @@ namespace Elite
      * 6502: PTCLS and PTCLS2, which are one body -- see the header. `_effects` is null for `PTCLS`
      * and the seam for `PTCLS2`.
      */
-    void DrawParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const ShipBlock& _work, LineHeap& _heap,
+    void DrawParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
                        const Bubble& _bubble, ExplosionEffects* _effects) noexcept
     {
       const std::uint16_t address = ShipHeapAddress(_work);
@@ -44,7 +44,7 @@ namespace Elite
 
         // 6502: LDA INWK+7 / CMP #7 -- the compare is made with A already loaded for the register
         // write, so the two answers are chosen before the branch rather than after it.
-        const bool distant = _work.Z().hi >= 7u;
+        const bool distant = _work.z.hi >= 7u;
         _effects->SetSpriteExpansion(distant ? 0xFDu : 0xFFu);
         sprx = distant ? 44u : 32u;
         spry = distant ? 40u : 30u;
@@ -192,7 +192,7 @@ namespace Elite
         _effects->SetRasterMode(0x04u); // 6502: LDA #%100 / JSR SETL1 -- map the I/O page back out
       }
 
-      state[3] = _bubble.blocks[0].Z().lo;
+      state[3] = _bubble.blocks[0].z.lo;
       _rng.SetState(state);
     }
   } // namespace
@@ -236,26 +236,26 @@ namespace Elite
     return ExplosionOffset{high.value, low.value};
   }
 
-  void DrawExplosionParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const ShipBlock& _work,
+  void DrawExplosionParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const Ship& _work,
                               LineHeap& _heap, const Bubble& _bubble) noexcept
   {
     DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
   }
 
-  void DrawExplosionParticlesWithSprite(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const ShipBlock& _work,
+  void DrawExplosionParticlesWithSprite(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const Ship& _work,
                                         LineHeap& _heap, const Bubble& _bubble, ExplosionEffects& _effects) noexcept
   {
     DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, &_effects);
   }
 
-  void DrawExplosionCloud(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, ShipBlock& _work, LineHeap& _heap,
+  void DrawExplosionCloud(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap,
                           const GeometryWorkspace& _geometry, const Bubble& _bubble, ExplosionEffects& _effects) noexcept
   {
     const std::uint16_t address = ShipHeapAddress(_work);
 
     // 6502: bit 6 of byte 31 -- there is a cloud on the screen from last frame, so draw it again
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
-    if (Has(_work.State(), ShipStateBit::CloudDrawn))
+    if (Has(_work.state, ShipStateBit::CloudDrawn))
     {
       DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
     }
@@ -269,8 +269,8 @@ namespace Elite
      * bit 7 must be clear -- z_hi under 32 shifted twice cannot reach 128 -- and so leaves it
      * CLEAR and the cloud ages by four.
      */
-    _math.t = _work.Z().lo;
-    std::uint8_t scaled = _work.Z().hi;
+    _math.t = _work.z.lo;
+    std::uint8_t scaled = _work.z.hi;
     bool carry = scaled >= 32u;
 
     if (carry)
@@ -302,7 +302,7 @@ namespace Elite
     {
       // 6502: EX2 -- the counter has run off the end, so the explosion is over. Bits 5 and 7 say
       // "exploding" and "killed", and `MVEIT` is what acts on the pair.
-      _work.State() = With(_work.State(), ShipStateBit::Exploding, ShipStateBit::Killed);
+      _work.state = With(_work.state, ShipStateBit::Exploding, ShipStateBit::Killed);
       return;
     }
 
@@ -336,8 +336,8 @@ namespace Elite
 
     // 6502: AND #%10111111 -- not drawn yet. The following `AND #%00001000` reads what that left,
     // so a ship with nothing on the screen returns here with the flag already cleared.
-    _work.State() = Without(_work.State(), ShipStateBit::CloudDrawn);
-    if (!Has(_work.State(), ShipStateBit::OnScreen))
+    _work.state = Without(_work.state, ShipStateBit::CloudDrawn);
+    if (!Has(_work.state, ShipStateBit::OnScreen))
     {
       return; // 6502: BEQ TT48, which is an RTS
     }
@@ -362,7 +362,7 @@ namespace Elite
       --index;
     } while (index != 6u);
 
-    _work.State() = With(_work.State(), ShipStateBit::CloudDrawn); // 6502: ORA #%01000000 -- there is a cloud now
+    _work.state = With(_work.state, ShipStateBit::CloudDrawn); // 6502: ORA #%01000000 -- there is a cloud now
 
     /*
      * 6502: LDY frump / CPY #18 -- the counter BEFORE it grew, so this is true on the explosion's

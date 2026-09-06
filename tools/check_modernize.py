@@ -319,7 +319,7 @@ SAMPLE_SOURCE = """
 #include "pch.h"
 namespace Elite
 {
-  void F(ShipBlock& _work, Bubble& _bubble, std::uint8_t slot)
+  void F(Ship& _work, Bubble& _bubble, std::uint8_t slot)
   {
     _work[31] = static_cast<std::uint8_t>(_work[31] | 0x20u);   /* work[3] in a comment */ // 6502: MV1
     _bubble.blocks[slot][36] = _work[SHIP_FLAGS_OFFSET];

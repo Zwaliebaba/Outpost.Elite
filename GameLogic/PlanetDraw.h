@@ -324,18 +324,18 @@ namespace Elite
     std::uint8_t at = 0;    ///< 6502: X, after its two INXs
   };
 
-  [[nodiscard]] AxisResult DivideAxisByZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept;
+  [[nodiscard]] AxisResult DivideAxisByZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept;
 
   /// 6502: PLS3 -- the same, scaled by 222/256, and returned as a signed sixteen-bit value with the
   /// high half in Y. `X` is preserved here rather than stepped, through `U`.
-  [[nodiscard]] AxisResult ScaleAxisByZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept;
+  [[nodiscard]] AxisResult ScaleAxisByZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept;
 
   /// 6502: PLS4 -- where a meridian starts, as an angle: `ARCTAN` of the ratio, flipped by the
   /// roof vector's sign, and divided by four to index a sixty-fourth of a turn.
-  void SetMeridianAngle(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
+  void SetMeridianAngle(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
 
   /// 6502: PLS5 -- two axes into `K2+2`/`K2+3` and their signs into `XX16+2`/`XX16+3`.
-  void LoadTwoAxes(const ShipBlock& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry, std::uint8_t _at) noexcept;
+  void LoadTwoAxes(const Ship& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry, std::uint8_t _at) noexcept;
 
   /*
    * 6502: PLS22, and PLS2 which is the two instructions above it.
@@ -364,7 +364,7 @@ namespace Elite
    * away from you (`INWK+20` negative, which is the nose vector pointing off).
    */
   void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                        ClipState& _clip, const ShipBlock& _ship, Projection& _centre, ShipType _type) noexcept;
+                        ClipState& _clip, const Ship& _ship, Projection& _centre, ShipType _type) noexcept;
 
   /*
    * 6502: PLANET -- the entry the main loop calls for both the planet and the sun.
@@ -397,7 +397,7 @@ namespace Elite
                const Projection& _centre) noexcept;
 
   void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                       ClipState& _clip, Rng& _rng, const ShipBlock& _ship, Projection& _centre, ShipType _type) noexcept;
+                       ClipState& _clip, Rng& _rng, const Ship& _ship, Projection& _centre, ShipType _type) noexcept;
 
   /*
    * 6502: ZINF -- clear a ship's data block and give it an identity orientation.
@@ -407,7 +407,7 @@ namespace Elite
    * `roofv_y` and `sidev_x`, so the ship comes out pointing along the axes -- and the sign on the
    * nose is what makes it face TOWARDS the player rather than away.
    */
-  void ClearShipBlock(ShipBlock& _work) noexcept;
+  void ClearShip(Ship& _work) noexcept;
 
   /*
    * 6502: nWq -- fill the whole stardust field with new specks, and draw them.
@@ -429,7 +429,7 @@ namespace Elite
    *
    * IT WRITES `TYPE` AND `XSAV` ITSELF, before each `JSR SCAN`, which is why the flight state is
    * an argument: `SCAN` reads `TYPE` as a global and `WPSHPS` is what sets it. That was a seam
-   * until 3d-a -- `BubbleEffects::ScanShip(const ShipBlock&, std::uint8_t)`, one of the two
+   * until 3d-a -- `BubbleEffects::ScanShip(const Ship&, std::uint8_t)`, one of the two
    * signatures that disagreed about the same routine (§6.59) -- and the seam is gone because the
    * scanner is built.
    *
@@ -438,10 +438,10 @@ namespace Elite
    * happens. The port has no single home for `QQ11` yet -- 3d-d's flight loop is where it gets
    * one -- so it is passed.
    */
-  void ClearAllShips(Canvas& _canvas, DrawWorkspace& _draw, PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work, FlightState& _flight,
+  void ClearAllShips(Canvas& _canvas, DrawWorkspace& _draw, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight,
                      std::uint8_t _view) noexcept;
 
   void SeedStardustAndClearShips(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng, PlanetSunState& _state, Bubble& _bubble,
-                                 ShipBlock& _work, FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept;
+                                 Ship& _work, FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept;
 
 } // namespace Elite

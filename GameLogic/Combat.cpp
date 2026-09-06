@@ -58,9 +58,9 @@ namespace Elite
     return Volume(_distance, 16u, 8u, 6u, 3u);
   }
 
-  std::uint8_t PlayHitSound(const ShipBlock& _work, DashboardEffects& _effects) noexcept
+  std::uint8_t PlayHitSound(const Ship& _work, DashboardEffects& _effects) noexcept
   {
-    const std::uint8_t sustain = ExplosionVolume(_work.Z().hi);
+    const std::uint8_t sustain = ExplosionVolume(_work.z.hi);
 
     // 6502: LDY #sfxhit / LDX #208 / JMP NOISE2.
     (void)_effects.PlaySoundPitched(SOUND_SHIP_EXPLODING, sustain, EXPLOSION_PITCH_HIT);
@@ -99,12 +99,12 @@ namespace Elite
     }
 
     // 6502: davidscockup -- and the noise is the same shape as EXNO's with wider thresholds.
-    const std::uint8_t sustain = KillVolume(_screen.work.Z().hi);
+    const std::uint8_t sustain = KillVolume(_screen.work.z.hi);
     (void)_effects.PlaySoundPitched(SOUND_EXPLOSION, sustain, EXPLOSION_PITCH_KILL);
     return sustain;
   }
 
-  bool TakeDamage(FlightScreen& _screen, DashboardEffects& _effects, const ShipBlock& _target, std::uint8_t _damage, bool _carryIn) noexcept
+  bool TakeDamage(FlightScreen& _screen, DashboardEffects& _effects, const Ship& _target, std::uint8_t _damage, bool _carryIn) noexcept
   {
     FlightStatus& status = _screen.status;
 
@@ -117,7 +117,7 @@ namespace Elite
      * shield loses `_damage` or one more than `_damage` depending on a bit of the thing that hit
      * it (§6.87). `LDX #0` is dead -- both paths that read X load it again first.
      */
-    const bool fromBehind = (_target.Z().sgn & 0x80u) != 0u;
+    const bool fromBehind = (_target.z.sgn & 0x80u) != 0u;
     std::uint8_t& shield = fromBehind ? status.aftShield : status.forwardShield;
 
     const SubResult left = SubtractWithCarry(shield, _damage, _carryIn);

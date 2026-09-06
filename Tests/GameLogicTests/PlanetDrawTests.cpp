@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "ShipBytes.h"
+
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
@@ -895,7 +897,7 @@ namespace GameLogicTests
               Elite::MathWorkspace math;
               Elite::ClipState clip;
               Elite::Projection centre;
-              Elite::ShipBlock ship{};
+              Elite::Ship ship{};
               Elite::Rng rng;
 
               // The sun draws for real now, and its ragged edge comes from `DORND` -- so the
@@ -913,36 +915,36 @@ namespace GameLogicTests
               // A planet's block: a position, and three orientation vectors as (lo, hi) pairs with
               // the magnitude in the HIGH byte -- which is §6.39's lesson, and the reason this sweep
               // sets the high bytes rather than the low ones.
-              ship[Elite::SHIP_X_OFFSET] = 0;
-              ship[Elite::SHIP_X_OFFSET + 1] = 1;
-              ship[Elite::SHIP_Y_OFFSET] = 0;
-              ship[Elite::SHIP_Y_OFFSET + 1] = 1;
+              ship.x.lo = 0;
+              PokeShip(ship, Elite::SHIP_X_OFFSET + 1, 1);
+              ship.y.lo = 0;
+              PokeShip(ship, Elite::SHIP_Y_OFFSET + 1, 1);
               for (std::size_t byte = 0; byte < 3u; ++byte)
               {
-                ship[Elite::SHIP_Z_OFFSET + byte] = where.z[byte];
+                PokeShip(ship, Elite::SHIP_Z_OFFSET + byte, where.z[byte]);
               }
-              ship[10] = turned.bytes[0];
-              ship[12] = turned.bytes[1];
-              ship[14] = where.nose;
-              ship[16] = turned.bytes[2];
-              ship[18] = turned.bytes[3];
-              ship[20] = where.roof;
-              ship[22] = turned.bytes[4];
-              ship[24] = turned.bytes[5];
-              ship[26] = where.side;
-              ship[9] = 0x20;
-              ship[11] = 0x30;
-              ship[13] = 0x40;
-              ship[15] = 0x50;
-              ship[17] = 0x60;
-              ship[19] = 0x70;
-              ship[21] = 0x80;
-              ship[23] = 0x90;
-              ship[25] = 0xA0;
+              ship.nose.x.hi = turned.bytes[0];
+              ship.nose.y.hi = turned.bytes[1];
+              ship.nose.z.hi = where.nose;
+              ship.roof.x.hi = turned.bytes[2];
+              ship.roof.y.hi = turned.bytes[3];
+              ship.roof.z.hi = where.roof;
+              ship.side.x.hi = turned.bytes[4];
+              ship.side.y.hi = turned.bytes[5];
+              ship.side.z.hi = where.side;
+              ship.nose.x.lo = 0x20;
+              ship.nose.y.lo = 0x30;
+              ship.nose.z.lo = 0x40;
+              ship.roof.x.lo = 0x50;
+              ship.roof.y.lo = 0x60;
+              ship.roof.z.lo = 0x70;
+              ship.side.x.lo = 0x80;
+              ship.side.y.lo = 0x90;
+              ship.side.z.lo = 0xA0;
 
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = ship[byte];
+                cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = ship.ToBytes()[byte];
               }
 
               cpu.memory[at.type] = type;
@@ -1208,22 +1210,24 @@ namespace GameLogicTests
       const HeapLabels at(oracle);
 
       Cpu6502 cpu = oracle.Fresh();
-      Elite::ShipBlock work{};
+      Elite::Ship work{};
 
       // Fill both sides with something, so "cleared" means cleared rather than "already zero".
+      std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
         const std::uint8_t value = static_cast<std::uint8_t>(0x5Au + byte * 7u);
-        work[byte] = value;
+        shipBytes[byte] = value;
         cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = value;
       }
+      work = Elite::Ship::FromBytes(shipBytes);
 
       Assert::IsTrue(cpu.CallSubroutine(oracle.Label("ZINF"), 20'000).completed, L"ZINF returned");
-      Elite::ClearShipBlock(work);
+      Elite::ClearShip(work);
 
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work.ToBytes()[byte],
                          (L"ZINF: INWK+" + std::to_wstring(byte)).c_str());
       }
     }
@@ -1279,7 +1283,7 @@ namespace GameLogicTests
               Elite::Rng rng;
               Elite::PlanetSunState state;
               Elite::Bubble bubble;
-              Elite::ShipBlock work{};
+              Elite::Ship work{};
               Elite::FlightState flight;
 
               SeedSunHeap(cpu, state, at, 0x2C6A91B7u);
@@ -1308,20 +1312,24 @@ namespace GameLogicTests
               {
                 bubble.slots[slot] = fleet[slot];
                 cpu.memory[static_cast<std::uint16_t>(frin + slot)] = fleet[slot];
+                std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
                   const std::uint8_t value = static_cast<std::uint8_t>(0x11u + slot * 13u + byte * 3u);
-                  bubble.blocks[slot][byte] = value;
+                  shipBytes[byte] = value;
                   cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
                 }
+                bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
               }
 
+              std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
                 const std::uint8_t value = static_cast<std::uint8_t>(0xC7u - byte * 5u);
-                work[byte] = value;
+                shipBytes[byte] = value;
                 cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = value;
               }
+              work = Elite::Ship::FromBytes(shipBytes);
 
               cpu.memory[at.qq11] = viewType;
               cpu.c = carryIn;
@@ -1355,14 +1363,14 @@ namespace GameLogicTests
               {
                 Assert::AreEqual(
                   cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + Elite::SHIP_STATE_OFFSET)],
-                  bubble.blocks[slot][Elite::SHIP_STATE_OFFSET], (where + L": the slot's state byte").c_str());
+                  bubble.blocks[slot].state, (where + L": the slot's state byte").c_str());
               }
 
               // `WPSHPS` copies THIRTY-TWO bytes into `INWK`, not the whole block, so the four
               // above them keep whatever was there. Comparing the copy is what measures that.
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work.ToBytes()[byte],
                                  (where + L": INWK+" + std::to_wstring(byte)).c_str());
               }
 

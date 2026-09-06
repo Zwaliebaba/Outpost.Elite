@@ -11,7 +11,7 @@ namespace Elite
     return (_shipType == ShipType::Station) ? _bubble.stationBlueprint : BlueprintAddress(_shipType);
   }
 
-  ShipBlock* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept
+  Ship* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept
   {
     // The original has no bound here: `UNIV` is `NOSH` entries and `GINF` reads whatever the index
     // lands on. Nothing asks for a slot it has not just found free, so this is a guard against a
@@ -19,7 +19,7 @@ namespace Elite
     return (_slot < MAX_SHIPS) ? &_bubble.blocks[_slot] : nullptr;
   }
 
-  NewShip AddShip(Bubble& _bubble, ShipBlock& _work, ShipType _shipType, std::uint16_t& _blueprint) noexcept
+  NewShip AddShip(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint16_t& _blueprint) noexcept
   {
     // 6502: STA T / LDX #0 / .NWL1 LDA FRIN,X / BEQ NW1 / INX / CPX #NOSH / BCC NWL1.
     std::uint8_t slot = 0;
@@ -66,8 +66,8 @@ namespace Elite
         const std::uint8_t heapHigh = static_cast<std::uint8_t>(highDifference);
         carry = highDifference >= 0x100u;
 
-        _work.HeapLow() = heapLow;
-        _work.HeapHigh() = heapHigh;
+        _work.heapLow = heapLow;
+        _work.heapHigh = heapHigh;
 
         /*
          * 6502: LDA INWK+33 / SBC INF / TAY / LDA INWK+34 / SBC INF+1 / BCC NW3+1.
@@ -100,8 +100,8 @@ namespace Elite
       }
 
       // 6502: NW6 -- LDY #14 / LDA (XX0),Y / STA INWK+35, then byte 19 masked to three bits.
-      _work.Energy() = ShipByte(static_cast<std::uint16_t>(blueprint + 14u));
-      _work.State() = MissilesOf(ShipByte(static_cast<std::uint16_t>(blueprint + 19u)));
+      _work.energy = ShipByte(static_cast<std::uint16_t>(blueprint + 14u));
+      _work.state = MissilesOf(ShipByte(static_cast<std::uint16_t>(blueprint + 19u)));
     }
 
     // 6502: NW2 -- STA FRIN,X / TAX / BMI NW8. The slot takes the type, and X BECOMES the type.
@@ -139,7 +139,7 @@ namespace Elite
      * which is a defined byte rather than a fault, and reproducing it costs nothing.
      */
     const std::uint8_t defaults = ShipByte(static_cast<std::uint16_t>(SHIP_DEFAULT_FLAGS + Byte(_shipType) - 1u));
-    _work.Newb() = static_cast<std::uint8_t>(Without(defaults, NewbBit::Docking, NewbBit::Remove) | _work.Newb());
+    _work.newb = static_cast<std::uint8_t>(Without(defaults, NewbBit::Docking, NewbBit::Remove) | _work.newb);
 
     // 6502: LDY #NI%-1 / .NWL3 LDA INWK,Y / STA (INF),Y / DEY / BPL NWL3 / SEC / RTS.
     _bubble.blocks[slot] = _work;

@@ -11,9 +11,9 @@
  * `SHIP_KILLED` in another, `0x80u` in a third -- so the same bit had three spellings and one of
  * the names was wrong (§8). The bits are named here once, with the original's values, and the
  * helpers below are the `AND` and `ORA` a routine did against them -- as VALUES, so that a site
- * keeps the original's load-modify-store shape (`work.State() = With(work.State(), ...)` is
+ * keeps the original's load-modify-store shape (`work.state = With(work.state, ...)` is
  * `LDA INWK+31 / ORA #bit / STA INWK+31`) and no helper takes a byte by reference. Storage stays
- * a byte: `ShipBlock::State()` is still `std::uint8_t&`, the image still holds the byte, and the
+ * a byte: `Ship::State()` is still `std::uint8_t&`, the image still holds the byte, and the
  * oracle still compares it. A flags type that OWNS the byte, with `Set` and `Clear` as members,
  * is M1-c's, with the struct.
  *

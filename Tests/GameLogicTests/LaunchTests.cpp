@@ -542,7 +542,7 @@ namespace GameLogicTests
 
     struct RecordingOutside final : Elite::ShipEffects, Elite::ShipDrawEffects
     {
-      bool RunTactics(Elite::ShipBlock&) override
+      bool RunTactics(Elite::Ship&) override
       {
         return true;
       }
@@ -683,7 +683,7 @@ namespace GameLogicTests
       }
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)] = universe.work[byte];
+        _cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)] = universe.work.ToBytes()[byte];
       }
     }
 
@@ -724,7 +724,7 @@ namespace GameLogicTests
       }
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)], universe.work[byte],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_to.inwk + byte)], universe.work.ToBytes()[byte],
                          (_context + L": INWK byte " + std::to_wstring(byte)).c_str());
       }
     }
@@ -1164,7 +1164,7 @@ namespace GameLogicTests
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
-                           leaving.universe.bubble.blocks[slot][byte],
+                           leaving.universe.bubble.blocks[slot].ToBytes()[byte],
                            (where + L": K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte)).c_str());
         }
       }
@@ -1442,7 +1442,7 @@ namespace GameLogicTests
                  */
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.inwk + byte)], leaving.universe.work[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.inwk + byte)], leaving.universe.work.ToBytes()[byte],
                                    (where + L": INWK+" + std::to_wstring(byte)).c_str());
                 }
 

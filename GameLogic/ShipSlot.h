@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Ship.h"
 #include "ShipBlueprint.h"
 #include "ShipFlags.h"
 #include "ShipType.h"
@@ -18,11 +19,6 @@ namespace Elite
    * routine that moves, draws, shoots at or is shot by a ship works on one slot of this at a time,
    * copied into `INWK` and copied back.
    */
-
-  /// 6502: NI% -- how many bytes one ship's data block is. Thirty-seven, not thirty-six: the
-  /// resolved C64 source says `NI% = 37`, and the `original-sources` listings disagree with the
-  /// library on other constants, which is what `tools/c64_source.py` exists to settle.
-  inline constexpr std::uint8_t SHIP_BLOCK_SIZE = 37;
 
   /*
    * 6502: NOSH -- the most ships the bubble holds at once.
@@ -52,294 +48,6 @@ namespace Elite
   inline constexpr std::uint16_t SHIP_HEAP_TOP = 0xFFC0;   ///< 6502: LS%, where SLSP starts
 
   /*
-   * THE LAYOUT OF THE BLOCK, every offset a routine reads, named once (Design/Modernize.md M1-a).
-   *
-   * 6502: INWK+0 to INWK+8 are the position, three bytes an axis -- a sixteen-bit magnitude low
-   * byte first and a sign byte whose bit 7 is the sign (`SignMag24`). INWK+9 to INWK+26 are the
-   * orientation: three vectors of six bytes, `nosev`, `roofv` and `sidev`, each an x, y and z
-   * component of two bytes with the sign in bit 7 of the high one. The routines that are entered
-   * with an axis or a vector in a register (`MVT1` with X = 0, 3 or 6; `MVS4` with Y = 9, 15 or 21)
-   * take the offset as they always did and address the block through `PositionAt` and `VectorAt`
-   * below, which is why these are offsets rather than an enumeration.
-   */
-  inline constexpr std::uint8_t SHIP_X_OFFSET = 0; ///< 6502: INWK+0, +1, +2 -- x_lo, x_hi, x_sign
-  inline constexpr std::uint8_t SHIP_Y_OFFSET = 3; ///< 6502: INWK+3, +4, +5
-  inline constexpr std::uint8_t SHIP_Z_OFFSET = 6; ///< 6502: INWK+6, +7, +8
-
-  inline constexpr std::uint8_t SHIP_NOSE_OFFSET = 9;  ///< 6502: INWK+9 to +14 -- nosev, x lo/hi, y lo/hi, z lo/hi
-  inline constexpr std::uint8_t SHIP_ROOF_OFFSET = 15; ///< 6502: INWK+15 to +20 -- roofv
-  inline constexpr std::uint8_t SHIP_SIDE_OFFSET = 21; ///< 6502: INWK+21 to +26 -- sidev
-
-  inline constexpr std::uint8_t SHIP_SPEED_OFFSET = 27;        ///< 6502: INWK+27
-  inline constexpr std::uint8_t SHIP_ACCELERATION_OFFSET = 28; ///< 6502: INWK+28
-  inline constexpr std::uint8_t SHIP_ROLL_OFFSET = 29;         ///< 6502: INWK+29 -- the roll counter
-  inline constexpr std::uint8_t SHIP_PITCH_OFFSET = 30;        ///< 6502: INWK+30 -- the pitch counter
-
-  /// 6502: INWK+32 -- the AI byte: bit 7 says the ship has AI, and the rest is aggression, or for a
-  /// missile the slot it is locked on to (`KILLSHP` renumbers it).
-  inline constexpr std::uint8_t SHIP_AI_OFFSET = 32;
-
-  /// 6502: NEWB is at zero page 45 and INWK at 9, so NEWB IS INWK+36 -- the last byte of the block,
-  /// and the reason NI% is thirty-seven rather than the thirty-six the workspace looks.
-  inline constexpr std::uint8_t SHIP_FLAGS_OFFSET = 36;
-
-  /// 6502: the offsets NWSHP writes before the block is copied into its slot.
-  inline constexpr std::uint8_t SHIP_HEAP_LOW_OFFSET = 33;  ///< 6502: INWK+33 / INWK+34, the ship's
-  inline constexpr std::uint8_t SHIP_HEAP_HIGH_OFFSET = 34; ///< own heap pointer
-  inline constexpr std::uint8_t SHIP_ENERGY_OFFSET = 35;    ///< 6502: INWK+35, from blueprint byte 14
-
-  /*
-   * 6502: INWK+31 -- one byte holding five things, which is why it does not get a name saying what
-   * it is FOR.
-   *
-   * Slice 3a called this `SHIP_MISSILES_OFFSET`, because `NWSHP` is the only routine that had
-   * reached it and all `NWSHP` does is OR the blueprint's missile count into the bottom three bits.
-   * The drawing code reads the same byte for something else entirely -- bit 3 says whether the ship
-   * is currently on the screen, and it is what `EE51` tests to decide whether there is anything to
-   * rub out. Two names for one offset is the §6.34 trap set deliberately, so there is one name and
-   * the bits are named once, in `ShipFlags.h`, as `ShipStateBit`.
-   */
-  inline constexpr std::uint8_t SHIP_STATE_OFFSET = 31;
-
-
-  /*
-   * 6502: INWK+0..2, +3..5 or +6..8 -- one axis of the position, as the three bytes it is.
-   *
-   * References into the block rather than a copy, so that `axis.lo = ...` writes the byte the
-   * routine would have written with `STA INWK,X`. `Byte` is `std::uint8_t` or `const std::uint8_t`,
-   * which is how one view serves a routine that writes and one that only reads.
-   */
-  template <class Byte> struct AxisBytes
-  {
-    Byte& lo;
-    Byte& hi;
-    Byte& sgn;
-  };
-
-  /// 6502: two bytes of an orientation vector -- one component, low byte then high, sign in bit 7
-  /// of the high one.
-  template <class Byte> struct ComponentBytes
-  {
-    Byte& lo;
-    Byte& hi;
-  };
-
-  /// 6502: INWK+9..14, +15..20 or +21..26 -- one of the three orientation vectors, six bytes.
-  template <class Byte> struct VectorBytes
-  {
-    Byte& xLo;
-    Byte& xHi;
-    Byte& yLo;
-    Byte& yHi;
-    Byte& zLo;
-    Byte& zHi;
-  };
-
-  /*
-   * 6502: INWK, and one entry of K% -- a single ship, as thirty-seven bytes.
-   *
-   * BYTES AND NOT FIELDS, still, and for the reason slice 3a gave: the original addresses this
-   * block by offset from three directions -- `INWK,X` and `INWK+10,Y` walk it as vectors, `MVS4`
-   * steps Y through it in sixes, and `NWSHP` copies it wholesale through `(INF),Y` -- and the bytes
-   * are what the oracle compares. What Modernize.md M1-a adds on top is NAMES: every offset a
-   * routine reads is an accessor below, so that `work.State()` is what `work[31]` was and a reader
-   * meets the byte's meaning rather than its number. The accessors are references into `bytes`,
-   * so nothing is copied and every write lands where `STA INWK+n` landed. `operator[]` stays for
-   * the wholesale copies, which M1-c turns into a codec.
-   */
-  struct ShipBlock
-  {
-    std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes{};
-
-    [[nodiscard]] constexpr std::uint8_t& operator[](std::size_t _offset) noexcept
-    {
-      return bytes[_offset];
-    }
-    [[nodiscard]] constexpr std::uint8_t operator[](std::size_t _offset) const noexcept
-    {
-      return bytes[_offset];
-    }
-
-    // ---- the position ---------------------------------------------------------------------------
-
-    /// 6502: INWK,X with X = 0, 3 or 6 -- the axis a routine was entered with.
-    [[nodiscard]] constexpr AxisBytes<std::uint8_t> PositionAt(std::uint8_t _offset) noexcept
-    {
-      return {bytes[_offset], bytes[_offset + 1u], bytes[_offset + 2u]};
-    }
-    [[nodiscard]] constexpr AxisBytes<const std::uint8_t> PositionAt(std::uint8_t _offset) const noexcept
-    {
-      return {bytes[_offset], bytes[_offset + 1u], bytes[_offset + 2u]};
-    }
-
-    [[nodiscard]] constexpr AxisBytes<std::uint8_t> X() noexcept
-    {
-      return PositionAt(SHIP_X_OFFSET);
-    }
-    [[nodiscard]] constexpr AxisBytes<const std::uint8_t> X() const noexcept
-    {
-      return PositionAt(SHIP_X_OFFSET);
-    }
-    [[nodiscard]] constexpr AxisBytes<std::uint8_t> Y() noexcept
-    {
-      return PositionAt(SHIP_Y_OFFSET);
-    }
-    [[nodiscard]] constexpr AxisBytes<const std::uint8_t> Y() const noexcept
-    {
-      return PositionAt(SHIP_Y_OFFSET);
-    }
-    [[nodiscard]] constexpr AxisBytes<std::uint8_t> Z() noexcept
-    {
-      return PositionAt(SHIP_Z_OFFSET);
-    }
-    [[nodiscard]] constexpr AxisBytes<const std::uint8_t> Z() const noexcept
-    {
-      return PositionAt(SHIP_Z_OFFSET);
-    }
-
-    // ---- the orientation ------------------------------------------------------------------------
-
-    /// 6502: INWK,Y with Y = 9, 15 or 21 -- the vector a routine was entered with.
-    [[nodiscard]] constexpr VectorBytes<std::uint8_t> VectorAt(std::uint8_t _offset) noexcept
-    {
-      return {bytes[_offset],      bytes[_offset + 1u], bytes[_offset + 2u],
-              bytes[_offset + 3u], bytes[_offset + 4u], bytes[_offset + 5u]};
-    }
-    [[nodiscard]] constexpr VectorBytes<const std::uint8_t> VectorAt(std::uint8_t _offset) const noexcept
-    {
-      return {bytes[_offset],      bytes[_offset + 1u], bytes[_offset + 2u],
-              bytes[_offset + 3u], bytes[_offset + 4u], bytes[_offset + 5u]};
-    }
-
-    /// 6502: INWK,Y / INWK+1,Y -- one component of a vector, where a routine was entered with the
-    /// component's own offset (`MVS5`'s X and Y, `MAS1`'s Y).
-    [[nodiscard]] constexpr ComponentBytes<std::uint8_t> ComponentAt(std::uint8_t _offset) noexcept
-    {
-      return {bytes[_offset], bytes[_offset + 1u]};
-    }
-    [[nodiscard]] constexpr ComponentBytes<const std::uint8_t> ComponentAt(std::uint8_t _offset) const noexcept
-    {
-      return {bytes[_offset], bytes[_offset + 1u]};
-    }
-
-    [[nodiscard]] constexpr VectorBytes<std::uint8_t> Nose() noexcept
-    {
-      return VectorAt(SHIP_NOSE_OFFSET);
-    }
-    [[nodiscard]] constexpr VectorBytes<const std::uint8_t> Nose() const noexcept
-    {
-      return VectorAt(SHIP_NOSE_OFFSET);
-    }
-    [[nodiscard]] constexpr VectorBytes<std::uint8_t> Roof() noexcept
-    {
-      return VectorAt(SHIP_ROOF_OFFSET);
-    }
-    [[nodiscard]] constexpr VectorBytes<const std::uint8_t> Roof() const noexcept
-    {
-      return VectorAt(SHIP_ROOF_OFFSET);
-    }
-    [[nodiscard]] constexpr VectorBytes<std::uint8_t> Side() noexcept
-    {
-      return VectorAt(SHIP_SIDE_OFFSET);
-    }
-    [[nodiscard]] constexpr VectorBytes<const std::uint8_t> Side() const noexcept
-    {
-      return VectorAt(SHIP_SIDE_OFFSET);
-    }
-
-    // ---- the rest, one byte each ----------------------------------------------------------------
-
-    [[nodiscard]] constexpr std::uint8_t& Speed() noexcept ///< 6502: INWK+27
-    {
-      return bytes[SHIP_SPEED_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t Speed() const noexcept
-    {
-      return bytes[SHIP_SPEED_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t& Acceleration() noexcept ///< 6502: INWK+28
-    {
-      return bytes[SHIP_ACCELERATION_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t Acceleration() const noexcept
-    {
-      return bytes[SHIP_ACCELERATION_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t& RollCounter() noexcept ///< 6502: INWK+29
-    {
-      return bytes[SHIP_ROLL_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t RollCounter() const noexcept
-    {
-      return bytes[SHIP_ROLL_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t& PitchCounter() noexcept ///< 6502: INWK+30
-    {
-      return bytes[SHIP_PITCH_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t PitchCounter() const noexcept
-    {
-      return bytes[SHIP_PITCH_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t& State() noexcept ///< 6502: INWK+31 -- see `SHIP_STATE_OFFSET`
-    {
-      return bytes[SHIP_STATE_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t State() const noexcept
-    {
-      return bytes[SHIP_STATE_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t& Ai() noexcept ///< 6502: INWK+32
-    {
-      return bytes[SHIP_AI_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t Ai() const noexcept
-    {
-      return bytes[SHIP_AI_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t& HeapLow() noexcept ///< 6502: INWK+33
-    {
-      return bytes[SHIP_HEAP_LOW_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t HeapLow() const noexcept
-    {
-      return bytes[SHIP_HEAP_LOW_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t& HeapHigh() noexcept ///< 6502: INWK+34
-    {
-      return bytes[SHIP_HEAP_HIGH_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t HeapHigh() const noexcept
-    {
-      return bytes[SHIP_HEAP_HIGH_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t& Energy() noexcept ///< 6502: INWK+35
-    {
-      return bytes[SHIP_ENERGY_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t Energy() const noexcept
-    {
-      return bytes[SHIP_ENERGY_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t& Newb() noexcept ///< 6502: INWK+36, which is NEWB
-    {
-      return bytes[SHIP_FLAGS_OFFSET];
-    }
-    [[nodiscard]] constexpr std::uint8_t Newb() const noexcept
-    {
-      return bytes[SHIP_FLAGS_OFFSET];
-    }
-  };
-
-  // The layout the accessors are built on, said once so that a moved constant cannot move silently.
-  static_assert(SHIP_NOSE_OFFSET == SHIP_Z_OFFSET + 3u, "the orientation follows the position");
-  static_assert(SHIP_ROOF_OFFSET == SHIP_NOSE_OFFSET + 6u && SHIP_SIDE_OFFSET == SHIP_ROOF_OFFSET + 6u, "three vectors of six");
-  static_assert(SHIP_SPEED_OFFSET == SHIP_SIDE_OFFSET + 6u, "the speed follows the last vector");
-  static_assert(SHIP_STATE_OFFSET == 31u && SHIP_AI_OFFSET == 32u && SHIP_HEAP_LOW_OFFSET == 33u && SHIP_HEAP_HIGH_OFFSET == 34u &&
-                  SHIP_ENERGY_OFFSET == 35u && SHIP_FLAGS_OFFSET == 36u && SHIP_BLOCK_SIZE == 37u,
-                "the tail of the block");
-
-  /*
    * 6502: FRIN, K% and MANY together -- everything that is in the bubble right now.
    *
    * `UNIV` has no equivalent and needs none: it is a table of POINTERS to the ten blocks in `K%`,
@@ -355,7 +63,7 @@ namespace Elite
     std::array<std::uint8_t, MAX_SHIPS + 1> slots{};
 
     /// 6502: K% -- the ten data blocks the slots point at.
-    std::array<ShipBlock, MAX_SHIPS> blocks{};
+    std::array<Ship, MAX_SHIPS> blocks{};
 
     /*
      * 6502: MANY -- how many of each type are in the bubble, indexed by SHIP TYPE.
@@ -457,7 +165,7 @@ namespace Elite
    * routine survives as a named function only because the ledger counts it and because a caller
    * that asked for slot 10 in the original would read past `UNIV`.
    */
-  [[nodiscard]] ShipBlock* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept;
+  [[nodiscard]] Ship* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept;
 
   /// What `NWSHP` left behind: whether the ship was created, and where.
   struct NewShip
@@ -493,6 +201,6 @@ namespace Elite
    * the `BMI NW2` path past those stores -- so the omission could not be seen until `NWSPS` created
    * a real ship. The oracle caught it on the first frame that spawned a station.
    */
-  [[nodiscard]] NewShip AddShip(Bubble& _bubble, ShipBlock& _work, ShipType _shipType, std::uint16_t& _blueprint) noexcept;
+  [[nodiscard]] NewShip AddShip(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint16_t& _blueprint) noexcept;
 
 } // namespace Elite

@@ -125,7 +125,7 @@ namespace Outpost
 
     // ---- Elite::ShipEffects and Elite::ShipDrawEffects ------------------------------------------
 
-    [[nodiscard]] bool RunTactics(Elite::ShipBlock& _work) override;
+    [[nodiscard]] bool RunTactics(Elite::Ship& _work) override;
     void DrawPlanetOrSun() override;
     void DrawExplosion() override;
     void SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint) override;
@@ -154,7 +154,7 @@ namespace Outpost
      */
     void DrawRangeCircle(const Elite::RangeCircle& _circle) override;
     void DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius) override;
-    void RunDockingComputer(Elite::ShipBlock& _work) override;
+    void RunDockingComputer(Elite::Ship& _work) override;
 
     // ---- Elite::SightEffects and Elite::ViewEffects ----------------------------------------------
 
@@ -203,7 +203,7 @@ namespace Outpost
     Elite::Stardust m_dust;
     Elite::PlanetSunState m_heaps;
     Elite::Bubble m_bubble;
-    Elite::ShipBlock m_work{}; ///< 6502: INWK
+    Elite::Ship m_work{}; ///< 6502: INWK
 
     Elite::ScreenState m_screenState;
     Elite::FlightState m_flight;

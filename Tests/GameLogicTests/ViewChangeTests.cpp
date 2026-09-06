@@ -381,14 +381,16 @@ namespace GameLogicTests
 
         for (std::size_t slot = 0; slot < bubble.blocks.size(); ++slot)
         {
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             // Every byte marked, and byte 31 with bit 4 set, so clearing it is visible and
             // clearing anything else is a failure.
             const std::uint8_t value = (byte == 31u) ? 0xFFu : static_cast<std::uint8_t>(0x40u + byte + slot);
-            bubble.blocks[slot][byte] = value;
+            shipBytes[byte] = value;
             cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
           }
+          bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
         }
 
         Assert::IsTrue(cpu.CallSubroutine(zonk, 40'000).completed, L"zonkscanners returned");
@@ -400,7 +402,7 @@ namespace GameLogicTests
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             const std::uint16_t at = static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte);
-            Assert::AreEqual(cpu.memory[at], bubble.blocks[slot][byte],
+            Assert::AreEqual(cpu.memory[at], bubble.blocks[slot].ToBytes()[byte],
                              (where + L": K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte)).c_str());
           }
         }
@@ -531,13 +533,15 @@ namespace GameLogicTests
           std::uint32_t state = 0x77C1A305u ^ (counter * 0x9E3779B9u) ^ already;
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               state = state * 1103515245u + 12345u;
               const std::uint8_t value = (byte == 31u) ? 0xFFu : static_cast<std::uint8_t>(state >> 17);
-              bubble.blocks[slot][byte] = value;
+              shipBytes[byte] = value;
               cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
             }
+            bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
           }
 
           Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
@@ -592,7 +596,7 @@ namespace GameLogicTests
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               const std::uint16_t address = static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte);
-              Assert::AreEqual(cpu.memory[address], bubble.blocks[slot][byte],
+              Assert::AreEqual(cpu.memory[address], bubble.blocks[slot].ToBytes()[byte],
                                (where + L": K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte)).c_str());
             }
           }
@@ -707,13 +711,15 @@ namespace GameLogicTests
           std::uint32_t state = 0x2B91D6C5u ^ (view * 0x9E3779B9u) ^ already;
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               state = state * 1103515245u + 12345u;
               const std::uint8_t value = (byte == 31u) ? 0xFFu : static_cast<std::uint8_t>(state >> 17);
-              bubble.blocks[slot][byte] = value;
+              shipBytes[byte] = value;
               cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
             }
+            bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
           }
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(ttx66k, 400'000);
@@ -755,7 +761,7 @@ namespace GameLogicTests
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               const std::uint16_t address = static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte);
-              Assert::AreEqual(cpu.memory[address], bubble.blocks[slot][byte],
+              Assert::AreEqual(cpu.memory[address], bubble.blocks[slot].ToBytes()[byte],
                                (where + L": K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte)).c_str());
             }
           }
@@ -1001,14 +1007,14 @@ namespace GameLogicTests
           universe.bubble.slots[above] = item.occupant;
         }
 
-        universe.bubble.blocks[0][2] = 0u;
-        universe.bubble.blocks[0][5] = 0u;
-        universe.bubble.blocks[0][8] = item.planetSign;
-        universe.bubble.blocks[0][7] = item.planetHigh;
-        universe.bubble.blocks[1][2] = 0u;
-        universe.bubble.blocks[1][5] = 0u;
-        universe.bubble.blocks[1][8] = item.sunSign;
-        universe.bubble.blocks[1][7] = item.sunHigh;
+        universe.bubble.blocks[0].x.sgn = 0u;
+        universe.bubble.blocks[0].y.sgn = 0u;
+        universe.bubble.blocks[0].z.sgn = item.planetSign;
+        universe.bubble.blocks[0].z.hi = item.planetHigh;
+        universe.bubble.blocks[1].x.sgn = 0u;
+        universe.bubble.blocks[1].y.sgn = 0u;
+        universe.bubble.blocks[1].z.sgn = item.sunSign;
+        universe.bubble.blocks[1].z.hi = item.sunHigh;
 
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(oracle.Label("SETL1"));

@@ -35,6 +35,28 @@ namespace GameLogicTests
     }
 
     /// A run of directly held bytes, one cell each, named with their index.
+    /// A ship's thirty-seven bytes, through the codec: each cell reads `ToBytes()` and writes back
+    /// through `FromBytes`, so the image is the K% layout whatever the struct's own layout is.
+    void ShipCells(std::vector<Cell>& _cells, const std::wstring& _name, std::uint16_t _base, Elite::Ship& _ship, CellScope _scope)
+    {
+      for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+      {
+        Cell cell;
+        cell.name = _name + L" byte " + std::to_wstring(byte);
+        cell.address = static_cast<std::uint16_t>(_base + byte);
+        cell.scope = _scope;
+        Elite::Ship* ship = &_ship;
+        cell.get = [ship, byte]() { return ship->ToBytes()[byte]; };
+        cell.set = [ship, byte](std::uint8_t _value)
+        {
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> bytes = ship->ToBytes();
+          bytes[byte] = _value;
+          *ship = Elite::Ship::FromBytes(bytes);
+        };
+        _cells.push_back(std::move(cell));
+      }
+    }
+
     void Run(std::vector<Cell>& _cells, const wchar_t* _name, std::uint16_t _base, std::uint8_t* _bytes, std::size_t _count,
              CellScope _scope)
     {
@@ -184,13 +206,8 @@ namespace GameLogicTests
     Run(cells, L"LSO", _at.lso, _universe.heaps.sun.data(), _universe.heaps.sun.size(), CellScope::Compared);
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
     {
-      for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
-      {
-        Cell cell = Direct(L"K%", static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte),
-                           _universe.bubble.blocks[slot].bytes[byte], CellScope::Compared);
-        cell.name = L"K% slot " + std::to_wstring(slot) + L" byte " + std::to_wstring(byte);
-        cells.push_back(std::move(cell));
-      }
+      ShipCells(cells, L"K% slot " + std::to_wstring(slot), static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE),
+                _universe.bubble.blocks[slot], CellScope::Compared);
     }
     for (std::size_t index = 0; index < _universe.dust.x.size(); ++index)
     {
@@ -222,7 +239,7 @@ namespace GameLogicTests
 
     Run(cells, L"FRIN", _at.frin, _universe.bubble.slots.data(), _universe.bubble.slots.size(), CellScope::Image);
     Run(cells, L"MANY", _at.many, _universe.bubble.counts.data(), _universe.bubble.counts.size(), CellScope::Image);
-    Run(cells, L"INWK", _at.inwk, _universe.work.bytes.data(), Elite::SHIP_BLOCK_SIZE, CellScope::Image);
+    ShipCells(cells, L"INWK", _at.inwk, _universe.work, CellScope::Image);
     Run(cells, L"SXL", _at.sxl, _universe.dust.xLow.data(), _universe.dust.xLow.size(), CellScope::Image);
     Run(cells, L"SYL", _at.syl, _universe.dust.yLow.data(), _universe.dust.yLow.size(), CellScope::Image);
     Run(cells, L"SZL", _at.szl, _universe.dust.zLow.data(), _universe.dust.zLow.size(), CellScope::Image);

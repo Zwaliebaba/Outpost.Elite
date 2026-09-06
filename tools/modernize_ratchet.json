@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3615,
+      "ceiling": 3623,
       "slack": 0,
-      "slice": "M1-b"
+      "slice": "M1-c"
     },
     "oracle-test-files": {
       "ceiling": 50,

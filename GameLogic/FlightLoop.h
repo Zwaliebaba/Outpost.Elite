@@ -39,7 +39,7 @@ namespace Elite
    * stores `K+3` and the port needs nothing returned from the call. Returns the high byte with the
    * sign cleared, which is what the caller compares against a distance.
    */
-  [[nodiscard]] std::uint8_t DoubleAndAddCoordinate(ShipBlock& _work, MathWorkspace& _math, std::uint8_t _from, std::uint8_t _to) noexcept;
+  [[nodiscard]] std::uint8_t DoubleAndAddCoordinate(Ship& _work, MathWorkspace& _math, std::uint8_t _from, std::uint8_t _to) noexcept;
 
   /*
    * 6502: MAS2, and `m` above it -- OR the three sign bytes of a ship block together and drop the
@@ -68,7 +68,7 @@ namespace Elite
 
   /// 6502: MAS4 -- the same OR as `MAS2` but over `INWK`'s high bytes rather than a slot's sign
   /// bytes, and without the mask. Four instructions, and it is here because the loop calls it.
-  [[nodiscard]] std::uint8_t LargestShipAxis(const ShipBlock& _work, std::uint8_t _a) noexcept;
+  [[nodiscard]] std::uint8_t LargestShipAxis(const Ship& _work, std::uint8_t _a) noexcept;
 
   /*
    * 6502: cntr -- creep a centre-based control reading one step towards 128.
@@ -124,10 +124,10 @@ namespace Elite
    * inside the box, clear when any axis is outside it. `FAROF` is `LDA #224` and then this, which
    * is the distance at which the flight loop stops caring about a ship at all.
    */
-  [[nodiscard]] bool WithinRange(const ShipBlock& _work, std::uint8_t _limit) noexcept;
+  [[nodiscard]] bool WithinRange(const Ship& _work, std::uint8_t _limit) noexcept;
 
   /// 6502: FAROF -- `WithinRange` at the limit the loop uses, which is 224.
-  [[nodiscard]] inline bool WithinLoopRange(const ShipBlock& _work) noexcept
+  [[nodiscard]] inline bool WithinLoopRange(const Ship& _work) noexcept
   {
     return WithinRange(_work, 224u);
   }
@@ -145,7 +145,7 @@ namespace Elite
    * own, which says "no" for a sum too big to compare rather than for a ship too far to the side --
    * the same answer by a different route, and the port keeps them apart because the original does.
    */
-  [[nodiscard]] bool IsHit(const ShipBlock& _work, MathWorkspace& _math, std::uint16_t _blueprint, ShipType _type) noexcept;
+  [[nodiscard]] bool IsHit(const Ship& _work, MathWorkspace& _math, std::uint16_t _blueprint, ShipType _type) noexcept;
 
   /// 6502: SFS1 -- phase 4's "spawn a child ship from this one", which is where the wreckage
   /// actually comes from. It is here rather than in `Spawn.h` because the only thing in this slice

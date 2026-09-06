@@ -210,7 +210,7 @@ namespace GameLogicTests
 
     // ---- Elite::ShipEffects and Elite::ShipDrawEffects ------------------------------------------
 
-    [[nodiscard]] bool RunTactics(Elite::ShipBlock& _work) override
+    [[nodiscard]] bool RunTactics(Elite::Ship& _work) override
     {
       static_cast<void>(_work);
       return Elite::RunTactics(loop, universe.flight.slot);
@@ -278,7 +278,7 @@ namespace GameLogicTests
       Elite::DrawSun(universe.canvas, universe.heaps, universe.draw, universe.math, universe.rng, centre);
       Elite::ClearSunHeap(universe.heaps);
     }
-    void RunDockingComputer(Elite::ShipBlock& _work) override
+    void RunDockingComputer(Elite::Ship& _work) override
     {
       static_cast<void>(_work);
       static_cast<void>(Elite::RunDockingComputer(loop, 0u));

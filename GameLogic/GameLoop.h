@@ -196,7 +196,7 @@ namespace Elite
    * creation returned and the Thargoid's answer is discarded -- a full bubble gets the mothership
    * and no escort, and the port reproduces that rather than tidying it.
    */
-  NewShip SpawnThargoidPair(Bubble& _bubble, ShipBlock& _work, Rng& _rng, std::uint16_t& _blueprint, bool _carryIn) noexcept;
+  NewShip SpawnThargoidPair(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint16_t& _blueprint, bool _carryIn) noexcept;
 
   /*
    * Main game loop parts 1 to 4: everything that arrives in the bubble on its own.
@@ -204,7 +204,7 @@ namespace Elite
    * `_carryIn` is the flag the first `DORND` rotates in, which is whatever `Main.cpp` reached the
    * spawner with -- §6.121 is the reason it is a parameter rather than an assumption.
    */
-  void RunSpawning(Bubble& _bubble, ShipBlock& _work, Rng& _rng, CommanderBlock& _commander, const CurrentSystem& _current,
+  void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, CommanderBlock& _commander, const CurrentSystem& _current,
                    const FlightStatus& _status, std::uint8_t& _explosionCount, std::uint16_t& _blueprint, bool _carryIn) noexcept;
 
 } // namespace Elite

@@ -529,7 +529,7 @@ namespace GameLogicTests
           Elite::MathWorkspace math;
           Elite::GeometryWorkspace geometry;
           Elite::Rng rng;
-          Elite::ShipBlock work{};
+          Elite::Ship work{};
           Elite::LineHeap heap;
           Elite::Bubble bubble;
           RecordingBurst burst;
@@ -558,15 +558,19 @@ namespace GameLogicTests
             geometry.xx3[byte] = value;
           }
 
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = 0;
-            work[byte] = 0;
+            shipBytes[byte] = 0;
           }
+          work = Elite::Ship::FromBytes(shipBytes);
           const auto poke = [&](std::size_t _offset, std::uint8_t _value)
           {
             cpu.memory[static_cast<std::uint16_t>(inwk + _offset)] = _value;
-            work[_offset] = _value;
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> bytes = work.ToBytes();
+            bytes[_offset] = _value;
+            work = Elite::Ship::FromBytes(bytes);
           };
           poke(Elite::SHIP_Z_OFFSET, scene.zLow);
           poke(Elite::SHIP_Z_OFFSET + 1u, scene.zHigh);
@@ -575,7 +579,7 @@ namespace GameLogicTests
           poke(Elite::SHIP_HEAP_HIGH_OFFSET, HEAP_AT >> 8);
 
           cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 6u)] = PLANET_Z_LOW;
-          bubble.blocks[0][6] = PLANET_Z_LOW;
+          bubble.blocks[0].z.lo = PLANET_Z_LOW;
 
           for (std::size_t byte = 0; byte < 4u; ++byte)
           {
@@ -600,7 +604,7 @@ namespace GameLogicTests
 
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                              (where + L": INWK+" + std::to_wstring(byte)).c_str());
           }
 
@@ -726,7 +730,7 @@ namespace GameLogicTests
               Elite::DrawWorkspace draw;
               Elite::MathWorkspace math;
               Elite::Rng rng;
-              Elite::ShipBlock work{};
+              Elite::Ship work{};
               Elite::LineHeap heap;
               Elite::Bubble bubble;
               RecordingBurst burst;
@@ -746,22 +750,24 @@ namespace GameLogicTests
                 heap.Write(address, value);
               }
 
+              std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
                 cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = 0;
-                work[byte] = 0;
+                shipBytes[byte] = 0;
               }
+              work = Elite::Ship::FromBytes(shipBytes);
               // z_hi decides the burst's size, and it is read by `PTCLS2` alone.
               const std::uint8_t zHigh = static_cast<std::uint8_t>((size & 1u) != 0u ? 4u : 12u);
               cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + 1u)] = zHigh;
-              work[Elite::SHIP_Z_OFFSET + 1u] = zHigh;
+              work.z.hi = zHigh;
               cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
               cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-              work[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
-              work[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
+              work.heapLow = HEAP_AT & 0xFFu;
+              work.heapHigh = HEAP_AT >> 8;
 
               cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 6u)] = PLANET_Z_LOW;
-              bubble.blocks[0][6] = PLANET_Z_LOW;
+              bubble.blocks[0].z.lo = PLANET_Z_LOW;
 
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
@@ -796,7 +802,7 @@ namespace GameLogicTests
 
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                                  (where + L": INWK+" + std::to_wstring(byte)).c_str());
               }
 

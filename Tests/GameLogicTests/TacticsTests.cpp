@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "ShipBytes.h"
+
 #include "Cpu6502.h"
 #include "FlightUniverse.h"
 #include "OracleImage.h"
@@ -32,7 +34,7 @@ using Elite::Testing::OracleImage;
  * often (§6.42, §6.53, §6.68, §6.87, §6.117), and all six of these routines are sign-magnitude.
  *
  * `V(1 0)` IS AN ARGUMENT AND THE PORT DOES NOT HAVE ONE. `TAS1` reads through a zero-page pointer
- * and the port takes a `ShipBlock` instead, so each case writes the other object into a real ship
+ * and the port takes a `Ship` instead, so each case writes the other object into a real ship
  * slot and points `V` at it -- which is what both callers do anyway (`VCSU1` at the station's slot,
  * `TACTICS` at whichever slot `UNIV` names).
  */
@@ -102,11 +104,11 @@ namespace GameLogicTests
      */
     constexpr std::array<std::uint8_t, 6> SPREAD = {0x00u, 0x01u, 0x40u, 0x7Fu, 0x80u, 0xFFu};
 
-    void WriteBlock(Cpu6502& _cpu, std::uint16_t _base, const Elite::ShipBlock& _block)
+    void WriteBlock(Cpu6502& _cpu, std::uint16_t _base, const Elite::Ship& _block)
     {
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_base + byte)] = _block[byte];
+        _cpu.memory[static_cast<std::uint16_t>(_base + byte)] = _block.ToBytes()[byte];
       }
     }
 
@@ -164,20 +166,20 @@ namespace GameLogicTests
           {
             for (const std::uint8_t theirSign : {0x00u, 0x80u})
             {
-              Elite::ShipBlock mine{};
-              Elite::ShipBlock theirs{};
+              Elite::Ship mine{};
+              Elite::Ship theirs{};
 
               // Three axes at once, each with a different low byte, so a routine that used one
               // axis's bytes for another's would not agree by luck.
               for (std::size_t axis = 0; axis < 3u; ++axis)
               {
                 const std::size_t base = axis * 3u;
-                mine[base] = static_cast<std::uint8_t>(0x11u * (axis + 1u));
-                mine[base + 1u] = mineHigh;
-                mine[base + 2u] = static_cast<std::uint8_t>(mineSign);
-                theirs[base] = static_cast<std::uint8_t>(0x37u * (axis + 1u));
-                theirs[base + 1u] = theirHigh;
-                theirs[base + 2u] = static_cast<std::uint8_t>(theirSign);
+                PokeShip(mine, base, static_cast<std::uint8_t>(0x11u * (axis + 1u)));
+                PokeShip(mine, base + 1u, mineHigh);
+                PokeShip(mine, base + 2u, static_cast<std::uint8_t>(mineSign));
+                PokeShip(theirs, base, static_cast<std::uint8_t>(0x37u * (axis + 1u)));
+                PokeShip(theirs, base + 1u, theirHigh);
+                PokeShip(theirs, base + 2u, static_cast<std::uint8_t>(theirSign));
               }
 
               Elite::K3Block axes{};
@@ -257,10 +259,10 @@ namespace GameLogicTests
             {
               for (int station = 0; station < 2; ++station)
               {
-                Elite::ShipBlock block{};
-                block[which] = vx;
-                block[which + 2u] = vy;
-                block[which + 4u] = sx;
+                Elite::Ship block{};
+                PokeShip(block, which, vx);
+                PokeShip(block, which + 2u, vy);
+                PokeShip(block, which + 4u, sx);
 
                 Elite::DrawWorkspace draw;
                 draw.x1 = sx;
@@ -378,12 +380,12 @@ namespace GameLogicTests
           {
             for (const std::uint8_t sign : {0x00u, 0x80u})
             {
-              Elite::ShipBlock station{};
+              Elite::Ship station{};
 
               // Three different nose bytes, so an axis reading another axis's would show.
-              station[Elite::NOSE_VECTOR_X] = nose;
-              station[Elite::NOSE_VECTOR_Y] = static_cast<std::uint8_t>(nose ^ 0x80u);
-              station[Elite::NOSE_VECTOR_Z] = static_cast<std::uint8_t>(nose ^ 0x3Fu);
+              PokeShip(station, Elite::NOSE_VECTOR_X, nose);
+              PokeShip(station, Elite::NOSE_VECTOR_Y, static_cast<std::uint8_t>(nose ^ 0x80u));
+              PokeShip(station, Elite::NOSE_VECTOR_Z, static_cast<std::uint8_t>(nose ^ 0x3Fu));
 
               Elite::K3Block axes{};
               for (std::size_t axis = 0; axis < 3u; ++axis)
@@ -460,13 +462,15 @@ namespace GameLogicTests
               Elite::Bubble bubble;
               for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
               {
+                std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
-                  bubble.blocks[slot][byte] = static_cast<std::uint8_t>(0x11u + slot * 7u + byte * 3u);
+                  shipBytes[byte] = static_cast<std::uint8_t>(0x11u + slot * 7u + byte * 3u);
                 }
+                bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
               }
-              bubble.blocks[SLOT][32] = ai;
-              bubble.blocks[SLOT][36] = newb;
+              bubble.blocks[SLOT].ai = ai;
+              bubble.blocks[SLOT].newb = newb;
 
               /*
                * THE STATION'S HOSTILE BIT STARTS CLEAR, and the first version of this sweep did
@@ -474,13 +478,13 @@ namespace GameLogicTests
                * already has bit 2 set, so `AN2`'s `ORA #%00000100` changed nothing and a mutation
                * that skipped `AN2` altogether agreed on every case (§6.124).
                */
-              bubble.blocks[1][36] = Elite::Without(bubble.blocks[1][36], Elite::NewbBit::Hostile);
+              bubble.blocks[1].newb = Elite::Without(bubble.blocks[1].newb, Elite::NewbBit::Hostile);
 
               for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
               {
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
-                  cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = bubble.blocks[slot][byte];
+                  cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = bubble.blocks[slot].ToBytes()[byte];
                 }
               }
 
@@ -504,11 +508,11 @@ namespace GameLogicTests
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
                   Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
-                                   bubble.blocks[slot][byte],
+                                   bubble.blocks[slot].ToBytes()[byte],
                                    (where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
                 }
               }
-              angered += Elite::Has(bubble.blocks[1][36], Elite::NewbBit::Hostile) ? 1u : 0u;
+              angered += Elite::Has(bubble.blocks[1].newb, Elite::NewbBit::Hostile) ? 1u : 0u;
               ++compared;
             }
           }
@@ -575,7 +579,7 @@ namespace GameLogicTests
         spawned.push_back(Elite::Byte(_type));
         return true;
       }
-      bool RunTactics(Elite::ShipBlock&) override
+      bool RunTactics(Elite::Ship&) override
       {
         return true;
       }
@@ -709,10 +713,12 @@ namespace GameLogicTests
         const std::uint8_t type = (slot == 2u) ? _type : FLEET[slot];
         _universe.universe.bubble.slots[slot] = type;
 
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = _universe.universe.bubble.blocks[slot].ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
-          _universe.universe.bubble.blocks[slot][byte] = static_cast<std::uint8_t>(0x09u + slot * 5u + byte * 3u);
+          shipBytes[byte] = static_cast<std::uint8_t>(0x09u + slot * 5u + byte * 3u);
         }
+        _universe.universe.bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
 
         // The ship under test goes where the case asks; the others are spread around it so that a
         // missile's target and the station are somewhere distinct.
@@ -721,43 +727,43 @@ namespace GameLogicTests
         // (low, high, sign) per axis, and the HIGH byte is the one that matters: see the comment on
         // `Geometry` above. The low bytes are varied too, so a routine reading the wrong one does
         // not agree by accident.
-        _universe.universe.bubble.blocks[slot][0] = static_cast<std::uint8_t>(0x40u + slot * 11u);
-        _universe.universe.bubble.blocks[slot][1] = subject ? _where.x : static_cast<std::uint8_t>(0x20u + slot);
-        _universe.universe.bubble.blocks[slot][2] = subject ? _where.xSign : static_cast<std::uint8_t>((slot & 1u) != 0u ? 0x80u : 0x00u);
-        _universe.universe.bubble.blocks[slot][3] = static_cast<std::uint8_t>(0x60u + slot * 7u);
-        _universe.universe.bubble.blocks[slot][4] = subject ? _where.y : static_cast<std::uint8_t>(0x30u + slot);
-        _universe.universe.bubble.blocks[slot][5] = subject ? _where.ySign : std::uint8_t{0u};
-        _universe.universe.bubble.blocks[slot][6] = static_cast<std::uint8_t>(0x18u + slot * 13u);
-        _universe.universe.bubble.blocks[slot][7] = subject ? _where.z : static_cast<std::uint8_t>(0x28u + slot);
-        _universe.universe.bubble.blocks[slot][8] = subject ? _where.zSign : std::uint8_t{0u};
+        _universe.universe.bubble.blocks[slot].x.lo = static_cast<std::uint8_t>(0x40u + slot * 11u);
+        _universe.universe.bubble.blocks[slot].x.hi = subject ? _where.x : static_cast<std::uint8_t>(0x20u + slot);
+        _universe.universe.bubble.blocks[slot].x.sgn = subject ? _where.xSign : static_cast<std::uint8_t>((slot & 1u) != 0u ? 0x80u : 0x00u);
+        _universe.universe.bubble.blocks[slot].y.lo = static_cast<std::uint8_t>(0x60u + slot * 7u);
+        _universe.universe.bubble.blocks[slot].y.hi = subject ? _where.y : static_cast<std::uint8_t>(0x30u + slot);
+        _universe.universe.bubble.blocks[slot].y.sgn = subject ? _where.ySign : std::uint8_t{0u};
+        _universe.universe.bubble.blocks[slot].z.lo = static_cast<std::uint8_t>(0x18u + slot * 13u);
+        _universe.universe.bubble.blocks[slot].z.hi = subject ? _where.z : static_cast<std::uint8_t>(0x28u + slot);
+        _universe.universe.bubble.blocks[slot].z.sgn = subject ? _where.zSign : std::uint8_t{0u};
 
         // A believable orientation: nose along z, roof along y, side along x, with signs mixed.
-        _universe.universe.bubble.blocks[slot][10] = 0x60u;
-        _universe.universe.bubble.blocks[slot][12] = 0x10u;
-        _universe.universe.bubble.blocks[slot][14] = 0xE0u;
-        _universe.universe.bubble.blocks[slot][16] = 0x20u;
-        _universe.universe.bubble.blocks[slot][18] = 0x60u;
-        _universe.universe.bubble.blocks[slot][20] = 0x08u;
-        _universe.universe.bubble.blocks[slot][22] = 0xE0u;
-        _universe.universe.bubble.blocks[slot][24] = 0x08u;
-        _universe.universe.bubble.blocks[slot][26] = 0x60u;
+        _universe.universe.bubble.blocks[slot].nose.x.hi = 0x60u;
+        _universe.universe.bubble.blocks[slot].nose.y.hi = 0x10u;
+        _universe.universe.bubble.blocks[slot].nose.z.hi = 0xE0u;
+        _universe.universe.bubble.blocks[slot].roof.x.hi = 0x20u;
+        _universe.universe.bubble.blocks[slot].roof.y.hi = 0x60u;
+        _universe.universe.bubble.blocks[slot].roof.z.hi = 0x08u;
+        _universe.universe.bubble.blocks[slot].side.x.hi = 0xE0u;
+        _universe.universe.bubble.blocks[slot].side.y.hi = 0x08u;
+        _universe.universe.bubble.blocks[slot].side.z.hi = 0x60u;
 
         if (subject)
         {
-          _universe.universe.bubble.blocks[slot][10] = _where.noseX;
-          _universe.universe.bubble.blocks[slot][12] = _where.noseY;
-          _universe.universe.bubble.blocks[slot][14] = _where.noseZ;
+          _universe.universe.bubble.blocks[slot].nose.x.hi = _where.noseX;
+          _universe.universe.bubble.blocks[slot].nose.y.hi = _where.noseY;
+          _universe.universe.bubble.blocks[slot].nose.z.hi = _where.noseZ;
         }
 
-        _universe.universe.bubble.blocks[slot][27] = 12u;                        // speed
-        _universe.universe.bubble.blocks[slot][28] = 0u;                         // acceleration
-        _universe.universe.bubble.blocks[slot][29] = subject ? _where.roll : 0u; // roll
-        _universe.universe.bubble.blocks[slot][30] = 0u;                         // pitch
-        _universe.universe.bubble.blocks[slot][31] = 0u;
-        _universe.universe.bubble.blocks[slot][33] = 0u;
-        _universe.universe.bubble.blocks[slot][34] = 0u;
-        _universe.universe.bubble.blocks[slot][35] = 20u;
-        _universe.universe.bubble.blocks[slot][36] = subject ? _where.flags : 0u;
+        _universe.universe.bubble.blocks[slot].speed = 12u;                        // speed
+        _universe.universe.bubble.blocks[slot].acceleration = 0u;                         // acceleration
+        _universe.universe.bubble.blocks[slot].rollCounter = subject ? _where.roll : 0u; // roll
+        _universe.universe.bubble.blocks[slot].pitchCounter = 0u;                         // pitch
+        _universe.universe.bubble.blocks[slot].state = 0u;
+        _universe.universe.bubble.blocks[slot].heapLow = 0u;
+        _universe.universe.bubble.blocks[slot].heapHigh = 0u;
+        _universe.universe.bubble.blocks[slot].energy = 20u;
+        _universe.universe.bubble.blocks[slot].newb = subject ? _where.flags : 0u;
       }
 
       _universe.universe.bubble.Count(Elite::ShipType::Station) = _stations;
@@ -787,7 +793,7 @@ namespace GameLogicTests
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] =
-            _universe.universe.bubble.blocks[slot][byte];
+            _universe.universe.bubble.blocks[slot].ToBytes()[byte];
         }
       }
       for (std::size_t type = 0; type < _universe.universe.bubble.counts.size(); ++type)
@@ -796,7 +802,7 @@ namespace GameLogicTests
       }
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)] = _universe.universe.work[byte];
+        _cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)] = _universe.universe.work.ToBytes()[byte];
       }
       // ONE PLACE sets the generator on both sides, because a sweep whose two machines start from
       // different random state compares nothing at all -- which is how this test first failed.
@@ -850,7 +856,7 @@ namespace GameLogicTests
     {
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)], _universe.universe.work[byte],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)], _universe.universe.work.ToBytes()[byte],
                          (_where + L": INWK+" + std::to_wstring(byte)).c_str());
       }
       for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
@@ -860,7 +866,7 @@ namespace GameLogicTests
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
-                           _universe.universe.bubble.blocks[slot][byte],
+                           _universe.universe.bubble.blocks[slot].ToBytes()[byte],
                            (_where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
         }
       }
@@ -1116,10 +1122,10 @@ namespace GameLogicTests
             universe.universe.status.forwardShield = one.banks;
             universe.universe.status.aftShield = one.banks;
 
-            universe.universe.work[31] = one.state;
-            universe.universe.work[32] = one.ai;
-            universe.universe.work[35] = one.energy;
-            universe.universe.work[36] = one.newb;
+            universe.universe.work.state = one.state;
+            universe.universe.work.ai = one.ai;
+            universe.universe.work.energy = one.energy;
+            universe.universe.work.newb = one.newb;
             universe.universe.bubble.blocks[2] = universe.universe.work;
 
             /*
@@ -1132,11 +1138,13 @@ namespace GameLogicTests
              */
             if (one.targetSlot != 0u)
             {
+              std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = universe.universe.bubble.blocks[one.targetSlot].ToBytes();
               for (std::size_t byte = 0; byte < 9u; ++byte)
               {
-                universe.universe.bubble.blocks[one.targetSlot][byte] = universe.universe.work[byte];
+                shipBytes[byte] = universe.universe.work.ToBytes()[byte];
               }
-              universe.universe.bubble.blocks[one.targetSlot][31] = one.victimState;
+              universe.universe.bubble.blocks[one.targetSlot] = Elite::Ship::FromBytes(shipBytes);
+              universe.universe.bubble.blocks[one.targetSlot].state = one.victimState;
             }
             universe.seed = seed;
             universe.ecm = one.ecm;
@@ -1408,21 +1416,23 @@ namespace GameLogicTests
              * sweep can aim at the slot rather than at wherever the ramp happened to put it -- and
              * before both of those, every case in this test went down one branch (§6.126).
              */
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = universe.universe.bubble.blocks[1].ToBytes();
             for (std::size_t byte = 0; byte < 9u; ++byte)
             {
-              universe.universe.bubble.blocks[1][byte] = 0u;
+              shipBytes[byte] = 0u;
             }
+            universe.universe.bubble.blocks[1] = Elite::Ship::FromBytes(shipBytes);
 
-            universe.universe.work[0] = 0u;
-            universe.universe.work[1] = approach.x;
-            universe.universe.work[2] = approach.xSign;
-            universe.universe.work[3] = 0u;
-            universe.universe.work[4] = approach.y;
-            universe.universe.work[5] = approach.ySign;
-            universe.universe.work[6] = 0u;
-            universe.universe.work[7] = approach.z;
-            universe.universe.work[8] = approach.zSign;
-            universe.universe.work[27] = 12u;
+            universe.universe.work.x.lo = 0u;
+            universe.universe.work.x.hi = approach.x;
+            universe.universe.work.x.sgn = approach.xSign;
+            universe.universe.work.y.lo = 0u;
+            universe.universe.work.y.hi = approach.y;
+            universe.universe.work.y.sgn = approach.ySign;
+            universe.universe.work.z.lo = 0u;
+            universe.universe.work.z.hi = approach.z;
+            universe.universe.work.z.sgn = approach.zSign;
+            universe.universe.work.speed = 12u;
 
             /*
              * A NON-ZERO `NEWB`, because `TN13` sets its top bit with `ASL / SEC / ROR`.
@@ -1431,18 +1441,18 @@ namespace GameLogicTests
              * bit 6. With the byte zero the two are the same answer, and the mutation that made it
              * an `ORA` survived a thousand cases (§6.126). It varies per case so the shift shows.
              */
-            universe.universe.work[36] = static_cast<std::uint8_t>(0x24u + (compared & 0x1Fu));
+            universe.universe.work.newb = static_cast<std::uint8_t>(0x24u + (compared & 0x1Fu));
 
-            universe.universe.bubble.blocks[1][10] = approach.nose;
-            universe.universe.bubble.blocks[1][12] = approach.noseY;
-            universe.universe.bubble.blocks[1][14] = approach.noseZ;
+            universe.universe.bubble.blocks[1].nose.x.hi = approach.nose;
+            universe.universe.bubble.blocks[1].nose.y.hi = approach.noseY;
+            universe.universe.bubble.blocks[1].nose.z.hi = approach.noseZ;
 
-            universe.universe.work[10] = approach.shipNoseX;
-            universe.universe.work[12] = approach.shipNoseY;
-            universe.universe.work[14] = approach.shipNoseZ;
-            universe.universe.bubble.blocks[1][16] = approach.roofX;
-            universe.universe.bubble.blocks[1][18] = approach.roofY;
-            universe.universe.bubble.blocks[1][20] = approach.roofZ;
+            universe.universe.work.nose.x.hi = approach.shipNoseX;
+            universe.universe.work.nose.y.hi = approach.shipNoseY;
+            universe.universe.work.nose.z.hi = approach.shipNoseZ;
+            universe.universe.bubble.blocks[1].roof.x.hi = approach.roofX;
+            universe.universe.bubble.blocks[1].roof.y.hi = approach.roofY;
+            universe.universe.bubble.blocks[1].roof.z.hi = approach.roofZ;
 
             universe.universe.flight.type = Elite::TypeOf(type);
 
@@ -1486,9 +1496,9 @@ namespace GameLogicTests
              * whose cases all end the same way reaches one approach however many rows it has, so
              * this counts the distinct answers and the assertion below is on that count.
              */
-            outcomes.insert(std::to_string(universe.universe.work[27]) + "," + std::to_string(universe.universe.work[28]) + "," +
-                            std::to_string(universe.universe.work[29]) + "," + std::to_string(universe.universe.work[30]) + "," +
-                            std::to_string(universe.universe.work[36]));
+            outcomes.insert(std::to_string(universe.universe.work.speed) + "," + std::to_string(universe.universe.work.acceleration) + "," +
+                            std::to_string(universe.universe.work.rollCounter) + "," + std::to_string(universe.universe.work.pitchCounter) + "," +
+                            std::to_string(universe.universe.work.newb));
             ++compared;
           }
         }
