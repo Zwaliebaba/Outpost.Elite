@@ -95,11 +95,10 @@ namespace
                false),
         extended(characters, recursive, universe.rng, &shell),
         flight(window, universe),
-        ports{recursive, characters, characters,     flight, flight, flight, audio.Direct(),
-              extended,  shell,      shell,          shell,  shell,  store}
+        ports{recursive, characters, characters, flight, flight, audio.Direct(), extended, shell, shell, shell, shell, store}
     {
       // The seam the session answers that is a call needing the seams themselves -- `DOCKIT` --
-      // so the composition lends the struct back to the object seven of it point at.
+      // so the composition lends the struct back to the object two of it point at.
       flight.AttachPorts(ports);
       shell.AttachPorts(ports);
       recursive.SetValueTokens(&values);
@@ -261,18 +260,17 @@ namespace
   {
     Elite::ControlOptions& controls = _game.universe.options;
     Elite::MusicOptions& tunes = _game.universe.music.options;
-
     return Elite::OptionBlock{
       &controls.dampingDisabled,          // 6502: DAMP
       &controls.recentreDisabled,         // 6502: DJD
       &controls.authorNames,              // 6502: PATG
-      &_game.universe.status.damageFlash,          // 6502: FLH
+      &_game.universe.status.damageFlash, // 6502: FLH
       &_game.joystickGeometry,            // 6502: JSTGY
       &_game.joystickEnabled,             // 6502: JSTE
       &controls.joystick,                 // 6502: JSTK
       &tunes.dockingMusicOff,             // 6502: MUTOK
-      &_game.universe.useDisk,                     // 6502: DISK
-      &_game.universe.heaps.pltog, // 6502: PLTOG
+      &_game.universe.useDisk,            // 6502: DISK
+      &_game.universe.heaps.pltog,        // 6502: PLTOG
       &tunes.dockingMusicForced,          // 6502: MUFOR
       &tunes.dockingPlaysTheme,           // 6502: MUDOCK
       &tunes.effectsDuringMusic,          // 6502: MUSILLY
@@ -842,7 +840,8 @@ namespace
       Elite::AbandonShip(_game.universe, _game.ports, _game.universe.commander.fuel);
 
       // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
-      Elite::StopDockingMusic(_game.universe.music, _game.universe.status.titleReset, _game.universe.sound, _game.audio.Direct());
+      Elite::StopDockingMusic(_game.universe.music, _game.universe.status.titleReset, _game.universe.sound,
+                              _game.universe.memoryMap, _game.audio.Direct());
       Leave(_game, Elite::LoopOutcome::Docked);
       return;
     }
@@ -997,11 +996,12 @@ namespace
      */
     if (pass.music == Elite::MusicChange::StartNow)
     {
-      Elite::StartDockingMusicNow(_game.universe.music, _game.audio.Direct());
+      Elite::StartDockingMusicNow(_game.universe.music, _game.universe.memoryMap, _game.audio.Direct());
     }
     else if (pass.music == Elite::MusicChange::Stop)
     {
-      Elite::StopDockingMusic(_game.universe.music, _game.universe.status.titleReset, _game.universe.sound, _game.audio.Direct());
+      Elite::StopDockingMusic(_game.universe.music, _game.universe.status.titleReset, _game.universe.sound,
+                              _game.universe.memoryMap, _game.audio.Direct());
     }
 
     /*

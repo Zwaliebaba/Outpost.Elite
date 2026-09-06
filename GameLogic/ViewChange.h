@@ -103,7 +103,7 @@ namespace Elite
 
   /// 6502: NOSPRITES -- switch every sprite off, bracketed by the two raster-mode changes like
   /// `SIGHT`. Six instructions, and all six are the seam.
-  void HideAllSprites(SightEffects& _effects) noexcept;
+  void HideAllSprites(VideoState& _video, MemoryMap& _map) noexcept;
 
   /*
    * 6502: BOX2 -- the border: two vertical edges, a byte in the top right, and a rule across row 0.
@@ -169,7 +169,8 @@ namespace Elite
    * time and differ on the first.
    */
   void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
-                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, SightEffects& _effects) noexcept;
+                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, VideoState& _video,
+                     MemoryMap& _map) noexcept;
 
   /*
    * 6502: TTX66K -- clear the screen and draw whichever furniture this view wants.
@@ -189,7 +190,7 @@ namespace Elite
    */
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
                          const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,
-                         SightEffects& _effects, std::uint8_t _view) noexcept;
+                         VideoState& _video, MemoryMap& _map, std::uint8_t _view) noexcept;
 
   /// What `LOOK1` and `WARP` reach that is neither memory nor the canvas.
   /*

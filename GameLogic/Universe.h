@@ -9,6 +9,7 @@
 #include "ExtendedTokens.h"
 #include "Lasers.h"
 #include "Market.h"
+#include "MemoryMap.h"
 #include "Music.h"
 #include "LineHeap.h"
 #include "Rng.h"
@@ -137,6 +138,17 @@ namespace Elite
     // `CharacterPrinter` and the printers stay outside a universe that has to copy. Moving it in
     // means giving the printer a reference to it, which is M3-b's question and not M3-a's.
     VideoState video{};         ///< 6502: the VIC-II registers `MVTRIBS` reads back
+
+    /*
+     * 6502: L1M and `l1` -- the 6510's input/output port, which decides what the address space
+     * holds (M3-b-3a).
+     *
+     * It is here and not in `VideoState` because it is not a video register: the same routine banks
+     * the SID in for `stopat`, the CIA in for `RDKEY` and the KERNAL in for `SVE`. `MemoryMap.h`
+     * has the finding that put it in the library at all -- `SETL1` is neither self-modifying nor
+     * inside an interrupt handler, which is what the seam it used to sit behind was justified by.
+     */
+    MemoryMap memoryMap;
     TrumbleSprites trumbles;    ///< 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH
 
     std::uint8_t view = 0;      ///< 6502: QQ11 -- which screen is up

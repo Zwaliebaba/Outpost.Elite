@@ -61,7 +61,7 @@ namespace Elite
     _universe.text.column = TITLE_PROMPT_COLUMN;
 
     // 6502: JSR startat.
-    StartTheme(_universe.music, _ports.sid);
+    StartTheme(_universe.music, _universe.memoryMap, _ports.sid);
 
     // 6502: LDX #CYL / LDA #6 / LDY #210 / JSR TITLE -- a Cobra Mk III, a long way off.
     const std::uint8_t answer = _ports.start.ShowTitleScreen(TITLE_LOAD_TOKEN, ShipType::CobraMk3, TITLE_COBRA_DISTANCE);
@@ -75,7 +75,7 @@ namespace Elite
     if (answer == KEY_YES_INTERNAL)
     {
       // 6502: JSR stopat / JSR DFAULT / JSR SVE / JSR startat.
-      StopMusic(_universe.music, _universe.sound, _ports.sid);
+      StopMusic(_universe.music, _universe.sound, _universe.memoryMap, _ports.sid);
 
       // 6502: JSR DFAULT -- so the menu has a commander to print a name for.
       (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
@@ -89,7 +89,7 @@ namespace Elite
        * restarting the game and returning to the bay; here both answers lead to the same next
        * instruction, because `QU5`'s DFAULT below installs whatever the menu left in the image.
        */
-      StartTheme(_universe.music, _ports.sid);
+      StartTheme(_universe.music, _universe.memoryMap, _ports.sid);
     }
 
     /*
@@ -105,7 +105,7 @@ namespace Elite
     (void)_ports.start.ShowTitleScreen(TITLE_START_TOKEN, ShipType::Adder, TITLE_ADDER_DISTANCE);
 
     // 6502: JSR stopat -- the only stop both paths reach.
-    StopMusic(_universe.music, _universe.sound, _ports.sid);
+    StopMusic(_universe.music, _universe.sound, _universe.memoryMap, _ports.sid);
 
     /*
      * 6502: JSR ping / JSR TT111 / JSR jmp -- and this SNAPS the commander's position.

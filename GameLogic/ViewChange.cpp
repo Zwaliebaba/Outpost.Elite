@@ -146,15 +146,16 @@ namespace Elite
     }
   }
 
-  void HideAllSprites(SightEffects& _effects) noexcept
+  void HideAllSprites(VideoState& _video, MemoryMap& _map) noexcept
   {
-    _effects.SetRasterMode(0x05u);  // 6502: LDA #%101 / JSR SETL1
-    _effects.SetSpritesEnabled(0u); // 6502: LDA #%00000000 / STA VIC+&15
-    _effects.SetRasterMode(0x04u);  // 6502: LDA #%100, and it falls into SETL1
+    SetMemoryMap(_map, MEMORY_MAP_IO);   // 6502: LDA #%101 / JSR SETL1
+    ApplySpritesEnabled(_video, 0u);     // 6502: LDA #%00000000 / STA VIC+&15
+    SetMemoryMap(_map, MEMORY_MAP_RAM);  // 6502: LDA #%100, and it falls into SETL1
   }
 
   void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
-                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, SightEffects& _effects) noexcept
+                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, VideoState& _video,
+                     MemoryMap& _map) noexcept
   {
     // 6502: JSR BOX2 -- at its label, so eighteen rows: the space view's height (§6.79).
     DrawBorder(_canvas, BORDER_ROWS_SPACE_VIEW);
@@ -184,14 +185,14 @@ namespace Elite
     }
 
     DrawColourBands(_canvas); // 6502: .nearlyxmas JSR BLUEBAND
-    HideAllSprites(_effects); // 6502: JSR NOSPRITES
+    HideAllSprites(_video, _map); // 6502: JSR NOSPRITES
 
     _screen.dashboardShown = 0xFFu; // 6502: LDA #&FF / STA DFLAG
   }
 
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
                          const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,
-                         SightEffects& _effects, std::uint8_t _view) noexcept
+                         VideoState& _video, MemoryMap& _map, std::uint8_t _view) noexcept
   {
     /*
      * 6502: LDA #&04 / STA SC / LDA #&60 / STA SC+1 / LDX #24 / .BOL3 LDA #&10 / LDY #31 /
@@ -239,7 +240,7 @@ namespace Elite
     // so the space view and view 13 never reach anything below this.
     if (_view == 0u || _view == 13u)
     {
-      ShowDashboard(_canvas, _draw, _screen, _bubble, _flight, _status, _fuel, _compass, _effects);
+      ShowDashboard(_canvas, _draw, _screen, _bubble, _flight, _status, _fuel, _compass, _video, _map);
       return;
     }
 
@@ -260,7 +261,7 @@ namespace Elite
 
     DrawColourBands(_canvas);    // 6502: JSR BLUEBAND
     ForgetScannerBlips(_bubble); // 6502: JSR zonkscanners
-    HideAllSprites(_effects);    // 6502: JSR NOSPRITES
+    HideAllSprites(_video, _map); // 6502: JSR NOSPRITES
 
     // 6502: LDY #31 / LDA #&70 / .BOL5 STA &6004,Y / DEY / BPL BOL5 -- the top row's colour band.
     for (int offset = 31; offset >= 0; --offset)
@@ -321,7 +322,8 @@ namespace Elite
     _universe.text.row = 1u;    // 6502: STA YC
 
     SetUpScreenPixels(_universe.canvas, _universe.draw, _universe.text, _universe.screen, _universe.bubble, _universe.flight,
-                      _universe.status, _universe.commander.fuel, _universe.compass, _ports.sight, _universe.view); // 6502: JSR TTX66K
+                      _universe.status, _universe.commander.fuel, _universe.compass, _universe.video,
+                      _universe.memoryMap, _universe.view); // 6502: JSR TTX66K
 
     // 6502: LDX QQ22+1 / BEQ OLDBOX / JSR ee3 -- the hyperspace countdown outlives a screen change
     // and is reprinted, because the screen it was on has just been wiped.
@@ -361,8 +363,8 @@ namespace Elite
       _universe.spaceView = _to;  // 6502: .LQ STX VIEW
       SetUpScreen(_universe, _ports, 0u); // 6502: JSR TT66, with A zero, so it becomes the space view
 
-      DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView,
-                      _ports.sight); // 6502: JSR SIGHT
+      DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView, _universe.video,
+                      _universe.memoryMap); // 6502: JSR SIGHT
 
       // 6502: JMP NWSTARS -- a whole new field, because there was no space view to keep.
       SeedStardustAndClearShips(_universe.canvas, _universe.dust, _universe.rng, _universe.heaps, _universe.bubble, _universe.work,
@@ -387,7 +389,8 @@ namespace Elite
     // 6502: JSR WPSHPS, and then it falls into SIGHT.
     ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view);
 
-    DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView, _ports.sight);
+    DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView, _universe.video,
+                    _universe.memoryMap);
   }
 
   void Warp(Universe& _universe, Ports& _ports) noexcept

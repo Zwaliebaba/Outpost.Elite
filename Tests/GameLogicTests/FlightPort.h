@@ -48,8 +48,6 @@ namespace GameLogicTests
   class FlightPort final : public Elite::SpawnChildEffects,
                            public Elite::ShipDrawEffects,
                            public Elite::ControlEffects,
-                           public Elite::SightEffects,
-                           public Elite::ExplosionEffects,
                            public Elite::ChartEffects
   {
   public:
@@ -69,8 +67,8 @@ namespace GameLogicTests
 
     FlightPort()
       : ports{universe.printer,          universe.characters, universe.characters, *this,           *this,
-              *this,                     sidLog,              universe.extendedPrinter, universe.unused,
-              universe.unused,           universe.unused,     universe.unused,     universe.unused}
+              sidLog,                    universe.extendedPrinter, universe.unused, universe.unused,
+              universe.unused,           universe.unused,     universe.unused}
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -102,7 +100,6 @@ namespace GameLogicTests
     Elite::SidWriteLog sidLog;
 
     std::uint8_t docked = 0xFFu; ///< 6502: QQ12
-    std::uint8_t rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote
 
     /// The keyboard as the script holds it: one entry per C64 matrix position, non-zero for held.
     /// `ScanKeyboard` turns it into `keys` the way `RDKEY` fills `KLO`.
@@ -178,7 +175,7 @@ namespace GameLogicTests
     void DrawExplosion() override
     {
       Elite::DrawExplosionCloud(universe.canvas, universe.math, universe.rng, universe.work, universe.heap, universe.geometry,
-                                universe.bubble, *this);
+                                universe.bubble, universe.video, universe.memoryMap);
     }
 
     // ---- Elite::ControlEffects ------------------------------------------------------------------
@@ -187,7 +184,7 @@ namespace GameLogicTests
     /// matrix replaced by the script's array and the same two masks after it.
     void ScanKeyboard() override
     {
-      rasterMode = 0b101;                                         // 6502: LDA #%101 / JSR SETL1
+      Elite::SetMemoryMap(universe.memoryMap, Elite::MEMORY_MAP_IO); // 6502: LDA #%101 / JSR SETL1
       Elite::ApplyMaskSprites(universe.video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
       universe.keys.fill(0u);                                     // 6502: JSR ZEKTRAN
       for (std::size_t key = universe.keys.size(); key-- > 0u;)
@@ -211,7 +208,7 @@ namespace GameLogicTests
           universe.keys[index] = 0u;
         }
       }
-      rasterMode = 0b100; // 6502: LDA #%100 / JSR SETL1
+      Elite::SetMemoryMap(universe.memoryMap, Elite::MEMORY_MAP_RAM); // 6502: LDA #%100 / JSR SETL1
     }
 
     // ---- Elite::ChartEffects, and Elite::ControlEffects's docking computer ----------------------
@@ -228,34 +225,15 @@ namespace GameLogicTests
       Elite::ClearMessageRows(universe.canvas, universe.printer, universe.text, universe.characters.state, universe.message);
     }
 
-    // ---- Elite::SightEffects and Elite::ExplosionEffects ----------------------------------------
+    /*
+     * `SightEffects` AND `ExplosionEffects` WERE ANSWERED HERE AND ARE NOT ANY MORE (M3-b-3a).
+     *
+     * Six overrides, and five of them were already one line into `Universe::video`; the sixth kept
+     * `SETL1`'s byte in this object where nothing could read it. Both are library state now.
+     */
 
-    void SetRasterMode(std::uint8_t _mode) override
-    {
-      rasterMode = _mode;
-    }
-    void SetSightColour(std::uint8_t _colour) override
-    {
-      Elite::ApplySightColour(universe.video, _colour);
-    }
-    void SetSpritesEnabled(std::uint8_t _mask) override
-    {
-      Elite::ApplySpritesEnabled(universe.video, _mask);
-    }
-    void SetSpriteExpansion(std::uint8_t _mask) override
-    {
-      Elite::ApplySpriteExpansion(universe.video, _mask);
-    }
-    void ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y) override
-    {
-      Elite::ApplyExplosionSprite(universe.video, _x, _y);
-    }
-    void MaskSprites(std::uint8_t _mask) override
-    {
-      Elite::ApplyMaskSprites(universe.video, _mask);
-    }
     /// The seams and the text machinery, last because every reference in it is bound at
-    /// construction. Thirteen where the two aggregates held thirty-nine (M3-a).
+    /// construction. Twelve where the two aggregates held thirty-nine (M3-a).
     Elite::Ports ports;
   };
 

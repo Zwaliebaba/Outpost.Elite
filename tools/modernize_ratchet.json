@@ -9,9 +9,9 @@
   ],
   "ceilings": {
     "register-params": {
-      "ceiling": 14,
+      "ceiling": 13,
       "slack": 0,
-      "slice": "M3-b-1b: ChartShapes goes, and its two methods took an _x and a _y"
+      "slice": "M3-b-3a: DrawLaserSights takes the state, not a _view plus a seam"
     },
     "workspace-params": {
       "ceiling": 45,
@@ -29,24 +29,24 @@
       "slice": "M1-a"
     },
     "aggregate-refs": {
-      "ceiling": 13,
+      "ceiling": 12,
       "slack": 0,
-      "slice": "M3-a-3: TradeScreen, SaveScreen, GameStart and MissionBay go; what is left IS Ports"
+      "slice": "M3-b-3a: SightEffects goes and no port replaces it -- twelve, with credit for Presenter"
     },
     "main-lines": {
       "ceiling": 1197,
       "slack": 0,
-      "slice": "M3-b-2b: the music player is the universe's and Game holds only the chip"
+      "slice": "M3-b-3a: Main.cpp names neither sight seam and the Ports list is one line"
     },
     "outpost-elite-names": {
-      "ceiling": 180,
+      "ceiling": 177,
       "slack": 0,
-      "slice": "M3-b-2b: ViewEffects, FlightLoopEffects and the theme pair are not names any more"
+      "slice": "M3-b-3a: SightEffects, ExplosionEffects and the six overrides are not names any more"
     },
     "effects-seams": {
-      "ceiling": 16,
+      "ceiling": 14,
       "slack": 0,
-      "slice": "M3-b-2b: ViewEffects was in front of an RTS, and FlightLoopEffects had nothing of its own"
+      "slice": "M3-b-3a: SightEffects and ExplosionEffects become VideoState and MemoryMap writes"
     },
     "out-params": {
       "ceiling": 17,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3911,
+      "ceiling": 3910,
       "slack": 0,
-      "slice": "M3-b-2b: the markers on the four music seams, the bell and DOVDU19's palette"
+      "slice": "M3-b-3a: one pair of SETL1 constants for the whole library, not three"
     },
     "oracle-test-files": {
       "ceiling": 50,

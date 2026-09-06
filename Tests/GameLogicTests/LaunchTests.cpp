@@ -252,7 +252,6 @@ namespace GameLogicTests
 
         // The three the platform owns, plus §6.108's: `TT66` reaches `NOSPRITES`, and `NOSPRITES`
         // writes VIC registers that are the ship blueprint table in the oracle's flat memory.
-        cpu.AddTrap(oracle.Label("SETL1"));
         cpu.AddTrap(oracle.Label("DOVDU19"));
         cpu.AddTrap(oracle.Label("NOSPRITES"));
 
@@ -343,7 +342,6 @@ namespace GameLogicTests
         cpu.memory[stp] = 8u;
 
         cpu.AddTrap(delay);
-        cpu.AddTrap(oracle.Label("SETL1"));
         cpu.AddTrap(oracle.Label("DOVDU19"));
         cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, third time
 
@@ -852,7 +850,6 @@ namespace GameLogicTests
             leaving.universe.view = 1u;
 
             Cpu6502 cpu = oracle.Fresh();
-                    cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
 
             /*
@@ -1053,7 +1050,6 @@ namespace GameLogicTests
       MirrorLeaving(leaving, cpu, at, LaunchWhere(oracle), 0u);
 
       cpu.AddTrap(oracle.Label("EXNO3"), Cpu6502::TrapExit::SetCarry);
-      cpu.AddTrap(oracle.Label("SETL1"));
       cpu.AddTrap(oracle.Label("DOVDU19"));
       cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, fourth time
 
@@ -1413,7 +1409,6 @@ namespace GameLogicTests
                 leaving.start.fire = fire;
 
                 Cpu6502 cpu = oracle.Fresh();
-                cpu.AddTrap(oracle.Label("SETL1"));
                 cpu.AddTrap(oracle.Label("DOVDU19"));
 
                 /*

@@ -71,9 +71,7 @@ namespace Outpost
    */
   class FlightSession final : public Elite::SpawnChildEffects,
                               public Elite::ShipDrawEffects,
-                              public Elite::ControlEffects,
-                              public Elite::SightEffects,
-                              public Elite::ExplosionEffects
+                              public Elite::ControlEffects
   {
   public:
     FlightSession(Window& _window, Elite::Universe& _universe) noexcept;
@@ -140,32 +138,15 @@ namespace Outpost
     // universe's own heaps and the comparison is the chart's pixels.
     void RunDockingComputer(Elite::Ship& _work) override;
 
-    // ---- Elite::SightEffects ----------------------------------------------------------------------
-
-    /// `SetRasterMode` is `Elite::ExplosionEffects`'s as well as `SightEffects`'s -- one `SETL1` in
-    /// the game, one method here, and one override satisfying both interfaces.
-    void SetRasterMode(std::uint8_t _mode) override;
     /*
-     * 6502: the VIC-II sprite registers, for `Canvas::Resolve` to composite from.
+     * `SightEffects` AND `ExplosionEffects` WERE ANSWERED HERE AND ARE NOT ANY MORE (M3-b-3a).
      *
-     * A reference to plain data and NOT a getter that computes anything -- see `VideoState.h`, and
-     * `SightEffects::MaskSprites` before it. The flight session owns the struct because the seams
-     * that write it are its, and the presenter reads it because that is what ADR-005 §1 decided
-     * `Resolve` is for.
+     * Five of the six overrides were already one line into `Elite::ApplyXxx` over
+     * `Universe::video`, which is where ADR-005 §1 put the registers. The sixth was `SETL1`, and
+     * it stored into `m_rasterMode` -- a byte of this object that nothing in the program read.
+     * `Universe::memoryMap` is that byte now, in the library, compared against the game's own.
      */
-    [[nodiscard]] const Elite::VideoState& Video() const noexcept
-    {
-      return m_universe.video;
-    }
 
-    void SetSightColour(std::uint8_t _colour) override;
-    void SetSpritesEnabled(std::uint8_t _mask) override;
-    void MaskSprites(std::uint8_t _mask) override;
-
-    // ---- Elite::ExplosionEffects ----------------------------------------------------------------
-
-    void SetSpriteExpansion(std::uint8_t _mask) override;
-    void ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y) override;
 
   private:
     Window& m_window;
@@ -183,7 +164,6 @@ namespace Outpost
     /// 6502: the sound buffer, the music player and the chip they write -- the composition root's,
     /// because the docked half beeps and starts the theme through the shell.
 
-    std::uint8_t m_rasterMode = 0; ///< 6502: L1M -- what `SETL1` last wrote into the handler
 
     /// 6502: the seams, null until the composition root attaches them -- see `AttachPorts`.
     Elite::Ports* m_ports = nullptr;

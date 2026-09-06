@@ -67,7 +67,7 @@ namespace Elite
   {
 
     // 6502: JSR stopbd
-    StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _ports.sid);
+    StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
 
     /*
      * 6502: LDA BOMB / BPL BOMBOK / JSR BOMBOFF / STA BOMB.
@@ -580,7 +580,7 @@ namespace Elite
      * reproduces the arithmetic and none of the sequence (§6.109's argument, and §6.149's bug).
      */
     (void)MainFlightLoop(_universe, _ports);
-    HideAllSprites(_ports.sight);
+    HideAllSprites(_universe.video, _universe.memoryMap);
     if (_pacing != nullptr)
     {
       _pacing->ShowFrame();

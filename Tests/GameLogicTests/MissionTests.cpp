@@ -147,7 +147,7 @@ namespace GameLogicTests
     /// Where the mission routines live, looked up once.
     struct MissionWhere
     {
-      std::uint16_t pause, pas1, pause2, bris, mt27, mt28, rdkey, detok, delay, gcnt, xc, yc, ll9, setl1, dovdu19, nosprites;
+      std::uint16_t pause, pas1, pause2, bris, mt27, mt28, rdkey, detok, delay, gcnt, xc, yc, ll9, dovdu19, nosprites;
       std::uint16_t alpha, alp2Next, bet2, bet2Next, typeByte, xsav, inf, kPercent;
       std::uint16_t brief, brief2, brief3, brp, debrief, debrief2, tbrief, bay, yesno, tp, mcnt, slsp;
 
@@ -166,7 +166,6 @@ namespace GameLogicTests
         xc = _oracle.Label("XC");
         yc = _oracle.Label("YC");
         ll9 = _oracle.Label("LL9");
-        setl1 = _oracle.Label("SETL1");
         dovdu19 = _oracle.Label("DOVDU19");
         nosprites = _oracle.Label("NOSPRITES");
 
@@ -210,7 +209,6 @@ namespace GameLogicTests
     /// The seams that are not this slice's, trapped so both sides do the same nothing.
     static void Trap(Cpu6502& _cpu, const MissionWhere& _to)
     {
-      _cpu.AddTrap(_to.setl1);
       _cpu.AddTrap(_to.dovdu19);
 
       /*

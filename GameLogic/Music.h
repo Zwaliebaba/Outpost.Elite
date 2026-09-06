@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MemoryMap.h"
 #include "SoundEffects.h"
 
 #include <cstdint>
@@ -112,8 +113,12 @@ namespace Elite
    * `BIT MUDOCK / BMI startat` chooses the theme over the Blue Danube; then `startat2` records the
    * tune's start, and the checks run: already playing, do nothing; forced on, start regardless;
    * switched off, do nothing; else start. `BDENTRY` zeroes the chip and `MUPLA` goes to &FF.
+   *
+   * THE `MemoryMap` IS `april16`'s `SETL1` BRACKET, and the port did not have it until M3-b-3a:
+   * the SID has to be banked in before it can be written and out again afterwards, and while
+   * `SETL1` was a seam the library had nowhere to put the call (`MemoryMap.h`).
    */
-  void StartDockingMusic(MusicPlayer& _music, SidWriteLog& _log) noexcept;
+  void StartDockingMusic(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept;
 
   /*
    * 6502: april16 -- start it NOW, with none of the checks above it.
@@ -128,10 +133,10 @@ namespace Elite
    * with a test disabled -- it is the last four instructions of it (§6.136's `hyp1+3` was the same
    * question and went the other way, because there the difference really was one `JSR`).
    */
-  void StartDockingMusicNow(MusicPlayer& _music, SidWriteLog& _log) noexcept;
+  void StartDockingMusicNow(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept;
 
   /// 6502: startat -- the title theme, through the same `startat2` and so the same checks.
-  void StartTheme(MusicPlayer& _music, SidWriteLog& _log) noexcept;
+  void StartTheme(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept;
 
   /*
    * 6502: stopbd -- stop the docking music, unless something says not to.
@@ -141,7 +146,8 @@ namespace Elite
    * cannot be stopped, and the routine goes to START it instead, which does nothing if it is
    * already playing. Otherwise `stopat`.
    */
-  void StopDockingMusic(MusicPlayer& _music, std::uint8_t _titleReset, SoundBuffer& _buffer, SidWriteLog& _log) noexcept;
+  void StopDockingMusic(MusicPlayer& _music, std::uint8_t _titleReset, SoundBuffer& _buffer, MemoryMap& _map,
+                        SidWriteLog& _log) noexcept;
 
   /*
    * 6502: stopat -- stop whatever is playing.
@@ -150,7 +156,7 @@ namespace Elite
    * chip's twenty-five registers are zeroed from &18 down to 0, and the volume register is set to
    * fifteen -- so the effects, which `SOFLUSH` has just told to end, end on a chip that can be heard.
    */
-  void StopMusic(MusicPlayer& _music, SoundBuffer& _buffer, SidWriteLog& _log) noexcept;
+  void StopMusic(MusicPlayer& _music, SoundBuffer& _buffer, MemoryMap& _map, SidWriteLog& _log) noexcept;
 
   /*
    * 6502: BDENTRY -- start the tune at `tuneStart`.
