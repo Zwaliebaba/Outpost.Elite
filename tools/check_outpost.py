@@ -196,17 +196,25 @@ def type_bodies(_text: str):
                     break
 
 
-def declared_members(_logic: Path) -> dict[str, set[str]]:
-    """Every member name each type in a directory of headers has, its bases' included.
+def declared_members(_logic: Path, _globs: tuple[str, ...] = ("*.h",)) -> dict[str, set[str]]:
+    """Every member name each type in a directory has, its bases' included.
 
     A type declared twice -- a forward declaration and a definition -- unions rather than replaces,
     so a partial parse can only ever ADD members and never take one away. That is the direction a
     check like this has to fail in.
+
+    `_globs` is headers alone for the two member passes, because a variable is declared with a type
+    a header names. The CHAIN check asks for `*.cpp` too, and `Main.cpp`'s composition struct is
+    why: `Game` is declared in an anonymous namespace in the file that walks it (section 8).
     """
     members: dict[str, set[str]] = {}
     bases: dict[str, set[str]] = {}
 
-    for header in sorted(_logic.glob("*.h")):
+    sources: list[Path] = []
+    for glob in _globs:
+        sources += list(_logic.glob(glob))
+
+    for header in sorted(sources):
         text = strip_comments(header.read_text(encoding="utf-8", errors="replace"))
         for name, inherits, body in type_bodies(text):
             found = set(MEMBER_FIELD.findall(body))
@@ -224,6 +232,106 @@ def declared_members(_logic: Path) -> dict[str, set[str]]:
                     members[name] |= members[base]
 
     return members
+
+
+# `Type name;` inside a class body: what a member's own type is, for the chain check below. It is
+# the same shape as `MEMBER_FIELD` and keeps the type as well as the name.
+MEMBER_TYPED = re.compile(r"^\s*(?:mutable\s+|static\s+|inline\s+|constexpr\s+|const\s+)*"
+                          r"([A-Za-z_][\w:]*)\s*(?:<[^;{}()\n]*>)?\s*[*&]?\s*&?\s+"
+                          r"([A-Za-z_]\w*)\s*[;={\[]", re.MULTILINE)
+
+# `a.b.c` and longer -- a chain of at least two hops, which `APP_ACCESS` reads as two separate
+# pairs and therefore resolves neither of.
+CHAINED_ACCESS = re.compile(r"\b([A-Za-z_]\w*)((?:\s*(?:\.|->)\s*[A-Za-z_]\w*){2,})")
+
+
+def declared_member_types(_roots: list[Path]) -> dict[str, dict[str, str]]:
+    """For each type, what type each of its members is -- `Game.shell` is a `GameShell`.
+
+    The chain check needs this and the flat member map cannot supply it. Namespaces, references and
+    template arguments are stripped: what a chain needs is the type's NAME, and `Elite::Universe&`
+    and `Universe` are the same name for that purpose.
+    """
+    types: dict[str, dict[str, str]] = {}
+    for root in _roots:
+        for source in sorted(list(root.glob("*.h")) + list(root.glob("*.cpp"))):
+            text = strip_comments(source.read_text(encoding="utf-8", errors="replace"))
+            for name, _inherits, body in type_bodies(text):
+                for spelt, member in MEMBER_TYPED.findall(body):
+                    bare = spelt.rsplit("::", 1)[-1]
+                    if bare in KEYWORDS:
+                        continue
+                    types.setdefault(name, {}).setdefault(member, bare)
+    return types
+
+
+def check_chains(_sources: list[Path], _members: dict[str, set[str]],
+                 _memberTypes: dict[str, dict[str, str]]) -> tuple[int, list[str]]:
+    """`a.b.c` -- the access through an expression the five halves above all decline to read.
+
+    `Main.cpp` reached `_game.shell.FlushKeyboard()` for one commit after M3-b-3d renamed that
+    method to `Keyboard::Flush`, and every check here passed it: `APP_ACCESS` sees `_game.shell`
+    and `shell.FlushKeyboard` as two unrelated pairs, and `shell` is not a variable this file
+    declares, so neither was resolved. That is the sixth Windows-only break and the second one a
+    rename in `GameLogic` caused (plan section 8).
+
+    So this walks the chain. `_game` is declared `Game& _game`, `Game::shell` is a `GameShell`,
+    and `GameShell` is a type whose members are known -- three lookups, each of which may fail, and
+    a failure means the chain is not checked rather than that it is wrong. `Main.cpp`'s own
+    composition struct is why the type map reads `*.cpp` as well as `*.h`: `Game` is declared in an
+    anonymous namespace in the file that uses it.
+
+    A HOP THROUGH A CALL ENDS THE CHAIN. `_game.flight.Loop().options` names a return type this
+    cannot read, so the walk stops at the parenthesis and checks what it got to, which for that
+    example is `flight` on `Game` and nothing after it.
+    """
+    checked = 0
+    wrong: list[str] = []
+
+    for source in _sources:
+        text = strip_comments(source.read_text(encoding="utf-8", errors="replace"))
+
+        scope: dict[str, set[str]] = {}
+        for pattern in (APP_DECLARATION, OWN_DECLARATION):
+            for match in pattern.finditer(text):
+                scope.setdefault(match.group(2), set()).add(match.group(1))
+
+        # The same declining `check_members` does, for the same file: `CanvasPresenter.cpp` has an
+        # `Outpost::Viewport view` and a `D3D12_SHADER_RESOURCE_VIEW_DESC view`, and one scope per
+        # file cannot tell which `view.something` is which.
+        for match in ANY_DECLARATION.finditer(text):
+            spelt = match.group(1).rsplit("::", 1)[-1]
+            if spelt not in _members and spelt not in KEYWORDS:
+                scope.pop(match.group(2), None)
+
+        for match in CHAINED_ACCESS.finditer(text):
+            root = match.group(1)
+            if root not in scope:
+                continue
+            hops = re.findall(r"[A-Za-z_]\w*", match.group(2))
+
+            # A name two declarations disagree about is checked against neither: the chain needs one
+            # type to walk from, and the union of two is not a type.
+            owners = scope[root]
+            if len(owners) != 1:
+                continue
+            owner = next(iter(owners))
+
+            for index, hop in enumerate(hops):
+                known = _members.get(owner)
+                if known is None:
+                    break
+                checked += 1
+                if hop not in known:
+                    reached = root + "." + ".".join(hops[:index + 1])
+                    wrong.append(f"  FAIL  {source.name} reads {reached}, and {owner} has no member {hop}")
+                    break
+                nextType = _memberTypes.get(owner, {}).get(hop)
+                if nextType is None:
+                    break
+                owner = nextType
+
+    return checked, wrong
 
 
 def check_members(_sources: list[Path], _members: dict[str, set[str]], _pattern=APP_DECLARATION,
@@ -605,8 +713,40 @@ def self_test() -> int:
             print(line)
         return 1
 
+    # ---- and the chain check, planted with the access the Windows job rejected ----------------
+    with tempfile.TemporaryDirectory() as folder:
+        planted = Path(folder) / "Planted.cpp"
+        # THE CHAIN IS TWO HOPS AND THE FIRST ONE IS GOOD, on purpose: a check that reported the
+        # whole expression whenever any part of it failed to resolve would report every call in
+        # `Main.cpp`, and one that stopped at the first hop would never reach the bad one.
+        planted.write_text("namespace Outpost { struct Held { int kept = 0; }; struct Holder { Held held; }; }\n"
+                           "void f(Outpost::Holder& _it) { (void)_it.held.kept; (void)_it.held.gone; }\n",
+                           encoding="utf-8")
+        plantedTypes = declared_member_types([Path(folder)])
+        plantedMembers = declared_members(Path(folder), ("*.cpp",))
+        hops, broken = check_chains([planted], plantedMembers, plantedTypes)
+
+    if hops == 0:
+        print("FAIL  the self-test's chain was not walked at all")
+        return 1
+    if len(broken) != 1 or "gone" not in broken[0]:
+        print(f"FAIL  the self-test expected the second hop alone and got {broken}")
+        return 1
+
+    appTypes = declared_member_types([LOGIC, APP])
+    appMembers = declared_members(LOGIC, ("*.h", "*.cpp"))
+    for name, own in declared_members(APP, ("*.h", "*.cpp")).items():
+        appMembers.setdefault(name, set()).update(own)
+    dangling = check_chains(sorted(list(APP.glob("*.cpp")) + list(APP.glob("*.h"))), appMembers, appTypes)[1]
+    if dangling:
+        print("FAIL  the tree itself does not pass the chain check")
+        for line in dangling:
+            print(line)
+        return 1
+
     print(f"OK    self-test passed: a planted Elite:: member, a planted Outpost:: member, a planted "
-          f"initialiser, a planted missing brace and a planted unbraced case were caught, "
+          f"initialiser, a planted missing brace, a planted unbraced case and a planted broken "
+          f"chain were caught, "
           f"{len(members) + len(ownMembers)} types parsed, the tree is clean")
     return 0
 
@@ -675,6 +815,14 @@ def main() -> int:
     switchesChecked, skipped = check_switch_scopes(sources)
     wrong.extend(skipped)
 
+    # ---- and every member it names through an expression rather than a variable ---------------
+    everything = declared_members(LOGIC, ("*.h", "*.cpp"))
+    for name, own in declared_members(APP, ("*.h", "*.cpp")).items():
+        everything.setdefault(name, set()).update(own)
+    memberTypes = declared_member_types([LOGIC, APP])
+    chainsChecked, badChains = check_chains(sources, everything, memberTypes)
+    wrong.extend(badChains)
+
     print(f"app sources      {len(sources)}")
     print(f"Elite:: names    {len(used)}")
     print(f"calls checked    {checked}")
@@ -682,12 +830,13 @@ def main() -> int:
     print(f"initialisers     {initialisersChecked}")
     print(f"braces balanced  {bracesChecked}")
     print(f"switch bodies    {switchesChecked}")
+    print(f"chained members  {chainsChecked}")
 
     for line in wrong:
         print(line)
 
     if wrong and not missing:
-        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s), delimiter(s) or case scope(s) do not match")
+        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s), delimiter(s), case scope(s) or chain(s) do not match")
         return 1
 
     if missing:
@@ -698,12 +847,13 @@ def main() -> int:
         return 1
 
     if wrong:
-        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s), delimiter(s) or case scope(s) do not match")
+        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s), delimiter(s), case scope(s) or chain(s) do not match")
         return 1
 
     print("OK    every Elite:: name the app uses is declared, every call it makes has the right")
-    print("      number of arguments, every member it names exists, every constructor initialises")
-    print("      only its own members, and no case label jumps past a declaration")
+    print("      number of arguments, every member it names exists at the end of every chain it")
+    print("      walks, every constructor initialises only its own members, and no case label")
+    print("      jumps past a declaration")
     return 0
 
 
