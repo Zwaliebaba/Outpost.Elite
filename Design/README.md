@@ -9,10 +9,10 @@ briefing and dies. **There is no recorded mutation debt left**: the ship AI's th
 closed and `python tools/mutate.py --unit tactics` is 16 of 16 — the last one was a defect, `TA7`'s
 first `BCC` jumping to part SIX so that a ship above half energy never launches a missile (plan
 §6.152, §6.153). **What is left is not a slice**: ADR-005 §1's raster effects are decided and
-unwritten, so the energy bomb and the hyperspace tearing do not show (§6.154); three acceptance
-criteria were signed off by look with no stored capture; R13 is closed on one mutation unit of
-four; and 0e waits on the rights holders. Plan §1.2 lists the four in one place. **A fresh clone
-needs
+unwritten, so the energy bomb and the hyperspace tearing do not show (§6.154); four acceptance
+criteria were signed off by eye or by ear with no stored artefact; R13 is closed on one mutation
+unit of four; and 0e waits on the rights holders. Plan §1.2 lists the four in one place. **A fresh
+clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
 anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->377 tests** and
 CI runs **<!--count:checks-->eleven repository checks** beside it.
