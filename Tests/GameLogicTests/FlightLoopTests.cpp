@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <set>
 #include <string>
 #include <vector>
@@ -963,15 +964,9 @@ namespace GameLogicTests
     /// Everything one frame needs that the shared `Universe` does not carry.
     struct Frame
     {
-      Universe universe;
-      Elite::ControlState control;
-      Elite::ControlOptions options;
-      Elite::KeyLogger keys{};
-      Elite::LaserBurst burst{};
-      Elite::LineHeap heap;
-      Elite::ClipState clip;
-      Elite::Projection projection;
-      Elite::K3Block axes{};
+      Universe universe; ///< every byte of it, since M3-a -- the controls, the keys, the burst,
+                         ///< the heap, the clipper's flag, the projection and the axes were eight
+                         ///< members here while `FlightLoop` held references to them
       RecordingUniverse outside;
       RecordingLoop effects{universe.effects.sounds, universe.effects.soundCarries, universe};
 
@@ -993,7 +988,7 @@ namespace GameLogicTests
         universe.trumbles.count = 0u;
 
         // 6502: LSO -- the station draws into the SUN's heap, which lives in the universe (§6.112).
-        universe.LendSunHeap(heap);
+        universe.LendSunHeap();
 
         /*
          * A message already up, and a REAL one.
@@ -1025,8 +1020,8 @@ namespace GameLogicTests
         universe.bubble.missileTarget = 0xFFu;
         universe.flight.delt4 = 0u;
         universe.flight.delt4Next = 0u;
-        control.roll = 128u;
-        control.pitch = 128u;
+        universe.control.roll = 128u;
+        universe.control.pitch = 128u;
       }
     };
 
@@ -1035,17 +1030,17 @@ namespace GameLogicTests
     {
       const Universe& universe = _frame.universe;
 
-      for (std::size_t slot = 0; slot < _frame.keys.size(); ++slot)
+      for (std::size_t slot = 0; slot < _frame.universe.keys.size(); ++slot)
       {
-        _cpu.memory[static_cast<std::uint16_t>(_loop.klo + slot)] = _frame.keys[slot];
+        _cpu.memory[static_cast<std::uint16_t>(_loop.klo + slot)] = _frame.universe.keys[slot];
       }
 
-      _cpu.memory[_loop.jstx] = _frame.control.roll;
-      _cpu.memory[_loop.jsty] = _frame.control.pitch;
-      _cpu.memory[_loop.autoByte] = _frame.control.dockingComputer;
-      _cpu.memory[_loop.damp] = _frame.options.dampingDisabled;
-      _cpu.memory[_loop.djd] = _frame.options.recentreDisabled;
-      _cpu.memory[_loop.jstk] = _frame.options.joystick;
+      _cpu.memory[_loop.jstx] = _frame.universe.control.roll;
+      _cpu.memory[_loop.jsty] = _frame.universe.control.pitch;
+      _cpu.memory[_loop.autoByte] = _frame.universe.control.dockingComputer;
+      _cpu.memory[_loop.damp] = _frame.universe.options.dampingDisabled;
+      _cpu.memory[_loop.djd] = _frame.universe.options.recentreDisabled;
+      _cpu.memory[_loop.jstk] = _frame.universe.options.joystick;
 
       _cpu.memory[_loop.alpha] = universe.flight.alpha;
       _cpu.memory[_loop.alp2Next] = universe.flight.alp2Next;
@@ -1061,8 +1056,8 @@ namespace GameLogicTests
       _cpu.memory[_loop.ecmp] = universe.status.ecmOurs;
       _cpu.memory[_loop.moonflower] = universe.screen.upperBitmapMode;
 
-      _cpu.memory[_loop.lasx] = _frame.burst.x;
-      _cpu.memory[_loop.lasy] = _frame.burst.y;
+      _cpu.memory[_loop.lasx] = _frame.universe.burst.x;
+      _cpu.memory[_loop.lasy] = _frame.universe.burst.y;
     }
 
     /// Every byte the frame's opening can write, beyond what `CompareState` already covers.
@@ -1073,9 +1068,9 @@ namespace GameLogicTests
       auto same = [&](std::uint16_t _address, std::uint8_t _ours, const wchar_t* _name)
       { Assert::AreEqual(_cpu.memory[_address], _ours, (_context + L": " + _name).c_str()); };
 
-      same(_loop.jstx, _frame.control.roll, L"JSTX");
-      same(_loop.jsty, _frame.control.pitch, L"JSTY");
-      same(_loop.autoByte, _frame.control.dockingComputer, L"auto");
+      same(_loop.jstx, _frame.universe.control.roll, L"JSTX");
+      same(_loop.jsty, _frame.universe.control.pitch, L"JSTY");
+      same(_loop.autoByte, _frame.universe.control.dockingComputer, L"auto");
 
       same(_loop.alpha, universe.flight.alpha, L"ALPHA");
       same(_loop.alp2Next, universe.flight.alp2Next, L"ALP2+1");
@@ -1086,8 +1081,8 @@ namespace GameLogicTests
 
       same(_loop.las, universe.status.laserPower, L"LAS");
       same(_loop.lasct, universe.status.laserCount, L"LASCT");
-      same(_loop.lasx, _frame.burst.x, L"LASX");
-      same(_loop.lasy, _frame.burst.y, L"LASY");
+      same(_loop.lasx, _frame.universe.burst.x, L"LASX");
+      same(_loop.lasy, _frame.universe.burst.y, L"LASY");
       same(_loop.msar, universe.status.missileArmed, L"MSAR");
       same(_loop.mstg, universe.bubble.missileTarget, L"MSTG");
       same(_loop.ecmp, universe.status.ecmOurs, L"ECMP");
@@ -1191,8 +1186,11 @@ namespace GameLogicTests
       Whole,
     };
 
+    /// `_seed` runs after the mirror and before the call: the one hook for a byte `UniverseImage`
+    /// does not carry, which since M2-c is `MathWorkspace`'s two (the altitude's `Q`, and `MV40`'s
+    /// `K2`). Everything else in the frame goes through the image.
     void CompareFrames(Frame& _frame, const OracleImage& _oracle, const Where& _at, const LoopWhere& _loop, const std::wstring& _context,
-                       Reach _reach = Reach::Opening)
+                       Reach _reach = Reach::Opening, const std::function<void(Cpu6502&)>& _seed = {})
     {
       Cpu6502 cpu = _oracle.Fresh();
 
@@ -1283,23 +1281,26 @@ namespace GameLogicTests
        */
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        cpu.memory[address] = _frame.heap.Read(Elite::HeapOffset::FromAddress(address));
+        cpu.memory[address] = _frame.universe.heap.Read(Elite::HeapOffset::FromAddress(address));
       }
       cpu.memory[_loop.slsp] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom.Address() & 0xFFu);
       cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] = static_cast<std::uint8_t>(_frame.universe.bubble.heapBottom.Address() >> 8);
+
+      if (_seed)
+      {
+        _seed(cpu);
+      }
 
       const std::uint16_t entry = (_reach == Reach::Ships) ? _loop.ma3 : (_reach == Reach::Tail) ? _loop.ma18 : _loop.mainLoop;
 
       const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 8'000'000);
       Assert::IsTrue(run.completed, (_context + L": M% reached an exit").c_str());
 
-      Elite::FlightScreen screen = _frame.universe.Screen();
-      Elite::FlightLoop loop{screen,      _frame.keys,       _frame.control, _frame.options, _frame.burst,   _frame.heap,
-                             _frame.clip, _frame.projection, _frame.axes,    _frame.outside, _frame.outside, _frame.effects};
-      const Elite::LoopOutcome outcome = (_reach == Reach::Ships)   ? Elite::MoveEveryShip(loop)
-                                         : (_reach == Reach::Tail)  ? Elite::EndFlightFrame(loop)
-                                         : (_reach == Reach::Whole) ? Elite::MainFlightLoop(loop)
-                                                                    : Elite::BeginFlightFrame(loop);
+      Elite::Ports ports = _frame.universe.PortsWith(_frame.outside, _frame.outside, _frame.effects, _frame.universe.unused);
+      const Elite::LoopOutcome outcome = (_reach == Reach::Ships)   ? Elite::MoveEveryShip(_frame.universe, ports)
+                                         : (_reach == Reach::Tail)  ? Elite::EndFlightFrame(_frame.universe, ports)
+                                         : (_reach == Reach::Whole) ? Elite::MainFlightLoop(_frame.universe, ports)
+                                                                    : Elite::BeginFlightFrame(_frame.universe, ports);
 
       // ---- the exit ------------------------------------------------------------------------------
       std::uint32_t reachedEnd = 0;
@@ -1447,7 +1448,7 @@ namespace GameLogicTests
        */
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        Assert::AreEqual(cpu.memory[address], _frame.heap.Read(Elite::HeapOffset::FromAddress(address)),
+        Assert::AreEqual(cpu.memory[address], _frame.universe.heap.Read(Elite::HeapOffset::FromAddress(address)),
                          (_context + L": heap byte " + std::to_wstring(address)).c_str());
       }
 
@@ -1510,10 +1511,10 @@ namespace GameLogicTests
           for (std::uint8_t mode = 0; mode < 4u; ++mode)
           {
             Frame frame(roll * 7u + pitch * 3u + mode);
-            frame.control.roll = roll;
-            frame.control.pitch = pitch;
-            frame.options.dampingDisabled = ((mode & 1u) != 0u) ? 0xFFu : 0u;
-            frame.control.dockingComputer = ((mode & 2u) != 0u) ? 0xFFu : 0u;
+            frame.universe.control.roll = roll;
+            frame.universe.control.pitch = pitch;
+            frame.universe.options.dampingDisabled = ((mode & 1u) != 0u) ? 0xFFu : 0u;
+            frame.universe.control.dockingComputer = ((mode & 2u) != 0u) ? 0xFFu : 0u;
             /*
              * 6502: TRIBCT -- half the sweep carries Trumbles and half does not, so part 1's
              * `LDA TRIBCT / BEQ NOMVETR` is exercised both ways. With three of them showing and
@@ -1570,8 +1571,8 @@ namespace GameLogicTests
         {
           Frame frame(speed + keys * 101u);
           frame.universe.flight.delta = speed;
-          frame.keys[Elite::KEY_SPEED_UP] = ((keys & 1u) != 0u) ? 0xFFu : 0u;
-          frame.keys[Elite::KEY_SLOW_DOWN] = ((keys & 2u) != 0u) ? 0xFFu : 0u;
+          frame.universe.keys[Elite::KEY_SPEED_UP] = ((keys & 1u) != 0u) ? 0xFFu : 0u;
+          frame.universe.keys[Elite::KEY_SLOW_DOWN] = ((keys & 2u) != 0u) ? 0xFFu : 0u;
 
           const std::wstring where = WidenText("M% (DELTA " + std::to_string(speed) + ", keys " + std::to_string(keys) + ")");
           CompareFrames(frame, oracle, at, loop, where);
@@ -1635,19 +1636,19 @@ namespace GameLogicTests
         frame.universe.status.missileArmed = item.armed;
         frame.effects.spawnSucceeds = item.spawns;
 
-        frame.keys[Elite::KEY_UNARM_MISSILE] = item.unarm ? 0xFFu : 0u;
-        frame.keys[Elite::KEY_ARM_MISSILE] = item.arm ? 0xFFu : 0u;
-        frame.keys[Elite::KEY_FIRE_MISSILE] = item.fire ? 0xFFu : 0u;
+        frame.universe.keys[Elite::KEY_UNARM_MISSILE] = item.unarm ? 0xFFu : 0u;
+        frame.universe.keys[Elite::KEY_ARM_MISSILE] = item.arm ? 0xFFu : 0u;
+        frame.universe.keys[Elite::KEY_FIRE_MISSILE] = item.fire ? 0xFFu : 0u;
 
         // The five keys `BMI MA64` jumps over, all held, on every case.
-        frame.keys[Elite::KEY_ENERGY_BOMB] = 0xFFu;
-        frame.keys[Elite::KEY_CANCEL_DOCKING] = 0xFFu;
-        frame.keys[Elite::KEY_ESCAPE_POD] = 0xFFu;
-        frame.keys[Elite::KEY_ECM] = 0xFFu;
+        frame.universe.keys[Elite::KEY_ENERGY_BOMB] = 0xFFu;
+        frame.universe.keys[Elite::KEY_CANCEL_DOCKING] = 0xFFu;
+        frame.universe.keys[Elite::KEY_ESCAPE_POD] = 0xFFu;
+        frame.universe.keys[Elite::KEY_ECM] = 0xFFu;
         frame.universe.commander.energyBomb = 1u;
         frame.universe.commander.escapePod = 0u; // or the frame would end at ESCAPE
         frame.universe.commander.ecm = 0xFFu;
-        frame.control.dockingComputer = 0xFFu;
+        frame.universe.control.dockingComputer = 0xFFu;
 
         const std::wstring where = WidenText(std::string("M% (") + item.what + ")");
         CompareFrames(frame, oracle, at, loop, where);
@@ -1720,8 +1721,8 @@ namespace GameLogicTests
       for (const Case& item : CASES)
       {
         Frame frame(0x77u);
-        frame.keys[item.key] = 0xFFu;
-        frame.keys[Elite::KEY_PITCH_UP] = item.pitchUp;
+        frame.universe.keys[item.key] = 0xFFu;
+        frame.universe.keys[Elite::KEY_PITCH_UP] = item.pitchUp;
         frame.universe.commander.energyBomb = item.bomb;
         frame.universe.commander.escapePod = (item.key == Elite::KEY_ESCAPE_POD) ? item.fitting : 0u;
         frame.universe.commander.ecm = (item.key == Elite::KEY_ECM) ? item.fitting : 0u;
@@ -1729,7 +1730,7 @@ namespace GameLogicTests
           (item.key == Elite::KEY_DOCKING_COMPUTER || item.key == Elite::KEY_PITCH_UP) ? item.fitting : 0u;
         frame.universe.status.ecmCountdown = item.ecmCountdown;
         frame.universe.status.midJump = item.midJump;
-        frame.control.dockingComputer = item.dockingComputer;
+        frame.universe.control.dockingComputer = item.dockingComputer;
 
         const std::wstring where = WidenText(std::string("M% (") + item.what + ")");
         CompareFrames(frame, oracle, at, loop, where);
@@ -1779,7 +1780,7 @@ namespace GameLogicTests
               frame.universe.view = 0u;
               frame.universe.status.laserTemperature = heat;
               frame.universe.status.laserCount = count;
-              frame.keys[Elite::KEY_FIRE] = 0xFFu;
+              frame.universe.keys[Elite::KEY_FIRE] = 0xFFu;
               for (std::size_t index = 0; index < 4u; ++index)
               {
                 frame.universe.commander.lasers[index] = (index == view) ? fitted : 0u;
@@ -1824,7 +1825,7 @@ namespace GameLogicTests
         frame.universe.view = view;
         frame.universe.spaceView = 0u;
         frame.universe.status.laserTemperature = 40u;
-        frame.keys[Elite::KEY_FIRE] = 0xFFu;
+        frame.universe.keys[Elite::KEY_FIRE] = 0xFFu;
         frame.universe.commander.lasers[0] = Elite::LASER_BEAM;
 
         CompareFrames(frame, oracle, at, loop, WidenText("M% (QQ11 " + std::to_string(view) + ", firing)"));
@@ -1854,7 +1855,7 @@ namespace GameLogicTests
         Frame frame(energy + 5u);
         frame.universe.status.energy = energy;
         frame.universe.status.laserTemperature = 40u;
-        frame.keys[Elite::KEY_FIRE] = 0xFFu;
+        frame.universe.keys[Elite::KEY_FIRE] = 0xFFu;
         frame.universe.commander.lasers[0] = Elite::LASER_PULSE;
 
         CompareFrames(frame, oracle, at, loop, WidenText("M% (ENERGY " + std::to_string(energy) + ", firing)"));
@@ -2126,6 +2127,191 @@ namespace GameLogicTests
     }
   };
 
+  /*
+   * 6502: MA23's altitude, and the byte it takes its low half from (risk R22).
+   *
+   * `MA93` reaches `LDY #&FF / STY ALTIT / INY / JSR m / BNE MA23` on step 10 of the thirty-two,
+   * and if the planet's three sign bytes are clear and `MAS3`'s sum of squares is between 36 and
+   * 254 it goes on to `SBC #36 / STA R / JSR LL5 / LDA Q / STA ALTIT`. **`Q` IS NOT WRITTEN
+   * THERE.** `LL5` takes `(R Q)` as its radicand and `MAS2`/`MAS3` do not touch `Q`, so the low
+   * half of what the altitude is a square root of is whatever the frame last left in that byte.
+   *
+   * That is the whole of R22, and until this fixture nothing measured it: every frame sweep in
+   * this file puts the planet at a high byte of 0x20, so `MAS2` answers non-zero, `ALTIT` stays
+   * 255 and the square root never runs. The port's `MathWorkspace::q` could have held anything.
+   *
+   * The sweep below picks distances that make `SBC #36` leave a SMALL number, because that is what
+   * makes `Q` visible: with the difference at zero the radicand IS `Q` and `ALTIT` is its square
+   * root, so the fixture reads a byte through a function that loses only the bottom bits of it.
+   */
+  TEST_CLASS(TheAltitude)
+  {
+  public:
+    TEST_METHOD(TheAltitudeMatchesMA23)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+      const std::uint16_t qq = oracle.Label("Q");
+
+      /*
+       * `MAS3` squares each high byte with `SQUA2` (the top byte of the square) and adds, so a
+       * high byte of h contributes h*h/256 -- and 36 is the planet's own radius. 96 gives 36
+       * exactly, which is the difference of zero the sweep wants; the rest step up from there.
+       */
+      const std::uint8_t DISTANCES[] = {96, 97, 100, 110, 128, 160, 200, 255};
+
+      std::uint32_t compared = 0;
+      std::uint32_t measured = 0;
+      std::set<std::uint8_t> altitudes;
+
+      for (const std::uint8_t distance : DISTANCES)
+      {
+        for (const std::uint8_t seeded : {0u, 1u, 63u, 64u, 127u, 128u, 200u, 255u})
+        {
+          Frame frame(distance * 7u + seeded);
+          PopulateBubble(frame, 0x20u, 0x00u, false);
+
+          // The planet in slot 0, straight ahead on one axis so that `MAS2` answers zero and
+          // `MAS3` measures one square rather than three.
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> planet = frame.universe.bubble.blocks[0].ToBytes();
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            planet[byte] = 0u;
+          }
+          frame.universe.bubble.blocks[0] = Elite::Ship::FromBytes(planet);
+          frame.universe.bubble.blocks[0].z.hi = distance;
+
+          frame.universe.flight.mainLoopCounter = 10u; // 6502: MCNT AND 31 == 10
+          frame.universe.status.midJump = 0u;
+          frame.universe.status.energy = 200u; // above the warning, so no message is printed
+
+          /*
+           * The frame's `Q`, seeded on BOTH sides. `UniverseImage` does not carry `MathWorkspace`
+           * -- it is scratch, and M2-c took all of it but this byte and one other -- so the sweep
+           * mirrors it by hand, the way `CompareFrames` mirrors `RAND`.
+           */
+          frame.universe.math.q = static_cast<std::uint8_t>(seeded);
+
+          const std::wstring where = WidenText("MA23 (planet at " + std::to_string(distance) + ", Q " + std::to_string(seeded) + ")");
+          CompareFrames(frame, oracle, at, loop, where, Reach::Tail,
+                        [&](Cpu6502& _cpu) { _cpu.memory[qq] = static_cast<std::uint8_t>(seeded); });
+
+          if (frame.universe.status.altitude != 0xFFu)
+          {
+            ++measured;
+            altitudes.insert(frame.universe.status.altitude);
+          }
+          ++compared;
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(8u * 8u, compared, L"the whole sweep ran");
+      Assert::IsTrue(measured > 0u, L"the square root actually ran");
+      Assert::IsTrue(altitudes.size() > 4u, L"and the seeded Q moved the answer");
+    }
+
+    /*
+     * And the half R22 is actually about: `Q` decided by the FRAME rather than seeded.
+     *
+     * The sweep above proves the port takes the same square root of the same `(R Q)` as the game.
+     * This one runs the whole of `M%` with the planet close enough for the root to run, over
+     * bubbles that make different routines the last to touch `Q` -- a bubble with nothing in it, a
+     * ship the loop moves and does not draw (`MVS4`'s `STA Q` of BETA), one it draws as a
+     * wireframe (`LL9`'s last vertex distance, or the clipper's divisor), one it draws as a dot
+     * (`DVID3B`'s), one exploding (`DOEXP`'s cloud size) and a sun (`SUN`'s last row).
+     *
+     * `ALTIT` is in the compared image, so a port whose frame left a different byte there than the
+     * game's says so here. Nothing seeds `Q` on either side: that is the point.
+     */
+    TEST_METHOD(TheFramesOwnQReachesTheAltitude)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const LoopWhere loop(oracle);
+
+      struct Case
+      {
+        const char* what;
+        std::uint8_t distance; ///< the OTHER ships' high bytes, which decides how they are drawn
+        std::uint8_t state;    ///< 6502: INWK+31
+        bool empty;
+        bool sun;
+      };
+
+      const std::vector<Case> CASES = {
+        {"nothing else in the bubble", 0x20, 0x00, true, false},
+        {"ships too far to draw", 0x70, 0x00, false, false},
+        {"ships drawn as wireframes", 0x02, 0x00, false, false},
+        {"ships drawn as dots", 0x18, 0x00, false, false},
+        {"a ship exploding", 0x02, 0x20, false, false},
+        {"a sun close enough to draw", 0x02, 0x00, false, true},
+      };
+
+      // 96 puts `MAS3` at exactly the planet's radius, which is the case the difference of zero
+      // makes `Q` the whole radicand; the rest step the difference up so the root moves with it.
+      const std::uint8_t DISTANCES[] = {97, 100, 110, 128, 180, 255};
+
+      std::uint32_t compared = 0;
+      std::uint32_t measured = 0;
+      std::set<std::uint8_t> altitudes;
+
+      for (const Case& item : CASES)
+      {
+        for (const std::uint8_t distance : DISTANCES)
+        {
+          Frame frame(distance * 11u + static_cast<std::uint8_t>(item.distance));
+          PopulateBubble(frame, item.distance, item.state, item.empty);
+
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> planet = frame.universe.bubble.blocks[0].ToBytes();
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            planet[byte] = 0u;
+          }
+          frame.universe.bubble.blocks[0] = Elite::Ship::FromBytes(planet);
+          frame.universe.bubble.slots[0] = 128u;
+          frame.universe.bubble.blocks[0].z.hi = distance;
+
+          if (!item.sun)
+          {
+            // Take the sun out, so the only body the frame draws is the planet.
+            frame.universe.bubble.slots[1] = 0u;
+          }
+
+          frame.universe.flight.mainLoopCounter = 10u;
+          frame.universe.status.midJump = 0u;
+          frame.universe.status.energy = 200u;
+          frame.universe.view = 0u;
+
+          const std::wstring where =
+            WidenText(std::string("MA23 whole frame (") + item.what + ", planet at " + std::to_string(distance) + ")");
+          CompareFrames(frame, oracle, at, loop, where, Reach::Whole);
+
+          if (frame.universe.status.altitude != 0xFFu)
+          {
+            ++measured;
+            altitudes.insert(frame.universe.status.altitude);
+          }
+          ++compared;
+        }
+      }
+
+      Assert::AreEqual<std::uint32_t>(6u * 6u, compared, L"the whole sweep ran");
+      Assert::IsTrue(measured > 0u, L"the square root ran on frames the loop itself filled");
+      Assert::IsTrue(altitudes.size() > 2u, L"and the answers were not all the same");
+    }
+  };
+
   TEST_CLASS(TheWholeFlightFrame)
   {
   public:
@@ -2159,10 +2345,10 @@ namespace GameLogicTests
             PopulateBubble(frame, distance, 0x00u, false);
 
             frame.universe.flight.mainLoopCounter = static_cast<std::uint8_t>(counter * 4u + shape);
-            frame.control.roll = static_cast<std::uint8_t>(100u + counter * 5u);
-            frame.control.pitch = static_cast<std::uint8_t>(150u - counter * 3u);
-            frame.keys[Elite::KEY_FIRE] = ((shape & 1u) != 0u) ? 0xFFu : 0u;
-            frame.keys[Elite::KEY_SPEED_UP] = ((shape & 2u) != 0u) ? 0xFFu : 0u;
+            frame.universe.control.roll = static_cast<std::uint8_t>(100u + counter * 5u);
+            frame.universe.control.pitch = static_cast<std::uint8_t>(150u - counter * 3u);
+            frame.universe.keys[Elite::KEY_FIRE] = ((shape & 1u) != 0u) ? 0xFFu : 0u;
+            frame.universe.keys[Elite::KEY_SPEED_UP] = ((shape & 2u) != 0u) ? 0xFFu : 0u;
             frame.universe.commander.lasers[0] = Elite::LASER_PULSE;
             frame.universe.commander.missiles = 3u;
             frame.universe.commander.energyUnit = 1u;
@@ -2201,14 +2387,11 @@ namespace GameLogicTests
       frame.universe.view = 0u;
       frame.universe.spaceView = 0u;
 
-      Elite::FlightScreen screen = frame.universe.Screen();
-      Elite::FlightLoop loop{screen,     frame.keys,       frame.control, frame.options, frame.burst,   frame.heap,
-                             frame.clip, frame.projection, frame.axes,    frame.outside, frame.outside, frame.effects};
+      Elite::Ports ports = frame.universe.PortsWith(frame.outside, frame.outside, frame.effects, frame.universe.unused);
 
       std::uint8_t docked = 0xFFu;
       Elite::SystemSeeds selected{};
-      Elite::Launch(loop, nullptr, docked, frame.universe.commander.systemX, frame.universe.commander.systemY,
-                    5u, selected);
+      Elite::Launch(frame.universe, ports, nullptr, docked, frame.universe.commander.systemX, frame.universe.commander.systemY, selected);
 
       Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.Count(Elite::ShipType::Station),
                                       L"the launch leaves the station in the bubble");
@@ -2221,7 +2404,7 @@ namespace GameLogicTests
 
       for (int pass = 0; pass < 40; ++pass)
       {
-        const Elite::LoopOutcome outcome = Elite::MainFlightLoop(loop);
+        const Elite::LoopOutcome outcome = Elite::MainFlightLoop(frame.universe, ports);
         Assert::IsTrue(outcome == Elite::LoopOutcome::Continued,
                        (L"frame " + std::to_wstring(pass) + L" should not end the flight").c_str());
 
@@ -2240,15 +2423,16 @@ namespace GameLogicTests
        */
       const std::uint16_t heapAt = frame.universe.bubble.blocks[1].heap.Address();
       Assert::AreEqual<std::uint32_t>(Elite::SUN_HEAP_ADDRESS, heapAt, L"the station draws through the sun's heap");
-      Assert::IsTrue(frame.heap.Read(Elite::HeapOffset::FromAddress(heapAt)) > 1u, L"and the heap holds the lines it last drew");
+      Assert::IsTrue(frame.universe.heap.Read(Elite::HeapOffset::FromAddress(heapAt)) > 1u, L"and the heap holds the lines it last drew");
 
       std::size_t lit = 0;
       for (int y = 0; y < Elite::Canvas::SPACE_VIEW_HEIGHT; ++y)
       {
         for (int column = 0; column < Elite::Canvas::CELL_COLUMNS; ++column)
         {
-          lit +=
-            (frame.universe.canvas.Read(static_cast<std::uint16_t>(y / 8 * Elite::Canvas::ROW_BYTES + column * 8 + (y % 8))) != 0u) ? 1u : 0u;
+          lit += (frame.universe.canvas.Read(static_cast<std::uint16_t>(y / 8 * Elite::Canvas::ROW_BYTES + column * 8 + (y % 8))) != 0u)
+                   ? 1u
+                   : 0u;
         }
       }
       Assert::IsTrue(lit > 20u, L"and the space view has the station drawn in it");
@@ -2346,7 +2530,7 @@ namespace GameLogicTests
 
         for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
         {
-          cpu.memory[address] = frame.heap.Read(Elite::HeapOffset::FromAddress(address));
+          cpu.memory[address] = frame.universe.heap.Read(Elite::HeapOffset::FromAddress(address));
         }
         cpu.memory[loop.slsp] = static_cast<std::uint8_t>(frame.universe.bubble.heapBottom.Address() & 0xFFu);
         cpu.memory[static_cast<std::uint16_t>(loop.slsp + 1u)] = static_cast<std::uint8_t>(frame.universe.bubble.heapBottom.Address() >> 8);

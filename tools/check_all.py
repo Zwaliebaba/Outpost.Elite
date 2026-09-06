@@ -31,6 +31,7 @@ CHECKS: list[list[str]] = [
     ["check_gamelogic.py", "--self-test"],
     ["check_projects.py"],
     ["check_outpost.py"],
+    ["check_outpost.py", "--self-test"],
     ["check_docs.py"],
     ["check_counts.py"],
     ["check_modernize.py"],

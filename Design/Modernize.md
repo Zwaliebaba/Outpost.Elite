@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->395 tests, oracle present), all <!--count:checks-->thirteen repository checks pass,
+(<!--count:tests-->397 tests, oracle present), all <!--count:checks-->fourteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -291,18 +291,18 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->78 reference members
-across the structs `FlightScreen` (twenty-three), `FlightLoop`, `TradeScreen`, `SaveScreen`,
-`GameStart`, `MissionScreen`, `TitleScreen` and `ClipState`'s neighbours. `ViewChange.h` says it
-plainly: "the struct is the argument list". They are built by `FlightSession`'s constructor, by
-`Main.cpp`'s `StartOf`/`ChartOf`/`JumpOf`/`OptionsOf`, and by `FlightUniverse.h`'s `Screen()`, three
-times over.
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->39 reference members,
+and they were seventy-eight until M3-a-2. `FlightScreen`, `FlightLoop`, `MissionScreen` and
+`TitleScreen` held forty-nine of them and are gone: every routine takes `(Universe&, Ports&)`, and
+`Ports` is ten. What is left is the docked half's three — `TradeScreen` (nine), `SaveScreen` (nine)
+and `GameStart` (eleven) — which M3-a's second commit and M3-c take. `ViewChange.h` said it plainly
+while they existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
 <!--count:main-lines-->1,219 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->225 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->205 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
@@ -346,7 +346,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,927 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,937 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -479,7 +479,7 @@ never global.
 <!--census:start-->
 | Field | 6502 | Written by | Read before written, from the caller | Read after a call | Verdict |
 |---|---|---|---|---|---|
-| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail | EndFlightFrame | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. `LOIN`'s is the one this port has never modelled -- R22, and the owner's to rule on. |
+| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail | EndFlightFrame | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
 | `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
 | `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
 | `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
@@ -730,7 +730,8 @@ tree carries the original's data and the port's own code, and nothing of its sou
    its recorded ceiling; a slice that lowers a count lowers the ceiling in the same commit. It
    also fails when a ceiling is above the count by more than the slack it records, so the file
    cannot quietly stop describing the tree (§6.154's rule, mechanised).
-6. **Every signature change reaches `Outpost/` in the same commit**, and `check_outpost.py` runs.
+6. **Every signature change reaches `Outpost/` in the same commit**, and `check_outpost.py` runs —
+   which since M3-0 checks the members the app names as well as the names and the arities.
    Until M3 lands the executable is the caller this environment cannot compile, and a Windows job
    red on a type change is the failure mode; keeping the diff small per slice is the mitigation.
 7. **Rename toward meaning as you go.** A slice in M2 or M4 that touches `_math.q` or `xx15` names
@@ -1149,6 +1150,7 @@ leave (`DIALS`'s `T1`, `PLANET`'s `K`) go the same way where the byte was the ke
 `XX`, `YY`, the clipper's `(S R)` and `T` — stays in `MathWorkspace` for M2-c, and so does
 `NumberWorkspace`, which the census had pencilled in for M2-b but which is `PrintNumber`'s, not the
 kernel's; the boundary carries are M2-d's; `LOIN`'s `Q` (R22) is nobody's until the owner rules.
+(It turned out to be nobody's at all: `LOIN` never writes `Q` in this build — R22, closed below.)
 
 #### M2-c slice plan (written before the build, 2026-09-06; three commits; §8 records what each found)
 
@@ -1219,6 +1221,41 @@ same commit and the tactics unit re-run (rule 3). **What the slice does not do.*
 `SC` stay as the census says; the frame's `Q` and `MV40`'s byte stay; the boundary carries are
 M2-d's; `LL9`'s stages stay one routine until M4.
 
+#### M3-a slice plan (written before the build, 2026-09-06; two commits; §8 records what each found)
+
+**`Elite::Universe` owns every byte of game state, and nothing else.** The seven argument-list
+structs — `FlightScreen`, `FlightLoop`, `TradeScreen`, `SaveScreen`, `GameStart`, `MissionScreen`,
+`TitleScreen` — hold seventy-eight references between them, and §4.4's `Universe` is what they are
+all views of. Two commits, each green on the suite and `check_all`.
+
+**M3-a-1 — the type exists and owns the bytes.** `GameLogic/Universe.h` holds `struct Universe`: a
+plain aggregate of the state the flight half names, in the order §4.4 lists it, with no reference
+member, no virtual and no printer — so it copies, and `UniverseImage` can hash it without knowing
+what else is in the program. `FlightScreen` and `FlightLoop` stay, and are BUILT from it: the app's
+`FlightSession` and the fixture's `FlightUniverse.h` replace their twenty-odd members with one
+`Universe` and hand out the two aggregates as before. No routine signature changes, so the whole
+suite is the check, and `check_outpost.py`'s member half (M3-0) is what watches the app.
+
+**M3-a-2 — the routines take it.** Every routine that took `FlightScreen&` or `FlightLoop&` takes
+`(Universe&, Ports&)` and the two structs go. `Ports` is what is left when the state comes out: the
+text machinery bound to the universe's own bytes (`TokenPrinter`, `CharacterPrinter`, the `TextSink`
+they print through) and the five flight seams (`SightEffects`, `ViewEffects`, `ShipEffects`,
+`ShipDrawEffects`, `FlightLoopEffects`). It is a struct of references for one slice: M3-b is what
+collapses the seam half to §4.5's four ports, and doing it here would be two patterns in one slice
+(rule 8).
+
+**The acceptance the row promised, corrected before the build.** "`aggregate-refs` at zero" is not
+what M3-a can reach: thirty-nine of the seventy-eight are the docked half's four structs, which the
+row does not name and which M3-c's `Game` is the natural place for, and eight are `Ports`. The
+number M3-a can honestly deliver is **78 → 47** — the flight half's thirty-nine replaced by eight —
+and the rest is M3-b's and M3-c's. Recording it here rather than discovering it at the ratchet.
+
+**What the slice does not do.** The seams stay twenty-two (M3-b). `Main.cpp` keeps its own state
+for the docked screens (M3-c). The printers stay where the app builds them, because two of them
+need a seam — `TextPrinter` takes the bell and `ExtendedTokenPrinter` the control codes — and a
+`Universe` that held them would not be a plain aggregate, which is the one property M3-c's
+`StateHash` needs.
+
 ### Phase M2 — Explicit calling conventions
 
 | Slice | Scope | Acceptance | Sittings |
@@ -1245,6 +1282,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
+| **M3-0 The app's member check** ✅ **built 2026-09-06 (§8)** | `check_outpost.py` gains a third half: every member the app names on an `Elite::`-typed variable, against that type's members as `GameLogic/*.h` declares them, bases closed over. A `--self-test` plants one that cannot resolve. | In CI as the fourteenth check; 111 accesses resolved on the tree as it stands. | 1 |
 | **M3-a Universe** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`JumpState` replaced by `Universe&` (plus the ports) on every routine; `FlightSession` and `Outpost::Game` lend their members to it. | Green on both legs; `aggregate-refs` at zero. **Windows job is the gate** — this slice cannot be compiled here. | 4 |
 | **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at four. | 4 |
 | **M3-c Game** | `Elite::Game` with `Reset`, `Step`, `Frame`, `Sounds`, `StateHash`; `Perform`, `Leave`, the docked pass, `Advance` and `AdvancePaused` moved from `Main.cpp`; `Mode` explicit. `Main.cpp` at its target shape. | `DockedSessionTests` and the M0-c replay drive `Game::Step` and reproduce their stored hashes; `main-lines` in the ratchet under 300. | 4–5 |
@@ -1321,7 +1359,7 @@ M1-a's first file and the worked example every later slice copies.
 | **R19** | A recorded fixture pins only what the tests asked while the original was here; a behaviour no test reached before M6-b is unpinned for ever. | M6-a's coverage review; the M0-c replay's breadth. | M6 is last; the review is a gate, not a report; a fixture is never re-recorded (rule 1). |
 | **R20** | Rewriting the comments loses the reasons — the commentary records WHY a carry matters, and prose that says only WHAT is worth less than the assembly it replaced. | M6-d, per file. | The rule for M6-d is "keep the reason, drop the transcription"; a comment that cannot be rewritten without losing its reason keeps the instruction sequence as a quotation. |
 | **R21** | Deleting `MasterFile/` and `Upstream/` at the tip leaves them in every commit before M6-f; a reader of the history still finds them. | Not validated by this plan. | Owner decision, out of this plan's scope (§1 R-d); recorded so that M6-f is not mistaken for having done it. |
-| **R22** | The altitude's radicand low byte is a stale scratch byte the port never modelled faithfully: `MA23`'s `LL5` takes `(R Q)` with `Q` whatever the frame last left, and `LOIN` — which writes `Q` on every line it draws — has kept it local since slice 1d. | The M0-c replay, which caught M2-b changing it; the five writers the port does model, named at their lines. | M2-b kept the port's own value (the record proves it) and named the byte "the frame's Q"; the fix — `LOIN` publishing its last height, or an ADR-001 §6 row accepting the divergence — is the owner's ruling (§8, M2-b). |
+| **R22** ✅ **closed 2026-09-06** | The altitude's radicand low byte is a stale scratch byte: `MA23`'s `LL5` takes `(R Q)` with `Q` whatever the frame last left. The risk as written also said `LOIN` writes `Q` on every line and the port keeps it local — **and that half was false**: this build's `LOIN` works in `P2`, `Q2`, `R2`, `S2` at 188–191 and never touches `Q` at 154. The claim came from the BBC commentary, which is where M2-c-1's `T`/`T2` defect came from too. | `TheAltitudeMatchesMA23` seeds `Q` on both sides over eight values and eight distances; `TheFramesOwnQReachesTheAltitude` runs the whole of `M%` with the planet in range over six bubble shapes and lets each side decide `Q` for itself. `ALTIT` is in the compared image. | **Closed by measurement, not by ruling.** Neither fix was needed: `LOIN` had nothing to publish, and the frame's `Q` agrees with the game's on every shape the sweep covers. The fixture found a different defect on the way — `MA23` reaches `SBC #36` with the carry CLEAR, so the planet's radius costs 37 — which is fixed and the replay re-taken (§8). |
 
 ---
 
@@ -1551,6 +1589,141 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-a-2 built: the routines take `(Universe&, Ports&)`, and four argument-list
+structs are gone.** `FlightScreen`, `FlightLoop`, `MissionScreen` and `TitleScreen` held forty-nine
+reference members between them and every ported routine took one of them; each now takes the
+universe and the ports beside it. `Ports` is ten references — the three text objects, which cannot
+live in a universe that has to copy because two of them take a seam, and the seven seams the
+platform answers — and it is a struct of references for exactly one slice: M3-b collapses the seam
+half to §4.5's four ports, and doing it here would be two patterns in one (rule 8). 397 of 397
+still pass and the M0-c replay digests are untouched, which is the property the slice is for.
+
+**The acceptance the slice plan corrected was itself wrong, in the port's favour.** It predicted
+`aggregate-refs` 78 → 47 on a split of thirty-nine flight references and thirty-nine docked ones.
+The real split is forty-nine and twenty-nine, so the number is **78 → 39**: the flight half's
+forty-nine replaced by `Ports`' ten, and `TradeScreen` (nine), `SaveScreen` (nine) and `GameStart`
+(eleven) left for M3-a's docked half and M3-c. Recording the miss rather than the outcome, because
+the plan's number was arithmetic on a count nobody had run.
+
+**M3-a-1 had quietly made two bytes out of one, and this is where it showed.** `Universe` took a
+`std::uint8_t techLevel` while `CurrentSystem` stayed in the composition root — but `tek` reached
+the flight half as a REFERENCE into that struct before M3-a, so the copy was a second byte with the
+same name and no writer keeping them equal. `CurrentSystem` is a member of `Universe` now and
+`PerformJump` and `GalacticJump` lost the parameter, which is the shape §4.4 wanted and the one the
+original has. The same argument moved `INF`: `MissionScreen::shipSlot` carried the briefing ship's
+slot out through `GameShell::SetBriefingShip` and back in through control code 22, because `PAUSE`
+runs inside the token `BRIEF` is printing; it is `Universe::shipSlot` now and the shell's copy and
+its two setter calls are gone.
+
+**What the app lost.** `FlightSession` held twenty-two members of game state and holds none:
+`Outpost::Game` owns the one `Elite::Universe` and the session takes a reference to it, which took
+`outpost-elite-names` 225 → 205. `main-lines` did not move: `_game.universe.` is longer than
+`_game.` and clang-format rewrapped what overflowed, and the aliases and doc blocks the slice made
+redundant came out again.
+
+**And the Windows job earned its keep on the first push, twice over** (R15). `Main.cpp` would not
+compile: `recursive.SetCursor(&text)` named a member that had moved, which `check_outpost.py`
+cannot see because a bare identifier in a constructor body is not a `name.member`. Behind it was
+the one that mattered — `Game` still declared `Elite::Commander commander = Elite::DefaultCommander()`
+beside the universe's own, and every reader had been redirected to `universe.commander`, which is
+DEFAULT-CONSTRUCTED. Moving the byte without the initialisation starts the game with no credits, no
+laser and no home system, and no test on either leg would have caught it: the fixtures assign
+`DefaultCommander()` themselves. The dead member is gone and the cold start stores it in `Game`'s
+constructor. The session still builds
+`Ports`, because eight of that struct's ten references are to itself. `origin-markers` fell
+3,954 → 3,937 and every one of the seventeen was a `///< 6502:` on a reference member naming a byte
+`Universe.h` names in the same words — rule 4 is about markers on code, and no code lost one.
+
+**Twenty-two of the seventy-two mutants were re-anchored, none dropped** (rule 3): their `find`
+text named `screen.`, `_loop.` or `_mission`, and nine of them had to be rewritten by hand rather
+than by substitution because the call they mutate changed shape as well as spelling. The count
+stays at 72.
+
+**The Windows job is still the gate.** `check_outpost.py` caught nineteen arity and member errors
+in `Main.cpp` and `Shell.cpp` on this slice — the whole point of M3-0, one commit earlier — but it
+reads names and arity and never types, so R15 is unchanged: no Linux runner compiles `Outpost/`.
+
+**2026-09-06 — M3-a-1: `Elite::Universe` exists, and the whole suite ran against it unchanged.**
+`GameLogic/Universe.h` holds the state the flight half's two argument-list structs name, in §4.4's
+order, with **no reference member, no virtual and no printer** — so it copies, its layout is its
+fields, and `UniverseImage` can hash it without knowing what else is in the program, which is what
+`Game::StateHash` and the M0-c replay are built on. `ScreenState` moved into it from `ViewChange.h`,
+because it is state and that is where the state lives now.
+
+**The fixture inherits it rather than holding it**, which is what made the commit small: every
+field the library owns is the base's, so the thousand `universe.canvas` in the suite kept working
+and 397 of 397 passed with no test edited. Slicing a fixture now gives the state and nothing else.
+What stays in the derived struct is the recording ports, the printers and two bytes that are the
+fixture's own.
+
+**Two fields did not go in, and both for the same reason.** `ExtendedTextState` is a member of
+`CharacterPrinter`, and the printers cannot live in a universe that has to copy: `TextPrinter`
+takes the bell as a `TextEffects*` and `ExtendedTokenPrinter` the control codes as a
+`ControlCodes*`, so a universe that owned them would own a pointer to the platform. Giving the
+printer a reference to state the universe owns is M3-b's question.
+
+**The app is untouched**, deliberately: `FlightSession` still holds its own members and builds
+`FlightScreen`/`FlightLoop` from them. It moves in M3-a-2, when the routines change and it has to
+be edited anyway — one edit to the half no Linux runner compiles instead of two.
+
+**2026-09-06 — M3-0: the app's member names are checked, because M3 is about to rename a hundred
+of them in files no Linux runner compiles.** `check_outpost.py` has read every `Elite::Name` the
+executable mentions since slice 3d-b and every call's arity since 3d-c, and its own docstring named
+what was left: "anything reached through a member call rather than a qualified `Elite::` one". M3-a
+moves every byte of game state into one `Elite::Universe` and rewrites `Main.cpp` and
+`FlightSession` around it, which is exactly that — a rename of member names, in the half of the
+tree the portable runner cannot build. The Windows job would find it several minutes after a push,
+which is how `DockedShip` and `ClearMessageRows` were found, twice in one afternoon.
+
+The check reads `struct X { ... }` and `class X { ... }` out of `GameLogic/*.h` with their base
+lists, closes each type's members over its bases, finds every `Elite::Type name` the app declares,
+and checks each `name.member` against that set. Three choices are deliberately conservative: an
+identifier it cannot resolve is skipped, a type it cannot parse is skipped, and an identifier two
+declarations disagree about takes the UNION of their members — a false positive in a check that
+gates the build costs more than a miss. 111 accesses resolve on the tree as it stands, 84 of them
+in `Main.cpp`, and none is wrong. `--self-test` plants an access that cannot resolve and fails if
+it is not reported, because the arity half went a whole slice before anyone had watched it fail.
+
+What it still cannot see is a parameter TYPE that keeps its arity, a member reached through an
+expression rather than a named variable (`_game.flight.Loop().options`), and templates. Compiling
+the app is the only thing that would.
+
+**2026-09-06 — R22 ruled on, and it was not a ruling: half of it was written from the wrong
+machine's commentary, and measuring the other half found a different defect.** The risk said the
+altitude's radicand takes its low byte from whatever the frame last left in `Q`, and that `LOIN`
+writes `Q` on every line it draws while this port keeps it local — so the owner was to choose
+between `LOIN` publishing its last height and an ADR-001 §6 row accepting the divergence. **Neither
+was needed.** A search of the whole disassembly for writes to `Q` — zero page 154 — finds
+eighty-eight instructions and not one of them is inside `LOIN`: this build's line drawer works in
+`P2`, `Q2`, `R2` and `S2` at 188 to 191, which are a second set of scratch bytes, and touches `Q`,
+`R`, `S` and `T` nowhere. The claim came from the upstream commentary, which is the BBC's — the
+same source that had this port writing `T2` where the game writes `T` until M2-c-1 (§8). There was
+nothing for `LOIN` to publish.
+
+**And the half that was real was never measured.** The radicand's low byte genuinely is inherited:
+`MA23` does `SBC #36 / STA R / JSR LL5` and writes `R` alone, so `Q` is the frame's. Every frame
+sweep in the suite puts the planet at a high byte of 0x20, which makes `MAS2` answer non-zero, so
+`ALTIT` stays 255 and the square root has never run in a test. Two sweeps now do it:
+`TheAltitudeMatchesMA23` seeds `Q` on both sides over eight values and eight distances — the
+distances chosen so `SBC #36` leaves a small difference, because that is what makes `Q` the whole
+radicand — and `TheFramesOwnQReachesTheAltitude` runs the whole of `M%` with the planet in range
+over six bubble shapes (nothing else there, ships too far to draw, wireframes, dots, an explosion,
+a sun) and lets each side decide `Q` for itself. `ALTIT` is in the compared image, so a port whose
+frame left a different byte says so. It does not. **R22 is closed by measurement.**
+
+**What the fixture found instead.** The first case failed with the ORACLE dead and the port alive.
+`MA23` reaches `SBC #36` with the carry **clear**: `MAS3` returns the flag its last `ADC` left, and
+the only path that sets it is the saturation the `BCS MA23` two instructions above has already sent
+away. So the planet's radius costs thirty-seven, and the port had been subtracting thirty-six — an
+altitude one unit too generous everywhere it is computed, and a death radius one unit too small.
+Four slices of drawing work and a full-flight replay never saw it because no fixture put a planet
+close enough. Fixed, and the M0-c replay **re-taken under rule 1's second case**: seven of the
+sixteen digests moved and not one step did — the same 1,170 steps to the same dock.
+
+**A hook on the frame comparison.** `CompareFrames` takes an optional seeder that runs after the
+mirror and before the call, for a byte `UniverseImage` does not carry. Since M2-c that is
+`MathWorkspace`'s two, and this is the first fixture that needed one.
 
 **2026-09-06 — M2-d built: the boundary carries walked back to the instructions that set them,
 and three of them were wrong.** Twenty-four `bool _carryIn` parameters cross a non-kernel boundary,

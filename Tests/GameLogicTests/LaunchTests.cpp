@@ -243,8 +243,6 @@ namespace GameLogicTests
          */
         universe.heaps.stp = 4u;
 
-        Elite::ClipState clip;
-
         Cpu6502 cpu = oracle.Fresh();
         FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
         Mirror(universe, cpu, at);
@@ -264,8 +262,8 @@ namespace GameLogicTests
                                        std::to_wstring(run.stoppedAt))
                                         .c_str());
 
-        Elite::FlightScreen screen = universe.Screen();
-        Elite::DrawLaunchTunnel(screen, clip, nullptr);
+        Elite::Ports ports = universe.Ports();
+        Elite::DrawLaunchTunnel(universe, ports, nullptr);
 
         const std::wstring where = WidenText("LAUN (QQ11 " + std::to_string(view) + ")");
 
@@ -342,8 +340,6 @@ namespace GameLogicTests
         universe.heaps.lsp = 0u;
         universe.heaps.stp = 8u; // the launch's step, so a routine that forgot to store 4 is visible
 
-        Elite::ClipState clip;
-
         Cpu6502 cpu = oracle.Fresh();
         FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
         Mirror(universe, cpu, at);
@@ -362,8 +358,8 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"LL164 returned");
 
         Counting counting;
-        Elite::FlightScreen screen = universe.Screen();
-        Elite::DrawHyperspaceTunnel(screen, clip, universe.dashboard, &counting);
+        Elite::Ports ports = universe.Ports();
+        Elite::DrawHyperspaceTunnel(universe, ports, universe.dashboard, &counting);
 
         const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
 
@@ -557,15 +553,7 @@ namespace GameLogicTests
     /// Everything the launch works on, and the oracle's memory beside it.
     struct Leaving
     {
-      Universe universe;
-      Elite::ControlState control;
-      Elite::ControlOptions options;
-      Elite::KeyLogger keys{};
-      Elite::LaserBurst burst{};
-      Elite::LineHeap heap;
-      Elite::ClipState clip;
-      Elite::Projection projection;
-      Elite::K3Block axes{};
+      Universe universe; ///< every byte of it, since M3-a
       RecordingOutside outside;
       RecordingLaunch effects;
       RecordingStart start;
@@ -574,7 +562,13 @@ namespace GameLogicTests
       // arena has to be lent that window or the station's lines go nowhere (§6.112).
       Leaving()
       {
-        universe.LendSunHeap(heap);
+        universe.LendSunHeap();
+      }
+
+      /// The seams a launch reaches: the AI and the drawing, the sounds, and `RESET`'s own.
+      [[nodiscard]] Elite::Ports Ports() noexcept
+      {
+        return universe.PortsWith(outside, outside, effects, start);
       }
     };
 
@@ -641,10 +635,10 @@ namespace GameLogicTests
       universe.spaceView = 2u;
       universe.explosions = 0x66u;
 
-      _leaving.control.roll = 200u;
-      _leaving.control.pitch = 40u;
-      _leaving.control.dockingComputer = 0xFFu;
-      _leaving.clip.dontclip = 0x80u;
+      _leaving.universe.control.roll = 200u;
+      _leaving.universe.control.pitch = 40u;
+      _leaving.universe.control.dockingComputer = 0xFFu;
+      _leaving.universe.clip.dontclip = 0x80u;
       universe.heaps.stp = 4u; // what the short-range chart's fuel circle leaves behind
     }
 
@@ -655,14 +649,14 @@ namespace GameLogicTests
 
       _cpu.memory[_to.nostm] = universe.dust.count;
       _cpu.memory[_to.mstg] = universe.bubble.missileTarget;
-      _cpu.memory[_to.jstx] = _leaving.control.roll;
-      _cpu.memory[_to.jsty] = _leaving.control.pitch;
-      _cpu.memory[_to.autoByte] = _leaving.control.dockingComputer;
+      _cpu.memory[_to.jstx] = _leaving.universe.control.roll;
+      _cpu.memory[_to.jsty] = _leaving.universe.control.pitch;
+      _cpu.memory[_to.autoByte] = _leaving.universe.control.dockingComputer;
       _cpu.memory[_to.alp2Next] = universe.flight.alp2Next;
       _cpu.memory[_to.bet2] = universe.flight.bet2;
       _cpu.memory[_to.bet2Next] = universe.flight.bet2Next;
       _cpu.memory[_to.col2] = universe.text.cellColour;
-      _cpu.memory[_to.dontclip] = _leaving.clip.dontclip;
+      _cpu.memory[_to.dontclip] = _leaving.universe.clip.dontclip;
       _cpu.memory[_to.yx2m1] = universe.heaps.yx2M1;
       _cpu.memory[_to.qq22] = universe.status.hyperspaceCounter;
       _cpu.memory[_to.hfx] = universe.screen.hyperspaceEffect;
@@ -701,14 +695,14 @@ namespace GameLogicTests
 
       same(_to.nostm, universe.dust.count, L"NOSTM");
       same(_to.mstg, universe.bubble.missileTarget, L"MSTG");
-      same(_to.jstx, _leaving.control.roll, L"JSTX");
-      same(_to.jsty, _leaving.control.pitch, L"JSTY");
-      same(_to.autoByte, _leaving.control.dockingComputer, L"auto");
+      same(_to.jstx, _leaving.universe.control.roll, L"JSTX");
+      same(_to.jsty, _leaving.universe.control.pitch, L"JSTY");
+      same(_to.autoByte, _leaving.universe.control.dockingComputer, L"auto");
       same(_to.alp2Next, universe.flight.alp2Next, L"ALP2+1");
       same(_to.bet2, universe.flight.bet2, L"BET2");
       same(_to.bet2Next, universe.flight.bet2Next, L"BET2+1");
       same(_to.col2, universe.text.cellColour, L"COL2");
-      same(_to.dontclip, _leaving.clip.dontclip, L"dontclip");
+      same(_to.dontclip, _leaving.universe.clip.dontclip, L"dontclip");
       same(_to.yx2m1, universe.heaps.yx2M1, L"Yx2M1");
       same(_to.qq22, universe.status.hyperspaceCounter, L"QQ22");
       same(_to.hfx, universe.screen.hyperspaceEffect, L"HFX");
@@ -779,10 +773,8 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.res2, 2'000'000);
         Assert::IsTrue(run.completed, L"RES2 returned");
 
-        Elite::FlightScreen screen = leaving.universe.Screen();
-        Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
-                               leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
-        Elite::ResetShipAndBubble(loop);
+        Elite::Ports ports = leaving.Ports();
+        Elite::ResetShipAndBubble(leaving.universe, ports);
 
         const std::wstring where = WidenText("RES2 (shape " + std::to_string(shape) + ")");
 
@@ -838,12 +830,10 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.reset, 2'000'000);
         Assert::IsTrue(run.completed, L"RESET returned");
 
-        Elite::FlightScreen screen = leaving.universe.Screen();
-        Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
-                               leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+        Elite::Ports ports = leaving.Ports();
 
         std::uint8_t docked = 0;
-        Elite::ResetGame(loop, docked);
+        Elite::ResetGame(leaving.universe, ports, docked);
 
         const std::wstring where = WidenText("RESET (shape " + std::to_string(shape) + ")");
 
@@ -897,7 +887,7 @@ namespace GameLogicTests
           {
             Leaving leaving;
             Occupy(leaving, docked + techLevel * 7u + contraband);
-            leaving.universe.techLevel = techLevel; // 6502: tek, which `Mirror` sends to the oracle
+            leaving.universe.current.techLevel = techLevel; // 6502: tek, which `Mirror` sends to the oracle
             leaving.universe.commander.cargoHold[3] = contraband;
             leaving.universe.commander.cargoHold[10] = contraband;
             leaving.universe.commander.legalStatus = 2u;
@@ -925,14 +915,12 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(to.tt110, 8'000'000);
             Assert::IsTrue(run.completed, L"TT110 returned");
 
-            Elite::FlightScreen screen = leaving.universe.Screen();
-            Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
-                                   leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+            Elite::Ports ports = leaving.Ports();
 
             std::uint8_t flag = docked;
             Elite::SystemSeeds selected{};
-            Elite::Launch(loop, nullptr, flag, leaving.universe.commander.systemX,
-                          leaving.universe.commander.systemY, techLevel, selected);
+            Elite::Launch(leaving.universe, ports, nullptr, flag, leaving.universe.commander.systemX,
+                          leaving.universe.commander.systemY, selected);
 
             const std::wstring where = WidenText("TT110 (" + std::string(docked != 0u ? "docked" : "in flight") + ", tek " +
                                                  std::to_string(techLevel) + ", contraband " + std::to_string(contraband) + ")");
@@ -986,30 +974,26 @@ namespace GameLogicTests
       Occupy(leaving, 0x4Du);
       leaving.universe.view = 1u;
 
-      Elite::FlightScreen screen = leaving.universe.Screen();
-      Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
-                             leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+      Elite::Ports ports = leaving.Ports();
 
       Counting counting;
       std::uint8_t flag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
       Elite::SystemSeeds selected{};
-      Elite::Launch(loop, &counting, flag, leaving.universe.commander.systemX,
-                    leaving.universe.commander.systemY, 7u, selected);
+      Elite::Launch(leaving.universe, ports, &counting, flag, leaving.universe.commander.systemX,
+                    leaving.universe.commander.systemY, selected);
 
       Assert::AreEqual<std::uint32_t>(68u, counting.circles, L"both tunnels are paced, not just the second");
 
       // And the refusal path draws nothing at all, so it asks the platform for nothing either.
       Leaving flying;
       Occupy(flying, 0x4Du);
-      Elite::FlightScreen flyingScreen = flying.universe.Screen();
-      Elite::FlightLoop flyingLoop{flyingScreen, flying.keys,       flying.control, flying.options, flying.burst,   flying.heap,
-                                   flying.clip,  flying.projection, flying.axes,    flying.outside, flying.outside, flying.effects};
+      Elite::Ports flyingPorts = flying.Ports();
 
       Counting none;
       std::uint8_t inFlight = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
       Elite::SystemSeeds ignored{};
-      Elite::Launch(flyingLoop, &none, inFlight, flying.universe.commander.systemX,
-                    flying.universe.commander.systemY, 7u, ignored);
+      Elite::Launch(flying.universe, flyingPorts, &none, inFlight, flying.universe.commander.systemX,
+                    flying.universe.commander.systemY, ignored);
 
       Assert::AreEqual<std::uint32_t>(0u, none.circles, L"pressing 1 in flight is a view change and draws no tunnel");
     }
@@ -1137,11 +1121,9 @@ namespace GameLogicTests
       }
       Assert::IsTrue(reached, L"DEATH should reach its JSR U%");
 
-      Elite::FlightScreen screen = leaving.universe.Screen();
-      Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
-                             leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+      Elite::Ports ports = leaving.Ports();
 
-      Elite::PrepareDeathScene(loop, leaving.universe.dashboard);
+      Elite::PrepareDeathScene(leaving.universe, ports, leaving.universe.dashboard);
 
       const std::wstring where = L"DEATH (the scene)";
 
@@ -1279,23 +1261,21 @@ namespace GameLogicTests
       Leaving leaving;
       Occupy(leaving, 0x2Fu);
       leaving.universe.heaps.stp = 4u;
-      for (std::size_t index = 0; index < leaving.keys.size(); ++index)
+      for (std::size_t index = 0; index < leaving.universe.keys.size(); ++index)
       {
-        leaving.keys[index] = 0xFFu;
+        leaving.universe.keys[index] = 0xFFu;
       }
 
-      Elite::FlightScreen screen = leaving.universe.Screen();
-      Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
-                             leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
+      Elite::Ports ports = leaving.Ports();
 
-      Elite::Die(loop, leaving.universe.dashboard, nullptr);
+      Elite::Die(leaving.universe, ports, leaving.universe.dashboard, nullptr);
 
-      Assert::AreEqual<std::uint8_t>(0xFFu, leaving.keys[0], L"KLO+0 is below U%'s range and is untouched");
+      Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.keys[0], L"KLO+0 is below U%'s range and is untouched");
       for (std::size_t index = 1; index <= Elite::FLIGHT_KEYS_CLEARED; ++index)
       {
-        Assert::AreEqual<std::uint8_t>(0u, leaving.keys[index], (L"U% cleared KLO+" + std::to_wstring(index)).c_str());
+        Assert::AreEqual<std::uint8_t>(0u, leaving.universe.keys[index], (L"U% cleared KLO+" + std::to_wstring(index)).c_str());
       }
-      Assert::AreEqual<std::uint8_t>(0xFFu, leaving.keys[64], L"and the byte above U%'s range is untouched");
+      Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.keys[64], L"and the byte above U%'s range is untouched");
       Assert::AreEqual<std::uint8_t>(0u, leaving.universe.status.laserCount, L"LASCT counted down to zero");
       Assert::IsTrue(leaving.universe.flight.delta <= 1u, L"STA DELTA stopped the ship before the loop ran");
     }
@@ -1320,11 +1300,11 @@ namespace GameLogicTests
     {
       auto port = std::make_unique<FlightPort>();
       port->universe.commander = Elite::DefaultCommander();
-      Elite::ResetGame(port->loop, port->docked); // 6502: RESET
+      Elite::ResetGame(port->universe, port->ports, port->docked); // 6502: RESET
 
       Elite::SystemSeeds selected{};
-      Elite::Launch(port->loop, nullptr, port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
-                    port->universe.techLevel, selected); // 6502: TT110
+      Elite::Launch(port->universe, port->ports, nullptr, port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
+                    selected); // 6502: TT110
 
       // Some way out from the station at speed, so `ASL DELTA` twice has something to work on.
       for (int step = 0; step < 60; ++step)
@@ -1374,7 +1354,7 @@ namespace GameLogicTests
               continue; // a cloud's byte 0 is its size, not a line count
             }
             const std::uint8_t allowed = Elite::BlueprintOf(Elite::TypeOf(type))->heapBytes;
-            if (port.heap.Read(piece.heap) > allowed)
+            if (port.universe.heap.Read(piece.heap) > allowed)
             {
               failure = where + L": slot " + std::to_wstring(slot) + L" has more on its heap than its blueprint allows";
               return;
@@ -1411,7 +1391,7 @@ namespace GameLogicTests
       };
 
       Watching watching(*port);
-      Elite::Die(port->loop, *port, &watching);
+      Elite::Die(port->universe, port->ports, *port, &watching);
 
       Assert::IsTrue(watching.failure.empty(), watching.failure.c_str());
       Assert::AreEqual<std::uint32_t>(Elite::DEATH_FRAMES + 1u, watching.frames, L"every frame of the sequence was shown");
@@ -1464,7 +1444,7 @@ namespace GameLogicTests
                 Leaving leaving;
                 Occupy(leaving, Elite::Byte(shipType) * 13u + distance + frames + (fire ? 1u : 0u) + authors);
 
-                leaving.options.authorNames = authors;
+                leaving.universe.options.authorNames = authors;
                 leaving.start.quiet = frames - 1u;
                 leaving.start.key = 0x27u; // 6502: thiskey -- "Y", which is what `BR1` tests for
                 leaving.start.fire = fire;
@@ -1540,14 +1520,12 @@ namespace GameLogicTests
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(title, 20'000'000);
                 Assert::IsTrue(run.completed, L"TITLE returned");
 
-                Elite::FlightScreen screen = leaving.universe.Screen();
-                Elite::FlightLoop loop{screen,        leaving.keys,    leaving.control, leaving.options,
-                                       leaving.burst, leaving.heap,    leaving.clip,    leaving.projection,
-                                       leaving.axes,  leaving.outside, leaving.outside, leaving.effects};
+                Elite::Ports ports = leaving.Ports();
 
-                std::uint8_t flag = 0xFFu;
-                Elite::TitleScreen titleScreen{loop, leaving.start, leaving.universe.extendedPrinter, leaving.options, leaving.keys, flag};
-                const std::uint8_t answer = Elite::ShowTitleShip(titleScreen, Elite::TITLE_START_TOKEN, shipType, distance);
+                // 6502: QQ12 -- docked, which is where `TITLE` is reached from. It is the
+                // universe's own byte since M3-a, where `TitleScreen` held a reference to it.
+                leaving.universe.dockedFlag = 0xFFu;
+                const std::uint8_t answer = Elite::ShowTitleShip(leaving.universe, ports, Elite::TITLE_START_TOKEN, shipType, distance);
 
                 const std::wstring where =
                   WidenText("TITLE (ship " + std::to_string(Elite::Byte(shipType)) + ", distance " + std::to_string(distance) + ", " +
@@ -1568,10 +1546,10 @@ namespace GameLogicTests
                 Assert::IsTrue(leaving.universe.codes.ran.empty(), (where + L": no token reached a control code").c_str());
 
                 CompareState(cpu, leaving.universe, at, where);
-                CompareLeaving(cpu, leaving, to, flag, where);
+                CompareLeaving(cpu, leaving, to, leaving.universe.dockedFlag, where);
                 CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
 
-                Assert::AreEqual(cpu.memory[jstk], leaving.options.joystick, (where + L": JSTK").c_str());
+                Assert::AreEqual(cpu.memory[jstk], leaving.universe.options.joystick, (where + L": JSTK").c_str());
                 Assert::AreEqual(cpu.memory[mulie], leaving.universe.status.titleReset, (where + L": MULIE").c_str());
 
                 dismissed += fire ? 0u : 1u;

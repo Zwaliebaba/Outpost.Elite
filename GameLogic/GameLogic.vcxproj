@@ -178,6 +178,8 @@
     <ClInclude Include="Tactics.h" />
     <ClInclude Include="Raster.h" />
     <ClInclude Include="Trumbles.h" />
+    <ClInclude Include="Ports.h" />
+    <ClInclude Include="Universe.h" />
     <ClInclude Include="Spawn.h" />
     <ClInclude Include="SoundEffects.h" />
     <ClInclude Include="Music.h" />

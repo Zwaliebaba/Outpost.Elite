@@ -466,7 +466,8 @@ namespace GameLogicTests
               {
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
-                  cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = bubble.blocks[slot].ToBytes()[byte];
+                  cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] =
+                    bubble.blocks[slot].ToBytes()[byte];
                 }
               }
 
@@ -579,21 +580,19 @@ namespace GameLogicTests
     /// Everything a `TACTICS` case has to put into both machines before it can be compared.
     struct TacticsUniverse
     {
-      Universe universe;
-      Elite::ControlState control;
-      Elite::ControlOptions options;
-      Elite::KeyLogger keys{};
-      Elite::LaserBurst burst{};
-      Elite::LineHeap heap;
-      Elite::ClipState clip;
-      Elite::Projection projection;
-      Elite::K3Block axes{};
+      Universe universe; ///< every byte of it, since M3-a
       CountingEffects effects;
 
       std::array<std::uint8_t, 4> seed{};
       std::uint8_t ecm = 0;
       std::uint8_t legal = 0;
       std::uint8_t slot = 2;
+
+      /// The three seams the AI reaches, all counted in one place.
+      [[nodiscard]] Elite::Ports Ports() noexcept
+      {
+        return universe.PortsWith(effects, effects, effects, universe.unused);
+      }
     };
 
     /*
@@ -717,7 +716,8 @@ namespace GameLogicTests
         // not agree by accident.
         _universe.universe.bubble.blocks[slot].x.lo = static_cast<std::uint8_t>(0x40u + slot * 11u);
         _universe.universe.bubble.blocks[slot].x.hi = subject ? _where.x : static_cast<std::uint8_t>(0x20u + slot);
-        _universe.universe.bubble.blocks[slot].x.sgn = subject ? _where.xSign : static_cast<std::uint8_t>((slot & 1u) != 0u ? 0x80u : 0x00u);
+        _universe.universe.bubble.blocks[slot].x.sgn =
+          subject ? _where.xSign : static_cast<std::uint8_t>((slot & 1u) != 0u ? 0x80u : 0x00u);
         _universe.universe.bubble.blocks[slot].y.lo = static_cast<std::uint8_t>(0x60u + slot * 7u);
         _universe.universe.bubble.blocks[slot].y.hi = subject ? _where.y : static_cast<std::uint8_t>(0x30u + slot);
         _universe.universe.bubble.blocks[slot].y.sgn = subject ? _where.ySign : std::uint8_t{0u};
@@ -1147,10 +1147,8 @@ namespace GameLogicTests
             universe.universe.status.ecmCountdown = one.ecm;
             universe.universe.commander.legalStatus = one.legal;
 
-            Elite::FlightScreen screen = universe.universe.Screen();
-            Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
-                                   universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
-            const bool survived = Elite::RunTactics(loop, universe.slot);
+            Elite::Ports ports = universe.Ports();
+            const bool survived = Elite::RunTactics(universe.universe, ports, universe.slot);
 
             const std::wstring context =
               WidenText(std::string("TACTICS: ") + one.what + " " + where.what + " seed " + std::to_string(seed[0]));
@@ -1456,10 +1454,8 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(dockit, 400'000);
             Assert::IsTrue(run.completed, L"DOCKIT returned");
 
-            Elite::FlightScreen screen = universe.universe.Screen();
-            Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
-                                   universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
-            Assert::IsTrue(Elite::RunDockingComputer(loop, universe.slot), L"DOCKIT does not kill anybody");
+            Elite::Ports ports = universe.Ports();
+            Assert::IsTrue(Elite::RunDockingComputer(universe.universe, ports, universe.slot), L"DOCKIT does not kill anybody");
 
             const std::wstring context = WidenText(std::string("DOCKIT: ") + approach.what + (type == 0xE0u ? " (ours)" : " (theirs)") +
                                                    (faces != 0u ? " faces" : " no faces"));
@@ -1470,7 +1466,7 @@ namespace GameLogicTests
             // a local since M2-c, so the port leaves whatever was there.
             for (std::size_t byte = 0; byte < 9u; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], universe.axes[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], universe.universe.axes[byte],
                                (context + L": K3+" + std::to_wstring(byte)).c_str());
             }
 
@@ -1486,8 +1482,8 @@ namespace GameLogicTests
              * this counts the distinct answers and the assertion below is on that count.
              */
             outcomes.insert(std::to_string(universe.universe.work.speed) + "," + std::to_string(universe.universe.work.acceleration) + "," +
-                            std::to_string(universe.universe.work.rollCounter) + "," + std::to_string(universe.universe.work.pitchCounter) + "," +
-                            std::to_string(universe.universe.work.newb));
+                            std::to_string(universe.universe.work.rollCounter) + "," + std::to_string(universe.universe.work.pitchCounter) +
+                            "," + std::to_string(universe.universe.work.newb));
             ++compared;
           }
         }

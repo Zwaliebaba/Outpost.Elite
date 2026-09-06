@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Ports.h"
+#include "Universe.h"
+
 #include <cstdint>
 
 #include "Commander.h"
@@ -67,7 +70,7 @@ namespace Elite
    *
    * Returns the byte `NOISE2` gets, which part 11 stores into the dead ship's energy.
    */
-  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, ShipType _type) noexcept;
+  std::uint8_t RecordKill(Universe& _universe, Ports& _ports, DashboardEffects& _effects, ShipType _type) noexcept;
 
   /*
    * 6502: OOPS -- take `_damage`, on the shield the hit came from, and the banks under it.
@@ -81,7 +84,7 @@ namespace Elite
    *
    * Returns false when the energy banks have gone -- `JMP DEATH` -- so the caller ends the frame.
    */
-  [[nodiscard]] bool TakeDamage(FlightScreen& _screen, DashboardEffects& _effects, const Ship& _target, std::uint8_t _damage,
+  [[nodiscard]] bool TakeDamage(Universe& _universe, Ports& _ports, DashboardEffects& _effects, const Ship& _target, std::uint8_t _damage,
                                 bool _carryIn) noexcept;
 
   /*
@@ -96,7 +99,7 @@ namespace Elite
    * `EXNO3` is `LDY #sfxexpl / BNE NOISE`, so the carry is whatever the sound routine returned.
    * WHICH PIECE OF EQUIPMENT BREAKS DEPENDS ON WHETHER THE EXPLOSION GOT A VOICE (§6.88).
    */
-  void DamageEquipment(FlightScreen& _screen, bool _carryIn) noexcept;
+  void DamageEquipment(Universe& _universe, Ports& _ports, bool _carryIn) noexcept;
 
   /// 6502: BOMBOFF -- the bomb has burned out: standard bitmap mode again, and stop the flashing.
   void StopEnergyBomb(ScreenState& _screen) noexcept;

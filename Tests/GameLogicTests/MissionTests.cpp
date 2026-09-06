@@ -285,11 +285,10 @@ namespace GameLogicTests
       universe.bubble.blocks[0] = universe.work;
     }
 
-    /// `FlightLoop` over a `LoopUniverse`, which is twelve references nobody should type twice.
-    [[nodiscard]] static Elite::FlightLoop LoopOver(LoopUniverse& _universe, Elite::FlightScreen& _screen)
+    /// The seams a briefing reaches: the frame's three recorded, and the script answering `TITLE`'s.
+    [[nodiscard]] static Elite::Ports PortsOver(LoopUniverse& _universe, Elite::StartUpEffects& _start)
     {
-      return Elite::FlightLoop{_screen,     _universe.keys,       _universe.control, _universe.options, _universe.burst,   _universe.heap,
-                               _universe.clip, _universe.projection, _universe.axes,    _universe.effects, _universe.effects, _universe.effects};
+      return _universe.universe.PortsWith(_universe.effects, _universe.effects, _universe.effects, _start);
     }
 
     /// What `Mirror` does not send: the line heap, the flight model's rotation rates, and `INF`.
@@ -297,13 +296,14 @@ namespace GameLogicTests
     {
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        _cpu.memory[address] = _universe.heap.Read(Elite::HeapOffset::FromAddress(address));
+        _cpu.memory[address] = _universe.universe.heap.Read(Elite::HeapOffset::FromAddress(address));
       }
       _cpu.memory[_at.lsp] = _universe.universe.heaps.lsp;
 
       // 6502: SLSP -- the bottom of the ship line heap, which `NWSHP` allocates downwards from.
       _cpu.memory[_to.slsp] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom.Address() & 0xFFu);
-      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] = static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom.Address() >> 8);
+      _cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] =
+        static_cast<std::uint8_t>(_universe.universe.bubble.heapBottom.Address() >> 8);
 
       _cpu.memory[_to.alpha] = _universe.universe.flight.alpha;
       _cpu.memory[_to.alp2Next] = _universe.universe.flight.alp2Next;
@@ -334,7 +334,8 @@ namespace GameLogicTests
     {
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        Assert::AreEqual(_cpu.memory[address], _universe.heap.Read(Elite::HeapOffset::FromAddress(address)), (_where + L": heap " + std::to_wstring(address)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _universe.universe.heap.Read(Elite::HeapOffset::FromAddress(address)),
+                         (_where + L": heap " + std::to_wstring(address)).c_str());
       }
     }
   } // namespace
@@ -384,7 +385,7 @@ namespace GameLogicTests
           {
             LoopUniverse universe;
             Seed(universe.universe, Elite::Byte(type) * 31u + roll + pitch);
-            universe.universe.LendSunHeap(universe.heap);
+            universe.universe.LendSunHeap();
             universe.universe.trumbles.count = 0u;
 
             SetUpBriefingShip(universe, type, roll, pitch);
@@ -400,13 +401,11 @@ namespace GameLogicTests
 
             ScriptedStart start;
             start.key = 0x27u;
-            Elite::FlightScreen screen = universe.universe.Screen();
-            Elite::FlightLoop loop = LoopOver(universe, screen);
-            Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
-            const Elite::TitleKey answer = Elite::ShowBriefingShip(mission);
+            Elite::Ports ports = PortsOver(universe, start);
+            const Elite::TitleKey answer = Elite::ShowBriefingShip(universe.universe, ports);
 
-            const std::wstring where =
-              WidenText("PAS1 (ship " + std::to_string(Elite::Byte(type)) + ", roll " + std::to_string(roll) + ", pitch " + std::to_string(pitch) + ")");
+            const std::wstring where = WidenText("PAS1 (ship " + std::to_string(Elite::Byte(type)) + ", roll " + std::to_string(roll) +
+                                                 ", pitch " + std::to_string(pitch) + ")");
 
             Assert::AreEqual<std::uint32_t>(0x27u, answer.key, (where + L": thiskey").c_str());
             CompareBlock(cpu, universe, at, where);
@@ -454,7 +453,7 @@ namespace GameLogicTests
 
           LoopUniverse universe;
           Seed(universe.universe, quiet * 17u + held * 5u + Elite::Byte(type));
-          universe.universe.LendSunHeap(universe.heap);
+          universe.universe.LendSunHeap();
           universe.universe.trumbles.count = 0u;
           universe.universe.text.row = 0x17u; // so MT23's row 10 is a change rather than a coincidence
           universe.universe.text.column = 0x1Du;
@@ -475,11 +474,9 @@ namespace GameLogicTests
           start.held = held;
           start.quiet = quiet;
           start.key = 0x27u;
-          Elite::FlightScreen screen = universe.universe.Screen();
-          Elite::FlightLoop loop = LoopOver(universe, screen);
+          Elite::Ports ports = PortsOver(universe, start);
           std::uint8_t galaxy = 0;
-          Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
-          Elite::MissionCodes codes{mission, universe.universe.text, galaxy};
+          Elite::MissionCodes codes{universe.universe, ports, galaxy};
           universe.universe.codes.to = &codes;
 
           /*
@@ -490,8 +487,8 @@ namespace GameLogicTests
            */
           universe.universe.extendedPrinter.PrintByte(22u);
 
-          const std::wstring where =
-            WidenText("PAUSE (" + std::to_string(held) + " held, " + std::to_string(quiet) + " quiet, ship " + std::to_string(Elite::Byte(type)) + ")");
+          const std::wstring where = WidenText("PAUSE (" + std::to_string(held) + " held, " + std::to_string(quiet) + " quiet, ship " +
+                                               std::to_string(Elite::Byte(type)) + ")");
 
           /*
            * THE SCAN COUNT IS WHAT SEES THE FIRST LOOP. `JSR PAS1 / BNE PAUSE` runs while a key is
@@ -504,7 +501,8 @@ namespace GameLogicTests
           Assert::AreEqual<std::uint32_t>(theirScans, start.scans, (where + L": RDKEY calls").c_str());
 
           Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], universe.universe.text.row, (where + L": YC after MT23").c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], universe.universe.text.column, (where + L": XC, which MT23 leaves alone").c_str());
+          Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], universe.universe.text.column,
+                                          (where + L": XC, which MT23 leaves alone").c_str());
 
           CompareBlock(cpu, universe, at, where);
           CompareState(cpu, universe.universe, at, where);
@@ -557,10 +555,8 @@ namespace GameLogicTests
           start.key = 0x27u;
 
           LoopUniverse universe;
-          Elite::FlightScreen screen = universe.universe.Screen();
-          Elite::FlightLoop loop = LoopOver(universe, screen);
-          Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
-          Elite::WaitForKeyPress(mission);
+          Elite::Ports ports = PortsOver(universe, start);
+          Elite::WaitForKeyPress(universe.universe, ports);
 
           const std::wstring where = WidenText("PAUSE2 (" + std::to_string(held) + " held, " + std::to_string(quiet) + " quiet)");
           Assert::AreEqual<std::uint32_t>(theirScans, start.scans, (where + L": RDKEY calls").c_str());
@@ -593,7 +589,7 @@ namespace GameLogicTests
 
       LoopUniverse universe;
       Seed(universe.universe, 0x4Du);
-      universe.universe.LendSunHeap(universe.heap);
+      universe.universe.LendSunHeap();
       universe.universe.trumbles.count = 0u;
 
       Cpu6502 cpu = oracle.Fresh();
@@ -618,13 +614,11 @@ namespace GameLogicTests
 
       ScriptedStart start;
       std::uint8_t galaxy = 0;
-      Elite::FlightScreen screen = universe.universe.Screen();
-      Elite::FlightLoop loop = LoopOver(universe, screen);
-      Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
-      Elite::MissionCodes codes{mission, universe.universe.text, galaxy};
+      Elite::Ports ports = PortsOver(universe, start);
+      Elite::MissionCodes codes{universe.universe, ports, galaxy};
       universe.universe.codes.to = &codes;
 
-      Elite::ShowIncomingMessage(mission);
+      Elite::ShowIncomingMessage(universe.universe, ports);
 
       Assert::AreEqual<std::uint32_t>(1u, theirDelays, L"BRIS delays exactly once");
       Assert::AreEqual<std::size_t>(1u, start.delays.size(), L"and so does the port");
@@ -672,7 +666,7 @@ namespace GameLogicTests
       {
         LoopUniverse universe;
         Seed(universe.universe, view * 13u + 7u);
-        universe.universe.LendSunHeap(universe.heap);
+        universe.universe.LendSunHeap();
         universe.universe.trumbles.count = 0u;
         universe.universe.view = view;
         universe.universe.text.column = 0x1Du; // 6502: XC -- neither 1 nor 6, so both answers are visible
@@ -693,10 +687,8 @@ namespace GameLogicTests
 
         ScriptedStart start;
         std::uint8_t galaxy = 0;
-        Elite::FlightScreen screen = universe.universe.Screen();
-        Elite::FlightLoop loop = LoopOver(universe, screen);
-        Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
-        Elite::MissionCodes codes{mission, universe.universe.text, galaxy};
+        Elite::Ports ports = PortsOver(universe, start);
+        Elite::MissionCodes codes{universe.universe, ports, galaxy};
         universe.universe.codes.to = &codes;
 
         universe.universe.extendedPrinter.PrintByte(9u);
@@ -799,7 +791,7 @@ namespace GameLogicTests
           // ---- and the text, for the three where the token is a name -------------------------------
           LoopUniverse universe;
           Seed(universe.universe, galaxy * 7u + (captain ? 1u : 0u));
-          universe.universe.LendSunHeap(universe.heap);
+          universe.universe.LendSunHeap();
           universe.universe.trumbles.count = 0u;
           universe.universe.text.column = 1u; // 6502: XC -- `Seed` leaves it at 31, which is off the edge
           universe.universe.text.row = 10u;   // 6502: YC -- where MT23 would have put it
@@ -824,10 +816,8 @@ namespace GameLogicTests
           Assert::IsTrue(cpu.CallSubroutine(captain ? to.mt27 : to.mt28, 4'000'000).completed, (where + L": printed").c_str());
 
           ScriptedStart start;
-          Elite::FlightScreen screen = universe.universe.Screen();
-          Elite::FlightLoop loop = LoopOver(universe, screen);
-          Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
-          Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.galaxyNumber};
+          Elite::Ports ports = PortsOver(universe, start);
+          Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
           universe.universe.codes.to = &codes;
 
           /*
@@ -889,7 +879,7 @@ namespace GameLogicTests
         const wchar_t* name;
         std::uint16_t entry;
         std::uint8_t token;
-        Elite::ForcedKey (*run)(Elite::MissionScreen&, Elite::MissionBay&);
+        Elite::ForcedKey (*run)(Elite::Universe&, Elite::Ports&, Elite::MissionBay&);
       };
 
       const Case CASES[] = {
@@ -950,14 +940,12 @@ namespace GameLogicTests
           start.key = 0x27u;
 
           std::uint8_t dockedFlag = 0;
-          Elite::FlightScreen screen = universe.universe.Screen();
-          Elite::FlightLoop loop = LoopOver(universe, screen);
-          Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+          Elite::Ports ports = PortsOver(universe, start);
           Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
-          Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.galaxyNumber};
+          Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
           universe.universe.codes.to = &codes;
 
-          const Elite::ForcedKey key = item.run(mission, bay);
+          const Elite::ForcedKey key = item.run(universe.universe, ports, bay);
 
           const std::wstring where = std::wstring(item.name) + L" (TP " + std::to_wstring(progress * 17u) + L")";
 
@@ -1056,14 +1044,12 @@ namespace GameLogicTests
 
             ScriptedKeys keys{accept};
             std::uint8_t dockedFlag = 0;
-            Elite::FlightScreen screen = universe.universe.Screen();
-            Elite::FlightLoop loop = LoopOver(universe, screen);
-            Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+            Elite::Ports ports = PortsOver(universe, start);
             Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
-            Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.galaxyNumber};
+            Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
             universe.universe.codes.to = &codes;
 
-            static_cast<void>(Elite::OfferTrumble(mission, bay, keys));
+            static_cast<void>(Elite::OfferTrumble(universe.universe, ports, bay, keys));
 
             const std::wstring where = WidenText(std::string("TBRIEF (") + (accept ? "yes" : "no") + ", " + (rich ? "rich" : "poor") +
                                                  ", TP " + std::to_string(progress * 17u) + ")");
@@ -1133,7 +1119,7 @@ namespace GameLogicTests
       {
         LoopUniverse universe;
         Seed(universe.universe, progress * 23u + 5u);
-        universe.universe.LendSunHeap(universe.heap);
+        universe.universe.LendSunHeap();
         universe.universe.trumbles.count = 0u;
         universe.universe.commander.missionProgress = static_cast<std::uint8_t>(progress * 85u);
 
@@ -1181,14 +1167,12 @@ namespace GameLogicTests
         start.key = 0x27u;
 
         std::uint8_t dockedFlag = 0;
-        Elite::FlightScreen screen = universe.universe.Screen();
-        Elite::FlightLoop loop = LoopOver(universe, screen);
-        Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
+        Elite::Ports ports = PortsOver(universe, start);
         Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
-        Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.galaxyNumber};
+        Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
         universe.universe.codes.to = &codes;
 
-        const std::uint8_t ourToken = Elite::RunConstrictorBriefing(mission, bay);
+        const std::uint8_t ourToken = Elite::RunConstrictorBriefing(universe.universe, ports, bay);
 
         const std::wstring where = WidenText("BRIEF (TP " + std::to_string(progress * 85u) + ")");
 
