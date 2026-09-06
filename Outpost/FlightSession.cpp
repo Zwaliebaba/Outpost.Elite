@@ -213,10 +213,11 @@ namespace Outpost
     return Elite::SpawnShipAhead(m_bubble, m_work, _type, m_flight.delta, m_bubble.missileTarget, m_flight.blueprint).created;
   }
 
-  void FlightSession::Anger(std::uint8_t _slot, Elite::ShipType _type)
+  bool FlightSession::Anger(std::uint8_t _slot, Elite::ShipType _type)
   {
     // 6502: ANGRY on the block INF points at -- and which block that is, the caller says (§6.142).
-    Elite::Anger(m_bubble, m_flight, _slot, _type);
+    // The routine's exit carry comes back with it, for the `JSR LL9` that follows (§6.157).
+    return Elite::Anger(m_bubble, m_flight, _slot, _type);
   }
 
   bool FlightSession::SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type)
@@ -249,20 +250,6 @@ namespace Outpost
     // frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
     // vertices `LL9` part 8 projected, which `DOEXP` copies onto the ship's line heap.
     Elite::DrawExplosionCloud(m_canvas, m_draw, m_math, m_screen.rng, m_work, m_heap, m_geometry, m_bubble, *this);
-  }
-
-  void FlightSession::SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint8_t _explosionCount)
-  {
-    /*
-     * 6502: the `EE55` block -- six instructions, and they are behind a seam rather than in `LL9`
-     * for two reasons: what they write is `DOEXP`'s state, and the `JSR DORND` among them runs on
-     * whatever carry `LOIN` last left. The port cannot say what that carry is without reading all
-     * thirty-two of `LOIN`'s unrolled copies (§6.91), so seeding a cloud nothing draws would
-     * consume generator state the oracle does not.
-     */
-    (void)_heap;
-    (void)_address;
-    (void)_explosionCount;
   }
 
   // ---- the controls -------------------------------------------------------------------------------

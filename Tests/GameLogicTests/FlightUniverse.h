@@ -396,7 +396,10 @@ namespace GameLogicTests
     {
       return false;
     }
-    void Anger(std::uint8_t, Elite::ShipType) override {}
+    bool Anger(std::uint8_t, Elite::ShipType) override
+    {
+      return false; // a trap's answer: nothing ran, and no fixture here reaches the seeding that reads it
+    }
     bool SpawnChild(std::uint8_t, Elite::ShipType) override
     {
       return true;
@@ -407,7 +410,6 @@ namespace GameLogicTests
     }
     void DrawPlanetOrSun() override {}
     void DrawExplosion() override {}
-    void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override {}
   };
 
   /// The port's side of a case: the whole flight universe plus the pieces `FlightLoop` needs. Shared,

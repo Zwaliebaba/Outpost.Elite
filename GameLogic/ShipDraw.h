@@ -3,6 +3,7 @@
 #include "Arith.h"
 #include "Canvas.h"
 #include "LineHeap.h"
+#include "Rng.h"
 #include "ShipSlot.h"
 
 #include <array>
@@ -145,8 +146,32 @@ namespace Elite
    * screen. The routine clears it with an `EOR` (not an `AND`, because A already holds the mask and
    * the bit is known set) and redraws, which erases. If the bit is clear there is nothing there and
    * it returns through `LL10-1`, an `RTS` that belongs to the routine before it.
+   *
+   * RETURNS THE CARRY IT EXITS WITH, because the `EE55` block reads it (§6.157). It is not `LOIN`'s:
+   * `LL155` ends `INY / CPY XX20 / BCC LL27 / RTS`, so a heap with lines on it leaves the flag SET
+   * by the compare that ended the loop, whatever the line drawing did before it; a heap under four
+   * bytes leaves `CMP #4 / BCC LL82` -- CLEAR; and a ship that was not on the screen returns through
+   * a bare `RTS` with the flag the caller arrived with, which is `_carryIn`.
    */
-  void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, const LineHeap& _heap) noexcept;
+  bool EraseShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept;
+
+  /*
+   * 6502: the six instructions after `JSR EE51` in `LL9` part 1, and the `EE55` loop -- set up a
+   * newly killed ship's explosion cloud on its line heap.
+   *
+   * Byte 1 is 18, the counter `DOEXP` ages; byte 2 is `(XX0),7`, how many vertices the cloud
+   * blooms from, which arrives as the blueprint's `explosionCount`; bytes 3 to 6 are `DORND`. The
+   * FIRST `DORND` rolls in the carry `EE51` returned, and the other three run on the CLEAR that
+   * `CPY #6` leaves while Y is still under six.
+   *
+   * THIS WAS A SEAM WITH NOTHING BEHIND IT UNTIL 2026-09-06, on the belief that the carry came out
+   * of `LOIN` and could not be known (§6.91). With the six bytes never written, `DOEXP` read byte 2
+   * as zero, ran its vertex copy from index 0 down through 255 to 7, and wrote two hundred and
+   * fifty bytes of `XX3` over every line heap above the dying ship's -- which the ships owning those
+   * heaps then drew as lines, all over the screen and past the bottom of the bitmap into screen
+   * RAM. The death sequence was where it showed (§6.157).
+   */
+  void SeedExplosionCloud(LineHeap& _heap, HeapOffset _run, std::uint8_t _explosionCount, Rng& _rng, bool _carryIn) noexcept;
 
   /*
    * 6502: SHPPT, with its `Shpt` helper and its `nono` exit -- a distant ship, drawn as a dot.
@@ -346,10 +371,9 @@ namespace Elite
    * The two places `LL9` leaves its own code (slice 3b).
    *
    * `PLANET` is a tail jump taken when the type is negative, and belongs to 3c. `DOEXP` is the
-   * explosion, filed under `Explosion.cpp`; `SeedExplosionCloud` is the six instructions that set
-   * one up, and they are behind the seam rather than in `LL9` for two reasons -- what they write is
-   * `DOEXP`'s state, and the `JSR DORND` among them runs on whatever carry `LOIN` last left, which
-   * this port cannot say without reading all thirty-two of `LOIN`'s unrolled copies.
+   * explosion, filed under `Explosion.cpp`. The `EE55` block was a third seam here until
+   * 2026-09-06 and is `SeedExplosionCloud` above now: it is `LL9`'s own code, its carry is `EE51`'s
+   * and known, and a seam nobody implemented was the death sequence's corruption (§6.157).
    */
   class ShipDrawEffects
   {
@@ -361,11 +385,6 @@ namespace Elite
 
     /// 6502: LL14's JMP DOEXP -- redraw the explosion cloud, which is how it is erased.
     virtual void DrawExplosion() = 0;
-
-    /// 6502: the EE55 block -- byte 1 of the heap is the cloud's size, byte 2 its particle count,
-    /// which is `(XX0),7` and arrives here as the blueprint's `explosionCount`, and bytes 3 to 6
-    /// are random.
-    virtual void SeedExplosionCloud(LineHeap& _heap, std::uint16_t _address, std::uint8_t _explosionCount) = 0;
   };
 
   /*
@@ -382,9 +401,16 @@ namespace Elite
    * A ship too far away is drawn as a dot by `SHPPT` instead, and one behind the player or wider
    * than it is distant is rubbed out and abandoned. Both are `LL9` deciding not to draw, not the
    * caller.
+   *
+   * `_rng` and `_carryIn` are for one thing: a ship that arrives here killed and not yet exploding
+   * has its cloud seeded with four `DORND`s, and the first of them rolls in the carry `JSR LL9` was
+   * reached with when the ship was not on the screen to be erased (§6.157). Nothing between `LL9`'s
+   * first instruction and `EE51` touches the flag -- `LDA`, `BIT`, `ORA`, `AND`, stores -- so the
+   * caller's carry is the block's. Part 11 of the flight loop derives it; the title, the briefings
+   * and the escape pod draw ships that are never killed, and pass a value nothing reads.
    */
   void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                 Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
-                ShipDrawEffects& _effects) noexcept;
+                ShipDrawEffects& _effects, Rng& _rng, bool _carryIn) noexcept;
 
 } // namespace Elite

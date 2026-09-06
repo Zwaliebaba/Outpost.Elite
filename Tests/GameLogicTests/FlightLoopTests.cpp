@@ -11,6 +11,7 @@
 #include "Dashboard.h"
 #include "ShipBlueprint.h"
 #include "ShipSlot.h"
+#include "Tactics.h"
 
 #include <array>
 #include <cstdint>
@@ -862,16 +863,20 @@ namespace GameLogicTests
       std::vector<Pitched> pitched;
       std::vector<std::uint8_t> stopped;
       std::vector<std::uint8_t> spawned;
-      std::vector<std::uint8_t> angered;
       std::uint32_t musicStarts = 0;
       std::uint32_t musicStops = 0;
 
       /// What `FRS1` answers -- carry set for "there was room", clear for a full bubble.
       bool spawnSucceeds = true;
 
-      RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries) noexcept
+      /// The bubble `ANGRY` writes and the loop byte it reads: the routine RUNS here, on both sides
+      /// of the comparison, because `LL9` reads the carry it exits with (§6.157).
+      Universe& universe;
+
+      RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries, Universe& _universe) noexcept
         : sounds(_sounds),
-          soundCarries(_carries)
+          soundCarries(_carries),
+          universe(_universe)
       {
       }
 
@@ -905,10 +910,12 @@ namespace GameLogicTests
         spawned.push_back(Elite::Byte(_type));
         return spawnSucceeds;
       }
-      void Anger(std::uint8_t _slot, Elite::ShipType _type) override
+      bool Anger(std::uint8_t _slot, Elite::ShipType _type) override
       {
-        (void)_slot; // the oracle's trap records A, which is the type; the slot is INF's and not compared here
-        angered.push_back(Elite::Byte(_type));
+        // 6502: ANGRY, for real -- it was trapped on the oracle and recorded here until 2026-09-06,
+        // and a trap's exit carry is whatever the caller had, which is not what the routine leaves
+        // for `LL9` (§6.157). Its writes are compared through the ship blocks like everything else.
+        return Elite::Anger(universe.bubble, universe.flight, _slot, _type);
       }
       bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
       {
@@ -931,7 +938,6 @@ namespace GameLogicTests
       std::vector<std::uint8_t> tactics;
       std::uint32_t planets = 0;
       std::uint32_t explosions = 0;
-      std::uint32_t clouds = 0;
 
       bool RunTactics(Elite::Ship& _work) override
       {
@@ -946,13 +952,6 @@ namespace GameLogicTests
       {
         ++explosions;
       }
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t _address, std::uint8_t) override
-      {
-        seeded.push_back(_address);
-        ++clouds;
-      }
-
-      std::vector<std::uint16_t> seeded;
     };
 
     /// Everything one frame needs that the shared `Universe` does not carry.
@@ -968,7 +967,7 @@ namespace GameLogicTests
       Elite::Projection projection;
       Elite::K3Block axes{};
       RecordingUniverse outside;
-      RecordingLoop effects{universe.effects.sounds, universe.effects.soundCarries};
+      RecordingLoop effects{universe.effects.sounds, universe.effects.soundCarries, universe};
 
       explicit Frame(std::uint32_t _seed)
       {
@@ -1228,7 +1227,6 @@ namespace GameLogicTests
       cpu.AddTrap(_loop.sfs1, _frame.effects.childSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
       cpu.AddTrap(_loop.startbd);
       cpu.AddTrap(_loop.stopbd);
-      cpu.AddTrap(_loop.angry);
       cpu.AddTrap(_loop.frs1, _frame.effects.spawnSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
 
       // `NOISE` ends `SEC / RTS` on the path that gives the effect a voice, and `LASLI`'s opening
@@ -1292,7 +1290,6 @@ namespace GameLogicTests
       std::vector<std::uint8_t> sounds;
       std::vector<std::uint8_t> soundCarries;
       std::vector<std::uint8_t> spawned;
-      std::vector<std::uint8_t> angered;
       std::uint32_t starts = 0;
       std::uint32_t stops = 0;
 
@@ -1314,10 +1311,6 @@ namespace GameLogicTests
         else if (hit.address == _loop.frs1)
         {
           spawned.push_back(hit.x);
-        }
-        else if (hit.address == _loop.angry)
-        {
-          angered.push_back(hit.a);
         }
         else if (hit.address == _loop.startbd)
         {
@@ -1415,48 +1408,27 @@ namespace GameLogicTests
         Assert::AreEqual(spawned[index], _frame.effects.spawned[index], (_context + L": FRS1 type").c_str());
       }
 
-      Assert::AreEqual(angered.size(), _frame.effects.angered.size(), (_context + L": ANGRY calls").c_str());
-      for (std::size_t index = 0; index < angered.size(); ++index)
-      {
-        Assert::AreEqual(angered[index], _frame.effects.angered[index], (_context + L": ANGRY type").c_str());
-      }
-
       Assert::AreEqual(starts, _frame.effects.musicStarts, (_context + L": startbd").c_str());
       Assert::AreEqual(stops, _frame.effects.musicStops, (_context + L": stopbd").c_str());
 
       // ---- the universe -----------------------------------------------------------------------------
       CompareScreens(cpu, _at.screen, _frame.universe.canvas, 0x1Du, _context);
-      CompareState(cpu, _frame.universe, _at, _context, _frame.outside.clouds == 0u);
+      CompareState(cpu, _frame.universe, _at, _context);
       CompareFrame(cpu, _frame, _loop, _context);
 
       /*
-       * The heap, minus what an unseeded explosion cloud owns.
+       * The heap, ALL of it, and the generator with it.
        *
-       * `LL9`'s `EE55` block writes six bytes at the head of a newly killed ship's run and four of
-       * them come from `DORND` -- on a carry that arrives out of `LOIN`, through `EE51`, and the port
-       * has no exit carry for `LOIN` to give it. So the cloud stays behind `SeedExplosionCloud`, and
-       * the six bytes it owns plus the generator are the only things this comparison leaves out
-       * (§6.91). Everything else on a frame that kills a ship is still compared.
+       * Until 2026-09-06 this stepped over the six bytes at the head of a newly killed ship's run
+       * and skipped the generator on any frame that seeded a cloud, on §6.91's belief that the
+       * seeding's first `DORND` ran on a carry out of `LOIN` the port could not know. It runs on
+       * `EE51`'s, which is a `CMP`'s, and the port derives it now (§6.157) -- so a frame that kills
+       * a ship is compared whole, seeds included.
        */
-      auto seededHere = [&](std::uint16_t _address)
-      {
-        for (const std::uint16_t cloud : _frame.outside.seeded)
-        {
-          if (_address >= static_cast<std::uint16_t>(cloud + 1u) && _address <= static_cast<std::uint16_t>(cloud + 6u))
-          {
-            return true;
-          }
-        }
-        return false;
-      };
-
       for (std::uint16_t address = HEAP_START; address < Elite::LineHeap::TOP; ++address)
       {
-        if (seededHere(address))
-        {
-          continue;
-        }
-        Assert::AreEqual(cpu.memory[address], _frame.heap.Read(Elite::HeapOffset::FromAddress(address)), (_context + L": heap byte " + std::to_wstring(address)).c_str());
+        Assert::AreEqual(cpu.memory[address], _frame.heap.Read(Elite::HeapOffset::FromAddress(address)),
+                         (_context + L": heap byte " + std::to_wstring(address)).c_str());
       }
 
       const std::uint16_t bottom =

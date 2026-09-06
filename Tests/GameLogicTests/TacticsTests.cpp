@@ -499,10 +499,14 @@ namespace GameLogicTests
 
               Elite::FlightState flight;
               flight.type = Elite::TypeOf(loopType);
-              Elite::Anger(bubble, flight, SLOT, called);
+              const bool carry = Elite::Anger(bubble, flight, SLOT, called);
 
               const std::wstring where = WidenText("ANGRY NEWB " + std::to_string(newb) + " AI " + std::to_string(ai) + " TYPE " +
                                                    std::to_string(loopType) + " called " + std::to_string(Elite::Byte(called)));
+
+              // The exit carry is an output: part 11 falls from `JSR ANGRY` into `JSR LL9`, and a
+              // ship the laser just killed seeds its cloud on it (§6.157).
+              Assert::AreEqual(cpu.c, carry, (where + L": the exit carry").c_str());
               for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
               {
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
@@ -573,7 +577,10 @@ namespace GameLogicTests
       {
         return false;
       }
-      void Anger(std::uint8_t, Elite::ShipType) override {}
+      bool Anger(std::uint8_t, Elite::ShipType) override
+      {
+        return false; // a trap's answer, and no tactics case reaches the seeding that reads it
+      }
       bool SpawnChild(std::uint8_t, Elite::ShipType _type) override
       {
         spawned.push_back(Elite::Byte(_type));
@@ -585,7 +592,6 @@ namespace GameLogicTests
       }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override {}
     };
 
     /// Everything a `TACTICS` case has to put into both machines before it can be compared.

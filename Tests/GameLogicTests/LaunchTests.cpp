@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "FlightPort.h"
 #include "FlightUniverse.h"
 #include "OracleImage.h"
 
@@ -13,6 +14,7 @@
 #include "ShipDraw.h"
 
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <vector>
 #include <string>
@@ -532,7 +534,10 @@ namespace GameLogicTests
       {
         return true;
       }
-      void Anger(std::uint8_t, Elite::ShipType) override {}
+      bool Anger(std::uint8_t, Elite::ShipType) override
+      {
+        return false; // a trap's answer, and no launch reaches the seeding that reads it
+      }
       bool SpawnChild(std::uint8_t, Elite::ShipType) override
       {
         return true;
@@ -547,7 +552,6 @@ namespace GameLogicTests
       }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override {}
     };
 
     /// Everything the launch works on, and the oracle's memory beside it.
@@ -1294,6 +1298,104 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint8_t>(0xFFu, leaving.keys[64], L"and the byte above U%'s range is untouched");
       Assert::AreEqual<std::uint8_t>(0u, leaving.universe.status.laserCount, L"LASCT counted down to zero");
       Assert::IsTrue(leaving.universe.flight.delta <= 1u, L"STA DELTA stopped the ship before the loop ran");
+    }
+
+    /*
+     * The wreckage stays inside the space view, on every one of the sixty-five frames.
+     *
+     * A `FlightPort`, because the fault this pins needed every routine real. Half the wreckage is
+     * spawned dead and `DOEXP` runs on it -- and until 2026-09-06 the cloud it grew had never been
+     * seeded: byte 2 of the heap read as zero, the vertex copy ran from index 0 down through 255 to
+     * 7, and two hundred and fifty bytes of `XX3` landed across every line heap above the dying
+     * piece's. The pieces owning those heaps drew them as lines, past the bottom of the bitmap into
+     * screen RAM -- the coloured blocks in the border -- and their own lines were never erased, so
+     * the screen filled with wreckage that did not move (§6.157). `Leaving` could not have shown
+     * it: its explosion is a counter.
+     *
+     * So three things, every frame: no piece that is not exploding has more on its heap than its
+     * blueprint gave it; after the first frame, nothing in screen RAM outside the space view's
+     * thirty-two columns changes; and the dashboard's block of screen RAM does not change at all.
+     */
+    TEST_METHOD(TheWreckageStaysInsideTheSpaceView)
+    {
+      auto port = std::make_unique<FlightPort>();
+      port->universe.commander = Elite::DefaultCommander();
+      Elite::ResetGame(port->loop, port->docked); // 6502: RESET
+
+      Elite::SystemSeeds selected{};
+      Elite::Launch(port->loop, nullptr, port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
+                    port->universe.techLevel, selected); // 6502: TT110
+
+      // Some way out from the station at speed, so `ASL DELTA` twice has something to work on.
+      for (int step = 0; step < 60; ++step)
+      {
+        port->held.fill(0u);
+        port->held[Elite::KEY_SPEED_UP] = 1u;
+        Assert::IsTrue(port->Step() == Elite::LoopOutcome::Continued, L"flying");
+      }
+
+      struct Watching final : Elite::TunnelEffects
+      {
+        FlightPort& port;
+        std::vector<std::uint8_t> cells;
+        std::uint32_t frames = 0;
+
+        explicit Watching(FlightPort& _port) noexcept
+          : port(_port)
+        {
+        }
+
+        void ShowFrame() override
+        {
+          ++frames;
+          const std::wstring where = L"death frame " + std::to_wstring(frames);
+
+          for (std::size_t slot = 0; slot < port.universe.bubble.slots.size(); ++slot)
+          {
+            const std::uint8_t type = port.universe.bubble.slots[slot];
+            if (type == 0u)
+            {
+              break;
+            }
+            const Elite::Ship& piece = port.universe.bubble.blocks[slot];
+            if (Elite::Has(piece.state, Elite::ShipStateBit::Exploding))
+            {
+              continue; // a cloud's byte 0 is its size, not a line count
+            }
+            const std::uint8_t allowed = Elite::BlueprintOf(Elite::TypeOf(type))->heapBytes;
+            Assert::IsTrue(port.heap.Read(piece.heap) <= allowed,
+                           (where + L": slot " + std::to_wstring(slot) + L" has more on its heap than its blueprint allows").c_str());
+          }
+
+          const auto screen = port.universe.canvas.Screen();
+          if (frames == 1u)
+          {
+            cells.assign(screen.begin() + Elite::Canvas::SCREEN_CELLS, screen.end());
+            return;
+          }
+
+          for (std::size_t offset = 0; offset < cells.size(); ++offset)
+          {
+            const std::size_t at = Elite::Canvas::SCREEN_CELLS + offset;
+            const bool firstBlock = at < Elite::Canvas::DASHBOARD_CELLS;
+            const std::size_t column = offset % Elite::Canvas::CELL_COLUMNS;
+            const bool spaceView = firstBlock &&
+                                   offset < static_cast<std::size_t>(Elite::Canvas::CELL_COLUMNS * Elite::Canvas::CELL_ROWS) &&
+                                   column >= 4u && column < 36u;
+            if (spaceView)
+            {
+              continue;
+            }
+            Assert::AreEqual(cells[offset], screen[at],
+                             (where + L": screen RAM byte " + std::to_wstring(at) + L" outside the space view changed").c_str());
+          }
+        }
+      };
+
+      Watching watching(*port);
+      Elite::Die(port->loop, *port, &watching);
+
+      Assert::AreEqual<std::uint32_t>(Elite::DEATH_FRAMES + 1u, watching.frames, L"every frame of the sequence was shown");
     }
   };
 

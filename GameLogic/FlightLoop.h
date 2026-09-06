@@ -260,8 +260,12 @@ namespace Elite
      * `XSAV`'s slot -- with nothing locked at all in the common case. A seam that took only the type
      * had to guess which, guessed `MSTG`, and read block 255 the first time a laser landed without
      * a missile lock (§6.142).
+     *
+     * RETURNS THE CARRY `ANGRY` EXITS WITH, because part 11 falls from it into `JSR LL9` and a ship
+     * the laser has just killed seeds its explosion cloud on that flag (§6.157). `Elite::Anger` says
+     * what the flag is; an implementation that does not run the routine answers for a trap.
      */
-    virtual void Anger(std::uint8_t _slot, ShipType _type) = 0;
+    virtual bool Anger(std::uint8_t _slot, ShipType _type) = 0;
   };
 
   /*

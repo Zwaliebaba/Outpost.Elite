@@ -9,6 +9,8 @@
 
 namespace Elite
 {
+  /// 6502: LDA #18 -- what byte 1 of a fresh cloud's heap starts at, the counter `DOEXP` ages.
+  inline constexpr std::uint8_t EXPLOSION_COUNTER_START = 18;
 
   void DivideByShipZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
   {
@@ -169,21 +171,41 @@ namespace Elite
     DrawShipLines(_canvas, _draw, _heap, _run);
   }
 
-  void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, const LineHeap& _heap) noexcept
+  bool EraseShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept
   {
     if (!Has(_ship.state, ShipStateBit::OnScreen))
     {
-      return;
+      return _carryIn; // 6502: BEQ LL10-1 -- a bare RTS, and the flag is the caller's
     }
 
     _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
     DrawShipLines(_canvas, _draw, _heap, _ship.heap);
+
+    // 6502: LL155's exit -- `CMP #4 / BCC LL82` clears it for a heap with no line on it, and the
+    // `CPY XX20 / BCC LL27` that ends the loop leaves it set for every heap that had one.
+    return _heap.Read(_ship.heap) >= 4u;
+  }
+
+  void SeedExplosionCloud(LineHeap& _heap, HeapOffset _run, std::uint8_t _explosionCount, Rng& _rng, bool _carryIn) noexcept
+  {
+    _heap.Write(_run.Byte(1u), EXPLOSION_COUNTER_START); // 6502: LDY #1 / LDA #18 / STA (XX19),Y
+    _heap.Write(_run.Byte(2u), _explosionCount);         // 6502: LDY #7 / LDA (XX0),Y / LDY #2 / STA (XX19),Y
+
+    // 6502: .EE55 INY / JSR DORND / STA (XX19),Y / CPY #6 / BNE EE55 -- the first roll takes the
+    // carry `EE51` left, and each later one the clear that `CPY #6` leaves while Y is under six.
+    bool carry = _carryIn;
+    for (std::uint16_t byte = 3u; byte <= 6u; ++byte)
+    {
+      _heap.Write(_run.Byte(byte), _rng.Next(carry).value);
+      carry = false;
+    }
   }
 
   void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, LineHeap& _heap, MathWorkspace& _math,
                        Projection& _screen) noexcept
   {
-    EraseShip(_canvas, _draw, _ship, _heap);
+    // The flag `EE51` returns goes nowhere from here: `SHPPT` overwrites it in `PROJ`'s arithmetic.
+    static_cast<void>(EraseShip(_canvas, _draw, _ship, _heap, false));
 
     const ProjectResult projected = Project(_ship, _math, _screen);
 
@@ -786,7 +808,7 @@ namespace Elite
 
   void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
                 Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
-                ShipDrawEffects& _effects) noexcept
+                ShipDrawEffects& _effects, Rng& _rng, bool _carryIn) noexcept
   {
     // ---- part 1: is there anything to draw at all? ------------------------------------------
 
@@ -802,7 +824,8 @@ namespace Elite
     // 6502: bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
     if (Has(_work.newb, NewbBit::Remove))
     {
-      EraseShip(_canvas, _draw, _work, _heap);
+      // 6502: BMI EE51 -- a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
+      static_cast<void>(EraseShip(_canvas, _draw, _work, _heap, _carryIn));
       return;
     }
 
@@ -818,8 +841,10 @@ namespace Elite
       _slot.acceleration = 0;
       _slot.pitchCounter = 0;
 
-      EraseShip(_canvas, _draw, _work, _heap);
-      _effects.SeedExplosionCloud(_heap, _work.heap.Address(), _blueprint.explosionCount); // 6502: (XX0),7
+      // 6502: JSR EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
+      // carry the erase returns, which is the caller's when there was nothing to erase (§6.157).
+      const bool carry = EraseShip(_canvas, _draw, _work, _heap, _carryIn);
+      SeedExplosionCloud(_heap, _work.heap, _blueprint.explosionCount, _rng, carry); // 6502: (XX0),7
     }
 
     // 6502: EE28 / EE49 and LL10 -- four ways of being not worth drawing, sharing one exit. The
@@ -842,7 +867,7 @@ namespace Elite
       // 6502: LL14.
       if (!Has(_work.state, ShipStateBit::Exploding))
       {
-        EraseShip(_canvas, _draw, _work, _heap);
+        static_cast<void>(EraseShip(_canvas, _draw, _work, _heap, false)); // 6502: JMP EE51 -- and the flag is `LL9`'s exit
         return;
       }
 

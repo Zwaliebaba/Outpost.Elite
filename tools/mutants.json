@@ -707,6 +707,82 @@
           "note": "Deciding a sprite's mode once instead of per screen row. The VIC-II decides it as it scans, which is why a burst that straddles the split is drawn on one side only; pinning the half to the space view's draws the whole thing over the dashboard."
         }
       ]
+    },
+    {
+      "name": "cloud-seed",
+      "slice": "death-sequence fix 2026-09-06 (plan section 6.157)",
+      "filter": [
+        "TheShipLineHeap",
+        "TheDeathScreen",
+        "TheFlightFrameShips",
+        "TheTacticsVectors"
+      ],
+      "tests": 17,
+      "note": [
+        "The EE55 cloud seeding, the carries it reads and the two defects the tightened comparison",
+        "found beside it (plan section 6.157). Every decision here is a flag: which carry the first",
+        "DORND rolls in, what the other three get, what EE51 leaves, what ANGRY leaves, what the",
+        "scooped canister's roll gets. Each mutant flips one and names the oracle test that sees it."
+      ],
+      "mutants": [
+        {
+          "id": "cs-selftest",
+          "file": "GameLogic/ShipDraw.cpp",
+          "find": "_heap.Write(_run.Byte(2u), _explosionCount);",
+          "replace": "_heap.Write(_run.Byte(2u), 0u);",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Byte 2 is the vertex count DOEXP loops down from; zero is the unseeded value that wrote 250 bytes across the neighbouring heaps, so TheCloudSeedsLikeEE55 sees the byte and TheWreckageStaysInsideTheSpaceView sees the corruption. Keep it first in the list and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "cs-later-carries",
+          "file": "GameLogic/ShipDraw.cpp",
+          "find": "      _heap.Write(_run.Byte(byte), _rng.Next(carry).value);\n      carry = false;",
+          "replace": "      _heap.Write(_run.Byte(byte), _rng.Next(carry).value);\n      carry = true;",
+          "expect": "caught",
+          "note": "CPY #6 / BNE EE55 -- Y is under six on the way round, so the second, third and fourth DORND roll in a CLEAR carry whatever the first one had. Feeding them the first one's flag agrees on the clear-carry cases and not on the set-carry ones; TheCloudSeedsLikeEE55 runs both."
+        },
+        {
+          "id": "cs-ee51-exit",
+          "file": "GameLogic/ShipDraw.cpp",
+          "find": "return _heap.Read(_ship.heap) >= 4u;",
+          "replace": "return true;",
+          "expect": "caught",
+          "note": "LL155's CMP #4 / BCC LL82 -- a heap with no line on it leaves the carry CLEAR, and ErasingAShipMatchesEE51 runs an empty heap against the oracle's exit flag."
+        },
+        {
+          "id": "cs-counter",
+          "file": "GameLogic/ShipDraw.cpp",
+          "find": "EXPLOSION_COUNTER_START = 18;",
+          "replace": "EXPLOSION_COUNTER_START = 17;",
+          "expect": "caught",
+          "note": "LDA #18 -- the counter DOEXP ages, and the CPY #18 that decides the burst sprite's one frame reads it. TheCloudSeedsLikeEE55 compares heap byte 1."
+        },
+        {
+          "id": "cs-oily",
+          "file": "GameLogic/FlightLoop.cpp",
+          "find": "item = static_cast<std::uint8_t>(screen.rng.Next(true).value & 7u);",
+          "replace": "item = static_cast<std::uint8_t>(screen.rng.Next(false).value & 7u);",
+          "expect": "caught",
+          "note": ".oily JSR DORND reached only by CPX #OIL / BEQ oily, and an equal compare SETS the carry. This was the port until 2026-09-06, hidden while the comparison skipped the generator on frames that seeded a cloud; ThePerShipLoopMatchesMAL1's 'on top of us with scoops' compares RAND now."
+        },
+        {
+          "id": "cs-angry-station",
+          "file": "GameLogic/Tactics.cpp",
+          "find": "const bool comparedToStation = _type >= ShipType::Station;",
+          "replace": "const bool comparedToStation = _type > ShipType::Station;",
+          "expect": "caught",
+          "note": "CMP #SST with the station itself in A leaves the carry SET (equal), and BEQ AN2 returns on it. TheAngerMatchesANGRY compares the exit flag on every case, and a third of them call with the station."
+        },
+        {
+          "id": "cs-ll9-carry-hit",
+          "file": "GameLogic/FlightLoop.cpp",
+          "find": "carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it",
+          "replace": "carry = false; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it",
+          "expect": "caught",
+          "note": "HITCH's SEC is the flag JSR LL9 gets for a ship in the sights with no missile armed and no laser firing, and a ship that arrives there killed and not on the screen seeds its first DORND on it. ThePerShipLoopMatchesMAL1's 'on top of us, already dead' is that ship, and its RAND is compared."
+        }
+      ]
     }
   ]
 }
