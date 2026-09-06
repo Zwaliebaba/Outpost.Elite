@@ -1068,3 +1068,10 @@ became one `Elite::ShipType`; `origin-markers` up again, 3,583 → 3,615, becaus
 carries its label (rule 4), and `modernize_ratchet.json`'s `slice` fields now name the slice that
 last moved each ceiling — M1-a's three had been left saying `M0-a`. Four mutants re-anchored; the
 corpus rerun follows.
+
+**2026-09-06 — M1-b closed on the mutants.** The corpus on the typed tree, through the portable
+runner against the 392-test baseline: 65 mutants, 61 caught, 4 survived, the four the recorded
+equivalents — M0-d's tally for the third time. `msl-bit5` now reads `ShipStateBit::Exploding`
+against `ShipStateBit::OnScanner` and is caught by the same victim it always was, which is the
+point of naming the bits: the mutant says what it breaks. Rule 3 is met; M1-c — `Ship` with a
+codec, `Bubble::blocks` as ships, `operator[]` retired, the tests through the bridge — is next.
