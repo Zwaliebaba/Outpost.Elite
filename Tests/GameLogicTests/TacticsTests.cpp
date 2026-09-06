@@ -441,7 +441,7 @@ namespace GameLogicTests
       const std::uint8_t NEWBS[] = {0x00u, 0x20u, 0x04u, 0x24u, 0xFFu};
       const std::uint8_t AI[] = {0x00u, 0x01u, 0x7Fu, 0x80u, 0xFEu};
       const std::uint8_t LOOP_TYPES[] = {0u, 1u, 10u, 11u, 29u, 128u};
-      const std::uint8_t CALLED[] = {Elite::SHIP_TYPE_STATION, Elite::SHIP_TYPE_MISSILE, Elite::SHIP_TYPE_COBRA_MK3};
+      const Elite::ShipType CALLED[] = {Elite::ShipType::Station, Elite::ShipType::Missile, Elite::ShipType::CobraMk3};
 
       Cpu6502 cpu = oracle.Fresh();
       std::uint32_t compared = 0;
@@ -453,7 +453,7 @@ namespace GameLogicTests
         {
           for (const std::uint8_t loopType : LOOP_TYPES)
           {
-            for (const std::uint8_t called : CALLED)
+            for (const Elite::ShipType called : CALLED)
             {
               constexpr std::uint8_t SLOT = 3;
 
@@ -474,7 +474,7 @@ namespace GameLogicTests
                * already has bit 2 set, so `AN2`'s `ORA #%00000100` changed nothing and a mutation
                * that skipped `AN2` altogether agreed on every case (§6.124).
                */
-              bubble.blocks[1][36] = static_cast<std::uint8_t>(bubble.blocks[1][36] & ~Elite::NEWB_HOSTILE);
+              bubble.blocks[1][36] = Elite::Without(bubble.blocks[1][36], Elite::NewbBit::Hostile);
 
               for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
               {
@@ -489,16 +489,16 @@ namespace GameLogicTests
               cpu.memory[static_cast<std::uint16_t>(inf + 1)] = static_cast<std::uint8_t>(block >> 8u);
               cpu.memory[typeAt] = loopType;
 
-              cpu.a = called;
+              cpu.a = Elite::Byte(called);
               const Elite::Testing::RunResult run = cpu.CallSubroutine(angry, 20'000);
               Assert::IsTrue(run.completed, L"ANGRY returned");
 
               Elite::FlightState flight;
-              flight.type = loopType;
+              flight.type = Elite::TypeOf(loopType);
               Elite::Anger(bubble, flight, SLOT, called);
 
               const std::wstring where = WidenText("ANGRY NEWB " + std::to_string(newb) + " AI " + std::to_string(ai) + " TYPE " +
-                                                   std::to_string(loopType) + " called " + std::to_string(called));
+                                                   std::to_string(loopType) + " called " + std::to_string(Elite::Byte(called)));
               for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
               {
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
@@ -508,7 +508,7 @@ namespace GameLogicTests
                                    (where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
                 }
               }
-              angered += ((bubble.blocks[1][36] & Elite::NEWB_HOSTILE) != 0u) ? 1u : 0u;
+              angered += Elite::Has(bubble.blocks[1][36], Elite::NewbBit::Hostile) ? 1u : 0u;
               ++compared;
             }
           }
@@ -565,14 +565,14 @@ namespace GameLogicTests
       void StopSound(std::uint8_t) override {}
       void StartDockingMusic() override {}
       void StopDockingMusic() override {}
-      bool SpawnAhead(std::uint8_t) override
+      bool SpawnAhead(Elite::ShipType) override
       {
         return false;
       }
-      void Anger(std::uint8_t, std::uint8_t) override {}
-      bool SpawnChild(std::uint8_t, std::uint8_t _type) override
+      void Anger(std::uint8_t, Elite::ShipType) override {}
+      bool SpawnChild(std::uint8_t, Elite::ShipType _type) override
       {
-        spawned.push_back(_type);
+        spawned.push_back(Elite::Byte(_type));
         return true;
       }
       bool RunTactics(Elite::ShipBlock&) override
@@ -760,15 +760,15 @@ namespace GameLogicTests
         _universe.universe.bubble.blocks[slot][36] = subject ? _where.flags : 0u;
       }
 
-      _universe.universe.bubble.counts[Elite::SHIP_TYPE_STATION] = _stations;
-      _universe.universe.bubble.counts[Elite::SHIP_TYPE_THARGOID] = _thargoids;
-      _universe.universe.bubble.counts[Elite::SHIP_TYPE_COBRA_MK3] = 1u;
+      _universe.universe.bubble.Count(Elite::ShipType::Station) = _stations;
+      _universe.universe.bubble.Count(Elite::ShipType::Thargoid) = _thargoids;
+      _universe.universe.bubble.Count(Elite::ShipType::CobraMk3) = 1u;
       _universe.universe.bubble.heapBottom = Elite::SHIP_HEAP_TOP;
 
       _universe.universe.work = _universe.universe.bubble.blocks[2];
-      _universe.universe.flight.type = _type;
+      _universe.universe.flight.type = Elite::TypeOf(_type);
       _universe.universe.flight.slot = 2u;
-      _universe.universe.flight.blueprint = Elite::BlueprintAddress(_type == 0u ? std::uint8_t{11u} : _type);
+      _universe.universe.flight.blueprint = Elite::BlueprintAddress(_type == 0u ? Elite::ShipType::CobraMk3 : Elite::TypeOf(_type));
       _universe.universe.flight.mainLoopCounter = 0u;
 
       // 6502: XX2 -- the face visibility of the last ship drawn, which `DOCKIT` reads as `K3+10`.
@@ -815,7 +815,7 @@ namespace GameLogicTests
       _cpu.memory[static_cast<std::uint16_t>(_at.inf + 1)] = static_cast<std::uint8_t>(block >> 8u);
       _cpu.memory[_at.xx0] = static_cast<std::uint8_t>(_universe.universe.flight.blueprint);
       _cpu.memory[static_cast<std::uint16_t>(_at.xx0 + 1)] = static_cast<std::uint8_t>(_universe.universe.flight.blueprint >> 8u);
-      _cpu.memory[_at.type] = _universe.universe.flight.type;
+      _cpu.memory[_at.type] = Elite::Byte(_universe.universe.flight.type);
       _cpu.memory[_at.ecma] = _universe.ecm;
       _cpu.memory[_at.fist] = _universe.legal;
       _cpu.memory[_at.energy] = _universe.universe.status.energy;
@@ -1444,7 +1444,7 @@ namespace GameLogicTests
             universe.universe.bubble.blocks[1][18] = approach.roofY;
             universe.universe.bubble.blocks[1][20] = approach.roofZ;
 
-            universe.universe.flight.type = type;
+            universe.universe.flight.type = Elite::TypeOf(type);
 
             /*
              * 6502: XX2, which `DOCKIT` reads as `K3+10` -- the eleventh face of the last ship

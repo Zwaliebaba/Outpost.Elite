@@ -130,7 +130,7 @@ namespace GameLogicTests
         }
 
         // Each ship's heap block, carved off the top the way `NWSHP` carves it.
-        const std::uint16_t blueprint = Elite::BlueprintAddress(type);
+        const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(type));
         const std::uint8_t size = (blueprint == 0u) ? std::uint8_t{0} : Elite::ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
         heapAt = static_cast<std::uint16_t>(heapAt - size);
 
@@ -223,10 +223,10 @@ namespace GameLogicTests
       const std::uint16_t nwsps = oracle.Label("NWSPS");
       const std::uint16_t spblb = oracle.Label("SPBLB");
       const std::uint16_t spasto = oracle.Label("spasto");
-      const std::uint16_t xx21Station = static_cast<std::uint16_t>(oracle.Label("XX21") + 2u * Elite::SHIP_TYPE_STATION - 2u);
+      const std::uint16_t xx21Station = static_cast<std::uint16_t>(oracle.Label("XX21") + 2u * Elite::Byte(Elite::ShipType::Station) - 2u);
 
-      const std::uint16_t coriolis = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
-      const std::uint16_t dodo = Elite::BlueprintAddress(Elite::SHIP_TYPE_DODO);
+      const std::uint16_t coriolis = Elite::BlueprintAddress(Elite::ShipType::Station);
+      const std::uint16_t dodo = Elite::BlueprintAddress(Elite::ShipType::Dodo);
       Assert::AreNotEqual(coriolis, dodo, L"the two stations are different blueprints");
 
       /// A sun in slot 1, because `NWSPS` empties that slot without going near `KILLSHP`.
@@ -278,7 +278,7 @@ namespace GameLogicTests
             cpu.memory[static_cast<std::uint16_t>(xx21Station + 1u)] = static_cast<std::uint8_t>(standing >> 8);
 
             // 6502: XX0 -- the last ship's blueprint, which `NWSHP` overwrites with the station's.
-            std::uint16_t blueprint = Elite::BlueprintAddress(11u);
+            std::uint16_t blueprint = Elite::BlueprintAddress(Elite::ShipType::CobraMk3);
             cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
             cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = static_cast<std::uint8_t>(blueprint >> 8);
 
@@ -411,7 +411,7 @@ namespace GameLogicTests
             Elite::Bubble bubble;
             // 6502: XX21+2*SST-2 -- the entry `NWSPS` writes, which `KILLSHP` reads back through
             // byte 5 when it shuffles a station's slot down. Zero would make the port read nothing.
-            bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+            bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
             Elite::LineHeap heap;
             Elite::PlanetSunState state;
             Elite::ShipBlock work{};
@@ -441,7 +441,7 @@ namespace GameLogicTests
             // A locked missile keeps its target in INWK+32 as %1ttttttt.
             for (std::size_t slot = 0; slot < living; ++slot)
             {
-              if (fleet[slot] != Elite::SHIP_TYPE_MISSILE)
+              if (Elite::TypeOf(fleet[slot]) != Elite::ShipType::Missile)
               {
                 continue;
               }
@@ -465,7 +465,7 @@ namespace GameLogicTests
             cpu.memory[at.inf] = static_cast<std::uint8_t>(block);
             cpu.memory[static_cast<std::uint16_t>(at.inf + 1)] = static_cast<std::uint8_t>(block >> 8);
 
-            const std::uint16_t blueprint = Elite::BlueprintAddress(fleet[victim]);
+            const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(fleet[victim]));
             cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint);
             cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
 
@@ -493,7 +493,7 @@ namespace GameLogicTests
             missions += (commander.At(Elite::Field::MissionProgress) != 0x01u) ? 1u : 0u;
             // A kill only relocates when something is living above it, and the station's own
             // path shuffles nothing at all.
-            moved += (fleet[victim] != Elite::SHIP_TYPE_STATION && victim + 1u < living) ? 1u : 0u;
+            moved += (Elite::TypeOf(fleet[victim]) != Elite::ShipType::Station && victim + 1u < living) ? 1u : 0u;
             ++compared;
           }
         }
@@ -570,7 +570,7 @@ namespace GameLogicTests
       {
         Cpu6502 cpu = oracle.Fresh();
         Elite::Bubble bubble;
-        bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+        bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
         Elite::LineHeap heap;
         Elite::ShipBlock work{};
         Elite::CommanderBlock commander;
@@ -814,7 +814,7 @@ namespace GameLogicTests
       const std::uint8_t SPEEDS[] = {0u, 1u, 12u, 27u, 0xFFu};
       const std::vector<std::vector<std::uint8_t>> FLEETS = {
         {},
-        {Elite::SHIP_TYPE_COBRA_MK3},
+        {Elite::Byte(Elite::ShipType::CobraMk3)},
         // Full, so `NWSHP` must refuse -- and CANISTERS rather than Cobras, because `SeedBubble`
         // carves each ship's heap off the top and ten Cobras' worth reaches down over `K%`
         // itself. A fixture that overlaps the thing it is comparing proves nothing.
@@ -849,11 +849,11 @@ namespace GameLogicTests
             cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint);
             cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
 
-            cpu.x = Elite::SHIP_TYPE_MISSILE;
+            cpu.x = Elite::Byte(Elite::ShipType::Missile);
             const Elite::Testing::RunResult run = cpu.CallSubroutine(frs1, 200'000);
             Assert::IsTrue(run.completed, L"FRS1 returned");
 
-            const Elite::NewShip made = Elite::SpawnShipAhead(bubble, work, Elite::SHIP_TYPE_MISSILE, speed, target, blueprint);
+            const Elite::NewShip made = Elite::SpawnShipAhead(bubble, work, Elite::ShipType::Missile, speed, target, blueprint);
 
             const std::wstring where =
               Widen("FRS1 MSTG " + std::to_string(target) + " DELTA " + std::to_string(speed) + " fleet " + std::to_string(fleet.size()));
@@ -903,7 +903,7 @@ namespace GameLogicTests
       const std::uint16_t typeAt = oracle.Label("TYPE");
       const std::uint16_t xx3 = oracle.Label("XX3");
 
-      const std::uint8_t PARENTS[] = {Elite::SHIP_TYPE_STATION, Elite::SHIP_TYPE_COBRA_MK3, Elite::SHIP_TYPE_ASTEROID};
+      const Elite::ShipType PARENTS[] = {Elite::ShipType::Station, Elite::ShipType::CobraMk3, Elite::ShipType::Asteroid};
 
       /*
        * FOUR SEEDS, AND THE REASON IS A SURVIVING MUTATION. `SFS1` ends the cargo branch with
@@ -913,8 +913,8 @@ namespace GameLogicTests
        */
       const std::array<std::array<std::uint8_t, 4>, 4> SEEDS = {
         {{0x31u, 0xF5u, 0x7Au, 0x0Cu}, {0x11u, 0x22u, 0x33u, 0x44u}, {0x9Cu, 0x4Eu, 0x07u, 0xB3u}, {0xFFu, 0x01u, 0x80u, 0x7Fu}}};
-      const std::uint8_t CHILDREN[] = {Elite::SHIP_TYPE_ALLOY_PLATE, Elite::SHIP_TYPE_CANISTER, Elite::SHIP_TYPE_SPLINTER,
-                                       Elite::SHIP_TYPE_MISSILE, Elite::SHIP_TYPE_COBRA_MK3};
+      const Elite::ShipType CHILDREN[] = {Elite::ShipType::AlloyPlate, Elite::ShipType::Canister, Elite::ShipType::Splinter,
+                                         Elite::ShipType::Missile, Elite::ShipType::CobraMk3};
       const std::uint8_t FLAGS[] = {0u, Elite::SPAWN_CHILD_AI, 0xA5u};
 
       std::uint32_t compared = 0;
@@ -922,9 +922,9 @@ namespace GameLogicTests
       std::uint32_t pitchSet = 0;
       std::uint32_t pitchClear = 0;
 
-      for (const std::uint8_t parentType : PARENTS)
+      for (const Elite::ShipType parentType : PARENTS)
       {
-        for (const std::uint8_t childType : CHILDREN)
+        for (const Elite::ShipType childType : CHILDREN)
         {
           for (const std::uint8_t flag : FLAGS)
           {
@@ -935,7 +935,7 @@ namespace GameLogicTests
                 Cpu6502 cpu = oracle.Fresh();
                 Elite::Bubble bubble;
                 Elite::LineHeap heap;
-                SeedBubble(cpu, bubble, heap, at, {Elite::SHIP_TYPE_COBRA_MK3, parentType});
+                SeedBubble(cpu, bubble, heap, at, {Elite::Byte(Elite::ShipType::CobraMk3), Elite::Byte(parentType)});
 
                 /*
                * The station's nose vector with its signs BOTH WAYS, because `SFS2` reads them as
@@ -954,7 +954,7 @@ namespace GameLogicTests
                 const std::uint16_t parentBlock = static_cast<std::uint16_t>(at.kPercent + PARENT_SLOT * Elite::SHIP_BLOCK_SIZE);
                 cpu.memory[at.inf] = static_cast<std::uint8_t>(parentBlock);
                 cpu.memory[static_cast<std::uint16_t>(at.inf + 1)] = static_cast<std::uint8_t>(parentBlock >> 8);
-                cpu.memory[typeAt] = parentType;
+                cpu.memory[typeAt] = Elite::Byte(parentType);
 
                 for (std::size_t byte = 0; byte < 4u; ++byte)
                 {
@@ -984,16 +984,16 @@ namespace GameLogicTests
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(sescp, 200'000);
                   Assert::IsTrue(run.completed, L"SESCP returned");
                   made = Elite::SpawnEscapePod(bubble, work, rng, math, PARENT_SLOT, parentType, blueprint);
-                  where = Widen("SESCP parent " + std::to_string(parentType));
+                  where = Widen("SESCP parent " + std::to_string(Elite::Byte(parentType)));
                 }
                 else
                 {
                   cpu.a = flag;
-                  cpu.x = childType;
+                  cpu.x = Elite::Byte(childType);
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(sfs1, 200'000);
                   Assert::IsTrue(run.completed, L"SFS1 returned");
                   made = Elite::SpawnChildShip(bubble, work, rng, math, PARENT_SLOT, parentType, flag, childType, blueprint);
-                  where = Widen("SFS1 parent " + std::to_string(parentType) + " child " + std::to_string(childType) + " flag " +
+                  where = Widen("SFS1 parent " + std::to_string(Elite::Byte(parentType)) + " child " + std::to_string(Elite::Byte(childType)) + " flag " +
                                 std::to_string(flag));
                 }
 
@@ -1014,7 +1014,7 @@ namespace GameLogicTests
                 Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.xx0] | (cpu.memory[at.xx0 + 1] << 8)), blueprint,
                                                 (where + L": XX0 put back").c_str());
 
-                tumbled += (childType >= Elite::SHIP_TYPE_ALLOY_PLATE && childType <= Elite::SHIP_TYPE_SPLINTER) ? 1u : 0u;
+                tumbled += (Elite::Byte(childType) >= Elite::Byte(Elite::ShipType::AlloyPlate) && Elite::Byte(childType) <= Elite::Byte(Elite::ShipType::Splinter)) ? 1u : 0u;
                 if (made.created)
                 {
                   pitchSet += ((bubble.blocks[made.slot][29] & 0x80u) != 0u) ? 1u : 0u;

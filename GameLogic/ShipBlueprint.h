@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LookupTables.h"
+#include "ShipType.h"
 
 #include <cstdint>
 
@@ -84,7 +85,7 @@ namespace Elite
    * carry -- so this is a guard against a future routine being wrong, in the same spirit as
    * `Canvas::Read`'s bounds check, and not a behaviour the game has.
    */
-  [[nodiscard]] std::uint16_t BlueprintAddress(std::uint8_t _shipType) noexcept;
+  [[nodiscard]] std::uint16_t BlueprintAddress(ShipType _shipType) noexcept;
 
   /*
    * How many bytes a blueprint occupies, from its own header.

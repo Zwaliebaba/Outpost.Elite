@@ -192,12 +192,12 @@ namespace GameLogicTests
       // Phase three: a hostile Viper straight ahead, and the laser at it.
       {
         Universe& universe = _port.universe;
-        const Elite::NewShip viper = Elite::SpawnShipAhead(universe.bubble, universe.work, Elite::SHIP_TYPE_VIPER, universe.flight.delta,
+        const Elite::NewShip viper = Elite::SpawnShipAhead(universe.bubble, universe.work, Elite::ShipType::Viper, universe.flight.delta,
                                                            universe.bubble.missileTarget, universe.flight.blueprint); // 6502: FRS1
         trace.viperCreated = viper.created;
         if (viper.created)
         {
-          Elite::Anger(universe.bubble, universe.flight, viper.slot, Elite::SHIP_TYPE_VIPER); // 6502: ANGRY
+          Elite::Anger(universe.bubble, universe.flight, viper.slot, Elite::ShipType::Viper); // 6502: ANGRY
         }
       }
       if (!frames(240,

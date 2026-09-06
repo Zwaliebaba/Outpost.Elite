@@ -137,8 +137,8 @@ namespace Elite
    * `PACK` is not a type of its own: the source says `PACK = SH3`, so the pack hunters are the
    * eight blueprints from the Sidewinder up, and part 4 picks one with `AND #7 / ADC #PACK`.
    */
-  inline constexpr std::uint8_t SHIP_TYPE_COUGAR = 32;                       ///< 6502: COU
-  inline constexpr std::uint8_t SHIP_TYPE_PACK_FIRST = SHIP_TYPE_SIDEWINDER; ///< 6502: PACK = SH3
+  /// 6502: PACK = SH3 -- the pack hunters begin at the Sidewinder (`ShipType::Sidewinder`), and the
+  /// Cougar is `ShipType::Cougar`; both live in the enumeration now.
 
   /// 6502: LDY #2 / JSR DELAY -- two vertical syncs on a docked screen with the author-names
   /// option off, which is the only frame cap anywhere in the main loop (§6.17).

@@ -118,7 +118,7 @@ namespace Elite
     return static_cast<std::uint8_t>(reduced + 1u);
   }
 
-  void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, std::uint8_t _type, std::uint8_t _count) noexcept
+  void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count) noexcept
   {
     _math.cnt = _count; // 6502: .SPIN2 STA CNT, which sets no flags
 
@@ -140,7 +140,7 @@ namespace Elite
     }
   }
 
-  void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects, std::uint16_t _blueprint, std::uint8_t _type,
+  void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects, std::uint16_t _blueprint, ShipType _type,
                    bool _carryIn) noexcept
   {
     // 6502: JSR DORND / BPL oh -- and nothing else in the routine looks at the roll's low bits
@@ -159,7 +159,7 @@ namespace Elite
      * count is the ship TYPE masked by the blueprint's first byte; the roll decides only whether
      * anything is dropped at all. The oracle caught the port doing it the obvious way (§6.74).
      */
-    const std::uint8_t capped = static_cast<std::uint8_t>(_type & ShipByte(_blueprint) & 0x0Fu);
+    const std::uint8_t capped = static_cast<std::uint8_t>(Byte(_type) & ShipByte(_blueprint) & 0x0Fu);
 
     SpawnItems(_math, _effects, _type, capped); // 6502: and it falls into SPIN2
   }
@@ -206,7 +206,7 @@ namespace Elite
     return _limit >= _work.Z().hi;
   }
 
-  bool IsHit(const ShipBlock& _work, MathWorkspace& _math, std::uint16_t _blueprint, std::uint8_t _type) noexcept
+  bool IsHit(const ShipBlock& _work, MathWorkspace& _math, std::uint16_t _blueprint, ShipType _type) noexcept
   {
     // 6502: CLC / LDA INWK+8 / BNE HI1 -- the z sign byte, and anything but zero means the ship is
     // not close enough in front of us to have been hit.
@@ -216,14 +216,14 @@ namespace Elite
     }
 
     // 6502: LDA TYPE / BMI HI1 -- the planet and the sun are not shootable.
-    if ((_type & 0x80u) != 0u)
+    if (IsBody(_type))
     {
       return false;
     }
 
     // 6502: LDA INWK+31 / AND #%00100000 / ORA INWK+1 / ORA INWK+4 / BNE HI1 -- already exploding,
     // or too far off to either side. Three tests ORed into one branch.
-    if (((_work.State() & 0x20u) | _work.X().hi | _work.Y().hi) != 0u)
+    if (Has(_work.State(), ShipStateBit::Exploding) || (_work.X().hi | _work.Y().hi) != 0u)
     {
       return false;
     }
@@ -270,7 +270,7 @@ namespace Elite
     FlightScreen& screen = _loop.screen;
 
     // 6502: LDX #MSL / JSR FRS1 / BCC FR1 -- a full bubble means the missile stays on the rail.
-    if (!_loop.effects.SpawnAhead(SHIP_TYPE_MISSILE))
+    if (!_loop.effects.SpawnAhead(ShipType::Missile))
     {
       // 6502: .FR1 LDA #201 / JMP MESS -- "MISSILE JAMMED".
       ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, MESSAGE_MISSILE_JAMMED, screen.view);
@@ -280,7 +280,7 @@ namespace Elite
     // 6502: LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY -- the TARGET's slot and type, not the
     // missile's.
     const std::uint8_t target = screen.bubble.missileTarget;
-    _loop.effects.Anger(target, screen.bubble.slots[target]);
+    _loop.effects.Anger(target, TypeOf(screen.bubble.slots[target]));
 
     // 6502: LDY #BLACK2 / JSR ABORT -- the lock is gone and so is the indicator.
     AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.At(Field::Missiles), MISSILE_NONE);
@@ -617,16 +617,6 @@ namespace Elite
 
   namespace
   {
-    /// 6502: the bits of `INWK+31` this half tests and sets.
-    inline constexpr std::uint8_t SHIP_KILLED = 0x80;
-    inline constexpr std::uint8_t SHIP_EXPLODING = 0x20;
-    inline constexpr std::uint8_t SHIP_DRAWN_OR_EXPLODING = 0xA0;
-
-    /// 6502: the bits of `NEWB` -- bit 7 "leave the bubble", bit 6 "shooting one is a crime",
-    /// bit 2 "hostile", and bit 0's neighbour that `SCAN` reads.
-    inline constexpr std::uint8_t NEWB_REMOVE = 0x80;
-    inline constexpr std::uint8_t NEWB_INNOCENT = 0x40;
-    inline constexpr std::uint8_t NEWB_HOSTILE = 0x04;
 
     /// 6502: (XX0),10 and (XX0),11 -- the bounty a blueprint carries, low byte first.
     inline constexpr std::uint16_t BLUEPRINT_BOUNTY_LOW = 10;
@@ -696,7 +686,7 @@ namespace Elite
     /// 6502: ASL x / SEC / ROR x -- set bit 7 without touching the other seven.
     [[nodiscard]] std::uint8_t MarkKilled(std::uint8_t _state) noexcept
     {
-      return static_cast<std::uint8_t>(_state | SHIP_KILLED);
+      return With(_state, ShipStateBit::Killed);
     }
   } // namespace
 
@@ -717,14 +707,14 @@ namespace Elite
     std::uint8_t energy;
   };
 
-  [[nodiscard]] LaserHit ApplyLaserHit(FlightLoop& _loop, SpawnChildEffects& _spawn, std::uint16_t _blueprint, std::uint8_t _type) noexcept
+  [[nodiscard]] LaserHit ApplyLaserHit(FlightLoop& _loop, SpawnChildEffects& _spawn, std::uint16_t _blueprint, ShipType _type) noexcept
   {
     FlightScreen& screen = _loop.screen;
 
     (void)PlayHitSound(screen.work, _loop.effects); // 6502: LDX #15 / JSR EXNO
 
     // 6502: LDA TYPE / CMP #SST / BEQ MA14+2.
-    if (_type == SHIP_TYPE_STATION)
+    if (_type == ShipType::Station)
     {
       return {false, screen.work.Energy()};
     }
@@ -738,7 +728,7 @@ namespace Elite
      * QUARTER of even that. `Armlas AND 127` is 23, which is the power `MA68` stored after masking
      * the top bit off -- so the comparison is against the masked value and not against `Armlas`.
      */
-    if (_type >= SHIP_TYPE_CONSTRICTOR)
+    if (_type >= ShipType::Constrictor)
     {
       if (power != static_cast<std::uint8_t>(LASER_POWER_MILITARY & 0x7Fu))
       {
@@ -757,7 +747,7 @@ namespace Elite
       return {true, left.value};
     }
 
-    screen.work.State() = static_cast<std::uint8_t>(screen.work.State() | SHIP_KILLED);
+    screen.work.State() = With(screen.work.State(), ShipStateBit::Killed);
 
     /*
      * 6502: LDA TYPE / CMP #AST / BNE nosp / LDA LAS / CMP #Mlas / BNE nosp / JSR DORND / LDX #SPL /
@@ -766,15 +756,15 @@ namespace Elite
      * ONLY a mining laser splits an asteroid, and only an asteroid splits. Everything else drops
      * whatever `SPIN` decides from its blueprint, which is not random at all (§6.74).
      */
-    if (_type == SHIP_TYPE_ASTEROID && power == LASER_POWER_MINING)
+    if (_type == ShipType::Asteroid && power == LASER_POWER_MINING)
     {
       const RngResult roll = screen.rng.Next(false);
-      SpawnItems(screen.math, _spawn, SHIP_TYPE_SPLINTER, static_cast<std::uint8_t>(roll.value & 3u));
+      SpawnItems(screen.math, _spawn, ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u));
     }
 
     // 6502: .nosp LDY #PLT / JSR SPIN / LDY #OIL / JSR SPIN -- both, in that order, every time.
-    SpawnDebris(screen.rng, screen.math, _spawn, _blueprint, SHIP_TYPE_ALLOY_PLATE, false);
-    SpawnDebris(screen.rng, screen.math, _spawn, _blueprint, SHIP_TYPE_CANISTER, false);
+    SpawnDebris(screen.rng, screen.math, _spawn, _blueprint, ShipType::AlloyPlate, false);
+    SpawnDebris(screen.rng, screen.math, _spawn, _blueprint, ShipType::Canister, false);
 
     // 6502: LDX TYPE / JSR EXNO2 -- and what `.MA14` stores is what NOISE2 left in A (§6.86's
     // dependency again: the dead ship's energy byte comes out of the sound system).
@@ -817,8 +807,8 @@ namespace Elite
       screen.flight.slot = slot; // 6502: STX XSAV
 
       // 6502: LDA FRIN,X / BNE P%+5 / JMP MA18 -- the first empty slot ends the pass.
-      const std::uint8_t type = screen.bubble.slots[slot];
-      if (type == 0u)
+      const ShipType type = TypeOf(screen.bubble.slots[slot]);
+      if (type == ShipType::None)
       {
         return LoopOutcome::Continued;
       }
@@ -835,7 +825,7 @@ namespace Elite
        * The planet and the sun have no blueprint, and `XX0` is left holding the LAST ship's -- which
        * is why part 5's `CPY` tests below run on a Y that only a real ship has set.
        */
-      const bool isBody = (type & 0x80u) != 0u;
+      const bool isBody = IsBody(type);
       if (!isBody)
       {
         screen.flight.blueprint = BlueprintFor(screen.bubble, type);
@@ -849,9 +839,9 @@ namespace Elite
          * the blueprint index. A ship already exploding is skipped as well, or the bomb would
          * restart its cloud on every frame it burns.
          */
-        const bool exempt = (type == SHIP_TYPE_STATION) || (type == SHIP_TYPE_THARGOID) || (type >= SHIP_TYPE_CONSTRICTOR);
+        const bool exempt = (type == ShipType::Station) || (type == ShipType::Thargoid) || (Byte(type) >= Byte(ShipType::Constrictor));
 
-        if ((commander.At(Field::EnergyBomb) & 0x80u) != 0u && !exempt && (screen.work.State() & SHIP_EXPLODING) == 0u)
+        if ((commander.At(Field::EnergyBomb) & 0x80u) != 0u && !exempt && !Has(screen.work.State(), ShipStateBit::Exploding))
         {
           screen.work.State() = MarkKilled(screen.work.State());
           (void)RecordKill(screen, _loop.effects, type); // 6502: LDX TYPE / JSR EXNO2
@@ -885,7 +875,7 @@ namespace Elite
       bool scoopable = false;
       bool collision = false;
       {
-        const std::uint8_t seed = static_cast<std::uint8_t>(screen.work.State() & SHIP_DRAWN_OR_EXPLODING);
+        const std::uint8_t seed = static_cast<std::uint8_t>(screen.work.State() & Mask(ShipStateBit::Killed, ShipStateBit::Exploding));
 
         if (LargestShipAxis(screen.work, seed) == 0u)
         {
@@ -894,11 +884,11 @@ namespace Elite
 
           if ((low & 0x80u) == 0u && !isBody)
           {
-            if (type == SHIP_TYPE_STATION)
+            if (type == ShipType::Station)
             {
               docking = true; // 6502: CPX #SST / BEQ ISDK
             }
-            else if ((low & 0xC0u) == 0u && type != SHIP_TYPE_MISSILE)
+            else if ((low & 0xC0u) == 0u && type != ShipType::Missile)
             {
               /*
                * 6502: LDA BST / AND INWK+5 / BPL MA58.
@@ -931,7 +921,7 @@ namespace Elite
         std::uint8_t item = 0;
         bool crashed = false;
 
-        if (type == SHIP_TYPE_CANISTER)
+        if (type == ShipType::Canister)
         {
           item = static_cast<std::uint8_t>(screen.rng.Next(false).value & 7u); // 6502: oily
         }
@@ -976,7 +966,7 @@ namespace Elite
 
             // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
             // canister is removed by part 12 rather than by anything here.
-            screen.work.Newb() = static_cast<std::uint8_t>(screen.work.Newb() | NEWB_REMOVE);
+            screen.work.Newb() = With(screen.work.Newb(), NewbBit::Remove);
           }
         }
       }
@@ -995,7 +985,7 @@ namespace Elite
       {
         bool arrived = false;
 
-        const bool hostile = (screen.bubble.blocks[STATION_SLOT].Newb() & NEWB_HOSTILE) != 0u;
+        const bool hostile = Has(screen.bubble.blocks[STATION_SLOT].Newb(), NewbBit::Hostile);
 
         if (!hostile && screen.work.Nose().zHi >= DOCK_MINIMUM_PITCH)
         {
@@ -1083,7 +1073,7 @@ namespace Elite
        * Bit 7 of `NEWB` is "take this out of the bubble" AND "it is on the scanner", one bit doing
        * two jobs: a ship marked for removal has its blip drawn here so that the EOR erases it.
        */
-      if ((screen.work.Newb() & NEWB_REMOVE) != 0u)
+      if (Has(screen.work.Newb(), NewbBit::Remove))
       {
         DrawScannerBlip(screen.canvas, screen.draw, screen.work, type, screen.view);
       }
@@ -1141,9 +1131,9 @@ namespace Elite
        */
       block.Energy() = screen.work.Energy();
 
-      bool remove = (screen.work.Newb() & NEWB_REMOVE) != 0u;
+      bool remove = Has(screen.work.Newb(), NewbBit::Remove);
 
-      if (!remove && (screen.work.State() & SHIP_KILLED) != 0u && (screen.work.State() & SHIP_EXPLODING) != 0u)
+      if (!remove && Has(screen.work.State(), ShipStateBit::Killed) && Has(screen.work.State(), ShipStateBit::Exploding))
       {
         /*
          * 6502: LDA NEWB / AND #%01000000 / ORA FIST / STA FIST.
@@ -1153,7 +1143,7 @@ namespace Elite
          * cannot become more of one this way.
          */
         commander.At(Field::LegalStatus) =
-          static_cast<std::uint8_t>(commander.At(Field::LegalStatus) | (screen.work.Newb() & NEWB_INNOCENT));
+          static_cast<std::uint8_t>(commander.At(Field::LegalStatus) | (screen.work.Newb() & Mask(NewbBit::Cop)));
 
         // 6502: LDA DLY / ORA MJ / BNE KS1S -- no bounty while a message is up or in witchspace,
         // because the bounty IS a message and there is nowhere to put it.
@@ -1336,7 +1326,7 @@ namespace Elite
        * checks whether the planet is close enough to have one -- and `MAS1` is called three times
        * to DOUBLE the planet's coordinates into `INWK`, so the test is run at twice the distance.
        */
-      if (screen.status.midJump == 0u && counter == 0u && screen.bubble.counts[SHIP_TYPE_STATION] == 0u &&
+      if (screen.status.midJump == 0u && counter == 0u && screen.bubble.Count(ShipType::Station) == 0u &&
           LargestAxis(screen.bubble, 0u) == 0u)
       {
         // 6502: LDX #28 / .MAL4 LDA K%,X / STA INWK,X / DEX / BPL MAL4 -- 29 bytes, not the block.
@@ -1440,7 +1430,7 @@ namespace Elite
        */
       screen.status.cabinTemperature = CABIN_BASE;
 
-      if (screen.bubble.counts[SHIP_TYPE_STATION] != 0u || LargestAxis(screen.bubble, 1u) != 0u)
+      if (screen.bubble.Count(ShipType::Station) != 0u || LargestAxis(screen.bubble, 1u) != 0u)
       {
         return EndFlightFrameTail(_loop);
       }

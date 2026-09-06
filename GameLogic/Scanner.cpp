@@ -13,7 +13,7 @@ namespace Elite
 
   // ---- the scanner ------------------------------------------------------------------------------
 
-  void DrawScannerBlip(Canvas& _canvas, DrawWorkspace& _work, const ShipBlock& _ship, std::uint8_t _type, std::uint8_t _view) noexcept
+  void DrawScannerBlip(Canvas& _canvas, DrawWorkspace& _work, const ShipBlock& _ship, ShipType _type, std::uint8_t _view) noexcept
   {
     // 6502: LDA QQ11 / BNE SCR1 -- no dashboard on any view but the space view, so no scanner.
     if (_view != 0u)
@@ -23,20 +23,20 @@ namespace Elite
 
     // 6502: LDA INWK+31 / AND #%00010000 / BEQ SCR1 -- bit 4 is "show this on the scanner", and
     // it is cleared for the ships that have no blip at all.
-    if ((_ship.State() & 0x10u) == 0u)
+    if (!Has(_ship.State(), ShipStateBit::OnScanner))
     {
       return;
     }
 
     // 6502: LDX TYPE / BMI SCR1 -- the planet and the sun are types 128 and 129 and are not shown.
-    if ((_type & 0x80u) != 0u)
+    if (IsBody(_type))
     {
       return;
     }
 
     // The index is a ship TYPE, 1 to `SHIP_TYPE_COUNT`, which is what the table is sized by and
     // what `FRIN` can hold. The `BMI` above has already taken the planet and the sun out of it.
-    _work.col = SCANNER_COLOUR_TABLE[_type];
+    _work.col = SCANNER_COLOUR_TABLE[Byte(_type)];
 
     /*
      * 6502: LDA INWK+1 / ORA INWK+4 / ORA INWK+7 / AND #%11000000 / BNE SCR1.

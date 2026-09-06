@@ -298,7 +298,7 @@ times over.
 <!--count:main-lines-->1,162 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->227 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->226 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
@@ -327,7 +327,8 @@ cop, trader...). The screen's mode is `QQ11`'s value (`BUY_CARGO_VIEW = 2`, `SEL
 `INVENTORY_VIEW = 8`, `EQUIP_SHIP_VIEW = 32`, charts, space views 0..3 through `VIEW`).
 
 **P10 — Untyped bytes.** Ship types, views, laser kinds, sound effects, message tokens and colours
-are `std::uint8_t` constants; booleans are `0`/`0xFF` (`BST`, `ECM`, `DISK`); the thirteen pause-
+are `std::uint8_t` constants — **M1-b took the ship types and the three flag bytes of a ship to
+`ShipType`, `ShipStateBit`, `AiBit` and `NewbBit`** — booleans are `0`/`0xFF` (`BST`, `ECM`, `DISK`); the thirteen pause-
 screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making them contiguous
 would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->18 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
@@ -338,7 +339,7 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,583 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,615 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -789,7 +790,7 @@ a moved record with no defect named is a refactor that changed the game.
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
 | **M1-a ShipView** | Named accessors on `ShipBlock` (`X()`, `Y()`, `Z()`, `Nose()`, `Roof()`, `Side()`, `PositionAt()`, `VectorAt()`, `ComponentAt()`, `Speed()` … `Newb()`), the layout named once and `static_assert`ed; every literal and named-offset site migrated; the duplicate offset and type constants removed. Bytes unchanged. | Oracle suite green; `ship-literal-sites` and `ship-offset-sites` at zero in the ratchet; mutants in `Tactics.cpp` and `Missions.cpp` re-anchored and re-run. **Built 2026-09-06** (slice plan and §8 below). | 3–4 |
-| **M1-b ShipType and the flag types** | `enum class ShipType`, `ShipState`, `AiFlags`, `NewbFlags` with the original bit values; the second naming family deleted. | Green; `check_outpost.py` green after the app's constants follow. | 2 |
+| **M1-b ShipType and the flag types** | `enum class ShipType`, `ShipStateBit`, `AiBit`, `NewbBit` with the original bit values, the byte-valued helpers beside them; the second naming families deleted. | Green; `check_outpost.py` green after the app's constants follow. **Built 2026-09-06** (slice plan and §8 below). | 2 |
 | **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become codec calls. Tests migrate to the bridge. | Green through `UniverseImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). | 4–5 |
 | **M1-d Commander** | Typed `Commander` with the seventy-seven-byte codec; `Credits`, `LightYearsTenths`, `Laser`, `Equipment` strong types; `SaveCommander`/`LoadCommander`/checksums over the codec. | `SaveGameTests` and `CommanderTests` green; a commander file from R12's fixture still loads. | 3 |
 | **M1-e Blueprint** | Parsed `Blueprint` table; `ShipByte`/`BlueprintAddress`/`BlueprintFor` removed; `Bubble::stationType`. | `ShipDataTests` green with the three disagreeing ships called out as before; `LL9` suite green. | 3 |
@@ -825,6 +826,49 @@ receivers a block is reached through (`work`, `_ship`, `block`, `_slot`, `statio
 `blocks[...]` of a bubble, and the rest) rewrote the fixed sites in the library and the eighteen
 `find`/`replace` fields in `tools/mutants.json` that named one, in the same pass, so that
 `mutate.py --check` was green before the first build.
+
+#### M1-b slice plan (written with the build, 2026-09-06; §8 records what the build found)
+
+**The type is an enumeration and the byte stays the wire format.** `enum class ShipType :
+std::uint8_t` in its own header (`ShipType.h`, because `ShipBlueprint.h` and `ShipSlot.h` both need
+it and one includes the other) carries the original's numbers — 1 to 33 in `XX21`'s order, 128 and
+129 for the planet and the sun — and `Byte`/`TypeOf` cross to and from the byte. `FRIN`, `MANY` and
+the image keep holding bytes (`Bubble::slots`, `Bubble::counts`); the API speaks the type
+(`Bubble::Count(ShipType)`, `FlightState::type`, every `_shipType` and `_parentType` parameter, the
+`ShowTitleScreen`, `SpawnAhead`, `Anger` and `SpawnChild` seams); and the predicates the source has
+as ranges — `IsBody` (bit 7), `IsJunk` (`JL`..`JH` and `HER`), `IsWreckage` (`PLT`..`SPL`) — are
+`constexpr` beside it. Where a routine does arithmetic on a type (`ADC #SHU-1`, `E%-1,X`, the
+docking computer's `STA TYPE` of &E0, `NWSPS`'s type from the tech level), the site says `Byte(...)`
+or `TypeOf(...)` and the arithmetic stays visible rather than hidden in an operator.
+
+**The flags are bits with names, and the helpers are values.** `ShipFlags.h` holds `ShipStateBit`
+(bit 6 named twice, `Firing` and `CloudDrawn`, told apart by bit 5 as the source tells them),
+`AiBit` (bit 6 named twice too: `Hostile` for a ship's aggression field, `AimedAtPlayer` for a
+missile), `NewbBit` in the order `TA1`'s `LSR` walk reads them, and `MissilesOf`, `MissileTargetOf`
+and `MissileAiFor` for the two fields that share those bytes with the flags. `Has`, `HasAny`,
+`With`, `Without` and `Mask` are the `AND` and `ORA` immediates, as values. There is no
+by-reference `Set` or `Clear`: the first build had them, the ratchet read the three `std::uint8_t&`
+parameters as P10 coming back, and it was right — a helper that takes a byte by reference is an
+untyped byte with a nicer name, and the type that owns the byte is M1-c's. So a site is
+`work.State() = With(work.State(), ShipStateBit::Killed)`, which is the load-modify-store of
+`LDA INWK+31 / ORA #%10000000 / STA INWK+31` and no shorter than it.
+
+**The second naming families are gone.** `SHIP_TYPE_x` and `SHIP_STATE_x` from `ShipSlot.h`,
+`JUNK_TYPE_FIRST`/`JUNK_TYPE_LIMIT`, `FlightLoop.cpp`'s `SHIP_KILLED`, `SHIP_EXPLODING`,
+`SHIP_DRAWN_OR_EXPLODING`, `NEWB_REMOVE`, `NEWB_INNOCENT` and `NEWB_HOSTILE`, `Tactics.h`'s
+`NEWB_STATION_ALLY` and `NEWB_HOSTILE`, and `Spawn.h`'s and `GameLoop.h`'s copies of the types. A
+whole-byte value with a name of its own stays (`STATION_LAUNCH_AI`, `SPAWN_CHILD_AI`,
+`HERMIT_PIRATE_NEWB` — the last now written as the `Mask` it is).
+
+**What stays as bytes, deliberately.** `TA1`'s `LSR` walk over `NEWB` (`flags >> 1`, `>> 2`) is the
+source's control flow and M4's to restructure; `NWSHP`'s caller rotating the AI's carry into
+`INWK+31`; `INWK+32` used as a loop counter when the escape pod launches; `DEC INWK+31` spending a
+missile. The tests keep their byte fixtures and byte sweeps and cross with `TypeOf`/`Byte` at the
+call, so a sweep over all 256 types still runs through the same code.
+
+**The mutants followed.** Four re-anchored (`ta-240`, `msl-82`, `msl-bit5`, `kill-rotate`) and none
+dropped; `msl-82`'s replacement now sets the ECM bit on the station's missile address rather than
+writing `0x83`, which is the same byte with its meaning visible.
 
 ### Phase M2 — Explicit calling conventions
 
@@ -1002,3 +1046,25 @@ portable runner against a 392-test baseline: 65 mutants, 61 caught, 4 survived, 
 equivalents — the tally of M0-d exactly, with eighteen anchors now naming `work.RollCounter()`,
 `work.Energy()`, `work.Ai()` and `screen.work.Z().hi` where they named a number. Rule 3 is met, and
 M1-b — `ShipType`, `ShipState`, `AiFlags` and `NewbFlags` as types — is next. M0-a is built with this entry; nothing in `GameLogic/` changed.
+
+**2026-09-06 — M1-b built.** 112 `SHIP_TYPE_x` sites in the library and the executable and 65 in
+the tests became `ShipType::x`, 28 parameters in the headers were retyped, and 29 raw hex masks on
+`INWK+31`, `INWK+32` and `NEWB` became named bits; the suite was 392 of 392 at each of the three
+stops (the type compiling, the flags, the helpers as values). **Three findings, none of which
+changed a byte.** First, `FlightLoop.cpp`'s `NEWB_INNOCENT` (0x40) is the COP bit: `KS1`'s
+`AND #%01000000 / ORA FIST` folds "you shot a policeman" into the legal status, and the innocent
+bystander is bit 5, which the port had as `NEWB_STATION_ALLY`; the two names were each right about
+what the bit DOES and wrong about what the source calls it, and `NewbBit` names both as the source
+does. Second, `SHIP_DRAWN_OR_EXPLODING` (0xA0) is killed-or-exploding — the main loop's
+`AND #%10100000 / JSR MAS4` before `MA65` reads bits 5 and 7, and bit 3 is the drawn bit; the seed
+`MAS4` is handed was right and the name was not. Third, `INWK+32`'s bit 6 is two things: the top of a ship's aggression field, which `ORA
+#%11000000` sets on every hostile spawn, and a missile's "aimed at us", which `TACTICS` reads with
+`ASL A / BMI` — so `AiBit` names it twice and the target-slot field gets its own packing pair.
+**And one lesson from the ratchet**: the first build's `Set`/`Clear`/`Toggle` took the byte by
+reference, `out-params` rose from 18 to 21, and the counter was reading the code correctly (the
+slice plan says why); the helpers are values now and the count is 18 again. The other movements:
+`outpost-elite-names` 227 → 226, because `Elite::SHIP_TYPE_COBRA_MK3` and `Elite::SHIP_TYPE_STATION`
+became one `Elite::ShipType`; `origin-markers` up again, 3,583 → 3,615, because every enumerator
+carries its label (rule 4), and `modernize_ratchet.json`'s `slice` fields now name the slice that
+last moved each ceiling — M1-a's three had been left saying `M0-a`. Four mutants re-anchored; the
+corpus rerun follows.

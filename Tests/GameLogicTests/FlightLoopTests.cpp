@@ -390,10 +390,10 @@ namespace GameLogicTests
       {
         std::vector<std::uint8_t> flags;
         std::vector<std::uint8_t> types;
-        bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override
+        bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
         {
           flags.push_back(_aiFlag);
-          types.push_back(_type);
+          types.push_back(Elite::Byte(_type));
           return false; // `SFS1`'s carry, which a trap leaves clear and `SPIN` ignores
         }
       };
@@ -419,7 +419,7 @@ namespace GameLogicTests
           Recorder effects;
           Elite::MathWorkspace math;
           math.cnt = 0xEEu;
-          Elite::SpawnItems(math, effects, type, static_cast<std::uint8_t>(count));
+          Elite::SpawnItems(math, effects, Elite::TypeOf(type), static_cast<std::uint8_t>(count));
 
           const std::wstring where = WidenText("SPIN2(count " + std::to_string(count) + ", type " + std::to_string(type) + ")");
 
@@ -444,7 +444,7 @@ namespace GameLogicTests
 
       for (std::uint8_t type = 1; type <= Elite::SHIP_TYPE_COUNT; ++type)
       {
-        const std::uint16_t blueprint = Elite::BlueprintAddress(type);
+        const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(type));
         if (blueprint == 0u)
         {
           continue;
@@ -478,7 +478,7 @@ namespace GameLogicTests
             math.cnt = 0xEEu;
             Elite::Rng rng;
             rng.SetState(bytes);
-            Elite::SpawnDebris(rng, math, effects, blueprint, type, carry);
+            Elite::SpawnDebris(rng, math, effects, blueprint, Elite::TypeOf(type), carry);
 
             const std::wstring where = WidenText("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed) + ", carry " +
                                                  std::to_string(carry ? 1 : 0) + ")");
@@ -696,7 +696,7 @@ namespace GameLogicTests
 
       for (std::uint8_t shipType = 1; shipType <= Elite::SHIP_TYPE_COUNT; ++shipType)
       {
-        const std::uint16_t blueprint = Elite::BlueprintAddress(shipType);
+        const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(shipType));
         if (blueprint == 0u)
         {
           continue;
@@ -727,7 +727,7 @@ namespace GameLogicTests
                 Assert::IsTrue(cpu.CallSubroutine(hitch, 5'000).completed, L"HITCH returned");
 
                 Elite::MathWorkspace math;
-                const bool ours = Elite::IsHit(work, math, blueprint, shipType);
+                const bool ours = Elite::IsHit(work, math, blueprint, Elite::TypeOf(shipType));
 
                 const std::wstring where =
                   WidenText("HITCH(type " + std::to_string(shipType) + ", x " + std::to_string(across) + ", y " + std::to_string(down) +
@@ -892,19 +892,19 @@ namespace GameLogicTests
       {
         ++musicStops;
       }
-      bool SpawnAhead(std::uint8_t _type) override
+      bool SpawnAhead(Elite::ShipType _type) override
       {
-        spawned.push_back(_type);
+        spawned.push_back(Elite::Byte(_type));
         return spawnSucceeds;
       }
-      void Anger(std::uint8_t _slot, std::uint8_t _type) override
+      void Anger(std::uint8_t _slot, Elite::ShipType _type) override
       {
         (void)_slot; // the oracle's trap records A, which is the type; the slot is INF's and not compared here
-        angered.push_back(_type);
+        angered.push_back(Elite::Byte(_type));
       }
-      bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override
+      bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
       {
-        children.push_back({_aiFlag, _type});
+        children.push_back({_aiFlag, Elite::Byte(_type)});
         return childSucceeds;
       }
 
@@ -1003,7 +1003,7 @@ namespace GameLogicTests
          * zero the game reads `(XX0),15` out of its own zero page and the port reads a guarded zero,
          * which is a disagreement about an address neither would ever form.
          */
-        universe.flight.blueprint = Elite::BlueprintAddress(11u);
+        universe.flight.blueprint = Elite::BlueprintAddress(Elite::ShipType::CobraMk3);
         universe.screen.upperBitmapMode = 0xC0u;
         universe.status.laserCount = 0u;
         universe.status.laserPower = 0u;
@@ -2034,7 +2034,7 @@ namespace GameLogicTests
 
           // The sun in slot 1 at `distance` on every axis, and no station, so part 15 measures it.
           frame.universe.bubble.slots[1] = 129u;
-          frame.universe.bubble.counts[Elite::SHIP_TYPE_STATION] = 0u;
+          frame.universe.bubble.Count(Elite::ShipType::Station) = 0u;
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             frame.universe.bubble.blocks[1][byte] = 0u;
@@ -2152,7 +2152,7 @@ namespace GameLogicTests
       Elite::Launch(loop, nullptr, docked, frame.universe.commander.At(Elite::Field::SystemX), frame.universe.commander.At(Elite::Field::SystemY),
                     5u, selected);
 
-      Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.counts[Elite::SHIP_TYPE_STATION],
+      Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.Count(Elite::ShipType::Station),
                                       L"the launch leaves the station in the bubble");
 
       // 6502: LOOK1, which the launch ends with -- the front view, and `QQ11` back to zero.
@@ -2167,7 +2167,7 @@ namespace GameLogicTests
         Assert::IsTrue(outcome == Elite::LoopOutcome::Continued,
                        (L"frame " + std::to_wstring(pass) + L" should not end the flight").c_str());
 
-        Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.counts[Elite::SHIP_TYPE_STATION],
+        Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.Count(Elite::ShipType::Station),
                                         (L"the station is still there after " + std::to_wstring(pass + 1) + L" frames").c_str());
       }
 

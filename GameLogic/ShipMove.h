@@ -194,7 +194,7 @@ namespace Elite
     std::uint8_t mainLoopCounter = 0;
     std::uint8_t slot = 0;
 
-    std::uint8_t type = 0; ///< 6502: TYPE -- negative for the planet and the sun
+    ShipType type = ShipType::None; ///< 6502: TYPE -- negative (`IsBody`) for the planet and the sun
 
     /*
      * 6502: XX0(1 0) -- the blueprint the loop is working from, AND IT IS NOT RESET PER SHIP.
@@ -214,7 +214,7 @@ namespace Elite
     std::uint8_t rat2 = 0;
   };
 
-  // 6502: MSL -- `SHIP_TYPE_MISSILE` is in `ShipSlot.h` with the other type numbers. `MVEIT`
+  // 6502: MSL -- `ShipType::Missile` is in `ShipSlot.h` with the other type numbers. `MVEIT`
   // singles it out so that a missile runs its tactics on EVERY iteration rather than one in eight;
   // a missile that thought once every eighth of a second would be trivial to outrun.
 

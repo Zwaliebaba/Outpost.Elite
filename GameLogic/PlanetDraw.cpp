@@ -173,11 +173,11 @@ namespace Elite
     }
   }
 
-  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, std::uint8_t _type) noexcept
+  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, ShipType _type) noexcept
   {
     // 6502: PL2 -- LDA TYPE / LSR A / BCS P%+5 / JMP WPLS2 / JMP WPLS. The planet is 128 and the
     // sun 129, so the bottom bit is the whole of the test and no comparison is needed.
-    if ((_type & 0x01u) != 0u)
+    if ((Byte(_type) & 0x01u) != 0u)
     {
       EraseSun(_canvas, _state, _math, _draw);
     }
@@ -647,7 +647,7 @@ namespace Elite
   }
 
   void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                        ClipState& _clip, const ShipBlock& _ship, Projection& _centre, std::uint8_t _type) noexcept
+                        ClipState& _clip, const ShipBlock& _ship, Projection& _centre, ShipType _type) noexcept
   {
     // 6502: PL9 -- rub out last frame's planet, draw this frame's outline, and only then think
     // about the markings.
@@ -671,7 +671,7 @@ namespace Elite
       return;
     }
 
-    if (_type == 128u)
+    if (_type == ShipType::Planet)
     {
       /*
        * 6502: part 2 -- MERIDIANS. Two great circles at right angles, each drawn as a half
@@ -763,7 +763,7 @@ namespace Elite
   }
 
   void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                       ClipState& _clip, Rng& _rng, const ShipBlock& _ship, Projection& _centre, std::uint8_t _type) noexcept
+                       ClipState& _clip, Rng& _rng, const ShipBlock& _ship, Projection& _centre, ShipType _type) noexcept
   {
     /*
      * 6502: PLANET -- three rejections before any arithmetic.
@@ -799,7 +799,7 @@ namespace Elite
     }
 
     // 6502: LDA TYPE / LSR A / BCC PL9 / JMP SUN.
-    if ((_type & 0x01u) != 0u)
+    if ((Byte(_type) & 0x01u) != 0u)
     {
       DrawSun(_canvas, _state, _draw, _math, _rng, _centre);
       return;
@@ -1105,12 +1105,12 @@ namespace Elite
     // 6502: WPSHPS -- LDX #0 / .WSL1 LDA FRIN,X / BEQ WS2 / BMI WS1.
     for (std::size_t slot = 0; slot < _bubble.slots.size(); ++slot)
     {
-      const std::uint8_t type = _bubble.slots[slot];
-      if (type == 0u)
+      const ShipType type = TypeOf(_bubble.slots[slot]);
+      if (type == ShipType::None)
       {
         break; // 6502: BEQ WS2 -- the first empty slot ends the list
       }
-      if ((type & 0x80u) != 0u)
+      if (IsBody(type))
       {
         continue; // 6502: BMI WS1 -- the planet and the sun have no blip and no line heap
       }
@@ -1136,7 +1136,7 @@ namespace Elite
        * the slots. The mask clears bits 3, 4 and 6: "drawn on screen", "firing a laser", and the
        * one in between.
        */
-      _bubble.blocks[slot].State() = static_cast<std::uint8_t>(_bubble.blocks[slot].State() & 0xA7u);
+      _bubble.blocks[slot].State() = Without(_bubble.blocks[slot].State(), ShipStateBit::OnScreen, ShipStateBit::OnScanner, ShipStateBit::Firing);
     }
 
     // 6502: WS2 -- LDX #0 / STX LSP / DEX / STX LSX2 / STX LSY2. Note `LSP` goes to ZERO here and

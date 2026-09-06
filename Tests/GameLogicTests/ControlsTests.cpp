@@ -393,7 +393,7 @@ namespace GameLogicTests
 
         Elite::FlightState flight;
         flight.delta = 7u;
-        flight.type = 0u;
+        flight.type = Elite::ShipType::None;
 
         Elite::ReadFlightControls(keys, control, options, work, flight, effects);
 
@@ -406,7 +406,7 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.memory[jstx], control.roll, (where + L": JSTX").c_str());
         Assert::AreEqual(cpu.memory[jsty], control.pitch, (where + L": JSTY").c_str());
         Assert::AreEqual(cpu.memory[delta], flight.delta, (where + L": DELTA").c_str());
-        Assert::AreEqual(cpu.memory[type], flight.type, (where + L": TYPE").c_str());
+        Assert::AreEqual(cpu.memory[type], Elite::Byte(flight.type), (where + L": TYPE").c_str());
 
         for (std::size_t slot = 0; slot < keys.size(); ++slot)
         {

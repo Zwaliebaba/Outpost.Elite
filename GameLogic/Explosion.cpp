@@ -255,7 +255,7 @@ namespace Elite
 
     // 6502: bit 6 of byte 31 -- there is a cloud on the screen from last frame, so draw it again
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
-    if ((_work.State() & SHIP_STATE_CLOUD_DRAWN) != 0u)
+    if (Has(_work.State(), ShipStateBit::CloudDrawn))
     {
       DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
     }
@@ -302,7 +302,7 @@ namespace Elite
     {
       // 6502: EX2 -- the counter has run off the end, so the explosion is over. Bits 5 and 7 say
       // "exploding" and "killed", and `MVEIT` is what acts on the pair.
-      _work.State() |= static_cast<std::uint8_t>(SHIP_STATE_EXPLODING | SHIP_STATE_KILLED);
+      _work.State() = With(_work.State(), ShipStateBit::Exploding, ShipStateBit::Killed);
       return;
     }
 
@@ -336,8 +336,8 @@ namespace Elite
 
     // 6502: AND #%10111111 -- not drawn yet. The following `AND #%00001000` reads what that left,
     // so a ship with nothing on the screen returns here with the flag already cleared.
-    _work.State() = static_cast<std::uint8_t>(_work.State() & 0xBFu);
-    if ((_work.State() & SHIP_STATE_DRAWN) == 0u)
+    _work.State() = Without(_work.State(), ShipStateBit::CloudDrawn);
+    if (!Has(_work.State(), ShipStateBit::OnScreen))
     {
       return; // 6502: BEQ TT48, which is an RTS
     }
@@ -362,7 +362,7 @@ namespace Elite
       --index;
     } while (index != 6u);
 
-    _work.State() |= SHIP_STATE_CLOUD_DRAWN; // 6502: ORA #%01000000 -- there is a cloud now
+    _work.State() = With(_work.State(), ShipStateBit::CloudDrawn); // 6502: ORA #%01000000 -- there is a cloud now
 
     /*
      * 6502: LDY frump / CPY #18 -- the counter BEFORE it grew, so this is true on the explosion's

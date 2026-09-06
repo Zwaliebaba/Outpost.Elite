@@ -815,7 +815,7 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.memory[k4], screen.y, (where + L": K4").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k4 + 1)], screen.y1, (where + L": K4+1").c_str());
 
-        const bool nowDrawn = (ship[Elite::SHIP_STATE_OFFSET] & Elite::SHIP_STATE_DRAWN) != 0u;
+        const bool nowDrawn = Elite::Has(ship[Elite::SHIP_STATE_OFFSET], Elite::ShipStateBit::OnScreen);
         drawn += nowDrawn ? 1u : 0u;
 
         // The case the sequence exists for: `PROJ` stored K3, then gave up on K4, so the ship is
@@ -1566,7 +1566,7 @@ namespace GameLogicTests
 
       for (std::uint8_t shipType = 1; shipType <= Elite::SHIP_TYPE_COUNT; ++shipType)
       {
-        const std::uint16_t blueprint = Elite::BlueprintAddress(shipType);
+        const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(shipType));
         if (blueprint == 0u)
         {
           continue;
@@ -1639,7 +1639,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ll9, 4'000'000);
             Assert::IsTrue(run.completed, L"LL9 returned");
 
-            Elite::DrawShip(canvas, draw, geometry, math, clip, screen, work, slot, heap, blueprint, shipType, effects);
+            Elite::DrawShip(canvas, draw, geometry, math, clip, screen, work, slot, heap, blueprint, Elite::TypeOf(shipType), effects);
 
             const std::wstring where = Widen("LL9(type=" + std::to_string(shipType) + "): ") + placement.what;
 

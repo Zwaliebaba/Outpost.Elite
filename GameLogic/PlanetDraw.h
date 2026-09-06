@@ -197,7 +197,7 @@ namespace Elite
 
   /// 6502: PL2 -- rub out whichever of the two this is. `TYPE` is 128 for the planet and 129 for
   /// the sun, and the routine tells them apart with an `LSR` rather than a comparison.
-  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, std::uint8_t _type) noexcept;
+  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, ShipType _type) noexcept;
 
   /*
    * 6502: CHKON -- is a circle of radius K at (K3, K4) worth drawing?
@@ -364,7 +364,7 @@ namespace Elite
    * away from you (`INWK+20` negative, which is the nose vector pointing off).
    */
   void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                        ClipState& _clip, const ShipBlock& _ship, Projection& _centre, std::uint8_t _type) noexcept;
+                        ClipState& _clip, const ShipBlock& _ship, Projection& _centre, ShipType _type) noexcept;
 
   /*
    * 6502: PLANET -- the entry the main loop calls for both the planet and the sun.
@@ -397,7 +397,7 @@ namespace Elite
                const Projection& _centre) noexcept;
 
   void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                       ClipState& _clip, Rng& _rng, const ShipBlock& _ship, Projection& _centre, std::uint8_t _type) noexcept;
+                       ClipState& _clip, Rng& _rng, const ShipBlock& _ship, Projection& _centre, ShipType _type) noexcept;
 
   /*
    * 6502: ZINF -- clear a ship's data block and give it an identity orientation.

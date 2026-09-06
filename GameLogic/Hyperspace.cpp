@@ -46,7 +46,7 @@ namespace Elite
       do
       {
         carry = SpawnThargoidPair(_bubble, _work, _rng, _blueprint, carry).created;
-      } while (WITCHSPACE_THARGOIDS >= _bubble.counts[SHIP_TYPE_THARGOID]);
+      } while (WITCHSPACE_THARGOIDS >= _bubble.Count(ShipType::Thargoid));
     }
 
   } // namespace

@@ -75,7 +75,7 @@ namespace GameLogicTests
         delays.push_back(_frames);
       }
 
-      std::uint8_t ShowTitleScreen(std::uint8_t, std::uint8_t, std::uint8_t) override
+      std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override
       {
         return 0;
       }
@@ -230,13 +230,13 @@ namespace GameLogicTests
     }
 
     /// A Constrictor-shaped ship in slot 0, turning, which is what `BRIEF` leaves for `PAS1`.
-    static void SetUpBriefingShip(LoopUniverse& _universe, std::uint8_t _type, std::uint8_t _roll, std::uint8_t _pitch)
+    static void SetUpBriefingShip(LoopUniverse& _universe, Elite::ShipType _type, std::uint8_t _roll, std::uint8_t _pitch)
     {
       Universe& universe = _universe.universe;
 
       universe.flight.type = _type;
       universe.flight.blueprint = Elite::BlueprintAddress(_type);
-      universe.bubble.slots[0] = _type;
+      universe.bubble.slots[0] = Elite::Byte(_type);
       universe.bubble.slots[1] = 0u;
       universe.bubble.slots[2] = 0u;
       universe.view = 1u;      // 6502: QQ11 -- the briefing runs on the space view `BRIEF` set up
@@ -308,7 +308,7 @@ namespace GameLogicTests
       _cpu.memory[_to.alp2Next] = _universe.universe.flight.alp2Next;
       _cpu.memory[_to.bet2] = _universe.universe.flight.bet2;
       _cpu.memory[_to.bet2Next] = _universe.universe.flight.bet2Next;
-      _cpu.memory[_to.typeByte] = _universe.universe.flight.type;
+      _cpu.memory[_to.typeByte] = Elite::Byte(_universe.universe.flight.type);
       _cpu.memory[_to.xsav] = _slot;
 
       // 6502: INF -- the pointer `LL9` writes the block through, which is `K% + slot * NI%`.
@@ -375,14 +375,14 @@ namespace GameLogicTests
 
       std::uint32_t compared = 0;
 
-      for (const std::uint8_t type : {Elite::SHIP_TYPE_COBRA_MK3, Elite::SHIP_TYPE_ADDER})
+      for (const Elite::ShipType type : {Elite::ShipType::CobraMk3, Elite::ShipType::Adder})
       {
         for (const std::uint8_t roll : {std::uint8_t{0}, std::uint8_t{0x7Fu}, std::uint8_t{0x80u}})
         {
           for (const std::uint8_t pitch : {std::uint8_t{0}, std::uint8_t{0x7Fu}})
           {
             LoopUniverse universe;
-            Seed(universe.universe, type * 31u + roll + pitch);
+            Seed(universe.universe, Elite::Byte(type) * 31u + roll + pitch);
             universe.universe.LendSunHeap(universe.heap);
             universe.universe.trumbles.count = 0u;
 
@@ -405,7 +405,7 @@ namespace GameLogicTests
             const Elite::TitleKey answer = Elite::ShowBriefingShip(mission);
 
             const std::wstring where =
-              WidenText("PAS1 (ship " + std::to_string(type) + ", roll " + std::to_string(roll) + ", pitch " + std::to_string(pitch) + ")");
+              WidenText("PAS1 (ship " + std::to_string(Elite::Byte(type)) + ", roll " + std::to_string(roll) + ", pitch " + std::to_string(pitch) + ")");
 
             Assert::AreEqual<std::uint32_t>(0x27u, answer.key, (where + L": thiskey").c_str());
             CompareBlock(cpu, universe, at, where);
@@ -449,10 +449,10 @@ namespace GameLogicTests
       {
         for (const std::uint32_t quiet : {std::uint32_t{1}, std::uint32_t{2}, std::uint32_t{5}})
         {
-          const std::uint8_t type = ((held + quiet) & 1u) != 0u ? Elite::SHIP_TYPE_COBRA_MK3 : Elite::SHIP_TYPE_ADDER;
+          const Elite::ShipType type = ((held + quiet) & 1u) != 0u ? Elite::ShipType::CobraMk3 : Elite::ShipType::Adder;
 
           LoopUniverse universe;
-          Seed(universe.universe, quiet * 17u + held * 5u + type);
+          Seed(universe.universe, quiet * 17u + held * 5u + Elite::Byte(type));
           universe.universe.LendSunHeap(universe.heap);
           universe.universe.trumbles.count = 0u;
           universe.universe.text.row = 0x17u; // so MT23's row 10 is a change rather than a coincidence
@@ -490,7 +490,7 @@ namespace GameLogicTests
           universe.universe.extendedPrinter.PrintByte(22u);
 
           const std::wstring where =
-            WidenText("PAUSE (" + std::to_string(held) + " held, " + std::to_string(quiet) + " quiet, ship " + std::to_string(type) + ")");
+            WidenText("PAUSE (" + std::to_string(held) + " held, " + std::to_string(quiet) + " quiet, ship " + std::to_string(Elite::Byte(type)) + ")");
 
           /*
            * THE SCAN COUNT IS WHAT SEES THE FIRST LOOP. `JSR PAS1 / BNE PAUSE` runs while a key is
@@ -1210,7 +1210,7 @@ namespace GameLogicTests
         }
 
         Assert::AreEqual(cpu.memory[to.mcnt], universe.universe.flight.mainLoopCounter, (where + L": MCNT").c_str());
-        Assert::AreEqual(cpu.memory[to.typeByte], universe.universe.flight.type, (where + L": TYPE").c_str());
+        Assert::AreEqual(cpu.memory[to.typeByte], Elite::Byte(universe.universe.flight.type), (where + L": TYPE").c_str());
 
         CompareBlock(cpu, universe, at, where);
         CompareState(cpu, universe.universe, at, where);

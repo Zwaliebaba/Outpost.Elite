@@ -383,7 +383,7 @@ namespace Elite
    * caller.
    */
   void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                Projection& _screen, ShipBlock& _work, ShipBlock& _slot, LineHeap& _heap, std::uint16_t _blueprint, std::uint8_t _type,
+                Projection& _screen, ShipBlock& _work, ShipBlock& _slot, LineHeap& _heap, std::uint16_t _blueprint, ShipType _type,
                 ShipDrawEffects& _effects) noexcept;
 
 } // namespace Elite

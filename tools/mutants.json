@@ -90,8 +90,8 @@
         {
           "id": "ta-240",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (roll.value < 240u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
-          "replace": "if (roll.value < 239u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
+          "find": "if (roll.value < 240u || screen.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
+          "replace": "if (roll.value < 239u || screen.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
           "expect": "caught",
           "note": "The police roll. Closed by a seed that reads 239 there."
         },
@@ -170,16 +170,16 @@
         {
           "id": "msl-82",
           "file": "GameLogic/Tactics.cpp",
-          "find": "destroyed = (work.Ai() == 0x82u);",
-          "replace": "destroyed = (work.Ai() == 0x83u);",
+          "find": "destroyed = (work.Ai() == MissileAiFor(1u));",
+          "replace": "destroyed = (work.Ai() == With(MissileAiFor(1u), AiBit::HasEcm));",
           "expect": "caught",
           "note": "The station a missile dies against. Closed by cases that put the target at the missile's own position, which is the only way part 1's tail runs at all."
         },
         {
           "id": "msl-bit5",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if ((victim.State() & 0x20u) == 0u)",
-          "replace": "if ((victim.State() & 0x10u) == 0u)",
+          "find": "if (!Has(victim.State(), ShipStateBit::Exploding))",
+          "replace": "if (!Has(victim.State(), ShipStateBit::OnScanner))",
           "expect": "caught",
           "note": "BIT M32+1 reads bit 5 out of the middle of an instruction. Closed by a victim marked in bit 4 and not bit 5, which is the only state that tells the two apart."
         },
@@ -194,8 +194,8 @@
         {
           "id": "kill-rotate",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>((work.Ai() & 0x7Fu) >> 1u));",
-          "replace": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>(work.Ai() & 0x7Fu));",
+          "find": "      RecordKill(screen, _loop.effects, TypeOf(MissileTargetOf(work.Ai())));",
+          "replace": "      RecordKill(screen, _loop.effects, TypeOf(static_cast<std::uint8_t>(work.Ai() & 0x7Fu)));",
           "expect": "caught",
           "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2. Not a coverage gap: TALLY and TALLYL were neither pushed nor compared, so what EXNO2 scores was invisible. Closed by comparing all three bytes (plan section 6.153)."
         }

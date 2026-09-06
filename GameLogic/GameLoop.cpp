@@ -24,7 +24,7 @@ namespace Elite
      * Every call in these four parts has the same shape, and gathering it here keeps the parts
      * readable as the branch structure they are rather than as bookkeeping.
      */
-    NewShip Spawn(Bubble& _bubble, ShipBlock& _work, std::uint8_t _type, std::uint16_t& _blueprint) noexcept
+    NewShip Spawn(Bubble& _bubble, ShipBlock& _work, ShipType _type, std::uint16_t& _blueprint) noexcept
     {
       return AddShip(_bubble, _work, _type, _blueprint);
     }
@@ -287,7 +287,7 @@ namespace Elite
     _work.Ai() = 0xFFu;
 
     // 6502: LDA #THG / JSR NWSHP -- and the answer is discarded, because the next line is a JMP.
-    static_cast<void>(Spawn(_bubble, _work, SHIP_TYPE_THARGOID, _blueprint));
+    static_cast<void>(Spawn(_bubble, _work, ShipType::Thargoid, _blueprint));
 
     /*
      * 6502: LDA #TGL / JMP NWSHP -- a JMP and not a JSR, so `GTHG` returns the THARGON's answer.
@@ -297,7 +297,7 @@ namespace Elite
      * that reads it is part 4's `fothg2`, which ignores it, so the only thing this changes is what
      * a comparison against the shipped routine sees.
      */
-    return Spawn(_bubble, _work, SHIP_TYPE_THARGON, _blueprint);
+    return Spawn(_bubble, _work, ShipType::Thargon, _blueprint);
   }
 
   void RunSpawning(Bubble& _bubble, ShipBlock& _work, Rng& _rng, CommanderBlock& _commander, const CurrentSystem& _current,
@@ -333,7 +333,7 @@ namespace Elite
       toPart3 = carry;
     }
 
-    std::uint8_t pendingType = 0;
+    ShipType pendingType = ShipType::None;
     bool spawnPending = false;
 
     if (!toPart3)
@@ -411,8 +411,8 @@ namespace Elite
            * instruction, which is the shape §6.73 keeps finding, and the port had it as the roll
            * on both paths until the oracle disagreed on the type in an empty bubble.
            */
-          _work.Ai() = static_cast<std::uint8_t>(_work.Ai() | 0xC0u);
-          _work.Newb() = 0x10u;
+          _work.Ai() = With(_work.Ai(), AiBit::Active, AiBit::Hostile);
+          _work.Newb() = Mask(NewbBit::Docking);
           a = _work.Ai();
         }
 
@@ -425,15 +425,15 @@ namespace Elite
          * this version happens to choose (§6.121's rule about idioms that look like something
          * else).
          */
-        const AddResult type = AddWithCarry(static_cast<std::uint8_t>(a & 2u), SHIP_TYPE_COBRA_MK3, carry);
+        const AddResult type = AddWithCarry(static_cast<std::uint8_t>(a & 2u), Byte(ShipType::CobraMk3), carry);
         carry = type.carry;
 
-        if (type.value == SHIP_TYPE_HERMIT)
+        if (TypeOf(type.value) == ShipType::RockHermit)
         {
           return; // 6502: BEQ TT100 -- unreachable on the C64 constants
         }
 
-        pendingType = type.value;
+        pendingType = TypeOf(type.value);
         spawnPending = true;
       }
       else
@@ -472,8 +472,8 @@ namespace Elite
           if (cargo.value >= HERMIT_ROLL)
           {
             // 6502: LDA #HER / STA INWK+32 / BNE whips -- and `HER` is 15, so the `BNE` is a JMP.
-            _work.Ai() = SHIP_TYPE_HERMIT;
-            pendingType = SHIP_TYPE_HERMIT;
+            _work.Ai() = Byte(ShipType::RockHermit);
+            pendingType = ShipType::RockHermit;
           }
           else
           {
@@ -485,9 +485,9 @@ namespace Elite
              * type is 5, 6 or 7: a canister, an alloy plate or an asteroid.
              */
             const bool ten = cargo.value >= 10u;
-            const AddResult junkType = AddWithCarry(static_cast<std::uint8_t>(cargo.value & 1u), SHIP_TYPE_CANISTER, ten);
+            const AddResult junkType = AddWithCarry(static_cast<std::uint8_t>(cargo.value & 1u), Byte(ShipType::Canister), ten);
             carry = junkType.carry;
-            pendingType = junkType.value;
+            pendingType = TypeOf(junkType.value);
           }
           spawnPending = true;
         }
@@ -524,7 +524,7 @@ namespace Elite
     carry = doubled.carry; // 6502: ASL A -- and nothing between here and `Ze` touches the flag
 
     std::uint8_t threshold = doubled.value;
-    if (_bubble.counts[SHIP_TYPE_VIPER] != 0u)
+    if (_bubble.Count(ShipType::Viper) != 0u)
     {
       threshold = static_cast<std::uint8_t>(doubled.value | _commander.At(Field::LegalStatus));
     }
@@ -549,7 +549,7 @@ namespace Elite
       // 6502: LDA #18 / STA INWK+27 / LDA #%01111001 / STA INWK+32 / LDA #COU / BNE focoug.
       _work.Speed() = 18u;
       _work.Ai() = 0x79u;
-      static_cast<void>(Spawn(_bubble, _work, SHIP_TYPE_COUGAR, _blueprint));
+      static_cast<void>(Spawn(_bubble, _work, ShipType::Cougar, _blueprint));
       return;
     }
 
@@ -564,12 +564,12 @@ namespace Elite
     {
       // 6502: LDA #COPS / JSR NWSHP -- and `NWSHP` returns its own carry, which is the flag any
       // later `DORND` on this path rotates in.
-      carry = Spawn(_bubble, _work, SHIP_TYPE_VIPER, _blueprint).created;
+      carry = Spawn(_bubble, _work, ShipType::Viper, _blueprint).created;
     }
 
     // 6502: LDA MANY+COPS / BNE MLOOPS -- and this reads the count AFTER the spawn, so one Viper
     // in the bubble ends the pass whether it arrived just now or was already there.
-    if (_bubble.counts[SHIP_TYPE_VIPER] != 0u)
+    if (_bubble.Count(ShipType::Viper) != 0u)
     {
       return;
     }
@@ -651,12 +651,12 @@ namespace Elite
         carry = second.carry;
 
         const std::uint8_t masked = static_cast<std::uint8_t>(static_cast<std::uint8_t>(second.value & first.value) & 7u);
-        const AddResult pack = AddWithCarry(masked, SHIP_TYPE_PACK_FIRST, carry);
+        const AddResult pack = AddWithCarry(masked, Byte(ShipType::Sidewinder), carry);
         carry = pack.carry;
 
         // 6502: JSR NWSHP / DEC XX13 / BPL mt3 -- so the NEXT pass's first `DORND` rotates in the
         // carry `NWSHP` returned, not the one the `ADC` above left.
-        carry = Spawn(_bubble, _work, pack.value, _blueprint).created;
+        carry = Spawn(_bubble, _work, TypeOf(pack.value), _blueprint).created;
       }
 
       // 6502: the loop's fall-through IS part 5.
@@ -668,7 +668,7 @@ namespace Elite
      * `THERE` is asked whether this is the Constrictor's system.
      */
     ++_explosionCount;
-    const AddResult hunter = AddWithCarry(static_cast<std::uint8_t>(ze.value & 3u), SHIP_TYPE_COBRA_PIRATE, carry);
+    const AddResult hunter = AddWithCarry(static_cast<std::uint8_t>(ze.value & 3u), Byte(ShipType::CobraMk3Pirate), carry);
     carry = hunter.carry;
     const std::uint8_t y = hunter.value;
 
@@ -697,14 +697,14 @@ namespace Elite
 
       if (carry)
       {
-        constrictor = static_cast<std::uint8_t>(shifted.value | _bubble.counts[SHIP_TYPE_CONSTRICTOR]) == 0u;
+        constrictor = static_cast<std::uint8_t>(shifted.value | _bubble.Count(ShipType::Constrictor)) == 0u;
       }
     }
 
-    std::uint8_t hunterType = 0;
+    ShipType hunterType = ShipType::None;
     if (constrictor)
     {
-      hunterType = SHIP_TYPE_CONSTRICTOR; // 6502: .YESCON LDA #CON
+      hunterType = ShipType::Constrictor; // 6502: .YESCON LDA #CON
     }
     else
     {
@@ -717,12 +717,12 @@ namespace Elite
        * stepped over. The `CMP #200` is again there only for its CARRY, which `ROL A` shifts into
        * bit 0 of the AI byte.
        */
-      _work.Newb() = 0x04u;
+      _work.Newb() = Mask(NewbBit::Hostile);
       const RngResult ai = _rng.Next(carry);
       const ShiftResult rolled = RotateLeftValue(ai.value, ai.value >= THARGOID_ROLL);
       carry = rolled.carry;
-      _work.Ai() = static_cast<std::uint8_t>(rolled.value | 0xC0u);
-      hunterType = y;
+      _work.Ai() = With(rolled.value, AiBit::Active, AiBit::Hostile);
+      hunterType = TypeOf(y);
     }
 
     // 6502: .focoug JSR NWSHP / .mj1 JMP MLOOP.

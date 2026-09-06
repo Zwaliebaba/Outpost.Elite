@@ -461,7 +461,7 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[at.qq1], universe.universe.commander.At(Elite::Field::SystemY), (context + L": QQ1").c_str());
 
           outcomes.insert(std::to_string(universe.universe.status.midJump) + "/" + std::to_string(universe.universe.dust.count) + "/" +
-                          std::to_string(universe.universe.bubble.counts[Elite::SHIP_TYPE_THARGOID]));
+                          std::to_string(universe.universe.bubble.Count(Elite::ShipType::Thargoid)));
           ++compared;
         }
       }
@@ -733,7 +733,7 @@ namespace GameLogicTests
       Assert::AreEqual<std::size_t>(2u, outcomes.size(), L"the Trumbles survived and were absent");
       for (const std::string& one : outcomes)
       {
-        Assert::IsTrue(one.find("/" + std::to_string(Elite::SHIP_TYPE_COBRA_MK3)) != std::string::npos,
+        Assert::IsTrue(one.find("/" + std::to_string(Elite::Byte(Elite::ShipType::CobraMk3))) != std::string::npos,
                        L"and the ship left behind is always the Cobra, never the pirate");
       }
     }

@@ -119,7 +119,7 @@ namespace Elite
 
     // 6502: LDA SSPR / BEQ P%+5 / JSR SPBLB -- the station bulb is a TOGGLE, so this puts it out
     // only because it was lit, and the test is what keeps the two in step.
-    if (screen.bubble.counts[SHIP_TYPE_STATION] != 0u)
+    if (screen.bubble.Count(ShipType::Station) != 0u)
     {
       ToggleStationIndicator(screen.canvas);
     }
@@ -305,7 +305,7 @@ namespace Elite
     ChangeView(screen, 0u);
   }
 
-  std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance) noexcept
+  std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, ShipType _shipType, std::uint8_t _distance) noexcept
   {
     FlightLoop& loop = _title.loop;
     FlightScreen& screen = loop.screen;
@@ -543,7 +543,7 @@ namespace Elite
        * random but is a different random number from the one the comment names (§6.117).
        */
       const bool plate = (roll.previous & 1u) != 0u;
-      const std::uint8_t type = plate ? SHIP_TYPE_ALLOY_PLATE : SHIP_TYPE_CANISTER;
+      const ShipType type = plate ? ShipType::AlloyPlate : ShipType::Canister;
 
       // 6502: JSR fq1 -- and the carry it takes into its `ROL A` is the one `BCC D3` just tested.
       const NewShip made = AddDebris(screen.bubble, screen.work, type, screen.flight.delta, plate, screen.flight.blueprint);
@@ -598,18 +598,18 @@ namespace Elite
      * Cobra and gets a pirate Cobra instead. Two different blueprints, and the one you get is
      * decided by how full the bubble was when you punched out.
      */
-    screen.flight.type = SHIP_TYPE_COBRA_MK3;
+    screen.flight.type = ShipType::CobraMk3;
     /*
      * `FRS1` takes `DELTA` and `MSTG` rather than a speed: `LDA DELTA / ROL A / STA INWK+27`, with
      * the carry `MSTG`'s bit 7 (§6.121). So the abandoned ship leaves at TWICE the speed you were
      * doing, plus one if no missile was locked -- and `RES2` has just set `DELTA` to 3, so it is
      * always 6 or 7 whatever you were doing when you punched out.
      */
-    NewShip abandoned = SpawnShipAhead(screen.bubble, screen.work, SHIP_TYPE_COBRA_MK3, screen.flight.delta, screen.bubble.missileTarget,
+    NewShip abandoned = SpawnShipAhead(screen.bubble, screen.work, ShipType::CobraMk3, screen.flight.delta, screen.bubble.missileTarget,
                                        screen.flight.blueprint);
     if (!abandoned.created)
     {
-      abandoned = SpawnShipAhead(screen.bubble, screen.work, SHIP_TYPE_COBRA_PIRATE, screen.flight.delta, screen.bubble.missileTarget,
+      abandoned = SpawnShipAhead(screen.bubble, screen.work, ShipType::CobraMk3Pirate, screen.flight.delta, screen.bubble.missileTarget,
                                  screen.flight.blueprint);
     }
 

@@ -211,7 +211,7 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(scan, 20'000);
               Assert::IsTrue(run.completed, L"SCAN returned");
 
-              Elite::DrawScannerBlip(canvas, draw, ship, 11u, 0u);
+              Elite::DrawScannerBlip(canvas, draw, ship, Elite::ShipType::CobraMk3, 0u);
 
               const std::wstring where = Widen("SCAN z=" + std::to_string(depth) + (depthSign ? "-" : "+") +
                                                " y=" + std::to_string(height) + (heightSign ? "-" : "+"));
@@ -331,7 +331,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(scan, 20'000);
             Assert::IsTrue(run.completed, L"SCAN returned");
 
-            Elite::DrawScannerBlip(canvas, draw, ship, 11u, 0u);
+            Elite::DrawScannerBlip(canvas, draw, ship, Elite::ShipType::CobraMk3, 0u);
 
             const std::wstring where =
               Widen("SCAN x=" + std::to_string(across) + (sign ? "-" : "+") + " depth " + std::to_string(item.depth));
@@ -421,7 +421,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(scan, 20'000);
         Assert::IsTrue(run.completed, L"SCAN returned");
 
-        Elite::DrawScannerBlip(canvas, draw, ship, item.type, item.view);
+        Elite::DrawScannerBlip(canvas, draw, ship, Elite::TypeOf(item.type), item.view);
 
         const std::wstring where = Widen(std::string("SCAN: ") + item.what);
         const Marks marks = CompareAndMeasure(cpu, at.screen, canvas, where);
@@ -443,7 +443,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(scan, 20'000);
         Assert::IsTrue(run.completed, L"SCAN returned");
 
-        Elite::DrawScannerBlip(canvas, draw, ship, static_cast<std::uint8_t>(type), 0u);
+        Elite::DrawScannerBlip(canvas, draw, ship, Elite::TypeOf(static_cast<std::uint8_t>(type)), 0u);
 
         const std::wstring where = Widen("SCAN type " + std::to_string(type));
         (void)CompareAndMeasure(cpu, at.screen, canvas, where);
@@ -901,8 +901,8 @@ namespace GameLogicTests
           cpu.memory[at.comc] = compass.colour;
 
           // 6502: SSPR is MANY+SST, so setting the count IS setting the flag (§6.58).
-          bubble.counts[Elite::SHIP_TYPE_STATION] = stations;
-          cpu.memory[static_cast<std::uint16_t>(at.many + Elite::SHIP_TYPE_STATION)] = stations;
+          bubble.Count(Elite::ShipType::Station) = stations;
+          cpu.memory[static_cast<std::uint16_t>(at.many + Elite::Byte(Elite::ShipType::Station))] = stations;
 
           std::uint32_t state = 0x2C41A9F7u ^ (seed * 0xC2B2AE35u);
           for (std::size_t slot = 0; slot < 2u; ++slot)

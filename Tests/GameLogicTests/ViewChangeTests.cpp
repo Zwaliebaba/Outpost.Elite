@@ -516,8 +516,8 @@ namespace GameLogicTests
           cpu.memory[at.t2] = 0x77u;
 
           Elite::Bubble bubble;
-          bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
-          cpu.memory[static_cast<std::uint16_t>(at.many + Elite::SHIP_TYPE_STATION)] = 1u;
+          bubble.Count(Elite::ShipType::Station) = 1u;
+          cpu.memory[static_cast<std::uint16_t>(at.many + Elite::Byte(Elite::ShipType::Station))] = 1u;
 
           // Two ships in the bubble, both with bit 4 of byte 31 set, so `zonkscanners` has
           // something to forget -- and the DFLAG case that skips it has to leave it alone.
@@ -694,8 +694,8 @@ namespace GameLogicTests
           cpu.memory[comy] = 0x9Cu;
 
           Elite::Bubble bubble;
-          bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
-          cpu.memory[static_cast<std::uint16_t>(many + Elite::SHIP_TYPE_STATION)] = 1u;
+          bubble.Count(Elite::ShipType::Station) = 1u;
+          cpu.memory[static_cast<std::uint16_t>(many + Elite::Byte(Elite::ShipType::Station))] = 1u;
 
           const std::uint8_t TYPES[] = {3u, 5u};
           for (std::size_t slot = 0; slot < 2u; ++slot)
@@ -986,7 +986,7 @@ namespace GameLogicTests
         universe.view = 0u;
         universe.spaceView = 1u;
         universe.bubble.junk = item.junk;
-        universe.bubble.counts[Elite::SHIP_TYPE_STATION] = item.station;
+        universe.bubble.Count(Elite::ShipType::Station) = item.station;
         universe.status.midJump = item.midJump;
 
         for (std::size_t slot = 0; slot < universe.bubble.slots.size(); ++slot)

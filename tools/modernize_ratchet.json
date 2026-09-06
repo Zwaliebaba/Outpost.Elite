@@ -21,12 +21,12 @@
     "ship-literal-sites": {
       "ceiling": 0,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M1-a"
     },
     "ship-offset-sites": {
       "ceiling": 0,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M1-a"
     },
     "aggregate-refs": {
       "ceiling": 78,
@@ -39,9 +39,9 @@
       "slice": "M0-a"
     },
     "outpost-elite-names": {
-      "ceiling": 227,
+      "ceiling": 226,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M1-b"
     },
     "effects-seams": {
       "ceiling": 22,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3583,
+      "ceiling": 3615,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M1-b"
     },
     "oracle-test-files": {
       "ceiling": 50,

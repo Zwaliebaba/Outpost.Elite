@@ -5,10 +5,10 @@
 namespace Elite
 {
 
-  std::uint16_t BlueprintFor(const Bubble& _bubble, std::uint8_t _shipType) noexcept
+  std::uint16_t BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept
   {
     // 6502: the table is RAM and only the station's entry is ever written into. See `Bubble`.
-    return (_shipType == SHIP_TYPE_STATION) ? _bubble.stationBlueprint : BlueprintAddress(_shipType);
+    return (_shipType == ShipType::Station) ? _bubble.stationBlueprint : BlueprintAddress(_shipType);
   }
 
   ShipBlock* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept
@@ -19,7 +19,7 @@ namespace Elite
     return (_slot < MAX_SHIPS) ? &_bubble.blocks[_slot] : nullptr;
   }
 
-  NewShip AddShip(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint16_t& _blueprint) noexcept
+  NewShip AddShip(Bubble& _bubble, ShipBlock& _work, ShipType _shipType, std::uint16_t& _blueprint) noexcept
   {
     // 6502: STA T / LDX #0 / .NWL1 LDA FRIN,X / BEQ NW1 / INX / CPX #NOSH / BCC NWL1.
     std::uint8_t slot = 0;
@@ -36,7 +36,7 @@ namespace Elite
     const std::uint16_t block = SlotAddress(slot);
 
     // 6502: LDA T / BMI NW2 -- the planet and the sun have no blueprint and no heap.
-    if ((_shipType & 0x80u) == 0u)
+    if (!IsBody(_shipType))
     {
       /*
        * 6502: LDA XX21-1,Y / BEQ NW3 / STA XX0+1 / LDA XX21-2,Y / STA XX0.
@@ -53,7 +53,7 @@ namespace Elite
       _blueprint = blueprint;
 
       // 6502: CPY #2*SST / BEQ NW6 -- the space station keeps no line heap of its own.
-      if (_shipType != SHIP_TYPE_STATION)
+      if (_shipType != ShipType::Station)
       {
         const std::uint8_t heapSize = ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
 
@@ -101,13 +101,13 @@ namespace Elite
 
       // 6502: NW6 -- LDY #14 / LDA (XX0),Y / STA INWK+35, then byte 19 masked to three bits.
       _work.Energy() = ShipByte(static_cast<std::uint16_t>(blueprint + 14u));
-      _work.State() = static_cast<std::uint8_t>(ShipByte(static_cast<std::uint16_t>(blueprint + 19u)) & 7u);
+      _work.State() = MissilesOf(ShipByte(static_cast<std::uint16_t>(blueprint + 19u)));
     }
 
     // 6502: NW2 -- STA FRIN,X / TAX / BMI NW8. The slot takes the type, and X BECOMES the type.
-    _bubble.slots[slot] = _shipType;
+    _bubble.slots[slot] = Byte(_shipType);
 
-    if ((_shipType & 0x80u) == 0u)
+    if (!IsBody(_shipType))
     {
       /*
        * 6502: CPX #HER / BEQ gangbang / CPX #JL / BCC NW7 / CPX #JH / BCS NW7 / INC JUNK.
@@ -115,15 +115,15 @@ namespace Elite
        * The rock hermit is counted as junk even though its type is nowhere near the junk range,
        * which is what the extra comparison is for -- it looks like an asteroid until it opens fire.
        */
-      if (_shipType == SHIP_TYPE_HERMIT || (_shipType >= JUNK_TYPE_FIRST && _shipType < JUNK_TYPE_LIMIT))
+      if (IsJunk(_shipType))
       {
         ++_bubble.junk;
       }
 
       // 6502: NW7 -- INC MANY,X.
-      if (_shipType < _bubble.counts.size())
+      if (Byte(_shipType) < _bubble.counts.size())
       {
-        ++_bubble.counts[_shipType];
+        ++_bubble.Count(_shipType);
       }
     }
 
@@ -138,8 +138,8 @@ namespace Elite
      * 128 or 129, well past the thirty-three entries. It lands elsewhere in the ship data region,
      * which is a defined byte rather than a fault, and reproducing it costs nothing.
      */
-    const std::uint8_t defaults = ShipByte(static_cast<std::uint16_t>(SHIP_DEFAULT_FLAGS + _shipType - 1u));
-    _work.Newb() = static_cast<std::uint8_t>((defaults & 0x6Fu) | _work.Newb());
+    const std::uint8_t defaults = ShipByte(static_cast<std::uint16_t>(SHIP_DEFAULT_FLAGS + Byte(_shipType) - 1u));
+    _work.Newb() = static_cast<std::uint8_t>(Without(defaults, NewbBit::Docking, NewbBit::Remove) | _work.Newb());
 
     // 6502: LDY #NI%-1 / .NWL3 LDA INWK,Y / STA (INF),Y / DEY / BPL NWL3 / SEC / RTS.
     _bubble.blocks[slot] = _work;

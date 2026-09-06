@@ -280,11 +280,11 @@ namespace GameLogicTests
      * assembled image still holds the placeholder -- and `NWSPS` copies `spasto` INTO the table, so
      * a comparison against an image that has not booted spawns a station whose blueprint is &8888.
      * That is not a state the machine is ever in (§6.95's rule reaching a third byte). The port
-     * needs no field: nothing writes `spasto` after `BEGIN`, and `BlueprintAddress(SHIP_TYPE_STATION)`
+     * needs no field: nothing writes `spasto` after `BEGIN`, and `BlueprintAddress(ShipType::Station)`
      * IS `spasto` for ever.
      */
     {
-      const std::uint16_t coriolis = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+      const std::uint16_t coriolis = Elite::BlueprintAddress(Elite::ShipType::Station);
       Cell low;
       low.name = L"spasto";
       low.address = _at.spasto;

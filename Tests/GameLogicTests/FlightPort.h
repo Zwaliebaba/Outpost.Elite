@@ -80,8 +80,8 @@ namespace GameLogicTests
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
-      universe.flight.blueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_COBRA_MK3);
-      universe.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+      universe.flight.blueprint = Elite::BlueprintAddress(Elite::ShipType::CobraMk3);
+      universe.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
       universe.LendSunHeap(heap);
       Elite::SetUpLoaderScreen(universe.canvas); // 6502: the loader's palette, without which the screen stays black
     }
@@ -191,17 +191,17 @@ namespace GameLogicTests
     {
       Elite::StopDockingMusic(music, universe.status.titleReset, sound, sidLog);
     }
-    [[nodiscard]] bool SpawnAhead(std::uint8_t _type) override
+    [[nodiscard]] bool SpawnAhead(Elite::ShipType _type) override
     {
       return Elite::SpawnShipAhead(universe.bubble, universe.work, _type, universe.flight.delta, universe.bubble.missileTarget,
                                    universe.flight.blueprint)
         .created;
     }
-    void Anger(std::uint8_t _slot, std::uint8_t _type) override
+    void Anger(std::uint8_t _slot, Elite::ShipType _type) override
     {
       Elite::Anger(universe.bubble, universe.flight, _slot, _type);
     }
-    [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) override
+    [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
     {
       return Elite::SpawnChildShip(universe.bubble, universe.work, universe.rng, universe.math, universe.flight.slot, universe.flight.type,
                                    _aiFlag, _type, universe.flight.blueprint)

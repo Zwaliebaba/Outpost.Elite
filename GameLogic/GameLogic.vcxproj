@@ -154,6 +154,8 @@
     <ClInclude Include="Galaxy.h" />
     <ClInclude Include="ShipBlueprint.h" />
     <ClInclude Include="ShipSlot.h" />
+    <ClInclude Include="ShipFlags.h" />
+    <ClInclude Include="ShipType.h" />
     <ClInclude Include="ShipMove.h" />
     <ClInclude Include="ShipDraw.h" />
     <ClInclude Include="LineHeap.h" />

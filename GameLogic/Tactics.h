@@ -126,11 +126,6 @@ namespace Elite
   /// at four, and the four is the two doubled rather than a second constant.
   inline constexpr std::uint8_t ANGRY_ACCELERATION = 2;
 
-  /// 6502: bit 5 of NEWB -- "this ship is on the station's side", so hitting it angers the station
-  /// as well; and bit 2, which is the hostile flag `ANGRY` sets.
-  inline constexpr std::uint8_t NEWB_STATION_ALLY = 0x20;
-  inline constexpr std::uint8_t NEWB_HOSTILE = 0x04;
-
   /*
    * 6502: ANGRY -- tell the ship in slot `_slot` that we just hit it.
    *
@@ -143,7 +138,7 @@ namespace Elite
    * depends on loop state the caller never set. The port keeps both bytes separate because the
    * original does (§6.121).
    */
-  void Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, std::uint8_t _type) noexcept;
+  void Anger(Bubble& _bubble, const FlightState& _flight, std::uint8_t _slot, ShipType _type) noexcept;
 
   // ---- slice 4a-c: the AI, and the autopilot that shares its tail ------------------------------
 
@@ -167,7 +162,7 @@ namespace Elite
   /// 6502: LDA #%11110001 -- the AI byte a station gives the ship it launches, and
   /// `LDX #%00100100` the `NEWB` a rock hermit gives the pirate it turns into.
   inline constexpr std::uint8_t STATION_LAUNCH_AI = 0xF1;
-  inline constexpr std::uint8_t HERMIT_PIRATE_NEWB = 0x24;
+  inline constexpr std::uint8_t HERMIT_PIRATE_NEWB = Mask(NewbBit::Innocent, NewbBit::Hostile);
 
   /// 6502: CPX #4 / BCS TA22 -- a station launches Vipers until there are four of them.
   inline constexpr std::uint8_t MAXIMUM_POLICE = 4;

@@ -50,7 +50,7 @@ namespace Elite
    * type's scanner colour. All three are the original's, and `SCAN` is a leaf that nobody reads
    * them back from -- but the port keeps them because it keeps the workspace.
    */
-  void DrawScannerBlip(Canvas& _canvas, DrawWorkspace& _work, const ShipBlock& _ship, std::uint8_t _type, std::uint8_t _view) noexcept;
+  void DrawScannerBlip(Canvas& _canvas, DrawWorkspace& _work, const ShipBlock& _ship, ShipType _type, std::uint8_t _view) noexcept;
 
   // ---- the compass ----------------------------------------------------------------------------
 

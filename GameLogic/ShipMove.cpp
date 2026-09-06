@@ -495,7 +495,7 @@ namespace Elite
 
       // 6502: LDA TYPE / AND #&81 / CMP #&81 / BNE P%+3 / RTS -- the SUN, and only the sun, stops
       // here. It has no orientation to rotate.
-      if ((_flight.type & 0x81u) == 0x81u)
+      if ((Byte(_flight.type) & 0x81u) == 0x81u)
       {
         return;
       }
@@ -545,13 +545,13 @@ namespace Elite
        * Bit 4 is "this ship is drawn on the scanner". A live ship sets it and gets scanned AGAIN --
        * the second call of the iteration -- while an exploding one clears it instead and is not.
        */
-      if ((_work.State() & 0xA0u) != 0u)
+      if (HasAny(_work.State(), ShipStateBit::Killed, ShipStateBit::Exploding))
       {
-        _work.State() = static_cast<std::uint8_t>(_work.State() & 0xEFu); // 6502: MVD1
+        _work.State() = Without(_work.State(), ShipStateBit::OnScanner); // 6502: MVD1
         return;
       }
 
-      _work.State() = static_cast<std::uint8_t>(_work.State() | 0x10u);
+      _work.State() = With(_work.State(), ShipStateBit::OnScanner);
 
       // 6502: JMP SCAN -- a tail call, so it is the last thing done.
       DrawScannerBlip(_canvas, _draw, _work, _flight.type, _view);
@@ -563,7 +563,7 @@ namespace Elite
   {
     // 6502: LDA INWK+31 / AND #&A0 / BNE MV30 -- exploding or already dead, so straight to the
     // scanner. Nothing below moves it, which is why a wreck hangs where it died.
-    if ((_work.State() & 0xA0u) == 0u)
+    if (!HasAny(_work.State(), ShipStateBit::Killed, ShipStateBit::Exploding))
     {
       // 6502: LDA MCNT / EOR XSAV / AND #15 / BNE MV3 / JSR TIDY -- one ship every sixteenth pass.
       if ((static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 15u) == 0u)
@@ -573,7 +573,7 @@ namespace Elite
 
       // 6502: MV3 -- LDX TYPE / BPL P%+5 / JMP MV40. The planet and the sun move differently and
       // rejoin at MV45.
-      if ((_flight.type & 0x80u) != 0u)
+      if (IsBody(_flight.type))
       {
         MovePlanetOrSun(_work, _math, _flight.alpha, _flight.beta);
         MoveShipTail(_canvas, _draw, _work, _math, _flight, _view);
@@ -586,8 +586,8 @@ namespace Elite
        * A missile thinks on EVERY iteration and everything else on one in eight, which is the whole
        * reason a missile is frightening and a Krait is not.
        */
-      if ((_work.Ai() & 0x80u) != 0u &&
-          (_flight.type == SHIP_TYPE_MISSILE || (static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 7u) == 0u))
+      if (Has(_work.Ai(), AiBit::Active) &&
+          (_flight.type == ShipType::Missile || (static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 7u) == 0u))
       {
         // 6502: JSR TACTICS at MV26 -- and it can end in `JMP DEATH`, which does not come back.
         if (!_effects.RunTactics(_work))

@@ -77,7 +77,7 @@ namespace Elite
   /// 6502: DOD -- the Dodo station's ship type, which is the last blueprint this build carries.
   /// Measured rather than counted: entry 33 of the pointer table is 60973, and `SHIP_DODO` is at
   /// 60973 in the assembled image.
-  inline constexpr std::uint8_t SHIP_TYPE_DODO = 33;
+  /// `ShipType::Dodo` is the enumerator; this note stays for the measurement.
 
   /// 6502: LDA tek / CMP #10 / BCC notadodo -- a system this advanced has a Dodo, not a Coriolis.
   inline constexpr std::uint8_t STATION_DODO_TECH_LEVEL = 10;
@@ -171,7 +171,7 @@ namespace Elite
    * upstream comment says "double DELTA speed (i.e. 6)", which is neither the rotate nor the 12
    * that `DELTA` actually holds by then. `TXA / JMP NWSHP` makes the type the caller's X.
    */
-  [[nodiscard]] NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed, bool _carryIn,
+  [[nodiscard]] NewShip AddDebris(Bubble& _bubble, ShipBlock& _work, ShipType _shipType, std::uint8_t _speed, bool _carryIn,
                                   std::uint16_t& _blueprint) noexcept;
 
   // ---- slice 4a-b: putting a ship into the bubble from inside the bubble ------------------------
@@ -202,7 +202,7 @@ namespace Elite
    * The answer is `NWSHP`'s carry: clear means the bubble was full, and `FRMIS` shows "MISSILE
    * JAMMED" rather than spending the missile.
    */
-  [[nodiscard]] NewShip SpawnShipAhead(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint8_t _speed,
+  [[nodiscard]] NewShip SpawnShipAhead(Bubble& _bubble, ShipBlock& _work, ShipType _shipType, std::uint8_t _speed,
                                        std::uint8_t _missileTarget, std::uint16_t& _blueprint) noexcept;
 
   /*
@@ -235,11 +235,11 @@ namespace Elite
    * only in what they arrive holding.
    */
   [[nodiscard]] NewShip SpawnChildShip(Bubble& _bubble, ShipBlock& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
-                                       std::uint8_t _parentType, std::uint8_t _aiFlag, std::uint8_t _shipType,
+                                       ShipType _parentType, std::uint8_t _aiFlag, ShipType _shipType,
                                        std::uint16_t& _blueprint) noexcept;
 
   /// 6502: SESCP -- `SFS1` with the escape pod's type and the standard AI byte already loaded.
   [[nodiscard]] NewShip SpawnEscapePod(Bubble& _bubble, ShipBlock& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
-                                       std::uint8_t _parentType, std::uint16_t& _blueprint) noexcept;
+                                       ShipType _parentType, std::uint16_t& _blueprint) noexcept;
 
 } // namespace Elite

@@ -145,7 +145,7 @@ namespace Elite
    * own, which says "no" for a sum too big to compare rather than for a ship too far to the side --
    * the same answer by a different route, and the port keeps them apart because the original does.
    */
-  [[nodiscard]] bool IsHit(const ShipBlock& _work, MathWorkspace& _math, std::uint16_t _blueprint, std::uint8_t _type) noexcept;
+  [[nodiscard]] bool IsHit(const ShipBlock& _work, MathWorkspace& _math, std::uint16_t _blueprint, ShipType _type) noexcept;
 
   /// 6502: SFS1 -- phase 4's "spawn a child ship from this one", which is where the wreckage
   /// actually comes from. It is here rather than in `Spawn.h` because the only thing in this slice
@@ -157,7 +157,7 @@ namespace Elite
 
     /// 6502: JSR SFS1 with A = the AI flag and X = the type. It returns a carry saying whether the
     /// ship fitted; `SPIN` does not look at it, and this slice has no other caller.
-    [[nodiscard]] virtual bool SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type) = 0;
+    [[nodiscard]] virtual bool SpawnChild(std::uint8_t _aiFlag, ShipType _type) = 0;
   };
 
   /*
@@ -183,7 +183,7 @@ namespace Elite
    * kept the test inside the loop would agree with the game on every input and be a different
    * routine.
    */
-  void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, std::uint8_t _type, std::uint8_t _count) noexcept;
+  void SpawnItems(MathWorkspace& _math, SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count) noexcept;
 
   /*
    * 6502: SPIN -- a destroyed ship drops some of its cargo, or does not.
@@ -198,7 +198,7 @@ namespace Elite
    * The port had it the obvious way round and the oracle disagreed on the first blueprint whose
    * byte 0 differed from the roll (§6.74).
    */
-  void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects, std::uint16_t _blueprint, std::uint8_t _type,
+  void SpawnDebris(Rng& _rng, MathWorkspace& _math, SpawnChildEffects& _effects, std::uint16_t _blueprint, ShipType _type,
                    bool _carryIn) noexcept;
 
   /*
@@ -249,7 +249,7 @@ namespace Elite
 
     /// 6502: JSR FRS1 with X = the type -- phase 4's "put a ship right in front of us". The carry
     /// says whether it fitted, and `FRMIS` gives up when it did not.
-    [[nodiscard]] virtual bool SpawnAhead(std::uint8_t _type) = 0;
+    [[nodiscard]] virtual bool SpawnAhead(ShipType _type) = 0;
 
     /*
      * 6502: JSR ANGRY with A = the type and INF pointing at the ship -- "that ship has noticed".
@@ -261,7 +261,7 @@ namespace Elite
      * had to guess which, guessed `MSTG`, and read block 255 the first time a laser landed without
      * a missile lock (§6.142).
      */
-    virtual void Anger(std::uint8_t _slot, std::uint8_t _type) = 0;
+    virtual void Anger(std::uint8_t _slot, ShipType _type) = 0;
   };
 
   /*
