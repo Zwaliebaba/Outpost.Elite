@@ -53,9 +53,12 @@ namespace Elite
    * made inside `SIGHT`, and for the same reason: filing the whole routine as hardware would throw
    * away the sixty instructions that are not.
    *
-   * The register state this writes is write-only for now, exactly as `SightEffects` is. ADR-005 §1
-   * closed on making it a `VideoState` the port owns (§6.133) and that work is not done; when it
-   * is, this seam is one of the things it absorbs.
+   * The seam stayed after `VideoState` arrived, and that is deliberate. ADR-005 §1 closed on the
+   * register state becoming data the port owns (§6.133), and §6.148 made it so: this seam's
+   * implementation is one line into `Elite::ApplySpriteExpansion` or `ApplyExplosionSprite`, and
+   * `Canvas::Resolve` composites what they leave. What is still a seam is the CALL -- `GameLogic`
+   * says "put sprite 1 here", the presenter owns the struct -- because the alternative is a getter
+   * on the state, which is the mistake `SightEffects::MaskSprites` warns about.
    */
   class ExplosionEffects
   {

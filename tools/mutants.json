@@ -32,42 +32,42 @@
     "the tests, and a recorded survivor that starts being caught is debt that has been paid and",
     "should be written down as paid."
   ],
-
   "units": [
     {
       "name": "tactics",
       "slice": "4a-c",
-      "filter": ["TheTacticsVectors", "TheShipAi", "TheDockingComputer"],
+      "filter": [
+        "TheTacticsVectors",
+        "TheShipAi",
+        "TheDockingComputer"
+      ],
       "tests": 7,
       "note": [
-        "The ship AI and the autopilot (plan section 6.125). The docking half is closed -- every",
-        "`dock-*` and `steer-*` mutation is caught after sections 6.131 and 6.132 found three",
-        "branches its sweep could not reach. The AI half is not: fifteen survivors are recorded in",
-        "the plan BY NAME and are the reason this file exists.",
+        "The ship AI and the autopilot (plan section 6.125). Both halves are closed: every `dock-*` and",
+        "`steer-*` mutation is caught after sections 6.131 and 6.132 found three branches its sweep could",
+        "not reach, and every `ta-*`, `msl-*` and `kill-*` mutation is caught after sections 6.152 and",
+        "6.153 closed the thirteen this file was written to record.",
         "",
-        "HOW THE FIFTEEN GOT HERE, stated plainly because it bears on what a first run means. The",
-        "original mutants were hand edits and are gone; what survives is their names in section",
-        "6.125. Each name points at a constant or an operation that appears exactly once in",
-        "`Tactics.cpp` -- `ta-253` at the `CMP #253`, `msl-bit5` at the `BIT M32+1`, and so on -- so",
-        "the edit below is reconstructed from the name and from the routine, not recovered.",
+        "HOW THE FIFTEEN GOT HERE, kept because it bears on what the numbers below mean. The original",
+        "mutants were hand edits and are gone; what survived was their names in section 6.125. Each name",
+        "points at a constant or an operation that appears exactly once in `Tactics.cpp` -- `ta-253` at",
+        "the `CMP #253`, `msl-bit5` at the `BIT M32+1`, and so on -- so each edit below was reconstructed",
+        "from the name and from the routine, not recovered.",
         "",
-        "That makes the first run of this unit a TEST OF THE RECONSTRUCTION as much as of the port:",
-        "a reconstructed mutant that survives confirms the name was read correctly, and one that is",
-        "caught means either the reconstruction missed or the debt is smaller than recorded. Either",
-        "answer is worth more than the fifteen names were, because from here on the mutant is the",
-        "data and the name is just its label.",
+        "THE FIRST RUN, 2026-09-05, on the MSVC leg with a green 348-test baseline: 16 mutants, 3 caught,",
+        "13 survived. Thirteen survived exactly as section 6.125 recorded, which is the reconstruction",
+        "confirming itself thirteen times over; `ta7-three` and `msl-kill` came back caught and nothing",
+        "can now say whether those two reconstructions missed or that debt never existed.",
         "",
-        "THE FIRST RUN, 2026-09-05, on the MSVC leg with a green 348-test baseline: 16 mutants, 3",
-        "caught, 13 survived. The three caught are the selftest, `ta7-three` and `msl-kill`; the",
-        "other thirteen survive exactly as section 6.125 recorded. So the measured debt is THIRTEEN",
-        "and not fifteen -- and the two that came back caught are the honest limit of this exercise,",
-        "because the original mutants are gone and nothing can say whether the reconstruction missed",
-        "or the debt was overstated. Thirteen re-runnable survivors is still thirteen more than the",
-        "corpus had yesterday.",
-        "",
-        "The method for closing them is section 6.132's and is unchanged: probe the comparison,",
-        "count the distinct values that reach it, and add a ladder to the fixture. All fifteen are",
-        "thresholds the geometry table never lands on."
+        "THE SECOND AND THIRD RUNS, the same day: 16 of 16, none equivalent. Twelve of the thirteen were",
+        "the sweep -- six thresholds no seed stood on, a missile's whole arrival never executed, an",
+        "`ORA #104` reached by one odd value, a `CMP #16` whose branch read a bit no target had set, a",
+        "`TALLY` that was never compared, and a duplicate `TA20` that no missile in the port can reach.",
+        "THE THIRTEENTH WAS A DEFECT: `TA7`'s first `BCC` goes to `TA3`, which is part SIX, and the port",
+        "ran it into part five, so a ship above half its energy could launch a missile the original never",
+        "would. It was the LAST survivor closed, after three rounds of ladder-building had used up the",
+        "easy explanations -- which is the finding of section 6.153 and the reason a stubborn survivor",
+        "deserves more attention than a fresh one, not less."
       ],
       "mutants": [
         {
@@ -84,56 +84,56 @@
           "file": "GameLogic/Tactics.cpp",
           "find": "if (roll.value < 253u)",
           "replace": "if (roll.value < 252u)",
-          "expect": "survives",
-          "note": "The station's launch roll, three times in 256. The sweep's seeds never land on 252."
+          "expect": "caught",
+          "note": "The station's launch roll, three times in 256. Closed by a seed that reads 252 there."
         },
         {
           "id": "ta-240",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (roll.value < 240u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
           "replace": "if (roll.value < 239u || screen.bubble.counts[SHIP_TYPE_VIPER] >= MAXIMUM_POLICE)",
-          "expect": "survives",
-          "note": "TN5's police roll. Same shape as ta-253: a threshold with no case beside it."
+          "expect": "caught",
+          "note": "The police roll. Closed by a seed that reads 239 there."
         },
         {
           "id": "ta-ana200",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (first.value >= 200u)",
           "replace": "if (first.value >= 201u)",
-          "expect": "survives",
-          "note": "The Anaconda's escort roll, CMP #200 at TN7's entrance -- not the hermit's CMP #200."
+          "expect": "caught",
+          "note": "The Anaconda's escort roll. Closed by a seed that reads exactly 200 there."
         },
         {
           "id": "ta-250",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (chance.value >= 250u)",
           "replace": "if (chance.value >= 249u)",
-          "expect": "survives",
-          "note": "TN7's six-times-in-256 roll that gives a ship a random pitch."
+          "expect": "caught",
+          "note": "TN7's random pitch, six times in 256. Closed by a seed that reads 249 and one that reads 255."
         },
         {
           "id": "ta-104",
           "file": "GameLogic/Tactics.cpp",
           "find": "work[29] = static_cast<std::uint8_t>(amount.value | 104u);",
           "replace": "work[29] = static_cast<std::uint8_t>(amount.value | 105u);",
-          "expect": "survives",
-          "note": "ORA #104 on the roll TN7 just made. Only reachable through ta-250's branch."
+          "expect": "caught",
+          "note": "ORA #104 on the roll TN7 just made, reachable only through ta-250's branch -- and for a year one value reached it, 125, whose bottom bit is set. Closed by a seed that lands 252 at TN7 and then an EVEN operand (plan section 6.153)."
         },
         {
           "id": "ta-230",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (flee.value >= 230u)",
           "replace": "if (flee.value >= 229u)",
-          "expect": "survives",
-          "note": "How often a badly damaged ship with a pod actually runs."
+          "expect": "caught",
+          "note": "Losing your nerve. Closed by a seed that reads 229 there."
         },
         {
           "id": "ta-half",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 1u) >= work[35])",
-          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work[35])",
-          "expect": "survives",
-          "note": "TA7's LSR A -- energy above HALF the blueprint maximum and the ship fights on."
+          "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work[35];",
+          "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < work[35];",
+          "expect": "caught",
+          "note": "TA7's first LSR A -- and its BCC goes to CAPITAL TA3, part SIX, so a ship above half energy skips the missile launch. THIS ONE WAS A DEFECT: the port ran both energy branches into part five. Closed by the fix plus three cases WITH missiles straddling the threshold (plan section 6.153)."
         },
         {
           "id": "ta7-three",
@@ -141,47 +141,47 @@
           "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work[35])",
           "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work[35])",
           "expect": "caught",
-          "note": "The second energy test, below which a ship may run, nested inside ta-half's. CAUGHT on the first run, by TheAiMatchesTACTICS, while the plan names `ta7-three` among fifteen survivors. Since the original mutant is gone, this says one of two things and does not say which: the reconstruction is not the edit that was made, or that item of debt does not exist. What it does settle is that THIS perturbation of the shift is distinguished, and it stays here as a caught mutant rather than being deleted, because a mutant that is caught is still evidence."
+          "note": "TA7's second and third LSR A -- an EIGHTH of the maximum, not a quarter."
         },
         {
           "id": "ta3-ecm",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && screen.status.ecmCountdown == 0u)",
           "replace": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles)",
-          "expect": "survives",
-          "note": "LDA ECMA / BNE TA3 -- a running ECM stops the launch and the missile is not spent."
+          "expect": "caught",
+          "note": "ta3's LDA ECMA / BNE TA3 stops a launch. ECMA was zero in every case that reached it; closed by a pirate with missiles and an ECM running."
         },
         {
           "id": "ta20-eor",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      NegateVector(screen.draw); // 6502: .TA20 JSR TAS6\n      SteerTowards(_loop, static_cast<std::uint8_t>(math.cnt ^ 0x80u));",
-          "replace": "      NegateVector(screen.draw); // 6502: .TA20 JSR TAS6\n      SteerTowards(_loop, math.cnt);",
-          "expect": "survives",
-          "note": "TA20's EOR #%10000000 on the MISSILE path in part 4. The identical two lines appear again on the `reverse` path below, so the mutant carries the NegateVector call above it to be unique -- and that is the second thing this pins: which of the two TA20 entrances is being measured."
+          "find": "      SteerTowards(_loop, static_cast<std::uint8_t>(nose.high ^ 0x80u));",
+          "replace": "      SteerTowards(_loop, nose.high);",
+          "expect": "caught",
+          "note": "TA20's EOR #%10000000, in SteerMissileTowardsTarget. A second, unreachable copy of TA20 stood in part 4 and was deleted (plan section 6.152)."
         },
         {
           "id": "msl-16",
           "file": "GameLogic/Tactics.cpp",
           "find": "if (roll.value < 16u)",
           "replace": "if (roll.value < 17u)",
-          "expect": "survives",
-          "note": "TA64's CMP #16 -- one frame in sixteen a missile checks its target's ECM."
+          "expect": "caught",
+          "note": "TA64's CMP #16. Landing on 16 was not enough: the branch it guards reads bit 0 of the TARGET's INWK+32 and every missile in the sweep chased a slot whose byte 32 is even. Closed by a missile chasing slot 0 (plan section 6.153)."
         },
         {
           "id": "msl-82",
           "file": "GameLogic/Tactics.cpp",
           "find": "destroyed = (work[32] == 0x82u);",
           "replace": "destroyed = (work[32] == 0x83u);",
-          "expect": "survives",
-          "note": "A missile that reaches slot 1 -- the station -- dies rather than exploding."
+          "expect": "caught",
+          "note": "The station a missile dies against. Closed by cases that put the target at the missile's own position, which is the only way part 1's tail runs at all."
         },
         {
           "id": "msl-bit5",
           "file": "GameLogic/Tactics.cpp",
           "find": "if ((victim[31] & 0x20u) == 0u)",
           "replace": "if ((victim[31] & 0x10u) == 0u)",
-          "expect": "survives",
-          "note": "BIT M32+1 read as data: bit 5 is 'already exploding', so this is 'do not blow up a wreck'."
+          "expect": "caught",
+          "note": "BIT M32+1 reads bit 5 out of the middle of an instruction. Closed by a victim marked in bit 4 and not bit 5, which is the only state that tells the two apart."
         },
         {
           "id": "msl-kill",
@@ -189,23 +189,24 @@
           "find": "        return TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], MISSILE_DAMAGE, false);",
           "replace": "        return TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], COLLISION_DAMAGE, false);",
           "expect": "caught",
-          "note": "LDA #250 / JMP OOPS -- what a missile that has arrived costs, against the 80 a near miss costs. CAUGHT on the first run, by TheAiMatchesTACTICS, while the plan names `msl-kill` among fifteen survivors; the same caveat as ta7-three applies. 250 against 80 is a large difference in the player's energy banks and the sweep compares all three, so this one being caught is unsurprising -- which is itself a hint that the original `msl-kill` mutated something smaller."
+          "note": "250 into OOPS when a missile arrives."
         },
         {
           "id": "kill-rotate",
           "file": "GameLogic/Tactics.cpp",
           "find": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>((work[32] & 0x7Fu) >> 1u));",
           "replace": "      RecordKill(screen, _loop.effects, static_cast<std::uint8_t>(work[32] & 0x7Fu));",
-          "expect": "survives",
-          "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2."
+          "expect": "caught",
+          "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2. Not a coverage gap: TALLY and TALLYL were neither pushed nor compared, so what EXNO2 scores was invisible. Closed by comparing all three bytes (plan section 6.153)."
         }
       ]
     },
-
     {
       "name": "hyperspace",
       "slice": "4c-b",
-      "filter": ["TheJump"],
+      "filter": [
+        "TheJump"
+      ],
       "tests": 6,
       "note": [
         "The jump, witchspace and the galactic hyperdrive (plan section 6.136). Seeded with three",
@@ -232,16 +233,16 @@
           "file": "GameLogic/Hyperspace.cpp",
           "find": "if (roll.value >= WITCHSPACE_ROLL)",
           "replace": "if (roll.value > WITCHSPACE_ROLL)",
-          "expect": "survives",
-          "note": "CMP #253 / BCS MJP -- three jumps in 256 mis-jump, and `>=` to `>` makes it two. SURVIVED on this tool's first run, and it is a real gap rather than an equivalent. TheJumpMatchesTT18 sweeps four generator seeds by three fuels by three distances by four views, and its own comment says the seeds were chosen so that BOTH SIDES of the CMP are reached -- which they are. Reaching both sides is not landing ON the boundary, and 253 exactly is never rolled, so the one value that tells `>=` from `>` is the one value never tried. Section 6.132 in a new instance: the counter wanted is distinct answers per BRANCH, and here it is distinct values at the branch. Closing it is a seed that rolls 253."
+          "expect": "caught",
+          "note": "CMP #253 / BCS MJP -- three jumps in 256 mis-jump, and `>=` to `>` makes it two. Survived every run until 2026-09-06 because the four seeds rolled 0, 104, 206 and 252, and 252 is one BELOW the boundary: the only value that separates the two operators is 253 itself. The roll is the first DORND from the seed, so the fifth seed was inverted rather than searched (plan section 6.156)."
         },
         {
           "id": "hyp-ctrl-and",
           "file": "GameLogic/Hyperspace.cpp",
           "find": "if (_controlHeld && _patg)",
           "replace": "if (_controlHeld || _patg)",
-          "expect": "survives",
-          "note": "JSR CTRL / AND PATG / BMI ptg -- the cheat needs BOTH the key and the option, and `&&` to `||` is not caught. Nothing in TheJump varies the two flags: TheCheatFlagMatchesPtg tests `ptg` ALONE, over all 256 values of COK, and never enters PerformJump. The `&&` was also unreachable in the app until 2026-09-05, because JumpOf hardcoded controlHeld to false (section 6.147) -- so the fix that made the galactic hyperdrive reachable also made this gap matter, and the tool found it the same day. Closing it is four cases in PerformJump over the two flags."
+          "expect": "caught",
+          "note": "JSR CTRL / AND PATG / BMI ptg -- the cheat needs BOTH the key and the option. Survived because the sweep passed false for both and `&&` and `||` agree there. The test's own comment said the oracle could not answer `CTRL`; `CTRL` is `LDX #6` falling into `DKS4`, which on the C64 is `LDA KEYLOOK,X / TAX / RTS` over ordinary memory. All four combinations are a dimension of the sweep now (plan section 6.156)."
         },
         {
           "id": "hyp-fuel-zero",
@@ -250,6 +251,460 @@
           "replace": "screen.commander.At(Field::Fuel) = fuel.carry ? fuel.value : std::uint8_t{0u};",
           "expect": "equivalent",
           "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made."
+        }
+      ]
+    },
+    {
+      "name": "trumbles",
+      "slice": "4d-a",
+      "filter": [
+        "TheTrumbles"
+      ],
+      "tests": 8,
+      "note": [
+        "MVTRIBS and the six Trumble sprites (plan section 6.148). Ten mutants, written with the",
+        "slice rather than reconstructed from a name, so this unit is a measurement from its first",
+        "run rather than a test of a reconstruction.",
+        "",
+        "The two that matter most are `tr-carry2` and `tr-carry1`. The routine takes two random",
+        "numbers with DIFFERENT carries -- the first clear because an `ASL A` on a value below eight",
+        "cannot carry, the second set because `CMP #235` set it on the way past -- and the generator",
+        "reads C. Neither shows on screen; both move the whole sequence.",
+        "",
+        "FIRST RUN, 2026-09-05, on the portable leg with a green 355-test baseline: 11 mutants, 9",
+        "caught and 2 survived. Both survivors were answered rather than recorded as debt.",
+        "",
+        "`tr-leftsign` was a GAP and is closed: restricted to the 0 and 1 that MVTRIBS writes back,",
+        "the high byte of the x calculation can only come out as 0, 1, 2 or &FF, and &FF has every",
+        "bit set -- so bit 6 answers exactly as bit 7 does. Nothing in the library initialises",
+        "TRIBXH, TRIBVX or TRIBVXH, so the first pass after a Trumble appears reads uninitialised",
+        "RAM, and `TheSignTestReadsBitSeven` is that pass: all 256 starting values, which is where",
+        "the two bits disagree.",
+        "",
+        "`tr-msb-or` is a PROVABLE EQUIVALENT and is recorded as one. See its note.",
+        "",
+        "REWRITTEN 2026-09-05 when main's sprite work landed. `SPMASK` is no longer ported --",
+        "`VideoState` gives each sprite a whole sixteen-bit x, so the pair of masks that clear and",
+        "set one sprite's bit in a shared register have nothing to mask -- and `tr-spritebit` and",
+        "`tr-msb-or` went with it. `tr-sprite-index` and `tr-ninth-bit` cover the store that",
+        "replaced them."
+      ],
+      "mutants": [
+        {
+          "id": "tr-selftest",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "    _video.y[sprite] = AddWithCarry(_video.y[sprite], _sprites.velocityX[at + 1u], false).value;",
+          "replace": "    _video.y[sprite] = AddWithCarry(_video.y[sprite], 0u, false).value;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Dropping the y velocity leaves every Trumble on the row it started on, and TheYWrapMatchesMVTRIBS compares 768 rows against the shipped routine. Its job is to prove this run OBSERVES a catch; a run in which it survives is a run whose every other answer is worthless (Risk R13, plan section 6.119). Keep it first and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "tr-carry2",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "const RngResult driftRoll = _rng.Next(true);",
+          "replace": "const RngResult driftRoll = _rng.Next(false);",
+          "expect": "caught",
+          "note": "The SECOND DORND's carry, which `CMP #235` set on the way past. Wrong here and the y velocity is drawn from a different entry of TRIBDIR about half the time AND the generator ends one state adrift, so the next frame's roll is wrong too. Nothing on screen would say so; TheDirectionChoiceMatchesMVTRIBS compares RAND."
+        },
+        {
+          "id": "tr-carry1",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "const RngResult turnRoll = _rng.Next(false);",
+          "replace": "const RngResult turnRoll = _rng.Next(true);",
+          "expect": "caught",
+          "note": "The FIRST DORND's carry, which is the `ASL A` two instructions above -- clear, because A is at most 7. The mirror image of tr-carry2 and it fails on the same comparison."
+        },
+        {
+          "id": "tr-turn",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "if (turn >= _sprites.count)",
+          "replace": "if (turn > _sprites.count)",
+          "expect": "caught",
+          "note": "`CMP TRIBCT / BCC` -- the pass on which the counter EQUALS the count must not move anything. Off by one and a hold with three Trumbles moves a fourth sprite that is not showing."
+        },
+        {
+          "id": "tr-mask",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "TRUMBLE_TURN_MASK",
+          "replace": "TRUMBLE_TURN_MASK - 1u",
+          "expect": "caught",
+          "note": "`AND #7` -- with three left it counts to three instead of seven, so a Trumble moves every fourth frame rather than every eighth and the sixth one never moves at all."
+        },
+        {
+          "id": "tr-235",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "if (turnRoll.value >= TRUMBLE_TURN_ROLL)",
+          "replace": "if (turnRoll.value > TRUMBLE_TURN_ROLL)",
+          "expect": "caught",
+          "note": "`CMP #235 / BCC MVTR1` -- the boundary itself. Told apart only by a seed that rolls exactly 235, and the direction sweep tries 256 seeds against six sprites."
+        },
+        {
+          "id": "tr-rightedge",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "coordinateLow >= TRUMBLE_RIGHT_EDGE_LIMIT",
+          "replace": "coordinateLow > TRUMBLE_RIGHT_EDGE_LIMIT",
+          "expect": "caught",
+          "note": "`CMP #&50 / BCC oktrib` -- &150 exactly is off the right edge and &14F is not. The x sweep walks all 256 low bytes, so the boundary is in it by construction."
+        },
+        {
+          "id": "tr-leftsign",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "if ((high & 0x80u) != 0u)",
+          "replace": "if ((high & 0x40u) != 0u)",
+          "expect": "caught",
+          "note": "`BPL nominus` reads bit 7 and nothing else. SURVIVED on the first run, because within the 0 and 1 that MVTRIBS writes back to TRIBXH the high byte can only be 0, 1, 2 or &FF and &FF has bit 6 set as well. Closed by `TheSignTestReadsBitSeven`, which sweeps all 256 starting values of TRIBXH -- not an invented state, because nothing in the game initialises that byte and the first pass reads whatever the loader left."
+        },
+        {
+          "id": "tr-leftlow",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "coordinateLow = TRUMBLE_RIGHT_EDGE_LOW;",
+          "replace": "coordinateLow = TRUMBLE_RIGHT_EDGE_LIMIT;",
+          "expect": "caught",
+          "note": "`LDA #&48 / STA T` -- where a Trumble that walked off the left edge reappears. &48 rather than &50 is not arbitrary: at &150 the very next test would decide it had gone off the RIGHT edge and send it to zero, so this mutation makes the sprite teleport to the left edge instead of the right one."
+        },
+        {
+          "id": "tr-sprite-index",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "    const std::size_t sprite = static_cast<std::size_t>(turn) + FIRST_TRUMBLE_SPRITE;",
+          "replace": "    const std::size_t sprite = static_cast<std::size_t>(turn);",
+          "expect": "caught",
+          "note": "The Trumbles are VIC-II sprites 2 to 7, not 0 to 5 -- sprites 0 and 1 are the laser sights and the explosion. Dropping the offset moves the wrong two sprites and leaves the top two Trumbles still, which the whole-register comparison sees on the first case."
+        },
+        {
+          "id": "tr-ninth-bit",
+          "file": "GameLogic/Trumbles.cpp",
+          "find": "    _video.x[sprite] = static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | coordinateLow);",
+          "replace": "    _video.x[sprite] = static_cast<std::uint16_t>(coordinateLow);",
+          "expect": "caught",
+          "note": "The ninth x bit, dropped on the way into the register. This is the store that REPLACED `ORA SPMASK+1,Y / STA VIC+&10`: `VideoState` holds a whole sixteen-bit x, so the read-modify-write of a shared byte became one write, and this is the mutant that proves the second half of it is still there. A sprite past column 255 would sit on the left of the screen instead."
+        }
+      ]
+    },
+    {
+      "name": "missions",
+      "slice": "4d-b",
+      "filter": [
+        "TheMissionText",
+        "TheMissions"
+      ],
+      "tests": 9,
+      "note": [
+        "The four control codes a mission briefing is made of (plan section 6.149).",
+        "",
+        "TWO OF THESE ARE ABOUT A FALL-THROUGH. `PAUSE` ends `JSR LL9` and the next instruction is",
+        "MT23's `LDA #10`, so a briefing's `{22}` moves the cursor to row 10 and forces lower case as",
+        "surely as a `{23}` does. The port splits that across two objects -- the row is the seam's and",
+        "the two case flags are the text system's -- and the mutants below take one half away each.",
+        "",
+        "FIRST RUN, 2026-09-05: 12 mutants, 9 caught, 3 survived, and all three were real gaps in the",
+        "sweep rather than debt. `mi-release` needed a keyboard that starts with a key DOWN;",
+        "`mi-mt9-view` needed a token that is not 216; `mi-pause2-loop` needed a scan count that does",
+        "not wrap -- and the mutant itself was replaced, because `if (x) continue;` at the top of a",
+        "`for(;;)` and `while (x) {}` are the same loop, so the first version could not have failed.",
+        "",
+        "SECOND RUN, 2026-09-05, with 4d-c's thirteen added: 25 mutants, 22 caught, 3 survived, and all",
+        "three are recorded equivalents. `mi-mt9-view` became one: it was written as a defect and the",
+        "run proved the defect had no effect, because `TT66` writes the same `XC` twice on its own."
+      ],
+      "mutants": [
+        {
+          "id": "mi-selftest",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    screen.work[7] = BRIEFING_SHIP_DISTANCE;",
+          "replace": "    screen.work[7] = 0u;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Putting the briefing ship at z_hi = 0 rather than 2 draws it at a two-hundredth of the distance, which the whole-canvas comparison in TheBriefingShipMatchesPAS1 cannot miss. Keep it first and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "mi-distance",
+          "file": "GameLogic/Missions.h",
+          "find": "  inline constexpr std::uint8_t BRIEFING_SHIP_DISTANCE = 2;",
+          "replace": "  inline constexpr std::uint8_t BRIEFING_SHIP_DISTANCE = 1;",
+          "expect": "caught",
+          "note": "The byte the upstream comment gets wrong. `PAS1` on this build is `LDA #2 / STA INWK+7`; the Master and Apple versions load 1 and the comment was written for those. A port that trusted the comment would put the Constrictor at half the distance and twice the size, and this is the mutant that says so."
+        },
+        {
+          "id": "mi-height",
+          "file": "GameLogic/Missions.h",
+          "find": "  inline constexpr std::uint8_t BRIEFING_SHIP_HEIGHT = 80;",
+          "replace": "  inline constexpr std::uint8_t BRIEFING_SHIP_HEIGHT = 79;",
+          "expect": "caught",
+          "note": "`conhieght`, which the source calls the size of a gap and which is really the ship's y coordinate. One row out is a whole-canvas difference."
+        },
+        {
+          "id": "mi-release",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    while (ShowBriefingShip(_mission).key != 0u)\n    {\n    }\n",
+          "replace": "",
+          "expect": "caught",
+          "note": "The FIRST of PAUSE's two loops, dropped. `JSR PAS1 / BNE PAUSE` waits for the player to LET GO of the key that turned the previous page; without it one keystroke dismisses every remaining page of a briefing in a single frame. SURVIVED the first run, because the sweep always started with an empty keyboard and the loop is invisible from there -- closed by giving the script a `held` run, which is the state the loop exists for."
+        },
+        {
+          "id": "mi-erase",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    screen.work[31] = 0u;",
+          "replace": "    screen.work[31] = 0xFFu;",
+          "expect": "caught",
+          "note": "`LDA #0 / STA INWK+31` -- the ship stops being drawn, so the `LL9` after the screen change has nothing to rub out. Leaving the flags set makes that `LL9` erase lines the cleared screen no longer has."
+        },
+        {
+          "id": "mi-mt23-row",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    screen.text.row = MT23_ROW;",
+          "replace": "    screen.text.row = MT29_ROW;",
+          "expect": "caught",
+          "note": "The row PAUSE's fall-through moves to. MT23 loads 10 and MT29 loads 6, and the `EQUB &2C` between them is what makes the two one routine -- so this is the mutant that proves the port fell through into the right entry point."
+        },
+        {
+          "id": "mi-pause2-loop",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      if (_mission.effects.ScanTitleKeys(_mission.keys).key != 0u)\n      {\n        return; // 6502: .newyearseve RTS\n      }\n    }\n  }",
+          "replace": "      while (_mission.effects.ScanTitleKeys(_mission.keys).key == 0u)\n      {\n      }\n      return; // 6502: .newyearseve RTS\n    }\n  }",
+          "expect": "caught",
+          "note": "PAUSE2's `BEQ PAUSE2` goes back to the TOP of the routine and not to the scan above it, so an empty second scan re-checks for a release the routine has already had. The mutant turns that into a do-while, which is the reading everybody has first. It shows only when the keyboard goes empty, empty, PRESSED: the real routine treats that third scan as 'still held' and goes round again, and the do-while takes it as the answer. Two scans apart, and nothing is drawn, so the scan count is the only instrument -- which is why the script counts calls in a byte that cannot wrap. The first version of this mutant was `continue` against an inner `while`, and those two ARE the same loop."
+        },
+        {
+          "id": "mi-captain",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    PrintMissionToken(m_mission.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN, m_galaxy);",
+          "replace": "    PrintMissionToken(m_mission.tokens, (_code == 27) ? MISSION_PLANET_TOKEN : MISSION_CAPTAIN_TOKEN, m_galaxy);",
+          "expect": "caught",
+          "note": "MT27 and MT28 swapped. The two ranges are three apart and OVERLAP, so galaxy 3's captain is galaxy 0's planet -- which means a swap is invisible for exactly one pair of inputs and visible for the rest. The sweep covers all eight galaxies of both."
+        },
+        {
+          "id": "mi-galaxy",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _tokens.Print(AddWithCarry(_base, _galaxy, false).value);",
+          "replace": "    _tokens.Print(_base);",
+          "expect": "caught",
+          "note": "`CLC / ADC GCNT` dropped, so every galaxy gets galaxy zero's captain. This is what the fixture itself did for an afternoon, by poking `GCNT` before `Mirror` overwrote it with the commander block -- `GCNT` is `TP+15`."
+        },
+        {
+          "id": "mi-brief-token",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _mission.tokens.Print(INCOMING_MESSAGE_TOKEN);",
+          "replace": "    _mission.tokens.Print(215u);",
+          "expect": "caught",
+          "note": "The token `BRIS` prints. 216 is INCOMING MESSAGE and 215 is a carriage return, so this is the mutant for a briefing that opens on a blank screen."
+        },
+        {
+          "id": "mi-brief-frames",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _mission.effects.WaitFrames(INCOMING_MESSAGE_FRAMES);",
+          "replace": "    _mission.effects.WaitFrames(50u);",
+          "expect": "caught",
+          "note": "`LDY #100 / JMP DELAY` -- two seconds on PAL. Compared as a number rather than as elapsed time, because neither side has a raster."
+        },
+        {
+          "id": "mi-mt9-view",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      m_text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
+          "replace": "      SetUpScreen(m_mission.loop.screen, MT9_COLUMN_AND_VIEW);",
+          "expect": "equivalent",
+          "note": "MT9's column store, DROPPED -- and it makes no difference, which is not what this mutant was written to show. `LDA #1 / JSR DOXC / JMP TT66` is one load serving as a column and a view, and the port had only the view; adding the store is faithful and is what the routine does. But `TT66` sets `XC` to 1 ITSELF, twice -- once near the top and again at `.tt66 LDX #1 / STX XC / STX YC` -- and nothing between `DOXC` and `TT66` reads the byte, because `JMP TT66` is the next instruction. So the `DOXC` is DEAD, and the port was accidentally right for two slices. Recorded as an equivalent, with the store kept: it is the FIFTH piece of dead code found in the original, after `cntr`'s `REDU`, `.OLDBOX`'s cursor store, `MAS2`'s second entry and `TITLE`'s `LDA MCNT / AND #3`. It must never come back caught -- if it does, something has stopped writing `XC` in `TT66`."
+        },
+        {
+          "id": "mi-tp-set",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);\n\n    ShowIncomingMessage(_mission); // 6502: JSR BRIS",
+          "replace": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);\n\n    ShowIncomingMessage(_mission); // 6502: JSR BRIS",
+          "expect": "caught",
+          "note": "`LSR TP / SEC / ROL TP` sets bit 0; clearing it instead means the Constrictor is offered for ever. The sweep starts from sixteen values of TP so the flag is compared from states where it was already set as well as from states where it was not."
+        },
+        {
+          "id": "mi-brief3-and",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    progress = static_cast<std::uint8_t>((progress & MISSION_2_KEEP) | MISSION_2_PLANS);",
+          "replace": "    progress = static_cast<std::uint8_t>(progress | MISSION_2_PLANS);",
+          "expect": "caught",
+          "note": "`BRIEF3`'s `AND #%11110000`, dropped. Picking the plans up also FORGETS mission 1 -- both its bits go -- and a port that only ORed would agree from every starting state whose low nibble was already zero, which is why the sweep walks sixteen of them."
+        },
+        {
+          "id": "mi-debrief-shift",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);",
+          "replace": "    progress = static_cast<std::uint8_t>(progress & ~0x03u);",
+          "expect": "caught",
+          "note": "`LSR TP / ASL TP` clears bit 0 and LEAVES BIT 1, which is what takes the pair from `%11` to `%10` -- finished and paid, and never offered again. Clearing both would leave it at `%00`, which reads as never started."
+        },
+        {
+          "id": "mi-reward",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    ReceiveCash(_bay.commander, MISSION_REWARD);",
+          "replace": "    ReceiveCash(_bay.commander, 5000u);",
+          "expect": "caught",
+          "note": "5,000 CREDITS IS 50,000 TENTHS. The cash is held in tenths of a credit throughout, so a reward written in credits pays a tenth of what the game pays -- and the whole commander block is compared, so it is the four cash bytes that say so."
+        },
+        {
+          "id": "mi-engy",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _bay.commander.At(Field::EnergyUnit) = NAVY_ENERGY_UNIT;",
+          "replace": "    _bay.commander.At(Field::EnergyUnit) = 1u;",
+          "expect": "caught",
+          "note": "`LDA #2 / STA ENGY` -- the navy's energy unit, which the flight loop reads as three units a pass where the shop's one gives two. A 1 is the shop's."
+        },
+        {
+          "id": "mi-tally",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    _bay.commander.bytes[tally + 1u] = static_cast<std::uint8_t>(_bay.commander.bytes[tally + 1u] + 1u);",
+          "replace": "    _bay.commander.bytes[tally] = static_cast<std::uint8_t>(_bay.commander.bytes[tally] + 1u);",
+          "expect": "caught",
+          "note": "`INC TALLY+1` -- the HIGH byte, so the reward is 256 kills and a whole combat rank rather than one kill. This pair is low byte first, unlike the cash above it, which is exactly the trap."
+        },
+        {
+          "id": "mi-trumble-flag",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);\n\n    _mission.tokens.Print(TRUMBLE_OFFER);",
+          "replace": "    _mission.tokens.Print(TRUMBLE_OFFER);\n    progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);",
+          "expect": "equivalent",
+          "note": "Bit 4 set AFTER the question rather than before it. In the game the order matters -- `BCC BAYSTEP` leaves before the `INC` -- but the flag is set above the `DETOK` and nothing between the two reads it, so moving it past a print that cannot fail is the same program. Recorded as an equivalent so a run exercises that path, and it must never come back caught."
+        },
+        {
+          "id": "mi-trumble-inc",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    trumbles = static_cast<std::uint8_t>(trumbles + 1u);",
+          "replace": "    trumbles = static_cast<std::uint8_t>(trumbles + 2u);",
+          "expect": "caught",
+          "note": "`INC TRIBBLE` -- the player leaves with ONE Trumble and `MLOOP`'s breeding does the rest. Two would double every population the game ever reaches."
+        },
+        {
+          "id": "mi-spin-frames",
+          "file": "GameLogic/Missions.h",
+          "find": "  inline constexpr std::uint8_t BRIEFING_SPIN_FRAMES = 64;",
+          "replace": "  inline constexpr std::uint8_t BRIEFING_SPIN_FRAMES = 63;",
+          "expect": "caught",
+          "note": "`LDA #64 / STA MCNT` -- how long the Constrictor turns before it starts to move away. One frame out is a different screen and a different `MCNT` at the end, and both are compared."
+        },
+        {
+          "id": "mi-second-inc",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      screen.work[6] = static_cast<std::uint8_t>(screen.work[6] + 1u);\n      if (screen.work[6] == 0u)\n      {\n        break;\n      }\n\n      // 6502: LDX INWK+3",
+          "replace": "      // 6502: LDX INWK+3",
+          "expect": "caught",
+          "note": "The SECOND `INC INWK+6 / BEQ BR2` of the pair. The ship recedes two units a frame and the loop can end on either half, so dropping one halves the speed and changes which frame the briefing appears on."
+        },
+        {
+          "id": "mi-height-clamp",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      if (height >= BRIEFING_SHIP_HEIGHT)\n      {\n        height = BRIEFING_SHIP_HEIGHT;\n      }",
+          "replace": "      if (height > BRIEFING_SHIP_HEIGHT)\n      {\n        height = BRIEFING_SHIP_HEIGHT;\n      }",
+          "expect": "equivalent",
+          "note": "`CPX #conhieght / BCC P%+4 / LDX #conhieght` clamps at the value rather than above it, and `>=` against `>` is the same clamp: the only value they treat differently is `conhieght` itself, which both leave at `conhieght`. An equivalent by construction, kept so the run exercises one."
+        },
+        {
+          "id": "mi-dead-counter",
+          "file": "GameLogic/Missions.cpp",
+          "find": "      screen.flight.mainLoopCounter = static_cast<std::uint8_t>(screen.flight.mainLoopCounter - 1u);\n    }\n\n    // 6502: .BR2 INC INWK+7",
+          "replace": "    }\n\n    // 6502: .BR2 INC INWK+7",
+          "expect": "caught",
+          "note": "`DEC MCNT` in the SECOND loop, which nothing branches on. The counter is live in the first loop and dead in the second, and dropping it there is invisible on screen -- so `MCNT` is compared as state, which is the only place it shows."
+        },
+        {
+          "id": "mi-inwk7",
+          "file": "GameLogic/Missions.cpp",
+          "find": "    screen.work[7] = static_cast<std::uint8_t>(screen.work[7] + 1u);",
+          "replace": "",
+          "expect": "caught",
+          "note": "`.BR2 INC INWK+7` -- the high byte following the low one past 255. Without it the ship is 256 units nearer than the briefing text was written for, and `INWK` is compared byte for byte."
+        }
+      ]
+    },
+    {
+      "name": "raster",
+      "slice": "4f",
+      "filter": [
+        "TheRasterInterrupt"
+      ],
+      "tests": 7,
+      "note": [
+        "COMIRQ1's VIC-II half (plan section 6.155). Written with the slice, so this unit is a",
+        "measurement from its first run rather than a test of a reconstruction.",
+        "",
+        "FOUR of the handler's six registers reach the screen and they are two effects. `moonflower`",
+        "and `welcome` are the energy bomb; `santana` and `lotus` are how the explosion sprite is kept",
+        "out of the dashboard, which is a colour change rather than a clip. The other two -- `shango`",
+        "and the memory pointers -- are programmed correctly and consumed by nothing, so only the",
+        "oracle's write-ORDER comparison can tell a right value from a wrong one there. That is why",
+        "the comparison is a sequence and not a final state.",
+        "",
+        "`ra-blit-per-sprite` is the one mutant outside `Raster.cpp`, and it is here rather than in a",
+        "canvas unit because what it breaks is this routine's output being read per screen row."
+      ],
+      "mutants": [
+        {
+          "id": "ra-selftest",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.nextRasterLine = RASTER_NEXT_LINE_TABLE[index];",
+          "replace": "    out.nextRasterLine = 0u;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Zeroing the raster line the next interrupt fires on is a register the comparison reads on every one of 256 passes, so a run in which this survives is a run whose every other answer is worthless (Risk R13, plan section 6.119). Keep it first and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "ra-bomb-bit",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    if ((_bomb & BOMB_RUNNING) != 0u)",
+          "replace": "    if ((_bomb & 0x40u) != 0u)",
+          "expect": "caught",
+          "note": "BIT BOMB / BPL reads bit 7 and nothing else. The sweep runs the bomb byte at 0, &80, &7F and &FF, and &7F is the one that tells this bit from any other: every bit but the top one set, and the flash must not start."
+        },
+        {
+          "id": "ra-flash-half",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.background = spaceView ? _screen.backgroundFlash : RASTER_BACKGROUND_DASHBOARD;",
+          "replace": "    out.background = RASTER_BACKGROUND_DASHBOARD;",
+          "expect": "caught",
+          "note": "welcome,X, and which half reads which byte. Taking the fixed one for both halves means the space view never flashes -- the bomb's whole visible effect below the mode change -- and the oracle's VIC+&21 write says so on the pass the port got wrong."
+        },
+        {
+          "id": "ra-incr-once",
+          "file": "GameLogic/Raster.cpp",
+          "find": "      _screen.backgroundFlash = static_cast<std::uint8_t>(_screen.backgroundFlash + 1u);",
+          "replace": "      _screen.backgroundFlash = static_cast<std::uint8_t>(_screen.backgroundFlash + (spaceView ? 1u : 0u));",
+          "expect": "caught",
+          "note": "INC welcome sits ABOVE the split test, so both passes reach it and the colour moves twice a frame. This mutant is the plausible mistake -- incrementing only on the pass that shows it -- and it halves the flash rate. Caught on the dashboard pass, where the oracle's welcome has moved and the port's has not."
+        },
+        {
+          "id": "ra-alternate",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    _screen.rasterCounter = RASTER_NEXT_COUNTER_TABLE[index];",
+          "replace": "    _screen.rasterCounter = static_cast<std::uint8_t>(index);",
+          "expect": "caught",
+          "note": "innersec is what makes the split alternate: a handler that left RASTCT where it found it would program one half of the screen for ever. TheSplitAlternates is the assertion, and the oracle comparison reads RASTCT back on every pass as well."
+        },
+        {
+          "id": "ra-upper-bank",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.memoryPointers = spaceView ? RASTER_MEMORY_SPACE_VIEW : _screen.colourBank;",
+          "replace": "    out.memoryPointers = _screen.colourBank;",
+          "expect": "caught",
+          "note": "zebop is a CONSTANT and abraxas is state, which is the whole reason that pair is not a table. Reading the variable for both halves would colour the space view from the dashboard's block whenever the dashboard is up -- invisible in the port today, because Resolve takes the upper half's block as fixed, and caught only by the oracle's VIC+&18 write."
+        },
+        {
+          "id": "ra-explosion-colour",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.explosionColour = RASTER_SPRITE_COLOUR_TABLE[index];",
+          "replace": "    out.explosionColour = RASTER_SPRITE_COLOUR_TABLE[1u - index];",
+          "expect": "caught",
+          "note": "lotus read the wrong way round: VIC+&28 is SPRITE 1's colour, so this swaps the explosion's red into the dashboard half and its invisibility into the space view. Caught by the oracle's write order AND by the two compositing tests, which is the point -- until slice 4f this register reached nothing and only the first would have."
+        },
+        {
+          "id": "ra-sprite-mask",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.spriteMulticolour = RASTER_SPRITE_MULTICOLOUR_TABLE[index];",
+          "replace": "    out.spriteMulticolour = RASTER_SPRITE_MULTICOLOUR_TABLE[0];",
+          "expect": "caught",
+          "note": "santana, which differs between the halves in exactly one bit -- sprite 1's. Taking the space view's mask for both halves leaves the explosion multicolour over the dashboard, which is the defect the port had before 4f read the register at all."
+        },
+        {
+          "id": "ra-blit-per-sprite",
+          "file": "GameLogic/Canvas.cpp",
+          "find": "          const std::size_t half = (y >= Canvas::SPACE_VIEW_HEIGHT) ? 1u : 0u;",
+          "replace": "          const std::size_t half = 0u;",
+          "expect": "caught",
+          "note": "Deciding a sprite's mode once instead of per screen row. The VIC-II decides it as it scans, which is why a burst that straddles the split is drawn on one side only; pinning the half to the space view's draws the whole thing over the dashboard."
         }
       ]
     }

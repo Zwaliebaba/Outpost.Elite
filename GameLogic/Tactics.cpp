@@ -716,15 +716,19 @@ namespace Elite
     /*
      * ---- part 4: is it an Anaconda, is it scared, has it lost its nerve ------------------------
      *
-     * 6502: LDA TYPE / CMP #MSL / BNE P%+5 / JMP TA20 -- a missile that got here (through `TN4`)
-     * skips everything below and goes straight to the steering with its vector REVERSED.
+     * 6502: LDA TYPE / CMP #MSL / BNE P%+5 / JMP TA20, AND THE PORT HAS NO LINE FOR IT.
+     *
+     * In the original a missile reaches part 4 by falling out of `TN4` and `TA19`, and this test
+     * is what sends it to `TA20`. The port does not arrive here that way: every branch of part 1's
+     * missile block returns, and the two that would have fallen through call
+     * `SteerMissileTowardsTarget`, which is `TA19` AND this branch inlined -- see its comment.
+     *
+     * So a copy of `TA20` stood here as well, and it was unreachable. `tools/mutate.py` is what
+     * said so: `ta20-eor` flipped the `EOR #%10000000` in this copy and nothing in a 1,800-case
+     * sweep noticed, because no missile has ever reached this line (plan §6.152). Removed rather
+     * than left, because dead code no mutation can reach is exactly what a surviving mutant is
+     * for finding.
      */
-    if (type == SHIP_TYPE_MISSILE)
-    {
-      NegateVector(screen.draw); // 6502: .TA20 JSR TAS6
-      SteerTowards(_loop, static_cast<std::uint8_t>(math.cnt ^ 0x80u));
-      return true;
-    }
 
     // 6502: CMP #ANA / BNE TN7 / JSR DORND / CMP #200 / BCC TN7 -- an Anaconda spawns its escort.
     bool anacondaFellThrough = false;
@@ -766,13 +770,20 @@ namespace Elite
 
     /*
      * 6502: .TA7 LDY #14 / LDA (XX0),Y / LSR A / CMP INWK+35 / BCC TA3 -- energy above half the
-     * blueprint's maximum and the ship fights on. Below a QUARTER (`LSR` twice) it may run, and
-     * `DORND / CMP #230` is how often.
+     * blueprint's maximum and the ship fights on. Below an EIGHTH (`LSR` twice more) it may run,
+     * and `DORND / CMP #230` is how often.
+     *
+     * AND THE TWO BRANCHES DO NOT GO TO THE SAME PLACE. `BCC TA3` here is the CAPITAL label, which
+     * is part SIX -- so a ship with more than half its energy jumps over part five and never
+     * launches a missile at all. `BCC ta3` below is the lower-case one, which is part five. The
+     * port ran both of them into part five, so a healthy ship could fire; `ta-half` is the
+     * mutation that survived long enough to say so (§6.153).
      */
     const std::uint8_t maximumEnergy = ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + 14u));
     bool fellFromFleeTest = false;
+    const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work[35];
 
-    if (static_cast<std::uint8_t>(maximumEnergy >> 1u) >= work[35])
+    if (!fightsOn)
     {
       if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work[35])
       {
@@ -815,9 +826,11 @@ namespace Elite
      * 6502: .ta3 LDA INWK+31 / AND #%00000111 / BEQ TA3 / STA T / JSR DORND / AND #31 / CMP T /
      * BCS TA3 -- the bottom three bits of the state byte are how many missiles the ship has, and
      * the chance of it firing one is that count out of thirty-two.
+     *
+     * `fightsOn` is `TA7`'s first `BCC TA3` jumping clean over this part -- see the comment there.
      */
     const std::uint8_t missiles = static_cast<std::uint8_t>(work[31] & 7u);
-    if (missiles != 0u)
+    if (!fightsOn && missiles != 0u)
     {
       math.t = missiles;
 
