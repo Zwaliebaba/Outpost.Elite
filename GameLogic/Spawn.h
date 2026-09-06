@@ -61,7 +61,7 @@ namespace Elite
    * back to just a sun.
    */
   void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, Ship& _work, Commander& _commander,
-                SpawnEffects& _effects, std::uint8_t _slot, std::uint16_t& _blueprint) noexcept;
+                SpawnEffects& _effects, std::uint8_t _slot, const Blueprint*& _blueprint) noexcept;
 
   /*
    * 6502: SOS1 -- put the system's planet or sun into the bubble.
@@ -72,7 +72,7 @@ namespace Elite
    * pitch counters, which is what makes a planet rotate.
    */
   [[nodiscard]] NewShip AddPlanetOrSun(Bubble& _bubble, Ship& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
-                                       std::uint16_t& _blueprint) noexcept;
+                                       const Blueprint*& _blueprint) noexcept;
 
   /// 6502: DOD -- the Dodo station's ship type, which is the last blueprint this build carries.
   /// Measured rather than counted: entry 33 of the pointer table is 60973, and `SHIP_DODO` is at
@@ -105,7 +105,7 @@ namespace Elite
    * the station round to face the player it has just let go.
    */
   [[nodiscard]] NewShip AddStation(Bubble& _bubble, Ship& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
-                                   std::uint16_t& _blueprint) noexcept;
+                                   const Blueprint*& _blueprint) noexcept;
 
   /*
    * 6502: SOLAR -- build the system: a sun, a planet, and however many Trumbles have bred.
@@ -172,7 +172,7 @@ namespace Elite
    * that `DELTA` actually holds by then. `TXA / JMP NWSHP` makes the type the caller's X.
    */
   [[nodiscard]] NewShip AddDebris(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed, bool _carryIn,
-                                  std::uint16_t& _blueprint) noexcept;
+                                  const Blueprint*& _blueprint) noexcept;
 
   // ---- slice 4a-b: putting a ship into the bubble from inside the bubble ------------------------
 
@@ -203,7 +203,7 @@ namespace Elite
    * JAMMED" rather than spending the missile.
    */
   [[nodiscard]] NewShip SpawnShipAhead(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint8_t _speed,
-                                       std::uint8_t _missileTarget, std::uint16_t& _blueprint) noexcept;
+                                       std::uint8_t _missileTarget, const Blueprint*& _blueprint) noexcept;
 
   /*
    * 6502: SFS2 -- move a ship along one axis by twice A, sign and all.
@@ -236,10 +236,10 @@ namespace Elite
    */
   [[nodiscard]] NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
                                        ShipType _parentType, std::uint8_t _aiFlag, ShipType _shipType,
-                                       std::uint16_t& _blueprint) noexcept;
+                                       const Blueprint*& _blueprint) noexcept;
 
   /// 6502: SESCP -- `SFS1` with the escape pod's type and the standard AI byte already loaded.
   [[nodiscard]] NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent,
-                                       ShipType _parentType, std::uint16_t& _blueprint) noexcept;
+                                       ShipType _parentType, const Blueprint*& _blueprint) noexcept;
 
 } // namespace Elite

@@ -40,7 +40,7 @@ namespace Elite
      * Thargoid would spin here for ever, which is why `NWSHP`'s answer being ignored by `GTHG`
      * (§6.135) matters: the loop is bounded by the count, not by success.
      */
-    void FillWitchspaceWithThargoids(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint16_t& _blueprint, bool _carryIn) noexcept
+    void FillWitchspaceWithThargoids(Bubble& _bubble, Ship& _work, Rng& _rng, const Blueprint*& _blueprint, bool _carryIn) noexcept
     {
       bool carry = _carryIn;
       do

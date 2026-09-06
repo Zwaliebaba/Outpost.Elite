@@ -128,7 +128,7 @@ namespace Outpost
     [[nodiscard]] bool RunTactics(Elite::Ship& _work) override;
     void DrawPlanetOrSun() override;
     void DrawExplosion() override;
-    void SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint16_t _blueprint) override;
+    void SeedExplosionCloud(Elite::LineHeap& _heap, std::uint16_t _address, std::uint8_t _explosionCount) override;
 
     /*
      * 6502: RDKEY, once, into whichever logger the caller owns.

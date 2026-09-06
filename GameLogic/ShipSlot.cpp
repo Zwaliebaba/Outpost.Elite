@@ -5,10 +5,10 @@
 namespace Elite
 {
 
-  std::uint16_t BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept
+  const Blueprint* BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept
   {
     // 6502: the table is RAM and only the station's entry is ever written into. See `Bubble`.
-    return (_shipType == ShipType::Station) ? _bubble.stationBlueprint : BlueprintAddress(_shipType);
+    return BlueprintOf((_shipType == ShipType::Station) ? _bubble.stationType : _shipType);
   }
 
   Ship* SlotBlock(Bubble& _bubble, std::uint8_t _slot) noexcept
@@ -19,7 +19,7 @@ namespace Elite
     return (_slot < MAX_SHIPS) ? &_bubble.blocks[_slot] : nullptr;
   }
 
-  NewShip AddShip(Bubble& _bubble, Ship& _work, ShipType _shipType, std::uint16_t& _blueprint) noexcept
+  NewShip AddShip(Bubble& _bubble, Ship& _work, ShipType _shipType, const Blueprint*& _blueprint) noexcept
   {
     // 6502: STA T / LDX #0 / .NWL1 LDA FRIN,X / BEQ NW1 / INX / CPX #NOSH / BCC NWL1.
     std::uint8_t slot = 0;
@@ -45,8 +45,8 @@ namespace Elite
        * `XX0+1` alone as well -- the `BEQ` is taken before the `STA`. And the store happens at all,
        * which is what makes `XX0` an output of this routine rather than a local.
        */
-      const std::uint16_t blueprint = BlueprintFor(_bubble, _shipType);
-      if (blueprint == 0u)
+      const Blueprint* blueprint = BlueprintFor(_bubble, _shipType);
+      if (blueprint == nullptr)
       {
         return {}; // 6502: BEQ NW3 -- a type this build does not carry
       }
@@ -55,7 +55,7 @@ namespace Elite
       // 6502: CPY #2*SST / BEQ NW6 -- the space station keeps no line heap of its own.
       if (_shipType != ShipType::Station)
       {
-        const std::uint8_t heapSize = ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
+        const std::uint8_t heapSize = blueprint->heapBytes;
 
         // 6502: LDA SLSP / SEC / SBC T1 / STA INWK+33 / LDA SLSP+1 / SBC #0 / STA INWK+34.
         const std::uint16_t lowDifference = static_cast<std::uint16_t>((_bubble.heapBottom & 0xFFu) + 0x100u - heapSize);
@@ -100,8 +100,8 @@ namespace Elite
       }
 
       // 6502: NW6 -- LDY #14 / LDA (XX0),Y / STA INWK+35, then byte 19 masked to three bits.
-      _work.energy = ShipByte(static_cast<std::uint16_t>(blueprint + 14u));
-      _work.state = MissilesOf(ShipByte(static_cast<std::uint16_t>(blueprint + 19u)));
+      _work.energy = blueprint->maxEnergy;
+      _work.state = MissilesOf(blueprint->weapons);
     }
 
     // 6502: NW2 -- STA FRIN,X / TAX / BMI NW8. The slot takes the type, and X BECOMES the type.
@@ -138,7 +138,7 @@ namespace Elite
      * 128 or 129, well past the thirty-three entries. It lands elsewhere in the ship data region,
      * which is a defined byte rather than a fault, and reproducing it costs nothing.
      */
-    const std::uint8_t defaults = ShipByte(static_cast<std::uint16_t>(SHIP_DEFAULT_FLAGS + Byte(_shipType) - 1u));
+    const std::uint8_t defaults = DefaultNewbFor(_shipType);
     _work.newb = static_cast<std::uint8_t>(Without(defaults, NewbBit::Docking, NewbBit::Remove) | _work.newb);
 
     // 6502: LDY #NI%-1 / .NWL3 LDA INWK,Y / STA (INF),Y / DEY / BPL NWL3 / SEC / RTS.

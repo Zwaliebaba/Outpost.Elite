@@ -2,6 +2,7 @@
 
 #include "Arith.h"
 #include "Canvas.h"
+#include "ShipBlueprint.h"
 #include "ShipSlot.h"
 
 #include <cstdint>
@@ -205,7 +206,7 @@ namespace Elite
      * when it is exploding or dead. It is loop state and not ship state, which is why it sits here
      * beside `TYPE` and `XSAV` rather than being passed down (§6.90).
      */
-    std::uint16_t blueprint = 0;
+    const Blueprint* blueprint = &NO_BLUEPRINT;
 
     /// 6502: RAT and RAT2 -- scratch, but `MVEIT` leaves `RAT2` set and `PLUT` writes both as sign
     /// masks. Two routines, two meanings, the same two bytes; they are never live together because
@@ -241,7 +242,7 @@ namespace Elite
    * port has no single home for it until 3d-d.
    */
   [[nodiscard]] bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _work, MathWorkspace& _math, FlightState& _flight,
-                              ShipEffects& _effects, std::uint16_t _blueprint, std::uint8_t _view) noexcept;
+                              ShipEffects& _effects, const Blueprint& _blueprint, std::uint8_t _view) noexcept;
 
   /*
    * 6502: PLUT and PU1 -- flip a ship's axes for the view the player is looking through.

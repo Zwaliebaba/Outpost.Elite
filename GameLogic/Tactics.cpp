@@ -637,7 +637,7 @@ namespace Elite
     // 6502: .TA17 LDY #14 / LDA INWK+35 / CMP (XX0),Y / BCS TA21 / INC INWK+35 -- energy regrows
     // one unit a turn up to the blueprint's maximum, which is why a damaged ship you leave alone
     // is a whole ship when you come back.
-    if (work.energy < ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + 14u)))
+    if (work.energy < screen.flight.blueprint->maxEnergy)
     {
       ++work.energy;
     }
@@ -784,7 +784,7 @@ namespace Elite
      * port ran both of them into part five, so a healthy ship could fire; `ta-half` is the
      * mutation that survived long enough to say so (§6.153).
      */
-    const std::uint8_t maximumEnergy = ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + 14u));
+    const std::uint8_t maximumEnergy = screen.flight.blueprint->maxEnergy;
     bool fellFromFleeTest = false;
     const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work.energy;
 
@@ -799,7 +799,7 @@ namespace Elite
         {
           // 6502: LDX TYPE / LDA E%-1,X / BPL ta3 -- bit 7 of the default `NEWB` for this type is
           // "carries an escape pod", so only a ship that HAS one bails out.
-          const std::uint8_t defaults = ShipByte(static_cast<std::uint16_t>(SHIP_DEFAULT_FLAGS + Byte(type) - 1u));
+          const std::uint8_t defaults = DefaultNewbFor(type);
           if ((defaults & 0x80u) != 0u)
           {
             /*
@@ -883,7 +883,7 @@ namespace Elite
       {
         // 6502: LDY #19 / LDA (XX0),Y / AND #%11111000 / BEQ TA4 -- the blueprint's laser power,
         // and the bottom three bits are the missile count rather than power.
-        const std::uint8_t laser = static_cast<std::uint8_t>(ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + 19u)) & 0xF8u);
+        const std::uint8_t laser = static_cast<std::uint8_t>(screen.flight.blueprint->weapons & 0xF8u);
         if (laser != 0u)
         {
           // 6502: LDA INWK+31 / ORA #%01000000 / STA INWK+31 -- bit 6 is "firing", which is what
@@ -903,7 +903,7 @@ namespace Elite
              * the arithmetic says (§6.125). Found by a sweep that put the ship BESIDE us rather
              * than in front, which is the only geometry in it that reaches this line.
              */
-            const std::uint8_t power = ShipByte(static_cast<std::uint16_t>(screen.flight.blueprint + 19u));
+            const std::uint8_t power = screen.flight.blueprint->weapons;
             const std::uint8_t damage = static_cast<std::uint8_t>(power >> 1u);
             if (!TakeDamage(screen, _loop.effects, screen.bubble.blocks[_slot], damage, (power & 1u) != 0u))
             {

@@ -585,7 +585,7 @@ namespace GameLogicTests
       }
       void DrawPlanetOrSun() override {}
       void DrawExplosion() override {}
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override {}
+      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override {}
     };
 
     /// Everything a `TACTICS` case has to put into both machines before it can be compared.
@@ -774,7 +774,7 @@ namespace GameLogicTests
       _universe.universe.work = _universe.universe.bubble.blocks[2];
       _universe.universe.flight.type = Elite::TypeOf(_type);
       _universe.universe.flight.slot = 2u;
-      _universe.universe.flight.blueprint = Elite::BlueprintAddress(_type == 0u ? Elite::ShipType::CobraMk3 : Elite::TypeOf(_type));
+      _universe.universe.flight.blueprint = Elite::BlueprintOf(_type == 0u ? Elite::ShipType::CobraMk3 : Elite::TypeOf(_type));
       _universe.universe.flight.mainLoopCounter = 0u;
 
       // 6502: XX2 -- the face visibility of the last ship drawn, which `DOCKIT` reads as `K3+10`.
@@ -819,8 +819,8 @@ namespace GameLogicTests
       const std::uint16_t block = static_cast<std::uint16_t>(_at.kPercent + _universe.slot * Elite::SHIP_BLOCK_SIZE);
       _cpu.memory[_at.inf] = static_cast<std::uint8_t>(block);
       _cpu.memory[static_cast<std::uint16_t>(_at.inf + 1)] = static_cast<std::uint8_t>(block >> 8u);
-      _cpu.memory[_at.xx0] = static_cast<std::uint8_t>(_universe.universe.flight.blueprint);
-      _cpu.memory[static_cast<std::uint16_t>(_at.xx0 + 1)] = static_cast<std::uint8_t>(_universe.universe.flight.blueprint >> 8u);
+      _cpu.memory[_at.xx0] = static_cast<std::uint8_t>(_universe.universe.flight.blueprint->address);
+      _cpu.memory[static_cast<std::uint16_t>(_at.xx0 + 1)] = static_cast<std::uint8_t>(_universe.universe.flight.blueprint->address >> 8u);
       _cpu.memory[_at.type] = Elite::Byte(_universe.universe.flight.type);
       _cpu.memory[_at.ecma] = _universe.ecm;
       _cpu.memory[_at.fist] = _universe.legal;

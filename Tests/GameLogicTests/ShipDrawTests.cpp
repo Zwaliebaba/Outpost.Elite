@@ -1447,7 +1447,7 @@ namespace GameLogicTests
       {
         ++explosions;
       }
-      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint16_t) override
+      void SeedExplosionCloud(Elite::LineHeap&, std::uint16_t, std::uint8_t) override
       {
         ++clouds;
       }
@@ -1570,8 +1570,8 @@ namespace GameLogicTests
 
       for (std::uint8_t shipType = 1; shipType <= Elite::SHIP_TYPE_COUNT; ++shipType)
       {
-        const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(shipType));
-        if (blueprint == 0u)
+        const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::TypeOf(shipType));
+        if (blueprint == nullptr)
         {
           continue;
         }
@@ -1631,8 +1631,8 @@ namespace GameLogicTests
             work.heapLow = HEAP_AT & 0xFFu;
             work.heapHigh = HEAP_AT >> 8;
 
-            cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint);
-            cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
+            cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address);
+            cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
             cpu.memory[inf] = static_cast<std::uint8_t>(SLOT_AT);
             cpu.memory[static_cast<std::uint16_t>(inf + 1)] = static_cast<std::uint8_t>(SLOT_AT >> 8);
             cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)] = 0x5A;
@@ -1645,7 +1645,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ll9, 4'000'000);
             Assert::IsTrue(run.completed, L"LL9 returned");
 
-            Elite::DrawShip(canvas, draw, geometry, math, clip, screen, work, slot, heap, blueprint, Elite::TypeOf(shipType), effects);
+            Elite::DrawShip(canvas, draw, geometry, math, clip, screen, work, slot, heap, *blueprint, Elite::TypeOf(shipType), effects);
 
             const std::wstring where = Widen("LL9(type=" + std::to_string(shipType) + "): ") + placement.what;
 
@@ -1699,7 +1699,7 @@ namespace GameLogicTests
             // Did the edge loop stop because the blueprint's own heap allowance ran out? That is
             // the one path in `LL9` a whole-heap comparison cannot distinguish from the loop simply
             // finishing, so it is counted.
-            if (heap.Read(HEAP_AT) >= Elite::ShipByte(static_cast<std::uint16_t>(blueprint + 5u)))
+            if (heap.Read(HEAP_AT) >= blueprint->heapBytes)
             {
               ++heapFilled;
             }

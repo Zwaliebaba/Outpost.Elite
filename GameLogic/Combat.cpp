@@ -80,12 +80,12 @@ namespace Elite
      * screen prints. The carry out of the middle byte is what reaches the top one, and the label
      * the original gives that branch says what its author thought of the arrangement.
      */
-    const std::uint16_t table = static_cast<std::uint16_t>(SHIP_KILL_FRACTION + Byte(_type) - 1u);
-    const AddResult fraction = AddWithCarry(commander.killsFraction, ShipByte(table), false);
+    const KillWorth worth = KillWorthFor(_type);
+    const AddResult fraction = AddWithCarry(commander.killsFraction, worth.fraction, false);
     commander.killsFraction = fraction.value;
 
     const AddResult whole =
-      AddWithCarry(commander.kills.lo, ShipByte(static_cast<std::uint16_t>(table + SHIP_TYPE_COUNT)), fraction.carry);
+      AddWithCarry(commander.kills.lo, worth.whole, fraction.carry);
     commander.kills.lo = whole.value;
 
     if (whole.carry)
