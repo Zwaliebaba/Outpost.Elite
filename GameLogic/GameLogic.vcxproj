@@ -172,6 +172,7 @@
     <ClInclude Include="GameLoop.h" />
     <ClInclude Include="PauseScreen.h" />
     <ClInclude Include="Tactics.h" />
+    <ClInclude Include="Raster.h" />
     <ClInclude Include="Trumbles.h" />
     <ClInclude Include="Spawn.h" />
     <ClInclude Include="SoundEffects.h" />
@@ -260,6 +261,7 @@
     <ClCompile Include="PauseScreen.cpp" />
     <ClCompile Include="OptionTables.cpp" />
     <ClCompile Include="Tactics.cpp" />
+    <ClCompile Include="Raster.cpp" />
     <ClCompile Include="Trumbles.cpp" />
     <ClCompile Include="Spawn.cpp" />
     <ClCompile Include="SoundEffects.cpp" />

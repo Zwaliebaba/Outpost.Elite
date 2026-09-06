@@ -610,6 +610,86 @@
           "note": "`.BR2 INC INWK+7` -- the high byte following the low one past 255. Without it the ship is 256 units nearer than the briefing text was written for, and `INWK` is compared byte for byte."
         }
       ]
+    },
+    {
+      "name": "raster",
+      "slice": "4f",
+      "filter": [
+        "TheRasterInterrupt"
+      ],
+      "tests": 5,
+      "note": [
+        "COMIRQ1's VIC-II half (plan section 6.155). Written with the slice, so this unit is a",
+        "measurement from its first run rather than a test of a reconstruction.",
+        "",
+        "WHAT MAKES THE MUTANTS WORTH RUNNING HERE is that four of the handler's six registers do",
+        "not reach anything a player sees. `shango`, `santana`, `lotus` and the memory pointers are",
+        "programmed correctly by the port and consumed by nothing, so only the oracle's write-order",
+        "comparison can tell a right value from a wrong one -- which is the whole reason that",
+        "comparison is a sequence rather than a final state.",
+        "",
+        "The two that DO reach the screen are `moonflower` and `welcome`, and they are the energy",
+        "bomb. `ra-bomb-bit` and `ra-flash-half` are the mutants on them."
+      ],
+      "mutants": [
+        {
+          "id": "ra-selftest",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.nextRasterLine = RASTER_NEXT_LINE_TABLE[index];",
+          "replace": "    out.nextRasterLine = 0u;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Zeroing the raster line the next interrupt fires on is a register the comparison reads on every one of 256 passes, so a run in which this survives is a run whose every other answer is worthless (Risk R13, plan section 6.119). Keep it first and never delete it.",
+          "selftest": true
+        },
+        {
+          "id": "ra-bomb-bit",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    if ((_bomb & BOMB_RUNNING) != 0u)",
+          "replace": "    if ((_bomb & 0x40u) != 0u)",
+          "expect": "caught",
+          "note": "BIT BOMB / BPL reads bit 7 and nothing else. The sweep runs the bomb byte at 0, &80, &7F and &FF, and &7F is the one that tells this bit from any other: every bit but the top one set, and the flash must not start."
+        },
+        {
+          "id": "ra-flash-half",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.background = spaceView ? _screen.backgroundFlash : RASTER_BACKGROUND_DASHBOARD;",
+          "replace": "    out.background = RASTER_BACKGROUND_DASHBOARD;",
+          "expect": "caught",
+          "note": "welcome,X, and which half reads which byte. Taking the fixed one for both halves means the space view never flashes -- the bomb's whole visible effect below the mode change -- and the oracle's VIC+&21 write says so on the pass the port got wrong."
+        },
+        {
+          "id": "ra-incr-once",
+          "file": "GameLogic/Raster.cpp",
+          "find": "      _screen.backgroundFlash = static_cast<std::uint8_t>(_screen.backgroundFlash + 1u);",
+          "replace": "      _screen.backgroundFlash = static_cast<std::uint8_t>(_screen.backgroundFlash + (spaceView ? 1u : 0u));",
+          "expect": "caught",
+          "note": "INC welcome sits ABOVE the split test, so both passes reach it and the colour moves twice a frame. This mutant is the plausible mistake -- incrementing only on the pass that shows it -- and it halves the flash rate. Caught on the dashboard pass, where the oracle's welcome has moved and the port's has not."
+        },
+        {
+          "id": "ra-alternate",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    _screen.rasterCounter = RASTER_NEXT_COUNTER_TABLE[index];",
+          "replace": "    _screen.rasterCounter = static_cast<std::uint8_t>(index);",
+          "expect": "caught",
+          "note": "innersec is what makes the split alternate: a handler that left RASTCT where it found it would program one half of the screen for ever. TheSplitAlternates is the assertion, and the oracle comparison reads RASTCT back on every pass as well."
+        },
+        {
+          "id": "ra-upper-bank",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.memoryPointers = spaceView ? RASTER_MEMORY_SPACE_VIEW : _screen.colourBank;",
+          "replace": "    out.memoryPointers = _screen.colourBank;",
+          "expect": "caught",
+          "note": "zebop is a CONSTANT and abraxas is state, which is the whole reason that pair is not a table. Reading the variable for both halves would colour the space view from the dashboard's block whenever the dashboard is up -- invisible in the port today, because Resolve takes the upper half's block as fixed, and caught only by the oracle's VIC+&18 write."
+        },
+        {
+          "id": "ra-sprite-colour",
+          "file": "GameLogic/Raster.cpp",
+          "find": "    out.spriteColour = RASTER_SPRITE_COLOUR_TABLE[index];",
+          "replace": "    out.spriteColour = RASTER_SPRITE_COLOUR_TABLE[1u - index];",
+          "expect": "caught",
+          "note": "lotus read the wrong way round. One of the four registers nothing in the port consumes yet, so this mutant exists to prove the sequence comparison is what is holding them: swap the two entries and only the oracle notices."
+        }
+      ]
     }
   ]
 }

@@ -14,7 +14,7 @@ criteria were signed off by eye or by ear with no stored artefact; R13 is closed
 unit of four; and 0e waits on the rights holders. Plan §1.2 lists the four in one place. **A fresh
 clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
-anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->377 tests** and
+anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->382 tests** and
 CI runs **<!--count:checks-->eleven repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits

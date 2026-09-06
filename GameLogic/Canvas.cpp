@@ -65,6 +65,8 @@ namespace Elite
     m_screen.fill(0);
     m_colourCells.fill(0);
     m_background = 0;
+    m_spaceViewBackground = 0;
+    m_spaceViewMulticolour = false;
   }
 
   void Canvas::Resolve(std::span<std::uint8_t> _out) const noexcept
@@ -85,11 +87,23 @@ namespace Elite
       const bool lower = m_dashboardShown && (cellRow >= DASHBOARD_CELL_ROW);
       const std::uint16_t cellBase = lower ? DASHBOARD_CELLS : SCREEN_CELLS;
 
+      /*
+       * 6502: moonflower and welcome, the other half of the same interrupt's pair.
+       *
+       * Above the split the mode is `moonflower`'s bit 4 and the background is `welcome`, and both
+       * of them move only while the energy bomb burns -- so for every ordinary frame this is the
+       * standard-mode branch it always was. The cell BLOCK does not follow the mode: `zebop` is
+       * &81 whatever happens, so the upper half is coloured from the first block either way.
+       */
+      const bool multicolour = lower || m_spaceViewMulticolour;
+      const std::uint8_t background = lower ? m_background : m_spaceViewBackground;
+
       for (int cellColumn = 0; cellColumn < CELL_COLUMNS; ++cellColumn)
       {
         const int cell = cellRow * CELL_COLUMNS + cellColumn;
         ResolveCell(_out.data() + static_cast<std::size_t>(cellRow) * 8 * WIDTH + cellColumn * 8, WIDTH,
-                    &m_screen[cellRow * ROW_BYTES + cellColumn * 8], m_screen[cellBase + cell], m_colourCells[cell], m_background, lower);
+                    &m_screen[cellRow * ROW_BYTES + cellColumn * 8], m_screen[cellBase + cell], m_colourCells[cell], background,
+                    multicolour);
       }
     }
   }

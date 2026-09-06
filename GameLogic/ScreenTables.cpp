@@ -145,6 +145,30 @@ namespace Elite
     0x00,
   };
 
+  // 6502: shango -- which raster line the next interrupt fires on, per half of the split.
+  const std::array<std::uint8_t, 2> RASTER_NEXT_LINE_TABLE = {
+    0xC2,
+    0x33,
+  };
+
+  // 6502: santana -- which sprites are multicolour, per half.
+  const std::array<std::uint8_t, 2> RASTER_SPRITE_MULTICOLOUR_TABLE = {
+    0xFE,
+    0xFC,
+  };
+
+  // 6502: lotus -- the shared sprite colour %01, per half.
+  const std::array<std::uint8_t, 2> RASTER_SPRITE_COLOUR_TABLE = {
+    0x02,
+    0x00,
+  };
+
+  // 6502: innersec -- what RASTCT becomes, which is what makes the split alternate.
+  const std::array<std::uint8_t, 2> RASTER_NEXT_COUNTER_TABLE = {
+    0x01,
+    0x00,
+  };
+
   // 6502: sdump -- screen RAM for the dashboard's seven rows: %01 in the high nibble, %10 in the low.
   const std::array<std::uint8_t, 280> DASHBOARD_SCREEN_COLOURS = {
     0x00, 0x00, 0x00, 0x07, 0x17, 0x17, 0x74, 0x74, 0x74, 0x74, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27, 0x27,

@@ -40,6 +40,9 @@
     <ClInclude Include="Canvas.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="Raster.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="LoaderScreen.h">
       <Filter>Canvas</Filter>
     </ClInclude>
@@ -315,6 +318,9 @@
     </ClCompile>
     <ClCompile Include="Tactics.cpp">
       <Filter>Universe</Filter>
+    </ClCompile>
+    <ClCompile Include="Raster.cpp">
+      <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="Trumbles.cpp">
       <Filter>Universe</Filter>
