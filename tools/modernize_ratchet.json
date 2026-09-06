@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3718,
+      "ceiling": 3720,
       "slack": 0,
-      "slice": "death-sequence fix 2026-09-06 (plan 6.157): the EE55 block and the carries it reads, labelled"
+      "slice": "death-sequence fix 2026-09-06 (plan 6.157, 6.158): the EE55 block, the carries it reads and the hold-or-fitting load, labelled"
     },
     "oracle-test-files": {
       "ceiling": 50,
