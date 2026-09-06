@@ -17,7 +17,7 @@
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::CharacterPrinter;
-using Elite::CommanderBlock;
+using Elite::Commander;
 using Elite::Field;
 using Elite::StateTokens;
 using Elite::SystemSeeds;
@@ -193,10 +193,10 @@ namespace GameLogicTests
             }
 
             // ---- the port ----------------------------------------------------------------------
-            CommanderBlock commander;
-            commander.SetCash(situation.cash);
-            commander.At(Field::GalaxyNumber) = situation.galaxy;
-            commander.At(Field::Fuel) = situation.fuel;
+            Commander commander;
+            commander.cash.tenths = (situation.cash);
+            commander.galaxyNumber = situation.galaxy;
+            commander.fuel = situation.fuel;
 
             SystemSeeds current = situation.current;
             SystemSeeds selected = situation.selected;

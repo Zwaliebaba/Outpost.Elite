@@ -100,12 +100,12 @@ namespace GameLogicTests
     void Prepare(FlightPort& _port)
     {
       _port.universe.commander = Elite::DefaultCommander();
-      _port.universe.commander.At(Elite::Field::DockingComputer) = 0xFFu; // 6502: DKCMP -- so phase four has one to engage
+      _port.universe.commander.dockingComputer = 0xFFu; // 6502: DKCMP -- so phase four has one to engage
 
-      const Elite::CommanderBlock& commander = _port.universe.commander;
-      const std::uint8_t homeX = commander.At(Elite::Field::SystemX);
-      const std::uint8_t homeY = commander.At(Elite::Field::SystemY);
-      const Elite::NearestSystem home = Elite::FindNearestSystem(commander.GalaxySeeds(), homeX, homeY, homeX, homeY);
+      const Elite::Commander& commander = _port.universe.commander;
+      const std::uint8_t homeX = commander.systemX;
+      const std::uint8_t homeY = commander.systemY;
+      const Elite::NearestSystem home = Elite::FindNearestSystem(commander.galaxySeeds, homeX, homeY, homeX, homeY);
 
       _port.current.seeds = home.seeds;
       _port.current.economy = home.data.economy;
@@ -128,8 +128,8 @@ namespace GameLogicTests
 
       Prepare(_port);
       Elite::SystemSeeds selected{};
-      Elite::Launch(_port.loop, nullptr, _port.docked, _port.universe.commander.At(Elite::Field::SystemX),
-                    _port.universe.commander.At(Elite::Field::SystemY), _port.universe.techLevel, selected); // 6502: TT110
+      Elite::Launch(_port.loop, nullptr, _port.docked, _port.universe.commander.systemX,
+                    _port.universe.commander.systemY, _port.universe.techLevel, selected); // 6502: TT110
       checkpoint();
 
       if (_perturb)
@@ -328,7 +328,7 @@ namespace GameLogicTests
            state[1] = static_cast<std::uint8_t>(state[1] ^ 0x80u);
            _port.universe.rng.SetState(state);
          }},
-        {L"the fuel", [](FlightPort& _port) { _port.universe.commander.At(Elite::Field::Fuel) = static_cast<std::uint8_t>(_port.universe.commander.At(Elite::Field::Fuel) - 1u); }},
+        {L"the fuel", [](FlightPort& _port) { _port.universe.commander.fuel = static_cast<std::uint8_t>(_port.universe.commander.fuel - 1u); }},
         {L"a speck of stardust", [](FlightPort& _port) { _port.universe.dust.z[3] = static_cast<std::uint8_t>(_port.universe.dust.z[3] ^ 0x40u); }},
       };
 

@@ -18,7 +18,7 @@
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::CharacterPrinter;
-using Elite::CommanderBlock;
+using Elite::Commander;
 using Elite::CompetitionNumber;
 using Elite::Field;
 using Elite::KeySource;
@@ -134,17 +134,18 @@ namespace GameLogicTests
     };
 
     /// A spread of commanders chosen for the bytes the competition number folds in.
-    std::vector<CommanderBlock> Commanders()
+    std::vector<Commander> Commanders()
     {
-      std::vector<CommanderBlock> blocks;
+      std::vector<Commander> blocks;
 
       blocks.push_back(Elite::DefaultCommander());
 
-      CommanderBlock zero;
+      Commander zero;
       blocks.push_back(zero);
 
-      CommanderBlock full;
-      full.bytes.fill(0xFF);
+      std::array<std::uint8_t, Elite::COMMANDER_BLOCK_SIZE> allSet{};
+      allSet.fill(0xFF);
+      const Commander full = Commander::FromBytes(allSet);
       blocks.push_back(full);
 
       // Walk the four bytes the number actually reads -- the competition flags, the third cash byte
@@ -155,11 +156,11 @@ namespace GameLogicTests
         {
           for (const std::uint8_t kills : {0x00, 0x01, 0xA9, 0xFF})
           {
-            CommanderBlock block = Elite::DefaultCommander();
-            block.At(Field::Competition) = cok;
-            block.bytes[static_cast<std::size_t>(Field::Cash) + 2u] = cash2;
-            block.bytes[static_cast<std::size_t>(Field::Kills) + 1u] = kills;
-            block.At(Field::SaveCount) = static_cast<std::uint8_t>(cok ^ cash2);
+            Commander block = Elite::DefaultCommander();
+            block.competition = cok;
+            block.cash.SetByte(2u, cash2);
+            block.kills.hi = kills;
+            block.saveCount = static_cast<std::uint8_t>(cok ^ cash2);
             blocks.push_back(block);
           }
         }
@@ -199,7 +200,7 @@ namespace GameLogicTests
       static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> NAME = {'B', 'E', 'L', 'L', 13, 0, 0, 0};
       std::uint32_t compared = 0;
 
-      for (const CommanderBlock& original : Commanders())
+      for (const Commander& original : Commanders())
       {
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(oracle.Label("GTNMEW"));
@@ -214,9 +215,9 @@ namespace GameLogicTests
         }
         for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
         {
-          cpu.memory[static_cast<std::uint16_t>(tp + index)] = original.bytes[index];
+          cpu.memory[static_cast<std::uint16_t>(tp + index)] = original.ToBytes()[index];
         }
-        cpu.memory[svc] = original.At(Field::SaveCount);
+        cpu.memory[svc] = original.saveCount;
 
         cpu.a = cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -235,17 +236,17 @@ namespace GameLogicTests
         Assert::IsTrue(reached, L"SV1 should reach the Kernal call");
 
         // ---- the port ------------------------------------------------------------------------
-        CommanderBlock block = original;
+        Commander block = original;
         MemoryStore store;
         const Elite::SaveOutcome outcome = Elite::SaveCommanderTo(store, block, NAME);
 
-        const std::wstring where = Widen("SV1 (save count " + std::to_string(original.At(Field::SaveCount)) + ", flags " +
-                                         std::to_string(original.At(Field::Competition)) + ")");
+        const std::wstring where = Widen("SV1 (save count " + std::to_string(original.saveCount) + ", flags " +
+                                         std::to_string(original.competition) + ")");
 
         Assert::IsTrue(outcome.written, (where + L": the store should have been written").c_str());
 
         // 6502: LSR SVC -- halved, and it is the LIVE commander that changes.
-        Assert::AreEqual(cpu.memory[svc], block.At(Field::SaveCount), (where + L": the save count").c_str());
+        Assert::AreEqual(cpu.memory[svc], block.saveCount, (where + L": the save count").c_str());
 
         /*
          * The whole file image, which is where the defect was. SaveCommander wrote CHK3 and CHK and
@@ -353,7 +354,7 @@ namespace GameLogicTests
      */
     TEST_METHOD(TheRoundTripThroughAStoreReportsEveryFailure)
     {
-      CommanderBlock block = Elite::DefaultCommander();
+      Commander block = Elite::DefaultCommander();
       const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
 
       MemoryStore store;
@@ -362,7 +363,7 @@ namespace GameLogicTests
       const Elite::SaveOutcome saved = Elite::SaveCommanderTo(store, block, name);
       Assert::IsTrue(saved.written, L"the save should succeed");
 
-      CommanderBlock loaded;
+      Commander loaded;
       Assert::IsTrue(Elite::LoadCommanderFrom(store, loaded, loadedName), L"the round trip should load");
 
       // Everything but the checksum byte, which DFAULT's loop stops one short of (§6.14).
@@ -373,7 +374,7 @@ namespace GameLogicTests
         {
           continue; // written by the save and loaded back; the flags are checked below
         }
-        Assert::AreEqual(block.bytes[index], loaded.bytes[index], (L"round trip byte " + std::to_wstring(index)).c_str());
+        Assert::AreEqual(block.ToBytes()[index], loaded.ToBytes()[index], (L"round trip byte " + std::to_wstring(index)).c_str());
       }
 
       /*
@@ -382,15 +383,15 @@ namespace GameLogicTests
        * must leave bit 7 CLEAR -- which is the property the missing store broke, and the reason it
        * was worth finding.
        */
-      Assert::AreEqual<std::uint8_t>(0x40, loaded.At(Field::Competition), L"loaded from a file, and not flagged as tampered");
+      Assert::AreEqual<std::uint8_t>(0x40, loaded.competition, L"loaded from a file, and not flagged as tampered");
 
       store.failReads = true;
-      CommanderBlock unread;
+      Commander unread;
       Assert::IsFalse(Elite::LoadCommanderFrom(store, unread, loadedName), L"a read failure is reported");
 
       store.failReads = false;
       store.failWrites = true;
-      CommanderBlock another = Elite::DefaultCommander();
+      Commander another = Elite::DefaultCommander();
       Assert::IsFalse(Elite::SaveCommanderTo(store, another, name).written, L"a write failure is reported");
     }
   };
@@ -418,14 +419,14 @@ namespace GameLogicTests
     constexpr std::uint16_t TAPE_BUFFER = 0xCF00;
 
     /// The commander the fixture's device hands back, which is deliberately not the default one.
-    CommanderBlock FileCommander()
+    Commander FileCommander()
     {
-      CommanderBlock block = Elite::DefaultCommander();
-      block.SetCash(123456);
-      block.At(Field::Fuel) = 42;
-      block.At(Field::GalaxyNumber) = 3;
-      block.At(Field::SaveCount) = 0x60;
-      block.bytes[static_cast<std::size_t>(Field::Kills) + 1u] = 0x11;
+      Commander block = Elite::DefaultCommander();
+      block.cash.tenths = (123456);
+      block.fuel = 42;
+      block.galaxyNumber = 3;
+      block.saveCount = 0x60;
+      block.kills.hi = 0x11;
       return block;
     }
 
@@ -554,7 +555,7 @@ namespace GameLogicTests
       std::vector<std::uint32_t> printed;
       std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
       std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name{};
-      CommanderBlock block;
+      Commander block;
       std::uint8_t disk = 0;
       std::array<std::uint8_t, 4> competition{}; ///< 6502: K to K+3
     };
@@ -568,7 +569,7 @@ namespace GameLogicTests
      * the key) so that a routine entering at either label sees what the real one would leave.
      */
     ShippedMenu RunShippedMenu(const OracleImage& _oracle, const std::wstring& _where, const std::vector<std::uint8_t>& _keys,
-                               const CommanderBlock& _live, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE> _liveName,
+                               const Commander& _live, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE> _liveName,
                                std::span<const std::uint8_t, Elite::COMMANDER_FILE_SIZE> _image, bool _useDisk, bool _failDevice,
                                bool _badFile, std::uint8_t _numberWidth)
     {
@@ -633,7 +634,7 @@ namespace GameLogicTests
       }
       for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
       {
-        cpu.memory[static_cast<std::uint16_t>(tp + index)] = _live.bytes[index];
+        cpu.memory[static_cast<std::uint16_t>(tp + index)] = _live.ToBytes()[index];
       }
 
       cpu.a = cpu.x = cpu.y = 0;
@@ -734,10 +735,12 @@ namespace GameLogicTests
       {
         run.name[index] = cpu.memory[static_cast<std::uint16_t>(name + index)];
       }
+      std::array<std::uint8_t, Elite::COMMANDER_BLOCK_SIZE> block{};
       for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
       {
-        run.block.bytes[index] = cpu.memory[static_cast<std::uint16_t>(tp + index)];
+        block[index] = cpu.memory[static_cast<std::uint16_t>(tp + index)];
       }
+      run.block = Commander::FromBytes(block);
       return run;
     }
   } // namespace
@@ -812,12 +815,12 @@ namespace GameLogicTests
 
         // The live commander and the save image start out different, so a routine that wrote the
         // wrong one of the two would be visible rather than a no-op.
-        CommanderBlock live = Elite::DefaultCommander();
-        live.SetCash(7770);
-        live.At(Field::Fuel) = 55;
+        Commander live = Elite::DefaultCommander();
+        live.cash.tenths = (7770);
+        live.fuel = 55;
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
-        CommanderBlock saved = Elite::DefaultCommander();
-        saved.At(Field::GalaxyNumber) = 1;
+        Commander saved = Elite::DefaultCommander();
+        saved.galaxyNumber = 1;
         static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> IMAGE_NAME = {'O', 'L', 'D', 13, 0, 0, 0, 0};
         Elite::SaveCommander(saved, IMAGE_NAME, image);
 
@@ -832,7 +835,7 @@ namespace GameLogicTests
         text.row = 1;
         sink.cursor = &text;
 
-        CommanderBlock portBlock = live;
+        Commander portBlock = live;
         std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> portName = LIVE_NAME;
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> portImage = image;
         std::array<std::uint8_t, 16> buffer{};
@@ -911,7 +914,7 @@ namespace GameLogicTests
         }
         for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
         {
-          Assert::AreEqual(shipped.block.bytes[index], portBlock.bytes[index],
+          Assert::AreEqual(shipped.block.ToBytes()[index], portBlock.ToBytes()[index],
                            (where + L": live commander byte " + std::to_wstring(index)).c_str());
         }
 

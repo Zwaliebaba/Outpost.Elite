@@ -69,7 +69,7 @@ namespace Elite
 
   std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, ShipType _type) noexcept
   {
-    CommanderBlock& commander = _screen.commander;
+    Commander& commander = _screen.commander;
 
     /*
      * 6502: LDA TALLYL / CLC / ADC KWL%-1,X / STA TALLYL / LDA TALLY / ADC KWH%-1,X / STA TALLY /
@@ -81,17 +81,17 @@ namespace Elite
      * the original gives that branch says what its author thought of the arrangement.
      */
     const std::uint16_t table = static_cast<std::uint16_t>(SHIP_KILL_FRACTION + Byte(_type) - 1u);
-    const AddResult fraction = AddWithCarry(commander.At(Field::KillsLow), ShipByte(table), false);
-    commander.At(Field::KillsLow) = fraction.value;
+    const AddResult fraction = AddWithCarry(commander.killsFraction, ShipByte(table), false);
+    commander.killsFraction = fraction.value;
 
     const AddResult whole =
-      AddWithCarry(commander.At(Field::Kills), ShipByte(static_cast<std::uint16_t>(table + SHIP_TYPE_COUNT)), fraction.carry);
-    commander.At(Field::Kills) = whole.value;
+      AddWithCarry(commander.kills.lo, ShipByte(static_cast<std::uint16_t>(table + SHIP_TYPE_COUNT)), fraction.carry);
+    commander.kills.lo = whole.value;
 
     if (whole.carry)
     {
-      commander.bytes[static_cast<std::size_t>(Field::Kills) + 1u] =
-        static_cast<std::uint8_t>(commander.bytes[static_cast<std::size_t>(Field::Kills) + 1u] + 1u);
+      commander.kills.hi =
+        static_cast<std::uint8_t>(commander.kills.hi + 1u);
 
       // 6502: LDA #101 / JSR MESS -- "RIGHT ON COMMANDER", once every 256 whole kills.
       ShowMessage(_screen.canvas, _screen.printer, _screen.text, _screen.extended, _screen.message, MESSAGE_RIGHT_ON_COMMANDER,
@@ -175,11 +175,11 @@ namespace Elite
       return;
     }
 
-    CommanderBlock& commander = _screen.commander;
-    const std::size_t byte = static_cast<std::size_t>(Field::CargoHold) + slot;
+    Commander& commander = _screen.commander;
+    std::uint8_t& held = commander.cargoHold[slot];
 
     // 6502: LDA QQ20,X / BEQ out -- nothing there to break.
-    if (commander.bytes[byte] == 0u)
+    if (held == 0u)
     {
       return;
     }
@@ -193,7 +193,7 @@ namespace Elite
     _screen.message.append = 3u; // 6502: LDY #3 / STY de -- "... DESTROYED"
 
     // 6502: STA QQ20,X -- and A is `DLY`, which is zero because that is how we got here.
-    commander.bytes[byte] = 0u;
+    held = 0u;
 
     /*
      * 6502: CPX #17 / BCS ou1 / TXA / ADC #208 -- and the carry the compare left is part of the

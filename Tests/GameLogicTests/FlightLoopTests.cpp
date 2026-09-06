@@ -1095,7 +1095,7 @@ namespace GameLogicTests
 
       for (std::size_t index = 0; index < Elite::COMMANDER_BLOCK_SIZE; ++index)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_loop.tp + index)], universe.commander.bytes[index],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_loop.tp + index)], universe.commander.ToBytes()[index],
                          (_context + L": commander byte " + std::to_wstring(index)).c_str());
       }
     }
@@ -1632,7 +1632,7 @@ namespace GameLogicTests
       for (const Case& item : CASES)
       {
         Frame frame(0x31u);
-        frame.universe.commander.At(Elite::Field::Missiles) = item.missiles;
+        frame.universe.commander.missiles = item.missiles;
         frame.universe.bubble.missileTarget = item.target;
         frame.universe.status.missileArmed = item.armed;
         frame.effects.spawnSucceeds = item.spawns;
@@ -1646,9 +1646,9 @@ namespace GameLogicTests
         frame.keys[Elite::KEY_CANCEL_DOCKING] = 0xFFu;
         frame.keys[Elite::KEY_ESCAPE_POD] = 0xFFu;
         frame.keys[Elite::KEY_ECM] = 0xFFu;
-        frame.universe.commander.At(Elite::Field::EnergyBomb) = 1u;
-        frame.universe.commander.At(Elite::Field::EscapePod) = 0u; // or the frame would end at ESCAPE
-        frame.universe.commander.At(Elite::Field::Ecm) = 0xFFu;
+        frame.universe.commander.energyBomb = 1u;
+        frame.universe.commander.escapePod = 0u; // or the frame would end at ESCAPE
+        frame.universe.commander.ecm = 0xFFu;
         frame.control.dockingComputer = 0xFFu;
 
         const std::wstring where = WidenText(std::string("M% (") + item.what + ")");
@@ -1658,7 +1658,7 @@ namespace GameLogicTests
         {
           ++skipped;
           Assert::AreEqual<std::uint32_t>(0u, frame.effects.musicStops, (where + L": the cancel key was skipped").c_str());
-          Assert::AreEqual<std::uint8_t>(1u, frame.universe.commander.At(Elite::Field::EnergyBomb),
+          Assert::AreEqual<std::uint8_t>(1u, frame.universe.commander.energyBomb,
                                          (where + L": and so was the bomb").c_str());
         }
         if (item.fire && (item.target & 0x80u) == 0u && !item.spawns)
@@ -1724,10 +1724,10 @@ namespace GameLogicTests
         Frame frame(0x77u);
         frame.keys[item.key] = 0xFFu;
         frame.keys[Elite::KEY_PITCH_UP] = item.pitchUp;
-        frame.universe.commander.At(Elite::Field::EnergyBomb) = item.bomb;
-        frame.universe.commander.At(Elite::Field::EscapePod) = (item.key == Elite::KEY_ESCAPE_POD) ? item.fitting : 0u;
-        frame.universe.commander.At(Elite::Field::Ecm) = (item.key == Elite::KEY_ECM) ? item.fitting : 0u;
-        frame.universe.commander.At(Elite::Field::DockingComputer) =
+        frame.universe.commander.energyBomb = item.bomb;
+        frame.universe.commander.escapePod = (item.key == Elite::KEY_ESCAPE_POD) ? item.fitting : 0u;
+        frame.universe.commander.ecm = (item.key == Elite::KEY_ECM) ? item.fitting : 0u;
+        frame.universe.commander.dockingComputer =
           (item.key == Elite::KEY_DOCKING_COMPUTER || item.key == Elite::KEY_PITCH_UP) ? item.fitting : 0u;
         frame.universe.status.ecmCountdown = item.ecmCountdown;
         frame.universe.status.midJump = item.midJump;
@@ -1784,7 +1784,7 @@ namespace GameLogicTests
               frame.keys[Elite::KEY_FIRE] = 0xFFu;
               for (std::size_t index = 0; index < 4u; ++index)
               {
-                frame.universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + index] = (index == view) ? fitted : 0u;
+                frame.universe.commander.lasers[index] = (index == view) ? fitted : 0u;
               }
 
               const std::wstring where = WidenText("M% (VIEW " + std::to_string(view) + ", LASER " + std::to_string(fitted) + ", GNTMP " +
@@ -1827,7 +1827,7 @@ namespace GameLogicTests
         frame.universe.spaceView = 0u;
         frame.universe.status.laserTemperature = 40u;
         frame.keys[Elite::KEY_FIRE] = 0xFFu;
-        frame.universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] = Elite::LASER_BEAM;
+        frame.universe.commander.lasers[0] = Elite::LASER_BEAM;
 
         CompareFrames(frame, oracle, at, loop, WidenText("M% (QQ11 " + std::to_string(view) + ", firing)"));
       }
@@ -1857,7 +1857,7 @@ namespace GameLogicTests
         frame.universe.status.energy = energy;
         frame.universe.status.laserTemperature = 40u;
         frame.keys[Elite::KEY_FIRE] = 0xFFu;
-        frame.universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] = Elite::LASER_PULSE;
+        frame.universe.commander.lasers[0] = Elite::LASER_PULSE;
 
         CompareFrames(frame, oracle, at, loop, WidenText("M% (ENERGY " + std::to_string(energy) + ", firing)"));
       }
@@ -1927,10 +1927,10 @@ namespace GameLogicTests
           PopulateBubble(frame, item.distance, item.state, item.empty);
           frame.universe.status.laserPower = item.laser;
           frame.universe.status.missileArmed = missileArmed;
-          frame.universe.commander.At(Elite::Field::EnergyBomb) = item.bomb;
-          frame.universe.commander.At(Elite::Field::FuelScoops) = item.scoops;
+          frame.universe.commander.energyBomb = item.bomb;
+          frame.universe.commander.fuelScoops = item.scoops;
           frame.universe.view = item.view;
-          frame.universe.commander.At(Elite::Field::Missiles) = 3u;
+          frame.universe.commander.missiles = 3u;
 
           const std::wstring where = WidenText(std::string("MAL1 (") + item.what + (missileArmed != 0u ? ", missile armed)" : ")"));
           CompareFrames(frame, oracle, at, loop, where, Reach::Ships);
@@ -1985,9 +1985,9 @@ namespace GameLogicTests
           frame.universe.flight.mainLoopCounter = counter;
           frame.universe.status.midJump = ((shape & 1u) != 0u) ? 0xFFu : 0u;
           frame.universe.status.energy = ((shape & 2u) != 0u) ? 200u : 40u;
-          frame.universe.commander.At(Elite::Field::EnergyBomb) = (counter & 1u) != 0u ? 0xC0u : 0u;
-          frame.universe.commander.At(Elite::Field::EnergyUnit) = 1u;
-          frame.universe.commander.At(Elite::Field::FuelScoops) = 0xFFu;
+          frame.universe.commander.energyBomb = (counter & 1u) != 0u ? 0xC0u : 0u;
+          frame.universe.commander.energyUnit = 1u;
+          frame.universe.commander.fuelScoops = 0xFFu;
           frame.universe.status.viewLaser = 0x4Cu;
           frame.universe.status.laserCount = static_cast<std::uint8_t>(counter & 15u);
           frame.universe.status.ecmOurs = ((counter & 4u) != 0u) ? 0xFFu : 0u;
@@ -1996,7 +1996,7 @@ namespace GameLogicTests
           const std::wstring where = WidenText("MA18 (MCNT " + std::to_string(counter) + ", shape " + std::to_string(shape) + ")");
           CompareFrames(frame, oracle, at, loop, where, Reach::Tail);
 
-          bombEnded += (frame.universe.commander.At(Elite::Field::EnergyBomb) == 0x80u) ? 1u : 0u;
+          bombEnded += (frame.universe.commander.energyBomb == 0x80u) ? 1u : 0u;
           ++compared;
         }
       }
@@ -2057,18 +2057,18 @@ namespace GameLogicTests
 
           frame.universe.flight.mainLoopCounter = 20u;
           frame.universe.status.midJump = 0u;
-          frame.universe.commander.At(Elite::Field::FuelScoops) = scoops;
-          frame.universe.commander.At(Elite::Field::Fuel) = 40u;
+          frame.universe.commander.fuelScoops = scoops;
+          frame.universe.commander.fuel = 40u;
           frame.universe.fuel = 40u;
-          frame.universe.commander.At(Elite::Field::Tribbles) = 0x40u;
-          frame.universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = 0x21u;
+          frame.universe.commander.tribbles.lo = 0x40u;
+          frame.universe.commander.tribbles.hi = 0x21u;
           frame.universe.flight.delt4Next = 0xC0u;
 
           const std::wstring where =
             WidenText("MA33 (sun at " + std::to_string(distance) + (scoops != 0u ? ", scoops fitted)" : ", no scoops)"));
           CompareFrames(frame, oracle, at, loop, where, Reach::Tail);
 
-          scooped += (frame.universe.commander.At(Elite::Field::Fuel) > 40u) ? 1u : 0u;
+          scooped += (frame.universe.commander.fuel > 40u) ? 1u : 0u;
           cooked += (frame.universe.sight.maskedWith.empty() ? 0u : 1u);
           ++compared;
         }
@@ -2117,9 +2117,9 @@ namespace GameLogicTests
             frame.control.pitch = static_cast<std::uint8_t>(150u - counter * 3u);
             frame.keys[Elite::KEY_FIRE] = ((shape & 1u) != 0u) ? 0xFFu : 0u;
             frame.keys[Elite::KEY_SPEED_UP] = ((shape & 2u) != 0u) ? 0xFFu : 0u;
-            frame.universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers)] = Elite::LASER_PULSE;
-            frame.universe.commander.At(Elite::Field::Missiles) = 3u;
-            frame.universe.commander.At(Elite::Field::EnergyUnit) = 1u;
+            frame.universe.commander.lasers[0] = Elite::LASER_PULSE;
+            frame.universe.commander.missiles = 3u;
+            frame.universe.commander.energyUnit = 1u;
 
             const std::wstring where = WidenText("M% whole (MCNT " + std::to_string(counter * 4u + shape) + ", distance " +
                                                  std::to_string(distance) + ", shape " + std::to_string(shape) + ")");
@@ -2161,7 +2161,7 @@ namespace GameLogicTests
 
       std::uint8_t docked = 0xFFu;
       Elite::SystemSeeds selected{};
-      Elite::Launch(loop, nullptr, docked, frame.universe.commander.At(Elite::Field::SystemX), frame.universe.commander.At(Elite::Field::SystemY),
+      Elite::Launch(loop, nullptr, docked, frame.universe.commander.systemX, frame.universe.commander.systemY,
                     5u, selected);
 
       Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.Count(Elite::ShipType::Station),

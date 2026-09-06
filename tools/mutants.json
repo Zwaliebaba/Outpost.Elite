@@ -247,8 +247,8 @@
         {
           "id": "hyp-fuel-zero",
           "file": "GameLogic/Hyperspace.cpp",
-          "find": "screen.commander.At(Field::Fuel) = fuel.carry ? fuel.value : std::uint8_t{0};",
-          "replace": "screen.commander.At(Field::Fuel) = fuel.carry ? fuel.value : std::uint8_t{0u};",
+          "find": "screen.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0};",
+          "replace": "screen.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0u};",
           "expect": "equivalent",
           "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made."
         }
@@ -540,16 +540,16 @@
         {
           "id": "mi-engy",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _bay.commander.At(Field::EnergyUnit) = NAVY_ENERGY_UNIT;",
-          "replace": "    _bay.commander.At(Field::EnergyUnit) = 1u;",
+          "find": "    _bay.commander.energyUnit = NAVY_ENERGY_UNIT;",
+          "replace": "    _bay.commander.energyUnit = 1u;",
           "expect": "caught",
           "note": "`LDA #2 / STA ENGY` -- the navy's energy unit, which the flight loop reads as three units a pass where the shop's one gives two. A 1 is the shop's."
         },
         {
           "id": "mi-tally",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _bay.commander.bytes[tally + 1u] = static_cast<std::uint8_t>(_bay.commander.bytes[tally + 1u] + 1u);",
-          "replace": "    _bay.commander.bytes[tally] = static_cast<std::uint8_t>(_bay.commander.bytes[tally] + 1u);",
+          "find": "    _bay.commander.kills.hi = static_cast<std::uint8_t>(_bay.commander.kills.hi + 1u);",
+          "replace": "    _bay.commander.kills.lo = static_cast<std::uint8_t>(_bay.commander.kills.lo + 1u);",
           "expect": "caught",
           "note": "`INC TALLY+1` -- the HIGH byte, so the reward is 256 kills and a whole combat rank rather than one kill. This pair is low byte first, unlike the cash above it, which is exactly the trap."
         },

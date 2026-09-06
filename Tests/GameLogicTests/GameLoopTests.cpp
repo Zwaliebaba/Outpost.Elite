@@ -323,8 +323,8 @@ namespace GameLogicTests
             universe.universe.status.laserCount = one.count;
             universe.universe.status.cabinTemperature = one.cabin;
             universe.universe.view = one.view;
-            universe.universe.commander.At(Elite::Field::Tribbles) = one.tribbleLow;
-            universe.universe.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)) = one.tribbleHigh;
+            universe.universe.commander.tribbles.lo = one.tribbleLow;
+            universe.universe.commander.tribbles.hi = one.tribbleHigh;
 
             Mirror(universe.universe, cpu, where);
             cpu.memory[patg] = one.authors;
@@ -352,9 +352,9 @@ namespace GameLogicTests
                         " seed " + std::to_string(seed[0]) + " carry " + std::to_string(carryIn));
 
             CompareState(cpu, universe.universe, where, context);
-            Assert::AreEqual(cpu.memory[tribble], universe.universe.commander.At(Elite::Field::Tribbles), (context + L": TRIBBLE").c_str());
+            Assert::AreEqual(cpu.memory[tribble], universe.universe.commander.tribbles.lo, (context + L": TRIBBLE").c_str());
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tribble + 1u)],
-                             universe.universe.commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::Tribbles) + 1)),
+                             universe.universe.commander.tribbles.hi,
                              (context + L": TRIBBLE+1").c_str());
             for (std::size_t byte = 0; byte < 4u; ++byte)
             {
@@ -408,10 +408,10 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(at.there);
             Assert::IsTrue(run.completed, L"THERE returned");
 
-            Elite::CommanderBlock commander{};
-            commander.At(Elite::Field::GalaxyNumber) = galaxy;
-            commander.At(Elite::Field::SystemX) = x;
-            commander.At(Elite::Field::SystemY) = y;
+            Elite::Commander commander{};
+            commander.galaxyNumber = galaxy;
+            commander.systemX = x;
+            commander.systemY = y;
 
             const bool ours = Elite::AtConstrictorSystem(commander);
             const std::wstring where = L"THERE(" + std::to_wstring(galaxy) + L"," + std::to_wstring(x) + L"," + std::to_wstring(y) + L")";
@@ -645,16 +645,16 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(at.entry, 400'000, at.mloop);
             Assert::IsTrue(run.completed, L"the spawner reached MLOOP");
 
-            Elite::CommanderBlock commander{};
-            commander.At(Elite::Field::GalaxyNumber) = one.galaxy;
-            commander.At(Elite::Field::SystemX) = one.systemX;
-            commander.At(Elite::Field::SystemY) = one.systemY;
-            commander.At(Elite::Field::MissionProgress) = one.mission;
-            commander.At(Elite::Field::LegalStatus) = one.legal;
-            commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + 3)) = one.contraband;
-            commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + 6)) =
+            Elite::Commander commander{};
+            commander.galaxyNumber = one.galaxy;
+            commander.systemX = one.systemX;
+            commander.systemY = one.systemY;
+            commander.missionProgress = one.mission;
+            commander.legalStatus = one.legal;
+            commander.cargoHold[3] = one.contraband;
+            commander.cargoHold[6] =
               static_cast<std::uint8_t>(one.contraband / 2u);
-            commander.At(static_cast<Elite::Field>(static_cast<int>(Elite::Field::CargoHold) + 10)) =
+            commander.cargoHold[10] =
               static_cast<std::uint8_t>(one.contraband / 4u);
 
             Elite::CurrentSystem current;

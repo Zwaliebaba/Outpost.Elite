@@ -271,9 +271,9 @@ namespace GameLogicTests
             cpu.sp = 0xFD;
             Assert::IsTrue(cpu.CallSubroutine(oracle.Label("ping"), 10'000).completed, L"ping should return");
 
-            Elite::CommanderBlock commander;
-            commander.At(Elite::Field::SystemX) = static_cast<std::uint8_t>(x);
-            commander.At(Elite::Field::SystemY) = static_cast<std::uint8_t>(y);
+            Elite::Commander commander;
+            commander.systemX = static_cast<std::uint8_t>(x);
+            commander.systemY = static_cast<std::uint8_t>(y);
             std::uint8_t crosshairX = 0xAA;
             std::uint8_t crosshairY = 0xBB;
             Elite::CrosshairsToCurrentSystem(commander, crosshairX, crosshairY);
@@ -293,13 +293,13 @@ namespace GameLogicTests
             cpu.sp = 0xFD;
             Assert::IsTrue(cpu.CallSubroutine(oracle.Label("jmp"), 10'000).completed, L"jmp should return");
 
-            Elite::CommanderBlock commander;
-            commander.At(Elite::Field::SystemX) = 0xAA;
-            commander.At(Elite::Field::SystemY) = 0xBB;
+            Elite::Commander commander;
+            commander.systemX = 0xAA;
+            commander.systemY = 0xBB;
             Elite::CurrentSystemToCrosshairs(commander, static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y));
 
-            Assert::AreEqual(cpu.memory[qq0], commander.At(Elite::Field::SystemX), L"jmp: the current x");
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(qq0 + 1)], commander.At(Elite::Field::SystemY), L"jmp: the y");
+            Assert::AreEqual(cpu.memory[qq0], commander.systemX, L"jmp: the current x");
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(qq0 + 1)], commander.systemY, L"jmp: the y");
           }
 
           ++compared;
@@ -464,9 +464,9 @@ namespace GameLogicTests
 
         // The commander the sequence starts from: a valid save image whose coordinates fall
         // BETWEEN systems, so the snap through ping/TT111/jmp actually moves them.
-        Elite::CommanderBlock saved = Elite::DefaultCommander();
-        saved.At(Elite::Field::SystemX) = 0x63;
-        saved.At(Elite::Field::SystemY) = 0x4D;
+        Elite::Commander saved = Elite::DefaultCommander();
+        saved.systemX = 0x63;
+        saved.systemY = 0x4D;
         static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> NAME = {'B', 'E', 'L', 'L', 13, 0, 0, 0};
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
         Elite::SaveCommander(saved, NAME, image);
@@ -616,7 +616,7 @@ namespace GameLogicTests
         DeviceStore store;
         Elite::SaveScreen save{recursive, characters, extended, sink, text, keys, lineEffects, store, numbers};
 
-        Elite::CommanderBlock commander;
+        Elite::Commander commander;
         std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name{};
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> portImage = image;
         std::array<std::uint8_t, 16> buffer{};
@@ -662,9 +662,9 @@ namespace GameLogicTests
          * 6502: QQ0 and QQ1 are TP+1 and TP+2 -- two bytes of the COMMANDER, which is why the
          * comparison of the whole block below covers them and why the port has no separate copy.
          */
-        Assert::AreEqual(cpu.memory[oracle.Label("QQ0")], commander.At(Elite::Field::SystemX),
+        Assert::AreEqual(cpu.memory[oracle.Label("QQ0")], commander.systemX,
                          (where + L": QQ0, which is the commander's").c_str());
-        Assert::AreEqual(cpu.memory[oracle.Label("QQ1")], commander.At(Elite::Field::SystemY),
+        Assert::AreEqual(cpu.memory[oracle.Label("QQ1")], commander.systemY,
                          (where + L": QQ1, which is the commander's").c_str());
         Assert::AreEqual(cpu.memory[oracle.Label("QQ9")], crosshairX, (where + L": QQ9").c_str());
         Assert::AreEqual(cpu.memory[oracle.Label("QQ10")], crosshairY, (where + L": QQ10").c_str());
@@ -683,7 +683,7 @@ namespace GameLogicTests
         // DFAULT ran, so the live commander is what the image held.
         for (std::size_t index = 0; index + 1 < Elite::COMMANDER_BLOCK_SIZE; ++index)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("TP") + index)], commander.bytes[index],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("TP") + index)], commander.ToBytes()[index],
                            (where + L": the live commander's byte " + std::to_wstring(index)).c_str());
         }
 

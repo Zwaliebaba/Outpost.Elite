@@ -300,7 +300,7 @@ namespace Elite
     Compass& compass;
     Rng& rng;
 
-    CommanderBlock& commander; ///< 6502: TP -- `SIGHT` only reads it, the flight loop
+    Commander& commander; ///< 6502: TP -- `SIGHT` only reads it, the flight loop
                                ///< writes `NOMSL`, `QQ14`, `QQ20`, `FIST` and `BOMB`
     /*
      * 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and the six sprites they steer.

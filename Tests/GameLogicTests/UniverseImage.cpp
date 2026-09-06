@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <tuple>
 #include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -35,23 +36,26 @@ namespace GameLogicTests
     }
 
     /// A run of directly held bytes, one cell each, named with their index.
-    /// A ship's thirty-seven bytes, through the codec: each cell reads `ToBytes()` and writes back
-    /// through `FromBytes`, so the image is the K% layout whatever the struct's own layout is.
-    void ShipCells(std::vector<Cell>& _cells, const std::wstring& _name, std::uint16_t _base, Elite::Ship& _ship, CellScope _scope)
+    /// A struct with a codec -- a `Ship`'s thirty-seven bytes, a `Commander`'s seventy-seven --
+    /// as cells: each reads `ToBytes()` and writes back through `FromBytes`, so the image is the
+    /// original's layout whatever the struct's own layout is.
+    template <class Coded>
+    void CodecCells(std::vector<Cell>& _cells, const std::wstring& _name, std::uint16_t _base, Coded& _object, CellScope _scope)
     {
-      for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+      constexpr std::size_t SIZE = std::tuple_size_v<decltype(_object.ToBytes())>;
+      for (std::size_t byte = 0; byte < SIZE; ++byte)
       {
         Cell cell;
         cell.name = _name + L" byte " + std::to_wstring(byte);
         cell.address = static_cast<std::uint16_t>(_base + byte);
         cell.scope = _scope;
-        Elite::Ship* ship = &_ship;
-        cell.get = [ship, byte]() { return ship->ToBytes()[byte]; };
-        cell.set = [ship, byte](std::uint8_t _value)
+        Coded* object = &_object;
+        cell.get = [object, byte]() { return object->ToBytes()[byte]; };
+        cell.set = [object, byte](std::uint8_t _value)
         {
-          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> bytes = ship->ToBytes();
+          auto bytes = object->ToBytes();
           bytes[byte] = _value;
-          *ship = Elite::Ship::FromBytes(bytes);
+          *object = Coded::FromBytes(bytes);
         };
         _cells.push_back(std::move(cell));
       }
@@ -206,7 +210,7 @@ namespace GameLogicTests
     Run(cells, L"LSO", _at.lso, _universe.heaps.sun.data(), _universe.heaps.sun.size(), CellScope::Compared);
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
     {
-      ShipCells(cells, L"K% slot " + std::to_wstring(slot), static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE),
+      CodecCells(cells, L"K% slot " + std::to_wstring(slot), static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE),
                 _universe.bubble.blocks[slot], CellScope::Compared);
     }
     for (std::size_t index = 0; index < _universe.dust.x.size(); ++index)
@@ -239,7 +243,7 @@ namespace GameLogicTests
 
     Run(cells, L"FRIN", _at.frin, _universe.bubble.slots.data(), _universe.bubble.slots.size(), CellScope::Image);
     Run(cells, L"MANY", _at.many, _universe.bubble.counts.data(), _universe.bubble.counts.size(), CellScope::Image);
-    ShipCells(cells, L"INWK", _at.inwk, _universe.work, CellScope::Image);
+    CodecCells(cells, L"INWK", _at.inwk, _universe.work, CellScope::Image);
     Run(cells, L"SXL", _at.sxl, _universe.dust.xLow.data(), _universe.dust.xLow.size(), CellScope::Image);
     Run(cells, L"SYL", _at.syl, _universe.dust.yLow.data(), _universe.dust.yLow.size(), CellScope::Image);
     Run(cells, L"SZL", _at.szl, _universe.dust.zLow.data(), _universe.dust.zLow.size(), CellScope::Image);
@@ -252,7 +256,7 @@ namespace GameLogicTests
      * zeroes against whatever the shipped block happens to hold. `QQ14` comes with it; `Seed`
      * keeps `Universe::fuel` equal to it.
      */
-    Run(cells, L"TP", _at.tp, _universe.commander.bytes.data(), Elite::COMMANDER_BLOCK_SIZE, CellScope::Image);
+    CodecCells(cells, L"TP", _at.tp, _universe.commander, CellScope::Image);
 
     cells.push_back(Direct(L"COL2", _at.col2, _universe.text.cellColour, CellScope::Image));
     /*

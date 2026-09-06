@@ -252,7 +252,7 @@ namespace Elite
    */
   struct MissionBay
   {
-    CommanderBlock& commander; ///< 6502: TP, CASH, ENGY, TALLY and TRIBBLE
+    Commander& commander; ///< 6502: TP, CASH, ENGY, TALLY and TRIBBLE
     std::uint8_t& dockedFlag;  ///< 6502: QQ12, which `BAY` sets to &FF
     std::uint8_t view;         ///< 6502: QQ11, for the forced key's dispatch
     std::uint8_t countdown;    ///< 6502: QQ22+1 -- an in-flight hyperspace countdown, which is zero here

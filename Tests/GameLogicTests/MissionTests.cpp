@@ -814,7 +814,7 @@ namespace GameLogicTests
            * This one did, and every galaxy above zero was silently compared against galaxy zero's
            * token until the two character streams were dumped side by side.
            */
-          universe.universe.commander.At(Elite::Field::GalaxyNumber) = galaxy;
+          universe.universe.commander.galaxyNumber = galaxy;
 
           Cpu6502 cpu = oracle.Fresh();
           Trap(cpu, to);
@@ -828,7 +828,7 @@ namespace GameLogicTests
           Elite::FlightScreen screen = universe.universe.Screen();
           Elite::FlightLoop loop = LoopOver(universe, screen);
           Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
-          Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.At(Elite::Field::GalaxyNumber)};
+          Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.galaxyNumber};
           universe.universe.codes.to = &codes;
 
           /*
@@ -908,14 +908,14 @@ namespace GameLogicTests
         {
           LoopUniverse universe;
           Seed(universe.universe, progress * 5u + item.entry);
-          universe.universe.commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(progress * 17u);
+          universe.universe.commander.missionProgress = static_cast<std::uint8_t>(progress * 17u);
 
           Cpu6502 cpu = oracle.Fresh();
           cpu.AddTrap(to.detok);
           cpu.AddTrap(to.bay);
           for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
           {
-            cpu.memory[static_cast<std::uint16_t>(to.tp + byte)] = universe.universe.commander.bytes[byte];
+            cpu.memory[static_cast<std::uint16_t>(to.tp + byte)] = universe.universe.commander.ToBytes()[byte];
           }
 
           Assert::IsTrue(cpu.CallSubroutine(item.entry, 200'000).completed, L"the mission returned");
@@ -955,7 +955,7 @@ namespace GameLogicTests
           Elite::FlightLoop loop = LoopOver(universe, screen);
           Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
           Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
-          Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.At(Elite::Field::GalaxyNumber)};
+          Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.galaxyNumber};
           universe.universe.codes.to = &codes;
 
           const Elite::ForcedKey key = item.run(mission, bay);
@@ -970,7 +970,7 @@ namespace GameLogicTests
 
           for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], universe.universe.commander.bytes[byte],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], universe.universe.commander.ToBytes()[byte],
                              (where + L": TP+" + std::to_wstring(byte)).c_str());
           }
           ++compared;
@@ -1014,20 +1014,15 @@ namespace GameLogicTests
           {
             LoopUniverse universe;
             Seed(universe.universe, progress * 11u + (accept ? 2u : 0u) + (rich ? 1u : 0u));
-            universe.universe.commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(progress * 17u);
+            universe.universe.commander.missionProgress = static_cast<std::uint8_t>(progress * 17u);
 
             /*
              * 6502: CASH -- four bytes, big-endian, in tenths of a credit. 100,000 tenths is
              * 10,000 credits and 100 tenths is ten, so one half of the sweep can afford the
              * Trumble and the other cannot.
              */
-            const std::uint32_t cash = rich ? 100000u : 100u;
-            for (std::size_t byte = 0; byte < 4u; ++byte)
-            {
-              universe.universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + byte] =
-                static_cast<std::uint8_t>(cash >> (8u * (3u - byte)));
-            }
-            universe.universe.commander.At(Elite::Field::Tribbles) = 0u;
+            universe.universe.commander.cash.tenths = rich ? 100000u : 100u;
+            universe.universe.commander.tribbles.lo = 0u;
 
             Cpu6502 cpu = oracle.Fresh();
             cpu.AddTrap(to.detok);
@@ -1035,7 +1030,7 @@ namespace GameLogicTests
             cpu.AddTrap(to.yesno, accept ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
             for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
             {
-              cpu.memory[static_cast<std::uint16_t>(to.tp + byte)] = universe.universe.commander.bytes[byte];
+              cpu.memory[static_cast<std::uint16_t>(to.tp + byte)] = universe.universe.commander.ToBytes()[byte];
             }
 
             Assert::IsTrue(cpu.CallSubroutine(to.tbrief, 200'000).completed, L"TBRIEF returned");
@@ -1066,7 +1061,7 @@ namespace GameLogicTests
             Elite::FlightLoop loop = LoopOver(universe, screen);
             Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
             Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
-            Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.At(Elite::Field::GalaxyNumber)};
+            Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.galaxyNumber};
             universe.universe.codes.to = &codes;
 
             static_cast<void>(Elite::OfferTrumble(mission, bay, keys));
@@ -1081,19 +1076,19 @@ namespace GameLogicTests
 
             for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], universe.universe.commander.bytes[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], universe.universe.commander.ToBytes()[byte],
                                (where + L": TP+" + std::to_wstring(byte)).c_str());
             }
 
             if (accept)
             {
-              Assert::AreEqual<std::uint32_t>(1u, universe.universe.commander.At(Elite::Field::Tribbles), (where + L": one Trumble").c_str());
+              Assert::AreEqual<std::uint32_t>(1u, universe.universe.commander.tribbles.lo, (where + L": one Trumble").c_str());
               bought += rich ? 1u : 0u;
               freeTrumbles += rich ? 0u : 1u;
             }
             else
             {
-              Assert::AreEqual<std::uint32_t>(0u, universe.universe.commander.At(Elite::Field::Tribbles), (where + L": no Trumble").c_str());
+              Assert::AreEqual<std::uint32_t>(0u, universe.universe.commander.tribbles.lo, (where + L": no Trumble").c_str());
             }
             ++compared;
           }
@@ -1141,7 +1136,7 @@ namespace GameLogicTests
         Seed(universe.universe, progress * 23u + 5u);
         universe.universe.LendSunHeap(universe.heap);
         universe.universe.trumbles.count = 0u;
-        universe.universe.commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(progress * 85u);
+        universe.universe.commander.missionProgress = static_cast<std::uint8_t>(progress * 85u);
 
         /*
          * An EMPTY bubble, because `NWSHP` is what puts the Constrictor in it and a briefing runs
@@ -1191,7 +1186,7 @@ namespace GameLogicTests
         Elite::FlightLoop loop = LoopOver(universe, screen);
         Elite::MissionScreen mission{loop, start, universe.universe.extendedPrinter, universe.keys, 0u};
         Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
-        Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.At(Elite::Field::GalaxyNumber)};
+        Elite::MissionCodes codes{mission, universe.universe.text, universe.universe.commander.galaxyNumber};
         universe.universe.codes.to = &codes;
 
         const std::uint8_t ourToken = Elite::RunConstrictorBriefing(mission, bay);
@@ -1207,7 +1202,7 @@ namespace GameLogicTests
 
         for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], universe.universe.commander.bytes[byte],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(to.tp + byte)], universe.universe.commander.ToBytes()[byte],
                            (where + L": TP+" + std::to_wstring(byte)).c_str());
         }
 

@@ -191,13 +191,13 @@ namespace GameLogicTests
             {
               for (const std::uint32_t money : CASH_VALUES)
               {
-                Elite::CommanderBlock commander = Elite::DefaultCommander();
-                commander.At(Elite::Field::MissionProgress) = static_cast<std::uint8_t>(missions);
-                commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = rank;
-                commander.At(Elite::Field::GalaxyNumber) = galaxy;
-                commander.At(Elite::Field::SystemX) = place.x;
-                commander.At(Elite::Field::SystemY) = place.y;
-                commander.SetCash(money);
+                Elite::Commander commander = Elite::DefaultCommander();
+                commander.missionProgress = static_cast<std::uint8_t>(missions);
+                commander.kills.hi = rank;
+                commander.galaxyNumber = galaxy;
+                commander.systemX = place.x;
+                commander.systemY = place.y;
+                commander.cash.tenths = (money);
 
                 // ---- the shipped routine -------------------------------------------------------
                 Cpu6502 cpu = oracle.Fresh();
@@ -213,7 +213,7 @@ namespace GameLogicTests
                 for (std::size_t index = 0; index < 4; ++index)
                 {
                   cpu.memory[static_cast<std::uint16_t>(cash + index)] =
-                    commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+                    commander.cash.Byte(index);
                 }
 
                 cpu.a = cpu.x = cpu.y = 0;
@@ -291,10 +291,10 @@ namespace GameLogicTests
       cpu.AddTrap(delay);
 
       // A commander that earns nothing, so the run reaches BAY and every store above it has run.
-      Elite::CommanderBlock commander = Elite::DefaultCommander();
-      commander.At(Elite::Field::MissionProgress) = 0x02;
-      commander.At(Elite::Field::GalaxyNumber) = 7;
-      commander.SetCash(0);
+      Elite::Commander commander = Elite::DefaultCommander();
+      commander.missionProgress = 0x02;
+      commander.galaxyNumber = 7;
+      commander.cash.tenths = (0);
       cpu.memory[oracle.Label("TP")] = 0x02;
       cpu.memory[oracle.Label("GCNT")] = 7;
 
@@ -409,11 +409,11 @@ namespace GameLogicTests
        * BAY's stores on every path would set the docked flag before the mission screen had drawn.
        */
       RecordingEffects briefed;
-      Elite::CommanderBlock earner = Elite::DefaultCommander();
-      earner.At(Elite::Field::MissionProgress) = 0x00;
-      earner.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = 4;
-      earner.At(Elite::Field::GalaxyNumber) = 0;
-      earner.SetCash(0);
+      Elite::Commander earner = Elite::DefaultCommander();
+      earner.missionProgress = 0x00;
+      earner.kills.hi = 4;
+      earner.galaxyNumber = 0;
+      earner.cash.tenths = (0);
 
       Universe earnerUniverse;
       Elite::ClipState earnerClip;
@@ -485,10 +485,10 @@ namespace GameLogicTests
 
         // A commander with mission 1 finished and paid, in a galaxy where mission 2 cannot start,
         // so the only decision left is this one.
-        Elite::CommanderBlock commander = Elite::DefaultCommander();
-        commander.At(Elite::Field::MissionProgress) = 0x02;
-        commander.At(Elite::Field::GalaxyNumber) = 7;
-        commander.SetCash(item.tenths);
+        Elite::Commander commander = Elite::DefaultCommander();
+        commander.missionProgress = 0x02;
+        commander.galaxyNumber = 7;
+        commander.cash.tenths = (item.tenths);
 
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(oracle.Label("RES2"));
@@ -498,7 +498,7 @@ namespace GameLogicTests
         cpu.memory[oracle.Label("GCNT")] = 7;
         for (std::size_t index = 0; index < 4; ++index)
         {
-          cpu.memory[static_cast<std::uint16_t>(cash + index)] = commander.bytes[static_cast<std::size_t>(Elite::Field::Cash) + index];
+          cpu.memory[static_cast<std::uint16_t>(cash + index)] = commander.cash.Byte(index);
         }
         cpu.a = cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;

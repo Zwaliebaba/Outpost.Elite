@@ -72,11 +72,10 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(bad, 4000);
             Assert::IsTrue(run.completed, L"BAD returned");
 
-            Elite::CommanderBlock commander;
-            const std::size_t hold = static_cast<std::size_t>(Elite::Field::CargoHold);
-            commander.bytes[hold + 3u] = slaves;
-            commander.bytes[hold + 6u] = narcotics;
-            commander.bytes[hold + 10u] = firearms;
+            Elite::Commander commander;
+            commander.cargoHold[3] = slaves;
+            commander.cargoHold[6] = narcotics;
+            commander.cargoHold[10] = firearms;
 
             const std::wstring where = WidenText("BAD(slaves " + std::to_string(slaves) + ", narcotics " + std::to_string(narcotics) +
                                                  ", firearms " + std::to_string(firearms) + ")");
@@ -619,7 +618,7 @@ namespace GameLogicTests
       Universe& universe = _leaving.universe;
       Seed(universe, _seed);
 
-      universe.commander.At(Elite::Field::Fuel) = universe.fuel;
+      universe.commander.fuel = universe.fuel;
       universe.message.token = 101u;
       universe.message.column = 9u;
       universe.message.append = 1u;
@@ -710,8 +709,8 @@ namespace GameLogicTests
       same(_to.qq22, universe.status.hyperspaceCounter, L"QQ22");
       same(_to.hfx, universe.screen.hyperspaceEffect, L"HFX");
       same(_to.qq12, _docked, L"QQ12");
-      same(_to.bomb, universe.commander.At(Elite::Field::EnergyBomb), L"BOMB");
-      same(_to.fist, universe.commander.At(Elite::Field::LegalStatus), L"FIST");
+      same(_to.bomb, universe.commander.energyBomb, L"BOMB");
+      same(_to.fist, universe.commander.legalStatus, L"FIST");
 
       const std::uint16_t bottom =
         static_cast<std::uint16_t>(_cpu.memory[_to.slsp] | (_cpu.memory[static_cast<std::uint16_t>(_to.slsp + 1u)] << 8));
@@ -764,7 +763,7 @@ namespace GameLogicTests
 
         leaving.universe.bubble.Count(Elite::ShipType::Station) = ((shape & 1u) != 0u) ? 1u : 0u;
         leaving.universe.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
-        leaving.universe.commander.At(Elite::Field::EnergyBomb) = ((shape & 4u) != 0u) ? 0xC0u : 0x40u;
+        leaving.universe.commander.energyBomb = ((shape & 4u) != 0u) ? 0xC0u : 0x40u;
 
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(to.stopbd);
@@ -895,12 +894,10 @@ namespace GameLogicTests
             Leaving leaving;
             Occupy(leaving, docked + techLevel * 7u + contraband);
             leaving.universe.techLevel = techLevel; // 6502: tek, which `Mirror` sends to the oracle
-
-            const std::size_t hold = static_cast<std::size_t>(Elite::Field::CargoHold);
-            leaving.universe.commander.bytes[hold + 3u] = contraband;
-            leaving.universe.commander.bytes[hold + 10u] = contraband;
-            leaving.universe.commander.At(Elite::Field::LegalStatus) = 2u;
-            leaving.universe.commander.At(Elite::Field::EnergyBomb) = 0x40u;
+            leaving.universe.commander.cargoHold[3] = contraband;
+            leaving.universe.commander.cargoHold[10] = contraband;
+            leaving.universe.commander.legalStatus = 2u;
+            leaving.universe.commander.energyBomb = 0x40u;
             leaving.universe.view = 1u;
 
             Cpu6502 cpu = oracle.Fresh();
@@ -930,8 +927,8 @@ namespace GameLogicTests
 
             std::uint8_t flag = docked;
             Elite::SystemSeeds selected{};
-            Elite::Launch(loop, nullptr, flag, leaving.universe.commander.At(Elite::Field::SystemX),
-                          leaving.universe.commander.At(Elite::Field::SystemY), techLevel, selected);
+            Elite::Launch(loop, nullptr, flag, leaving.universe.commander.systemX,
+                          leaving.universe.commander.systemY, techLevel, selected);
 
             const std::wstring where = WidenText("TT110 (" + std::string(docked != 0u ? "docked" : "in flight") + ", tek " +
                                                  std::to_string(techLevel) + ", contraband " + std::to_string(contraband) + ")");
@@ -992,8 +989,8 @@ namespace GameLogicTests
       Counting counting;
       std::uint8_t flag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
       Elite::SystemSeeds selected{};
-      Elite::Launch(loop, &counting, flag, leaving.universe.commander.At(Elite::Field::SystemX),
-                    leaving.universe.commander.At(Elite::Field::SystemY), 7u, selected);
+      Elite::Launch(loop, &counting, flag, leaving.universe.commander.systemX,
+                    leaving.universe.commander.systemY, 7u, selected);
 
       Assert::AreEqual<std::uint32_t>(68u, counting.circles, L"both tunnels are paced, not just the second");
 
@@ -1007,8 +1004,8 @@ namespace GameLogicTests
       Counting none;
       std::uint8_t inFlight = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
       Elite::SystemSeeds ignored{};
-      Elite::Launch(flyingLoop, &none, inFlight, flying.universe.commander.At(Elite::Field::SystemX),
-                    flying.universe.commander.At(Elite::Field::SystemY), 7u, ignored);
+      Elite::Launch(flyingLoop, &none, inFlight, flying.universe.commander.systemX,
+                    flying.universe.commander.systemY, 7u, ignored);
 
       Assert::AreEqual<std::uint32_t>(0u, none.circles, L"pressing 1 in flight is a view change and draws no tunnel");
     }

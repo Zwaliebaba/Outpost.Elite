@@ -67,7 +67,7 @@ SKIP_ARITY = {
     # Types constructed rather than called, and names whose declarations this cannot parse. A name
     # here is still checked for EXISTENCE; only its argument count is let through.
     "Canvas", "DrawWorkspace", "MathWorkspace", "TextState", "ExtendedTextState", "MessageState",
-    "FlightStatus", "FlightState", "CommanderBlock", "Rng", "TokenPrinter", "CharacterPrinter",
+    "FlightStatus", "FlightState", "Commander", "Rng", "TokenPrinter", "CharacterPrinter",
     "ExtendedTokenPrinter", "TextPrinter", "StateTokens", "SystemSeeds", "CurrentSystem",
     "MarketState", "Bubble", "ShipBlock", "LineHeap", "Stardust", "PlanetSunState", "Compass",
     "LaserBurst", "GeometryWorkspace", "Projection", "GalaxyNumber",

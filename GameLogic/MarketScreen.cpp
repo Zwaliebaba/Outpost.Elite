@@ -102,7 +102,7 @@ namespace Elite
     }
   } // namespace
 
-  void BuyScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market, std::uint8_t _economy, bool _misJumped) noexcept
+  void BuyScreen(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy, bool _misJumped) noexcept
   {
     // 6502: LDA #2 / JSR TRADEMODE.
     _screen.effects.SetUpTradeScreen(BUY_CARGO_VIEW);
@@ -214,8 +214,8 @@ namespace Elite
            * Both carries are set explicitly, so neither is one of the chained ones this port keeps
            * finding. The hold and the market move by the same amount in opposite directions.
            */
-          const std::size_t hold = static_cast<std::size_t>(Field::CargoHold) + static_cast<std::size_t>(item);
-          _commander.bytes[hold] = AddWithCarry(_commander.bytes[hold], entry.value, false).value;
+          std::uint8_t& aboard = _commander.cargoHold[static_cast<std::size_t>(item)];
+          aboard = AddWithCarry(aboard, entry.value, false).value;
           _market.availability[item] = static_cast<std::uint8_t>(_market.availability[item] - entry.value);
 
           // 6502: PLA / BEQ TT222 -- buying nothing prints no confirmation and makes no sound.
@@ -233,9 +233,8 @@ namespace Elite
     }
   }
 
-  void ListCargo(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market, std::uint8_t _economy, std::uint8_t _view) noexcept
+  void ListCargo(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy, std::uint8_t _view) noexcept
   {
-    const std::size_t hold = static_cast<std::size_t>(Field::CargoHold);
 
     // 6502: LDY #0 / TT211: STY QQ29.
     for (int item = 0; item < MARKET_ITEM_COUNT; ++item)
@@ -249,7 +248,7 @@ namespace Elite
       for (;;)
       {
         // 6502: LDX QQ20,Y / BEQ TT212 -- nothing of this item, nothing to print.
-        const std::uint8_t held = _commander.bytes[hold + static_cast<std::size_t>(item)];
+        const std::uint8_t held = _commander.cargoHold[static_cast<std::size_t>(item)];
         if (held == 0)
         {
           break;
@@ -341,7 +340,7 @@ namespace Elite
         _screen.text.caseFlags = 0;
 
         // 6502: LDA QQ20,Y / SEC / SBC R / STA QQ20,Y.
-        _commander.bytes[hold + static_cast<std::size_t>(item)] = static_cast<std::uint8_t>(held - number.value);
+        _commander.cargoHold[static_cast<std::size_t>(item)] = static_cast<std::uint8_t>(held - number.value);
 
         // 6502: LDA R / STA P / LDA QQ24 / STA Q / JSR GCASH / JSR MCASH.
         ReceiveCash(_commander, TotalPrice(price, number.value));
@@ -373,7 +372,7 @@ namespace Elite
     SetSentenceCaseAndNewline(_screen.printer);
 
     const std::uint16_t trumbles =
-      static_cast<std::uint16_t>(_commander.At(Field::Tribbles) | (_commander.bytes[static_cast<std::size_t>(Field::Tribbles) + 1u] << 8));
+      static_cast<std::uint16_t>(_commander.tribbles.lo | (_commander.tribbles.hi << 8));
 
     // 6502: LDA TRIBBLE / ORA TRIBBLE+1 / BNE P%+3 / zebra: RTS.
     if (trumbles == 0)
@@ -403,7 +402,7 @@ namespace Elite
     _screen.characters.Put('s');
   }
 
-  void InventoryScreen(TradeScreen& _screen, CommanderBlock& _commander, MarketState& _market, std::uint8_t _economy) noexcept
+  void InventoryScreen(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy) noexcept
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
     _screen.effects.SetUpTradeScreen(INVENTORY_VIEW);
@@ -418,7 +417,7 @@ namespace Elite
     _screen.printer.Print(5);
 
     // 6502: LDA CRGO / CMP #26 / BCC P%+7 / LDA #107 / JSR TT27.
-    if (_commander.At(Field::CargoCapacity) >= LARGE_HOLD_THRESHOLD)
+    if (_commander.cargoCapacity >= LARGE_HOLD_THRESHOLD)
     {
       _screen.printer.Print(LARGE_CARGO_BAY_TOKEN);
     }

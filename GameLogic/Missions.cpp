@@ -235,7 +235,7 @@ namespace Elite
      * all back with a one going into bit 0. Every other bit ends where it started, so it is
      * `ORA #1` written for a machine whose author preferred shifts.
      */
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);
 
     ShowIncomingMessage(_mission); // 6502: JSR BRIS
@@ -334,7 +334,7 @@ namespace Elite
   ForcedKey BriefMission2(MissionScreen& _mission, MissionBay& _bay) noexcept
   {
     // 6502: LDA TP / ORA #%00000100 / STA TP -- in progress, plans not yet collected.
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_2_STARTED);
 
     // 6502: LDA #11 -- and then a FALL-THROUGH into BRP rather than a branch.
@@ -350,7 +350,7 @@ namespace Elite
      * both its bits go, not just the "in progress" one. Bit 1 is then set again by the `ORA`, which
      * is what `MissionOnDocking` reads as "mission 1 finished and paid", and bit 3 is the plans.
      */
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>((progress & MISSION_2_KEEP) | MISSION_2_PLANS);
 
     return PrintAndEnterBay(_mission, _bay, MISSION_2_BRIEFING);
@@ -369,7 +369,7 @@ namespace Elite
      * `\INC TALLY+1` sits between the two halves of this routine, commented out in the original,
      * so the Constrictor is worth no kill points. Not ported, because it does not run.
      */
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);
 
     // 6502: LDX #LO(50000) / LDY #HI(50000) / JSR MCASH -- 5,000 credits.
@@ -383,16 +383,15 @@ namespace Elite
   {
     // 6502: LDA TP / ORA #%00000100 / STA TP -- bit 2 again, so 2 and 3 are both up and the pair
     // reads as "complete".
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_2_STARTED);
 
     // 6502: LDA #2 / STA ENGY -- the navy's energy unit.
-    _bay.commander.At(Field::EnergyUnit) = NAVY_ENERGY_UNIT;
+    _bay.commander.energyUnit = NAVY_ENERGY_UNIT;
 
     // 6502: INC TALLY+1 -- 256 kill points, into the HIGH byte, so the low one is untouched and
     // the combat rank jumps by a whole step.
-    const std::size_t tally = static_cast<std::size_t>(Field::Kills);
-    _bay.commander.bytes[tally + 1u] = static_cast<std::uint8_t>(_bay.commander.bytes[tally + 1u] + 1u);
+    _bay.commander.kills.hi = static_cast<std::uint8_t>(_bay.commander.kills.hi + 1u);
 
     return PrintAndEnterBay(_mission, _bay, MISSION_2_DEBRIEFING);
   }
@@ -401,7 +400,7 @@ namespace Elite
   {
     // 6502: LDA TP / ORA #%00010000 / STA TP -- BEFORE the question, so declining still counts as
     // having been asked and the Trumble is never offered again.
-    std::uint8_t& progress = _bay.commander.At(Field::MissionProgress);
+    std::uint8_t& progress = _bay.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);
 
     _mission.tokens.Print(TRUMBLE_OFFER); // 6502: LDA #199 / JSR DETOK
@@ -422,7 +421,7 @@ namespace Elite
     static_cast<void>(SpendCash(_bay.commander, MISSION_REWARD));
 
     // 6502: INC TRIBBLE -- the LOW byte, from nothing to one, and `MLOOP` breeds the rest.
-    std::uint8_t& trumbles = _bay.commander.At(Field::Tribbles);
+    std::uint8_t& trumbles = _bay.commander.tribbles.lo;
     trumbles = static_cast<std::uint8_t>(trumbles + 1u);
 
     return PrintAndEnterBay(_mission, _bay, 0u); // 6502: JMP BAY

@@ -64,16 +64,16 @@ namespace Elite
      * are at least 196, which is true in a band 1536 credits wide that recurs every 6553.6. Rich
      * enough and you stop qualifying; get richer still and you qualify again.
      */
-    [[nodiscard]] DockingOutcome TrumblesOrBay(const CommanderBlock& _commander) noexcept
+    [[nodiscard]] DockingOutcome TrumblesOrBay(const Commander& _commander) noexcept
     {
-      const std::uint8_t cashByte = _commander.bytes[static_cast<std::size_t>(Field::Cash) + 2u];
+      const std::uint8_t cashByte = _commander.cash.Byte(2u);
       if (cashByte < TRUMBLES_CASH_BYTE)
       {
         return DockingOutcome::DockingBay;
       }
 
       // 6502: LDA TP / AND #%00010000 / BNE EN6 -- offered once, and the bit remembers it.
-      if ((_commander.At(Field::MissionProgress) & TRUMBLES_OFFERED) != 0u)
+      if ((_commander.missionProgress & TRUMBLES_OFFERED) != 0u)
       {
         return DockingOutcome::DockingBay;
       }
@@ -82,11 +82,11 @@ namespace Elite
     }
   } // namespace
 
-  DockingOutcome MissionOnDocking(const CommanderBlock& _commander) noexcept
+  DockingOutcome MissionOnDocking(const Commander& _commander) noexcept
   {
-    const std::uint8_t missions = _commander.At(Field::MissionProgress);
-    const std::uint8_t killsHigh = _commander.bytes[static_cast<std::size_t>(Field::Kills) + 1u];
-    const std::uint8_t galaxy = _commander.At(Field::GalaxyNumber);
+    const std::uint8_t missions = _commander.missionProgress;
+    const std::uint8_t killsHigh = _commander.kills.hi;
+    const std::uint8_t galaxy = _commander.galaxyNumber;
 
     // 6502: LDA TP / AND #%00000011 / BNE EN1.
     const std::uint8_t mission1 = static_cast<std::uint8_t>(missions & MISSION_1_BITS);
@@ -135,7 +135,7 @@ namespace Elite
     // 6502: EN3 -- CMP #%00000110 / BNE EN5, then Ceerdi's coordinates.
     if (stage == MISSION_2_AWAITING_PLANS)
     {
-      if (_commander.At(Field::SystemX) != CEERDI_X || _commander.At(Field::SystemY) != CEERDI_Y)
+      if (_commander.systemX != CEERDI_X || _commander.systemY != CEERDI_Y)
       {
         return TrumblesOrBay(_commander);
       }
@@ -145,7 +145,7 @@ namespace Elite
     // 6502: EN5 -- CMP #%00001010 / BNE EN4, then Birera's.
     if (stage == MISSION_2_CARRYING_PLANS)
     {
-      if (_commander.At(Field::SystemX) != BIRERA_X || _commander.At(Field::SystemY) != BIRERA_Y)
+      if (_commander.systemX != BIRERA_X || _commander.systemY != BIRERA_Y)
       {
         return TrumblesOrBay(_commander);
       }

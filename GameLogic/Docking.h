@@ -73,7 +73,7 @@ namespace Elite
    * each other about which threshold it is; neither is right, and the sweep in the tests walks the
    * values that tell them apart.
    */
-  [[nodiscard]] DockingOutcome MissionOnDocking(const CommanderBlock& _commander) noexcept;
+  [[nodiscard]] DockingOutcome MissionOnDocking(const Commander& _commander) noexcept;
 
   struct DockingResult
   {

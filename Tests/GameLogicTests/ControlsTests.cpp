@@ -507,17 +507,17 @@ namespace GameLogicTests
 
             FillScreens(cpu, canvas, screen, 0x6Du);
 
-            Elite::CommanderBlock commander;
+            Elite::Commander commander;
             for (std::uint8_t slot = 0; slot < 4u; ++slot)
             {
               // A different laser on every other view, so a port that ignored VIEW would be caught.
               const std::uint8_t fitted = (slot == which) ? laser : Elite::LASER_BEAM;
-              commander.bytes[static_cast<std::size_t>(Elite::Field::Lasers) + slot] = fitted;
+              commander.lasers[slot] = fitted;
               cpu.memory[static_cast<std::uint16_t>(laserBase + slot)] = fitted;
             }
 
-            commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles)] = 0x77u;
-            commander.bytes[static_cast<std::size_t>(Elite::Field::Tribbles) + 1u] = population;
+            commander.tribbles.lo = 0x77u;
+            commander.tribbles.hi = population;
             cpu.memory[tribble] = 0x77u;
             cpu.memory[static_cast<std::uint16_t>(tribble + 1)] = population;
 

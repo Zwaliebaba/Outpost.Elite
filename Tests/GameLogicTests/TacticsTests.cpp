@@ -839,10 +839,10 @@ namespace GameLogicTests
        * target's slot UNHALVED and the sweep agreed, because nothing ever looked at what the two
        * scores were (§6.153).
        */
-      _cpu.memory[_at.tallyl] = _universe.universe.commander.At(Elite::Field::KillsLow);
-      _cpu.memory[_at.tally] = _universe.universe.commander.At(Elite::Field::Kills);
+      _cpu.memory[_at.tallyl] = _universe.universe.commander.killsFraction;
+      _cpu.memory[_at.tally] = _universe.universe.commander.kills.lo;
       _cpu.memory[static_cast<std::uint16_t>(_at.tally + 1)] =
-        _universe.universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u];
+        _universe.universe.commander.kills.hi;
     }
 
     /*
@@ -891,10 +891,10 @@ namespace GameLogicTests
       Assert::AreEqual(_cpu.memory[_at.ash], _universe.universe.status.aftShield, (_where + L": ASH").c_str());
 
       // What `EXNO2` scores, all three bytes of it -- see `PushTacticsUniverse`.
-      Assert::AreEqual(_cpu.memory[_at.tallyl], _universe.universe.commander.At(Elite::Field::KillsLow), (_where + L": TALLYL").c_str());
-      Assert::AreEqual(_cpu.memory[_at.tally], _universe.universe.commander.At(Elite::Field::Kills), (_where + L": TALLY").c_str());
+      Assert::AreEqual(_cpu.memory[_at.tallyl], _universe.universe.commander.killsFraction, (_where + L": TALLYL").c_str());
+      Assert::AreEqual(_cpu.memory[_at.tally], _universe.universe.commander.kills.lo, (_where + L": TALLY").c_str());
       Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.tally + 1)],
-                       _universe.universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u],
+                       _universe.universe.commander.kills.hi,
                        (_where + L": TALLY+1").c_str());
     }
   } // namespace
@@ -1158,7 +1158,7 @@ namespace GameLogicTests
 
             // The port, from the same bytes, through the same seams.
             universe.universe.status.ecmCountdown = one.ecm;
-            universe.universe.commander.At(Elite::Field::LegalStatus) = one.legal;
+            universe.universe.commander.legalStatus = one.legal;
 
             Elite::FlightScreen screen = universe.universe.Screen();
             Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,

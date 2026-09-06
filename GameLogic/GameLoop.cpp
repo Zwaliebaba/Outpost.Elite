@@ -103,7 +103,7 @@ namespace Elite
     }
   }
 
-  std::uint8_t RunLoopTail(FlightLoop& _loop, CommanderBlock& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept
+  std::uint8_t RunLoopTail(FlightLoop& _loop, Commander& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept
   {
     std::uint8_t requestedFrames = 0;
     FlightScreen& screen = _loop.screen;
@@ -117,7 +117,7 @@ namespace Elite
     // makes the speed, roll and pitch indicators move at all.
     if (screen.view == 0u)
     {
-      DrawDials(screen.canvas, screen.draw, screen.math, screen.geometry, screen.flight, screen.status, _commander.At(Field::Fuel),
+      DrawDials(screen.canvas, screen.draw, screen.math, screen.geometry, screen.flight, screen.status, _commander.fuel,
                 screen.compass, screen.bubble);
 
       /*
@@ -163,8 +163,8 @@ namespace Elite
      * grows by one about one pass in seven, and `BPL nobabies / DEC TRIBBLE+1` clamps the high byte
      * at 127 by undoing the increment that would have set bit 7.
      */
-    std::uint8_t tribbleLow = _commander.At(Field::Tribbles);
-    std::uint8_t tribbleHigh = _commander.At(static_cast<Field>(static_cast<int>(Field::Tribbles) + 1));
+    std::uint8_t tribbleLow = _commander.tribbles.lo;
+    std::uint8_t tribbleHigh = _commander.tribbles.hi;
 
     if (tribbleHigh != 0u)
     {
@@ -184,8 +184,8 @@ namespace Elite
         }
       }
 
-      _commander.At(Field::Tribbles) = tribbleLow;
-      _commander.At(static_cast<Field>(static_cast<int>(Field::Tribbles) + 1)) = tribbleHigh;
+      _commander.tribbles.lo = tribbleLow;
+      _commander.tribbles.hi = tribbleHigh;
     }
 
     /*
@@ -252,17 +252,17 @@ namespace Elite
     return requestedFrames;
   }
 
-  bool AtConstrictorSystem(const CommanderBlock& _commander) noexcept
+  bool AtConstrictorSystem(const Commander& _commander) noexcept
   {
     // 6502: LDX GCNT / DEX / BNE THEX -- galaxy 2 and no other, and the `DEX` is why: galaxy 1 is
     // GCNT 0, so only GCNT 1 leaves zero behind.
-    if (static_cast<std::uint8_t>(_commander.At(Field::GalaxyNumber) - 1u) != 0u)
+    if (static_cast<std::uint8_t>(_commander.galaxyNumber - 1u) != 0u)
     {
       return false; // 6502: .THEX CLC / RTS
     }
 
     // 6502: LDA QQ0 / CMP #144 / BNE THEX.
-    if (_commander.At(Field::SystemX) != 144u)
+    if (_commander.systemX != 144u)
     {
       return false;
     }
@@ -274,7 +274,7 @@ namespace Elite
      * `CMP #33` left, and an equal compare sets it. Every other path runs the `CLC` and returns
      * clear. The routine's answer IS the carry and it is never in A.
      */
-    return _commander.At(Field::SystemY) == 33u;
+    return _commander.systemY == 33u;
   }
 
   NewShip SpawnThargoidPair(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint16_t& _blueprint, bool _carryIn) noexcept
@@ -300,7 +300,7 @@ namespace Elite
     return Spawn(_bubble, _work, ShipType::Thargon, _blueprint);
   }
 
-  void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, CommanderBlock& _commander, const CurrentSystem& _current,
+  void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, Commander& _commander, const CurrentSystem& _current,
                    const FlightStatus& _status, std::uint8_t& _explosionCount, std::uint16_t& _blueprint, bool _carryIn) noexcept
   {
     // 6502: LDA MJ / BNE ytq -- nothing spawns in witchspace, because witchspace has no system to
@@ -526,7 +526,7 @@ namespace Elite
     std::uint8_t threshold = doubled.value;
     if (_bubble.Count(ShipType::Viper) != 0u)
     {
-      threshold = static_cast<std::uint8_t>(doubled.value | _commander.At(Field::LegalStatus));
+      threshold = static_cast<std::uint8_t>(doubled.value | _commander.legalStatus);
     }
 
     // 6502: JSR Ze / CMP #136 / BEQ fothg -- one byte in 256 goes to the Cougar path.
@@ -588,7 +588,7 @@ namespace Elite
 
     // 6502: LDA TP / AND #%00001100 / CMP #%00001000 / BNE nopl -- mission 1 at stage 2, which is
     // when the Thargoids start hunting you.
-    const std::uint8_t stage = static_cast<std::uint8_t>(_commander.At(Field::MissionProgress) & 0x0Cu);
+    const std::uint8_t stage = static_cast<std::uint8_t>(_commander.missionProgress & 0x0Cu);
     carry = stage >= 0x08u; // 6502: CMP #%00001000, and the flag outlives the BNE
 
     if (stage == 0x08u)
@@ -688,7 +688,7 @@ namespace Elite
        */
       _work.ai = 0xF9u;
 
-      const std::uint8_t stage = static_cast<std::uint8_t>(_commander.At(Field::MissionProgress) & 3u);
+      const std::uint8_t stage = static_cast<std::uint8_t>(_commander.missionProgress & 3u);
       const ShiftResult shifted = {static_cast<std::uint8_t>(stage >> 1u), (stage & 1u) != 0u};
 
       // 6502: LSR A -- and `ORA`, `BEQ`, `LDA` and `STA` all leave the flag alone, so this is what
