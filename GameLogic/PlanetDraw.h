@@ -11,6 +11,7 @@
 #include <array>
 #include <cstdint>
 #include <utility>
+#include "Presenter.h"
 
 namespace Elite
 {
@@ -285,24 +286,16 @@ namespace Elite
    * about half a second, which is why it cannot be treated as ADR-005 section 1's "intermediate
    * state inside a step": it is not a step, it is thirty-four of them.
    *
-   * A null pacing draws the effect at once, which is what a comparison against the oracle wants:
-   * the 6502 has no present either, and the two sides must agree on PIXELS and not on time.
+   * A presenter that does nothing draws the effect at once, which is what a comparison against the
+   * oracle wants: the 6502 has no present either, and the two sides must agree on PIXELS and not
+   * on time.
    */
-  class TunnelEffects
-  {
-  public:
-    virtual ~TunnelEffects() = default;
-
-    /*
-     * One frame's worth of drawing is done: show it, and let one vertical sync pass.
-     *
-     * Named for the FRAME and not for the circle, because two routines want it. `HFL2` calls it
-     * after every circle, which is the pacing §6.109 measured; and `HYPNOISE` calls it once for
-     * its `LDY #1 / JSR DELAY`, which is the same thing the same length -- `DELAY` counts vertical
-     * syncs and this is one.
-     */
-    virtual void ShowFrame() = 0;
-  };
+  /*
+   * `TunnelEffects` WAS HERE AND IS `Presenter` SINCE M3-b-3c.
+   *
+   * One method, `ShowFrame`, threaded as a nullable pointer through eleven routines -- and the
+   * pointer was carrying three answers rather than one. `Presenter.h` has them.
+   */
 
   /*
    * 6502: HFL1 -- one ring of the hyperspace effect, expanding until it leaves the screen.
@@ -316,7 +309,7 @@ namespace Elite
    * carry and stops there, so the loop ends on whichever comes first.
    */
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                          ClipState& _clip, const Projection& _centre, std::uint8_t _index, TunnelEffects* _pacing) noexcept;
+                          ClipState& _clip, const Projection& _centre, std::uint8_t _index, Presenter& _present) noexcept;
 
   /*
    * 6502: HFS1 -- the whole effect, eight rings from the centre of the space view.
@@ -325,7 +318,7 @@ namespace Elite
    * around the crosshairs whatever the ship is doing. `XX4` counts the eight.
    */
   void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
-                           MathWorkspace& _math, ClipState& _clip, TunnelEffects* _pacing) noexcept;
+                           MathWorkspace& _math, ClipState& _clip, Presenter& _present) noexcept;
 
   /*
    * 6502: CIRCLE -- is it worth drawing, how coarse should it be, and then draw it.

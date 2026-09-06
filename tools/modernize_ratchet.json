@@ -34,19 +34,19 @@
       "slice": "M3-b-3a: SightEffects goes and no port replaces it -- twelve, with credit for Presenter"
     },
     "main-lines": {
-      "ceiling": 1197,
+      "ceiling": 1161,
       "slack": 0,
-      "slice": "M3-b-3b: Main.cpp opens a trade screen with TT66 and a flush rather than a seam"
+      "slice": "M3-b-3c: Main.cpp's DeathPacing goes -- the library counts the ships and asks the presenter"
     },
     "outpost-elite-names": {
-      "ceiling": 175,
+      "ceiling": 174,
       "slack": 0,
-      "slice": "M3-b-3b: the app names neither TradeScreenEffects nor ChartEffects nor their four methods"
+      "slice": "M3-b-3c: TunnelEffects is not a name the app reaches any more"
     },
     "effects-seams": {
-      "ceiling": 13,
+      "ceiling": 12,
       "slack": 0,
-      "slice": "M3-b-3b: TradeScreenEffects and ChartEffects go and Presenter arrives -- two out, one in"
+      "slice": "M3-b-3c: TunnelEffects becomes Presenter's Present and HoldFlightFrame"
     },
     "out-params": {
       "ceiling": 17,

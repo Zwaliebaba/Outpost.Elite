@@ -300,13 +300,13 @@ interfaces with four ports without touching a signature again. `ViewChange.h` sa
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
-<!--count:main-lines-->1,197 lines, most of them the dispatch, the exits and the two loops. Plan
+<!--count:main-lines-->1,161 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->175 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->174 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->13 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->12 abstract classes in
 `GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `TunnelEffects::ShowFrame`,
 `SaveStore` through `SaveScreen`). Most are **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
@@ -1368,8 +1368,8 @@ raster interrupt handler" and which is nothing of the kind (§8, `MemoryMap.h`).
 are `SetUpTradeScreen`, `ClearBottomRows` or `BeepAndPause`'s beep. What `Presenter` carries is
 `DELAY`, because `WSCAN` waits for a raster line and nothing in `GameLogic` knows what one is —
 which is also why the oracle traps it and a suite that untrapped it would hang (§8).
-`TunnelEffects::ShowFrame` is `Present()` and is M3-b-3c's, threaded as a nullable `TunnelEffects*`
-through ten routines that the port replaces with the `Ports` member.
+`TunnelEffects::ShowFrame` became `Present()` in M3-b-3c — and it was one method carrying three
+answers, one of which the executable was getting wrong (§8).
 
 **M3-b-4 — `SaveStore`, the text system, and the null port.** `CommanderStore` is renamed to §4.5's
 name. `TextSink`, `ValueTokens` and `ControlCodes` are the text system's own polymorphism rather
@@ -1713,6 +1713,41 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-3c: one seam was carrying three answers, and the executable was choosing between
+them.** `TunnelEffects::ShowFrame` is `Presenter`'s now, and it did not survive the move as one
+method. The interface had exactly one, threaded as a NULLABLE POINTER through eleven routines, and
+what the pointer selected was not an implementation but a POLICY:
+
+  - `GameShell::ShowFrame` was `DELAY` with a count of one -- the vertical sync the launch and
+    hyperspace tunnels ask for, because the original spells `JSR DELAY` inside `LL164` and `HFL2`.
+  - `Main.cpp`'s own `DeathPacing::ShowFrame` was a frame held for as long as the NEXT took to
+    compute, which is what `DEATH`'s `.D2 JSR M% / DEC LASCT / BNE D2` gets from a machine that
+    waits for nothing. Paced by vertical sync instead, sixty-four frames go past in a second and
+    read as a glitch -- §6.149's bug, found once and prevented here by a second signature.
+  - A null pointer was NO present at all, which `PlanetDraw.h` documented as the oracle's: the 6502
+    has none either, and the two sides must agree on pixels rather than on time.
+
+So `Presenter` gains `Present()` and `HoldFlightFrame(ships)`, the third is a presenter that does
+nothing, and `Main.cpp`'s pacing struct goes. `Die` walks `FRIN` for the ship count itself, which is
+where that walk belonged: the cost of a frame depends on how full the bubble is and the wreckage
+empties it, so the rate rises through the sequence exactly as the original's did.
+`effects-seams` 13 → 12, `main-lines` 1,197 → 1,161, `outpost-elite-names` 175 → 174.
+
+**AND A NULL WAS BEING PASSED WHERE THE GAME HAS AN INSTRUCTION.** `Main.cpp` handed `PerformJump`
+and the `Launch` after it a null pacing on the IN-FLIGHT hyperspace jump -- the one the countdown
+expires into -- where the docked chart's jump passed the shell. `TT18` is one routine whichever door
+it is reached through, and the `JSR DELAY` is inside `LL164`, not at the call site; so the in-flight
+jump drew its tunnel with no frame shown and cut straight to the arrival. It is a defect of the same
+shape as §6.149 and the seam's NULLABILITY is what allowed it: a port that must name an object at
+every call site can drop a present, and one that gets it from `Ports` cannot. Nothing in the suite
+covers it -- it is the app's, and R15's -- so the evidence is the shipped source rather than a
+comparison, and this note is the record.
+
+**`TheLaunchPacing` was written to catch exactly this and now cannot fail.** The test exists because
+someone replaced one of `TT110`'s two pacing arguments with `nullptr`, changed no pixel, failed no
+assertion, and put half of §6.109 back. Its assertion survives -- sixty-eight circles across the two
+tunnels -- but what it guards is now guarded by the type: there is no argument to get wrong.
 
 **2026-09-06 — M3-b-3a's fix: `Main.cpp` read an accessor the slice had deleted, and the fifth half
 of `check_outpost.py` is the one that would have said so.** `Outpost::FlightSession::Video()` handed

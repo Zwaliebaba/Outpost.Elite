@@ -166,7 +166,7 @@ namespace GameLogicTests
                             std::to_wstring(run.instructions) + L", stoppedAt " + std::to_wstring(run.stoppedAt))
                              .c_str());
 
-            Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, geometry, math, clip, nullptr);
+            Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, geometry, math, clip, universe.unused);
           }
 
           const std::wstring where = WidenText("HFS1 (STP " + std::to_string(step) + ", " + std::to_string(pass + 1u) + " pass(es))");
@@ -261,7 +261,7 @@ namespace GameLogicTests
                                         .c_str());
 
         Elite::Ports ports = universe.Ports();
-        Elite::DrawLaunchTunnel(universe, ports, nullptr);
+        Elite::DrawLaunchTunnel(universe, ports);
 
         const std::wstring where = WidenText("LAUN (QQ11 " + std::to_string(view) + ")");
 
@@ -308,13 +308,15 @@ namespace GameLogicTests
         return;
       }
 
-      struct Counting final : Elite::TunnelEffects
+      struct Counting final : Elite::Presenter
       {
         std::uint32_t frames = 0;
-        void ShowFrame() override
+        void Present() override
         {
           ++frames;
         }
+        void WaitFrames(std::uint8_t) override {}
+        void HoldFlightFrame(std::uint8_t) override {}
       };
 
       const OracleImage& oracle = OracleImage::Instance();
@@ -349,8 +351,8 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"LL164 returned");
 
         Counting counting;
-        Elite::Ports ports = universe.Ports();
-        Elite::DrawHyperspaceTunnel(universe, ports, &counting);
+        Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, universe.unused, counting);
+        Elite::DrawHyperspaceTunnel(universe, ports);
 
         const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
 
@@ -387,13 +389,15 @@ namespace GameLogicTests
 
     TEST_METHOD(ThePacingIsOneFramePerCircle)
     {
-      struct Counting final : Elite::TunnelEffects
+      struct Counting final : Elite::Presenter
       {
         std::uint32_t circles = 0;
-        void ShowFrame() override
+        void Present() override
         {
           ++circles;
         }
+        void WaitFrames(std::uint8_t) override {}
+        void HoldFlightFrame(std::uint8_t) override {}
       };
 
       for (const std::uint8_t step : {std::uint8_t{2}, std::uint8_t{4}, std::uint8_t{8}})
@@ -406,7 +410,7 @@ namespace GameLogicTests
 
         Elite::ClipState clip;
         Counting counting;
-        Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, &counting);
+        Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, counting);
 
         Assert::AreEqual<std::uint32_t>(34u, counting.circles, (WidenText("STP " + std::to_string(step)) + L": circles shown").c_str());
       }
@@ -428,8 +432,8 @@ namespace GameLogicTests
       Elite::ClipState clipA;
       Elite::ClipState clipB;
       Counting counting;
-      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.geometry, unpaced.math, clipA, nullptr);
-      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.geometry, paced.math, clipB, &counting);
+      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.geometry, unpaced.math, clipA, unpaced.unused);
+      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.geometry, paced.math, clipB, counting);
 
       const std::span<const std::uint8_t> quiet = unpaced.canvas.Screen();
       const std::span<const std::uint8_t> watched = paced.canvas.Screen();
@@ -453,6 +457,8 @@ namespace GameLogicTests
      */
     struct RecordingStart final : Elite::StartUpEffects, Elite::Presenter
     {
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
       void ClearKeyLogger() override {}
       /*
        * 6502: JSR RDKEY inside `TLL2` -- scripted, because the loop it drives is key-driven and
@@ -871,7 +877,7 @@ namespace GameLogicTests
 
             std::uint8_t flag = docked;
             Elite::SystemSeeds selected{};
-            Elite::Launch(leaving.universe, ports, nullptr, flag, leaving.universe.commander.systemX,
+            Elite::Launch(leaving.universe, ports, flag, leaving.universe.commander.systemX,
                           leaving.universe.commander.systemY, selected);
 
             const std::wstring where = WidenText("TT110 (" + std::string(docked != 0u ? "docked" : "in flight") + ", tek " +
@@ -913,25 +919,27 @@ namespace GameLogicTests
   public:
     TEST_METHOD(ALaunchPacesBothOfItsTunnels)
     {
-      struct Counting final : Elite::TunnelEffects
+      struct Counting final : Elite::Presenter
       {
         std::uint32_t circles = 0;
-        void ShowFrame() override
+        void Present() override
         {
           ++circles;
         }
+        void WaitFrames(std::uint8_t) override {}
+        void HoldFlightFrame(std::uint8_t) override {}
       };
 
       Leaving leaving;
       Occupy(leaving, 0x4Du);
       leaving.universe.view = 1u;
 
-      Elite::Ports ports = leaving.Ports();
-
       Counting counting;
+      Elite::Ports ports = leaving.universe.PortsWith(leaving.outside, leaving.effects, leaving.start, counting);
+
       std::uint8_t flag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
       Elite::SystemSeeds selected{};
-      Elite::Launch(leaving.universe, ports, &counting, flag, leaving.universe.commander.systemX,
+      Elite::Launch(leaving.universe, ports, flag, leaving.universe.commander.systemX,
                     leaving.universe.commander.systemY, selected);
 
       Assert::AreEqual<std::uint32_t>(68u, counting.circles, L"both tunnels are paced, not just the second");
@@ -939,12 +947,13 @@ namespace GameLogicTests
       // And the refusal path draws nothing at all, so it asks the platform for nothing either.
       Leaving flying;
       Occupy(flying, 0x4Du);
-      Elite::Ports flyingPorts = flying.Ports();
 
       Counting none;
+      Elite::Ports flyingPorts = flying.universe.PortsWith(flying.outside, flying.effects, flying.start, none);
+
       std::uint8_t inFlight = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
       Elite::SystemSeeds ignored{};
-      Elite::Launch(flying.universe, flyingPorts, &none, inFlight, flying.universe.commander.systemX,
+      Elite::Launch(flying.universe, flyingPorts, inFlight, flying.universe.commander.systemX,
                     flying.universe.commander.systemY, ignored);
 
       Assert::AreEqual<std::uint32_t>(0u, none.circles, L"pressing 1 in flight is a view change and draws no tunnel");
@@ -1227,7 +1236,7 @@ namespace GameLogicTests
 
       Elite::Ports ports = leaving.Ports();
 
-      Elite::Die(leaving.universe, ports, nullptr);
+      Elite::Die(leaving.universe, ports);
 
       Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.keys[0], L"KLO+0 is below U%'s range and is untouched");
       for (std::size_t index = 1; index <= Elite::FLIGHT_KEYS_CLEARED; ++index)
@@ -1262,7 +1271,7 @@ namespace GameLogicTests
       Elite::ResetGame(port->universe, port->ports, port->docked); // 6502: RESET
 
       Elite::SystemSeeds selected{};
-      Elite::Launch(port->universe, port->ports, nullptr, port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
+      Elite::Launch(port->universe, port->ports, port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
                     selected); // 6502: TT110
 
       // Some way out from the station at speed, so `ASL DELTA` twice has something to work on.
@@ -1279,7 +1288,7 @@ namespace GameLogicTests
        * the process rather than the test -- which is what the mutation harness saw when the cloud's
        * vertex count was zeroed (the run aborted with no summary, on both runners' shims).
        */
-      struct Watching final : Elite::TunnelEffects
+      struct Watching final : Elite::Presenter
       {
         FlightPort& port;
         std::vector<std::uint8_t> cells;
@@ -1291,7 +1300,9 @@ namespace GameLogicTests
         {
         }
 
-        void ShowFrame() override
+      void WaitFrames(std::uint8_t) override {}
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override
         {
           ++frames;
           if (!failure.empty())
@@ -1350,7 +1361,8 @@ namespace GameLogicTests
       };
 
       Watching watching(*port);
-      Elite::Die(port->universe, port->ports, &watching);
+      port->watching = &watching;
+      Elite::Die(port->universe, port->ports);
 
       Assert::IsTrue(watching.failure.empty(), watching.failure.c_str());
       Assert::AreEqual<std::uint32_t>(Elite::DEATH_FRAMES + 1u, watching.frames, L"every frame of the sequence was shown");

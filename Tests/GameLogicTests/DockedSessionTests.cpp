@@ -94,6 +94,14 @@ namespace GameLogicTests
       {
         Note("wait " + std::to_string(_frames));
       }
+      void Present() override
+      {
+        Note("present");
+      }
+      void HoldFlightFrame(std::uint8_t _ships) override
+      {
+        Note("hold " + std::to_string(_ships));
+      }
       void FlushKeyboard() override
       {
         Note("flush");

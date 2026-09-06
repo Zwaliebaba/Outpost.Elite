@@ -227,7 +227,7 @@ namespace Outpost
     }
   }
 
-  void GameShell::ShowFrame()
+  void GameShell::Present()
   {
     /*
      * One circle of a launch or hyperspace tunnel has been drawn; show it and let a frame pass.

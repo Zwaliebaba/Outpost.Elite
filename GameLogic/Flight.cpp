@@ -176,7 +176,7 @@ namespace Elite
     ResetShipAndBubble(_universe, _ports); // 6502: and no RTS -- it falls into RES2
   }
 
-  void DrawLaunchTunnel(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept
+  void DrawLaunchTunnel(Universe& _universe, Ports& _ports) noexcept
   {
     // 6502: .LAUN LDY #sfxwhosh / JSR NOISE -- and the carry it returns is dropped, because the
     // next instruction is a load. §6.99's third answer costs nothing here.
@@ -194,10 +194,10 @@ namespace Elite
      * showing the docked screen -- which is exactly right, because the caller has not finished
      * leaving it yet.
      */
-    DrawTunnel(_universe, _ports, LAUNCH_TUNNEL_STEP, _pacing);
+    DrawTunnel(_universe, _ports, LAUNCH_TUNNEL_STEP);
   }
 
-  void DrawTunnel(Universe& _universe, Ports& _ports, std::uint8_t _step, TunnelEffects* _pacing) noexcept
+  void DrawTunnel(Universe& _universe, Ports& _ports, std::uint8_t _step) noexcept
   {
     // 6502: .HFS2 STA STP -- the only writer of the step on either tunnel's path, which is the
     // other half of §6.94's answer.
@@ -216,10 +216,10 @@ namespace Elite
     _universe.view = saved;
 
     // 6502: falls into HFS1.
-    DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _pacing);
+    DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present);
   }
 
-  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept
+  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports) noexcept
   {
     /*
      * 6502: .HYPNOISE -- LDY #sfxhyp1 / LDA #&F5 / LDX #240 / JSR NOISE2, then `sfxwhosh` through
@@ -239,18 +239,15 @@ namespace Elite
     (void)PlaySoundEffect(_universe.sound, SOUND_MISSILE, false);
 
     // 6502: LDY #1 / JSR DELAY -- one vertical sync, which is what the pacing object holds for.
-    if (_pacing != nullptr)
-    {
-      _pacing->ShowFrame();
-    }
+    _ports.present.Present();
 
     (void)PlaySoundEffect(_universe.sound, static_cast<std::uint8_t>(SOUND_HYPERSPACE + 128u), false);
 
     // 6502: LDA #4 / JSR HFS2 / RTS.
-    DrawTunnel(_universe, _ports, HYPERSPACE_TUNNEL_STEP, _pacing);
+    DrawTunnel(_universe, _ports, HYPERSPACE_TUNNEL_STEP);
   }
 
-  void Launch(Universe& _universe, Ports& _ports, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX,
+  void Launch(Universe& _universe, Ports& _ports,  std::uint8_t& _docked, std::uint8_t _crosshairX,
               std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept
   {
 
@@ -258,7 +255,7 @@ namespace Elite
     if (_docked != 0u)
     {
       // 6502: JSR LAUN, over the docked screen it is still showing.
-      DrawLaunchTunnel(_universe, _ports, _pacing);
+      DrawLaunchTunnel(_universe, _ports);
       ResetShipAndBubble(_universe, _ports); // 6502: JSR RES2
 
       /*
@@ -299,7 +296,7 @@ namespace Elite
        * `STP` is still the 8 `LAUN` stored, which is the second half of §6.94's answer: the step
        * IS written on this path, by the routine the port had left as a stub (§6.109).
        */
-      DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _pacing);
+      DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present);
     }
 
     // 6502: .NLUNCH LDX #0 / STX QQ12 / JMP LOOK1 -- and the X that clears the flag is the X the
@@ -561,7 +558,7 @@ namespace Elite
     } while (_universe.bubble.slots[DEATH_DEBRIS_SLOT] == 0u);
   }
 
-  void Die(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept
+  void Die(Universe& _universe, Ports& _ports) noexcept
   {
 
     PrepareDeathScene(_universe, _ports);
@@ -578,23 +575,34 @@ namespace Elite
      * VIC-II was reading the bitmap the whole time, so a frame was on the screen for exactly as
      * long as the next took to compute. A port that draws sixty-five frames between two presents
      * reproduces the arithmetic and none of the sequence (§6.109's argument, and §6.149's bug).
+     *
+     * `FRIN` is walked for the ship count on every frame, because the cost of one depends on it and
+     * the wreckage flying past empties the bubble -- so the rate rises through the sequence.
      */
+    const auto hold = [&_universe, &_ports]()
+    {
+      std::uint8_t ships = 0;
+      for (const std::uint8_t type : _universe.bubble.slots)
+      {
+        if (type == 0u)
+        {
+          break;
+        }
+        ++ships;
+      }
+      _ports.present.HoldFlightFrame(ships);
+    };
+
     (void)MainFlightLoop(_universe, _ports);
     HideAllSprites(_universe.video, _universe.memoryMap);
-    if (_pacing != nullptr)
-    {
-      _pacing->ShowFrame();
-    }
+    hold();
 
     do
     {
       (void)MainFlightLoop(_universe, _ports);
       _universe.status.laserCount = static_cast<std::uint8_t>(_universe.status.laserCount - 1u);
 
-      if (_pacing != nullptr)
-      {
-        _pacing->ShowFrame();
-      }
+      hold();
     } while (_universe.status.laserCount != 0u);
 
     // 6502: LDX #31 / JSR DET1 / JMP DEATH2 -- the first is a bare RTS and the second is the

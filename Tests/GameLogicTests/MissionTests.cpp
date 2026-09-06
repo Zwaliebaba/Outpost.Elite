@@ -33,6 +33,8 @@ namespace GameLogicTests
      */
     struct ScriptedStart final : Elite::StartUpEffects, Elite::Presenter
     {
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
       std::uint32_t quiet = 0;
       std::uint8_t key = 0;
       std::uint32_t scans = 0;

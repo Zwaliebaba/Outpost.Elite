@@ -247,6 +247,8 @@ namespace GameLogicTests
     class RecordingEffects : public Elite::Presenter
     {
     public:
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
       void WaitFrames(std::uint8_t) override
       {
         log.push_back(0x300u);

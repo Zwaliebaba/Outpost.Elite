@@ -216,7 +216,7 @@ namespace GameLogicTests
               Elite::MarketState market;
 
               const Elite::JumpResult result =
-                Elite::PerformJump(universe.universe, ports, selected, jump, described, market, nullptr,
+                Elite::PerformJump(universe.universe, ports, selected, jump, described, market,
                                    cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, controlHeld, patg);
 
               const std::wstring context =
@@ -351,7 +351,7 @@ namespace GameLogicTests
             Elite::SystemSeeds selected{};
             Elite::JumpState jump;
 
-            Elite::GalacticJump(universe.universe, ports, galaxySeeds, selected, jump, chart, nullptr);
+            Elite::GalacticJump(universe.universe, ports, galaxySeeds, selected, jump, chart);
 
             const std::wstring context = WidenText("Ghy seed " + std::to_string(seedIndex) + (fitted != 0u ? " fitted" : " none") +
                                                    " galaxy " + std::to_string(galaxy));
@@ -447,7 +447,7 @@ namespace GameLogicTests
 
           Elite::Ports ports = universe.Ports();
 
-          Elite::EnterWitchspace(universe.universe, ports, universe.universe.commander, nullptr);
+          Elite::EnterWitchspace(universe.universe, ports, universe.universe.commander);
 
           const std::wstring context = WidenText("MJP seed " + std::to_string(seedIndex) + " QQ1 " + std::to_string(systemY));
 

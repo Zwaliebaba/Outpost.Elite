@@ -47,7 +47,8 @@ namespace GameLogicTests
 
   class FlightPort final : public Elite::SpawnChildEffects,
                            public Elite::ShipDrawEffects,
-                           public Elite::ControlEffects
+                           public Elite::ControlEffects,
+                           public Elite::Presenter
   {
   public:
     /// 6502: what `CIRCLE` would have left in `STP` -- a launch reads it (§6.95), so the port
@@ -66,7 +67,7 @@ namespace GameLogicTests
 
     FlightPort()
       : ports{universe.printer,          universe.characters, universe.characters, *this,           *this,
-              sidLog,                    universe.extendedPrinter, universe.unused, universe.unused,
+              sidLog,                    universe.extendedPrinter, universe.unused, *this,
               universe.unused,           universe.unused,     universe.unused}
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
@@ -208,6 +209,38 @@ namespace GameLogicTests
         }
       }
       Elite::SetMemoryMap(universe.memoryMap, Elite::MEMORY_MAP_RAM); // 6502: LDA #%100 / JSR SETL1
+    }
+
+    /*
+     * 6502: the display, which this port does not have -- so the calls are FORWARDED or dropped.
+     *
+     * `Presenter` is in `Ports` since M3-b-3c, so there is no null pointer to pass any more and a
+     * suite that wants to count presents attaches a recorder here. An unattached port shows
+     * nothing, which is what every oracle comparison wants: the 6502 has no present either, and
+     * the two sides must agree on PIXELS rather than on time.
+     */
+    Elite::Presenter* watching = nullptr;
+
+    void WaitFrames(std::uint8_t _frames) override
+    {
+      if (watching != nullptr)
+      {
+        watching->WaitFrames(_frames);
+      }
+    }
+    void Present() override
+    {
+      if (watching != nullptr)
+      {
+        watching->Present();
+      }
+    }
+    void HoldFlightFrame(std::uint8_t _ships) override
+    {
+      if (watching != nullptr)
+      {
+        watching->HoldFlightFrame(_ships);
+      }
     }
 
     // ---- Elite::ControlEffects's docking computer -------------------------------------------------

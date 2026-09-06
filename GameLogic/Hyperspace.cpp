@@ -112,12 +112,12 @@ namespace Elite
     GenerateMarket(_rng, _described.economy, _market);
   }
 
-  void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander, TunnelEffects* _pacing) noexcept
+  void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander) noexcept
   {
 
     // 6502: LDA #3 / JSR TT66 / JSR LL164 / JSR RES2.
     SetUpScreen(_universe, _ports, SPACE_VIEW);
-    DrawHyperspaceTunnel(_universe, _ports, _pacing);
+    DrawHyperspaceTunnel(_universe, _ports);
     ResetShipAndBubble(_universe, _ports);
 
     /*
@@ -145,8 +145,7 @@ namespace Elite
     _commander.systemY = static_cast<std::uint8_t>(_commander.systemY ^ 0x1Fu);
   }
 
-  void EnterWitchspaceCheating(Universe& _universe, Ports& _ports, Commander& _commander,
-                               TunnelEffects* _pacing) noexcept
+  void EnterWitchspaceCheating(Universe& _universe, Ports& _ports, Commander& _commander) noexcept
   {
     /*
      * 6502: .ptg LSR COK / SEC / ROL COK -- which is `ORA #1` and NOT a rotate.
@@ -159,11 +158,11 @@ namespace Elite
     _commander.competition = static_cast<std::uint8_t>(_commander.competition | 1u);
 
     // 6502: and then it FALLS INTO MJP.
-    EnterWitchspace(_universe, _ports, _commander, _pacing);
+    EnterWitchspace(_universe, _ports, _commander);
   }
 
   JumpResult PerformJump(Universe& _universe, Ports& _ports, SystemSeeds& _selected, JumpState& _jump, SystemData& _described,
-                         MarketState& _market, TunnelEffects* _pacing, std::uint8_t _crosshairX,
+                         MarketState& _market,  std::uint8_t _crosshairX,
                          std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _controlHeld, bool _patg) noexcept
   {
 
@@ -201,14 +200,14 @@ namespace Elite
     if (fromSpace)
     {
       SetUpScreen(_universe, _ports, _universe.view);
-      DrawHyperspaceTunnel(_universe, _ports, _pacing);
+      DrawHyperspaceTunnel(_universe, _ports);
       carry = true;
     }
 
     // 6502: .ee5 JSR CTRL / AND PATG / BMI ptg -- the configuration key and the option together.
     if (_controlHeld && _patg)
     {
-      EnterWitchspaceCheating(_universe, _ports, _universe.commander, _pacing);
+      EnterWitchspaceCheating(_universe, _ports, _universe.commander);
       return JumpResult::Witchspace;
     }
 
@@ -216,7 +215,7 @@ namespace Elite
     const RngResult roll = _universe.rng.Next(carry);
     if (roll.value >= WITCHSPACE_ROLL)
     {
-      EnterWitchspace(_universe, _ports, _universe.commander, _pacing);
+      EnterWitchspace(_universe, _ports, _universe.commander);
       return JumpResult::Witchspace;
     }
 
@@ -261,9 +260,8 @@ namespace Elite
   }
 
   void GalacticJump(Universe& _universe, Ports& _ports, SystemSeeds& _galaxy, SystemSeeds& _selected, JumpState& _jump,
-                    ChartView& _chart, TunnelEffects* _pacing) noexcept
+                    ChartView& _chart) noexcept
   {
-    static_cast<void>(_pacing);
 
     /*
      * 6502: LDX GHYP / BEQ zZ+1 -- and there is no code at `zZ+1`.
@@ -310,7 +308,7 @@ namespace Elite
 
     // 6502: JSR TT110 -- and this is the LAUNCH, called for its redraw: a galactic jump from a
     // chart leaves you in space looking forward.
-    Launch(_universe, _ports, _pacing, _jump.docked, _chart.cursorX, _chart.cursorY, _selected);
+    Launch(_universe, _ports, _jump.docked, _chart.cursorX, _chart.cursorY, _selected);
 
     // 6502: JSR TT111 / LDX #5 / .dumdeedum LDA QQ15,X / STA safehouse,X -- the system nearest the
     // middle of the galaxy becomes both the selection and the countdown's target.

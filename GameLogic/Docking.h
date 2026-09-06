@@ -99,7 +99,7 @@ namespace Elite
    * the tunnel was ported, and every one of them is inside `Universe` since M3-a.
    */
   [[nodiscard]] DockingResult DockAtStation(Universe& _universe, Ports& _ports,
-                                            TunnelEffects* _pacing, std::uint8_t& _dockedFlag, std::uint8_t _view,
+                                             std::uint8_t& _dockedFlag, std::uint8_t _view,
                                             bool _hyperspaceHeld) noexcept;
 
 } // namespace Elite

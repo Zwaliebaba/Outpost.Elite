@@ -89,7 +89,7 @@ namespace Elite
    * It was a seam on `StartUpEffects` until this slice, for the reason every other one was: the
    * ball line heap it draws through arrived in 3c and nothing revisited the stub (§6.73, again).
    */
-  void DrawLaunchTunnel(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept;
+  void DrawLaunchTunnel(Universe& _universe, Ports& _ports) noexcept;
 
   /// 6502: LDA #4 -- the step `LL164` hands `HFS2`, and the rounder of the two. `HFS2`'s header
   /// comment has this pair the wrong way round; see `LAUNCH_TUNNEL_STEP`.
@@ -111,23 +111,19 @@ namespace Elite
    * of it, which is what `HFS2` taking `A` says: the two entry points differ by two instructions.
    * Splitting it out is what lets the hyperspace tunnel exist without copying the launch's body.
    */
-  void DrawTunnel(Universe& _universe, Ports& _ports, std::uint8_t _step, TunnelEffects* _pacing) noexcept;
+  void DrawTunnel(Universe& _universe, Ports& _ports, std::uint8_t _step) noexcept;
 
   /*
    * 6502: LL164 -- the hyperspace tunnel, and `HYPNOISE` in front of it.
    *
    * Five instructions once `HFS2` exists: the noise, a step of 4, and the rings. `HYPNOISE` is a
    * SOUND routine (the upstream files it as one) and it is played through the seams phase 5 owns,
-   * except for its `LDY #1 / JSR DELAY`, which is one vertical sync and is therefore the pacing
-   * object's `ShowFrame`.
+   * except for its `LDY #1 / JSR DELAY`, which is one vertical sync and is therefore
+   * `Presenter::Present`.
    *
-   * NOTHING IN THE PORT CALLS THIS YET. `MJP` and `TT18` are its only callers and both are 4c, so
-   * this is the tunnel waiting for the jump rather than a routine with a live caller -- built here
-   * because it is what slice 3d-e names, and because the alternative was to leave `HFS2` reachable
-   * at one step size out of two.
+   * `MJP` and `TT18` are its callers, and both are built.
    */
-  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports,
-                            TunnelEffects* _pacing) noexcept;
+  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: TT110 -- leave the station, or refuse to.
@@ -141,7 +137,7 @@ namespace Elite
    * contraband fine is ORed into `FIST` on the way out, so leaving is what levies it rather than
    * being scanned.
    */
-  void Launch(Universe& _universe, Ports& _ports, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX,
+  void Launch(Universe& _universe, Ports& _ports,  std::uint8_t& _docked, std::uint8_t _crosshairX,
               std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept;
 
   /*
@@ -294,7 +290,7 @@ namespace Elite
   void PrepareDeathScene(Universe& _universe, Ports& _ports) noexcept;
 
   /*
-   * `_pacing` IS WHAT MAKES THE DEATH VISIBLE, and it was missing.
+   * `Presenter::HoldFlightFrame` IS WHAT MAKES THE DEATH VISIBLE, and it was missing once.
    *
    * `Die` runs the whole flight loop sixty-five times over the wreckage. Every one of those draws
    * a frame into the canvas -- and without somewhere to SHOW them, all sixty-five happen between
@@ -302,11 +298,12 @@ namespace Elite
    * from the shot that killed them to "LOAD NEW COMMANDER (Y/N)?", which looks exactly like a port
    * that never built the death sequence at all.
    *
-   * It is the same seam the launch and hyperspace tunnels use, for the same reason and with the
-   * same meaning: the 6502 waited for nothing, but the DISPLAY it had showed each frame for as
-   * long as the next took to compute (§6.109). Null runs the sequence with nothing shown, which is
-   * what the tests want.
+   * IT IS NOT THE TUNNELS' `Present`, and M3-b-3c is where the difference became a signature. The
+   * 6502 waits for nothing here, so each frame was on screen for as long as the NEXT took to
+   * compute (§6.109); a vertical sync apiece runs the sixty-four past in a second and reads as a
+   * glitch (§6.149). Both were `TunnelEffects::ShowFrame` and told apart only by which object the
+   * executable happened to pass.
    */
-  void Die(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept;
+  void Die(Universe& _universe, Ports& _ports) noexcept;
 
 } // namespace Elite
