@@ -52,8 +52,17 @@ namespace GameLogicTests
     void DrawPlanetOrSun() override {}
     void DrawExplosion() override {}
 
-    // Elite::SpawnChildEffects
-    bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
+    /*
+     * Elite::SpawnChildEffects -- and this is the SECOND place this object makes a choice.
+     *
+     * 6502: SFS1's carry, which says whether the bubble had room for the child. False is the answer
+     * a fixture that never meant to reach the seam gets; a fixture that DOES reach it -- a kill
+     * spawning debris, which is every flight frame worth running -- sets `spawnRoom` and gets the
+     * other one. `LoopRecording` was a second class for exactly that one boolean until M3-b-4c.
+     */
+    bool spawnRoom = false;
+
+    bool SpawnChild(std::uint8_t, Elite::ShipType) override { return spawnRoom; }
 
     // Elite::StartUpEffects
     void ClearKeyLogger() override {}
