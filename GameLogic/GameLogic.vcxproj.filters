@@ -49,7 +49,7 @@
     <ClInclude Include="TextPrint.h">
       <Filter>Text</Filter>
     </ClInclude>
-    <ClInclude Include="Universe.h">
+    <ClInclude Include="Galaxy.h">
       <Filter>Universe</Filter>
     </ClInclude>
     <ClInclude Include="ShipBlueprint.h">
@@ -202,7 +202,7 @@
     <ClCompile Include="TextPrint.cpp">
       <Filter>Text</Filter>
     </ClCompile>
-    <ClCompile Include="Universe.cpp">
+    <ClCompile Include="Galaxy.cpp">
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Market.cpp">

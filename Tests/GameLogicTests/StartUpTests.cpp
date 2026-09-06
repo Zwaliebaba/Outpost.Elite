@@ -9,7 +9,7 @@
 #include "StateTokens.h"
 #include "TextPrint.h"
 #include "Tokens.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <array>
 #include <cstdint>

@@ -21,6 +21,9 @@
     <ClInclude Include="GoldenCanvas.h">
       <Filter>Oracle</Filter>
     </ClInclude>
+    <ClInclude Include="FlightPort.h">
+      <Filter>Oracle</Filter>
+    </ClInclude>
     <ClInclude Include="FlightUniverse.h">
       <Filter>Oracle</Filter>
     </ClInclude>
@@ -78,7 +81,7 @@
     <ClCompile Include="NumberTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
-    <ClCompile Include="UniverseTests.cpp">
+    <ClCompile Include="GalaxyTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="MarketTests.cpp">
@@ -166,6 +169,9 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="UniverseImageTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="FlightReplayTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="MessageTests.cpp">

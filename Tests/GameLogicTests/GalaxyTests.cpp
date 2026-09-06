@@ -5,7 +5,7 @@
 #include "ExtendedTokens.h"
 #include "Rng.h"
 #include "Tokens.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <array>
 #include <cstdint>
@@ -143,7 +143,7 @@ namespace GameLogicTests
     };
   } // namespace
 
-  TEST_CLASS(UniverseAgainstTheShippedGame)
+  TEST_CLASS(GalaxyAgainstTheShippedGame)
   {
   public:
     /*

@@ -33,7 +33,7 @@
 #include "SystemScreen.h"
 #include "TextPrint.h"
 #include "Tokens.h"
-#include "Universe.h"
+#include "Galaxy.h"
 #include "ViewChange.h"
 
 #include <array>

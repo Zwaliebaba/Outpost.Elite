@@ -547,6 +547,10 @@ namespace GameLogicTests
     std::uint16_t tp, mch, messxc, screen;
     std::uint16_t tek, xx21Station, spasto; ///< 6502: tek, XX21+2*SST-2, and BEGIN's saved copy of it
 
+    /// Unresolved -- every address zero -- for the one use that needs none: hashing the image,
+    /// which reads cells in table order and never their addresses (`Hash(const Universe&)`).
+    Where() = default;
+
     explicit Where(const OracleImage& _oracle)
     {
       frin = _oracle.Label("FRIN");

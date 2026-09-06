@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <array>
 #include <cstdint>

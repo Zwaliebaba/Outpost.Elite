@@ -8,7 +8,7 @@
 #include "PlanetDraw.h"
 #include "Spawn.h"
 #include "StartUp.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 /*
  * Getting into flight, and getting the universe ready for it.

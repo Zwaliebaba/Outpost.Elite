@@ -254,7 +254,7 @@ namespace Elite
     _screen.characters.Put('m');
 
     // 6502: JSR TTX69 / JMP PDESC -- and PDESC's mission overrides are phase 4's, which is what
-    // Universe.h's header records.
+    // Galaxy.h's header records.
     MoveDownAndNewline(_screen.printer, _screen.text);
     PrintSystemDescription(_screen.extended, _screen.rng, _seeds);
   }

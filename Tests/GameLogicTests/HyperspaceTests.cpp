@@ -11,7 +11,7 @@
 #include "Hyperspace.h"
 #include "Market.h"
 #include "FlightLoop.h"
-#include "Universe.h"
+#include "Galaxy.h"
 
 #include <array>
 #include <set>
