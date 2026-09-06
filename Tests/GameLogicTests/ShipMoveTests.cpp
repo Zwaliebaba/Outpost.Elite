@@ -95,7 +95,6 @@ namespace GameLogicTests
                 {
                   Cpu6502 cpu = oracle.Fresh();
                   Elite::Ship work;
-                  Elite::MathWorkspace math;
 
                   // The three bytes of the coordinate, and the addend's low byte in R.
                   const std::uint8_t bytes[3] = {low, high, static_cast<std::uint8_t>(a ^ 0x55u)};
@@ -105,14 +104,13 @@ namespace GameLogicTests
                     PokeShip(work, axis + byte, bytes[byte]);
                   }
                   cpu.memory[rr] = r;
-                  math.r = r;
 
                   cpu.a = a;
                   cpu.x = axis;
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(masked ? static_cast<std::uint16_t>(mvt1 - 2) : mvt1);
                   Assert::IsTrue(run.completed, L"MVT1 returned");
 
-                  Elite::AddToShipCoordinate(work, math, a, axis, masked);
+                  Elite::AddToShipCoordinate(work, a, r, axis, masked);
 
                   const std::wstring where =
                     Widen(std::string(masked ? "MVT1-2" : "MVT1") + "(a=" + std::to_string(a) + ", r=" + std::to_string(r) +
@@ -159,7 +157,6 @@ namespace GameLogicTests
               {
                 Cpu6502 cpu = oracle.Fresh();
                 Elite::Ship work;
-                Elite::MathWorkspace math;
 
                 const std::uint8_t bytes[3] = {low, static_cast<std::uint8_t>(low ^ 0x3Cu), k3};
                 for (int byte = 0; byte < 3; ++byte)
@@ -171,20 +168,21 @@ namespace GameLogicTests
                 for (int byte = 0; byte < 4; ++byte)
                 {
                   cpu.memory[static_cast<std::uint16_t>(kk + byte)] = k[byte];
-                  math.k[byte] = k[byte];
                 }
 
                 cpu.x = axis;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvt3);
                 Assert::IsTrue(run.completed, L"MVT3 returned");
 
-                const bool carry = Elite::AddShipCoordinateToK(work, math, axis);
+                const Elite::KBlockSum sum = Elite::AddShipCoordinateToK(work, Elite::KBlock{0, k1, k2, k3}, axis);
+                const bool carry = sum.carry;
+                const std::uint8_t ours[4] = {sum.value.low, sum.value.mid, sum.value.high, sum.value.top};
 
                 const std::wstring where = Widen("MVT3(K=" + std::to_string(k1) + "/" + std::to_string(k2) + "/" + std::to_string(k3) +
                                                  ", x=" + std::to_string(axis) + ")");
                 for (int byte = 0; byte < 4; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], math.k[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], ours[byte],
                                    (where + L": K+" + std::to_wstring(byte)).c_str());
                 }
 
@@ -235,7 +233,6 @@ namespace GameLogicTests
               {
                 Cpu6502 cpu = oracle.Fresh();
                 Elite::Ship work;
-                Elite::MathWorkspace math;
 
                 const std::uint8_t bytes[3] = {low, static_cast<std::uint8_t>(low ^ 0x81u), a};
                 for (int byte = 0; byte < 3; ++byte)
@@ -245,21 +242,19 @@ namespace GameLogicTests
                 }
                 cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
                 cpu.memory[static_cast<std::uint16_t>(pp + 2)] = p2;
-                math.p1 = p1;
-                math.p2 = p2;
 
                 cpu.a = a;
                 cpu.x = axis;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvt6);
                 Assert::IsTrue(run.completed, L"MVT6 returned");
 
-                const std::uint8_t sign = Elite::AddShipCoordinateToP(work, math, a, axis);
+                const Elite::SignMag24 moved = Elite::AddShipCoordinateToP(work, Elite::SignMag24{p1, p2, a}, axis);
 
                 const std::wstring where = Widen("MVT6(a=" + std::to_string(a) + ", P=" + std::to_string(p1) + "/" + std::to_string(p2) +
                                                  ", x=" + std::to_string(axis) + ")");
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 1)], math.p1, (where + L": P+1").c_str());
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 2)], math.p2, (where + L": P+2").c_str());
-                Assert::AreEqual(cpu.a, sign, (where + L": the sign it hands back").c_str());
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 1)], moved.lo, (where + L": P+1").c_str());
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(pp + 2)], moved.hi, (where + L": P+2").c_str());
+                Assert::AreEqual(cpu.a, moved.sgn, (where + L": the sign it hands back").c_str());
                 ++compared;
               }
             }
@@ -310,7 +305,6 @@ namespace GameLogicTests
             {
               Cpu6502 cpu = oracle.Fresh();
               Elite::Ship work;
-              Elite::MathWorkspace math;
 
               // Six bytes of vector, spread so the three axes differ from one another.
               for (std::uint8_t byte = 0; byte < 6u; ++byte)
@@ -326,7 +320,7 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(mvs4);
               Assert::IsTrue(run.completed, L"MVS4 returned");
 
-              Elite::RotateShipVector(work, math, vector, a, b);
+              Elite::RotateShipVector(work, vector, a, b);
 
               const std::wstring where = Widen("MVS4(y=" + std::to_string(vector) + ", alpha=" + std::to_string(a) +
                                                ", beta=" + std::to_string(b) + ", seed=" + std::to_string(seed) + ")");
@@ -382,7 +376,6 @@ namespace GameLogicTests
               {
                 Cpu6502 cpu = oracle.Fresh();
                 Elite::Ship work;
-                Elite::MathWorkspace math;
 
                 const std::uint8_t yHigh = static_cast<std::uint8_t>(yLow ^ 0x93u);
                 const std::uint8_t bytes[4] = {xLow, xHigh, yLow, yHigh};
@@ -400,7 +393,7 @@ namespace GameLogicTests
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(mvs5);
                 Assert::IsTrue(run.completed, L"MVS5 returned");
 
-                Elite::RotateCoordinatePair(work, math, pair.first, pair.second, direction);
+                Elite::RotateCoordinatePair(work, pair.first, pair.second, direction);
 
                 const std::wstring where = Widen("MVS5(x=" + std::to_string(pair.first) + ", y=" + std::to_string(pair.second) +
                                                  ", rat2=" + std::to_string(direction) + ", " + std::to_string(xLow) + "/" +
@@ -501,8 +494,7 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(tidy);
           Assert::IsTrue(run.completed, L"TIDY returned");
 
-          Elite::MathWorkspace math;
-          Elite::TidyOrientation(work, math);
+          Elite::TidyOrientation(work);
 
           const std::wstring where = Widen(std::string("TIDY: ") + item.what + ", roof seed " + std::to_string(roofSeed));
           for (std::uint8_t offset = 9; offset <= 26u; ++offset)

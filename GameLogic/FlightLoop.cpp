@@ -19,31 +19,30 @@
 namespace Elite
 {
 
-  std::uint8_t DoubleAndAddCoordinate(Ship& _work, MathWorkspace& _math, std::uint8_t _from, std::uint8_t _to) noexcept
+  std::uint8_t DoubleAndAddCoordinate(Ship& _work, std::uint8_t _from, std::uint8_t _to) noexcept
   {
     const auto& from = _work.ComponentAt(_from); // 6502: INWK,Y / INWK+1,Y
     auto& to = _work.PositionAt(_to);            // 6502: INWK,X to INWK+2,X
     // 6502: LDA INWK,Y / ASL A / STA K+1 / LDA INWK+1,Y / ROL A / STA K+2.
+    KBlock k;
     const ShiftResult low = RotateLeftValue(from.lo, false);
-    _math.k[1] = low.value;
+    k.mid = low.value;
 
     const ShiftResult high = RotateLeftValue(from.hi, low.carry);
-    _math.k[2] = high.value;
+    k.high = high.value;
 
     // 6502: LDA #0 / ROR A / STA K+3 -- the bit that fell off the top becomes the sign byte, so the
     // doubling cannot overflow: it widens instead.
-    _math.k[3] = RotateRight(0u, high.carry).value;
+    k.top = RotateRight(0u, high.carry).value;
 
     // The exit carry is live only on `VCSUB`'s path out to `TA64` (§6.126). `MVT1` reads `K+3`
     // and stores, so the flag dies here.
-    static_cast<void>(AddShipCoordinateToK(_work, _math, _to)); // 6502: JSR MVT3
+    k = AddShipCoordinateToK(_work, k, _to).value; // 6502: JSR MVT3
 
     // 6502: STA INWK+2,X -- and A is `K+3`, because every path through `MVT3` ends `STA K+3`.
-    to.sgn = _math.k[3];
-    to.lo = _math.k[1];                                // 6502: LDY K+1 / STY INWK,X
-    to.hi = _math.k[2]; // 6502: LDY K+2 / STY INWK+1,X
+    to = k.Coordinate(); // 6502: LDY K+1 / STY INWK,X / LDY K+2 / STY INWK+1,X
 
-    return static_cast<std::uint8_t>(_math.k[3] & 0x7Fu); // 6502: AND #%01111111
+    return static_cast<std::uint8_t>(k.top & 0x7Fu); // 6502: AND #%01111111
   }
 
   std::uint8_t LargestAxisFrom(const Bubble& _bubble, std::uint8_t _slot, std::uint8_t _a) noexcept
@@ -61,27 +60,27 @@ namespace Elite
     return static_cast<std::uint8_t>(together & 0x7Fu);
   }
 
-  std::uint8_t SumOfSquares(const Bubble& _bubble, MathWorkspace& _math, std::uint8_t _slot) noexcept
+  std::uint8_t SumOfSquares(const Bubble& _bubble, std::uint8_t _slot) noexcept
   {
     const Ship& block = _bubble.blocks[_slot];
 
     // 6502: LDA K%+1,Y / JSR SQUA2 / STA R.
-    _math.r = SquareUnsigned(_math, block.x.hi).high;
+    std::uint8_t r = SquareUnsigned(block.x.hi).high;
 
     // 6502: LDA K%+4,Y / JSR SQUA2 / ADC R / BCS MA30 -- the `ADC` reads `SQUA2`'s exit carry, and
     // that carry is never set (§6.70), so this is the plain addition it looks like.
-    const WideResult second = SquareUnsigned(_math, block.y.hi);
-    const AddResult sum = AddWithCarry(second.high, _math.r, second.carry);
+    const Product second = SquareUnsigned(block.y.hi);
+    const AddResult sum = AddWithCarry(second.high, r, second.carry);
     if (sum.carry)
     {
       return 0xFFu; // 6502: MA30 -- LDA #&FF
     }
 
-    _math.r = sum.value; // 6502: STA R
+    r = sum.value; // 6502: STA R
 
     // 6502: LDA K%+7,Y / JSR SQUA2 / ADC R / BCC P%+4 -- and the branch skips the saturation.
-    const WideResult third = SquareUnsigned(_math, block.z.hi);
-    const AddResult total = AddWithCarry(third.high, _math.r, third.carry);
+    const Product third = SquareUnsigned(block.z.hi);
+    const AddResult total = AddWithCarry(third.high, r, third.carry);
 
     return total.carry ? 0xFFu : total.value;
   }
@@ -231,13 +230,13 @@ namespace Elite
     }
 
     // 6502: LDA INWK / JSR SQUA2 / STA S / LDA P / STA R.
-    const WideResult across = SquareUnsigned(_math, _work.x.lo);
+    const Product across = SquareUnsigned(_work.x.lo);
     _math.s = across.high;
-    _math.r = _math.p;
+    _math.r = across.low;
 
     // 6502: LDA INWK+3 / JSR SQUA2 / TAX / LDA P / ADC R / STA R / TXA / ADC S / BCS TN10.
-    const WideResult down = SquareUnsigned(_math, _work.y.lo);
-    const AddResult low = AddWithCarry(_math.p, _math.r, across.carry);
+    const Product down = SquareUnsigned(_work.y.lo);
+    const AddResult low = AddWithCarry(down.low, _math.r, across.carry);
     _math.r = low.value;
     const AddResult high = AddWithCarry(down.high, _math.s, low.carry);
     if (high.carry)
@@ -988,8 +987,8 @@ namespace Elite
 
         if (!hostile && screen.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
         {
-          LoadPlanetAxes(screen.bubble, _loop.axes, screen.draw, screen.math); // 6502: JSR SPS1
-          NormaliseAxes(_loop.axes, screen.draw, screen.math);                 // the fall-through
+          LoadPlanetAxes(screen.bubble, _loop.axes, screen.draw); // 6502: JSR SPS1
+          (void)NormaliseAxes(_loop.axes, screen.draw);           // the fall-through
 
           if (screen.draw.x2 >= DOCK_MINIMUM_ALIGNMENT &&
               static_cast<std::uint8_t>(screen.work.roof.x.hi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
@@ -1350,9 +1349,8 @@ namespace Elite
         // 6502: INX / LDY #9 / JSR MAS1 / BNE MA23S, and twice more at (3, 11) and (6, 13).
         // The `&&`s short-circuit and have to: each `MAS1` DOUBLES the coordinate it reads, in
         // place, so a second call after a non-zero answer would move the planet twice.
-        const bool ahead = DoubleAndAddCoordinate(screen.work, screen.math, 9u, 0u) == 0u &&
-                           DoubleAndAddCoordinate(screen.work, screen.math, 11u, 3u) == 0u &&
-                           DoubleAndAddCoordinate(screen.work, screen.math, 13u, 6u) == 0u;
+        const bool ahead = DoubleAndAddCoordinate(screen.work, 9u, 0u) == 0u && DoubleAndAddCoordinate(screen.work, 11u, 3u) == 0u &&
+                           DoubleAndAddCoordinate(screen.work, 13u, 6u) == 0u;
 
         if (ahead && WithinRange(screen.work, STATION_SPAWN_RANGE))
         {
@@ -1406,7 +1404,7 @@ namespace Elite
       if (LargestAxis(screen.bubble, 0u) == 0u)
       {
         // 6502: JSR MAS3 / BCS MA23 -- and the carry is `MAS3`'s saturation, not a comparison.
-        const std::uint8_t squares = SumOfSquares(screen.bubble, screen.math, 0u);
+        const std::uint8_t squares = SumOfSquares(screen.bubble, 0u);
         if (squares != 0xFFu)
         {
           // 6502: SBC #36 / BCC MA28 -- inside the planet's own radius, so this is the ground.
@@ -1416,10 +1414,22 @@ namespace Elite
             return LoopOutcome::Died; // 6502: .MA28 JMP DEATH
           }
 
-          // 6502: STA R / JSR LL5 / LDA Q / STA ALTIT.
-          screen.math.r = above.value;
-          (void)SquareRoot(screen.math);
-          screen.status.altitude = screen.math.q;
+          /*
+           * 6502: STA R / JSR LL5 / LDA Q / STA ALTIT.
+           *
+           * THE RADICAND'S LOW BYTE IS WHATEVER `Q` LAST HELD. Nothing between the last ship's
+           * processing and this square root writes `Q` -- `MAS3` and `m` do not -- so the altitude's
+           * low bits come from the last routine of the frame that used the scratch byte: `MVS4`'s
+           * `STA Q` of BETA for a ship the loop moved and did not draw, `LL9`'s vertex distance or
+           * the clipper's for one it drew, `DVID3B`'s scaled divisor for a dot, `SUN`'s last row's
+           * root. Since M2-b the kernel keeps its scratch to itself, so those five routines write
+           * `MathWorkspace::q` for this read alone -- the "frame's Q" -- and the replay record is
+           * what proves the value is the one the port always read (§8, M2-b). What NONE of them
+           * models is `LOIN`'s `STA Q`, which this port has kept local since slice 1d: on a frame
+           * whose last ship drew lines the original's byte is the last line's height and this
+           * port's is not. That gap is older than M2 and is the owner's to rule on (§7, R22).
+           */
+          screen.status.altitude = SquareRoot(above.value, screen.math.q).value;
         }
       }
     }
@@ -1454,7 +1464,7 @@ namespace Elite
        * `MAS3`'s exit carry -- and the carry OUT is death: an overflow here means the sum passed
        * 255, which is the sun.
        */
-      const std::uint8_t squares = SumOfSquares(screen.bubble, screen.math, 1u);
+      const std::uint8_t squares = SumOfSquares(screen.bubble, 1u);
       const AddResult heat = AddWithCarry(static_cast<std::uint8_t>(squares ^ 0xFFu), CABIN_BASE, false);
       screen.status.cabinTemperature = heat.value;
 

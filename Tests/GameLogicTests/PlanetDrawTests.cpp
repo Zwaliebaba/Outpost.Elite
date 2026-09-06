@@ -983,10 +983,12 @@ namespace GameLogicTests
               {
                 Assert::AreEqual(cpu.memory[BYTES[byte].first], BYTES[byte].second, (label + L": " + NAMES[byte]).c_str());
               }
+              // `K` is not compared here: `PLS22` used it as scratch for two of its products and the
+              // port keeps those as locals since M2-b, so after a planet with markings the two `K`s
+              // differ by design. The radius the routine reads and clamps is the first byte, which
+              // the sun's and the crater's paths above pin through the screen.
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k + byte)], math.k[byte],
-                                 (label + L": K+" + std::to_wstring(byte)).c_str());
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k2 + byte)], math.k2[byte],
                                  (label + L": K2+" + std::to_wstring(byte)).c_str());
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k5 + byte)], state.k5[byte],

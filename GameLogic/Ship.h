@@ -88,15 +88,8 @@ namespace Elite
                   SHIP_ENERGY_OFFSET == 35u && SHIP_FLAGS_OFFSET == 36u && SHIP_BLOCK_SIZE == 37u,
                 "the tail of the block");
 
-  /// 6502: INWK+9/10 and kin -- one component of an orientation vector: sixteen bits, the sign in
-  /// bit 7 of the high byte.
-  struct SignMag16
-  {
-    std::uint8_t lo = 0;
-    std::uint8_t hi = 0;
-
-    [[nodiscard]] constexpr bool operator==(const SignMag16&) const noexcept = default;
-  };
+  // 6502: INWK+9/10 and kin -- one component of an orientation vector is a `SignMag16`, which lives
+  // in `EliteTypes.h` since M2-b because the arithmetic kernel takes and returns the same shape.
 
   /// 6502: INWK+9..14, +15..20 or +21..26 -- nosev, roofv or sidev: three components of two bytes.
   struct Vector16

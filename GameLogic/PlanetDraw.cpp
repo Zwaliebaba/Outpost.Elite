@@ -367,8 +367,8 @@ namespace Elite
        * back by hand; that is what the two `CMP #33` tests do. 33 rather than 32 because what is
        * being compared is a count the loop has already stepped.
        */
-      const WideResult sine = MultiplyKBySine(_math, _math.cnt, carry);
-      std::uint8_t across = sine.high;
+      const LogProduct sine = MultiplyBySine(_math.k[0], _math.cnt, carry);
+      std::uint8_t across = sine.value;
       _math.t = 0;
 
       carry = _math.cnt >= 33u; // 6502: LDX CNT / CPX #33
@@ -388,8 +388,8 @@ namespace Elite
       // 6502: LDA CNT / CLC / ADC #16 / JSR FMLTU2 -- the same table a quarter-turn on, which is
       // the cosine.
       const AddResult quarter = AddWithCarry(_math.cnt, 16u, false);
-      const WideResult cosine = MultiplyKBySine(_math, quarter.value, false);
-      std::uint8_t down = cosine.high;
+      const LogProduct cosine = MultiplyBySine(_math.k[0], quarter.value, false);
+      std::uint8_t down = cosine.value;
       _math.t = 0;
 
       /*
@@ -464,10 +464,8 @@ namespace Elite
     // X is 9, 11, 21 or 23: one COMPONENT of an orientation vector, whose sign is bit 7 of its
     // high byte -- not a position axis, whose sign has a byte of its own.
     const SignMag16& component = _ship.ComponentAt(_at);
-    _math.p = component.lo;
-    _math.p1 = static_cast<std::uint8_t>(component.hi & 0x7Fu);
-
-    DivideByShipZ(_ship, _math, static_cast<std::uint8_t>(component.hi & 0x80u));
+    DivideByShipZ(_ship, _math,
+                  SignMag24{component.lo, static_cast<std::uint8_t>(component.hi & 0x7Fu), static_cast<std::uint8_t>(component.hi & 0x80u)});
 
     /*
      * 6502: LDA K / LDY K+1 / BEQ P%+4 / LDA #254.
@@ -490,20 +488,19 @@ namespace Elite
     // 6502: PLS3 -- PLS1, then * 222/256, and X is SAVED rather than stepped because the caller
     // wants to divide the same axis twice.
     const AxisResult axis = DivideAxisByZ(_ship, _math, _at);
-    _math.p = axis.value;
-    _math.q = 222;
 
     // 6502: `STX U` comes AFTER the `JSR PLS1`, and `PLS1` ends with two `INX`s -- so what is
     // saved and handed back is the STEPPED index, not the one this call was given. `PL26` calls
     // this twice in a row without touching X in between and gets two different axes (§6.53).
-    _math.u = axis.at;
+    const std::uint8_t stepped = axis.at;
 
-    const std::uint8_t scaled = MultiplyUnsigned(_math).high;
+    // 6502: STA P / LDA #222 / STA Q / JSR MULTU.
+    const std::uint8_t scaled = MultiplyUnsigned(axis.value, 222).high;
 
     // 6502: LDY K+3 / BPL PL12 -- a positive axis returns as it is with a zero high byte.
     if ((_math.k[3] & 0x80u) == 0u)
     {
-      return {scaled, 0, _math.u};
+      return {scaled, 0, stepped};
     }
 
     // 6502: EOR #&FF / CLC / ADC #1 / BEQ PL12 -- and a negative one is negated into a sixteen-bit
@@ -512,17 +509,16 @@ namespace Elite
     const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(scaled ^ 0xFFu), 1u, false);
     if (negated.value == 0u)
     {
-      return {negated.value, 0, _math.u};
+      return {negated.value, 0, stepped};
     }
 
-    return {negated.value, 0xFF, _math.u};
+    return {negated.value, 0xFF, stepped};
   }
 
-  void SetMeridianAngle(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
+  void SetMeridianAngle(const Ship& _ship, MathWorkspace& _math, std::uint8_t _numerator, std::uint8_t _denominator) noexcept
   {
     // 6502: PLS4 -- STA Q / JSR ARCTAN, then the roof vector's sign decides which way round.
-    _math.q = _a;
-    std::uint8_t angle = Arctan(_math);
+    std::uint8_t angle = Arctan(_numerator, _denominator);
 
     // 6502: LDX INWK+14 / BMI P%+4 / EOR #%10000000 -- the branch SKIPS the flip, so it is the
     // POSITIVE roof vector that gets it.
@@ -562,20 +558,23 @@ namespace Elite
        * circle: `K2(3 2)` is how far the meridian reaches across and `K2(1 0)` how far it reaches
        * down, and a meridian seen edge-on has one of them at zero.
        */
-      _math.q = SINE_TABLE[_math.cnt2 & 0x1Fu];
-      _math.r = MultiplyByLog(_math, _math.k2[2], false).high;
-      _math.k[0] = MultiplyByLog(_math, _math.k2[3], false).high;
+      // 6502: LDA SNE,X / STA Q / LDA K2+2 / JSR FMLTU / STA R / LDA K2+3 / JSR FMLTU / STA K --
+      // the first axis against the sine, both halves; `R` and `K` were the scratch they waited in.
+      const std::uint8_t sine = SINE_TABLE[_math.cnt2 & 0x1Fu];
+      const std::uint8_t firstAcross = MultiplyByLog(_math.k2[2], sine, false).value;
+      const std::uint8_t secondAcross = MultiplyByLog(_math.k2[3], sine, false).value;
 
       // 6502: LDX CNT2 / CPX #33 / LDA #0 / ROR A / STA XX16+5 -- the sign for this quarter, as a
       // bit rotated straight out of the comparison.
       _geometry.xx16[5] = (_math.cnt2 >= 33u) ? 0x80u : 0x00u;
       bool carry = _math.cnt2 >= 33u;
 
+      // 6502: the same table a quarter-turn on -- the cosine -- against the second axis. `K+2` and
+      // `P` were the scratch these waited in.
       const AddResult quarter = AddWithCarry(_math.cnt2, 16u, false);
-      _math.q = SINE_TABLE[quarter.value & 0x1Fu];
-      _math.k[2] = MultiplyByLog(_math, _math.k2[1], false).high;
-      const WideResult second = MultiplyByLog(_math, _math.k2[0], false);
-      _math.p = second.high;
+      const std::uint8_t cosine = SINE_TABLE[quarter.value & 0x1Fu];
+      const std::uint8_t secondDown = MultiplyByLog(_math.k2[1], cosine, false).value;
+      const LogProduct second = MultiplyByLog(_math.k2[0], cosine, false);
 
       /*
        * 6502: LDA CNT2 / ADC #15 / AND #63 / CMP #33 / LDA #0 / ROR A / STA XX16+4.
@@ -588,9 +587,10 @@ namespace Elite
       const AddResult stepped = AddWithCarry(_math.cnt2, 15u, second.carry);
       _geometry.xx16[4] = (static_cast<std::uint8_t>(stepped.value & 0x3Fu) >= 33u) ? 0x80u : 0x00u;
 
-      // 6502: the two `ADD`s, each combining a product with the axis sign it belongs to.
-      _math.s = static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[2]);
-      AddSignedResult sum = AddSigned(_math, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[0]));
+      // 6502: the two `ADD`s, each combining a product with the axis sign it belongs to: (A P) is
+      // the first-axis sign over the cosine product, (S R) the second-axis sign over the sine's.
+      AddSignedResult sum = AddSigned(SignMag16{second.value, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[0])},
+                                      SignMag16{firstAcross, static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[2])});
       _math.t = sum.high;
       std::uint8_t low = sum.low;
       carry = sum.carry; // 6502: `STA T / BPL PL42` touches no flag, so `ADC K3` reads ADD's
@@ -611,10 +611,9 @@ namespace Elite
       _state.k6[0] = xLow.value;
       _state.k6[1] = AddWithCarry(_math.t, _centre.x1, xLow.carry).value;
 
-      _math.r = _math.k[0];
-      _math.s = static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[3]);
-      _math.p = _math.k[2];
-      sum = AddSigned(_math, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[1]));
+      // 6502: LDA K / STA R / ... / LDA K+2 / STA P / ... / JSR ADD -- the other pair of products.
+      sum = AddSigned(SignMag16{secondDown, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[1])},
+                      SignMag16{secondAcross, static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[3])});
       _math.t = static_cast<std::uint8_t>(sum.high ^ 0x80u);
       low = sum.low;
       carry = sum.carry; // 6502: `EOR #%10000000 / STA T / BPL PL43` -- again no flag is touched
@@ -691,8 +690,7 @@ namespace Elite
 
       // 6502: LDA INWK+14 / EOR #%10000000 / STA P / LDA INWK+20 / JSR PLS4 -- where the first
       // meridian starts, from the roof vector against the nose.
-      _math.p = static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u);
-      SetMeridianAngle(_ship, _math, _ship.roof.z.hi);
+      SetMeridianAngle(_ship, _math, static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u), _ship.roof.z.hi);
 
       AxisResult axis = DivideAxisByZ(_ship, _math, 9);
       _math.k2[0] = axis.value;
@@ -706,8 +704,7 @@ namespace Elite
       DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
 
       // And the second meridian, which shares the first pair of axes and takes a new second pair.
-      _math.p = static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u);
-      SetMeridianAngle(_ship, _math, _ship.side.z.hi);
+      SetMeridianAngle(_ship, _math, static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u), _ship.side.z.hi);
 
       LoadTwoAxes(_ship, _math, _geometry, 21);
       DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
@@ -792,9 +789,7 @@ namespace Elite
 
     // 6502: LDA #96 / STA P+1 / LDA #0 / STA P / JSR DVID3B2 -- the radius is 96 * 256 / z, and
     // 96 is the planet's size in the same units everything else in the geometry uses.
-    _math.p1 = 96;
-    _math.p = 0;
-    DivideByShipZ(_ship, _math, 0);
+    DivideByShipZ(_ship, _math, SignMag24{0, 96, 0});
 
     // 6502: LDA K+1 / BEQ PL82 / LDA #248 / STA K -- a radius that overflowed a byte is clamped,
     // and K+1 is LEFT SET, which is what `PL9` reads to skip the markings.
@@ -889,8 +884,9 @@ namespace Elite
     _state.v = at;
     _state.vNext = sign;
 
-    _math.k2[1] = SquareUnsigned(_math, _math.k[0]).high;
-    _math.k2[0] = _math.p;
+    const Product radiusSquared = SquareUnsigned(_math.k[0]);
+    _math.k2[1] = radiusSquared.high;
+    _math.k2[0] = radiusSquared.low;
 
     // 6502: part 2 -- rub out the rows BELOW the sun, with last frame's centre, before any of
     // this frame's arithmetic touches `YY`.
@@ -924,20 +920,21 @@ namespace Elite
 
     for (;;)
     {
-      // 6502: the half-width, as sqrt(K^2 - v^2).
-      _math.t = SquareUnsigned(_math, _state.v).high;
-      const SubResult widthLow = SubtractWithCarry(_math.k2[0], _math.p, true);
-      _math.q = widthLow.value;
-      _math.r = SubtractWithCarry(_math.k2[1], _math.t, widthLow.carry).value;
+      // 6502: the half-width, as sqrt(K^2 - v^2). `T` held the square's high byte and (R Q) the
+      // difference, which is the radicand `LL5` takes.
+      const Product vSquared = SquareUnsigned(_state.v);
+      const SubResult widthLow = SubtractWithCarry(_math.k2[0], vSquared.low, true);
+      const std::uint8_t widthHigh = SubtractWithCarry(_math.k2[1], vSquared.high, widthLow.carry).value;
 
       _draw.y1 = row;
-      const bool rootCarry = SquareRoot(_math);
+      const Root root = SquareRoot(widthHigh, widthLow.value);
+      _math.q = root.value; // 6502: LL5's ROL Q -- and the last row's root is the frame's Q when the sun is the last slot drawn
 
       // 6502: JSR DORND / AND CNT / CLC / ADC Q / BCC PLF44 / LDA #255 -- the ragged edge, and it
       // saturates rather than wrapping round to nothing. The generator runs on the carry `LL5`
       // left, which is the last bit out of the square root (§6.55).
-      const RngResult roll = _rng.Next(rootCarry);
-      const AddResult ragged = AddWithCarry(static_cast<std::uint8_t>(roll.value & _math.cnt), _math.q, false);
+      const RngResult roll = _rng.Next(root.carry);
+      const AddResult ragged = AddWithCarry(static_cast<std::uint8_t>(roll.value & _math.cnt), root.value, false);
       std::uint8_t width = ragged.value;
       if (ragged.carry)
       {

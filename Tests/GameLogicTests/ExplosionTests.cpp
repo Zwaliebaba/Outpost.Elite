@@ -156,11 +156,10 @@ namespace GameLogicTests
         Assert::AreEqual(_cpu.memory[at], _ours, (_context + L": " + Widen(_name)).c_str());
       };
 
+      // `Q` is the cloud size `DOEXP` hands `EXS1`, and `U` the particle count it hands `PTCLS`;
+      // the rest of the kernel's scratch -- `P`, `R`, `S`, `T` -- stays inside the kernel since
+      // M2-b and is not compared.
       same("Q", _math.q);
-      same("R", _math.r);
-      same("P", _math.p);
-      same("S", _math.s);
-      same("T", _math.t);
       same("U", _math.u);
       same("CNT", _math.cnt);
       same("TGT", _math.tgt);
@@ -375,7 +374,6 @@ namespace GameLogicTests
       const std::uint16_t rand = oracle.Label("RAND");
       const std::uint16_t qq = oracle.Label("Q");
       const std::uint16_t rr = oracle.Label("R");
-      const std::uint16_t ss = oracle.Label("S");
       const std::uint16_t tt = oracle.Label("T");
 
       // The cloud sizes are the interesting ones: zero is `FMLTU`'s second early exit, and the
@@ -432,30 +430,25 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(exs1, 20'000);
               Assert::IsTrue(run.completed, L"EXS1 returned");
 
-              Elite::MathWorkspace math;
               Elite::Rng rng;
-              math.q = size;
-              math.r = low;
-              math.t = 0x5Cu;
               rng.SetState(seed);
 
-              const Elite::ExplosionOffset offset = Elite::OffsetByCloud(math, rng, high);
+              const Elite::ExplosionOffset offset = Elite::OffsetByCloud(rng, high, low, size);
 
               const std::wstring where = Widen("EXS1(Q=" + std::to_string(size) + ", A=" + std::to_string(high) +
                                                ", R=" + std::to_string(low) + ", seed=" + std::to_string(seed[0]) + "): ");
 
               Assert::AreEqual(cpu.a, offset.high, (where + L"the high byte").c_str());
               Assert::AreEqual(cpu.x, offset.low, (where + L"the low byte").c_str());
-              Assert::AreEqual(cpu.memory[ss], math.s, (where + L"S").c_str());
-              Assert::AreEqual(cpu.memory[tt], math.t, (where + L"T").c_str());
-              Assert::AreEqual(cpu.memory[rr], math.r, (where + L"R").c_str());
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
                 Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
                                  (where + L"RAND+" + std::to_wstring(byte)).c_str());
               }
 
-              if (math.t != 0x5Cu)
+              // The sentinel is read on the ORACLE's side: the port's subtracting half keeps its
+              // product as a local since M2-b.
+              if (cpu.memory[tt] != 0x5Cu)
               {
                 ++subtracted;
               }

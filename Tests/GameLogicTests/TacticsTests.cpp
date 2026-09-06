@@ -196,21 +196,15 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(vcsub, 20'000);
               Assert::IsTrue(run.completed, L"VCSUB returned");
 
-              Elite::MathWorkspace math;
-              const bool carry = Elite::SubtractShipAxes(theirs, mine, axes, math);
+              const bool carry = Elite::SubtractShipAxes(theirs, mine, axes);
 
               const std::wstring where = WidenText("VCSUB mine " + std::to_string(mineHigh) + "/" + std::to_string(mineSign) + " theirs " +
                                                    std::to_string(theirHigh) + "/" + std::to_string(theirSign));
               CompareAxes(cpu, at, axes, where);
 
-              // 6502: K+1 to K+3 -- the scratch `TAS1` leaves behind, which `TACTICS` does not read
-              // and which says the subtraction went through `MVT3` rather than round it.
-              for (std::size_t byte = 1; byte < 4u; ++byte)
-              {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k + byte)], math.k[byte],
-                                 (where + L": K+" + std::to_wstring(byte)).c_str());
-              }
-              Assert::AreEqual(cpu.memory[at.u], math.u, (where + L": U").c_str());
+              // 6502: K+1 to K+3 and U -- the scratch `TAS1` leaves behind, which `TACTICS` does
+              // not read. The port holds the block as a value since M2-b, so what `K3` received
+              // is the comparison, not the bytes it travelled through.
 
               // The carry the LAST of the three `MVT3`s exits with. Nothing between here and the
               // `DORND` at `TA64` touches the flag, so it is `TACTICS`'s input and not scratch
@@ -282,19 +276,12 @@ namespace GameLogicTests
                 const Elite::Testing::RunResult run = cpu.CallSubroutine((station != 0) ? tas4 : tas3, 20'000);
                 Assert::IsTrue(run.completed, L"the dot product returned");
 
-                Elite::MathWorkspace math;
-                math.q = 0x5Au;
-                math.r = 0x5Au;
-                math.s = 0x5Au;
-                const Elite::AddSignedResult got = Elite::DotProductWithShip(block, draw, math, which);
+                const Elite::AddSignedResult got = Elite::DotProductWithShip(block, draw, which);
 
                 const std::wstring where = WidenText(std::string(station != 0 ? "TAS4" : "TAS3") + " vector " + std::to_string(which) +
                                                      " (" + std::to_string(vx) + "," + std::to_string(vy) + "," + std::to_string(sx) + ")");
                 Assert::AreEqual(cpu.a, got.high, (where + L": A").c_str());
                 Assert::AreEqual(cpu.x, got.low, (where + L": X").c_str());
-                Assert::AreEqual(cpu.memory[at.q], math.q, (where + L": Q").c_str());
-                Assert::AreEqual(cpu.memory[at.r], math.r, (where + L": R").c_str());
-                Assert::AreEqual(cpu.memory[at.s], math.s, (where + L": S").c_str());
                 ++compared;
               }
             }

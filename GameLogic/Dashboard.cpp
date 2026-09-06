@@ -249,9 +249,8 @@ namespace Elite
 
     // 6502: LDA #0 / STA R / STA P / LDA #8 / STA S -- `ADD` adds a positive eight to whatever
     // sign-magnitude byte it is handed, which is what centres both indicators.
-    _math.r = 0;
-    _math.p = 0;
-    _math.s = 8u;
+    // (A P) is the value over a zero low byte, and (S R) is eight -- the centre of the indicator.
+    constexpr SignMag16 INDICATOR_CENTRE{0u, 8u};
 
     /*
      * 6502: LDA ALP1 / LSR A / LSR A / ORA ALP2 / EOR #%10000000 / JSR ADD / JSR DIL2.
@@ -260,7 +259,7 @@ namespace Elite
      * indicator moves the other way from the roll.
      */
     const std::uint8_t roll = static_cast<std::uint8_t>(((_flight.alp1 >> 2) | _flight.alp2) ^ 0x80u);
-    DrawIndicator(_canvas, _draw, _math, AddSigned(_math, roll).high);
+    DrawIndicator(_canvas, _draw, _math, AddSigned(SignMag16{0u, roll}, INDICATOR_CENTRE).high);
 
     /*
      * 6502: LDA BETA / LDX BET1 / BEQ P%+4 / SBC #1 / JSR ADD / JSR DIL2.
@@ -280,7 +279,7 @@ namespace Elite
     {
       pitch = SubtractWithCarry(pitch, 1u, false).value;
     }
-    DrawIndicator(_canvas, _draw, _math, AddSigned(_math, pitch).high);
+    DrawIndicator(_canvas, _draw, _math, AddSigned(SignMag16{0u, pitch}, INDICATOR_CENTRE).high);
 
     // ---- part 3: the four energy bars, on one pass in four --------------------------------------
 
