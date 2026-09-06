@@ -1300,8 +1300,10 @@ and **`effects-seams` reaches five in M3-b rather than four** — the M3-b row's
 one, and this is where that is recorded rather than discovered at the ratchet.
 
 **`ShipDrawEffects` CANNOT GO IN THIS SLICE EITHER, and the reason is the oracle rather than the
-port.** M3-b-1d was built and reverted; this is what it found, recorded so the next attempt starts
-from evidence rather than from the plan's optimism.
+port.** It was built and reverted, and it takes no slice letter because a reverted slice should not
+own one — `M3-b-1d` is the spawn half of `FlightLoopEffects`, which went in its place. This is what
+the attempt found, recorded so the next one starts from evidence rather than from the plan's
+optimism.
 
 `DrawPlanetOrSun` is `LL25`'s `JMP PLANET` and `DrawExplosion` is `LL14`'s `JMP DOEXP`, and both
 are routines this library has had since slices 3c and 4b-b. The removal itself is small: `DrawShip`
