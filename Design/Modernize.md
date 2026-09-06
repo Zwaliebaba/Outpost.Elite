@@ -303,7 +303,7 @@ the rest existed: "the struct is the argument list".
 <!--count:main-lines-->1,198 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->189 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->187 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->19 abstract classes in
@@ -312,8 +312,9 @@ only a Windows compiler can type-check.
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
 `ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each declared when the routine on the
 far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
-times. `SpawnEffects`, `ChartShapes`, `ShipEffects::RunTactics` and `FlightLoopEffects`'s
-`SpawnAhead` and `Anger` are gone (M3-b-1a to M3-b-1d). Three methods
+times. `SpawnEffects`, `ChartShapes`, `ShipEffects::RunTactics`, `FlightLoopEffects`'s `SpawnAhead`
+and `Anger`, and `StartUpEffects`'s `ResetUniverse`, `ResetShip` and `ResetMissileIndicators` are
+gone (M3-b-1a to M3-b-1e). Three methods
 are declared on two interfaces each and one override satisfies both, which is
 the language's rule and a smell. One seam carries a CPU flag across the platform boundary:
 `PlaySound(std::uint8_t _effect, bool _carryIn)` returns a carry because `NOISE` does (§6.99), and
@@ -348,7 +349,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,918 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,915 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1688,6 +1689,30 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-1e: the reset half of `StartUpEffects` goes, and untrapping `RES2` found a
+routine hidden behind a trap's address.** `ResetUniverse` was `RESET`, `ResetShip` was `RES2` and
+`ResetMissileIndicators` was `msblob` — three routines `Flight.cpp` and `Dashboard.cpp` have had
+since the stardust, the heaps and the dashboard were built. `msblob` was declared on TWO interfaces,
+`StartUpEffects` and `TradeScreenEffects`, and both copies went; `DockAtStation` lost its
+`StartUpEffects&` parameter with them and reaches `WaitFrames` through `Ports` like everything else.
+`outpost-elite-names` 189 → 187.
+
+**`RES2` OPENS `JSR stopbd`, AND `stopbd` FALLS INTO `stopat`.** `StartUpTests` traps `stopat` for
+the title theme and the port records `StopTheme` against it. Untrap `RESET` and `RES2` and the
+oracle's sequence grows two `stopat` hits the port cannot match — not because the port is missing a
+stop, but because a trap catches an address rather than a routine, and `stopbd` is ten bytes in
+front of `stopat` with no `RTS` between them. The fix says what is really there: `stopbd` gets its
+own trap, and the port's `StopDockingMusic` — which `ResetShipAndBubble` has always called — is
+recorded into the same list. A cold start now shows `stopbd` twice at the head of the sequence,
+which is `TT170`'s fall-through into `DEATH2` reaching `RES2` a second time (§6.25) made visible.
+
+**Three suites replaced a count with an observation.** `DockingTests` asserted the list `{RES2,
+DELAY}`; `RES2` empties the bubble and stops the ship, so that is what it asserts now — the same
+shape §6.109 gave `LAUN` when it stopped being a seam. `MarketScreenTests` and `StartUpTests`
+counted `msblob`; it is the ONLY thing in either screen that touches the canvas (the text goes into
+a recording sink and `CLYNS`, `TT66`, `dn2` and `TITLE` are still seams), so ink on the canvas is
+the routine having run. Both were checked by deleting the call and watching the assertion come back.
 
 **2026-09-06 — M3-b-1d: the spawn half of `FlightLoopEffects` goes, and "the bubble is full" stops
 being a trap's answer.** `SpawnAhead` was `JSR FRS1` and `Anger` was `JSR ANGRY`; slice 4a-b built

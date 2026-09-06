@@ -3,6 +3,8 @@
 #include "StartUp.h"
 
 #include "Commander.h"
+#include "Dashboard.h"
+#include "Flight.h"
 #include "Ports.h"
 #include "Universe.h"
 
@@ -96,7 +98,7 @@ namespace Elite
     (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
     // 6502: JSR msblob.
-    _ports.start.ResetMissileIndicators();
+    ResetMissileIndicators(_universe.canvas, _universe.commander.missiles);
 
     // 6502: LDA #7 / LDX #ADA / LDY #48 / JSR TITLE -- an Adder, close up. Its key is discarded.
     (void)_ports.start.ShowTitleScreen(TITLE_START_TOKEN, ShipType::Adder, TITLE_ADDER_DISTANCE);
@@ -151,11 +153,12 @@ namespace Elite
 
   ForcedKey ResetAndStartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
-    // 6502: TT170 -- LDX #&FF / TXS / JSR RESET, and RESET runs off its end into RES2.
-    _ports.start.ResetUniverse();
+    // 6502: TT170 -- LDX #&FF / TXS / JSR RESET, and RESET runs off its end into RES2, which is
+    // why `ResetGame` ends with `ResetShipAndBubble` rather than this calling both.
+    ResetGame(_universe, _ports, _universe.dockedFlag);
 
     // 6502: the fall-through into DEATH2 -- LDX #&FF / TXS / JSR RES2, a SECOND time.
-    _ports.start.ResetShip();
+    ResetShipAndBubble(_universe, _ports);
 
     // 6502: and then into BR1.
     return StartGame(_universe, _ports, _hyperspaceHeld);

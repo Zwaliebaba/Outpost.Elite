@@ -65,14 +65,6 @@ namespace GameLogicTests
     class RecordingEffects : public Elite::StartUpEffects
     {
     public:
-      void ResetUniverse() override
-      {
-        seams.push_back("RESET");
-      }
-      void ResetShip() override
-      {
-        seams.push_back("RES2");
-      }
       void ClearKeyLogger() override
       {
         seams.push_back("ZEKTRAN");
@@ -84,10 +76,6 @@ namespace GameLogicTests
       void StopTheme() override
       {
         seams.push_back("stopat");
-      }
-      void ResetMissileIndicators() override
-      {
-        seams.push_back("msblob");
       }
       /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
       [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
@@ -201,7 +189,6 @@ namespace GameLogicTests
 
                 // ---- the shipped routine -------------------------------------------------------
                 Cpu6502 cpu = oracle.Fresh();
-                cpu.AddTrap(oracle.Label("RES2"));
                 cpu.AddTrap(oracle.Label("LAUN"));
                 cpu.AddTrap(oracle.Label("DELAY"));
 
@@ -285,7 +272,6 @@ namespace GameLogicTests
       const std::uint16_t bay = oracle.Label("BAY");
 
       Cpu6502 cpu = oracle.Fresh();
-      cpu.AddTrap(oracle.Label("RES2"));
       cpu.AddTrap(oracle.Label("LAUN"));
       const std::uint16_t delay = oracle.Label("DELAY");
       cpu.AddTrap(delay);
@@ -352,14 +338,14 @@ namespace GameLogicTests
       universe.status.energy = 0x5C;
       std::uint8_t dockedFlag = 0;
 
-      Elite::Ports ports = universe.Ports();
-      const Elite::DockingResult result = Elite::DockAtStation(effects, universe, ports, nullptr, dockedFlag, 0, false);
+      Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, effects);
+      const Elite::DockingResult result = Elite::DockAtStation(universe, ports, nullptr, dockedFlag, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome), L"this commander earns no briefing");
 
-      // 6502: JSR RES2 / JSR LAUN / ... / LDY #44 / JSR DELAY, in that order -- and `LAUN` is not
-      // in this list any more because it is not a seam any more.
-      const std::vector<std::string> EXPECTED = {"RES2", "DELAY"};
+      // 6502: JSR RES2 / JSR LAUN / ... / LDY #44 / JSR DELAY, in that order -- and neither `RES2`
+      // nor `LAUN` is in this list any more, because neither is a seam any more.
+      const std::vector<std::string> EXPECTED = {"DELAY"};
       Assert::AreEqual(EXPECTED.size(), effects.seams.size(), L"how many seams arriving reaches");
       for (std::size_t index = 0; index < EXPECTED.size(); ++index)
       {
@@ -371,6 +357,14 @@ namespace GameLogicTests
        * a seam. What it leaves behind says so instead: the step it stores and the noise it makes.
        * Without this, deleting the call from `DOENTRY` would pass every other assertion here.
        */
+      /*
+       * 6502: JSR RES2 -- and what it leaves behind says it happened, for the same reason `LAUN`'s
+       * does (M3-b-1e). It was a seam that could only be counted; it empties the bubble, so a slot
+       * still occupied is a `RES2` that did not run.
+       */
+      Assert::AreEqual<std::uint8_t>(0u, universe.bubble.slots[0], L"RES2 emptied the bubble");
+      Assert::AreEqual<std::uint8_t>(0u, universe.flight.delta, L"and stopped the ship");
+
       Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, universe.heaps.stp, L"LAUN stored the step");
       Assert::AreEqual<std::size_t>(1u, universe.effects.sounds.size(), L"LAUN made one noise");
       Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, universe.effects.sounds.front(), L"and it is sfxwhosh");
@@ -418,9 +412,9 @@ namespace GameLogicTests
       earnerUniverse.commander = earner;
       earnerUniverse.heaps.stp = 4u; // §6.95, as above
       std::uint8_t earnerDocked = 0;
-      Elite::Ports earnerPorts = earnerUniverse.Ports();
+      Elite::Ports earnerPorts = earnerUniverse.PortsWith(earnerUniverse.unused, earnerUniverse.unused, briefed);
       const Elite::DockingResult briefing =
-        Elite::DockAtStation(briefed, earnerUniverse, earnerPorts, nullptr, earnerDocked, 0, false);
+        Elite::DockAtStation(earnerUniverse, earnerPorts, nullptr, earnerDocked, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::BriefMission1), static_cast<int>(briefing.outcome),
                        L"this commander has earned the Constrictor mission");
@@ -490,8 +484,7 @@ namespace GameLogicTests
         commander.cash.tenths = (item.tenths);
 
         Cpu6502 cpu = oracle.Fresh();
-        cpu.AddTrap(oracle.Label("RES2"));
-        cpu.AddTrap(oracle.Label("LAUN"));
+          cpu.AddTrap(oracle.Label("LAUN"));
         cpu.AddTrap(oracle.Label("DELAY"));
         cpu.memory[oracle.Label("TP")] = 0x02;
         cpu.memory[oracle.Label("GCNT")] = 7;

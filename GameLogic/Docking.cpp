@@ -2,6 +2,8 @@
 
 #include "Docking.h"
 
+#include "Flight.h"
+
 /*
  * Docking at the station (slice 2e).
  */
@@ -155,11 +157,11 @@ namespace Elite
     return TrumblesOrBay(_commander);
   }
 
-  DockingResult DockAtStation(StartUpEffects& _effects, Universe& _universe, Ports& _ports, TunnelEffects* _pacing,
-                              std::uint8_t& _dockedFlag, std::uint8_t _view, bool _hyperspaceHeld) noexcept
+  DockingResult DockAtStation(Universe& _universe, Ports& _ports, TunnelEffects* _pacing, std::uint8_t& _dockedFlag,
+                              std::uint8_t _view, bool _hyperspaceHeld) noexcept
   {
     // 6502: JSR RES2 -- once here, where the cold start reaches it twice (§6.25).
-    _effects.ResetShip();
+    ResetShipAndBubble(_universe, _ports);
 
     // 6502: JSR LAUN -- the routine rather than a seam, since this slice ported it.
     DrawLaunchTunnel(_universe, _ports, _pacing);
@@ -179,7 +181,7 @@ namespace Elite
     _universe.status.energy = 0xFF;
 
     // 6502: LDY #44 / JSR DELAY.
-    _effects.WaitFrames(DOCKING_PAUSE_FRAMES);
+    _ports.start.WaitFrames(DOCKING_PAUSE_FRAMES);
 
     DockingResult result{};
     result.outcome = MissionOnDocking(_universe.commander);

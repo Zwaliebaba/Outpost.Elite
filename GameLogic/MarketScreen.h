@@ -67,8 +67,9 @@ namespace Elite
      */
     virtual void ClearToView(std::uint8_t _view) = 0;
 
-    /// 6502: msblob -- reset the dashboard's missile indicators. The dashboard is phase 3's.
-    virtual void ResetMissileIndicators() = 0;
+    /// `msblob` WAS A SEAM HERE, on this interface and on `StartUpEffects` both, and is gone
+    /// (M3-b-1e): the dashboard was phase 3's when it was written and `Dashboard.cpp` has had
+    /// `ResetMissileIndicators` since slice 3d-d-iii-b, which `KILLSHP` already calls directly.
 
     /*
      * 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.

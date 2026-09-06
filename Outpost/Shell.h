@@ -37,11 +37,11 @@ namespace Outpost
    * builds the same shape out of a null presenter and asserts that the declarations are mutually
    * consistent, so the arrangement here is verified before this file compiles.
    *
-   * Three of the methods below appear on two interfaces each -- `ClearBottomRows` on the trade
-   * screens and the charts, `WaitFrames` on the line editor and the start sequence,
-   * `ResetMissileIndicators` on the trade screens and the start sequence. One definition overrides
-   * both in each case, which is the language's own rule and is deliberate rather than lucky: two
-   * independent statements of what a routine needs, satisfied by one thing.
+   * Two of the methods below appear on two interfaces each -- `ClearBottomRows` on the trade
+   * screens and the charts, `WaitFrames` on the line editor and the start sequence. One definition
+   * overrides both in each case, which is the language's own rule and is deliberate rather than
+   * lucky: two independent statements of what a routine needs, satisfied by one thing.
+   * `ResetMissileIndicators` was a third until M3-b-1e, which took `msblob` off both.
    *
    * WHAT IS HONESTLY MISSING, and it is said here rather than left to be discovered while playing.
    * Phase 4 owns the docking tunnel and the rotating title ship; phase 5 owns sound. Every method
@@ -131,15 +131,12 @@ namespace Outpost
     void ClearToView(std::uint8_t _view) override;
     void ClearBottomRows() override;
     void BeepAndPause() override;
-    void ResetMissileIndicators() override;
 
     // ---- Elite::LineEntryEffects and Elite::StartUpEffects --------------------------------------
 
     void WaitFrames(std::uint8_t _frames) override;
     void FlushKeyboard() override;
 
-    void ResetUniverse() override;
-    void ResetShip() override;
     void ClearKeyLogger() override;
     void StartTheme() override;
     void StopTheme() override;

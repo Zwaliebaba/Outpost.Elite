@@ -750,7 +750,7 @@ namespace
        * is here anyway because the routine is built and the alternative is a hole that looks like
        * a decision.
        */
-      const Elite::DockingResult arrival = Elite::DockAtStation(_game.shell, _game.universe, _game.ports, &_game.shell,
+      const Elite::DockingResult arrival = Elite::DockAtStation(_game.universe, _game.ports, &_game.shell,
                                                                 _game.universe.dockedFlag, _game.universe.view, false);
 
       /*
@@ -823,7 +823,7 @@ namespace
         DeathPacing pacing(_game);
         Elite::Die(_game.universe, _game.ports, _game.flight, &pacing);
 
-        _game.shell.ResetShip();
+        Elite::ResetShipAndBubble(_game.universe, _game.ports); // 6502: DEATH2's JSR RES2
 
         const Elite::ForcedKey begun = Elite::StartGame(_game.universe, _game.ports, false);
         Perform(_game, begun.outcome);

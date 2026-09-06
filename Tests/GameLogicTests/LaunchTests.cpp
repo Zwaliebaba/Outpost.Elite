@@ -464,12 +464,9 @@ namespace GameLogicTests
      */
     struct RecordingStart final : Elite::StartUpEffects
     {
-      void ResetUniverse() override {}
-      void ResetShip() override {}
       void ClearKeyLogger() override {}
       void StartTheme() override {}
       void StopTheme() override {}
-      void ResetMissileIndicators() override {}
       /*
        * 6502: JSR RDKEY inside `TLL2` -- scripted, because the loop it drives is key-driven and
        * nothing else decides how many frames the title screen runs for.
