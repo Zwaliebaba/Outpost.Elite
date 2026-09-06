@@ -337,13 +337,16 @@ screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making 
 would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->18 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
 
-**P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->31 `bool
+**P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->32 `bool
 _carryIn` parameters in headers. Inside the kernel (`AddWithCarry`, `Rng::Next`, the multipliers)
-they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThargoidPair`,
-`AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
-6502 flag was live, and every caller passes a literal.
+they are the numeric model and stay. The other twenty-four are a routine boundary that happens to
+be where a 6502 flag was live, and this pattern's original entry said "every caller passes a
+literal". **M2-d audited all twenty-four against the disassembly and that was wrong**: most are a
+computed flag the port models, three were passed the wrong value, and the literals that remain are
+each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
+the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,924 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,927 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -493,6 +496,28 @@ never global.
 
 The `_a`/`_x`/`_y` parameters are renamed for what they carry (`_seed`, `_axisOffset`, `_highBits`)
 at the same time; the `// 6502:` comment keeps the register.
+
+### 4.3.1 The boundary carries, audited (M2-d, 2026-09-06)
+
+Twenty-four `bool _carryIn` parameters cross a boundary that is not the arithmetic kernel's. Each
+one is a place where the original had a 6502 flag live across a `JSR`, and the audit below walks
+back from every call site in `Design/Reference/compile-source.txt` to the instruction that decided
+the flag. Three classes come out, and three of the twenty-four were being passed the wrong value.
+
+| Routine (6502) | What the original leaves at each call site | What the port passes | Verdict |
+|---|---|---|---|
+| `SpawnDebris` (`SPIN`), `SpawnItems` (`SPIN2`) | `.nosp` is reached from `CMP #AST`, from `CMP #Mlas` or by falling out of `SPIN2`; the second `JSR SPIN` runs on the first one's exit | `false`, `false` | **Wrong, fixed.** Both return their exit carry now (`DORND`'s, or the last `SFS1`'s, which is `NWSHP`'s "was it made"), and `MA47` threads it |
+| the splinter roll (`JSR DORND` at `MA47`) | `CMP #Mlas` was EQUAL, so the carry is SET | `false` | **Wrong, fixed** |
+| `StartEcm` (`ECBLB2`) from `M32` | `LSR A / BCS` -- taken, so SET | `false` | **Wrong, fixed.** Unobservable (`NOISE` only returns it when the sound is off, and `ECBLB2` discards it), and wrong all the same |
+| the missile-lock `Beep` at `MA47` | `HITCH`'s `SEC`, which `LDA MSAR` and `BEQ` do not touch | `false`, beside a local already set to `true` for the same flag | **Wrong, fixed.** Observable on a silent build: `NOISE` hands it back and `LL9` seeds a cloud on it (§6.157) |
+| `TakeDamage` (`OOPS`), `DamageEquipment`, `FireLaser` (`LASLI`), `SeedExplosionCloud`, `EraseShip`, `DrawShip` (`LL9`), `DrawBall`/`DrawBallLine`, `SeedDebris` (`Ze`), `SpawnThargoidPair` (`GTHG`), `AddDebris` (`fq1`), `SeedStardustAndClearShips` | a computed flag: a compare, a shift, or a callee's answer | the same flag, computed | **Live and modelled.** The parameter is the routine's operand and stays |
+| `RunSpawning` (`MTT1`), `RunLoopTail` (part 5), `BuildSystem` (`SOLAR`), `StartEcm` from the flight loop's E.C.M. key | inherited from before anything the port models: `M%`'s exit for the spawner, `RES2`'s (and `ZERO`'s) for `SOLAR`, and possibly `WARP`'s for the key | `false` at every caller | **Honest assumption.** The parameter is what puts it at the call site instead of inside the routine; `false` is what the port can supply. Collapsing it would hide the assumption, which is why M2-d does not |
+| `PlaySoundEffectPitched` (`NOISE2`) | `CPY #&E0` at the Trumble squeak: set for a burning cabin, clear otherwise | `false`, because `DashboardEffects::PlaySoundPitched` has no flag | **Dropped at the seam**, and unobservable: the only reader is `NOISE`'s sound-off return and every caller discards it. M3-b's seams are where it would go |
+
+**Why the count went up rather than down.** The M2-d row promised `carry-params` "at the kernel's
+floor". The audit is the reason it is not: twenty of the twenty-four are the routine's operand, and
+the four literals left are assumptions that belong at a call site. `SpawnItems` GAINED one, because
+`SPIN2` really does hand its caller's carry back when the count is zero.
 
 ### 4.4 `Universe`, `Game`, and the mode machine
 
@@ -1201,7 +1226,7 @@ M2-d's; `LL9`'s stages stay one routine until M4.
 | **M2-a The channel census** | For every workspace field: who writes it, who reads it, and whether any reader reads without writing first — from the tests' `Mirror` lists and a read of each routine. Written into this document as §4.3's table, completed. | The table names every field; no field is "unknown". **Built 2026-09-06** (slice plan and §8 below; `channel_census.py --check` holds it). | 2 |
 | **M2-b Kernel** | `Arith` routines take values and return `Product`/`Quotient`/`SignedSum` structs; `MathWorkspace` parameters removed one routine family at a time (multipliers, dividers, `LL28`, `NORM`, `TIDY`). | Exhaustive oracle sweeps unchanged; `register-params` and the `MathWorkspace` parameter count in the ratchet fall to their floors. **Built 2026-09-06** (slice plan and §8 below; register-params 64 → 22, workspace-params 207 → 151). | 4–5 |
 | **M2-c Geometry and drawing scratch** | `GeometryWorkspace`, `DrawWorkspace`, `ClipState`, `K3Block`, `Projection` and `NumberWorkspace` become stage results or locals, with what M2-b left in `MathWorkspace`; `Projection` outliving `Project` stays and is documented at the one place it matters. Three commits (slice plan above): the line and its callers, the clipper, `LL9`'s frame with the planet and the sun. | `LL9`, planet, sun, stardust and clipper suites green; `workspace-params` at the floor the census names. | 4 |
-| **M2-d Boundary carries** | The `bool _carryIn` on `RunSpawning`, `RunLoopTail`, `SpawnThargoidPair`, `AddDebris`, `SpawnDebris` and the two `PlaySound` seams resolved to what each caller passes; kernel carries untouched. | Green; `carry-params` at the kernel's floor. | 1 |
+| **M2-d Boundary carries** ✅ **built 2026-09-06 (§4.3.1, §8)** | Every non-kernel `bool _carryIn` walked back to the instruction that decides it, at every call site in the disassembly. Three were passed the wrong value and are fixed; the rest are the routine's operand or an inherited flag the port cannot see, and the parameter is what keeps that assumption at the call site. | Green, with a fixture that reaches `MA47`'s kill and compares `RAND` across it; `carry-params` 31 → 32 with the audit as the reason. | 1 |
 
 ### Phase M3 — Ownership
 
@@ -1513,6 +1538,54 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M2-d built: the boundary carries walked back to the instructions that set them,
+and three of them were wrong.** Twenty-four `bool _carryIn` parameters cross a non-kernel boundary,
+and the slice's row said they were "a routine boundary that happens to be where a 6502 flag was
+live, and every caller passes a literal". Walking each call site back through the disassembly to
+the nearest instruction that writes the carry says otherwise: twenty are the routine's operand, the
+four literals left are flags inherited from before anything this port models, and three sites were
+being passed a value the original does not have. §4.3.1 is the table.
+
+**`MA47`'s two `JSR SPIN`s and the splinter roll.** `BURN` reaches the kill with the carry CLEAR --
+`ASL INWK+31 / SEC / ROR INWK+31` shifts the zero the `ASL` put in bit 0 straight back out -- and
+then `CMP #AST` and `CMP #Mlas` overwrite it, so `.nosp` is reached with "was the type at least an
+asteroid" or "was the laser at least a mining one", and the splinter roll (reached only when both
+compares were EQUAL) with the carry SET. The second `JSR SPIN` runs on what the first one left,
+which is `DORND`'s when the roll dropped nothing and `SFS1`'s -- that is `NWSHP`'s "was it made" --
+when it did. The port passed `false` to all four. `SPIN` and `SPIN2` return their exit carry now
+and `MA47` threads it.
+
+**Why four slices missed it.** No fixture reached the kill: `PopulateBubble` gives every ship sixty
+units of energy and the sweep's strongest laser takes fifty, so `BURN`'s subtraction never borrowed
+and `SPIN` was never called from a frame. Three cases were added -- a ship shot to bits in the
+sights, and an asteroid shot with the right laser and the wrong one -- and the first of them
+failed on `RAND` before the fix, which is the whole point of adding them. Both `SPIN` sweeps now
+compare the exit carry as well, with the `SFS1` trap ending `SEC` the way `NWSHP` does.
+
+**`M32`'s E.C.M. and `MA47`'s beep.** `M32` reaches `ECBLB2` through `LSR A / BCS`, so the carry is
+SET; the port passed `false`. It is unobservable -- `NOISE` only hands the flag back when the sound
+is switched off, and `ECBLB2` discards it -- and wrong all the same. The beep is not unobservable:
+`MA47` reaches it with `HITCH`'s `SEC`, the port had a local already set to `true` for exactly that
+flag two lines above, and passed `false` to the sound anyway. On a silent build `NOISE` returns
+what it was given and `LL9` seeds an explosion cloud on it (§6.157), so the wrong value moved the
+generator.
+
+**What the slice deliberately does not do.** Four literals stay: `MTT1`'s (the spawner's first
+`DORND` rotates in whatever `M%` left), part 5's, `SOLAR`'s (`RES2` runs into `ZINF` and returns
+the carry its own caller had), and the flight loop's E.C.M. key (possibly `WARP`'s, three
+instructions earlier, which this port calls through a seam). Each is an assumption, and the
+parameter is what keeps it at the call site instead of buried in the routine -- so collapsing them
+to constants, which the row's "carry-params at the kernel's floor" asked for, would have made the
+tree read as if the question were settled. `PlaySoundEffectPitched`'s is dropped at a seam that has
+no flag; the squeak's `CPY #&E0` is what the original passes, nothing reads it, and M3-b's ports
+are where it would go.
+
+**Green.** 395 of 395 with the oracle present and the M0-c replay record UNCHANGED -- the replay
+never shoots a ship to pieces, which is the other half of why the defect survived. All thirteen
+repository checks. The ratchet: `carry-params` 31 → **32**, because `SPIN2` really does hand its
+caller's carry back when the count is zero and the port now says so; `origin-markers` 3,924 →
+3,927. **Mutants** (rule 3): the corpus is re-run against the committed slice below.
 
 **2026-09-06 — M2-c-3 built: `MathWorkspace` is two bytes, and both of them are there on purpose.**
 `LL9`'s five scratch bytes -- `XX4`, `XX17`, `XX18`, `XX20` and `V` -- are locals of the one

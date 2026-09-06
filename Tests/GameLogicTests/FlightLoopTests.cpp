@@ -393,6 +393,12 @@ namespace GameLogicTests
       const std::uint16_t xx0 = oracle.Label("XX0");
       const std::uint16_t rand = oracle.Label("RAND");
 
+      /*
+       * `SFS1`'s exit carry is `NWSHP`'s -- `NW3`'s `CLC` for a full bubble, `NWL3`'s `SEC` for a
+       * ship that was made -- because everything between the `JSR NWSHP` and `SFS1`'s `RTS` is
+       * pulls and stores. `SPIN` hands that flag back to `MA47`, whose second `JSR SPIN` runs on
+       * it (M2-d), so the trap ends `SEC` and the seam here answers the same.
+       */
       struct Recorder final : Elite::SpawnChildEffects
       {
         std::vector<std::uint8_t> flags;
@@ -401,12 +407,12 @@ namespace GameLogicTests
         {
           flags.push_back(_aiFlag);
           types.push_back(Elite::Byte(_type));
-          return false; // `SFS1`'s carry, which a trap leaves clear and `SPIN` ignores
+          return true;
         }
       };
 
       Cpu6502 cpu = oracle.Fresh();
-      cpu.AddTrap(sfs1);
+      cpu.AddTrap(sfs1, Cpu6502::TrapExit::SetCarry);
 
       // ---- SPIN2 on its own --------------------------------------------------------------------
       std::uint32_t placed = 0;
@@ -414,17 +420,21 @@ namespace GameLogicTests
       {
         for (const std::uint8_t type : {std::uint8_t{3}, std::uint8_t{5}, std::uint8_t{17}})
         {
+          // `oh` is a bare `RTS`, so a count of zero hands the caller's own carry straight back --
+          // which only a sweep that varies it can see.
+          const bool carryIn = (count & 1u) != 0u;
           cpu.ClearTrapHits();
           cpu.memory[cnt] = 0xEEu;
           cpu.a = static_cast<std::uint8_t>(count);
           cpu.x = type;
           cpu.z = (count == 0u); // what the caller's own `AND` has just left behind
+          cpu.c = carryIn;
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(spin2, 20'000);
           Assert::IsTrue(run.completed, L"SPIN2 returned");
 
           Recorder effects;
-          Elite::SpawnItems(effects, Elite::TypeOf(type), static_cast<std::uint8_t>(count));
+          const bool exit = Elite::SpawnItems(effects, Elite::TypeOf(type), static_cast<std::uint8_t>(count), carryIn);
 
           const std::wstring where = WidenText("SPIN2(count " + std::to_string(count) + ", type " + std::to_string(type) + ")");
 
@@ -436,6 +446,7 @@ namespace GameLogicTests
           }
           // `CNT` is `SPIN2`'s loop counter and its own since M2-c-3. How many times it went round
           // is what the seam above records, spawn for spawn.
+          Assert::AreEqual(cpu.c, exit, (where + L": the exit carry").c_str());
 
           placed += static_cast<std::uint32_t>(cpu.trapHits.size());
         }
@@ -482,7 +493,7 @@ namespace GameLogicTests
             Recorder effects;
             Elite::Rng rng;
             rng.SetState(bytes);
-            Elite::SpawnDebris(rng, effects, *blueprint, Elite::TypeOf(type), carry);
+            const bool exit = Elite::SpawnDebris(rng, effects, *blueprint, Elite::TypeOf(type), carry);
 
             const std::wstring where = WidenText("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed) + ", carry " +
                                                  std::to_string(carry ? 1 : 0) + ")");
@@ -494,6 +505,7 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit], (where + L": the type of #" + std::to_wstring(hit)).c_str());
             }
             // `CNT` is `SPIN2`'s own since M2-c-3; the seam records every spawn it made.
+            Assert::AreEqual(cpu.c, exit, (where + L": the exit carry").c_str());
             for (std::size_t byte = 0; byte < bytes.size(); ++byte)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
@@ -1884,6 +1896,17 @@ namespace GameLogicTests
         std::uint8_t view;     ///< 6502: QQ11
         bool empty;
         bool inSights = false; ///< dead ahead and close: what `HITCH` says yes to
+
+        /*
+         * 6502: INWK+35 and TYPE -- what it takes to reach `BURN`'s kill and the two `JSR SPIN`s
+         * after it, which no case here reached until M2-d went looking for the carry they run on.
+         *
+         * `energy` under `LAS` is what makes the subtraction borrow; `asteroids` makes the three
+         * shootable ships type 7, because only an asteroid meets the `CMP #AST` that leads to the
+         * splinter roll -- and that roll is a `DORND` whose carry the port had wrong.
+         */
+        std::uint8_t energy = 60;
+        bool asteroids = false;
       };
 
       const std::vector<Case> CASES = {
@@ -1902,6 +1925,9 @@ namespace GameLogicTests
         {"a beam laser at close range", 0x00, 0x00, 143 & 0x7F, 0, 0, 0, false},
         {"a mining laser at close range", 0x00, 0x00, 50, 0, 0, 0, false},
         {"a military laser at close range", 0x00, 0x00, 151 & 0x7F, 0, 0, 0, false},
+        {"in the sights and shot to bits", 0x00, 0x00, 50, 0, 0, 0, false, true, 8},
+        {"an asteroid in the sights, shot to bits", 0x00, 0x00, 50, 0, 0, 0, false, true, 8, true},
+        {"an asteroid shot with the wrong laser", 0x00, 0x00, 15, 0, 0, 0, false, true, 8, true},
       };
 
       std::uint32_t compared = 0;
@@ -1929,6 +1955,22 @@ namespace GameLogicTests
             }
           }
 
+          // 6502: INWK+35 and FRIN/MANY -- what a laser has to get through, and what it is shooting.
+          for (std::size_t slot = 2; slot < 5u; ++slot)
+          {
+            frame.universe.bubble.blocks[slot].energy = item.energy;
+            if (item.asteroids)
+            {
+              const std::uint8_t was = frame.universe.bubble.slots[slot];
+              if (was < 34u && frame.universe.bubble.counts[was] != 0u)
+              {
+                --frame.universe.bubble.counts[was];
+              }
+              frame.universe.bubble.slots[slot] = Elite::Byte(Elite::ShipType::Asteroid);
+              ++frame.universe.bubble.counts[Elite::Byte(Elite::ShipType::Asteroid)];
+            }
+          }
+
           frame.universe.status.laserPower = item.laser;
           frame.universe.status.missileArmed = missileArmed;
           frame.universe.commander.energyBomb = item.bomb;
@@ -1949,7 +1991,7 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(15u * 2u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::uint32_t>(18u * 2u, compared, L"the whole sweep ran");
       Assert::IsTrue(killed > 0u, L"some bubbles emptied");
     }
   };

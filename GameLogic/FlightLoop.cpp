@@ -119,39 +119,44 @@ namespace Elite
     return static_cast<std::uint8_t>(reduced + 1u);
   }
 
-  void SpawnItems(SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count) noexcept
+  bool SpawnItems(SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count, bool _carryIn) noexcept
   {
     // 6502: .SPIN2 STA CNT, which sets no flags. `CNT` is this loop's counter and its own since
     // M2-c-3: `SFS1` is a seam and nothing behind it reads the byte.
     std::uint8_t cnt = _count;
 
     // 6502: .spl BEQ oh -- on the caller's Z flag, which every caller has just set from the count.
+    // `oh` is a bare `RTS`, so a count of zero hands the CALLER'S OWN CARRY straight back (M2-d).
     if (_count == 0u)
     {
-      return;
+      return _carryIn;
     }
 
+    bool carry = _carryIn;
     for (;;)
     {
-      (void)_effects.SpawnChild(0u, _type); // 6502: LDA #0 / JSR SFS1
+      // 6502: LDA #0 / JSR SFS1 -- and `SFS1` ends `JSR NWSHP` followed by nothing but pulls and
+      // stores, so what it leaves in the carry is `NWSHP`'s: `NW3`'s `CLC` for a full bubble and
+      // `NWL3`'s `SEC` for a ship that was made. That is the seam's `created` (M2-d).
+      carry = _effects.SpawnChild(0u, _type);
 
       cnt = static_cast<std::uint8_t>(cnt - 1u); // 6502: DEC CNT
       if (cnt == 0u)                             // 6502: BNE spl+2
       {
-        return;
+        return carry;
       }
     }
   }
 
-  void SpawnDebris(Rng& _rng, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type,
-                   bool _carryIn) noexcept
+  bool SpawnDebris(Rng& _rng, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept
   {
     // 6502: JSR DORND / BPL oh -- and nothing else in the routine looks at the roll's low bits
     // except as a count, so half of all calls do nothing.
     const RngResult roll = _rng.Next(_carryIn);
     if ((roll.value & 0x80u) == 0u)
     {
-      return;
+      // 6502: BPL oh -- a bare `RTS`, so the carry the caller gets is `DORND`'s own (M2-d).
+      return roll.carry;
     }
 
     /*
@@ -164,7 +169,8 @@ namespace Elite
      */
     const std::uint8_t capped = static_cast<std::uint8_t>(Byte(_type) & _blueprint.cargo & 0x0Fu);
 
-    SpawnItems(_effects, _type, capped); // 6502: and it falls into SPIN2
+    // 6502: and it falls into SPIN2 -- with `DORND`'s carry, which `AND` did not touch.
+    return SpawnItems(_effects, _type, capped, roll.carry);
   }
 
   bool DrainEnergy(FlightStatus& _status) noexcept
@@ -751,16 +757,34 @@ namespace Elite
      *
      * ONLY a mining laser splits an asteroid, and only an asteroid splits. Everything else drops
      * whatever `SPIN` decides from its blueprint, which is not random at all (§6.74).
+     *
+     * THE THREE ROLLS BELOW RUN ON A CARRY THE TWO COMPARES SET, and the port passed `false` to
+     * all three until M2-d (§8). The flag arriving here is CLEAR -- `ASL INWK+31 / SEC / ROR
+     * INWK+31` above shifts the zero the `ASL` put in bit 0 straight back out -- and then each
+     * `CMP` overwrites it, so what `SPIN` and the splinter roll rotate into `DORND` is "was the
+     * type at least an asteroid" or "was the laser at least a mining one", and the second `SPIN`
+     * runs on what the first one left. It changes the generator, so it changes what is dropped.
      */
-    if (_type == ShipType::Asteroid && power == LASER_POWER_MINING)
+    bool carry;
+    if (_type != ShipType::Asteroid)
     {
-      const RngResult roll = screen.rng.Next(false);
-      SpawnItems(_spawn, ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u));
+      carry = Byte(_type) >= Byte(ShipType::Asteroid); // 6502: CMP #AST, then `BNE nosp`
+    }
+    else if (power != LASER_POWER_MINING)
+    {
+      carry = power >= LASER_POWER_MINING; // 6502: CMP #Mlas, then `BNE nosp`
+    }
+    else
+    {
+      // Both compares were EQUAL, so both set the carry: the roll below sees it set.
+      const RngResult roll = screen.rng.Next(true);
+      carry = SpawnItems(_spawn, ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u), roll.carry);
     }
 
-    // 6502: .nosp LDY #PLT / JSR SPIN / LDY #OIL / JSR SPIN -- both, in that order, every time.
-    SpawnDebris(screen.rng, _spawn, _blueprint, ShipType::AlloyPlate, false);
-    SpawnDebris(screen.rng, _spawn, _blueprint, ShipType::Canister, false);
+    // 6502: .nosp LDY #PLT / JSR SPIN / LDY #OIL / JSR SPIN -- both, in that order, every time,
+    // and the second on the carry the first left.
+    carry = SpawnDebris(screen.rng, _spawn, _blueprint, ShipType::AlloyPlate, carry);
+    static_cast<void>(SpawnDebris(screen.rng, _spawn, _blueprint, ShipType::Canister, carry));
 
     // 6502: LDX TYPE / JSR EXNO2 -- and what `.MA14` stores is what NOISE2 left in A (§6.86's
     // dependency again: the dead ship's energy byte comes out of the sound system).
@@ -1101,7 +1125,11 @@ namespace Elite
           // and register moves and leave it alone.
           if (screen.status.missileArmed != 0u)
           {
-            carry = _loop.effects.PlaySound(SOUND_BEEP, false);
+            // The flag going IN is the one two lines above -- `HITCH`'s `SEC`, which `LDA MSAR`
+            // and `BEQ` do not touch. `NOISE` hands it straight back when the sound is switched
+            // off, so passing `false` here (which the port did until M2-d) changed the carry `LL9`
+            // seeds an explosion cloud on, on a silent build (§8).
+            carry = _loop.effects.PlaySound(SOUND_BEEP, carry);
             SetMissileTarget(screen.canvas, screen.bubble, screen.status.missileArmed, commander.missiles, screen.flight.slot,
                              MISSILE_LOCKED);
           }
