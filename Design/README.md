@@ -18,7 +18,7 @@ covered by whole-bitmap oracle comparisons and the fourth of which is a sound ha
 **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
 anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->392 tests** and
-CI runs **<!--count:checks-->twelve repository checks** beside it.
+CI runs **<!--count:checks-->thirteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
@@ -67,6 +67,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 | [003](ADR/ADR-003-verification.md) | Verification | **A 6502 oracle in the test project** runs the assembled original's routines and the C++ port on the same inputs; **golden canvases** for screens; **replay hashes** for whole-game determinism. |
 | [004](ADR/ADR-004-projects-and-layout.md) | Projects and layout | **Our own codebase — nothing lifted from a sibling repository.** `GameLogic` (namespace `Elite`) holds the port, platform-free and deterministic; presentation lives in `Outpost.exe`; tests under `Tests/`. Flat folders, unique PascalCase names, generated data tables checked in, `MasterFile/` and `Upstream/` are reference only. |
 | [005](ADR/ADR-005-presentation.md) | Presentation | **Packaged Win32, no XAML: MSIX stays, WinUI 3 goes.** Raw window, flip-model D3D12 swap chain blitting the indexed canvas at integer scale, XAudio2 with a small SID-style synthesiser. |
+| [006](ADR/ADR-006-modernisation-architecture.md) | Modernisation architecture | **The port becomes a C++ program with no behavioural change**: typed structs with byte codecs, value-in value-out routines, `Universe` and `Game` over four ports, pipelines of named stages, the oracle as judge until recorded fixtures replace it — the architecture [Modernize.md](Modernize.md) builds toward, recorded at M2's opening and amended as phases land. |
 
 ## Two things this corpus is deliberately not
 
