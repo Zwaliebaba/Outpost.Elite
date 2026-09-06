@@ -1316,7 +1316,10 @@ has not yet given a heap points at address 0 — outside the arena — and a `He
 defaulted to `K%` would have made `Ship{}` code to bytes `00 F9` where the oracle has `00 00`.
 The default is the zero pointer, `Top()` is `LS%`, and the `static_assert` in the header says so.
 Ratchet: `outpost-elite-names` 225 → 224 (`Elite::SUN_HEAP_ADDRESS` left the executable with the
-base argument), `origin-markers` 3,702 → 3,705. **M1 as a whole**: six slices, every one green on
+base argument), `origin-markers` 3,702 → 3,705. And the M1-a mistake, repeated once: the push went
+out with `check_counts.py` red on one marker in the risk register because the command ran the
+checks through a `grep` that succeeded on the word FAIL; the follow-up commit fixed the marker, and
+the habit is now to run `check_all.py` on its own and read its exit status. **M1 as a whole**: six slices, every one green on
 the oracle and the corpus, four findings the bytes never showed (two misnamed offsets, two misnamed
 flag bits, a misnamed state mask, and the Splinter's borrowed edges), and the data model is now
 `Ship`, `Commander`, `Blueprint`, `ShipType`, the flag bits and `HeapOffset`, with the bytes as
