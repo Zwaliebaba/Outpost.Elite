@@ -341,17 +341,17 @@ namespace GameLogicTests
      */
     UnusedSeams unused;
 
-    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipEffects& _tactics, Elite::ShipDrawEffects& _drawing,
-                                         Elite::FlightLoopEffects& _loop, Elite::StartUpEffects& _start) noexcept
+    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::FlightLoopEffects& _loop,
+                                         Elite::StartUpEffects& _start) noexcept
     {
-      return Elite::Ports{printer,   characters, characters, sight,  effects, _tactics, _drawing, _loop,
+      return Elite::Ports{printer, characters, characters, sight,  effects, _drawing, _loop,
                           extendedPrinter, _start, unused, unused, unused, unused};
     }
 
-    /// The four a screen change never reaches, answered with nothing.
+    /// The three a screen change never reaches, answered with nothing.
     [[nodiscard]] Elite::Ports Ports() noexcept
     {
-      return PortsWith(unused, unused, unused, unused);
+      return PortsWith(unused, unused, unused);
     }
   };
 
@@ -361,7 +361,7 @@ namespace GameLogicTests
    * this slice decides. Counted rather than ignored, because `LL164` makes a noise and a
    * comparison that dropped it would agree with a port that had lost the hyperspace sound.
    */
-  struct LoopRecording final : Elite::FlightLoopEffects, Elite::ShipEffects, Elite::ShipDrawEffects
+  struct LoopRecording final : Elite::FlightLoopEffects, Elite::ShipDrawEffects
   {
     std::vector<std::uint8_t> sounds;
 
@@ -395,10 +395,6 @@ namespace GameLogicTests
     {
       return true;
     }
-    bool RunTactics(Elite::Ship&) override
-    {
-      return true;
-    }
     void DrawPlanetOrSun() override {}
     void DrawExplosion() override {}
   };
@@ -414,12 +410,12 @@ namespace GameLogicTests
   struct LoopUniverse
   {
     Universe universe;
-    LoopRecording effects; ///< the AI, the drawing and the sounds, all three recorded in one place
+    LoopRecording effects; ///< the drawing and the sounds, both recorded in one place
 
-    /// The seams as `Elite::Ports`: the recorder for the three a frame reaches, nothing for the rest.
+    /// The seams as `Elite::Ports`: the recorder for the two a frame reaches, nothing for the rest.
     [[nodiscard]] Elite::Ports Ports() noexcept
     {
-      return universe.PortsWith(effects, effects, effects, universe.unused);
+      return universe.PortsWith(effects, effects, universe.unused);
     }
   };
 

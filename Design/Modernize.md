@@ -267,7 +267,7 @@ left, and both outlive their writer on purpose (§4.3). `DrawWorkspace`, `Geomet
 `Projection` and `K3Block` are the same pattern for other zero-page runs. M2-c emptied most of
 them: `NumberWorkspace` went with M2-c-1, `DrawWorkspace` is the dashboard's screen cursor since
 M2-c-2, `MathWorkspace` is `Q` and `K2`'s bottom byte since M2-c-3, and `GeometryWorkspace` is
-`LL9`'s four stage results. <!--count:workspace-params-->46 parameters in the headers are still one
+`LL9`'s four stage results. <!--count:workspace-params-->45 parameters in the headers are still one
 of them by reference. The pattern is faithful and it is also the reason no signature says what a function
 consumes or produces.
 
@@ -291,7 +291,7 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->14 reference members,
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->13 reference members,
 and they were seventy-eight before M3-a. All seven argument-list structs are gone — `FlightScreen`,
 `FlightLoop`, `MissionScreen` and `TitleScreen` in M3-a-2, `TradeScreen`, `SaveScreen`, `GameStart`
 and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The fourteen that
@@ -303,17 +303,18 @@ the rest existed: "the struct is the argument list".
 <!--count:main-lines-->1,198 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->193 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->191 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->20 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->19 abstract classes in
 `GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `DashboardEffects::PlaySound`,
 `TunnelEffects::ShowFrame`, `SaveStore` through `SaveScreen`). Most are **phase order**:
-`ShipEffects::RunTactics`, `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`,
-`FlightLoopEffects::SpawnAhead` and `Anger`, `SpawnChildEffects::SpawnChild`, `ChartShapes`,
-`ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each declared when the routine on the
-far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
-times. Three methods are declared on two interfaces each and one override satisfies both, which is
+`ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `FlightLoopEffects::SpawnAhead` and `Anger`,
+`SpawnChildEffects::SpawnChild`, `ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each
+declared when the routine on the far side was "phase 4's" and kept after it landed, which §6.73
+already names as a mistake made four times. `SpawnEffects`, `ChartShapes` and
+`ShipEffects::RunTactics` were three more and are gone (M3-b-1a, M3-b-1b, M3-b-1c). Three methods
+are declared on two interfaces each and one override satisfies both, which is
 the language's rule and a smell. One seam carries a CPU flag across the platform boundary:
 `PlaySound(std::uint8_t _effect, bool _carryIn)` returns a carry because `NOISE` does (§6.99), and
 the *window* is asked to preserve it.
@@ -347,7 +348,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,922 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,920 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1650,6 +1651,44 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-1c: `ShipEffects` goes, and `MVEIT` becomes a routine that reaches all of
+`Universe`.** One method — `RunTactics` — and it is the seam that stood longest for the plainest
+reason: `MVEIT` was slice 3a's and `TACTICS` was phase 4's, so the AI had to be an interface for a
+year. Slice 4a-c built it. `MoveShip` now takes `(Universe&, Ports&)` and calls `RunTactics`
+directly; the six arguments it took — canvas, work block, `MathWorkspace`, `FlightState`,
+blueprint and `QQ11` — were the same six members of the universe at every one of its five call
+sites, so they went with the seam. `effects-seams` 20 → 19, `workspace-params` 46 → 45,
+`aggregate-refs` 14 → 13 (`Ports` is thirteen references), `outpost-elite-names` 193 → 191.
+
+**THE BOOL SURVIVES THE INTERFACE, and that is the part worth saying out loud.** §6.122 gave
+`RunTactics` a `bool` because three of the AI's paths reach `OOPS`, `OOPS` ends `JMP DEATH`, and on
+the 6502 that abandons the stack — `TACTICS`, `MVEIT` and the frame simply stop. It reads like a
+seam's concession and it is not: the answer is threaded out through `MoveShip` to `MoveEveryShip`,
+which turns it into `LoopOutcome::Died`, and every one of those hops is port code. The interface
+went; the return type is unchanged.
+
+**Four suites stopped counting and started comparing.** `FlightLoopTests`, `MissionTests`,
+`LaunchTests` and `ShipMoveTests` each held a recorder whose `RunTactics` did nothing and answered
+`true`, against an oracle with `TACTICS` trapped. All four traps are off. In `FlightLoopTests` that
+is nearly free — `Seed` gives its fleet a random `INWK+32`, so half the bubble was already asking
+for an AI that neither side ran, and the frame comparison covers what it does. `ShipMoveTests` is
+where the work was.
+
+**`ShipMoveTests` had no universe to run the AI in, and that is the seam's real cost.** It built an
+`Elite::Ship`, a `MathWorkspace`, a `FlightState` and a `Canvas` — four objects, enough for the
+arithmetic and nothing more — and asserted `item.tactics`, a per-case count of how often `MV26` was
+reached: three times in twenty for a hostile ship, twenty for a missile. The AI reads the bubble,
+the commander, the ECM countdown, the message line and the generator, and writes ships, sounds and
+screen bytes, none of which four loose objects can put into the oracle. So the suite takes
+`FlightUniverse.h` now — the shared fixture `ViewChangeTests` and `FlightLoopTests` already use —
+and `Mirror`/`CompareState` replace the count with the whole universe, compared on every one of the
+twenty iterations. That says how often the AI ran AND what it did each time.
+
+**And it was checked rather than assumed.** A suite that compares more can still be comparing
+nothing, so `RunTactics` was made to return early for exactly this fixture's shape and the run
+repeated: `MVEIT: a HOSTILE ship, so tactics run: iteration 3, INWK+29 -- expected 2 actual 6`. The
+roll counter the AI writes is the byte that says so. Reverted, and 397 pass.
 
 **2026-09-06 — M3-b-1b: `ChartShapes` goes, and the first run without its traps found the port
 drawing nothing at all.** `CIRCLE2` is `DrawBall` and `SUN` is `DrawSun`, both ported since slice

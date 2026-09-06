@@ -224,7 +224,6 @@ namespace GameLogicTests
        * in a flat image and `NWSHP` then refuses the ship it names.
        */
       _cpu.AddTrap(_to.nosprites);
-      _cpu.AddTrap(OracleImage::Instance().Label("TACTICS"));
       _cpu.AddTrap(OracleImage::Instance().Label("DOEXP"));
       _cpu.AddTrap(OracleImage::Instance().Label("PLANET"));
     }
@@ -288,7 +287,7 @@ namespace GameLogicTests
     /// The seams a briefing reaches: the frame's three recorded, and the script answering `TITLE`'s.
     [[nodiscard]] static Elite::Ports PortsOver(LoopUniverse& _universe, Elite::StartUpEffects& _start)
     {
-      return _universe.universe.PortsWith(_universe.effects, _universe.effects, _universe.effects, _start);
+      return _universe.universe.PortsWith(_universe.effects, _universe.effects, _start);
     }
 
     /// What `Mirror` does not send: the line heap, the flight model's rotation rates, and `INF`.

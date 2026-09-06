@@ -290,7 +290,7 @@ namespace GameLogicTests
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng, &shell),
           ports{recursive, characters, sink,  nulls, nulls, nulls, nulls,
-                nulls,     extended,   shell, keys,  shell, shell, store}
+                extended,  shell,      keys,  shell, shell, store}
       {
         commander = Elite::DefaultCommander();
         name = Elite::DefaultCommanderName();

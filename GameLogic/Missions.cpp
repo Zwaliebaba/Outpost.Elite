@@ -33,8 +33,7 @@ namespace Elite
      */
     void MoveBriefingShip(Universe& _universe, Ports& _ports) noexcept
     {
-      static_cast<void>(MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics,
-                                 *_universe.flight.blueprint, _universe.view));
+      static_cast<void>(MoveShip(_universe, _ports));
     }
   } // namespace
 
@@ -66,8 +65,7 @@ namespace Elite
      * a ship whose `INWK+32` has bit 7 set, and the Constrictor `BRIEF` builds is made by `ZINF`
      * and `NWSHP` with no AI byte set, so there is nothing for the AI to do and nobody to do it to.
      */
-    (void)MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics, *_universe.flight.blueprint,
-                   _universe.view);
+    (void)MoveShip(_universe, _ports);
 
     // 6502: JMP RDKEY -- a tail call, so what `PAS1` returns is what `RDKEY` returns.
     return _ports.start.ScanTitleKeys(_universe.keys);

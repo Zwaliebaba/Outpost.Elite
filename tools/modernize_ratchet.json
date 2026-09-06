@@ -14,7 +14,7 @@
       "slice": "M3-b-1b: ChartShapes goes, and its two methods took an _x and a _y"
     },
     "workspace-params": {
-      "ceiling": 46,
+      "ceiling": 45,
       "slack": 0,
       "slice": "M2-c-3: MathWorkspace is Q and K2's bottom byte, and no drawing routine takes the others"
     },
@@ -29,7 +29,7 @@
       "slice": "M1-a"
     },
     "aggregate-refs": {
-      "ceiling": 14,
+      "ceiling": 13,
       "slack": 0,
       "slice": "M3-a-3: TradeScreen, SaveScreen, GameStart and MissionBay go; what is left IS Ports"
     },
@@ -39,12 +39,12 @@
       "slice": "M3-a-3: Main.cpp holds no state the universe owns and builds no argument list"
     },
     "outpost-elite-names": {
-      "ceiling": 193,
+      "ceiling": 191,
       "slack": 0,
       "slice": "M3-b-1b: the app no longer names ChartShapes or the chart routines' pieces"
     },
     "effects-seams": {
-      "ceiling": 20,
+      "ceiling": 19,
       "slack": 0,
       "slice": "M3-b-1b: ChartShapes goes -- CIRCLE2 is DrawBall and SUN is DrawSun"
     },
@@ -56,7 +56,7 @@
     "carry-params": {
       "ceiling": 32,
       "slack": 0,
-      "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is §4.3.1)"
+      "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is \u00a74.3.1)"
     },
     "mutants": {
       "ceiling": 72,
@@ -69,7 +69,7 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3922,
+      "ceiling": 3920,
       "slack": 0,
       "slice": "M3-b-1: the markers on SpawnEffects' four methods, which name labels the routines already name"
     },

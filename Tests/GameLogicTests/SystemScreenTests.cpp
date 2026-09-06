@@ -264,8 +264,8 @@ namespace GameLogicTests
           Elite::Rng& rng = universe.rng;
           Elite::ExtendedTokenPrinter extended(characters, printer, rng);
           NullSeams nulls;
-          Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
-                             nulls,   extended,   nulls, keys,  effects, nulls, nulls};
+          Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, nulls,
+                             extended, nulls,      keys,  effects, nulls, nulls};
 
           Elite::SystemDataScreen(universe, ports, data, distance);
 

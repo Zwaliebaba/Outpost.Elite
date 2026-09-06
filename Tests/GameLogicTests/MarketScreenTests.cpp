@@ -598,8 +598,8 @@ namespace GameLogicTests
         Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
-        Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
-                           nulls,   extended,   nulls, keys,  effects, nulls, nulls};
+        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, nulls,
+                           extended, nulls,      keys,  effects, nulls, nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
         Elite::BuyScreen(universe, ports, false);
@@ -860,8 +860,8 @@ namespace GameLogicTests
         rng.SetState(SEED);
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
-        Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
-                           nulls,   extended,   nulls, keys,  effects, nulls, nulls};
+        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, nulls,
+                           extended, nulls,      keys,  effects, nulls, nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
 
@@ -1115,8 +1115,8 @@ namespace GameLogicTests
         Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
-        Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
-                           nulls,   extended,   nulls, keys,  effects, nulls, nulls};
+        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, nulls,
+                           extended, nulls,      keys,  effects, nulls, nulls};
 
         const Elite::ShipCondition condition{s.docked, s.junk, s.firstShip, s.energy};
         universe.crosshairX = CROSSHAIR_X; // 6502: QQ9 and QQ10, which the screen reads for `TT111`
@@ -1392,8 +1392,8 @@ namespace GameLogicTests
         Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
         NullSeams nulls;
-        Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
-                           nulls,   extended,   nulls, keys,  effects, nulls, nulls};
+        Elite::Ports ports{printer,  characters, sink,  nulls, nulls, nulls, nulls,
+                           extended, nulls,      keys,  effects, nulls, nulls};
 
         universe.current.techLevel = s.tech; // 6502: tek -- the byte the shop reads
         Elite::EquipShipScreen(universe, ports);

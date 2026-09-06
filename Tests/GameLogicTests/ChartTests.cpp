@@ -225,8 +225,8 @@ namespace GameLogicTests
           characters(screen),
           printer(characters, &galaxy),
           extended(characters, printer, rng),
-          ports{printer, characters, characters, nulls, nulls, nulls, nulls,
-                nulls,   extended,   nulls,      nulls, nulls, nulls, nulls}
+          ports{printer, characters, characters, nulls,    nulls, nulls, nulls,
+                extended, nulls,      nulls,      nulls, nulls, nulls}
       {
         galaxy.number = _galaxy;
         text.column = 1;

@@ -37,8 +37,7 @@
 namespace GameLogicTests
 {
 
-  struct NullSeams : Elite::ShipEffects,
-                     Elite::ShipDrawEffects,
+  struct NullSeams : Elite::ShipDrawEffects,
                      Elite::FlightLoopEffects,
                      Elite::StartUpEffects,
                      Elite::SightEffects,
@@ -48,9 +47,6 @@ namespace GameLogicTests
                      Elite::LineEntryEffects,
                      Elite::CommanderStore
   {
-    // Elite::ShipEffects
-    bool RunTactics(Elite::Ship&) override { return false; }
-
     // Elite::ShipDrawEffects
     void DrawPlanetOrSun() override {}
     void DrawExplosion() override {}

@@ -8,7 +8,7 @@ namespace Elite
    *
    * When the state came out of the six argument-list structs this is what was left: the text
    * machinery, which cannot live in a universe that has to copy because two of its objects take a
-   * seam, and the eleven interfaces the platform answers. Fourteen references where the six structs
+   * seam, and the eleven interfaces the platform answers. Thirteen references where the six structs
    * held sixty-six.
    *
    * IT IS A STRUCT OF REFERENCES FOR ONE SLICE. §4.5's four ports -- `Presenter`, `Keyboard`,
@@ -27,7 +27,6 @@ namespace Elite
   class CharacterPrinter;
   class SightEffects;
   class ViewEffects;
-  class ShipEffects;
   class ShipDrawEffects;
   class FlightLoopEffects;
   class ExtendedTokenPrinter;
@@ -47,7 +46,6 @@ namespace Elite
     // ---- the seams the platform answers ------------------------------------------------------
     SightEffects& sight;      ///< 6502: SIGHT's sprite pokes
     ViewEffects& view;        ///< 6502: what a screen change reaches outside the library
-    ShipEffects& tactics;     ///< 6502: JSR TACTICS, from inside `MVEIT`
     ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
     FlightLoopEffects& loop;  ///< 6502: the frame's sounds, spawns and music
 
