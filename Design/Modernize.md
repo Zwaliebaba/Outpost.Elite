@@ -995,4 +995,10 @@ view over bytes, generic over constness because it is one — so the counter now
 before it counts, with a sample in its self-test. The first push of this slice went out with
 `check_counts.py` red on the three markers above, because the command that ran the checks piped
 their exit status away; the fix followed in the next commit, and the lesson is the same one
-`check_all.py` was written for. M0-a is built with this entry; nothing in `GameLogic/` changed.
+`check_all.py` was written for.
+
+**2026-09-06 — M1-a closed on the mutants.** The corpus re-run on the migrated tree, through the
+portable runner against a 392-test baseline: 65 mutants, 61 caught, 4 survived, the four the recorded
+equivalents — the tally of M0-d exactly, with eighteen anchors now naming `work.RollCounter()`,
+`work.Energy()`, `work.Ai()` and `screen.work.Z().hi` where they named a number. Rule 3 is met, and
+M1-b — `ShipType`, `ShipState`, `AiFlags` and `NewbFlags` as types — is next. M0-a is built with this entry; nothing in `GameLogic/` changed.
