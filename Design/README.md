@@ -18,7 +18,7 @@ covered by whole-bitmap oracle comparisons and the fourth of which is a sound ha
 **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
 anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->385 tests** and
-CI runs **<!--count:checks-->eleven repository checks** beside it.
+CI runs **<!--count:checks-->twelve repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the
@@ -56,6 +56,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 | 3 | [Source-Inventory.md](Source-Inventory.md) | every group of original routines, which C++ file it becomes, and whether it is ported, replaced or dropped. The coverage ledger the port is measured against. |
 | 4 | the ADRs below | the decisions the plan rests on. **The ADR wins on *what*, the plan on *when*.** |
 | 5 | [Risk-Register.md](Risk-Register.md) | what is most likely to go wrong, and where each risk is validated early |
+| 6 | [Modernize.md](Modernize.md) | **the modernisation plan** (opened 2026-09-06, Proposed): what the port carries from the 6502 as its architecture, measured; the target C++ shape; five phases of slices, each gated on the oracle; and the eight decisions it needs from the owner. Reads after the plan, because it starts where the plan's build order ends. |
 
 ## Decisions at a glance
 
@@ -69,10 +70,14 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 
 ## Two things this corpus is deliberately not
 
-- **Not a modernisation design.** Higher resolution, smoother motion, gamepad, new UI: all
+- **Not a feature design for phase 6.** Higher resolution, smoother motion, gamepad, new UI: all
   real, all later, all gated on the faithful port passing its oracle and golden tests
   (ADR-001 §4). Building toward a nicer game before the original one runs is the failure mode
-  the plan is shaped to avoid.
+  the plan is shaped to avoid. **What the corpus does hold, since 2026-09-06, is a modernisation
+  plan for the PROGRAM rather than the game**: [Modernize.md](Modernize.md) restructures the code
+  with no behavioural change and its own ratchet (`tools/check_modernize.py`), and every one of
+  its slices is gated on the same oracle. The gate ADR-001 §4 set is met; that document is
+  Proposed until the owner answers the questions in its §1.
 - **Not a licence.** The upstream source carries no licence (ADR-001 §5, Risk R1), and the
   owner intends to publish eventually, which makes this the project's largest exposure rather
   than a footnote. Slice **0e** seeks the rights holders' permission. **The repository is

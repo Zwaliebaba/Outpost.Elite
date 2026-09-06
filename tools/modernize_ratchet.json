@@ -1,0 +1,72 @@
+{
+  "$schema-note": [
+    "The ceilings tools/check_modernize.py holds the tree to (Design/Modernize.md section 5, rule 5).",
+    "",
+    "A count above its ceiling fails the build: a pattern a slice removed has come back. A count",
+    "below it by more than `slack` fails too: the slice that lowered it lowers the ceiling here, in",
+    "the same commit, and names itself in `slice` and in the plan's journal (Risk R18). `python",
+    "tools/check_modernize.py --update` rewrites the numbers; the journal entry is yours to write."
+  ],
+  "ceilings": {
+    "register-params": {
+      "ceiling": 64,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "workspace-params": {
+      "ceiling": 207,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "ship-literal-sites": {
+      "ceiling": 329,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "ship-offset-sites": {
+      "ceiling": 107,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "aggregate-refs": {
+      "ceiling": 78,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "main-lines": {
+      "ceiling": 1162,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "outpost-elite-names": {
+      "ceiling": 227,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "effects-seams": {
+      "ceiling": 22,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "out-params": {
+      "ceiling": 18,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "carry-params": {
+      "ceiling": 28,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "mutants": {
+      "ceiling": 65,
+      "slack": 0,
+      "slice": "M0-a"
+    },
+    "inventory-stale-files": {
+      "ceiling": 21,
+      "slack": 0,
+      "slice": "M0-a"
+    }
+  }
+}

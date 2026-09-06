@@ -106,6 +106,12 @@ jobs:
       - name: The numbers the documents state are the numbers the tree has
         run: python tools/check_counts.py
 
+      # Design/Modernize.md names the legacy patterns the port still carries and measures each
+      # one. The ceilings in tools/modernize_ratchet.json only go down: a count above its ceiling
+      # is a pattern a slice removed coming back, and a count below it is a ceiling nobody lowered.
+      - name: The modernisation ratchet still describes the tree
+        run: python tools/check_modernize.py
+
       # The mutation RUN is minutes per mutant and belongs to whoever is finishing a slice. What
       # runs here is the cheap half: every recorded mutant still points at code that exists. A
       # mutant whose `find` has rotted out of its file is a stale record, and a stale record is
