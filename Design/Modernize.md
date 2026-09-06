@@ -5,13 +5,13 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->392 tests, oracle present), all <!--count:checks-->twelve repository checks pass,
+(<!--count:tests-->392 tests, oracle present), all <!--count:checks-->thirteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
 **Depends on:** ADR-001 (fidelity — unchanged), ADR-002 (numeric model — unchanged), ADR-003 (the
 oracle stays the judge), ADR-004 (projects and layout — §1's seam is what M3 finally builds).
-**Feeds:** ADR-006 and ADR-007 (to be written when M1 and M3 open — §6), the risk register (§7).
+**Feeds:** ADR-006 (the modernisation architecture, written 2026-09-06 at M2's opening and amended at M5-d) and ADR-007 (to be written when M3 closes — §6), the risk register (§7).
 
 **What this is.** A plan to restructure `GameLogic/` and the executable so that the code reads as a
 C++ program rather than as annotated 6502, **with no behavioural change**. Same universe, same
@@ -450,10 +450,72 @@ named field of the callee's result. From the port's own findings, the list is sh
 | `CNT`, `TGT`, `CNT2` | fourteen users, each initialising before reading (§6.49) | locals |
 | `T1` after `TIDY`, `Q` after `DVID`, `R` after `LL28` | within one file each | locals or a result field |
 
-`MathWorkspace` shrinks to what is left after that pass, which the plan expects to be nothing; if a
-channel is found that the list above misses, it is recorded as a new row here and modelled the same
-way. `Flags` stays for the routines whose callers read `C` or `V` (`TwistSeeds`'s carry,
-`PrintSystemName`'s carry, `Rng::Next`'s `C` and `V`), returned, never global.
+**The census, M2-a (2026-09-06).** The table above is what the port's own findings named before
+anyone counted. The table below is the count: `tools/channel_census.py` reads every routine in
+`GameLogic/*.cpp`, finds each workspace it takes or reaches through `FlightScreen`, and records per
+field which routines write it, which read it before writing it with no call in between (it came from
+the caller) and which read it first after passing the workspace to a callee (it came, most likely,
+from that callee). The verdict column is the human reading, held in the tool beside the mechanics,
+and `channel_census.py --check` fails when this table and the tree disagree or a field has no
+verdict. Of the forty-nine fields, five outlive a call on purpose (`Projection`'s four and `SC`),
+one is a constant in this port (`dontclip`), nine are locals, and thirty-four are parameters or
+results — so `MathWorkspace` shrinks to nothing, `DrawWorkspace` to the dashboard's cursor, and
+`GeometryWorkspace` to `LL9`'s frame. `Flags` stays for the routines whose callers read `C` or `V`
+(`TwistSeeds`'s carry, `PrintSystemName`'s carry, `Rng::Next`'s `C` and `V`), returned, never global.
+
+<!--census:start-->
+| Field | 6502 | Written by | Read before written, from the caller | Read after a call | Verdict |
+|---|---|---|---|---|---|
+| `MathWorkspace.p` | `P` | Arctan, DivideAndScale, DivideAxisByZ, DivideSignedToK, DivideWide, DoubleAndFold, DrawDials, DrawEllipse, DrawPlanetDetail, DrawPlanetOrSun, HalveTwice, MovePlanetOrSun, MoveShip, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways, MultiplyByX, MultiplyMagnitudeByQ, MultiplyScaled, MultiplyScaledBy, MultiplySigned, MultiplyUnsigned, MultiplyWide, OffsetByCloud, OrientationComponent, Project, RotateHalf, RotateShipVector, ScaleAxisByZ, SetPairP, SquareUnsigned, Warp | AddSigned, Arctan, DivideWide, DoubleAndFold, HalveTwice, MultiplyByX, MultiplySignedToK, MultiplyWide | DrawExplosionCloud (after DivideAndScale), DrawSun (after SquareUnsigned), IsHit (after SquareUnsigned), MoveStardustAhead (after MultiplyByHeight), MoveStardustAstern (after MultiplyMagnitudeByQ), MoveStardustSideways (after DivideSpeedBy), MultiplyScaled (after SetPairP), MultiplySignedToSR (after MultiplySigned), Normalise (after Square), ScaleToCompass (after DivideAndScale) | **Result and parameter** (M2-b). The multipliers leave the low byte here (`MU11`, `MULTU`, `MULT1`) and `MVEIT`, the stardust, `HITCH` and the cloud read it after the call: `Product{high, low, carry}`. Where a routine reads it from its caller (`AddSigned`, `MultiplyWide`, `DivideWide`, `MultiplyByX`, `Arctan`, `MultiplySignedToK`) it is the operand `P`, a parameter. |
+| `MathWorkspace.p1` | `P+1` | AddShipCoordinateToP, CircleOffScreen, DivideAxisByZ, DivideSignedToK, DivideWide, DrawPlanetOrSun, MovePlanetOrSun, MultiplyWide, Project, SetPairP | AddShipCoordinateToP, DivideSignedToK, MultiplySignedToK | DrawSun (after EraseSun), MoveShip (after AddShipCoordinateToP) | **Parameter and result** (M2-b). The three-byte routines (`AddShipCoordinateToP`, `DivideSignedToK`, `MultiplySignedToK`) read `P+1` from the caller and `MoveShip` and `DrawSun` read it after: one `Wide24` value in and out with `p` and `p2`. |
+| `MathWorkspace.p2` | `P+2` | AddShipCoordinateToP, CircleOffScreen, DivideByShipZ, DivideSignedToK, MoveShip, OrientationComponent | AddShipCoordinateToP, DivideSignedToK | DrawSun (after EraseSun) | **Parameter and result** (M2-b), the top byte of the same `Wide24`. |
+| `MathWorkspace.q` | `Q` | Arctan, DivideByShipZ, DivideSignedToK, DivideSpeedBy, DivideWide, DotProductWithShip, DotProducts, DrawBar, DrawDials, DrawEllipse, DrawExplosionCloud, DrawIndicator, DrawParticles, DrawShip, DrawSun, FaceVisibility, MeasureSlope, MovePlanetOrSun, MoveShip, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways, MultiplyAddDivide96, MultiplyKBySine, MultiplySlope, Normalise, OrientationComponent, PrepareSlope, RotateShipVector, ScaleAxisByZ, ScaleOrientation, ScaleToCompass, SetMeridianAngle, SquareRoot, TidyOrientation | Arctan, CombineSigned, DivideAndScale, DivideByLogarithms, DivideByQ, DivideSignedToK, DivideSlope, DivideToR, DivideToUR, DivideWide, MultiplyByLog, MultiplySigned, MultiplySignedToK, MultiplyUnsigned, MultiplyWide, SquareRoot | EndFlightFrame (after SquareRoot), MultiplySlope (after ?) | **Parameter** (M2-b). Every read-first is a kernel routine reading the multiplier or divisor `Q` its caller set. The one after-call read, `EndFlightFrame` after `DoubleAndAddCoordinate`, is `MAS1` leaving the doubled high byte in `Q`: a result field. |
+| `MathWorkspace.r` | `R` | DivideByLogarithms, DivideByShipZ, DivideSignedToK, DivideSlope, DivideToR, DivideToUR, DotProductWithShip, DotProducts, DrawDials, DrawEllipse, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, EndFlightFrame, FaceVisibility, IsHit, MovePointOnScreen, MoveShip, MoveShipAlongAxis, MoveShipTail, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways, MultiplyPosition, MultiplyPositionByRoll, MultiplySignedToK, MultiplySignedToSR, MultiplySlope, Normalise, PrepareSlope, RotateHalf, RotateShipVector, StepAlongX, SumOfSquares, Warp | AddSigned, AddToShipCoordinate, CombineSigned, DivideSignedToK, DivideSlope, PrepareSlope, SquareRoot | AngleOfRatio (after DivideToR), ClipLineKeepingSwap (after MeasureSlope), DivideAndScale (after DivideByLogarithms), DrawExplosionCloud (after DivideAndScale), OffsetByCloud (after MultiplyByLog), ScaleOrientation (after DivideToR) | **Result and parameter** (M2-b). The dividers leave `R` (`DivideToR`, `DivideByLogarithms`) and `AngleOfRatio`, `DivideAndScale`, `ScaleOrientation`, `OffsetByCloud` read it after: `Quotient`. `AddSigned`, `CombineSigned`, `SquareRoot` and `MVT1` read it from the caller: a parameter. |
+| `MathWorkspace.s` | `S` | AddShipCoordinateToK, AddToShipCoordinate, CombineSigned, DivideByShipZ, DivideSlope, DivideToUR, DotProductWithShip, DotProducts, DrawDials, DrawEllipse, DrawShip, FaceVisibility, IsHit, MeasureSlope, MovePointOnScreen, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways, MultiplyPositionByRoll, MultiplyPositionSigned, MultiplySignedToSR, MultiplySlope, OffsetByCloud, PrepareSlope, RotateHalf, RotateShipVector, Warp | AddSigned, CombineSigned, DivideSignedToK, DivideSlope, PrepareSlope | ClipLineKeepingSwap (after MeasureSlope), MultiplySlope (after ?) | **Result and parameter** (M2-b), the high half of `(S R)`: `MultiplySignedToSR` leaves it, `AddSigned` and `CombineSigned` take it; the clipper's slope helpers hand it between `MeasureSlope`, `PrepareSlope`, `MultiplySlope` and `DivideSlope`, which is M2-c's `Slope` value. |
+| `MathWorkspace.t` | `T` | AddShipCoordinateToK, AddSigned, AddToShipCoordinate, Arctan, ClipSunRow, DivideBy96, DivideByQ, DivideSignedToK, DivideWide, DotProducts, DrawBall, DrawCompass, DrawEllipse, DrawExplosionCloud, DrawLaserSights, DrawShip, DrawSun, FaceVisibility, MeasureSlope, MovePlanetOrSun, MultiplyByX, MultiplyScaled, MultiplySigned, MultiplySignedToK, Normalise, OffsetByCloud, RotateHalf | DrawBallLine | StepAlongX (after MultiplySlope), StepAlongY (after DivideSlope) | **Parameter, else local** (M2-b, M2-c). `StepAlongX`/`StepAlongY` read `T` after `PrepareSlope` (the slope helpers' shared value) and `DrawBallLine` reads what `DrawBall` set (`BLINE`'s step); every other writer initialises it. |
+| `MathWorkspace.t1` | `T1` | AddSigned, Arctan, DivideBy96, DrawDials, DrawShip, MultiplyScaled, MultiplySigned, SpawnChildShip | DrawBar | — | **One parameter, else local** (M2-c). `DrawBar` reads the threshold `DrawDials` stored in `T1` (`LDA #14 / STA T1`); `Arctan`, `MultiplyScaled`, `AddSigned`, `DrawShip` and `SpawnChildShip` use it as their own scratch. |
+| `MathWorkspace.u` | `U` | AddSigned, DivideToUR, DrawParticles, DrawShip, ScaleAxisByZ, SubtractShipAxis | — | — | **Local**. Six writers, no reader that did not write it first. |
+| `MathWorkspace.cnt` | `CNT` | DrawBall, DrawBallLine, DrawEllipse, DrawParticles, DrawShip, DrawSun, SpawnItems | — | DrawBallLine (after ClipLine) | **Local, and one parameter** (M2-c). Every writer initialises it (its own comment, §6.49); the hand-over is `DrawBall` → `DrawBallLine`, `CIRCLE2` giving `BLINE` its segment count. |
+| `MathWorkspace.tgt` | `TGT` | DrawHalfEllipse, DrawParticles, DrawPlanetDetail, DrawSun | — | DrawEllipse (after DrawBallLine) | **Parameter** (M2-c). `DrawEllipse` reads what `DrawHalfEllipse`, `DrawPlanetDetail` and `DrawSun` set: what the walk counts up to. |
+| `MathWorkspace.cnt2` | `CNT2` | DrawEllipse, DrawPlanetDetail, SetMeridianAngle, ShowTitleShip | DrawEllipse | — | **Parameter** (M2-c). `DrawEllipse` reads the starting angle `SetMeridianAngle` and `DrawPlanetDetail` set; `ShowTitleShip`'s use is its own local. |
+| `MathWorkspace.xx` | `XX` | DrawSun, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways | MultiplyPosition, MultiplyPositionByRoll | — | **Parameter** (M2-c). `XX(1 0)` is the stardust's coordinate handed to `MultiplyPosition`/`MultiplyPositionByRoll`, and the sun's handed to `ClipSunRow`: a `Coord16` argument at each of the two callers, not a shared pair. |
+| `MathWorkspace.xxNext` | `XX+1` | DrawSun, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways | MultiplyPositionByRoll, MultiplyPositionSigned | — | **Parameter** (M2-c), the high byte of the same `Coord16`. |
+| `MathWorkspace.yy` | `YY` | DrawSun, EraseSun, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways | ClipSunRow | — | **Parameter** (M2-c). `ClipSunRow` reads `YY(1 0)` from `DrawSun`/`EraseSun`; the stardust writes and reads its own. |
+| `MathWorkspace.yyNext` | `YY+1` | DrawSun, EraseSun, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways, PlotStardust | ClipSunRow | — | **Parameter** (M2-c), the high byte of the same. |
+| `MathWorkspace.widget` | `widget` | DivideByLogarithms, MultiplyByLog | — | — | **Local** to the logarithm routines, as its comment says. |
+| `MathWorkspace.k` | `K(3 2 1 0)` | AddShipCoordinateToK, DivideSignedToK, DivideToScreenOffset, DoubleAndAddCoordinate, DrawDials, DrawEllipse, DrawHyperspaceRing, DrawPlanetOrSun, FillK, MultiplySignedToK, RotateCoordinatePair, SubtractShipAxis | AddShipCoordinateToK, CircleOffScreen, DrawBar | DivideAxisByZ (after DivideByShipZ), DivideToScreenOffset (after DivideByShipZ), DrawCircle (after CircleOffScreen), DrawPlanetDetail (after DrawCircle), DrawPlanetOrSun (after DivideByShipZ), DrawSun (after EraseSun), MovePlanetOrSun (after AddShipCoordinateToK), MultiplyKBySine (after MultiplyByLog), ScaleAxisByZ (after MultiplyUnsigned) | **Result and parameter** (M2-b, M2-c). `DivideByShipZ` leaves the quotient in `K` and `DivideAxisByZ`, `DivideToScreenOffset` and `DrawPlanetOrSun` read it after; `MultiplySignedToK`/`AddShipCoordinateToK` leave it for `MovePlanetOrSun` (§4.3's `MV40` row, locals there); `CircleOffScreen`, `DrawBar` and `AddShipCoordinateToK` read what their callers set (the radius, the bar's colours, the coordinate): a `K24` value in and out. |
+| `MathWorkspace.k2` | `K2(3 2 1 0)` | DrawPlanetDetail, DrawSun, LoadTwoAxes, MovePlanetOrSun, MoveShip | — | DrawEllipse (after MultiplyByLog) | **Result and parameter** (M2-b, M2-c). `DrawEllipse` reads the two axes its caller set and what `MultiplyByLog` left; `MovePlanetOrSun`, `LoadTwoAxes` and `DrawSun` write their own: locals in `MV40`, a parameter in the ellipse. |
+| `DrawWorkspace.x1` | `X1` | BuildUnitVector, ClipSunRow, DrawBallLine, DrawCompassDot, DrawCrosshairs, DrawHorizontalLine, DrawLaserPair, DrawScannerBlip, DrawScreenRule, DrawSeparator, DrawShallowLine, DrawShip, DrawShipLines, DrawSteepLine, DrawSun, EraseBall, FlipStardust, MovePointOnScreen, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways, NegateVector, NormaliseAxes, RunDockingComputer, SeedStardustField | DotProductWithShip, DotProducts, DrawCompass, DrawHorizontalLine, DrawLine, DrawShallowLine, DrawSteepLine, FaceVisibility, MeasureSlope, PlotDash, PlotRelativePixel, PushHeapLine, StepAlongX, SwapEnds | DrawSun (after ClipSunRow), RunDockingComputer (after NegateVector) | **Parameter and result** (M2-c). `XX15` is the line: `LOIN` and the pixel helpers take its four ends (`Line`), the clipper takes six bytes and returns four (`Line16` in, `Line` out), `DotProducts` and `TAS2` take a vector in the same bytes, the stardust its point. No read outlives a call except through `SWAP`. |
+| `DrawWorkspace.y1` | `Y1` | BuildUnitVector, DrawBallLine, DrawCompassDot, DrawCrosshairs, DrawLaserPair, DrawParticles, DrawScannerBlip, DrawScreenRule, DrawSeparator, DrawShallowLine, DrawShip, DrawShipLines, DrawSteepLine, DrawSun, EraseBall, EraseSunRow, FlipStardust, MovePointOnScreen, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways, MultiplyByHeight, NegateVector, NormaliseAxes, PlotBlock, RepackClipped, RunDockingComputer, SeedStardustField | BothEndsBeyondTheSameEdge, DotProductWithShip, DotProducts, DrawCompass, DrawHorizontalLine, DrawLine, DrawShallowLine, DrawSteepLine, FaceVisibility, MeasureSlope, MovePointOnScreen, PlotDash, PlotRelativePixel, PushHeapLine, SwapEnds | ClipLineKeepingSwap (after RepackClipped), MoveStardustAhead (after MultiplyByHeight), MoveStardustAstern (after MultiplyByHeight), RunDockingComputer (after NegateVector) | **Parameter and result** (M2-c), with `x1`. |
+| `DrawWorkspace.x2` | `X2` | BuildUnitVector, ClipSunRow, DrawBallLine, DrawCrosshairs, DrawHorizontalLine, DrawLaserPair, DrawScreenRule, DrawSeparator, DrawShallowLine, DrawShip, DrawShipLines, DrawSteepLine, DrawSun, EraseBall, MovePointOnScreen, NegateVector, NormaliseAxes, RepackClipped, RunDockingComputer | BothEndsBeyondTheSameEdge, DotProductWithShip, DotProducts, DrawCompass, DrawHorizontalLine, DrawLine, DrawShallowLine, DrawSteepLine, FaceVisibility, MeasureSlope, PushHeapLine, RepackClipped, SwapEnds | ClipLineKeepingSwap (after RepackClipped), DrawSun (after ClipSunRow), MoveEveryShip (after NormaliseAxes), MovePointOnScreen (after StepAlongX) | **Parameter and result** (M2-c), with `x1`. |
+| `DrawWorkspace.y2` | `Y2` | DrawBallLine, DrawCrosshairs, DrawLaserPair, DrawSeparator, DrawShallowLine, DrawShip, DrawShipLines, DrawSteepLine, EraseBall, MovePointOnScreen, RepackClipped | BothEndsBeyondTheSameEdge, DotProducts, DrawLine, DrawShallowLine, DrawSteepLine, FaceVisibility, MeasureSlope, PushHeapLine, SwapEnds | ClipLineKeepingSwap (after RepackClipped), MovePointOnScreen (after StepAlongX) | **Parameter and result** (M2-c), with `x1`. |
+| `DrawWorkspace.col` | `COL` | DrawBar, DrawCompassDot, DrawScannerBlip | PlotDash | — | **Parameter** (M2-c). `PlotDash` reads the colour mask its caller set (`DrawBar`, `DrawCompassDot`, `DrawScannerBlip`). |
+| `DrawWorkspace.zz` | `ZZ` | DrawLongRangeChart, DrawParticles, FlipStardust, MoveStardustAhead, MoveStardustAstern, MoveStardustSideways, SeedStardustField | PlotPixel | PlotRelativePixel (after PlotPixel) | **Parameter** (M2-c). `PlotPixel` reads the distance its caller set; `PlotRelativePixel` reads it after `PlotPixel`, which does not write it. |
+| `DrawWorkspace.t2` | `T2` | DrawBorder, DrawHorizontalLine | — | — | **Local** to `DrawHorizontalLine` and `DrawBorder`. |
+| `DrawWorkspace.r2` | `R2` | DrawHorizontalLine | — | — | **Local** to `DrawHorizontalLine`. |
+| `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
+| `DrawWorkspace.swap` | `SWAP` | ClipLine, ClipLineKeepingSwap, DrawLine, DrawShallowLine, DrawSteepLine | — | DrawBallLine (after ClipLine), EraseBall (after DrawLine) | **Result** (M2-c). Written by the clipper and by `LOIN`, read by `DrawBallLine` after `ClipLine` and by `EraseBall` after `DrawLine` (§6.46): `ClipResult::swapped` and `DrawLine`'s return. |
+| `DrawWorkspace.xx15Plus4` | `XX15+4` | DrawBallLine, DrawShip | DotProducts, FaceVisibility, MeasureSlope, RepackClipped, SwapEnds | — | **Parameter** (M2-c), the fifth byte of the clipper's `Line16`. |
+| `DrawWorkspace.xx15Plus5` | `XX15+5` | DrawBallLine, DrawShip | BothEndsBeyondTheSameEdge, DotProducts, FaceVisibility, MeasureSlope, SwapEnds | ClipLine (after ClipLineKeepingSwap) | **Parameter** (M2-c), the sixth; `ClipLine` reads it back from `ClipLineKeepingSwap` for `LL147`'s accumulator, which is that entry point's own result. |
+| `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, TransposeOrientation | — | **Stage result** (M2-c). `ScaleOrientation` (part 3) fills it, `DotProducts` and `TransposeOrientation` read it: `ScaledOrientation`, kept by `LL9`'s frame. |
+| `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, DrawDials, DrawShip, MeasureSlope | BothEndsBeyondTheSameEdge, FaceVisibility, PrepareSlope, RepackClipped, SwapEnds | ClipLineKeepingSwap (after RepackClipped), DrawShip (after DotProducts) | **Stage result and the clipper's local** (M2-c). `DotProducts` leaves three dot products that part 4 reads; the clipper's helpers use the same bytes as their own scratch, which the frame separates. |
+| `GeometryWorkspace.xx2` | `XX2` | DrawShip | EitherFaceVisible, RunDockingComputer | — | **Stage result** (M2-c). Face visibility, written by part 4 and read by `EitherFaceVisible`; `RunDockingComputer` reads `XX2+10` as the memory it is (§6.112), which the frame keeps addressable for that one reader. |
+| `GeometryWorkspace.xx3` | `XX3` | DrawShip | DrawExplosionCloud | — | **Stage result** (M2-c). The projected vertices, `LL9`'s own, handed to `DrawExplosionCloud` for the burst. |
+| `GeometryWorkspace.xx4` | `XX4` | DrawHyperspaceRings, DrawShip | — | — | **Local** of `LL9`'s frame (the distance). |
+| `GeometryWorkspace.xx17` | `XX17` | DrawShip | — | — | **Local** of `LL9`'s frame (the loop counter). |
+| `GeometryWorkspace.xx18` | `XX18` | DrawShip | — | — | **Local** of `LL9`'s frame (the halved position). |
+| `GeometryWorkspace.xx20` | `XX20` | DrawShip | — | — | **Local** of `LL9`'s frame (the loop bound). |
+| `GeometryWorkspace.v` | `V(1 0)` | DrawShip | — | — | **Local** of `LL9`'s frame (the walker, an index since M1-e). |
+| `ClipState.xx13` | `XX13` | ClipLineKeepingSwap | — | DrawBallLine (after ClipLine) | **Result** (M2-c). Written by the clipper, read by `DrawBallLine` after `ClipLine` (which end is on screen): `ClipResult::ends`. |
+| `ClipState.dontclip` | `dontclip` | ResetShipAndBubble | ClipLineKeepingSwap | — | **Constant in this port.** Only `ZERO` writes it (to zero) and only `LL145` reads it; nothing sets bit 7, because the one routine that does in the original is not part of this build's paths. A `bool` parameter of the clipper, `false` at every caller, until a caller appears. |
+| `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
+| `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
+| `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
+| `Projection.y1` | `K4+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
+| `K3Block.*` | `K3 to K3+9` | LoadPlanetAxis, LoadStationAxes, NormaliseAxes, OffsetAxis, SubtractShipAxis | BuildUnitVector, OffsetAxis | — | **Parameter and result** (M2-c). `SPS1` (`LoadPlanetAxis`, `NormaliseAxes`) leaves the vector `BuildUnitVector` and part 9 read; `TAS2`/`OffsetAxis` take and return it: `UnitVector`/`Vector24`, §4.3's `XX15 after SPS1` row. |
+| `NumberWorkspace.k` | `K(3 2 1 0)` | PrintNumber | PrintNumber | — | **Parameter** (M2-b). `PrintNumber` reads the value its caller set and uses the rest as scratch; `PrintValue` already wraps it. |
+| `NumberWorkspace.u` | `U` | PrintNumber | — | — | **Parameter** (M2-b), the digit count. |
+<!--census:end-->
 
 The `_a`/`_x`/`_y` parameters are renamed for what they carry (`_seed`, `_axisOffset`, `_highBits`)
 at the same time; the `// 6502:` comment keeps the register.
@@ -1030,11 +1092,35 @@ the tests moved to offsets, because the oracle's copy is bytes at addresses.
 station-into-sun-heap case among them — the chain moved as a block and the offset type's default
 was chosen before the first compile for the reason above.
 
+#### M2-a slice plan (written with the build, 2026-09-06; §8 records what the census found)
+
+**The census is a tool, and the table is its output.** `tools/channel_census.py` parses every
+routine in `GameLogic/*.cpp` by its Allman brace at namespace indentation, finds the workspaces it
+takes (`MathWorkspace& _math`, `_work`, `_draw`, `_geometry`, `_clip`, `_centre`, `_axes`) and the
+ones it reaches through `FlightScreen` and `FlightLoop` (`screen.math.q`, `_loop.clip.xx13`), and
+walks the body top to bottom classifying every access as a write (`=`, `+=`, `++`, ...), a read, or
+a pass of the whole workspace to a callee. A field is "from the caller" for a routine when its
+first access is a read that no pass precedes, and "after a call" when a pass precedes it. It does
+not follow control flow, and says so: a read in one branch after a write in another counts as a
+read-first, and the verdicts are where the reading corrects the count.
+
+**Every field has a verdict, in the tool.** `VERDICTS` holds one per field, in four classes —
+parameter, result, local, and state-by-design — with the routine or the finding that decides it;
+the table in §4.3 is generated from the mechanics and the verdicts together and `--check` fails
+when the two drift or a field is missing. That makes the census a thirteenth repository check
+rather than a page that was true once.
+
+**What the slice does not do.** It changes no signature. M2-b takes the kernel's verdicts (`P`, `Q`,
+`R`, `S`, `K`, the `Wide24` triple) to `Product`, `Quotient` and `SignedSum` results; M2-c takes the
+drawing scratch (the line the clipper carries, `LL9`'s frame, the ellipse's `TGT`/`CNT2`/`K2`, the
+sun's `XX`/`YY`) to stage results and locals and leaves `Projection` and `SC` as the two
+deliberate exceptions; M2-d resolves the boundary carries.
+
 ### Phase M2 — Explicit calling conventions
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M2-a The channel census** | For every workspace field: who writes it, who reads it, and whether any reader reads without writing first — from the tests' `Mirror` lists and a read of each routine. Written into this document as §4.3's table, completed. | The table names every field; no field is "unknown". | 2 |
+| **M2-a The channel census** | For every workspace field: who writes it, who reads it, and whether any reader reads without writing first — from the tests' `Mirror` lists and a read of each routine. Written into this document as §4.3's table, completed. | The table names every field; no field is "unknown". **Built 2026-09-06** (slice plan and §8 below; `channel_census.py --check` holds it). | 2 |
 | **M2-b Kernel** | `Arith` routines take values and return `Product`/`Quotient`/`SignedSum` structs; `MathWorkspace` parameters removed one routine family at a time (multipliers, dividers, `LL28`, `NORM`, `TIDY`). | Exhaustive oracle sweeps unchanged; `register-params` and the `MathWorkspace` parameter count in the ratchet fall to their floors. | 4–5 |
 | **M2-c Geometry and drawing scratch** | `GeometryWorkspace`, `DrawWorkspace`, `ClipState`, `K3Block`, `Projection` become stage results or locals; `Projection` outliving `Project` stays and is documented at the one place it matters. | `LL9`, planet, sun, stardust and clipper suites green. | 4 |
 | **M2-d Boundary carries** | The `bool _carryIn` on `RunSpawning`, `RunLoopTail`, `SpawnThargoidPair`, `AddDebris`, `SpawnDebris` and the two `PlaySound` seams resolved to what each caller passes; kernel carries untouched. | Green; `carry-params` at the kernel's floor. | 1 |
@@ -1064,7 +1150,7 @@ was chosen before the first compile for the reason above.
 | **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). | Green; `out-params` at zero. | 3 |
 | **M5-b constexpr data** | The generated tables as `constexpr std::array`; the codecs, the trig lookups and the token decoder evaluated at compile time where the tests can `static_assert` a known value. | `TableTests` green; one `static_assert` per table against the oracle-checked value. | 2 |
 | **M5-c The ledger** | The <!--count:inventory-stale-files-->21 file names in `Source-Inventory.md` that name no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. | In CI. | 1 |
-| **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture) written from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
+| **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture, written at M2's opening) amended from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
 
@@ -1329,6 +1415,25 @@ their codecs. M2 — explicit calling conventions — is next; `Design/ADR-006` 
 **2026-09-06 — M1-f closed on the mutants, and M1 with it.** 65 mutants on the offset-addressed
 tree: 61 caught, 4 survived, the four the recorded equivalents — M0-d's tally for the seventh time
 and the last of M1, with no anchor moved. Rule 3 is met for every slice of the phase.
+
+**2026-09-06 — ADR-006 written, and M2-a built.** `Design/ADR/ADR-006-modernisation-architecture.md`
+records the architecture Modernize.md §4 builds toward and what M0 and M1 settled on the way — the
+layering, structs with codecs and the zero-byte default rule, the four classes a workspace field
+can fall into, the four ports, the pipelines, the verification rules and the detachment — with a
+status table by phase; M5-d amends it from what was built. Then the census. `tools/channel_census.py`
+found 451 routines and 49 workspace fields, and the mechanical columns confirmed every row §4.3
+already had and added the ones it did not: `T1` is a parameter `DIALS` hands `DIL`; `CNT` is a
+local everywhere except `CIRCLE2` → `BLINE`; `TGT` and `CNT2` are the ellipse's parameters; `XX`
+and `YY` are two callers' coordinates and not a shared pair; `K2` is `MV40`'s local and the
+ellipse's parameter; `SWAP` and `XX13` are the clipper's results; `XX3` is `LL9`'s stage result
+that the explosion reads. **Two findings.** `dontclip` is a constant in this port: only `ZERO`
+writes it, to zero, and only `LL145` reads it — the routine that sets bit 7 in the original is on no
+path this build takes, so the clipper's "return the line unclipped" branch has never run here and
+no test reaches it. And `SC` joins `Projection` as state that outlives a call on purpose: `DIALS`
+sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, which slice 3d-b
+documented and the census now lists. The tool is the thirteenth repository check
+(`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
+nothing in `GameLogic/` changed.
 
 **2026-09-06 — `main` merged in, mid M1-f.** The owner's death-sequence pacing (`HoldFlightFrame`,
 a `TunnelEffects*` on `Die`) came in from `main` with one conflict — `leaving.world.dashboard`,

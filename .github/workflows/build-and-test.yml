@@ -131,6 +131,12 @@ jobs:
       - name: Coverage ledger
         run: python tools/inventory.py --strict
 
+      # Modernize.md section 4.3 lists, for every zero-page workspace field, who writes it and who
+      # reads it before writing it, with a verdict each; this regenerates the table from the tree
+      # and fails when the two differ or a field has no verdict (Modernize.md M2-a).
+      - name: The channel census still describes the tree
+        run: python tools/channel_census.py --check
+
   # -------------------------------------------------------------------------------------------
   # The suite on Linux, through Tests/PortableRunner. Same test files, same oracle, g++ instead
   # of MSVC -- see that directory's README for what the runner is and, more importantly, what it
