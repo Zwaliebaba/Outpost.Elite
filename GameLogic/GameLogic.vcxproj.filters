@@ -208,6 +208,9 @@
     <ClInclude Include="ExtendedTokens.h">
       <Filter>Text</Filter>
     </ClInclude>
+    <ClInclude Include="Game.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -399,6 +402,9 @@
     </ClCompile>
     <ClCompile Include="ExtendedTokens.cpp">
       <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="Game.cpp">
+      <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="ExtendedTokenTables.cpp">
       <Filter>Generated Data</Filter>

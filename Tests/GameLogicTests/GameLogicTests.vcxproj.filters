@@ -88,6 +88,9 @@
     <ClCompile Include="GalaxyTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="GameTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="MarketTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>

@@ -34,14 +34,14 @@
       "slice": "M3-b-3d: Keyboard lands over KeySource and LineEntryEffects -- two out, one in"
     },
     "main-lines": {
-      "ceiling": 1160,
+      "ceiling": 256,
       "slack": 0,
-      "slice": "M3-b-4b: two Attach calls go with the control-code seam the shell answered"
+      "slice": "M3-c: Main.cpp is the composition root and the two outer loops, and nothing else"
     },
     "outpost-elite-names": {
-      "ceiling": 157,
+      "ceiling": 71,
       "slack": 0,
-      "slice": "M3-b-4b: ControlCodes goes and takes eight names the app reached for it"
+      "slice": "M3-c: the app reaches Elite::Game and the seams it hands it, not the game"
     },
     "effects-seams": {
       "ceiling": 9,
@@ -64,14 +64,14 @@
       "slice": "death-sequence fix 2026-09-06 (plan 6.157): the cloud-seed unit, seven mutants"
     },
     "inventory-stale-files": {
-      "ceiling": 21,
+      "ceiling": 20,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M3-c"
     },
     "origin-markers": {
-      "ceiling": 3925,
+      "ceiling": 4021,
       "slack": 0,
-      "slice": "M3-b-4b: the shell's control-code markers move into GameLogic with the dispatch (rule 4)"
+      "slice": "M3-c: eight hundred lines of dispatch move into GameLogic with their markers (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 50,

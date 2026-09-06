@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->398 tests, oracle present), all <!--count:checks-->fourteen repository checks pass,
+(<!--count:tests-->402 tests, oracle present), all <!--count:checks-->fourteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -299,12 +299,18 @@ remain ARE `Ports`**, which is the one struct §4.5 exists to collapse: M3-b rep
 with four ports without touching a signature again, and three of the four have landed. `ViewChange.h` said it plainly while
 the rest existed: "the struct is the argument list".
 
-**P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
-<!--count:main-lines-->1,160 lines, most of them the dispatch, the exits and the two loops. Plan
-§2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
-ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->157 distinct `Elite::` names that
-only a Windows compiler can type-check.
+**P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
+`Outpost/Main.cpp` is <!--count:main-lines-->256 lines and every one of them is the platform: the
+window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
+paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
+state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
+<!--count:outpost-elite-names-->71 distinct `Elite::` names where it reached 205 when M3 opened.
+
+What §2.1 asked for and this does not yet have is `Frame()`, `Sounds()` and `StateHash()`, and one
+thing it did not ask for: `Elite::Universe` is still the composition root's, because
+`Outpost::FlightSession` binds it at construction and answers three of the seams `Game`'s `Ports`
+needs. Two of the three are already scheduled to go, and the member moves across when they do
+(§8, 2026-09-06).
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->9 abstract classes in
 `GameLogic/*.h`. Some are platform (`Keyboard`, `Presenter`, `CommanderStore`); `TextSink` and
@@ -349,7 +355,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,925 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,021 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -489,7 +495,7 @@ never global.
 | `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, DrawShip, MeasureSlope | FaceVisibility | DrawShip (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
 | `GeometryWorkspace.xx2` | `XX2` | DrawShip | EitherFaceVisible, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
 | `GeometryWorkspace.xx3` | `XX3` | DrawShip | DrawExplosionCloud | — | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
-| `ClipState.dontclip` | `dontclip` | DrawShortRangeChart, ResetShipAndBubble | ClipLineKeepingSwap | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
+| `ClipState.dontclip` | `dontclip` | DrawShortRangeChart, Game::DrawChart, ResetShipAndBubble | ClipLineKeepingSwap | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
 | `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
 | `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
 | `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
@@ -1441,7 +1447,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | **M3-0 The app's member check** ✅ **built 2026-09-06 (§8)** | `check_outpost.py` gains a third half: every member the app names on an `Elite::`-typed variable, against that type's members as `GameLogic/*.h` declares them, bases closed over. A `--self-test` plants one that cannot resolve. | In CI as the fourteenth check; 111 accesses resolved on the tree as it stands. | 1 |
 | **M3-a Universe** ✅ **built 2026-09-06 (§8)** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`MissionBay` replaced by `(Universe&, Ports&)` on every routine; `FlightSession` and `Outpost::Game` own the universe and the ports between them. | Green on both legs; `aggregate-refs` 78 → 14, and the fourteen ARE `Ports` — "at zero" is M3-b's, which collapses that one struct. `JumpState` is values rather than references and goes with M3-c's `Game`. **The Windows job was the gate and caught two defects** (§8). | 4 |
 | **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at **six**, not four: `SpawnChildEffects` needs M4-a's typed stage result and `ShipDrawEffects` needs the oracle to model the 6510 port register, and the slice plan records both. | 4 |
-| **M3-c Game** | `Elite::Game` with `Reset`, `Step`, `Frame`, `Sounds`, `StateHash`; `Perform`, `Leave`, the docked pass, `Advance` and `AdvancePaused` moved from `Main.cpp`; `Mode` explicit. `Main.cpp` at its target shape. | `DockedSessionTests` and the M0-c replay drive `Game::Step` and reproduce their stored hashes; `main-lines` in the ratchet under 300. | 4–5 |
+| **M3-c Game** ✅ **built 2026-09-06 (§8)** | `Elite::Game` with `Reset` and three `Step`s; `Perform`, `Leave`, `MissionOf`, the chart draw, the docked pass and the pause pass moved from `Main.cpp`, with the eight bytes of game state that were in no struct and the five text objects. `Advance` SPLIT rather than moved — the count of passes is a `double` and the determinism guard forbids one here. | `main-lines` 1,219 → <!--count:main-lines-->256, under the 300 the row asked for, and `outpost-elite-names` 205 → <!--count:outpost-elite-names-->71. `GameTests` drives the object as `Run` drives it. `Frame`, `Sounds` and `StateHash` are not built and `DockedSessionTests` still owns its own composition (§8). | 4–5 |
 | **M3-d ADR-007** | State ownership and the replay hash, written from M3-a..c as built. | Accepted. | 1 |
 
 ### Phase M4 — Control flow
@@ -1459,7 +1465,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 |---|---|---|---|
 | **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). | Green; `out-params` at zero. | 3 |
 | **M5-b constexpr data** | The generated tables as `constexpr std::array`; the codecs, the trig lookups and the token decoder evaluated at compile time where the tests can `static_assert` a known value. | `TableTests` green; one `static_assert` per table against the oracle-checked value. | 2 |
-| **M5-c The ledger** | The <!--count:inventory-stale-files-->21 file names in `Source-Inventory.md` that name no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. | In CI. | 1 |
+| **M5-c The ledger** | The <!--count:inventory-stale-files-->20 file names in `Source-Inventory.md` that name no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. | In CI. | 1 |
 | **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture, written at M2's opening) amended from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
@@ -1745,6 +1751,64 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-c: the top of the program moves into the library, and `Main.cpp` goes from 1,160
+lines to 256.** `Outpost/Main.cpp` held the universe, the text system, the ports, eight bytes of
+game state that are in no struct, and every dispatch the main loop makes — `TT102`'s twenty-odd
+actions, `M%`'s outcomes, `DOENTRY`'s six mission exits, `FREEZE`, the chart draw, the docked pass
+and the flight pass. Eight hundred lines of 6502 in the ONE FILE NO LINUX RUNNER COMPILES, which is
+the whole of R15's surface and the reason `check_outpost.py` has grown seven halves this week.
+`Elite::Game` is where all of it lives now. `main-lines` 1,160 → 256, `outpost-elite-names` 157 →
+71 (205 when M3 opened).
+
+**THE LINE THE SPLIT FALLS ON IS THE DETERMINISM GUARD'S, and that is the finding.** The plan's row
+says `Advance` and `AdvancePaused` move here. `AdvancePaused` did. `Advance` COULD NOT: it turns
+elapsed seconds into a count of passes, over ADR-005 §3's accumulator, and `GameLogic` may not
+touch a float (AGENTS.md §5, `check_gamelogic.py`). So it SPLIT — `PlanSteps` and the seconds stay
+in the executable and `Game::Step` takes one key and runs one pass. That is §2.1's
+`Step(InputFrame)` arrived at from the other direction, and it is a better shape than the row
+described: the count of passes is a property of the display and the passes are the game's.
+
+**`Step` ANSWERS A BOOLEAN, which is the `return` the old loop used.** `Advance`'s body returned out
+of the whole batch when `M%` left the flight half or the pause key froze it; a `Step` that could not
+say so would let the caller run a docked pass through the flight loop. It is the one piece of
+control flow that had to become a value.
+
+**EVERY PLATFORM REACH IN THE MOVED CODE HAD AN EXACT PORT EQUIVALENT, and that is M3-b's dividend
+rather than a coincidence.** `_game.shell.ClearToView(v)` is `SetUpScreen(universe, ports, v)`;
+`_game.shell.Flush()` is `ports.keyboard.Flush()`; `_game.shell.View()` is `universe.view`;
+`_game.audio.Direct()` is `ports.sid`; and `_game.window.Held(KEY_CONTROL)` — the galactic drive's
+modifier, read live — is `ports.keyboard.Held`, which is the port M3-b-3d landed four commits ago.
+Nine reaches, nine one-for-one replacements, no new seam.
+
+**WHAT §2.1 ASKED FOR AND THIS DOES NOT HAVE, said plainly.** `Frame()`, `Sounds()` and
+`StateHash()` are not built: the first two are the executable's draw and drain, which have no caller
+in the library yet, and the third wants `UniverseImage`'s hash, which lives in the test tree.
+`DockedSessionTests` still owns its own composition rather than driving `Game` — it asserts on a
+CHARACTER STREAM and `Game` builds its own text chain down to the canvas, so pointing it at `Game`
+would cost the transcript that suite is made of. `GameTests` is the new suite instead: four methods
+that drive the object the way `Run` drives it — the cold start ends docked with a rolled market, the
+pause key freezes and the resume key thaws, a keyless docked pass still ticks `TT107`'s countdown,
+and sixty-four docked passes followed by flight passes end in `M%` answering `Docked` and `Leave`
+performing the arrival. That last one is the real one: it runs `DOENTRY`, the missions and the
+status screen, so a `Game` whose dispatch were unwired would still be flying at the end of it.
+
+**AND `Elite::Universe` IS STILL THE COMPOSITION ROOT'S, which §2.1 does not ask for.**
+`Outpost::FlightSession` binds the universe at construction and answers three of the seams `Game`'s
+`Ports` needs, so whichever of the two is built first needs the other, and the only ways out are a
+deferred binding on the app side or the reference this took. Two of those three seams are already
+scheduled to go — `ShipDrawEffects` when the emulator models the banking §6.108 found,
+`SpawnChildEffects` in M4-a — and what is left of that class afterwards is `DOCKIT`. When it goes,
+`m_universe` becomes a member and the composition root stops holding any game state at all. Named
+here so the next person does not have to re-derive why it is a reference.
+
+Two smaller things went with the slice: `GameShell::AttachExtended` and `m_extendedPrinter`, which
+existed for a null check that never dereferenced the pointer; and `Main.cpp`'s `Game` struct, which
+is `App` now and holds seven members where it held twenty.
+
+402 of 402, all 14 repository checks, `origin-markers` 3,925 → 4,021 — UP by ninety-six, the
+direction rule 5 allows before M6, because that is the dispatch's own markers arriving with it
+(rule 4).
 
 **2026-09-06 — M3-b-4c: the null port was already one class, and the second one was a boolean.**
 The plan's row asks for `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView` and
