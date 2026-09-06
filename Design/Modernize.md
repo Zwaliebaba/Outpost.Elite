@@ -1282,6 +1282,21 @@ both sides run the routine, so the trap has to come off and the comparison becom
 the state the routine produced — which is a stronger statement and a per-suite piece of work. §8
 records what each one found.
 
+**`SpawnChildEffects` CANNOT GO IN THIS SLICE, and the reason is worth writing down before the
+build rather than after.** §4.5 lists `SpawnChild` among the calls into routines that now exist, and
+it is one — but its callers are `SpawnItems` and `SpawnDebris`, whose entire contract IS the call
+sequence: `SPIN2` is a loop that calls `SFS1` `CNT` times and hands back the LAST one's carry, which
+is `NWSHP`'s "was there room". `TheWreckageMatchesSPIN` compares that sequence argument by argument
+with `SFS1` trapped to `SEC` on the oracle and the seam answering `true` on the port — both sides
+told "always room". Let the routine spawn for real and the bubble fills at ten slots, the carry
+flips, and the comparison is no longer of the same thing.
+
+The honest fix is M4-a's pattern, not M3-b's: `SpawnItems` ANSWERS which ships to spawn and the
+caller spawns them, so the sequence is a typed stage result and the test compares it without a seam
+at all. Doing that here would be two patterns in one slice (rule 8). So the seam stays until M4-a,
+and **`effects-seams` reaches five in M3-b rather than four** — the M3-b row's acceptance is wrong by
+one, and this is where that is recorded rather than discovered at the ratchet.
+
 **M3-b-2 — `SoundSink`.** `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep` and
 `FlightLoopEffects`'s music pair collapse into one port that takes a SID REGISTER WRITE. The library
 already owns `SoundBuffer`, the music player and the tables; what it lacks is somewhere to put them,
@@ -1330,7 +1345,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 |---|---|---|---|
 | **M3-0 The app's member check** ✅ **built 2026-09-06 (§8)** | `check_outpost.py` gains a third half: every member the app names on an `Elite::`-typed variable, against that type's members as `GameLogic/*.h` declares them, bases closed over. A `--self-test` plants one that cannot resolve. | In CI as the fourteenth check; 111 accesses resolved on the tree as it stands. | 1 |
 | **M3-a Universe** ✅ **built 2026-09-06 (§8)** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`MissionBay` replaced by `(Universe&, Ports&)` on every routine; `FlightSession` and `Outpost::Game` own the universe and the ports between them. | Green on both legs; `aggregate-refs` 78 → 14, and the fourteen ARE `Ports` — "at zero" is M3-b's, which collapses that one struct. `JumpState` is values rather than references and goes with M3-c's `Game`. **The Windows job was the gate and caught two defects** (§8). | 4 |
-| **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at four. | 4 |
+| **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at **five**, not four: `SpawnChildEffects` needs M4-a's typed stage result and the slice plan records why. | 4 |
 | **M3-c Game** | `Elite::Game` with `Reset`, `Step`, `Frame`, `Sounds`, `StateHash`; `Perform`, `Leave`, the docked pass, `Advance` and `AdvancePaused` moved from `Main.cpp`; `Mode` explicit. `Main.cpp` at its target shape. | `DockedSessionTests` and the M0-c replay drive `Game::Step` and reproduce their stored hashes; `main-lines` in the ratchet under 300. | 4–5 |
 | **M3-d ADR-007** | State ownership and the replay hash, written from M3-a..c as built. | Accepted. | 1 |
 
