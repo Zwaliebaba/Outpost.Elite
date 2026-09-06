@@ -1554,7 +1554,8 @@ about an answer: `LOIN`'s four ends and `SWAP` are compared for the first time, 
 pins the byte instead. `K3+9` is `TAS2`'s shift counter and the block compares stop at nine bytes.
 **Mutants** (rule 3): `ta-selftest` and `ta20-eor` name lines this slice moved and are re-anchored
 to `NegateVector`'s value form and `SteerMissileTowardsTarget`'s call, and the tactics unit is
-re-run: 16 of 16 caught, as recorded. The ratchet: `register-params` 22 → 20, `workspace-params`
+re-run: 16 of 16 caught, and the whole corpus with it -- 72 mutants, 68 caught and the four
+recorded survivors surviving, as recorded. The ratchet: `register-params` 22 → 20, `workspace-params`
 151 → 86, `main-lines` 1,220 → 1,219, `outpost-elite-names` 226 → 225 (`NumberWorkspace` leaves the
 app), `origin-markers` 3,807 → 3,854 (rule 4: every byte a value replaced carries its label).
 
