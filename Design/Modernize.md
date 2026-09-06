@@ -1326,6 +1326,10 @@ flag bits, a misnamed state mask, and the Splinter's borrowed edges), and the da
 their codecs. M2 — explicit calling conventions — is next; `Design/ADR-006` is due when it opens
 (§0).
 
+**2026-09-06 — M1-f closed on the mutants, and M1 with it.** 65 mutants on the offset-addressed
+tree: 61 caught, 4 survived, the four the recorded equivalents — M0-d's tally for the seventh time
+and the last of M1, with no anchor moved. Rule 3 is met for every slice of the phase.
+
 **2026-09-06 — `main` merged in, mid M1-f.** The owner's death-sequence pacing (`HoldFlightFrame`,
 a `TunnelEffects*` on `Die`) came in from `main` with one conflict — `leaving.world.dashboard`,
 which this branch had already renamed to `universe` — and the suite was 392 of 392 on the merged
