@@ -269,9 +269,10 @@ reference. The pattern is faithful and it is also the reason no signature says w
 consumes or produces.
 
 **P3 — Flat byte blobs addressed by number.** `ShipBlock` is `std::array<std::uint8_t, 37>` with
-`operator[]`; <!--count:ship-literal-sites-->329 sites in `GameLogic/*.cpp` index it with a numeric
-literal (`work[31]`, `work[29]`, `_work[8]`) and <!--count:ship-offset-sites-->107 with a named
-offset constant, of which two families name the same byte (`SHIP_STATE` and `SHIP_STATE_OFFSET`,
+`operator[]`; when this plan opened, 329 sites in `GameLogic/*.cpp` indexed it with a numeric
+literal (`work[31]`, `work[29]`, `_work[8]`) and 107 with a named offset constant — **M1-a took
+both to <!--count:ship-literal-sites-->0 and <!--count:ship-offset-sites-->0** — and two of the
+constant families named the same byte (`SHIP_STATE` and `SHIP_STATE_OFFSET`,
 `SHIP_FLAGS` and `SHIP_FLAGS_OFFSET`, `SHIP_ENERGY` and `SHIP_ENERGY_OFFSET`) — the §6.34 trap set
 twice. `CommanderBlock` is seventy-seven bytes behind a `Field` enum and `At()`, which is the better
 half of the pattern and still hands back a byte for `Cash` (four bytes) and `Kills` (two). A second
@@ -337,7 +338,7 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,549 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,583 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -987,4 +988,11 @@ oracle never noticed because a name is not a behaviour; the view names them `Nos
 at zero, the second after its counter stopped counting `counts[SHIP_TYPE_x]`, which indexes the
 per-type tally and never was a byte of a block; `origin-markers` UP from 3,549 to 3,581 because
 every accessor carries the `INWK+n` label the offset it replaces carried (rule 4), and that is the
-one direction rule 5 allows a marker count to move before M6. M0-a is built with this entry; nothing in `GameLogic/` changed.
+one direction rule 5 allows a marker count to move before M6. And one counter learned something:
+`aggregate-refs` read the views' `Byte&` members as argument-list references and rose from 78 to 89,
+which is P5 being miscounted rather than P5 coming back — a templated struct of references is a
+view over bytes, generic over constness because it is one — so the counter now cuts those bodies
+before it counts, with a sample in its self-test. The first push of this slice went out with
+`check_counts.py` red on the three markers above, because the command that ran the checks piped
+their exit status away; the fix followed in the next commit, and the lesson is the same one
+`check_all.py` was written for. M0-a is built with this entry; nothing in `GameLogic/` changed.
