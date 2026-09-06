@@ -24,6 +24,7 @@
 #include "TextPrint.h"
 #include "Tokens.h"
 #include "ViewChange.h"
+#include "Universe.h"
 
 #include <array>
 #include <cstdint>
@@ -197,22 +198,18 @@ namespace GameLogicTests
     }
   };
 
-  struct Universe
+  /*
+   * The fixture's universe: `Elite::Universe`'s bytes, plus what a test needs beside them.
+   *
+   * INHERITED RATHER THAN HELD, since M3-a. Every field the library owns is the base's -- so a
+   * fixture writing `universe.canvas` writes the same byte the app does, and slicing a fixture
+   * gives the state and nothing else. What is added here is the recording ports, the printers
+   * (which cannot live in a universe that has to copy: two of them take a seam) and the two bytes
+   * that are the fixture's own.
+   */
+  struct Universe : Elite::Universe
   {
     RecordingView effects; ///< first, because the character printer's bell records into its list
-
-    Elite::Canvas canvas;
-    Elite::DrawWorkspace draw;
-    Elite::MathWorkspace math;
-    Elite::GeometryWorkspace geometry;
-
-    Elite::Stardust dust;
-    Elite::PlanetSunState heaps;
-    Elite::Bubble bubble;
-    Elite::Ship work{};
-
-    Elite::ScreenState screen;
-    Elite::TextState text;
 
     /*
      * The real character printer, drawing into the canvas -- `CHPR` is NOT trapped on the oracle's
@@ -258,7 +255,6 @@ namespace GameLogicTests
     Elite::TextPrinter glyphs{canvas, text, &chars};
     Elite::CharacterPrinter characters{glyphs};
     Elite::TokenPrinter printer{characters};
-    Elite::MessageState message;
 
     /*
      * 6502: DETOK's seam, and it RECORDS rather than acts.
@@ -295,24 +291,11 @@ namespace GameLogicTests
 
     Codes codes;
 
-    Elite::FlightState flight;
-    Elite::FlightStatus status;
-    Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
-    Elite::Rng rng;
-
+        
     /// Declared after `rng` because it binds one, and the order here is the construction order.
     Elite::ExtendedTokenPrinter extendedPrinter{characters, printer, rng, &codes};
 
-    Elite::Commander commander;
-
-    /// 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and VIC+&04 to VIC+&10 -- the sprite bank slice 4d-a
-    /// gave a home. It was the bare count while nothing moved them.
-    Elite::TrumbleSprites trumbles;
-
-    /// 6502: the VIC-II sprite registers (ADR-005 §1). `MVTRIBS` reads and writes two of them per
-    /// Trumble; every other writer reaches them through a seam.
-    Elite::VideoState video{};
-
+    
     /*
      * Whether the Trumbles' COORDINATE REGISTERS are mirrored into the oracle and compared back.
      *
@@ -327,11 +310,6 @@ namespace GameLogicTests
 
     RecordingSight sight;
     RecordingDashboard dashboard;
-
-    std::uint8_t view = 0;
-    std::uint8_t spaceView = 0;
-    std::uint8_t explosions = 0;
-    std::uint8_t techLevel = 0; ///< 6502: tek -- part 14's station reads it
 
     /// 6502: QQ14 -- kept only so the fixtures can name it; the byte the port reads is the
     /// commander block's, because part 15's fuel scooping writes it and a copy would drift.

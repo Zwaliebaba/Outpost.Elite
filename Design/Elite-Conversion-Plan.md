@@ -124,7 +124,7 @@ is preserved in the history and was true then.
 - `Outpost.slnx` with four projects: `NeuronCore`, `GameLogic`, `GameLogicTests` and `Outpost`.
 - `NeuronCore/` — the foundation static library: the shared precompiled-header content and
   `Debug.h`. No game semantics, and no C++/WinRT in the two libraries that never used it.
-- `GameLogic/` — **the port**, namespace `Elite`: <!--count:gamelogic-sources-->66 translation units and <!--count:gamelogic-headers-->57 headers,
+- `GameLogic/` — **the port**, namespace `Elite`: <!--count:gamelogic-sources-->66 translation units and <!--count:gamelogic-headers-->58 headers,
   deterministic and platform-free, guarded by `tools/check_gamelogic.py`. Everything phases 0 to 3
   name is here — the arithmetic kernel, the text system, the universe, every docked screen, the
   ship slots and motion, `LL9` and the clipper, the planet, sun and stardust, all sixteen parts of
@@ -889,7 +889,7 @@ is a fourth assembly `tools/labels.py` does not build") — the reasoning is kep
 and the status is marked beside it. `GameLogic/Explosion.h` said the `VideoState` work "is not
 done". Risk R2 said thirteen masters where there are twelve, R5 described two write-only sprite
 seams that no longer exist, and R11's "~45 C++ homes" was a design-time estimate against
-<!--count:gamelogic-sources-->66 sources and <!--count:gamelogic-headers-->57 headers. The three
+<!--count:gamelogic-sources-->66 sources and <!--count:gamelogic-headers-->58 headers. The three
 counts now carry markers, which is the difference between correcting a number and stopping it
 rotting again.
 

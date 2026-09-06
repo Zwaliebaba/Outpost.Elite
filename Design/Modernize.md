@@ -346,7 +346,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,927 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,954 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1221,6 +1221,41 @@ same commit and the tactics unit re-run (rule 3). **What the slice does not do.*
 `SC` stay as the census says; the frame's `Q` and `MV40`'s byte stay; the boundary carries are
 M2-d's; `LL9`'s stages stay one routine until M4.
 
+#### M3-a slice plan (written before the build, 2026-09-06; two commits; §8 records what each found)
+
+**`Elite::Universe` owns every byte of game state, and nothing else.** The seven argument-list
+structs — `FlightScreen`, `FlightLoop`, `TradeScreen`, `SaveScreen`, `GameStart`, `MissionScreen`,
+`TitleScreen` — hold seventy-eight references between them, and §4.4's `Universe` is what they are
+all views of. Two commits, each green on the suite and `check_all`.
+
+**M3-a-1 — the type exists and owns the bytes.** `GameLogic/Universe.h` holds `struct Universe`: a
+plain aggregate of the state the flight half names, in the order §4.4 lists it, with no reference
+member, no virtual and no printer — so it copies, and `UniverseImage` can hash it without knowing
+what else is in the program. `FlightScreen` and `FlightLoop` stay, and are BUILT from it: the app's
+`FlightSession` and the fixture's `FlightUniverse.h` replace their twenty-odd members with one
+`Universe` and hand out the two aggregates as before. No routine signature changes, so the whole
+suite is the check, and `check_outpost.py`'s member half (M3-0) is what watches the app.
+
+**M3-a-2 — the routines take it.** Every routine that took `FlightScreen&` or `FlightLoop&` takes
+`(Universe&, Ports&)` and the two structs go. `Ports` is what is left when the state comes out: the
+text machinery bound to the universe's own bytes (`TokenPrinter`, `CharacterPrinter`, the `TextSink`
+they print through) and the five flight seams (`SightEffects`, `ViewEffects`, `ShipEffects`,
+`ShipDrawEffects`, `FlightLoopEffects`). It is a struct of references for one slice: M3-b is what
+collapses the seam half to §4.5's four ports, and doing it here would be two patterns in one slice
+(rule 8).
+
+**The acceptance the row promised, corrected before the build.** "`aggregate-refs` at zero" is not
+what M3-a can reach: thirty-nine of the seventy-eight are the docked half's four structs, which the
+row does not name and which M3-c's `Game` is the natural place for, and eight are `Ports`. The
+number M3-a can honestly deliver is **78 → 47** — the flight half's thirty-nine replaced by eight —
+and the rest is M3-b's and M3-c's. Recording it here rather than discovering it at the ratchet.
+
+**What the slice does not do.** The seams stay twenty-two (M3-b). `Main.cpp` keeps its own state
+for the docked screens (M3-c). The printers stay where the app builds them, because two of them
+need a seam — `TextPrinter` takes the bell and `ExtendedTokenPrinter` the control codes — and a
+`Universe` that held them would not be a plain aggregate, which is the one property M3-c's
+`StateHash` needs.
+
 ### Phase M2 — Explicit calling conventions
 
 | Slice | Scope | Acceptance | Sittings |
@@ -1554,6 +1589,29 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-a-1: `Elite::Universe` exists, and the whole suite ran against it unchanged.**
+`GameLogic/Universe.h` holds the state the flight half's two argument-list structs name, in §4.4's
+order, with **no reference member, no virtual and no printer** — so it copies, its layout is its
+fields, and `UniverseImage` can hash it without knowing what else is in the program, which is what
+`Game::StateHash` and the M0-c replay are built on. `ScreenState` moved into it from `ViewChange.h`,
+because it is state and that is where the state lives now.
+
+**The fixture inherits it rather than holding it**, which is what made the commit small: every
+field the library owns is the base's, so the thousand `universe.canvas` in the suite kept working
+and 397 of 397 passed with no test edited. Slicing a fixture now gives the state and nothing else.
+What stays in the derived struct is the recording ports, the printers and two bytes that are the
+fixture's own.
+
+**Two fields did not go in, and both for the same reason.** `ExtendedTextState` is a member of
+`CharacterPrinter`, and the printers cannot live in a universe that has to copy: `TextPrinter`
+takes the bell as a `TextEffects*` and `ExtendedTokenPrinter` the control codes as a
+`ControlCodes*`, so a universe that owned them would own a pointer to the platform. Giving the
+printer a reference to state the universe owns is M3-b's question.
+
+**The app is untouched**, deliberately: `FlightSession` still holds its own members and builds
+`FlightScreen`/`FlightLoop` from them. It moves in M3-a-2, when the routines change and it has to
+be edited anyway — one edit to the half no Linux runner compiles instead of two.
 
 **2026-09-06 — M3-0: the app's member names are checked, because M3 is about to rename a hundred
 of them in files no Linux runner compiles.** `check_outpost.py` has read every `Elite::Name` the
