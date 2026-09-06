@@ -308,6 +308,20 @@ namespace Elite
    */
   void PrepareDeathScene(FlightLoop& _loop, DashboardEffects& _sound) noexcept;
 
-  void Die(FlightLoop& _loop, DashboardEffects& _sound) noexcept;
+  /*
+   * `_pacing` IS WHAT MAKES THE DEATH VISIBLE, and it was missing.
+   *
+   * `Die` runs the whole flight loop sixty-five times over the wreckage. Every one of those draws
+   * a frame into the canvas -- and without somewhere to SHOW them, all sixty-five happen between
+   * two of the outer loop's presents and the player sees none of it: the screen jumps straight
+   * from the shot that killed them to "LOAD NEW COMMANDER (Y/N)?", which looks exactly like a port
+   * that never built the death sequence at all.
+   *
+   * It is the same seam the launch and hyperspace tunnels use, for the same reason and with the
+   * same meaning: the 6502 waited for nothing, but the DISPLAY it had showed each frame for as
+   * long as the next took to compute (§6.109). Null runs the sequence with nothing shown, which is
+   * what the tests want.
+   */
+  void Die(FlightLoop& _loop, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept;
 
 } // namespace Elite
