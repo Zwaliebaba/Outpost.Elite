@@ -1505,6 +1505,18 @@ namespace GameLogicTests
 
                 Elite::Ports ports = leaving.Ports();
 
+                /*
+                 * 6502: DT3 -- and BOTH SIDES RUN IT SINCE M3-b-4b.
+                 *
+                 * This asserted `codes.ran.empty()` until the seam went: a recorder counted the
+                 * control codes `TITLE`'s three tokens reached and the test said there were none.
+                 * The oracle has always RUN them, so what that assertion was really claiming is
+                 * that the two screens agree -- which `CompareScreens` below says directly, and
+                 * says for the right reason. §6.73's corollary: the seam was what the suite
+                 * counted, and the count goes with it.
+                 */
+                leaving.universe.RunCodesThrough(ports);
+
                 // 6502: QQ12 -- docked, which is where `TITLE` is reached from. It is the
                 // universe's own byte since M3-a, where `TitleScreen` held a reference to it.
                 leaving.universe.dockedFlag = 0xFFu;
@@ -1526,7 +1538,6 @@ namespace GameLogicTests
                 }
 
                 Assert::AreEqual(cpu.a, answer, (where + L": thiskey").c_str());
-                Assert::IsTrue(leaving.universe.codes.ran.empty(), (where + L": no token reached a control code").c_str());
 
                 CompareState(cpu, leaving.universe, at, where);
                 CompareLeaving(cpu, leaving, to, leaving.universe.dockedFlag, where);

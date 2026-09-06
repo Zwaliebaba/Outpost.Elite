@@ -489,9 +489,7 @@ namespace GameLogicTests
           start.quiet = quiet;
           start.key = 0x27u;
           Elite::Ports ports = PortsOver(universe, start);
-          std::uint8_t galaxy = 0;
-          Elite::MissionCodes codes{universe.universe, ports, galaxy};
-          universe.universe.codes.to = &codes;
+          universe.universe.RunCodesThrough(ports);
 
           /*
            * Through the PRINTER rather than by calling `PauseForKey`, because the fall-through into
@@ -627,10 +625,8 @@ namespace GameLogicTests
       }
 
       ScriptedStart start;
-      std::uint8_t galaxy = 0;
       Elite::Ports ports = PortsOver(universe, start);
-      Elite::MissionCodes codes{universe.universe, ports, galaxy};
-      universe.universe.codes.to = &codes;
+      universe.universe.RunCodesThrough(ports);
 
       Elite::ShowIncomingMessage(universe.universe, ports);
 
@@ -700,10 +696,8 @@ namespace GameLogicTests
         Assert::IsTrue(cpu.CallSubroutine(oracle.Label("DETOK2"), 4'000'000).completed, L"DETOK2 returned");
 
         ScriptedStart start;
-        std::uint8_t galaxy = 0;
         Elite::Ports ports = PortsOver(universe, start);
-        Elite::MissionCodes codes{universe.universe, ports, galaxy};
-        universe.universe.codes.to = &codes;
+        universe.universe.RunCodesThrough(ports);
 
         universe.universe.extendedPrinter.PrintByte(9u);
 
@@ -831,8 +825,7 @@ namespace GameLogicTests
 
           ScriptedStart start;
           Elite::Ports ports = PortsOver(universe, start);
-          Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
-          universe.universe.codes.to = &codes;
+          universe.universe.RunCodesThrough(ports);
 
           /*
            * Through the control-code dispatch rather than by calling `PrintMissionToken` -- these
@@ -954,8 +947,7 @@ namespace GameLogicTests
           start.key = 0x27u;
 
           Elite::Ports ports = PortsOver(universe, start);
-          Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
-          universe.universe.codes.to = &codes;
+          universe.universe.RunCodesThrough(ports);
 
           const Elite::ForcedKey key = item.run(universe.universe, ports, false);
 
@@ -1056,8 +1048,7 @@ namespace GameLogicTests
 
             ScriptedKeys keys{accept};
             Elite::Ports ports = PortsOver(universe, start);
-            Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
-            universe.universe.codes.to = &codes;
+            universe.universe.RunCodesThrough(ports);
 
             static_cast<void>(Elite::OfferTrumble(universe.universe, ports, false, keys));
 
@@ -1177,8 +1168,7 @@ namespace GameLogicTests
         start.key = 0x27u;
 
         Elite::Ports ports = PortsOver(universe, start);
-        Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
-        universe.universe.codes.to = &codes;
+        universe.universe.RunCodesThrough(ports);
 
         const std::uint8_t ourToken = Elite::RunConstrictorBriefing(universe.universe, ports, false);
 

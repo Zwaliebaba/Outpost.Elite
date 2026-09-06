@@ -56,18 +56,19 @@ namespace GameLogicTests
       std::vector<std::uint8_t> characters;
     };
 
-    class DeferredControls : public Elite::ControlCodes
-    {
-    public:
-      void Run(std::uint8_t _code) override
-      {
-        reached = true;
-        lastCode = _code;
-      }
-      bool reached = false;
-      std::uint8_t lastCode = 0;
-    };
-
+    /*
+     * `DeferredControls` WAS HERE AND IS NOT ANY MORE (M3-b-4b).
+     *
+     * It recorded that a code had left the text system, and the sweep below asserted which of the
+     * thirty-one do. `Elite::RunControlCode` is the dispatch now and this printer is built WITHOUT
+     * a game, so the codes that leave are ignored -- which is exactly what a null `ControlCodes*`
+     * meant and is what keeps this sweep about the text system rather than about the game.
+     *
+     * WHAT THAT COSTS IS NAMED RATHER THAN HIDDEN. The eleven deferred codes are still deferred,
+     * and five of them (9, 21, 25, 27 and 28) could be compared here against a real universe --
+     * see §8. Three more (22, 24, 26) need a scripted keyboard on both sides first, and three
+     * (11, 30, 31) have nothing behind them on either.
+     */
     /// Value tokens reach commander state, which is phase 2's.
     class DeferredValues : public Elite::ValueTokens
     {
@@ -149,7 +150,7 @@ namespace GameLogicTests
       explicit PortPrinter(const TextStateBytes& _state, const GeneratorState& _seed = SEED)
         : characters(screen),
           recursive(characters, &values),
-          printer(characters, recursive, rng, &controls)
+          printer(characters, recursive, rng)
       {
         rng.SetState(_seed);
         characters.state.lowerCaseBits = _state.lowerCaseBits;
@@ -163,7 +164,6 @@ namespace GameLogicTests
       CapturingSink screen;
       Rng rng;
       DeferredValues values;
-      DeferredControls controls;
       Elite::CharacterPrinter characters;
       TokenPrinter recursive;
       ExtendedTokenPrinter printer;
@@ -207,7 +207,7 @@ namespace GameLogicTests
       PortPrinter port(_state, _seed);
       port.printer.Print(_token);
 
-      if (port.controls.reached || port.values.reached)
+      if (port.printer.CodesThatLeft() != 0u || port.values.reached)
       {
         return false;
       }
@@ -471,8 +471,10 @@ namespace GameLogicTests
           PortPrinter port(start);
           port.printer.PrintByte(code);
 
-          Assert::AreEqual(seam, port.controls.reached,
-                           (L"control code " + std::to_wstring(code) + L" should" + (seam ? L"" : L" not") + L" reach the seam").c_str());
+          Assert::AreEqual(seam, port.printer.CodesThatLeft() != 0u,
+                           (L"control code " + std::to_wstring(code) + L" should" + (seam ? L"" : L" not") +
+                            L" leave the text system")
+                             .c_str());
           if (deferred)
           {
             continue;
@@ -731,7 +733,7 @@ namespace GameLogicTests
         PortPrinter port{TextStateBytes{}};
         port.printer.PrintSystemOverride(static_cast<std::uint8_t>(token));
 
-        if (port.controls.reached || port.values.reached)
+        if (port.printer.CodesThatLeft() != 0u || port.values.reached)
         {
           continue;
         }

@@ -93,7 +93,7 @@ namespace
         recursive(characters),
         values(recursive, universe.text, universe.commander, universe.commanderName, universe.current.seeds, universe.selectedSeeds,
                false),
-        extended(characters, recursive, universe.rng, &shell),
+        extended(characters, recursive, universe.rng),
         flight(window, universe),
         ports{recursive, characters, characters, flight, flight, audio.Direct(), extended, shell, shell, shell, store}
     {
@@ -101,13 +101,12 @@ namespace
       // so the composition lends the struct back to the object two of it point at.
       flight.AttachPorts(ports);
       shell.AttachPorts(ports);
+      extended.SetGame(universe, ports); // 6502: DT3 -- a control code that leaves is the library's
       recursive.SetValueTokens(&values);
       recursive.SetCursor(&universe.text);
-      shell.Attach(recursive, universe.text, characters.state, universe.message);
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, universe.dockedFlag);
       shell.AttachVideo(universe.video);                   // ADR-005 §1 -- the sprites composite in Resolve
-      shell.AttachGalaxy(universe.commander.galaxyNumber); // 6502: GCNT, for MT27 and MT28
       shell.AttachSound(audio, universe.sound, universe.music);
 
       // 6502: NA% -- the commander the cold start begins from, and a STORE rather than a member

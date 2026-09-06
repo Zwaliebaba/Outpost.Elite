@@ -34,24 +34,24 @@
       "slice": "M3-b-3d: Keyboard lands over KeySource and LineEntryEffects -- two out, one in"
     },
     "main-lines": {
-      "ceiling": 1161,
+      "ceiling": 1160,
       "slack": 0,
-      "slice": "M3-b-3c: Main.cpp's DeathPacing goes -- the library counts the ships and asks the presenter"
+      "slice": "M3-b-4b: two Attach calls go with the control-code seam the shell answered"
     },
     "outpost-elite-names": {
-      "ceiling": 165,
+      "ceiling": 157,
       "slack": 0,
-      "slice": "M3-b-4a: TextEffects is not a name the app reaches any more"
+      "slice": "M3-b-4b: ControlCodes goes and takes eight names the app reached for it"
     },
     "effects-seams": {
-      "ceiling": 10,
+      "ceiling": 9,
       "slack": 0,
-      "slice": "M3-b-4a: clss is ClearTextArea, which the library has had since slice 2a"
+      "slice": "M3-b-4b: DT3's dispatch is Elite::RunControlCode, not a seam the shell answers"
     },
     "out-params": {
-      "ceiling": 17,
+      "ceiling": 16,
       "slack": 0,
-      "slice": "M3-a-3: StatusScreen's QQ15 is a Universe field, not an out parameter"
+      "slice": "M3-b-4b: MissionCodes goes and its galaxy reference with it"
     },
     "carry-params": {
       "ceiling": 30,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3923,
+      "ceiling": 3925,
       "slack": 0,
-      "slice": "M3-b-4a: one marker for clss where the seam and the printer each had one"
+      "slice": "M3-b-4b: the shell's control-code markers move into GameLogic with the dispatch (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 50,

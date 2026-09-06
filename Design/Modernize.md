@@ -300,13 +300,13 @@ with four ports without touching a signature again, and three of the four have l
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
-<!--count:main-lines-->1,161 lines, most of them the dispatch, the exits and the two loops. Plan
+<!--count:main-lines-->1,160 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->165 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->157 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->10 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->9 abstract classes in
 `GameLogic/*.h`. Some are platform (`Keyboard`, `Presenter`, `CommanderStore`); `TextSink` and
 `ValueTokens` are the text system's own and are argued about in §8 rather than assumed away. Most are **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
@@ -337,7 +337,7 @@ cop, trader...). The screen's mode is `QQ11`'s value (`BUY_CARGO_VIEW = 2`, `SEL
 are `std::uint8_t` constants — **M1-b took the ship types and the three flag bytes of a ship to
 `ShipType`, `ShipStateBit`, `AiBit` and `NewbBit`** — booleans are `0`/`0xFF` (`BST`, `ECM`, `DISK`); the thirteen pause-
 screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making them contiguous
-would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->17 parameters are
+would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->16 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
 
 **P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->30 `bool
@@ -349,7 +349,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,923 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,925 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -585,7 +585,7 @@ port because a windowed program cannot block and the plan does not change that (
 | `Presenter` ✅ **M3-b-3b/3c** | `TunnelEffects::ShowFrame`, `TradeScreenEffects::ClearToView` (the pixels half), `LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames`, `ExplosionEffects`/`SightEffects`'s VIC pokes (they become `VideoState` writes the library makes itself) | `WaitFrames(n)`, `Present()`, `HoldFlightFrame(ships)`, `HoldTitleFrame(distance)` — four, because one `ShowFrame` was carrying three pacing policies and the two holds are two different cost curves |
 | `Keyboard` ✅ **M3-b-3d** | `KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys`, `LineEntryEffects::FlushKeyboard` (`JumpState::controlHeld` is a chart's own byte and stays) | `Held(key)`, `NextKey()`, `Flush()` — **not** `Scan(KeyLogger&)`: `RDKEY` is `Elite::ScanKeyboard` in the library and only the row read is the platform's (§8, 2026-09-06) |
 | `SoundSink` ✅ **M3-b-2b** | `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep`, `FlightLoopEffects::Start/StopDockingMusic` | `Write(SidRegister, value)` — the library runs `NOISE` and the music player itself and emits register writes, which ADR-003 §1 already says is the port's `SoundEvent` stream |
-| `SaveStore` | `CommanderStore`, which is what the `SaveScreen` half that reads and writes files became in M3-a-3 | `Load(name) -> std::optional<Image>`, `Save(name, Image)` |
+| `CommanderStore` — **not renamed** | the `SaveScreen` half that reads and writes files, which it became in M3-a-3 | `Write(name, file)`, `Read(name, outFile)` — the row said `SaveStore`, and `Outpost::SaveStore` has been the executable's implementation of it since slice 2d, so the rename would give `class SaveStore : public Elite::SaveStore`. `CommanderStore` says what is stored and `Outpost::SaveStore` says where it goes (§8, 2026-09-06) |
 
 **`Elite::Ports` is the intermediate this table collapses.** M3-a-3 left one struct of fourteen
 references — three printers and eleven interfaces — where seven argument-list structs had held
@@ -597,7 +597,18 @@ zero slack does not let a struct grow first and shrink afterwards (§8, 2026-09-
 Everything else in the twenty-two is either a call into a routine that now exists (`RunTactics`,
 `DrawPlanetOrSun`, `SpawnAhead`, `Anger`, `SpawnChild`, `ChartShapes`, `DrawExplosion`,
 `SeedExplosionCloud`, `ResetUniverse`, `ResetShip`, `ClearKeyLogger`, `StartTheme`, `StopTheme`,
-`ShowTitleScreen`, `Run(controlCode)`) or a `VideoState` write. `PlaySound`'s carry stays inside
+`ShowTitleScreen`, `Run(controlCode)`, `ClearScreen`) or a `VideoState` write.
+
+**`TextSink` AND `ValueTokens` ARE NOT IN THE TWENTY-TWO AND DO NOT GO.** This section used to group
+them with `ControlCodes` as "the text system's own polymorphism", and then concluded they should go
+because `CHPR` and the value tokens exist — which does not follow. `TextSink` is not a seam in front
+of `CHPR`; it is the interface `CHPR` IMPLEMENTS. Both production implementations are inside
+`GameLogic` and form a chain — `TokenPrinter` → `CharacterPrinter` → `TextPrinter` → `Canvas` — and
+seventeen fixtures use it to compare token expansion as a CHARACTER STREAM against the shipped
+routine, which is a more precise instrument than the pixel comparison that would replace it. §6.73's
+corollary points the other way here, and this is the first seam in M3-b where it does (§8,
+2026-09-06). `ValueTokens` is the same shape: `StateTokens` is its only production implementation
+and it exists to break a construction cycle inside the library. `PlaySound`'s carry stays inside
 the library where `NOISE` lives. The null port for tests is one class with four interfaces and a
 transcript, which is what `NullShell` and `LoopRecording` are today in two halves.
 
@@ -1380,11 +1391,20 @@ and everything around it was already the library's (§8). `StartUpEffects::ScanT
 it, its reason answered by `Presenter::HoldTitleFrame`. **M3-b-3 is complete**; three of §4.5's four
 ports have landed and `SaveStore` is M3-b-4's.
 
-**M3-b-4 — `SaveStore`, the text system, and the null port.** `CommanderStore` is renamed to §4.5's
-name. `TextSink`, `ValueTokens` and `ControlCodes` are the text system's own polymorphism rather
-than platform, and are the three the table does not mention: they go by the same argument as the
-rest, since `CHPR`, the value tokens and the nine mission codes all exist. `NullShell`,
-`LoopRecording`, `RecordingSight`, `RecordingView` and `RecordingDashboard` become one null port.
+**M3-b-4 — the text system's seams, and the null port.** The row said `CommanderStore` would be
+renamed to §4.5's name and that `TextSink`, `ValueTokens` and `ControlCodes` would all go; two of
+those three claims are wrong and §4.5 above now says so. What the slice actually is:
+
+  - **4a ✅ `TextEffects`**, which the row did not mention at all. `clss` is `TT66simp`, the library
+    has had it since slice 2a, and the executable was answering the seam with the whole of `TT66`
+    (§8).
+  - **4b ✅ `ControlCodes`**. `DT3`'s dispatch is `Elite::RunControlCode` over `(Universe&, Ports&)`;
+    the last thing the shell still owned was `CLYNS`, which is `Elite::ClearMessageRows`.
+  - **4c `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView` and `RecordingDashboard`
+    become one null port.**
+  - **`CommanderStore` keeps its name** and `TextSink` and `ValueTokens` stay, for the reasons §4.5
+    now records. `effects-seams` stops at the number that leaves them standing rather than the
+    ratchet quietly failing to reach zero.
 
 **What this slice does not do.** `Elite::Game` is M3-c's. The seams that survive are four, and the
 count is what says so.
@@ -1722,6 +1742,66 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-4b: `ControlCodes` goes, and what the seam stood in front of was `GameLogic`
+reaching `GameLogic` through the executable.** `DT3` and its `JMTB` table are the control codes that
+leave the text system, and `GameShell::Run` answered three of them before forwarding the rest to
+`Elite::MissionCodes`. All three were the library's: codes 8 and 9 are stores into `Universe::text`
+plus `SetUpScreen`, and code 21 is `CLYNS`, which is `Elite::ClearMessageRows` and has been since
+slice 2a. So `MissionCodes` becomes `Elite::RunControlCode(Universe&, Ports&, code)`, absorbs 21,
+and the extended printer reaches it directly. §6.73 for the twelfth time.
+
+**THE GALAXY WAS A PARAMETER THAT WAS A UNIVERSE BYTE.** `MissionCodes` took `const std::uint8_t&
+_galaxy` and every caller bound `commander.galaxyNumber` to it — the executable through
+`AttachGalaxy`, the suites through a local. It reads the commander now, which is what M3-a removed
+nine of, and `out-params` fell with it.
+
+**THE SEAM WAS HOLDING FIVE OF THE SHELL'S POINTERS UP.** `GameShell` carried the token printer, the
+cursor, the sentence flags, the message counters and `GCNT` for one method, and `Attach` and
+`AttachGalaxy` existed to set them. `RunControlCode` reaches all five through `(Universe&, Ports&)`,
+so both methods and all five members go and `Main.cpp` loses two lines of wiring.
+`outpost-elite-names` 165 → 157: eight names the app reached ONLY to answer codes.
+
+**`SetGame` IS A SETTER AND HAS TO BE.** `ExtendedTokenPrinter` is a member of `Ports` and
+`RunControlCode` takes a `Ports&`, so neither can be the other's constructor argument.
+`TokenPrinter::SetValueTokens` unties the same knot for the same reason and `Main.cpp`'s composition
+already lends the struct back to two of the objects inside it. A printer with no game ignores the
+codes that leave, which is exactly what a null `ControlCodes*` meant — so the token suites are
+unaffected by construction rather than by luck.
+
+**AND A COUNTER REPLACES THE RECORDER, WHICH IS THE ONE THING §6.73's COROLLARY COULD NOT COVER.**
+Three suites needed to know that a token had reached a code the port defers: `CompareToken` must
+SKIP such a token, because it cannot be compared against a game that runs it, and no state
+comparison can tell "deferred" from "ran and did nothing". So `ExtendedTokenPrinter` counts the codes
+that leave — a `std::uint32_t`, not a virtual — and `CodesThatLeft()` is what the suites ask.
+`GalaxyTests` still asserts that none of 2,048 generated descriptions reaches one; `ExtendedTokenTests`
+still asserts exactly which fourteen of the thirty-one leave.
+
+**WHAT THIS DOES NOT DO, named rather than left to be discovered.** The eleven codes
+`ExtendedTokenTests` defers are still deferred. Five of them — 9, 21, 25, 27 and 28 — could be
+compared there against a real universe and are not, because doing it means giving that sweep a
+`Ports` and a canvas comparison, which is a second pattern and belongs in its own slice. Three more
+(22, 24, 26) need a scripted keyboard on both sides first. Three (11, 30, 31) have nothing behind
+them on either side and fall to `default` in `RunControlCode` exactly as they fell to the shell's.
+
+**Two suites now run the codes for real.** `MissionTests` reaches them through
+`Universe::RunCodesThrough`, and `DockedSessionTests` — the fixture that most nearly IS the
+executable — calls `SetGame` in its constructor. `LaunchTests` lost its `codes.ran.empty()`
+assertion and gained the attachment instead: the oracle has always RUN `TITLE`'s codes, so what that
+assertion really claimed is that the two screens agree, which `CompareScreens` says directly and for
+the right reason. Falsified before it was believed: stubbing `SetGame` out fails four methods across
+`PAUSE`, `BRIS`, `MT9` and `MT27`.
+
+`effects-seams` 10 → 9, `outpost-elite-names` 165 → 157, `main-lines` 1,161 → 1,160, `out-params`
+17 → 16, and `origin-markers` 3,923 → 3,925 — UP, the direction rule 5 allows before M6, because
+the shell's markers moved into `GameLogic` with the dispatch (rule 4). `mi-captain` and
+`mi-mt9-view` re-anchored on the free function.
+
+**AND `ExtendedTokenPrinter::RunControlCode` HAD TO BE RENAMED, which is worth one line.** The
+printer already had a private member of that name — the text system's own half of `DT3` — and a
+member hides a namespace-scope function of the same name at unqualified lookup, so the first build
+of this slice reported four calls to a member "expecting 1 argument, 3 provided". It is `RunTextCode`
+now, and the pair of names says which half is which.
 
 **2026-09-06 — M3-b-4a: `TextEffects` goes, and the seam was answering with the wrong routine.**
 `clss` is what `CHPR` does with a character printed below the last row, and this port had it as a

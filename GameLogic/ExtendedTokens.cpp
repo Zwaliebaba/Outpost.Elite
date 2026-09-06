@@ -2,6 +2,8 @@
 
 #include "ExtendedTokens.h"
 
+#include "Missions.h"
+
 #include "EliteConfig.h"
 #include "LookupTables.h"
 
@@ -362,7 +364,7 @@ namespace Elite
     if (_byte < FIRST_CHARACTER)
     {
       // 6502: DT3 -- a control code, dispatched through the JMTB jump table.
-      RunControlCode(_byte);
+      RunTextCode(_byte);
       return;
     }
 
@@ -467,7 +469,7 @@ namespace Elite
   // The control codes
   // ======================================================================================
 
-  void ExtendedTokenPrinter::RunControlCode(std::uint8_t _code) noexcept
+  void ExtendedTokenPrinter::RunTextCode(std::uint8_t _code) noexcept
   {
     ExtendedTextState& state = m_characters.state;
 
@@ -521,9 +523,10 @@ namespace Elite
     case 8:
       // 6502: MT8 -- LDA #6 / JSR DOXC, then DTW2. The column belongs to the canvas and goes to
       // the seam; the flag belongs here.
-      if (m_controls != nullptr)
+      ++m_codesThatLeft;
+      if (m_universe != nullptr && m_ports != nullptr)
       {
-        m_controls->Run(_code);
+        RunControlCode(*m_universe, *m_ports, _code);
       }
       state.sentenceStart = 0xFF;
       return;
@@ -572,9 +575,10 @@ namespace Elite
       // are text state and are set here; the rest is the seam's.
       state.sentenceStart = 0xFF;
       m_recursive.SetCaseFlags(0x80);
-      if (m_controls != nullptr)
+      ++m_codesThatLeft;
+      if (m_universe != nullptr && m_ports != nullptr)
       {
-        m_controls->Run(_code);
+        RunControlCode(*m_universe, *m_ports, _code);
       }
       return;
 
@@ -595,9 +599,10 @@ namespace Elite
        * WHITETEXT between them is an RTS in this version; the C64's text is one colour. So all
        * that is left besides the cursor move is MT13's pair of stores, which land here.
        */
-      if (m_controls != nullptr)
+      ++m_codesThatLeft;
+      if (m_universe != nullptr && m_ports != nullptr)
       {
-        m_controls->Run(_code);
+        RunControlCode(*m_universe, *m_ports, _code);
       }
       state.alwaysLower = 0x80;
       state.lowerCaseBits = 0x20;
@@ -623,9 +628,10 @@ namespace Elite
        * the two bytes before the table and jumps to $6060. No token can contain it either --
        * zero is what terminates one.
        */
-      if (m_controls != nullptr)
+      ++m_codesThatLeft;
+      if (m_universe != nullptr && m_ports != nullptr)
       {
-        m_controls->Run(_code);
+        RunControlCode(*m_universe, *m_ports, _code);
       }
       return;
     }

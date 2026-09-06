@@ -75,8 +75,7 @@ namespace GameLogicTests
      * this way is the cheapest available check that those declarations are consistent.
      */
     class NullShell final : public Elite::Presenter,
-                            public Elite::StartUpEffects,
-                            public Elite::ControlCodes
+                            public Elite::StartUpEffects
     {
     public:
       /*
@@ -119,11 +118,14 @@ namespace GameLogicTests
         return titleAnswer;
       }
 
-      /// The control codes that leave the text system, which a null presenter simply does not draw.
-      void Run(std::uint8_t _code) override
-      {
-        Note("code " + std::to_string(_code));
-      }
+      /*
+       * `Run` WAS HERE AND IS NOT ANY MORE (M3-b-4b).
+       *
+       * It noted `"code N"` into the transcript and nothing asserted on the note. A docked session
+       * is the fixture that most nearly IS the executable, so the codes run for real here now --
+       * `SetGame` in the constructor -- and what they do lands in the state and the transcript this
+       * suite already compares.
+       */
 
       Elite::TextState* cursor = nullptr;
       Elite::TokenPrinter* printer = nullptr;
@@ -262,10 +264,11 @@ namespace GameLogicTests
         : characters(sink),
           recursive(characters),
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
-          extended(characters, recursive, rng, &shell),
+          extended(characters, recursive, rng),
           ports{recursive, characters, sink,  nulls, nulls, sid,
                 extended,  shell,      shell, keys,  store}
       {
+        extended.SetGame(universe, ports); // 6502: DT3 -- the codes that leave run in the library
         commander = Elite::DefaultCommander();
         name = Elite::DefaultCommanderName();
         recursive.SetValueTokens(&values);

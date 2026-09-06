@@ -146,14 +146,14 @@ namespace Elite
     _tokens.Print(AddWithCarry(_base, _galaxy, false).value);
   }
 
-  bool MissionCodes::RunMissionCode(std::uint8_t _code) noexcept
+  void RunControlCode(Universe& _universe, Ports& _ports, std::uint8_t _code) noexcept
   {
     switch (_code)
     {
     case 8:
       // 6502: MT8 -- LDA #6 / JSR DOXC. The `DTW2` store is the printer's and is already done.
-      m_universe.text.column = MT8_COLUMN;
-      return true;
+      _universe.text.column = MT8_COLUMN;
+      return;
 
     case 9:
       /*
@@ -164,15 +164,26 @@ namespace Elite
        * the column store is DEAD, because `TT66` writes the same `XC` on its own. Ported because
        * the routine does it, not because anything can see it.
        */
-      m_universe.text.column = MT9_COLUMN_AND_VIEW;
-      SetUpScreen(m_universe, m_ports, MT9_COLUMN_AND_VIEW);
-      return true;
+      _universe.text.column = MT9_COLUMN_AND_VIEW;
+      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);
+      return;
+
+    case 21:
+      /*
+       * 6502: CLYNS -- the bottom rows, which belong to the docked screens rather than to a
+       * mission, and which the executable answered until M3-b-4b.
+       *
+       * The two flags it sets are the printer's and the extended printer has already set them, so
+       * what is left is the screen half -- and that half is `Elite::ClearMessageRows`.
+       */
+      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message);
+      return;
 
     case 22:
       // 6502: PAUSE. Its fall-through into MT23 sets the row here and the case flags in the
       // printer, which is the same split codes 23 and 29 already have.
-      PauseForKey(m_universe, m_ports);
-      return true;
+      PauseForKey(_universe, _ports);
+      return;
 
     case 23:
     case 29:
@@ -183,26 +194,33 @@ namespace Elite
        * briefing that moves to row 10 keeps whatever column it was printing at. `WHITETEXT` is a
        * bare `RTS` on this build and `MT13`'s two stores are the printer's.
        */
-      m_universe.text.row = (_code == 23) ? MT23_ROW : MT29_ROW;
-      return true;
+      _universe.text.row = (_code == 23) ? MT23_ROW : MT29_ROW;
+      return;
 
     case 24:
       // 6502: PAUSE2 -- the same wait with no ship, and no fall-through after it.
-      WaitForKeyPress(m_universe, m_ports);
-      return true;
+      WaitForKeyPress(_universe, _ports);
+      return;
 
     case 25:
-      ShowIncomingMessage(m_universe, m_ports);
-      return true;
+      ShowIncomingMessage(_universe, _ports);
+      return;
 
     case 27:
     case 28:
       // 6502: MT27 and MT28 -- the captain and the planet, one token per galaxy.
-      PrintMissionToken(m_ports.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN, m_galaxy);
-      return true;
+      PrintMissionToken(_ports.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN,
+                        _universe.commander.galaxyNumber);
+      return;
 
     default:
-      return false;
+      /*
+       * 11 is `NLIN4`, a rule across the screen; 26 is `MT26`, which reads a line and has no
+       * answer for whose buffer the line goes into; 30 and 31 are `FILEPR` and `OTHERFILEPR`,
+       * tokens under `DISK`. Four codes with nothing behind them, and no token the game prints
+       * from here contains one -- which is what the suites assert rather than assume.
+       */
+      return;
     }
   }
 

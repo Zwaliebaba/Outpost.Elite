@@ -51,7 +51,6 @@ namespace Outpost
    */
   class GameShell final : public Elite::Presenter,
                           public Elite::StartUpEffects,
-                          public Elite::ControlCodes,
                           public Elite::Keyboard
   {
   public:
@@ -63,16 +62,13 @@ namespace Outpost
     {
     }
 
-    /// The text system the shell drives, wired up by the composition root once it exists. The
-    /// message counters come with it because `CLYNS` clears them (§6.67).
-    void Attach(Elite::TokenPrinter& _printer, Elite::TextState& _text, Elite::ExtendedTextState& _extended,
-                Elite::MessageState& _message) noexcept
-    {
-      m_printer = &_printer;
-      m_text = &_text;
-      m_extended = &_extended;
-      m_message = &_message;
-    }
+    /*
+     * `Attach` AND `AttachGalaxy` WERE HERE AND ARE NOT ANY MORE (M3-b-4b).
+     *
+     * The printer, the cursor, the sentence flags, the message counters and `GCNT` were five
+     * pointers this object held for one method: `Run`, the control-code seam. `Elite::RunControlCode`
+     * reaches all five through `(Universe&, Ports&)`, so the shell stopped needing any of them.
+     */
 
     /*
      * One turn of the outer loop: dispatch what the window has, then draw and wait for the vertical
@@ -159,9 +155,14 @@ namespace Outpost
     /// 165 Hz panel that span the ship twenty times too fast when this was a plain present.
     void HoldTitleFrame(std::uint8_t _distance) override;
 
-    // ---- Elite::ControlCodes -----------------------------------------------------------------------
-
-    void Run(std::uint8_t _code) override;
+    /*
+     * `Elite::ControlCodes` WAS ANSWERED HERE AND IS NOT ANY MORE (M3-b-4b).
+     *
+     * `Run` dispatched codes 8, 9 and 21 and forwarded the rest to `Elite::MissionCodes`. All three
+     * were `GameLogic` reached through the executable -- two cursor stores and `ClearMessageRows` --
+     * so `Elite::RunControlCode` is the whole dispatch now and the extended printer reaches it
+     * directly.
+     */
 
     /// 6502: QQ11 -- which screen is showing. See `m_view`: the byte is the composition root's,
     /// because the flight half writes it too.
@@ -211,18 +212,6 @@ namespace Outpost
       m_ports = &_ports;
     }
 
-    /*
-     * 6502: GCNT -- which galaxy the player is in, which MT27 and MT28 add to a token number.
-     *
-     * A pointer to the commander block's byte rather than a copy, because a galactic hyperdrive
-     * changes it mid-session and a mission briefing printed afterwards names the new galaxy's
-     * captain.
-     */
-    void AttachGalaxy(const std::uint8_t& _galaxy) noexcept
-    {
-      m_galaxy = &_galaxy;
-    }
-
     /// The SID and what feeds it. Set by the composition root, like the flight, because the sound
     /// buffer and the music player are the game's and the output is the platform's, and this object
     /// is where the two halves of the loop meet.
@@ -244,15 +233,6 @@ namespace Outpost
     /// 6502: the sprite registers, null until the composition root attaches them.
     const Elite::VideoState* m_video = nullptr;
 
-    /// 6502: GCNT. See `AttachGalaxy`. `INF` was a second byte here until M3-a: `BRIEF` wrote the
-    /// briefing ship's slot through `SetBriefingShip` and control code 22 read it back. It is
-    /// `Universe::shipSlot` now, which both of them reach without the shell carrying a copy.
-    const std::uint8_t* m_galaxy = nullptr;
-
-    Elite::TokenPrinter* m_printer = nullptr;
-    Elite::TextState* m_text = nullptr;
-    Elite::ExtendedTextState* m_extended = nullptr;
-    Elite::MessageState* m_message = nullptr;
     Elite::ExtendedTokenPrinter* m_extendedPrinter = nullptr;
     FlightSession* m_flight = nullptr;
     Elite::Ports* m_ports = nullptr;
