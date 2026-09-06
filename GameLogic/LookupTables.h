@@ -261,6 +261,27 @@ namespace Elite
   extern const std::array<std::uint8_t, 4> TRUMBLE_DIRECTION_HIGH_TABLE;
 
   /*
+   * 6502: shango, santana, lotus and innersec -- four of the seven tables `COMIRQ1` indexes.
+   *
+   * The raster interrupt runs twice a frame and `RASTCT` says which half it is setting up: entry 0
+   * is the space view and entry 1 the dashboard. Seven tables sit consecutively in memory and the
+   * handler reads all of them at `LDX RASTCT`, but only these four are DATA. The other three have
+   * a second byte the game WRITES under its own name -- `zebop`/`abraxas`, `moonflower`/
+   * `caravanserai`, `welcome`/`welcome+1` -- so they are `ScreenState` fields rather than tables,
+   * and `Raster.h` holds the two halves of those that really are fixed.
+   *
+   * `RASTER_NEXT_LINE_TABLE` is the pair that makes the split: 194 and 51. Fifty-one is the first
+   * raster line of the bitmap and 194 is `51 + 143`, so the interrupt fires on the LAST row of the
+   * space view and its registers take effect from the next one -- which is row 144, exactly
+   * `Canvas::DASHBOARD_CELL_ROW * 8`. The off-by-one is the handler not being instantaneous, and
+   * the arithmetic is why the port splits where it does rather than where it guessed.
+   */
+  extern const std::array<std::uint8_t, 2> RASTER_NEXT_LINE_TABLE;
+  extern const std::array<std::uint8_t, 2> RASTER_SPRITE_MULTICOLOUR_TABLE;
+  extern const std::array<std::uint8_t, 2> RASTER_SPRITE_COLOUR_TABLE;
+  extern const std::array<std::uint8_t, 2> RASTER_NEXT_COUNTER_TABLE;
+
+  /*
    * 6502: spritp -- the seven sprite definitions, 64 bytes each.
    *
    * FROM A FOURTH ASSEMBLY, and that is the only reason they were not here already.

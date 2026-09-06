@@ -24,6 +24,7 @@
 #include "StartUp.h"
 #include "TextPrint.h"
 #include "Tokens.h"
+#include "Raster.h"
 #include "ViewChange.h"
 #include "Music.h"
 #include "SoundEffects.h"

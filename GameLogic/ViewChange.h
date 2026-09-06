@@ -122,14 +122,31 @@ namespace Elite
     std::uint8_t backgroundFlash = 0;
 
     /*
-     * 6502: HFX -- the hyperspace effect's own flag, which the RASTER HANDLER reads.
+     * 6502: HFX -- AND IT DOES NOTHING IN THIS VERSION, which took a slice to establish (§6.155).
      *
-     * `comirq1` checks it once a frame and scrambles the screen's row addresses while it is set,
-     * which is the tearing a jump ends with. Nothing in `GameLogic` reads it; `ZERO` clears it
-     * and `LL164` sets it, so it is state the port has to carry even though the thing that acts
-     * on it is behind the presentation seam.
+     * On the BBC and the 6502 Second Processor a non-zero `HFX` makes the hyperspace rings
+     * multicoloured, and `IRQ1` is the handler that reads it. This build has neither: upstream's
+     * `hfx.asm` is `SKIP 1` and says in as many words that the flag is unused here; `DOHFX` exists
+     * as a label with both of its instructions commented out in the original source; the C64's
+     * `LL164` is four instructions and does not write it; and the C64's `COMIRQ1` does not read
+     * it. Nothing in the assembled game touches this byte except `ZERO`, which clears `FRIN` to
+     * `de` and catches it in passing at 1161.
+     *
+     * So the field is here because the memory is, and the port clears it where the original does.
+     * ADR-005 §1 scheduled a per-row shift of the space view for it and there is no such effect to
+     * build.
      */
     std::uint8_t hyperspaceEffect = 0;
+
+    /*
+     * 6502: RASTCT -- which half of the raster split the interrupt is setting up next.
+     *
+     * Zero is the space view and one is the dashboard, and `COMIRQ1` reads it as the index into
+     * all seven of its tables before writing `innersec,X` back over it. It is the whole of the
+     * handler's state: everything else it reads is either a constant table or one of the four
+     * bytes above.
+     */
+    std::uint8_t rasterCounter = 0;
   };
 
   /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the

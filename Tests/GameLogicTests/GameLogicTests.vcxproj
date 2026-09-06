@@ -164,6 +164,7 @@
     <ClCompile Include="GameLoopTests.cpp" />
     <ClCompile Include="PauseScreenTests.cpp" />
     <ClCompile Include="TacticsTests.cpp" />
+    <ClCompile Include="RasterTests.cpp" />
     <ClCompile Include="TrumbleTests.cpp" />
     <ClCompile Include="SpawnTests.cpp" />
     <ClCompile Include="SoundTests.cpp" />

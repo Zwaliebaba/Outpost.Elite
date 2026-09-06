@@ -261,6 +261,25 @@ TABLES = [
           "the low byte of the four directions a Trumble sprite can move in"),
     Table("TRUMBLE_DIRECTION_HIGH_TABLE", "TRIBDIRH", 4, "ScreenTables.cpp",
           "the high byte of the same four, which makes the second of them negative"),
+    # ---- slice 4f: the raster interrupt's own tables, indexed by `RASTCT`.
+    #
+    # `COMIRQ1` reads SEVEN two-byte tables at `LDX RASTCT` and only these four are DATA. The
+    # other three are the game's live state wearing a table's shape, because the second byte of
+    # each pair is a separately named variable something writes: `zebop`/`abraxas` is the screen
+    # RAM block and `wantdials` writes the second; `moonflower`/`caravanserai` is the bitmap mode
+    # and the energy bomb writes the first while `wantdials` writes the second;
+    # `welcome`/`welcome+1` is the background colour and the interrupt itself increments the
+    # first. Extracting those would freeze a byte the game moves, so `Raster.h` holds the two
+    # halves that really are constant (`zebop` and `welcome+1`) as named constants instead, and
+    # the rest are `ScreenState` fields.
+    Table("RASTER_NEXT_LINE_TABLE", "shango", 2, "ScreenTables.cpp",
+          "which raster line the next interrupt fires on, per half of the split"),
+    Table("RASTER_SPRITE_MULTICOLOUR_TABLE", "santana", 2, "ScreenTables.cpp",
+          "which sprites are multicolour, per half"),
+    Table("RASTER_SPRITE_COLOUR_TABLE", "lotus", 2, "ScreenTables.cpp",
+          "the shared sprite colour %01, per half"),
+    Table("RASTER_NEXT_COUNTER_TABLE", "innersec", 2, "ScreenTables.cpp",
+          "what RASTCT becomes, which is what makes the split alternate"),
     # `SPMASK` IS NOT EXTRACTED, and the absence is deliberate. Its twelve bytes are a pair of
     # masks per Trumble sprite for clearing and setting that sprite's ninth x bit in VIC+&10, and
     # they exist because eight sprites share that register. `VideoState` gives each sprite a whole
