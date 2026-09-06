@@ -8,11 +8,11 @@ and compared against the assembled original. The executable launches, flies, fig
 briefing and dies. **There is no recorded mutation debt left**: the ship AI's thirteen survivors are
 closed and `python tools/mutate.py --unit tactics` is 16 of 16 — the last one was a defect, `TA7`'s
 first `BCC` jumping to part SIX so that a ship above half energy never launches a missile (plan
-§6.152, §6.153). **What is left is not a slice**: ADR-005 §1's raster effects are decided and
-unwritten, so the energy bomb and the hyperspace tearing do not show (§6.154); four acceptance
-criteria were signed off by eye or by ear with no stored artefact; R13 is closed on one mutation
-unit of four; and 0e waits on the rights holders. Plan §1.2 lists the four in one place. **A fresh
-clone needs
+§6.152, §6.153). **What is left is not a slice**: four acceptance criteria were signed off by eye
+or by ear with no stored artefact; R13 is closed on two mutation units of five; and 0e waits on the
+rights holders. Plan §1.2 lists the three in one place. ADR-005 §1's raster effects headed that
+list until 2026-09-06 and are built now, as slice 4f — the energy bomb shows, and the hyperspace
+tearing turned out not to exist in this build at all (§6.155). **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
 anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->382 tests** and
 CI runs **<!--count:checks-->eleven repository checks** beside it.
