@@ -9,14 +9,14 @@
   ],
   "ceilings": {
     "register-params": {
-      "ceiling": 20,
+      "ceiling": 17,
       "slack": 0,
-      "slice": "M2-c-1: the pixel routines take their point, and the stardust its coordinates"
+      "slice": "M2-c-2: the clipper and its slope helpers take their line and their slope as values"
     },
     "workspace-params": {
-      "ceiling": 86,
+      "ceiling": 58,
       "slack": 0,
-      "slice": "M2-c-1: the line, the pixel, the blip, the compass, the dials and the number printer take values"
+      "slice": "M2-c-2: the clipper, the planet and the sun stop taking DrawWorkspace"
     },
     "ship-literal-sites": {
       "ceiling": 0,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3854,
+      "ceiling": 3887,
       "slack": 0,
-      "slice": "M2-c-1: every value a drawing routine now takes carries the byte it was, labelled (rule 4)"
+      "slice": "M2-c-2: the clipper's new value types carry their 6502: names"
     },
     "oracle-test-files": {
       "ceiling": 50,

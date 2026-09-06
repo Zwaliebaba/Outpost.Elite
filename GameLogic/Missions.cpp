@@ -20,7 +20,7 @@ namespace Elite
     {
       FlightLoop& loop = _mission.loop;
       FlightScreen& screen = loop.screen;
-      DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
+      DrawShip(screen.canvas, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
                screen.bubble.blocks[_mission.shipSlot], loop.heap, *screen.flight.blueprint, screen.flight.type, loop.drawing, screen.rng,
                false); // a briefing's ship is never killed, so the carry goes unread
     }
@@ -60,7 +60,7 @@ namespace Elite
     screen.work.z.hi = BRIEFING_SHIP_DISTANCE;
 
     // 6502: JSR LL9 -- a briefing's ship is never killed, so the carry it is reached with goes unread.
-    DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
+    DrawShip(screen.canvas, screen.geometry, screen.math, loop.clip, loop.projection, screen.work,
              screen.bubble.blocks[_mission.shipSlot], loop.heap, *screen.flight.blueprint, screen.flight.type, loop.drawing, screen.rng,
              false);
 

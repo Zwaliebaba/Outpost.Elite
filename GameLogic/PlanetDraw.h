@@ -157,8 +157,16 @@ namespace Elite
    * CLEAR means `X1` and `X2` are its ends, clamped to the screen. It is the sun's clipper, and it
    * is a different routine from `LL145` because a horizontal line needs no slope.
    */
-  [[nodiscard]] bool ClipSunRow(PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, std::uint8_t _a,
-                                std::uint8_t _row) noexcept;
+  /// What `EDGES` answers with: the row's two ends in `X1` and `X2`, and the carry that says the
+  /// whole row is off the screen.
+  struct SunRow
+  {
+    std::uint8_t x1 = 0;      ///< 6502: X1
+    std::uint8_t x2 = 0;      ///< 6502: X2
+    bool offScreen = false;   ///< 6502: the carry -- SEC on both of `ED1`'s and `ED3`'s exits
+  };
+
+  [[nodiscard]] SunRow ClipSunRow(PlanetSunState& _state, MathWorkspace& _math, std::uint8_t _halfWidth, std::uint8_t _row) noexcept;
 
   /*
    * 6502: HLOIN2 -- clip the row, forget it, and draw it.
@@ -168,8 +176,7 @@ namespace Elite
    * written would draw whatever `X1` and `X2` happened to hold, and the port reproduces that rather
    * than adding the branch the game does not have (ADR-003).
    */
-  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, std::uint8_t _a,
-                   std::uint8_t _row) noexcept;
+  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, std::uint8_t _halfWidth, std::uint8_t _row) noexcept;
 
   /// 6502: FLFLLS -- forget the whole sun. Rows 1 to 199 are zeroed and entry 0 becomes 255.
   void ClearSunHeap(PlanetSunState& _state) noexcept;
@@ -184,7 +191,7 @@ namespace Elite
    * The 143 is the literal `2*Y-1` and not `Yx2M1`, in the same build where `CHKON` reads the
    * variable. Reproduced as written.
    */
-  void EraseSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw) noexcept;
+  void EraseSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math) noexcept;
 
   /*
    * 6502: WPLS2 -- rub the planet out, one segment at a time.
@@ -193,11 +200,11 @@ namespace Elite
    * run's START rather than another segment's end. `BLINE` writes those breaks when a segment is
    * clipped away, which is how a circle half off the screen comes back as several polylines.
    */
-  void EraseBall(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw) noexcept;
+  void EraseBall(Canvas& _canvas, PlanetSunState& _state) noexcept;
 
   /// 6502: PL2 -- rub out whichever of the two this is. `TYPE` is 128 for the planet and 129 for
   /// the sun, and the routine tells them apart with an `LSR` rather than a comparison.
-  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, ShipType _type) noexcept;
+  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, ShipType _type) noexcept;
 
   /*
    * 6502: CHKON -- is a circle of radius K at (K3, K4) worth drawing?
@@ -227,7 +234,7 @@ namespace Elite
    *
    * It returns the new `CNT`, which is what both callers loop on.
    */
-  [[nodiscard]] std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry,
+  [[nodiscard]] std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
                                           MathWorkspace& _math, ClipState& _clip, const Projection& _centre, std::uint8_t _x,
                                           bool _carryIn) noexcept;
 
@@ -239,7 +246,7 @@ namespace Elite
    * negation is what the `CMP #33` tests are for: 33 rather than 32 because the compare is against
    * a count that has already been advanced.
    */
-  void DrawBall(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawBall(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                 ClipState& _clip, const Projection& _centre, bool _carryIn) noexcept;
 
   /*
@@ -288,7 +295,7 @@ namespace Elite
    * `ASL K / BCS HF8` is the exit as much as `CMP #160` is: a radius past 128 doubles into the
    * carry and stops there, so the loop ends on whichever comes first.
    */
-  void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                           ClipState& _clip, const Projection& _centre, std::uint8_t _index, TunnelEffects* _pacing) noexcept;
 
   /*
@@ -297,7 +304,7 @@ namespace Elite
    * `K3` and `K4` are set to the view centre and their high bytes cleared, so the rings are drawn
    * around the crosshairs whatever the ship is doing. `XX4` counts the eight.
    */
-  void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry,
+  void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
                            MathWorkspace& _math, ClipState& _clip, TunnelEffects* _pacing) noexcept;
 
   /*
@@ -307,7 +314,7 @@ namespace Elite
    * radius under 8, 4 under 60 and 2 above -- so a planet gets 32 segments and a distant one gets
    * 8, and the `LSR A` pair that chooses is two instructions rather than a table.
    */
-  [[nodiscard]] bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry,
+  [[nodiscard]] bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
                                 MathWorkspace& _math, ClipState& _clip, const Projection& _centre) noexcept;
 
   /*
@@ -347,10 +354,10 @@ namespace Elite
    * passed `TGT` -- 31 for a meridian and 64 for a crater, which is why one is a half-turn and the
    * other a whole one.
    */
-  void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                    ClipState& _clip, const Projection& _centre) noexcept;
 
-  void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                        ClipState& _clip, const Projection& _centre) noexcept;
 
   /*
@@ -364,7 +371,7 @@ namespace Elite
    * Neither is drawn at all unless `PLTOG` says so, and the crater is skipped for a planet turned
    * away from you (`INWK+20` negative, which is the nose vector pointing off).
    */
-  void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                         ClipState& _clip, const Ship& _ship, Projection& _centre, ShipType _type) noexcept;
 
   /*
@@ -394,10 +401,10 @@ namespace Elite
    * `CNT` is the raggedness, three bits rolled straight out of three comparisons against the
    * radius, so a small sun is smooth and a large one is not.
    */
-  void DrawSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng,
+  void DrawSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, Rng& _rng,
                const Projection& _centre) noexcept;
 
-  void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                        ClipState& _clip, Rng& _rng, const Ship& _ship, Projection& _centre, ShipType _type) noexcept;
 
   /*

@@ -10,13 +10,15 @@
 namespace Elite
 {
 
-  bool ClipSunRow(PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, std::uint8_t _a, std::uint8_t _row) noexcept
+  SunRow ClipSunRow(PlanetSunState& _state, MathWorkspace& _math, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
   {
-    // 6502: EDGES -- STA T / CLC / ADC YY / STA X2, the right-hand end first.
-    _math.t = _a;
+    // 6502: EDGES -- STA T / CLC / ADC YY / STA X2, the right-hand end first. `T` is the kernel's
+    // byte and this routine's own since M2-c-2; `X1` and `X2` are the answer.
+    const std::uint8_t t = _halfWidth;
+    SunRow row;
 
-    const AddResult right = AddWithCarry(_a, _math.yy, false);
-    _draw.x2 = right.value;
+    const AddResult right = AddWithCarry(_halfWidth, _math.yy, false);
+    row.x2 = right.value;
     const AddResult rightHigh = AddWithCarry(_math.yyNext, 0u, right.carry);
 
     if ((rightHigh.value & 0x80u) != 0u)
@@ -26,23 +28,24 @@ namespace Elite
       {
         _state.sun[_row] = 0;
       }
-      return true;
+      row.offScreen = true;
+      return row;
     }
 
     // 6502: BEQ P%+6 -- a high byte of zero means X2 is already a screen coordinate. Anything
     // else positive means the line runs off the right, so it is clamped.
     if (rightHigh.value != 0u)
     {
-      _draw.x2 = 255;
+      row.x2 = 255;
     }
 
-    const SubResult left = SubtractWithCarry(_math.yy, _math.t, true);
-    _draw.x1 = left.value;
+    const SubResult left = SubtractWithCarry(_math.yy, t, true);
+    row.x1 = left.value;
     const SubResult leftHigh = SubtractWithCarry(_math.yyNext, 0u, left.carry);
 
     if (leftHigh.value == 0u)
     {
-      return false; // 6502: CLC / RTS -- both ends are on screen as they stand.
+      return row; // 6502: CLC / RTS -- both ends are on screen as they stand.
     }
 
     // 6502: ED3.
@@ -53,26 +56,25 @@ namespace Elite
       {
         _state.sun[_row] = 0;
       }
-      return true;
+      row.offScreen = true;
+      return row;
     }
 
-    _draw.x1 = 0;
-    return false;
+    row.x1 = 0;
+    return row;
   }
 
-  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, std::uint8_t _a,
-                   std::uint8_t _row) noexcept
+  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
   {
     // 6502: HLOIN2 -- JSR EDGES / STY Y1 / LDA #0 / STA LSO,Y / JMP HLOIN. The carry is dropped.
-    (void)ClipSunRow(_state, _math, _draw, _a, _row);
+    const SunRow row = ClipSunRow(_state, _math, _halfWidth, _row);
 
-    _draw.y1 = _row; // 6502: STY Y1 -- the byte stays faithful until M2-c takes the clipper's six
     if (_row < _state.sun.size())
     {
       _state.sun[_row] = 0;
     }
 
-    DrawHorizontalLine(_canvas, _draw.x1, _draw.x2, _draw.y1); // 6502: JMP HLOIN
+    DrawHorizontalLine(_canvas, row.x1, row.x2, _row); // 6502: STY Y1 / JMP HLOIN
   }
 
   void ClearSunHeap(PlanetSunState& _state) noexcept
@@ -96,7 +98,7 @@ namespace Elite
     _state.SetBallX(0, 0xFF);
   }
 
-  void EraseSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw) noexcept
+  void EraseSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math) noexcept
   {
     // 6502: WPLS -- LDA LSX / BMI WPLS-1, and that byte is `WP1`'s own `RTS`. One of the six
     // backward label-with-offset targets §6.35 counted that land in the file BEFORE the one
@@ -115,14 +117,14 @@ namespace Elite
       const std::uint8_t width = _state.sun[row];
       if (width != 0u)
       {
-        EraseSunRow(_canvas, _state, _math, _draw, width, row);
+        EraseSunRow(_canvas, _state, _math, width, row);
       }
     }
 
     _state.sun[0] = 0xFF;
   }
 
-  void EraseBall(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw) noexcept
+  void EraseBall(Canvas& _canvas, PlanetSunState& _state) noexcept
   {
     // 6502: WPLS2 -- LDY LSX2 / BNE WP1. Entry 0 of the x heap is the flag: `CIRCLE` clears it
     // when it starts filling, so anything else means there is nothing to rub out.
@@ -137,9 +139,12 @@ namespace Elite
      * 6502: X1, Y1, X2, Y2 -- and the walk STARTS FROM WHATEVER X1 AND Y1 HOLD. A run's first
      * segment has no predecessor, so when entry 0 is not a break the first `LOIN` draws from the
      * point the last routine to write those bytes left there. `WS2` makes entry 0 a break, so the
-     * game reaches that only through a heap nothing cleared; the bytes stay on the workspace, read
-     * and left as the original leaves them, until M2-c's second commit decides where they live.
+     * game reaches that only through a heap nothing cleared, and `WS2` is what makes entry 0 a
+     * break -- so the port starts the walk from a zeroed `Line` rather than from bytes the last
+     * drawer left (M2-c-2, and the sweep that pins it seeds the same zeroes).
      */
+    Line line;
+
     while (true)
     {
       // 6502: WPL1 -- CPY LSP / BCS WP1.
@@ -158,20 +163,16 @@ namespace Elite
          * rather than one with a chord across it.
          */
         ++at;
-        _draw.x1 = _state.BallX(at);
-        _draw.y1 = _state.BallY(at);
+        line.x1 = _state.BallX(at);
+        line.y1 = _state.BallY(at);
         ++at;
         continue;
       }
 
-      _draw.y2 = y;
-      _draw.x2 = _state.BallX(at);
-      const DrawnLine drawn = DrawLine(_canvas, Line{_draw.x1, _draw.y1, _draw.x2, _draw.y2});
-      _draw.x1 = drawn.ends.x1; // the four bytes as LOIN leaves them, the other way round when it swapped
-      _draw.y1 = drawn.ends.y1;
-      _draw.x2 = drawn.ends.x2;
-      _draw.y2 = drawn.ends.y2;
-      _draw.swap = drawn.swapped ? 0xFFu : 0u; // 6502: what LOIN's DEC SWAP left
+      line.y2 = y;
+      line.x2 = _state.BallX(at);
+      const DrawnLine drawn = DrawLine(_canvas, line);
+      line = drawn.ends; // the four bytes as `LOIN` leaves them, the other way round when it swapped
       ++at;
 
       /*
@@ -181,23 +182,23 @@ namespace Elite
        */
       if (!drawn.swapped)
       {
-        _draw.x1 = _draw.x2;
-        _draw.y1 = _draw.y2;
+        line.x1 = line.x2;
+        line.y1 = line.y2;
       }
     }
   }
 
-  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, DrawWorkspace& _draw, ShipType _type) noexcept
+  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, ShipType _type) noexcept
   {
     // 6502: PL2 -- LDA TYPE / LSR A / BCS P%+5 / JMP WPLS2 / JMP WPLS. The planet is 128 and the
     // sun 129, so the bottom bit is the whole of the test and no comparison is needed.
     if ((Byte(_type) & 0x01u) != 0u)
     {
-      EraseSun(_canvas, _state, _math, _draw);
+      EraseSun(_canvas, _state, _math);
     }
     else
     {
-      EraseBall(_canvas, _state, _draw);
+      EraseBall(_canvas, _state);
     }
   }
 
@@ -244,7 +245,7 @@ namespace Elite
     return topLow.value >= _state.yx2M1;
   }
 
-  std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry,
+  std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
                             MathWorkspace& _math, ClipState& _clip, const Projection& _centre, std::uint8_t _x, bool _carryIn) noexcept
   {
     // 6502: TXA / ADC K4 / STA K6+2 / LDA K4+1 / ADC T / STA K6+3 -- the segment's far end, as an
@@ -263,16 +264,24 @@ namespace Elite
     else
     {
       // 6502: BL1 -- the eight bytes of the two endpoints into the clipper's own workspace.
-      _draw.x1 = _state.k5[0];
-      _draw.y1 = _state.k5[1];
-      _draw.x2 = _state.k5[2];
-      _draw.y2 = _state.k5[3];
-      _draw.xx15Plus4 = _state.k6[0];
-      _draw.xx15Plus5 = _state.k6[1];
+      Line16 segment;
+      segment.first.xLow = _state.k5[0];
+      segment.first.xHigh = _state.k5[1];
+      segment.first.yLow = _state.k5[2];
+      segment.first.yHigh = _state.k5[3];
+      segment.second.xLow = _state.k6[0];
+      segment.second.xHigh = _state.k6[1];
+
+      // 6502: `XX12(1 0)` -- the far end's y, which `LL145` reads there and `LL9`'s frame owns.
       _geometry.xx12[0] = _state.k6[2];
       _geometry.xx12[1] = _state.k6[3];
+      segment.second.yLow = _geometry.xx12[0];
+      segment.second.yHigh = _geometry.xx12[1];
 
-      if (ClipLine(_draw, _geometry, _math, _clip))
+      const ClipResult clipped = ClipLine(segment, _geometry, _math, _clip);
+      Line line = clipped.line;
+
+      if (clipped.rejected)
       {
         endTheRun = true; // 6502: BCS BL5 -- clipped away entirely
       }
@@ -280,14 +289,10 @@ namespace Elite
       {
         // 6502: LDA SWAP / BEQ BL9 -- the clipper may hand the ends back the other way round, and
         // the heap has to hold them in the order the walk produced them.
-        if (_draw.swap != 0u)
+        if (clipped.swap != 0u)
         {
-          std::uint8_t held = _draw.x1;
-          _draw.x1 = _draw.x2;
-          _draw.x2 = held;
-          held = _draw.y1;
-          _draw.y1 = _draw.y2;
-          _draw.y2 = held;
+          std::swap(line.x1, line.x2);
+          std::swap(line.y1, line.y2);
         }
 
         /*
@@ -299,20 +304,20 @@ namespace Elite
         std::uint8_t at = _state.lsp;
         if (_state.BallYBefore(at) == 0xFFu)
         {
-          _state.SetBallX(at, _draw.x1);
-          _state.SetBallY(at, _draw.y1);
+          _state.SetBallX(at, line.x1);
+          _state.SetBallY(at, line.y1);
           ++at;
         }
-        _state.SetBallX(at, _draw.x2);
-        _state.SetBallY(at, _draw.y2);
+        _state.SetBallX(at, line.x2);
+        _state.SetBallY(at, line.y2);
         ++at;
         _state.lsp = at;
 
-        (void)DrawLine(_canvas, Line{_draw.x1, _draw.y1, _draw.x2, _draw.y2});
+        (void)DrawLine(_canvas, line);
 
         // 6502: LDA XX13 / BNE BL5 -- an end that had to be moved ends the run too, because the
         // next segment does not start where this one was drawn to.
-        endTheRun = _clip.xx13 != 0u;
+        endTheRun = clipped.ends != 0u;
       }
     }
 
@@ -361,7 +366,7 @@ namespace Elite
 
   } // namespace
 
-  void DrawBall(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawBall(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                 ClipState& _clip, const Projection& _centre, bool _carryIn) noexcept
   {
     // 6502: LDX #&FF / STX FLAG / INX / STX CNT.
@@ -423,7 +428,7 @@ namespace Elite
       }
 
       // 6502: PL38 -- and the segment is drawn, with the y offset still in X.
-      const std::uint8_t reached = DrawBallLine(_canvas, _state, _draw, _geometry, _math, _clip, _centre, down, carry);
+      const std::uint8_t reached = DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, down, carry);
 
       // 6502: CMP #65 / BCS P%+5 / JMP PLL3 -- sixty-four steps of one, or eight of eight.
       if (reached >= 65u)
@@ -434,7 +439,7 @@ namespace Elite
     }
   }
 
-  bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                   ClipState& _clip, const Projection& _centre) noexcept
   {
     // 6502: JSR CHKON / BCS RTS2.
@@ -466,7 +471,7 @@ namespace Elite
     }
     _state.stp = step;
 
-    DrawBall(_canvas, _state, _draw, _geometry, _math, _clip, _centre, carry);
+    DrawBall(_canvas, _state, _geometry, _math, _clip, _centre, carry);
     return false;
   }
 
@@ -555,7 +560,7 @@ namespace Elite
     _geometry.xx16[3] = axis.sign;
   }
 
-  void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                    ClipState& _clip, const Projection& _centre) noexcept
   {
     // 6502: PLS22 -- LDX #0 / STX CNT / DEX / STX FLAG.
@@ -640,7 +645,7 @@ namespace Elite
       }
 
       // 6502: PL43 -- and the segment, with the y offset in X.
-      const std::uint8_t reached = DrawBallLine(_canvas, _state, _draw, _geometry, _math, _clip, _centre, low, carry);
+      const std::uint8_t reached = DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, low, carry);
 
       // 6502: CMP TGT / BEQ P%+4 / BCS PL40 -- the `BEQ` is what makes the last step INCLUSIVE, so
       // a meridian reaching exactly 31 draws its final segment and a crater reaching 64 draws its.
@@ -653,23 +658,23 @@ namespace Elite
     }
   }
 
-  void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                        ClipState& _clip, const Projection& _centre) noexcept
   {
     // 6502: PLS2 -- LDA #31 / STA TGT, then straight into PLS22. Half a turn, because a meridian
     // seen from outside is a semicircle and the other half is behind the planet.
     _math.tgt = 31;
-    DrawEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
+    DrawEllipse(_canvas, _state, _geometry, _math, _clip, _centre);
   }
 
-  void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                         ClipState& _clip, const Ship& _ship, Projection& _centre, ShipType _type) noexcept
   {
     // 6502: PL9 -- rub out last frame's planet, draw this frame's outline, and only then think
     // about the markings.
-    EraseBall(_canvas, _state, _draw);
+    EraseBall(_canvas, _state);
 
-    if (DrawCircle(_canvas, _state, _draw, _geometry, _math, _clip, _centre))
+    if (DrawCircle(_canvas, _state, _geometry, _math, _clip, _centre))
     {
       return; // 6502: BCS PL20 -- CHKON refused it
     }
@@ -713,13 +718,13 @@ namespace Elite
       _geometry.xx16[1] = axis.sign;
 
       LoadTwoAxes(_ship, _math, _geometry, 15);
-      DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
+      DrawHalfEllipse(_canvas, _state, _geometry, _math, _clip, _centre);
 
       // And the second meridian, which shares the first pair of axes and takes a new second pair.
       SetMeridianAngle(_ship, _math, static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u), _ship.side.z.hi);
 
       LoadTwoAxes(_ship, _math, _geometry, 21);
-      DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
+      DrawHalfEllipse(_canvas, _state, _geometry, _math, _clip, _centre);
       return;
     }
 
@@ -773,10 +778,10 @@ namespace Elite
     // 6502: LDA #64 / STA TGT / LDA #0 / STA CNT2 / JMP PLS22 -- a whole turn, from zero.
     _math.tgt = 64;
     _math.cnt2 = 0;
-    DrawEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
+    DrawEllipse(_canvas, _state, _geometry, _math, _clip, _centre);
   }
 
-  void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                        ClipState& _clip, Rng& _rng, const Ship& _ship, Projection& _centre, ShipType _type) noexcept
   {
     /*
@@ -789,13 +794,13 @@ namespace Elite
      */
     if (_ship.z.sgn >= 48u || (_ship.z.sgn | _ship.z.hi) == 0u)
     {
-      ErasePlanetOrSun(_canvas, _state, _math, _draw, _type);
+      ErasePlanetOrSun(_canvas, _state, _math, _type);
       return;
     }
 
     if (Project(_ship, _math, _centre).offScreen)
     {
-      ErasePlanetOrSun(_canvas, _state, _math, _draw, _type);
+      ErasePlanetOrSun(_canvas, _state, _math, _type);
       return;
     }
 
@@ -813,14 +818,14 @@ namespace Elite
     // 6502: LDA TYPE / LSR A / BCC PL9 / JMP SUN.
     if ((Byte(_type) & 0x01u) != 0u)
     {
-      DrawSun(_canvas, _state, _draw, _math, _rng, _centre);
+      DrawSun(_canvas, _state, _math, _rng, _centre);
       return;
     }
 
-    DrawPlanetDetail(_canvas, _state, _draw, _geometry, _math, _clip, _ship, _centre, _type);
+    DrawPlanetDetail(_canvas, _state, _geometry, _math, _clip, _ship, _centre, _type);
   }
 
-  void DrawSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng,
+  void DrawSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, Rng& _rng,
                const Projection& _centre) noexcept
   {
     // 6502: LDA #1 / STA LSX -- entry 0 stops being the "nothing there" flag the moment the
@@ -830,7 +835,7 @@ namespace Elite
     if (CircleOffScreen(_state, _math, _centre))
     {
       // 6502: BCS PLF3M3 / JMP WPLS -- nothing of it is on screen, so only rub out the old one.
-      EraseSun(_canvas, _state, _math, _draw);
+      EraseSun(_canvas, _state, _math);
       return;
     }
 
@@ -910,7 +915,7 @@ namespace Elite
     {
       if (_state.sun[row] != 0u)
       {
-        EraseSunRow(_canvas, _state, _math, _draw, _state.sun[row], row);
+        EraseSunRow(_canvas, _state, _math, _state.sun[row], row);
       }
       --row;
     }
@@ -938,7 +943,6 @@ namespace Elite
       const SubResult widthLow = SubtractWithCarry(_math.k2[0], vSquared.low, true);
       const std::uint8_t widthHigh = SubtractWithCarry(_math.k2[1], vSquared.high, widthLow.carry).value;
 
-      _draw.y1 = row;
       const Root root = SquareRoot(widthHigh, widthLow.value);
       _math.q = root.value; // 6502: LL5's ROL Q -- and the last row's root is the frame's Q when the sun is the last slot drawn
 
@@ -960,45 +964,44 @@ namespace Elite
 
       if (was != 0u)
       {
-        // The old line, clipped against LAST frame's centre.
+        // The old line, clipped against LAST frame's centre. Its two ends go in `XX(1 0)`, which
+        // `PLF23` reads back.
         _math.yy = _state.sunX;
         _math.yyNext = _state.sunXNext;
-        (void)ClipSunRow(_state, _math, _draw, was, row);
-        _math.xx = _draw.x1;
-        _math.xxNext = _draw.x2;
+        const SunRow old = ClipSunRow(_state, _math, was, row);
+        _math.xx = old.x1;
+        _math.xxNext = old.x2;
 
         // And the new one, against this frame's.
         _math.yy = _centre.x;
         _math.yyNext = _centre.x1;
-        const bool offScreen = ClipSunRow(_state, _math, _draw, _state.sun[row], row);
+        const SunRow fresh = ClipSunRow(_state, _math, _state.sun[row], row);
 
-        if (!offScreen)
+        if (!fresh.offScreen)
         {
           // 6502: the two ends CROSSED OVER, so what is drawn is one end of the old line to the
           // matching end of the new one -- the sliver that has appeared or gone.
-          const std::uint8_t held = _draw.x2;
-          _draw.x2 = _math.xx;
+          const std::uint8_t held = fresh.x2;
+          DrawHorizontalLine(_canvas, fresh.x1, _math.xx, row);
           _math.xx = held;
-          DrawHorizontalLine(_canvas, _draw.x1, _draw.x2, _draw.y1);
         }
 
         // 6502: PLF23 -- and the other sliver.
-        _draw.x1 = _math.xx;
-        _draw.x2 = _math.xxNext;
-        DrawHorizontalLine(_canvas, _draw.x1, _draw.x2, _draw.y1);
+        DrawHorizontalLine(_canvas, _math.xx, _math.xxNext, row);
       }
       else
       {
         // 6502: PLF11 -- nothing was there last frame, so the whole of the new line is drawn.
         _math.yy = _centre.x;
         _math.yyNext = _centre.x1;
-        if (ClipSunRow(_state, _math, _draw, _state.sun[row], row))
+        const SunRow fresh = ClipSunRow(_state, _math, _state.sun[row], row);
+        if (fresh.offScreen)
         {
           _state.sun[row] = 0;
         }
         else
         {
-          DrawHorizontalLine(_canvas, _draw.x1, _draw.x2, _draw.y1);
+          DrawHorizontalLine(_canvas, fresh.x1, fresh.x2, row);
         }
       }
 
@@ -1048,7 +1051,7 @@ namespace Elite
       {
         if (_state.sun[row] != 0u)
         {
-          EraseSunRow(_canvas, _state, _math, _draw, _state.sun[row], row);
+          EraseSunRow(_canvas, _state, _math, _state.sun[row], row);
         }
         --row;
       }
@@ -1173,7 +1176,7 @@ namespace Elite
     ClearAllShips(_canvas, _state, _bubble, _work, _flight, _view);
   }
 
-  void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
+  void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                           ClipState& _clip, const Projection& _centre, std::uint8_t _index, TunnelEffects* _pacing) noexcept
   {
     // 6502: .HFL1 LDA XX4 / AND #7 / CLC / ADC #8 / STA K -- the ring's starting radius.
@@ -1189,7 +1192,7 @@ namespace Elite
      * previous. The whole effect is one heap entry deep.
      */
       _state.lsp = 1u;
-      DrawBall(_canvas, _state, _draw, _geometry, _math, _clip, _centre, false);
+      DrawBall(_canvas, _state, _geometry, _math, _clip, _centre, false);
 
       /*
        * Not in the 6502, and it is the display's absence rather than an addition to the routine.
@@ -1220,7 +1223,7 @@ namespace Elite
     }
   }
 
-  void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry,
+  void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
                            MathWorkspace& _math, ClipState& _clip, TunnelEffects* _pacing) noexcept
   {
     // 6502: LDX #X / STX K3 / LDX #Y / STX K4 / LDX #0 / STX XX4 / STX K3+1 / STX K4+1.
@@ -1234,7 +1237,7 @@ namespace Elite
     for (std::uint8_t index = 0; index < 8u; ++index)
     {
       _geometry.xx4 = index;
-      DrawHyperspaceRing(_canvas, _state, _draw, _geometry, _math, _clip, centre, index, _pacing);
+      DrawHyperspaceRing(_canvas, _state, _geometry, _math, _clip, centre, index, _pacing);
     }
 
     // 6502: the loop leaves `XX4` at eight, and `LL9` part 1 is the next thing to read it.

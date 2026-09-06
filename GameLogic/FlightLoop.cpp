@@ -1128,7 +1128,7 @@ namespace Elite
       // 6502: .MA8 JSR LL9 -- and it is the same call that erases the last frame's ship.
       if (drawIt)
       {
-        DrawShip(screen.canvas, screen.draw, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work, block, _loop.heap,
+        DrawShip(screen.canvas, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work, block, _loop.heap,
                  *screen.flight.blueprint, type, _loop.drawing, screen.rng, carry);
       }
 
@@ -1353,7 +1353,7 @@ namespace Elite
 
         if (ahead && WithinRange(screen.work, STATION_SPAWN_RANGE))
         {
-          EraseSun(screen.canvas, screen.heaps, screen.math, screen.draw); // 6502: JSR WPLS
+          EraseSun(screen.canvas, screen.heaps, screen.math); // 6502: JSR WPLS
 
           // 6502: JSR NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties
           // the sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
