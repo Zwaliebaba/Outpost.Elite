@@ -316,6 +316,6 @@ namespace Elite
    * every 6,553.6 credits and a poor player inside one is offered a free Trumble. Ported rather
    * than fixed, and recorded in ADR-001 §6.
    */
-  [[nodiscard]] ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, KeySource& _keys) noexcept;
+  [[nodiscard]] ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, Keyboard& _keys) noexcept;
 
 } // namespace Elite

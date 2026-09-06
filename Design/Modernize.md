@@ -291,24 +291,24 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->12 reference members,
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->11 reference members,
 and they were seventy-eight before M3-a. All seven argument-list structs are gone — `FlightScreen`,
 `FlightLoop`, `MissionScreen` and `TitleScreen` in M3-a-2, `TradeScreen`, `SaveScreen`, `GameStart`
-and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The fourteen that
-remain ARE `Ports`**, which is the one struct §4.5 exists to collapse: M3-b replaces its eleven
-interfaces with four ports without touching a signature again. `ViewChange.h` said it plainly while
+and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The eleven that
+remain ARE `Ports`**, which is the one struct §4.5 exists to collapse: M3-b replaces its interfaces
+with four ports without touching a signature again, and three of the four have landed. `ViewChange.h` said it plainly while
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
 <!--count:main-lines-->1,161 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->174 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->166 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->12 abstract classes in
-`GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `TunnelEffects::ShowFrame`,
-`SaveStore` through `SaveScreen`). Most are **phase order**:
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->11 abstract classes in
+`GameLogic/*.h`. Some are platform (`TextSink`, `Keyboard`, `Presenter`, `SaveStore` through
+`SaveScreen`). Most are **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
 `ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each declared when the routine on the
 far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
@@ -349,7 +349,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,910 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,924 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -582,15 +582,17 @@ port because a windowed program cannot block and the plan does not change that (
 
 | Port | Replaces | Methods |
 |---|---|---|
-| `Presenter` | `TunnelEffects::ShowFrame`, `TradeScreenEffects::ClearToView` (the pixels half), `LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames`, `ExplosionEffects`/`SightEffects`'s VIC pokes (they become `VideoState` writes the library makes itself) | `Present()`, `WaitFrames(n)` |
-| `Keyboard` | `KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys`, `FlushKeyboard`, `JumpState::controlHeld` | `Scan(KeyLogger&)`, `NextKey()`, `Flush()` |
-| `SoundSink` | `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep`, `FlightLoopEffects::Start/StopDockingMusic` | `Write(SidRegister, value)` — the library runs `NOISE` and the music player itself and emits register writes, which ADR-003 §1 already says is the port's `SoundEvent` stream |
+| `Presenter` ✅ **M3-b-3b/3c** | `TunnelEffects::ShowFrame`, `TradeScreenEffects::ClearToView` (the pixels half), `LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames`, `ExplosionEffects`/`SightEffects`'s VIC pokes (they become `VideoState` writes the library makes itself) | `WaitFrames(n)`, `Present()`, `HoldFlightFrame(ships)`, `HoldTitleFrame(distance)` — four, because one `ShowFrame` was carrying three pacing policies and the two holds are two different cost curves |
+| `Keyboard` ✅ **M3-b-3d** | `KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys`, `LineEntryEffects::FlushKeyboard` (`JumpState::controlHeld` is a chart's own byte and stays) | `Held(key)`, `NextKey()`, `Flush()` — **not** `Scan(KeyLogger&)`: `RDKEY` is `Elite::ScanKeyboard` in the library and only the row read is the platform's (§8, 2026-09-06) |
+| `SoundSink` ✅ **M3-b-2b** | `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep`, `FlightLoopEffects::Start/StopDockingMusic` | `Write(SidRegister, value)` — the library runs `NOISE` and the music player itself and emits register writes, which ADR-003 §1 already says is the port's `SoundEvent` stream |
 | `SaveStore` | `CommanderStore`, which is what the `SaveScreen` half that reads and writes files became in M3-a-3 | `Load(name) -> std::optional<Image>`, `Save(name, Image)` |
 
 **`Elite::Ports` is the intermediate this table collapses.** M3-a-3 left one struct of fourteen
 references — three printers and eleven interfaces — where seven argument-list structs had held
 seventy-eight, and that is the whole surface M3-b works on: the four rows above replace the eleven,
-and no signature changes again.
+and no signature changes again. Eleven references after M3-b-3d, with `SaveStore` the row still to
+land — and each port has arrived in the same commit as at least one removal, because a ceiling with
+zero slack does not let a struct grow first and shrink afterwards (§8, 2026-09-06).
 
 Everything else in the twenty-two is either a call into a routine that now exists (`RunTactics`,
 `DrawPlanetOrSun`, `SpawnAhead`, `Anger`, `SpawnChild`, `ChartShapes`, `DrawExplosion`,
@@ -1371,6 +1373,13 @@ which is also why the oracle traps it and a suite that untrapped it would hang (
 `TunnelEffects::ShowFrame` became `Present()` in M3-b-3c — and it was one method carrying three
 answers, one of which the executable was getting wrong (§8).
 
+**M3-b-3d landed `Keyboard`, and the row above is wrong about that one too.** `ControlEffects::
+ScanKeyboard` does not become a method of it: `RDKEY` is `Elite::ScanKeyboard` in the library and
+the port answers `Held(key)`, because the walk is the only part of the routine that reads hardware
+and everything around it was already the library's (§8). `StartUpEffects::ScanTitleKeys` goes with
+it, its reason answered by `Presenter::HoldTitleFrame`. **M3-b-3 is complete**; three of §4.5's four
+ports have landed and `SaveStore` is M3-b-4's.
+
 **M3-b-4 — `SaveStore`, the text system, and the null port.** `CommanderStore` is renamed to §4.5's
 name. `TextSink`, `ValueTokens` and `ControlCodes` are the text system's own polymorphism rather
 than platform, and are the three the table does not mention: they go by the same argument as the
@@ -1713,6 +1722,63 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-3d: `Keyboard` lands, and `RDKEY` turns out to be one line of platform under
+fifty of game.** The third of §4.5's four ports replaces `KeySource`, `LineEntryEffects` and
+`StartUpEffects::ScanTitleKeys`, and it does NOT have the `Scan(KeyLogger&)` the table asked for.
+The routine walks `&DC00`/`&DC01` eight columns at a time, and everything around that walk had
+already stopped being the platform's: the `SETL1` bracket is `MemoryMap` since M3-b-3a, the sprite
+mask is a `VideoState` write, `ZEKTRAN` is sixty-five bytes of `Universe`, the countdown that leaves
+`thiskey` holding the LOWEST-numbered held key is arithmetic, and the `QQ11` tail is the piece this
+port's own comment has called "the one piece of `RDKEY` that is game logic" since slice 3d. So the
+port answers `Held(key)` and `Elite::ScanKeyboard` is the rest — compared, ratcheted and mutated
+like anything else in the library.
+
+**IT WAS TRANSCRIBED THREE TIMES AND IS NOW WRITTEN ONCE.** `FlightSession::ScanMatrix` in the app,
+`FlightPort::ScanKeyboard` in the tests and `GameShell`'s title-screen path were three copies of the
+same fifty lines, each with its own `NON_STEERING_KEYS` array and its own `RDKEY_SPRITE_MASK`, and
+two of them also carried ADR-005 §4's chart-view steering rule — which is the port's own and not
+`RDKEY`'s, and so exactly the kind of rule that drifts when it lives in three places. Two copies are
+deleted and the third is the library's.
+
+**AND THE SECOND SEAM FOR THE SAME ROUTINE GOES WITH IT.** `StartUpEffects::ScanTitleKeys` existed
+because the title screen must PRESENT between two drawn frames where a flight loop must not, and the
+argument recorded beside it was that the difference is in the platform AROUND the scan rather than
+in the scan. That was true and is answered by `Presenter::HoldTitleFrame`, which M3-b-3c's shape
+made available: the hold happens at the call site and the scan is one routine again. `TITLE`'s loop,
+`PAS1` and `PAUSE2` all now read `HoldTitleFrame` then `ScanKeyboard`, which is the order the 6510
+had for free.
+
+**`ReadNumber` AND `ReadLine` LOST A PARAMETER EACH, AND `ReadFlightControls` LOST FOUR.** The line
+editor took a `LineEntryEffects&` for one method; `DOKEY` took the five bytes it reads and a seam,
+and takes `(Universe&, Ports&, ControlEffects&)` — which is M3-a's shape, arrived at here because
+`ScanKeyboard` needs `video`, `memoryMap`, `keys` and `QQ11` and they are all in the universe.
+`ControlEffects` is down to `RunDockingComputer`.
+
+**WHAT THE SUITE STILL DOES NOT COMPARE, said plainly.** `Elite::ScanKeyboard` has no oracle test.
+The shipped `RDKEY` selects a matrix column by writing `&DC00` and reads the answer from `&DC01`,
+and `Cpu6502`'s memory is FLAT — one byte at `&DC01` whatever was written — so an oracle running the
+real routine would read the same column eight times and compare nothing. Comparing it needs CIA
+1 modelled in the emulator, which is the same shape of blocker `ShipDrawEffects` waits on (§6.108's
+banking) and belongs in the same slice. Until then both sides of `DOKEY` are stubbed at `RDKEY` and
+the port's stub is a `Keyboard` that holds down the four steering keys the case names, so the logger
+`ScanKeyboard` rebuilds is the one the test seeded. That is a comparison of `DOKEY`, which is what
+it always was, and not of the walk.
+
+**Three fixtures learned that a seam is what a suite COUNTS (§6.73's corollary, for the tenth
+time).** `MissionTests` scripted `TitleKey{pressed, key}` and now scripts which key is DOWN, with
+the walk turning that into the carry and `thiskey`; `LaunchTests` the same, `KY7` included so the
+title loop still takes `BMI TL3`; `NameEntryTests` compared the ORDER `DELAY` and `FLKB` are reached
+in, so the keyboard writes into the presenter's log rather than keeping one of its own. `PortsWith`
+gained a fifth argument for the fixtures that reach the keyboard, and the four-argument form fills
+it with nothing — which is what made `TheBriefingShipMatchesPAS1` fail loudly and the two `PAUSE`
+tests HANG rather than fail, the first sign of a fixture whose keyboard was answering the wrong
+object.
+
+397 of 397 green. `aggregate-refs` 12 → 11, `effects-seams` 12 → 11, `outpost-elite-names` 174 →
+166, and `origin-markers` 3,910 → 3,924 -- UP, which is the one direction rule 5 allows before M6:
+`Outpost/FlightSession.cpp` lost nine markers and `GameLogic/Controls.cpp` gained them, because they
+came with the routine (rule 4). `mi-pause2-loop` is re-anchored on the call it now names.
 
 **2026-09-06 — M3-b-3c's fix: the braces a scripted deletion took were the ones holding a `case`
 label off a declaration, and a sixth half of `check_outpost.py` is what says so now.** Removing

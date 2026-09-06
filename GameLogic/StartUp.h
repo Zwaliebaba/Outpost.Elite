@@ -77,11 +77,8 @@ namespace Elite
    * thing being ported, and an interface that bundled them would have nothing left to compare.
    */
   /// 6502: what `RDKEY` leaves behind -- the carry, and `thiskey` in both X and A.
-  struct TitleKey
-  {
-    bool pressed = false; ///< 6502: the carry, SET when the matrix walk found something
-    std::uint8_t key = 0; ///< 6502: thiskey, which is what `TITLE` returns and `BR1` compares
-  };
+  // `TitleKey` moved to `Controls.h` in M3-b-3d, beside the routine that answers it: `RDKEY` is
+  // `Elite::ScanKeyboard` and the title screen is one of its two callers rather than its owner.
 
   class StartUpEffects
   {
@@ -134,21 +131,15 @@ namespace Elite
      */
 
     /*
-     * 6502: JSR RDKEY at the bottom of `TLL2` -- the title screen's per-frame keyboard scan.
+     * `ScanTitleKeys` WAS HERE AND IS NOT ANY MORE (M3-b-3d).
      *
-     * IT IS A SECOND SEAM FOR THE SAME ROUTINE, and that is deliberate rather than the §6.59
-     * mistake. `ControlEffects::ScanKeyboard` is `RDKEY` for `DOKEY`, inside the flight loop, where
-     * the app has already presented the frame before stepping; this one is `RDKEY` for `TITLE`,
-     * whose loop is entirely inside `GameLogic` and so is the only thing standing between two drawn
-     * frames. The two callers want different things from the platform AROUND the scan, not
-     * different things from the scan, which is why the difference is in the seam rather than in an
-     * argument: an implementation that presented on both would cap the flight loop at one frame in
-     * five, and one that presented on neither would leave the title ship invisible.
-     *
-     * It answers what `RDKEY` answers: the carry, and `thiskey` -- the LOWEST-numbered held key,
-     * because the matrix walk counts down from &40 and the last store wins.
+     * It was a SECOND seam for `RDKEY`, and the reason given was that the two callers want
+     * different things from the platform AROUND the scan rather than different things from the
+     * scan: the title screen is the only thing standing between two drawn frames and must present,
+     * where a flight loop that presented would cap itself at one frame in five. That was true and
+     * is answered by `Presenter` -- `HoldTitleFrame` before the scan, `ScanKeyboard` for the scan.
      */
-    [[nodiscard]] virtual TitleKey ScanTitleKeys(KeyLogger& _keys) = 0;
+
 
     /*
      * `WaitFrames` WAS HERE AND IS `Presenter`'s SINCE M3-b-3b.

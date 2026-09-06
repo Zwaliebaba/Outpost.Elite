@@ -64,7 +64,7 @@ namespace Elite
     void ReportAndReturnToMenu(Universe& _universe, Ports& _ports, std::uint8_t _token) noexcept
     {
       _ports.tokens.Print(_token);
-      (void)_ports.keys.NextKey();
+      (void)_ports.keyboard.NextKey();
     }
   } // namespace
 
@@ -108,7 +108,7 @@ namespace Elite
     return result;
   }
 
-  bool AskYesNo(KeySource& _keys) noexcept
+  bool AskYesNo(Keyboard& _keys) noexcept
   {
     // 6502: YESNO -- JSR t / CMP #'Y' / BEQ PL6 / CMP #'N' / BNE YESNO / CLC / RTS.
     for (;;)
@@ -250,7 +250,7 @@ namespace Elite
       _ports.tokens.Print(MENU_TOKEN);
 
       // 6502: JSR t.
-      const std::uint8_t key = _ports.keys.NextKey();
+      const std::uint8_t key = _ports.keyboard.NextKey();
 
       /*
        * 6502: `loading` -- JSR GTNMEW / JSR LOD / JSR TRNME / SEC / RTS.
@@ -265,7 +265,7 @@ namespace Elite
         // The name GTNME falls back on is the IMAGE's, through TR1's `LDA NA%,X` -- not the live
         // commander's. Type nothing and you keep the name you last saved under, which need not be
         // the name you are playing as.
-        (void)AskCommanderName(_ports.keys, _ports.sink, _universe.text, _ports.tokens, _ports.entry, _ports.present,
+        (void)AskCommanderName(_ports.keyboard, _ports.sink, _universe.text, _ports.tokens, _ports.present,
                                _universe.lineBuffer, imageName, limits);
 
         std::array<std::uint8_t, COMMANDER_FILE_SIZE> file{};
@@ -307,7 +307,7 @@ namespace Elite
        */
       if (key == DISK_MENU_SAVE)
       {
-        (void)AskCommanderName(_ports.keys, _ports.sink, _universe.text, _ports.tokens, _ports.entry, _ports.present,
+        (void)AskCommanderName(_ports.keyboard, _ports.sink, _universe.text, _ports.tokens, _ports.present,
                                _universe.lineBuffer, imageName, limits);
 
         // 6502: JSR TRNME -- and here it runs BEFORE the file is touched, so the name the store is
@@ -372,7 +372,7 @@ namespace Elite
         (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
         // 6502: JSR t -- one key before the menu gives the screen back.
-        (void)_ports.keys.NextKey();
+        (void)_ports.keyboard.NextKey();
 
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Saved;
@@ -402,7 +402,7 @@ namespace Elite
       if (key == DISK_MENU_DEFAULT)
       {
         _ports.tokens.Print(CONFIRM_TOKEN);
-        if (!AskYesNo(_ports.keys))
+        if (!AskYesNo(_ports.keyboard))
         {
           return Leave(DiskMenuResult{});
         }

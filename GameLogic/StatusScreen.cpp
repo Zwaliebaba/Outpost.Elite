@@ -141,7 +141,7 @@ namespace Elite
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
     SetUpScreen(_universe, _ports, INVENTORY_VIEW);
-    _ports.entry.FlushKeyboard();
+    _ports.keyboard.Flush();
 
     /*
      * 6502: JSR TT111 -- the system nearest the crosshairs, whose seeds the title line then prints.

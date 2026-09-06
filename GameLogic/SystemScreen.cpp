@@ -135,7 +135,7 @@ namespace Elite
   {
     // 6502: LDA #1 / JSR TRADEMODE -- which sets the cursor and the case flags too.
     SetUpScreen(_universe, _ports, DATA_ON_SYSTEM_VIEW);
-    _ports.entry.FlushKeyboard();
+    _ports.keyboard.Flush();
 
     // 6502: LDA #9 / JSR DOXC / LDA #163 / JSR NLIN3 -- the rule NLIN3 falls into is the canvas's,
     // and a caller draws it, exactly as the market screen and the status screen do.

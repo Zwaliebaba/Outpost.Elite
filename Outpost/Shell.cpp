@@ -170,9 +170,17 @@ namespace Outpost
     }
   }
 
-  void GameShell::FlushKeyboard()
+  void GameShell::Flush()
   {
     m_window.FlushKeys(); // 6502: FLKB
+  }
+
+  bool GameShell::Held(std::size_t _key)
+  {
+    // 6502: the matrix walk's read of one row. Everything around it -- the `SETL1` bracket, the
+    // sprite mask, `ZEKTRAN`'s clear and the countdown that produces `thiskey` -- is
+    // `Elite::ScanKeyboard`'s since M3-b-3d.
+    return m_window.Held(static_cast<std::uint8_t>(_key));
   }
 
   void GameShell::ClearKeyLogger()
@@ -240,16 +248,13 @@ namespace Outpost
     WaitFrames(1u);
   }
 
-  Elite::TitleKey GameShell::ScanTitleKeys(Elite::KeyLogger& _keys)
+  void GameShell::HoldTitleFrame(std::uint8_t _distance)
   {
     /*
-     * 6502: JSR RDKEY at the bottom of `TLL2` -- and the PRESENT that comes with it on this
-     * platform.
-     *
      * `LL9` has just drawn the ship into the canvas and nothing else stands between this frame and
      * the next, so the turn belongs here: the C64 had a VIC-II showing the bitmap continuously and
-     * this does not. It is also the only place the keyboard can be read at all, because the table
-     * `Held` walks is filled by the message pump `Turn` runs.
+     * this does not. It is also what fills the table `Held` reads, because that is the message
+     * pump `Turn` runs -- so a scan without one of these would see a keyboard nobody had polled.
      */
     /*
      * AND THE WAIT, WHICH IS THE POINT. `TITLE` runs `MVEIT` and `LL9` and comes straight back
@@ -275,12 +280,11 @@ namespace Outpost
       m_lastSpin = now;
 
       /*
-       * The rate is read fresh every time because it CHANGES: the ship is a dot when it starts and
-       * a wireframe across the middle of the screen when it arrives, and those cost 15,600 and
-       * 121,276 cycles. `INWK+7` is the byte `TLL2` walks down, so it is what the curve is indexed
-       * by -- the port is reading the same counter the original's cost depends on.
+       * The rate changes as the sequence runs: the ship is a dot when it starts and a wireframe
+       * across the middle of the screen when it arrives, and those cost 15,600 and 121,276 cycles.
+       * `_distance` is `INWK+7`, the byte `TLL2` walks down, and the library passes it (M3-b-3d).
        */
-      const double period = TitleTurnSeconds(m_flight->Universe().work.z.hi);
+      const double period = TitleTurnSeconds(_distance);
 
       m_spinLeftover += elapsed;
       if (m_spinLeftover >= period)
@@ -291,8 +295,6 @@ namespace Outpost
         break;
       }
     }
-
-    return (m_flight != nullptr) ? m_flight->ScanMatrix(_keys) : Elite::TitleKey{true, 0u};
   }
 
   std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance)

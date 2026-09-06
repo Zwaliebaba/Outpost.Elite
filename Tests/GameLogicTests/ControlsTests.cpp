@@ -5,13 +5,19 @@
 
 #include "Charts.h"
 #include "Controls.h"
+#include "NullSeams.h"
 
 #include "Arith.h"
 #include "Canvas.h"
 #include "Commander.h"
+#include "ExtendedTokens.h"
 #include "LookupTables.h"
+#include "Ports.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
+#include "SoundEffects.h"
+#include "Tokens.h"
+#include "Universe.h"
 
 #include <array>
 #include <cstdint>
@@ -286,6 +292,96 @@ namespace GameLogicTests
       cpu.AddTrap(oracle.Label("RDKEY"));
       cpu.AddTrap(oracle.Label("DK4")); // which is `.ant`, where the port's function ends
 
+      /*
+       * The port's side of `RDKEY`, and BOTH SIDES ARE STILL STUBBED (M3-b-3d).
+       *
+       * `DOKEY` opens `JSR RDKEY`, which the oracle traps because it is the CIA matrix scan. The
+       * port used to answer with a seam that did nothing, so the key logger each side compared was
+       * the one this test seeded. `RDKEY` is `Elite::ScanKeyboard` since M3-b-3d and the port runs
+       * it for real -- `ZEKTRAN`, the walk, the `QQ11` tail -- so the seed has to arrive through
+       * the walk instead: this keyboard holds down exactly the four steering keys the case asks
+       * for and `ScanKeyboard` rebuilds the same logger from them.
+       *
+       * IT IS NOT A COMPARISON OF `RDKEY` AND DOES NOT PRETEND TO BE. The walk reads `&DC00` and
+       * `&DC01` eight columns at a time, and `Cpu6502`'s memory is flat -- one byte at `&DC01`
+       * whatever column was selected -- so an oracle that ran the real routine would read the same
+       * column eight times. Comparing it needs the CIA modelled in the emulator, which is the same
+       * shape of blocker `ShipDrawEffects` is waiting on (§6.108) and is recorded beside it.
+       */
+      struct ScriptedMatrix final : Elite::Keyboard
+      {
+        std::uint8_t held = 0;     ///< bits 0-3: KY3, KY4, KY5, KY6 held, as the case names them
+        std::uint32_t scans = 0; ///< walks, counted at the key each one starts on
+
+        [[nodiscard]] bool Held(std::size_t _key) override
+        {
+          // `ScanKeyboard` counts DOWN from the top of the logger, so the highest index is where a
+          // walk begins -- which is what makes "one scan per DOKEY" still an assertion about scans.
+          if (_key + 1u == std::tuple_size_v<Elite::KeyLogger>)
+          {
+            ++scans;
+          }
+          if (_key == Elite::KEY_ROLL_LEFT)
+          {
+            return (held & 1u) != 0u;
+          }
+          if (_key == Elite::KEY_ROLL_RIGHT)
+          {
+            return (held & 2u) != 0u;
+          }
+          if (_key == Elite::KEY_PITCH_UP)
+          {
+            return (held & 4u) != 0u;
+          }
+          if (_key == Elite::KEY_PITCH_DOWN)
+          {
+            return (held & 8u) != 0u;
+          }
+          return false;
+        }
+        [[nodiscard]] std::uint8_t NextKey() override { return 0; }
+        void Flush() override {}
+      } board;
+
+      /*
+       * 6502: JSR DOCKIT, replaced on the port's side by the same stub the oracle is loaded with.
+       *
+       * The speed is EORed rather than stored for the reason the oracle's stub is: `DOCKIT` READS
+       * `INWK+27`, so a stub that only wrote it would make `LDA DELTA / STA INWK+27` invisible.
+       */
+      struct Stub final : Elite::ControlEffects
+      {
+        Autopilot answer{};
+        std::uint32_t runs = 0;
+
+        void RunDockingComputer(Elite::Ship& _work) override
+        {
+          _work.speed = static_cast<std::uint8_t>(_work.speed ^ answer.speed);
+          _work.acceleration = answer.acceleration;
+          _work.rollCounter = answer.roll;
+          _work.pitchCounter = answer.pitch;
+          ++runs;
+        }
+      };
+
+      /*
+       * The universe and the ports, built ONCE -- `DOKEY` reaches eight of its bytes and none of
+       * the text machinery, but a `Ports` binds every reference in it whether or not it is read.
+       */
+      struct Discard final : Elite::TextSink
+      {
+        void Put(std::uint8_t) override {}
+      } discard;
+
+      Elite::Universe universe;
+      NullSeams nulls;
+      Elite::CharacterPrinter characters{discard};
+      Elite::TokenPrinter printer{characters};
+      Elite::ExtendedTokenPrinter extended{characters, printer, universe.rng};
+      Elite::SidWriteLog sid;
+      Elite::Ports ports{printer,  characters, characters, nulls, nulls, sid,
+                         extended, nulls,      nulls,      board, nulls};
+
       std::uint32_t recentredByStick = 0;
       std::uint32_t bigRollRequests = 0;
       std::uint32_t clampedSpeed = 0;
@@ -363,41 +459,35 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"DOKEY reached .ant");
 
         // ---- the port -------------------------------------------------------------------------
-        struct Stub final : Elite::ControlEffects
-        {
-          Autopilot answer{};
-          std::uint32_t scans = 0;
-          std::uint32_t runs = 0;
-
-          void ScanKeyboard() override
-          {
-            ++scans;
-          }
-          void RunDockingComputer(Elite::Ship& _work) override
-          {
-            _work.speed = static_cast<std::uint8_t>(_work.speed ^ answer.speed);
-            _work.acceleration = answer.acceleration;
-            _work.rollCounter = answer.roll;
-            _work.pitchCounter = answer.pitch;
-            ++runs;
-          }
-        } effects;
+        Stub effects;
         effects.answer = item.autopilot;
+        board.held = item.keys;
+        board.scans = 0;
 
-        Elite::ControlState control;
-        control.roll = item.roll;
-        control.pitch = item.pitch;
-        control.dockingComputer = item.docking;
+        universe.keys = keys;
+        universe.view = 0u; // 6502: QQ11 -- the space view, where `RDKEY` forgets nothing
 
-        Elite::ControlOptions options;
-        options.recentreDisabled = item.recentre;
-        options.joystick = item.joystick;
+        universe.control = Elite::ControlState{};
+        universe.control.roll = item.roll;
+        universe.control.pitch = item.pitch;
+        universe.control.dockingComputer = item.docking;
 
-        Elite::FlightState flight;
-        flight.delta = 7u;
-        flight.type = Elite::ShipType::None;
+        universe.options = Elite::ControlOptions{};
+        universe.options.recentreDisabled = item.recentre;
+        universe.options.joystick = item.joystick;
 
-        Elite::ReadFlightControls(keys, control, options, work, flight, effects);
+        universe.flight = Elite::FlightState{};
+        universe.flight.delta = 7u;
+        universe.flight.type = Elite::ShipType::None;
+
+        universe.work = work;
+
+        Elite::ReadFlightControls(universe, ports, effects);
+
+        Elite::ControlState& control = universe.control;
+        Elite::FlightState& flight = universe.flight;
+        work = universe.work;
+        keys = universe.keys;
 
         const std::wstring where = Widen("DOKEY(auto " + std::to_string(item.docking) + ", JSTK " + std::to_string(item.joystick) +
                                          ", DJD " + std::to_string(item.recentre) + ", JSTX " + std::to_string(item.roll) + ", JSTY " +
@@ -421,7 +511,7 @@ namespace GameLogicTests
                            (where + L": INWK+" + std::to_wstring(byte)).c_str());
         }
 
-        Assert::AreEqual<std::uint32_t>(1u, effects.scans, (where + L": one keyboard scan").c_str());
+        Assert::AreEqual<std::uint32_t>(1u, board.scans, (where + L": one keyboard scan").c_str());
         Assert::AreEqual<std::uint32_t>(item.docking != 0u ? 1u : 0u, effects.runs,
                                         (where + L": the autopilot ran only when it is on").c_str());
 

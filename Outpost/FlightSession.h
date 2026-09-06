@@ -122,16 +122,14 @@ namespace Outpost
     /*
      * 6502: RDKEY, once, into whichever logger the caller owns.
      *
-     * Public because `GameShell` needs it for the title screen and `ControlEffects::ScanKeyboard`
+     * Public because `GameShell` needs it for the title screen and the flight loop's own scan
      * needs it for the flight loop, and they must be the same scan: two implementations of `RDKEY`
      * is §6.59's mistake, and the difference between the two callers is the PRESENT around it
      * rather than anything in here.
      */
-    [[nodiscard]] Elite::TitleKey ScanMatrix(Elite::KeyLogger& _keys) noexcept;
 
     // ---- Elite::ControlEffects ------------------------------------------------------------------
 
-    void ScanKeyboard() override;
 
     // `ChartShapes` was answered here rather than removed "because the charts are compared against
     // the shipped game through it (§6.115)". M3-b-1b removed it: the charts draw through the

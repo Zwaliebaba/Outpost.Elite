@@ -34,7 +34,9 @@
  * `WaitFrames` used to satisfy `StartUpEffects` and `LineEntryEffects` with one override, because
  * `DELAY` is one routine in the game and the two interfaces were two views of it. It is
  * `Presenter`'s alone since M3-b-3b, which is that observation made in the library rather than in
- * every implementation of it.
+ * every implementation of it. `ScanTitleKeys` and `FlushKeyboard` went the same way in M3-b-3d:
+ * the first is `Elite::ScanKeyboard` in the library over `Keyboard::Held`, and the second is
+ * `Keyboard::Flush`.
  */
 namespace GameLogicTests
 {
@@ -42,8 +44,7 @@ namespace GameLogicTests
   struct NullSeams : Elite::ShipDrawEffects,
                      Elite::SpawnChildEffects,
                      Elite::StartUpEffects,
-                     Elite::KeySource,
-                     Elite::LineEntryEffects,
+                     Elite::Keyboard,
                      Elite::Presenter,
                      Elite::CommanderStore
   {
@@ -56,20 +57,19 @@ namespace GameLogicTests
 
     // Elite::StartUpEffects
     void ClearKeyLogger() override {}
-    Elite::TitleKey ScanTitleKeys(Elite::KeyLogger&) override { return {}; }
     std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override { return 0; }
 
     // Elite::Presenter
     void WaitFrames(std::uint8_t) override {}
     void Present() override {}
     void HoldFlightFrame(std::uint8_t) override {}
+    void HoldTitleFrame(std::uint8_t) override {}
 
-    // Elite::KeySource -- `TT217` BLOCKS in the game, so a fixture that reached it would hang
-    // rather than fail; this answers a key nothing dispatches.
+    // Elite::Keyboard -- no key is down, and `TT217` BLOCKS in the game, so a fixture that reached
+    // it would hang rather than fail; this answers a key nothing dispatches.
+    bool Held(std::size_t) override { return false; }
     std::uint8_t NextKey() override { return 0; }
-
-    // Elite::LineEntryEffects
-    void FlushKeyboard() override {}
+    void Flush() override {}
 
     // Elite::CommanderStore -- no fixture here touches a file, and false is "the device failed".
     bool Write(std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>,

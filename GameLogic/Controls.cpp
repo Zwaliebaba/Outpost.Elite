@@ -3,7 +3,10 @@
 #include "Controls.h"
 
 #include "EliteTypes.h"
+#include "FlightLoop.h" // for the KY12..KY20 offsets `RDKEY`'s `QQ11` tail clears
 #include "LookupTables.h"
+#include "Ports.h"
+#include "Universe.h"
 
 namespace Elite
 {
@@ -81,10 +84,88 @@ namespace Elite
     return moved;
   }
 
-  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, Ship& _work, FlightState& _flight,
-                          ControlEffects& _effects) noexcept
+  namespace
   {
-    _effects.ScanKeyboard(); // 6502: JSR RDKEY
+    /*
+     * 6502: the keys `DOKEY` ignores on every screen but the space view -- `RDKEY`'s answer to
+     * `QQ11 <> 0`.
+     *
+     * The bomb, the pod, the missiles, the E.C.M., the warp and the docking computer are the keys
+     * that DO something rather than steer; with a chart or a market on screen the scan reports them
+     * as unheld regardless of the keyboard. `DOKEY`'s six steering keys are deliberately not here.
+     */
+    constexpr std::size_t NON_STEERING_KEYS[] = {
+      KEY_ENERGY_BOMB, KEY_ESCAPE_POD, KEY_ARM_MISSILE,      KEY_UNARM_MISSILE,  KEY_FIRE_MISSILE,
+      KEY_ECM,         KEY_WARP,       KEY_DOCKING_COMPUTER, KEY_CANCEL_DOCKING,
+    };
+
+    /// 6502: RDKEY's `AND #%11111101` -- sprite 1 off while the matrix is scanned, and it is not
+    /// one of the four the sights use.
+    constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
+  } // namespace
+
+  TitleKey ScanKeyboard(KeyLogger& _keys, VideoState& _video, MemoryMap& _map, std::uint8_t _view, Keyboard& _keyboard) noexcept
+  {
+    SetMemoryMap(_map, MEMORY_MAP_IO);            // 6502: LDA #%101 / JSR SETL1
+    ApplyMaskSprites(_video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
+    _keys.fill(0u);                              // 6502: JSR ZEKTRAN
+
+    // 6502: LDX #&40 / .Rdi1 ... / DEC KEYLOOK,X / STX thiskey / SEC / .Rdi3 DEX / BMI Rdiex.
+    TitleKey answer;
+    for (std::uint8_t key = static_cast<std::uint8_t>(_keys.size()); key-- > 0u;)
+    {
+      if (_keyboard.Held(key))
+      {
+        _keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
+        answer.pressed = true;
+        answer.key = key;
+      }
+    }
+
+    // 6502: LDA QQ11 / BEQ allkeys -- with anything but the space view up, the nine keys that act
+    // rather than steer are forgotten.
+    if (_view != 0u)
+    {
+      for (const std::size_t index : NON_STEERING_KEYS)
+      {
+        _keys[index] = 0u;
+      }
+    }
+
+    /*
+     * AND THE STEERING KEYS GO ON A CHART, which is the port's rule and NOT `RDKEY`'s.
+     *
+     * On a C64 the two sets never collide: `<`, `>`, `X` and `S` steer and the cursor keys move the
+     * crosshairs, so `RDKEY` has no reason to drop the steering entries and does not. This port's
+     * map is a modern one (ADR-005 §4) and the arrows do both jobs, so one of them has to give way
+     * while a chart is up -- and it is the steering, because a chart is the one screen where the
+     * arrows are what you aim with. The alternative is a ship that rolls while you read the map.
+     *
+     * It is here rather than in `KeyMap` because this is where the game itself sorts keys by view,
+     * one statement above; and it is marked as the port's own so nobody looks for it in `RDKEY`.
+     */
+    if (IsChartView(_view))
+    {
+      for (const std::size_t index : {KEY_ROLL_LEFT, KEY_ROLL_RIGHT, KEY_PITCH_UP, KEY_PITCH_DOWN})
+      {
+        _keys[index] = 0u;
+      }
+    }
+
+    SetMemoryMap(_map, MEMORY_MAP_RAM); // 6502: LDA #%100 / JSR SETL1
+    return answer;
+  }
+
+  void ReadFlightControls(Universe& _universe, Ports& _ports, ControlEffects& _effects) noexcept
+  {
+    KeyLogger& _keys = _universe.keys;
+    ControlState& _control = _universe.control;
+    const ControlOptions& _options = _universe.options;
+    Ship& _work = _universe.work;
+    FlightState& _flight = _universe.flight;
+
+    // 6502: JSR RDKEY, whose answer `DOKEY` does not read.
+    static_cast<void>(ScanKeyboard(_keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard));
 
     // 6502: LDA auto / BEQ DK15 -- with the docking computer off, what is held down is what the
     // player is holding down.

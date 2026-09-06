@@ -460,8 +460,8 @@
         {
           "id": "mi-pause2-loop",
           "file": "GameLogic/Missions.cpp",
-          "find": "      if (_ports.start.ScanTitleKeys(_universe.keys).key != 0u)\n      {\n        return; // 6502: .newyearseve RTS\n      }\n    }\n  }",
-          "replace": "      while (_ports.start.ScanTitleKeys(_universe.keys).key == 0u)\n      {\n      }\n      return; // 6502: .newyearseve RTS\n    }\n  }",
+          "find": "      if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)\n      {\n        return; // 6502: .newyearseve RTS\n      }\n    }\n  }",
+          "replace": "      while (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key == 0u)\n      {\n      }\n      return; // 6502: .newyearseve RTS\n    }\n  }",
           "expect": "caught",
           "note": "PAUSE2's `BEQ PAUSE2` goes back to the TOP of the routine and not to the scan above it, so an empty second scan re-checks for a release the routine has already had. The mutant turns that into a do-while, which is the reading everybody has first. It shows only when the keyboard goes empty, empty, PRESSED: the real routine treats that third scan as 'still held' and goes round again, and the do-while takes it as the answer. Two scans apart, and nothing is drawn, so the scan count is the only instrument -- which is why the script counts calls in a byte that cannot wrap. The first version of this mutant was `continue` against an inner `while`, and those two ARE the same loop."
         },

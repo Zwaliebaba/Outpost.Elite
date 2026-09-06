@@ -4,6 +4,7 @@
 
 #include "Canvas.h"
 #include "Commander.h"
+#include "Controls.h"
 #include "ExtendedTokens.h"
 #include "NameEntry.h"
 #include "Rng.h"
@@ -17,7 +18,7 @@
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::CharacterPrinter;
-using Elite::KeySource;
+using Elite::Keyboard;
 using Elite::LineLimits;
 using Elite::LineResult;
 using Elite::TextState;
@@ -56,7 +57,7 @@ namespace GameLogicTests
 
     /// The port's side of a scripted keyboard. Records an overrun rather than throwing, because
     /// GameLogic is noexcept and an assertion here would unwind through it into std::terminate.
-    class ScriptedKeys : public KeySource
+    class ScriptedKeys : public Keyboard
     {
     public:
       explicit ScriptedKeys(std::vector<std::uint8_t> _keys) noexcept
@@ -64,7 +65,31 @@ namespace GameLogicTests
       {
       }
 
-      std::uint8_t NextKey() override
+      /*
+       * 6502: FLKB, which was `LineEntryEffects`'s until M3-b-3d and is this port's.
+       *
+       * It writes into a log the caller lends it, and that is the point rather than an economy:
+       * what these tests compare is the ORDER a line editor reaches its two C64 things in, and an
+       * order needs one list. `DELAY` is `Presenter`'s and `FLKB` is this one's, so the two ports
+       * share the recording the way the game shares a screen.
+       */
+      std::vector<std::uint32_t>* log = nullptr;
+
+      void Flush() override
+      {
+        if (log != nullptr)
+        {
+          log->push_back(0x200u);
+        }
+      }
+
+      /// 6502: the matrix walk, which the line editor never reaches -- `TT217` is its whole input.
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         if (m_taken >= m_keys.size())
         {
@@ -90,19 +115,17 @@ namespace GameLogicTests
     };
 
     /// The two C64 things the line editor reaches for, recorded rather than performed. `DELAY` is
-    /// `Presenter`'s since M3-b-3b and `FLKB` is still the line editor's own.
-    class RecordingEffects : public Elite::LineEntryEffects, public Elite::Presenter
+    /// `Presenter`'s since M3-b-3b; `FLKB` is `Keyboard::Flush`'s since M3-b-3d and writes into
+    /// this same log, because what the tests compare is the ORDER the two are reached in.
+    class RecordingEffects : public Elite::Presenter
     {
     public:
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       void WaitFrames(std::uint8_t _frames) override
       {
         log.push_back(static_cast<std::uint32_t>(0x100u + _frames));
-      }
-      void FlushKeyboard() override
-      {
-        log.push_back(0x200u);
       }
 
       std::vector<std::uint32_t> log;
@@ -300,13 +323,14 @@ namespace GameLogicTests
 
         ScriptedKeys keys(script.keys);
         RecordingEffects effects;
+        keys.log = &effects.log;
         std::array<std::uint8_t, 16> buffer;
         buffer.fill(0xAA);
 
         LineLimits limits;
         limits.maxLength = script.maxLength;
 
-        const LineResult result = Elite::ReadLine(keys, sink, text, effects, effects, buffer, limits);
+        const LineResult result = Elite::ReadLine(keys, sink, text, effects, buffer, limits);
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
@@ -498,11 +522,12 @@ namespace GameLogicTests
 
         ScriptedKeys keys(item.keys);
         RecordingEffects effects;
+        keys.log = &effects.log;
         std::array<std::uint8_t, 16> buffer;
         buffer.fill(0x77);
         LineLimits limits;
 
-        const LineResult result = Elite::AskCommanderName(keys, sink, text, extended, effects, effects, buffer, EXISTING, limits);
+        const LineResult result = Elite::AskCommanderName(keys, sink, text, extended, effects, buffer, EXISTING, limits);
 
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
         Assert::AreEqual(run.keysTaken, keys.Taken(), (where + L": how many keys were read").c_str());

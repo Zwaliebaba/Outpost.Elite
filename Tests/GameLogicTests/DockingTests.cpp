@@ -67,17 +67,11 @@ namespace GameLogicTests
     public:
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       void ClearKeyLogger() override
       {
         seams.push_back("ZEKTRAN");
       }
-      /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
-      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
-      {
-        (void)_keys;
-        return {true, 0u};
-      }
-
       void WaitFrames(std::uint8_t _frames) override
       {
         seams.push_back("DELAY");

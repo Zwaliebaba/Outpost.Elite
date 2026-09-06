@@ -5,6 +5,7 @@
 #include "OracleImage.h"
 
 #include "Commander.h"
+#include "Controls.h"
 #include "ExtendedTokens.h"
 #include "Rng.h"
 #include "SaveGame.h"
@@ -23,7 +24,7 @@ using Elite::CharacterPrinter;
 using Elite::Commander;
 using Elite::CompetitionNumber;
 using Elite::Field;
-using Elite::KeySource;
+using Elite::Keyboard;
 using Elite::TokenPrinter;
 using Elite::Testing::Cpu6502;
 using Elite::Testing::OracleImage;
@@ -97,14 +98,26 @@ namespace GameLogicTests
       bool failReads = false;
     };
 
-    class ScriptedKeys : public KeySource
+    class ScriptedKeys : public Keyboard
     {
     public:
       explicit ScriptedKeys(std::vector<std::uint8_t> _keys) noexcept
         : m_keys(std::move(_keys))
       {
       }
-      std::uint8_t NextKey() override
+
+      /// 6502: FLKB, which was `LineEntryEffects`'s until M3-b-3d, and the matrix walk, which the
+      /// disk menu never reaches -- `TT217` is the whole of what it reads.
+      void Flush() override
+      {
+        ++flushes;
+      }
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         if (m_taken >= m_keys.size())
         {
@@ -127,6 +140,8 @@ namespace GameLogicTests
       {
         return m_overrun;
       }
+
+      int flushes = 0; ///< 6502: FLKB, which `MenuEffects` counted until M3-b-3d
 
     private:
       std::vector<std::uint8_t> m_keys;
@@ -494,23 +509,19 @@ namespace GameLogicTests
       bool badFile = false;
     };
 
-    /// 6502: DELAY and FLKB, recorded rather than performed -- the first is `Presenter`'s since
-    /// M3-b-3b and the second is still the line editor's.
-    class MenuEffects : public Elite::LineEntryEffects, public Elite::Presenter
+    /// 6502: DELAY, recorded rather than performed. `FLKB` was here until M3-b-3d and is counted
+    /// by `ScriptedKeys`, which is the port that answers it now.
+    class MenuEffects : public Elite::Presenter
     {
     public:
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       void WaitFrames(std::uint8_t) override
       {
         ++waits;
       }
-      void FlushKeyboard() override
-      {
-        ++flushes;
-      }
       int waits = 0;
-      int flushes = 0;
     };
 
     /// The control codes that leave the text system. Every one of them is trapped on the other side.
@@ -880,7 +891,7 @@ namespace GameLogicTests
         NullSeams nulls;
         Elite::SidWriteLog sid;
         Elite::Ports ports{recursive, characters, sink,    nulls, nulls, sid,
-                           extended,  nulls,      effects, keys,  effects, store};
+                           extended,  nulls,      effects, keys,  store};
 
         const Elite::DiskMenuResult result = Elite::DiskAccessMenu(universe, ports);
 

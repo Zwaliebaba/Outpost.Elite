@@ -68,7 +68,8 @@ namespace Elite
     (void)MoveShip(_universe, _ports);
 
     // 6502: JMP RDKEY -- a tail call, so what `PAS1` returns is what `RDKEY` returns.
-    return _ports.start.ScanTitleKeys(_universe.keys);
+    _ports.present.HoldTitleFrame(_universe.work.z.hi); // 6502: TLL2's pace
+    return ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard);
   }
 
   void PauseForKey(Universe& _universe, Ports& _ports) noexcept
@@ -108,7 +109,8 @@ namespace Elite
     for (;;)
     {
       // 6502: .PAUSE2 JSR RDKEY / BNE PAUSE2.
-      if (_ports.start.ScanTitleKeys(_universe.keys).key != 0u)
+      _ports.present.HoldTitleFrame(_universe.work.z.hi); // 6502: TLL2's pace
+      if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)
       {
         continue;
       }
@@ -120,7 +122,8 @@ namespace Elite
        * check for a release it has already had. Written as two scans in a loop rather than as a
        * do-while, because that is the shape: the first scan is reached again on every failure.
        */
-      if (_ports.start.ScanTitleKeys(_universe.keys).key != 0u)
+      _ports.present.HoldTitleFrame(_universe.work.z.hi); // 6502: TLL2's pace
+      if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)
       {
         return; // 6502: .newyearseve RTS
       }
@@ -388,7 +391,7 @@ namespace Elite
     return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, MISSION_2_DEBRIEFING);
   }
 
-  ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, KeySource& _keys) noexcept
+  ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, Keyboard& _keys) noexcept
   {
     // 6502: LDA TP / ORA #%00010000 / STA TP -- BEFORE the question, so declining still counts as
     // having been asked and the Trumble is never offered again.

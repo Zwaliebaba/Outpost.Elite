@@ -5,6 +5,7 @@
 #include "OracleImage.h"
 
 #include "Commander.h"
+#include "Controls.h"
 #include "ExtendedTokens.h"
 #include "Rng.h"
 #include "StateTokens.h"
@@ -106,13 +107,20 @@ namespace GameLogicTests
      * leaves is in the character stream this sweep already compares.
      */
 
-    class NoKeys : public Elite::KeySource
+    class NoKeys : public Elite::Keyboard
     {
     public:
-      std::uint8_t NextKey() override
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         asked = true;
         return 13;
+      }
+      /// 6502: FLKB, which `TRADEMODE` runs and this screen does not check, and the matrix walk,
+      /// which nothing docked reaches.
+      void Flush() override {}
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
       }
       bool asked = false;
     };
@@ -244,7 +252,7 @@ namespace GameLogicTests
           NullSeams nulls;
           Elite::SidWriteLog sid;
           Elite::Ports ports{printer,  characters, sink,  nulls, nulls, sid,
-                             extended, nulls,      nulls, keys,  nulls, nulls};
+                             extended, nulls,      nulls, keys,  nulls};
 
           Elite::SystemDataScreen(universe, ports, data, distance);
 

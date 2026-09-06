@@ -114,7 +114,7 @@ namespace Elite
   {
     // 6502: LDA #2 / JSR TRADEMODE.
     SetUpScreen(_universe, _ports, BUY_CARGO_VIEW);
-    _ports.entry.FlushKeyboard();
+    _ports.keyboard.Flush();
 
     _universe.text.column = 1;
     _universe.text.row = 1;
@@ -174,7 +174,7 @@ namespace Elite
           // 6502: TT223K -- JSR gnum. The LDX #0 / STX R / LDX #12 / STX T1 before it have no
           // effect: gnum repeats both at its own start. The original's comment wonders whether
           // they were left behind when code moved, and they are not reproduced here.
-          const NumberEntry entry = ReadNumber(_ports.keys, _ports.characters, _universe.text, available);
+          const NumberEntry entry = ReadNumber(_ports.keyboard, _ports.characters, _universe.text, available);
 
           // 6502: gnum's `JMP BAY2` -- a letter leaves the screen entirely, not just this item.
           if (entry.outcome == DigitResult::LeaveScreen)
@@ -291,7 +291,7 @@ namespace Elite
         _ports.tokens.Print(YES_NO_TOKEN);
 
         // 6502: JSR gnum -- and QQ25 is the amount HELD, so "Y" sells the lot.
-        const NumberEntry number = ReadNumber(_ports.keys, _ports.characters, _universe.text, held);
+        const NumberEntry number = ReadNumber(_ports.keyboard, _ports.characters, _universe.text, held);
 
         // 6502: gnum's JMP BAY2.
         if (number.outcome == DigitResult::LeaveScreen)
@@ -418,7 +418,7 @@ namespace Elite
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
     SetUpScreen(_universe, _ports, INVENTORY_VIEW);
-    _ports.entry.FlushKeyboard();
+    _ports.keyboard.Flush();
 
     // 6502: LDA #11 / JSR DOXC / LDA #164 / JSR TT60 -- and TT60 is four routines deep.
     _universe.text.column = INVENTORY_TITLE_COLUMN;
