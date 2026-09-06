@@ -95,9 +95,17 @@ def count_ship_offset_sites(_root: Path) -> int:
     return len(SHIP_OFFSET.findall(read_stripped(sources(_root))))
 
 
+VIEW_TEMPLATE = re.compile(r"template\s*<[^>]*>\s*struct\s+\w+\s*\{[^}]*\}", re.DOTALL)
+
+
 def count_aggregate_refs(_root: Path) -> int:
-    """P5 -- reference members of the argument-list structs (`Canvas& canvas;`) in the headers."""
-    return len(AGGREGATE_REF.findall(read_stripped(headers(_root))))
+    """P5 -- reference members of the argument-list structs (`Canvas& canvas;`) in the headers.
+
+    A templated struct of references is a VIEW over bytes (`AxisBytes<Byte>` and kin, M1-a), generic
+    over constness precisely because it is one, and not an argument list; its bodies are cut before
+    the count so that naming a byte does not read as a pattern coming back.
+    """
+    return len(AGGREGATE_REF.findall(VIEW_TEMPLATE.sub(" ", read_stripped(headers(_root)))))
 
 
 def count_effects_seams(_root: Path) -> int:
@@ -293,6 +301,11 @@ namespace Elite
     Canvas& canvas;
     MathWorkspace& math;
     std::uint8_t& view;
+  };
+  template <class Byte> struct AxisBytes
+  {
+    Byte& lo;
+    Byte& hi;
   };
   // std::uint8_t _a in a comment does not count, and neither does bool _carryIn here
   /// 6502: MAS2 -- a marker, which IS counted, from the raw text
