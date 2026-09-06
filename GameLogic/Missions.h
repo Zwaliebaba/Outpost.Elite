@@ -136,44 +136,29 @@ namespace Elite
   void PrintMissionToken(ExtendedTokenPrinter& _tokens, std::uint8_t _base, std::uint8_t _galaxy) noexcept;
 
   /*
-   * 6502: the entries of `JMTB` that a mission briefing reaches -- 8, 9, 22, 23, 24, 25, 27, 28
-   * and 29.
+   * 6502: DT3 and its `JMTB` jump table -- every control code that leaves the text system.
    *
    * WHY THE DISPATCH IS HERE AND NOT IN THE EXECUTABLE. It was in the executable, because every one
    * of these codes needed something the executable had and `GameLogic` did not: a canvas to clear,
-   * a keyboard to wait on, a galaxy number. All three arrived -- `TT66` in slice 3d, `RDKEY`'s seam
-   * in 3b, the commander block in 2d -- and what was left in `Outpost/Shell.cpp` was nine cases of
-   * arithmetic that no test could reach, two of which turned out to be wrong: code 9 was not moving
-   * the cursor and codes 23 and 29 were moving it when the game does not.
+   * a keyboard to wait on, a galaxy number. All three arrived -- `TT66` in slice 3d, `RDKEY` in
+   * M3-b-3d, the commander block in 2d -- and what was left in `Outpost/Shell.cpp` was nine cases
+   * of arithmetic that no test could reach, two of which turned out to be wrong: code 9 was not
+   * moving the cursor and codes 23 and 29 were moving it when the game does not.
    *
-   * The shell still owns code 21, which is `CLYNS` and belongs to the docked screens, and the codes
-   * nothing yet answers. It forwards the rest here.
+   * IT WAS A `ControlCodes` SEAM UNTIL M3-b-4b AND IS A FUNCTION NOW. The last thing the shell
+   * still owned was code 21, which is `CLYNS` -- `Elite::ClearMessageRows`, a routine this library
+   * has had since slice 2a -- so what the seam stood in front of was `GameLogic` calling
+   * `GameLogic` through the executable. §6.73 for the twelfth time.
+   *
+   * THE GALAXY IS NOT A PARAMETER. `MissionCodes` took it as a `const std::uint8_t&` and every
+   * caller bound `commander.galaxyNumber` to it, which is what M3-a removed nine of.
+   *
+   * A CODE NOTHING ANSWERS IS LEFT ALONE, and there are three: 11 (`NLIN4`, a rule across the
+   * screen) and 30 and 31 (`FILEPR` and `OTHERFILEPR`, the disk names under `DISK`). They fall to
+   * `default` here exactly as they fell to the shell's, so the port's behaviour is unchanged and
+   * the list of what is still missing is in one place.
    */
-  class MissionCodes final : public ControlCodes
-  {
-  public:
-    MissionCodes(Universe& _universe, Ports& _ports, const std::uint8_t& _galaxy) noexcept
-      : m_universe(_universe),
-        m_ports(_ports),
-        m_galaxy(_galaxy)
-    {
-    }
-
-    /// Runs `_code` and says whether it was one of this object's. A code it does not know is left
-    /// entirely alone, so the caller's own switch can have it.
-    [[nodiscard]] bool RunMissionCode(std::uint8_t _code) noexcept;
-
-    /// `ControlCodes`, for a caller that has nothing else to add. Ignores what it does not know.
-    void Run(std::uint8_t _code) override
-    {
-      static_cast<void>(RunMissionCode(_code));
-    }
-
-  private:
-    Universe& m_universe;
-    Ports& m_ports;
-    const std::uint8_t& m_galaxy;
-  };
+  void RunControlCode(Universe& _universe, Ports& _ports, std::uint8_t _code) noexcept;
 
   /// 6502: MT8 -- LDA #6 / JSR DOXC, and the `DTW2` store beside it is the printer's.
   inline constexpr std::uint8_t MT8_COLUMN = 6;

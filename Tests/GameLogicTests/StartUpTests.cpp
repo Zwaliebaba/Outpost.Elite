@@ -178,12 +178,6 @@ namespace GameLogicTests
       std::size_t m_extra = 0;
     };
 
-    class IgnoredControls : public Elite::ControlCodes
-    {
-    public:
-      void Run(std::uint8_t) override {}
-    };
-
     struct CountingSink : public Elite::TextSink
     {
       void Put(std::uint8_t) override
@@ -601,8 +595,7 @@ namespace GameLogicTests
         Elite::TokenPrinter recursive(characters);
         recursive.SetCursor(&text);
         Elite::Rng& rng = universe.rng;
-        IgnoredControls controls;
-        Elite::ExtendedTokenPrinter extended(characters, recursive, rng, &controls);
+        Elite::ExtendedTokenPrinter extended(characters, recursive, rng);
 
         ScriptedKeys keys(script.menuKeys);
         DeviceStore store;

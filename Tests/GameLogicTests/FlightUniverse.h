@@ -185,43 +185,33 @@ namespace GameLogicTests
     Elite::TokenPrinter printer{characters};
 
     /*
-     * 6502: DETOK's seam, and it RECORDS rather than acts.
+     * `Codes` WAS HERE AND IS NOT ANY MORE (M3-b-4b).
      *
-     * `TITLE` prints three extended tokens and the port has no answer for a control code outside
-     * the shell, so this exists to say out loud whether any of them contains one. The tests assert
-     * the list is empty; if a token ever grows a code, the assertion is what says so rather than a
-     * screen quietly diverging from the game's.
+     * It recorded which control codes left the text system, and forwarded them to a `MissionCodes`
+     * when a suite had one. `Elite::RunControlCode` is the whole dispatch now, so a suite that
+     * wants the codes to RUN calls `RunCodesThrough` and the comparison is the state they produced
+     * -- which is §6.73's corollary for the twelfth time: the seam was what a suite counted, and
+     * the count goes with it.
      */
-    struct Codes final : Elite::ControlCodes
-    {
-      std::vector<std::uint8_t> ran;
 
-      /*
-       * A real handler to pass the code on to, when a suite has one (slice 4d-b).
-       *
-       * `MissionCodes` is `GameLogic`'s answer to nine of these and a mission suite needs it bound
-       * to the SAME printer the fixture built, which is a knot: the handler needs a `MissionScreen`
-       * and the screen needs the printer. Forwarding unties it -- the printer keeps this object and
-       * this object gains the handler afterwards -- and the recording carries on either way, so the
-       * suites that assert the list is empty are unaffected.
-       */
-      Elite::ControlCodes* to = nullptr;
-
-      void Run(std::uint8_t _code) override
-      {
-        ran.push_back(_code);
-        if (to != nullptr)
-        {
-          to->Run(_code);
-        }
-      }
-    };
-
-    Codes codes;
-
-        
     /// Declared after `rng` because it binds one, and the order here is the construction order.
-    Elite::ExtendedTokenPrinter extendedPrinter{characters, printer, rng, &codes};
+    Elite::ExtendedTokenPrinter extendedPrinter{characters, printer, rng};
+
+    /*
+     * Point the extended printer at a `Ports` the caller owns, so a control code that leaves the
+     * text system runs in the library instead of being ignored.
+     *
+     * THE `Ports` MUST OUTLIVE THE PRINTING. `Ports()` and `PortsWith` return by value, so this
+     * takes a reference to a named local rather than binding a temporary -- a fixture that passed
+     * `RunCodesThrough(Ports())` would leave the printer pointing at a dead struct of references.
+     *
+     * A fixture that does NOT call this has a printer that ignores the codes that leave, which is
+     * what a null `ControlCodes*` meant before M3-b-4b and is what the token suites are built on.
+     */
+    void RunCodesThrough(Elite::Ports& _ports) noexcept
+    {
+      extendedPrinter.SetGame(*this, _ports);
+    }
 
     
     /*

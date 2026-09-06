@@ -524,17 +524,6 @@ namespace GameLogicTests
       int waits = 0;
     };
 
-    /// The control codes that leave the text system. Every one of them is trapped on the other side.
-    class IgnoredControls : public Elite::ControlCodes
-    {
-    public:
-      void Run(std::uint8_t _code) override
-      {
-        codes.push_back(_code);
-      }
-      std::vector<std::uint8_t> codes;
-    };
-
     /// Every character with the cursor it was printed at, exactly as the docked screens compare.
     struct StampedSink : public Elite::TextSink
     {
@@ -868,7 +857,6 @@ namespace GameLogicTests
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE>& portImage = universe.commanderFile;
 
         Elite::Rng& rng = universe.rng;
-        IgnoredControls controls;
         Elite::CharacterPrinter characters(sink);
         TokenPrinter recursive(characters);
         recursive.SetCursor(&text);
@@ -876,7 +864,7 @@ namespace GameLogicTests
         Elite::SystemSeeds selected{};
         Elite::StateTokens values(recursive, text, portBlock, portName, current, selected, false);
         recursive.SetValueTokens(&values);
-        Elite::ExtendedTokenPrinter extended(characters, recursive, rng, &controls);
+        Elite::ExtendedTokenPrinter extended(characters, recursive, rng);
 
         ScriptedKeys keys(script.keys);
         MenuEffects effects;

@@ -487,17 +487,13 @@ namespace GameLogicTests
         std::uint32_t unexpected = 0;
       };
 
-      /// 9, 11 and 21 reach the canvas. A description that reached one would be a hole in this.
-      struct CountingControls : public Elite::ControlCodes
-      {
-        void Run(std::uint8_t _code) override
-        {
-          ++counts[_code];
-        }
-        std::array<std::uint32_t, 32> counts{};
-      };
-
-      CountingControls controls;
+      /*
+       * 9, 11 and 21 reach the canvas. A description that reached one would be a hole in this.
+       *
+       * It was a `ControlCodes` recorder until M3-b-4b and is the printer's own counter now: the
+       * seam is gone and `ExtendedTokenPrinter::CodesThatLeft` is what a suite asks instead.
+       */
+      std::uint32_t deferred = 0;
       SystemSeeds galaxy = Elite::GALAXY_ONE_SEEDS;
       std::uint32_t compared = 0;
       std::string firstDescription;
@@ -549,8 +545,9 @@ namespace GameLogicTests
           Elite::TokenPrinter recursive(characters, &names);
           names.printer = &recursive;
           Elite::Rng rng;
-          Elite::ExtendedTokenPrinter printer(characters, recursive, rng, &controls);
+          Elite::ExtendedTokenPrinter printer(characters, recursive, rng);
           Elite::PrintSystemDescription(printer, rng, seeds);
+          deferred += printer.CodesThatLeft();
 
           const std::wstring where =
             L"galaxy " + std::to_wstring(galaxyNumber) + L" system " + std::to_wstring(system) + L" (seeds " + Widen(Show(seeds)) + L")";
@@ -576,11 +573,6 @@ namespace GameLogicTests
 
       Assert::AreEqual<std::uint32_t>(2048u, compared, L"every system should be described");
 
-      std::uint32_t deferred = 0;
-      for (const std::uint32_t count : controls.counts)
-      {
-        deferred += count;
-      }
       Assert::AreEqual<std::uint32_t>(0u, deferred, L"no generated description should reach a control code the port defers");
 
       Logger::WriteMessage(("PDESC: 2,048 descriptions compared. Galaxy 1 system 0 reads:\n" + firstDescription + "\n").c_str());
@@ -597,7 +589,7 @@ namespace GameLogicTests
       Collector screen;
       Elite::CharacterPrinter characters(screen);
       Elite::TokenPrinter recursive(characters, nullptr);
-      Elite::ExtendedTokenPrinter printer(characters, recursive, rng, nullptr);
+      Elite::ExtendedTokenPrinter printer(characters, recursive, rng);
 
       const SystemSeeds probe = {{11, 22, 33, 44, 55, 66}};
       Elite::PrintSystemDescription(printer, rng, probe);
