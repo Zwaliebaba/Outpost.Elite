@@ -245,7 +245,6 @@ namespace Elite
   void Launch(Universe& _universe, Ports& _ports, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX,
               std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept
   {
-    LoopSpawnEffects spawning(_universe, _ports);
 
     // 6502: LDX QQ12 / BEQ NLUNCH -- pressing "1" in flight does nothing but change the view.
     if (_docked != 0u)
@@ -271,12 +270,11 @@ namespace Elite
        * The station is what you have just left, and this is where it goes.
        */
       _universe.work.z.sgn = static_cast<std::uint8_t>(_universe.work.z.sgn + 1u);
-      (void)AddPlanetOrSun(_universe.bubble, _universe.work, spawning, _universe.current.techLevel, _universe.flight.blueprint);
+      (void)AddPlanetOrSun(_universe, _ports);
 
       _universe.work.z.sgn = 128u;
       _universe.work.z.hi = static_cast<std::uint8_t>(_universe.work.z.hi + 1u);
-      (void)AddStation(_universe.bubble, _universe.work, spawning, _universe.current.techLevel,
-                       _universe.flight.blueprint); // 6502: JSR NWSPS
+      (void)AddStation(_universe, _ports); // 6502: JSR NWSPS
 
       _universe.flight.delta = LAUNCH_SPEED; // 6502: LDA #12 / STA DELTA
 

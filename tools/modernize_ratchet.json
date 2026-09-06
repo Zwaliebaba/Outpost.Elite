@@ -44,9 +44,9 @@
       "slice": "M3-a-3: three more argument-list structs go"
     },
     "effects-seams": {
-      "ceiling": 22,
+      "ceiling": 21,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M3-b-1: SpawnEffects goes -- its four methods are four routines GameLogic contains"
     },
     "out-params": {
       "ceiling": 17,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3925,
+      "ceiling": 3922,
       "slack": 0,
-      "slice": "M3-a-3: the markers on the reference members that named a byte Universe.h already names"
+      "slice": "M3-b-1: the markers on SpawnEffects' four methods, which name labels the routines already name"
     },
     "oracle-test-files": {
       "ceiling": 50,

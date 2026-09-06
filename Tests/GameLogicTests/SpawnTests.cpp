@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "FlightUniverse.h"
 #include "OracleImage.h"
 
 #include "Canvas.h"
@@ -34,49 +35,15 @@ namespace GameLogicTests
 
   namespace
   {
-    bool OracleMissing()
-    {
-      const OracleImage& oracle = OracleImage::Instance();
-      if (oracle.Available())
-      {
-        return false;
-      }
-      Logger::WriteMessage(("SKIPPED -- oracle absent: " + oracle.Reason()).c_str());
-      return true;
-    }
 
     std::wstring Widen(const std::string& _text)
     {
       return std::wstring(_text.begin(), _text.end());
     }
 
-    /// The four things `KILLSHP` and `SOLAR` still reach outside this slice, recorded rather than
-    /// run. `SCAN` was a fifth until slice 3d-a built it (§6.61).
-    class RecordingEffects : public Elite::SpawnEffects
-    {
-    public:
-      std::vector<std::uint8_t> aborts;
-      std::vector<std::uint8_t> messages;
-      std::uint32_t stationBlobs = 0;
-      std::uint32_t missileBlobs = 0;
-
-      void AbortMissile(std::uint8_t _colour) override
-      {
-        aborts.push_back(_colour);
-      }
-      void ShowMessage(std::uint8_t _token) override
-      {
-        messages.push_back(_token);
-      }
-      void ToggleStationIndicator() override
-      {
-        ++stationBlobs;
-      }
-      void ResetMissileIndicators() override
-      {
-        ++missileBlobs;
-      }
-    };
+    // `RecordingEffects` recorded `SpawnEffects`' four calls. The seam went in M3-b-1 and the
+    // routines run for real on both sides, so what says they agree is the screen comparison in
+    // each sweep rather than a tally -- which is what §6.73 keeps arguing a seam owes the port.
 
     struct SpawnLabels
     {
@@ -168,7 +135,8 @@ namespace GameLogicTests
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
-                           _bubble.blocks[slot].ToBytes()[byte], (_where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
+                           _bubble.blocks[slot].ToBytes()[byte],
+                           (_where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
         }
       }
       for (std::size_t type = 0; type < _bubble.counts.size(); ++type)
@@ -194,7 +162,8 @@ namespace GameLogicTests
 
       for (std::uint16_t address = LINES_START; address < Elite::LineHeap::TOP; ++address)
       {
-        Assert::AreEqual(_cpu.memory[address], _heap.Read(Elite::HeapOffset::FromAddress(address)), (_where + L": the heap at " + std::to_wstring(address)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _heap.Read(Elite::HeapOffset::FromAddress(address)),
+                         (_where + L": the heap at " + std::to_wstring(address)).c_str());
       }
     }
   } // namespace
@@ -222,7 +191,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const SpawnLabels at(oracle);
       const std::uint16_t nwsps = oracle.Label("NWSPS");
-      const std::uint16_t spblb = oracle.Label("SPBLB");
+      const std::uint16_t screenBase = ScreenBase(oracle);
       const std::uint16_t spasto = oracle.Label("spasto");
       const std::uint16_t xx21Station = static_cast<std::uint16_t>(oracle.Label("XX21") + 2u * Elite::Byte(Elite::ShipType::Station) - 2u);
 
@@ -241,6 +210,7 @@ namespace GameLogicTests
       std::uint32_t created = 0;
       std::uint32_t refused = 0;
       std::uint32_t dodos = 0;
+      std::uint32_t bulbs = 0;
 
       for (const std::vector<std::uint8_t>& fleet : FLEETS)
       {
@@ -250,11 +220,16 @@ namespace GameLogicTests
           for (const Elite::Blueprint* standing : {coriolis, dodo})
           {
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(spblb);
 
-            Elite::Bubble bubble;
-            Elite::LineHeap heap;
-            RecordingEffects effects;
+            /*
+             * The universe, with the names below aliases into it. `NWSPS` takes `(Universe&,
+             * Ports&)` since M3-b-1, and `SPBLB` is `Elite::ToggleStationIndicator`, which it now
+             * calls -- so THE TRAP CAME OFF and the screen comparison below is what says the two
+             * sides lit the same indicator, where the seam only counted the call.
+             */
+            Universe universe;
+            Elite::Bubble& bubble = universe.bubble;
+            Elite::LineHeap& heap = universe.heap;
 
             SeedBubble(cpu, bubble, heap, at, fleet);
 
@@ -288,7 +263,13 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(nwsps, 400'000);
             Assert::IsTrue(run.completed, L"NWSPS returned");
 
-            const Elite::NewShip station = Elite::AddStation(bubble, work, effects, techLevel, blueprint);
+            universe.work = work;
+            universe.current.techLevel = techLevel;
+            universe.flight.blueprint = blueprint;
+            Elite::Ports ports = universe.Ports();
+            const Elite::NewShip station = Elite::AddStation(universe, ports);
+            work = universe.work;
+            blueprint = universe.flight.blueprint;
 
             const std::wstring where = Widen("NWSPS (slots " + std::to_string(fleet.size()) + ", tek " + std::to_string(techLevel) +
                                              ", table " + (standing == dodo ? "Dodo" : "Coriolis") + ")");
@@ -311,14 +292,23 @@ namespace GameLogicTests
                              (where + L": XX21+2*SST-1").c_str());
 
             Assert::AreEqual(cpu.c, station.created, (where + L": the carry").c_str());
-            Assert::AreEqual<std::uint32_t>(1u, effects.stationBlobs, (where + L": SPBLB").c_str());
 
-            std::uint32_t bulbs = 0;
-            for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+            /*
+             * 6502: SPBLB -- the station indicator, drawn on BOTH sides since M3-b-1 took the seam
+             * away, and compared as pixels rather than counted as a call.
+             */
+            const std::span<const std::uint8_t> lit = universe.canvas.Screen();
+            for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
             {
-              bulbs += (hit.address == spblb) ? 1u : 0u;
+              const std::uint8_t expected = cpu.memory[static_cast<std::uint16_t>(screenBase + offset)];
+              if (expected != lit[offset])
+              {
+                Assert::Fail((where + L": SPBLB's pixels at " + std::to_wstring(offset) + L" -- game has " +
+                              std::to_wstring(expected) + L", port has " + std::to_wstring(lit[offset]))
+                               .c_str());
+              }
+              bulbs += (lit[offset] != 0u) ? 1u : 0u;
             }
-            Assert::AreEqual<std::uint32_t>(bulbs, effects.stationBlobs, (where + L": SPBLB calls").c_str());
 
             /*
              * THE SUN IS GONE, and the station is standing in its place.
@@ -345,6 +335,7 @@ namespace GameLogicTests
 
       Assert::AreEqual<std::uint32_t>(36u, compared, L"the whole sweep ran");
       Assert::IsTrue(dodos > 0u, L"some systems got a Dodo");
+      Assert::IsTrue(bulbs > 0u, L"and the station indicator was actually drawn");
 
       /*
        * NWSPS CANNOT FAIL, and the sweep proves it rather than assuming it.
@@ -383,6 +374,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const SpawnLabels at(oracle);
       const std::uint16_t killshp = oracle.Label("KILLSHP");
+      const std::uint16_t screenBase = ScreenBase(oracle);
 
       const std::vector<std::vector<std::uint8_t>> FLEETS = {
         {9, 0},
@@ -411,20 +403,25 @@ namespace GameLogicTests
           for (const std::uint8_t locked : {0xFFu, 0u, 1u, 2u})
           {
             Cpu6502 cpu = oracle.Fresh();
-            Elite::Bubble bubble;
+
+            /*
+             * The universe, with the names below aliases into it. `KILLSHP` takes `(Universe&,
+             * Ports&)` since M3-b-1: `ABORT`, `MESS` and `SPBLB` are three routines this library
+             * contains, so the three traps came off and both sides run them. What compares them is
+             * the whole screen -- the missile indicator, the message row and the station light are
+             * all pixels -- plus the message state, which is what `MESS` leaves behind.
+             */
+            Universe universe;
+            Elite::Bubble& bubble = universe.bubble;
             // 6502: XX21+2*SST-2 -- the entry `NWSPS` writes, which `KILLSHP` reads back through
             // byte 5 when it shuffles a station's slot down. Zero would make the port read nothing.
             bubble.stationType = Elite::ShipType::Station;
-            Elite::LineHeap heap;
-            Elite::PlanetSunState state;
-            Elite::Ship work{};
-            Elite::Commander commander;
-            RecordingEffects effects;
+            Elite::LineHeap& heap = universe.heap;
+            Elite::Ship& work = universe.work;
+            Elite::Commander& commander = universe.commander;
 
-            // ABORT, MESS and SPBLB are slice 3d's.
-            cpu.AddTrap(oracle.Label("ABORT"));
-            cpu.AddTrap(oracle.Label("MESS"));
-            cpu.AddTrap(oracle.Label("SPBLB"));
+            // 6502: NOMSL and NOMSL's indicator -- `ABORT` redraws them, so they have to agree.
+            commander.missiles = cpu.memory[oracle.Label("NOMSL")];
 
             SeedBubble(cpu, bubble, heap, at, fleet);
 
@@ -464,7 +461,8 @@ namespace GameLogicTests
              * the main loop, which has just done so. A test that only puts X in place gets a
              * routine reading whatever the last call left.
              */
-            const std::uint16_t block = static_cast<std::uint16_t>(Elite::SHIP_BLOCK_BASE + (static_cast<std::uint8_t>(victim) * Elite::SHIP_BLOCK_SIZE));
+            const std::uint16_t block =
+              static_cast<std::uint16_t>(Elite::SHIP_BLOCK_BASE + (static_cast<std::uint8_t>(victim) * Elite::SHIP_BLOCK_SIZE));
             cpu.memory[at.inf] = static_cast<std::uint8_t>(block);
             cpu.memory[static_cast<std::uint16_t>(at.inf + 1)] = static_cast<std::uint8_t>(block >> 8);
 
@@ -478,8 +476,9 @@ namespace GameLogicTests
 
             // 6502: XX0 -- the caller's, and the same value the oracle was given above. `KS4`'s sun
             // is a negative type, so `NWSHP` takes `BMI NW2` and nothing writes it back.
-            const Elite::Blueprint* xx0 = blueprint;
-            Elite::KillShip(bubble, heap, state, work, commander, effects, static_cast<std::uint8_t>(victim), xx0);
+            universe.flight.blueprint = blueprint;
+            Elite::Ports ports = universe.Ports();
+            Elite::KillShip(universe, ports, static_cast<std::uint8_t>(victim));
 
             const std::wstring where = Widen("KILLSHP fleet=" + std::to_string(fleet.size()) + " victim=" + std::to_string(victim) +
                                              " locked=" + std::to_string(locked));
@@ -488,11 +487,27 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.memory[at.tp], commander.missionProgress, (where + L": TP").c_str());
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.tally + 1)],
                              commander.kills.hi, (where + L": TALLY+1").c_str());
-            Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.aborts.size() + effects.messages.size() + effects.stationBlobs,
-                                          (where + L": the seams").c_str());
+            /*
+             * The pixels the three routines drew, which is what the three traps used to hide.
+             * `MESS` prints through the port's own printer into the same canvas, so one comparison
+             * covers the unlock, the message and the station light together.
+             */
+            const std::span<const std::uint8_t> ours = universe.canvas.Screen();
+            for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
+            {
+              const std::uint8_t expected = cpu.memory[static_cast<std::uint16_t>(screenBase + offset)];
+              if (expected != ours[offset])
+              {
+                Assert::Fail((where + L": the screen at " + std::to_wstring(offset) + L" -- game has " + std::to_wstring(expected) +
+                              L", port has " + std::to_wstring(ours[offset]))
+                               .c_str());
+              }
+            }
 
-            aborted += static_cast<std::uint32_t>(effects.aborts.size());
-            stations += effects.stationBlobs;
+            // 6502: MSTG and DLY -- what `ABORT` and `MESS` leave, which is how the sweep counts
+            // what it used to count by recording the calls.
+            aborted += (locked == static_cast<std::uint8_t>(victim)) ? 1u : 0u;
+            stations += (Elite::TypeOf(fleet[victim]) == Elite::ShipType::Station) ? 1u : 0u;
             missions += (commander.missionProgress != 0x01u) ? 1u : 0u;
             // A kill only relocates when something is living above it, and the station's own
             // path shuffles nothing at all.
@@ -572,19 +587,29 @@ namespace GameLogicTests
       for (const System& system : SYSTEMS)
       {
         Cpu6502 cpu = oracle.Fresh();
-        Elite::Bubble bubble;
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * `SOLAR` takes `(Universe&, Ports&)` since M3-b-1, when `SpawnEffects` went: `msblob` is
+         * `Elite::ResetMissileIndicators` and the routine calls it. **THE TRAP CAME OFF WITH THE
+         * SEAM** -- both sides draw the indicators now, and the whole-screen comparison below is
+         * what says they drew the same ones, which is a stronger statement than the call count the
+         * seam allowed.
+         */
+        Universe universe;
+        Elite::Bubble& bubble = universe.bubble;
         bubble.stationType = Elite::ShipType::Station;
-        Elite::LineHeap heap;
-        Elite::Ship work{};
-        Elite::Commander commander;
-        RecordingEffects effects;
-        Elite::FlightState flight;
-        Elite::Rng rng;
-        Elite::Canvas canvas;
-        Elite::Stardust dust;
-        Elite::PlanetSunState state;
+        Elite::LineHeap& heap = universe.heap;
+        Elite::Ship& work = universe.work;
+        Elite::Commander& commander = universe.commander;
+        Elite::FlightState& flight = universe.flight;
+        Elite::Rng& rng = universe.rng;
+        Elite::Canvas& canvas = universe.canvas;
+        Elite::Stardust& dust = universe.dust;
+        Elite::PlanetSunState& state = universe.heaps;
 
-        cpu.AddTrap(oracle.Label("msblob"));
+        // 6502: NOMSL -- what `msblob` draws, and it has to agree on both sides now that it runs.
+        commander.missiles = cpu.memory[oracle.Label("NOMSL")];
 
         SeedBubble(cpu, bubble, heap, at, {});
 
@@ -624,8 +649,11 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(solar, 400'000);
         Assert::IsTrue(run.completed, L"SOLAR returned");
 
-        Elite::BuildSystem(canvas, dust, state, bubble, work, commander, rng, flight, effects, system.techLevel, system.seeds, 0,
-                           system.carryIn);
+        universe.current.techLevel = system.techLevel;
+        universe.current.seeds.bytes = system.seeds;
+        universe.view = 0;
+        Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, universe.unused, universe.unused);
+        Elite::BuildSystem(universe, ports, system.carryIn);
 
         const std::wstring where = std::wstring(L"SOLAR ") + system.what;
 
@@ -849,7 +877,8 @@ namespace GameLogicTests
             }
             work = Elite::Ship::FromBytes(shipBytes);
 
-            const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
+            const Elite::Blueprint* blueprint =
+              Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
             cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint->address);
             cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
@@ -977,7 +1006,8 @@ namespace GameLogicTests
                 }
                 work = Elite::Ship::FromBytes(shipBytes);
 
-                const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
+                const Elite::Blueprint* blueprint =
+                  Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
                 cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint->address);
                 cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
@@ -999,8 +1029,8 @@ namespace GameLogicTests
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(sfs1, 200'000);
                   Assert::IsTrue(run.completed, L"SFS1 returned");
                   made = Elite::SpawnChildShip(bubble, work, rng, PARENT_SLOT, parentType, flag, childType, blueprint);
-                  where = Widen("SFS1 parent " + std::to_string(Elite::Byte(parentType)) + " child " + std::to_string(Elite::Byte(childType)) + " flag " +
-                                std::to_string(flag));
+                  where = Widen("SFS1 parent " + std::to_string(Elite::Byte(parentType)) + " child " +
+                                std::to_string(Elite::Byte(childType)) + " flag " + std::to_string(flag));
                 }
 
                 CompareBubble(cpu, bubble, heap, at, where);
@@ -1017,10 +1047,13 @@ namespace GameLogicTests
                 }
 
                 Assert::AreEqual(cpu.c, made.created, (where + L": the carry").c_str());
-                Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.xx0] | (cpu.memory[at.xx0 + 1] << 8)), blueprint->address,
-                                                (where + L": XX0 put back").c_str());
+                Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.xx0] | (cpu.memory[at.xx0 + 1] << 8)),
+                                                blueprint->address, (where + L": XX0 put back").c_str());
 
-                tumbled += (Elite::Byte(childType) >= Elite::Byte(Elite::ShipType::AlloyPlate) && Elite::Byte(childType) <= Elite::Byte(Elite::ShipType::Splinter)) ? 1u : 0u;
+                tumbled += (Elite::Byte(childType) >= Elite::Byte(Elite::ShipType::AlloyPlate) &&
+                            Elite::Byte(childType) <= Elite::Byte(Elite::ShipType::Splinter))
+                             ? 1u
+                             : 0u;
                 if (made.created)
                 {
                   pitchSet += ((bubble.blocks[made.slot].rollCounter & 0x80u) != 0u) ? 1u : 0u;
