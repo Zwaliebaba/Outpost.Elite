@@ -55,6 +55,9 @@
     <Filter Include="Project Files">
       <UniqueIdentifier>{2b87ec6f-c138-4492-a2aa-f03f600423b2}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{cac95f4d-9e14-4288-a170-0cd9d50e4502}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="app.manifest">
@@ -70,11 +73,17 @@
     <None Include="packages.config">
       <Filter>Project Files</Filter>
     </None>
-    <None Include="Canvas.hlsli" />
+    <None Include="Canvas.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="CanvasVertexShader.hlsl" />
-    <FxCompile Include="CanvasPixelShader.hlsl" />
+    <FxCompile Include="CanvasPixelShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="CanvasVertexShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="$(MSBuildThisFileDirectory)..\..\natvis\wil.natstepfilter">
