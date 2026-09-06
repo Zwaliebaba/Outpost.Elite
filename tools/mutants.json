@@ -780,7 +780,7 @@
           "find": "carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it",
           "replace": "carry = false; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it",
           "expect": "caught",
-          "note": "HITCH's SEC is the flag JSR LL9 gets for a ship in the sights with no missile armed and no laser firing, and a ship that arrives there killed and not on the screen seeds its first DORND on it. ThePerShipLoopMatchesMAL1's 'on top of us, already dead' is that ship, and its RAND is compared."
+          "note": "HITCH's SEC is the flag JSR LL9 gets for a ship in the sights with no missile armed and no laser firing, and a ship that arrives there killed and not on the screen seeds its first DORND on it. ThePerShipLoopMatchesMAL1's 'in the sights, already dead' is that ship, and its RAND is compared -- 'on top of us' is not, because MVEIT takes the player's speed off z before HITCH looks, and the generator was not compared by the frame tests until this mutant survived (2026-09-06)."
         }
       ]
     }
