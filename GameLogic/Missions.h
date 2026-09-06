@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Ports.h"
+#include "Universe.h"
+
 #include "ExtendedTokens.h"
 #include "FlightLoop.h"
 #include "StartUp.h"
@@ -74,32 +77,8 @@ namespace Elite
   inline constexpr std::uint8_t MISSION_CAPTAIN_TOKEN = 217;
   inline constexpr std::uint8_t MISSION_PLANET_TOKEN = 220;
 
-  /*
-   * Everything the mission text reaches that `FlightLoop` does not already carry.
-   *
-   * A struct for the same reason `TitleScreen` is one: the alternative is a five-argument function
-   * repeated four times. `PAUSE` needs the flight model (it draws a ship through `LL9` and turns it
-   * through `MVEIT`), the keyboard, and the screen -- which is `TITLE`'s list minus the joystick
-   * question and the docked flag.
-   */
-  struct MissionScreen
-  {
-    FlightLoop& loop;
-    StartUpEffects& effects;      ///< 6502: RDKEY, through `ScanTitleKeys`, and `DELAY`
-    ExtendedTokenPrinter& tokens; ///< 6502: DETOK
-    KeyLogger& keys;              ///< 6502: KLO -- what the scan fills in
-
-    /*
-     * 6502: INF -- which slot holds the ship being shown, as a number rather than a pointer.
-     *
-     * `LL9` part 1 writes two bytes of the ship's block directly rather than waiting for `INWK` to
-     * be copied back, so it needs the block as well as the workspace. In the original that is `INF`
-     * and it is left pointing at whatever `NWSHP` created; here the slot travels in the struct,
-     * because `PAUSE` runs INSIDE the token that `BRIEF` is printing and has to find the ship that
-     * `BRIEF` made several hundred instructions earlier.
-     */
-    std::uint8_t shipSlot = 0;
-  };
+  // `MissionScreen` was an argument list holding a `FlightLoop&` and five more references. Every byte
+  // of it is `Universe`'s since M3-a and every seam is `Ports`'.
 
   /*
    * 6502: PAS1 -- put the briefing ship back where it belongs, draw it, turn it, read the keyboard.
@@ -112,7 +91,7 @@ namespace Elite
    * Returns what `RDKEY` returns. `PAUSE`'s two loops branch on `thiskey` alone, so the carry is
    * carried for completeness rather than because this caller reads it.
    */
-  [[nodiscard]] TitleKey ShowBriefingShip(MissionScreen& _mission) noexcept;
+  [[nodiscard]] TitleKey ShowBriefingShip(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: PAUSE, control code 22 -- spin the ship until a key is pressed, then put it away.
@@ -126,7 +105,7 @@ namespace Elite
    * 29: the cursor move is here and the two case flags are the printer's. A control-code handler
    * that forgot the fall-through would print the rest of the briefing in the wrong case.
    */
-  void PauseForKey(MissionScreen& _mission) noexcept;
+  void PauseForKey(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: PAUSE2, control code 24 -- the same wait with no ship in it.
@@ -136,7 +115,7 @@ namespace Elite
    * routine will look for it again. The label after the `RTS` is `newyearseve`, which is the only
    * clue in the source about when it was written.
    */
-  void WaitForKeyPress(MissionScreen& _mission) noexcept;
+  void WaitForKeyPress(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: BRIS, control code 25 -- "INCOMING MESSAGE" and two seconds of nothing.
@@ -144,7 +123,7 @@ namespace Elite
    * `LDA #216 / JSR DETOK / LDY #100 / JMP DELAY`. Token 216 clears the screen itself, so this is
    * the whole of the transition into a briefing.
    */
-  void ShowIncomingMessage(MissionScreen& _mission) noexcept;
+  void ShowIncomingMessage(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: MT27 and MT28 -- one routine, two entry points, one addition.
@@ -173,9 +152,9 @@ namespace Elite
   class MissionCodes final : public ControlCodes
   {
   public:
-    MissionCodes(MissionScreen& _mission, TextState& _text, const std::uint8_t& _galaxy) noexcept
-      : m_mission(_mission),
-        m_text(_text),
+    MissionCodes(Universe& _universe, Ports& _ports, const std::uint8_t& _galaxy) noexcept
+      : m_universe(_universe),
+        m_ports(_ports),
         m_galaxy(_galaxy)
     {
     }
@@ -191,8 +170,8 @@ namespace Elite
     }
 
   private:
-    MissionScreen& m_mission;
-    TextState& m_text;
+    Universe& m_universe;
+    Ports& m_ports;
     const std::uint8_t& m_galaxy;
   };
 
@@ -265,7 +244,7 @@ namespace Elite
    * `JSR DETOK` then `.BAYSTEP JMP BAY`, and `BAYSTEP` is the entry `TBRIEF` uses when the player
    * turns the Trumble down: it skips the token and goes straight to the bay.
    */
-  [[nodiscard]] ForcedKey PrintAndEnterBay(MissionScreen& _mission, MissionBay& _bay, std::uint8_t _token) noexcept;
+  [[nodiscard]] ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, MissionBay& _bay, std::uint8_t _token) noexcept;
 
   /*
    * 6502: BRIEF -- start mission 1, and show the Constrictor turning while it says so.
@@ -289,14 +268,14 @@ namespace Elite
    * that is where the original splits: `BR2` ends `LDA #10 / BNE BRPS`, and everything after the
    * branch is `BRP`'s and is shared with four other missions.
    */
-  [[nodiscard]] std::uint8_t RunConstrictorBriefing(MissionScreen& _mission, MissionBay& _bay) noexcept;
+  [[nodiscard]] std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
 
   /// 6502: BRIEF, whole -- the briefing and then `BRP`, which prints token 10 and goes to the bay.
-  [[nodiscard]] ForcedKey BriefMission1(MissionScreen& _mission, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey BriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
 
   /// 6502: BRIEF2 -- set bit 2 of `TP` and print token 11, the message that sends the player to
   /// Ceerdi. Falls into `BRP`.
-  [[nodiscard]] ForcedKey BriefMission2(MissionScreen& _mission, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey BriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
 
   /*
    * 6502: BRIEF3 -- collect the plans at Ceerdi.
@@ -305,7 +284,7 @@ namespace Elite
    * 1's two bits as well as setting mission 2's, so picking up the plans is also what forgets that
    * the Constrictor ever happened. Bit 3 is "the plans are aboard".
    */
-  [[nodiscard]] ForcedKey CollectPlans(MissionScreen& _mission, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey CollectPlans(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
 
   /*
    * 6502: DEBRIEF -- finish mission 1 and pay for it.
@@ -315,7 +294,7 @@ namespace Elite
    * will not offer again. The commented-out `INC TALLY+1` beside it is in the original source and
    * is not ported, because it does not run.
    */
-  [[nodiscard]] ForcedKey DebriefMission1(MissionScreen& _mission, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
 
   /*
    * 6502: DEBRIEF2 -- deliver the plans at Birera.
@@ -324,7 +303,7 @@ namespace Elite
    * -- the navy's energy unit, which recharges faster than the one the shop sells -- and 256 kill
    * points, added to the HIGH byte of the tally so the low byte is untouched.
    */
-  [[nodiscard]] ForcedKey DebriefMission2(MissionScreen& _mission, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey DebriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
 
   /*
    * 6502: TBRIEF -- offer the Trumble, and take the money if it is accepted.
@@ -340,6 +319,6 @@ namespace Elite
    * every 6,553.6 credits and a poor player inside one is offered a free Trumble. Ported rather
    * than fixed, and recorded in ADR-001 §6.
    */
-  [[nodiscard]] ForcedKey OfferTrumble(MissionScreen& _mission, MissionBay& _bay, KeySource& _keys) noexcept;
+  [[nodiscard]] ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, MissionBay& _bay, KeySource& _keys) noexcept;
 
 } // namespace Elite

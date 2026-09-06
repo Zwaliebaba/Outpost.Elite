@@ -20,10 +20,12 @@
 #include "LineHeap.h"
 #include "ShipSlot.h"
 #include "Spawn.h"
+#include "StartUp.h"
 #include "Stardust.h"
 #include "TextPrint.h"
 #include "Tokens.h"
 #include "ViewChange.h"
+#include "Universe.h"
 
 #include <array>
 #include <cstdint>
@@ -197,22 +199,59 @@ namespace GameLogicTests
     }
   };
 
-  struct Universe
+  /*
+   * The four seams a fixture that is not running a frame never reaches, answered with nothing.
+   *
+   * `Ports` binds ten references and a screen-change test supplies two of them; without this the
+   * other eight would have to be written out at every call site, which is the argument list M3-a
+   * exists to remove. A test that WANTS to see one of these passes its own through `PortsWith`.
+   */
+  struct UnusedSeams final : Elite::ShipEffects,
+                             Elite::ShipDrawEffects,
+                             Elite::FlightLoopEffects,
+                             Elite::StartUpEffects
+  {
+    // Elite::ShipEffects
+    bool RunTactics(Elite::Ship&) override { return false; }
+
+    // Elite::ShipDrawEffects
+    void DrawPlanetOrSun() override {}
+    void DrawExplosion() override {}
+
+    // Elite::FlightLoopEffects, and Elite::DashboardEffects and Elite::SpawnChildEffects under it
+    bool PlaySound(std::uint8_t, bool) override { return false; }
+    bool PlaySoundPitched(std::uint8_t, std::uint8_t, std::uint8_t) override { return false; }
+    void StopSound(std::uint8_t) override {}
+    void StartDockingMusic() override {}
+    void StopDockingMusic() override {}
+    bool SpawnAhead(Elite::ShipType) override { return false; }
+    bool Anger(std::uint8_t, Elite::ShipType) override { return false; }
+    bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
+
+    // Elite::StartUpEffects
+    void ResetUniverse() override {}
+    void ResetShip() override {}
+    void ClearKeyLogger() override {}
+    void StartTheme() override {}
+    void StopTheme() override {}
+    void ResetMissileIndicators() override {}
+    Elite::TitleKey ScanTitleKeys(Elite::KeyLogger&) override { return {}; }
+    void WaitFrames(std::uint8_t) override {}
+    std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override { return 0; }
+  };
+
+  /*
+   * The fixture's universe: `Elite::Universe`'s bytes, plus what a test needs beside them.
+   *
+   * INHERITED RATHER THAN HELD, since M3-a. Every field the library owns is the base's -- so a
+   * fixture writing `universe.canvas` writes the same byte the app does, and slicing a fixture
+   * gives the state and nothing else. What is added here is the recording ports, the printers
+   * (which cannot live in a universe that has to copy: two of them take a seam) and the two bytes
+   * that are the fixture's own.
+   */
+  struct Universe : Elite::Universe
   {
     RecordingView effects; ///< first, because the character printer's bell records into its list
-
-    Elite::Canvas canvas;
-    Elite::DrawWorkspace draw;
-    Elite::MathWorkspace math;
-    Elite::GeometryWorkspace geometry;
-
-    Elite::Stardust dust;
-    Elite::PlanetSunState heaps;
-    Elite::Bubble bubble;
-    Elite::Ship work{};
-
-    Elite::ScreenState screen;
-    Elite::TextState text;
 
     /*
      * The real character printer, drawing into the canvas -- `CHPR` is NOT trapped on the oracle's
@@ -258,7 +297,6 @@ namespace GameLogicTests
     Elite::TextPrinter glyphs{canvas, text, &chars};
     Elite::CharacterPrinter characters{glyphs};
     Elite::TokenPrinter printer{characters};
-    Elite::MessageState message;
 
     /*
      * 6502: DETOK's seam, and it RECORDS rather than acts.
@@ -295,24 +333,11 @@ namespace GameLogicTests
 
     Codes codes;
 
-    Elite::FlightState flight;
-    Elite::FlightStatus status;
-    Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
-    Elite::Rng rng;
-
+        
     /// Declared after `rng` because it binds one, and the order here is the construction order.
     Elite::ExtendedTokenPrinter extendedPrinter{characters, printer, rng, &codes};
 
-    Elite::Commander commander;
-
-    /// 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and VIC+&04 to VIC+&10 -- the sprite bank slice 4d-a
-    /// gave a home. It was the bare count while nothing moved them.
-    Elite::TrumbleSprites trumbles;
-
-    /// 6502: the VIC-II sprite registers (ADR-005 §1). `MVTRIBS` reads and writes two of them per
-    /// Trumble; every other writer reaches them through a seam.
-    Elite::VideoState video{};
-
+    
     /*
      * Whether the Trumbles' COORDINATE REGISTERS are mirrored into the oracle and compared back.
      *
@@ -328,11 +353,6 @@ namespace GameLogicTests
     RecordingSight sight;
     RecordingDashboard dashboard;
 
-    std::uint8_t view = 0;
-    std::uint8_t spaceView = 0;
-    std::uint8_t explosions = 0;
-    std::uint8_t techLevel = 0; ///< 6502: tek -- part 14's station reads it
-
     /// 6502: QQ14 -- kept only so the fixtures can name it; the byte the port reads is the
     /// commander block's, because part 15's fuel scooping writes it and a copy would drift.
     std::uint8_t fuel = 0;
@@ -343,24 +363,25 @@ namespace GameLogicTests
     }
 
     /*
-     * 6502: LSO -- the sun's heap, which `NWSPS` hands to the SPACE STATION (§6.112).
+     * The seams and the text machinery this fixture answers with, as `Elite::Ports` (M3-a-2).
      *
-     * The `LineHeap` belongs to whoever is running a frame rather than to the universe, so this is
-     * the universe lending its sun window to one. Every fixture that draws a station has to call it,
-     * for the same reason `FlightSession` does: without it the station's lines are written out of
-     * the arena and dropped, and the comparison against `LSO` compares two sets of nothing.
+     * It was `Screen()` returning a `FlightScreen` of twenty-seven references, twenty-two of which
+     * were the universe's own bytes. What is left is the recordings, and `LoopRecording` supplies
+     * the three a frame needs -- so a fixture that only changes screens passes `sight`/`effects`
+     * for all five and one that runs a frame passes its recorder.
      */
-    void LendSunHeap(Elite::LineHeap& _heap) noexcept
+    UnusedSeams unused;
+
+    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipEffects& _tactics, Elite::ShipDrawEffects& _drawing,
+                                         Elite::FlightLoopEffects& _loop, Elite::StartUpEffects& _start) noexcept
     {
-      _heap.AttachSunHeap(heaps.sun);
+      return Elite::Ports{printer, characters, characters, sight, effects, _tactics, _drawing, _loop, extendedPrinter, _start};
     }
 
-    [[nodiscard]] Elite::FlightScreen Screen() noexcept
+    /// The four a screen change never reaches, answered with nothing.
+    [[nodiscard]] Elite::Ports Ports() noexcept
     {
-      return Elite::FlightScreen{
-        canvas,  draw,       math,      geometry,   dust,     heaps,   bubble, work,      screen,   text,  characters.state,
-        printer, characters, message,   flight,     status,   compass, rng,    commander, trumbles, video, sight,
-        effects, view,       spaceView, explosions, techLevel};
+      return PortsWith(unused, unused, unused, unused);
     }
   };
 
@@ -412,20 +433,24 @@ namespace GameLogicTests
     void DrawExplosion() override {}
   };
 
-  /// The port's side of a case: the whole flight universe plus the pieces `FlightLoop` needs. Shared,
-  /// because three suites now build the same twelve-member aggregate to call one routine.
+  /*
+   * The port's side of a case: the whole flight universe and the one recorder a frame reaches
+   * through.
+   *
+   * It was a twelve-member aggregate three suites built to call one routine, because `FlightLoop`
+   * held a reference to each of the eight bytes below `Universe`. Since M3-a the universe owns them,
+   * so what is left is the pairing of a universe with what answers for the platform around it.
+   */
   struct LoopUniverse
   {
     Universe universe;
-    Elite::ControlState control;
-    Elite::ControlOptions options;
-    Elite::KeyLogger keys{};
-    Elite::LaserBurst burst{};
-    Elite::LineHeap heap;
-    Elite::ClipState clip;
-    Elite::Projection projection;
-    Elite::K3Block axes{};
-    LoopRecording effects;
+    LoopRecording effects; ///< the AI, the drawing and the sounds, all three recorded in one place
+
+    /// The seams as `Elite::Ports`: the recorder for the three a frame reaches, nothing for the rest.
+    [[nodiscard]] Elite::Ports Ports() noexcept
+    {
+      return universe.PortsWith(effects, effects, effects, universe.unused);
+    }
   };
 
   inline void Seed(Universe& _universe, std::uint32_t _seed)
@@ -454,7 +479,7 @@ namespace GameLogicTests
      */
     _universe.bubble.stationType = Elite::ShipType::Station;
 
-    _universe.techLevel = 7u; // 6502: tek -- below the Dodo's threshold, so the seeded state is stable
+    _universe.current.techLevel = 7u; // 6502: tek -- below the Dodo's threshold, so the seeded state is stable
 
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
     {
@@ -662,6 +687,7 @@ namespace GameLogicTests
    * difference turned into an assertion. Nothing a suite passes has changed.
    */
   void Mirror(const Universe& _universe, Cpu6502& _cpu, const Where& _at);
-  void CompareState(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context, bool _compareRng = true);
+  void CompareState(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context,
+                    bool _compareRng = true);
 
 } // namespace GameLogicTests

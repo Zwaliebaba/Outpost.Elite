@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Ports.h"
+#include "Universe.h"
+
 #include <cstdint>
 
 #include "Arith.h"
@@ -14,6 +17,7 @@
 #include "TextPrint.h"
 #include "Tokens.h"
 #include "Trumbles.h"
+#include "Universe.h"
 
 namespace Elite
 {
@@ -88,66 +92,9 @@ namespace Elite
   /// 6502: BLUEBAND -- both bands, the left at `SCBASE` and the right 37 cells along.
   void DrawColourBands(Canvas& _canvas) noexcept;
 
-  /*
-   * 6502: abraxas, caravanserai and DFLAG -- what the screen is currently set up as.
-   *
-   * The first two READ LIKE REGISTERS AND ARE NOT. `abraxas` is the value the raster interrupt
-   * pokes into `VIC+&18` on its next pass and `caravanserai` the one for `VIC+&11`, so both are
-   * ordinary bytes here and only the handler that reads them is hardware. §6.73 made the opposite
-   * mistake about `SIGHT`; this is the same question with the answer the other way round.
-   *
-   * `abraxas` says which block of screen RAM colours the bottom of the screen -- &81 for the one at
-   * &6000 and &91 for the one at &6400, which is the dashboard's. `caravanserai` chooses standard
-   * or multicolour bitmap for the same half. `DFLAG` is the cheap half of it: non-zero means the
-   * dashboard is already on screen, so `wantdials` can skip copying it in again.
-   */
-  struct ScreenState
-  {
-    std::uint8_t colourBank = 0x81;  ///< 6502: abraxas
-    std::uint8_t bitmapMode = 0xC0;  ///< 6502: caravanserai -- the LOWER half of the screen
-    std::uint8_t dashboardShown = 0; ///< 6502: DFLAG
+  // 6502: abraxas, caravanserai, DFLAG, moonflower, welcome and HFX -- `ScreenState` moved to
+  // `Universe.h` with M3-a, because it is state and that is where the state lives now.
 
-    /// 6502: moonflower -- `caravanserai`'s twin for the upper half, and the energy bomb's whole
-    /// effect: flight loop part 3 drops it to %11010000 and the space view goes to standard bitmap
-    /// mode for as long as the bomb burns.
-    std::uint8_t upperBitmapMode = 0xC0;
-
-    /*
-     * 6502: welcome -- the border colour the raster handler cycles while the bomb burns.
-     *
-     * A table the interrupt indexes rather than a flag: `COMIRQ1` does `LDA welcome,X` and writes
-     * VIC register &21, so a non-zero first byte is what makes the background flash. `BOMBOFF`
-     * puts it back to zero and `COMIRQ1` increments it, which is the only place it grows.
-     */
-    std::uint8_t backgroundFlash = 0;
-
-    /*
-     * 6502: HFX -- AND IT DOES NOTHING IN THIS VERSION, which took a slice to establish (§6.155).
-     *
-     * On the BBC and the 6502 Second Processor a non-zero `HFX` makes the hyperspace rings
-     * multicoloured, and `IRQ1` is the handler that reads it. This build has neither: upstream's
-     * `hfx.asm` is `SKIP 1` and says in as many words that the flag is unused here; `DOHFX` exists
-     * as a label with both of its instructions commented out in the original source; the C64's
-     * `LL164` is four instructions and does not write it; and the C64's `COMIRQ1` does not read
-     * it. Nothing in the assembled game touches this byte except `ZERO`, which clears `FRIN` to
-     * `de` and catches it in passing at 1161.
-     *
-     * So the field is here because the memory is, and the port clears it where the original does.
-     * ADR-005 §1 scheduled a per-row shift of the space view for it and there is no such effect to
-     * build.
-     */
-    std::uint8_t hyperspaceEffect = 0;
-
-    /*
-     * 6502: RASTCT -- which half of the raster split the interrupt is setting up next.
-     *
-     * Zero is the space view and one is the dashboard, and `COMIRQ1` reads it as the index into
-     * all seven of its tables before writing `innersec,X` back over it. It is the whole of the
-     * handler's state: everything else it reads is either a constant table or one of the four
-     * bytes above.
-     */
-    std::uint8_t rasterCounter = 0;
-  };
 
   /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
   /// extra bit the dashboard's bottom half needs.
@@ -263,81 +210,8 @@ namespace Elite
   /// 6502: sfxboop -- the effect number `WARP` asks for when it refuses.
   inline constexpr std::uint8_t SOUND_BOOP = 6;
 
-  /*
-   * Everything a screen change works on.
-   *
-   * One struct for the reason `TradeScreen`, `SaveScreen` and `GameStart` are structs: the
-   * alternative is a function with eighteen arguments, written four times. `TTX66` genuinely
-   * touches all of this -- the line heaps, the token printer, the message counters, the laser, the
-   * stardust and the dashboard -- because clearing the screen means forgetting everything drawn on
-   * it, and everything drawn on it belongs to somebody different.
-   *
-   * The references are what the original's globals are. Nothing here is aggregated state the game
-   * does not have: each field is one 6502 label, and the struct is the argument list.
-   */
-  struct FlightScreen
-  {
-    Canvas& canvas;
-    DrawWorkspace& draw;
-    MathWorkspace& math;
-    GeometryWorkspace& geometry;
-
-    Stardust& dust;
-    PlanetSunState& heaps;
-    Bubble& bubble;
-    Ship& work; ///< 6502: INWK
-
-    ScreenState& screen;
-    TextState& text;
-    ExtendedTextState& extended;
-    TokenPrinter& printer;
-    TextSink& sink;
-    MessageState& message;
-
-    FlightState& flight;
-    FlightStatus& status;
-    Compass& compass;
-    Rng& rng;
-
-    Commander& commander; ///< 6502: TP -- `SIGHT` only reads it, the flight loop
-                               ///< writes `NOMSL`, `QQ14`, `QQ20`, `FIST` and `BOMB`
-    /*
-     * 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH and the six sprites they steer.
-     *
-     * ONE FIELD RATHER THAN TWO because `TRIBCT` is what indexes the rest: `SIGHT` writes the
-     * count and `MVTRIBS` reads it to decide which sprite this frame moves. It was a bare
-     * `std::uint8_t&` while nothing moved them (slice 3d), which is the same shape `K3Block` had
-     * before a second routine asked for it (§6.121).
-     */
-    TrumbleSprites& trumbles;
-
-    /*
-     * 6502: the VIC-II sprite registers, which `MVTRIBS` READS and not only writes.
-     *
-     * Every other route into them is a write-only seam, which is what `VideoState.h` says they
-     * should be -- a getter would invite a port to compute what the hardware holds. `MVTRIBS` is
-     * the exception the design allows for rather than a hole in it: it loads a sprite's x back out
-     * of the register, adds a velocity to it and stores it again, so the register IS its input.
-     */
-    VideoState& video;
-
-    SightEffects& sight;
-    ViewEffects& effects;
-
-    std::uint8_t& view;       ///< 6502: QQ11 -- which screen is up
-    std::uint8_t& spaceView;  ///< 6502: VIEW -- which way the player is looking, 0 to 3
-    std::uint8_t& explosions; ///< 6502: EV
-
-    /*
-     * 6502: tek -- the current system's tech level, which the flight loop READS.
-     *
-     * Here because part 14 spawns the station and `NWSPS` picks a Coriolis or a Dodo by this byte.
-     * It belongs to the docked half -- `CurrentSystem` carries it and arriving writes it -- so this
-     * is a reference to that byte and not a second copy of it, the same arrangement as `QQ11` and
-     * the commander block.
-     */
-    std::uint8_t& techLevel;
-  };
+  // `FlightScreen` was the argument list a screen change took -- twenty-seven references, each one
+  // 6502 label. Every byte of it is `Universe`'s since M3-a and the four seams are `Ports`'.
 
   /*
    * 6502: TT66, which is `STA QQ11` and then falls into TTX66 -- change to a screen and clear it.
@@ -357,7 +231,7 @@ namespace Elite
    * The view's name is printed only on the space view, at column 11 of row 1: `LDA VIEW / ORA #&60`
    * turns 0 to 3 into tokens 96 to 99, then a space, then token 175 -- "VIEW".
    */
-  void SetUpScreen(FlightScreen& _screen, std::uint8_t _view) noexcept;
+  void SetUpScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept;
 
   /*
    * 6502: LOOK1 -- change the view, with `LQ` and `LO2` as its other two paths.
@@ -368,7 +242,7 @@ namespace Elite
    * stardust, wipes the ships and falls into `SIGHT` -- and does NOT reseed the dust, which is why
    * switching views mirrors the field in the diagonal rather than replacing it.
    */
-  void ChangeView(FlightScreen& _screen, std::uint8_t _to) noexcept;
+  void ChangeView(Universe& _universe, Ports& _ports, std::uint8_t _to) noexcept;
 
   /*
    * 6502: WARP -- the "J" key, which jumps you a long way towards the planet or the sun.
@@ -383,6 +257,6 @@ namespace Elite
    * with the low bit set: it subtracts a fixed amount from each body's z. Then the view is reset
    * through `LOOK1` and the main loop counter is forced so the next pass does a full update.
    */
-  void Warp(FlightScreen& _screen) noexcept;
+  void Warp(Universe& _universe, Ports& _ports) noexcept;
 
 } // namespace Elite

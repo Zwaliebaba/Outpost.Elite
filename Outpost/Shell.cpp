@@ -149,7 +149,7 @@ namespace Outpost
       return;
     }
 
-    Elite::SetUpScreen(m_flight->Screen(), _view);
+    Elite::SetUpScreen(m_flight->Universe(), m_flight->Ports(), _view);
   }
 
   void GameShell::ClearBottomRows()
@@ -190,8 +190,7 @@ namespace Outpost
     // rather than read: the routine draws as many blocks as the ship still carries.
     if (m_flight != nullptr)
     {
-      const Elite::FlightScreen& screen = m_flight->Screen();
-      Elite::ResetMissileIndicators(m_canvas, screen.commander.missiles);
+      Elite::ResetMissileIndicators(m_canvas, m_flight->Universe().commander.missiles);
     }
   }
 
@@ -232,7 +231,7 @@ namespace Outpost
     // `ResetGame` ends with `ResetShipAndBubble` and this does not call `ResetShip` as well.
     if (m_flight != nullptr && m_dockedFlag != nullptr)
     {
-      Elite::ResetGame(m_flight->Loop(), *m_dockedFlag);
+      Elite::ResetGame(m_flight->Universe(), m_flight->Ports(), *m_dockedFlag);
     }
   }
 
@@ -252,7 +251,7 @@ namespace Outpost
      */
     if (m_flight != nullptr)
     {
-      Elite::ResetShipAndBubble(m_flight->Loop());
+      Elite::ResetShipAndBubble(m_flight->Universe(), m_flight->Ports());
     }
   }
 
@@ -365,7 +364,7 @@ namespace Outpost
        * 121,276 cycles. `INWK+7` is the byte `TLL2` walks down, so it is what the curve is indexed
        * by -- the port is reading the same counter the original's cost depends on.
        */
-      const double period = TitleTurnSeconds(m_flight->Screen().work.z.hi);
+      const double period = TitleTurnSeconds(m_flight->Universe().work.z.hi);
 
       m_spinLeftover += elapsed;
       if (m_spinLeftover >= period)
@@ -399,9 +398,7 @@ namespace Outpost
       return 0;
     }
 
-    Elite::FlightLoop& loop = m_flight->Loop();
-    Elite::TitleScreen title{loop, *this, *m_extendedPrinter, loop.options, loop.keys, *m_dockedFlag};
-    return Elite::ShowTitleShip(title, _token, _shipType, _distance);
+    return Elite::ShowTitleShip(m_flight->Universe(), m_flight->Ports(), _token, _shipType, _distance);
   }
 
   // ---- the control codes that leave the text system ------------------------------------------------
@@ -419,9 +416,7 @@ namespace Outpost
      */
     if (m_flight != nullptr && m_extendedPrinter != nullptr && m_text != nullptr && m_galaxy != nullptr)
     {
-      Elite::FlightLoop& loop = m_flight->Loop();
-      Elite::MissionScreen mission{loop, *this, *m_extendedPrinter, loop.keys, m_briefingSlot};
-      Elite::MissionCodes codes{mission, *m_text, *m_galaxy};
+      Elite::MissionCodes codes{m_flight->Universe(), m_flight->Ports(), *m_galaxy};
       if (codes.RunMissionCode(_code))
       {
         return;

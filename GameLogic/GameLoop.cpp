@@ -31,9 +31,8 @@ namespace Elite
 
   } // namespace
 
-  LoopHead RunLoopHead(FlightLoop& _loop, ChartEffects& _rows) noexcept
+  LoopHead RunLoopHead(Universe& _universe, Ports& _ports, ChartEffects& _rows) noexcept
   {
-    FlightScreen& screen = _loop.screen;
 
     /*
      * 6502: DEC DLY / BEQ me2 / BPL me3 / INC DLY.
@@ -42,13 +41,13 @@ namespace Elite
      * the `BPL` falls through and the increment puts it back. Only a `DLY` of exactly 1 reaches
      * `me2`.
      */
-    const std::uint8_t delayed = static_cast<std::uint8_t>(screen.message.delay - 1u);
-    screen.message.delay = delayed;
+    const std::uint8_t delayed = static_cast<std::uint8_t>(_universe.message.delay - 1u);
+    _universe.message.delay = delayed;
 
     if (delayed == 0u)
     {
       // 6502: .me2 LDA QQ11 / BNE clynsneed.
-      if (screen.view != 0u)
+      if (_universe.view != 0u)
       {
         _rows.ClearBottomRows(); // 6502: JSR CLYNS -- a text screen's message is in the bottom rows
       }
@@ -61,19 +60,20 @@ namespace Elite
          * a message rubs out the first. And `MESS` sets `DLY` to twenty, which is why the `LDA #0 /
          * STA DLY` after it is not redundant -- it undoes what the call just did.
          */
-        ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, screen.message.token, screen.view);
-        screen.message.delay = 0u;
+        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, _universe.message.token,
+                    _universe.view);
+        _universe.message.delay = 0u;
       }
     }
     else if ((delayed & 0x80u) != 0u)
     {
-      screen.message.delay = static_cast<std::uint8_t>(delayed + 1u); // 6502: INC DLY
+      _universe.message.delay = static_cast<std::uint8_t>(delayed + 1u); // 6502: INC DLY
     }
 
     // 6502: .me3 DEC MCNT / BEQ P%+5 / .ytq JMP MLOOP -- and this is the ONE PASS IN 256 that
     // reaches everything slice 4c-a built.
-    --screen.flight.mainLoopCounter;
-    return screen.flight.mainLoopCounter == 0u ? LoopHead::Spawn : LoopHead::SkipSpawning;
+    --_universe.flight.mainLoopCounter;
+    return _universe.flight.mainLoopCounter == 0u ? LoopHead::Spawn : LoopHead::SkipSpawning;
   }
 
   void CoolTheGuns(FlightStatus& _status) noexcept
@@ -103,21 +103,20 @@ namespace Elite
     }
   }
 
-  std::uint8_t RunLoopTail(FlightLoop& _loop, Commander& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept
+  std::uint8_t RunLoopTail(Universe& _universe, Ports& _ports, Commander& _commander, std::uint8_t _authorNames, bool _carryIn) noexcept
   {
     std::uint8_t requestedFrames = 0;
-    FlightScreen& screen = _loop.screen;
     bool carry = _carryIn;
 
     // 6502: the two countdowns above the `QQ11` gate, which a docked pass reaches as well -- see
     // `CoolTheGuns`, which the executable's docked loop calls for exactly that reason.
-    CoolTheGuns(screen.status);
+    CoolTheGuns(_universe.status);
 
     // 6502: .NOLASCT LDA QQ11 / BNE P%+5 / JSR DIALS -- every pass on the space view, which is what
     // makes the speed, roll and pitch indicators move at all.
-    if (screen.view == 0u)
+    if (_universe.view == 0u)
     {
-      DrawDials(screen.canvas, screen.draw, screen.flight, screen.status, _commander.fuel, screen.compass, screen.bubble);
+      DrawDials(_universe.canvas, _universe.draw, _universe.flight, _universe.status, _commander.fuel, _universe.compass, _universe.bubble);
 
       /*
        * AND `DIALS` COMES BACK WITH THE CARRY CLEAR, which is what the breeding roll below rotates
@@ -136,7 +135,7 @@ namespace Elite
      * set. The option is one bit doing two unrelated jobs (§6.121's shape), and this is the second:
      * it also gates five of the spawner's tests.
      */
-    if (screen.view != 0u) // 6502: LDA QQ11 / BEQ plus13
+    if (_universe.view != 0u) // 6502: LDA QQ11 / BEQ plus13
     {
       /*
        * 6502: AND PATG / LSR A / BCS plus13 -- and the `LSR` is BOTH the test and the carry the
@@ -145,7 +144,7 @@ namespace Elite
        * clear. One instruction doing the branch and the argument, which is why the option byte has
        * to be passed rather than a bool -- `AND PATG` is a byte operation and only bit 0 survives.
        */
-      carry = (static_cast<std::uint8_t>(screen.view & _authorNames) & 1u) != 0u;
+      carry = (static_cast<std::uint8_t>(_universe.view & _authorNames) & 1u) != 0u;
       if (!carry)
       {
         requestedFrames = LOOP_DELAY_FRAMES; // 6502: LDY #2 / JSR DELAY
@@ -167,7 +166,7 @@ namespace Elite
 
     if (tribbleHigh != 0u)
     {
-      const RngResult roll = screen.rng.Next(carry);
+      const RngResult roll = _universe.rng.Next(carry);
       carry = roll.value >= TRUMBLE_BREED_ROLL; // 6502: CMP #220
 
       const AddResult grown = AddWithCarry(tribbleLow, 0u, carry);
@@ -209,7 +208,7 @@ namespace Elite
      * cool one runs the `ASL` and arrives with bit 7 of the Trumble count instead. Two paths, two
      * different sources, and the port had the breeding block's flag standing on both.
      */
-    carry = screen.status.cabinTemperature >= TRUMBLE_BURN_TEMPERATURE; // 6502: CMP #224
+    carry = _universe.status.cabinTemperature >= TRUMBLE_BURN_TEMPERATURE; // 6502: CMP #224
     if (!carry)
     {
       const ShiftResult doubled = RotateLeftValue(threshold, false); // 6502: ASL T
@@ -217,7 +216,7 @@ namespace Elite
       carry = doubled.carry;
     }
 
-    const RngResult squeak = screen.rng.Next(carry);
+    const RngResult squeak = _universe.rng.Next(carry);
     carry = squeak.value >= threshold; // 6502: CMP T
     if (carry)
     {
@@ -235,11 +234,11 @@ namespace Elite
      */
     // 6502: JSR DORND -- and `CMP T` above left the carry CLEAR, because a set one would have
     // taken the `BCS` and returned. So this roll always rotates in a zero.
-    const RngResult voice = screen.rng.Next(carry);
+    const RngResult voice = _universe.rng.Next(carry);
     std::uint8_t frequency = static_cast<std::uint8_t>(voice.value | 0x40u);
     std::uint8_t sustain = 0x80u;
 
-    if (screen.status.cabinTemperature >= TRUMBLE_BURN_TEMPERATURE)
+    if (_universe.status.cabinTemperature >= TRUMBLE_BURN_TEMPERATURE)
     {
       frequency = static_cast<std::uint8_t>(frequency & 0x0Fu);
       sustain = 0xF1u;
@@ -247,7 +246,7 @@ namespace Elite
 
     // 6502: LDY #sfxtrib / JSR NOISE2, and then `.NOSQUEEK JSR TT17` -- which is the caller's, the
     // way the launch below part 4 is.
-    static_cast<void>(_loop.effects.PlaySoundPitched(SOUND_TRUMBLES, sustain, frequency));
+    static_cast<void>(_ports.loop.PlaySoundPitched(SOUND_TRUMBLES, sustain, frequency));
     return requestedFrames;
   }
 

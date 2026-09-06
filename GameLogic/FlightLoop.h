@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Ports.h"
+#include "Universe.h"
+
 #include <cstdint>
 
 #include "Arith.h"
@@ -297,29 +300,9 @@ namespace Elite
     Escaped,   ///< 6502: JMP ESCAPE, from part 3's escape pod
   };
 
-  /// Everything the flight loop works on that `FlightScreen` does not already carry.
-  struct FlightLoop
-  {
-    FlightScreen& screen;
-
-    KeyLogger& keys;         ///< 6502: KLO
-    ControlState& control;   ///< 6502: JSTX, JSTY and `auto`
-    ControlOptions& options; ///< 6502: DAMP, DJD and JSTK
-    LaserBurst& burst;       ///< 6502: LASX and LASY, which `LASLI` picks and draws through
-
-    /*
-     * What the per-ship half needs and the screen does not carry: `LL9` writes the ship line heap
-     * through `XX19` and clips through `XX12`, and `MVEIT` and `LL9` each have a seam of their own.
-     */
-    LineHeap& heap;           ///< 6502: the `LS%` region, and `SLSP` inside it
-    ClipState& clip;          ///< 6502: XX12, XX13 and the clipper's own workspace
-    Projection& projection;   ///< 6502: K3 and K4 -- where the ship landed on screen
-    K3Block& axes;            ///< 6502: K3, which `SPS1` fills for part 9's docking check
-    ShipEffects& tactics;     ///< 6502: JSR TACTICS, from inside `MVEIT`
-    ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
-
-    FlightLoopEffects& effects;
-  };
+  // `FlightLoop` was the argument list the flight half took: `FlightScreen&` plus the keys, the
+  // controls, the line heap, the clipper's flag, the projection, the axes and three seams. Every
+  // byte of it is `Universe`'s since M3-a and every seam is `Ports`'.
 
   /*
    * 6502: M% to `MA3` -- the head of a frame: the seed, the Trumbles, the controls and the keys.
@@ -347,7 +330,7 @@ namespace Elite
    * `LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY` reads the TARGET's type out of the slot the lock
    * names -- so what gets angry is the ship being shot at, not the missile.
    */
-  void FireMissile(FlightLoop& _loop) noexcept;
+  void FireMissile(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: what `KILLSHP` and `SOS1` call, wired to the routines the port already has.
@@ -361,8 +344,9 @@ namespace Elite
   class LoopSpawnEffects final : public SpawnEffects
   {
   public:
-    explicit LoopSpawnEffects(FlightLoop& _loop) noexcept
-      : m_loop(_loop)
+    LoopSpawnEffects(Universe& _universe, Ports& _ports) noexcept
+      : m_universe(_universe),
+        m_ports(_ports)
     {
     }
 
@@ -372,10 +356,11 @@ namespace Elite
     void ResetMissileIndicators() override;
 
   private:
-    FlightLoop& m_loop;
+    Universe& m_universe;
+    Ports& m_ports;
   };
 
-  [[nodiscard]] LoopOutcome BeginFlightFrame(FlightLoop& _loop) noexcept;
+  [[nodiscard]] LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: MA3 to `JMP MAL1` -- parts 4 to 12, once per occupied slot, and `KS1` under them.
@@ -389,7 +374,7 @@ namespace Elite
    * kill it, move it, copy it back, test it for a collision, draw it, decide whether our laser hit
    * it, and finally either kill it or write its two changed bytes back.
    */
-  [[nodiscard]] LoopOutcome MoveEveryShip(FlightLoop& _loop) noexcept;
+  [[nodiscard]] LoopOutcome MoveEveryShip(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: MA18 to `JMP STARS` -- parts 13 to 16, once per frame after the ships.
@@ -400,10 +385,10 @@ namespace Elite
    * temperature. So a frame in the flight loop does one sixteenth of the housekeeping and the
    * player never sees the seam.
    */
-  [[nodiscard]] LoopOutcome EndFlightFrame(FlightLoop& _loop) noexcept;
+  [[nodiscard]] LoopOutcome EndFlightFrame(Universe& _universe, Ports& _ports) noexcept;
 
   /// 6502: `M%` from end to end -- the opening, every ship, and the tail.
-  [[nodiscard]] LoopOutcome MainFlightLoop(FlightLoop& _loop) noexcept;
+  [[nodiscard]] LoopOutcome MainFlightLoop(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: TT17 -- scan the keyboard for the flight controls, once a frame.
@@ -429,6 +414,6 @@ namespace Elite
    * The joystick half of `TT17afterall` is not ported: `JSTK` is zero for a keyboard player from
    * the moment the title screen is dismissed with a key, and this build has no joystick.
    */
-  [[nodiscard]] CrosshairStep ScanFlightControls(FlightLoop& _loop, ControlEffects& _effects, std::uint8_t _view) noexcept;
+  [[nodiscard]] CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, ControlEffects& _effects, std::uint8_t _view) noexcept;
 
 } // namespace Elite

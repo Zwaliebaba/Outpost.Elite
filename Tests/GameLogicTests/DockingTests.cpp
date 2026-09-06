@@ -333,7 +333,6 @@ namespace GameLogicTests
        */
       RecordingEffects effects;
       Universe universe;
-      Elite::ClipState clip;
       universe.commander = commander;
 
       /*
@@ -353,8 +352,8 @@ namespace GameLogicTests
       universe.status.energy = 0x5C;
       std::uint8_t dockedFlag = 0;
 
-      Elite::FlightScreen screen = universe.Screen();
-      const Elite::DockingResult result = Elite::DockAtStation(effects, screen, clip, nullptr, dockedFlag, 0, false);
+      Elite::Ports ports = universe.Ports();
+      const Elite::DockingResult result = Elite::DockAtStation(effects, universe, ports, nullptr, dockedFlag, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome), L"this commander earns no briefing");
 
@@ -416,12 +415,12 @@ namespace GameLogicTests
       earner.cash.tenths = (0);
 
       Universe earnerUniverse;
-      Elite::ClipState earnerClip;
       earnerUniverse.commander = earner;
       earnerUniverse.heaps.stp = 4u; // §6.95, as above
       std::uint8_t earnerDocked = 0;
-      Elite::FlightScreen earnerScreen = earnerUniverse.Screen();
-      const Elite::DockingResult briefing = Elite::DockAtStation(briefed, earnerScreen, earnerClip, nullptr, earnerDocked, 0, false);
+      Elite::Ports earnerPorts = earnerUniverse.Ports();
+      const Elite::DockingResult briefing =
+        Elite::DockAtStation(briefed, earnerUniverse, earnerPorts, nullptr, earnerDocked, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::BriefMission1), static_cast<int>(briefing.outcome),
                        L"this commander has earned the Constrictor mission");

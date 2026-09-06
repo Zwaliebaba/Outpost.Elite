@@ -215,19 +215,21 @@ namespace GameLogicTests
     }
 
     cells.push_back(Direct(L"NOSTM", _at.nostm, _universe.dust.count, CellScope::Compared));
-    cells.push_back(Direct(L"tek", _at.tek, _universe.techLevel, CellScope::Compared));
+    cells.push_back(Direct(L"tek", _at.tek, _universe.current.techLevel, CellScope::Compared));
 
     // 6502: XX21+2*SST-2 -- the self-modified table entry, compared as state because `NWSPS` is
     // the only writer, so an unexpected change is a defect.
-    AddressPair(cells, L"XX21+2*SST-2", L"XX21+2*SST-1", _at.xx21Station, [&_universe]() { return Elite::BlueprintOf(_universe.bubble.stationType)->address; },
-                [&_universe](std::uint16_t _address)
-                {
-                  if (const Elite::Blueprint* found = Elite::BlueprintAt(_address); found != nullptr && found->address != 0u)
-                  {
-                    _universe.bubble.stationType = found->type;
-                  }
-                },
-                CellScope::Compared);
+    AddressPair(
+      cells, L"XX21+2*SST-2", L"XX21+2*SST-1", _at.xx21Station,
+      [&_universe]() { return Elite::BlueprintOf(_universe.bubble.stationType)->address; },
+      [&_universe](std::uint16_t _address)
+      {
+        if (const Elite::Blueprint* found = Elite::BlueprintAt(_address); found != nullptr && found->address != 0u)
+        {
+          _universe.bubble.stationType = found->type;
+        }
+      },
+      CellScope::Compared);
 
     Run(cells, L"LSO", _at.lso, _universe.heaps.sun.data(), _universe.heaps.sun.size(), CellScope::Compared);
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)

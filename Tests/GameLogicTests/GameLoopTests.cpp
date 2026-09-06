@@ -139,7 +139,8 @@ namespace GameLogicTests
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
-                           _bubble.blocks[slot].ToBytes()[byte], (_where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
+                           _bubble.blocks[slot].ToBytes()[byte],
+                           (_where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
         }
       }
       for (std::size_t type = 0; type < _bubble.counts.size(); ++type)
@@ -154,7 +155,8 @@ namespace GameLogicTests
       constexpr std::uint16_t LINES_START = static_cast<std::uint16_t>(Elite::SHIP_BLOCK_BASE + Elite::MAX_SHIPS * Elite::SHIP_BLOCK_SIZE);
       for (std::uint16_t address = LINES_START; address < Elite::LineHeap::TOP; ++address)
       {
-        Assert::AreEqual(_cpu.memory[address], _heap.Read(Elite::HeapOffset::FromAddress(address)), (_where + L": the heap at " + std::to_wstring(address)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _heap.Read(Elite::HeapOffset::FromAddress(address)),
+                         (_where + L": the heap at " + std::to_wstring(address)).c_str());
       }
     }
 
@@ -210,9 +212,7 @@ namespace GameLogicTests
             // Stopped at `ytq` -- the skip's own `JMP` -- so a spawn is the run that goes PAST it.
             const Elite::Testing::RunResult run = cpu.CallSubroutine(head, 4'000'000, ytq);
 
-            Elite::FlightScreen screen = universe.universe.Screen();
-            Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
-                                   universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
+            Elite::Ports ports = universe.Ports();
 
             struct Rows final : Elite::ChartEffects
             {
@@ -223,7 +223,7 @@ namespace GameLogicTests
               }
             } rows;
 
-            const Elite::LoopHead decided = Elite::RunLoopHead(loop, rows);
+            const Elite::LoopHead decided = Elite::RunLoopHead(universe.universe, ports, rows);
 
             const std::wstring context =
               WidenText("TT100 dly " + std::to_string(delay) + " mcnt " + std::to_string(counter) + " view " + std::to_string(view));
@@ -233,16 +233,16 @@ namespace GameLogicTests
             {
               // 6502: the fall-through into part 2's `LDA MJ`, which is slice 4c-a. The port has to
               // run it too or the comparison is against a machine that did more work.
-              Elite::CurrentSystem current;
-              Elite::RunSpawning(screen.bubble, screen.work, screen.rng, screen.commander, current, screen.status, screen.explosions,
-                                 screen.flight.blueprint, false);
+              Elite::RunSpawning(universe.universe.bubble, universe.universe.work, universe.universe.rng, universe.universe.commander,
+                                 universe.universe.current, universe.universe.status, universe.universe.explosions,
+                                 universe.universe.flight.blueprint, false);
             }
 
             CompareState(cpu, universe.universe, where, context);
             static_cast<void>(ytq);
 
-            outcomes.insert(std::to_string(decided == Elite::LoopHead::Spawn ? 1 : 0) + "/" + std::to_string(universe.universe.message.delay) +
-                            "/" + std::to_string(rows.cleared));
+            outcomes.insert(std::to_string(decided == Elite::LoopHead::Spawn ? 1 : 0) + "/" +
+                            std::to_string(universe.universe.message.delay) + "/" + std::to_string(rows.cleared));
             ++compared;
           }
         }
@@ -338,12 +338,11 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(mloop, 4'000'000, tt17);
             Assert::IsTrue(run.completed, L"MLOOP reached TT17");
 
-            Elite::FlightScreen screen = universe.universe.Screen();
-            Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
-                                   universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
-            screen.rng.SetState(seed);
+            Elite::Ports ports = universe.Ports();
+            universe.universe.rng.SetState(seed);
 
-            const std::uint8_t frames = Elite::RunLoopTail(loop, universe.universe.commander, one.authors, carryIn != 0u);
+            const std::uint8_t frames =
+              Elite::RunLoopTail(universe.universe, ports, universe.universe.commander, one.authors, carryIn != 0u);
 
             const std::wstring context =
               WidenText("MLOOP laser " + std::to_string(one.laser) + " lasct " + std::to_string(one.count) + " view " +
@@ -357,7 +356,7 @@ namespace GameLogicTests
                              (context + L": TRIBBLE+1").c_str());
             for (std::size_t byte = 0; byte < 4u; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(where.rand + byte)], screen.rng.State()[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(where.rand + byte)], universe.universe.rng.State()[byte],
                                (context + L": RAND+" + std::to_wstring(byte)).c_str());
             }
 
@@ -484,7 +483,8 @@ namespace GameLogicTests
             }
             work = Elite::Ship::FromBytes(shipBytes);
 
-            const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
+            const Elite::Blueprint* blueprint =
+              Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
             cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
             cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
@@ -635,7 +635,8 @@ namespace GameLogicTests
             }
             work = Elite::Ship::FromBytes(shipBytes);
 
-            const Elite::Blueprint* blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
+            const Elite::Blueprint* blueprint =
+              Elite::BlueprintOf(Elite::ShipType::CobraMk3); // a real XX0, so the routine can hand it back
             cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint->address & 0xFFu);
             cpu.memory[static_cast<std::uint16_t>(at.xx0 + 1u)] = static_cast<std::uint8_t>(blueprint->address >> 8);
 
@@ -682,8 +683,8 @@ namespace GameLogicTests
                                (where + L": RAND+" + std::to_wstring(byte)).c_str());
             }
             Assert::AreEqual(cpu.memory[at.ev], encounters, (where + L": EV").c_str());
-            Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.xx0] | (cpu.memory[at.xx0 + 1] << 8)), blueprint->address,
-                                            (where + L": XX0").c_str());
+            Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.xx0] | (cpu.memory[at.xx0 + 1] << 8)),
+                                            blueprint->address, (where + L": XX0").c_str());
 
             // What arrived, measured from the bubble rather than from the inputs -- section 6.132's
             // counter, so a sweep that only ever spawns nothing cannot look healthy.

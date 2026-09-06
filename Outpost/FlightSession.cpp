@@ -54,44 +54,16 @@ namespace Outpost
     constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
   } // namespace
 
-  FlightSession::FlightSession(Window& _window, Elite::Canvas& _canvas, Elite::TextState& _text, Elite::CharacterPrinter& _characters,
-                               Elite::TokenPrinter& _printer, Elite::MessageState& _message, Elite::Commander& _commander,
-                               Elite::Rng& _rng, Elite::FlightStatus& _status, std::uint8_t& _view, std::uint8_t& _explosions,
-                               std::uint8_t& _techLevel, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music,
+  FlightSession::FlightSession(Window& _window, Elite::Universe& _universe, Elite::TokenPrinter& _printer,
+                               Elite::CharacterPrinter& _characters, Elite::ExtendedTokenPrinter& _tokens,
+                               Elite::StartUpEffects& _start, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music,
                                SoundOutput& _audio) noexcept
     : m_window(_window),
-      m_canvas(_canvas),
+      m_universe(_universe),
       m_sound(_sound),
       m_music(_music),
       m_audio(_audio),
-      m_screen{_canvas,
-               m_draw,
-               m_math,
-               m_geometry,
-               m_dust,
-               m_heaps,
-               m_bubble,
-               m_work,
-               m_screenState,
-               _text,
-               _characters.state,
-               _printer,
-               _characters,
-               _message,
-               m_flight,
-               _status,
-               m_compass,
-               _rng,
-               _commander,
-               m_trumbles,
-               m_video,
-               *this,
-               *this,
-               _view,
-               m_spaceView,
-               _explosions,
-               _techLevel},
-      m_loop{m_screen, m_keys, m_control, m_options, m_burst, m_heap, m_clip, m_projection, m_axes, *this, *this, *this}
+      m_ports{_printer, _characters, _characters, *this, *this, *this, *this, *this, _tokens, _start}
   {
     /*
      * TWO BYTES THE GAME WOULD HAVE HAD AND A FRESH C++ OBJECT DOES NOT (§6.95).
@@ -103,29 +75,29 @@ namespace Outpost
      * whatever the last ship put there (§6.90). The last ship the game drew before the docking bay
      * is the title screen's Cobra Mk III, so that is what the pointer would hold.
      */
-    m_heaps.stp = LAST_CIRCLE_STEP;
-    m_flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
+    m_universe.heaps.stp = LAST_CIRCLE_STEP;
+    m_universe.flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
 
     // 6502: the loader's part 4 -- the sprite positions, sizes and colours the game inherits and
     // never writes. Without it the sights are switched on at (0, 0), off the screen (§6.160).
-    Elite::SetUpLoaderVideo(m_video);
+    Elite::SetUpLoaderVideo(m_universe.video);
 
     /*
      * 6502: XX21+2*SST-2 -- a third byte of the same shape, and this one is not left by a previous
      * screen at all: `BEGIN` writes it at boot and only `NWSPS` writes it afterwards. Zero is what
      * `NWSHP` refuses, so an unseeded session would silently never build a station.
      */
-    m_bubble.stationType = Elite::ShipType::Station;
+    m_universe.bubble.stationType = Elite::ShipType::Station;
 
     /*
      * 6502: LSO -- and the station's line heap is IT, not a run carved out of `SLSP` (§6.112).
      *
-     * `NWSPS` points the station at the sun's 200 bytes, which live in `m_heaps` here and not in
-     * the arena `m_heap` addresses. Lending the window is what makes the station's lines land
-     * somewhere; without it every one of them is written out of range and dropped, and the station
-     * you have just launched from is invisible in the rear view.
+     * `NWSPS` points the station at the sun's 200 bytes, which are `heaps.sun` and not the arena
+     * `heap` addresses. Lending the window is what makes the station's lines land somewhere;
+     * without it every one of them is written out of range and dropped, and the station you have
+     * just launched from is invisible in the rear view.
      */
-    m_heap.AttachSunHeap(m_heaps.sun);
+    m_universe.LendSunHeap();
   }
 
   void FlightSession::SyncVideoRegisters() noexcept
@@ -143,26 +115,26 @@ namespace Outpost
      * test, so a burning bomb moves the background colour on EVERY pass: running this once a frame
      * would halve the flash rate.
      */
-    const std::uint8_t bomb = m_screen.commander.energyBomb; // 6502: BOMB
-    const Elite::RasterRegisters first = Elite::TickRasterInterrupt(m_screenState, bomb);
-    const Elite::RasterRegisters second = Elite::TickRasterInterrupt(m_screenState, bomb);
+    const std::uint8_t bomb = m_universe.commander.energyBomb; // 6502: BOMB
+    const Elite::RasterRegisters first = Elite::TickRasterInterrupt(m_universe.screen, bomb);
+    const Elite::RasterRegisters second = Elite::TickRasterInterrupt(m_universe.screen, bomb);
 
     const Elite::RasterRegisters& spaceView = first.spaceView ? first : second;
     const Elite::RasterRegisters& dashboard = first.spaceView ? second : first;
 
     // 6502: LDA abraxas / STA VIC+&18 -- and &91 is the dashboard's block, which is also the only
     // state in which its rows are multicolour.
-    m_canvas.SetDashboardShown(dashboard.memoryPointers == Elite::COLOUR_BANK_DASHBOARD);
-    m_canvas.SetBackground(dashboard.background);
+    m_universe.canvas.SetDashboardShown(dashboard.memoryPointers == Elite::COLOUR_BANK_DASHBOARD);
+    m_universe.canvas.SetBackground(dashboard.background);
 
     // 6502: moonflower and welcome -- the energy bomb.
-    m_canvas.SetSpaceViewMulticolour((spaceView.control2 & Elite::BITMAP_MODE_MULTICOLOUR) != 0u);
-    m_canvas.SetSpaceViewBackground(spaceView.background);
+    m_universe.canvas.SetSpaceViewMulticolour((spaceView.control2 & Elite::BITMAP_MODE_MULTICOLOUR) != 0u);
+    m_universe.canvas.SetSpaceViewBackground(spaceView.background);
 
     // 6502: santana and lotus -- the explosion sprite, which is multicolour and red above the
     // split and single-colour in colour 0 below it, so it never draws over the dashboard.
-    m_canvas.SetSpriteMulticolour(spaceView.spriteMulticolour, dashboard.spriteMulticolour);
-    m_canvas.SetExplosionColour(spaceView.explosionColour, dashboard.explosionColour);
+    m_universe.canvas.SetSpriteMulticolour(spaceView.spriteMulticolour, dashboard.spriteMulticolour);
+    m_universe.canvas.SetExplosionColour(spaceView.explosionColour, dashboard.explosionColour);
   }
 
   // ---- the sound ----------------------------------------------------------------------------------
@@ -200,7 +172,7 @@ namespace Outpost
   void FlightSession::StopDockingMusic()
   {
     // 6502: stopbd -- which reads MULIE, the title screen's bracket around its RESET.
-    Elite::StopDockingMusic(m_music, m_screen.status.titleReset, m_sound, m_audio.Direct());
+    Elite::StopDockingMusic(m_music, m_universe.status.titleReset, m_sound, m_audio.Direct());
   }
 
   // ---- the bubble ---------------------------------------------------------------------------------
@@ -216,20 +188,23 @@ namespace Outpost
    */
   bool FlightSession::SpawnAhead(Elite::ShipType _type)
   {
-    return Elite::SpawnShipAhead(m_bubble, m_work, _type, m_flight.delta, m_bubble.missileTarget, m_flight.blueprint).created;
+    return Elite::SpawnShipAhead(m_universe.bubble, m_universe.work, _type, m_universe.flight.delta, m_universe.bubble.missileTarget,
+                                 m_universe.flight.blueprint)
+      .created;
   }
 
   bool FlightSession::Anger(std::uint8_t _slot, Elite::ShipType _type)
   {
     // 6502: ANGRY on the block INF points at -- and which block that is, the caller says (§6.142).
     // The routine's exit carry comes back with it, for the `JSR LL9` that follows (§6.157).
-    return Elite::Anger(m_bubble, m_flight, _slot, _type);
+    return Elite::Anger(m_universe.bubble, m_universe.flight, _slot, _type);
   }
 
   bool FlightSession::SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type)
   {
     // 6502: SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.
-    return Elite::SpawnChildShip(m_bubble, m_work, m_screen.rng, m_flight.slot, m_flight.type, _aiFlag, _type, m_flight.blueprint)
+    return Elite::SpawnChildShip(m_universe.bubble, m_universe.work, m_universe.rng, m_universe.flight.slot, m_universe.flight.type,
+                                 _aiFlag, _type, m_universe.flight.blueprint)
       .created;
   }
 
@@ -240,14 +215,15 @@ namespace Outpost
     // 6502: JSR TACTICS from `MVEIT`'s `MV26`, with `INF` at the slot being moved -- which is
     // `XSAV`, the byte the loop keeps for exactly this.
     (void)_work;
-    return Elite::RunTactics(m_loop, m_flight.slot);
+    return Elite::RunTactics(m_universe, m_ports, m_universe.flight.slot);
   }
 
   void FlightSession::DrawPlanetOrSun()
   {
     // 6502: LL25 -- JMP PLANET, taken for a type with bit 7 set. `INWK` is the body and `TYPE`
     // decides which of the two it is, exactly as the tail jump does.
-    Elite::DrawPlanetOrSun(m_canvas, m_heaps, m_geometry, m_math, m_clip, m_screen.rng, m_work, m_projection, m_flight.type);
+    Elite::DrawPlanetOrSun(m_universe.canvas, m_universe.heaps, m_universe.geometry, m_universe.math, m_universe.clip, m_universe.rng,
+                           m_universe.work, m_universe.projection, m_universe.flight.type);
   }
 
   void FlightSession::DrawExplosion()
@@ -255,14 +231,15 @@ namespace Outpost
     // 6502: LL14's JMP DOEXP -- age the cloud by one frame and draw it, which is how the last
     // frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
     // vertices `LL9` part 8 projected, which `DOEXP` copies onto the ship's line heap.
-    Elite::DrawExplosionCloud(m_canvas, m_math, m_screen.rng, m_work, m_heap, m_geometry, m_bubble, *this);
+    Elite::DrawExplosionCloud(m_universe.canvas, m_universe.math, m_universe.rng, m_universe.work, m_universe.heap, m_universe.geometry,
+                              m_universe.bubble, *this);
   }
 
   // ---- the controls -------------------------------------------------------------------------------
 
   void FlightSession::ScanKeyboard()
   {
-    (void)ScanMatrix(m_keys); // 6502: JSR RDKEY, whose answer `DOKEY` does not read
+    (void)ScanMatrix(m_universe.keys); // 6502: JSR RDKEY, whose answer `DOKEY` does not read
   }
 
   Elite::TitleKey FlightSession::ScanMatrix(Elite::KeyLogger& _keys) noexcept
@@ -277,7 +254,7 @@ namespace Outpost
      * presses standing for ever.
      */
     m_rasterMode = RASTER_MODE_SCANNING;                 // 6502: LDA #%101 / JSR SETL1
-    Elite::ApplyMaskSprites(m_video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
+    Elite::ApplyMaskSprites(m_universe.video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
     _keys.fill(0u);                                      // 6502: JSR ZEKTRAN
 
     /*
@@ -302,7 +279,7 @@ namespace Outpost
     // 6502: LDA QQ11 / BEQ allkeys -- with anything but the space view up, the nine keys that act
     // rather than steer are forgotten. This is the one piece of `RDKEY` that is game logic, and it
     // stays with the scan because it depends on what the scan found.
-    if (m_screen.view != 0u)
+    if (m_universe.view != 0u)
     {
       for (const std::size_t index : NON_STEERING_KEYS)
       {
@@ -322,7 +299,7 @@ namespace Outpost
      * It is here rather than in `KeyMap` because this is where the game itself sorts keys by view,
      * one statement above; and it is marked as the port's own so nobody looks for it in `RDKEY`.
      */
-    if (Elite::IsChartView(m_screen.view))
+    if (Elite::IsChartView(m_universe.view))
     {
       for (const std::size_t index : {Elite::KEY_ROLL_LEFT, Elite::KEY_ROLL_RIGHT, Elite::KEY_PITCH_UP, Elite::KEY_PITCH_DOWN})
       {
@@ -343,11 +320,12 @@ namespace Outpost
      * `LSP` goes to ONE rather than to zero: the ball heap's first byte is not a line, so an empty
      * heap is a pointer of 1 and a `LSP` of 0 would make `BLINE`'s first segment overwrite it.
      */
-    m_heaps.lsp = 1u;
-    m_heaps.stp = _circle.step;
+    m_universe.heaps.lsp = 1u;
+    m_universe.heaps.stp = _circle.step;
 
     const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-    Elite::DrawBall(m_canvas, m_heaps, m_geometry, m_math, m_clip, centre, _circle.radius, false);
+    Elite::DrawBall(m_universe.canvas, m_universe.heaps, m_universe.geometry, m_universe.math, m_universe.clip, centre, _circle.radius,
+                    false);
   }
 
   void FlightSession::DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius)
@@ -359,12 +337,12 @@ namespace Outpost
      * has nothing to erase, and cleared after so that the next disc does not rub this one out. A
      * chart's discs are the one place the game draws suns it never intends to move.
      */
-    Elite::ClearSunHeap(m_heaps);
+    Elite::ClearSunHeap(m_universe.heaps);
 
     const Elite::Projection centre{_x, 0u, _y, 0u};
-    Elite::DrawSun(m_canvas, m_heaps, m_math, m_screen.rng, centre, _radius);
+    Elite::DrawSun(m_universe.canvas, m_universe.heaps, m_universe.math, m_universe.rng, centre, _radius);
 
-    Elite::ClearSunHeap(m_heaps);
+    Elite::ClearSunHeap(m_universe.heaps);
   }
 
   void FlightSession::RunDockingComputer(Elite::Ship& _work)
@@ -381,7 +359,7 @@ namespace Outpost
      * rather than an NPC's. Slot 0 is what `INF` points at on that path.
      */
     (void)_work;
-    (void)Elite::RunDockingComputer(m_loop, 0u);
+    (void)Elite::RunDockingComputer(m_universe, m_ports, 0u);
   }
 
   // ---- the VIC-II ----------------------------------------------------------------------------------
@@ -403,27 +381,27 @@ namespace Outpost
    */
   void FlightSession::SetSightColour(std::uint8_t _colour)
   {
-    Elite::ApplySightColour(m_video, _colour); // 6502: STA VIC+&27 -- sprite 0, the sights'
+    Elite::ApplySightColour(m_universe.video, _colour); // 6502: STA VIC+&27 -- sprite 0, the sights'
   }
 
   void FlightSession::SetSpritesEnabled(std::uint8_t _mask)
   {
-    Elite::ApplySpritesEnabled(m_video, _mask); // 6502: STA VIC+&15
+    Elite::ApplySpritesEnabled(m_universe.video, _mask); // 6502: STA VIC+&15
   }
 
   void FlightSession::SetSpriteExpansion(std::uint8_t _mask)
   {
-    Elite::ApplySpriteExpansion(m_video, _mask); // 6502: STA VIC+&17 / STA VIC+&1D
+    Elite::ApplySpriteExpansion(m_universe.video, _mask); // 6502: STA VIC+&17 / STA VIC+&1D
   }
 
   void FlightSession::ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y)
   {
-    Elite::ApplyExplosionSprite(m_video, _x, _y); // 6502: the five writes that place sprite 1
+    Elite::ApplyExplosionSprite(m_universe.video, _x, _y); // 6502: the five writes that place sprite 1
   }
 
   void FlightSession::MaskSprites(std::uint8_t _mask)
   {
-    Elite::ApplyMaskSprites(m_video, _mask); // 6502: LDA VIC+&15 / AND #.. / STA VIC+&15
+    Elite::ApplyMaskSprites(m_universe.video, _mask); // 6502: LDA VIC+&15 / AND #.. / STA VIC+&15
   }
 
   void FlightSession::SetPalette(std::uint8_t _colour)
