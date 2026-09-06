@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "OracleImage.h"
 
 #include "Commander.h"
@@ -830,17 +832,28 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         StampedSink sink;
-        Elite::TextState text;
+
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * `SVE` takes `(Universe&, Ports&)` since M3-a-3 and reads the commander, the name, the
+         * image, the line buffer, `DISK` and `U` out of it, so a fixture that kept its own copies
+         * would be comparing a screen driven by different bytes from the ones it asserts on.
+         */
+        Elite::Universe universe;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         sink.cursor = &text;
 
-        Commander portBlock = live;
-        std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> portName = LIVE_NAME;
-        std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> portImage = image;
-        std::array<std::uint8_t, 16> buffer{};
+        universe.commander = live;
+        Commander& portBlock = universe.commander;
+        universe.commanderName = LIVE_NAME;
+        std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE>& portName = universe.commanderName;
+        universe.commanderFile = image;
+        std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE>& portImage = universe.commanderFile;
 
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         IgnoredControls controls;
         Elite::CharacterPrinter characters(sink);
         TokenPrinter recursive(characters);
@@ -856,13 +869,16 @@ namespace GameLogicTests
         DeviceStore store;
         store.failDevice = script.failDevice;
         store.badFile = script.badFile;
-        std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it (M2-c)
+        std::uint8_t& numberWidth = universe.numberWidth;  // 6502: U as the last BPRNT left it (M2-c)
         numberWidth = script.numberWidth; // 6502: U, exactly as it was seeded on the other side
-        std::uint8_t useDisk = script.useDisk ? std::uint8_t{0xFFu} : std::uint8_t{0};
+        std::uint8_t& useDisk = universe.useDisk;
+        useDisk = script.useDisk ? std::uint8_t{0xFFu} : std::uint8_t{0};
 
-        Elite::SaveScreen screen{recursive, characters, extended, sink, text, keys, effects, store, numberWidth};
+        NullSeams nulls;
+        Elite::Ports ports{recursive, characters, sink,  nulls, nulls, nulls, nulls,
+                           nulls,     extended,   nulls, keys,  nulls, effects, store};
 
-        const Elite::DiskMenuResult result = Elite::DiskAccessMenu(screen, portBlock, portName, portImage, buffer, useDisk);
+        const Elite::DiskMenuResult result = Elite::DiskAccessMenu(universe, ports);
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());

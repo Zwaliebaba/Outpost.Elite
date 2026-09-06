@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "OracleImage.h"
 
 #include "Commander.h"
@@ -600,40 +602,47 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         CountingSink sink;
-        Elite::TextState text;
+
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * `BR1` takes `(Universe&, Ports&)` since M3-a-3 -- `GameStart` went with `SaveScreen`,
+         * because it held one -- so every byte the sequence reads or writes is this object's, and
+         * the assertions below still read as they did.
+         */
+        Elite::Universe universe;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         Elite::CharacterPrinter characters(sink);
         Elite::TokenPrinter recursive(characters);
         recursive.SetCursor(&text);
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         IgnoredControls controls;
         Elite::ExtendedTokenPrinter extended(characters, recursive, rng, &controls);
-        std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it (M2-c)
 
         ScriptedKeys keys(script.menuKeys);
         SilentEffects lineEffects;
         DeviceStore store;
-        Elite::SaveScreen save{recursive, characters, extended, sink, text, keys, lineEffects, store, numberWidth};
 
-        Elite::Commander commander;
-        std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name{};
-        std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> portImage = image;
-        std::array<std::uint8_t, 16> buffer{};
-        std::uint8_t useDisk = 0;
+        Elite::Commander& commander = universe.commander;
+        universe.commanderFile = image;
 
-        CurrentSystem current;
-        SystemSeeds selected{};
-        std::uint8_t crosshairX = 0;
-        std::uint8_t crosshairY = 0;
-        std::uint8_t explosionCount = 0xEE;
-        std::uint8_t dockedFlag = 0;
+        CurrentSystem& current = universe.current;
+        SystemSeeds& selected = universe.selectedSeeds;
+        std::uint8_t& crosshairX = universe.crosshairX;
+        std::uint8_t& crosshairY = universe.crosshairY;
+        std::uint8_t& explosionCount = universe.explosions;
+        explosionCount = 0xEE;
+        std::uint8_t& dockedFlag = universe.dockedFlag;
 
         RecordingStart effects({script.firstAnswer, 0});
-        Elite::GameStart game{effects, save,    text,     commander,  name,       portImage,      buffer,
-                              useDisk, current, selected, crosshairX, crosshairY, explosionCount, dockedFlag};
+        NullSeams nulls;
+        Elite::Ports ports{recursive, characters, sink,    nulls, nulls, nulls,       nulls,
+                           nulls,     extended,   effects, keys,  nulls, lineEffects, store};
 
-        const Elite::ForcedKey forced = script.coldStart ? Elite::ResetAndStartGame(game) : Elite::StartGame(game);
+        const Elite::ForcedKey forced =
+          script.coldStart ? Elite::ResetAndStartGame(universe, ports, false) : Elite::StartGame(universe, ports, false);
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(effects.overran, (where + L": the port asked for more title screens").c_str());

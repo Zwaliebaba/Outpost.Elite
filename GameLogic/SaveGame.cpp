@@ -4,6 +4,8 @@
 
 #include "EliteTypes.h"
 #include "LookupTables.h"
+#include "Ports.h"
+#include "Universe.h"
 
 /*
  * Saving and loading a commander (slice 2d).
@@ -59,10 +61,10 @@ namespace Elite
      * Two labels with one body between them, which is why the port has one function: the only thing
      * that differs is the token, and both end at the same `JMP SVE`.
      */
-    void ReportAndReturnToMenu(SaveScreen& _screen, std::uint8_t _token) noexcept
+    void ReportAndReturnToMenu(Universe& _universe, Ports& _ports, std::uint8_t _token) noexcept
     {
-      _screen.extended.Print(_token);
-      (void)_screen.keys.NextKey();
+      _ports.tokens.Print(_token);
+      (void)_ports.keys.NextKey();
     }
   } // namespace
 
@@ -158,7 +160,8 @@ namespace Elite
 
     // The competition number reads the file's checksums, so it is worked out from the image rather
     // than from the block -- the same distinction SaveCommander's header makes.
-    const Commander image = Commander::FromBytes(std::span<const std::uint8_t, COMMANDER_BLOCK_SIZE>{file.data() + BLOCK_IN_FILE, COMMANDER_BLOCK_SIZE});
+    const Commander image =
+      Commander::FromBytes(std::span<const std::uint8_t, COMMANDER_BLOCK_SIZE>{file.data() + BLOCK_IN_FILE, COMMANDER_BLOCK_SIZE});
     outcome.competition = MakeCompetitionNumber(image);
 
     // 6502: NA% -- kept because DFAULT reads it back, not because the write needs it.
@@ -180,9 +183,7 @@ namespace Elite
     return LoadCommander(file, _outBlock, _name);
   }
 
-  DiskMenuResult DiskAccessMenu(SaveScreen& _screen, Commander& _block, std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name,
-                                std::span<std::uint8_t, COMMANDER_FILE_SIZE> _image, std::span<std::uint8_t> _buffer,
-                                std::uint8_t& _useDisk) noexcept
+  DiskMenuResult DiskAccessMenu(Universe& _universe, Ports& _ports) noexcept
   {
     /*
      * 6502: RLINE, which is a global in the original and a local here.
@@ -193,15 +194,15 @@ namespace Elite
     LineLimits limits;
 
     // 6502: NA% -- the eight bytes of name at the front of the image, which TRNME writes.
-    const auto imageName = _image.first<COMMANDER_NAME_SIZE>();
+    const auto imageName = std::span<std::uint8_t, COMMANDER_FILE_SIZE>{_universe.commanderFile}.first<COMMANDER_NAME_SIZE>();
 
     // 6502: INWK+5 -- what KERNALSETUP turns into a filename, which is the LINE and not the image.
     const auto TypedName = [&]() noexcept
     {
       std::array<std::uint8_t, COMMANDER_NAME_SIZE> typed{};
-      for (std::size_t index = 0; index < COMMANDER_NAME_SIZE && index < _buffer.size(); ++index)
+      for (std::size_t index = 0; index < COMMANDER_NAME_SIZE && index < _universe.lineBuffer.size(); ++index)
       {
-        typed[index] = _buffer[index];
+        typed[index] = _universe.lineBuffer[index];
       }
       return typed;
     };
@@ -237,7 +238,7 @@ namespace Elite
     {
       if (loadFramePending)
       {
-        StoreCommanderName(_buffer, imageName); // 6502: JSR TRNME
+        StoreCommanderName(_universe.lineBuffer, imageName); // 6502: JSR TRNME
         _result.newCommander = true;            // 6502: SEC
       }
       return _result;
@@ -246,10 +247,10 @@ namespace Elite
     for (;;)
     {
       // 6502: LDA #1 / JSR DETOK -- the menu, redrawn every time round.
-      _screen.extended.Print(MENU_TOKEN);
+      _ports.tokens.Print(MENU_TOKEN);
 
       // 6502: JSR t.
-      const std::uint8_t key = _screen.keys.NextKey();
+      const std::uint8_t key = _ports.keys.NextKey();
 
       /*
        * 6502: `loading` -- JSR GTNMEW / JSR LOD / JSR TRNME / SEC / RTS.
@@ -264,15 +265,16 @@ namespace Elite
         // The name GTNME falls back on is the IMAGE's, through TR1's `LDA NA%,X` -- not the live
         // commander's. Type nothing and you keep the name you last saved under, which need not be
         // the name you are playing as.
-        (void)AskCommanderName(_screen.keys, _screen.chpr, _screen.text, _screen.extended, _screen.effects, _buffer, imageName, limits);
+        (void)AskCommanderName(_ports.keys, _ports.sink, _universe.text, _ports.tokens, _ports.entry, _universe.lineBuffer, imageName,
+                               limits);
 
         std::array<std::uint8_t, COMMANDER_FILE_SIZE> file{};
 
         // 6502: JSR KERNALLOAD / BCS tapeerror -- the device could not read it.
-        if (!_screen.store.Read(TypedName(), file))
+        if (!_ports.store.Read(TypedName(), file))
         {
           loadFramePending = true;
-          ReportAndReturnToMenu(_screen, DEVICE_ERROR_TOKEN);
+          ReportAndReturnToMenu(_universe, _ports, DEVICE_ERROR_TOKEN);
           continue;
         }
 
@@ -280,7 +282,7 @@ namespace Elite
         if ((file[BLOCK_IN_FILE] & NOT_A_COMMANDER) != 0u)
         {
           loadFramePending = true;
-          ReportAndReturnToMenu(_screen, BAD_FILE_TOKEN);
+          ReportAndReturnToMenu(_universe, _ports, BAD_FILE_TOKEN);
           continue;
         }
 
@@ -288,11 +290,11 @@ namespace Elite
         // had until TRNME below overwrites it.
         for (std::size_t index = 0; index < COMMANDER_BLOCK_SIZE; ++index)
         {
-          _image[BLOCK_IN_FILE + index] = file[BLOCK_IN_FILE + index];
+          _universe.commanderFile[BLOCK_IN_FILE + index] = file[BLOCK_IN_FILE + index];
         }
 
         // 6502: JSR TRNME -- the typed name over the one the image was carrying.
-        StoreCommanderName(_buffer, imageName);
+        StoreCommanderName(_universe.lineBuffer, imageName);
 
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Loaded;
@@ -305,15 +307,16 @@ namespace Elite
        */
       if (key == DISK_MENU_SAVE)
       {
-        (void)AskCommanderName(_screen.keys, _screen.chpr, _screen.text, _screen.extended, _screen.effects, _buffer, imageName, limits);
+        (void)AskCommanderName(_ports.keys, _ports.sink, _universe.text, _ports.tokens, _ports.entry, _universe.lineBuffer, imageName,
+                               limits);
 
         // 6502: JSR TRNME -- and here it runs BEFORE the file is touched, so the name the store is
         // given and the name in the image are the same eight bytes.
-        StoreCommanderName(_buffer, imageName);
+        StoreCommanderName(_universe.lineBuffer, imageName);
 
         // 6502: LDA #4 / JSR DETOK. It comes one instruction after `LSR SVC` in the original and
         // one before it here, which nothing can observe: the token does not read the save count.
-        _screen.extended.Print(SAVE_TOKEN);
+        _ports.tokens.Print(SAVE_TOKEN);
 
         /*
          * The name goes in from the IMAGE, which is where TRNME just put it -- not from the line
@@ -324,12 +327,12 @@ namespace Elite
          * code in the port: the original's copy would still be reproduced, but nothing would
          * depend on it, and a later change that moved it would go unnoticed.
          */
-        const SaveOutcome saved = SaveCommanderTo(_screen.store, _block, imageName);
+        const SaveOutcome saved = SaveCommanderTo(_ports.store, _universe.commander, imageName);
 
         // 6502: SVL1 and the three checksums -- the image is what they leave behind.
         for (std::size_t index = 0; index < COMMANDER_FILE_SIZE; ++index)
         {
-          _image[index] = saved.image[index];
+          _universe.commanderFile[index] = saved.image[index];
         }
 
         /*
@@ -343,18 +346,18 @@ namespace Elite
         {
           competition[index] = saved.competition.value[index];
         }
-        _screen.numberWidth = PrintNumber(_screen.characters, competition, _screen.numberWidth, false);
+        _universe.numberWidth = PrintNumber(_ports.characters, competition, _universe.numberWidth, false);
 
         // 6502: JSR TT67 / JSR TT67 -- two of them, so the number gets a blank line under it.
-        PrintNewline(_screen.printer);
-        PrintNewline(_screen.printer);
+        PrintNewline(_ports.printer);
+        PrintNewline(_ports.printer);
 
         // 6502: BCS saveerror -- which is a JMP to tapeerror, the same body the load path uses. No
         // frame is left behind: SV1 is reached by a BRANCH from the menu, so the only return
         // address on the stack is still SVE's own.
         if (!saved.written)
         {
-          ReportAndReturnToMenu(_screen, DEVICE_ERROR_TOKEN);
+          ReportAndReturnToMenu(_universe, _ports, DEVICE_ERROR_TOKEN);
           continue;
         }
 
@@ -366,10 +369,10 @@ namespace Elite
          * carries on is the rebuilt one rather than the one the player was playing. It is the same
          * bytes, so nothing visible moves -- but the routine that runs is a load.
          */
-        (void)LoadCommander(_image, _block, _name);
+        (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
         // 6502: JSR t -- one key before the menu gives the screen back.
-        (void)_screen.keys.NextKey();
+        (void)_ports.keys.NextKey();
 
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Saved;
@@ -385,7 +388,7 @@ namespace Elite
         // 6502: EOR #&FF -- the same all-eight-bits flip the pause screen's `DKS3` does, and
         // the reason `DISK` is a BYTE and not a bool: it is one of the thirteen toggles, and a
         // bool cannot hold the &FF the indexed store writes (§6.139).
-        _useDisk = static_cast<std::uint8_t>(_useDisk ^ 0xFFu);
+        _universe.useDisk = static_cast<std::uint8_t>(_universe.useDisk ^ 0xFFu);
         continue;
       }
 
@@ -398,17 +401,17 @@ namespace Elite
        */
       if (key == DISK_MENU_DEFAULT)
       {
-        _screen.extended.Print(CONFIRM_TOKEN);
-        if (!AskYesNo(_screen.keys))
+        _ports.tokens.Print(CONFIRM_TOKEN);
+        if (!AskYesNo(_ports.keys))
         {
           return Leave(DiskMenuResult{});
         }
 
         // 6502: JSR JAMESON -- NA2% over NA%, which is an image and not the live commander.
-        ResetToDefaultCommander(_image);
+        ResetToDefaultCommander(_universe.commanderFile);
 
         // 6502: JMP DFAULT -- and only now is the default commander actually in play.
-        (void)LoadCommander(_image, _block, _name);
+        (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
         DiskMenuResult result;
         result.outcome = DiskMenuOutcome::Reset;

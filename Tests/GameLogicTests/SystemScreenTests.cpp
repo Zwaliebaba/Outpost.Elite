@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "OracleImage.h"
 
 #include "Commander.h"
@@ -230,7 +232,11 @@ namespace GameLogicTests
 
           // ---- the port ------------------------------------------------------------------------
           StampedSink sink;
-          Elite::TextState text;
+
+          // The universe, with the names below aliases into it: the screen takes `(Universe&,
+          // Ports&)` since M3-a-3, so every byte it reads has to be this object's.
+          Elite::Universe universe;
+          Elite::TextState& text = universe.text;
           text.column = 1;
           text.row = 1;
           text.caseFlags = 0;
@@ -241,22 +247,27 @@ namespace GameLogicTests
           printer.SetCaseFlags(0);
           printer.SetCursor(&text);
 
-          Elite::Commander commander = Elite::DefaultCommander();
+          universe.commander = Elite::DefaultCommander();
+          Elite::Commander& commander = universe.commander;
           commander.galaxyNumber = galaxyNumber;
           const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-          SystemSeeds current = seeds;
-          SystemSeeds selected = seeds;
+          SystemSeeds& current = universe.current.seeds;
+          current = seeds;
+          SystemSeeds& selected = universe.selectedSeeds;
+          selected = seeds;
           Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                     selected, false);
           printer.SetValueTokens(&values);
 
           NoKeys keys;
           RecordingEffects effects;
-          Elite::Rng rng;
+          Elite::Rng& rng = universe.rng;
           Elite::ExtendedTokenPrinter extended(characters, printer, rng);
-          Elite::TradeScreen screen{printer, characters, extended, text, keys, effects, rng};
+          NullSeams nulls;
+          Elite::Ports ports{printer, characters, sink,  nulls, nulls, nulls, nulls,
+                             nulls,   extended,   nulls, keys,  effects, nulls, nulls};
 
-          Elite::SystemDataScreen(screen, selected, data, distance);
+          Elite::SystemDataScreen(universe, ports, data, distance);
 
           if (sink.stamped != expected)
           {

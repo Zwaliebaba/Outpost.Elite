@@ -3,6 +3,8 @@
 #include "StatusScreen.h"
 
 #include "EliteTypes.h"
+#include "Ports.h"
+#include "Universe.h"
 
 /*
  * The Status Mode screen (slice 2c).
@@ -134,11 +136,10 @@ namespace Elite
     }
   } // namespace
 
-  void StatusScreen(TradeScreen& _screen, const Commander& _commander, const ShipCondition& _condition, std::uint8_t _crosshairX,
-                    std::uint8_t _crosshairY, SystemSeeds& _outSelected) noexcept
+  void StatusScreen(Universe& _universe, Ports& _ports, const ShipCondition& _condition) noexcept
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    _screen.effects.SetUpTradeScreen(INVENTORY_VIEW);
+    _ports.trade.SetUpTradeScreen(INVENTORY_VIEW);
 
     /*
      * 6502: JSR TT111 -- the system nearest the crosshairs, whose seeds the title line then prints.
@@ -146,13 +147,13 @@ namespace Elite
      * It is called for what it leaves behind rather than for anything it draws, which is why its
      * result goes straight into the selected system rather than being read here.
      */
-    _outSelected =
-      FindNearestSystem(_commander.galaxySeeds, _crosshairX, _crosshairY, _commander.systemX, _commander.systemY)
-        .seeds;
+    _universe.selectedSeeds = FindNearestSystem(_universe.commander.galaxySeeds, _universe.crosshairX, _universe.crosshairY,
+                                                _universe.commander.systemX, _universe.commander.systemY)
+                                .seeds;
 
     // 6502: LDA #7 / JSR DOXC / LDA #126 / JSR NLIN3 -- the rule itself is the canvas's.
-    _screen.text.column = TITLE_COLUMN;
-    _screen.printer.Print(TITLE_TOKEN);
+    _universe.text.column = TITLE_COLUMN;
+    _ports.printer.Print(TITLE_TOKEN);
 
     /*
      * 6502: LDA #15 / LDY QQ12 / BNE wearedocked.
@@ -164,7 +165,7 @@ namespace Elite
     if (_condition.docked != 0)
     {
       // 6502: wearedocked -- JSR DETOK / JSR TT67K / JMP st6+3.
-      _screen.extended.Print(DOCKED_TOKEN);
+      _ports.tokens.Print(DOCKED_TOKEN);
 
       /*
        * 6502: TT67K -- LDA #12 falling straight into CHPR, so the newline goes through the CHARACTER
@@ -181,7 +182,7 @@ namespace Elite
        * flags, which is a fact about token 125 rather than about this routine. The faithful call
        * costs nothing and is kept.
        */
-      _screen.characters.Put(12);
+      _ports.characters.Put(12);
     }
     else
     {
@@ -200,11 +201,11 @@ namespace Elite
       }
 
       // 6502: st6 -- JSR plf.
-      PrintThenNewline(_screen.printer, condition);
+      PrintThenNewline(_ports.printer, condition);
     }
 
     // 6502: st6+3 -- LDA #125 / JSR spc.
-    PrintThenSpace(_screen.printer, LEGAL_HEADING_TOKEN);
+    PrintThenSpace(_ports.printer, LEGAL_HEADING_TOKEN);
 
     /*
      * 6502: LDA #19 / LDY FIST / BEQ st5 / CPY #50 / ADC #1.
@@ -213,32 +214,32 @@ namespace Elite
      * third one reachable at all.
      */
     std::uint8_t legal = LEGAL_BASE;
-    const std::uint8_t fist = _commander.legalStatus;
+    const std::uint8_t fist = _universe.commander.legalStatus;
     if (fist != 0)
     {
       legal = AddWithCarry(legal, 1, fist >= FUGITIVE_AT).value;
     }
-    PrintThenNewline(_screen.printer, legal);
+    PrintThenNewline(_ports.printer, legal);
 
     // 6502: LDA #16 / JSR spc / ... / st3: TXA / CLC / ADC #21 / JSR plf.
-    PrintThenSpace(_screen.printer, RATING_HEADING_TOKEN);
-    PrintThenNewline(_screen.printer, static_cast<std::uint8_t>(RATING_BASE + Rating(_commander.kills.Value())));
+    PrintThenSpace(_ports.printer, RATING_HEADING_TOKEN);
+    PrintThenNewline(_ports.printer, static_cast<std::uint8_t>(RATING_BASE + Rating(_universe.commander.kills.Value())));
 
     // 6502: LDA #18 / JSR plf2.
-    PrintThenIndent(_screen.printer, _screen.text, EQUIPMENT_HEADING_TOKEN);
+    PrintThenIndent(_ports.printer, _universe.text, EQUIPMENT_HEADING_TOKEN);
 
     // 6502: LDA ESCP / BEQ P%+7 / LDA #112 / JSR plf2, and the same shape twice more.
-    if (_commander.escapePod != 0)
+    if (_universe.commander.escapePod != 0)
     {
-      PrintThenIndent(_screen.printer, _screen.text, ESCAPE_POD_TOKEN);
+      PrintThenIndent(_ports.printer, _universe.text, ESCAPE_POD_TOKEN);
     }
-    if (_commander.fuelScoops != 0)
+    if (_universe.commander.fuelScoops != 0)
     {
-      PrintThenIndent(_screen.printer, _screen.text, FUEL_SCOOPS_TOKEN);
+      PrintThenIndent(_ports.printer, _universe.text, FUEL_SCOOPS_TOKEN);
     }
-    if (_commander.ecm != 0)
+    if (_universe.commander.ecm != 0)
     {
-      PrintThenIndent(_screen.printer, _screen.text, ECM_TOKEN);
+      PrintThenIndent(_ports.printer, _universe.text, ECM_TOKEN);
     }
 
     /*
@@ -251,28 +252,28 @@ namespace Elite
      */
     // The walk is over BYTES from BOMB, so it goes through the codec: the five it reaches are the bomb,
     // the energy unit, the docking computer, the galactic hyperdrive and the escape pod.
-    const std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> equipment = _commander.ToBytes();
+    const std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> equipment = _universe.commander.ToBytes();
     for (std::uint8_t token = BOMB_GROUP_FIRST_TOKEN; token < BOMB_GROUP_LAST_TOKEN; ++token)
     {
       const std::size_t field = static_cast<std::size_t>(Field::EnergyBomb) + static_cast<std::size_t>(token - BOMB_GROUP_FIRST_TOKEN);
       if (equipment[field] != 0)
       {
-        PrintThenIndent(_screen.printer, _screen.text, token);
+        PrintThenIndent(_ports.printer, _universe.text, token);
       }
     }
 
     // 6502: LDX #0 / st: STX CNT / LDY LASER,X / BEQ st1 / ... / CPX #4 / BCC st.
     for (int mount = 0; mount < LASER_MOUNTS; ++mount)
     {
-      const std::uint8_t power = _commander.lasers[static_cast<std::size_t>(mount)];
+      const std::uint8_t power = _universe.commander.lasers[static_cast<std::size_t>(mount)];
       if (power == 0)
       {
         continue;
       }
 
       // 6502: TXA / CLC / ADC #96 / JSR spc -- the mount's name and a space.
-      PrintThenSpace(_screen.printer, static_cast<std::uint8_t>(VIEW_NAME_BASE + mount));
-      PrintThenIndent(_screen.printer, _screen.text, LaserToken(power));
+      PrintThenSpace(_ports.printer, static_cast<std::uint8_t>(VIEW_NAME_BASE + mount));
+      PrintThenIndent(_ports.printer, _universe.text, LaserToken(power));
     }
   }
 

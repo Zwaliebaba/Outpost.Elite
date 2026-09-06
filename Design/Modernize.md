@@ -291,18 +291,19 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->39 reference members,
-and they were seventy-eight until M3-a-2. `FlightScreen`, `FlightLoop`, `MissionScreen` and
-`TitleScreen` held forty-nine of them and are gone: every routine takes `(Universe&, Ports&)`, and
-`Ports` is ten. What is left is the docked half's three — `TradeScreen` (nine), `SaveScreen` (nine)
-and `GameStart` (eleven) — which M3-a's second commit and M3-c take. `ViewChange.h` said it plainly
-while they existed: "the struct is the argument list".
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->14 reference members,
+and they were seventy-eight before M3-a. All seven argument-list structs are gone — `FlightScreen`,
+`FlightLoop`, `MissionScreen` and `TitleScreen` in M3-a-2, `TradeScreen`, `SaveScreen`, `GameStart`
+and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The fourteen that
+remain ARE `Ports`**, which is the one struct §4.5 exists to collapse: M3-b replaces its eleven
+interfaces with four ports without touching a signature again. `ViewChange.h` said it plainly while
+the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
-<!--count:main-lines-->1,219 lines, most of them the dispatch, the exits and the two loops. Plan
+<!--count:main-lines-->1,199 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->205 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->199 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
@@ -334,7 +335,7 @@ cop, trader...). The screen's mode is `QQ11`'s value (`BUY_CARGO_VIEW = 2`, `SEL
 are `std::uint8_t` constants — **M1-b took the ship types and the three flag bytes of a ship to
 `ShipType`, `ShipStateBit`, `AiBit` and `NewbBit`** — booleans are `0`/`0xFF` (`BST`, `ECM`, `DISK`); the thirteen pause-
 screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making them contiguous
-would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->18 parameters are
+would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->17 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
 
 **P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->32 `bool
@@ -346,7 +347,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,937 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,925 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -582,7 +583,12 @@ port because a windowed program cannot block and the plan does not change that (
 | `Presenter` | `TunnelEffects::ShowFrame`, `TradeScreenEffects::ClearToView` (the pixels half), `LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames`, `ExplosionEffects`/`SightEffects`'s VIC pokes (they become `VideoState` writes the library makes itself) | `Present()`, `WaitFrames(n)` |
 | `Keyboard` | `KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys`, `FlushKeyboard`, `JumpState::controlHeld` | `Scan(KeyLogger&)`, `NextKey()`, `Flush()` |
 | `SoundSink` | `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep`, `FlightLoopEffects::Start/StopDockingMusic` | `Write(SidRegister, value)` — the library runs `NOISE` and the music player itself and emits register writes, which ADR-003 §1 already says is the port's `SoundEvent` stream |
-| `SaveStore` | the `SaveScreen` half that reads and writes files | `Load(name) -> std::optional<Image>`, `Save(name, Image)` |
+| `SaveStore` | `CommanderStore`, which is what the `SaveScreen` half that reads and writes files became in M3-a-3 | `Load(name) -> std::optional<Image>`, `Save(name, Image)` |
+
+**`Elite::Ports` is the intermediate this table collapses.** M3-a-3 left one struct of fourteen
+references — three printers and eleven interfaces — where seven argument-list structs had held
+seventy-eight, and that is the whole surface M3-b works on: the four rows above replace the eleven,
+and no signature changes again.
 
 Everything else in the twenty-two is either a call into a routine that now exists (`RunTactics`,
 `DrawPlanetOrSun`, `SpawnAhead`, `Anger`, `SpawnChild`, `ChartShapes`, `DrawExplosion`,
@@ -1283,7 +1289,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
 | **M3-0 The app's member check** ✅ **built 2026-09-06 (§8)** | `check_outpost.py` gains a third half: every member the app names on an `Elite::`-typed variable, against that type's members as `GameLogic/*.h` declares them, bases closed over. A `--self-test` plants one that cannot resolve. | In CI as the fourteenth check; 111 accesses resolved on the tree as it stands. | 1 |
-| **M3-a Universe** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`JumpState` replaced by `Universe&` (plus the ports) on every routine; `FlightSession` and `Outpost::Game` lend their members to it. | Green on both legs; `aggregate-refs` at zero. **Windows job is the gate** — this slice cannot be compiled here. | 4 |
+| **M3-a Universe** ✅ **built 2026-09-06 (§8)** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`MissionBay` replaced by `(Universe&, Ports&)` on every routine; `FlightSession` and `Outpost::Game` own the universe and the ports between them. | Green on both legs; `aggregate-refs` 78 → 14, and the fourteen ARE `Ports` — "at zero" is M3-b's, which collapses that one struct. `JumpState` is values rather than references and goes with M3-c's `Game`. **The Windows job was the gate and caught two defects** (§8). | 4 |
 | **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at four. | 4 |
 | **M3-c Game** | `Elite::Game` with `Reset`, `Step`, `Frame`, `Sounds`, `StateHash`; `Perform`, `Leave`, the docked pass, `Advance` and `AdvancePaused` moved from `Main.cpp`; `Mode` explicit. `Main.cpp` at its target shape. | `DockedSessionTests` and the M0-c replay drive `Game::Step` and reproduce their stored hashes; `main-lines` in the ratchet under 300. | 4–5 |
 | **M3-d ADR-007** | State ownership and the replay hash, written from M3-a..c as built. | Accepted. | 1 |
@@ -1589,6 +1595,48 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-a-3 built, and M3-a is done: all seven argument-list structs are gone and what
+is left IS `Ports`.** `TradeScreen`, `SaveScreen`, `GameStart` and `MissionBay` went the way the
+flight half's four did: every docked screen, the disk menu, the start sequence and the six mission
+exits take `(Universe&, Ports&)`. `aggregate-refs` **39 → 14**, and the fourteen are `Ports` itself
+— the M3-a row's "at zero" is reached exactly when M3-b collapses that one struct to §4.5's four
+ports, which is the slice it was always describing.
+
+**`GameStart` was not a separate commit in the end, and could not be.** It held a `SaveScreen&`,
+so it could not outlive it — the same knot `TitleScreen` and `MissionScreen` had with `FlightLoop`
+one commit earlier, and the same answer: it goes with what it held. Rule 8 is satisfied because it
+is one pattern, not two; recording it because the slice plan had it as M3-a-4.
+
+**Nine parameters went with the structs, and every one of them was a second name for a byte the
+universe owns**: the commander, `QQ28`, `tek`, `QQ9`, `QQ10`, `QQ15`, the market, `NA%`/`NAME`, and
+`U`. `StatusScreen`'s `SystemSeeds& _outSelected` was the last of the out-parameters this phase can
+reach (`out-params` 18 → 17): `TT111` writes `QQ15` and the screen reads it back, which is a field
+and not a result. `Universe` gained `QQ9`, `QQ10`, `QQ15`, the market, `NAME`, `NA%`, the line
+editor's buffer, `DISK` and `U` — nine byte ranges that were the composition root's, and are memory
+in the original.
+
+**`MissionBay` bought a small fidelity gain on the way out.** It carried `QQ11` and `QQ22+1` as
+VALUES snapshotted at entry, and `BAY`'s fall-through reads them live in the original — which
+matters, because a briefing's `{9}` runs `TT66` and moves `QQ11` while the token is still printing.
+The port reads the universe now. Two mission tests asserted on their own `dockedFlag` local and had
+to be pointed at the universe's; nothing else moved.
+
+**`Ports` grew to fourteen and `Outpost::Game` took it over.** Eight of the fourteen are
+`GameShell`'s and `SaveStore`'s rather than the flight session's, so a session that built the struct
+would be composing the docked half; the root owns it and lends it back to the two objects whose own
+seams are calls that need it (`FlightSession::AttachPorts` for `TACTICS` and `DOCKIT`,
+`GameShell::AttachPorts` for `TT66`, `RESET` and the mission codes). `main-lines` 1,219 → 1,199,
+`outpost-elite-names` 205 → 199.
+
+**The test tree gained one header and lost nothing.** `NullSeams.h` answers all ten interfaces with
+nothing, so a suite says which seams it cares about by passing its own recorder for those; the
+flight fixture's `UnusedSeams` is an alias for it. The docked suites name the universe's fields
+through local references rather than holding their own bytes — the same mistake in a fixture that
+M3-a-2's Windows build found in the app, and the reason the aliases are written as aliases.
+
+397 of 397 pass, all fourteen checks pass, and three more of the seventy-two mutants were
+re-anchored with none dropped.
 
 **2026-09-06 — M3-a-2 built: the routines take `(Universe&, Ports&)`, and four argument-list
 structs are gone.** `FlightScreen`, `FlightLoop`, `MissionScreen` and `TitleScreen` held forty-nine

@@ -8,6 +8,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because it names types these headers declare
+  struct Ports;    // Ports.h, likewise
+
   /*
    * The equipment shop (slice 2c).
    *
@@ -44,7 +47,7 @@ namespace Elite
    * enough equipment has a list long enough to collide with the menu. A key that is not 0 to 3
    * clears the bottom rows and asks again, for ever.
    */
-  [[nodiscard]] std::uint8_t ChooseView(TradeScreen& _screen, std::uint8_t _techLevel) noexcept;
+  [[nodiscard]] std::uint8_t ChooseView(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: refund -- fit a laser, and give back what the old one cost.
@@ -75,6 +78,6 @@ namespace Elite
    * branches then hand it back with MCASH -- so buying an escape pod you already own moves the
    * money out and back rather than never moving it.
    */
-  void EquipShipScreen(TradeScreen& _screen, Commander& _commander, std::uint8_t _techLevel) noexcept;
+  void EquipShipScreen(Universe& _universe, Ports& _ports) noexcept;
 
 } // namespace Elite

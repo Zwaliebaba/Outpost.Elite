@@ -879,7 +879,7 @@ namespace GameLogicTests
         const wchar_t* name;
         std::uint16_t entry;
         std::uint8_t token;
-        Elite::ForcedKey (*run)(Elite::Universe&, Elite::Ports&, Elite::MissionBay&);
+        Elite::ForcedKey (*run)(Elite::Universe&, Elite::Ports&, bool);
       };
 
       const Case CASES[] = {
@@ -939,20 +939,18 @@ namespace GameLogicTests
           start.alternate = true;
           start.key = 0x27u;
 
-          std::uint8_t dockedFlag = 0;
           Elite::Ports ports = PortsOver(universe, start);
-          Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
           Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
           universe.universe.codes.to = &codes;
 
-          const Elite::ForcedKey key = item.run(universe.universe, ports, bay);
+          const Elite::ForcedKey key = item.run(universe.universe, ports, false);
 
           const std::wstring where = std::wstring(item.name) + L" (TP " + std::to_wstring(progress * 17u) + L")";
 
           Assert::AreEqual<std::uint32_t>(1u, detoks, (where + L": one DETOK").c_str());
           Assert::AreEqual<std::uint32_t>(1u, bays, (where + L": one BAY").c_str());
           Assert::AreEqual<std::uint32_t>(theirToken, item.token, (where + L": the token").c_str());
-          Assert::AreEqual<std::uint32_t>(0xFFu, dockedFlag, (where + L": QQ12 -- BAY sets it to &FF").c_str());
+          Assert::AreEqual<std::uint32_t>(0xFFu, universe.universe.dockedFlag, (where + L": QQ12 -- BAY sets it to &FF").c_str());
           static_cast<void>(key);
 
           for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
@@ -1043,13 +1041,11 @@ namespace GameLogicTests
             start.key = 0x27u;
 
             ScriptedKeys keys{accept};
-            std::uint8_t dockedFlag = 0;
             Elite::Ports ports = PortsOver(universe, start);
-            Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
             Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
             universe.universe.codes.to = &codes;
 
-            static_cast<void>(Elite::OfferTrumble(universe.universe, ports, bay, keys));
+            static_cast<void>(Elite::OfferTrumble(universe.universe, ports, false, keys));
 
             const std::wstring where = WidenText(std::string("TBRIEF (") + (accept ? "yes" : "no") + ", " + (rich ? "rich" : "poor") +
                                                  ", TP " + std::to_string(progress * 17u) + ")");
@@ -1057,7 +1053,7 @@ namespace GameLogicTests
             Assert::AreEqual<std::uint32_t>(1u, detoks, (where + L": one DETOK").c_str());
             Assert::AreEqual<std::uint32_t>(Elite::TRUMBLE_OFFER, theirToken, (where + L": the offer token").c_str());
             Assert::AreEqual<std::uint32_t>(1u, bays, (where + L": one BAY").c_str());
-            Assert::AreEqual<std::uint32_t>(0xFFu, dockedFlag, (where + L": QQ12").c_str());
+            Assert::AreEqual<std::uint32_t>(0xFFu, universe.universe.dockedFlag, (where + L": QQ12").c_str());
 
             for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
             {
@@ -1166,13 +1162,11 @@ namespace GameLogicTests
         start.alternate = true;
         start.key = 0x27u;
 
-        std::uint8_t dockedFlag = 0;
         Elite::Ports ports = PortsOver(universe, start);
-        Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
         Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
         universe.universe.codes.to = &codes;
 
-        const std::uint8_t ourToken = Elite::RunConstrictorBriefing(universe.universe, ports, bay);
+        const std::uint8_t ourToken = Elite::RunConstrictorBriefing(universe.universe, ports, false);
 
         const std::wstring where = WidenText("BRIEF (TP " + std::to_string(progress * 85u) + ")");
 

@@ -54,16 +54,13 @@ namespace Outpost
     constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
   } // namespace
 
-  FlightSession::FlightSession(Window& _window, Elite::Universe& _universe, Elite::TokenPrinter& _printer,
-                               Elite::CharacterPrinter& _characters, Elite::ExtendedTokenPrinter& _tokens,
-                               Elite::StartUpEffects& _start, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music,
+  FlightSession::FlightSession(Window& _window, Elite::Universe& _universe, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music,
                                SoundOutput& _audio) noexcept
     : m_window(_window),
       m_universe(_universe),
       m_sound(_sound),
       m_music(_music),
-      m_audio(_audio),
-      m_ports{_printer, _characters, _characters, *this, *this, *this, *this, *this, _tokens, _start}
+      m_audio(_audio)
   {
     /*
      * TWO BYTES THE GAME WOULD HAVE HAD AND A FRESH C++ OBJECT DOES NOT (§6.95).
@@ -215,7 +212,9 @@ namespace Outpost
     // 6502: JSR TACTICS from `MVEIT`'s `MV26`, with `INF` at the slot being moved -- which is
     // `XSAV`, the byte the loop keeps for exactly this.
     (void)_work;
-    return Elite::RunTactics(m_universe, m_ports, m_universe.flight.slot);
+    // `TACTICS` decides whether the player survived, and a session with no ports attached has no
+    // AI to ask -- which is a composition error rather than a game state, so it answers "alive".
+    return (m_ports != nullptr) ? Elite::RunTactics(m_universe, *m_ports, m_universe.flight.slot) : true;
   }
 
   void FlightSession::DrawPlanetOrSun()
@@ -359,7 +358,10 @@ namespace Outpost
      * rather than an NPC's. Slot 0 is what `INF` points at on that path.
      */
     (void)_work;
-    (void)Elite::RunDockingComputer(m_universe, m_ports, 0u);
+    if (m_ports != nullptr)
+    {
+      (void)Elite::RunDockingComputer(m_universe, *m_ports, 0u);
+    }
   }
 
   // ---- the VIC-II ----------------------------------------------------------------------------------

@@ -6,10 +6,10 @@ namespace Elite
   /*
    * Everything the library needs that is not a byte of `Universe` (Modernize.md §4.4, slice M3-a).
    *
-   * When the state came out of `FlightScreen`, `FlightLoop`, `MissionScreen` and `TitleScreen` this
-   * is what was left: the text machinery, which cannot live in a universe that has to copy because
-   * two of its objects take a seam, and the seven interfaces the platform answers. Ten references
-   * where the four structs held forty-nine.
+   * When the state came out of the six argument-list structs this is what was left: the text
+   * machinery, which cannot live in a universe that has to copy because two of its objects take a
+   * seam, and the eleven interfaces the platform answers. Fourteen references where the six structs
+   * held sixty-six.
    *
    * IT IS A STRUCT OF REFERENCES FOR ONE SLICE. §4.5's four ports -- `Presenter`, `Keyboard`,
    * `SoundSink`, `SaveStore` -- are M3-b's, and most of what the seven below carry is not a port at
@@ -32,6 +32,10 @@ namespace Elite
   class FlightLoopEffects;
   class ExtendedTokenPrinter;
   class StartUpEffects;
+  class KeySource;
+  class TradeScreenEffects;
+  class LineEntryEffects;
+  class CommanderStore;
 
   struct Ports
   {
@@ -57,6 +61,20 @@ namespace Elite
      */
     ExtendedTokenPrinter& tokens;
     StartUpEffects& start;
+
+    /*
+     * The four the DOCKED screens need and a flight frame does not (M3-a-3).
+     *
+     * `keys` is `TT217`, which blocks until a key is pressed -- the docked half's whole input, where
+     * a flight reads the matrix through `ControlEffects`. `trade` is `TRADEMODE`, the screen change
+     * every trading screen opens with, and `entry` is the two the line editor waits and flushes
+     * through. `store` is §4.5's `SaveStore` under its old name, and the one of the four that is a
+     * port rather than a call into a routine that now exists.
+     */
+    KeySource& keys;
+    TradeScreenEffects& trade;
+    LineEntryEffects& entry;
+    CommanderStore& store;
   };
 
 } // namespace Elite

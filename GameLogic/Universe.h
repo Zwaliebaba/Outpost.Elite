@@ -8,6 +8,7 @@
 #include "Dashboard.h"
 #include "ExtendedTokens.h"
 #include "Lasers.h"
+#include "Market.h"
 #include "LineHeap.h"
 #include "Rng.h"
 #include "Scanner.h"
@@ -166,6 +167,52 @@ namespace Elite
     // ---- the player --------------------------------------------------------------------------
     Commander commander;
     Rng rng;
+
+    /*
+     * 6502: QQ9 and QQ10 -- where the crosshairs are on whichever chart is up.
+     *
+     * The player's, not the chart's: `ping` copies the commander's own position into them and `jmp`
+     * copies them back, so they outlive every screen that draws them. `ChartView` is still the
+     * argument the chart routines take, because it is a VIEW over four owners; these two are the
+     * pair of them it borrows.
+     */
+    std::uint8_t crosshairX = 0;
+    std::uint8_t crosshairY = 0;
+
+    /// 6502: QQ15 -- the seeds of the system under the crosshairs, which `TT111` writes and the
+    /// status, system-data and hyperspace screens all read back.
+    SystemSeeds selectedSeeds{};
+
+    /// 6502: QQ26, QQ19 and AVL -- the market this station is offering, which lasts as long as the
+    /// docking does: `GenerateMarket` writes it on arrival and every trading screen reads it.
+    MarketState market;
+
+    /*
+     * 6502: NAME, NA% and DISK -- the commander's FILE, which is not the commander.
+     *
+     * `NAME` is the eight bytes the save and load prompts read and write; `NA%` is the save image,
+     * which `JAMESON` overwrites and `DFAULT` loads back, so it is what a reset actually resets;
+     * and `DISK` is one of the pause screen's thirteen toggles, a byte rather than a flag. All
+     * three are memory in the original and were `GameStart`'s spans until M3-a-3.
+     */
+    std::array<std::uint8_t, COMMANDER_NAME_SIZE> commanderName{};
+    std::array<std::uint8_t, COMMANDER_FILE_SIZE> commanderFile{};
+    std::uint8_t useDisk = 0;
+
+    /// 6502: INWK+5 -- the line editor's buffer, which the original carves out of the ship
+    /// workspace and the port keeps beside it. Sixteen bytes, which is what `MT26`'s limits allow.
+    std::array<std::uint8_t, 16> lineBuffer{};
+
+    /*
+     * 6502: U -- the field width `BPRNT` was last given, and it is state because SV1 does not set it.
+     *
+     * The competition number is printed with `CLC / JSR BPRNT` and no store to `U` first, so it
+     * comes out at whatever width the last caller left behind. `U` is a scratch byte in zero page
+     * that `ZERO` does not clear, and the upstream source says so in as many words. Harmless -- the
+     * number always has ten digits, so all that varies is a leading space -- but a port that chose
+     * a width here would be inventing one. It was `SaveScreen::numberWidth` until M3-a-3.
+     */
+    std::uint8_t numberWidth = 0;
 
     /*
      * 6502: QQ2, QQ28, tek and gov -- the system you are IN, as opposed to the one under the

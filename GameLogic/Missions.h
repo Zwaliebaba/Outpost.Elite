@@ -229,14 +229,11 @@ namespace Elite
    * `BRP` is `JSR DETOK` then `JMP BAY`, and every mission but `TBRIEF`'s refusal is a tail call
    * into it -- so all seven return the same thing, and it is the forced key `BAY` presses.
    */
-  struct MissionBay
-  {
-    Commander& commander; ///< 6502: TP, CASH, ENGY, TALLY and TRIBBLE
-    std::uint8_t& dockedFlag;  ///< 6502: QQ12, which `BAY` sets to &FF
-    std::uint8_t view;         ///< 6502: QQ11, for the forced key's dispatch
-    std::uint8_t countdown;    ///< 6502: QQ22+1 -- an in-flight hyperspace countdown, which is zero here
-    bool hyperspaceHeld = false;
-  };
+  // `MissionBay` was the commander, `QQ12`, `QQ11` and `QQ22+1` -- two references and two values,
+  // all four `Universe`'s since M3-a-3. What is left is the one argument below: what `KLO+HINT`
+  // held when the key was pressed, which `BAY`'s fall-through reads and no byte carries. The view
+  // and the countdown are read LIVE now rather than snapshotted, which is what `TT102` does: a
+  // briefing's `{9}` moves `QQ11` while the token is printing.
 
   /*
    * 6502: BRP -- print an extended token and go to the docking bay.
@@ -244,7 +241,7 @@ namespace Elite
    * `JSR DETOK` then `.BAYSTEP JMP BAY`, and `BAYSTEP` is the entry `TBRIEF` uses when the player
    * turns the Trumble down: it skips the token and goes straight to the bay.
    */
-  [[nodiscard]] ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, MissionBay& _bay, std::uint8_t _token) noexcept;
+  [[nodiscard]] ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, std::uint8_t _token) noexcept;
 
   /*
    * 6502: BRIEF -- start mission 1, and show the Constrictor turning while it says so.
@@ -268,14 +265,14 @@ namespace Elite
    * that is where the original splits: `BR2` ends `LDA #10 / BNE BRPS`, and everything after the
    * branch is `BRP`'s and is shared with four other missions.
    */
-  [[nodiscard]] std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /// 6502: BRIEF, whole -- the briefing and then `BRP`, which prints token 10 and goes to the bay.
-  [[nodiscard]] ForcedKey BriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey BriefMission1(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /// 6502: BRIEF2 -- set bit 2 of `TP` and print token 11, the message that sends the player to
   /// Ceerdi. Falls into `BRP`.
-  [[nodiscard]] ForcedKey BriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey BriefMission2(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: BRIEF3 -- collect the plans at Ceerdi.
@@ -284,7 +281,7 @@ namespace Elite
    * 1's two bits as well as setting mission 2's, so picking up the plans is also what forgets that
    * the Constrictor ever happened. Bit 3 is "the plans are aboard".
    */
-  [[nodiscard]] ForcedKey CollectPlans(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey CollectPlans(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: DEBRIEF -- finish mission 1 and pay for it.
@@ -294,7 +291,7 @@ namespace Elite
    * will not offer again. The commented-out `INC TALLY+1` beside it is in the original source and
    * is not ported, because it does not run.
    */
-  [[nodiscard]] ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: DEBRIEF2 -- deliver the plans at Birera.
@@ -303,7 +300,7 @@ namespace Elite
    * -- the navy's energy unit, which recharges faster than the one the shop sells -- and 256 kill
    * points, added to the HIGH byte of the tally so the low byte is untouched.
    */
-  [[nodiscard]] ForcedKey DebriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey DebriefMission2(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: TBRIEF -- offer the Trumble, and take the money if it is accepted.
@@ -319,6 +316,6 @@ namespace Elite
    * every 6,553.6 credits and a poor player inside one is offered a free Trumble. Ported rather
    * than fixed, and recorded in ADR-001 §6.
    */
-  [[nodiscard]] ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, MissionBay& _bay, KeySource& _keys) noexcept;
+  [[nodiscard]] ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, KeySource& _keys) noexcept;
 
 } // namespace Elite

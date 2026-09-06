@@ -143,13 +143,13 @@ namespace Outpost
      * path puts both back. A docked screen reached through the old three calls after a launch would
      * have kept the flight settings and drawn its bottom seven rows as multicolour nonsense.
      */
-    if (m_flight == nullptr)
+    if (m_flight == nullptr || m_ports == nullptr)
     {
       m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the universe
       return;
     }
 
-    Elite::SetUpScreen(m_flight->Universe(), m_flight->Ports(), _view);
+    Elite::SetUpScreen(m_flight->Universe(), *m_ports, _view);
   }
 
   void GameShell::ClearBottomRows()
@@ -229,9 +229,9 @@ namespace Outpost
   {
     // 6502: RESET, and it falls into RES2 rather than calling it -- which is why the port's
     // `ResetGame` ends with `ResetShipAndBubble` and this does not call `ResetShip` as well.
-    if (m_flight != nullptr && m_dockedFlag != nullptr)
+    if (m_flight != nullptr && m_ports != nullptr && m_dockedFlag != nullptr)
     {
-      Elite::ResetGame(m_flight->Universe(), m_flight->Ports(), *m_dockedFlag);
+      Elite::ResetGame(m_flight->Universe(), *m_ports, *m_dockedFlag);
     }
   }
 
@@ -249,9 +249,9 @@ namespace Outpost
      * fall-through and once through `DEATH2`'s. The port reproduces both calls rather than
      * collapsing them.
      */
-    if (m_flight != nullptr)
+    if (m_flight != nullptr && m_ports != nullptr)
     {
-      Elite::ResetShipAndBubble(m_flight->Universe(), m_flight->Ports());
+      Elite::ResetShipAndBubble(m_flight->Universe(), *m_ports);
     }
   }
 
@@ -393,12 +393,12 @@ namespace Outpost
      * `NextKey()`, which is the CHARACTER. 89 never equals 39, so the disk menu could not be opened
      * from the title screen at all (§6.107).
      */
-    if (m_flight == nullptr || m_extendedPrinter == nullptr || m_dockedFlag == nullptr)
+    if (m_flight == nullptr || m_ports == nullptr || m_extendedPrinter == nullptr || m_dockedFlag == nullptr)
     {
       return 0;
     }
 
-    return Elite::ShowTitleShip(m_flight->Universe(), m_flight->Ports(), _token, _shipType, _distance);
+    return Elite::ShowTitleShip(m_flight->Universe(), *m_ports, _token, _shipType, _distance);
   }
 
   // ---- the control codes that leave the text system ------------------------------------------------
@@ -414,9 +414,9 @@ namespace Outpost
      * nothing answers yet. What is left here is the null checks, because a control code can be
      * printed before there is a flight session to run it on.
      */
-    if (m_flight != nullptr && m_extendedPrinter != nullptr && m_text != nullptr && m_galaxy != nullptr)
+    if (m_flight != nullptr && m_ports != nullptr && m_extendedPrinter != nullptr && m_text != nullptr && m_galaxy != nullptr)
     {
-      Elite::MissionCodes codes{m_flight->Universe(), m_flight->Ports(), *m_galaxy};
+      Elite::MissionCodes codes{m_flight->Universe(), *m_ports, *m_galaxy};
       if (codes.RunMissionCode(_code))
       {
         return;

@@ -5,6 +5,8 @@
 #include "EliteTypes.h"
 #include "TextPrint.h"
 #include "Tokens.h"
+#include "Ports.h"
+#include "Universe.h"
 
 /*
  * The Data on System screen (slice 2a).
@@ -128,24 +130,24 @@ namespace Elite
     PrintTitleLine(_printer, _text, LIGHT_YEARS_TOKEN);
   }
 
-  void SystemDataScreen(TradeScreen& _screen, SystemSeeds& _seeds, const SystemData& _data, std::uint16_t _distance) noexcept
+  void SystemDataScreen(Universe& _universe, Ports& _ports, const SystemData& _data, std::uint16_t _distance) noexcept
   {
     // 6502: LDA #1 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    _screen.effects.SetUpTradeScreen(DATA_ON_SYSTEM_VIEW);
+    _ports.trade.SetUpTradeScreen(DATA_ON_SYSTEM_VIEW);
 
     // 6502: LDA #9 / JSR DOXC / LDA #163 / JSR NLIN3 -- the rule NLIN3 falls into is the canvas's,
     // and a caller draws it, exactly as the market screen and the status screen do.
-    _screen.text.column = TITLE_COLUMN;
-    _screen.printer.Print(TITLE_TOKEN);
+    _universe.text.column = TITLE_COLUMN;
+    _ports.printer.Print(TITLE_TOKEN);
 
     // 6502: JSR TTX69 -- a row down, sentence case, and a newline.
-    MoveDownAndNewline(_screen.printer, _screen.text);
+    MoveDownAndNewline(_ports.printer, _universe.text);
 
     // 6502: JSR TT146.
-    PrintDistanceLine(_screen.printer, _screen.characters, _screen.text, _distance);
+    PrintDistanceLine(_ports.printer, _ports.characters, _universe.text, _distance);
 
     // 6502: LDA #194 / JSR TT68.
-    PrintThenColon(_screen.printer, ECONOMY_HEADING);
+    PrintThenColon(_ports.printer, ECONOMY_HEADING);
 
     /*
      * 6502: LDA QQ3 / CLC / ADC #1 / LSR A / CMP #%00000010 / BEQ TT70 / LDA QQ3 / BCC TT71 /
@@ -165,7 +167,7 @@ namespace Elite
     if (prosperity == 2u)
     {
       // 6502: TT70 -- LDA #173 / JSR TT27 / JMP TT72, which lands PAST the ADC above.
-      _screen.printer.Print(ECONOMY_MAINLY);
+      _ports.printer.Print(ECONOMY_MAINLY);
     }
     else
     {
@@ -176,15 +178,15 @@ namespace Elite
         // five and not five-and-a-borrow. The CLC after it is what makes the ADC below plain.
         word = AddWithCarry(word, static_cast<std::uint8_t>(5u ^ 0xFFu), true).value;
       }
-      _screen.printer.Print(static_cast<std::uint8_t>(ECONOMY_PROSPERITY + word));
+      _ports.printer.Print(static_cast<std::uint8_t>(ECONOMY_PROSPERITY + word));
     }
 
     // 6502: TT72 -- LDA QQ3 / LSR A / LSR A / CLC / ADC #168 / JSR TT60.
-    PrintTitleLine(_screen.printer, _screen.text, static_cast<std::uint8_t>(ECONOMY_KIND + (_data.economy >> 2)));
+    PrintTitleLine(_ports.printer, _universe.text, static_cast<std::uint8_t>(ECONOMY_KIND + (_data.economy >> 2)));
 
     // 6502: LDA #162 / JSR TT68 / LDA QQ4 / CLC / ADC #177 / JSR TT60.
-    PrintThenColon(_screen.printer, GOVERNMENT_HEADING);
-    PrintTitleLine(_screen.printer, _screen.text, static_cast<std::uint8_t>(GOVERNMENT_FIRST + _data.government));
+    PrintThenColon(_ports.printer, GOVERNMENT_HEADING);
+    PrintTitleLine(_ports.printer, _universe.text, static_cast<std::uint8_t>(GOVERNMENT_FIRST + _data.government));
 
     /*
      * 6502: LDA #196 / JSR TT68 / LDX QQ5 / INX / CLC / JSR pr2.
@@ -194,39 +196,39 @@ namespace Elite
      * market -- works on the stored value, which is the off-by-one plan section 6.15 records the
      * other half of.
      */
-    PrintThenColon(_screen.printer, TECH_HEADING);
-    PrintByteValue(_screen.characters, static_cast<std::uint8_t>(_data.techLevel + 1u), false);
+    PrintThenColon(_ports.printer, TECH_HEADING);
+    PrintByteValue(_ports.characters, static_cast<std::uint8_t>(_data.techLevel + 1u), false);
 
     // 6502: JSR TTX69.
-    MoveDownAndNewline(_screen.printer, _screen.text);
+    MoveDownAndNewline(_ports.printer, _universe.text);
 
     // 6502: LDA #192 / JSR TT68 / SEC / LDX QQ6 / JSR pr2 -- three digits with a decimal point, so
     // the population is in hundreds of millions and prints as billions.
-    PrintThenColon(_screen.printer, POPULATION_HEADING);
-    PrintByteValue(_screen.characters, _data.population, true);
-    PrintTitleLine(_screen.printer, _screen.text, BILLION_TOKEN);
+    PrintThenColon(_ports.printer, POPULATION_HEADING);
+    PrintByteValue(_ports.characters, _data.population, true);
+    PrintTitleLine(_ports.printer, _universe.text, BILLION_TOKEN);
 
     // 6502: LDA #'(' / JSR TT27 / LDA QQ15+4 / BMI TT75.
-    _screen.printer.Print('(');
-    if ((_seeds.bytes[4] & 0x80u) != 0u)
+    _ports.printer.Print('(');
+    if ((_universe.selectedSeeds.bytes[4] & 0x80u) != 0u)
     {
-      PrintInhabitants(_screen.printer, _seeds);
+      PrintInhabitants(_ports.printer, _universe.selectedSeeds);
     }
     else
     {
       // 6502: LDA #188 / JSR TT27 / JMP TT76.
-      _screen.printer.Print(HUMAN_COLONIALS);
+      _ports.printer.Print(HUMAN_COLONIALS);
     }
 
     // 6502: TT76 -- LDA #'S' / JSR TT27 / LDA #')' / JSR TT60. The plural is unconditional, which
     // is why the screen says "Human Colonials" and never "Human Colonial".
-    _screen.printer.Print('S');
-    PrintTitleLine(_screen.printer, _screen.text, ')');
+    _ports.printer.Print('S');
+    PrintTitleLine(_ports.printer, _universe.text, ')');
 
     // 6502: LDA #193 / JSR TT68 / LDX QQ7 / LDY QQ7+1 / JSR pr6 / JSR TT162.
-    PrintThenColon(_screen.printer, PRODUCTIVITY_HEADING);
-    PrintValue(_screen.characters, _data.productivity, 5, false);
-    PrintSpace(_screen.printer);
+    PrintThenColon(_ports.printer, PRODUCTIVITY_HEADING);
+    PrintValue(_ports.characters, _data.productivity, 5, false);
+    PrintSpace(_ports.printer);
 
     /*
      * 6502: LDA #0 / STA QQ17 / LDA #'M' / JSR TT27 / LDA #226 / JSR TT60.
@@ -235,28 +237,28 @@ namespace Elite
      * out lower case: the sentence-case state has seen a letter by now, and TT27 would fold it. The
      * token after it puts nothing back, so the next line's case comes from TT60's own chain.
      */
-    _screen.printer.SetCaseFlags(0);
-    _screen.printer.Print('M');
-    PrintTitleLine(_screen.printer, _screen.text, CREDITS_TOKEN);
+    _ports.printer.SetCaseFlags(0);
+    _ports.printer.Print('M');
+    PrintTitleLine(_ports.printer, _universe.text, CREDITS_TOKEN);
 
     // 6502: LDA #250 / JSR TT68.
-    PrintThenColon(_screen.printer, RADIUS_HEADING);
+    PrintThenColon(_ports.printer, RADIUS_HEADING);
 
     // 6502: LDA QQ15+5 / LDX QQ15+3 / AND #%00001111 / CLC / ADC #11 / TAY / JSR pr5.
-    const std::uint16_t radius =
-      static_cast<std::uint16_t>((static_cast<std::uint16_t>((_seeds.bytes[5] & 0x0Fu) + RADIUS_HIGH_BASE) << 8) | _seeds.bytes[3]);
-    PrintValue(_screen.characters, radius, 5, false);
-    PrintSpace(_screen.printer);
+    const std::uint16_t radius = static_cast<std::uint16_t>(
+      (static_cast<std::uint16_t>((_universe.selectedSeeds.bytes[5] & 0x0Fu) + RADIUS_HIGH_BASE) << 8) | _universe.selectedSeeds.bytes[3]);
+    PrintValue(_ports.characters, radius, 5, false);
+    PrintSpace(_ports.printer);
 
     // 6502: LDA #'k' / JSR TT26 / LDA #'m' / JSR TT26 -- through the CHARACTER printer, so the case
     // flags do not touch them and the "km" stays lower case whatever QQ17 holds.
-    _screen.characters.Put('k');
-    _screen.characters.Put('m');
+    _ports.characters.Put('k');
+    _ports.characters.Put('m');
 
     // 6502: JSR TTX69 / JMP PDESC -- and PDESC's mission overrides are phase 4's, which is what
     // Galaxy.h's header records.
-    MoveDownAndNewline(_screen.printer, _screen.text);
-    PrintSystemDescription(_screen.extended, _screen.rng, _seeds);
+    MoveDownAndNewline(_ports.printer, _universe.text);
+    PrintSystemDescription(_ports.tokens, _universe.rng, _universe.selectedSeeds);
   }
 
 } // namespace Elite

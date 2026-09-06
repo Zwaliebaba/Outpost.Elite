@@ -198,6 +198,13 @@ namespace Outpost
       m_video = &_video;
     }
 
+    /// The seams, which the composition root owns and this object is four of. Everything the shell
+    /// forwards into `GameLogic` takes them beside the universe since M3-a.
+    void AttachPorts(Elite::Ports& _ports) noexcept
+    {
+      m_ports = &_ports;
+    }
+
     /*
      * 6502: GCNT -- which galaxy the player is in, which MT27 and MT28 add to a token number.
      *
@@ -242,6 +249,7 @@ namespace Outpost
     Elite::MessageState* m_message = nullptr;
     Elite::ExtendedTokenPrinter* m_extendedPrinter = nullptr;
     FlightSession* m_flight = nullptr;
+    Elite::Ports* m_ports = nullptr;
     std::uint8_t* m_dockedFlag = nullptr;
 
     SoundOutput* m_audio = nullptr;

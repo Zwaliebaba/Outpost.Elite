@@ -71,8 +71,9 @@ namespace GameLogicTests
     static constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
 
     FlightPort()
-      : ports{universe.printer, universe.characters, universe.characters, *this,                    *this,
-              *this,            *this,               *this,               universe.extendedPrinter, universe.unused}
+      : ports{universe.printer, universe.characters,      universe.characters, *this,           *this,
+              *this,            *this,                    *this,               universe.extendedPrinter,
+              universe.unused,  universe.unused,          universe.unused,     universe.unused, universe.unused}
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;

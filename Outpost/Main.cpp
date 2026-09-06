@@ -95,8 +95,14 @@ namespace
         extended(characters, recursive, universe.rng, &shell),
         trade{recursive, characters, extended, universe.text, shell, shell, universe.rng},
         save{recursive, characters, extended, screen, universe.text, shell, shell, store, numberWidth},
-        flight(window, universe, recursive, characters, extended, shell, sound, music, audio)
+        flight(window, universe, sound, music, audio),
+        ports{recursive, characters, characters, flight, flight, flight, flight,
+              flight,    extended,   shell,      shell,  shell,  shell,  store}
     {
+      // The seams the session answers that are calls needing the seams themselves -- `TACTICS` and
+      // `DOCKIT` -- so the composition lends the struct back to the object eight of it point at.
+      flight.AttachPorts(ports);
+      shell.AttachPorts(ports);
       recursive.SetValueTokens(&values);
       recursive.SetCursor(&universe.text);
       shell.Attach(recursive, universe.text, characters.state, universe.message);
@@ -156,27 +162,6 @@ namespace
     Elite::TextPrinter screen;
     Elite::CharacterPrinter characters;
     Elite::TokenPrinter recursive;
-    std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it, which SV1 prints the competition number at
-
-    // ---- the commander's FILE, which is not the commander ------------------------------------------
-    // 6502: NA%'s first eight bytes are the NAME, which `universe.commander`'s block does not carry.
-    std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-    std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
-    std::array<std::uint8_t, 16> buffer{};
-    std::uint8_t useDisk = 0;
-
-    /*
-     * 6502: QQ15 and QQ2 -- the selected system's seeds, and the current system's inside `current`.
-     *
-     * THERE WAS A SECOND COPY OF QQ2 HERE, and it is gone (§6.140). The token printer was bound to
-     * it and the start sequence wrote the other one, so the status screen's "Present System" was
-     * blank until the first jump. `universe.current.seeds` is the byte; the printer reads it.
-     */
-    Elite::SystemSeeds selectedSeeds{};
-    Elite::MarketState market;
-
-    std::uint8_t crosshairX = 0;
-    std::uint8_t crosshairY = 0;
 
     /*
      * 6502: what `TT17` leaves in X and Y -- the crosshair steps, held between the scan and the
@@ -229,23 +214,23 @@ namespace
     // ---- the screens ------------------------------------------------------------------------------
     Elite::StateTokens values;
     Elite::ExtendedTokenPrinter extended;
-    Elite::TradeScreen trade;
-    Elite::SaveScreen save;
 
-    /// Last, because it holds references to nearly everything above it.
+    /// Last but one, because it holds a reference to the universe above it.
     Outpost::FlightSession flight;
+
+    /*
+     * The seams, and every ported routine takes this beside the universe (Modernize.md §4.5).
+     *
+     * LAST, because every reference in it is bound at construction and eight of them are the
+     * session's. It is fourteen references for one slice: M3-b collapses the eleven interfaces to
+     * §4.5's four ports without touching a signature again.
+     */
+    Elite::Ports ports;
   };
 
   /// The start sequence's argument list, which `Run` builds for the cold start and `Leave` rebuilds
   /// for `DEATH2`. It is an aggregate of references, so building it twice costs nothing and sharing
   /// one would mean keeping a struct alive across the whole program for two call sites.
-  [[nodiscard]] Elite::GameStart StartOf(Game& _game)
-  {
-    return Elite::GameStart{_game.shell,      _game.save,       _game.universe.text,           _game.universe.commander, _game.name,
-                            _game.image,      _game.buffer,     _game.useDisk,        _game.universe.current,   _game.selectedSeeds,
-                            _game.crosshairX, _game.crosshairY, _game.universe.explosions, _game.universe.dockedFlag};
-  }
-
   /*
    * 6502: what a chart reads -- QQ9, QQ10, QQ0, QQ1, QQ11 and QQ14, gathered where they live.
    *
@@ -256,8 +241,8 @@ namespace
   [[nodiscard]] Elite::ChartView ChartOf(Game& _game)
   {
     Elite::ChartView view;
-    view.cursorX = _game.crosshairX;
-    view.cursorY = _game.crosshairY;
+    view.cursorX = _game.universe.crosshairX;
+    view.cursorY = _game.universe.crosshairY;
     view.homeX = _game.universe.commander.systemX;
     view.homeY = _game.universe.commander.systemY;
     view.view = _game.universe.view;
@@ -288,7 +273,7 @@ namespace
       &_game.joystickEnabled,             // 6502: JSTE
       &controls.joystick,                 // 6502: JSTK
       &music.dockingMusicOff,             // 6502: MUTOK
-      &_game.useDisk,                     // 6502: DISK
+      &_game.universe.useDisk,                     // 6502: DISK
       &_game.universe.heaps.pltog, // 6502: PLTOG
       &music.dockingMusicForced,          // 6502: MUFOR
       &music.dockingPlaysTheme,           // 6502: MUDOCK
@@ -400,7 +385,7 @@ namespace
       const Elite::ShipCondition condition{_game.universe.dockedFlag, bubble.junk,
                                            (beyond < bubble.slots.size()) ? bubble.slots[beyond] : std::uint8_t{0},
                                            _game.universe.status.energy};
-      Elite::StatusScreen(_game.trade, _game.universe.commander, condition, _game.crosshairX, _game.crosshairY, _game.selectedSeeds);
+      Elite::StatusScreen(_game.universe, _game.ports, condition);
       return;
     }
 
@@ -408,21 +393,22 @@ namespace
     {
       // 6502: JSR TT111 / JMP TT25 -- the screen reads what the search leaves behind.
       const Elite::NearestSystem found =
-        Elite::FindNearestSystem(_game.universe.commander.galaxySeeds, _game.crosshairX, _game.crosshairY,
+        Elite::FindNearestSystem(_game.universe.commander.galaxySeeds, _game.universe.crosshairX, _game.universe.crosshairY,
                                  _game.universe.commander.systemX, _game.universe.commander.systemY);
-      _game.selectedSeeds = found.seeds;
-      Elite::SystemDataScreen(_game.trade, _game.selectedSeeds, found.data, found.distance);
+      _game.universe.selectedSeeds = found.seeds;
+      Elite::SystemDataScreen(_game.universe, _game.ports, found.data, found.distance);
       return;
     }
 
     case Elite::KeyAction::MarketPrice:
       // 6502: TT167. The screen reset above it is TRADEMODE, which the caller does.
       _game.shell.SetUpTradeScreen(Elite::BUY_CARGO_VIEW);
-      Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.universe.text, _game.universe.current.economy, _game.market, false);
+      Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.universe.text, _game.universe.current.economy,
+                               _game.universe.market, false);
       return;
 
     case Elite::KeyAction::BuyCargo:
-      Elite::BuyScreen(_game.trade, _game.universe.commander, _game.market, _game.universe.current.economy, false);
+      Elite::BuyScreen(_game.universe, _game.ports, false);
 
       /*
        * 6502: BAY2 -- LDA #f9 / JMP FRCE, and the screen reaches it BOTH ways out. A letter gets
@@ -441,7 +427,7 @@ namespace
       return;
 
     case Elite::KeyAction::SellCargo:
-      Elite::ListCargo(_game.trade, _game.universe.commander, _game.market, _game.universe.current.economy, Elite::SELL_CARGO_VIEW);
+      Elite::ListCargo(_game.universe, _game.ports, Elite::SELL_CARGO_VIEW);
 
       /*
        * 6502: TT212's `JSR dn2 / JMP BAY2` -- and only the beep is the screen's.
@@ -454,21 +440,21 @@ namespace
       return;
 
     case Elite::KeyAction::Inventory:
-      Elite::InventoryScreen(_game.trade, _game.universe.commander, _game.market, _game.universe.current.economy);
+      Elite::InventoryScreen(_game.universe, _game.ports);
       return;
 
     case Elite::KeyAction::EquipShip:
-      Elite::EquipShipScreen(_game.trade, _game.universe.commander, _game.universe.current.techLevel);
+      Elite::EquipShipScreen(_game.universe, _game.ports);
       return;
 
     case Elite::KeyAction::DiskAccess:
     {
       const Elite::DiskMenuResult menu =
-        Elite::DiskAccessMenu(_game.save, _game.universe.commander, _game.name, _game.image, _game.buffer, _game.useDisk);
+        Elite::DiskAccessMenu(_game.universe, _game.ports);
       // 6502: BCC P%+5 / JMP QU5 / JMP BAY -- and QU5 is DFAULT, which installs the loaded image.
       if (menu.newCommander)
       {
-        (void)Elite::LoadCommander(_game.image, _game.universe.commander, _game.name);
+        (void)Elite::LoadCommander(_game.universe.commanderFile, _game.universe.commander, _game.universe.commanderName);
       }
       return;
     }
@@ -482,14 +468,14 @@ namespace
        * `_selected` comes back written: the launch runs `TT111` for the SEEDS rather than for the
        * distance, because the planet's appearance is generated from the system you are leaving.
        */
-      Elite::Launch(_game.universe, _game.flight.Ports(), &_game.shell, _game.universe.dockedFlag, _game.crosshairX, _game.crosshairY,
-                    _game.selectedSeeds);
+      Elite::Launch(_game.universe, _game.ports, &_game.shell, _game.universe.dockedFlag, _game.universe.crosshairX,
+                    _game.universe.crosshairY, _game.universe.selectedSeeds);
       return;
 
     case Elite::KeyAction::ChangeView:
       // 6502: LOOK1 with X = the view. The dispatch already decided which one through two `EQUB
       // &2C`s, so this performs the answer rather than reading the key again.
-      Elite::ChangeView(_game.universe, _game.flight.Ports(), _outcome.view);
+      Elite::ChangeView(_game.universe, _game.ports, _outcome.view);
       return;
 
     /*
@@ -518,10 +504,10 @@ namespace
       Elite::ChartView chart = ChartOf(_game);
 
       Elite::DrawTargetCrosshairs(_game.universe.canvas, chart);
-      Elite::CrosshairsToCurrentSystem(_game.universe.commander, _game.crosshairX, _game.crosshairY);
+      Elite::CrosshairsToCurrentSystem(_game.universe.commander, _game.universe.crosshairX, _game.universe.crosshairY);
 
-      chart.cursorX = _game.crosshairX;
-      chart.cursorY = _game.crosshairY;
+      chart.cursorX = _game.universe.crosshairX;
+      chart.cursorY = _game.universe.crosshairY;
       Elite::DrawTargetCrosshairs(_game.universe.canvas, chart);
       return;
     }
@@ -540,8 +526,8 @@ namespace
 
       Elite::MoveCrosshairs(_game.universe.canvas, chart, _game.crosshairStep.x, _game.crosshairStep.y);
 
-      _game.crosshairX = chart.cursorX;
-      _game.crosshairY = chart.cursorY;
+      _game.universe.crosshairX = chart.cursorX;
+      _game.universe.crosshairY = chart.cursorY;
     }
       [[fallthrough]];
 
@@ -596,17 +582,17 @@ namespace
         described.techLevel = _game.universe.current.techLevel;
 
         const Elite::JumpResult jumped = Elite::PerformJump(
-          _game.universe, _game.flight.Ports(), _game.selectedSeeds, jump, described, _game.market, _game.flight, nullptr, _game.crosshairX,
-          _game.crosshairY, _game.universe.commander.galaxySeeds, _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL)),
-          _game.universe.options.authorNames != 0u);
+          _game.universe, _game.ports, _game.universe.selectedSeeds, jump, described, _game.universe.market, _game.flight, nullptr,
+          _game.universe.crosshairX, _game.universe.crosshairY, _game.universe.commander.galaxySeeds,
+          _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_CONTROL)), _game.universe.options.authorNames != 0u);
 
         _game.jumpDistance = jump.distance;
 
         if (jumped == Elite::JumpResult::Arrived)
         {
           // 6502: the fall-through into `TT110`, which is the launch the arrival ends with.
-          Elite::Launch(_game.universe, _game.flight.Ports(), nullptr, _game.universe.dockedFlag, _game.crosshairX, _game.crosshairY,
-                        _game.selectedSeeds);
+          Elite::Launch(_game.universe, _game.ports, nullptr, _game.universe.dockedFlag, _game.universe.crosshairX,
+                        _game.universe.crosshairY, _game.universe.selectedSeeds);
         }
       }
       return;
@@ -634,8 +620,8 @@ namespace
       _game.universe.status.hyperspaceCounter = jump.counter; // 6502: STA QQ22 -- and it was never copied back (§6.159)
       _game.jumpDistance = jump.distance;
       _game.jumpTarget = jump.target;
-      _game.crosshairX = chart.cursorX;
-      _game.crosshairY = chart.cursorY;
+      _game.universe.crosshairX = chart.cursorX;
+      _game.universe.crosshairY = chart.cursorY;
 
       /*
        * 6502: Ghy -- reached by `hyp`'s `JSR CTRL / BMI Ghy`, which `JumpOf` now answers from the
@@ -651,7 +637,7 @@ namespace
          * of it.
          */
         Elite::SystemSeeds galaxy = _game.universe.commander.galaxySeeds;
-        Elite::GalacticJump(_game.universe, _game.flight.Ports(), galaxy, _game.selectedSeeds, jump, chart, nullptr);
+        Elite::GalacticJump(_game.universe, _game.ports, galaxy, _game.universe.selectedSeeds, jump, chart, nullptr);
 
         for (int byte = 0; byte < 6; ++byte)
         {
@@ -663,8 +649,8 @@ namespace
         _game.universe.status.hyperspaceCounter = jump.counter; // 6502: `Ghy` falls into `wW`, which stores QQ22 as well
         _game.jumpTarget = jump.target;
         _game.jumpDistance = jump.distance;
-        _game.crosshairX = chart.cursorX;
-        _game.crosshairY = chart.cursorY;
+        _game.universe.crosshairX = chart.cursorX;
+        _game.universe.crosshairY = chart.cursorY;
       }
       return;
     }
@@ -707,10 +693,10 @@ namespace
    * A function rather than six lines in the switch because `BRIEF` needs the briefing ship's slot
    * carried into the control code that spins it, and that is one line the other five do not have.
    */
-  [[nodiscard]] Elite::ForcedKey MissionOf(Elite::DockingOutcome _outcome, Elite::MissionBay& _bay, Game& _game)
+  [[nodiscard]] Elite::ForcedKey MissionOf(Elite::DockingOutcome _outcome, Game& _game)
   {
     Elite::Universe& universe = _game.universe;
-    Elite::Ports& ports = _game.flight.Ports();
+    Elite::Ports& ports = _game.ports;
 
     switch (_outcome)
     {
@@ -721,25 +707,25 @@ namespace
        * it -- so the slot has to reach the control code. It travels in `Universe::shipSlot` since
        * M3-a, where it went out through the shell and came back in.
        */
-      const std::uint8_t token = Elite::RunConstrictorBriefing(universe, ports, _bay);
-      return Elite::PrintAndEnterBay(universe, ports, _bay, token);
+      const std::uint8_t token = Elite::RunConstrictorBriefing(universe, ports, false);
+      return Elite::PrintAndEnterBay(universe, ports, false, token);
     }
 
     case Elite::DockingOutcome::DebriefMission1:
-      return Elite::DebriefMission1(universe, ports, _bay);
+      return Elite::DebriefMission1(universe, ports, false);
     case Elite::DockingOutcome::BriefMission2:
-      return Elite::BriefMission2(universe, ports, _bay);
+      return Elite::BriefMission2(universe, ports, false);
     case Elite::DockingOutcome::CollectPlans:
-      return Elite::CollectPlans(universe, ports, _bay);
+      return Elite::CollectPlans(universe, ports, false);
     case Elite::DockingOutcome::DebriefMission2:
-      return Elite::DebriefMission2(universe, ports, _bay);
+      return Elite::DebriefMission2(universe, ports, false);
     case Elite::DockingOutcome::OfferTrumbles:
-      return Elite::OfferTrumble(universe, ports, _bay, _game.shell);
+      return Elite::OfferTrumble(universe, ports, false, _game.shell);
 
     case Elite::DockingOutcome::DockingBay:
     default:
       // 6502: EN6 -- JMP BAY, and nothing happened.
-      return Elite::EnterDockingBay(_bay.dockedFlag, _bay.view, _bay.countdown, _bay.hyperspaceHeld);
+      return Elite::EnterDockingBay(universe.dockedFlag, universe.view, universe.status.hyperspaceCountdown, false);
     }
   }
 
@@ -765,7 +751,7 @@ namespace
        * is here anyway because the routine is built and the alternative is a hole that looks like
        * a decision.
        */
-      const Elite::DockingResult arrival = Elite::DockAtStation(_game.shell, _game.universe, _game.flight.Ports(), &_game.shell,
+      const Elite::DockingResult arrival = Elite::DockAtStation(_game.shell, _game.universe, _game.ports, &_game.shell,
                                                                 _game.universe.dockedFlag, _game.universe.view, false);
 
       /*
@@ -776,10 +762,7 @@ namespace
        * slice the port took the tail they share and skipped the briefings themselves, which is why
        * a docking that had earned one went straight to the status screen.
        */
-      Elite::MissionBay missionBay{_game.universe.commander, _game.universe.dockedFlag, _game.universe.view,
-                                   _game.universe.status.hyperspaceCountdown, false};
-
-      const Elite::ForcedKey bay = MissionOf(arrival.outcome, missionBay, _game);
+      const Elite::ForcedKey bay = MissionOf(arrival.outcome, _game);
       Perform(_game, bay.outcome);
       return;
     }
@@ -839,12 +822,11 @@ namespace
         };
 
         DeathPacing pacing(_game);
-        Elite::Die(_game.universe, _game.flight.Ports(), _game.flight, &pacing);
+        Elite::Die(_game.universe, _game.ports, _game.flight, &pacing);
 
         _game.shell.ResetShip();
 
-        Elite::GameStart restart = StartOf(_game);
-        const Elite::ForcedKey begun = Elite::StartGame(restart);
+        const Elite::ForcedKey begun = Elite::StartGame(_game.universe, _game.ports, false);
         Perform(_game, begun.outcome);
       }
       return;
@@ -859,7 +841,7 @@ namespace
        * way `TT18`'s fall into `TT110` was. A default commander cannot reach here at all: `KY13` is
        * ANDed with `ESCP`, so it needs one that has bought a pod.
        */
-      Elite::AbandonShip(_game.universe, _game.flight.Ports(), _game.universe.commander.fuel);
+      Elite::AbandonShip(_game.universe, _game.ports, _game.universe.commander.fuel);
 
       // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
       _game.flight.StopDockingMusic();
@@ -915,7 +897,7 @@ namespace
 
     for (int step = 0; step < plan.steps; ++step)
     {
-      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(_game.universe, _game.flight.Ports()); // 6502: JSR M%
+      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(_game.universe, _game.ports); // 6502: JSR M%
       if (outcome != Elite::LoopOutcome::Continued)
       {
         Leave(_game, outcome);
@@ -933,7 +915,7 @@ namespace
        */
       Elite::Universe& universe = _game.universe;
 
-      if (Elite::RunLoopHead(universe, _game.flight.Ports(), _game.shell) == Elite::LoopHead::Spawn)
+      if (Elite::RunLoopHead(universe, _game.ports, _game.shell) == Elite::LoopHead::Spawn)
       {
         Elite::RunSpawning(universe.bubble, universe.work, universe.rng, universe.commander, universe.current, universe.status,
                            universe.explosions, universe.flight.blueprint, false);
@@ -946,7 +928,7 @@ namespace
        * one that waits. The docked loop below is where it would matter, and that loop is paced by
        * `PlanSteps` rather than by vsync counts (ADR-005 §3).
        */
-      static_cast<void>(Elite::RunLoopTail(universe, _game.flight.Ports(), universe.commander, universe.options.authorNames, false));
+      static_cast<void>(Elite::RunLoopTail(universe, _game.ports, universe.commander, universe.options.authorNames, false));
 
       /*
        * 6502: and then `MLOOP`'s second half, which the flight loop falls into -- `JSR TT17` and
@@ -962,7 +944,7 @@ namespace
        * green -- was never called by anything but its own test: no key the player HELD reached the
        * game, which is every flight control there is (§6.111).
        */
-      (void)Elite::ScanFlightControls(_game.universe, _game.flight.Ports(), _game.flight, _game.universe.view);
+      (void)Elite::ScanFlightControls(_game.universe, _game.ports, _game.flight, _game.universe.view);
 
       /*
        * 6502: JSR TT102 -- EVERY PASS, with A = `thiskey`, which is zero when nothing was pressed.
@@ -1063,18 +1045,16 @@ namespace
     Elite::SetUpLoaderScreen(game->universe.canvas);
 
     // 6502: NA% -- the commander the disk menu's "load" compares against, and the one SVE writes.
-    Elite::SaveCommander(game->universe.commander, game->name, game->image);
-
-    Elite::GameStart start = StartOf(*game);
+    Elite::SaveCommander(game->universe.commander, game->universe.commanderName, game->universe.commanderFile);
 
     // 6502: TT170 -- the cold start. It ends by pressing "8" for the player and entering the docked
     // half of the main loop, which is why there is no separate "draw the first screen" step.
-    const Elite::ForcedKey begun = Elite::ResetAndStartGame(start);
+    const Elite::ForcedKey begun = Elite::ResetAndStartGame(game->universe, game->ports, false);
     if (begun.loop == Elite::MainLoop::Docked)
     {
       // 6502: the market is rolled on arrival rather than by the start sequence, and the market
       // screen reads it -- so a game that skipped this would print a table of zeroes.
-      Elite::GenerateMarket(game->universe.rng, game->universe.current.economy, game->market);
+      Elite::GenerateMarket(game->universe.rng, game->universe.current.economy, game->universe.market);
 
       // 6502: BAY forces "8" and TT102 has already dispatched it, so this PERFORMS that outcome
       // rather than deciding it again -- deciding twice would work today and stop working the
@@ -1165,7 +1145,7 @@ namespace
            */
           Elite::CoolTheGuns(game->universe.status);
 
-          game->crosshairStep = Elite::ScanFlightControls(game->universe, game->flight.Ports(), game->flight, game->universe.view);
+          game->crosshairStep = Elite::ScanFlightControls(game->universe, game->ports, game->flight, game->universe.view);
 
           std::uint8_t key = 0;
           (void)game->window.TakeKey(key); // 6502: `thiskey`, which is zero when nothing is held
