@@ -14,6 +14,7 @@
 #include "TextPrint.h"
 #include "Tokens.h"
 #include "Trumbles.h"
+#include "Universe.h"
 
 namespace Elite
 {
@@ -88,66 +89,9 @@ namespace Elite
   /// 6502: BLUEBAND -- both bands, the left at `SCBASE` and the right 37 cells along.
   void DrawColourBands(Canvas& _canvas) noexcept;
 
-  /*
-   * 6502: abraxas, caravanserai and DFLAG -- what the screen is currently set up as.
-   *
-   * The first two READ LIKE REGISTERS AND ARE NOT. `abraxas` is the value the raster interrupt
-   * pokes into `VIC+&18` on its next pass and `caravanserai` the one for `VIC+&11`, so both are
-   * ordinary bytes here and only the handler that reads them is hardware. §6.73 made the opposite
-   * mistake about `SIGHT`; this is the same question with the answer the other way round.
-   *
-   * `abraxas` says which block of screen RAM colours the bottom of the screen -- &81 for the one at
-   * &6000 and &91 for the one at &6400, which is the dashboard's. `caravanserai` chooses standard
-   * or multicolour bitmap for the same half. `DFLAG` is the cheap half of it: non-zero means the
-   * dashboard is already on screen, so `wantdials` can skip copying it in again.
-   */
-  struct ScreenState
-  {
-    std::uint8_t colourBank = 0x81;  ///< 6502: abraxas
-    std::uint8_t bitmapMode = 0xC0;  ///< 6502: caravanserai -- the LOWER half of the screen
-    std::uint8_t dashboardShown = 0; ///< 6502: DFLAG
+  // 6502: abraxas, caravanserai, DFLAG, moonflower, welcome and HFX -- `ScreenState` moved to
+  // `Universe.h` with M3-a, because it is state and that is where the state lives now.
 
-    /// 6502: moonflower -- `caravanserai`'s twin for the upper half, and the energy bomb's whole
-    /// effect: flight loop part 3 drops it to %11010000 and the space view goes to standard bitmap
-    /// mode for as long as the bomb burns.
-    std::uint8_t upperBitmapMode = 0xC0;
-
-    /*
-     * 6502: welcome -- the border colour the raster handler cycles while the bomb burns.
-     *
-     * A table the interrupt indexes rather than a flag: `COMIRQ1` does `LDA welcome,X` and writes
-     * VIC register &21, so a non-zero first byte is what makes the background flash. `BOMBOFF`
-     * puts it back to zero and `COMIRQ1` increments it, which is the only place it grows.
-     */
-    std::uint8_t backgroundFlash = 0;
-
-    /*
-     * 6502: HFX -- AND IT DOES NOTHING IN THIS VERSION, which took a slice to establish (§6.155).
-     *
-     * On the BBC and the 6502 Second Processor a non-zero `HFX` makes the hyperspace rings
-     * multicoloured, and `IRQ1` is the handler that reads it. This build has neither: upstream's
-     * `hfx.asm` is `SKIP 1` and says in as many words that the flag is unused here; `DOHFX` exists
-     * as a label with both of its instructions commented out in the original source; the C64's
-     * `LL164` is four instructions and does not write it; and the C64's `COMIRQ1` does not read
-     * it. Nothing in the assembled game touches this byte except `ZERO`, which clears `FRIN` to
-     * `de` and catches it in passing at 1161.
-     *
-     * So the field is here because the memory is, and the port clears it where the original does.
-     * ADR-005 §1 scheduled a per-row shift of the space view for it and there is no such effect to
-     * build.
-     */
-    std::uint8_t hyperspaceEffect = 0;
-
-    /*
-     * 6502: RASTCT -- which half of the raster split the interrupt is setting up next.
-     *
-     * Zero is the space view and one is the dashboard, and `COMIRQ1` reads it as the index into
-     * all seven of its tables before writing `innersec,X` back over it. It is the whole of the
-     * handler's state: everything else it reads is either a constant table or one of the four
-     * bytes above.
-     */
-    std::uint8_t rasterCounter = 0;
-  };
 
   /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
   /// extra bit the dashboard's bottom half needs.

@@ -124,6 +124,9 @@
     <ClInclude Include="Trumbles.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Universe.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Missions.h">
       <Filter>Universe</Filter>
     </ClInclude>
