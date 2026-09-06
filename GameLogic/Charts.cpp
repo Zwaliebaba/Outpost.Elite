@@ -583,6 +583,7 @@ namespace Elite
     // 6502: wW / wW2 -- LDA #15 / STA QQ22+1 / STA QQ22 / TAX / JMP ee3. Both bytes of the
     // countdown take the same value, and the one that is printed is the one in X.
     _jump.countdown = COUNTDOWN_START;
+    _jump.counter = COUNTDOWN_START; // 6502: STA QQ22 -- the tick within a step, not only the number shown
     PrintCountdown(_extended.Characters(), _text, COUNTDOWN_START);
     return JumpOutcome::CountingDown;
   }

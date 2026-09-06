@@ -1,6 +1,8 @@
 #include "pch.h"
 
 #include "FlightSession.h"
+
+#include "LoaderScreen.h"
 #include "SoundOutput.h"
 
 #include "Tactics.h"
@@ -103,6 +105,10 @@ namespace Outpost
      */
     m_heaps.stp = LAST_CIRCLE_STEP;
     m_flight.blueprint = Elite::BlueprintOf(Elite::ShipType::CobraMk3);
+
+    // 6502: the loader's part 4 -- the sprite positions, sizes and colours the game inherits and
+    // never writes. Without it the sights are switched on at (0, 0), off the screen (§6.160).
+    Elite::SetUpLoaderVideo(m_video);
 
     /*
      * 6502: XX21+2*SST-2 -- a third byte of the same shape, and this one is not left by a previous

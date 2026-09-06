@@ -146,17 +146,17 @@ namespace GameLogicTests
               const bool controlHeld = (cheat & 1) != 0;
               const bool patg = (cheat & 2) != 0;
 
-              Cpu6502 cpu = oracle.Fresh();
-              // `TT114` is the chart's own redraw, which `TT18` JUMPS to rather than calls -- the
-              // port hands it back as an outcome for the caller, so here it is a trap.
-              for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY", "TT114"})
-              {
-                std::uint16_t address = 0;
-                if (oracle.TryLabel(seam, address))
+                Cpu6502 cpu = oracle.Fresh();
+                // `TT114` is the chart's own redraw, which `TT18` JUMPS to rather than calls -- the
+                // port hands it back as an outcome for the caller, so here it is a trap.
+                for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY", "TT114"})
                 {
-                  cpu.AddTrap(address);
+                  std::uint16_t address = 0;
+                  if (oracle.TryLabel(seam, address))
+                  {
+                    cpu.AddTrap(address);
+                  }
                 }
-              }
 
               LoopUniverse universe;
               Seed(universe.universe, 5u);
@@ -374,6 +374,7 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.memory[at.qq0], universe.universe.commander.systemX, (context + L": QQ0").c_str());
             Assert::AreEqual(cpu.memory[at.qq1], universe.universe.commander.systemY, (context + L": QQ1").c_str());
             Assert::AreEqual(cpu.memory[at.qq22 + 1], jump.countdown, (context + L": QQ22+1").c_str());
+            Assert::AreEqual(cpu.memory[at.qq22], jump.counter, (context + L": QQ22 -- wW2 stores both bytes (§6.159)").c_str());
             Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.memory[at.qq8] | (cpu.memory[at.qq8 + 1] << 8)), jump.distance,
                                             (context + L": QQ8").c_str());
             for (std::size_t byte = 0; byte < 6u; ++byte)

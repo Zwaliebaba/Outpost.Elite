@@ -284,8 +284,10 @@ namespace Elite
     screen.commander.galacticDrive = 0u;
     screen.commander.legalStatus = 0u;
 
-    // 6502: LDA #2 / JSR wW2 -- the countdown, started at two rather than fifteen.
+    // 6502: LDA #2 / JSR wW2 -- the countdown, started at two rather than fifteen, and `wW2` stores
+    // the same A into QQ22 as well as QQ22+1 (§6.159).
     _jump.countdown = 2u;
+    _jump.counter = 2u;
 
     // 6502: INC GCNT / LDA GCNT / AND #%11110111 / STA GCNT -- eight galaxies, and the mask is
     // what wraps the eighth back to the first.
