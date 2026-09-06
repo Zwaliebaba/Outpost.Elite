@@ -698,13 +698,15 @@ namespace GameLogicTests
             std::uint32_t state = 0x5C31A70Fu ^ (counter * 0x9E3779B9u) ^ (stations * 0x85EBCA6Bu);
             for (std::size_t slot = 0; slot < 2u; ++slot)
             {
+              std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
                 state = state * 1103515245u + 12345u;
                 const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-                bubble.blocks[slot][byte] = value;
+                shipBytes[byte] = value;
                 cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
               }
+              bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
             }
 
             Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};

@@ -122,20 +122,22 @@ namespace GameLogicTests
         _bubble.slots[slot] = type;
         _cpu.memory[static_cast<std::uint16_t>(_at.frin + slot)] = type;
 
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = _bubble.blocks[slot].ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           const std::uint8_t value = static_cast<std::uint8_t>(0x21u + slot * 17u + byte * 5u);
-          _bubble.blocks[slot][byte] = value;
+          shipBytes[byte] = value;
           _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
         }
+        _bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
 
         // Each ship's heap block, carved off the top the way `NWSHP` carves it.
         const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(type));
         const std::uint8_t size = (blueprint == 0u) ? std::uint8_t{0} : Elite::ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
         heapAt = static_cast<std::uint16_t>(heapAt - size);
 
-        _bubble.blocks[slot][Elite::SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(heapAt);
-        _bubble.blocks[slot][Elite::SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(heapAt >> 8);
+        _bubble.blocks[slot].heapLow = static_cast<std::uint8_t>(heapAt);
+        _bubble.blocks[slot].heapHigh = static_cast<std::uint8_t>(heapAt >> 8);
         _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + Elite::SHIP_HEAP_LOW_OFFSET)] =
           static_cast<std::uint8_t>(heapAt);
         _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + Elite::SHIP_HEAP_HIGH_OFFSET)] =
@@ -167,7 +169,7 @@ namespace GameLogicTests
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)],
-                           _bubble.blocks[slot][byte], (_where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
+                           _bubble.blocks[slot].ToBytes()[byte], (_where + L": K%+" + std::to_wstring(slot) + L"." + std::to_wstring(byte)).c_str());
         }
       }
       for (std::size_t type = 0; type < _bubble.counts.size(); ++type)
@@ -259,13 +261,15 @@ namespace GameLogicTests
 
             // 6502: INWK -- a recognisable block, so that `NwS1`'s three flips and the heap pointer
             // are compared against something rather than against zeroes.
-            Elite::ShipBlock work{};
+            Elite::Ship work{};
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               const std::uint8_t value = static_cast<std::uint8_t>(0x13u + byte * 7u);
-              work[byte] = value;
+              shipBytes[byte] = value;
               cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = value;
             }
+            work = Elite::Ship::FromBytes(shipBytes);
 
             cpu.memory[at.tek] = techLevel;
 
@@ -294,7 +298,7 @@ namespace GameLogicTests
 
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work.ToBytes()[byte],
                                (where + L": INWK+" + std::to_wstring(byte)).c_str());
             }
 
@@ -414,7 +418,7 @@ namespace GameLogicTests
             bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
             Elite::LineHeap heap;
             Elite::PlanetSunState state;
-            Elite::ShipBlock work{};
+            Elite::Ship work{};
             Elite::CommanderBlock commander;
             RecordingEffects effects;
 
@@ -446,7 +450,7 @@ namespace GameLogicTests
                 continue;
               }
               const std::uint8_t ai = static_cast<std::uint8_t>(0x80u | ((slot == 0u ? living - 1u : 0u) << 1));
-              bubble.blocks[slot][32] = ai;
+              bubble.blocks[slot].ai = ai;
               cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + 32u)] = ai;
             }
 
@@ -572,7 +576,7 @@ namespace GameLogicTests
         Elite::Bubble bubble;
         bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
         Elite::LineHeap heap;
-        Elite::ShipBlock work{};
+        Elite::Ship work{};
         Elite::CommanderBlock commander;
         RecordingEffects effects;
         Elite::FlightState flight;
@@ -661,7 +665,7 @@ namespace GameLogicTests
         }
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work.ToBytes()[byte],
                            (where + L": INWK+" + std::to_wstring(byte)).c_str());
         }
         for (std::size_t byte = 0; byte < 4u; ++byte)
@@ -732,12 +736,14 @@ namespace GameLogicTests
             }
 
             // Junk in every byte, so a block `ZINF` failed to clear would show.
-            Elite::ShipBlock work{};
+            Elite::Ship work{};
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
-              work[byte] = static_cast<std::uint8_t>(0xA0u + byte);
-              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = work[byte];
+              shipBytes[byte] = static_cast<std::uint8_t>(0xA0u + byte);
+              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = shipBytes[byte];
             }
+            work = Elite::Ship::FromBytes(shipBytes);
 
             cpu.c = carryIn;
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ze, 20'000);
@@ -752,7 +758,7 @@ namespace GameLogicTests
 
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work.ToBytes()[byte],
                                (where + L": INWK+" + std::to_wstring(byte)).c_str());
             }
             for (std::size_t byte = 0; byte < 4u; ++byte)
@@ -766,7 +772,7 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.a, got.value, (where + L": A").c_str());
             Assert::AreEqual(cpu.x, got.previous, (where + L": X").c_str());
 
-            aggressive += ((work[32] & 1u) != 0u) ? 1u : 0u;
+            aggressive += ((work.ai & 1u) != 0u) ? 1u : 0u;
             ++compared;
           }
         }
@@ -838,12 +844,14 @@ namespace GameLogicTests
             cpu.memory[mstg] = target;
             cpu.memory[delta] = speed;
 
-            Elite::ShipBlock work{};
+            Elite::Ship work{};
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
-              work[byte] = static_cast<std::uint8_t>(0xB0u + byte);
-              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = work[byte];
+              shipBytes[byte] = static_cast<std::uint8_t>(0xB0u + byte);
+              cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = shipBytes[byte];
             }
+            work = Elite::Ship::FromBytes(shipBytes);
 
             std::uint16_t blueprint = 0x1234u;
             cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint);
@@ -861,7 +869,7 @@ namespace GameLogicTests
 
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work.ToBytes()[byte],
                                (where + L": INWK+" + std::to_wstring(byte)).c_str());
             }
 
@@ -942,12 +950,12 @@ namespace GameLogicTests
                * sign-magnitude and `SeedBubble`'s ramp is all positive: a mutation that dropped
                * the sign entirely survived the first version of this sweep (§6.124).
                */
-                bubble.blocks[1][10] = 0x60u;
-                bubble.blocks[1][12] = 0xE0u;
-                bubble.blocks[1][14] = 0x1Fu;
+                bubble.blocks[1].nose.x.hi = 0x60u;
+                bubble.blocks[1].nose.y.hi = 0xE0u;
+                bubble.blocks[1].nose.z.hi = 0x1Fu;
                 for (const std::size_t byte : {std::size_t{10}, std::size_t{12}, std::size_t{14}})
                 {
-                  cpu.memory[static_cast<std::uint16_t>(at.kPercent + Elite::SHIP_BLOCK_SIZE + byte)] = bubble.blocks[1][byte];
+                  cpu.memory[static_cast<std::uint16_t>(at.kPercent + Elite::SHIP_BLOCK_SIZE + byte)] = bubble.blocks[1].ToBytes()[byte];
                 }
 
                 constexpr std::uint8_t PARENT_SLOT = 1;
@@ -963,13 +971,15 @@ namespace GameLogicTests
                 Elite::Rng rng;
                 rng.SetState(seed);
 
-                Elite::ShipBlock work{};
+                Elite::Ship work{};
+                std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
-                  work[byte] = static_cast<std::uint8_t>(0xC0u + byte);
-                  cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = work[byte];
+                  shipBytes[byte] = static_cast<std::uint8_t>(0xC0u + byte);
+                  cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)] = shipBytes[byte];
                   cpu.memory[static_cast<std::uint16_t>(xx3 + byte)] = 0x5Au;
                 }
+                work = Elite::Ship::FromBytes(shipBytes);
 
                 std::uint16_t blueprint = 0x1234u;
                 cpu.memory[at.xx0] = static_cast<std::uint8_t>(blueprint);
@@ -1001,7 +1011,7 @@ namespace GameLogicTests
 
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
-                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work[byte],
+                  Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + byte)], work.ToBytes()[byte],
                                    (where + L": INWK+" + std::to_wstring(byte)).c_str());
                 }
                 for (std::size_t byte = 0; byte < 4u; ++byte)
@@ -1017,8 +1027,8 @@ namespace GameLogicTests
                 tumbled += (Elite::Byte(childType) >= Elite::Byte(Elite::ShipType::AlloyPlate) && Elite::Byte(childType) <= Elite::Byte(Elite::ShipType::Splinter)) ? 1u : 0u;
                 if (made.created)
                 {
-                  pitchSet += ((bubble.blocks[made.slot][29] & 0x80u) != 0u) ? 1u : 0u;
-                  pitchClear += ((bubble.blocks[made.slot][29] & 0x80u) == 0u) ? 1u : 0u;
+                  pitchSet += ((bubble.blocks[made.slot].rollCounter & 0x80u) != 0u) ? 1u : 0u;
+                  pitchClear += ((bubble.blocks[made.slot].rollCounter & 0x80u) == 0u) ? 1u : 0u;
                 }
                 ++compared;
               }

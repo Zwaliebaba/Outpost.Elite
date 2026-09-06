@@ -271,7 +271,8 @@ consumes or produces.
 **P3 — Flat byte blobs addressed by number.** `ShipBlock` is `std::array<std::uint8_t, 37>` with
 `operator[]`; when this plan opened, 329 sites in `GameLogic/*.cpp` indexed it with a numeric
 literal (`work[31]`, `work[29]`, `_work[8]`) and 107 with a named offset constant — **M1-a took
-both to <!--count:ship-literal-sites-->0 and <!--count:ship-offset-sites-->0** — and two of the
+both to <!--count:ship-literal-sites-->0 and <!--count:ship-offset-sites-->0, and M1-c made the
+block a `Ship` of fields with the bytes as its codec** — and two of the
 constant families named the same byte (`SHIP_STATE` and `SHIP_STATE_OFFSET`,
 `SHIP_FLAGS` and `SHIP_FLAGS_OFFSET`, `SHIP_ENERGY` and `SHIP_ENERGY_OFFSET`) — the §6.34 trap set
 twice. `CommanderBlock` is seventy-seven bytes behind a `Field` enum and `At()`, which is the better
@@ -339,7 +340,7 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,615 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,623 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -791,7 +792,7 @@ a moved record with no defect named is a refactor that changed the game.
 |---|---|---|---|
 | **M1-a ShipView** | Named accessors on `ShipBlock` (`X()`, `Y()`, `Z()`, `Nose()`, `Roof()`, `Side()`, `PositionAt()`, `VectorAt()`, `ComponentAt()`, `Speed()` … `Newb()`), the layout named once and `static_assert`ed; every literal and named-offset site migrated; the duplicate offset and type constants removed. Bytes unchanged. | Oracle suite green; `ship-literal-sites` and `ship-offset-sites` at zero in the ratchet; mutants in `Tactics.cpp` and `Missions.cpp` re-anchored and re-run. **Built 2026-09-06** (slice plan and §8 below). | 3–4 |
 | **M1-b ShipType and the flag types** | `enum class ShipType`, `ShipStateBit`, `AiBit`, `NewbBit` with the original bit values, the byte-valued helpers beside them; the second naming families deleted. | Green; `check_outpost.py` green after the app's constants follow. **Built 2026-09-06** (slice plan and §8 below). | 2 |
-| **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become codec calls. Tests migrate to the bridge. | Green through `UniverseImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). | 4–5 |
+| **M1-c Ship with a codec** | `Ship` struct replaces `ShipBlock`; `ToBytes`/`FromBytes`; `Bubble::blocks` becomes `std::array<Ship, 10>`; `NWSHP`'s copy and `MAL2`/`MAL3` become struct copies and the partial copies codec calls. Tests migrate to the bridge. | Green through `UniverseImage`; `Materialise` bytes identical to M1-b's for the replay scripts (M0-c's stored hashes do not change). **Built 2026-09-06** (slice plan and §8 below). | 4–5 |
 | **M1-d Commander** | Typed `Commander` with the seventy-seven-byte codec; `Credits`, `LightYearsTenths`, `Laser`, `Equipment` strong types; `SaveCommander`/`LoadCommander`/checksums over the codec. | `SaveGameTests` and `CommanderTests` green; a commander file from R12's fixture still loads. | 3 |
 | **M1-e Blueprint** | Parsed `Blueprint` table; `ShipByte`/`BlueprintAddress`/`BlueprintFor` removed; `Bubble::stationType`. | `ShipDataTests` green with the three disagreeing ships called out as before; `LL9` suite green. | 3 |
 | **M1-f HeapOffset** | The line heap addressed by offset; `TryReserveHeap` with the exact chain; the sun's heap lent as a span. | `NWSHP`'s refusal sweep green (`ShipSlotTests`); the station-into-sun-heap case (§6.112) green. | 2–3 |
@@ -869,6 +870,55 @@ call, so a sweep over all 256 types still runs through the same code.
 **The mutants followed.** Four re-anchored (`ta-240`, `msl-82`, `msl-bit5`, `kill-rotate`) and none
 dropped; `msl-82`'s replacement now sets the ECM bit on the station's missile address rather than
 writing `0x83`, which is the same byte with its meaning visible.
+
+#### M1-c slice plan (written with the build, 2026-09-06; §8 records what the build found)
+
+**The struct is the model and the bytes are its wire format.** `Ship.h` holds `Ship` as fields in
+the bytes' order — `SignMag24 x, y, z` (`EliteTypes.h`'s type, which already existed for exactly
+this and gained `operator==`), `Vector16 nose, roof, side` of three `SignMag16` components, then
+`speed`, `acceleration`, `rollCounter`, `pitchCounter`, `state`, `ai`, `heapLow`, `heapHigh`,
+`energy`, `newb` — and `ToBytes`/`FromBytes`, the one place the K% layout is written down, with a
+`static_assert` round trip over thirty-seven distinct bytes so the ORDER is proved and not just the
+count. `state`, `ai` and `newb` stay bytes under `ShipFlags.h`'s names and the heap pointer stays two
+bytes: the owning types are M1-f's and the flags' own slice's, one pattern at a time.
+
+**The accessors went with the bytes.** M1-a's `X()`, `Nose()`, `Speed()` … `Newb()` were views of
+references because there was nothing else to return; a field needs no accessor, so the 491 sites
+say `work.x.hi`, `work.nose.z.hi`, `work.state` — the same regex pass as M1-a, over the same receiver
+list, with the eighteen mutant anchors rewritten in it. `ShipBlock` is `Ship` at its 217 mentions,
+`ClearShipBlock` is `ClearShip` and is `_work = Ship{}`.
+
+**The offset-parametric routines keep their offsets and lose their arithmetic.** `PositionAt(0|3|6)`,
+`VectorAt(9|15|21)` and `ComponentAt(9..25 odd)` return the field a register offset names, and M2
+replaces the offset with an enumeration. The routines that indexed through arithmetic on the offset
+are now typed: `PUS1` swaps `vector.x` and `vector.z`; `TIDY`'s eight low-byte clears are eight
+named pointers with `side.z.lo` visibly absent (the off-by-one the oracle insists on); the rear
+view's eight sign flips likewise; `PLS1` reads a `ComponentAt`, because its X is 9, 11, 21 or 23 —
+a VECTOR component with the sign in bit 7 of its high byte, which the first build read as a
+position axis and the planet sweep caught at once. A local that took a view by `auto` now copies a
+field: the four writers (`MVT1`, `MVS4`, `MVS5`, `NWSPS`'s nose) are `auto&`, and the oracle found
+every one of them before the second suite run — twenty tests red, all on `INWK+0..26`.
+
+**Whole copies are struct copies; partial copies go through the codec, where the count shows.**
+`NWSHP`'s `NWL3`, `MAL2`, `MAL3` are `=`. `WSL2`'s thirty-two bytes and `MAL4`'s twenty-nine are
+`ToBytes`, `std::copy_n`, `FromBytes`, with what is left out named in the comment; `SPL1`'s nine
+bytes into `K3`, `LL9`'s eighteen into `XX16` and nine into `XX18` read `ToBytes()`. Eleven codec
+calls in the library, and none of them in a routine that reads one field.
+
+**The bridge and the tests speak bytes through the codec.** `UniverseImage`'s K% and INWK cells
+are `ShipCells`: get is `ToBytes()[byte]`, set is `FromBytes` of the edited array, so the image is
+the K% layout whatever the struct's is — the replay's sixteen recorded digests did not move, which is
+the acceptance. In the tests, 161 numeric indexes became fields by the same offset table, 42 byte
+loops fill an array and `FromBytes` it, 45 loop reads are `ToBytes()[byte]`, and the 29 fixtures
+that are written in a register offset because the routine under test is entered with one use
+`PokeShip`/`PeekShip` (`ShipBytes.h`, tests only) — a fixture keeps its `INWK,X`, and the library
+never sees the helpers.
+
+**What the regex got wrong, and how it showed.** Two receivers on the list are not ships in every
+file: `sun` is also the sun's line heap and a label, `seeded` and `afterClear` are also RNGs, and a
+test's `block` is sometimes a byte array. Each misfire was a compile error, none a wrong test; the
+lesson for M1-d's pass over `CommanderBlock` is to derive the receiver list per file from the
+declarations rather than from the library's habits.
 
 ### Phase M2 — Explicit calling conventions
 
@@ -1075,3 +1125,21 @@ equivalents — M0-d's tally for the third time. `msl-bit5` now reads `ShipState
 against `ShipStateBit::OnScanner` and is caught by the same victim it always was, which is the
 point of naming the bits: the mutant says what it breaks. Rule 3 is met; M1-c — `Ship` with a
 codec, `Bubble::blocks` as ships, `operator[]` retired, the tests through the bridge — is next.
+
+**2026-09-06 — M1-c built.** `Ship` is a struct of fields with `ToBytes`/`FromBytes` as its wire
+format; `operator[]`, `bytes` and the M1-a views are gone; `Bubble::blocks` holds ships. 491
+accessor sites became fields, 217 `ShipBlock`s became `Ship`, the library reads the codec eleven
+times and the tests through `ShipCells`, forty-two array loops and twenty-nine `PokeShip`/`PeekShip`
+fixtures. **The oracle earned its keep twice.** The first suite run had twenty tests red, every one
+on `INWK+0..26`: four routines had taken M1-a's view by `auto`, which copied a struct of references
+harmlessly and now copied a field silently — `MVT1`, `MVS4`, `MVS5` and `NWSPS`'s nose write went
+into a copy and the block never changed. `auto&` closed nineteen. The twentieth was `PLS1`, which
+the build had read as a POSITION axis because its parameter is called an axis and the routine
+"divides an axis by z"; its X is 9, 11, 21 or 23, an orientation component whose sign is bit 7 of
+its high byte, and the planet's meridian sweep is the one test that reaches it. Neither would have
+been found by reading. The replay's sixteen digests are unchanged, which is M1-c's acceptance:
+`Materialise` writes the same bytes from a struct as it wrote from an array. The ratchet moved once,
+`origin-markers` 3,615 → 3,623 for `Ship.h`'s field labels (rule 4), and `aggregate-refs` stayed at
+78 — the counter had already learned to cut the views it no longer needs to cut. Mutants: the
+anchors moved with the regex and `mutate.py --check` was green before the first build; the corpus
+rerun follows.

@@ -58,13 +58,15 @@ namespace GameLogicTests
         {
           Elite::Bubble bubble;
           std::uint32_t state = 0x2C7B41A5u ^ (seed * 0x9E3779B9u) ^ slot;
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             state = state * 1103515245u + 12345u;
             const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-            bubble.blocks[slot][byte] = value;
+            shipBytes[byte] = value;
             cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
           }
+          bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
 
           for (std::uint32_t seedByte = 0; seedByte < 256; ++seedByte)
           {
@@ -108,15 +110,17 @@ namespace GameLogicTests
 
       for (std::uint32_t seed = 0; seed < 16; ++seed)
       {
-        Elite::ShipBlock work;
+        Elite::Ship work;
         std::uint32_t state = 0x71A3C25Fu ^ (seed * 0x85EBCA6Bu);
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           state = state * 1103515245u + 12345u;
           const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-          work[byte] = value;
+          shipBytes[byte] = value;
           cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = value;
         }
+        work = Elite::Ship::FromBytes(shipBytes);
 
         for (std::uint32_t seedByte = 0; seedByte < 256; ++seedByte)
         {
@@ -165,12 +169,14 @@ namespace GameLogicTests
           {
             Elite::Bubble bubble;
             const std::uint8_t BYTES[3] = {x, y, z};
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[0].ToBytes();
             for (int axis = 0; axis < 3; ++axis)
             {
               const std::size_t at = static_cast<std::size_t>(axis) * 3u + 1u;
-              bubble.blocks[0][at] = BYTES[axis];
+              shipBytes[at] = BYTES[axis];
               cpu.memory[static_cast<std::uint16_t>(kPercent + at)] = BYTES[axis];
             }
+            bubble.blocks[0] = Elite::Ship::FromBytes(shipBytes);
 
             cpu.y = 0;
             const Elite::Testing::RunResult run = cpu.CallSubroutine(mas3, 5'000);
@@ -229,22 +235,24 @@ namespace GameLogicTests
           {
             for (const std::uint8_t target : VALUES)
             {
-              Elite::ShipBlock work;
+              Elite::Ship work;
+              std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                work[byte] = 0;
+                shipBytes[byte] = 0;
               }
+              work = Elite::Ship::FromBytes(shipBytes);
 
               // The source coordinate at INWK+9, and the destination at INWK+0.
-              work[9] = low;
-              work[10] = high;
-              work[0] = target;
-              work[1] = static_cast<std::uint8_t>(target ^ 0x5Au);
-              work[2] = sign;
+              work.nose.x.lo = low;
+              work.nose.x.hi = high;
+              work.x.lo = target;
+              work.x.hi = static_cast<std::uint8_t>(target ^ 0x5Au);
+              work.x.sgn = sign;
 
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+                cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work.ToBytes()[byte];
               }
 
               cpu.y = 9;
@@ -261,7 +269,7 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.a, ours, (where + L": the returned magnitude").c_str());
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                                  (where + L": INWK+" + std::to_wstring(byte)).c_str());
               }
 
@@ -629,13 +637,13 @@ namespace GameLogicTests
         {
           for (const std::uint8_t z : AXES)
           {
-            Elite::ShipBlock work{};
-            work[1] = x;
-            work[4] = y;
-            work[7] = z;
+            Elite::Ship work{};
+            work.x.hi = x;
+            work.y.hi = y;
+            work.z.hi = z;
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
-              cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+              cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work.ToBytes()[byte];
             }
 
             // `FAROF` first, which is `LDA #224` and then the body.
@@ -710,15 +718,15 @@ namespace GameLogicTests
             {
               for (const std::uint8_t exploding : {std::uint8_t{0}, std::uint8_t{0x20}})
               {
-                Elite::ShipBlock work{};
-                work[0] = across;
-                work[3] = down;
-                work[8] = behind;
-                work[31] = exploding;
+                Elite::Ship work{};
+                work.x.lo = across;
+                work.y.lo = down;
+                work.z.sgn = behind;
+                work.state = exploding;
 
                 for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
                 {
-                  cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+                  cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work.ToBytes()[byte];
                 }
                 cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
                 cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
@@ -925,9 +933,9 @@ namespace GameLogicTests
       std::uint32_t explosions = 0;
       std::uint32_t clouds = 0;
 
-      bool RunTactics(Elite::ShipBlock& _work) override
+      bool RunTactics(Elite::Ship& _work) override
       {
-        tactics.push_back(_work[32]);
+        tactics.push_back(_work.ai);
         return true; // the counted double never kills the player -- §6.122's answer for "nothing happened"
       }
       void DrawPlanetOrSun() override
@@ -1128,27 +1136,29 @@ namespace GameLogicTests
           ++universe.bubble.counts[TYPES[slot]];
         }
 
-        Elite::ShipBlock& block = universe.bubble.blocks[slot];
+        Elite::Ship& block = universe.bubble.blocks[slot];
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = block.ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
-          block[byte] = 0u;
+          shipBytes[byte] = 0u;
         }
+        block = Elite::Ship::FromBytes(shipBytes);
 
-        block[1] = _distance; // x high
-        block[4] = _distance; // y high
+        block.x.hi = _distance; // x high
+        block.y.hi = _distance; // y high
 
         /*
          * The z high byte separates the ships EXCEPT at zero, where it must not: parts 7 to 12 branch
          * on all three high bytes being zero together, so spreading them out would mean no case in
          * the sweep ever collided with anything.
          */
-        block[7] = (_distance == 0u) ? std::uint8_t{0} : static_cast<std::uint8_t>(_distance + slot);
-        block[14] = 20u; // pitch counter
-        block[27] = 20u; // speed
-        block[31] = _state;
-        block[32] = 0u;    // no AI, so `TACTICS` is not reached
-        block[34] = 0x0Cu; // the heap pointer's high byte
-        block[35] = 60u;   // energy
+        block.z.hi = (_distance == 0u) ? std::uint8_t{0} : static_cast<std::uint8_t>(_distance + slot);
+        block.nose.z.hi = 20u; // pitch counter
+        block.speed = 20u; // speed
+        block.state = _state;
+        block.ai = 0u;    // no AI, so `TACTICS` is not reached
+        block.heapHigh = 0x0Cu; // the heap pointer's high byte
+        block.energy = 60u;   // energy
       }
 
       universe.bubble.junk = 0u;
@@ -2035,13 +2045,15 @@ namespace GameLogicTests
           // The sun in slot 1 at `distance` on every axis, and no station, so part 15 measures it.
           frame.universe.bubble.slots[1] = 129u;
           frame.universe.bubble.Count(Elite::ShipType::Station) = 0u;
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = frame.universe.bubble.blocks[1].ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
-            frame.universe.bubble.blocks[1][byte] = 0u;
+            shipBytes[byte] = 0u;
           }
-          frame.universe.bubble.blocks[1][1] = distance;
-          frame.universe.bubble.blocks[1][4] = distance;
-          frame.universe.bubble.blocks[1][7] = distance;
+          frame.universe.bubble.blocks[1] = Elite::Ship::FromBytes(shipBytes);
+          frame.universe.bubble.blocks[1].x.hi = distance;
+          frame.universe.bubble.blocks[1].y.hi = distance;
+          frame.universe.bubble.blocks[1].z.hi = distance;
 
           frame.universe.flight.mainLoopCounter = 20u;
           frame.universe.status.midJump = 0u;

@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "ShipBytes.h"
+
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
@@ -270,14 +272,14 @@ namespace GameLogicTests
                   // No denominator is skipped here, and that is the point of the sweep: the
                   // `ORA #1` makes every one of them terminate, z = 0 included.
                   Cpu6502 cpu = oracle.Fresh();
-                  Elite::ShipBlock ship;
+                  Elite::Ship ship;
                   Elite::MathWorkspace math;
 
                   const std::uint8_t z[3] = {zLow, zHigh, zSign};
                   for (int byte = 0; byte < 3; ++byte)
                   {
                     cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + byte)] = z[byte];
-                    ship[Elite::SHIP_Z_OFFSET + byte] = z[byte];
+                    PokeShip(ship, Elite::SHIP_Z_OFFSET + byte, z[byte]);
                   }
                   cpu.memory[pp] = p;
                   cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
@@ -359,14 +361,14 @@ namespace GameLogicTests
                 for (const std::uint8_t zSign : EDGES)
                 {
                   Cpu6502 cpu = oracle.Fresh();
-                  Elite::ShipBlock ship;
+                  Elite::Ship ship;
                   Elite::MathWorkspace math;
 
                   const std::uint8_t z[3] = {zLow, zHigh, zSign};
                   for (int byte = 0; byte < 3; ++byte)
                   {
                     cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_Z_OFFSET + byte)] = z[byte];
-                    ship[Elite::SHIP_Z_OFFSET + byte] = z[byte];
+                    PokeShip(ship, Elite::SHIP_Z_OFFSET + byte, z[byte]);
                   }
                   cpu.memory[pp] = p;
                   cpu.memory[static_cast<std::uint16_t>(pp + 1)] = p1;
@@ -478,7 +480,7 @@ namespace GameLogicTests
                     for (const std::uint8_t zSign : SIGNS)
                     {
                       Cpu6502 cpu = oracle.Fresh();
-                      Elite::ShipBlock ship;
+                      Elite::Ship ship;
                       Elite::MathWorkspace math;
                       Elite::Projection screen;
 
@@ -486,7 +488,7 @@ namespace GameLogicTests
                       for (int byte = 0; byte < 9; ++byte)
                       {
                         cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = block[byte];
-                        ship[static_cast<std::size_t>(byte)] = block[byte];
+                        PokeShip(ship, static_cast<std::size_t>(byte), block[byte]);
                       }
 
                       // The sentinel that makes a half-written answer visible.
@@ -683,15 +685,15 @@ namespace GameLogicTests
         Elite::Canvas canvas;
         Elite::DrawWorkspace draw;
         Elite::LineHeap heap;
-        Elite::ShipBlock ship;
+        Elite::Ship ship;
 
         SeedHeap(cpu, heap, lines);
         cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
         cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
         cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = state;
-        ship[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
-        ship[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
-        ship[Elite::SHIP_STATE_OFFSET] = state;
+        ship.heapLow = HEAP_AT & 0xFFu;
+        ship.heapHigh = HEAP_AT >> 8;
+        ship.state = state;
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ee51, 500'000);
         Assert::IsTrue(run.completed, L"EE51 returned");
@@ -700,7 +702,7 @@ namespace GameLogicTests
 
         const std::wstring where = L"EE51 state " + std::to_wstring(state);
         CompareScreens(cpu, screenBase, canvas, where);
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship[Elite::SHIP_STATE_OFFSET],
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship.state,
                          (where + L": INWK+31").c_str());
         erased += ((state & 0x08u) != 0u) ? 1u : 0u;
         ++cases;
@@ -771,13 +773,13 @@ namespace GameLogicTests
       Elite::LineHeap heap;
       Elite::MathWorkspace math;
       Elite::Projection screen;
-      Elite::ShipBlock ship;
+      Elite::Ship ship;
 
       SeedHeap(cpu, heap, {});
       cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
       cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-      ship[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
-      ship[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
+      ship.heapLow = HEAP_AT & 0xFFu;
+      ship.heapHigh = HEAP_AT >> 8;
 
       // K3 and K4 start where the machine starts them, and the port has to agree from there --
       // the stale-coordinate path reads them before anything has written them.
@@ -792,13 +794,15 @@ namespace GameLogicTests
       {
         const Elite::Projection before = screen;
 
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = ship.ToBytes();
         for (std::uint8_t byte = 0; byte < 9u; ++byte)
         {
           cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = position.block[byte];
-          ship[byte] = position.block[byte];
+          shipBytes[byte] = position.block[byte];
         }
+        ship = Elite::Ship::FromBytes(shipBytes);
         cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = position.state;
-        ship[Elite::SHIP_STATE_OFFSET] = position.state;
+        ship.state = position.state;
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(shppt, 500'000);
         Assert::IsTrue(run.completed, L"SHPPT returned");
@@ -808,14 +812,14 @@ namespace GameLogicTests
         const std::wstring where = std::wstring(L"SHPPT: ") + position.what;
         CompareScreens(cpu, screenBase, canvas, where);
         CompareHeaps(cpu, heap, where);
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship[Elite::SHIP_STATE_OFFSET],
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)], ship.state,
                          (where + L": INWK+31").c_str());
         Assert::AreEqual(cpu.memory[k3], screen.x, (where + L": K3").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k3 + 1)], screen.x1, (where + L": K3+1").c_str());
         Assert::AreEqual(cpu.memory[k4], screen.y, (where + L": K4").c_str());
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(k4 + 1)], screen.y1, (where + L": K4+1").c_str());
 
-        const bool nowDrawn = Elite::Has(ship[Elite::SHIP_STATE_OFFSET], Elite::ShipStateBit::OnScreen);
+        const bool nowDrawn = Elite::Has(ship.state, Elite::ShipStateBit::OnScreen);
         drawn += nowDrawn ? 1u : 0u;
 
         // The case the sequence exists for: `PROJ` stored K3, then gave up on K4, so the ship is
@@ -1588,8 +1592,8 @@ namespace GameLogicTests
             Elite::MathWorkspace math;
             Elite::ClipState clip;
             Elite::Projection screen;
-            Elite::ShipBlock work;
-            Elite::ShipBlock slot;
+            Elite::Ship work;
+            Elite::Ship slot;
             Elite::LineHeap heap;
             CountingDrawEffects effects;
 
@@ -1608,22 +1612,24 @@ namespace GameLogicTests
               cpu.memory[static_cast<std::uint16_t>(xx2 + byte)] = 0;
             }
 
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
             for (std::size_t byte = 0; byte < 9u; ++byte)
             {
               cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = placement.position[byte];
-              work[byte] = placement.position[byte];
+              shipBytes[byte] = placement.position[byte];
             }
+            work = Elite::Ship::FromBytes(shipBytes);
             for (std::size_t byte = 0; byte < 18u; ++byte)
             {
               cpu.memory[static_cast<std::uint16_t>(inwk + 9u + byte)] = orientation[byte];
-              work[9u + byte] = orientation[byte];
+              PokeShip(work, 9u + byte, orientation[byte]);
             }
             cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = placement.state;
-            work[Elite::SHIP_STATE_OFFSET] = placement.state;
+            work.state = placement.state;
             cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
             cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-            work[Elite::SHIP_HEAP_LOW_OFFSET] = HEAP_AT & 0xFFu;
-            work[Elite::SHIP_HEAP_HIGH_OFFSET] = HEAP_AT >> 8;
+            work.heapLow = HEAP_AT & 0xFFu;
+            work.heapHigh = HEAP_AT >> 8;
 
             cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint);
             cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
@@ -1631,8 +1637,8 @@ namespace GameLogicTests
             cpu.memory[static_cast<std::uint16_t>(inf + 1)] = static_cast<std::uint8_t>(SLOT_AT >> 8);
             cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)] = 0x5A;
             cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 30)] = 0xA5;
-            slot[28] = 0x5A;
-            slot[30] = 0xA5;
+            slot.acceleration = 0x5A;
+            slot.pitchCounter = 0xA5;
             cpu.memory[type] = shipType;
             cpu.memory[dontclip] = 0;
 
@@ -1648,11 +1654,11 @@ namespace GameLogicTests
 
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                                (where + L": INWK+" + std::to_wstring(byte)).c_str());
             }
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)], slot[28], (where + L": the slot's byte 28").c_str());
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 30)], slot[30], (where + L": the slot's byte 30").c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)], slot.acceleration, (where + L": the slot's byte 28").c_str());
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 30)], slot.pitchCounter, (where + L": the slot's byte 30").c_str());
             // `XX18` is the ship's position as the face loop leaves it, and the `ovflw` retry is
             // the only thing that changes it after the dot products -- so comparing it is how a
             // retry that ran, or failed to, is seen from outside the routine.

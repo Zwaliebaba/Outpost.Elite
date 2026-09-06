@@ -81,7 +81,7 @@ namespace Elite
     return moved;
   }
 
-  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, ShipBlock& _work, FlightState& _flight,
+  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, Ship& _work, FlightState& _flight,
                           ControlEffects& _effects) noexcept
   {
     _effects.ScanKeyboard(); // 6502: JSR RDKEY
@@ -90,7 +90,7 @@ namespace Elite
     // player is holding down.
     if (_control.dockingComputer != 0u)
     {
-      ClearShipBlock(_work); // 6502: JSR ZINF
+      ClearShip(_work); // 6502: JSR ZINF
 
       /*
        * 6502: LDA #96 / STA INWK+14 / ORA #%10000000 / STA INWK+22 / STA TYPE.
@@ -99,31 +99,31 @@ namespace Elite
        * this puts them back the other way round -- so the block the autopilot is handed is not the
        * one `ZINF` makes, and the two instructions that differ are easy to read as a repeat.
        */
-      _work.Nose().zHi = 96u;
-      _work.Side().xHi = static_cast<std::uint8_t>(96u | 0x80u);
+      _work.nose.z.hi = 96u;
+      _work.side.x.hi = static_cast<std::uint8_t>(96u | 0x80u);
       _flight.type = TypeOf(static_cast<std::uint8_t>(96u | 0x80u));
 
-      _work.Speed() = _flight.delta;          // 6502: LDA DELTA / STA INWK+27
+      _work.speed = _flight.delta;          // 6502: LDA DELTA / STA INWK+27
       _effects.RunDockingComputer(_work); // 6502: JSR DOCKIT
 
       // 6502: LDA INWK+27 / CMP #22 / BCC P%+4 / LDA #22 / STA DELTA -- the autopilot is not
       // allowed to fly faster than 22, whatever it asked for.
-      _flight.delta = (_work.Speed() < 22u) ? _work.Speed() : std::uint8_t{22u};
+      _flight.delta = (_work.speed < 22u) ? _work.speed : std::uint8_t{22u};
 
       // 6502: LDA #&FF / LDX #(KY1-KLO) / LDY INWK+28 / BEQ DK11 / BMI P%+4 / LDX #(KY2-KLO) /
       // STA KLO,X -- the acceleration becomes "?" held down or Space held down, and neither if it
       // is zero.
-      if (_work.Acceleration() != 0u)
+      if (_work.acceleration != 0u)
       {
-        const std::size_t slot = ((_work.Acceleration() & 0x80u) != 0u) ? KEY_SLOW_DOWN : KEY_SPEED_UP;
+        const std::size_t slot = ((_work.acceleration & 0x80u) != 0u) ? KEY_SLOW_DOWN : KEY_SPEED_UP;
         _keys[slot] = 0xFFu;
       }
 
       // ---- .DK11: the roll ------------------------------------------------------------------
       //
       // 6502: LDA #128 / LDX #(KY3-KLO) / ASL INWK+29 / BEQ DK12.
-      const ShiftResult roll = RotateLeftValue(_work.RollCounter(), false);
-      _work.RollCounter() = roll.value;
+      const ShiftResult roll = RotateLeftValue(_work.rollCounter, false);
+      _work.rollCounter = roll.value;
 
       if (roll.value == 0u)
       {
@@ -155,8 +155,8 @@ namespace Elite
       //
       // No `BIT` and no direct write: the pitch has no large-request path, and the carry test is
       // the other way round from the roll's.
-      const ShiftResult pitch = RotateLeftValue(_work.PitchCounter(), false);
-      _work.PitchCounter() = pitch.value;
+      const ShiftResult pitch = RotateLeftValue(_work.pitchCounter, false);
+      _work.pitchCounter = pitch.value;
 
       if (pitch.value == 0u)
       {

@@ -27,6 +27,9 @@
     <ClInclude Include="FlightUniverse.h">
       <Filter>Oracle</Filter>
     </ClInclude>
+    <ClInclude Include="ShipBytes.h">
+      <Filter>Oracle</Filter>
+    </ClInclude>
     <ClInclude Include="UniverseImage.h">
       <Filter>Oracle</Filter>
     </ClInclude>

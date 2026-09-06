@@ -50,7 +50,7 @@ namespace Elite
    * type's scanner colour. All three are the original's, and `SCAN` is a leaf that nobody reads
    * them back from -- but the port keeps them because it keeps the workspace.
    */
-  void DrawScannerBlip(Canvas& _canvas, DrawWorkspace& _work, const ShipBlock& _ship, ShipType _type, std::uint8_t _view) noexcept;
+  void DrawScannerBlip(Canvas& _canvas, DrawWorkspace& _work, const Ship& _ship, ShipType _type, std::uint8_t _view) noexcept;
 
   // ---- the compass ----------------------------------------------------------------------------
 
@@ -109,7 +109,7 @@ namespace Elite
    * below it -- so this takes bytes 1 and 2 as a sixteen-bit magnitude and keeps the sign apart.
    * The planet is millions of units away; the bottom eight bits of that are not a direction.
    */
-  void LoadPlanetAxis(const ShipBlock& _planet, K3Block& _axes, std::uint8_t _at) noexcept;
+  void LoadPlanetAxis(const Ship& _planet, K3Block& _axes, std::uint8_t _at) noexcept;
 
   /*
    * 6502: TAS2 -- turn the three coordinates in `K3` into a unit vector in `XX15`.

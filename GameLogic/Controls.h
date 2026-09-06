@@ -219,7 +219,7 @@ namespace Elite
 
     /// 6502: JSR DOCKIT -- phase 4's docking autopilot. It reads the ship block and writes
     /// `INWK+27` to `INWK+30`, which is how it steers: as an acceleration and three rates.
-    virtual void RunDockingComputer(ShipBlock& _work) = 0;
+    virtual void RunDockingComputer(Ship& _work) = 0;
   };
 
   /*
@@ -242,7 +242,7 @@ namespace Elite
    *
    * The routine ends by falling into `DK4`, the docked dispatcher, which is not this unit's.
    */
-  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, ShipBlock& _work, FlightState& _flight,
+  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, Ship& _work, FlightState& _flight,
                           ControlEffects& _effects) noexcept;
 
   /*

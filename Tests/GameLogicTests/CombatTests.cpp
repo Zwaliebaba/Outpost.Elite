@@ -206,7 +206,7 @@ namespace GameLogicTests
           universe.commander.At(Elite::Field::KillsLow) = start.fraction;
           universe.commander.At(Elite::Field::Kills) = start.whole;
           universe.commander.bytes[static_cast<std::size_t>(Elite::Field::Kills) + 1u] = start.high;
-          universe.work[7] = static_cast<std::uint8_t>(type * 7u);
+          universe.work.z.hi = static_cast<std::uint8_t>(type * 7u);
 
           Cpu6502 cpu = oracle.Fresh();
           cpu.AddTrap(noise2);
@@ -219,7 +219,7 @@ namespace GameLogicTests
           cpu.memory[at.messxc] = universe.message.column;
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
-            cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = universe.work[byte];
+            cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = universe.work.ToBytes()[byte];
           }
 
           cpu.x = type;
@@ -310,7 +310,7 @@ namespace GameLogicTests
               universe.status.forwardShield = shield;
               universe.status.aftShield = static_cast<std::uint8_t>(shield ^ 0x11u);
               universe.status.energy = banks;
-              universe.bubble.blocks[2][8] = fromBehind ? 0x80u : 0x00u;
+              universe.bubble.blocks[2].z.sgn = fromBehind ? 0x80u : 0x00u;
 
               // A hold with something in every slot, and a generator whose X lands inside it often
               // enough that `OUCH` actually breaks things -- `Seed`'s own state always picks slot

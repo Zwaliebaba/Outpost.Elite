@@ -144,8 +144,8 @@ namespace Elite
       }
 
       // 6502: JSR GINF / LDY #31 / LDA (INF),Y / AND #%11101111 / STA (INF),Y.
-      ShipBlock& block = _bubble.blocks[slot];
-      block.State() = Without(block.State(), ShipStateBit::OnScanner);
+      Ship& block = _bubble.blocks[slot];
+      block.state = Without(block.state, ShipStateBit::OnScanner);
     }
   }
 
@@ -423,7 +423,7 @@ namespace Elite
      * A negative z is a body BEHIND you, and you cannot warp into something behind you, so its
      * distance is not tested at all.
      */
-    if ((_screen.bubble.blocks[0].Z().sgn & 0x80u) == 0u)
+    if ((_screen.bubble.blocks[0].z.sgn & 0x80u) == 0u)
     {
       if (LargestAxis(_screen.bubble, 0u) < 2u)
       {
@@ -434,7 +434,7 @@ namespace Elite
 
     // 6502: .WA3 LDY K%+NI%+8 / BMI WA2 / LDY #NI% / JSR m / CMP #2 / BCC WA1 -- the same for the
     // sun, through `m` rather than `MAS2` because there is no accumulator worth keeping this time.
-    if ((_screen.bubble.blocks[1].Z().sgn & 0x80u) == 0u)
+    if ((_screen.bubble.blocks[1].z.sgn & 0x80u) == 0u)
     {
       if (LargestAxis(_screen.bubble, 1u) < 2u)
       {
@@ -450,8 +450,8 @@ namespace Elite
     _screen.math.p = 0x81u;
 
     // 6502: LDA K%+8 / JSR ADD / STA K%+8, and the same for the sun.
-    _screen.bubble.blocks[0].Z().sgn = AddSigned(_screen.math, _screen.bubble.blocks[0].Z().sgn).high;
-    _screen.bubble.blocks[1].Z().sgn = AddSigned(_screen.math, _screen.bubble.blocks[1].Z().sgn).high;
+    _screen.bubble.blocks[0].z.sgn = AddSigned(_screen.math, _screen.bubble.blocks[0].z.sgn).high;
+    _screen.bubble.blocks[1].z.sgn = AddSigned(_screen.math, _screen.bubble.blocks[1].z.sgn).high;
 
     /*
      * 6502: LDA #1 / STA QQ11 / STA MCNT / LSR A / STA EV / LDX VIEW / JMP LOOK1.

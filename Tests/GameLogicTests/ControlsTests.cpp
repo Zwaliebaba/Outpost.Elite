@@ -340,13 +340,15 @@ namespace GameLogicTests
           cpu.memory[static_cast<std::uint16_t>(klo + slot)] = keys[slot];
         }
 
-        Elite::ShipBlock work{};
+        Elite::Ship work{};
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           // A block that is not already zero, so `ZINF` has something to clear.
-          work[byte] = static_cast<std::uint8_t>(0x5Au + byte);
-          cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = work[byte];
+          shipBytes[byte] = static_cast<std::uint8_t>(0x5Au + byte);
+          cpu.memory[static_cast<std::uint16_t>(inwk + byte)] = shipBytes[byte];
         }
+        work = Elite::Ship::FromBytes(shipBytes);
 
         cpu.memory[autoPilot] = item.docking;
         cpu.memory[jstk] = item.joystick;
@@ -371,12 +373,12 @@ namespace GameLogicTests
           {
             ++scans;
           }
-          void RunDockingComputer(Elite::ShipBlock& _work) override
+          void RunDockingComputer(Elite::Ship& _work) override
           {
-            _work[27] = static_cast<std::uint8_t>(_work[27] ^ answer.speed);
-            _work[28] = answer.acceleration;
-            _work[29] = answer.roll;
-            _work[30] = answer.pitch;
+            _work.speed = static_cast<std::uint8_t>(_work.speed ^ answer.speed);
+            _work.acceleration = answer.acceleration;
+            _work.rollCounter = answer.roll;
+            _work.pitchCounter = answer.pitch;
             ++runs;
           }
         } effects;
@@ -415,7 +417,7 @@ namespace GameLogicTests
         }
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work[byte],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + byte)], work.ToBytes()[byte],
                            (where + L": INWK+" + std::to_wstring(byte)).c_str());
         }
 

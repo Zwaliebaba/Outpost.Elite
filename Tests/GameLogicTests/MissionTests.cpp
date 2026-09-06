@@ -248,24 +248,26 @@ namespace GameLogicTests
        * Byte 31 is the "drawn" flag with the exploding bit clear, and bytes 32 and 34 are zero so
        * that `MVEIT` cannot reach `TACTICS` -- the same reason `TITLE`'s ship cannot (§6.122).
        */
+      std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = universe.work.ToBytes();
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        universe.work[byte] = 0u;
+        shipBytes[byte] = 0u;
       }
+      universe.work = Elite::Ship::FromBytes(shipBytes);
       /*
        * 6502: what `ZINF` leaves -- 96 in the roof's y and the side's x, and 96 WITH THE SIGN BIT
        * in the nose's z, so the ship faces the player. `TITLE` writes a bare 96 over that third one
        * and gets a ship facing away; a briefing does not, because `BRIEF` never touches it.
        */
-      universe.work[14] = 0xE0u;
-      universe.work[18] = 96u;
-      universe.work[22] = 96u;
+      universe.work.nose.z.hi = 0xE0u;
+      universe.work.roof.y.hi = 96u;
+      universe.work.side.x.hi = 96u;
 
       universe.flight.slot = 0u; // 6502: XSAV -- which slot `MVEIT` thinks it is moving
-      universe.work[29] = _roll;
-      universe.work[30] = _pitch;
-      universe.work[31] = 0u;
-      universe.work[32] = 0u;
+      universe.work.rollCounter = _roll;
+      universe.work.pitchCounter = _pitch;
+      universe.work.state = 0u;
+      universe.work.ai = 0u;
 
       /*
        * 6502: INWK+33 and INWK+34 -- the ship's OWN line heap, which `NWSHP` allocates.
@@ -277,8 +279,8 @@ namespace GameLogicTests
        * scribbled were the whole of the disagreement.
        */
       const std::uint16_t heap = static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 0x100u);
-      universe.work[Elite::SHIP_HEAP_LOW_OFFSET] = static_cast<std::uint8_t>(heap & 0xFFu);
-      universe.work[Elite::SHIP_HEAP_HIGH_OFFSET] = static_cast<std::uint8_t>(heap >> 8);
+      universe.work.heapLow = static_cast<std::uint8_t>(heap & 0xFFu);
+      universe.work.heapHigh = static_cast<std::uint8_t>(heap >> 8);
       universe.bubble.heapBottom = heap;
 
       universe.bubble.blocks[0] = universe.work;
@@ -323,7 +325,7 @@ namespace GameLogicTests
     {
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)], _universe.universe.work[byte],
+        Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.inwk + byte)], _universe.universe.work.ToBytes()[byte],
                          (_where + L": INWK+" + std::to_wstring(byte)).c_str());
       }
     }

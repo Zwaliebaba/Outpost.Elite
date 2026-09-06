@@ -58,6 +58,9 @@
     <ClInclude Include="ShipSlot.h">
       <Filter>Universe</Filter>
     </ClInclude>
+    <ClInclude Include="Ship.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="ShipFlags.h">
       <Filter>Universe</Filter>
     </ClInclude>

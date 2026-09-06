@@ -262,7 +262,7 @@ namespace GameLogicTests
 
       // 6502: INWK is at zero page 9 and is NI% bytes, so it ends at 9 + 37.
       Assert::AreEqual<std::uint16_t>(9, oracle.Label("INWK"), L"INWK is where the port assumes");
-      Assert::AreEqual<std::size_t>(Elite::SHIP_BLOCK_SIZE, Elite::ShipBlock{}.bytes.size(), L"a ship block is NI% bytes");
+      Assert::AreEqual<std::size_t>(Elite::SHIP_BLOCK_SIZE, Elite::Ship{}.ToBytes().size(), L"a ship block is NI% bytes");
 
       // The counter is indexed by ship type, so it has to reach the last one.
       Elite::Bubble bubble;
@@ -274,10 +274,10 @@ namespace GameLogicTests
     {
       Elite::Bubble bubble;
 
-      std::set<Elite::ShipBlock*> distinct;
+      std::set<Elite::Ship*> distinct;
       for (std::uint8_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
       {
-        Elite::ShipBlock* block = Elite::SlotBlock(bubble, slot);
+        Elite::Ship* block = Elite::SlotBlock(bubble, slot);
         Assert::IsNotNull(block, L"every slot in range has a block");
         distinct.insert(block);
       }
@@ -370,13 +370,15 @@ namespace GameLogicTests
 
         // A recognisable INWK on both sides, so the copy into the slot is checked rather than
         // assumed -- a routine that wrote nothing would agree with one that wrote zeroes.
-        Elite::ShipBlock work;
+        Elite::Ship work;
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
         for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
         {
           const std::uint8_t value = static_cast<std::uint8_t>(0xA0u + offset);
           cpu.memory[static_cast<std::uint16_t>(inwk + offset)] = value;
-          work[offset] = value;
+          shipBytes[offset] = value;
         }
+        work = Elite::Ship::FromBytes(shipBytes);
 
         cpu.a = item.type;
         const Elite::Testing::RunResult run = cpu.CallSubroutine(nwshp);
@@ -409,7 +411,7 @@ namespace GameLogicTests
         // INWK as the routine left it, including NEWB at offset 36 and the heap pointer at 33/34.
         for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
         {
-          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work[offset],
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(inwk + offset)], work.ToBytes()[offset],
                            (where + L": INWK+" + std::to_wstring(offset)).c_str());
         }
 
@@ -419,7 +421,7 @@ namespace GameLogicTests
           const std::uint16_t block = Elite::SlotAddress(created.slot);
           for (std::size_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)
           {
-            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(block + offset)], bubble.blocks[created.slot][offset],
+            Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(block + offset)], bubble.blocks[created.slot].ToBytes()[offset],
                              (where + L": the slot's block at +" + std::to_wstring(offset)).c_str());
           }
         }

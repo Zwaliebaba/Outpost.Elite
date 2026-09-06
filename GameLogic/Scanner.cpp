@@ -13,7 +13,7 @@ namespace Elite
 
   // ---- the scanner ------------------------------------------------------------------------------
 
-  void DrawScannerBlip(Canvas& _canvas, DrawWorkspace& _work, const ShipBlock& _ship, ShipType _type, std::uint8_t _view) noexcept
+  void DrawScannerBlip(Canvas& _canvas, DrawWorkspace& _work, const Ship& _ship, ShipType _type, std::uint8_t _view) noexcept
   {
     // 6502: LDA QQ11 / BNE SCR1 -- no dashboard on any view but the space view, so no scanner.
     if (_view != 0u)
@@ -23,7 +23,7 @@ namespace Elite
 
     // 6502: LDA INWK+31 / AND #%00010000 / BEQ SCR1 -- bit 4 is "show this on the scanner", and
     // it is cleared for the ships that have no blip at all.
-    if (!Has(_ship.State(), ShipStateBit::OnScanner))
+    if (!Has(_ship.state, ShipStateBit::OnScanner))
     {
       return;
     }
@@ -46,7 +46,7 @@ namespace Elite
      * rather than clip. It is a test of the three ORed together and not of each in turn, which is
      * the same answer for a check of "is any bit 6 or 7 set anywhere".
      */
-    if (((_ship.X().hi | _ship.Y().hi | _ship.Z().hi) & 0xC0u) != 0u)
+    if (((_ship.x.hi | _ship.y.hi | _ship.z.hi) & 0xC0u) != 0u)
     {
       return;
     }
@@ -58,8 +58,8 @@ namespace Elite
      * set therefore lands one pixel right of one at x_hi = 0 without it: 124 rather than 123.
      */
     bool carry = false; // 6502: CLC
-    std::uint8_t across = _ship.X().hi;
-    if ((_ship.X().sgn & 0x80u) != 0u) // 6502: LDX INWK+2 / BPL SC2
+    std::uint8_t across = _ship.x.hi;
+    if ((_ship.x.sgn & 0x80u) != 0u) // 6502: LDX INWK+2 / BPL SC2
     {
       const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(across ^ 0xFFu), 1u, carry);
       across = negated.value;
@@ -76,9 +76,9 @@ namespace Elite
      * `SC` is the byte it goes in and it is NOT the screen pointer here. It becomes one further
      * down, when `CPIX4` overwrites it; until then it is the row the stick is drawn back to.
      */
-    std::uint8_t depth = static_cast<std::uint8_t>(_ship.Z().hi >> 2);
+    std::uint8_t depth = static_cast<std::uint8_t>(_ship.z.hi >> 2);
     bool depthCarry = false;      // 6502: CLC
-    if ((_ship.Z().sgn & 0x80u) != 0u) // 6502: LDX INWK+8 / BPL SC3
+    if ((_ship.z.sgn & 0x80u) != 0u) // 6502: LDX INWK+8 / BPL SC3
     {
       depth = static_cast<std::uint8_t>(depth ^ 0xFFu);
       depthCarry = true; // 6502: SEC -- so the one's complement and the carry make a negation
@@ -93,9 +93,9 @@ namespace Elite
      * That is not an inconsistency with the depth above: screen rows increase downwards, so a ship
      * above the plane of flight has to move to a smaller row number.
      */
-    std::uint8_t height = static_cast<std::uint8_t>(_ship.Y().hi >> 1);
+    std::uint8_t height = static_cast<std::uint8_t>(_ship.y.hi >> 1);
     bool heightCarry = false;     // 6502: CLC
-    if ((_ship.Y().sgn & 0x80u) == 0u) // 6502: LDX INWK+5 / BMI SCD6
+    if ((_ship.y.sgn & 0x80u) == 0u) // 6502: LDX INWK+5 / BMI SCD6
     {
       height = static_cast<std::uint8_t>(height ^ 0xFFu);
       heightCarry = true; // 6502: SEC
@@ -221,13 +221,14 @@ namespace Elite
     (void)PlotDash(_canvas, _work);
   }
 
-  void LoadPlanetAxis(const ShipBlock& _planet, K3Block& _axes, std::uint8_t _at) noexcept
+  void LoadPlanetAxis(const Ship& _planet, K3Block& _axes, std::uint8_t _at) noexcept
   {
-    // 6502: LDA K%+1,X / STA K3,X
-    _axes[_at] = _planet[static_cast<std::size_t>(_at) + 1u];
+    // 6502: LDA K%+1,X / STA K3,X -- with X = 0, 3 or 6, the axis's high byte.
+    const SignMag24& axis = _planet.PositionAt(_at);
+    _axes[_at] = axis.hi;
 
     // 6502: LDA K%+2,X / TAY / AND #%01111111 / STA K3+1,X / TYA / AND #%10000000 / STA K3+2,X
-    const std::uint8_t top = _planet[static_cast<std::size_t>(_at) + 2u];
+    const std::uint8_t top = axis.sgn;
     _axes[static_cast<std::size_t>(_at) + 1u] = static_cast<std::uint8_t>(top & 0x7Fu);
     _axes[static_cast<std::size_t>(_at) + 2u] = static_cast<std::uint8_t>(top & 0x80u);
   }
@@ -312,10 +313,12 @@ namespace Elite
 
   void LoadStationAxes(const Bubble& _bubble, K3Block& _axes, DrawWorkspace& _work, MathWorkspace& _math) noexcept
   {
-    // 6502: LDX #8 / SPL1 -- LDA K%+NI%,X / STA K3,X / DEX / BPL SPL1. Nine bytes, downwards.
+    // 6502: LDX #8 / SPL1 -- LDA K%+NI%,X / STA K3,X / DEX / BPL SPL1. Nine bytes, downwards: the
+    // station's position, in the block's own order.
+    const std::array<std::uint8_t, SHIP_BLOCK_SIZE> station = _bubble.blocks[1].ToBytes();
     for (std::size_t at = 9u; at-- > 0u;)
     {
-      _axes[at] = _bubble.blocks[1][at];
+      _axes[at] = station[at];
     }
 
     NormaliseAxes(_axes, _work, _math); // 6502: JMP TAS2

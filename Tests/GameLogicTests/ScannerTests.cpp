@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "ShipBytes.h"
+
 #include "Cpu6502.h"
 #include "OracleImage.h"
 
@@ -134,17 +136,17 @@ namespace GameLogicTests
     }
 
     /// One ship's nine coordinate bytes plus its state and type, written to both sides.
-    void PlaceShip(Cpu6502& _cpu, const Labels& _at, Elite::ShipBlock& _ship, const std::array<std::uint8_t, 6>& _position,
+    void PlaceShip(Cpu6502& _cpu, const Labels& _at, Elite::Ship& _ship, const std::array<std::uint8_t, 6>& _position,
                    std::uint8_t _state, std::uint8_t _type) noexcept
     {
       const std::uint8_t OFFSETS[6] = {1u, 2u, 4u, 5u, 7u, 8u};
-      _ship = Elite::ShipBlock{};
+      _ship = Elite::Ship{};
       for (int which = 0; which < 6; ++which)
       {
-        _ship[OFFSETS[which]] = _position[static_cast<std::size_t>(which)];
+        PokeShip(_ship, OFFSETS[which], _position[static_cast<std::size_t>(which)]);
         _cpu.memory[static_cast<std::uint16_t>(_at.inwk + OFFSETS[which])] = _position[static_cast<std::size_t>(which)];
       }
-      _ship[31] = _state;
+      _ship.state = _state;
       _cpu.memory[static_cast<std::uint16_t>(_at.inwk + 31)] = _state;
       _cpu.memory[_at.type] = _type;
     }
@@ -182,7 +184,7 @@ namespace GameLogicTests
 
       Elite::Canvas canvas;
       Elite::DrawWorkspace draw;
-      Elite::ShipBlock ship;
+      Elite::Ship ship;
 
       std::uint32_t compared = 0;
       std::uint32_t up = 0;
@@ -297,7 +299,7 @@ namespace GameLogicTests
 
       Elite::Canvas canvas;
       Elite::DrawWorkspace draw;
-      Elite::ShipBlock ship;
+      Elite::Ship ship;
 
       struct Depth
       {
@@ -382,7 +384,7 @@ namespace GameLogicTests
       Cpu6502 cpu = oracle.Fresh();
       Elite::Canvas canvas;
       Elite::DrawWorkspace draw;
-      Elite::ShipBlock ship;
+      Elite::Ship ship;
 
       struct Case
       {
@@ -622,13 +624,15 @@ namespace GameLogicTests
         // A deterministic spread of nine-byte positions, including the ones with the sign bit set
         // and the ones whose sign byte carries seven more bits of magnitude.
         std::uint32_t state = 0x1F35C7B1u ^ (seed * 0x9E3779B9u);
+        std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[0].ToBytes();
         for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
         {
           state = state * 1103515245u + 12345u;
           const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-          bubble.blocks[0][byte] = value;
+          shipBytes[byte] = value;
           cpu.memory[static_cast<std::uint16_t>(at.kPercent + byte)] = value;
         }
+        bubble.blocks[0] = Elite::Ship::FromBytes(shipBytes);
 
         for (std::size_t byte = 0; byte < 10u; ++byte)
         {
@@ -685,13 +689,15 @@ namespace GameLogicTests
         std::uint32_t state = 0x77A31D05u ^ (seed * 0x85EBCA6Bu);
         for (std::size_t slot = 0; slot < 2u; ++slot)
         {
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
             state = state * 1103515245u + 12345u;
             const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-            bubble.blocks[slot][byte] = value;
+            shipBytes[byte] = value;
             cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
           }
+          bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
         }
 
         for (std::size_t byte = 0; byte < 10u; ++byte)
@@ -907,13 +913,15 @@ namespace GameLogicTests
           std::uint32_t state = 0x2C41A9F7u ^ (seed * 0xC2B2AE35u);
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
+            std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = bubble.blocks[slot].ToBytes();
             for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
             {
               state = state * 1103515245u + 12345u;
               const std::uint8_t value = static_cast<std::uint8_t>(state >> 17);
-              bubble.blocks[slot][byte] = value;
+              shipBytes[byte] = value;
               cpu.memory[static_cast<std::uint16_t>(at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
             }
+            bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
           }
 
           for (int frame = 0; frame < 2; ++frame)

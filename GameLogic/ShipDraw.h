@@ -60,7 +60,7 @@ namespace Elite
    * the projection -- it exists to divide by a ship's distance, and its callers are `PLS6` here
    * and `PLANET`/`PLS1` in slice 3c. Nothing in the movement code calls it.
    */
-  void DivideByShipZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
+  void DivideByShipZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
 
   /*
    * 6502: PLS6 (with its PL21, PL44 and PL6 exits) -- (X K) = (A P+1 P) / z, overflowing at 1024.
@@ -74,7 +74,7 @@ namespace Elite
    * where a sign-magnitude number is converted, because a screen coordinate is an offset from the
    * centre and has to be added to it.
    */
-  [[nodiscard]] ScreenOffset DivideToScreenOffset(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
+  [[nodiscard]] ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept;
 
   /// 6502: K3(1 0) and K4(1 0) -- where a point landed on the screen, as sixteen bits per axis so
   /// that a shape whose centre is off the edge still has somewhere to be drawn from. These are the
@@ -113,7 +113,7 @@ namespace Elite
    * stored and K4 has not, and the original leaves it that way; no caller reads either after an
    * overflow, but a port that computed both and assigned at the end would be a different routine.
    */
-  ProjectResult Project(const ShipBlock& _ship, MathWorkspace& _math, Projection& _screen) noexcept;
+  ProjectResult Project(const Ship& _ship, MathWorkspace& _math, Projection& _screen) noexcept;
 
   /*
    * 6502: LL155, with the LL27 loop it is the head of -- draw every line on a ship's line heap.
@@ -146,7 +146,7 @@ namespace Elite
    * the bit is known set) and redraws, which erases. If the bit is clear there is nothing there and
    * it returns through `LL10-1`, an `RTS` that belongs to the routine before it.
    */
-  void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, const LineHeap& _heap) noexcept;
+  void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, const LineHeap& _heap) noexcept;
 
   /*
    * 6502: SHPPT, with its `Shpt` helper and its `nono` exit -- a distant ship, drawn as a dot.
@@ -161,7 +161,7 @@ namespace Elite
    * last one was, and reproducing that is why `_screen` is a parameter that outlives the call
    * rather than a local. It is a bug in the original, forty years old and shipped.
    */
-  void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, LineHeap& _heap, MathWorkspace& _math,
+  void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, LineHeap& _heap, MathWorkspace& _math,
                        Projection& _screen) noexcept;
 
   /*
@@ -383,7 +383,7 @@ namespace Elite
    * caller.
    */
   void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                Projection& _screen, ShipBlock& _work, ShipBlock& _slot, LineHeap& _heap, std::uint16_t _blueprint, ShipType _type,
+                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, std::uint16_t _blueprint, ShipType _type,
                 ShipDrawEffects& _effects) noexcept;
 
 } // namespace Elite

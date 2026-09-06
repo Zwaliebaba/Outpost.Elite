@@ -105,9 +105,9 @@ namespace Elite
   };
 
   /// 6502: XX19(1 0), which shares its location with `INWK+33/34` -- the ship's own heap pointer.
-  [[nodiscard]] constexpr std::uint16_t ShipHeapAddress(const ShipBlock& _ship) noexcept
+  [[nodiscard]] constexpr std::uint16_t ShipHeapAddress(const Ship& _ship) noexcept
   {
-    return static_cast<std::uint16_t>(_ship.HeapLow() | (_ship.HeapHigh() << 8));
+    return static_cast<std::uint16_t>(_ship.heapLow | (_ship.heapHigh << 8));
   }
 
 } // namespace Elite

@@ -10,21 +10,21 @@
 namespace Elite
 {
 
-  void DivideByShipZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
+  void DivideByShipZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
   {
     _math.p2 = _a;
 
     // The `ORA #1` is what makes the divide below safe, and it is deliberate rather than defensive:
     // a ship exactly on the plane of the screen has z_lo = 0, and the difference between dividing
     // by zero and dividing by one is invisible at this scale.
-    _math.q = static_cast<std::uint8_t>(_ship.Z().lo | 0x01u);
-    _math.r = _ship.Z().hi;
-    _math.s = _ship.Z().sgn;
+    _math.q = static_cast<std::uint8_t>(_ship.z.lo | 0x01u);
+    _math.r = _ship.z.hi;
+    _math.s = _ship.z.sgn;
 
     DivideSignedToK(_math);
   }
 
-  ScreenOffset DivideToScreenOffset(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
+  ScreenOffset DivideToScreenOffset(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
   {
     DivideByShipZ(_ship, _math, _a);
 
@@ -64,12 +64,12 @@ namespace Elite
     return ScreenOffset{_math.k[0], negated.value, negated.value, false};
   }
 
-  ProjectResult Project(const ShipBlock& _ship, MathWorkspace& _math, Projection& _screen) noexcept
+  ProjectResult Project(const Ship& _ship, MathWorkspace& _math, Projection& _screen) noexcept
   {
-    _math.p = _ship.X().lo;
-    _math.p1 = _ship.X().hi;
+    _math.p = _ship.x.lo;
+    _math.p1 = _ship.x.hi;
 
-    const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.X().sgn);
+    const ScreenOffset across = DivideToScreenOffset(_ship, _math, _ship.x.sgn);
     if (across.overflow)
     {
       // 6502: BCS PL2-1, which is PROJ's own RTS one byte before the next routine begins.
@@ -82,10 +82,10 @@ namespace Elite
     const AddResult x1 = AddWithCarry(across.high, 0, x.carry);
     _screen.x1 = x1.value;
 
-    _math.p = _ship.Y().lo;
-    _math.p1 = _ship.Y().hi;
+    _math.p = _ship.y.lo;
+    _math.p1 = _ship.y.hi;
 
-    const std::uint8_t upwards = static_cast<std::uint8_t>(_ship.Y().sgn ^ 0x80u);
+    const std::uint8_t upwards = static_cast<std::uint8_t>(_ship.y.sgn ^ 0x80u);
     const ScreenOffset down = DivideToScreenOffset(_ship, _math, upwards);
     if (down.overflow)
     {
@@ -169,18 +169,18 @@ namespace Elite
     DrawShipLines(_canvas, _draw, _heap, _address);
   }
 
-  void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, const LineHeap& _heap) noexcept
+  void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, const LineHeap& _heap) noexcept
   {
-    if (!Has(_ship.State(), ShipStateBit::OnScreen))
+    if (!Has(_ship.state, ShipStateBit::OnScreen))
     {
       return;
     }
 
-    _ship.State() = static_cast<std::uint8_t>(_ship.State() ^ Mask(ShipStateBit::OnScreen));
+    _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
     DrawShipLines(_canvas, _draw, _heap, ShipHeapAddress(_ship));
   }
 
-  void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, LineHeap& _heap, MathWorkspace& _math,
+  void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, LineHeap& _heap, MathWorkspace& _math,
                        Projection& _screen) noexcept
   {
     EraseShip(_canvas, _draw, _ship, _heap);
@@ -201,11 +201,11 @@ namespace Elite
     {
       // 6502: nono -- LDA #%11110111 / AND XX1+31. Reached four ways, and all four leave the ship
       // marked as not on the screen.
-      _ship.State() = Without(_ship.State(), ShipStateBit::OnScreen);
+      _ship.state = Without(_ship.state, ShipStateBit::OnScreen);
       return;
     }
 
-    _ship.State() = With(_ship.State(), ShipStateBit::OnScreen);
+    _ship.state = With(_ship.state, ShipStateBit::OnScreen);
     StoreLineCountAndDraw(_canvas, _draw, _heap, heap, 8);
   }
 
@@ -660,14 +660,15 @@ namespace Elite
     /// 6502: LL15 and LL21 -- copy the ship's three orientation vectors into XX16 and scale each
     /// magnitude down by 197. The `ASL A` on the magnitude puts its top bit into the carry and the
     /// `ROL A` on the sign byte rotates it in, so what gets divided is the pair read as nine bits.
-    void ScaleOrientation(const ShipBlock& _work, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
+    void ScaleOrientation(const Ship& _work, GeometryWorkspace& _geometry, MathWorkspace& _math) noexcept
     {
+      const std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _work.ToBytes();
       for (int byte = 5; byte >= 0; --byte)
       {
         const std::size_t at = static_cast<std::size_t>(byte);
-        _geometry.xx16[at] = _work[21u + at];
-        _geometry.xx16[at + 6u] = _work[15u + at];
-        _geometry.xx16[at + 12u] = _work[9u + at];
+        _geometry.xx16[at] = bytes[SHIP_SIDE_OFFSET + at];
+        _geometry.xx16[at + 6u] = bytes[SHIP_ROOF_OFFSET + at];
+        _geometry.xx16[at + 12u] = bytes[SHIP_NOSE_OFFSET + at];
       }
 
       _math.q = 197;
@@ -726,7 +727,7 @@ namespace Elite
      * byte -- and they compute the same thing, which is why one function serves both.
      */
     void PlaceVertexAxis(std::uint8_t& _low, std::uint8_t& _high, std::uint8_t& _sign, std::uint8_t _productLow, std::uint8_t _productSign,
-                         const ShipBlock& _work, std::size_t _axis) noexcept
+                         const Ship& _work, std::size_t _axis) noexcept
     {
       const auto axis = _work.PositionAt(static_cast<std::uint8_t>(_axis)); // 6502: INWK,X to INWK+2,X
       _sign = axis.sgn;
@@ -784,7 +785,7 @@ namespace Elite
   } // namespace
 
   void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                Projection& _screen, ShipBlock& _work, ShipBlock& _slot, LineHeap& _heap, std::uint16_t _blueprint, ShipType _type,
+                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, std::uint16_t _blueprint, ShipType _type,
                 ShipDrawEffects& _effects) noexcept
   {
     // ---- part 1: is there anything to draw at all? ------------------------------------------
@@ -799,23 +800,23 @@ namespace Elite
     _geometry.xx4 = 31;
 
     // 6502: bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
-    if (Has(_work.Newb(), NewbBit::Remove))
+    if (Has(_work.newb, NewbBit::Remove))
     {
       EraseShip(_canvas, _draw, _work, _heap);
       return;
     }
 
-    const std::uint8_t entryState = _work.State();
+    const std::uint8_t entryState = _work.state;
     if (!Has(entryState, ShipStateBit::Exploding) && Has(entryState, ShipStateBit::Killed))
     {
       // Killed and not yet exploding. Bits 6 and 7 are cleared by the same instruction that sets
       // bit 5, so the ship stops firing in the moment it starts to blow up.
-      _work.State() = Without(With(entryState, ShipStateBit::Exploding), ShipStateBit::Firing, ShipStateBit::Killed);
+      _work.state = Without(With(entryState, ShipStateBit::Exploding), ShipStateBit::Firing, ShipStateBit::Killed);
 
       // Written through INF into the ship's block in K% rather than into INWK, so that the
       // caller's copy back does not undo them.
-      _slot.Acceleration() = 0;
-      _slot.PitchCounter() = 0;
+      _slot.acceleration = 0;
+      _slot.pitchCounter = 0;
 
       EraseShip(_canvas, _draw, _work, _heap);
       _effects.SeedExplosionCloud(_heap, ShipHeapAddress(_work), _blueprint);
@@ -824,28 +825,28 @@ namespace Elite
     // 6502: EE28 / EE49 and LL10 -- four ways of being not worth drawing, sharing one exit. The
     // two coordinate tests are sixteen-bit: |x| or |y| at least as large as z puts the ship outside
     // a ninety-degree view whatever the projection would make of it.
-    bool gone = (_work.Z().sgn & 0x80u) != 0u;
+    bool gone = (_work.z.sgn & 0x80u) != 0u;
     if (!gone)
     {
-      gone = _work.Z().hi >= 192u;
+      gone = _work.z.hi >= 192u;
     }
     for (std::size_t axis = 0; !gone && axis < 2u; ++axis)
     {
       const auto other = _work.PositionAt((axis == 0u) ? SHIP_X_OFFSET : SHIP_Y_OFFSET);
-      const SubResult low = SubtractWithCarry(other.lo, _work.Z().lo, true);
-      gone = SubtractWithCarry(other.hi, _work.Z().hi, low.carry).carry;
+      const SubResult low = SubtractWithCarry(other.lo, _work.z.lo, true);
+      gone = SubtractWithCarry(other.hi, _work.z.hi, low.carry).carry;
     }
 
     if (gone)
     {
       // 6502: LL14.
-      if (!Has(_work.State(), ShipStateBit::Exploding))
+      if (!Has(_work.state, ShipStateBit::Exploding))
       {
         EraseShip(_canvas, _draw, _work, _heap);
         return;
       }
 
-      _work.State() = Without(_work.State(), ShipStateBit::OnScreen);
+      _work.state = Without(_work.state, ShipStateBit::OnScreen);
       _effects.DrawExplosion();
       return;
     }
@@ -860,8 +861,8 @@ namespace Elite
 
     // z divided by sixteen into (A T), and then by another eight. The `ROR A` after the fourth
     // `LSR A` picks up the carry that shift left, so the two halves are one number and not two.
-    std::uint8_t distanceLow = _work.Z().lo;
-    std::uint8_t distanceHigh = _work.Z().hi;
+    std::uint8_t distanceLow = _work.z.lo;
+    std::uint8_t distanceHigh = _work.z.hi;
     for (int shift = 0; shift < 3; ++shift)
     {
       const bool into = (distanceHigh & 0x01u) != 0u;
@@ -875,8 +876,8 @@ namespace Elite
     {
       _geometry.xx4 = static_cast<std::uint8_t>(RotateRight(distanceLow, spare).value >> 3);
     }
-    else if (ShipByte(static_cast<std::uint16_t>(_blueprint + 13u)) < _work.Z().hi &&
-             !Has(_work.State(), ShipStateBit::Exploding))
+    else if (ShipByte(static_cast<std::uint16_t>(_blueprint + 13u)) < _work.z.hi &&
+             !Has(_work.state, ShipStateBit::Exploding))
     {
       // 6502: LL13 -- past the blueprint's own visibility distance, so a dot will do.
       DrawShipAsPoint(_canvas, _draw, _work, _heap, _math, _screen);
@@ -887,9 +888,10 @@ namespace Elite
 
     ScaleOrientation(_work, _geometry, _math);
 
+    const std::array<std::uint8_t, SHIP_BLOCK_SIZE> position = _work.ToBytes();
     for (int byte = 8; byte >= 0; --byte)
     {
-      _geometry.xx18[static_cast<std::size_t>(byte)] = _work[static_cast<std::size_t>(byte)];
+      _geometry.xx18[static_cast<std::size_t>(byte)] = position[static_cast<std::size_t>(byte)];
     }
     _geometry.xx2[15] = 255;
 
@@ -897,7 +899,7 @@ namespace Elite
 
     // ---- parts 4 and 5: which faces can be seen --------------------------------------------
 
-    if (Has(_work.State(), ShipStateBit::Exploding))
+    if (Has(_work.state, ShipStateBit::Exploding))
     {
       // 6502: EE30 -- an exploding ship shows every face and every vertex, so that the whole cloud
       // can be built out of them.
@@ -1094,15 +1096,15 @@ namespace Elite
         // to be pulled in front of it before anything is divided by it.
         if ((_geometry.xx12[5] & 0x80u) == 0u)
         {
-          const AddResult sum = AddWithCarry(_geometry.xx12[4], _work.Z().lo, false);
+          const AddResult sum = AddWithCarry(_geometry.xx12[4], _work.z.lo, false);
           _math.t = sum.value;
-          _math.u = AddWithCarry(_work.Z().hi, 0, sum.carry).value;
+          _math.u = AddWithCarry(_work.z.hi, 0, sum.carry).value;
         }
         else
         {
-          const SubResult low = SubtractWithCarry(_work.Z().lo, _geometry.xx12[4], true);
+          const SubResult low = SubtractWithCarry(_work.z.lo, _geometry.xx12[4], true);
           _math.t = low.value;
-          const SubResult high = SubtractWithCarry(_work.Z().hi, 0, low.carry);
+          const SubResult high = SubtractWithCarry(_work.z.hi, 0, low.carry);
           _math.u = high.value;
 
           if (!high.carry || (high.value == 0u && low.value < 4u))
@@ -1207,28 +1209,28 @@ namespace Elite
 
     // ---- part 9: the ship is on the screen from here, and the laser goes on the heap ---------
 
-    if (Has(_work.State(), ShipStateBit::Exploding))
+    if (Has(_work.state, ShipStateBit::Exploding))
     {
-      _work.State() = With(_work.State(), ShipStateBit::OnScreen);
+      _work.state = With(_work.state, ShipStateBit::OnScreen);
       _effects.DrawExplosion();
       return;
     }
 
     // 6502: EE31 -- rub out the last frame's ship, then mark this one as being on the screen.
     const std::uint16_t heap = ShipHeapAddress(_work);
-    if (Has(_work.State(), ShipStateBit::OnScreen))
+    if (Has(_work.state, ShipStateBit::OnScreen))
     {
       DrawShipLines(_canvas, _draw, _heap, heap);
     }
-    _work.State() = With(_work.State(), ShipStateBit::OnScreen);
+    _work.state = With(_work.state, ShipStateBit::OnScreen);
 
     _geometry.xx20 = ShipByte(static_cast<std::uint16_t>(_blueprint + 9u));
     _geometry.xx17 = 0;
     _math.u = 1;
 
-    if (Has(_work.State(), ShipStateBit::Firing))
+    if (Has(_work.state, ShipStateBit::Firing))
     {
-      _work.State() = Without(_work.State(), ShipStateBit::Firing);
+      _work.state = Without(_work.state, ShipStateBit::Firing);
 
       const std::size_t muzzle = ShipByte(static_cast<std::uint16_t>(_blueprint + 6u));
       _draw.x1 = _geometry.xx3[muzzle];
@@ -1243,11 +1245,11 @@ namespace Elite
         _draw.xx15Plus4 = 0;
         _draw.xx15Plus5 = 0;
         _geometry.xx12[1] = 0;
-        _geometry.xx12[0] = _work.Z().lo;
+        _geometry.xx12[0] = _work.z.lo;
 
         // The laser fires towards the player, so the far end is the origin -- and to the left of
         // it when the ship is to the left, which is the whole of this `DEC`.
-        if ((_work.X().sgn & 0x80u) != 0u)
+        if ((_work.x.sgn & 0x80u) != 0u)
         {
           _draw.xx15Plus4 = 255;
         }

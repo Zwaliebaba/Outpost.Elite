@@ -209,7 +209,7 @@ namespace GameLogicTests
     Elite::Stardust dust;
     Elite::PlanetSunState heaps;
     Elite::Bubble bubble;
-    Elite::ShipBlock work{};
+    Elite::Ship work{};
 
     Elite::ScreenState screen;
     Elite::TextState text;
@@ -401,7 +401,7 @@ namespace GameLogicTests
     {
       return true;
     }
-    bool RunTactics(Elite::ShipBlock&) override
+    bool RunTactics(Elite::Ship&) override
     {
       return true;
     }
@@ -456,15 +456,19 @@ namespace GameLogicTests
 
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
     {
+      std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = _universe.bubble.blocks[slot].ToBytes();
       for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
       {
-        _universe.bubble.blocks[slot][byte] = (byte == 31u) ? 0xFFu : next();
+        shipBytes[byte] = (byte == 31u) ? 0xFFu : next();
       }
+      _universe.bubble.blocks[slot] = Elite::Ship::FromBytes(shipBytes);
     }
+    std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> workBytes = _universe.work.ToBytes();
     for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
     {
-      _universe.work[byte] = next();
+      workBytes[byte] = next();
     }
+    _universe.work = Elite::Ship::FromBytes(workBytes);
 
     for (std::size_t index = 0; index < _universe.dust.x.size(); ++index)
     {

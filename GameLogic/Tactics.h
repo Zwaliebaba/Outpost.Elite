@@ -20,7 +20,7 @@ namespace Elite
    * the whole of what phase 3 was missing before an AI could be written. They are here rather than
    * in `Scanner.h` -- which owns `K3` and the compass routines that fill it -- because their
    * callers are the tactics and the autopilot; and they are here rather than in `Arith.h` because
-   * every one of them reads a `ShipBlock`, which the arithmetic kernel does not know about.
+   * every one of them reads a `Ship`, which the arithmetic kernel does not know about.
    *
    * `K3` IS THE SAME TEN BYTES THE COMPASS USES, and `K3Block` is now its name in both places
    * (§6.121). The original shares the zero page between `SPS1`, `CIRCLE2` and these, and nothing
@@ -44,7 +44,7 @@ namespace Elite
    *
    * `LDY U` after the call restores Y for a caller that wants it, and no caller in this build does.
    */
-  [[nodiscard]] bool SubtractShipAxis(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math,
+  [[nodiscard]] bool SubtractShipAxis(const Ship& _other, const Ship& _work, K3Block& _axes, MathWorkspace& _math,
                                       std::uint8_t _at) noexcept;
 
   /*
@@ -58,10 +58,10 @@ namespace Elite
    */
   /// Returns the carry the LAST of the three `MVT3`s exits with, which `TACTICS` rotates into the
   /// `DORND` at `TA64`: nothing between the two touches the flag (§6.126).
-  [[nodiscard]] bool SubtractShipAxes(const ShipBlock& _other, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
+  [[nodiscard]] bool SubtractShipAxes(const Ship& _other, const Ship& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
 
   /// 6502: VCSU1 -- `VCSUB` with `V` pointing at `K%+NI%`, which is where `NWSPS` puts the station.
-  [[nodiscard]] bool SubtractStationAxes(const Bubble& _bubble, const ShipBlock& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
+  [[nodiscard]] bool SubtractStationAxes(const Bubble& _bubble, const Ship& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
 
   /*
    * 6502: TAS3 and TAS4 -- the dot product of `XX15` with one of a ship's orientation vectors.
@@ -75,7 +75,7 @@ namespace Elite
    * It ends by falling into `MAD` rather than calling it, so the answer is `MAD`'s (A X) pair:
    * the dot product as a sign-magnitude sixteen-bit value, with the sign in A's bit 7.
    */
-  [[nodiscard]] AddSignedResult DotProductWithShip(const ShipBlock& _block, const DrawWorkspace& _draw, MathWorkspace& _math,
+  [[nodiscard]] AddSignedResult DotProductWithShip(const Ship& _block, const DrawWorkspace& _draw, MathWorkspace& _math,
                                                    std::uint8_t _at) noexcept;
 
   /*

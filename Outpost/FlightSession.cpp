@@ -228,7 +228,7 @@ namespace Outpost
 
   // ---- the ships ----------------------------------------------------------------------------------
 
-  bool FlightSession::RunTactics(Elite::ShipBlock& _work)
+  bool FlightSession::RunTactics(Elite::Ship& _work)
   {
     // 6502: JSR TACTICS from `MVEIT`'s `MV26`, with `INF` at the slot being moved -- which is
     // `XSAV`, the byte the loop keeps for exactly this.
@@ -376,7 +376,7 @@ namespace Outpost
     Elite::ClearSunHeap(m_heaps);
   }
 
-  void FlightSession::RunDockingComputer(Elite::ShipBlock& _work)
+  void FlightSession::RunDockingComputer(Elite::Ship& _work)
   {
     /*
      * 6502: JSR DOCKIT from `DOKEY`'s `auton` path.

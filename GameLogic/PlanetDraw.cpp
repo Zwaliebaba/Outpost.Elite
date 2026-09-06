@@ -5,6 +5,8 @@
 #include "EliteTypes.h"
 #include "LookupTables.h"
 
+#include <algorithm>
+
 namespace Elite
 {
 
@@ -456,13 +458,16 @@ namespace Elite
     return false;
   }
 
-  AxisResult DivideAxisByZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept
+  AxisResult DivideAxisByZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept
   {
     // 6502: PLS1 -- LDA INWK,X / STA P / LDA INWK+1,X / AND #%01111111 / STA P+1, then the sign.
-    _math.p = _ship[_at];
-    _math.p1 = static_cast<std::uint8_t>(_ship[_at + 1u] & 0x7Fu);
+    // X is 9, 11, 21 or 23: one COMPONENT of an orientation vector, whose sign is bit 7 of its
+    // high byte -- not a position axis, whose sign has a byte of its own.
+    const SignMag16& component = _ship.ComponentAt(_at);
+    _math.p = component.lo;
+    _math.p1 = static_cast<std::uint8_t>(component.hi & 0x7Fu);
 
-    DivideByShipZ(_ship, _math, static_cast<std::uint8_t>(_ship[_at + 1u] & 0x80u));
+    DivideByShipZ(_ship, _math, static_cast<std::uint8_t>(component.hi & 0x80u));
 
     /*
      * 6502: LDA K / LDY K+1 / BEQ P%+4 / LDA #254.
@@ -480,7 +485,7 @@ namespace Elite
     return {value, _math.k[3], static_cast<std::uint8_t>(_at + 2u)};
   }
 
-  AxisResult ScaleAxisByZ(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept
+  AxisResult ScaleAxisByZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept
   {
     // 6502: PLS3 -- PLS1, then * 222/256, and X is SAVED rather than stepped because the caller
     // wants to divide the same axis twice.
@@ -513,7 +518,7 @@ namespace Elite
     return {negated.value, 0xFF, _math.u};
   }
 
-  void SetMeridianAngle(const ShipBlock& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
+  void SetMeridianAngle(const Ship& _ship, MathWorkspace& _math, std::uint8_t _a) noexcept
   {
     // 6502: PLS4 -- STA Q / JSR ARCTAN, then the roof vector's sign decides which way round.
     _math.q = _a;
@@ -521,7 +526,7 @@ namespace Elite
 
     // 6502: LDX INWK+14 / BMI P%+4 / EOR #%10000000 -- the branch SKIPS the flip, so it is the
     // POSITIVE roof vector that gets it.
-    if ((_ship.Nose().zHi & 0x80u) == 0u)
+    if ((_ship.nose.z.hi & 0x80u) == 0u)
     {
       angle = static_cast<std::uint8_t>(angle ^ 0x80u);
     }
@@ -530,7 +535,7 @@ namespace Elite
     _math.cnt2 = static_cast<std::uint8_t>(angle >> 2);
   }
 
-  void LoadTwoAxes(const ShipBlock& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry, std::uint8_t _at) noexcept
+  void LoadTwoAxes(const Ship& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry, std::uint8_t _at) noexcept
   {
     // 6502: PLS5 -- two of PLS1 into the second half of the ellipse's axes.
     AxisResult axis = DivideAxisByZ(_ship, _math, _at);
@@ -647,7 +652,7 @@ namespace Elite
   }
 
   void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                        ClipState& _clip, const ShipBlock& _ship, Projection& _centre, ShipType _type) noexcept
+                        ClipState& _clip, const Ship& _ship, Projection& _centre, ShipType _type) noexcept
   {
     // 6502: PL9 -- rub out last frame's planet, draw this frame's outline, and only then think
     // about the markings.
@@ -686,8 +691,8 @@ namespace Elite
 
       // 6502: LDA INWK+14 / EOR #%10000000 / STA P / LDA INWK+20 / JSR PLS4 -- where the first
       // meridian starts, from the roof vector against the nose.
-      _math.p = static_cast<std::uint8_t>(_ship.Nose().zHi ^ 0x80u);
-      SetMeridianAngle(_ship, _math, _ship.Roof().zHi);
+      _math.p = static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u);
+      SetMeridianAngle(_ship, _math, _ship.roof.z.hi);
 
       AxisResult axis = DivideAxisByZ(_ship, _math, 9);
       _math.k2[0] = axis.value;
@@ -701,8 +706,8 @@ namespace Elite
       DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
 
       // And the second meridian, which shares the first pair of axes and takes a new second pair.
-      _math.p = static_cast<std::uint8_t>(_ship.Nose().zHi ^ 0x80u);
-      SetMeridianAngle(_ship, _math, _ship.Side().zHi);
+      _math.p = static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u);
+      SetMeridianAngle(_ship, _math, _ship.side.z.hi);
 
       LoadTwoAxes(_ship, _math, _geometry, 21);
       DrawHalfEllipse(_canvas, _state, _draw, _geometry, _math, _clip, _centre);
@@ -715,7 +720,7 @@ namespace Elite
      *
      * `LDA INWK+20 / BMI PL20` -- the nose pointing away means the crater is on the far side.
      */
-    if ((_ship.Roof().zHi & 0x80u) != 0u)
+    if ((_ship.roof.z.hi & 0x80u) != 0u)
     {
       return;
     }
@@ -763,7 +768,7 @@ namespace Elite
   }
 
   void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                       ClipState& _clip, Rng& _rng, const ShipBlock& _ship, Projection& _centre, ShipType _type) noexcept
+                       ClipState& _clip, Rng& _rng, const Ship& _ship, Projection& _centre, ShipType _type) noexcept
   {
     /*
      * 6502: PLANET -- three rejections before any arithmetic.
@@ -773,7 +778,7 @@ namespace Elite
      * take. Both go to `PL2`, so a rejected planet is ERASED rather than merely skipped -- which is
      * why flying away from one leaves no outline behind.
      */
-    if (_ship.Z().sgn >= 48u || (_ship.Z().sgn | _ship.Z().hi) == 0u)
+    if (_ship.z.sgn >= 48u || (_ship.z.sgn | _ship.z.hi) == 0u)
     {
       ErasePlanetOrSun(_canvas, _state, _math, _draw, _type);
       return;
@@ -1045,13 +1050,10 @@ namespace Elite
     _state.sunXNext = _centre.x1;
   }
 
-  void ClearShipBlock(ShipBlock& _work) noexcept
+  void ClearShip(Ship& _work) noexcept
   {
     // 6502: ZINF -- LDY #NI%-1 / LDA #0 / .ZI1 STA INWK,Y / DEY / BPL ZI1.
-    for (std::size_t byte = 0; byte < SHIP_BLOCK_SIZE; ++byte)
-    {
-      _work[byte] = 0;
-    }
+    _work = Ship{};
 
     /*
      * 6502: LDA #96 / STA INWK+18 / STA INWK+22 / ORA #%10000000 / STA INWK+14.
@@ -1061,9 +1063,9 @@ namespace Elite
      * 127 because the orientation vectors are unit vectors at a scale of 96, which is the same 96
      * `PLANET` divides by for its radius.
      */
-    _work.Roof().yHi = 96;
-    _work.Side().xHi = 96;
-    _work.Nose().zHi = static_cast<std::uint8_t>(96u | 0x80u);
+    _work.roof.y.hi = 96;
+    _work.side.x.hi = 96;
+    _work.nose.z.hi = static_cast<std::uint8_t>(96u | 0x80u);
   }
 
   void SeedStardustField(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng, bool _carryIn) noexcept
@@ -1099,7 +1101,7 @@ namespace Elite
     }
   }
 
-  void ClearAllShips(Canvas& _canvas, DrawWorkspace& _draw, PlanetSunState& _state, Bubble& _bubble, ShipBlock& _work, FlightState& _flight,
+  void ClearAllShips(Canvas& _canvas, DrawWorkspace& _draw, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight,
                      std::uint8_t _view) noexcept
   {
     // 6502: WPSHPS -- LDX #0 / .WSL1 LDA FRIN,X / BEQ WS2 / BMI WS1.
@@ -1115,11 +1117,12 @@ namespace Elite
         continue; // 6502: BMI WS1 -- the planet and the sun have no blip and no line heap
       }
 
-      // 6502: JSR GINF / LDY #31 / .WSL2 -- thirty-two bytes, not the whole block.
-      for (std::size_t byte = 0; byte < 32u; ++byte)
-      {
-        _work[byte] = _bubble.blocks[slot][byte];
-      }
+      // 6502: JSR GINF / LDY #31 / .WSL2 -- thirty-two bytes, not the whole block: the AI byte,
+      // the heap pointer, the energy and NEWB keep what INWK held.
+      std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _work.ToBytes();
+      const std::array<std::uint8_t, SHIP_BLOCK_SIZE> from = _bubble.blocks[slot].ToBytes();
+      std::copy_n(from.begin(), 32u, bytes.begin());
+      _work = Ship::FromBytes(bytes);
 
       // 6502: STA TYPE / ... / STX XSAV / JSR SCAN / LDX XSAV. Both stores are the routine's own
       // and were invisible while the scanner was a seam: `SCAN` reads `TYPE` as a global, and
@@ -1136,7 +1139,7 @@ namespace Elite
        * the slots. The mask clears bits 3, 4 and 6: "drawn on screen", "firing a laser", and the
        * one in between.
        */
-      _bubble.blocks[slot].State() = Without(_bubble.blocks[slot].State(), ShipStateBit::OnScreen, ShipStateBit::OnScanner, ShipStateBit::Firing);
+      _bubble.blocks[slot].state = Without(_bubble.blocks[slot].state, ShipStateBit::OnScreen, ShipStateBit::OnScanner, ShipStateBit::Firing);
     }
 
     // 6502: WS2 -- LDX #0 / STX LSP / DEX / STX LSX2 / STX LSY2. Note `LSP` goes to ZERO here and
@@ -1150,7 +1153,7 @@ namespace Elite
   }
 
   void SeedStardustAndClearShips(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng, PlanetSunState& _state, Bubble& _bubble,
-                                 ShipBlock& _work, FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept
+                                 Ship& _work, FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept
   {
     // 6502: NWSTARS -- LDA QQ11 / BNE WPSHPS. `QQ11` is the view, zero for the space view, and a
     // menu has no stardust to fill. The same byte then decides whether `SCAN` draws anything.

@@ -328,7 +328,7 @@ namespace Outpost
        * 121,276 cycles. `INWK+7` is the byte `TLL2` walks down, so it is what the curve is indexed
        * by -- the port is reading the same counter the original's cost depends on.
        */
-      const double period = TitleTurnSeconds(m_flight->Screen().work[7]);
+      const double period = TitleTurnSeconds(m_flight->Screen().work.z.hi);
 
       m_spinLeftover += elapsed;
       if (m_spinLeftover >= period)

@@ -101,6 +101,8 @@ namespace Elite
     std::uint8_t hi = 0;
     std::uint8_t sgn = 0;
 
+    [[nodiscard]] constexpr bool operator==(const SignMag24&) const noexcept = default;
+
     [[nodiscard]] constexpr bool Negative() const noexcept
     {
       return (sgn & 0x80u) != 0u;
