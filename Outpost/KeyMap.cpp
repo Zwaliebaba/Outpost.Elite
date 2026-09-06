@@ -34,11 +34,16 @@ namespace Outpost
        * The arrows steer and the two keys beside them set speed, which is the swap that makes this
        * map modern rather than faithful: on the C64 the arrangement is the other way round, with
        * roll on "," and "." (the unshifted "<" and ">") and speed on Space and "/".
+       *
+       * UP DIVES AND DOWN CLIMBS, the way a joystick or a flight stick does: pushing forward puts
+       * the nose down. The owner asked for this on 2026-09-06; it was the other way round until
+       * then. Only the two Windows keys move -- the C64 keys behind them are still `KY5` for the
+       * climb and `KY6` for the dive.
        */
       {0x25, Elite::KEY_ROLL_LEFT, "Left -- roll left"},    // VK_LEFT,       6502: KY3, C64 "<"
       {0x27, Elite::KEY_ROLL_RIGHT, "Right -- roll right"}, // VK_RIGHT,      6502: KY4, C64 ">"
-      {0x26, Elite::KEY_PITCH_UP, "Up -- climb"},           // VK_UP,         6502: KY5, C64 "X"
-      {0x28, Elite::KEY_PITCH_DOWN, "Down -- dive"},        // VK_DOWN,       6502: KY6, C64 "S"
+      {0x28, Elite::KEY_PITCH_UP, "Down -- climb"},         // VK_DOWN,       6502: KY5, C64 "X"
+      {0x26, Elite::KEY_PITCH_DOWN, "Up -- dive"},          // VK_UP,         6502: KY6, C64 "S"
       {0xBE, Elite::KEY_SPEED_UP, ". -- increase speed"},   // VK_OEM_PERIOD, 6502: KY2, C64 Space
       {0xBC, Elite::KEY_SLOW_DOWN, ", -- decrease speed"},  // VK_OEM_COMMA,  6502: KY1, C64 "?"
       {0x41, Elite::KEY_FIRE, "A -- fire lasers"},          // VK_A,          6502: KY7, C64 "A"
