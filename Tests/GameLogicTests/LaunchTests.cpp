@@ -502,7 +502,7 @@ namespace GameLogicTests
 
       void WaitFrames(std::uint8_t) override {}
 
-      std::uint8_t ShowTitleScreen(std::uint8_t, std::uint8_t, std::uint8_t) override
+      std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override
       {
         return 0;
       }
@@ -529,12 +529,12 @@ namespace GameLogicTests
       {
         ++musicStops;
       }
-      bool SpawnAhead(std::uint8_t) override
+      bool SpawnAhead(Elite::ShipType) override
       {
         return true;
       }
-      void Anger(std::uint8_t, std::uint8_t) override {}
-      bool SpawnChild(std::uint8_t, std::uint8_t) override
+      void Anger(std::uint8_t, Elite::ShipType) override {}
+      bool SpawnChild(std::uint8_t, Elite::ShipType) override
       {
         return true;
       }
@@ -624,7 +624,7 @@ namespace GameLogicTests
       universe.message.column = 9u;
       universe.message.append = 1u;
       universe.message.delay = 12u;
-      universe.flight.blueprint = Elite::BlueprintAddress(11u);
+      universe.flight.blueprint = Elite::BlueprintAddress(Elite::ShipType::CobraMk3);
 
       universe.bubble.heapBottom = static_cast<std::uint16_t>(Elite::SHIP_HEAP_TOP - 64u);
       universe.heaps.yx2M1 = 199u;
@@ -762,7 +762,7 @@ namespace GameLogicTests
         Leaving leaving;
         Occupy(leaving, shape * 17u + 3u);
 
-        leaving.universe.bubble.counts[Elite::SHIP_TYPE_STATION] = ((shape & 1u) != 0u) ? 1u : 0u;
+        leaving.universe.bubble.Count(Elite::ShipType::Station) = ((shape & 1u) != 0u) ? 1u : 0u;
         leaving.universe.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
         leaving.universe.commander.At(Elite::Field::EnergyBomb) = ((shape & 4u) != 0u) ? 0xC0u : 0x40u;
 
@@ -822,7 +822,7 @@ namespace GameLogicTests
         Leaving leaving;
         Occupy(leaving, shape * 31u + 11u);
 
-        leaving.universe.bubble.counts[Elite::SHIP_TYPE_STATION] = ((shape & 1u) != 0u) ? 1u : 0u;
+        leaving.universe.bubble.Count(Elite::ShipType::Station) = ((shape & 1u) != 0u) ? 1u : 0u;
         leaving.universe.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
 
         Cpu6502 cpu = oracle.Fresh();
@@ -1333,7 +1333,7 @@ namespace GameLogicTests
       std::uint32_t dismissed = 0;
       std::uint32_t fired = 0;
 
-      for (const std::uint8_t shipType : {Elite::SHIP_TYPE_COBRA_MK3, Elite::SHIP_TYPE_ADDER})
+      for (const Elite::ShipType shipType : {Elite::ShipType::CobraMk3, Elite::ShipType::Adder})
       {
         for (const std::uint8_t distance : {Elite::TITLE_COBRA_DISTANCE, Elite::TITLE_ADDER_DISTANCE})
         {
@@ -1344,7 +1344,7 @@ namespace GameLogicTests
               for (const std::uint8_t authors : {std::uint8_t{0}, std::uint8_t{0xFF}})
               {
                 Leaving leaving;
-                Occupy(leaving, shipType * 13u + distance + frames + (fire ? 1u : 0u) + authors);
+                Occupy(leaving, Elite::Byte(shipType) * 13u + distance + frames + (fire ? 1u : 0u) + authors);
 
                 leaving.options.authorNames = authors;
                 leaving.start.quiet = frames - 1u;
@@ -1417,7 +1417,7 @@ namespace GameLogicTests
                 cpu.memory[patg] = authors;
 
                 cpu.a = Elite::TITLE_START_TOKEN;
-                cpu.x = shipType;
+                cpu.x = Elite::Byte(shipType);
                 cpu.y = distance;
                 const Elite::Testing::RunResult run = cpu.CallSubroutine(title, 20'000'000);
                 Assert::IsTrue(run.completed, L"TITLE returned");
@@ -1432,7 +1432,7 @@ namespace GameLogicTests
                 const std::uint8_t answer = Elite::ShowTitleShip(titleScreen, Elite::TITLE_START_TOKEN, shipType, distance);
 
                 const std::wstring where =
-                  WidenText("TITLE (ship " + std::to_string(shipType) + ", distance " + std::to_string(distance) + ", " +
+                  WidenText("TITLE (ship " + std::to_string(Elite::Byte(shipType)) + ", distance " + std::to_string(distance) + ", " +
                             std::to_string(frames) + " frames, " + (fire ? "fire" : "key") + ", PATG " + std::to_string(authors) + ")");
 
                 /*

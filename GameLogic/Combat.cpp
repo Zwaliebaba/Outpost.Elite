@@ -67,7 +67,7 @@ namespace Elite
     return sustain;
   }
 
-  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, std::uint8_t _type) noexcept
+  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, ShipType _type) noexcept
   {
     CommanderBlock& commander = _screen.commander;
 
@@ -80,7 +80,7 @@ namespace Elite
      * screen prints. The carry out of the middle byte is what reaches the top one, and the label
      * the original gives that branch says what its author thought of the arrangement.
      */
-    const std::uint16_t table = static_cast<std::uint16_t>(SHIP_KILL_FRACTION + _type - 1u);
+    const std::uint16_t table = static_cast<std::uint16_t>(SHIP_KILL_FRACTION + Byte(_type) - 1u);
     const AddResult fraction = AddWithCarry(commander.At(Field::KillsLow), ShipByte(table), false);
     commander.At(Field::KillsLow) = fraction.value;
 

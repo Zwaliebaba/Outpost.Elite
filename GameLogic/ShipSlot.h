@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ShipBlueprint.h"
+#include "ShipFlags.h"
+#include "ShipType.h"
 
 #include <array>
 #include <cstdint>
@@ -95,77 +97,10 @@ namespace Elite
    * The drawing code reads the same byte for something else entirely -- bit 3 says whether the ship
    * is currently on the screen, and it is what `EE51` tests to decide whether there is anything to
    * rub out. Two names for one offset is the §6.34 trap set deliberately, so there is one name and
-   * the bits are documented.
-   *
-   * Bits 4 and the rest of the upper half are left unnamed until the routines that read them are
-   * ported; guessing at them from the bit numbers is how the wrong constant gets used once.
+   * the bits are named once, in `ShipFlags.h`, as `ShipStateBit`.
    */
   inline constexpr std::uint8_t SHIP_STATE_OFFSET = 31;
 
-  inline constexpr std::uint8_t SHIP_STATE_MISSILES = 0x07;  ///< 6502: blueprint byte 19 AND 7
-  inline constexpr std::uint8_t SHIP_STATE_DRAWN = 0x08;     ///< 6502: bit 3 -- on the screen now
-  inline constexpr std::uint8_t SHIP_STATE_EXPLODING = 0x20; ///< 6502: bit 5
-  inline constexpr std::uint8_t SHIP_STATE_FIRING = 0x40;    ///< 6502: bit 6 -- laser
-  inline constexpr std::uint8_t SHIP_STATE_KILLED = 0x80;    ///< 6502: bit 7 -- killed, not yet exploding
-
-  /*
-   * 6502: bit 6 again, and it is NOT the laser while bit 5 is set.
-   *
-   * `LL9` part 1 clears bits 6 and 7 in the same instruction that sets bit 5, so a ship stops
-   * firing in the moment it starts to blow up -- and `DOEXP` then uses the vacated bit to mean
-   * "there is a cloud on the screen from last frame". One bit, two meanings, told apart by
-   * another bit; the port names both rather than letting a reader meet `SHIP_STATE_FIRING` in
-   * the explosion and wonder.
-   */
-  inline constexpr std::uint8_t SHIP_STATE_CLOUD_DRAWN = 0x40;
-
-  /// 6502: the ship types NWSHP and KILLSHP single out by name.
-  /// 6502: MSL -- the only type that carries a target slot in its AI byte, which `KILLSHP` has to
-  /// renumber, and the one `MVEIT` runs tactics on every iteration rather than one in eight.
-  inline constexpr std::uint8_t SHIP_TYPE_MISSILE = 1;
-  inline constexpr std::uint8_t SHIP_TYPE_STATION = 2;      ///< 6502: SST -- skips the heap allocation
-  inline constexpr std::uint8_t SHIP_TYPE_HERMIT = 15;      ///< 6502: HER -- counts as junk despite its type
-  inline constexpr std::uint8_t SHIP_TYPE_CONSTRICTOR = 31; ///< 6502: CON -- the mission ship, whose
-                                                            ///< death sets a mission flag
-  inline constexpr std::uint8_t JUNK_TYPE_FIRST = 3;        ///< 6502: JL = ESC
-  inline constexpr std::uint8_t JUNK_TYPE_LIMIT = 11;       ///< 6502: JH = SHU+2, exclusive
-
-  /*
-   * 6502: the wreckage, and the two the energy bomb cannot touch.
-   *
-   * `PLT` to `SPL` is a RANGE and is used as one: `SFS1` gives a random tumble to everything from
-   * the plate to the splinter and to nothing else, so the four numbers being consecutive is part of
-   * the behaviour rather than an accident of the table. `THG` and `CON` are two of the bomb's three
-   * exemptions, and `CON` is also the boundary above which a laser is halved unless it is military.
-   */
-  inline constexpr std::uint8_t SHIP_TYPE_ALLOY_PLATE = 4; ///< 6502: PLT
-  inline constexpr std::uint8_t SHIP_TYPE_CANISTER = 5;    ///< 6502: OIL
-  inline constexpr std::uint8_t SHIP_TYPE_ASTEROID = 7;    ///< 6502: AST
-  inline constexpr std::uint8_t SHIP_TYPE_SPLINTER = 8;    ///< 6502: SPL
-  inline constexpr std::uint8_t SHIP_TYPE_THARGOID = 29;   ///< 6502: THG
-
-  /// 6502: ESC and CYL. `ESC` is `JL`, the bottom of the junk range, and `CYL` is the boundary
-  /// `ANGRY` compares `TYPE` against -- everything below it is wreckage, a missile or a station.
-  inline constexpr std::uint8_t SHIP_TYPE_ESCAPE_POD = 3;
-  inline constexpr std::uint8_t SHIP_TYPE_COBRA_MK3 = 11;
-
-  /// 6502: CYL2 -- the pirate Cobra, which is a different blueprint and a different bounty. Named
-  /// here rather than beside the spawner that asked for it first, because `ESCAPE` asks too
-  /// (§6.121: a name that records which routine asked first stops being true when a second one does).
-  inline constexpr std::uint8_t SHIP_TYPE_COBRA_PIRATE = 24;
-
-  /// 6502: ADA -- the Adder, which the title screen spins under "Press Fire or Space, Commander".
-  inline constexpr std::uint8_t SHIP_TYPE_ADDER = 20;
-
-  /// 6502: SHU, ANA, COPS, SH3, WRM and TGL -- the six `TACTICS` names when it decides what a
-  /// station launches, what an Anaconda escorts itself with, and what a rock hermit turns into.
-  /// `SHU + 1` is the Transporter, which the source never names and which `TA1` counts.
-  inline constexpr std::uint8_t SHIP_TYPE_SHUTTLE = 9;
-  inline constexpr std::uint8_t SHIP_TYPE_ANACONDA = 14;
-  inline constexpr std::uint8_t SHIP_TYPE_VIPER = 16;
-  inline constexpr std::uint8_t SHIP_TYPE_SIDEWINDER = 17;
-  inline constexpr std::uint8_t SHIP_TYPE_WORM = 23;
-  inline constexpr std::uint8_t SHIP_TYPE_THARGON = 30;
 
   /*
    * 6502: INWK+0..2, +3..5 or +6..8 -- one axis of the position, as the three bytes it is.
@@ -455,7 +390,17 @@ namespace Elite
      */
     [[nodiscard]] std::uint8_t StationPresent() const noexcept
     {
-      return counts[SHIP_TYPE_STATION];
+      return Count(ShipType::Station);
+    }
+
+    /// 6502: MANY,X with X = the type -- how many of a type are in the bubble.
+    [[nodiscard]] constexpr std::uint8_t& Count(ShipType _type) noexcept
+    {
+      return counts[Byte(_type)];
+    }
+    [[nodiscard]] constexpr std::uint8_t Count(ShipType _type) const noexcept
+    {
+      return counts[Byte(_type)];
     }
 
     /// 6502: SLSP -- the bottom of the ship line heap, which grows DOWN from LS%. It is bubble
@@ -477,7 +422,7 @@ namespace Elite
      *
      * `spasto` needs no field of its own. `BEGIN` copies this entry into it at boot, before
      * anything can have changed it, so `spasto` is permanently the Coriolis's address -- which is
-     * what `BlueprintAddress(SHIP_TYPE_STATION)` returns from the immutable region.
+     * what `BlueprintAddress(ShipType::Station)` returns from the immutable region.
      *
      * IT MUST BE SEEDED, and zero is not a value the game can hold here: a zero entry in `XX21`
      * means "this build does not carry that type" and `NWSHP` refuses the ship. So an unseeded
@@ -495,7 +440,7 @@ namespace Elite
    * table, because that is where the Coriolis and the Dodo differ. Both of the routines that index
    * the table by type -- `NWSHP` and the flight loop's part 4 -- go through here for that reason.
    */
-  [[nodiscard]] std::uint16_t BlueprintFor(const Bubble& _bubble, std::uint8_t _shipType) noexcept;
+  [[nodiscard]] std::uint16_t BlueprintFor(const Bubble& _bubble, ShipType _shipType) noexcept;
 
   /// 6502: what GINF computes -- the ADDRESS of slot X's block, which is what `NWSHP` compares the
   /// heap against. The blocks are an array here; this is the address the original would have used.
@@ -548,6 +493,6 @@ namespace Elite
    * the `BMI NW2` path past those stores -- so the omission could not be seen until `NWSPS` created
    * a real ship. The oracle caught it on the first frame that spawned a station.
    */
-  [[nodiscard]] NewShip AddShip(Bubble& _bubble, ShipBlock& _work, std::uint8_t _shipType, std::uint16_t& _blueprint) noexcept;
+  [[nodiscard]] NewShip AddShip(Bubble& _bubble, ShipBlock& _work, ShipType _shipType, std::uint16_t& _blueprint) noexcept;
 
 } // namespace Elite

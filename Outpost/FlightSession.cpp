@@ -102,14 +102,14 @@ namespace Outpost
      * is the title screen's Cobra Mk III, so that is what the pointer would hold.
      */
     m_heaps.stp = LAST_CIRCLE_STEP;
-    m_flight.blueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_COBRA_MK3);
+    m_flight.blueprint = Elite::BlueprintAddress(Elite::ShipType::CobraMk3);
 
     /*
      * 6502: XX21+2*SST-2 -- a third byte of the same shape, and this one is not left by a previous
      * screen at all: `BEGIN` writes it at boot and only `NWSPS` writes it afterwards. Zero is what
      * `NWSHP` refuses, so an unseeded session would silently never build a station.
      */
-    m_bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+    m_bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
 
     /*
      * 6502: LSO -- and the station's line heap is IT, not a run carved out of `SLSP` (§6.112).
@@ -208,18 +208,18 @@ namespace Outpost
    * still missing is not the spawning: it is `TACTICS`, so a ship that `Anger` makes hostile has
    * nothing to do about it yet.
    */
-  bool FlightSession::SpawnAhead(std::uint8_t _type)
+  bool FlightSession::SpawnAhead(Elite::ShipType _type)
   {
     return Elite::SpawnShipAhead(m_bubble, m_work, _type, m_flight.delta, m_bubble.missileTarget, m_flight.blueprint).created;
   }
 
-  void FlightSession::Anger(std::uint8_t _slot, std::uint8_t _type)
+  void FlightSession::Anger(std::uint8_t _slot, Elite::ShipType _type)
   {
     // 6502: ANGRY on the block INF points at -- and which block that is, the caller says (§6.142).
     Elite::Anger(m_bubble, m_flight, _slot, _type);
   }
 
-  bool FlightSession::SpawnChild(std::uint8_t _aiFlag, std::uint8_t _type)
+  bool FlightSession::SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type)
   {
     // 6502: SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.
     return Elite::SpawnChildShip(m_bubble, m_work, m_screen.rng, m_math, m_flight.slot, m_flight.type, _aiFlag, _type, m_flight.blueprint)

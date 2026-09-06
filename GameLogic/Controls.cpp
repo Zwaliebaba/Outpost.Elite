@@ -101,7 +101,7 @@ namespace Elite
        */
       _work.Nose().zHi = 96u;
       _work.Side().xHi = static_cast<std::uint8_t>(96u | 0x80u);
-      _flight.type = static_cast<std::uint8_t>(96u | 0x80u);
+      _flight.type = TypeOf(static_cast<std::uint8_t>(96u | 0x80u));
 
       _work.Speed() = _flight.delta;          // 6502: LDA DELTA / STA INWK+27
       _effects.RunDockingComputer(_work); // 6502: JSR DOCKIT

@@ -60,7 +60,7 @@ namespace GameLogicTests
       std::set<std::uint16_t> distinct;
       for (int type = 1; type <= Elite::SHIP_TYPE_COUNT; ++type)
       {
-        const std::uint16_t address = Elite::BlueprintAddress(static_cast<std::uint8_t>(type));
+        const std::uint16_t address = Elite::BlueprintAddress(Elite::TypeOf(static_cast<std::uint8_t>(type)));
         if (address != 0)
         {
           distinct.insert(address);
@@ -95,7 +95,7 @@ namespace GameLogicTests
         const std::uint16_t expected = static_cast<std::uint16_t>(cpu.memory[entry] | (cpu.memory[entry + 1] << 8));
 
         const std::wstring where = Widen("ship type " + std::to_string(type));
-        Assert::AreEqual(expected, Elite::BlueprintAddress(static_cast<std::uint8_t>(type)), (where + L": the blueprint address").c_str());
+        Assert::AreEqual(expected, Elite::BlueprintAddress(Elite::TypeOf(static_cast<std::uint8_t>(type))), (where + L": the blueprint address").c_str());
 
         if (expected != 0)
         {
@@ -121,10 +121,10 @@ namespace GameLogicTests
        */
       for (const int beyond : {Elite::SHIP_TYPE_COUNT + 1, Elite::SHIP_TYPE_COUNT + 2, 39, 255})
       {
-        Assert::AreEqual<std::uint16_t>(0, Elite::BlueprintAddress(static_cast<std::uint8_t>(beyond)),
+        Assert::AreEqual<std::uint16_t>(0, Elite::BlueprintAddress(Elite::TypeOf(static_cast<std::uint8_t>(beyond))),
                                         L"a type this build does not carry has no blueprint");
       }
-      Assert::AreEqual<std::uint16_t>(0, Elite::BlueprintAddress(0), L"and nor does the empty slot");
+      Assert::AreEqual<std::uint16_t>(0, Elite::BlueprintAddress(Elite::ShipType::None), L"and nor does the empty slot");
     }
 
     /*
@@ -324,11 +324,11 @@ namespace GameLogicTests
 
       const std::vector<Case> CASES = {
         {"a Cobra into an empty bubble", 11, 0, Elite::SHIP_HEAP_TOP},
-        {"the space station, which keeps no heap", Elite::SHIP_TYPE_STATION, 0, Elite::SHIP_HEAP_TOP},
+        {"the space station, which keeps no heap", Elite::Byte(Elite::ShipType::Station), 0, Elite::SHIP_HEAP_TOP},
         {"a missile", 1, 0, Elite::SHIP_HEAP_TOP},
         {"a canister, which is junk", 5, 0, Elite::SHIP_HEAP_TOP},
         {"an escape pod, the first junk type", 3, 0, Elite::SHIP_HEAP_TOP},
-        {"a rock hermit, junk by name only", Elite::SHIP_TYPE_HERMIT, 0, Elite::SHIP_HEAP_TOP},
+        {"a rock hermit, junk by name only", Elite::Byte(Elite::ShipType::RockHermit), 0, Elite::SHIP_HEAP_TOP},
         {"a shuttle, one below the junk limit", 9, 0, Elite::SHIP_HEAP_TOP},
         {"type 11, one past it", 11, 0, Elite::SHIP_HEAP_TOP},
         {"the planet", 128, 0, Elite::SHIP_HEAP_TOP},
@@ -355,7 +355,7 @@ namespace GameLogicTests
 
         // 6502: XX21+2*SST-2 -- the entry `NWSPS` writes and `NWSHP` reads. The oracle's copy is
         // the assembled one, so the port's has to be too or the station case refuses the ship.
-        bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+        bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
 
         // The same starting bubble on both sides: `occupied` slots holding a Viper.
         for (std::uint8_t filled = 0; filled < item.occupied; ++filled)
@@ -383,7 +383,7 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, (where + L": NWSHP returned").c_str());
 
         std::uint16_t blueprint = 0; // 6502: XX0, which NWSHP writes
-        const Elite::NewShip created = Elite::AddShip(bubble, work, item.type, blueprint);
+        const Elite::NewShip created = Elite::AddShip(bubble, work, Elite::TypeOf(item.type), blueprint);
 
         // The carry is the answer, and both refusals clear it.
         Assert::AreEqual(cpu.c, created.created, (where + L": whether the ship was created").c_str());

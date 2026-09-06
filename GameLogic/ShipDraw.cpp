@@ -171,12 +171,12 @@ namespace Elite
 
   void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, ShipBlock& _ship, const LineHeap& _heap) noexcept
   {
-    if ((_ship.State() & SHIP_STATE_DRAWN) == 0u)
+    if (!Has(_ship.State(), ShipStateBit::OnScreen))
     {
       return;
     }
 
-    _ship.State() = static_cast<std::uint8_t>(_ship.State() ^ SHIP_STATE_DRAWN);
+    _ship.State() = static_cast<std::uint8_t>(_ship.State() ^ Mask(ShipStateBit::OnScreen));
     DrawShipLines(_canvas, _draw, _heap, ShipHeapAddress(_ship));
   }
 
@@ -201,11 +201,11 @@ namespace Elite
     {
       // 6502: nono -- LDA #%11110111 / AND XX1+31. Reached four ways, and all four leave the ship
       // marked as not on the screen.
-      _ship.State() = static_cast<std::uint8_t>(_ship.State() & 0xF7u);
+      _ship.State() = Without(_ship.State(), ShipStateBit::OnScreen);
       return;
     }
 
-    _ship.State() = static_cast<std::uint8_t>(_ship.State() | SHIP_STATE_DRAWN);
+    _ship.State() = With(_ship.State(), ShipStateBit::OnScreen);
     StoreLineCountAndDraw(_canvas, _draw, _heap, heap, 8);
   }
 
@@ -784,13 +784,13 @@ namespace Elite
   } // namespace
 
   void DrawShip(Canvas& _canvas, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,
-                Projection& _screen, ShipBlock& _work, ShipBlock& _slot, LineHeap& _heap, std::uint16_t _blueprint, std::uint8_t _type,
+                Projection& _screen, ShipBlock& _work, ShipBlock& _slot, LineHeap& _heap, std::uint16_t _blueprint, ShipType _type,
                 ShipDrawEffects& _effects) noexcept
   {
     // ---- part 1: is there anything to draw at all? ------------------------------------------
 
     // 6502: LL25 -- a negative type is the planet or the sun, which is a different routine.
-    if ((_type & 0x80u) != 0u)
+    if (IsBody(_type))
     {
       _effects.DrawPlanetOrSun();
       return;
@@ -799,18 +799,18 @@ namespace Elite
     _geometry.xx4 = 31;
 
     // 6502: bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
-    if ((_work.Newb() & 0x80u) != 0u)
+    if (Has(_work.Newb(), NewbBit::Remove))
     {
       EraseShip(_canvas, _draw, _work, _heap);
       return;
     }
 
     const std::uint8_t entryState = _work.State();
-    if ((entryState & SHIP_STATE_EXPLODING) == 0u && (entryState & SHIP_STATE_KILLED) != 0u)
+    if (!Has(entryState, ShipStateBit::Exploding) && Has(entryState, ShipStateBit::Killed))
     {
       // Killed and not yet exploding. Bits 6 and 7 are cleared by the same instruction that sets
       // bit 5, so the ship stops firing in the moment it starts to blow up.
-      _work.State() = static_cast<std::uint8_t>((SHIP_STATE_EXPLODING | entryState) & 0x3Fu);
+      _work.State() = Without(With(entryState, ShipStateBit::Exploding), ShipStateBit::Firing, ShipStateBit::Killed);
 
       // Written through INF into the ship's block in K% rather than into INWK, so that the
       // caller's copy back does not undo them.
@@ -839,13 +839,13 @@ namespace Elite
     if (gone)
     {
       // 6502: LL14.
-      if ((_work.State() & SHIP_STATE_EXPLODING) == 0u)
+      if (!Has(_work.State(), ShipStateBit::Exploding))
       {
         EraseShip(_canvas, _draw, _work, _heap);
         return;
       }
 
-      _work.State() = static_cast<std::uint8_t>(_work.State() & 0xF7u);
+      _work.State() = Without(_work.State(), ShipStateBit::OnScreen);
       _effects.DrawExplosion();
       return;
     }
@@ -876,7 +876,7 @@ namespace Elite
       _geometry.xx4 = static_cast<std::uint8_t>(RotateRight(distanceLow, spare).value >> 3);
     }
     else if (ShipByte(static_cast<std::uint16_t>(_blueprint + 13u)) < _work.Z().hi &&
-             (_work.State() & SHIP_STATE_EXPLODING) == 0u)
+             !Has(_work.State(), ShipStateBit::Exploding))
     {
       // 6502: LL13 -- past the blueprint's own visibility distance, so a dot will do.
       DrawShipAsPoint(_canvas, _draw, _work, _heap, _math, _screen);
@@ -897,7 +897,7 @@ namespace Elite
 
     // ---- parts 4 and 5: which faces can be seen --------------------------------------------
 
-    if ((_work.State() & SHIP_STATE_EXPLODING) != 0u)
+    if (Has(_work.State(), ShipStateBit::Exploding))
     {
       // 6502: EE30 -- an exploding ship shows every face and every vertex, so that the whole cloud
       // can be built out of them.
@@ -1207,28 +1207,28 @@ namespace Elite
 
     // ---- part 9: the ship is on the screen from here, and the laser goes on the heap ---------
 
-    if ((_work.State() & SHIP_STATE_EXPLODING) != 0u)
+    if (Has(_work.State(), ShipStateBit::Exploding))
     {
-      _work.State() = static_cast<std::uint8_t>(_work.State() | SHIP_STATE_DRAWN);
+      _work.State() = With(_work.State(), ShipStateBit::OnScreen);
       _effects.DrawExplosion();
       return;
     }
 
     // 6502: EE31 -- rub out the last frame's ship, then mark this one as being on the screen.
     const std::uint16_t heap = ShipHeapAddress(_work);
-    if ((_work.State() & SHIP_STATE_DRAWN) != 0u)
+    if (Has(_work.State(), ShipStateBit::OnScreen))
     {
       DrawShipLines(_canvas, _draw, _heap, heap);
     }
-    _work.State() = static_cast<std::uint8_t>(_work.State() | SHIP_STATE_DRAWN);
+    _work.State() = With(_work.State(), ShipStateBit::OnScreen);
 
     _geometry.xx20 = ShipByte(static_cast<std::uint16_t>(_blueprint + 9u));
     _geometry.xx17 = 0;
     _math.u = 1;
 
-    if ((_work.State() & SHIP_STATE_FIRING) != 0u)
+    if (Has(_work.State(), ShipStateBit::Firing))
     {
-      _work.State() = static_cast<std::uint8_t>(_work.State() & 0xBFu);
+      _work.State() = Without(_work.State(), ShipStateBit::Firing);
 
       const std::size_t muzzle = ShipByte(static_cast<std::uint16_t>(_blueprint + 6u));
       _draw.x1 = _geometry.xx3[muzzle];

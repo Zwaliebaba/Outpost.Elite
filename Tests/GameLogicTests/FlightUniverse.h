@@ -392,12 +392,12 @@ namespace GameLogicTests
     void StopSound(std::uint8_t) override {}
     void StartDockingMusic() override {}
     void StopDockingMusic() override {}
-    bool SpawnAhead(std::uint8_t) override
+    bool SpawnAhead(Elite::ShipType) override
     {
       return false;
     }
-    void Anger(std::uint8_t, std::uint8_t) override {}
-    bool SpawnChild(std::uint8_t, std::uint8_t) override
+    void Anger(std::uint8_t, Elite::ShipType) override {}
+    bool SpawnChild(std::uint8_t, Elite::ShipType) override
     {
       return true;
     }
@@ -440,7 +440,7 @@ namespace GameLogicTests
     {
       _universe.bubble.slots[slot] = TYPES[slot];
     }
-    _universe.bubble.counts[Elite::SHIP_TYPE_STATION] = 1u;
+    _universe.bubble.Count(Elite::ShipType::Station) = 1u;
     _universe.bubble.junk = 1u;
 
     /*
@@ -450,7 +450,7 @@ namespace GameLogicTests
      * type whose entry is zero, so an unseeded bubble would silently stop creating stations. The
      * Coriolis is what `BEGIN` leaves and what every system below tech level ten keeps.
      */
-    _universe.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::SHIP_TYPE_STATION);
+    _universe.bubble.stationBlueprint = Elite::BlueprintAddress(Elite::ShipType::Station);
 
     _universe.techLevel = 7u; // 6502: tek -- below the Dodo's threshold, so the seeded state is stable
 
@@ -641,7 +641,7 @@ namespace GameLogicTests
        * Computed from `XX21` and `SST` rather than looked up, because it has no label of its own:
        * the original addresses it as an expression and so does this.
        */
-      xx21Station = static_cast<std::uint16_t>(_oracle.Label("XX21") + 2u * Elite::SHIP_TYPE_STATION - 2u);
+      xx21Station = static_cast<std::uint16_t>(_oracle.Label("XX21") + 2u * Elite::Byte(Elite::ShipType::Station) - 2u);
       spasto = _oracle.Label("spasto");
 
       screen = ScreenBase(_oracle);

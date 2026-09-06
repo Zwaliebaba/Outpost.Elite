@@ -101,7 +101,7 @@ namespace GameLogicTests
         seams.push_back("DELAY");
         frames = _frames;
       }
-      std::uint8_t ShowTitleScreen(std::uint8_t, std::uint8_t, std::uint8_t) override
+      std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override
       {
         seams.push_back("TITLE");
         return 0;

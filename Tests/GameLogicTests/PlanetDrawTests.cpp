@@ -483,7 +483,7 @@ namespace GameLogicTests
         cpu.memory[at.y1] = 50;
 
         Assert::IsTrue(cpu.CallSubroutine(pl2, 8'000'000).completed, L"PL2 returned");
-        Elite::ErasePlanetOrSun(canvas, state, math, draw, type);
+        Elite::ErasePlanetOrSun(canvas, state, math, draw, Elite::TypeOf(type));
 
         const std::wstring where = Widen("PL2 type=" + std::to_string(type));
         CompareScreens(cpu, at.screen, canvas, where);
@@ -961,7 +961,7 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(planet, 20'000'000);
               Assert::IsTrue(run.completed, L"PLANET returned");
 
-              Elite::DrawPlanetOrSun(canvas, state, draw, geometry, math, clip, rng, ship, centre, type);
+              Elite::DrawPlanetOrSun(canvas, state, draw, geometry, math, clip, rng, ship, centre, Elite::TypeOf(type));
 
               const std::wstring label =
                 Widen("PLANET type=" + std::to_string(type) + " pltog=" + std::to_string(detail) + " ") + where.what + L" / " + turned.what;
@@ -1368,7 +1368,7 @@ namespace GameLogicTests
 
               // 6502: STA TYPE / STX XSAV -- the two globals `WPSHPS` writes for `SCAN`, and
               // they are left holding the LAST ship the loop reached.
-              Assert::AreEqual(cpu.memory[oracle.Label("TYPE")], flight.type, (where + L": TYPE after the walk").c_str());
+              Assert::AreEqual(cpu.memory[oracle.Label("TYPE")], Elite::Byte(flight.type), (where + L": TYPE after the walk").c_str());
               Assert::AreEqual(cpu.memory[oracle.Label("XSAV")], flight.slot, (where + L": XSAV after the walk").c_str());
 
               /*

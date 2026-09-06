@@ -95,7 +95,7 @@ namespace GameLogicTests
           _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] = value;
         }
 
-        const std::uint16_t blueprint = Elite::BlueprintAddress(type);
+        const std::uint16_t blueprint = Elite::BlueprintAddress(Elite::TypeOf(type));
         const std::uint8_t size = (blueprint == 0u) ? std::uint8_t{0} : Elite::ShipByte(static_cast<std::uint16_t>(blueprint + 5u));
         heapAt = static_cast<std::uint16_t>(heapAt - size);
 
@@ -509,8 +509,8 @@ namespace GameLogicTests
             // The carry `GTHG` exits with, which is the THARGON's and not the Thargoid's.
             Assert::AreEqual(cpu.c, made.created, (where + L": the exit carry").c_str());
 
-            outcomes.insert(std::to_string(bubble.counts[Elite::SHIP_TYPE_THARGOID]) + "/" +
-                            std::to_string(bubble.counts[Elite::SHIP_TYPE_THARGON]) + "/" + std::to_string(made.created ? 1 : 0));
+            outcomes.insert(std::to_string(bubble.Count(Elite::ShipType::Thargoid)) + "/" +
+                            std::to_string(bubble.Count(Elite::ShipType::Thargon)) + "/" + std::to_string(made.created ? 1 : 0));
             ++compared;
           }
         }

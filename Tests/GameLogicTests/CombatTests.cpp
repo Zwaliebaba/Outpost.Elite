@@ -228,7 +228,7 @@ namespace GameLogicTests
 
           RecordingCombat effects;
           Elite::FlightScreen screen = universe.Screen();
-          const std::uint8_t ours = Elite::RecordKill(screen, effects, type);
+          const std::uint8_t ours = Elite::RecordKill(screen, effects, Elite::TypeOf(type));
 
           const std::wstring where = WidenText("EXNO2(type " + std::to_string(type) + ", tally " + std::to_string(start.high) + "." +
                                                std::to_string(start.whole) + "." + std::to_string(start.fraction) + ")");

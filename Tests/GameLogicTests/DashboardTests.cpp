@@ -692,8 +692,8 @@ namespace GameLogicTests
 
             // The compass, which `DIALS` ends by calling. `SSPR` is `MANY+SST` (§6.58).
             Elite::Bubble bubble;
-            bubble.counts[Elite::SHIP_TYPE_STATION] = stations;
-            cpu.memory[static_cast<std::uint16_t>(at.many + Elite::SHIP_TYPE_STATION)] = stations;
+            bubble.Count(Elite::ShipType::Station) = stations;
+            cpu.memory[static_cast<std::uint16_t>(at.many + Elite::Byte(Elite::ShipType::Station))] = stations;
 
             std::uint32_t state = 0x5C31A70Fu ^ (counter * 0x9E3779B9u) ^ (stations * 0x85EBCA6Bu);
             for (std::size_t slot = 0; slot < 2u; ++slot)

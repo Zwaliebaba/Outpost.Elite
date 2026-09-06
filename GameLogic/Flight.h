@@ -242,7 +242,7 @@ namespace Elite
    * Returns `thiskey` -- the key NUMBER, not the character. `BR1` compares it against `KEY_YES_
    * INTERNAL`, which is 39 and not `'Y'`.
    */
-  [[nodiscard]] std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, std::uint8_t _shipType,
+  [[nodiscard]] std::uint8_t ShowTitleShip(TitleScreen& _title, std::uint8_t _token, ShipType _shipType,
                                            std::uint8_t _distance) noexcept;
 
   /*

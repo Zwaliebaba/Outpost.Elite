@@ -67,7 +67,7 @@ namespace Elite
    *
    * Returns the byte `NOISE2` gets, which part 11 stores into the dead ship's energy.
    */
-  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, std::uint8_t _type) noexcept;
+  std::uint8_t RecordKill(FlightScreen& _screen, DashboardEffects& _effects, ShipType _type) noexcept;
 
   /*
    * 6502: OOPS -- take `_damage`, on the shield the hit came from, and the banks under it.

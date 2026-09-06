@@ -244,8 +244,8 @@ namespace Elite
 
     // 6502: LDA #CON / STA TYPE / JSR NWSHP -- into the DOCKED game's bubble, which is why `RES2`
     // is what clears it up afterwards rather than anything here.
-    screen.flight.type = SHIP_TYPE_CONSTRICTOR;
-    const NewShip created = AddShip(screen.bubble, screen.work, SHIP_TYPE_CONSTRICTOR, screen.flight.blueprint);
+    screen.flight.type = ShipType::Constrictor;
+    const NewShip created = AddShip(screen.bubble, screen.work, ShipType::Constrictor, screen.flight.blueprint);
     _mission.shipSlot = created.created ? created.slot : std::uint8_t{0};
 
     /*

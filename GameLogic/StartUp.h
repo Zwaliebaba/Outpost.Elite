@@ -160,7 +160,7 @@ namespace Elite
      * screen; `_distance` is how far away it settles once it has finished moving towards the
      * viewer, and it is 210 for the Cobra and 48 for the Adder.
      */
-    [[nodiscard]] virtual std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance) = 0;
+    [[nodiscard]] virtual std::uint8_t ShowTitleScreen(std::uint8_t _token, ShipType _shipType, std::uint8_t _distance) = 0;
   };
 
   /// 6502: the two title screens BR1 shows, which differ in every argument.

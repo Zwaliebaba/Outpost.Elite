@@ -145,7 +145,7 @@ namespace Elite
 
       // 6502: JSR GINF / LDY #31 / LDA (INF),Y / AND #%11101111 / STA (INF),Y.
       ShipBlock& block = _bubble.blocks[slot];
-      block.State() = static_cast<std::uint8_t>(block.State() & 0xEFu);
+      block.State() = Without(block.State(), ShipStateBit::OnScanner);
     }
   }
 
@@ -405,7 +405,7 @@ namespace Elite
      */
     const std::size_t slot = static_cast<std::size_t>(_screen.bubble.junk) + 2u;
     const std::uint8_t occupied = (slot < _screen.bubble.slots.size()) ? _screen.bubble.slots[slot] : 0u;
-    const std::uint8_t station = _screen.bubble.counts[SHIP_TYPE_STATION];
+    const std::uint8_t station = _screen.bubble.Count(ShipType::Station);
 
     if ((occupied | station | _screen.status.midJump) != 0u)
     {

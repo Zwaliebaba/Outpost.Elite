@@ -154,9 +154,9 @@ namespace GameLogicTests
         return {true, 0u};
       }
 
-      std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _ship, std::uint8_t) override
+      std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _ship, std::uint8_t) override
       {
-        Note("title " + std::to_string(_token) + "/" + std::to_string(_ship));
+        Note("title " + std::to_string(_token) + "/" + std::to_string(Elite::Byte(_ship)));
         return titleAnswer;
       }
 

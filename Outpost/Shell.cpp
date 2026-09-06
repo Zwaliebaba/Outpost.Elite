@@ -343,7 +343,7 @@ namespace Outpost
     return (m_flight != nullptr) ? m_flight->ScanMatrix(_keys) : Elite::TitleKey{true, 0u};
   }
 
-  std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance)
+  std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance)
   {
     /*
      * 6502: TITLE -- ported in full now, so this is a forward rather than a placeholder.

@@ -761,7 +761,7 @@ namespace GameLogicTests
         }
 
         // The blueprint MVEIT reads its maximum speed from, in XX0 on the oracle's side.
-        const std::uint16_t blueprint = Elite::BlueprintAddress((item.type & 0x80u) != 0u ? std::uint8_t{11} : item.type);
+        const std::uint16_t blueprint = Elite::BlueprintAddress((item.type & 0x80u) != 0u ? Elite::ShipType::CobraMk3 : Elite::TypeOf(item.type));
         cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint & 0xFFu);
         cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint >> 8);
 
@@ -774,7 +774,7 @@ namespace GameLogicTests
         flight.bet1 = static_cast<std::uint8_t>(item.beta & 0x7Fu);
         flight.bet2 = static_cast<std::uint8_t>(item.beta & 0x80u);
         flight.delta = 14;
-        flight.type = item.type;
+        flight.type = Elite::TypeOf(item.type);
         flight.slot = 3;
 
         const std::uint8_t NAMES[][2] = {

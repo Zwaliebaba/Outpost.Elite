@@ -610,7 +610,7 @@ namespace GameLogicTests
           {
             ++finished;
           }
-          else if ((scene.state & Elite::SHIP_STATE_DRAWN) == 0u)
+          else if (!Elite::Has(scene.state, Elite::ShipStateBit::OnScreen))
           {
             ++offScreen;
           }

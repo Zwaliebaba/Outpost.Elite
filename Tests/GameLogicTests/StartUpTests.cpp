@@ -133,9 +133,9 @@ namespace GameLogicTests
         seams.push_back({"DELAY", _frames, 0, 0});
       }
 
-      std::uint8_t ShowTitleScreen(std::uint8_t _token, std::uint8_t _shipType, std::uint8_t _distance) override
+      std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance) override
       {
-        seams.push_back({"TITLE", _token, _shipType, _distance});
+        seams.push_back({"TITLE", _token, Elite::Byte(_shipType), _distance});
         if (m_taken >= m_answers.size())
         {
           overran = true;
@@ -435,8 +435,8 @@ namespace GameLogicTests
       const Seam BLOB{"msblob", 0, 0, 0};
       const Seam RESET{"RESET", 0, 0, 0};
       const Seam RES2{"RES2", 0, 0, 0};
-      const Seam FIRST{"TITLE", Elite::TITLE_LOAD_TOKEN, Elite::SHIP_TYPE_COBRA_MK3, Elite::TITLE_COBRA_DISTANCE};
-      const Seam SECOND{"TITLE", Elite::TITLE_START_TOKEN, Elite::SHIP_TYPE_ADDER, Elite::TITLE_ADDER_DISTANCE};
+      const Seam FIRST{"TITLE", Elite::TITLE_LOAD_TOKEN, Elite::Byte(Elite::ShipType::CobraMk3), Elite::TITLE_COBRA_DISTANCE};
+      const Seam SECOND{"TITLE", Elite::TITLE_START_TOKEN, Elite::Byte(Elite::ShipType::Adder), Elite::TITLE_ADDER_DISTANCE};
 
       const std::vector<Script> SCRIPTS = {
         {"N at the prompt", false, 'N', {}, {ZEK, START, FIRST, BLOB, SECOND, STOP}},
