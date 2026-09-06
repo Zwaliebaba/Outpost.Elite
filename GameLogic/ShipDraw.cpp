@@ -113,11 +113,11 @@ namespace Elite
      * it returns to SHPPT's caller with the ship marked as not drawn. A bool and an early return say
      * the same thing without needing a stack.
      */
-    bool StorePoint(LineHeap& _heap, std::uint16_t _address, const Projection& _screen, std::uint8_t _y, std::uint8_t _a) noexcept
+    bool StorePoint(LineHeap& _heap, HeapOffset _run, const Projection& _screen, std::uint8_t _y, std::uint8_t _a) noexcept
     {
-      _heap.Write(static_cast<std::uint16_t>(_address + _y), _a);
-      _heap.Write(static_cast<std::uint16_t>(_address + _y + 2), _a);
-      _heap.Write(static_cast<std::uint16_t>(_address + _y + 1), _screen.x);
+      _heap.Write(_run.Byte(_y), _a);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_y + 2u)), _a);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_y + 1u)), _screen.x);
 
       // The carry is clear here on both calls: on the first because the `CMP` that let us past the
       // bottom-of-screen test left it clear, and on the second because the first call would have
@@ -128,15 +128,15 @@ namespace Elite
         return false;
       }
 
-      _heap.Write(static_cast<std::uint16_t>(_address + _y - 1), right.value);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_y - 1u)), right.value);
       return true;
     }
 
   } // namespace
 
-  void DrawShipLines(Canvas& _canvas, DrawWorkspace& _draw, const LineHeap& _heap, std::uint16_t _address) noexcept
+  void DrawShipLines(Canvas& _canvas, DrawWorkspace& _draw, const LineHeap& _heap, HeapOffset _run) noexcept
   {
-    const std::uint8_t length = _heap.Read(_address);
+    const std::uint8_t length = _heap.Read(_run);
     if (length < 4u)
     {
       return;
@@ -152,10 +152,10 @@ namespace Elite
     std::uint8_t y = 1;
     do
     {
-      _draw.x1 = _heap.Read(static_cast<std::uint16_t>(_address + y));
-      _draw.y1 = _heap.Read(static_cast<std::uint16_t>(_address + y + 1));
-      _draw.x2 = _heap.Read(static_cast<std::uint16_t>(_address + y + 2));
-      _draw.y2 = _heap.Read(static_cast<std::uint16_t>(_address + y + 3));
+      _draw.x1 = _heap.Read(_run.Byte(y));
+      _draw.y1 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 1u)));
+      _draw.x2 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 2u)));
+      _draw.y2 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 3u)));
 
       DrawLine(_canvas, _draw);
 
@@ -163,10 +163,10 @@ namespace Elite
     } while (y < length);
   }
 
-  void StoreLineCountAndDraw(Canvas& _canvas, DrawWorkspace& _draw, LineHeap& _heap, std::uint16_t _address, std::uint8_t _count) noexcept
+  void StoreLineCountAndDraw(Canvas& _canvas, DrawWorkspace& _draw, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept
   {
-    _heap.Write(_address, _count);
-    DrawShipLines(_canvas, _draw, _heap, _address);
+    _heap.Write(_run, _count);
+    DrawShipLines(_canvas, _draw, _heap, _run);
   }
 
   void EraseShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, const LineHeap& _heap) noexcept
@@ -177,7 +177,7 @@ namespace Elite
     }
 
     _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
-    DrawShipLines(_canvas, _draw, _heap, ShipHeapAddress(_ship));
+    DrawShipLines(_canvas, _draw, _heap, _ship.heap);
   }
 
   void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, LineHeap& _heap, MathWorkspace& _math,
@@ -191,7 +191,7 @@ namespace Elite
     // visible whenever `PLS6` overflows on its second test rather than its first.
     const bool offScreen = (projected.a | _screen.x1) != 0u || _screen.y >= static_cast<std::uint8_t>(SPACE_VIEW_BOTTOM - 2);
 
-    const std::uint16_t heap = ShipHeapAddress(_ship);
+    const HeapOffset heap = _ship.heap;
 
     // The two stores write as they go and can fail half way, which is what the original does: the
     // first four bytes of the entry are already on the heap when the second call gives up. Nothing
@@ -766,12 +766,12 @@ namespace Elite
     }
 
     /// 6502: LL80 -- put a clipped line's four bytes on the ship's line heap.
-    void PushHeapLine(LineHeap& _heap, std::uint16_t _address, const DrawWorkspace& _draw, std::uint8_t& _next) noexcept
+    void PushHeapLine(LineHeap& _heap, HeapOffset _run, const DrawWorkspace& _draw, std::uint8_t& _next) noexcept
     {
-      _heap.Write(static_cast<std::uint16_t>(_address + _next), _draw.x1);
-      _heap.Write(static_cast<std::uint16_t>(_address + _next + 1u), _draw.y1);
-      _heap.Write(static_cast<std::uint16_t>(_address + _next + 2u), _draw.x2);
-      _heap.Write(static_cast<std::uint16_t>(_address + _next + 3u), _draw.y2);
+      _heap.Write(_run.Byte(_next), _draw.x1);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_next + 1u)), _draw.y1);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_next + 2u)), _draw.x2);
+      _heap.Write(_run.Byte(static_cast<std::uint16_t>(_next + 3u)), _draw.y2);
       _next = static_cast<std::uint8_t>(_next + 4u);
     }
 
@@ -819,7 +819,7 @@ namespace Elite
       _slot.pitchCounter = 0;
 
       EraseShip(_canvas, _draw, _work, _heap);
-      _effects.SeedExplosionCloud(_heap, ShipHeapAddress(_work), _blueprint.explosionCount); // 6502: (XX0),7
+      _effects.SeedExplosionCloud(_heap, _work.heap.Address(), _blueprint.explosionCount); // 6502: (XX0),7
     }
 
     // 6502: EE28 / EE49 and LL10 -- four ways of being not worth drawing, sharing one exit. The
@@ -1214,7 +1214,7 @@ namespace Elite
     }
 
     // 6502: EE31 -- rub out the last frame's ship, then mark this one as being on the screen.
-    const std::uint16_t heap = ShipHeapAddress(_work);
+    const HeapOffset heap = _work.heap;
     if (Has(_work.state, ShipStateBit::OnScreen))
     {
       DrawShipLines(_canvas, _draw, _heap, heap);

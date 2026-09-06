@@ -93,7 +93,7 @@ namespace GameLogicTests
         const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
         const std::uint8_t value = (offset < _bytes.size()) ? _bytes[offset] : std::uint8_t{0};
         _cpu.memory[address] = value;
-        _heap.Write(address, value);
+        _heap.Write(Elite::HeapOffset::FromAddress(address), value);
       }
     }
 
@@ -102,7 +102,7 @@ namespace GameLogicTests
       for (std::uint16_t offset = 0; offset < 256u; ++offset)
       {
         const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
-        Assert::AreEqual(_cpu.memory[address], _heap.Read(address), (_context + L": heap byte " + std::to_wstring(offset)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _heap.Read(Elite::HeapOffset::FromAddress(address)), (_context + L": heap byte " + std::to_wstring(offset)).c_str());
       }
     }
   } // namespace
@@ -605,7 +605,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll155, 500'000);
         Assert::IsTrue(run.completed, L"LL155 returned");
 
-        Elite::DrawShipLines(canvas, draw, heap, HEAP_AT);
+        Elite::DrawShipLines(canvas, draw, heap, Elite::HeapOffset::FromAddress(HEAP_AT));
 
         CompareScreens(cpu, screenBase, canvas, L"LL155 length " + std::to_wstring(length));
         CompareHeaps(cpu, heap, L"LL155 length " + std::to_wstring(length));
@@ -648,7 +648,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll81, 500'000);
         Assert::IsTrue(run.completed, L"LL81 returned");
 
-        Elite::StoreLineCountAndDraw(canvas, draw, heap, HEAP_AT, count);
+        Elite::StoreLineCountAndDraw(canvas, draw, heap, Elite::HeapOffset::FromAddress(HEAP_AT), count);
 
         CompareScreens(cpu, screenBase, canvas, L"LL81 count " + std::to_wstring(count));
         CompareHeaps(cpu, heap, L"LL81 count " + std::to_wstring(count));
@@ -691,8 +691,7 @@ namespace GameLogicTests
         cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
         cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
         cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_STATE_OFFSET)] = state;
-        ship.heapLow = HEAP_AT & 0xFFu;
-        ship.heapHigh = HEAP_AT >> 8;
+        ship.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
         ship.state = state;
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ee51, 500'000);
@@ -778,8 +777,7 @@ namespace GameLogicTests
       SeedHeap(cpu, heap, {});
       cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
       cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-      ship.heapLow = HEAP_AT & 0xFFu;
-      ship.heapHigh = HEAP_AT >> 8;
+      ship.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
 
       // K3 and K4 start where the machine starts them, and the port has to agree from there --
       // the stale-coordinate path reads them before anything has written them.
@@ -1628,8 +1626,7 @@ namespace GameLogicTests
             work.state = placement.state;
             cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
             cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-            work.heapLow = HEAP_AT & 0xFFu;
-            work.heapHigh = HEAP_AT >> 8;
+            work.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
 
             cpu.memory[xx0] = static_cast<std::uint8_t>(blueprint->address);
             cpu.memory[static_cast<std::uint16_t>(xx0 + 1)] = static_cast<std::uint8_t>(blueprint->address >> 8);
@@ -1699,15 +1696,15 @@ namespace GameLogicTests
             // Did the edge loop stop because the blueprint's own heap allowance ran out? That is
             // the one path in `LL9` a whole-heap comparison cannot distinguish from the loop simply
             // finishing, so it is counted.
-            if (heap.Read(HEAP_AT) >= blueprint->heapBytes)
+            if (heap.Read(Elite::HeapOffset::FromAddress(HEAP_AT)) >= blueprint->heapBytes)
             {
               ++heapFilled;
             }
-            if (heap.Read(HEAP_AT) == 8u)
+            if (heap.Read(Elite::HeapOffset::FromAddress(HEAP_AT)) == 8u)
             {
               ++asPoints;
             }
-            else if (heap.Read(HEAP_AT) >= 4u)
+            else if (heap.Read(Elite::HeapOffset::FromAddress(HEAP_AT)) >= 4u)
             {
               ++drawn;
             }

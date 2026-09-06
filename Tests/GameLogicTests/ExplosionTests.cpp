@@ -131,7 +131,7 @@ namespace GameLogicTests
       for (std::uint16_t offset = 0; offset < 256u; ++offset)
       {
         const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
-        Assert::AreEqual(_cpu.memory[address], _heap.Read(address), (_context + L": heap byte " + std::to_wstring(offset)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _heap.Read(Elite::HeapOffset::FromAddress(address)), (_context + L": heap byte " + std::to_wstring(offset)).c_str());
       }
     }
 
@@ -547,7 +547,7 @@ namespace GameLogicTests
             const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
             const std::uint8_t value = (offset < bytes.size()) ? bytes[offset] : std::uint8_t{0};
             cpu.memory[address] = value;
-            heap.Write(address, value);
+            heap.Write(Elite::HeapOffset::FromAddress(address), value);
           }
 
           const std::vector<std::uint8_t> vertices = Vertices(scene.count, layout);
@@ -610,7 +610,7 @@ namespace GameLogicTests
 
           // Which of the routine's four endings this scene reached, counted so that a sweep which
           // stopped exercising one of them says so.
-          if (heap.Read(static_cast<std::uint16_t>(HEAP_AT + 1u)) == scene.counter)
+          if (heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(HEAP_AT + 1u))) == scene.counter)
           {
             ++finished;
           }
@@ -631,7 +631,7 @@ namespace GameLogicTests
               ++burstsRefused;
             }
           }
-          if (scene.zHigh >= 32u && heap.Read(static_cast<std::uint16_t>(HEAP_AT + 1u)) != scene.counter)
+          if (scene.zHigh >= 32u && heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(HEAP_AT + 1u))) != scene.counter)
           {
             ++agedByFive;
           }
@@ -643,9 +643,9 @@ namespace GameLogicTests
            * `8 * P + bits` for a P below 28, so it cannot exceed 223, and 254 in byte 0 of the heap
            * can only be the `LDA #&FE`.
            */
-          if (heap.Read(static_cast<std::uint16_t>(HEAP_AT + 1u)) != scene.counter)
+          if (heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(HEAP_AT + 1u))) != scene.counter)
           {
-            if (heap.Read(HEAP_AT) == 0xFEu)
+            if (heap.Read(Elite::HeapOffset::FromAddress(HEAP_AT)) == 0xFEu)
             {
               ++cappedSize;
             }
@@ -747,7 +747,7 @@ namespace GameLogicTests
                 const std::uint16_t address = static_cast<std::uint16_t>(HEAP_AT + offset);
                 const std::uint8_t value = (offset < bytes.size()) ? bytes[offset] : std::uint8_t{0};
                 cpu.memory[address] = value;
-                heap.Write(address, value);
+                heap.Write(Elite::HeapOffset::FromAddress(address), value);
               }
 
               std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> shipBytes = work.ToBytes();
@@ -763,8 +763,7 @@ namespace GameLogicTests
               work.z.hi = zHigh;
               cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_LOW_OFFSET)] = HEAP_AT & 0xFFu;
               cpu.memory[static_cast<std::uint16_t>(inwk + Elite::SHIP_HEAP_HIGH_OFFSET)] = HEAP_AT >> 8;
-              work.heapLow = HEAP_AT & 0xFFu;
-              work.heapHigh = HEAP_AT >> 8;
+              work.heap = Elite::HeapOffset::FromAddress(HEAP_AT);
 
               cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 6u)] = PLANET_Z_LOW;
               bubble.blocks[0].z.lo = PLANET_Z_LOW;

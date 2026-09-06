@@ -119,7 +119,7 @@ namespace Outpost
      * somewhere; without it every one of them is written out of range and dropped, and the station
      * you have just launched from is invisible in the rear view.
      */
-    m_heap.AttachSunHeap(Elite::SUN_HEAP_ADDRESS, m_heaps.sun);
+    m_heap.AttachSunHeap(m_heaps.sun);
   }
 
   void FlightSession::SyncVideoRegisters() noexcept

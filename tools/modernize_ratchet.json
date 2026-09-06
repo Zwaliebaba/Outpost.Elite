@@ -39,9 +39,9 @@
       "slice": "main 4bab1f8 (merged 2026-09-06)"
     },
     "outpost-elite-names": {
-      "ceiling": 225,
+      "ceiling": 224,
       "slack": 0,
-      "slice": "M1-d"
+      "slice": "M1-f"
     },
     "effects-seams": {
       "ceiling": 22,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3702,
+      "ceiling": 3705,
       "slack": 0,
-      "slice": "M1-e"
+      "slice": "M1-f"
     },
     "oracle-test-files": {
       "ceiling": 50,

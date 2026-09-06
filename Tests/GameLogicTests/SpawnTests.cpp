@@ -136,8 +136,7 @@ namespace GameLogicTests
         const std::uint8_t size = (blueprint == 0u) ? std::uint8_t{0} : blueprint->heapBytes;
         heapAt = static_cast<std::uint16_t>(heapAt - size);
 
-        _bubble.blocks[slot].heapLow = static_cast<std::uint8_t>(heapAt);
-        _bubble.blocks[slot].heapHigh = static_cast<std::uint8_t>(heapAt >> 8);
+        _bubble.blocks[slot].heap = Elite::HeapOffset::FromAddress(heapAt);
         _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + Elite::SHIP_HEAP_LOW_OFFSET)] =
           static_cast<std::uint8_t>(heapAt);
         _cpu.memory[static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE + Elite::SHIP_HEAP_HIGH_OFFSET)] =
@@ -146,12 +145,12 @@ namespace GameLogicTests
         for (std::uint16_t byte = 0; byte < size; ++byte)
         {
           const std::uint8_t value = static_cast<std::uint8_t>(0x40u + slot * 23u + byte);
-          _heap.Write(static_cast<std::uint16_t>(heapAt + byte), value);
+          _heap.Write(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(heapAt + byte)), value);
           _cpu.memory[static_cast<std::uint16_t>(heapAt + byte)] = value;
         }
       }
 
-      _bubble.heapBottom = heapAt;
+      _bubble.heapBottom = Elite::HeapOffset::FromAddress(heapAt);
       _cpu.memory[_at.slsp] = static_cast<std::uint8_t>(heapAt);
       _cpu.memory[static_cast<std::uint16_t>(_at.slsp + 1)] = static_cast<std::uint8_t>(heapAt >> 8);
     }
@@ -180,7 +179,7 @@ namespace GameLogicTests
 
       Assert::AreEqual(_cpu.memory[_at.junk], _bubble.junk, (_where + L": JUNK").c_str());
       Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(_cpu.memory[_at.slsp] | (_cpu.memory[_at.slsp + 1] << 8)),
-                                      _bubble.heapBottom, (_where + L": SLSP").c_str());
+                                      _bubble.heapBottom.Address(), (_where + L": SLSP").c_str());
 
       /*
        * The line heap itself, which is the half a slot-list comparison cannot see -- and only the
@@ -195,7 +194,7 @@ namespace GameLogicTests
 
       for (std::uint16_t address = LINES_START; address < Elite::LineHeap::TOP; ++address)
       {
-        Assert::AreEqual(_cpu.memory[address], _heap.Read(address), (_where + L": the heap at " + std::to_wstring(address)).c_str());
+        Assert::AreEqual(_cpu.memory[address], _heap.Read(Elite::HeapOffset::FromAddress(address)), (_where + L": the heap at " + std::to_wstring(address)).c_str());
       }
     }
   } // namespace
@@ -465,7 +464,7 @@ namespace GameLogicTests
              * the main loop, which has just done so. A test that only puts X in place gets a
              * routine reading whatever the last call left.
              */
-            const std::uint16_t block = Elite::SlotAddress(static_cast<std::uint8_t>(victim));
+            const std::uint16_t block = static_cast<std::uint16_t>(Elite::SHIP_BLOCK_BASE + (static_cast<std::uint8_t>(victim) * Elite::SHIP_BLOCK_SIZE));
             cpu.memory[at.inf] = static_cast<std::uint8_t>(block);
             cpu.memory[static_cast<std::uint16_t>(at.inf + 1)] = static_cast<std::uint8_t>(block >> 8);
 

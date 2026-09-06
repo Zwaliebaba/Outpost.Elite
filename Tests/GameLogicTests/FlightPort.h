@@ -160,7 +160,7 @@ namespace GameLogicTests
       std::array<std::uint8_t, Elite::LineHeap::SIZE> arena{};
       for (std::size_t offset = 0; offset < arena.size(); ++offset)
       {
-        arena[offset] = heap.Read(static_cast<std::uint16_t>(Elite::LineHeap::BASE + offset));
+        arena[offset] = heap.Read(Elite::HeapOffset::FromAddress(static_cast<std::uint16_t>(Elite::LineHeap::BASE + offset)));
       }
       digest = FoldBytes(digest, arena);
 

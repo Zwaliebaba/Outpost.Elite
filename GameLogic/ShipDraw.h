@@ -126,7 +126,7 @@ namespace Elite
    * `LOIN` plots by EOR, so this both draws a ship and rubs it out; which one it is depends only on
    * whether the same lines are already on the screen. That is the whole of Elite's ship animation.
    */
-  void DrawShipLines(Canvas& _canvas, DrawWorkspace& _draw, const LineHeap& _heap, std::uint16_t _address) noexcept;
+  void DrawShipLines(Canvas& _canvas, DrawWorkspace& _draw, const LineHeap& _heap, HeapOffset _run) noexcept;
 
   /*
    * 6502: LL81 -- store the heap's length in byte 0 and fall straight into `LL155`.
@@ -136,7 +136,7 @@ namespace Elite
    * already in A. Both then draw. Ported as one function with the length as a parameter, because
    * the difference between the two entry points is only where the byte came from.
    */
-  void StoreLineCountAndDraw(Canvas& _canvas, DrawWorkspace& _draw, LineHeap& _heap, std::uint16_t _address, std::uint8_t _count) noexcept;
+  void StoreLineCountAndDraw(Canvas& _canvas, DrawWorkspace& _draw, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept;
 
   /*
    * 6502: EE51 -- take the ship off the screen, if it is on it.

@@ -152,6 +152,7 @@
     <ClInclude Include="LoaderScreen.h" />
     <ClInclude Include="TextPrint.h" />
     <ClInclude Include="Galaxy.h" />
+    <ClInclude Include="HeapOffset.h" />
     <ClInclude Include="ShipBlueprint.h" />
     <ClInclude Include="ShipSlot.h" />
     <ClInclude Include="Ship.h" />
