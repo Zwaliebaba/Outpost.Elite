@@ -225,7 +225,7 @@ namespace GameLogicTests
           characters(screen),
           printer(characters, &galaxy),
           extended(characters, printer, rng),
-          ports{printer, characters, characters, nulls,    nulls, nulls, nulls,
+          ports{printer, characters, characters, nulls,    nulls, nulls, sid,
                 extended, nulls,      nulls,      nulls, nulls, nulls}
       {
         galaxy.number = _galaxy;
@@ -253,6 +253,7 @@ namespace GameLogicTests
       Elite::TokenPrinter printer;
       Elite::ExtendedTokenPrinter extended;
       NullSeams nulls;
+      Elite::SidWriteLog sid; ///< 6502: SID -- nothing here makes a sound, and this is where it would go
       Elite::Ports ports;
     };
 

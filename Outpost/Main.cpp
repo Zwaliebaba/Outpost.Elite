@@ -88,15 +88,15 @@ namespace
   {
     Game()
       : shell(window, presenter, universe.canvas, universe.view),
-        screen(universe.canvas, universe.text, &shell),
+        screen(universe.canvas, universe.text, &shell, &universe.sound),
         characters(screen),
         recursive(characters),
         values(recursive, universe.text, universe.commander, universe.commanderName, universe.current.seeds, universe.selectedSeeds,
                false),
         extended(characters, recursive, universe.rng, &shell),
-        flight(window, universe, universe.sound, music, audio),
-        ports{recursive, characters, characters, flight, flight, flight, flight,
-              extended,  shell,      shell,      shell,  shell,  store}
+        flight(window, universe),
+        ports{recursive, characters, characters,     flight, flight, flight, audio.Direct(),
+              extended,  shell,      shell,          shell,  shell,  store}
     {
       // The seam the session answers that is a call needing the seams themselves -- `DOCKIT` --
       // so the composition lends the struct back to the object seven of it point at.
@@ -109,7 +109,7 @@ namespace
       shell.AttachFlight(flight, universe.dockedFlag);
       shell.AttachVideo(flight.Video());                            // ADR-005 §1 -- the sprites composite in Resolve
       shell.AttachGalaxy(universe.commander.galaxyNumber); // 6502: GCNT, for MT27 and MT28
-      shell.AttachSound(audio, universe.sound, music);
+      shell.AttachSound(audio, universe.sound, universe.music);
 
       // 6502: NA% -- the commander the cold start begins from, and a STORE rather than a member
       // initialiser since M3-a: `Game` held its own `= Elite::DefaultCommander()` and
@@ -140,15 +140,14 @@ namespace
     Elite::Universe universe;
 
     /*
-     * 6502: the music player and the SID it writes, and the BUFFER is not here since M3-b-2a --
-     * `universe.sound` is what `NOISE` fills and `SOINT` drains, the original's own split.
+     * The SID, and NEITHER the effect buffer nor the player is here any more: `universe.sound` is
+     * what `NOISE` fills since M3-b-2a and `universe.music` is what `startbd` drives since M3-b-2b,
+     * which is the original's own split -- the game writes memory and the interrupt writes the chip.
      *
-     * Both are here rather than in the flight session because BOTH halves of the loop make sound:
-     * the docked screens beep and the title screen starts the theme through the shell, and the
-     * flight loop fires lasers through the session. The output is the platform's and is the one
-     * object in this struct that can fail to open, in which case the game runs in silence.
+     * This is the chip, and it is the one object in this struct that can fail to open, in which
+     * case the game runs in silence. `Direct()` is the log the library's own game-side writes go
+     * to, and it is what `Ports::sid` binds to.
      */
-    Elite::MusicPlayer music;
     Outpost::SoundOutput audio;
 
     Outpost::GameShell shell;
@@ -261,7 +260,7 @@ namespace
   [[nodiscard]] Elite::OptionBlock OptionsOf(Game& _game)
   {
     Elite::ControlOptions& controls = _game.universe.options;
-    Elite::MusicOptions& music = _game.music.options;
+    Elite::MusicOptions& tunes = _game.universe.music.options;
 
     return Elite::OptionBlock{
       &controls.dampingDisabled,          // 6502: DAMP
@@ -271,12 +270,12 @@ namespace
       &_game.joystickGeometry,            // 6502: JSTGY
       &_game.joystickEnabled,             // 6502: JSTE
       &controls.joystick,                 // 6502: JSTK
-      &music.dockingMusicOff,             // 6502: MUTOK
+      &tunes.dockingMusicOff,             // 6502: MUTOK
       &_game.universe.useDisk,                     // 6502: DISK
       &_game.universe.heaps.pltog, // 6502: PLTOG
-      &music.dockingMusicForced,          // 6502: MUFOR
-      &music.dockingPlaysTheme,           // 6502: MUDOCK
-      &music.effectsDuringMusic,          // 6502: MUSILLY
+      &tunes.dockingMusicForced,          // 6502: MUFOR
+      &tunes.dockingPlaysTheme,           // 6502: MUDOCK
+      &tunes.effectsDuringMusic,          // 6502: MUSILLY
     };
   }
 
@@ -843,7 +842,7 @@ namespace
       Elite::AbandonShip(_game.universe, _game.ports, _game.universe.commander.fuel);
 
       // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
-      _game.flight.StopDockingMusic();
+      Elite::StopDockingMusic(_game.universe.music, _game.universe.status.titleReset, _game.universe.sound, _game.audio.Direct());
       Leave(_game, Elite::LoopOutcome::Docked);
       return;
     }
@@ -998,11 +997,11 @@ namespace
      */
     if (pass.music == Elite::MusicChange::StartNow)
     {
-      Elite::StartDockingMusicNow(_game.music, _game.audio.Direct());
+      Elite::StartDockingMusicNow(_game.universe.music, _game.audio.Direct());
     }
     else if (pass.music == Elite::MusicChange::Stop)
     {
-      Elite::StopDockingMusic(_game.music, _game.universe.status.titleReset, _game.universe.sound, _game.audio.Direct());
+      Elite::StopDockingMusic(_game.universe.music, _game.universe.status.titleReset, _game.universe.sound, _game.audio.Direct());
     }
 
     /*

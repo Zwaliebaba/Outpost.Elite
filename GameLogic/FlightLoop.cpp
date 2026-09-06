@@ -6,6 +6,7 @@
 #include "ShipBlueprint.h"
 #include "Lasers.h"
 #include "Messages.h"
+#include "Music.h"
 #include "Combat.h"
 #include "Market.h"
 #include "PlanetDraw.h"
@@ -496,7 +497,7 @@ namespace Elite
       if (_universe.keys[KEY_CANCEL_DOCKING] != 0u)
       {
         _universe.control.dockingComputer = 0u;
-        _ports.loop.StopDockingMusic();
+        StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _ports.sid);
       }
 
       // 6502: .MA78 LDA KY13 / AND ESCP / BEQ noescp / LDA MJ / BNE noescp / JMP ESCAPE -- and it
@@ -542,7 +543,7 @@ namespace Elite
     if ((_universe.keys[KEY_DOCKING_COMPUTER] & commander.dockingComputer) != 0u && requested != 0u)
     {
       _universe.control.dockingComputer = requested;
-      _ports.loop.StartDockingMusic();
+      StartDockingMusic(_universe.music, _ports.sid);
     }
 
     // ---- part 3's tail: the guns -----------------------------------------------------------------
@@ -1002,7 +1003,8 @@ namespace Elite
 
         if (arrived)
         {
-          _ports.loop.StopDockingMusic(); // 6502: .GOIN JSR stopbd / JMP DOENTRY
+          // 6502: .GOIN JSR stopbd / JMP DOENTRY
+          StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _ports.sid);
           return LoopOutcome::Docked;
         }
 

@@ -83,22 +83,22 @@ namespace GameLogicTests
      * until the fixture that closed R22 put a planet in range (§8).
      */
     constexpr Checkpoint RECORDED[] = {
-      {0, 0xedbe9940b28ac29full},    // launched from Lave
-      {40, 0xbbd728582c78abf7ull},   // coasted
-      {100, 0x671e68d93bf16d36ull},  // at full speed
-      {200, 0x2a404c461b4c208cull},
-      {300, 0x3dd514d55c7cf34cull},
-      {340, 0x6882d4363524fba4ull},  // the Viper fought
-      {342, 0x8b4b589ee97addf9ull},  // the docking computer engaged
-      {400, 0x82e2e6a14f0ff025ull},
-      {500, 0xfc8d3d57cf6ddae4ull},
-      {600, 0xad88a309a4c50e03ull},
-      {700, 0x82e35cc859ceb4cdull},
-      {800, 0x41900b865080f35eull},
-      {900, 0x7f0cc27e76c055e0ull},
-      {1000, 0x7e5a04fab4848de4ull},
-      {1100, 0xbadba1ca56277b1full},
-      {1170, 0x4fcb28d2d4b6a563ull}, // docked
+      {0, 0x172fde4731072aafull},    // launched from Lave
+      {40, 0xdeaa6d7172c7db77ull},   // coasted
+      {100, 0x454bf9625d95f316ull},  // at full speed
+      {200, 0x2cda23565f85bb0cull},
+      {300, 0x3f34ca0ae88283e4ull},
+      {340, 0x3a2f639e66b0b31cull},  // the Viper fought
+      {342, 0x92bf510f980a6f0eull},  // the docking computer engaged
+      {400, 0x4e4ffb1784c239e2ull},
+      {500, 0x6fa8d83f77be2c57ull},
+      {600, 0x145a6b04890d5840ull},
+      {700, 0xc46c9889443e00a6ull},
+      {800, 0x4dcb7b2f69aa9ad1ull},
+      {900, 0x0d647cdd733a8d9bull},
+      {1000, 0x5c63409a02a9834bull},
+      {1100, 0xc3d1f29bf4813164ull},
+      {1170, 0x27701f86b1503c8bull}, // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;

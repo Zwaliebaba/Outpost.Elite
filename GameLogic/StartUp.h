@@ -108,11 +108,19 @@ namespace Elite
      */
     virtual void ClearKeyLogger() = 0;
 
-    /// 6502: startat -- begin the title theme on the SID.
-    virtual void StartTheme() = 0;
-
-    /// 6502: stopat -- stop it, and silence all three voices.
-    virtual void StopTheme() = 0;
+    /*
+     * `StartTheme` AND `StopTheme` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-2b).
+     *
+     * `startat` is the title theme through the same `startat2` as the docking music, and `stopat`
+     * is "stop whatever is playing" -- `SOFLUSH` down the effects, `MUPLA` to zero, the chip's
+     * twenty-five registers run down and the volume back to fifteen. Both are `Music.cpp`'s since
+     * slice 5b; the start sequence calls them over `Universe::music` and `Ports::sid` (§6.73).
+     *
+     * THE STOP TAKES THE EFFECT BUFFER AS WELL AS THE PLAYER, because `SOFLUSH` is the first thing
+     * it does: stopping the music ends the sound effects too, on a chip that can still be heard.
+     * The seam hid that -- the executable reached for its own `SoundBuffer` -- and the signature
+     * is where it belongs.
+     */
 
 
     /*

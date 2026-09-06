@@ -8,14 +8,21 @@ namespace Elite
    *
    * When the state came out of the six argument-list structs this is what was left: the text
    * machinery, which cannot live in a universe that has to copy because two of its objects take a
-   * seam, and the eleven interfaces the platform answers. Thirteen references where the six structs
-   * held sixty-six.
+   * seam, and the interfaces the platform answers. Thirteen references where the six structs held
+   * sixty-six.
    *
    * IT IS A STRUCT OF REFERENCES FOR ONE SLICE. §4.5's four ports -- `Presenter`, `Keyboard`,
-   * `SoundSink`, `SaveStore` -- are M3-b's, and most of what the seven below carry is not a port at
+   * `SoundSink`, `SaveStore` -- are M3-b's, and most of what the rest below carry is not a port at
    * all but a call into a routine that now exists. Collapsing them here would be two patterns in
    * one slice (rule 8), so this is the shape that lets M3-a change every signature once and M3-b
    * change what is behind them without touching a signature again.
+   *
+   * THE COUNT DOES NOT FALL WHILE THE PHASE RUNS AND IT CANNOT. Each of the four ports has to be
+   * here before the seams it replaces can go, so a slice that lands one and removes none would put
+   * `aggregate-refs` ABOVE the ceiling M3-a-3 recorded -- which rule 5 forbids outright, and rightly:
+   * a ratchet that can be argued past is not one. So each of M3-b's remaining slices lands its port
+   * in the same commit as at least one removal, and this one is thirteen references before M3-b-2b
+   * and thirteen after (§8, 2026-09-06).
    *
    * THE DECLARATIONS BELOW ARE FORWARD ONES ON PURPOSE. A reference member needs no complete type,
    * and this header including `ViewChange.h` while `ViewChange.h`'s routines take a `Ports&` is a
@@ -26,15 +33,16 @@ namespace Elite
   class TokenPrinter;
   class CharacterPrinter;
   class SightEffects;
-  class ViewEffects;
   class ShipDrawEffects;
-  class FlightLoopEffects;
+  class SpawnChildEffects;
   class ExtendedTokenPrinter;
   class StartUpEffects;
   class KeySource;
   class TradeScreenEffects;
   class LineEntryEffects;
   class CommanderStore;
+
+  struct SidWriteLog; // SoundEffects.h -- a plain aggregate, so this cannot be a class declaration
 
   struct Ports
   {
@@ -45,9 +53,27 @@ namespace Elite
 
     // ---- the seams the platform answers ------------------------------------------------------
     SightEffects& sight;      ///< 6502: SIGHT's sprite pokes
-    ViewEffects& view;        ///< 6502: what a screen change reaches outside the library
     ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
-    FlightLoopEffects& loop;  ///< 6502: the frame's sounds, spawns and music
+    SpawnChildEffects& loop;  ///< 6502: SFS1, which M4-a's typed stage result is what it waits on
+
+    /*
+     * 6502: SID -- the chip, as the game side of the code writes it (M3-b-2b).
+     *
+     * THE FIRST OF SECTION 4.5's FOUR TO ARRIVE, and it is a `SidWriteLog` rather than an interface
+     * because that is what the port has meant by a sound sink since slice 5a: the library runs
+     * `NOISE` and the music player itself and emits REGISTER WRITES IN ORDER, and the order is the
+     * observable (`SoundEffects.h`). A method per register would be the same thing with a vtable.
+     *
+     * It is the GAME side's log and not the interrupt's. `SOINT` and the music player's own tick
+     * are called by the executable once a frame with a log of its own; what comes through here is
+     * the handful of writes the game makes between interrupts -- `stopat` running the chip down and
+     * `BDENTRY` zeroing it -- which the executable applies ahead of the next interrupt's, because
+     * that is the order they happen in.
+     *
+     * It is here and not in `Universe` because it is not state: nothing in the library reads it
+     * back, it is drained and cleared every frame, and the M0-c replay hashes the universe.
+     */
+    SidWriteLog& sid;
 
     /*
      * The two the title screen and the briefings need and a flight frame does not.

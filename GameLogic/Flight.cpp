@@ -6,6 +6,7 @@
 
 #include "Combat.h"
 #include "Market.h"
+#include "Music.h"
 #include "PlanetDraw.h"
 #include "Spawn.h"
 
@@ -65,7 +66,8 @@ namespace Elite
   void ResetShipAndBubble(Universe& _universe, Ports& _ports) noexcept
   {
 
-    _ports.loop.StopDockingMusic(); // 6502: JSR stopbd
+    // 6502: JSR stopbd
+    StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _ports.sid);
 
     /*
      * 6502: LDA BOMB / BPL BOMBOK / JSR BOMBOFF / STA BOMB.
@@ -324,8 +326,9 @@ namespace Elite
     ResetGame(_universe, _ports, _universe.dockedFlag);
     _universe.status.titleReset = 0u;
 
-    _ports.start.ClearKeyLogger();          // 6502: JSR ZEKTRAN
-    _ports.view.SetPalette(TITLE_PALETTE); // 6502: LDA #32 / JSR DOVDU19
+    _ports.start.ClearKeyLogger(); // 6502: JSR ZEKTRAN
+
+    // 6502: LDA #32 / JSR DOVDU19 -- the title screen's palette on the Master, an RTS here.
 
     SetUpScreen(_universe, _ports, TITLE_CLEAR_VIEW); // 6502: LDA #13 / JSR TT66
     _universe.view = 0u;                      // 6502: LDA #0 / STA QQ11

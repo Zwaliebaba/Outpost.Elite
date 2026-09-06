@@ -192,24 +192,27 @@ namespace Elite
                          SightEffects& _effects, std::uint8_t _view) noexcept;
 
   /// What `LOOK1` and `WARP` reach that is neither memory nor the canvas.
-  class ViewEffects
-  {
-  public:
-    virtual ~ViewEffects() = default;
-
-    /// 6502: LDA #0 / JSR DOVDU19 -- a palette change, which on this build writes a VIC-II colour
-    /// register. `LOOK1` makes it the first thing it does, before it has even looked at the view.
-    virtual void SetPalette(std::uint8_t _colour) = 0;
-
-    /*
-     * `PlaySound` WAS HERE AND IS NOT ANY MORE (M3-b-2a).
-     *
-     * It was `LDY #sfxboop / JMP NOISE` -- the refusal noise `WARP` makes when it will not warp --
-     * and it was the SECOND declaration of one routine, `DashboardEffects` having the other. Both
-     * are `PlaySoundEffect` over `Universe::sound` now. `WARP` tail-calls and drops the carry both
-     * ways, which is why its caller passed false and discarded the answer (§6.99).
-     */
-  };
+  /*
+   * `ViewEffects` WAS HERE AND IS NOT ANY MORE (M3-b-2b).
+   *
+   * It ended with one method, `SetPalette`, and the method was in front of NOTHING. `DOVDU19` on
+   * the 6502 Second Processor rewrites `VNT3+1` in the interrupt handler to choose a mode 1
+   * palette; on THIS build the upstream source assembles the label and the `RTS` and skips the
+   * store -- "this subroutine has no effect in this version of Elite", in as many words. So the
+   * two `JSR`s are two `JSR`s to an `RTS`, and the port keeps them as the comments below, which is
+   * the whole of what they are.
+   *
+   * THE HEADER SAID OTHERWISE AND WAS WRONG. The comment on the method claimed the call "on this
+   * build writes a VIC-II colour register", which is the Master's reading; `Outpost`'s empty
+   * implementation had the right one all along and said so. A seam is a claim that something is
+   * outside the library, and this one was never true (§6.73's rule, arriving from the other side:
+   * a seam scoped before the thing behind it was READ).
+   *
+   * `PlaySound` went in M3-b-2a: it was `LDY #sfxboop / JMP NOISE`, the refusal noise `WARP` makes
+   * when it will not warp, and the SECOND declaration of one routine -- `DashboardEffects` having
+   * the other. Both are `PlaySoundEffect` over `Universe::sound` now. `WARP` tail-calls and drops
+   * the carry both ways, which is why its caller passed false and discarded the answer (§6.99).
+   */
 
   /// 6502: sfxboop -- the effect number `WARP` asks for when it refuses.
   inline constexpr std::uint8_t SOUND_BOOP = 6;

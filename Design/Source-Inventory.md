@@ -167,7 +167,7 @@ loader 22, sprites 5 — 710 includes, all distinct; verified mechanically 2026-
 
 | Labels | Files | Home | Disposition |
 |---|---|---|---|
-| ✅ `bell` | 1 | `SoundEffects.cpp` | Port<br><br>**Built 2026-09-05**: `BELL` is `LDA #7 / JMP CHPR`, and `CHPR`'s character 7 is `R5`, which is `JSR BEEP` -- the `TextEffects::Beep` seam, which `GameShell::Beep` now answers with `Elite::Beep`. There is no function of its own because there is no routine of its own: the whole of it is two instructions that reach something already ported. |
+| ✅ `bell` | 1 | `SoundEffects.cpp` | Port<br><br>**Built 2026-09-05**: `BELL` is `LDA #7 / JMP CHPR`, and `CHPR`'s character 7 is `R5`, which is `JSR BEEP`. It was a `TextEffects::Beep` seam the executable answered until M3-b-2b; `TextPrinter` holds the `SoundBuffer` and calls `Elite::Beep` itself now, so the bell reaches `NOISE` inside the library. There is no function of its own because there is no routine of its own: the whole of it is two instructions that reach something already ported. |
 
 The per-row file counts above were made by hand from the include list and are approximate;
 `tools/inventory.py` (slice 0c) is what reconciles them mechanically against the 627 includes

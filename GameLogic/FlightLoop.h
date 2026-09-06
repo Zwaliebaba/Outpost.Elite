@@ -247,29 +247,35 @@ namespace Elite
    * `SpawnChildEffects`, because part 11's `SPIN` and `SPIN2` drop wreckage through `SFS1`, which
    * is M4-a's to take away.
    */
-  class FlightLoopEffects : public SpawnChildEffects
-  {
-  public:
-    /// 6502: JSR startbd and JSR stopbd -- the docking music, which is a second interrupt handler.
-    virtual void StartDockingMusic() = 0;
-    virtual void StopDockingMusic() = 0;
-
-    /*
-     * `FRS1` AND `ANGRY` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-1d).
-     *
-     * `SpawnAhead` was `JSR FRS1` with X = the type -- "put a ship right in front of us" -- and
-     * `Anger` was `JSR ANGRY` with the ship's slot and type. Slice 4a-b built both, in `Spawn.cpp`
-     * and `Tactics.cpp`, and the flight loop calls them: §6.73's rule again.
-     *
-     * TWO THINGS THEY TAUGHT SURVIVE THEM. `ANGRY`'s SLOT had to be an argument because the two
-     * callers point `INF` at different ships -- part 3 angers the missile's TARGET (`LDX MSTG /
-     * JSR GINF`) and part 11 the ship OUR LASER hit (`XSAV`'s) -- and the seam that took only the
-     * type guessed `MSTG` and read block 255 the first time a laser landed without a lock (§6.142).
-     * And `ANGRY`'s EXIT CARRY is part 11's, because it falls from there into `JSR LL9` and a ship
-     * the laser has just killed seeds its explosion cloud on that flag (§6.157). `Elite::Anger`
-     * takes the slot and answers the carry; the seam only ever forwarded to it.
-     */
-  };
+  /*
+   * `FlightLoopEffects` WAS HERE AND IS NOT ANY MORE (M3-b-2b).
+   *
+   * It was `SpawnChildEffects` plus the docking music's pair, and with the pair gone there was
+   * nothing of its own left to declare -- so `Ports::loop` is a `SpawnChildEffects&` and the
+   * derived class is not needed to hold it. `SpawnChild` stays a seam for M4-a's reason and not
+   * this slice's (§8, M3-b-1).
+   *
+   * `StartDockingMusic` was `JSR startbd` and `StopDockingMusic` was `JSR stopbd`, and both are
+   * `Music.cpp`'s routines over `Universe::music`, writing the chip through `Ports::sid`. `stopbd`
+   * READS A BYTE THE SEAM COULD NOT SEE: `BIT MULIE / BMI itsoff`, the title screen's bracket
+   * around its `RESET`, which is `Status::titleReset` and is why the call takes it. The executable
+   * was passing it in from the universe it happened to hold; the library passes it from the
+   * universe it is given.
+   *
+   * `FRS1` AND `ANGRY` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-1d).
+   *
+   * `SpawnAhead` was `JSR FRS1` with X = the type -- "put a ship right in front of us" -- and
+   * `Anger` was `JSR ANGRY` with the ship's slot and type. Slice 4a-b built both, in `Spawn.cpp`
+   * and `Tactics.cpp`, and the flight loop calls them: §6.73's rule again.
+   *
+   * TWO THINGS THEY TAUGHT SURVIVE THEM. `ANGRY`'s SLOT had to be an argument because the two
+   * callers point `INF` at different ships -- part 3 angers the missile's TARGET (`LDX MSTG /
+   * JSR GINF`) and part 11 the ship OUR LASER hit (`XSAV`'s) -- and the seam that took only the
+   * type guessed `MSTG` and read block 255 the first time a laser landed without a lock (§6.142).
+   * And `ANGRY`'s EXIT CARRY is part 11's, because it falls from there into `JSR LL9` and a ship
+   * the laser has just killed seeds its explosion cloud on that flag (§6.157). `Elite::Anger`
+   * takes the slot and answers the carry; the seam only ever forwarded to it.
+   */
 
   /*
    * `NWSPS` WAS A SEAM HERE AND IS NOT ANY MORE.

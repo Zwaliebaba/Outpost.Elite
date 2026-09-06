@@ -253,6 +253,19 @@ namespace GameLogicTests
     Run(cells, L"SOVCH", _at.sovch, _universe.sound.volumeRate.data(), _universe.sound.volumeRate.size(), CellScope::Compared);
     cells.push_back(Direct(L"PULSEW", _at.pulsew, _universe.sound.pulseWidth, CellScope::Compared));
     cells.push_back(Direct(L"DNOIZ", _at.dnoiz, _universe.sound.soundOff, CellScope::Compared));
+
+    /*
+     * 6502: MUPLA and MULIE -- what `startbd`, `stopbd`, `startat` and `stopat` leave behind
+     * (M3-b-2b).
+     *
+     * The same argument one paragraph up: they were seams on `FlightLoopEffects` and
+     * `StartUpEffects` and the fixtures counted the calls; both machines run the player now, so
+     * whether a tune is playing is a byte to be mirrored in and compared out. `MULIE` is the title
+     * screen's bracket around its `RESET`, which `stopbd` READS -- so a fixture that changed it
+     * without the port changing it too would be comparing two different decisions.
+     */
+    cells.push_back(Direct(L"MUPLA", _at.mupla, _universe.music.playing, CellScope::Compared));
+    cells.push_back(Direct(L"MULIE", _at.mulie, _universe.status.titleReset, CellScope::Compared));
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
     {
       CodecCells(cells, L"K% slot " + std::to_wstring(slot), static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE),
@@ -467,6 +480,12 @@ namespace GameLogicTests
       {L"SOVCH", _at.sovch, sound.volumeRate.data(), sound.volumeRate.size()},
       {L"PULSEW", _at.pulsew, &sound.pulseWidth, 1u},
       {L"DNOIZ", _at.dnoiz, &sound.soundOff, 1u},
+
+      // 6502: MUPLA and MULIE -- the music the game side starts and stops (M3-b-2b). `ImageCells`
+      // carries them too, so a suite that calls `CompareState` has them already; this is for the
+      // ones that ask about the sound alone.
+      {L"MUPLA", _at.mupla, &_universe.music.playing, 1u},
+      {L"MULIE", _at.mulie, &_universe.status.titleReset, 1u},
     };
 
     for (const Run& run : RUNS)

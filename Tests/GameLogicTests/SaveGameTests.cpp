@@ -875,7 +875,8 @@ namespace GameLogicTests
         useDisk = script.useDisk ? std::uint8_t{0xFFu} : std::uint8_t{0};
 
         NullSeams nulls;
-        Elite::Ports ports{recursive, characters, sink,  nulls, nulls, nulls, nulls,
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{recursive, characters, sink,  nulls, nulls, nulls, sid,
                            extended,  nulls,      keys,  nulls, effects, store};
 
         const Elite::DiskMenuResult result = Elite::DiskAccessMenu(universe, ports);

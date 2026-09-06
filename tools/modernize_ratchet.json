@@ -34,19 +34,19 @@
       "slice": "M3-a-3: TradeScreen, SaveScreen, GameStart and MissionBay go; what is left IS Ports"
     },
     "main-lines": {
-      "ceiling": 1198,
+      "ceiling": 1197,
       "slack": 0,
-      "slice": "M3-a-3: Main.cpp holds no state the universe owns and builds no argument list"
+      "slice": "M3-b-2b: the music player is the universe's and Game holds only the chip"
     },
     "outpost-elite-names": {
-      "ceiling": 184,
+      "ceiling": 180,
       "slack": 0,
-      "slice": "M3-b-1b: the app no longer names ChartShapes or the chart routines' pieces"
+      "slice": "M3-b-2b: ViewEffects, FlightLoopEffects and the theme pair are not names any more"
     },
     "effects-seams": {
-      "ceiling": 18,
+      "ceiling": 16,
       "slack": 0,
-      "slice": "M3-b-1b: ChartShapes goes -- CIRCLE2 is DrawBall and SUN is DrawSun"
+      "slice": "M3-b-2b: ViewEffects was in front of an RTS, and FlightLoopEffects had nothing of its own"
     },
     "out-params": {
       "ceiling": 17,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3915,
+      "ceiling": 3911,
       "slack": 0,
-      "slice": "M3-b-1: the markers on SpawnEffects' four methods, which name labels the routines already name"
+      "slice": "M3-b-2b: the markers on the four music seams, the bell and DOVDU19's palette"
     },
     "oracle-test-files": {
       "ceiling": 50,

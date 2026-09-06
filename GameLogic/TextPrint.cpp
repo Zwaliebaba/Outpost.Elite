@@ -331,10 +331,10 @@ namespace Elite
 
     if (_character == 7)
     {
-      // 6502: R5 -- the bell, which is a sound event and so belongs to phase 5.
-      if (m_effects != nullptr)
+      // 6502: R5 -- JSR BEEP, whose carry `dn2`, `R5` and `DK4` all drop.
+      if (m_sound != nullptr)
       {
-        m_effects->Beep();
+        (void)Beep(*m_sound, false);
       }
       return _character;
     }

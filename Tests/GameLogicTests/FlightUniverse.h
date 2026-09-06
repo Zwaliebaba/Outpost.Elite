@@ -128,7 +128,11 @@ namespace GameLogicTests
   };
 
   /*
-   * 6502: DOVDU19 -- the one thing a screen change still reaches outside the universe.
+   * `RecordingView` WAS HERE AND IS NOT ANY MORE (M3-b-2b).
+   *
+   * It counted `DOVDU19`, which on this build is a bare `RTS` -- so the suite was comparing the
+   * port's call against nothing at all, and `ViewChangeTests` asserted the count. The library makes
+   * no call now and the comment at `LOOK1` is what carries the label.
    *
    * It had a `PlaySound` too, until M3-b-2a: `WARP`'s refusal noise was `ViewEffects::PlaySound`
    * and the same `NOISE` that `DashboardEffects` declared, so the port had one routine behind two
@@ -136,15 +140,6 @@ namespace GameLogicTests
    * `Universe::sound` now, and what they write is compared through `SOFLG` and its nine
    * neighbours like every other byte.
    */
-  struct RecordingView final : Elite::ViewEffects
-  {
-    std::vector<std::uint8_t> palettes;
-
-    void SetPalette(std::uint8_t _colour) override
-    {
-      palettes.push_back(_colour);
-    }
-  };
 
   /*
    * The port's whole flight universe, and the `FlightScreen` over it.
@@ -174,7 +169,15 @@ namespace GameLogicTests
    */
   struct Universe : Elite::Universe
   {
-    RecordingView effects; ///< first, because the character printer's bell records into its list
+    /*
+     * 6502: SID -- what the game side of the code writes, which for a flight fixture is nothing.
+     *
+     * `Ports::sid` needs somewhere to point and this is it. `stopat` and `BDENTRY` are the only
+     * routines that reach it, and the suites that run them -- `StartUpTests`, `LaunchTests` --
+     * assert on `Universe::music` rather than on the log, because the player's state is what the
+     * oracle can be compared against and a register write is not (yet: §6.108's harness slice).
+     */
+    Elite::SidWriteLog sid;
 
     /*
      * The real character printer, drawing into the canvas -- `CHPR` is NOT trapped on the oracle's
@@ -184,47 +187,27 @@ namespace GameLogicTests
      * here is checked by.
      */
     /*
-     * `CHPR`'s two seams, wired to the sound list.
+     * `CHPR`'s ONE remaining seam, which is the screen clear.
      *
-     * Character 7 rings the bell, which is `JSR BEEP` and so `NOISE` -- and the flight loop prints
-     * a token that contains one, so a comparison that let the bell fall on the floor would count
-     * one sound fewer than the game on every energy warning.
+     * The bell was the other and is not a seam any more (M3-b-2b): character 7 is `JSR BEEP` and
+     * `BEEP` has been `Elite::Beep` over a `SoundBuffer` since slice 5a, so `TextPrinter` takes the
+     * buffer and rings it. `CHPR` is not trapped on the oracle's side here, so the game's bell
+     * reaches the real `NOISE` and writes `sound_variables` -- and the flight loop prints a token
+     * that contains one, so a port that only counted the call would be one effect short on every
+     * energy warning.
      */
     struct Chars final : Elite::TextEffects
     {
-      Elite::SoundBuffer& sound;
       std::uint32_t cleared = 0;
 
-      explicit Chars(Elite::SoundBuffer& _sound) noexcept
-        : sound(_sound)
-      {
-      }
-
-      /*
-       * 6502: BEEP -- `LDY #sfxbeep / JMP NOISE`, and it RUNS since M3-b-2a.
-       *
-       * It was recorded into the same list `DashboardEffects` pushed to, because `NOISE` was a
-       * seam and the fixtures compared the calls. `CHPR` is not trapped on the oracle's side here,
-       * so the game's bell reaches the real `NOISE` and writes `sound_variables`; a port that only
-       * counted the call would leave the buffer comparison one effect short. The carry is `CHPR`'s
-       * and `BEEP` touches no flag on its way (§6.118), which is why false is passed and the
-       * answer dropped.
-       */
-      void Beep() override
-      {
-        (void)Elite::PlaySoundEffect(sound, SOUND_BEEP_EFFECT, false);
-      }
       void ClearScreen() override
       {
         ++cleared;
       }
     };
 
-    /// 6502: sfxbeep -- what `BEEP` asks `NOISE` for.
-    static constexpr std::uint8_t SOUND_BEEP_EFFECT = 5;
-
-    Chars chars{sound};
-    Elite::TextPrinter glyphs{canvas, text, &chars};
+    Chars chars;
+    Elite::TextPrinter glyphs{canvas, text, &chars, &sound};
     Elite::CharacterPrinter characters{glyphs};
     Elite::TokenPrinter printer{characters};
 
@@ -296,15 +279,15 @@ namespace GameLogicTests
      *
      * It was `Screen()` returning a `FlightScreen` of twenty-seven references, twenty-two of which
      * were the universe's own bytes. What is left is the recordings, and `LoopRecording` supplies
-     * the three a frame needs -- so a fixture that only changes screens passes `sight`/`effects`
-     * for all five and one that runs a frame passes its recorder.
+     * the two a frame needs -- so a fixture that only changes screens passes `unused` for all three
+     * and one that runs a frame passes its recorder.
      */
     UnusedSeams unused;
 
-    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::FlightLoopEffects& _loop,
+    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::SpawnChildEffects& _loop,
                                          Elite::StartUpEffects& _start) noexcept
     {
-      return Elite::Ports{printer, characters, characters, sight,  effects, _drawing, _loop,
+      return Elite::Ports{printer, characters, characters, sight,  _drawing, _loop, sid,
                           extendedPrinter, _start, unused, unused, unused, unused};
     }
 
@@ -321,10 +304,8 @@ namespace GameLogicTests
    * this slice decides. Counted rather than ignored, because `LL164` makes a noise and a
    * comparison that dropped it would agree with a port that had lost the hyperspace sound.
    */
-  struct LoopRecording final : Elite::FlightLoopEffects, Elite::ShipDrawEffects
+  struct LoopRecording final : Elite::SpawnChildEffects, Elite::ShipDrawEffects
   {
-    void StartDockingMusic() override {}
-    void StopDockingMusic() override {}
     bool SpawnChild(std::uint8_t, Elite::ShipType) override
     {
       return true;
@@ -486,6 +467,17 @@ namespace GameLogicTests
      */
     std::uint16_t soflg, socnt, sopr, pulsew, sofrch, sofrq, socr, soatk, sosus, sovch, dnoiz;
 
+    /*
+     * 6502: MUPLA and MULIE -- the music player's own two bytes that a routine outside `Music.cpp`
+     * can reach (M3-b-2b).
+     *
+     * `startbd`, `stopbd`, `startat` and `stopat` run on both machines now, so a fixture that
+     * reaches one has to be able to say whether the two agree on it. The rest of the player --
+     * `BDBUFF`, the pointers, the vibrato -- is `SoundTests`', which drives the tick itself; these
+     * are what the GAME side of the code sets and reads.
+     */
+    std::uint16_t mupla, mulie;
+
     /// Unresolved -- every address zero -- for the one use that needs none: hashing the image,
     /// which reads cells in table order and never their addresses (`Hash(const Universe&)`).
     Where() = default;
@@ -584,6 +576,8 @@ namespace GameLogicTests
       sosus = _oracle.Label("SOSUS");
       sovch = _oracle.Label("SOVCH");
       dnoiz = _oracle.Label("DNOIZ");
+      mupla = _oracle.Label("MUPLA");
+      mulie = _oracle.Label("MULIE");
 
       /*
        * 6502: XX21+2*SST-2 -- the only two bytes of the pointer table the game writes.

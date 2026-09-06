@@ -170,17 +170,13 @@ namespace Outpost
 
   void GameShell::BeepAndPause()
   {
-    Beep();
-    WaitFrames(BEEP_PAUSE_FRAMES);
-  }
-
-  void GameShell::Beep()
-  {
-    // 6502: BEEP -- and every caller on this side (dn2, R5, DK4) drops the carry it returns.
+    // 6502: dn2 -- JSR BEEP and then JSR DELAY, and the beep's carry is dropped as `R5` and `DK4`
+    // drop it. `TextPrinter` rings the bell for `R5` itself since M3-b-2b; this is the other caller.
     if (m_sound != nullptr)
     {
       (void)Elite::Beep(*m_sound, false);
     }
+    WaitFrames(BEEP_PAUSE_FRAMES);
   }
 
   // ---- waiting and the keyboard ------------------------------------------------------------------
@@ -214,24 +210,13 @@ namespace Outpost
 
   // ---- the start sequence -------------------------------------------------------------------------
 
-  void GameShell::StartTheme()
-  {
-    // 6502: startat -- and BDENTRY's writes to the chip go through the output's direct log, so they
-    // land before the interrupt's next frame rather than being lost to it.
-    if (m_music != nullptr && m_audio != nullptr)
-    {
-      Elite::StartTheme(*m_music, m_audio->Direct());
-    }
-  }
-
-  void GameShell::StopTheme()
-  {
-    // 6502: stopat.
-    if (m_music != nullptr && m_sound != nullptr && m_audio != nullptr)
-    {
-      Elite::StopMusic(*m_music, *m_sound, m_audio->Direct());
-    }
-  }
+  /*
+   * `StartTheme` AND `StopTheme` WERE HERE AND ARE NOT ANY MORE (M3-b-2b).
+   *
+   * `startat` and `stopat` are `Elite::StartTheme` and `Elite::StopMusic` over `Universe::music`,
+   * and the start sequence calls them itself through `Ports::sid`. What this object was adding was
+   * the null checks, and the checks were on members that are always bound by the composition root.
+   */
 
   void GameShell::HoldFlightFrame(std::uint8_t _ships)
   {
