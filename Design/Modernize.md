@@ -1223,10 +1223,23 @@ M2-d's; `LL9`'s stages stay one routine until M4.
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M2-a The channel census** | For every workspace field: who writes it, who reads it, and whether any reader reads without writing first — from the tests' `Mirror` lists and a read of each routine. Written into this document as §4.3's table, completed. | The table names every field; no field is "unknown". **Built 2026-09-06** (slice plan and §8 below; `channel_census.py --check` holds it). | 2 |
-| **M2-b Kernel** | `Arith` routines take values and return `Product`/`Quotient`/`SignedSum` structs; `MathWorkspace` parameters removed one routine family at a time (multipliers, dividers, `LL28`, `NORM`, `TIDY`). | Exhaustive oracle sweeps unchanged; `register-params` and the `MathWorkspace` parameter count in the ratchet fall to their floors. **Built 2026-09-06** (slice plan and §8 below; register-params 64 → 22, workspace-params 207 → 151). | 4–5 |
-| **M2-c Geometry and drawing scratch** | `GeometryWorkspace`, `DrawWorkspace`, `ClipState`, `K3Block`, `Projection` and `NumberWorkspace` become stage results or locals, with what M2-b left in `MathWorkspace`; `Projection` outliving `Project` stays and is documented at the one place it matters. Three commits (slice plan above): the line and its callers, the clipper, `LL9`'s frame with the planet and the sun. | `LL9`, planet, sun, stardust and clipper suites green; `workspace-params` at the floor the census names. | 4 |
+| **M2-a The channel census** ✅ | For every workspace field: who writes it, who reads it, and whether any reader reads without writing first — from the tests' `Mirror` lists and a read of each routine. Written into this document as §4.3's table, completed. | The table names every field; no field is "unknown". **Built 2026-09-06** (slice plan and §8 below; `channel_census.py --check` holds it). | 2 |
+| **M2-b Kernel** ✅ | `Arith` routines take values and return `Product`/`Quotient`/`SignedSum` structs; `MathWorkspace` parameters removed one routine family at a time (multipliers, dividers, `LL28`, `NORM`, `TIDY`). | Exhaustive oracle sweeps unchanged; `register-params` and the `MathWorkspace` parameter count in the ratchet fall to their floors. **Built 2026-09-06** (slice plan and §8 below; register-params 64 → 22, workspace-params 207 → 151). | 4–5 |
+| **M2-c Geometry and drawing scratch** ✅ **built 2026-09-06 in three commits (§8)** | `GeometryWorkspace`, `DrawWorkspace`, `ClipState`, `K3Block`, `Projection` and `NumberWorkspace` become stage results or locals, with what M2-b left in `MathWorkspace`; `Projection` outliving `Project` stays and is documented at the one place it matters. The line and its callers, then the clipper, then `LL9`'s frame with the planet and the sun. | `LL9`, planet, sun, stardust and clipper suites green; `workspace-params` 151 → 46 and `MathWorkspace` down to `Q` and `K2`'s bottom byte, which is the floor the census names. | 4 |
 | **M2-d Boundary carries** ✅ **built 2026-09-06 (§4.3.1, §8)** | Every non-kernel `bool _carryIn` walked back to the instruction that decides it, at every call site in the disassembly. Three were passed the wrong value and are fixed; the rest are the routine's operand or an inherited flag the port cannot see, and the parameter is what keeps that assumption at the call site. | Green, with a fixture that reaches `MA47`'s kill and compares `RAND` across it; `carry-params` 31 → 32 with the audit as the reason. | 1 |
+
+**Phase M2 is complete, 2026-09-06.** Five commits over four slices, each green on the suite, the
+M0-c replay and `check_all`. What a routine consumes and produces is now in its signature: the
+arithmetic kernel takes values and answers with structs (M2-b), the drawing takes and returns the
+line, the slope, the circle's radius and the ellipse's axes (M2-c), and every carry that crosses a
+boundary has been walked back to the instruction that sets it (M2-d). Six workspace structs held
+forty-two fields when M2-a counted them and hold thirteen now, each with a verdict the thirteenth
+repository check holds the tree to: two bytes that outlive their writer on purpose (`Q` and `K2`'s
+bottom byte, §8), the dashboard's screen cursor, the short-range chart's `dontclip`, `LL9`'s four
+stage results and `Projection`'s four. The ratchet moved `register-params` 64 → 16 and
+`workspace-params` 207 → 46 across the phase. Three port defects were found on the way and fixed:
+`HLOIN` and `BOX2` writing `T2` where the game writes `T` (M2-c-1), and `MA47`'s three carries into
+`SPIN` and the beep (M2-d).
 
 ### Phase M3 — Ownership
 
