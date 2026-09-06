@@ -1714,6 +1714,27 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-06 — M3-b-3a's fix: `Main.cpp` read an accessor the slice had deleted, and the fifth half
+of `check_outpost.py` is the one that would have said so.** `Outpost::FlightSession::Video()` handed
+the presenter the sprite registers to composite from; it sat inside the block of `SightEffects` and
+`ExplosionEffects` overrides, and the script that cut that block took it too. MSVC said
+`Main.cpp(109): error C2039: 'Video': is not a member of 'Outpost::FlightSession'` and nothing else.
+The accessor is not restored: `Universe::video` is where the registers live since ADR-005 §1, so the
+composition root hands the presenter that, and the flight session has one fewer thing to own.
+
+**IT IS THE FOURTH TIME A SCRIPTED DELETION IN `Outpost/` HAS BROKEN ONLY THE WINDOWS LEG**, and the
+first three each added a half to this check -- `check_members` after M3-a-2, `check_initialisers`
+after M3-a-3, `check_braces` after M3-b-2a. `check_members` resolved `name.member` against the type
+of `name` for `Elite::`-typed variables ONLY, and `flight` is an `Outpost::FlightSession`. So the
+check ran, resolved 124 accesses, and could not see the one that mattered. It runs twice now, over
+both namespaces, and the self-test's second plant is that access restored.
+
+**Two things the app-type pass has to decline, and it declines both.** `CanvasPresenter.cpp`
+declares two different `view`s -- an `Outpost::Viewport` and a `D3D12_SHADER_RESOURCE_VIEW_DESC` --
+and this check keeps one scope per file, so a name also declared with a type it cannot parse is not
+checked at all. The Direct3D headers are not read and never will be; what the check knows is what
+`Outpost/*.h` declares, and everything else is somebody else's compiler's business.
+
 **2026-09-06 — M3-b-3b: `Presenter` arrives, and four of the five seams it was supposed to collapse
 turned out to be forwarding calls.** §4.5 lists `TunnelEffects::ShowFrame`,
 `LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames` and `TradeScreenEffects::ClearToView` as

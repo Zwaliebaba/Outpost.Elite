@@ -106,7 +106,7 @@ namespace
       shell.Attach(recursive, universe.text, characters.state, universe.message);
       shell.AttachExtended(extended);
       shell.AttachFlight(flight, universe.dockedFlag);
-      shell.AttachVideo(flight.Video());                            // ADR-005 §1 -- the sprites composite in Resolve
+      shell.AttachVideo(universe.video);                   // ADR-005 §1 -- the sprites composite in Resolve
       shell.AttachGalaxy(universe.commander.galaxyNumber); // 6502: GCNT, for MT27 and MT28
       shell.AttachSound(audio, universe.sound, universe.music);
 

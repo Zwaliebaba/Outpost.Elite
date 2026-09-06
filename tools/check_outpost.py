@@ -73,9 +73,27 @@ APP_DECLARATION = re.compile(r"\bElite::([A-Za-z_]\w*)\s*(?:<[^;{}()]*>)?\s*[*&]
 
 APP_ACCESS = re.compile(r"\b([A-Za-z_]\w*)\s*(?:\.|->)\s*([A-Za-z_]\w*)")
 
+# The same, for the app's OWN types, which carry no namespace where the app names them. `Outpost::`
+# is optional because `Main.cpp` writes `GameShell shell;` and `Shell.h` writes `Outpost::Window&`.
+OWN_DECLARATION = re.compile(r"\b(?:Outpost::)?([A-Z][A-Za-z_]\w*)\s*(?:<[^;{}()]*>)?\s*[*&]?\s*&?\s*"
+                             r"([a-z_]\w*)\s*(?=[;={,)]|\{)")
+
+# ANY `Type name`, whatever the type is. It exists so the app-type pass can tell an identifier it
+# knows from one it only THINKS it knows: `CanvasPresenter.cpp` declares two different `view`s, an
+# `Outpost::Viewport` and a `D3D12_SHADER_RESOURCE_VIEW_DESC`, and a check with one scope per file
+# would otherwise read the Direct3D one's members against the Viewport's.
+ANY_DECLARATION = re.compile(r"\b([A-Za-z_][\w:]*)\s*(?:<[^;{}()]*>)?\s*[*&]?\s*&?\s*"
+                             r"([a-z_]\w*)\s*(?=[;={,)]|\{)")
+
 # `Elite::Testing` is the test namespace and nothing in the app should reach it; anything nested
 # below a name this finds is checked by its own first segment.
 IGNORED = {"Testing"}
+
+# What `ANY_DECLARATION` matches that is not a type: the words that can stand where one does.
+KEYWORDS = {"return", "const", "static", "constexpr", "inline", "if", "for", "while", "else",
+            "case", "auto", "using", "typedef", "struct", "class", "enum", "namespace", "template",
+            "public", "private", "protected", "virtual", "override", "noexcept", "explicit", "new",
+            "delete", "sizeof", "co_return", "switch", "do", "goto", "friend", "mutable", "operator"}
 
 
 def strip_comments(_text: str) -> str:
@@ -179,7 +197,7 @@ def type_bodies(_text: str):
 
 
 def declared_members(_logic: Path) -> dict[str, set[str]]:
-    """Every member name each GameLogic type has, its bases' included.
+    """Every member name each type in a directory of headers has, its bases' included.
 
     A type declared twice -- a forward declaration and a definition -- unions rather than replaces,
     so a partial parse can only ever ADD members and never take one away. That is the direction a
@@ -208,8 +226,21 @@ def declared_members(_logic: Path) -> dict[str, set[str]]:
     return members
 
 
-def check_members(_sources: list[Path], _members: dict[str, set[str]]) -> tuple[int, list[str]]:
-    """Every `name.member` on an `Elite::Type name` the app declares, against that type's members."""
+def check_members(_sources: list[Path], _members: dict[str, set[str]], _pattern=APP_DECLARATION,
+                  _prefix: str = "Elite::") -> tuple[int, list[str]]:
+    """Every `name.member` on a `Type name` the app declares, against that type's members.
+
+    IT RUNS TWICE, over two namespaces, and the second pass is the one a Windows build asked for.
+    The first checks what the app names on an `Elite::` type -- a member `GameLogic` removed and the
+    app still reads. The second checks what it names on its OWN types, which the first cannot see
+    because `Outpost::FlightSession` carries no `Elite::`: `Main.cpp` read `flight.Video()` for a
+    commit after slice M3-b-3a's scripted deletion took the accessor with the seams around it, and
+    `check_outpost.py` passed every one of its five halves (plan section 8).
+
+    The app-type pass declines to guess in one place the `Elite::` pass need not: a type the parse
+    did not find has no member set, so nothing on a variable of it is checked. That is the same
+    direction as everything else here -- it can only let a bad access through.
+    """
     checked = 0
     wrong: list[str] = []
 
@@ -219,13 +250,21 @@ def check_members(_sources: list[Path], _members: dict[str, set[str]]) -> tuple[
         # One scope per file, and an identifier two declarations disagree about takes the union.
         # Crude, and crude in the safe direction: it can only let a bad access through.
         identifiers: dict[str, set[str]] = {}
-        for match in APP_DECLARATION.finditer(text):
+        for match in _pattern.finditer(text):
             if match.group(1) in _members:
                 identifiers.setdefault(match.group(2), set()).add(match.group(1))
 
+        # A name this file also declares with a type the parse does not know is not checked at all.
+        unknown: set[str] = set()
+        if _pattern is OWN_DECLARATION:
+            for match in ANY_DECLARATION.finditer(text):
+                spelt = match.group(1).rsplit("::", 1)[-1]
+                if spelt not in _members and spelt not in KEYWORDS:
+                    unknown.add(match.group(2))
+
         for match in APP_ACCESS.finditer(text):
             name, member = match.group(1), match.group(2)
-            if name not in identifiers:
+            if name not in identifiers or name in unknown:
                 continue
             allowed: set[str] = set()
             for owner in identifiers[name]:
@@ -233,7 +272,7 @@ def check_members(_sources: list[Path], _members: dict[str, set[str]]) -> tuple[
             checked += 1
             if member not in allowed:
                 owners = "/".join(sorted(identifiers[name]))
-                wrong.append(f"  FAIL  {source.name} reads {name}.{member}, and Elite::{owners} has no such member")
+                wrong.append(f"  FAIL  {source.name} reads {name}.{member}, and {_prefix}{owners} has no such member")
 
     return checked, wrong
 
@@ -372,6 +411,36 @@ def self_test() -> int:
             print(line)
         return 1
 
+    # ---- the app-type pass, planted with the access a Windows build found --------------------
+    #
+    # `Main.cpp` read `flight.Video()` for one commit after slice M3-b-3a's scripted deletion took
+    # the accessor out with the seams around it. Five halves of this check passed it; only MSVC
+    # said `error C2039`. So the plant is that access, restored.
+    ownMembers = declared_members(APP)
+    if "FlightSession" not in ownMembers:
+        print("FAIL  the member map did not parse Outpost::FlightSession")
+        return 1
+
+    with tempfile.TemporaryDirectory() as folder:
+        planted = Path(folder) / "Planted.cpp"
+        planted.write_text("void f() { Outpost::FlightSession flight; (void)flight.Video(); }\n", encoding="utf-8")
+        ownChecked, ownWrong = check_members([planted], ownMembers, OWN_DECLARATION, "Outpost::")
+
+    if ownChecked == 0:
+        print("FAIL  the self-test's app-type access was not resolved at all")
+        return 1
+    if not ownWrong:
+        print("FAIL  the self-test's missing app member was not reported")
+        return 1
+
+    realOwn = check_members(sorted(list(APP.glob("*.cpp")) + list(APP.glob("*.h"))), ownMembers,
+                            OWN_DECLARATION, "Outpost::")[1]
+    if realOwn:
+        print("FAIL  the tree itself does not pass the app-type member check")
+        for line in realOwn:
+            print(line)
+        return 1
+
     # ---- and the initialiser check, planted the same way -------------------------------------
     with tempfile.TemporaryDirectory() as folder:
         planted = Path(folder) / "Planted.cpp"
@@ -422,8 +491,9 @@ def self_test() -> int:
             print(line)
         return 1
 
-    print(f"OK    self-test passed: a planted member, a planted initialiser and a planted missing "
-          f"brace were caught, {len(members)} types parsed, the tree is clean")
+    print(f"OK    self-test passed: a planted Elite:: member, a planted Outpost:: member, a planted "
+          f"initialiser and a planted missing brace were caught, {len(members) + len(ownMembers)} types "
+          f"parsed, the tree is clean")
     return 0
 
 
@@ -472,6 +542,12 @@ def main() -> int:
     members = declared_members(LOGIC)
     membersChecked, badMembers = check_members(sources, members)
     wrong.extend(badMembers)
+
+    # ---- and the same for the app's OWN types, which the pass above cannot see ----------------
+    ownMembers = declared_members(APP)
+    ownChecked, badOwn = check_members(sources, ownMembers, OWN_DECLARATION, "Outpost::")
+    membersChecked += ownChecked
+    wrong.extend(badOwn)
 
     # ---- and every name the app's own constructors initialise -------------------------------
     initialisersChecked, badInitialisers = check_initialisers(sources)
