@@ -1454,3 +1454,11 @@ seeded, and the scripted flight's first kill seeds one now -- and the journal en
 `mutants` 65 → 72: the `cloud-seed` unit, a selftest and six flags, one per decision the fix made
 (rule 3); the tally is the next run's to report, because `mutate.py` builds HEAD and the fix is
 uncommitted as this is written.
+
+**2026-09-06 — M1-d left an indexed load running past the typed hold (plan §6.158).** `OUCH`'s
+`QQ20,X` reaches the five fittings after the seventeen goods by design, and `cargoHold[slot]` on a
+`std::array<std::uint8_t, 17>` is an out-of-range subscript for all five: Debug asserts, Release
+reads the right bytes by the accident of layout, and CI runs Release. `Commander::HoldOrFitting`
+is the typed form of the same load. Rule 2's "every widening happens inside a helper" has a
+sibling: every access that ran past a byte array's end on purpose needs a named helper too, and
+the Debug configuration is the check that finds the ones a slice missed.

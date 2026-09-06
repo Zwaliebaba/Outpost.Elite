@@ -175,6 +175,35 @@ namespace Elite
 
     [[nodiscard]] constexpr bool operator==(const Commander&) const noexcept = default;
 
+    /*
+     * 6502: QQ20,X for X in 0 to 21 -- the hold, and then the five fittings that follow it in the
+     * block: ECM, BST, BOMB, ENGY, DKCMP.
+     *
+     * `OUCH` picks a slot under 22 and empties `QQ20,X`, which is a cargo type below seventeen and
+     * a piece of equipment from seventeen on -- the same indexed load reaching past the array's end
+     * into the bytes laid out after it. While the commander was seventy-seven bytes that was one
+     * subscript; with the hold a typed array it is this, because `cargoHold[17]` is not a fitting
+     * but a bounds assertion in Debug and whatever sits there in Release (plan §6.158). The caller
+     * has already tested `< 22`; a slot at or past it lands on the docking computer rather than on
+     * memory this struct does not model.
+     */
+    [[nodiscard]] constexpr std::uint8_t& HoldOrFitting(std::uint8_t _slot) noexcept
+    {
+      switch (_slot)
+      {
+      case 17u:
+        return ecm;
+      case 18u:
+        return fuelScoops;
+      case 19u:
+        return energyBomb;
+      case 20u:
+        return energyUnit;
+      default:
+        return (_slot < cargoHold.size()) ? cargoHold[_slot] : dockingComputer;
+      }
+    }
+
     /// 6502: the TP layout -- the seventy-seven bytes SVE writes and DFAULT reads.
     [[nodiscard]] constexpr std::array<std::uint8_t, COMMANDER_BLOCK_SIZE> ToBytes() const noexcept
     {

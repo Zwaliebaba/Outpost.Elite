@@ -175,8 +175,11 @@ namespace Elite
       return;
     }
 
+    // 6502: QQ20,X -- and X runs to 21, past the seventeen goods into the five fittings after
+    // them. `cargoHold[slot]` was that until M1-d typed the hold, and then it was an out-of-range
+    // subscript for every fitting `OUCH` could break (plan §6.158).
     Commander& commander = _screen.commander;
-    std::uint8_t& held = commander.cargoHold[slot];
+    std::uint8_t& held = commander.HoldOrFitting(slot);
 
     // 6502: LDA QQ20,X / BEQ out -- nothing there to break.
     if (held == 0u)

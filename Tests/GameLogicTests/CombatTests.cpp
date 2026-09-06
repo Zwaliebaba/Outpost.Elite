@@ -315,9 +315,9 @@ namespace GameLogicTests
               // A hold with something in every slot, and a generator whose X lands inside it often
               // enough that `OUCH` actually breaks things -- `Seed`'s own state always picks slot
               // 34, which is past the end of the block and so never breaks anything at all.
-              for (std::size_t index = 0; index < 22u; ++index)
+              for (std::uint8_t index = 0; index < 22u; ++index)
               {
-                universe.commander.cargoHold[index] = 6u;
+                universe.commander.HoldOrFitting(index) = 6u; // 6502: QQ20 through DKCMP
               }
               universe.rng.SetState({0u, static_cast<std::uint8_t>((damage + shield + banks + shape) % 30u), 0u, 0u});
 
@@ -444,9 +444,9 @@ namespace GameLogicTests
                 universe.message.delay = already;
                 universe.rng.SetState({0u, slot, 0u, toss});
 
-                for (std::size_t index = 0; index < 22u; ++index)
+                for (std::uint8_t index = 0; index < 22u; ++index)
                 {
-                  universe.commander.cargoHold[index] = held;
+                  universe.commander.HoldOrFitting(index) = held; // 6502: QQ20 through DKCMP
                 }
 
                 Cpu6502 cpu = oracle.Fresh();
@@ -476,8 +476,7 @@ namespace GameLogicTests
                                    (where + L": commander byte " + std::to_wstring(byte)).c_str());
                 }
 
-                const std::uint8_t after =
-                  (slot < 22u) ? universe.commander.cargoHold[slot] : held;
+                const std::uint8_t after = (slot < 22u) ? universe.commander.HoldOrFitting(slot) : held;
                 emptied += (held != 0u && after == 0u) ? 1u : 0u;
                 suppressed += (already != 0u && after == held) ? 1u : 0u;
                 ++compared;
