@@ -39,7 +39,7 @@
       "slice": "M3-a-3: Main.cpp holds no state the universe owns and builds no argument list"
     },
     "outpost-elite-names": {
-      "ceiling": 180,
+      "ceiling": 184,
       "slack": 0,
       "slice": "M3-b-1b: the app no longer names ChartShapes or the chart routines' pieces"
     },

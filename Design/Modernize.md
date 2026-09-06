@@ -303,7 +303,7 @@ the rest existed: "the struct is the argument list".
 <!--count:main-lines-->1,198 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->180 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->184 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->18 abstract classes in
@@ -1692,13 +1692,33 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-06 — M3-b-2a's fix: one brace, sixteen errors, and a check that would have caught it.**
+The script that deleted `FlightSession`'s three sound methods began its cut at the `/*` above them,
+which belonged to `SyncVideoRegisters`'s BODY, and took the body and its closing brace with it. The
+Linux leg cannot see that -- `Outpost/` compiles on the Windows job alone (R15) -- and the file
+still parsed far enough for `check_outpost.py` to read its names, its arities, its members and its
+initialisers and pass all four. MSVC reported sixteen `local function definitions are illegal` and
+one `C1075: '{': no matching token found`, which is one missing brace wearing seventeen costumes.
+
+**`outpost-elite-names` was 180 and the tree's real number is 184.** The four names the deleted body
+used went with it, so the count the slice recorded was measured on a broken tree. The ceiling is
+corrected upward to 184 rather than left at a figure no working tree can reach -- nothing that was
+removed came back, a miscount is being undone -- and M3-b-2a's true saving is three names, not seven.
+
+**`check_outpost.py` counts delimiters now.** It is the cheapest half of a parse and it is the
+second time a scripted deletion has unbalanced an app file that only CI could see; `check_members`
+and `check_initialisers` were each added after a Windows failure for the same reason. Strings,
+character literals and comments come out first, because a brace inside any of them is not a brace --
+and the self-test plants exactly that, a `"}"` and a `'{'` around a function whose closing brace is
+missing, so a check that counted them would pass the planted file and fail the real ones.
+
 **2026-09-06 — M3-b-2a: `DashboardEffects` goes, and the sound system was deciding a ship's energy
 byte behind it.** `PlaySound` was `NOISE`, `PlaySoundPitched` was `NOISE2` and `StopSound` was
 `NOISEOFF` -- three routines `SoundEffects.cpp` has had since slice 5a. `ViewEffects::PlaySound` was
 the SAME routine declared a second time and went with them. `Universe` gains `SoundBuffer sound`,
 which is where the seam's reason went: the SID is written from a raster interrupt and not from the
 game, `NOISE` fills a buffer and `SOINT` drains it, and the port had nowhere to keep the buffer
-between them. It is memory, not a port. `effects-seams` 19 → 18, `outpost-elite-names` 187 → 180,
+between them. It is memory, not a port. `effects-seams` 19 → 18, `outpost-elite-names` 187 → 184,
 `carry-params` 32 → 30.
 
 **`.MA14 STA INWK+35` STORES WHAT `NOISE2` LEFT IN A, AND THAT IS NOT THE SUSTAIN.** The dead
