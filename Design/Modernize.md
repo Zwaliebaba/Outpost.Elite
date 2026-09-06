@@ -1723,6 +1723,40 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-06 — M3-b-3d's fix: a member reached through an expression, and a seventh half for
+`check_outpost.py`.** `Main.cpp` called `_game.shell.FlushKeyboard()` in the market-price case, and
+the method is `Keyboard::Flush` since the slice that renamed it. Six halves of the check passed the
+file: `MarketPrice` reads through TWO hops and `APP_ACCESS` sees `_game.shell` and
+`shell.FlushKeyboard` as unrelated pairs, neither of which resolves — `shell` is not a variable that
+file declares. `Main.cpp(401,19): error C2039` from the Windows job and from nothing else, which is
+R15 for the sixth time.
+
+**So the check walks the chain now, and the walk is the point rather than the pattern.** `_game` is
+declared `Game& _game`; `Game::shell` is a `GameShell`; `GameShell` is a type whose members are
+known. Three lookups, each of which may fail — and a failure ends the walk rather than reporting
+one, so `_game.flight.Loop().options` is checked as far as `flight` and no further. Two things had
+to change to make it reach anything: the member map gains each member's own TYPE, and it reads
+`Outpost/*.cpp` as well as the headers, because `Main.cpp`'s composition struct is declared in an
+anonymous namespace in the file that walks it. 292 chains resolved on the tree as it stands, where
+the flat member pass resolves 227 single hops.
+
+**The self-test's plant is a chain whose FIRST hop is good.** A check that reported the whole
+expression whenever any part of it failed to resolve would report every call in `Main.cpp`; one
+that stopped at the first hop would never reach the bad one. So the plant is `_it.held.kept` beside
+`_it.held.gone` and the test requires that exactly the second be named. `CanvasPresenter.cpp`'s two
+`view`s are declined here as they are by the flat pass — one scope per file cannot tell an
+`Outpost::Viewport` from a `D3D12_SHADER_RESOURCE_VIEW_DESC`.
+
+**Six Windows-only breaks, six halves, and the pattern in them is worth stating.** `check_members`
+after M3-a-2, `check_initialisers` after M3-a-3, `check_braces` after M3-b-2a, the app-type pass
+after M3-b-3a, `check_switch_scopes` after M3-b-3c and this after M3-b-3d. Every one was found by
+MSVC and every one was cheap to catch once it had been seen; none of them was predicted. That is
+what R15's mitigation actually looks like — not a check written in advance, but a check written the
+same afternoon as the break, which is only affordable because the slices are small.
+
+Mutants re-run on the committed tree: 72, 68 caught, 4 survived, the four recorded equivalents.
+Rule 3 met for M3-b-3d.
+
 **2026-09-06 — M3-b-3d: `Keyboard` lands, and `RDKEY` turns out to be one line of platform under
 fifty of game.** The third of §4.5's four ports replaces `KeySource`, `LineEntryEffects` and
 `StartUpEffects::ScanTitleKeys`, and it does NOT have the `Scan(KeyLogger&)` the table asked for.

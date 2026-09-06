@@ -398,7 +398,7 @@ namespace
 
     case Elite::KeyAction::MarketPrice:
       _game.shell.ClearToView(Elite::BUY_CARGO_VIEW); // 6502: TT167's TRADEMODE -- TT66 and FLKB
-      _game.shell.FlushKeyboard();
+      _game.shell.Flush();
       Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.universe.text, _game.universe.current.economy,
                                _game.universe.market, false);
       return;
