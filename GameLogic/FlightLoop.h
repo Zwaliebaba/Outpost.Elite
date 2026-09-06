@@ -183,7 +183,9 @@ namespace Elite
    * kept the test inside the loop would agree with the game on every input and be a different
    * routine.
    */
-  void SpawnItems(SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count) noexcept;
+  /// Returns the exit carry, which is the caller's own when the count is zero and the last
+  /// `SFS1`'s -- `NWSHP`'s "was it made" -- otherwise. `SPIN` and `.nosp` both read it (M2-d).
+  bool SpawnItems(SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count, bool _carryIn) noexcept;
 
   /*
    * 6502: SPIN -- a destroyed ship drops some of its cargo, or does not.
@@ -198,8 +200,9 @@ namespace Elite
    * The port had it the obvious way round and the oracle disagreed on the first blueprint whose
    * byte 0 differed from the roll (§6.74).
    */
-  void SpawnDebris(Rng& _rng, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type,
-                   bool _carryIn) noexcept;
+  /// Returns the exit carry: `DORND`'s when the roll drops nothing, else `SPIN2`'s. `MA47` runs
+  /// the second `JSR SPIN` on what the first one left (M2-d).
+  bool SpawnDebris(Rng& _rng, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept;
 
   /*
    * 6502: KY12 to KY20 -- the flight keys the loop reads that `DOKEY` does not.

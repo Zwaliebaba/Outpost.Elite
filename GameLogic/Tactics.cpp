@@ -485,7 +485,12 @@ namespace Elite
              */
             if (Has(screen.bubble.blocks[target].ai, AiBit::HasEcm))
             {
-              StartEcm(screen.canvas, screen.status, _loop.effects, false);
+              // The carry is SET here, and `JMP ECBLB2` touches nothing on the way: `BCS` is only
+              // taken when `LSR A` shifted a 1 out, which is the bit this branch tested. `ECBLB2`
+              // hands it straight to `NOISE`, whose only use for it is the value it returns when
+              // the sound is switched off -- so it is unobservable, and the port passed `false`
+              // until M2-d read the branch (§8).
+              StartEcm(screen.canvas, screen.status, _loop.effects, true);
               return true;
             }
           }

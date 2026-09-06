@@ -54,9 +54,9 @@
       "slice": "M0-a"
     },
     "carry-params": {
-      "ceiling": 31,
+      "ceiling": 32,
       "slack": 0,
-      "slice": "death-sequence fix 2026-09-06 (plan 6.157): EE51, EE55 and LL9 carry their input flag"
+      "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is §4.3.1)"
     },
     "mutants": {
       "ceiling": 72,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3924,
+      "ceiling": 3927,
       "slack": 0,
-      "slice": "M2-c-3: every byte a local or a value replaced carries its 6502 name"
+      "slice": "M2-d: the three carries the audit corrected carry their instructions"
     },
     "oracle-test-files": {
       "ceiling": 50,
