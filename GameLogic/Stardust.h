@@ -66,46 +66,37 @@ namespace Elite
   // ---- the wrappers, which are one or two instructions and a fall-through -------------------
   //
   // Seven routines in the ledger, and none of them is more than four bytes of setup before it runs
-  // into something already ported. They are functions here rather than inlined because the ledger
-  // counts them and because each is a named entry point the oracle can be called at (§6.20).
+  // into something already ported. Four are functions here because each is a named entry point the
+  // oracle can be called at (§6.20); the other three -- `MLS2`, `MUT1` and `MUT2` -- were nothing
+  // but "(S R) = XX(1 0)" in front of a multiply, and since M2-b the multiply takes its addend as a
+  // value, so they are the `SignMag16{xx, xxNext}` at each of their call sites in the movers.
 
-  /// 6502: DV41 -- Q = A, then (P R) = DELTA / Q through `DVID4`.
-  [[nodiscard]] std::uint8_t DivideSpeedBy(MathWorkspace& _math, const FlightState& _flight, std::uint8_t _a) noexcept;
+  /// 6502: DV41 -- Q = A, then (P R) = DELTA / Q through `DVID4`: the whole part and the fraction,
+  /// and the fraction is what comes back in A.
+  [[nodiscard]] ScaledDivision DivideSpeedBy(const FlightState& _flight, std::uint8_t _divisor) noexcept;
 
   /// 6502: DV42 -- the same for a particle's own distance.
-  [[nodiscard]] std::uint8_t DivideSpeedByDistance(MathWorkspace& _math, const FlightState& _flight, const Stardust& _dust,
-                                                   std::uint8_t _at) noexcept;
+  [[nodiscard]] ScaledDivision DivideSpeedByDistance(const FlightState& _flight, const Stardust& _dust, std::uint8_t _at) noexcept;
 
   /// 6502: MLU1 -- Y1 = SY, then (A P) = |SY| * Q through `MLU2`. The carry is part of the answer:
   /// the front view adds `SYL` to it and the rear view subtracts, neither with a `CLC` or a `SEC`.
-  [[nodiscard]] WideResult MultiplyByHeight(MathWorkspace& _math, DrawWorkspace& _draw, const Stardust& _dust, std::uint8_t _at) noexcept;
+  [[nodiscard]] Product MultiplyByHeight(DrawWorkspace& _draw, const Stardust& _dust, std::uint8_t _at, std::uint8_t _multiplier) noexcept;
 
-  /// 6502: MLS1 -- P = ALP1, then `MULTS`. And `MULTS-2`, which is the same without the `LDX`,
-  /// reached by the movers with the multiplier already in X.
-  [[nodiscard]] std::uint8_t MultiplyByRoll(MathWorkspace& _math, const FlightState& _flight, std::uint8_t _a) noexcept;
-  [[nodiscard]] std::uint8_t MultiplyScaledBy(MathWorkspace& _math, std::uint8_t _x, std::uint8_t _a) noexcept;
-
-  /*
-   * 6502: MLS2 -- (S R) = XX(1 0), then `MLS1`. And MUT1 and MUT2 -- R = XX, and S = XX+1 as well,
-   * then `MULT1`.
-   *
-   * These three are in this file and take no `Stardust`, which is not a contradiction. Their only
-   * callers in the whole build are `STARS1` and `STARS6`, so this is where they belong; the bytes
-   * they read are shared with the sun, so `MathWorkspace` is what they take. Where a routine lives
-   * and what it reads are separate questions and the ledger has conflated them seven times now.
-   */
-  [[nodiscard]] std::uint8_t MultiplyPositionByRoll(MathWorkspace& _math, const FlightState& _flight, std::uint8_t _a) noexcept;
-  [[nodiscard]] std::uint8_t MultiplyPosition(MathWorkspace& _math, std::uint8_t _a) noexcept;
-  [[nodiscard]] std::uint8_t MultiplyPositionSigned(MathWorkspace& _math, std::uint8_t _a) noexcept;
+  /// 6502: MLS1 -- P = ALP1, then `MULTS`. (6502: MULTS-2 is the same without the `LDX`, reached by
+  /// the movers with the multiplier already in X -- which is `MultiplyScaled` called directly.)
+  [[nodiscard]] Product MultiplyByRoll(const FlightState& _flight, std::uint8_t _value) noexcept;
 
   /*
    * 6502: PIX1 -- `ADD`, keep the answer as the particle's new y, and plot it.
    *
+   * `_value` is (A P) and `_addend` is (S R), as `ADD` takes them: the movers hand it the pitch
+   * or the roll over a zero low byte, and the particle's y.
+   *
    * The ledger marked this ported with the rest of the pixel routines in slice 1d-a and it was not
    * (§6.41): it writes `SYL`, and the stardust arrays did not exist then.
    */
-  void PlotStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Stardust& _dust, std::uint8_t _at,
-                    std::uint8_t _a) noexcept;
+  void PlotStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Stardust& _dust, std::uint8_t _at, SignMag16 _value,
+                    SignMag16 _addend) noexcept;
 
   /*
    * 6502: FLIP -- swap every speck's x and y, which reflects the whole field in the line x = y,

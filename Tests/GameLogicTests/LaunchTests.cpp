@@ -1334,11 +1334,18 @@ namespace GameLogicTests
         Assert::IsTrue(port->Step() == Elite::LoopOutcome::Continued, L"flying");
       }
 
+      /*
+       * The checks RECORD their first failure and the test asserts it after `Die` returns: this
+       * callback is reached from `noexcept` code, and an assertion that throws from inside it ends
+       * the process rather than the test -- which is what the mutation harness saw when the cloud's
+       * vertex count was zeroed (the run aborted with no summary, on both runners' shims).
+       */
       struct Watching final : Elite::TunnelEffects
       {
         FlightPort& port;
         std::vector<std::uint8_t> cells;
         std::uint32_t frames = 0;
+        std::wstring failure; // the first frame that went wrong, and how
 
         explicit Watching(FlightPort& _port) noexcept
           : port(_port)
@@ -1348,6 +1355,10 @@ namespace GameLogicTests
         void ShowFrame() override
         {
           ++frames;
+          if (!failure.empty())
+          {
+            return; // the first failure is the one worth reading
+          }
           const std::wstring where = L"death frame " + std::to_wstring(frames);
 
           for (std::size_t slot = 0; slot < port.universe.bubble.slots.size(); ++slot)
@@ -1363,8 +1374,11 @@ namespace GameLogicTests
               continue; // a cloud's byte 0 is its size, not a line count
             }
             const std::uint8_t allowed = Elite::BlueprintOf(Elite::TypeOf(type))->heapBytes;
-            Assert::IsTrue(port.heap.Read(piece.heap) <= allowed,
-                           (where + L": slot " + std::to_wstring(slot) + L" has more on its heap than its blueprint allows").c_str());
+            if (port.heap.Read(piece.heap) > allowed)
+            {
+              failure = where + L": slot " + std::to_wstring(slot) + L" has more on its heap than its blueprint allows";
+              return;
+            }
           }
 
           const auto screen = port.universe.canvas.Screen();
@@ -1386,8 +1400,12 @@ namespace GameLogicTests
             {
               continue;
             }
-            Assert::AreEqual(cells[offset], screen[at],
-                             (where + L": screen RAM byte " + std::to_wstring(at) + L" outside the space view changed").c_str());
+            if (cells[offset] != screen[at])
+            {
+              failure = where + L": screen RAM byte " + std::to_wstring(at) + L" outside the space view changed -- was " +
+                        std::to_wstring(cells[offset]) + L", is " + std::to_wstring(screen[at]);
+              return;
+            }
           }
         }
       };
@@ -1395,6 +1413,7 @@ namespace GameLogicTests
       Watching watching(*port);
       Elite::Die(port->loop, *port, &watching);
 
+      Assert::IsTrue(watching.failure.empty(), watching.failure.c_str());
       Assert::AreEqual<std::uint32_t>(Elite::DEATH_FRAMES + 1u, watching.frames, L"every frame of the sequence was shown");
     }
   };

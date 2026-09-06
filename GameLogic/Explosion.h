@@ -123,7 +123,8 @@ namespace Elite
     std::uint8_t low = 0;  ///< 6502: X
   };
 
-  [[nodiscard]] ExplosionOffset OffsetByCloud(MathWorkspace& _math, Rng& _rng, std::uint8_t _a) noexcept;
+  /// `_high` is A, the vertex's high byte; `_low` is R and `_size` is Q, which the caller staged.
+  [[nodiscard]] ExplosionOffset OffsetByCloud(Rng& _rng, std::uint8_t _high, std::uint8_t _low, std::uint8_t _size) noexcept;
 
   /*
    * 6502: PTCLS -- draw one frame of the cloud, and PTCLS2 -- the same with the burst sprite.

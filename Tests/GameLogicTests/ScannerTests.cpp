@@ -518,8 +518,7 @@ namespace GameLogicTests
               Assert::IsTrue(run.completed, L"TAS2 returned");
 
               Elite::DrawWorkspace draw;
-              Elite::MathWorkspace math;
-              Elite::NormaliseAxes(axes, draw, math);
+              (void)Elite::NormaliseAxes(axes, draw);
 
               const std::wstring where = Widen("TAS2 highs " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z) +
                                                " variant " + std::to_string(variant));
@@ -573,16 +572,12 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(sps2, 20'000);
           Assert::IsTrue(run.completed, L"SPS2 returned");
 
-          Elite::MathWorkspace math;
-          math.q = 0x5Au;
-          const Elite::CompassOffset offset = Elite::ScaleToCompass(math, static_cast<std::uint8_t>(value));
+          const Elite::CompassOffset offset = Elite::ScaleToCompass(static_cast<std::uint8_t>(value));
 
           const std::wstring where = Widen("SPS2(" + std::to_string(value) + ", carry " + std::to_string(carryIn ? 1 : 0) + ")");
           Assert::AreEqual(cpu.x, offset.offset, (where + L": X").c_str());
           Assert::AreEqual(cpu.y, offset.sign, (where + L": Y").c_str());
           Assert::AreEqual(cpu.c, offset.carry, (where + L": the exit carry").c_str());
-          Assert::AreEqual(cpu.memory[at.p], math.p, (where + L": P").c_str());
-          Assert::AreEqual(cpu.memory[at.q], math.q, (where + L": Q").c_str());
           carried += offset.carry ? 1u : 0u;
         }
       }
@@ -644,8 +639,7 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"SPS1 returned");
 
         Elite::DrawWorkspace draw;
-        Elite::MathWorkspace math;
-        Elite::LoadPlanetAxes(bubble, axes, draw, math);
+        Elite::LoadPlanetAxes(bubble, axes, draw);
 
         const std::wstring where = Widen("SPS1 seed " + std::to_string(seed));
         for (std::size_t byte = 0; byte < 10u; ++byte)
@@ -710,8 +704,7 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"SPS4 returned");
 
         Elite::DrawWorkspace draw;
-        Elite::MathWorkspace math;
-        Elite::LoadStationAxes(bubble, axes, draw, math);
+        Elite::LoadStationAxes(bubble, axes, draw);
 
         const std::wstring where = Widen("SPS4 seed " + std::to_string(seed));
         for (std::size_t byte = 0; byte < 10u; ++byte)

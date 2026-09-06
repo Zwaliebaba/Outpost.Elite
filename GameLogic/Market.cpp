@@ -175,20 +175,19 @@ namespace Elite
   {
     // 6502: JSR MULTU -- (A P) = P * Q. Which operand is which does not matter to the product, and
     // the callers do not agree on it either.
-    MathWorkspace work;
-    work.p = _price;
-    work.q = _quantity;
-    std::uint8_t high = MultiplyUnsigned(work).high;
+    const Product product = MultiplyUnsigned(_price, _quantity);
+    std::uint8_t high = product.high;
+    std::uint8_t low = product.low;
 
     // 6502: GC2 -- ASL P / ROL A, twice.
     for (int shift = 0; shift < 2; ++shift)
     {
-      const ShiftResult low = RotateLeft(work.p, false);
-      work.p = low.value;
-      high = RotateLeft(high, low.carry).value;
+      const ShiftResult doubled = RotateLeft(low, false);
+      low = doubled.value;
+      high = RotateLeft(high, doubled.carry).value;
     }
 
-    return static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | work.p);
+    return static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | low);
   }
 
   bool CargoFits(const Commander& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept

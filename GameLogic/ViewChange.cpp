@@ -444,14 +444,13 @@ namespace Elite
     }
 
     // 6502: .WA2 LDA #&81 / STA S / STA R / STA P -- &81 is -1 in sign-magnitude with the low bit
-    // set, so `ADD` subtracts the same fixed amount from each body's z.
-    _screen.math.s = 0x81u;
-    _screen.math.r = 0x81u;
-    _screen.math.p = 0x81u;
+    // set, so `ADD` subtracts the same fixed amount from each body's z: (A P) is the sign byte
+    // over &81, and (S R) is &81 twice.
+    constexpr SignMag16 WARP_STEP{0x81u, 0x81u};
 
     // 6502: LDA K%+8 / JSR ADD / STA K%+8, and the same for the sun.
-    _screen.bubble.blocks[0].z.sgn = AddSigned(_screen.math, _screen.bubble.blocks[0].z.sgn).high;
-    _screen.bubble.blocks[1].z.sgn = AddSigned(_screen.math, _screen.bubble.blocks[1].z.sgn).high;
+    _screen.bubble.blocks[0].z.sgn = AddSigned(SignMag16{0x81u, _screen.bubble.blocks[0].z.sgn}, WARP_STEP).high;
+    _screen.bubble.blocks[1].z.sgn = AddSigned(SignMag16{0x81u, _screen.bubble.blocks[1].z.sgn}, WARP_STEP).high;
 
     /*
      * 6502: LDA #1 / STA QQ11 / STA MCNT / LSR A / STA EV / LDX VIEW / JMP LOOK1.

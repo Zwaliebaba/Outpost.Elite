@@ -399,13 +399,13 @@ namespace Elite
     return AddDebris(_bubble, _work, _shipType, _speed, carry, _blueprint); // 6502: no JSR -- a fall into `fq1`
   }
 
-  void MoveShipAlongAxis(Ship& _work, MathWorkspace& _math, std::uint8_t _amount, std::uint8_t _axis) noexcept
+  void MoveShipAlongAxis(Ship& _work, std::uint8_t _amount, std::uint8_t _axis) noexcept
   {
     // 6502: ASL A / STA R / LDA #0 / ROR A / JMP MVT1 -- R is the doubled magnitude and A the sign.
-    _math.r = static_cast<std::uint8_t>(_amount << 1u);
+    const std::uint8_t doubled = static_cast<std::uint8_t>(_amount << 1u);
     const std::uint8_t sign = static_cast<std::uint8_t>((_amount & 0x80u) != 0u ? 0x80u : 0x00u);
 
-    AddToShipCoordinate(_work, _math, sign, _axis, false);
+    AddToShipCoordinate(_work, sign, doubled, _axis, false);
   }
 
   NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent, ShipType _parentType,
@@ -427,9 +427,9 @@ namespace Elite
 
       // 6502: LDX #0 / LDA INWK+10 / JSR SFS2, and twice more -- out along the station's own axes,
       // so a ship leaves through the slot rather than out of the middle of the hull.
-      MoveShipAlongAxis(_work, _math, _work.nose.x.hi, 0u);
-      MoveShipAlongAxis(_work, _math, _work.nose.y.hi, 3u);
-      MoveShipAlongAxis(_work, _math, _work.nose.z.hi, 6u);
+      MoveShipAlongAxis(_work, _work.nose.x.hi, 0u);
+      MoveShipAlongAxis(_work, _work.nose.y.hi, 3u);
+      MoveShipAlongAxis(_work, _work.nose.z.hi, 6u);
     }
 
     // 6502: .rx LDA T1 / STA INWK+32 / LSR INWK+29 / ASL INWK+29 -- the AI byte, then bit 0 of the

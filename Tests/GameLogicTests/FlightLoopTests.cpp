@@ -183,8 +183,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(mas3, 5'000);
             Assert::IsTrue(run.completed, L"MAS3 returned");
 
-            Elite::MathWorkspace math;
-            const std::uint8_t ours = Elite::SumOfSquares(bubble, math, 0);
+            const std::uint8_t ours = Elite::SumOfSquares(bubble, 0);
 
             const std::wstring where = WidenText("MAS3(" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + ")");
             Assert::AreEqual(cpu.a, ours, where.c_str());
@@ -261,8 +260,7 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(mas1, 5'000);
               Assert::IsTrue(run.completed, L"MAS1 returned");
 
-              Elite::MathWorkspace math;
-              const std::uint8_t ours = Elite::DoubleAndAddCoordinate(work, math, 9, 0);
+              const std::uint8_t ours = Elite::DoubleAndAddCoordinate(work, 9, 0);
 
               const std::wstring where = WidenText("MAS1(low " + std::to_string(low) + ", high " + std::to_string(high) + ", sign " +
                                                    std::to_string(sign) + ", target " + std::to_string(target) + ")");

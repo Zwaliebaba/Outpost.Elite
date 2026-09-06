@@ -40,12 +40,12 @@ namespace Elite
    * The subtraction is `EOR #%10000000` on the other object's sign and then `MVT3`, which ADDS --
    * negate one side and add is how sign-magnitude subtracts. `MVT3` leaves its answer's sign byte
    * in A as well as in `K+3`, and the `STA K3+2,X` right after the call is reading that register;
-   * the port reads `_math.k[3]`, which is the same byte.
+   * the port reads the block `MVT3` hands back, which is the same byte.
    *
-   * `LDY U` after the call restores Y for a caller that wants it, and no caller in this build does.
+   * `STY U / LDX U ... LDY U` parks Y for a caller that wants it back, and no caller in this build
+   * does; the port has no register to park.
    */
-  [[nodiscard]] bool SubtractShipAxis(const Ship& _other, const Ship& _work, K3Block& _axes, MathWorkspace& _math,
-                                      std::uint8_t _at) noexcept;
+  [[nodiscard]] bool SubtractShipAxis(const Ship& _other, const Ship& _work, K3Block& _axes, std::uint8_t _at) noexcept;
 
   /*
    * 6502: VCSUB -- all three axes, so `K3` becomes the vector FROM the other object TO this ship.
@@ -58,10 +58,10 @@ namespace Elite
    */
   /// Returns the carry the LAST of the three `MVT3`s exits with, which `TACTICS` rotates into the
   /// `DORND` at `TA64`: nothing between the two touches the flag (§6.126).
-  [[nodiscard]] bool SubtractShipAxes(const Ship& _other, const Ship& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
+  [[nodiscard]] bool SubtractShipAxes(const Ship& _other, const Ship& _work, K3Block& _axes) noexcept;
 
   /// 6502: VCSU1 -- `VCSUB` with `V` pointing at `K%+NI%`, which is where `NWSPS` puts the station.
-  [[nodiscard]] bool SubtractStationAxes(const Bubble& _bubble, const Ship& _work, K3Block& _axes, MathWorkspace& _math) noexcept;
+  [[nodiscard]] bool SubtractStationAxes(const Bubble& _bubble, const Ship& _work, K3Block& _axes) noexcept;
 
   /*
    * 6502: TAS3 and TAS4 -- the dot product of `XX15` with one of a ship's orientation vectors.
@@ -75,8 +75,7 @@ namespace Elite
    * It ends by falling into `MAD` rather than calling it, so the answer is `MAD`'s (A X) pair:
    * the dot product as a sign-magnitude sixteen-bit value, with the sign in A's bit 7.
    */
-  [[nodiscard]] AddSignedResult DotProductWithShip(const Ship& _block, const DrawWorkspace& _draw, MathWorkspace& _math,
-                                                   std::uint8_t _at) noexcept;
+  [[nodiscard]] AddSignedResult DotProductWithShip(const Ship& _block, const DrawWorkspace& _draw, std::uint8_t _at) noexcept;
 
   /*
    * 6502: TAS6 -- point `XX15` the other way.
