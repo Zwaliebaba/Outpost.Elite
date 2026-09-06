@@ -111,20 +111,21 @@ namespace GameLogicTests
     }
 
     /*
-     * Seven definitions of 64 bytes, and the split between the two macros.
+     * Seven definitions of 64 bytes -- and NOT which of them are multicolour.
      *
-     * `spritp` is written with `SPRITE2` for the four laser sights and the explosion and `SPRITE4`
-     * for the two Trumbles, and nothing in the assembled bytes says which is which -- the VIC-II
-     * carries it in register &1C, which this build never writes. So `FIRST_MULTICOLOUR_DEFINITION`
-     * is a fact transcribed from the source, and this is the assertion that says so out loud rather
-     * than leaving a 5 in a header.
+     * This test used to assert `FIRST_MULTICOLOUR_DEFINITION` was 5, on the reasoning that "nothing
+     * in the assembled bytes says which is which -- the VIC-II carries it in register &1C, which
+     * this build never writes". The second half is false: `COMIRQ1` writes &1C twice a frame from
+     * `santana`, and the whole point of it is to switch the EXPLOSION -- whose definition is
+     * `SPRITE2` -- into multicolour above the raster split and out of it below (§6.155). The macro
+     * a definition was written with is what the artist drew; the register is what the chip shows.
+     * `TheExplosionIsMulticolourAboveTheSplit` in `RasterTests` is the assertion that replaced it.
      */
-    TEST_METHOD(TheDefinitionsAreSevenAndTheLastTwoAreMulticolour)
+    TEST_METHOD(TheDefinitionsAreSevenOfSixtyFourBytes)
     {
       Assert::AreEqual<std::size_t>(Elite::SPRITE_DEFINITION_COUNT * Elite::SPRITE_BYTES, Elite::SPRITE_DEFINITIONS.size(),
                                     L"seven definitions of 64 bytes");
-      Assert::AreEqual<std::size_t>(5u, Elite::FIRST_MULTICOLOUR_DEFINITION,
-                                    L"0-3 are the laser sights and 4 is the explosion, all SPRITE2");
+      Assert::AreEqual<int>(1, Elite::EXPLOSION_SPRITE, L"and sprite 1 is the one the raster split moves");
 
       // 21 rows of three bytes is 63, and the 64th is padding the hardware never reads. Definition
       // 0's is &3A, which the upstream source calls "random workspace noise left over from the BBC

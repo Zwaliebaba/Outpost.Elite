@@ -132,6 +132,7 @@
     <ClCompile Include="NumberTests.cpp" />
     <ClCompile Include="UniverseTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
+    <ClCompile Include="MissionTests.cpp" />
     <ClCompile Include="MarketScreenTests.cpp" />
     <ClCompile Include="StateTokenTests.cpp" />
     <ClCompile Include="NameEntryTests.cpp" />
@@ -163,6 +164,9 @@
     <ClCompile Include="GameLoopTests.cpp" />
     <ClCompile Include="PauseScreenTests.cpp" />
     <ClCompile Include="TacticsTests.cpp" />
+    <ClCompile Include="RasterTests.cpp" />
+    <ClCompile Include="SidRenderTests.cpp" />
+    <ClCompile Include="TrumbleTests.cpp" />
     <ClCompile Include="SpawnTests.cpp" />
     <ClCompile Include="SoundTests.cpp" />
     <!-- The parts of the executable that are decisions rather than API calls, compiled into the
@@ -178,6 +182,9 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\..\Outpost\KeyMap.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\Outpost\SidSynth.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="ChartTests.cpp" />

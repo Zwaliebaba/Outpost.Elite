@@ -81,7 +81,8 @@ namespace Outpost
                m_compass,
                _rng,
                _commander,
-               m_trumbleSprites,
+               m_trumbles,
+               m_video,
                *this,
                *this,
                _view,
@@ -123,8 +124,39 @@ namespace Outpost
 
   void FlightSession::SyncVideoRegisters() noexcept
   {
-    // 6502: LDA abraxas / STA VIC+&18 and LDA caravanserai / STA VIC+&11, once a frame.
-    m_canvas.SetDashboardShown(m_screenState.colourBank == Elite::COLOUR_BANK_DASHBOARD);
+    /*
+     * 6502: COMIRQ1's VIC-II half, BOTH PASSES, once per presented frame (slice 4f).
+     *
+     * The handler runs twice a frame on the real machine -- once at the top of the space view and
+     * once at the top of the dashboard -- and each pass programs the registers for the half below
+     * it. The port has no raster to interrupt, so it runs the same two passes here and keeps what
+     * each of them would have put on the screen; `TickRasterInterrupt` advances `RASTCT` itself, so
+     * two calls are a frame however this one is entered.
+     *
+     * AND THE COUNT MATTERS RATHER THAN BEING TIDY. `BIT BOMB / INC welcome` sits above the split
+     * test, so a burning bomb moves the background colour on EVERY pass: running this once a frame
+     * would halve the flash rate.
+     */
+    const std::uint8_t bomb = m_screen.commander.At(Elite::Field::EnergyBomb); // 6502: BOMB
+    const Elite::RasterRegisters first = Elite::TickRasterInterrupt(m_screenState, bomb);
+    const Elite::RasterRegisters second = Elite::TickRasterInterrupt(m_screenState, bomb);
+
+    const Elite::RasterRegisters& spaceView = first.spaceView ? first : second;
+    const Elite::RasterRegisters& dashboard = first.spaceView ? second : first;
+
+    // 6502: LDA abraxas / STA VIC+&18 -- and &91 is the dashboard's block, which is also the only
+    // state in which its rows are multicolour.
+    m_canvas.SetDashboardShown(dashboard.memoryPointers == Elite::COLOUR_BANK_DASHBOARD);
+    m_canvas.SetBackground(dashboard.background);
+
+    // 6502: moonflower and welcome -- the energy bomb.
+    m_canvas.SetSpaceViewMulticolour((spaceView.control2 & Elite::BITMAP_MODE_MULTICOLOUR) != 0u);
+    m_canvas.SetSpaceViewBackground(spaceView.background);
+
+    // 6502: santana and lotus -- the explosion sprite, which is multicolour and red above the
+    // split and single-colour in colour 0 below it, so it never draws over the dashboard.
+    m_canvas.SetSpriteMulticolour(spaceView.spriteMulticolour, dashboard.spriteMulticolour);
+    m_canvas.SetExplosionColour(spaceView.explosionColour, dashboard.explosionColour);
   }
 
   // ---- the sound ----------------------------------------------------------------------------------
@@ -151,12 +183,6 @@ namespace Outpost
   void FlightSession::StopSound(std::uint8_t _effect)
   {
     Elite::StopSoundEffect(m_sound, _effect); // 6502: NOISEOFF
-  }
-
-  void FlightSession::MoveTrumbles()
-  {
-    // 6502: MVTRIBS -- and it is a CALL written as two jumps (§6.82), so a frame with Trumbles
-    // aboard still runs its other fifteen parts. Phase 4 owns the Trumbles themselves.
   }
 
   void FlightSession::StartDockingMusic()
