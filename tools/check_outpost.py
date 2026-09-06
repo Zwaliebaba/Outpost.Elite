@@ -238,6 +238,80 @@ def check_members(_sources: list[Path], _members: dict[str, set[str]]) -> tuple[
     return checked, wrong
 
 
+def initialiser_lists(_body: str, _name: str) -> list[tuple[int, int]]:
+    """The (start, end) of every `Name(...) : here {` in a class body, as offsets into it.
+
+    A BRACE INITIALISER IS NOT THE BODY, and telling them apart is the whole of this function.
+    `ports{a, b}` opens a brace at depth zero exactly as the constructor's body does, and the first
+    draft stopped there -- so a list whose members were all brace-initialised read as empty and the
+    check passed a tree it should have failed. The difference is what comes immediately before:
+    an initialiser's brace follows its NAME, and the body's follows whitespace.
+    """
+    spans: list[tuple[int, int]] = []
+    for ctor in re.finditer(rf"\b{re.escape(_name)}\s*\([^;{{}}]*\)\s*(?:noexcept\s*)?:", _body):
+        depth = 0
+        for index in range(ctor.end(), len(_body)):
+            char = _body[index]
+            if char in "([":
+                depth += 1
+            elif char in ")]":
+                depth -= 1
+            elif char == "{":
+                if depth == 0 and not (index > 0 and (_body[index - 1].isalnum() or _body[index - 1] == "_")):
+                    spans.append((ctor.end(), index))
+                    break
+                depth += 1
+            elif char == "}":
+                depth -= 1
+    return spans
+
+
+def check_initialisers(_sources: list[Path]) -> tuple[int, list[str]]:
+    """Every name an app constructor's member-initialiser list initialises, against its own members.
+
+    WHY THIS EXISTS, and it is the third answer to the same question. The name check reads
+    `Elite::Name`, the arity check reads a call's arguments, and the member check reads
+    `name.member` -- and none of the three can see a BARE IDENTIFIER, which is what a constructor's
+    initialiser list is made of. M3-a-2 and M3-a-3 each moved a batch of `Outpost::Game`'s members
+    into `Elite::Universe`, each left an initialiser behind naming one that had gone, and each cost
+    a red Windows build several minutes after a push that all fourteen checks had passed
+    (§8, "the Windows job on M3-a-2" and "M3-a-3"). Twice is a pattern.
+
+    It reads only what MSVC reports as C2614 -- "X is not a base or member" -- because that is the
+    part a regex can settle: the initialised NAME is either a member of the type, a base of it, or
+    the type itself (a delegating constructor). What it still cannot see is a bare identifier used
+    as an ARGUMENT inside one of those initialisers, which is C2065 and needs a real parser; the
+    C2614s came with C2065s both times, so catching the one catches the commit.
+    """
+    checked = 0
+    wrong: list[str] = []
+
+    for source in _sources:
+        text = strip_comments(source.read_text(encoding="utf-8", errors="replace"))
+        for name, inherits, body in type_bodies(text):
+            lists = initialiser_lists(body, name)
+
+            # The member set is read from the body with those lists BLANKED OUT, because
+            # `a(1), gone(2)` reads exactly like two method declarations to a regex -- which is how
+            # the first draft of this check declared every initialiser a member of itself.
+            without = body
+            for start, end in lists:
+                without = without[:start] + (" " * (end - start)) + without[end:]
+
+            declared = set(MEMBER_FIELD.findall(without)) | set(MEMBER_METHOD.findall(without))
+            declared |= set(re.findall(r"(?:public|private|protected)?\s*(?:[A-Za-z_]\w*::)?([A-Za-z_]\w*)", inherits))
+            declared.add(name)
+
+            for start, end in lists:
+                for entry in re.finditer(r"(?:^|,)\s*([A-Za-z_]\w*)\s*[({]", body[start:end]):
+                    checked += 1
+                    if entry.group(1) not in declared:
+                        wrong.append(f"  FAIL  {source.name}: {name}'s constructor initialises "
+                                     f"{entry.group(1)}, which is not one of its members or bases")
+
+    return checked, wrong
+
+
 def self_test() -> int:
     """Plant an access that cannot resolve and check the member check says so.
 
@@ -270,7 +344,34 @@ def self_test() -> int:
             print(line)
         return 1
 
-    print(f"OK    self-test passed: a planted member was caught, {len(members)} types parsed, the tree is clean")
+    # ---- and the initialiser check, planted the same way -------------------------------------
+    with tempfile.TemporaryDirectory() as folder:
+        planted = Path(folder) / "Planted.cpp"
+        # A BRACE INITIALISER BEFORE THE BAD ONE, on purpose: `kept{}` opens a brace at depth zero
+        # exactly as the body does, and the first draft of `initialiser_lists` stopped there and
+        # reported nothing. A self-test whose list is all parentheses would have passed it.
+        planted.write_text("struct Held { int a; int b; Held() : a(1), kept{2}, gone(3) {} };\n", encoding="utf-8")
+        started, bad = check_initialisers([planted])
+
+    if started == 0:
+        print("FAIL  the self-test's initialiser list was not read at all")
+        return 1
+    if not bad:
+        print("FAIL  the self-test's initialiser of a name that is not a member was not reported")
+        return 1
+    if started < 3:
+        print(f"FAIL  the self-test's list has three entries and the check read {started}")
+        return 1
+
+    stale = check_initialisers(sorted(list(APP.glob("*.cpp")) + list(APP.glob("*.h"))))[1]
+    if stale:
+        print("FAIL  the tree itself does not pass the initialiser check")
+        for line in stale:
+            print(line)
+        return 1
+
+    print(f"OK    self-test passed: a planted member and a planted initialiser were caught, "
+          f"{len(members)} types parsed, the tree is clean")
     return 0
 
 
@@ -320,16 +421,21 @@ def main() -> int:
     membersChecked, badMembers = check_members(sources, members)
     wrong.extend(badMembers)
 
+    # ---- and every name the app's own constructors initialise -------------------------------
+    initialisersChecked, badInitialisers = check_initialisers(sources)
+    wrong.extend(badInitialisers)
+
     print(f"app sources      {len(sources)}")
     print(f"Elite:: names    {len(used)}")
     print(f"calls checked    {checked}")
     print(f"members checked  {membersChecked}")
+    print(f"initialisers     {initialisersChecked}")
 
     for line in wrong:
         print(line)
 
     if wrong and not missing:
-        print(f"FAIL  {len(wrong)} call(s) or member(s) the app names do not match GameLogic")
+        print(f"FAIL  {len(wrong)} call(s), member(s) or initialiser(s) the app names do not match")
         return 1
 
     if missing:
@@ -340,11 +446,12 @@ def main() -> int:
         return 1
 
     if wrong:
-        print(f"FAIL  {len(wrong)} call(s) or member(s) the app names do not match GameLogic")
+        print(f"FAIL  {len(wrong)} call(s), member(s) or initialiser(s) the app names do not match")
         return 1
 
     print("OK    every Elite:: name the app uses is declared, every call it makes has the right")
-    print("      number of arguments, and every member it names exists")
+    print("      number of arguments, every member it names exists, and every constructor")
+    print("      initialises only its own members")
     return 0
 
 
