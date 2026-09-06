@@ -560,7 +560,7 @@ namespace Elite
     } while (screen.bubble.slots[DEATH_DEBRIS_SLOT] == 0u);
   }
 
-  void Die(FlightLoop& _loop, DashboardEffects& _sound) noexcept
+  void Die(FlightLoop& _loop, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
   {
     FlightScreen& screen = _loop.screen;
 
@@ -571,14 +571,30 @@ namespace Elite
     // 6502: STA DELTA -- and A is the zero `U%` left in it, so we stop dead.
     screen.flight.delta = 0u;
 
-    // 6502: JSR M% / JSR NOSPRITES / .D2 JSR M% / DEC LASCT / BNE D2.
+    /*
+     * 6502: JSR M% / JSR NOSPRITES / .D2 JSR M% / DEC LASCT / BNE D2.
+     *
+     * EVERY `M%` IS A FRAME, and each one is shown. The 6502 needed no instruction for that -- the
+     * VIC-II was reading the bitmap the whole time, so a frame was on the screen for exactly as
+     * long as the next took to compute. A port that draws sixty-five frames between two presents
+     * reproduces the arithmetic and none of the sequence (§6.109's argument, and §6.149's bug).
+     */
     (void)MainFlightLoop(_loop);
     HideAllSprites(screen.sight);
+    if (_pacing != nullptr)
+    {
+      _pacing->ShowFrame();
+    }
 
     do
     {
       (void)MainFlightLoop(_loop);
       screen.status.laserCount = static_cast<std::uint8_t>(screen.status.laserCount - 1u);
+
+      if (_pacing != nullptr)
+      {
+        _pacing->ShowFrame();
+      }
     } while (screen.status.laserCount != 0u);
 
     // 6502: LDX #31 / JSR DET1 / JMP DEATH2 -- the first is a bare RTS and the second is the

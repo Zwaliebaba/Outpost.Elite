@@ -1284,7 +1284,7 @@ namespace GameLogicTests
       Elite::FlightLoop loop{screen,       leaving.keys,       leaving.control, leaving.options, leaving.burst,   leaving.heap,
                              leaving.clip, leaving.projection, leaving.axes,    leaving.outside, leaving.outside, leaving.effects};
 
-      Elite::Die(loop, leaving.universe.dashboard);
+      Elite::Die(loop, leaving.universe.dashboard, nullptr);
 
       Assert::AreEqual<std::uint8_t>(0xFFu, leaving.keys[0], L"KLO+0 is below U%'s range and is untouched");
       for (std::size_t index = 1; index <= Elite::FLIGHT_KEYS_CLEARED; ++index)
