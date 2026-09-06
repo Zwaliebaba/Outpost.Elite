@@ -41,10 +41,17 @@ METHOD_RE = re.compile(r"^\s*TEST_METHOD\((\w+)\)", re.M)
 # runner that does not compile, which is the failure mode to prefer over a silent skip.
 SUITE_NAMESPACE = "GameLogicTests"
 
-# GameLogic is compiled whole. The three named test-project files are the oracle: the interpreter,
-# the loader that finds the assembled game, and the golden-canvas reader. The rest of that
-# directory is suites, which arrive through the generated units.
-ORACLE_SOURCES = ["Cpu6502.cpp", "OracleImage.cpp", "GoldenCanvas.cpp", "UniverseImage.cpp"]
+# GameLogic is compiled whole, and so is every test-project source that is not a suite: the
+# interpreter, the loader that finds the assembled game, the golden-canvas reader, the universe
+# image, and whatever the modernisation adds beside them. They used to be a hand-kept list here,
+# which was a second place a non-suite source had to be named after the .vcxproj, with no check
+# between the two: a file added to the project alone failed on this leg with a link error and
+# nowhere else (Design/Modernize.md, the CI review of 2026-09-06). A glob has no second place.
+# The suites arrive through the generated units, so they are excluded by their name.
+def oracle_sources(_repo: Path) -> list[Path]:
+    tests = _repo / "Tests" / "GameLogicTests"
+    return sorted(path for path in tests.glob("*.cpp") if not path.name.endswith("Tests.cpp") and path.name != "pch.cpp")
+
 
 # The executable's own files that the suite covers, which is every one that does not call into
 # Windows. `SaveStore` earned its place by being written, committed and left uncompiled for a day
@@ -223,8 +230,8 @@ def write_makefile(_build: Path, _repo: Path, _here: Path, _generated: list[Path
         rule(source, "generated")
     for source in sorted((_repo / "GameLogic").glob("*.cpp")):
         rule(source, "GameLogic")
-    for name in ORACLE_SOURCES:
-        rule(_repo / "Tests" / "GameLogicTests" / name, "oracle")
+    for source in oracle_sources(_repo):
+        rule(source, "oracle")
     for name in EXECUTABLE_SOURCES:
         rule(_repo / "Outpost" / name, "Outpost")
 
