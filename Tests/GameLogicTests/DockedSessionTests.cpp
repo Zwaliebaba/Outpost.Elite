@@ -269,7 +269,7 @@ namespace GameLogicTests
           recursive(characters),
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng, &shell),
-          ports{recursive, characters, sink,  nulls, nulls, nulls, sid,
+          ports{recursive, characters, sink,  nulls, nulls, sid,
                 extended,  shell,      keys,  shell, shell, store}
       {
         commander = Elite::DefaultCommander();

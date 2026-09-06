@@ -21,8 +21,9 @@ namespace Elite
    * here before the seams it replaces can go, so a slice that lands one and removes none would put
    * `aggregate-refs` ABOVE the ceiling M3-a-3 recorded -- which rule 5 forbids outright, and rightly:
    * a ratchet that can be argued past is not one. So each of M3-b's remaining slices lands its port
-   * in the same commit as at least one removal, and this one is thirteen references before M3-b-2b
-   * and thirteen after (§8, 2026-09-06).
+   * in the same commit as at least one removal: thirteen before M3-b-2b and thirteen after, and
+   * TWELVE after M3-b-3a, which removed `SightEffects` and landed no port at all -- so the credit
+   * is there for `Presenter` and `Keyboard` to spend (§8, 2026-09-06).
    *
    * THE DECLARATIONS BELOW ARE FORWARD ONES ON PURPOSE. A reference member needs no complete type,
    * and this header including `ViewChange.h` while `ViewChange.h`'s routines take a `Ports&` is a
@@ -32,7 +33,6 @@ namespace Elite
   class TextSink;
   class TokenPrinter;
   class CharacterPrinter;
-  class SightEffects;
   class ShipDrawEffects;
   class SpawnChildEffects;
   class ExtendedTokenPrinter;
@@ -52,7 +52,6 @@ namespace Elite
     TextSink& sink;              ///< what `printer` and `characters` put characters through
 
     // ---- the seams the platform answers ------------------------------------------------------
-    SightEffects& sight;      ///< 6502: SIGHT's sprite pokes
     ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
     SpawnChildEffects& loop;  ///< 6502: SFS1, which M4-a's typed stage result is what it waits on
 

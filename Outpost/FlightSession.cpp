@@ -47,10 +47,8 @@ namespace Outpost
       Elite::KEY_ECM,         Elite::KEY_WARP,       Elite::KEY_DOCKING_COMPUTER, Elite::KEY_CANCEL_DOCKING,
     };
 
-    /// 6502: the two values `SETL1` writes into the raster handler, and the sprite bit `RDKEY`
-    /// clears on its way past -- %11111101 is sprite 1, which is not one of the four the sights use.
-    constexpr std::uint8_t RASTER_MODE_SCANNING = 0b101;
-    constexpr std::uint8_t RASTER_MODE_NORMAL = 0b100;
+    /// 6502: AND #%11111101 -- sprite 1, which `RDKEY` switches off on its way past and is not one
+    /// of the four the sights use. The two `SETL1` values are `Elite::MEMORY_MAP_IO` and `_RAM`.
     constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
   } // namespace
 
@@ -166,7 +164,7 @@ namespace Outpost
     // frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
     // vertices `LL9` part 8 projected, which `DOEXP` copies onto the ship's line heap.
     Elite::DrawExplosionCloud(m_universe.canvas, m_universe.math, m_universe.rng, m_universe.work, m_universe.heap, m_universe.geometry,
-                              m_universe.bubble, *this);
+                              m_universe.bubble, m_universe.video, m_universe.memoryMap);
   }
 
   // ---- the controls -------------------------------------------------------------------------------
@@ -187,7 +185,7 @@ namespace Outpost
      * is flying, and a scan that stored rather than cleared would leave the autopilot's synthetic
      * presses standing for ever.
      */
-    m_rasterMode = RASTER_MODE_SCANNING;                 // 6502: LDA #%101 / JSR SETL1
+    Elite::SetMemoryMap(m_universe.memoryMap, Elite::MEMORY_MAP_IO); // 6502: LDA #%101 / JSR SETL1
     Elite::ApplyMaskSprites(m_universe.video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
     _keys.fill(0u);                                      // 6502: JSR ZEKTRAN
 
@@ -241,7 +239,7 @@ namespace Outpost
       }
     }
 
-    m_rasterMode = RASTER_MODE_NORMAL; // 6502: LDA #%100 / JSR SETL1
+    Elite::SetMemoryMap(m_universe.memoryMap, Elite::MEMORY_MAP_RAM); // 6502: LDA #%100 / JSR SETL1
     return answer;
   }
 
@@ -263,48 +261,6 @@ namespace Outpost
     {
       (void)Elite::RunDockingComputer(m_universe, *m_ports, 0u);
     }
-  }
-
-  // ---- the VIC-II ----------------------------------------------------------------------------------
-
-  void FlightSession::SetRasterMode(std::uint8_t _mode)
-  {
-    // 6502: SETL1 -- self-modifying code inside the interrupt handler (§6.59). The port has no
-    // interrupt to modify, so the mode is remembered and nothing reads it yet.
-    m_rasterMode = _mode;
-  }
-
-  /*
-   * The four register seams, one line each into `VideoState`.
-   *
-   * They were four bodies holding four private members and nothing read them (plan §6.148). The
-   * arithmetic did not move -- `Elite::Apply*` is where it is now -- and neither did the
-   * read-modify-writes, which are still performed rather than computed, for the reason
-   * `SightEffects::MaskSprites` gives.
-   */
-  void FlightSession::SetSightColour(std::uint8_t _colour)
-  {
-    Elite::ApplySightColour(m_universe.video, _colour); // 6502: STA VIC+&27 -- sprite 0, the sights'
-  }
-
-  void FlightSession::SetSpritesEnabled(std::uint8_t _mask)
-  {
-    Elite::ApplySpritesEnabled(m_universe.video, _mask); // 6502: STA VIC+&15
-  }
-
-  void FlightSession::SetSpriteExpansion(std::uint8_t _mask)
-  {
-    Elite::ApplySpriteExpansion(m_universe.video, _mask); // 6502: STA VIC+&17 / STA VIC+&1D
-  }
-
-  void FlightSession::ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y)
-  {
-    Elite::ApplyExplosionSprite(m_universe.video, _x, _y); // 6502: the five writes that place sprite 1
-  }
-
-  void FlightSession::MaskSprites(std::uint8_t _mask)
-  {
-    Elite::ApplyMaskSprites(m_universe.video, _mask); // 6502: LDA VIC+&15 / AND #.. / STA VIC+&15
   }
 
 } // namespace Outpost

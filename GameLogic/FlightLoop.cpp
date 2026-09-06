@@ -327,7 +327,8 @@ namespace Elite
      */
     if (_universe.trumbles.count != 0u)
     {
-      MoveTrumbleSprites(_universe.trumbles, _universe.video, _universe.rng, _universe.flight.mainLoopCounter, _ports.sight);
+      MoveTrumbleSprites(_universe.trumbles, _universe.video, _universe.rng, _universe.flight.mainLoopCounter,
+                         _universe.memoryMap);
     }
 
     // ---- part 2: the roll ------------------------------------------------------------------------
@@ -497,7 +498,8 @@ namespace Elite
       if (_universe.keys[KEY_CANCEL_DOCKING] != 0u)
       {
         _universe.control.dockingComputer = 0u;
-        StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _ports.sid);
+        StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap,
+                         _ports.sid);
       }
 
       // 6502: .MA78 LDA KY13 / AND ESCP / BEQ noescp / LDA MJ / BNE noescp / JMP ESCAPE -- and it
@@ -543,7 +545,7 @@ namespace Elite
     if ((_universe.keys[KEY_DOCKING_COMPUTER] & commander.dockingComputer) != 0u && requested != 0u)
     {
       _universe.control.dockingComputer = requested;
-      StartDockingMusic(_universe.music, _ports.sid);
+      StartDockingMusic(_universe.music, _universe.memoryMap, _ports.sid);
     }
 
     // ---- part 3's tail: the guns -----------------------------------------------------------------
@@ -676,11 +678,6 @@ namespace Elite
 
     /// 6502: LDA #192 / JSR FAROF2 -- the station is respawned when the planet is inside this.
     inline constexpr std::uint8_t STATION_SPAWN_RANGE = 192;
-
-    /// 6502: LDA #%101 and LDA #%100 -- the two raster modes `SETL1` is asked for around the sprite
-    /// write that kills a Trumble.
-    inline constexpr std::uint8_t RASTER_TRUMBLE_KILL = 0x05;
-    inline constexpr std::uint8_t RASTER_TRUMBLE_DONE = 0x04;
 
     /// 6502: LDA VIC+&15 / AND #%00000011 -- everything but the two lowest sprites goes off.
     inline constexpr std::uint8_t SPRITES_KEEP = 0x03;
@@ -1004,7 +1001,8 @@ namespace Elite
         if (arrived)
         {
           // 6502: .GOIN JSR stopbd / JMP DOENTRY
-          StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _ports.sid);
+          StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap,
+                         _ports.sid);
           return LoopOutcome::Docked;
         }
 
@@ -1507,9 +1505,9 @@ namespace Elite
        */
       if (heat.value >= CABIN_TRUMBLE_DEATH)
       {
-        _ports.sight.SetRasterMode(RASTER_TRUMBLE_KILL);
-        _ports.sight.MaskSprites(SPRITES_KEEP);
-        _ports.sight.SetRasterMode(RASTER_TRUMBLE_DONE);
+        SetMemoryMap(_universe.memoryMap, MEMORY_MAP_IO);
+        ApplyMaskSprites(_universe.video, SPRITES_KEEP);
+        SetMemoryMap(_universe.memoryMap, MEMORY_MAP_RAM);
 
         const ShiftResult high = RotateRight(commander.tribbles.hi, false);
         commander.tribbles.hi = high.value;

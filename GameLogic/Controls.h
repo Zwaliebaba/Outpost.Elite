@@ -4,10 +4,12 @@
 #include <cstdint>
 
 #include "Canvas.h"
+#include "MemoryMap.h"
 #include "Commander.h"
 #include "PlanetDraw.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
+#include "VideoState.h"
 #include "Trumbles.h"
 
 namespace Elite
@@ -278,41 +280,21 @@ namespace Elite
   inline constexpr std::uint8_t LASER_MILITARY = 151;
 
   /// What `SIGHT` reaches that is a VIC-II register rather than memory.
-  class SightEffects
-  {
-  public:
-    virtual ~SightEffects() = default;
-
-    /*
-     * 6502: JSR SETL1 -- switch the raster interrupt handler's mode, which the routine does twice,
-     * bracketing everything it touches.
-     *
-     * `SETL1` is self-modifying code inside the interrupt handler itself: `SEI / STA L1M / ... /
-     * CLI`. §6.59 refused it a place in `GameLogic` for that reason and this is the seam it gets
-     * instead. The two values are %101 on the way in and %100 on the way out.
-     */
-    virtual void SetRasterMode(std::uint8_t _mode) = 0;
-
-    /// 6502: STA VIC+&27 -- sprite 0's colour, which is the sights'.
-    virtual void SetSightColour(std::uint8_t _colour) = 0;
-
-    /// 6502: STA VIC+&15 -- which of the eight sprites are switched on. Bit 0 is the sights and
-    /// bits 2 to 7 are the Trumbles, which is why the two are ORed together here rather than set
-    /// independently.
-    virtual void SetSpritesEnabled(std::uint8_t _mask) = 0;
-
-    /*
-     * 6502: LDA VIC+&15 / AND #%00000011 / STA VIC+&15 -- and this one READS the register first.
-     *
-     * The flight loop's part 15 switches every sprite off but the lowest two when the cabin gets
-     * hot enough to kill the Trumbles, and it does it as a read-modify-write rather than by
-     * computing the new value: it does not know how many Trumbles are showing. So it cannot be
-     * expressed as `SetSpritesEnabled` -- the port has no copy of the register to AND against --
-     * and it is a second method rather than a getter, because a getter would invite a port to
-     * compute what the hardware is holding.
-     */
-    virtual void MaskSprites(std::uint8_t _mask) = 0;
-  };
+  /*
+   * `SightEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3a).
+   *
+   * Three of its four methods were VIC-II register writes, and ADR-005 §1 decided in slice 3d that
+   * they belong in `VideoState` -- `ApplySightColour`, `ApplySpritesEnabled` and `ApplyMaskSprites`
+   * have been the one-line bodies behind them ever since. `MaskSprites` stays a call of its own for
+   * the reason it always had: part 15's `LDA VIC+&15 / AND #.. / STA VIC+&15` is a read-modify-write
+   * the game makes because it does not know how many Trumble sprites are showing, so it is not a
+   * `SetSpritesEnabled` with a computed argument.
+   *
+   * THE FOURTH IS WHY THE OTHER THREE HAD TO WAIT, and the reason it gave was wrong. `SetRasterMode`
+   * was `SETL1`, which this port believed for six slices to be "self-modifying code inside the
+   * interrupt handler" -- it is the 6510's input/output port register, eight instructions, no code
+   * written. `MemoryMap.h` has the reading and the two bytes it turns into.
+   */
 
   /*
    * 6502: SIGHT -- the laser sights and the Trumbles, which are the same four instructions apart.
@@ -332,7 +314,7 @@ namespace Elite
    * instead. A port that wrote a pointer of 160 and then disabled the sprite would look the same
    * on screen and differ on every byte.
    */
-  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles,
-                       std::uint8_t _view, SightEffects& _effects) noexcept;
+  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles, std::uint8_t _view,
+                       VideoState& _video, MemoryMap& _map) noexcept;
 
 } // namespace Elite

@@ -266,6 +266,24 @@ namespace GameLogicTests
      */
     cells.push_back(Direct(L"MUPLA", _at.mupla, _universe.music.playing, CellScope::Compared));
     cells.push_back(Direct(L"MULIE", _at.mulie, _universe.status.titleReset, CellScope::Compared));
+
+    /*
+     * 6502: L1M and l1 -- the memory map, MIRRORED IN AND NOT COMPARED OUT (M3-b-3a).
+     *
+     * They were `SightEffects::SetRasterMode`, a write-only seam the fixtures counted, and both
+     * machines run `SETL1` now -- so mirroring them matters: `SETL1` PRESERVES the top five bits,
+     * and a port given a zero where the game has the datasette's would agree by accident.
+     *
+     * THEY CANNOT BE COMPARED HERE, and the reason is §6.108's and not this slice's. `NOSPRITES`
+     * is trapped on the oracle in every fixture that changes a screen, because in flat memory its
+     * `STA VIC+&15` lands on the blueprint pointer table; so the game does not reach the `SETL1`
+     * inside it and the port does. Four suites DO run the routine on both sides and compare the
+     * byte where it lands -- `ControlsTests` (`SIGHT`), `TrumbleTests` (`MVTRIBS`),
+     * `ExplosionTests` (`PTCLS2`) and `SoundTests` (`startbd`, `stopbd`) -- and they are where the
+     * bracket is pinned until the harness models the banking.
+     */
+    cells.push_back(Direct(L"L1M", _at.l1m, _universe.memoryMap.requested, CellScope::Seeded));
+    cells.push_back(Direct(L"l1", Where::IO_PORT, _universe.memoryMap.port, CellScope::Seeded));
     for (std::size_t slot = 0; slot < _universe.bubble.blocks.size(); ++slot)
     {
       CodecCells(cells, L"K% slot " + std::to_wstring(slot), static_cast<std::uint16_t>(_at.kPercent + slot * Elite::SHIP_BLOCK_SIZE),

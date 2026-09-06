@@ -252,7 +252,7 @@ counted. `tools/check_modernize.py` counts them and **fails the build if any cou
 ratchet is what stops a slice reintroducing what another slice removed (§5, rule 5). The recorded
 ceilings are in `tools/modernize_ratchet.json` and are lowered as slices land.
 
-**P1 — The register-shaped calling convention.** <!--count:register-params-->14 parameters in
+**P1 — The register-shaped calling convention.** <!--count:register-params-->13 parameters in
 `GameLogic/*.h` are named `_a`, `_x` or `_y` and typed `std::uint8_t`: the routine takes what the
 6502 routine took in that register, and its meaning is in the comment. Twelve result structs carry
 a field named `a` or `carry` for the same reason (`ProjectResult::a`, `ScreenOffset::a`). Example:
@@ -291,7 +291,7 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->13 reference members,
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->12 reference members,
 and they were seventy-eight before M3-a. All seven argument-list structs are gone — `FlightScreen`,
 `FlightLoop`, `MissionScreen` and `TitleScreen` in M3-a-2, `TradeScreen`, `SaveScreen`, `GameStart`
 and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The fourteen that
@@ -303,10 +303,10 @@ the rest existed: "the struct is the argument list".
 <!--count:main-lines-->1,197 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->180 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->177 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->16 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->14 abstract classes in
 `GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `TunnelEffects::ShowFrame`,
 `SaveStore` through `SaveScreen`). Most are **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
@@ -349,7 +349,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,911 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,910 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1358,6 +1358,12 @@ as at least one removal**, and the count leaves the phase at four without ever g
 become `Keyboard`. `SightEffects` and `ExplosionEffects` become `VideoState` writes the library
 makes itself, which ADR-005 §1 already decided.
 
+**M3-b-3a did that last part first, and it is what pays for the two ports.** Both seams go and
+nothing replaces them, so `aggregate-refs` reaches twelve with the credit standing: `Keyboard` is a
+rename of `KeySource` and costs nothing, and `Presenter` spends the credit. What held the two back
+was `SetRasterMode` — `SETL1`, which this plan's own row called "self-modifying code inside a raster
+interrupt handler" and which is nothing of the kind (§8, `MemoryMap.h`).
+
 **M3-b-4 — `SaveStore`, the text system, and the null port.** `CommanderStore` is renamed to §4.5's
 name. `TextSink`, `ValueTokens` and `ControlCodes` are the text system's own polymorphism rather
 than platform, and are the three the table does not mention: they go by the same argument as the
@@ -1700,6 +1706,59 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M3-b-3a: `SETL1` is not what six slices of this port believed it was.** `SightEffects`
+and `ExplosionEffects` go, and with them the last write-only seams over the VIC-II. Five of their six
+methods were already one line into `ApplySightColour`, `ApplySpritesEnabled`, `ApplyMaskSprites`,
+`ApplySpriteExpansion` and `ApplyExplosionSprite` -- ADR-005 §1 decided that in slice 3d and the
+implementations have been forwarding ever since. `effects-seams` 16 → 14, `aggregate-refs` 13 → 12,
+`outpost-elite-names` 180 → 177, `main-lines` 1,198 → 1,197, `register-params` 14 → 13.
+
+**THE SIXTH IS WHY THE OTHER FIVE WAITED, AND THE REASON WAS A MISREADING.** The conversion plan's
+3d row says in as many words: "`SETL1` is NOT one of them: it is self-modifying code inside a raster
+interrupt handler and belongs behind a seam like the sound." `Controls.h` repeated it, `VideoState.h`
+gave it as the reason the byte could never live there, and `TrumbleTests` explained a trap with it.
+The routine is eight instructions -- `SEI / STA L1M / LDA l1 / AND #%11111000 / ORA L1M / STA l1 /
+CLI / RTS` -- and none of them writes code. `l1` is &0001, the 6510's own port register; the
+`SEI`/`CLI` is there so an interrupt cannot be taken with the memory map half-written, and that
+bracket is the whole of what the "interrupt handler" reading was built on. `Trumbles.h` had it right
+("memory banking rather than a register") and was overruled by the other three.
+
+**So it is two bytes, and `MemoryMap.h` is where they and the reading now live.** The same argument
+as `SoundBuffer` in M3-b-2a and `MusicPlayer` in M3-b-2b: the game writes them and what a port does
+about the banking is the port's business. It is not part of `VideoState`, and the shipped source is
+what says so -- the fourteen callers bracket the sprite registers, the SID (`startbd`, `stopat`), the
+keyboard's CIA (`RDKEY`, `DKSANYKEY`) and the KERNAL's disk routines (`SVE`, `LOD`). One register,
+four chips. The executable had been keeping it as `FlightSession::m_rasterMode`, a byte nothing read.
+
+**A PORT DEFECT CAME OUT OF IT, AND THE SEAM IS WHY IT WAS INVISIBLE.** `april16` brackets `BDENTRY`
+with `SETL1` and `stopat` brackets its twenty-five SID writes with it, because the chip has to be
+banked in before it can be written. `Music.cpp` had said so in its comments since slice 5b and had
+never made the calls -- there was nowhere to make them to. Both are there now, and `SoundTests`
+compares `l1` across `startbd` and `stopbd` over all thirty-two flag combinations.
+
+**FOUR SUITES COMPARE THE BRACKET AND THE OTHERS CANNOT, WHICH IS §6.108 AGAIN.** `SETL1` is trapped
+nowhere now; `ControlsTests` (`SIGHT`), `TrumbleTests` (`MVTRIBS`), `ExplosionTests` (`PTCLS2`) and
+`SoundTests` run it on both machines and compare the byte. ONE BYTE STILL TELLS THE CASES APART,
+which was the doubt worth checking before the assertions were rewritten: the bracket's two modes
+DIFFER, so no call leaves the seed, one leaves %101 and both leave %100 -- and the fixtures seed the
+top five bits non-zero, so a port that had lost the `AND #%11111000` would not agree by accident.
+What a final byte cannot see is a doubled bracket, and the oracle's own store log pins the shipped
+routines to exactly two. The whole-universe image MIRRORS `l1` and `L1M` and does not compare them,
+because every fixture that changes a screen still traps `NOSPRITES` for §6.108's reason -- in flat
+memory its `STA VIC+&15` lands on the blueprint pointer table -- so the game does not reach the
+`SETL1` inside it and the port does.
+
+**Two counts had to be earned back rather than excused.** `main-lines` and `origin-markers` both rose
+on the first pass, and the way down was to stop saying the same thing three times: there is one
+`SETL1` in the game and there are now one pair of constants for it, `MEMORY_MAP_IO` and
+`MEMORY_MAP_RAM`, where `Trumbles.h`, `FlightLoop.cpp` and `FlightSession.cpp` each had their own.
+
+**What a recorder could count and a byte cannot.** `ExplosionTests` counted the port's calls to
+`ShowExplosionSprite` per cloud -- six vertices, some refused -- and only the LAST placement survives
+in the registers, on the hardware as much as in `VideoState`. So the seam let the suite count
+something no screen could show. The coverage counters read the oracle's own stores to VIC+&2 now, and
+the two machines are compared on the state they end in.
 
 **2026-09-06 — M3-b-2b: the music comes inside, and one of the two seams it removed was in front of
 an `RTS`.** `FlightLoopEffects::Start/StopDockingMusic` were `JSR startbd` and `JSR stopbd`,

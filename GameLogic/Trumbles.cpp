@@ -10,7 +10,7 @@ namespace Elite
 {
 
   void MoveTrumbleSprites(TrumbleSprites& _sprites, VideoState& _video, Rng& _rng, std::uint8_t _mainLoopCounter,
-                          SightEffects& _effects) noexcept
+                          MemoryMap& _map) noexcept
   {
     /*
      * 6502: LDA MCNT / AND #7 / CMP TRIBCT / BCC P%+5 / JMP NOMVETR.
@@ -31,7 +31,7 @@ namespace Elite
     const std::size_t sprite = static_cast<std::size_t>(turn) + FIRST_TRUMBLE_SPRITE;
 
     // 6502: LDA #%101 / JSR SETL1 -- the video chip's registers, mapped in.
-    _effects.SetRasterMode(TRUMBLE_RASTER_IO);
+    SetMemoryMap(_map, MEMORY_MAP_IO);
 
     /*
      * 6502: JSR DORND / CMP #235 / BCC MVTR1.
@@ -131,7 +131,7 @@ namespace Elite
 
     // 6502: LDA #%100 / JSR SETL1 / JMP NOMVETR -- the registers mapped back out, and the jump
     // back into the flight loop that makes this a call written as two jumps (§6.82).
-    _effects.SetRasterMode(TRUMBLE_RASTER_RAM);
+    SetMemoryMap(_map, MEMORY_MAP_RAM);
   }
 
 } // namespace Elite

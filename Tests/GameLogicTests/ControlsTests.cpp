@@ -456,9 +456,9 @@ namespace GameLogicTests
      * at all. The port puts them behind a seam, the oracle catches them as memory, and the two are
      * compared against each other.
      *
-     * `SETL1` is trapped and its two calls are checked for order as well as value: the routine
-     * brackets everything it does between %101 and %100, and a port that switched the raster mode
-     * once would agree on every byte.
+     * `SETL1` RUNS ON BOTH SIDES since M3-b-3a and is trapped on neither, so the bracket is a
+     * `MemoryMap` rather than a list of calls -- and one byte still tells no call, one call and
+     * both apart, because the two modes differ. The assertion says how.
      */
     TEST_METHOD(TheLaserSightsMatchSIGHT)
     {
@@ -469,7 +469,6 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t sight = oracle.Label("SIGHT");
-      const std::uint16_t setl1 = oracle.Label("SETL1");
       const std::uint16_t laserBase = oracle.Label("LASER");
       const std::uint16_t view = oracle.Label("VIEW");
       const std::uint16_t tribble = oracle.Label("TRIBBLE");
@@ -480,6 +479,12 @@ namespace GameLogicTests
       // 6502: VIC, which is &D000 -- the same address the ship blueprints load at.
       const std::uint16_t vicColour = 0xD027u;
       const std::uint16_t vicEnable = 0xD015u;
+
+      // 6502: l1 -- a seed whose top five bits are non-zero, so that "SETL1 left them alone" is a
+      // statement with something in it. %100 in the bottom three is where the bracket ends.
+      constexpr std::uint8_t PORT_SEED = 0xE7;
+      constexpr std::uint8_t PORT_AFTER_IN = (PORT_SEED & 0xF8u) | Elite::MEMORY_MAP_IO;
+      constexpr std::uint8_t PORT_AFTER_BOTH = (PORT_SEED & 0xF8u) | Elite::MEMORY_MAP_RAM;
 
       const std::vector<std::uint8_t> LASERS = {
         0, // none fitted on this view
@@ -502,8 +507,11 @@ namespace GameLogicTests
           for (const std::uint8_t population : POPULATIONS)
           {
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(setl1);
             Elite::Canvas canvas;
+
+            // 6502: l1 (&0001) -- every write the routine makes to the port register, in order.
+            // `SETL1` is not trapped since M3-b-3a: the port runs it too.
+            cpu.LogStores(0x0001u, 0x0001u);
 
             FillScreens(cpu, canvas, screen, 0x6Du);
 
@@ -526,36 +534,23 @@ namespace GameLogicTests
             cpu.memory[t] = 0x9Cu;
             cpu.memory[vicColour] = 0x00u;
             cpu.memory[vicEnable] = 0x00u;
+            cpu.memory[0x0001u] = PORT_SEED; // 6502: l1 -- see the bracket assertion below
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(sight, 5'000);
             Assert::IsTrue(run.completed, L"SIGHT returned");
 
-            struct Recorder final : Elite::SightEffects
-            {
-              std::vector<std::uint8_t> modes;
-              std::uint8_t colour = 0;
-              std::uint32_t colours = 0;
-              std::uint8_t enabled = 0;
-
-              void SetRasterMode(std::uint8_t _mode) override
-              {
-                modes.push_back(_mode);
-              }
-              void SetSightColour(std::uint8_t _colour) override
-              {
-                colour = _colour;
-                ++colours;
-              }
-              void SetSpritesEnabled(std::uint8_t _mask) override
-              {
-                enabled = _mask;
-              }
-              void MaskSprites(std::uint8_t) override {}
-            } effects;
-
             Elite::TrumbleSprites trumbles;
             trumbles.count = 0x9Cu;
-            Elite::DrawLaserSights(canvas, commander, trumbles, which, effects);
+
+            // 6502: VIC+&27 and VIC+&15 -- seeded with the same marker as the oracle's, so "left
+            // alone" and "written with zero" are different answers on both sides.
+            Elite::VideoState video{};
+            video.colour[0] = 0x00u;
+            video.enabled = 0x00u;
+            Elite::MemoryMap map;
+            map.port = PORT_SEED;
+
+            Elite::DrawLaserSights(canvas, commander, trumbles, which, video, map);
 
             const std::wstring where = Widen("SIGHT(laser " + std::to_string(laser) + " on view " + std::to_string(which) + ", Trumbles " +
                                              std::to_string(population) + ")");
@@ -564,29 +559,36 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.memory[tribct], trumbles.count, (where + L": TRIBCT").c_str());
             // `T` is `SIGHT`'s own since M2-c-3 -- one if a laser was found, zero if not -- and
             // what it produced is the sprite-enable byte compared on the next line.
-            Assert::AreEqual(cpu.memory[vicEnable], effects.enabled, (where + L": VIC+&15").c_str());
+            Assert::AreEqual(cpu.memory[vicEnable], video.enabled, (where + L": VIC+&15").c_str());
 
             // The colour register is only written when a laser was found, so a case with none
-            // leaves the marker rather than a colour -- and the port must not call the seam.
-            Assert::AreEqual<std::uint32_t>(laser != 0u ? 1u : 0u, effects.colours, (where + L": how often the colour was set").c_str());
-            if (laser != 0u)
+            // leaves the marker on BOTH sides rather than a colour.
+            Assert::AreEqual(cpu.memory[vicColour], video.colour[0], (where + L": VIC+&27").c_str());
+            if (laser == 0u)
             {
-              Assert::AreEqual(cpu.memory[vicColour], effects.colour, (where + L": VIC+&27").c_str());
-            }
-            else
-            {
-              Assert::AreEqual<std::uint32_t>(0u, cpu.memory[vicColour], (where + L": the game left it alone too").c_str());
+              Assert::AreEqual<std::uint32_t>(0u, cpu.memory[vicColour], (where + L": and neither wrote it").c_str());
             }
 
-            Assert::AreEqual<std::size_t>(2u, effects.modes.size(), (where + L": two raster switches").c_str());
-            Assert::AreEqual<std::uint32_t>(0x05u, effects.modes[0], (where + L": the way in").c_str());
-            Assert::AreEqual<std::uint32_t>(0x04u, effects.modes[1], (where + L": and out").c_str());
-            Assert::AreEqual<std::size_t>(2u, cpu.trapHits.size(), (where + L": the game switched twice too").c_str());
-            Assert::AreEqual<std::uint32_t>(effects.modes[0], cpu.trapHits[0].a, (where + L": with the same mode").c_str());
-            Assert::AreEqual<std::uint32_t>(effects.modes[1], cpu.trapHits[1].a, (where + L": and the same one back").c_str());
+            /*
+             * 6502: SETL1 -- the bracket, as one byte instead of two counted calls (M3-b-3a).
+             *
+             * This used to compare the port's two `SetRasterMode` calls against the oracle's two
+             * trap hits. Both machines run `SETL1` now, and the byte it leaves says as much: the
+             * two modes DIFFER, so no call leaves the seed, one leaves %101 and both leave %100.
+             * The top five bits are the datasette's and neither call touches them, which is why the
+             * seed is not zero. What a final byte cannot distinguish is a doubled bracket, and the
+             * oracle's own store log below is what pins the shipped routine to exactly two.
+             */
+            Assert::AreEqual(cpu.memory[0x0001u], map.port, (where + L": l1 -- the map both machines end on").c_str());
+            Assert::AreEqual<std::uint32_t>(PORT_AFTER_BOTH, map.port, (where + L": in and back out").c_str());
+            // The values are the COMPOSED byte and not the mode: `SETL1`'s store is `LDA l1 /
+            // AND #%11111000 / ORA L1M / STA l1`, so the datasette bits ride along.
+            Assert::AreEqual<std::size_t>(2u, cpu.stores.size(), (where + L": the game switched the map twice").c_str());
+            Assert::AreEqual<std::uint32_t>(PORT_AFTER_IN, cpu.stores[0].value, (where + L": the way in").c_str());
+            Assert::AreEqual<std::uint32_t>(PORT_AFTER_BOTH, cpu.stores[1].value, (where + L": and out").c_str());
 
             pointers.insert(canvas.Read(Elite::SIGHT_SPRITE_CELL));
-            masks.insert(effects.enabled);
+            masks.insert(video.enabled);
             ++compared;
           }
         }

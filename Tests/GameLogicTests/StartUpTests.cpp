@@ -477,7 +477,7 @@ namespace GameLogicTests
         }
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
         for (const char* seam :
-             {"DOXC", "DOYC", "MT9", "NLIN4", "FILEPR", "OTHERFILEPR", "KERNALSETUP", "SETL1", "SWAPPZERO", "DELAY", "FLKB"})
+             {"DOXC", "DOYC", "MT9", "NLIN4", "FILEPR", "OTHERFILEPR", "KERNALSETUP", "SWAPPZERO", "DELAY", "FLKB"})
         {
           cpu.AddTrap(oracle.Label(seam));
         }
@@ -626,7 +626,7 @@ namespace GameLogicTests
         RecordingStart effects({script.firstAnswer, 0});
         Elite::SidWriteLog sid; ///< 6502: SID -- what `startat`, `stopat` and `stopbd` write
         NullSeams nulls;
-        Elite::Ports ports{recursive, characters, sink,  nulls,       nulls, nulls, sid,
+        Elite::Ports ports{recursive, characters, sink,  nulls, nulls, sid,
                            extended,  effects,    keys,  nulls,       lineEffects, store};
 
         /*

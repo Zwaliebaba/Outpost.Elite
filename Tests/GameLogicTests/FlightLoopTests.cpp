@@ -796,7 +796,7 @@ namespace GameLogicTests
 
       std::uint16_t ma3, ma18, escape;
       std::uint16_t mainLoop, death, doentry, doexp, planet, sfs1;
-      std::uint16_t setl1, dovdu19, slsp;
+      std::uint16_t dovdu19, slsp;
 
       explicit LoopWhere(const OracleImage& _oracle)
       {
@@ -835,7 +835,6 @@ namespace GameLogicTests
         doexp = _oracle.Label("DOEXP");
         planet = _oracle.Label("PLANET");
         sfs1 = _oracle.Label("SFS1");
-        setl1 = _oracle.Label("SETL1");
         dovdu19 = _oracle.Label("DOVDU19");
         slsp = _oracle.Label("SLSP");
       }
@@ -1153,7 +1152,6 @@ namespace GameLogicTests
 
       cpu.AddTrap(_loop.doexp);
       cpu.AddTrap(_loop.planet);
-      cpu.AddTrap(_loop.setl1);
       cpu.AddTrap(_loop.dovdu19);
       cpu.AddTrap(_loop.sfs1, _frame.effects.childSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
 
@@ -1978,7 +1976,9 @@ namespace GameLogicTests
           CompareFrames(frame, oracle, at, loop, where, Reach::Tail);
 
           scooped += (frame.universe.commander.fuel > 40u) ? 1u : 0u;
-          cooked += (frame.universe.sight.maskedWith.empty() ? 0u : 1u);
+          // 6502: part 15's `AND #%00000011` -- the mask leaves only sprites 0 and 1, so an enable
+          // byte with no Trumble bit left is a cabin that got hot enough to kill them (M3-b-3a).
+          cooked += ((frame.universe.video.enabled & 0xFCu) == 0u) ? 1u : 0u;
           ++compared;
         }
       }
@@ -2380,7 +2380,6 @@ namespace GameLogicTests
         }
 
         // Sound and the VIC-II only: everything that draws or thinks runs for real.
-        cpu.AddTrap(loop.setl1);
         cpu.AddTrap(loop.dovdu19);
 
         FillScreens(cpu, frame.universe.canvas, at.screen, 0x1Du);

@@ -224,10 +224,10 @@ namespace Elite
     // unit's. A caller of `DOKEY` gets that as well, and the call site does not say so.
   }
 
-  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles,
-                       std::uint8_t _view, SightEffects& _effects) noexcept
+  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles, std::uint8_t _view,
+                       VideoState& _video, MemoryMap& _map) noexcept
   {
-    _effects.SetRasterMode(0x05u); // 6502: LDA #%101 / JSR SETL1
+    SetMemoryMap(_map, MEMORY_MAP_IO); // 6502: LDA #%101 / JSR SETL1
 
     // 6502: LDY VIEW / LDA LASER,Y / BEQ SIG3.
     const std::uint8_t laser = _commander.lasers[_view];
@@ -261,7 +261,7 @@ namespace Elite
       _canvas.Write(SIGHT_SPRITE_CELL_2, pointer);
 
       // 6502: LDA sightcol-SPOFF%,Y / STA VIC+&27.
-      _effects.SetSightColour(LASER_SIGHT_COLOUR_TABLE[static_cast<std::size_t>(pointer - SPRITE_POINTER_BASE)]);
+        ApplySightColour(_video, LASER_SIGHT_COLOUR_TABLE[static_cast<std::size_t>(pointer - SPRITE_POINTER_BASE)]);
     }
 
     // 6502: LDA #1 / .SIG3 STA T -- one if a laser was found, and the zero `LDA LASER,Y` left if
@@ -275,9 +275,9 @@ namespace Elite
     _trumbles.count = TRUMBLE_COUNT_TABLE[index]; // 6502: LDA TRIBTA,X / STA TRIBCT
 
     // 6502: LDA TRIBMA,X / ORA T / STA VIC+&15 -- the sights and the Trumbles in one byte.
-    _effects.SetSpritesEnabled(static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | sightsBit));
+    ApplySpritesEnabled(_video, static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | sightsBit));
 
-    _effects.SetRasterMode(0x04u); // 6502: LDA #%100 / JMP SETL1, a tail call
+    SetMemoryMap(_map, MEMORY_MAP_RAM); // 6502: LDA #%100 / JMP SETL1, a tail call
   }
 
   void ClearFlightKeys(KeyLogger& _keys) noexcept

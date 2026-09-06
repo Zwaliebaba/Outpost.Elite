@@ -101,31 +101,15 @@ namespace GameLogicTests
     return touched;
   }
 
-  struct RecordingSight final : Elite::SightEffects
-  {
-    std::vector<std::uint8_t> modes;
-    std::vector<std::uint8_t> masks;
-    std::vector<std::uint8_t> colours;
-
-    void SetRasterMode(std::uint8_t _mode) override
-    {
-      modes.push_back(_mode);
-    }
-    void SetSightColour(std::uint8_t _colour) override
-    {
-      colours.push_back(_colour);
-    }
-    void SetSpritesEnabled(std::uint8_t _mask) override
-    {
-      masks.push_back(_mask);
-    }
-    void MaskSprites(std::uint8_t _mask) override
-    {
-      maskedWith.push_back(_mask);
-    }
-
-    std::vector<std::uint8_t> maskedWith;
-  };
+  /*
+   * `RecordingSight` WAS HERE AND IS NOT ANY MORE (M3-b-3a).
+   *
+   * Four lists -- the raster modes, the enable masks, the sight colours and part 15's read-modify-
+   * write -- because `SightEffects` was write-only and a list of calls was the only thing a suite
+   * could compare. Three of the four are `Universe::video` now and the fourth is
+   * `Universe::memoryMap`, both of them mirrored into the oracle and compared out of it like every
+   * other byte, so what the routine DID is compared rather than what it was asked to do.
+   */
 
   /*
    * `RecordingView` WAS HERE AND IS NOT ANY MORE (M3-b-2b).
@@ -263,7 +247,6 @@ namespace GameLogicTests
      */
     bool spriteRegistersAreOurs = false;
 
-    RecordingSight sight;
 
     /// 6502: QQ14 -- kept only so the fixtures can name it; the byte the port reads is the
     /// commander block's, because part 15's fuel scooping writes it and a copy would drift.
@@ -287,7 +270,7 @@ namespace GameLogicTests
     [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::SpawnChildEffects& _loop,
                                          Elite::StartUpEffects& _start) noexcept
     {
-      return Elite::Ports{printer, characters, characters, sight,  _drawing, _loop, sid,
+      return Elite::Ports{printer, characters, characters, _drawing, _loop, sid,
                           extendedPrinter, _start, unused, unused, unused, unused};
     }
 
@@ -478,6 +461,18 @@ namespace GameLogicTests
      */
     std::uint16_t mupla, mulie;
 
+    /*
+     * 6502: L1M and `l1` -- the 6510's input/output port, and the second is address &0001 rather
+     * than a label (M3-b-3a).
+     *
+     * `SETL1` runs on both machines now, so a routine that brackets its register writes leaves the
+     * same two bytes on both. `l1` is written with the datasette bits ridden along, which is why
+     * the fixtures seed it non-zero: a comparison against zero would agree with a port that had
+     * lost the `AND #%11111000`.
+     */
+    std::uint16_t l1m;
+    static constexpr std::uint16_t IO_PORT = 0x0001;
+
     /// Unresolved -- every address zero -- for the one use that needs none: hashing the image,
     /// which reads cells in table order and never their addresses (`Hash(const Universe&)`).
     Where() = default;
@@ -578,6 +573,7 @@ namespace GameLogicTests
       dnoiz = _oracle.Label("DNOIZ");
       mupla = _oracle.Label("MUPLA");
       mulie = _oracle.Label("MULIE");
+      l1m = _oracle.Label("L1M");
 
       /*
        * 6502: XX21+2*SST-2 -- the only two bytes of the pointer table the game writes.

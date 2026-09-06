@@ -469,27 +469,6 @@ namespace GameLogicTests
       at.frin = oracle.Label("FRIN");
       at.t2 = oracle.Label("T2");
 
-      struct Recorder final : Elite::SightEffects
-      {
-        std::vector<std::uint8_t> modes;
-        std::vector<std::uint8_t> masks;
-        std::uint32_t colours = 0;
-
-        void SetRasterMode(std::uint8_t _mode) override
-        {
-          modes.push_back(_mode);
-        }
-        void SetSightColour(std::uint8_t) override
-        {
-          ++colours;
-        }
-        void SetSpritesEnabled(std::uint8_t _mask) override
-        {
-          masks.push_back(_mask);
-        }
-        void MaskSprites(std::uint8_t) override {}
-      };
-
       std::uint32_t compared = 0;
       std::uint32_t copies = 0;
 
@@ -499,7 +478,6 @@ namespace GameLogicTests
         {
           Cpu6502 cpu = oracle.Fresh();
           Elite::Canvas canvas;
-          cpu.AddTrap(oracle.Label("SETL1"));
 
           FillScreens(cpu, canvas, screen, 0x00u);
 
@@ -573,8 +551,13 @@ namespace GameLogicTests
           status.altitude = READINGS[11];
           status.damageFlash = READINGS[12];
 
-          Recorder effects;
-          Elite::ShowDashboard(canvas, draw, screenState, bubble, flight, status, READINGS[8], compass, effects);
+          // 6502: VIC+&15 and l1 -- seeded so that "NOSPRITES ran" is a byte and not a call count.
+          Elite::VideoState video{};
+          Elite::MemoryMap map;
+          video.enabled = 0xA7u;
+          map.port = 0xE7u;
+
+          Elite::ShowDashboard(canvas, draw, screenState, bubble, flight, status, READINGS[8], compass, video, map);
 
           const std::wstring where = WidenText("wantdials(DFLAG " + std::to_string(already) + ", MCNT " + std::to_string(counter) + ")");
 
@@ -597,11 +580,10 @@ namespace GameLogicTests
             }
           }
 
-          // `NOSPRITES` runs either way, so the seam sees the same three calls whatever `DFLAG` is.
-          Assert::AreEqual<std::size_t>(2u, effects.modes.size(), (where + L": two raster switches").c_str());
-          Assert::AreEqual<std::size_t>(1u, effects.masks.size(), (where + L": one sprite mask").c_str());
-          Assert::AreEqual<std::uint32_t>(0u, effects.masks[0], (where + L": and it is zero").c_str());
-          Assert::AreEqual<std::size_t>(2u, cpu.trapHits.size(), (where + L": the game switched twice").c_str());
+          // `NOSPRITES` runs either way, so the sprites are off and the map is back whatever
+          // `DFLAG` is (M3-b-3a: the state where three counted calls used to be).
+          Assert::AreEqual<std::uint32_t>(0u, video.enabled, (where + L": NOSPRITES switched every sprite off").c_str());
+          Assert::AreEqual<std::uint32_t>(0xE4u, map.port, (where + L": and put the memory map back").c_str());
 
           Assert::IsTrue(touched > 0u, (where + L": something was drawn").c_str());
           copies += (already == 0u) ? 1u : 0u;
@@ -650,22 +632,6 @@ namespace GameLogicTests
       const std::uint16_t t2 = oracle.Label("T2");
       const std::uint16_t mcnt = oracle.Label("MCNT");
 
-      struct Recorder final : Elite::SightEffects
-      {
-        std::vector<std::uint8_t> modes;
-        std::vector<std::uint8_t> masks;
-        void SetRasterMode(std::uint8_t _mode) override
-        {
-          modes.push_back(_mode);
-        }
-        void SetSightColour(std::uint8_t) override {}
-        void SetSpritesEnabled(std::uint8_t _mask) override
-        {
-          masks.push_back(_mask);
-        }
-        void MaskSprites(std::uint8_t) override {}
-      };
-
       std::uint32_t compared = 0;
       std::uint32_t dashboards = 0;
       std::uint32_t oneBand = 0;
@@ -677,7 +643,6 @@ namespace GameLogicTests
         {
           Cpu6502 cpu = oracle.Fresh();
           Elite::Canvas canvas;
-          cpu.AddTrap(oracle.Label("SETL1"));
 
           FillScreens(cpu, canvas, screen, 0x1Du);
 
@@ -727,7 +692,10 @@ namespace GameLogicTests
           Elite::Compass compass{0xC3u, 0x9Cu, 0x55u};
           Elite::FlightState flight;
           Elite::FlightStatus status;
-          Recorder effects;
+          Elite::VideoState video{};
+          Elite::MemoryMap map;
+          video.enabled = 0xA7u;
+          map.port = 0xE7u;
 
           screenState.colourBank = 0x33u;
           screenState.bitmapMode = 0x44u;
@@ -735,7 +703,7 @@ namespace GameLogicTests
           textState.column = 0x66u;
           textState.row = 0x77u;
 
-          Elite::SetUpScreenPixels(canvas, draw, textState, screenState, bubble, flight, status, 0u, compass, effects, view);
+          Elite::SetUpScreenPixels(canvas, draw, textState, screenState, bubble, flight, status, 0u, compass, video, map, view);
 
           const std::wstring where = WidenText("TTX66K(QQ11 " + std::to_string(view) + ", DFLAG " + std::to_string(already) + ")");
 
@@ -757,8 +725,9 @@ namespace GameLogicTests
             }
           }
 
-          Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.modes.size(),
-                                        (where + L": the same number of raster switches").c_str());
+          // Every path reaches `NOSPRITES`, so both sides end with the sprites off and the map back.
+          Assert::AreEqual<std::uint32_t>(0u, video.enabled, (where + L": every sprite off").c_str());
+          Assert::AreEqual<std::uint32_t>(0xE4u, map.port, (where + L": and the memory map back").c_str());
 
           dashboards += (view == 0u || view == 13u) ? 1u : 0u;
           oneBand += (view == 2u || view == 64u || view == 128u) ? 1u : 0u;
@@ -817,7 +786,6 @@ namespace GameLogicTests
             universe.status.hyperspaceCountdown = countdown;
 
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(oracle.Label("SETL1"));
             FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
             Mirror(universe, cpu, at);
 
@@ -881,7 +849,6 @@ namespace GameLogicTests
             universe.spaceView = from;
 
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
             FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
             Mirror(universe, cpu, at);
@@ -1013,7 +980,6 @@ namespace GameLogicTests
         universe.bubble.blocks[1].z.hi = item.sunHigh;
 
         Cpu6502 cpu = oracle.Fresh();
-        cpu.AddTrap(oracle.Label("SETL1"));
         cpu.AddTrap(oracle.Label("DOVDU19"));
         FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
         Mirror(universe, cpu, at);

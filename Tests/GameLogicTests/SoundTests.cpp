@@ -619,13 +619,15 @@ namespace GameLogicTests
 
         Assert::IsTrue(cpu.CallSubroutine(theme ? at.startat : at.startbd, 200'000).completed, L"the start returned");
         Elite::SidWriteLog started;
+        Elite::MemoryMap map;
+        map.port = cpu.memory[0x0001u]; // 6502: l1 -- `april16` brackets `BDENTRY` with `SETL1`
         if (theme)
         {
-          Elite::StartTheme(music, started);
+          Elite::StartTheme(music, map, started);
         }
         else
         {
-          Elite::StartDockingMusic(music, started);
+          Elite::StartDockingMusic(music, map, started);
         }
 
         const std::wstring tune = theme ? L"theme" : L"docking";
@@ -725,18 +727,24 @@ namespace GameLogicTests
 
           const std::wstring where = Widen("flags " + std::to_string(flags) + (stopFirst ? " stopbd" : " startbd"));
           Elite::SidWriteLog log;
+          Elite::MemoryMap map;
+          map.port = cpu.memory[0x0001u]; // 6502: l1, as the image has it before the routine runs
           if (stopFirst)
           {
             Assert::IsTrue(cpu.CallSubroutine(at.stopbd, 200'000).completed, L"stopbd returned");
-            Elite::StopDockingMusic(music, titleReset, ours, log);
+            Elite::StopDockingMusic(music, titleReset, ours, map, log);
           }
           else
           {
             Assert::IsTrue(cpu.CallSubroutine(at.startbd, 200'000).completed, L"startbd returned");
-            Elite::StartDockingMusic(music, log);
+            Elite::StartDockingMusic(music, map, log);
           }
 
           CompareWrites(cpu, log, where);
+
+          // 6502: l1 -- `april16` and `stopat` bracket their SID writes with `SETL1`, which the
+          // port dropped until M3-b-3a: the routines said so in their comments and did not do it.
+          Assert::AreEqual(cpu.memory[0x0001u], map.port, (where + L": l1 after the bracket").c_str());
           CompareMusic(cpu, at, music, where);
           CompareBuffer(cpu, at, ours, where);
         }

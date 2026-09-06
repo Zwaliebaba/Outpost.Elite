@@ -31,8 +31,8 @@
  * CHOICE, and false is the branch a fixture that reached it would have to explain.
  *
  * `WaitFrames` satisfies `StartUpEffects` and `LineEntryEffects` with one override, because
- * `DELAY` is one routine in the game and the two interfaces are two views of it -- the same
- * arrangement `SetRasterMode` has across `SightEffects` and `ExplosionEffects`.
+ * `DELAY` is one routine in the game and the two interfaces are two views of it -- the arrangement
+ * `SetRasterMode` had across `SightEffects` and `ExplosionEffects` until M3-b-3a took both.
  */
 namespace GameLogicTests
 {
@@ -40,7 +40,6 @@ namespace GameLogicTests
   struct NullSeams : Elite::ShipDrawEffects,
                      Elite::SpawnChildEffects,
                      Elite::StartUpEffects,
-                     Elite::SightEffects,
                      Elite::KeySource,
                      Elite::TradeScreenEffects,
                      Elite::LineEntryEffects,
@@ -58,12 +57,6 @@ namespace GameLogicTests
     Elite::TitleKey ScanTitleKeys(Elite::KeyLogger&) override { return {}; }
     void WaitFrames(std::uint8_t) override {}
     std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override { return 0; }
-
-    // Elite::SightEffects
-    void SetRasterMode(std::uint8_t) override {}
-    void SetSightColour(std::uint8_t) override {}
-    void SetSpritesEnabled(std::uint8_t) override {}
-    void MaskSprites(std::uint8_t) override {}
 
     // Elite::KeySource -- `TT217` BLOCKS in the game, so a fixture that reached it would hang
     // rather than fail; this answers a key nothing dispatches.

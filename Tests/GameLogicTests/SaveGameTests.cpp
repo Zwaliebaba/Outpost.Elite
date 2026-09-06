@@ -593,7 +593,7 @@ namespace GameLogicTests
       // routines that leave the text system. DOXC rather than MT8, because the port splits MT8 the
       // same way -- the column is the canvas's and the sentence-case flag is the text system's.
       for (const char* seam :
-           {"DELAY", "FLKB", "MT9", "NLIN4", "DOXC", "DOYC", "FILEPR", "OTHERFILEPR", "KERNALSETUP", "SETL1", "SWAPPZERO"})
+           {"DELAY", "FLKB", "MT9", "NLIN4", "DOXC", "DOYC", "FILEPR", "OTHERFILEPR", "KERNALSETUP", "SWAPPZERO"})
       {
         cpu.AddTrap(_oracle.Label(seam));
       }
@@ -876,7 +876,7 @@ namespace GameLogicTests
 
         NullSeams nulls;
         Elite::SidWriteLog sid;
-        Elite::Ports ports{recursive, characters, sink,  nulls, nulls, nulls, sid,
+        Elite::Ports ports{recursive, characters, sink,  nulls, nulls, sid,
                            extended,  nulls,      keys,  nulls, effects, store};
 
         const Elite::DiskMenuResult result = Elite::DiskAccessMenu(universe, ports);
