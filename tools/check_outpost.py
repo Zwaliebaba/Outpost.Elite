@@ -379,6 +379,85 @@ def check_braces(_sources: list["Path"]) -> tuple[int, list[str]]:
     return counted, wrong
 
 
+# A declaration WITH AN INITIALISER: optional leading keywords, a type that may carry a namespace
+# and a template argument list, a name, and then `=` or `{`. `auto` falls out of the keyword group
+# and stands as the type, which is what `auto held = ...` needs. `held = 1;` and `ship.speed = 1;`
+# do not match, because both want a second identifier where they have punctuation or nothing.
+SWITCH_DECLARATION = re.compile(r"^[ \t]*(?!return\b|case\b|default\b|else\b|break\b|delete\b)"
+                                r"(?:(?:const|constexpr|static|volatile|unsigned|signed)\s+)*"
+                                r"[A-Za-z_][\w:]*\s*(?:<[^;{}()\n]*>)?\s*[*&]?\s+"
+                                r"([A-Za-z_]\w*)\s*(?:=(?!=)|\{)", re.MULTILINE)
+
+# What ends a case and so proves the declaration above one is skipped by a label.
+SWITCH_LABEL = re.compile(r"^[ \t]*(?:case\b|default\s*:)", re.MULTILINE)
+
+
+def switch_bodies(_text: str):
+    """Each `switch (...) { ... }` body in _text, without its braces."""
+    for match in re.finditer(r"\bswitch\s*\(", _text):
+        condition = balanced(_text, match.end() - 1)
+        if condition is None:
+            continue
+        opener = _text.find("{", match.end() + len(condition))
+        if opener < 0:
+            continue
+        depth = 0
+        for index in range(opener, len(_text)):
+            if _text[index] == "{":
+                depth += 1
+            elif _text[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    yield _text[opener + 1:index]
+                    break
+
+
+def check_switch_scopes(_sources: list[Path]) -> tuple[int, list[str]]:
+    """No `case` label jumps past a declaration with an initialiser.
+
+    A `switch` body is ONE scope, so a variable declared in one case is in scope in the next and
+    C++ will not let a label jump past its initialisation. Every compiler rejects it; nothing on
+    the Linux leg compiles `Outpost/`, so the first sign is `error C2360` from the Windows job --
+    which is what M3-b-3c produced by deleting a pacing struct and the braces that had held it,
+    leaving `const Elite::ForcedKey begun = ...` bare inside the loop's switch. The brace check
+    above could not see it: the braces balanced, which was the whole problem.
+
+    The report is deliberately narrow. A declaration is only named when a `case` or `default`
+    label follows it AT THE SAME DEPTH, because that is the shape the compiler objects to; the
+    last case of a switch may declare what it likes. Depth is counted over both kinds of bracket,
+    so a declaration inside a nested block or a lambda is somebody else's business.
+    """
+    counted = 0
+    wrong: list[str] = []
+    for source in _sources:
+        text = strip_comments(source.read_text(encoding="utf-8", errors="replace"))
+        text = re.sub(r"'(?:\\.|[^'\\])'", "''", text)
+        text = re.sub(r'"(?:\\.|[^"\\])*"', '""', text)
+        for body in switch_bodies(text):
+            counted += 1
+            depth = 0
+            depths = []
+            for character in body:
+                if character in "{(":
+                    depths.append(depth)
+                    depth += 1
+                elif character in "})":
+                    depth -= 1
+                    depths.append(depth)
+                else:
+                    depths.append(depth)
+
+            labels = [label.start() for label in SWITCH_LABEL.finditer(body) if depths[label.start()] == 0]
+            for match in SWITCH_DECLARATION.finditer(body):
+                if depths[match.start()] != 0:
+                    continue
+                if not any(label > match.start() for label in labels):
+                    continue
+                wrong.append(f"  FAIL  {source.name} declares {match.group(1)} directly in a switch body "
+                             f"and a case label follows it; brace the case (C2360)")
+    return counted, wrong
+
+
 def self_test() -> int:
     """Plant an access that cannot resolve and check the member check says so.
 
@@ -491,9 +570,44 @@ def self_test() -> int:
             print(line)
         return 1
 
+    # ---- and the switch-scope check, planted with the shape the Windows job rejected ---------
+    with tempfile.TemporaryDirectory() as folder:
+        planted = Path(folder) / "Planted.cpp"
+        # A BRACED CASE ABOVE THE BARE ONE, on purpose: `kept` is legal exactly because it has a
+        # scope, so a check that only looked for `Type name =` inside a switch would report it and
+        # the tree would learn to ignore the check. And `last` below the final label is legal too.
+        planted.write_text("void f(int mode) {\n"
+                           "  switch (mode) {\n"
+                           "  case 1: { const int kept = 1; (void)kept; return; }\n"
+                           "  case 2:\n"
+                           "    const int gone = 2;\n"
+                           "    (void)gone;\n"
+                           "    return;\n"
+                           "  case 3:\n"
+                           "    const int last = 3;\n"
+                           "    (void)last;\n"
+                           "    return;\n"
+                           "  }\n"
+                           "}\n", encoding="utf-8")
+        switches, skipped = check_switch_scopes([planted])
+
+    if switches == 0:
+        print("FAIL  the self-test's switch body was not read at all")
+        return 1
+    if len(skipped) != 1 or "gone" not in skipped[0]:
+        print(f"FAIL  the self-test expected the bare declaration alone and got {skipped}")
+        return 1
+
+    jumped = check_switch_scopes(sorted(list(APP.glob("*.cpp")) + list(APP.glob("*.h"))))[1]
+    if jumped:
+        print("FAIL  the tree itself does not pass the switch-scope check")
+        for line in jumped:
+            print(line)
+        return 1
+
     print(f"OK    self-test passed: a planted Elite:: member, a planted Outpost:: member, a planted "
-          f"initialiser and a planted missing brace were caught, {len(members) + len(ownMembers)} types "
-          f"parsed, the tree is clean")
+          f"initialiser, a planted missing brace and a planted unbraced case were caught, "
+          f"{len(members) + len(ownMembers)} types parsed, the tree is clean")
     return 0
 
 
@@ -557,18 +671,23 @@ def main() -> int:
     bracesChecked, unbalanced = check_braces(sources)
     wrong.extend(unbalanced)
 
+    # ---- and that no case label in them jumps past a declaration -----------------------------
+    switchesChecked, skipped = check_switch_scopes(sources)
+    wrong.extend(skipped)
+
     print(f"app sources      {len(sources)}")
     print(f"Elite:: names    {len(used)}")
     print(f"calls checked    {checked}")
     print(f"members checked  {membersChecked}")
     print(f"initialisers     {initialisersChecked}")
     print(f"braces balanced  {bracesChecked}")
+    print(f"switch bodies    {switchesChecked}")
 
     for line in wrong:
         print(line)
 
     if wrong and not missing:
-        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s) or delimiter(s) in the app do not match")
+        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s), delimiter(s) or case scope(s) do not match")
         return 1
 
     if missing:
@@ -579,12 +698,12 @@ def main() -> int:
         return 1
 
     if wrong:
-        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s) or delimiter(s) in the app do not match")
+        print(f"FAIL  {len(wrong)} call(s), member(s), initialiser(s), delimiter(s) or case scope(s) do not match")
         return 1
 
     print("OK    every Elite:: name the app uses is declared, every call it makes has the right")
-    print("      number of arguments, every member it names exists, and every constructor")
-    print("      initialises only its own members")
+    print("      number of arguments, every member it names exists, every constructor initialises")
+    print("      only its own members, and no case label jumps past a declaration")
     return 0
 
 

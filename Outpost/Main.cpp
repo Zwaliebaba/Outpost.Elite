@@ -764,21 +764,20 @@ namespace
     }
 
     case Elite::LoopOutcome::Died:
+    {
       /*
        * 6502: DEATH, then DEATH2 -- and the port now takes both.
        *
-       * `DEATH` is built (§6.117), so what a player sees on dying is the sequence rather than an
-       * immediate restart: the sound, FOUR TIMES the speed, the border rubbed off with its own
-       * EOR, a new stardust field, "GAME OVER", five pieces of wreckage and sixty-four iterations
-       * of the flight loop to fly them past. `DEATH2` is the tail -- `JSR RES2` and a fall into
-       * `BR1` -- which this already did and still does.
+       * `DEATH` is built (§6.117), so what a player sees on dying is the sequence rather than an immediate restart:
+       * the sound, FOUR TIMES the speed, the border rubbed off with its own EOR, a new stardust field, "GAME OVER",
+       * five pieces of wreckage and sixty-four iterations of the flight loop to fly them past. `DEATH2` is the tail
+       * -- `JSR RES2` and a fall into `BR1` -- which this already did and still does.
        *
-       * It said "a quarter-turn of the speed" until 2026-09-05, as did `Flight.h`. `ASL DELTA`
-       * twice is a multiply, the port and its test have always had it right, and the debris
-       * rushing past at four times your last speed is exactly what the sequence looks like.
+       * It said "a quarter-turn of the speed" until 2026-09-05, as did `Flight.h`. `ASL DELTA` twice is a multiply,
+       * the port and its test have always had it right, and four times your last speed is what the debris looks like.
        *
-       * Neither routine restores the energy banks. That is the game's behaviour and not an
-       * omission here: `RESET` fills them and only the COLD start calls it (ADR-003).
+       * Neither routine restores the energy banks. That is the game's behaviour and not an omission here: `RESET`
+       * fills them and only the COLD start calls it (ADR-003).
        */
       // 6502: DEATH's `.D2 JSR M% / DEC LASCT / BNE D2` -- and `Presenter::HoldFlightFrame` is what
       // shows each of the sixty-five frames for as long as the next takes, which is §6.149's bug
@@ -790,6 +789,7 @@ namespace
       const Elite::ForcedKey begun = Elite::StartGame(_game.universe, _game.ports, false);
       Perform(_game, begun.outcome);
       return;
+    }
 
     case Elite::LoopOutcome::Escaped:
     {
