@@ -740,7 +740,44 @@ namespace
        * omission here: `RESET` fills them and only the COLD start calls it (ADR-003).
        */
       {
-        Elite::Die(_game.flight.Loop(), _game.flight);
+        /*
+         * The pacing, and it is NOT the shell's `ShowFrame`.
+         *
+         * `DEATH` runs the flight loop sixty-five times and the original waits for nothing between
+         * them (§6.17): each frame was on screen for as long as the next took to compute, which the
+         * cost model puts at about 12.7 a second. Handing this the shell would pace it by vertical
+         * sync instead, and the sixty-four frames would go past in a second -- which is what the
+         * first version did, and it read as a glitch rather than as a death (§6.149).
+         *
+         * The ship count is read FRESH on every frame because the bubble empties as the wreckage
+         * flies past, so the rate rises through the sequence exactly as the original's did.
+         */
+        struct DeathPacing final : Elite::TunnelEffects
+        {
+          Game& game;
+
+          explicit DeathPacing(Game& _game) noexcept
+            : game(_game)
+          {
+          }
+
+          void ShowFrame() override
+          {
+            std::uint8_t ships = 0;
+            for (const std::uint8_t type : game.flight.Loop().screen.bubble.slots)
+            {
+              if (type == 0u)
+              {
+                break; // 6502: FRIN's zero terminates the list
+              }
+              ++ships;
+            }
+            game.shell.HoldFlightFrame(ships);
+          }
+        };
+
+        DeathPacing pacing(_game);
+        Elite::Die(_game.flight.Loop(), _game.flight, &pacing);
 
         _game.shell.ResetShip();
 

@@ -289,6 +289,43 @@ namespace Outpost
     }
   }
 
+  void GameShell::HoldFlightFrame(std::uint8_t _ships)
+  {
+    /*
+     * Present the SAME picture until a flight frame is due, which is what the VIC-II was doing
+     * while the 6510 computed the next one. `FlightFrameSeconds` is the measured cost model
+     * (§6.114), read fresh because it depends on how full the bubble is -- and during a death the
+     * bubble empties as the wreckage flies past, so the rate is not a constant.
+     */
+    const double period = FlightFrameSeconds(_ships);
+
+    if (m_lastFlightFrame.time_since_epoch().count() == 0)
+    {
+      m_lastFlightFrame = std::chrono::steady_clock::now();
+    }
+
+    for (;;)
+    {
+      if (!Turn())
+      {
+        Abandon();
+      }
+
+      const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+      const double elapsed = std::chrono::duration<double>(now - m_lastFlightFrame).count();
+      m_lastFlightFrame = now;
+
+      m_flightFrameLeftover += elapsed;
+      if (m_flightFrameLeftover >= period)
+      {
+        // One frame, and a long backlog is dropped rather than repaid -- a stall should cost the
+        // sequence a frame, not run the rest of it at double speed (the title's rule, §6.110).
+        m_flightFrameLeftover = (m_flightFrameLeftover >= 2.0 * period) ? 0.0 : (m_flightFrameLeftover - period);
+        return;
+      }
+    }
+  }
+
   void GameShell::ShowFrame()
   {
     /*
