@@ -255,7 +255,7 @@ namespace Outpost
     // 6502: LL14's JMP DOEXP -- age the cloud by one frame and draw it, which is how the last
     // frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
     // vertices `LL9` part 8 projected, which `DOEXP` copies onto the ship's line heap.
-    Elite::DrawExplosionCloud(m_canvas, m_draw, m_math, m_screen.rng, m_work, m_heap, m_geometry, m_bubble, *this);
+    Elite::DrawExplosionCloud(m_canvas, m_math, m_screen.rng, m_work, m_heap, m_geometry, m_bubble, *this);
   }
 
   // ---- the controls -------------------------------------------------------------------------------

@@ -75,16 +75,16 @@ namespace Elite
    * It ends by falling into `MAD` rather than calling it, so the answer is `MAD`'s (A X) pair:
    * the dot product as a sign-magnitude sixteen-bit value, with the sign in A's bit 7.
    */
-  [[nodiscard]] AddSignedResult DotProductWithShip(const Ship& _block, const DrawWorkspace& _draw, std::uint8_t _at) noexcept;
+  [[nodiscard]] AddSignedResult DotProductWithShip(const Ship& _block, UnitVector _vector, std::uint8_t _at) noexcept;
 
   /*
    * 6502: TAS6 -- point `XX15` the other way.
    *
    * Three `EOR #%10000000`s, which is what negation is in sign-magnitude: the magnitude is
-   * untouched and only the sign bit moves. `XX15` is `X1`, `Y1` and `X2` in the draw workspace
-   * (§6.37), the same six bytes `TAS2` and the line drawing share.
+   * untouched and only the sign bit moves. `XX15` is `X1`, `Y1` and `X2` (§6.37), the same six
+   * bytes `TAS2` and the line drawing share, and since M2-c the vector goes in and comes back.
    */
-  void NegateVector(DrawWorkspace& _draw) noexcept;
+  [[nodiscard]] UnitVector NegateVector(UnitVector _vector) noexcept;
 
   /*
    * 6502: DCS1 -- move `K3` from the station to the IDEAL DOCKING POSITION, which is out in front

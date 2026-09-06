@@ -66,23 +66,32 @@ namespace GameLogicTests
     constexpr std::uint32_t AUTOPILOT_LIMIT = 4000;
 
     /// The record. Empty is a failure, so a tree can never carry an unpinned replay.
+    /*
+     * RE-TAKEN 2026-09-06 (M2-c, Modernize.md rule 1's second case: the port was wrong).
+     *
+     * Every digest moved and not one step did: the flight is the same 1,170 steps to the same
+     * dock, and what changed is the SHAPE of the image the digest is taken over. `UniverseImage`
+     * hashed a `T2` cell holding a byte the game does not write -- `HLOIN` and `BOX2` park their
+     * scratch in `T`, and the port had followed the BBC commentary's `T2`/`R2` naming instead.
+     * Both are locals now, the cell is gone, and every digest below is one byte narrower.
+     */
     constexpr Checkpoint RECORDED[] = {
-      {0, 0x7d05eea054298f60ull},    // launched from Lave
-      {40, 0xb62a1b4cc0eb5509ull},   // coasted
-      {100, 0xf9dd621d29fe1c4dull},  // at full speed
-      {200, 0x79cf7c2053860154ull},  // re-taken 2026-09-06 (§6.157)
-      {300, 0x3aeedfd85df734d5ull},
-      {340, 0x3bad2c109437025cull},  // the Viper fought
-      {342, 0x57e6af3388f0d307ull},  // the docking computer engaged
-      {400, 0x9f74d262265bb987ull},
-      {500, 0x1adca3f73b7ae235ull},
-      {600, 0x955f5e32f8e1fe3eull},
-      {700, 0x5f367374dd2f5c8dull},
-      {800, 0x322a179f2024f781ull},
-      {900, 0x54fa19b2fb1538a5ull},
-      {1000, 0x42025ac553b121cbull},
-      {1100, 0x2a756dbb4e60db77ull},
-      {1170, 0x7bba73354ced21d0ull}, // docked
+      {0, 0x793d19aaf960deaaull},    // launched from Lave
+      {40, 0x8c08ff3c1805bfd5ull},   // coasted
+      {100, 0x8baad0a1c0327247ull},  // at full speed
+      {200, 0x35d9bf19cf6c2e90ull},
+      {300, 0x24449bcf0ec9102bull},
+      {340, 0x19982d918af825e4ull},  // the Viper fought
+      {342, 0x586a396d95e105f5ull},  // the docking computer engaged
+      {400, 0x3ada7522d3376ce9ull},
+      {500, 0x8a8e79201b21842dull},
+      {600, 0x1898d3e20b42ab22ull},
+      {700, 0x55cb1c673764c46dull},
+      {800, 0x11ed5553a41da45full},
+      {900, 0x4aba4549a9d9dfe9ull},
+      {1000, 0x72d94ce3ca9f3d4dull},
+      {1100, 0xa3db6fc7d6ce54a7ull},
+      {1170, 0xe9a05a7fe9c76544ull}, // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;

@@ -24,8 +24,8 @@ namespace Elite
      * 6502: PTCLS and PTCLS2, which are one body -- see the header. `_effects` is null for `PTCLS`
      * and the seam for `PTCLS2`.
      */
-    void DrawParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
-                       const Bubble& _bubble, ExplosionEffects* _effects) noexcept
+    void DrawParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap, const Bubble& _bubble,
+                       ExplosionEffects* _effects) noexcept
     {
       const HeapOffset address = _work.heap;
 
@@ -137,8 +137,8 @@ namespace Elite
         for (;;)
         {
           // 6502: JSR DORND2 / STA ZZ -- how far away the particle is, which is what decides
-          // whether `PIXEL` draws one mark, two, or a square.
-          _draw.zz = _rng.NextRepeatable().value;
+          // whether `PIXEL` draws one mark, two, or a square. `ZZ` and `Y1` are this loop's own (M2-c).
+          const std::uint8_t distance = _rng.NextRepeatable().value;
 
           // 6502: LDA K3+1 / STA R / LDA K3 / JSR EXS1 -- the vertex's y, against the cloud in Q.
           const ExplosionOffset offsetY = OffsetByCloud(_rng, k3[0], k3[1], _math.q);
@@ -155,13 +155,13 @@ namespace Elite
           }
           else
           {
-            _draw.y1 = offsetY.low; // 6502: STX Y1
+            const std::uint8_t y1 = offsetY.low; // 6502: STX Y1
 
             const ExplosionOffset offsetX = OffsetByCloud(_rng, k3[2], k3[3], _math.q);
 
             if (offsetX.high == 0u)
             {
-              PlotPixel(_canvas, _draw, offsetX.low, _draw.y1);
+              PlotPixel(_canvas, offsetX.low, y1, distance);
             }
           }
 
@@ -235,20 +235,20 @@ namespace Elite
     return ExplosionOffset{high.value, low.value};
   }
 
-  void DrawExplosionParticles(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const Ship& _work,
-                              LineHeap& _heap, const Bubble& _bubble) noexcept
+  void DrawExplosionParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
+                              const Bubble& _bubble) noexcept
   {
-    DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr);
   }
 
-  void DrawExplosionParticlesWithSprite(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, const Ship& _work,
-                                        LineHeap& _heap, const Bubble& _bubble, ExplosionEffects& _effects) noexcept
+  void DrawExplosionParticlesWithSprite(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
+                                        const Bubble& _bubble, ExplosionEffects& _effects) noexcept
   {
-    DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, &_effects);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_effects);
   }
 
-  void DrawExplosionCloud(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap,
-                          const GeometryWorkspace& _geometry, const Bubble& _bubble, ExplosionEffects& _effects) noexcept
+  void DrawExplosionCloud(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap, const GeometryWorkspace& _geometry,
+                          const Bubble& _bubble, ExplosionEffects& _effects) noexcept
   {
     const HeapOffset address = _work.heap;
 
@@ -256,7 +256,7 @@ namespace Elite
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
     if (Has(_work.state, ShipStateBit::CloudDrawn))
     {
-      DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
+      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr);
     }
 
     /*
@@ -371,11 +371,11 @@ namespace Elite
      */
     if (frump == EXPLOSION_CLOUD_START)
     {
-      DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, &_effects);
+      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_effects);
       return;
     }
 
-    DrawParticles(_canvas, _draw, _math, _rng, _work, _heap, _bubble, nullptr);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr);
   }
 
 } // namespace Elite

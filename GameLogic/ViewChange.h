@@ -70,7 +70,7 @@ namespace Elite
 
   /// 6502: BOXS -- a horizontal line right across the screen on row `_row`, through `HLOIN`.
   /// `X1 = 0` and `X2 = 255`, which is the whole 256-pixel width and not the 32 cells of text.
-  void DrawScreenRule(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _row) noexcept;
+  void DrawScreenRule(Canvas& _canvas, std::uint8_t _row) noexcept;
 
   /*
    * 6502: BOXS2 -- EOR one byte into all eight rows of a character cell, eighteen cells down.
@@ -167,11 +167,11 @@ namespace Elite
    * BOX2` gets 18. A text screen is 25 character rows tall and the space view is 18, and that
    * whole distinction is one byte of data standing in for an instruction (§6.79).
    *
-   * `T2` carries the count from the first edge to the second, which is why the port writes it
-   * rather than using `_rows` twice: they are the same number and the original reads them from
-   * different places.
+   * `T` carries the count from the first edge to the second -- `STX T` and then `LDX T`, because
+   * `BOXS2` leaves X at zero -- and it is the kernel's byte, a local since M2-b. The port wrote
+   * `T2` until M2-c and nothing read it (§8).
    */
-  void DrawBorder(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _rows) noexcept;
+  void DrawBorder(Canvas& _canvas, std::uint8_t _rows) noexcept;
 
   /*
    * 6502: BOX -- the whole-screen border, which is `BOX2` with a floor under it.
@@ -182,7 +182,7 @@ namespace Elite
    *
    * `TT66` does not call this; `DEATH` does, once, over the screen `TT66` has just cleared.
    */
-  void DrawFullBorder(Canvas& _canvas, DrawWorkspace& _draw) noexcept;
+  void DrawFullBorder(Canvas& _canvas) noexcept;
 
   /// 6502: LDX #18 -- what a `JSR BOX2` gets, which is the space view's height in character rows.
   inline constexpr std::uint8_t BORDER_ROWS_SPACE_VIEW = 18;
@@ -221,9 +221,8 @@ namespace Elite
    * `DIALS`. So a port that treated the flag as "do nothing" would agree on the pixels the second
    * time and differ on the first.
    */
-  void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, GeometryWorkspace& _geometry, ScreenState& _screen,
-                     Bubble& _bubble, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,
-                     SightEffects& _effects) noexcept;
+  void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
+                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, SightEffects& _effects) noexcept;
 
   /*
    * 6502: TTX66K -- clear the screen and draw whichever furniture this view wants.
@@ -241,9 +240,9 @@ namespace Elite
    * character rows and not 18 (§6.79). `_view` is `QQ11`, and views 2, 64 and 128 are the ones
    * that get one band of colour cells rather than two.
    */
-  void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, GeometryWorkspace& _geometry, TextState& _text,
-                         ScreenState& _screen, Bubble& _bubble, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
-                         Compass& _compass, SightEffects& _effects, std::uint8_t _view) noexcept;
+  void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
+                         const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,
+                         SightEffects& _effects, std::uint8_t _view) noexcept;
 
   /// What `LOOK1` and `WARP` reach that is neither memory nor the canvas.
   class ViewEffects

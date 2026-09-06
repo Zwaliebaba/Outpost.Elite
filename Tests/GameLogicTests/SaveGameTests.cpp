@@ -856,11 +856,11 @@ namespace GameLogicTests
         DeviceStore store;
         store.failDevice = script.failDevice;
         store.badFile = script.badFile;
-        Elite::NumberWorkspace numbers;
-        numbers.u = script.numberWidth; // 6502: U, exactly as it was seeded on the other side
+        std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it (M2-c)
+        numberWidth = script.numberWidth; // 6502: U, exactly as it was seeded on the other side
         std::uint8_t useDisk = script.useDisk ? std::uint8_t{0xFFu} : std::uint8_t{0};
 
-        Elite::SaveScreen screen{recursive, characters, extended, sink, text, keys, effects, store, numbers};
+        Elite::SaveScreen screen{recursive, characters, extended, sink, text, keys, effects, store, numberWidth};
 
         const Elite::DiskMenuResult result = Elite::DiskAccessMenu(screen, portBlock, portName, portImage, buffer, useDisk);
 

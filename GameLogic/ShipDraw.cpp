@@ -158,7 +158,7 @@ namespace Elite
 
   } // namespace
 
-  void DrawShipLines(Canvas& _canvas, DrawWorkspace& _draw, const LineHeap& _heap, HeapOffset _run) noexcept
+  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run) noexcept
   {
     const std::uint8_t length = _heap.Read(_run);
     if (length < 4u)
@@ -176,24 +176,25 @@ namespace Elite
     std::uint8_t y = 1;
     do
     {
-      _draw.x1 = _heap.Read(_run.Byte(y));
-      _draw.y1 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 1u)));
-      _draw.x2 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 2u)));
-      _draw.y2 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 3u)));
+      Line line;
+      line.x1 = _heap.Read(_run.Byte(y));
+      line.y1 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 1u)));
+      line.x2 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 2u)));
+      line.y2 = _heap.Read(_run.Byte(static_cast<std::uint16_t>(y + 3u)));
 
-      DrawLine(_canvas, _draw);
+      (void)DrawLine(_canvas, line);
 
       y = static_cast<std::uint8_t>(y + 4);
     } while (y < length);
   }
 
-  void StoreLineCountAndDraw(Canvas& _canvas, DrawWorkspace& _draw, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept
+  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept
   {
     _heap.Write(_run, _count);
-    DrawShipLines(_canvas, _draw, _heap, _run);
+    DrawShipLines(_canvas, _heap, _run);
   }
 
-  bool EraseShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept
+  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept
   {
     if (!Has(_ship.state, ShipStateBit::OnScreen))
     {
@@ -201,7 +202,7 @@ namespace Elite
     }
 
     _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
-    DrawShipLines(_canvas, _draw, _heap, _ship.heap);
+    DrawShipLines(_canvas, _heap, _ship.heap);
 
     // 6502: LL155's exit -- `CMP #4 / BCC LL82` clears it for a heap with no line on it, and the
     // `CPY XX20 / BCC LL27` that ends the loop leaves it set for every heap that had one.
@@ -223,11 +224,10 @@ namespace Elite
     }
   }
 
-  void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, LineHeap& _heap, MathWorkspace& _math,
-                       Projection& _screen) noexcept
+  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen) noexcept
   {
     // The flag `EE51` returns goes nowhere from here: `SHPPT` overwrites it in `PROJ`'s arithmetic.
-    static_cast<void>(EraseShip(_canvas, _draw, _ship, _heap, false));
+    static_cast<void>(EraseShip(_canvas, _ship, _heap, false));
 
     const ProjectResult projected = Project(_ship, _math, _screen);
 
@@ -250,7 +250,7 @@ namespace Elite
     }
 
     _ship.state = With(_ship.state, ShipStateBit::OnScreen);
-    StoreLineCountAndDraw(_canvas, _draw, _heap, heap, 8);
+    StoreLineCountAndDraw(_canvas, _heap, heap, 8);
   }
 
   void DotProducts(const DrawWorkspace& _draw, GeometryWorkspace& _geometry) noexcept
@@ -840,7 +840,7 @@ namespace Elite
     if (Has(_work.newb, NewbBit::Remove))
     {
       // 6502: BMI EE51 -- a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
-      static_cast<void>(EraseShip(_canvas, _draw, _work, _heap, _carryIn));
+      static_cast<void>(EraseShip(_canvas, _work, _heap, _carryIn));
       return;
     }
 
@@ -858,7 +858,7 @@ namespace Elite
 
       // 6502: JSR EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
       // carry the erase returns, which is the caller's when there was nothing to erase (§6.157).
-      const bool carry = EraseShip(_canvas, _draw, _work, _heap, _carryIn);
+      const bool carry = EraseShip(_canvas, _work, _heap, _carryIn);
       SeedExplosionCloud(_heap, _work.heap, _blueprint.explosionCount, _rng, carry); // 6502: (XX0),7
     }
 
@@ -882,7 +882,7 @@ namespace Elite
       // 6502: LL14.
       if (!Has(_work.state, ShipStateBit::Exploding))
       {
-        static_cast<void>(EraseShip(_canvas, _draw, _work, _heap, false)); // 6502: JMP EE51 -- and the flag is `LL9`'s exit
+        static_cast<void>(EraseShip(_canvas, _work, _heap, false)); // 6502: JMP EE51 -- and the flag is `LL9`'s exit
         return;
       }
 
@@ -920,7 +920,7 @@ namespace Elite
              !Has(_work.state, ShipStateBit::Exploding))
     {
       // 6502: LL13 -- past the blueprint's own visibility distance, so a dot will do.
-      DrawShipAsPoint(_canvas, _draw, _work, _heap, _math, _screen);
+      DrawShipAsPoint(_canvas, _work, _heap, _math, _screen);
       return;
     }
 
@@ -1255,7 +1255,7 @@ namespace Elite
     const HeapOffset heap = _work.heap;
     if (Has(_work.state, ShipStateBit::OnScreen))
     {
-      DrawShipLines(_canvas, _draw, _heap, heap);
+      DrawShipLines(_canvas, _heap, heap);
     }
     _work.state = With(_work.state, ShipStateBit::OnScreen);
 
@@ -1347,7 +1347,7 @@ namespace Elite
     }
 
     // 6502: LL81 -- the heap's length goes in byte 0, and then it is drawn.
-    StoreLineCountAndDraw(_canvas, _draw, _heap, heap, _math.u);
+    StoreLineCountAndDraw(_canvas, _heap, heap, _math.u);
   }
 
 } // namespace Elite

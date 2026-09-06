@@ -66,8 +66,9 @@ its operators; the flag bytes' owning types likewise.
 
 **Opened by M2-a, 2026-09-06.** Every kernel routine's inputs are parameters and its outputs a
 returned struct. The zero-page scratch structs — `MathWorkspace`, `DrawWorkspace`,
-`GeometryWorkspace`, `ClipState`, `Projection`, `K3Block`, `NumberWorkspace` — carry forty-nine
-fields, and `tools/channel_census.py` reads every routine and classifies each field per routine as
+`GeometryWorkspace`, `ClipState`, `Projection` and `K3Block` — carried forty-nine fields when M2-a
+counted them and forty-two after M2-c's first commit (`NumberWorkspace` and the drawing bytes that
+were parameters went), and `tools/channel_census.py` reads every routine and classifies each field per routine as
 written, read before written from the caller, or read after a call; Modernize.md §4.3 holds the
 census and a verdict for each field. The verdicts fall into four classes and only four:
 
@@ -158,7 +159,7 @@ needs it.
 |---|---|---|
 | M0 The safety net | Built 2026-09-06 | Modernize.md §6 M0, §8 |
 | M1 Typed data | Built 2026-09-06 | §2 above; Modernize.md §6 M1 |
-| M2 Calling conventions | M2-a and M2-b built 2026-09-06 (the kernel takes values and returns structs; the frame's `Q` named, Modernize.md §8 and R22); M2-c and M2-d open | §3 above; Modernize.md §4.3 |
+| M2 Calling conventions | M2-a and M2-b built 2026-09-06 (the kernel takes values and returns structs; the frame's `Q` named, Modernize.md §8 and R22); M2-c's first of three commits built the same day (the line, the pixel, the blip, the compass, the dials and the number printer); M2-c-2, M2-c-3 and M2-d open | §3 above; Modernize.md §4.3 |
 | M3 Ownership | Planned | §4; ADR-007 when built |
 | M4 Control flow | Planned | §5 |
 | M5 Polish and the ledger | Planned; amends this document | Modernize.md §6 M5 |

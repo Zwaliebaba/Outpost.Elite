@@ -589,7 +589,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll155, 500'000);
         Assert::IsTrue(run.completed, L"LL155 returned");
 
-        Elite::DrawShipLines(canvas, draw, heap, Elite::HeapOffset::FromAddress(HEAP_AT));
+        Elite::DrawShipLines(canvas, heap, Elite::HeapOffset::FromAddress(HEAP_AT));
 
         CompareScreens(cpu, screenBase, canvas, L"LL155 length " + std::to_wstring(length));
         CompareHeaps(cpu, heap, L"LL155 length " + std::to_wstring(length));
@@ -632,7 +632,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll81, 500'000);
         Assert::IsTrue(run.completed, L"LL81 returned");
 
-        Elite::StoreLineCountAndDraw(canvas, draw, heap, Elite::HeapOffset::FromAddress(HEAP_AT), count);
+        Elite::StoreLineCountAndDraw(canvas, heap, Elite::HeapOffset::FromAddress(HEAP_AT), count);
 
         CompareScreens(cpu, screenBase, canvas, L"LL81 count " + std::to_wstring(count));
         CompareHeaps(cpu, heap, L"LL81 count " + std::to_wstring(count));
@@ -690,7 +690,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ee51, 500'000);
             Assert::IsTrue(run.completed, L"EE51 returned");
 
-            const bool carry = Elite::EraseShip(canvas, draw, ship, heap, carryIn);
+            const bool carry = Elite::EraseShip(canvas, ship, heap, carryIn);
 
             const std::wstring where = L"EE51 state " + std::to_wstring(state) + L" heap " + std::to_wstring(heapBytes->size()) +
                                        L" carry in " + std::to_wstring(carryIn);
@@ -906,7 +906,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(shppt, 500'000);
         Assert::IsTrue(run.completed, L"SHPPT returned");
 
-        Elite::DrawShipAsPoint(canvas, draw, ship, heap, math, screen);
+        Elite::DrawShipAsPoint(canvas, ship, heap, math, screen);
 
         const std::wstring where = std::wstring(L"SHPPT: ") + position.what;
         CompareScreens(cpu, screenBase, canvas, where);

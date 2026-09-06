@@ -131,7 +131,7 @@ namespace Elite
     }
 
     // 6502: .yu JSR WPSHPS -- rub every ship off the screen and forget both line heaps.
-    ClearAllShips(screen.canvas, screen.draw, screen.heaps, screen.bubble, screen.work, screen.flight, screen.view);
+    ClearAllShips(screen.canvas, screen.heaps, screen.bubble, screen.work, screen.flight, screen.view);
 
     ClearBubbleState(_loop); // 6502: JSR ZERO
 
@@ -405,8 +405,7 @@ namespace Elite
        * byte 32 to nothing. So the AI cannot run here and cannot kill anybody, and there is no
        * player to kill -- the title screen has no energy banks (§6.122).
        */
-      (void)MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, *screen.flight.blueprint,
-                     screen.view);
+      (void)MoveShip(screen.canvas, screen.work, screen.math, screen.flight, loop.tactics, *screen.flight.blueprint, screen.view);
 
       /*
        * 6502: LDX distaway / STX INWK+6 / LDA MCNT / AND #3 / LDA #0 / STA INWK / STA INWK+3.
@@ -469,7 +468,7 @@ namespace Elite
     SetUpScreen(screen, DEATH_VIEW);
 
     // 6502: JSR BOX -- the SAME border again, and `BOX2` EORs, so drawing it twice rubs it out.
-    DrawFullBorder(screen.canvas, screen.draw);
+    DrawFullBorder(screen.canvas);
 
     // 6502: LDA #0 / STA SCBASE+&1F1F / STA SCBASE+&118 -- the two bytes `BOX` STORES instead of
     // EORing, which a second pass therefore cannot remove.
@@ -477,7 +476,7 @@ namespace Elite
     screen.canvas.Write(BORDER_TOP_RIGHT, 0u);
 
     // 6502: JSR nWq -- a whole new stardust field over the cleared screen.
-    SeedStardustField(screen.canvas, screen.draw, screen.dust, screen.rng, false);
+    SeedStardustField(screen.canvas, screen.dust, screen.rng, false);
 
     // 6502: LDA #12 / JSR DOYC / JSR DOXC -- the cursor, then the sign.
     screen.text.row = GAME_OVER_ROW;
@@ -644,7 +643,7 @@ namespace Elite
     while (screen.work.ai != 0u)
     {
       static_cast<void>(
-        MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, *screen.flight.blueprint, screen.view));
+        MoveShip(screen.canvas, screen.work, screen.math, screen.flight, _loop.tactics, *screen.flight.blueprint, screen.view));
       /*
        * 6502: JSR LL9 -- and the SLOT it writes back to is the one `FRS1` just filled, through
        * `INF`. Handing it slot 0 would have `LL9` writing its bookkeeping into the PLANET, which
@@ -658,7 +657,7 @@ namespace Elite
 
     // 6502: JSR SCAN -- and it is drawn ONCE, after the loop, so the blip the animation left
     // on the scanner is erased rather than added to. `SCAN` is an EOR.
-    DrawScannerBlip(screen.canvas, screen.draw, screen.work, screen.flight.type, screen.view);
+    DrawScannerBlip(screen.canvas, screen.work, screen.flight.type, screen.view);
 
     // 6502: LDA #0 / LDX #16 / .ESL2 STA QQ20,X / DEX / BPL ESL2 -- SEVENTEEN bytes, because the
     // loop runs from 16 down THROUGH zero.

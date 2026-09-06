@@ -1339,7 +1339,7 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(nwstars, 200'000);
               Assert::IsTrue(run.completed, L"NWSTARS returned");
 
-              Elite::SeedStardustAndClearShips(canvas, draw, dust, rng, state, bubble, work, flight, viewType, carryIn);
+              Elite::SeedStardustAndClearShips(canvas, dust, rng, state, bubble, work, flight, viewType, carryIn);
 
               const std::wstring where = Widen("NWSTARS ships=" + std::to_string(fleet.size()) + " view=" + std::to_string(viewType) +
                                                " count=" + std::to_string(count) + " carry=" + std::to_string(carryIn ? 1 : 0));

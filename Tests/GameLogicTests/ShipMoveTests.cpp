@@ -813,7 +813,7 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(mveit);
           Assert::IsTrue(run.completed, (where + L": MVEIT returned on iteration " + std::to_wstring(iteration)).c_str());
 
-          Assert::IsTrue(Elite::MoveShip(canvas, draw, work, math, flight, effects, *blueprint, 0u),
+          Assert::IsTrue(Elite::MoveShip(canvas, work, math, flight, effects, *blueprint, 0u),
                          L"MVEIT does not kill the player when the tactics double does not");
 
           for (std::uint8_t offset = 0; offset < Elite::SHIP_BLOCK_SIZE; ++offset)

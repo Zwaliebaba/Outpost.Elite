@@ -255,7 +255,7 @@ namespace Elite
    */
   /// `_math` is here for two bytes since M2-b: `MV40` reads `K2`'s bottom byte, and the tail leaves
   /// `Q` holding the pitch -- the frame's Q -- for the altitude check (`EndFlightFrame`).
-  [[nodiscard]] bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
+  [[nodiscard]] bool MoveShip(Canvas& _canvas, Ship& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
                               const Blueprint& _blueprint, std::uint8_t _view) noexcept;
 
   /*

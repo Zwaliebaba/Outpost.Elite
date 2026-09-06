@@ -17,7 +17,7 @@ namespace Elite
     return {(flashing != 0u) ? DIAL_NORMAL : DIAL_DANGER, DIAL_NORMAL};
   }
 
-  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, std::uint8_t _value, int _shifts) noexcept
+  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold, DialColours _colours) noexcept
   {
     // 6502: DILX -- four `LSR A`, and the entry point decides how many of them run (§6.63).
     std::uint8_t value = _value;
@@ -26,7 +26,7 @@ namespace Elite
       value = static_cast<std::uint8_t>(value >> 1);
     }
 
-    _math.q = value; // 6502: DIL -- STA Q
+    std::uint8_t q = value; // 6502: DIL -- STA Q, and Q is this routine's own (M2-c)
 
     // 6502: LDX #&FF / STX R -- a full block of pixels, which the partial block below shifts down.
     std::uint8_t bits = 0xFFu;
@@ -39,13 +39,10 @@ namespace Elite
      * as (K, K+1) and part 3 stores them the other way round, so the same test means the opposite
      * thing for the energy bars.
      */
-    if (value >= _math.t1)
+    std::uint8_t colour = _colours.atOrAbove; // 6502: COL
+    if (value < _threshold && _colours.below != 0u)
     {
-      _draw.col = _math.k[0];
-    }
-    else
-    {
-      _draw.col = (_math.k[1] != 0u) ? _math.k[1] : _math.k[0];
+      colour = _colours.below;
     }
 
     // 6502: LDY #2 / LDX #3 -- rows 2 to 4 of four character cells, so a bar is three pixels tall.
@@ -55,11 +52,11 @@ namespace Elite
     {
       std::uint8_t pattern = 0;
 
-      if (_math.q >= 4u) // 6502: LDA Q / CMP #4 / BCC DL2
+      if (q >= 4u) // 6502: LDA Q / CMP #4 / BCC DL2
       {
         // 6502: SBC #4 / STA Q / LDA R -- a whole block lit, and the carry the CMP left makes the
         // subtraction exact.
-        _math.q = static_cast<std::uint8_t>(_math.q - 4u);
+        q = static_cast<std::uint8_t>(q - 4u);
         pattern = bits;
       }
       else
@@ -70,7 +67,7 @@ namespace Elite
          * `EOR #3` is `3 - Q` for a Q below four, and the loop shifts the full block left twice for
          * each step of it -- so a Q of three lights three pixels and a Q of zero lights none.
          */
-        std::uint8_t remaining = static_cast<std::uint8_t>(_math.q ^ 3u);
+        std::uint8_t remaining = static_cast<std::uint8_t>(q ^ 3u);
         pattern = bits;
         do
         {
@@ -81,12 +78,12 @@ namespace Elite
         // 6502: LDA #0 / STA R / LDA #99 / STA Q -- everything past the partial block is empty, and
         // 99 is how the loop is told there is nothing left: it can never fall below four again.
         bits = 0;
-        _math.q = 99u;
+        q = 99u;
       }
 
       // 6502: DL5 -- AND COL / STA (SC),Y three times over. It STORES rather than EORs, which is
       // why the dashboard needs no erase and the space view does.
-      const std::uint8_t byte = static_cast<std::uint8_t>(pattern & _draw.col);
+      const std::uint8_t byte = static_cast<std::uint8_t>(pattern & colour);
       for (std::uint8_t within = 0; within < 3u; ++within)
       {
         _canvas.Write(static_cast<std::uint16_t>(_draw.sc + row + within), byte);
@@ -106,20 +103,20 @@ namespace Elite
     _draw.sc = static_cast<std::uint16_t>(_draw.sc + 0x140u);
   }
 
-  void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, std::uint8_t _value) noexcept
+  void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value) noexcept
   {
     std::uint8_t row = 1u; // 6502: LDY #1 -- rows 1 to 4, so this bar is four pixels tall
-    _math.q = _value;
+    std::uint8_t q = _value; // 6502: STA Q -- this routine's own (M2-c)
 
     do
     {
       std::uint8_t byte = 0;
 
       // 6502: SEC / LDA Q / SBC #4 / BCS DLL11
-      const SubResult step = SubtractWithCarry(_math.q, 4u, true);
+      const SubResult step = SubtractWithCarry(q, 4u, true);
       if (step.carry)
       {
-        _math.q = step.value; // 6502: DLL11 -- STA Q / LDA #0, an empty block
+        q = step.value; // 6502: DLL11 -- STA Q / LDA #0, an empty block
       }
       else
       {
@@ -129,8 +126,8 @@ namespace Elite
          * The lit pixel, and then `Q` is set to 255 so that no later block can match -- a loop exit
          * written as data rather than as a branch.
          */
-        byte = static_cast<std::uint8_t>(DASHBOARD_PIXEL_TABLE[_math.q & 3u] & DIAL_NORMAL);
-        _math.q = 0xFFu;
+        byte = static_cast<std::uint8_t>(DASHBOARD_PIXEL_TABLE[q & 3u] & DIAL_NORMAL);
+        q = 0xFFu;
       }
 
       // 6502: DLL12 -- four stores down the character cell.
@@ -229,8 +226,8 @@ namespace Elite
     _effects.StopSound(SOUND_ECM); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
   }
 
-  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, GeometryWorkspace& _geometry, const FlightState& _flight,
-                 const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, const Bubble& _bubble) noexcept
+  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
+                 Compass& _compass, const Bubble& _bubble) noexcept
   {
     // ---- part 1: the speed bar ------------------------------------------------------------------
 
@@ -239,11 +236,10 @@ namespace Elite
 
     // 6502: JSR PZW / STX K+1 / STA K -- the danger colour in K and yellow in K+1.
     const DangerColours danger = DangerColour(_flight.mainLoopCounter, _status.damageFlash);
-    _math.k[1] = danger.x;
-    _math.k[0] = danger.a;
+    const DialColours speedColours{danger.a, danger.x};
 
-    _math.t1 = 14u;                                   // 6502: LDA #14 / STA T1
-    DrawBar(_canvas, _draw, _math, _flight.delta, 1); // 6502: LDA DELTA / JSR DIL-1
+    // 6502: LDA #14 / STA T1, then LDA DELTA / JSR DIL-1.
+    DrawBar(_canvas, _draw, _flight.delta, 1, 14u, speedColours);
 
     // ---- part 2: roll and pitch -----------------------------------------------------------------
 
@@ -259,7 +255,7 @@ namespace Elite
      * indicator moves the other way from the roll.
      */
     const std::uint8_t roll = static_cast<std::uint8_t>(((_flight.alp1 >> 2) | _flight.alp2) ^ 0x80u);
-    DrawIndicator(_canvas, _draw, _math, AddSigned(SignMag16{0u, roll}, INDICATOR_CENTRE).high);
+    DrawIndicator(_canvas, _draw, AddSigned(SignMag16{0u, roll}, INDICATOR_CENTRE).high);
 
     /*
      * 6502: LDA BETA / LDX BET1 / BEQ P%+4 / SBC #1 / JSR ADD / JSR DIL2.
@@ -279,9 +275,13 @@ namespace Elite
     {
       pitch = SubtractWithCarry(pitch, 1u, false).value;
     }
-    DrawIndicator(_canvas, _draw, _math, AddSigned(SignMag16{0u, pitch}, INDICATOR_CENTRE).high);
+    DrawIndicator(_canvas, _draw, AddSigned(SignMag16{0u, pitch}, INDICATOR_CENTRE).high);
 
     // ---- part 3: the four energy bars, on one pass in four --------------------------------------
+
+    // 6502: LDX #3 / STX T1 -- part 3's threshold, and part 4 is only ever reached through part 3,
+    // so the shields and the fuel are drawn against it too.
+    constexpr std::uint8_t BAR_THRESHOLD = 3u;
 
     /*
      * 6502: LDA MCNT / AND #3 / BNE dec27.
@@ -300,16 +300,11 @@ namespace Elite
       // 6502: JSR PZW / STX K / STA K+1 -- the OTHER way round from part 1, so the same threshold
       // test in `DIL` picks the opposite colour.
       const DangerColours bars = DangerColour(_flight.mainLoopCounter, _status.damageFlash);
-      _math.k[0] = bars.x;
-      _math.k[1] = bars.a;
-
-      _math.t1 = 3u; // 6502: LDX #3 / STX T1
+      const DialColours barColours{bars.x, bars.a};
 
       // 6502: LDY #0 / .DLL23 STY XX12,X / DEX / BPL DLL23 -- all four cleared before any is read.
-      for (std::size_t bar = 0; bar < 4u; ++bar)
-      {
-        _geometry.xx12[bar] = 0;
-      }
+      // The four bytes are `XX12`, and this routine's own (M2-c).
+      std::array<std::uint8_t, 4> xx12{};
 
       /*
        * 6502: LDA ENERGY / LSR A / LSR A / STA Q / .DLL24 SEC / SBC #16 / BCC DLL26 / ...
@@ -318,19 +313,19 @@ namespace Elite
        * full bank fills bar 3 first and the remainder lands in whichever bar the subtraction ran
        * out on.
        */
-      _math.q = static_cast<std::uint8_t>(_status.energy >> 2);
+      std::uint8_t q = static_cast<std::uint8_t>(_status.energy >> 2); // 6502: STA Q
       int bar = 3;
       for (;;)
       {
-        const SubResult left = SubtractWithCarry(_math.q, 16u, true);
+        const SubResult left = SubtractWithCarry(q, 16u, true);
         if (!left.carry)
         {
-          _geometry.xx12[static_cast<std::size_t>(bar)] = _math.q; // 6502: DLL26
+          xx12[static_cast<std::size_t>(bar)] = q; // 6502: DLL26
           break;
         }
 
-        _math.q = left.value;
-        _geometry.xx12[static_cast<std::size_t>(bar)] = 16u;
+        q = left.value;
+        xx12[static_cast<std::size_t>(bar)] = 16u;
         --bar;
         if (bar < 0)
         {
@@ -339,11 +334,10 @@ namespace Elite
       }
 
       // 6502: DLL9 -- LDA XX12,Y / STY P / JSR DIL / LDY P / INY / CPY #4 / BNE DLL9. `DIL` and not
-      // `DILX`, so the bars are drawn unshifted.
+      // `DILX`, so the bars are drawn unshifted; `P` parks the index and nothing else reads it.
       for (std::uint8_t which = 0; which < 4u; ++which)
       {
-        _math.p = which;
-        DrawBar(_canvas, _draw, _math, _geometry.xx12[which], 0);
+        DrawBar(_canvas, _draw, xx12[which], 0, BAR_THRESHOLD, barColours);
       }
     }
 
@@ -353,28 +347,25 @@ namespace Elite
     _draw.sc = static_cast<std::uint16_t>(DASHBOARD_BITMAP + 8u * 6u);
 
     // 6502: LDA #YELLOW / STA K / STA K+1 -- both colours the same, so the shields and the fuel do
-    // not flash whatever `T1` says.
-    _math.k[0] = DIAL_NORMAL;
-    _math.k[1] = DIAL_NORMAL;
+    // not flash whatever `T1` says -- and `T1` is still part 3's 3.
+    const DialColours plain{DIAL_NORMAL, DIAL_NORMAL};
 
-    DrawBar(_canvas, _draw, _math, _status.forwardShield, 4); // 6502: LDA FSH / JSR DILX
-    DrawBar(_canvas, _draw, _math, _status.aftShield, 4);     // 6502: LDA ASH / JSR DILX
-    DrawBar(_canvas, _draw, _math, _fuel, 2);                 // 6502: LDA QQ14 / JSR DILX+2
+    DrawBar(_canvas, _draw, _status.forwardShield, 4, BAR_THRESHOLD, plain); // 6502: LDA FSH / JSR DILX
+    DrawBar(_canvas, _draw, _status.aftShield, 4, BAR_THRESHOLD, plain);     // 6502: LDA ASH / JSR DILX
+    DrawBar(_canvas, _draw, _fuel, 2, BAR_THRESHOLD, plain);                 // 6502: LDA QQ14 / JSR DILX+2
 
     // 6502: JSR PZW / STX K+1 / STA K -- part 1's order again, so the temperatures flash.
     const DangerColours heat = DangerColour(_flight.mainLoopCounter, _status.damageFlash);
-    _math.k[1] = heat.x;
-    _math.k[0] = heat.a;
+    const DialColours heatColours{heat.a, heat.x};
 
-    _math.t1 = 11u;                                              // 6502: LDX #11 / STX T1
-    DrawBar(_canvas, _draw, _math, _status.cabinTemperature, 4); // 6502: LDA CABTMP / JSR DILX
-    DrawBar(_canvas, _draw, _math, _status.laserTemperature, 4); // 6502: LDA GNTMP / JSR DILX
+    // 6502: LDX #11 / STX T1
+    DrawBar(_canvas, _draw, _status.cabinTemperature, 4, 11u, heatColours); // 6502: LDA CABTMP / JSR DILX
+    DrawBar(_canvas, _draw, _status.laserTemperature, 4, 11u, heatColours); // 6502: LDA GNTMP / JSR DILX
 
     // 6502: LDA #240 / STA T1 -- the altitude never reaches its threshold, so it never flashes.
-    _math.t1 = 240u;
-    DrawBar(_canvas, _draw, _math, _status.altitude, 4); // 6502: LDA ALTIT / JSR DILX
+    DrawBar(_canvas, _draw, _status.altitude, 4, 240u, heatColours); // 6502: LDA ALTIT / JSR DILX
 
-    UpdateCompass(_canvas, _draw, _math, _compass, _bubble); // 6502: JMP COMPAS
+    UpdateCompass(_canvas, _compass, _bubble); // 6502: JMP COMPAS
   }
 
 } // namespace Elite

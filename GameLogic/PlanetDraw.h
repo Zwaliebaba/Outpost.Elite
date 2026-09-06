@@ -418,7 +418,7 @@ namespace Elite
    * `WPSHPS` into `FLFLLS` -- which is why the ledger listing them as four rows is misleading
    * (§6.45): you cannot port the head without the tail.
    */
-  void SeedStardustField(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng, bool _carryIn) noexcept;
+  void SeedStardustField(Canvas& _canvas, Stardust& _dust, Rng& _rng, bool _carryIn) noexcept;
 
   /*
    * 6502: WPSHPS -- rub every ship off the screen and forget both line heaps.
@@ -439,10 +439,9 @@ namespace Elite
    * happens. The port has no single home for `QQ11` yet -- 3d-d's flight loop is where it gets
    * one -- so it is passed.
    */
-  void ClearAllShips(Canvas& _canvas, DrawWorkspace& _draw, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight,
-                     std::uint8_t _view) noexcept;
+  void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight, std::uint8_t _view) noexcept;
 
-  void SeedStardustAndClearShips(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng, PlanetSunState& _state, Bubble& _bubble,
-                                 Ship& _work, FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept;
+  void SeedStardustAndClearShips(Canvas& _canvas, Stardust& _dust, Rng& _rng, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
+                                 FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept;
 
 } // namespace Elite

@@ -314,12 +314,35 @@ namespace Elite
   };
 
   /*
-   * The zero-page bytes the drawing routines pass their arguments in.
+   * 6502: X1, Y1, X2, Y2 -- a line, as `LOIN` takes it: the first four bytes of `XX15`.
    *
-   * Same reasoning as MathWorkspace: the calling convention is part of the behaviour being
-   * verified, and several of these are read back by the caller after the call.
+   * A value since M2-c: the line routines take one and the clipper hands one back. `LOIN` may
+   * swap its ends on the way, and `DrawnLine` is what it leaves.
+   */
+  struct Line
+  {
+    std::uint8_t x1 = 0;
+    std::uint8_t y1 = 0;
+    std::uint8_t x2 = 0;
+    std::uint8_t y2 = 0;
+  };
+
+  /*
+   * The zero-page bytes the clipper and the dashboard keep between calls.
    *
-   * 6502: X1, Y1, X2, Y2, COL, ZZ, and the scratch the line routines use.
+   * Until M2-c this held every byte the drawing routines passed their arguments in -- `COL`, `ZZ`
+   * and `R2` were here -- and those are parameters and locals now. What is left is `XX15`'s six
+   * bytes and `SWAP`, which `LL145` reads and writes and M2-c's second commit takes to a `Line16`
+   * and a `ClipResult`; `SC`, which stays until M4 names the dashboard's cursor; and `T2`.
+   *
+   * `T2` AND `R2` WERE HERE AND WERE THE PORT'S OWN INVENTION (M2-c, §8). `HLOIN` and `BOX2` park
+   * their scratch in `T` and `R` -- the kernel's two bytes, which are locals since M2-b -- and the
+   * port wrote `T2` and `R2` instead, following the upstream commentary rather than the C64's own
+   * code. Nothing read either byte, so nothing was wrong on the screen; what it moved was the M0-c
+   * digest, which hashed a byte the game does not write there. Both are locals now and the record
+   * is re-taken under rule 1's second case.
+   *
+   * 6502: X1, Y1, X2, Y2 and XX15+4, XX15+5 as the clipper's six; SWAP; SC.
    */
   struct DrawWorkspace
   {
@@ -327,17 +350,6 @@ namespace Elite
     std::uint8_t y1 = 0;
     std::uint8_t x2 = 0;
     std::uint8_t y2 = 0;
-
-    /// 6502: COL -- the colour mask a coloured plot is ANDed with. RED, YELLOW, GREEN and WHITE
-    /// are four multicolour pixels each rather than a colour number.
-    std::uint8_t col = 0;
-
-    /// 6502: ZZ -- how far away a point is, which is what decides whether PIXEL draws one mark,
-    /// two, or a four-pixel square.
-    std::uint8_t zz = 0;
-
-    std::uint8_t t2 = 0;
-    std::uint8_t r2 = 0;
 
     /*
      * 6502: SC(1 0) -- the screen pointer, and it is here because the DASHBOARD keeps it between
@@ -387,9 +399,9 @@ namespace Elite
 
   // ---- the pixel primitives (slice 1d-a) ------------------------------------------------------
 
-  /// 6502: PIXEL -- plot at (_x, _y) with the size taken from the workspace's ZZ. Under 80 it is a
-  /// four-pixel square, under 144 a two-pixel dash, and beyond that a single mark.
-  void PlotPixel(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _x, std::uint8_t _y) noexcept;
+  /// 6502: PIXEL -- plot at (_x, _y) with the size taken from `_distance`, which is `ZZ`: under 80
+  /// it is a four-pixel square, under 144 a two-pixel dash, and beyond that a single mark.
+  void PlotPixel(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
   /// 6502: PIXEL2 -- the same, for a point given in the space view's own sign-magnitude
   /// coordinates relative to the centre. Falls through into PIXEL, so this is that whole path.
@@ -401,7 +413,7 @@ namespace Elite
    * The stardust's own movers do NOT read it -- they follow the plot with `JSR DV42`, and `DVID4`
    * opens with an `ASL` -- so they discard it explicitly rather than by accident.
    */
-  [[nodiscard]] bool PlotRelativePixel(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+  [[nodiscard]] bool PlotRelativePixel(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
   /*
    * 6502: what `CPIX2` leaves in SC(1 0), Y and X, and `SCAN` is the caller that reads all three.
@@ -425,23 +437,39 @@ namespace Elite
     std::uint8_t pixel = 0;    ///< 6502: X -- x AND 7, the index into CTWOS2
   };
 
-  /// 6502: CPIX2 -- a two-pixel dash at (X1, Y1) in the colour in COL. The second pixel can land
-  /// in the next character cell, and the routine detects that from the mask rather than from x --
-  /// which is why the cursor it returns can point one cell to the right of (X1, Y1)'s own.
-  CellCursor PlotDash(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+  /// 6502: CPIX2 -- a two-pixel dash at (X1, Y1) in the colour mask `COL` (RED, YELLOW, GREEN and
+  /// WHITE are four multicolour pixels each rather than a colour number). The second pixel can
+  /// land in the next character cell, and the routine detects that from the mask rather than from
+  /// x -- which is why the cursor it returns can point one cell to the right of (X1, Y1)'s own.
+  CellCursor PlotDash(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _colour) noexcept;
 
   /// 6502: CPIX4 -- a two-by-two block: CPIX2, then the row above it. The cursor is the SECOND
-  /// call's, which is the row `SCAN` starts its stick from.
-  CellCursor PlotBlock(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+  /// call's, which is the row `SCAN` starts its stick from. The original leaves `Y1` decremented;
+  /// nothing reads it, and since M2-c nothing can.
+  CellCursor PlotBlock(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _colour) noexcept;
+
+  /*
+   * What `LOIN` leaves behind: the four bytes as it left them -- the other way round from the line
+   * it was given when it drew right to left or bottom to top -- and `SWAP`, which says so.
+   *
+   * `SWAP` is 0 or 255 in the original, written with a `DEC`; `WPLS2` tests it with `BNE` and reads
+   * `X1` and `Y1` after it, and that is the one caller that reads either (§6.46).
+   */
+  struct DrawnLine
+  {
+    Line ends;
+    bool swapped = false; ///< 6502: SWAP
+  };
 
   /// 6502: LOIN / LL30 -- a line from (X1, Y1) to (X2, Y2), plotted one BIT at a time so that it
   /// alternates between each cell's two colours. The shipped code unrolls it into thirty-two
   /// copies reached through self-modifying jumps; this is the two loops those copies are.
-  void DrawLine(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+  DrawnLine DrawLine(Canvas& _canvas, Line _line) noexcept;
 
-  /// 6502: HLOIN -- a horizontal line from X1 to X2 (exclusive) on row Y1. The ends are masked
-  /// bytes and everything between is a whole byte, which is why a line's edge can come out a
-  /// different colour from its body.
-  void DrawHorizontalLine(Canvas& _canvas, DrawWorkspace& _work) noexcept;
+  /// 6502: HLOIN -- a horizontal line from `_x1` to `_x2` (exclusive) on row `_y`. The ends are
+  /// masked bytes and everything between is a whole byte, which is why a line's edge can come out
+  /// a different colour from its body. The original swaps the ends and decrements `X2` in place;
+  /// no caller reads either afterwards, and `T` and `R` are its own (M2-c).
+  void DrawHorizontalLine(Canvas& _canvas, std::uint8_t _x1, std::uint8_t _x2, std::uint8_t _row) noexcept;
 
 } // namespace Elite

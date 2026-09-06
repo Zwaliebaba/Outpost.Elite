@@ -196,8 +196,7 @@ namespace GameLogicTests
         cpu.x = row;
         Assert::IsTrue(cpu.CallSubroutine(boxs, 20'000).completed, L"BOXS returned");
 
-        Elite::DrawWorkspace draw;
-        Elite::DrawScreenRule(canvas, draw, row);
+        Elite::DrawScreenRule(canvas, row);
 
         const std::wstring where = WidenText("BOXS(row " + std::to_string(row) + ")");
         Assert::IsTrue(CompareScreens(cpu, screen, canvas, 0x11u, where) > 0u, (where + L": something was drawn").c_str());
@@ -333,13 +332,14 @@ namespace GameLogicTests
         cpu.x = item.preset ? item.rows : std::uint8_t{0xA5u};
         Assert::IsTrue(cpu.CallSubroutine(item.entry, 60'000).completed, L"BOX2 returned");
 
-        Elite::DrawWorkspace draw;
-        draw.t2 = 0x99u;
-        Elite::DrawBorder(canvas, draw, item.rows);
+        Elite::DrawBorder(canvas, item.rows);
 
         const std::wstring where = WidenText(std::string("BOX2 (") + item.what + ")");
         Assert::IsTrue(CompareScreens(cpu, screen, canvas, 0x4Du, where) > 0u, (where + L": something was drawn").c_str());
-        Assert::AreEqual(cpu.memory[t2], draw.t2, (where + L": T2").c_str());
+
+        // `T` carries the row count from one edge to the other and `HLOIN` overwrites it on the way
+        // out; it is the kernel's byte and a local since M2-b, so there is nothing left to compare
+        // (§8, M2-c -- the port used to write `T2` here, which the game does not).
       }
     }
     /*
@@ -553,11 +553,8 @@ namespace GameLogicTests
           Assert::IsTrue(run.completed, L"wantdials returned");
 
           Elite::DrawWorkspace draw;
-          Elite::MathWorkspace math;
-          Elite::GeometryWorkspace geometry;
           Elite::ScreenState screenState;
           screenState.dashboardShown = already;
-          draw.t2 = 0x77u;
 
           Elite::FlightState flight;
           flight.delta = READINGS[0];
@@ -577,7 +574,7 @@ namespace GameLogicTests
           status.damageFlash = READINGS[12];
 
           Recorder effects;
-          Elite::ShowDashboard(canvas, draw, math, geometry, screenState, bubble, flight, status, READINGS[8], compass, effects);
+          Elite::ShowDashboard(canvas, draw, screenState, bubble, flight, status, READINGS[8], compass, effects);
 
           const std::wstring where = WidenText("wantdials(DFLAG " + std::to_string(already) + ", MCNT " + std::to_string(counter) + ")");
 
@@ -589,7 +586,6 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
           Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
           Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
-          Assert::AreEqual(cpu.memory[at.t2], draw.t2, (where + L": T2").c_str());
 
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
@@ -726,8 +722,6 @@ namespace GameLogicTests
           Assert::IsTrue(run.completed, L"TTX66K returned");
 
           Elite::DrawWorkspace draw;
-          Elite::MathWorkspace math;
-          Elite::GeometryWorkspace geometry;
           Elite::TextState textState;
           Elite::ScreenState screenState;
           Elite::Compass compass{0xC3u, 0x9Cu, 0x55u};
@@ -740,10 +734,8 @@ namespace GameLogicTests
           screenState.dashboardShown = already;
           textState.column = 0x66u;
           textState.row = 0x77u;
-          draw.t2 = 0x88u;
 
-          Elite::SetUpScreenPixels(canvas, draw, math, geometry, textState, screenState, bubble, flight, status, 0u, compass, effects,
-                                   view);
+          Elite::SetUpScreenPixels(canvas, draw, textState, screenState, bubble, flight, status, 0u, compass, effects, view);
 
           const std::wstring where = WidenText("TTX66K(QQ11 " + std::to_string(view) + ", DFLAG " + std::to_string(already) + ")");
 
@@ -754,7 +746,6 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[comc], compass.colour, (where + L": COMC").c_str());
           Assert::AreEqual(cpu.memory[xc], textState.column, (where + L": XC").c_str());
           Assert::AreEqual(cpu.memory[yc], textState.row, (where + L": YC").c_str());
-          Assert::AreEqual(cpu.memory[t2], draw.t2, (where + L": T2").c_str());
 
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {

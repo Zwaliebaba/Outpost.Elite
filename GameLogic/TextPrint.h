@@ -4,6 +4,7 @@
 #include "ExtendedTokens.h"
 #include "Tokens.h"
 
+#include <array>
 #include <cstdint>
 
 namespace Elite
@@ -93,15 +94,22 @@ namespace Elite
    * does: the original reaches DASC, which is the whole sentence-case machinery, and the number
    * printer's own behaviour is the sequence of characters it hands over.
    */
-  struct NumberWorkspace
-  {
-    std::uint8_t k[4] = {0, 0, 0, 0}; ///< 6502: K -- the value, most significant byte first
-    std::uint8_t u = 0;               ///< 6502: U -- how many digits fall after the decimal point
-  };
+  /// 6502: K -- the value, most significant byte first. A value since M2-c; `NumberWorkspace` held
+  /// it and `U` until then.
+  using NumberBytes = std::array<std::uint8_t, 4>;
 
-  /// 6502: BPRNT. `_withPoint` is the carry the entry points set, and it decides whether a decimal
-  /// point is printed at all -- pr6 clears it, pr5 leaves it as the caller had it.
-  void PrintNumber(TextSink& _sink, NumberWorkspace& _work, bool _withPoint) noexcept;
+  /*
+   * 6502: BPRNT. `_withPoint` is the carry the entry points set, and it decides whether a decimal
+   * point is printed at all -- pr6 clears it, pr5 leaves it as the caller had it. `_digits` is `U`,
+   * how many digits fall after the decimal point.
+   *
+   * RETURNS WHAT IT LEAVES IN `U`. The routine rewrites the byte as it works (`LDA #11 / SEC / SBC U
+   * / STA U / INC U`), and `SV1` prints the competition number with no `U` of its own -- so the
+   * width that print gets is whatever the last `BPRNT` left, and `SaveScreen` carries the byte for
+   * that one reader. `TT11` sets `U` before every other print, and the port's copies of those are
+   * their own locals, which is a gap this comment names and M2-c did not close (§8, M2-c).
+   */
+  [[nodiscard]] std::uint8_t PrintNumber(TextSink& _sink, NumberBytes _value, std::uint8_t _digits, bool _withPoint) noexcept;
 
   /// 6502: TT11 -- the same, for a sixteen-bit value, which is how nearly every caller reaches it.
   void PrintValue(TextSink& _sink, std::uint16_t _value, std::uint8_t _digits, bool _withPoint) noexcept;

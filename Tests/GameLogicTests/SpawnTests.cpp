@@ -581,7 +581,6 @@ namespace GameLogicTests
         Elite::FlightState flight;
         Elite::Rng rng;
         Elite::Canvas canvas;
-        Elite::DrawWorkspace draw;
         Elite::Stardust dust;
         Elite::PlanetSunState state;
 
@@ -625,7 +624,7 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(solar, 400'000);
         Assert::IsTrue(run.completed, L"SOLAR returned");
 
-        Elite::BuildSystem(canvas, draw, dust, state, bubble, work, commander, rng, flight, effects, system.techLevel, system.seeds, 0,
+        Elite::BuildSystem(canvas, dust, state, bubble, work, commander, rng, flight, effects, system.techLevel, system.seeds, 0,
                            system.carryIn);
 
         const std::wstring where = std::wstring(L"SOLAR ") + system.what;

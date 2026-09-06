@@ -338,11 +338,12 @@ namespace Elite
          * So a save the device refuses still shows a number, and the number it shows is the one
          * the refused file would have had.
          */
+        NumberBytes competition{};
         for (std::size_t index = 0; index < saved.competition.value.size(); ++index)
         {
-          _screen.numbers.k[index] = saved.competition.value[index];
+          competition[index] = saved.competition.value[index];
         }
-        PrintNumber(_screen.characters, _screen.numbers, false);
+        _screen.numberWidth = PrintNumber(_screen.characters, competition, _screen.numberWidth, false);
 
         // 6502: JSR TT67 / JSR TT67 -- two of them, so the number gets a blank line under it.
         PrintNewline(_screen.printer);

@@ -108,26 +108,27 @@ namespace Elite
     return _value;
   }
 
-  void DrawCrosshairs(Canvas& _canvas, DrawWorkspace& _work, const Crosshairs& _at, std::uint8_t _view) noexcept
+  void DrawCrosshairs(Canvas& _canvas, const Crosshairs& _at, std::uint8_t _view) noexcept
   {
     // 6502: LDA #24 / LDX QQ11 / BPL TT178 / LDA #0 -- the long-range chart is 24 rows down.
     const std::uint8_t top = ShortRange(_view) ? std::uint8_t{0} : LONG_RANGE_TOP;
 
     // 6502: TT84 / TT85 -- the horizontal stroke, saturating at both ends of the screen.
+    Line stroke;
     const std::uint16_t left = static_cast<std::uint16_t>(_at.x) - _at.size;
-    _work.x1 = (left < 0x100u) ? static_cast<std::uint8_t>(left) : std::uint8_t{0};
+    stroke.x1 = (left < 0x100u) ? static_cast<std::uint8_t>(left) : std::uint8_t{0};
 
     const AddResult right = AddWithCarry(_at.x, _at.size, false);
-    _work.x2 = right.carry ? std::uint8_t{255} : right.value;
+    stroke.x2 = right.carry ? std::uint8_t{255} : right.value;
 
-    _work.y1 = AddWithCarry(_at.y, top, false).value;
-    _work.y2 = _work.y1;
-    DrawLine(_canvas, _work);
+    stroke.y1 = AddWithCarry(_at.y, top, false).value;
+    stroke.y2 = stroke.y1;
+    (void)DrawLine(_canvas, stroke);
 
     // 6502: TT86 -- the vertical stroke's top.
     const std::uint16_t above = static_cast<std::uint16_t>(_at.y) - _at.size;
     const std::uint8_t clippedTop = (above < 0x100u) ? static_cast<std::uint8_t>(above) : std::uint8_t{0};
-    _work.y1 = AddWithCarry(clippedTop, top, false).value;
+    stroke.y1 = AddWithCarry(clippedTop, top, false).value;
 
     /*
      * 6502: LDA QQ19+1 / CLC / ADC QQ19+2 / ADC QQ19+5.
@@ -141,14 +142,14 @@ namespace Elite
 
     // 6502: CMP #152 / BCC TT87 / LDX QQ11 / BMI TT87 / LDA #151 -- the clamp is the long-range
     // chart's only, because the short-range chart has nothing printed below it.
-    _work.y2 = (bottom.value >= LONG_RANGE_BOTTOM && !ShortRange(_view)) ? std::uint8_t{LONG_RANGE_BOTTOM - 1} : bottom.value;
+    stroke.y2 = (bottom.value >= LONG_RANGE_BOTTOM && !ShortRange(_view)) ? std::uint8_t{LONG_RANGE_BOTTOM - 1} : bottom.value;
 
-    _work.x1 = _at.x;
-    _work.x2 = _at.x;
-    DrawLine(_canvas, _work);
+    stroke.x1 = _at.x;
+    stroke.x2 = _at.x;
+    (void)DrawLine(_canvas, stroke);
   }
 
-  void DrawTargetCrosshairs(Canvas& _canvas, DrawWorkspace& _work, const ChartView& _view) noexcept
+  void DrawTargetCrosshairs(Canvas& _canvas, const ChartView& _view) noexcept
   {
     Crosshairs at;
 
@@ -158,7 +159,7 @@ namespace Elite
       at.x = _view.cursorX;
       at.y = static_cast<std::uint8_t>(_view.cursorY >> 1);
       at.size = 4;
-      DrawCrosshairs(_canvas, _work, at, _view.view);
+      DrawCrosshairs(_canvas, at, _view.view);
       return;
     }
 
@@ -185,13 +186,13 @@ namespace Elite
 
     at.y = AddWithCarry(static_cast<std::uint8_t>(dy << 1), SHORT_RANGE_CENTRE_Y, false).value;
     at.size = 8;
-    DrawCrosshairs(_canvas, _work, at, _view.view);
+    DrawCrosshairs(_canvas, at, _view.view);
   }
 
-  void MoveCrosshairs(Canvas& _canvas, DrawWorkspace& _work, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY) noexcept
+  void MoveCrosshairs(Canvas& _canvas, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY) noexcept
   {
     // 6502: JSR TT103 -- the lines are drawn by EOR, so this erases the crosshair that is there.
-    DrawTargetCrosshairs(_canvas, _work, _view);
+    DrawTargetCrosshairs(_canvas, _view);
 
     /*
      * 6502: DEY / TYA / EOR #255 -- the vertical step arrives negated, because a key that means
@@ -202,10 +203,10 @@ namespace Elite
     _view.cursorX = StepCoordinate(_view.cursorX, _stepX);
 
     // 6502: falls through into TT103 again, which redraws at the new place.
-    DrawTargetCrosshairs(_canvas, _work, _view);
+    DrawTargetCrosshairs(_canvas, _view);
   }
 
-  void DrawFuelRange(Canvas& _canvas, DrawWorkspace& _work, const ChartView& _view, ChartShapes* _shapes) noexcept
+  void DrawFuelRange(Canvas& _canvas, const ChartView& _view, ChartShapes* _shapes) noexcept
   {
     Crosshairs at;
     RangeCircle circle;
@@ -217,7 +218,7 @@ namespace Elite
       at.x = SHORT_RANGE_CENTRE_X;
       at.y = SHORT_RANGE_CENTRE_Y;
       at.size = 16;
-      DrawCrosshairs(_canvas, _work, at, _view.view);
+      DrawCrosshairs(_canvas, at, _view.view);
 
       circle.x = at.x;
       circle.y = at.y;
@@ -229,7 +230,7 @@ namespace Elite
       at.x = _view.homeX;
       at.y = static_cast<std::uint8_t>(_view.homeY >> 1);
       at.size = 7;
-      DrawCrosshairs(_canvas, _work, at, _view.view);
+      DrawCrosshairs(_canvas, at, _view.view);
 
       circle.x = at.x;
 
@@ -249,18 +250,14 @@ namespace Elite
     }
   }
 
-  void DrawSeparator(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _y) noexcept
+  void DrawSeparator(Canvas& _canvas, std::uint8_t _y) noexcept
   {
     // 6502: NLIN2 -- LDX #0 / STX X1 / DEX / STX X2, so the line runs to 255 rather than to the
     // edge of the drawing area, and its right end lands in the margin.
-    _work.y1 = _y;
-    _work.y2 = _y;
-    _work.x1 = 0;
-    _work.x2 = 255;
-    DrawLine(_canvas, _work);
+    (void)DrawLine(_canvas, Line{0u, _y, 255u, _y});
   }
 
-  void DrawLongRangeChart(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
+  void DrawLongRangeChart(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
                           const SystemSeeds& _galaxy, ChartShapes* _shapes) noexcept
   {
     // 6502: LDA #7 / JSR DOXC / LDA #199 / JSR TT27 -- the title, seven cells in.
@@ -274,11 +271,11 @@ namespace Elite
      * INCYC's and has nothing to do with the 23. Then a second rule at 152, under the chart.
      */
     ++_text.row;
-    DrawSeparator(_canvas, _work, LONG_RANGE_RULE_TOP);
-    DrawSeparator(_canvas, _work, LONG_RANGE_RULE_BOTTOM);
+    DrawSeparator(_canvas, LONG_RANGE_RULE_TOP);
+    DrawSeparator(_canvas, LONG_RANGE_RULE_BOTTOM);
 
     // 6502: JSR TT14 -- the fuel circle, before the dots rather than after.
-    DrawFuelRange(_canvas, _work, _view, _shapes);
+    DrawFuelRange(_canvas, _view, _shapes);
 
     /*
      * 6502: TT83 -- 256 systems, and each one is a single PIXEL call.
@@ -290,17 +287,17 @@ namespace Elite
     SystemSeeds seeds = _galaxy;
     for (int system = 0; system < 256; ++system)
     {
-      _work.zz = static_cast<std::uint8_t>(seeds.bytes[4] | 0x50u);
+      const std::uint8_t distance = static_cast<std::uint8_t>(seeds.bytes[4] | 0x50u); // 6502: STA ZZ
       const std::uint8_t y = AddWithCarry(static_cast<std::uint8_t>(seeds.bytes[1] >> 1), LONG_RANGE_TOP, false).value;
-      PlotPixel(_canvas, _work, seeds.bytes[3], y);
+      PlotPixel(_canvas, seeds.bytes[3], y, distance);
       NextSystem(seeds);
     }
 
     // 6502: the fall-through into TT15 with QQ19 set from QQ9 and QQ10.
-    DrawTargetCrosshairs(_canvas, _work, _view);
+    DrawTargetCrosshairs(_canvas, _view);
   }
 
-  void DrawShortRangeChart(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
+  void DrawShortRangeChart(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
                            const SystemSeeds& _galaxy, ChartShapes* _shapes) noexcept
   {
     /*
@@ -313,10 +310,10 @@ namespace Elite
      */
     _text.column = 7;
     _printer.Print(TITLE_SHORT_RANGE);
-    DrawSeparator(_canvas, _work, SHORT_RANGE_RULE);
+    DrawSeparator(_canvas, SHORT_RANGE_RULE);
 
-    DrawFuelRange(_canvas, _work, _view, _shapes);
-    DrawTargetCrosshairs(_canvas, _work, _view);
+    DrawFuelRange(_canvas, _view, _shapes);
+    DrawTargetCrosshairs(_canvas, _view);
 
     /*
      * 6502: EE3 -- LDX #24 / STA XX1,X, counting down.
@@ -471,18 +468,18 @@ namespace Elite
     PrintValue(_sink, _count, 3, false);
   }
 
-  NearestSystem SelectNearestSystem(Canvas& _canvas, DrawWorkspace& _work, ChartView& _view, const SystemSeeds& _galaxy,
+  NearestSystem SelectNearestSystem(Canvas& _canvas, ChartView& _view, const SystemSeeds& _galaxy,
                                     ChartEffects* _effects) noexcept
   {
     // 6502: hm -- JSR TT103 / JSR TT111 / JSR TT103 / JMP CLYNS. The first call rubs the crosshair
     // out, because LOIN draws by EOR and drawing it twice is how it moves.
-    DrawTargetCrosshairs(_canvas, _work, _view);
+    DrawTargetCrosshairs(_canvas, _view);
 
     const NearestSystem nearest = FindNearestSystem(_galaxy, _view.cursorX, _view.cursorY, _view.homeX, _view.homeY);
     _view.cursorX = nearest.x;
     _view.cursorY = nearest.y;
 
-    DrawTargetCrosshairs(_canvas, _work, _view);
+    DrawTargetCrosshairs(_canvas, _view);
 
     if (_effects != nullptr)
     {
@@ -492,7 +489,7 @@ namespace Elite
     return nearest;
   }
 
-  JumpOutcome RequestHyperspace(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _printer, ExtendedTokenPrinter& _extended,
+  JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended,
                                 TextState& _text, ChartView& _view, JumpState& _jump, const SystemSeeds& _galaxy,
                                 ChartEffects* _effects) noexcept
   {
@@ -543,7 +540,7 @@ namespace Elite
     }
     else
     {
-      const NearestSystem nearest = SelectNearestSystem(_canvas, _work, _view, _galaxy, _effects);
+      const NearestSystem nearest = SelectNearestSystem(_canvas, _view, _galaxy, _effects);
       _jump.distance = nearest.distance;
       _jump.target = nearest.seeds;
     }

@@ -27,10 +27,10 @@ namespace Elite
     return DivideSpeedBy(_flight, _dust.z[_at]);
   }
 
-  Product MultiplyByHeight(DrawWorkspace& _draw, const Stardust& _dust, std::uint8_t _at, std::uint8_t _multiplier) noexcept
+  Product MultiplyByHeight(const Stardust& _dust, std::uint8_t _at, std::uint8_t _multiplier) noexcept
   {
-    _draw.y1 = _dust.y[_at];
-    return MultiplyMagnitude(_draw.y1, _multiplier);
+    // 6502: LDA SY,Y / STA Y1 -- and the mover reads the same byte back as the height's high half.
+    return MultiplyMagnitude(_dust.y[_at], _multiplier);
   }
 
   Product MultiplyByRoll(const FlightState& _flight, std::uint8_t _value) noexcept
@@ -39,27 +39,25 @@ namespace Elite
     return MultiplyScaled(_flight.alp1, _value);
   }
 
-  void PlotStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Stardust& _dust, std::uint8_t _at, SignMag16 _value,
-                    SignMag16 _addend) noexcept
+  std::uint8_t PlotStardust(Canvas& _canvas, Stardust& _dust, std::uint8_t _at, SignMag16 _value, SignMag16 _addend, std::uint8_t _across,
+                            std::uint8_t _down, std::uint8_t _distance) noexcept
   {
     const AddSignedResult sum = AddSigned(_value, _addend);
-    _math.yyNext = sum.high;
-    _dust.yLow[_at] = sum.low;
-    (void)PlotRelativePixel(_canvas, _draw);
+    _dust.yLow[_at] = sum.low; // 6502: STX SYL,Y
+    (void)PlotRelativePixel(_canvas, _across, _down, _distance);
+    return sum.high; // 6502: STA YY+1
   }
 
-  void FlipStardust(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust) noexcept
+  void FlipStardust(Canvas& _canvas, Stardust& _dust) noexcept
   {
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
+      // 6502: LDA SY,Y / STA Y1 ... LDA SX,Y / STA Y1 / STA SY,Y / ... STA X1 / STA SX,Y / LDA SZ,Y / STA ZZ.
       const std::uint8_t was = _dust.y[at];
-      _draw.y1 = _dust.x[at];
-      _dust.y[at] = _draw.y1;
-      _draw.x1 = was;
+      _dust.y[at] = _dust.x[at];
       _dust.x[at] = was;
-      _draw.zz = _dust.z[at];
 
-      (void)PlotRelativePixel(_canvas, _draw);
+      (void)PlotRelativePixel(_canvas, was, _dust.y[at], _dust.z[at]);
     }
   }
 
@@ -96,8 +94,7 @@ namespace Elite
 
   } // namespace
 
-  void MoveStardustAhead(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, const FlightState& _flight, Stardust& _dust,
-                         Rng& _rng) noexcept
+  void MoveStardustAhead(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng) noexcept
   {
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
@@ -110,51 +107,47 @@ namespace Elite
       // this subtraction runs on is the one the second `ROR A` above left, not a `SEC`.
       const SubResult zLow = SubtractWithCarry(_dust.zLow[at], _flight.delt4, halved.carry);
       _dust.zLow[at] = zLow.value;
-      _draw.zz = _dust.z[at];
+      std::uint8_t distance = _dust.z[at]; // 6502: STA ZZ -- the distance it WAS, which is what the erase plots at
       _dust.z[at] = SubtractWithCarry(_dust.z[at], _flight.delt4Next, zLow.carry).value;
 
-      // Its height and its distance across, each scaled by how much closer it now is.
-      const Product height = MultiplyByHeight(_draw, _dust, at, scale);
+      // Its height and its distance across, each scaled by how much closer it now is. `X1` and
+      // `Y1` are the speck's old position, staged for the erase (M2-c: locals).
+      std::uint8_t y1 = _dust.y[at]; // 6502: MLU1's STA Y1
+      const Product height = MultiplyByHeight(_dust, at, scale);
       const AddResult yLow = AddWithCarry(height.low, _dust.yLow[at], height.carry);
-      _math.yy = yLow.value;
-      _math.yyNext = AddWithCarry(_draw.y1, height.high, yLow.carry).value;
       // 6502: STA R ... STA S -- the height is the (S R) the roll's first `ADD` runs on.
-      const SignMag16 heightSum{_math.yy, _math.yyNext};
+      const SignMag16 heightSum{yLow.value, AddWithCarry(y1, height.high, yLow.carry).value}; // 6502: YY(1 0)
 
-      _draw.x1 = _dust.x[at];
-      const Product across = MultiplyMagnitude(_draw.x1, scale);
+      std::uint8_t x1 = _dust.x[at]; // 6502: STA X1
+      const Product across = MultiplyMagnitude(x1, scale);
       const AddResult xLow = AddWithCarry(across.low, _dust.xLow[at], across.carry);
-      _math.xx = xLow.value;
-      _math.xxNext = AddWithCarry(_draw.x1, across.high, xLow.carry).value;
+      SignMag16 x{xLow.value, AddWithCarry(x1, across.high, xLow.carry).value}; // 6502: XX(1 0)
 
       // 6502: the roll, as two multiply-and-adds with the signs crossed over.
-      Product rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(_math.xxNext ^ _flight.alp2Next));
+      Product rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(x.hi ^ _flight.alp2Next));
       AddSignedResult sum = AddSigned(rolled.Pair(), heightSum);
-      _math.yyNext = sum.high;
-      _math.yy = sum.low;
+      SignMag16 y{sum.low, sum.high}; // 6502: STA YY+1 / STX YY
 
       // 6502: JSR MLS2 -- (S R) = XX(1 0), then MLS1 and the `ADD`.
       rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(sum.high ^ _flight.alp2));
-      sum = AddSigned(rolled.Pair(), SignMag16{_math.xx, _math.xxNext});
-      _math.xxNext = sum.high;
-      _math.xx = sum.low;
+      sum = AddSigned(rolled.Pair(), x);
+      x = SignMag16{sum.low, sum.high};
 
       // And the pitch: 6502: LDX BET1 / ... / JSR MULTS-2 / STA Q / JSR MUT2 -- (S R) = XX(1 0)
       // again, and `MULT1` squares the pitch term, because `STA Q` left it in A (§6.44).
-      const std::uint8_t pitch = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(_math.yyNext ^ _flight.bet2Next)).high;
+      const std::uint8_t pitch = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(y.hi ^ _flight.bet2Next)).high;
       const Product pitched = MultiplySigned(pitch, pitch);
-      sum = AddSigned(DoubleAndFold(pitched), SignMag16{_math.xx, _math.xxNext});
-      _math.xxNext = sum.high;
+      sum = AddSigned(DoubleAndFold(pitched), x);
+      x.hi = sum.high;
       _dust.xLow[at] = sum.low;
 
       // 6502: LDA YY / STA R / LDA YY+1 / STA S / LDA #0 / STA P / LDA BETA / EOR #128 / JSR PIX1.
-      PlotStardust(_canvas, _draw, _math, _dust, at, SignMag16{0u, static_cast<std::uint8_t>(_flight.beta ^ 0x80u)},
-                   SignMag16{_math.yy, _math.yyNext});
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, static_cast<std::uint8_t>(_flight.beta ^ 0x80u)}, y, x1, y1, distance);
 
       // 6502: the three kill tests. A speck that has drifted more than 120 either way, or come
       // closer than 16, is not clipped -- it is thrown away and a new one rolled at the edge.
-      _draw.x1 = _math.xxNext;
-      _dust.x[at] = _math.xxNext;
+      x1 = x.hi;
+      _dust.x[at] = x.hi;
 
       /*
        * Three kill tests, and WHICH of them fires decides the carry the first `DORND` below runs
@@ -162,15 +155,15 @@ namespace Elite
        * clear. The generator takes the carry as an operand, so the speck that replaces one which
        * drifted sideways is a different speck from the one replacing a speck that came too close.
        */
-      bool killed = (_math.xxNext & 0x7Fu) >= 120u;
+      bool killed = (x.hi & 0x7Fu) >= 120u;
       bool entryCarry = true;
 
       if (!killed)
       {
-        _dust.y[at] = _math.yyNext;
-        _draw.y1 = _math.yyNext;
+        _dust.y[at] = y.hi;
+        y1 = y.hi;
 
-        killed = (_math.yyNext & 0x7Fu) >= 120u;
+        killed = (y.hi & 0x7Fu) >= 120u;
         if (!killed && _dust.z[at] < 16u)
         {
           killed = true;
@@ -183,28 +176,27 @@ namespace Elite
         // 6502: KILL1 -- and each `DORND` after the first runs on the one before it, because
         // nothing between them touches the carry.
         RngResult roll = _rng.Next(entryCarry);
-        _draw.y1 = static_cast<std::uint8_t>(roll.value | 4u);
-        _dust.y[at] = _draw.y1;
+        y1 = static_cast<std::uint8_t>(roll.value | 4u);
+        _dust.y[at] = y1;
 
         roll = _rng.Next(roll.carry);
-        _draw.x1 = static_cast<std::uint8_t>(roll.value | 8u);
-        _dust.x[at] = _draw.x1;
+        x1 = static_cast<std::uint8_t>(roll.value | 8u);
+        _dust.x[at] = x1;
 
         roll = _rng.Next(roll.carry);
-        _draw.zz = static_cast<std::uint8_t>(roll.value | 144u);
-        _dust.z[at] = _draw.zz;
+        distance = static_cast<std::uint8_t>(roll.value | 144u);
+        _dust.z[at] = distance;
       }
       else
       {
-        _draw.zz = _dust.z[at];
+        distance = _dust.z[at];
       }
 
-      (void)PlotRelativePixel(_canvas, _draw);
+      (void)PlotRelativePixel(_canvas, x1, y1, distance);
     }
   }
 
-  void MoveStardustAstern(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, const FlightState& _flight, Stardust& _dust,
-                          Rng& _rng) noexcept
+  void MoveStardustAstern(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng) noexcept
   {
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
@@ -219,39 +211,35 @@ namespace Elite
        * the coordinates are done in the other order, the roll's two sign bytes are swapped, the
        * pitch is not negated, and both kill tests are different. Two routines, deliberately.
        */
-      _draw.x1 = _dust.x[at];
-      const Product across = MultiplyMagnitude(_draw.x1, scale);
+      std::uint8_t x1 = _dust.x[at]; // 6502: STA X1 -- the old position, staged for the erase (M2-c: locals)
+      const Product across = MultiplyMagnitude(x1, scale);
       const SubResult xLow = SubtractWithCarry(_dust.xLow[at], across.low, across.carry);
-      _math.xx = xLow.value;
-      const SubResult xHigh = SubtractWithCarry(_draw.x1, across.high, xLow.carry);
-      _math.xxNext = xHigh.value;
+      const SubResult xHigh = SubtractWithCarry(x1, across.high, xLow.carry);
+      SignMag16 x{xLow.value, xHigh.value}; // 6502: XX(1 0)
 
-      const Product height = MultiplyByHeight(_draw, _dust, at, scale);
+      std::uint8_t y1 = _dust.y[at]; // 6502: MLU1's STA Y1
+      const Product height = MultiplyByHeight(_dust, at, scale);
       const SubResult yLow = SubtractWithCarry(_dust.yLow[at], height.low, height.carry);
-      _math.yy = yLow.value;
-      const SubResult yHigh = SubtractWithCarry(_draw.y1, height.high, yLow.carry);
-      _math.yyNext = yHigh.value;
+      const SubResult yHigh = SubtractWithCarry(y1, height.high, yLow.carry);
       // 6502: STA R ... STA S -- the height is the (S R) the roll's first `ADD` runs on.
-      const SignMag16 heightSum{_math.yy, _math.yyNext};
+      const SignMag16 heightSum{yLow.value, yHigh.value}; // 6502: YY(1 0)
 
       // 6502: `ADC DELT4` -- on the borrow the subtraction above left, with no `CLC` between them.
       const AddResult zLow = AddWithCarry(_dust.zLow[at], _flight.delt4, yHigh.carry);
       _dust.zLow[at] = zLow.value;
-      _draw.zz = _dust.z[at];
+      std::uint8_t distance = _dust.z[at]; // 6502: STA ZZ
       _dust.z[at] = AddWithCarry(_dust.z[at], _flight.delt4Next, zLow.carry).value;
 
       // The roll, and the two sign bytes are the other way round from the front view's -- which is
       // the whole of what makes the dust roll the opposite way when you look behind you.
-      Product rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(_math.xxNext ^ _flight.alp2));
+      Product rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(x.hi ^ _flight.alp2));
       AddSignedResult sum = AddSigned(rolled.Pair(), heightSum);
-      _math.yyNext = sum.high;
-      _math.yy = sum.low;
+      SignMag16 y{sum.low, sum.high};
 
       // 6502: JSR MLS2 -- (S R) = XX(1 0), then MLS1 and the `ADD`.
       rolled = MultiplyByRoll(_flight, static_cast<std::uint8_t>(sum.high ^ _flight.alp2Next));
-      sum = AddSigned(rolled.Pair(), SignMag16{_math.xx, _math.xxNext});
-      _math.xxNext = sum.high;
-      _math.xx = sum.low;
+      sum = AddSigned(rolled.Pair(), x);
+      x = SignMag16{sum.low, sum.high};
 
       /*
        * And the pitch, where the two routines diverge further than a sign: `STARS1` squares the
@@ -260,19 +248,19 @@ namespace Elite
        * JSR MUT1, which is (S R) = XX(1 0) and then `MULT1`. The port keeps both as written
        * (ADR-003).
        */
-      const std::uint8_t pitch = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(_math.yyNext ^ _flight.bet2Next)).high;
-      const Product pitched = MultiplySigned(static_cast<std::uint8_t>(_math.xxNext ^ 0x80u), pitch);
-      sum = AddSigned(DoubleAndFold(pitched), SignMag16{_math.xx, _math.xxNext});
-      _math.xxNext = sum.high;
+      const std::uint8_t pitch = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(y.hi ^ _flight.bet2Next)).high;
+      const Product pitched = MultiplySigned(static_cast<std::uint8_t>(x.hi ^ 0x80u), pitch);
+      sum = AddSigned(DoubleAndFold(pitched), x);
+      x.hi = sum.high;
       _dust.xLow[at] = sum.low;
 
       // 6502: LDA YY / STA R / LDA YY+1 / STA S / LDA #0 / STA P / LDA BETA / JSR PIX1.
-      PlotStardust(_canvas, _draw, _math, _dust, at, SignMag16{0u, _flight.beta}, SignMag16{_math.yy, _math.yyNext});
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.beta}, y, x1, y1, distance);
 
-      _draw.x1 = _math.xxNext;
-      _dust.x[at] = _math.xxNext;
-      _draw.y1 = _math.yyNext;
-      _dust.y[at] = _math.yyNext;
+      x1 = x.hi;
+      _dust.x[at] = x.hi;
+      y1 = y.hi;
+      _dust.y[at] = y.hi;
 
       /*
        * Two kill tests rather than three, and both on the values just stored: more than 110 up or
@@ -282,7 +270,7 @@ namespace Elite
        * Both arrive at the generator with carry SET, so `KILL6` has one entry where `KILL1` has
        * two.
        */
-      const bool killed = (_math.yyNext & 0x7Fu) >= 110u || _dust.z[at] >= 160u;
+      const bool killed = (y.hi & 0x7Fu) >= 110u || _dust.z[at] >= 160u;
 
       if (killed)
       {
@@ -292,38 +280,38 @@ namespace Elite
         RngResult roll = _rng.Next(true);
         const AddResult renewed = AddWithCarry(static_cast<std::uint8_t>(roll.value & 0x7Fu), 10u, roll.carry);
         _dust.z[at] = renewed.value;
-        _draw.zz = renewed.value;
+        distance = renewed.value;
 
         if (RotateRight(renewed.value, false).carry)
         {
           // 6502: ST4 -- anywhere across, at the top or the bottom.
           roll = _rng.Next(true);
-          _draw.x1 = roll.value;
+          x1 = roll.value;
           _dust.x[at] = roll.value;
 
-          _draw.y1 = RotateRight(230u, RotateRight(roll.value, false).carry).value;
-          _dust.y[at] = _draw.y1;
+          y1 = RotateRight(230u, RotateRight(roll.value, false).carry).value;
+          _dust.y[at] = y1;
         }
         else
         {
           // 6502: at the left or the right edge, anywhere up or down.
           const bool side = RotateRight(static_cast<std::uint8_t>(renewed.value >> 1), false).carry;
-          _draw.x1 = RotateRight(252u, side).value;
-          _dust.x[at] = _draw.x1;
+          x1 = RotateRight(252u, side).value;
+          _dust.x[at] = x1;
 
           // The `ROR A` above left carry clear -- 252 has no bottom bit -- and the generator reads
           // it.
           roll = _rng.Next(false);
-          _draw.y1 = roll.value;
+          y1 = roll.value;
           _dust.y[at] = roll.value;
         }
       }
       else
       {
-        _draw.zz = _dust.z[at];
+        distance = _dust.z[at];
       }
 
-      (void)PlotRelativePixel(_canvas, _draw);
+      (void)PlotRelativePixel(_canvas, x1, y1, distance);
     }
   }
 
@@ -352,8 +340,7 @@ namespace Elite
 
   } // namespace
 
-  void MoveStardustSideways(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, FlightState& _flight, Stardust& _dust, Rng& _rng,
-                            std::uint8_t _view) noexcept
+  void MoveStardustSideways(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view) noexcept
   {
     /*
      * 6502: LDA #0 / CPX #2 / ROR A / STA RAT / EOR #%10000000 / STA RAT2.
@@ -376,42 +363,40 @@ namespace Elite
        * replaced ever gets a new distance. Sideways, everything slides across at a rate set by how
        * far away it is, and nothing else.
        */
-      _draw.zz = _dust.z[at];
+      std::uint8_t distance = _dust.z[at]; // 6502: STA ZZ
       const ScaledDivision step = DivideSpeedBy(_flight, static_cast<std::uint8_t>(_dust.z[at] >> 3)); // 6502: JSR DV41
       _dust.newzp = step.whole;                                                                          // 6502: LDA P / STA newzp
 
       // 6502: EOR RAT2 / STA S -- (S R) is the step with the view's sign over it, R being the
       // fraction `DVID4` left; and (A P) is the particle's x.
       const SignMag16 sideways{step.fraction, static_cast<std::uint8_t>(step.whole ^ _flight.rat2)};
-      _draw.x1 = _dust.x[at];
-      AddSignedResult sum = AddSigned(SignMag16{_dust.xLow[at], _draw.x1}, sideways);
+      std::uint8_t x1 = _dust.x[at]; // 6502: STA X1 -- the old position, staged for the erase (M2-c: locals)
+      AddSignedResult sum = AddSigned(SignMag16{_dust.xLow[at], x1}, sideways);
       const SignMag16 stepped = sum.Pair(); // 6502: STA S / STX R
 
       // The pitch, twice: once into the x it has just stepped and once into the y.
-      _draw.y1 = _dust.y[at];
-      Product pitched = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(_draw.y1 ^ _flight.bet2)); // 6502: JSR MULTS-2
+      std::uint8_t y1 = _dust.y[at]; // 6502: STA Y1
+      Product pitched = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(y1 ^ _flight.bet2)); // 6502: JSR MULTS-2
       sum = AddSigned(pitched.Pair(), stepped);
-      _math.xx = sum.low;
-      _math.xxNext = sum.high;
+      SignMag16 x{sum.low, sum.high}; // 6502: XX(1 0)
 
       pitched = MultiplyScaled(_flight.bet1, static_cast<std::uint8_t>(sum.high ^ _flight.bet2Next));
-      sum = AddSigned(pitched.Pair(), SignMag16{_dust.yLow[at], _draw.y1});
-      _math.yy = sum.low;
-      _math.yyNext = sum.high;
+      sum = AddSigned(pitched.Pair(), SignMag16{_dust.yLow[at], y1});
+      SignMag16 y{sum.low, sum.high}; // 6502: YY(1 0)
 
       // And the roll, as one scale factor used by both multiply-accumulates. 6502: STA Q.
       const std::uint8_t roll = MultiplyScaled(_flight.alp1, static_cast<std::uint8_t>(sum.high ^ _flight.alp2)).high;
 
-      sum = MultiplyAndAdd(static_cast<std::uint8_t>(_math.xxNext ^ 0x80u), roll, SignMag16{_math.xx, _math.xxNext});
-      _math.xxNext = sum.high;
+      sum = MultiplyAndAdd(static_cast<std::uint8_t>(x.hi ^ 0x80u), roll, x);
+      x.hi = sum.high;
       _dust.xLow[at] = sum.low;
 
-      sum = MultiplyAndAdd(_math.yyNext, roll, SignMag16{_math.yy, _math.yyNext});
+      sum = MultiplyAndAdd(y.hi, roll, y);
       // 6502: STA S / STX R / LDA #0 / STA P / LDA ALPHA / JSR PIX1.
-      PlotStardust(_canvas, _draw, _math, _dust, at, SignMag16{0u, _flight.alpha}, sum.Pair());
+      y.hi = PlotStardust(_canvas, _dust, at, SignMag16{0u, _flight.alpha}, sum.Pair(), x1, y1, distance);
 
-      _dust.x[at] = _math.xxNext;
-      _draw.x1 = _math.xxNext;
+      _dust.x[at] = x.hi;
+      x1 = x.hi;
 
       /*
        * 6502: AND #%01111111 / EOR #%01111111 / CMP newzp / BCC KILL2 / BEQ KILL2.
@@ -424,7 +409,7 @@ namespace Elite
        * Two branches, two entry carries: `BCC` arrives with it clear and `BEQ` with it set, and the
        * generator reads it.
        */
-      const std::uint8_t room = static_cast<std::uint8_t>((_math.xxNext & 0x7Fu) ^ 0x7Fu);
+      const std::uint8_t room = static_cast<std::uint8_t>((x.hi & 0x7Fu) ^ 0x7Fu);
 
       bool killed = room <= _dust.newzp;
       bool entryCarry = room == _dust.newzp;
@@ -432,12 +417,12 @@ namespace Elite
 
       if (!killed)
       {
-        _dust.y[at] = _math.yyNext;
-        _draw.y1 = _math.yyNext;
+        _dust.y[at] = y.hi;
+        y1 = y.hi;
 
         // 6502: CMP #116 / BCS ST5 -- and no test on the distance at all, because it has not
         // changed.
-        if ((_math.yyNext & 0x7Fu) >= 116u)
+        if ((y.hi & 0x7Fu) >= 116u)
         {
           killed = true;
           entryCarry = true;
@@ -453,50 +438,49 @@ namespace Elite
         {
           // 6502: KILL2 -- back in at the edge the dust is coming FROM, which is the side `RAT`
           // names, at any height.
-          _draw.y1 = roll.value;
+          y1 = roll.value;
           _dust.y[at] = roll.value;
-          _draw.x1 = static_cast<std::uint8_t>(115u | _flight.rat);
-          _dust.x[at] = _draw.x1;
+          x1 = static_cast<std::uint8_t>(115u | _flight.rat);
+          _dust.x[at] = x1;
         }
         else
         {
           // 6502: ST5 -- or at the top or the bottom, anywhere across. The edge is chosen by the
           // roll's sign, so dust replaced while you are rolling comes in on the side it left.
-          _draw.x1 = roll.value;
+          x1 = roll.value;
           _dust.x[at] = roll.value;
-          _draw.y1 = static_cast<std::uint8_t>(110u | _flight.alp2Next);
-          _dust.y[at] = _draw.y1;
+          y1 = static_cast<std::uint8_t>(110u | _flight.alp2Next);
+          _dust.y[at] = y1;
         }
 
         // 6502: STF1 -- and a distance, which both paths share. The `ORA #8` keeps it off the
         // player's face.
         roll = _rng.Next(roll.carry);
-        _draw.zz = static_cast<std::uint8_t>(roll.value | 8u);
-        _dust.z[at] = _draw.zz;
+        distance = static_cast<std::uint8_t>(roll.value | 8u);
+        _dust.z[at] = distance;
       }
 
-      (void)PlotRelativePixel(_canvas, _draw);
+      (void)PlotRelativePixel(_canvas, x1, y1, distance);
     }
 
     // 6502: the loop leaves through `BEQ ST2`, so the angles are put back on the way out.
     FlipRollAndPitch(_flight);
   }
 
-  void MoveStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, FlightState& _flight, Stardust& _dust, Rng& _rng,
-                    std::uint8_t _view) noexcept
+  void MoveStardust(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view) noexcept
   {
     // 6502: STARS -- LDX VIEW / BEQ STARS1 / DEX / BNE ST11 / JMP STARS6 / .ST11 JMP STARS2.
     if (_view == 0u)
     {
-      MoveStardustAhead(_canvas, _draw, _math, _flight, _dust, _rng);
+      MoveStardustAhead(_canvas, _flight, _dust, _rng);
     }
     else if (_view == 1u)
     {
-      MoveStardustAstern(_canvas, _draw, _math, _flight, _dust, _rng);
+      MoveStardustAstern(_canvas, _flight, _dust, _rng);
     }
     else
     {
-      MoveStardustSideways(_canvas, _draw, _math, _flight, _dust, _rng, _view);
+      MoveStardustSideways(_canvas, _flight, _dust, _rng, _view);
     }
   }
 

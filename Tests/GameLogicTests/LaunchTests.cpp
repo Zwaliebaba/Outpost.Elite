@@ -1216,7 +1216,7 @@ namespace GameLogicTests
       const Elite::Testing::RunResult run = cpu.CallSubroutine(box, 2'000'000);
       Assert::IsTrue(run.completed, L"BOX returned");
 
-      Elite::DrawFullBorder(universe.canvas, universe.draw);
+      Elite::DrawFullBorder(universe.canvas);
 
       const std::uint32_t touched = CompareScreens(cpu, at.screen, universe.canvas, 0x00u, L"BOX");
       Assert::IsTrue(touched > 0u, L"BOX: something was drawn");

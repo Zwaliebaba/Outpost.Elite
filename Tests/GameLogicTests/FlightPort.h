@@ -222,8 +222,8 @@ namespace GameLogicTests
     }
     void DrawExplosion() override
     {
-      Elite::DrawExplosionCloud(universe.canvas, universe.draw, universe.math, universe.rng, universe.work, heap, universe.geometry,
-                                universe.bubble, *this);
+      Elite::DrawExplosionCloud(universe.canvas, universe.math, universe.rng, universe.work, heap, universe.geometry, universe.bubble,
+                                *this);
     }
 
     // ---- Elite::ControlEffects ------------------------------------------------------------------
