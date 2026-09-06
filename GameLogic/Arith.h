@@ -9,85 +9,40 @@ namespace Elite
 {
 
   /*
-   * The zero-page scratch bytes the drawing and movement routines still share (Modernize.md
-   * slice M2-c takes them further).
+   * The two zero-page bytes that are still a channel between routines, and nothing else.
    *
-   * In the original these are fixed addresses that every routine reads and writes by name, and
-   * callers set some of them up before a call and read others afterwards. Until M2-b the
-   * arithmetic kernel was one of those routines: a multiplier "left the low byte in P" for a caller
-   * three files away, and the workspace was passed to hundreds of functions so that it could. The
-   * kernel now takes its operands as values and hands its answers back as structs (`Product`,
-   * `Quotient`, `SignedSum` and kin below), so what is left here is the scratch the NON-kernel
-   * routines hand each other -- the clipper's slope, the planet drawer's radius, the stardust's
-   * coordinate -- which the census in Modernize.md section 4.3 names field by field.
+   * In the original these are fixed addresses every routine reads and writes by name, and callers
+   * set some of them up before a call and read others afterwards. M2-b took the arithmetic kernel
+   * off them -- it takes its operands as values and hands its answers back as structs (`Product`,
+   * `Quotient`, `SignedSum` and kin below) -- and M2-c took the drawing. What is left is two bytes
+   * that OUTLIVE their writer on purpose, both named in Modernize.md section 8, and this struct
+   * exists to say so rather than to hold scratch.
    *
-   * 6502: P, Q, R, S, T, T1, U.
+   * 6502: Q and K2.
    */
   struct MathWorkspace
   {
-    // P is a three-byte block in the original, and the wider routines use all of it.
-    std::uint8_t p = 0;
-    std::uint8_t p1 = 0;
-    std::uint8_t p2 = 0;
-
+    /*
+     * 6502: Q -- the frame's `Q` (Modernize.md section 8, risk R22).
+     *
+     * `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte.
+     * `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two
+     * routines and the clipper's `LL115` and `LL118` write it for that read, as the original's
+     * `STA Q`s do. `LOIN` writes it in the original and has kept it local here since slice 1d,
+     * which is the one place this port's `Q` is not the game's -- R22, and the owner's to rule on.
+     */
     std::uint8_t q = 0;
-    std::uint8_t r = 0;
-    std::uint8_t s = 0;
-    std::uint8_t t = 0;
-    std::uint8_t t1 = 0;
-    std::uint8_t u = 0;
 
     /*
-     * 6502: CNT -- zero page 170, a counter with FOURTEEN users.
+     * 6502: K2 -- the BOTTOM BYTE of the second four-byte block, and only that byte.
      *
-     * `LL9` parts 6 and 8, `BLINE`, `CIRCLE2`, `PLS22`, `SUN` parts 1 and 3, `TACTICS`, `DOEXP`,
-     * `PTCLS2`, `SPIN` and `STATUS` all write it and read it back. Every one of them initialises it
-     * before reading, so nothing hands it between units and separate copies would be unobservable
-     * -- which is the argument that kept `XX2` and `K3` apart. Here it costs one field to be right
-     * instead of unobservably-not-wrong, so it lives here rather than in the first workspace that
-     * happened to need it (§6.49).
+     * `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its
+     * first addition, so what it gets is whatever the last planet or sun drawer left there a frame
+     * ago (M2-b, section 8). `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is,
+     * for that read alone; the other three bytes of the block are the ellipse's axes and travel as
+     * an `EllipseAxes` value since M2-c-3.
      */
-    std::uint8_t cnt = 0;
-
-    /*
-     * 6502: TGT and CNT2 -- 168 and 171, and shared the same way `CNT` is (§6.49).
-     *
-     * `TGT` is what a walk counts up to: `PLS2` sets it to 31 for a meridian, `PL9` to 64 for a
-     * crater, `SUN` to its own, and `DOEXP` and `PTCLS2` to theirs. `CNT2` is the angle a walk is
-     * at, and `TACTICS`, `DOCKIT` and `TITLE` use it for something else entirely.
-     *
-     * They are here for the same reason and with the same argument: every user sets them before
-     * reading, so separate copies would be unobservable, and one field costs less than the proof.
-     */
-    std::uint8_t tgt = 0;
-    std::uint8_t cnt2 = 0;
-
-    /*
-     * 6502: XX(1 0) and YY(1 0) -- two sixteen-bit scratch values at zero page 93 and 95.
-     *
-     * They are here rather than with the stardust, which is where they were first put and where
-     * only their FIRST caller lives (§6.45). `EDGES`, `WPLS` and three of `SUN`'s four parts read
-     * and write the same two labels, and `SUNX` sits immediately after them at 97 -- so they are a
-     * shared coordinate pair, not a workspace one routine owns. The two users are never live at
-     * the same time, which is exactly why nothing would ever have failed.
-     */
-    std::uint8_t xx = 0;
-    std::uint8_t xxNext = 0;
-    std::uint8_t yy = 0;
-    std::uint8_t yyNext = 0;
-
-    // 6502: K, a four-byte result block that the planet and sun drawers and the dashboard fill.
-    // What the kernel used to leave here comes back as a `KBlock` value since M2-b.
-    std::uint8_t k[4] = {0, 0, 0, 0};
-
-    /*
-     * 6502: K2 -- a SECOND four-byte block, and separate storage rather than a second use of K.
-     *
-     * The ellipse drawer holds one pair of projected axes here while `K` holds the other, and the
-     * original agrees that they are two blocks -- K is at zero page 119 and K2 at 178, nowhere near
-     * each other. (`MV40`, which was the first argument for two blocks, holds both as locals now.)
-     */
-    std::uint8_t k2[4] = {0, 0, 0, 0};
+    std::uint8_t k2Low = 0;
   };
 
   // ---- what the kernel answers with ------------------------------------------------------------

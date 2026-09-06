@@ -385,7 +385,7 @@ namespace Elite
     screen.text.column = 3u;                 // 6502: LDA #3 / JSR DOXC
     _title.tokens.Print(TITLE_BYLINE_TOKEN); // 6502: LDA #12 / JSR DETOK
 
-    screen.math.cnt2 = TITLE_CNT2;              // 6502: LDA #12 / STA CNT2
+    screen.flight.steerCone = TITLE_CNT2;       // 6502: LDA #12 / STA CNT2
     screen.flight.mainLoopCounter = TITLE_MCNT; // 6502: LDA #5 / STA MCNT
     _title.options.joystick = 0xFFu;            // 6502: LDA #&FF / STA JSTK
 

@@ -203,8 +203,8 @@ namespace GameLogicTests
     }
     [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
     {
-      return Elite::SpawnChildShip(universe.bubble, universe.work, universe.rng, universe.math, universe.flight.slot, universe.flight.type,
-                                   _aiFlag, _type, universe.flight.blueprint)
+      return Elite::SpawnChildShip(universe.bubble, universe.work, universe.rng, universe.flight.slot, universe.flight.type, _aiFlag,
+                                   _type, universe.flight.blueprint)
         .created;
     }
 
@@ -265,16 +265,14 @@ namespace GameLogicTests
     {
       universe.heaps.lsp = 1u;
       universe.heaps.stp = _circle.step;
-      universe.math.k[0] = _circle.radius;
       const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-      Elite::DrawBall(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, centre, false);
+      Elite::DrawBall(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, centre, _circle.radius, false);
     }
     void DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius) override
     {
       Elite::ClearSunHeap(universe.heaps);
-      universe.math.k[0] = _radius;
       const Elite::Projection centre{_x, 0u, _y, 0u};
-      Elite::DrawSun(universe.canvas, universe.heaps, universe.math, universe.rng, centre);
+      Elite::DrawSun(universe.canvas, universe.heaps, universe.math, universe.rng, centre, _radius);
       Elite::ClearSunHeap(universe.heaps);
     }
     void RunDockingComputer(Elite::Ship& _work) override

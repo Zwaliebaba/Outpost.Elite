@@ -408,11 +408,13 @@ namespace Elite
     AddToShipCoordinate(_work, sign, doubled, _axis, false);
   }
 
-  NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent, ShipType _parentType,
+  NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent, ShipType _parentType,
                          std::uint8_t _aiFlag, ShipType _shipType, const Blueprint*& _blueprint) noexcept
   {
     // 6502: STA T1 / TXA / PHA / LDA XX0 / PHA ... -- the AI byte kept and the caller's state saved.
-    _math.t1 = _aiFlag;
+    // `T1` is this routine's own since M2-c-3: `FRS1` parks the byte across the copy below and
+    // reads it back twenty instructions later, and nothing else touches it in between.
+    const std::uint8_t aiFlag = _aiFlag; // 6502: T1
     const Blueprint* const savedBlueprint = _blueprint;
 
     // 6502: LDY #NI%-1 / .FRL2 LDA INWK,Y / STA XX3,Y / LDA (INF),Y / STA INWK,Y / DEY / BPL FRL2.
@@ -434,7 +436,7 @@ namespace Elite
 
     // 6502: .rx LDA T1 / STA INWK+32 / LSR INWK+29 / ASL INWK+29 -- the AI byte, then bit 0 of the
     // roll counter cleared, which is what makes the new ship's roll damp rather than lock.
-    _work.ai = _math.t1;
+    _work.ai = aiFlag;
     _work.rollCounter = static_cast<std::uint8_t>(_work.rollCounter & 0xFEu);
 
     /*
@@ -471,11 +473,11 @@ namespace Elite
     return made;
   }
 
-  NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, MathWorkspace& _math, std::uint8_t _parent, ShipType _parentType,
+  NewShip SpawnEscapePod(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent, ShipType _parentType,
                          const Blueprint*& _blueprint) noexcept
   {
     // 6502: LDX #ESC / LDA #%11111110, and then straight into `SFS1`.
-    return SpawnChildShip(_bubble, _work, _rng, _math, _parent, _parentType, SPAWN_CHILD_AI, ShipType::EscapePod, _blueprint);
+    return SpawnChildShip(_bubble, _work, _rng, _parent, _parentType, SPAWN_CHILD_AI, ShipType::EscapePod, _blueprint);
   }
 
 } // namespace Elite

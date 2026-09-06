@@ -375,7 +375,7 @@ namespace Elite
      * workspace: the byte is read from it here and nowhere else.
      */
     KBlock k2 = k;
-    k2.low = _math.k2[0];
+    k2.low = _math.k2Low;
 
     // 6502: LDA BETA / STA Q / LDA K+3 / JSR MULT3 -- K = beta * K2, the coordinate from K+1 up.
     k = MultiplySigned24(k2.Coordinate(), _beta);

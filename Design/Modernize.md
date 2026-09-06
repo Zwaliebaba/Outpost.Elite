@@ -252,21 +252,23 @@ counted. `tools/check_modernize.py` counts them and **fails the build if any cou
 ratchet is what stops a slice reintroducing what another slice removed (§5, rule 5). The recorded
 ceilings are in `tools/modernize_ratchet.json` and are lowered as slices land.
 
-**P1 — The register-shaped calling convention.** <!--count:register-params-->17 parameters in
+**P1 — The register-shaped calling convention.** <!--count:register-params-->16 parameters in
 `GameLogic/*.h` are named `_a`, `_x` or `_y` and typed `std::uint8_t`: the routine takes what the
 6502 routine took in that register, and its meaning is in the comment. Twelve result structs carry
 a field named `a` or `carry` for the same reason (`ProjectResult::a`, `ScreenOffset::a`). Example:
 `LargestAxisFrom(const Bubble&, std::uint8_t _slot, std::uint8_t _a)` is `MAS2` and `_a` is the
 value the caller ORs the high bytes into.
 
-**P2 — Zero-page scratch as an implicit channel.** `MathWorkspace` holds `P`, `P+1`, `P+2`, `Q`, `R`,
-`S`, `T`, `T1`, `U`, `CNT`, `TGT`, `CNT2`, `XX`, `YY`, `K` and `K2` (and held `widget` until M2-b) and is passed to
-hundreds of functions so that a routine can "leave the low byte in P" for a caller three files
-away (`Arith.h`'s own words). `DrawWorkspace`, `GeometryWorkspace`, `ClipState`, `K3Block`,
-`Projection` and `K3Block` are the same pattern for other zero-page runs (`NumberWorkspace` went
-with M2-c-1, and `DrawWorkspace` is down to the dashboard's screen cursor since M2-c-2);
-<!--count:workspace-params-->58 parameters in the headers are one of the workspaces by
-reference. The pattern is faithful and it is also the reason no signature says what a function
+**P2 — Zero-page scratch as an implicit channel.** `MathWorkspace` held `P`, `P+1`, `P+2`, `Q`, `R`,
+`S`, `T`, `T1`, `U`, `CNT`, `TGT`, `CNT2`, `XX`, `YY`, `K`, `K2` and `widget`, and was passed to
+hundreds of functions so that a routine could "leave the low byte in P" for a caller three files
+away (`Arith.h`'s own words). M2-b took the kernel's off it and M2-c the drawing's; two bytes are
+left, and both outlive their writer on purpose (§4.3). `DrawWorkspace`, `GeometryWorkspace`, `ClipState`, `K3Block`,
+`Projection` and `K3Block` are the same pattern for other zero-page runs. M2-c emptied most of
+them: `NumberWorkspace` went with M2-c-1, `DrawWorkspace` is the dashboard's screen cursor since
+M2-c-2, `MathWorkspace` is `Q` and `K2`'s bottom byte since M2-c-3, and `GeometryWorkspace` is
+`LL9`'s four stage results. <!--count:workspace-params-->46 parameters in the headers are still one
+of them by reference. The pattern is faithful and it is also the reason no signature says what a function
 consumes or produces.
 
 **P3 — Flat byte blobs addressed by number.** `ShipBlock` is `std::array<std::uint8_t, 37>` with
@@ -341,7 +343,7 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,887 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,924 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -464,41 +466,23 @@ outlived a call on purpose (`Projection`'s four and `SC`), one was a constant in
 and found two more that outlive a call by design — `K2`'s bottom byte, which `MV40` reads and never
 writes, and `Q` as the frame leaves it for the altitude check (§8, R22) — so `MathWorkspace` keeps
 those two bytes and the drawing scratch M2-c owns, `DrawWorkspace` shrinks to the dashboard's
-cursor, and `GeometryWorkspace` to `LL9`'s frame. `Flags` stays for the routines whose callers read
+cursor, and `GeometryWorkspace` to `LL9`'s frame. **M2-c finished it**: thirteen fields are left
+across all six structs — `Q` and `K2`'s bottom byte, `SC`, `dontclip`, `LL9`'s four stage results,
+`Projection`'s four and `K3` — where there were forty-two when M2-a took the first count.
+`Flags` stays for the routines whose callers read
 `C` or `V` (`TwistSeeds`'s carry, `PrintSystemName`'s carry, `Rng::Next`'s `C` and `V`), returned,
 never global.
 
 <!--census:start-->
 | Field | 6502 | Written by | Read before written, from the caller | Read after a call | Verdict |
 |---|---|---|---|---|---|
-| `MathWorkspace.p` | `P` | DrawPlanetDetail | — | — | **Done (M2-b): the kernel's operand and low byte are values** -- `Product{high, low, carry}` out of the multipliers, `SignMag16` into `ADD`. What is left is the planet drawer parking a crater offset and the dashboard its scratch: M2-c's locals. |
-| `MathWorkspace.p1` | `P+1` | CircleOffScreen | — | DrawSun (after EraseSun) | **Left for M2-c.** The kernel's three-byte operands are `SignMag24` values since M2-b; what remains is `CHKON`'s (`CircleOffScreen`) horizontal extent, which `DrawSun` reads after `EraseSun` -- the planet drawer's own channel. |
-| `MathWorkspace.p2` | `P+2` | CircleOffScreen | — | DrawSun (after EraseSun) | **Left for M2-c**, with `p1`. |
-| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail | — | EndFlightFrame (after EraseSun) | **The frame's Q** (M2-b, §8; risk R22). The kernel takes its multiplier and divisor as values. Two readers are left: the clipper's slope helpers hand it between `MeasureSlope`, `PrepareSlope`, `MultiplySlope` and `DivideSlope` (M2-c's `Slope`), and the altitude check in `EndFlightFrame` takes whatever the frame last left in `Q` as its radicand's low byte -- `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip` and `DrawSun` write it for that read alone, as the original's `STA Q`s did, and `LOIN`'s is the one this port has never modelled. `DrawDials`/`DrawBar`/`DrawIndicator` and the cloud's `DrawExplosionCloud`/`DrawParticles` are the dashboard's and the explosion's own parameter (M2-c). |
-| `MathWorkspace.r` | `R` | IsHit | — | — | **Left for M2-c.** The kernel's `Quotient` and `Product` went with M2-b; what remains is the clipper's slope (`MeasureSlope` → `PrepareSlope` → `MultiplySlope`/`DivideSlope`, `StepAlongX`'s x) and `HITCH`'s (`IsHit`) sum of squares -- one `Slope` value and one local. |
-| `MathWorkspace.s` | `S` | IsHit | — | — | **Left for M2-c**, the high half of the clipper's `(S R)` and `IsHit`'s; the kernel's `SignedSum::sign` and `SignMag16::hi` since M2-b. |
-| `MathWorkspace.t` | `T` | DrawBall, DrawEllipse, DrawExplosionCloud, DrawLaserSights, DrawShip, RunTactics | DrawBallLine | — | **Left for M2-c's second and third commits.** `StepAlongX`/`StepAlongY` read `T` after `PrepareSlope` (the slope helpers' shared value, M2-c-2's `Slope`) and `DrawBallLine` reads what `DrawBall` set (`BLINE`'s step, M2-c-3's parameter); every other writer initialises it. The kernel's `T` is a local since M2-b, and `HLOIN`'s and `BOX2`'s are locals since M2-c-1 (§8: the port wrote `T2`). |
-| `MathWorkspace.t1` | `T1` | DrawShip, SpawnChildShip | — | — | **One parameter, else local** (M2-c-3). `DrawShip` and `SpawnChildShip` use it as their own scratch; `DIALS`'s threshold became `DrawBar`'s parameter in M2-c-1 and the kernel's `T1` is a local since M2-b. |
-| `MathWorkspace.u` | `U` | DrawParticles, DrawShip | — | — | **Local**. Two writers, no reader that did not write it first; `LL61`'s incoming `U` is a parameter since M2-b. |
-| `MathWorkspace.cnt` | `CNT` | DrawBall, DrawBallLine, DrawEllipse, DrawParticles, DrawShip, DrawSun, RunTactics, SpawnItems, SteerTowards | — | DrawBallLine (after ClipLine) | **Local, and one parameter** (M2-c-3). Every writer initialises it (its own comment, §6.49); the hand-over is `DrawBall` → `DrawBallLine`, `CIRCLE2` giving `BLINE` its segment count. |
-| `MathWorkspace.tgt` | `TGT` | DrawHalfEllipse, DrawParticles, DrawPlanetDetail, DrawSun | — | DrawEllipse (after DrawBallLine) | **Parameter** (M2-c). `DrawEllipse` reads what `DrawHalfEllipse`, `DrawPlanetDetail` and `DrawSun` set: what the walk counts up to. |
-| `MathWorkspace.cnt2` | `CNT2` | DrawEllipse, DrawPlanetDetail, RunDockingComputer, RunTactics, SetMeridianAngle, ShowTitleShip | DrawEllipse | SteerTowards (after ?) | **Parameter** (M2-c-3). `DrawEllipse` reads the starting angle `SetMeridianAngle` and `DrawPlanetDetail` set; `ShowTitleShip`'s use is its own local. |
-| `MathWorkspace.xx` | `XX` | DrawSun | — | — | **Parameter** (M2-c-3). `XX(1 0)` is the sun's half-width handed to `ClipSunRow` and the sliver it draws; the stardust's is a `SignMag16` local of each mover since M2-c-1. |
-| `MathWorkspace.xxNext` | `XX+1` | DrawSun | — | — | **Parameter** (M2-c-3), the high byte of the same. |
-| `MathWorkspace.yy` | `YY` | DrawSun, EraseSun | ClipSunRow | — | **Parameter** (M2-c). `ClipSunRow` reads `YY(1 0)` from `DrawSun`/`EraseSun`; the stardust writes and reads its own. |
-| `MathWorkspace.yyNext` | `YY+1` | DrawSun, EraseSun | ClipSunRow | — | **Parameter** (M2-c-3), the high byte of the same. |
-| `MathWorkspace.k` | `K(3 2 1 0)` | DivideByShipZ, DivideToScreenOffset, DrawHyperspaceRing, DrawPlanetOrSun | CircleOffScreen, DrawBall | DivideAxisByZ (after DivideByShipZ), DivideToScreenOffset (after DivideByShipZ), DrawCircle (after CircleOffScreen), DrawPlanetDetail (after DrawCircle), DrawPlanetOrSun (after DivideByShipZ), DrawSun (after EraseSun), ScaleAxisByZ (after DivideAxisByZ) | **Result and parameter** (M2-c). `DivideByShipZ` leaves the quotient in `K` and `DivideAxisByZ`, `DivideToScreenOffset` and `DrawPlanetOrSun` read it after; `CircleOffScreen`, `DrawBall` and `DrawBar` read what their callers set (the radius, the bar's colours): a `KBlock` value in and out. `MV40`, `MAS1` and `TAS1` hold theirs as `KBlock` locals since M2-b. |
-| `MathWorkspace.k2` | `K2(3 2 1 0)` | DrawPlanetDetail, DrawSun, LoadTwoAxes | DrawEllipse, MovePlanetOrSun | — | **Parameter, and one byte of state** (M2-c; M2-b, §8). `DrawEllipse` reads the two axes `LoadTwoAxes` set; `DrawSun` and `DrawPlanetDetail` write their own. `MV40` holds its `K2` as a local since M2-b -- except the bottom byte, which it never writes and reads for the carry of its first addition: whatever the last drawer left there, on purpose. |
+| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail | EndFlightFrame | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. `LOIN`'s is the one this port has never modelled -- R22, and the owner's to rule on. |
+| `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
 | `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
-| `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, TransposeOrientation | — | **Stage result** (M2-c). `ScaleOrientation` (part 3) fills it, `DotProducts` and `TransposeOrientation` read it: `ScaledOrientation`, kept by `LL9`'s frame. |
-| `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, DrawShip, MeasureSlope | FaceVisibility | DrawShip (after ?) | **Stage result and the clipper's local** (M2-c-2 and M2-c-3). `DotProducts` leaves three dot products that part 4 reads; the clipper's helpers use the same bytes as their own scratch, which the frame separates. `DIALS` stopped borrowing them in M2-c-1. |
-| `GeometryWorkspace.xx2` | `XX2` | DrawShip | EitherFaceVisible, RunDockingComputer | — | **Stage result** (M2-c-3). Face visibility, written by part 4 and read by `EitherFaceVisible`; `RunDockingComputer` reads `XX2+10` as the memory it is (§6.112), which the frame keeps addressable for that one reader. |
-| `GeometryWorkspace.xx3` | `XX3` | DrawShip | DrawExplosionCloud | — | **Stage result** (M2-c-3). The projected vertices, `LL9`'s own, handed to `DrawExplosionCloud` for the burst. |
-| `GeometryWorkspace.xx4` | `XX4` | DrawHyperspaceRings, DrawShip | — | — | **Local** of `LL9`'s frame (the distance). |
-| `GeometryWorkspace.xx17` | `XX17` | DrawShip | — | — | **Local** of `LL9`'s frame (the loop counter). |
-| `GeometryWorkspace.xx18` | `XX18` | DrawShip | — | — | **Local** of `LL9`'s frame (the halved position). |
-| `GeometryWorkspace.xx20` | `XX20` | DrawShip | — | — | **Local** of `LL9`'s frame (the loop bound). |
-| `GeometryWorkspace.v` | `V(1 0)` | DrawShip | — | — | **Local** of `LL9`'s frame (the walker, an index since M1-e). |
+| `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
+| `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, DrawShip, MeasureSlope | FaceVisibility | DrawShip (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
+| `GeometryWorkspace.xx2` | `XX2` | DrawShip | EitherFaceVisible, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
+| `GeometryWorkspace.xx3` | `XX3` | DrawShip | DrawExplosionCloud | — | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
 | `ClipState.dontclip` | `dontclip` | ResetShipAndBubble | ClipLineKeepingSwap | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
 | `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
 | `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
@@ -1190,9 +1174,17 @@ returns the vertical extent (`P+1`, `P+2`) `SUN` reads; the ellipse's four axes 
 `EllipseAxes` that `PLS5`, `PL9` and `PL26` fill and `PLS22` takes with its `CNT2` start and `TGT`
 end; `BLINE`'s `T` and `CNT` are `CIRCLE2`'s and `PLS22`'s locals handed in and back; `EDGES` takes
 the centre as `SignMag16` and the half-width and returns the row's two ends; `SUN`'s `K2` and `CNT`
-are locals; `DOEXP`'s `Q`, `U`, `CNT`, `TGT` are `PTCLS`'s parameters. After this commit
-`MathWorkspace` holds `q` (the frame's Q, R22) and `k2`'s bottom byte (`MV40`, §8) and nothing else
-— what M2-a's verdicts said, with the tree agreeing.
+are locals; `DOEXP`'s `U`, `CNT` and `TGT` are `PTCLS`'s locals. After this commit `MathWorkspace`
+holds `q` (the frame's Q, R22) and `k2`'s bottom byte (`MV40`, §8) and nothing else — what M2-a's
+verdicts said, with the tree agreeing.
+
+Two corrections the tree made to this paragraph, journalled below. `DOEXP`'s **`Q` is not** a
+parameter: it is the frame's `Q` and `DOEXP` runs inside `LL9` part 9, so the same argument that
+kept the clipper's applies. And `CNT2` **is not** a parameter of the steering: `TACTICS` and
+`DOCKIT` write `RAT`, `RAT2` and `CNT2` in the same three instructions and `TA6` reads all three, so
+the third byte joins the first two on `FlightState` rather than being threaded through `TA151`,
+`GOPL` and `TA152`. The ellipse walk's `CNT2` is a different meaning in the same byte and is a
+parameter, as planned.
 
 **Tests** are rewritten through the bridge as M2-b's were: each sweep stages the same bytes into
 the value it now passes and compares the returned struct against the oracle's zero page, and an
@@ -1521,6 +1513,49 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-06 — M2-c-3 built: `MathWorkspace` is two bytes, and both of them are there on purpose.**
+`LL9`'s five scratch bytes -- `XX4`, `XX17`, `XX18`, `XX20` and `V` -- are locals of the one
+function the eleven parts became, and so are `CNT`, `T`, `T1` and `U` where it used them; what is
+left in the frame is the four stage results parts 3 to 11 hand each other, two of which have a
+reader outside (`DOEXP`'s copy of `XX3`, `DOCKIT`'s stale `XX2+10`). The planet and the sun take
+theirs as values: `DVID3B2` returns the `KBlock`, `CHKON` takes the radius and returns the circle's
+bottom edge, `CIRCLE`/`CIRCLE2`/`SUN` take the radius, `BLINE` takes `(T X)` and `CNT` and returns
+the `CNT` it advanced, `PLS22` takes an `EllipseAxes` with its `CNT2` start and `TGT` end, `PLS4`
+returns the angle, `PLS5` the second axis pair, `EDGES` takes `YY(1 0)`, and `SUN`, `PL26`, `HFL5`,
+`PLS3` and `PL9` hold the rest as locals. Outside the drawers, `HITCH`'s `(S R)`, `FRS1`'s `T1`,
+`SPIN2`'s `CNT`, `SIGHT`'s `T`, `PTCLS`'s `U`/`CNT`/`TGT`, `DOEXP`'s `T`, `TACTICS`'s `CNT` and
+`TT207`'s `P` went the same way.
+
+**Two bytes are left and neither is scratch.** `Q` is the frame's, which `MA23`'s altitude check
+reads (R22); `K2`'s bottom byte is the one `MV40` reads for the carry of its first addition without
+ever writing it (M2-b, §8). `PL9`, `PL26` and `SUN` store to `K2` where the original's `STA K2` is,
+for that read alone, exactly as the eight `Q` writers do -- the third time this slice has met the
+pattern, and the reason the plan's "`DOEXP`'s `Q` is a parameter" line was wrong: `DOEXP` runs
+inside `LL9` part 9, so what it leaves in `Q` is what the altitude check gets.
+
+**And `CNT2` is not a parameter either.** `TACTICS` and `DOCKIT` write `RAT`, `RAT2` and `CNT2` in
+three instructions and `TA6` reads all three; `RAT` and `RAT2` have been `FlightState` members since
+slice 3a, so the third byte joins them as `steerCone` rather than threading through `TA151`, `GOPL`
+and `TA152`. The ellipse walk's `CNT2` is a different meaning in the same byte and is `PLS22`'s
+parameter, as planned.
+
+**Tests.** Every comparison that was about an answer is kept -- `CHKON`'s `(P+2 P+1)` (now compared
+only on the on-screen paths, which are the ones that write it), `DVID3B2`'s `K`, `BLINE`'s returned
+`CNT`, `DOEXP`'s `Q`, the sun's and the planet's `K2` bottom byte. The ones that were about a
+routine's own scratch go with a comment naming what pins the byte instead: `LL9`'s `XX18` (the
+`ovflw` retry is visible in `XX2`, the heap and the screen, over thirty-three blueprints and five
+placements), `CIRCLE2`'s and `SUN`'s `CNT` and `TGT` (the segments and the row widths), `PTCLS`'s
+`U`, `CNT` and `TGT` (the sprite seam records every particle), `SPIN2`'s `CNT` (the spawn seam),
+`SIGHT`'s `T` (the sprite-enable byte), `BLINE`'s `CNT` (returned) and the `PLANET` sweep's `CNT`,
+`CNT2` and `TGT` -- whose coverage counters now read the ORACLE's `TGT`, because it is the sweep's
+reach they measure and not the port's answer. One dead helper removed from `UniverseImage.cpp`
+(`Pair` lost its last caller when M2-c-1 dropped the `T2` cell).
+
+**Green.** 395 of 395 with the oracle present, the M0-c replay record unchanged, all thirteen
+repository checks. The ratchet: `register-params` 17 → 16, `workspace-params` 58 → 46,
+`origin-markers` 3,887 → 3,924 (rule 4). **Mutants** (rule 3): no recorded mutant anchors a line
+this slice moved; the corpus is re-run against the committed slice below.
 
 **2026-09-06 — M2-c-2 built: the clipper takes a line and answers with one, and the frame's `Q`
 turned out not to be the helpers' to keep.** `LL145` and `LL147` take a `Line16` — two sixteen-bit

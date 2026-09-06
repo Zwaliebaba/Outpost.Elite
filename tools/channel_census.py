@@ -41,9 +41,9 @@ END = "<!--census:end-->"
 
 # The workspaces and their fields, as the headers declare them.
 WORKSPACES: dict[str, list[str]] = {
-    "MathWorkspace": ["p", "p1", "p2", "q", "r", "s", "t", "t1", "u", "cnt", "tgt", "cnt2", "xx", "xxNext", "yy", "yyNext", "k", "k2"],
+    "MathWorkspace": ["q", "k2Low"],
     "DrawWorkspace": ["sc"],
-    "GeometryWorkspace": ["xx16", "xx12", "xx2", "xx3", "xx4", "xx17", "xx18", "xx20", "v"],
+    "GeometryWorkspace": ["xx16", "xx12", "xx2", "xx3"],
     "ClipState": ["dontclip"],
     "Projection": ["x", "x1", "y", "y1"],
     "K3Block": ["*"],
@@ -51,15 +51,10 @@ WORKSPACES: dict[str, list[str]] = {
 
 # What the 6502 called each field, for the table.
 LABELS: dict[str, str] = {
-    "MathWorkspace.p": "P", "MathWorkspace.p1": "P+1", "MathWorkspace.p2": "P+2", "MathWorkspace.q": "Q", "MathWorkspace.r": "R",
-    "MathWorkspace.s": "S", "MathWorkspace.t": "T", "MathWorkspace.t1": "T1", "MathWorkspace.u": "U", "MathWorkspace.cnt": "CNT",
-    "MathWorkspace.tgt": "TGT", "MathWorkspace.cnt2": "CNT2", "MathWorkspace.xx": "XX", "MathWorkspace.xxNext": "XX+1",
-    "MathWorkspace.yy": "YY", "MathWorkspace.yyNext": "YY+1", "MathWorkspace.k": "K(3 2 1 0)",
-    "MathWorkspace.k2": "K2(3 2 1 0)",
+    "MathWorkspace.q": "Q", "MathWorkspace.k2Low": "K2",
     "DrawWorkspace.sc": "SC(1 0)",
-    "GeometryWorkspace.xx16": "XX16", "GeometryWorkspace.xx12": "XX12", "GeometryWorkspace.xx2": "XX2", "GeometryWorkspace.xx3": "XX3",
-    "GeometryWorkspace.xx4": "XX4", "GeometryWorkspace.xx17": "XX17", "GeometryWorkspace.xx18": "XX18", "GeometryWorkspace.xx20": "XX20",
-    "GeometryWorkspace.v": "V(1 0)",
+    "GeometryWorkspace.xx16": "XX16", "GeometryWorkspace.xx12": "XX12", "GeometryWorkspace.xx2": "XX2",
+    "GeometryWorkspace.xx3": "XX3",
     "ClipState.dontclip": "dontclip",
     "Projection.x": "K3", "Projection.x1": "K3+1", "Projection.y": "K4", "Projection.y1": "K4+1",
     "K3Block.*": "K3 to K3+9",
@@ -75,37 +70,16 @@ AGGREGATE_MEMBERS: dict[str, str] = {
 # out. "local" is scratch within one routine; "result" a value a callee hands back; "parameter"
 # a value a caller hands in; "state" a value that outlives the call on purpose, with the reason.
 VERDICTS: dict[str, str] = {
-    # ---- MathWorkspace: the arithmetic kernel's channels, taken to values by M2-b ------------------
-    "MathWorkspace.p": "**Done (M2-b): the kernel's operand and low byte are values** -- `Product{high, low, carry}` out of the multipliers, `SignMag16` into `ADD`. What is left is the planet drawer parking a crater offset and the dashboard its scratch: M2-c's locals.",
-    "MathWorkspace.p1": "**Left for M2-c.** The kernel's three-byte operands are `SignMag24` values since M2-b; what remains is `CHKON`'s (`CircleOffScreen`) horizontal extent, which `DrawSun` reads after `EraseSun` -- the planet drawer's own channel.",
-    "MathWorkspace.p2": "**Left for M2-c**, with `p1`.",
-    "MathWorkspace.q": "**The frame's Q** (M2-b, §8; risk R22). The kernel takes its multiplier and divisor as values. Two readers are left: the clipper's slope helpers hand it between `MeasureSlope`, `PrepareSlope`, `MultiplySlope` and `DivideSlope` (M2-c's `Slope`), and the altitude check in `EndFlightFrame` takes whatever the frame last left in `Q` as its radicand's low byte -- `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip` and `DrawSun` write it for that read alone, as the original's `STA Q`s did, and `LOIN`'s is the one this port has never modelled. `DrawDials`/`DrawBar`/`DrawIndicator` and the cloud's `DrawExplosionCloud`/`DrawParticles` are the dashboard's and the explosion's own parameter (M2-c).",
-    "MathWorkspace.r": "**Left for M2-c.** The kernel's `Quotient` and `Product` went with M2-b; what remains is the clipper's slope (`MeasureSlope` → `PrepareSlope` → `MultiplySlope`/`DivideSlope`, `StepAlongX`'s x) and `HITCH`'s (`IsHit`) sum of squares -- one `Slope` value and one local.",
-    "MathWorkspace.s": "**Left for M2-c**, the high half of the clipper's `(S R)` and `IsHit`'s; the kernel's `SignedSum::sign` and `SignMag16::hi` since M2-b.",
-    "MathWorkspace.t": "**Left for M2-c's second and third commits.** `StepAlongX`/`StepAlongY` read `T` after `PrepareSlope` (the slope helpers' shared value, M2-c-2's `Slope`) and `DrawBallLine` reads what `DrawBall` set (`BLINE`'s step, M2-c-3's parameter); every other writer initialises it. The kernel's `T` is a local since M2-b, and `HLOIN`'s and `BOX2`'s are locals since M2-c-1 (§8: the port wrote `T2`).",
-    "MathWorkspace.t1": "**One parameter, else local** (M2-c-3). `DrawShip` and `SpawnChildShip` use it as their own scratch; `DIALS`'s threshold became `DrawBar`'s parameter in M2-c-1 and the kernel's `T1` is a local since M2-b.",
-    "MathWorkspace.u": "**Local**. Two writers, no reader that did not write it first; `LL61`'s incoming `U` is a parameter since M2-b.",
-    "MathWorkspace.cnt": "**Local, and one parameter** (M2-c-3). Every writer initialises it (its own comment, §6.49); the hand-over is `DrawBall` → `DrawBallLine`, `CIRCLE2` giving `BLINE` its segment count.",
-    "MathWorkspace.tgt": "**Parameter** (M2-c). `DrawEllipse` reads what `DrawHalfEllipse`, `DrawPlanetDetail` and `DrawSun` set: what the walk counts up to.",
-    "MathWorkspace.cnt2": "**Parameter** (M2-c-3). `DrawEllipse` reads the starting angle `SetMeridianAngle` and `DrawPlanetDetail` set; `ShowTitleShip`'s use is its own local.",
-    "MathWorkspace.xx": "**Parameter** (M2-c-3). `XX(1 0)` is the sun's half-width handed to `ClipSunRow` and the sliver it draws; the stardust's is a `SignMag16` local of each mover since M2-c-1.",
-    "MathWorkspace.xxNext": "**Parameter** (M2-c-3), the high byte of the same.",
-    "MathWorkspace.yy": "**Parameter** (M2-c). `ClipSunRow` reads `YY(1 0)` from `DrawSun`/`EraseSun`; the stardust writes and reads its own.",
-    "MathWorkspace.yyNext": "**Parameter** (M2-c-3), the high byte of the same.",
-    "MathWorkspace.k": "**Result and parameter** (M2-c). `DivideByShipZ` leaves the quotient in `K` and `DivideAxisByZ`, `DivideToScreenOffset` and `DrawPlanetOrSun` read it after; `CircleOffScreen`, `DrawBall` and `DrawBar` read what their callers set (the radius, the bar's colours): a `KBlock` value in and out. `MV40`, `MAS1` and `TAS1` hold theirs as `KBlock` locals since M2-b.",
-    "MathWorkspace.k2": "**Parameter, and one byte of state** (M2-c; M2-b, §8). `DrawEllipse` reads the two axes `LoadTwoAxes` set; `DrawSun` and `DrawPlanetDetail` write their own. `MV40` holds its `K2` as a local since M2-b -- except the bottom byte, which it never writes and reads for the carry of its first addition: whatever the last drawer left there, on purpose.",
+    # ---- MathWorkspace: two bytes that outlive their writer on purpose ---------------------------
+    "MathWorkspace.q": "**The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. `LOIN`'s is the one this port has never modelled -- R22, and the owner's to rule on.",
+    "MathWorkspace.k2Low": "**One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3.",
     # ---- DrawWorkspace: the dashboard's screen cursor, all that is left of it after M2-c-2 --------
     "DrawWorkspace.sc": "**State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch.",
-    # ---- GeometryWorkspace: LL9's frame, M2-c -----------------------------------------------------
-    "GeometryWorkspace.xx16": "**Stage result** (M2-c). `ScaleOrientation` (part 3) fills it, `DotProducts` and `TransposeOrientation` read it: `ScaledOrientation`, kept by `LL9`'s frame.",
-    "GeometryWorkspace.xx12": "**Stage result and the clipper's local** (M2-c-2 and M2-c-3). `DotProducts` leaves three dot products that part 4 reads; the clipper's helpers use the same bytes as their own scratch, which the frame separates. `DIALS` stopped borrowing them in M2-c-1.",
-    "GeometryWorkspace.xx2": "**Stage result** (M2-c-3). Face visibility, written by part 4 and read by `EitherFaceVisible`; `RunDockingComputer` reads `XX2+10` as the memory it is (§6.112), which the frame keeps addressable for that one reader.",
-    "GeometryWorkspace.xx3": "**Stage result** (M2-c-3). The projected vertices, `LL9`'s own, handed to `DrawExplosionCloud` for the burst.",
-    "GeometryWorkspace.xx4": "**Local** of `LL9`'s frame (the distance).",
-    "GeometryWorkspace.xx17": "**Local** of `LL9`'s frame (the loop counter).",
-    "GeometryWorkspace.xx18": "**Local** of `LL9`'s frame (the halved position).",
-    "GeometryWorkspace.xx20": "**Local** of `LL9`'s frame (the loop bound).",
-    "GeometryWorkspace.v": "**Local** of `LL9`'s frame (the walker, an index since M1-e).",
+    # ---- GeometryWorkspace: LL9's four stage results ---------------------------------------------
+    "GeometryWorkspace.xx16": "**Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are.",
+    "GeometryWorkspace.xx12": "**Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1.",
+    "GeometryWorkspace.xx2": "**Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals.",
+    "GeometryWorkspace.xx3": "**Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader.",
     # ---- ClipState -------------------------------------------------------------------------------
     "ClipState.dontclip": "**State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it.",
     # ---- Projection -----------------------------------------------------------------------------

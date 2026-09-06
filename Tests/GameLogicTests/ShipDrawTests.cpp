@@ -276,14 +276,16 @@ namespace GameLogicTests
                   const Elite::Testing::RunResult run = cpu.CallSubroutine(dvid3b2);
                   Assert::IsTrue(run.completed, L"DVID3B2 returned");
 
-                  Elite::DivideByShipZ(ship, math, Elite::SignMag24{p, p1, a});
+                  const Elite::KBlock k = Elite::DivideByShipZ(ship, math, Elite::SignMag24{p, p1, a});
 
                   const std::wstring where =
                     Widen("DVID3B2(a=" + std::to_string(a) + ", P=" + std::to_string(p) + "/" + std::to_string(p1) +
                           ", z=" + std::to_string(zLow) + "/" + std::to_string(zHigh) + "/" + std::to_string(zSign) + ")");
+                  // `K(3 2 1 0)` is the value this routine returns since M2-c-3.
+                  const std::uint8_t ours[4] = {k.low, k.mid, k.high, k.top};
                   for (int byte = 0; byte < 4; ++byte)
                   {
-                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], math.k[byte],
+                    Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(kk + byte)], ours[static_cast<std::size_t>(byte)],
                                      (where + L": K+" + std::to_wstring(byte)).c_str());
                   }
 
@@ -1756,14 +1758,16 @@ namespace GameLogicTests
             }
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 28)], slot.acceleration, (where + L": the slot's byte 28").c_str());
             Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(SLOT_AT + 30)], slot.pitchCounter, (where + L": the slot's byte 30").c_str());
-            // `XX18` is the ship's position as the face loop leaves it, and the `ovflw` retry is
-            // the only thing that changes it after the dot products -- so comparing it is how a
-            // retry that ran, or failed to, is seen from outside the routine.
-            for (std::size_t byte = 0; byte < 9u; ++byte)
-            {
-              Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("XX18") + byte)], geometry.xx18[byte],
-                               (where + L": XX18+" + std::to_wstring(byte)).c_str());
-            }
+            /*
+             * `XX18` was compared here until M2-c-3, because the `ovflw` retry is the only thing
+             * that changes it after the dot products and comparing it was how a retry that ran, or
+             * failed to, could be seen from outside. It is `LL9`'s own scratch and is a local now,
+             * so what pins the retry is `XX2` below: every face's visibility is the magnitude of a
+             * dot product taken with the position the retry left, so a retry that ran when it
+             * should not have, or halved the wrong byte, changes the answer for that face. Over
+             * thirty-three blueprints and five placements a systematically wrong retry cannot
+             * leave all of them alone -- and the heap and the screen are compared as well.
+             */
 
             /*
              * Twelve of `XX2`'s sixteen bytes, and the four left out are the ones it SHARES with

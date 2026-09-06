@@ -332,7 +332,7 @@ namespace Elite
    * instead. A port that wrote a pointer of 160 and then disabled the sprite would look the same
    * on screen and differ on every byte.
    */
-  void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const Commander& _commander, TrumbleSprites& _trumbles,
+  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles,
                        std::uint8_t _view, SightEffects& _effects) noexcept;
 
 } // namespace Elite

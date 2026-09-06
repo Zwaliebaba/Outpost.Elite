@@ -224,7 +224,7 @@ namespace Elite
     // unit's. A caller of `DOKEY` gets that as well, and the call site does not say so.
   }
 
-  void DrawLaserSights(Canvas& _canvas, MathWorkspace& _math, const Commander& _commander, TrumbleSprites& _trumbles,
+  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles,
                        std::uint8_t _view, SightEffects& _effects) noexcept
   {
     _effects.SetRasterMode(0x05u); // 6502: LDA #%101 / JSR SETL1
@@ -265,8 +265,8 @@ namespace Elite
     }
 
     // 6502: LDA #1 / .SIG3 STA T -- one if a laser was found, and the zero `LDA LASER,Y` left if
-    // not, which is the whole of how the sights get switched off.
-    _math.t = (laser != 0u) ? std::uint8_t{1u} : std::uint8_t{0u};
+    // not, which is the whole of how the sights get switched off. `SIGHT`'s own since M2-c-3.
+    const std::uint8_t sightsBit = (laser != 0u) ? std::uint8_t{1u} : std::uint8_t{0u};
 
     // 6502: LDA TRIBBLE+1 / AND #%01111111 / LSR A x4 / TAX.
     const std::uint8_t population = _commander.tribbles.hi;
@@ -275,7 +275,7 @@ namespace Elite
     _trumbles.count = TRUMBLE_COUNT_TABLE[index]; // 6502: LDA TRIBTA,X / STA TRIBCT
 
     // 6502: LDA TRIBMA,X / ORA T / STA VIC+&15 -- the sights and the Trumbles in one byte.
-    _effects.SetSpritesEnabled(static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | _math.t));
+    _effects.SetSpritesEnabled(static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | sightsBit));
 
     _effects.SetRasterMode(0x04u); // 6502: LDA #%100 / JMP SETL1, a tail call
   }

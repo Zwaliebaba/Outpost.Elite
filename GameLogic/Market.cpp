@@ -318,16 +318,15 @@ namespace Elite
      * one after the point. That is where the quoted price comes from: the byte holds four-tenths of
      * a credit each.
      */
-    MathWorkspace work;
-    work.p = price;
+    std::uint8_t low = price; // 6502: P, and this routine's own since M2-c-3
     std::uint8_t high = 0;
     for (int shift = 0; shift < 2; ++shift)
     {
-      const ShiftResult low = RotateLeft(work.p, false);
-      work.p = low.value;
-      high = RotateLeft(high, low.carry).value;
+      const ShiftResult shifted = RotateLeft(low, false);
+      low = shifted.value;
+      high = RotateLeft(high, shifted.carry).value;
     }
-    PrintValue(_characters, static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | work.p), 5, true);
+    PrintValue(_characters, static_cast<std::uint16_t>((static_cast<std::uint16_t>(high) << 8) | low), 5, true);
 
     // 6502: LDY QQ19+4 / LDA #5 / LDX AVL,Y / STX QQ25 / CLC / BEQ TT172.
     const std::uint8_t available = _market.availability[static_cast<std::size_t>(_item)];

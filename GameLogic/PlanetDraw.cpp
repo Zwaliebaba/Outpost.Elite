@@ -10,16 +10,16 @@
 namespace Elite
 {
 
-  SunRow ClipSunRow(PlanetSunState& _state, MathWorkspace& _math, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
+  SunRow ClipSunRow(PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
   {
     // 6502: EDGES -- STA T / CLC / ADC YY / STA X2, the right-hand end first. `T` is the kernel's
     // byte and this routine's own since M2-c-2; `X1` and `X2` are the answer.
     const std::uint8_t t = _halfWidth;
     SunRow row;
 
-    const AddResult right = AddWithCarry(_halfWidth, _math.yy, false);
+    const AddResult right = AddWithCarry(_halfWidth, _centre.lo, false);
     row.x2 = right.value;
-    const AddResult rightHigh = AddWithCarry(_math.yyNext, 0u, right.carry);
+    const AddResult rightHigh = AddWithCarry(_centre.hi, 0u, right.carry);
 
     if ((rightHigh.value & 0x80u) != 0u)
     {
@@ -39,9 +39,9 @@ namespace Elite
       row.x2 = 255;
     }
 
-    const SubResult left = SubtractWithCarry(_math.yy, t, true);
+    const SubResult left = SubtractWithCarry(_centre.lo, t, true);
     row.x1 = left.value;
-    const SubResult leftHigh = SubtractWithCarry(_math.yyNext, 0u, left.carry);
+    const SubResult leftHigh = SubtractWithCarry(_centre.hi, 0u, left.carry);
 
     if (leftHigh.value == 0u)
     {
@@ -64,10 +64,10 @@ namespace Elite
     return row;
   }
 
-  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
+  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept
   {
     // 6502: HLOIN2 -- JSR EDGES / STY Y1 / LDA #0 / STA LSO,Y / JMP HLOIN. The carry is dropped.
-    const SunRow row = ClipSunRow(_state, _math, _halfWidth, _row);
+    const SunRow row = ClipSunRow(_state, _centre, _halfWidth, _row);
 
     if (_row < _state.sun.size())
     {
@@ -98,7 +98,7 @@ namespace Elite
     _state.SetBallX(0, 0xFF);
   }
 
-  void EraseSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math) noexcept
+  void EraseSun(Canvas& _canvas, PlanetSunState& _state) noexcept
   {
     // 6502: WPLS -- LDA LSX / BMI WPLS-1, and that byte is `WP1`'s own `RTS`. One of the six
     // backward label-with-offset targets §6.35 counted that land in the file BEFORE the one
@@ -108,8 +108,9 @@ namespace Elite
       return;
     }
 
-    _math.yy = _state.sunX;
-    _math.yyNext = _state.sunXNext;
+    // 6502: LDA SUNX / STA YY / LDA SUNX+1 / STA YY+1 -- `YY(1 0)` is `EDGES`'s centre and a
+    // parameter since M2-c-3; what it holds here is where the sun WAS.
+    const SignMag16 wasAt{_state.sunX, _state.sunXNext};
 
     // 6502: LDY #2*Y-1 -- the literal 143, in the same build where `CHKON` reads `Yx2M1`.
     for (std::uint8_t row = SPACE_VIEW_BOTTOM - 1u; row != 0u; --row)
@@ -117,7 +118,7 @@ namespace Elite
       const std::uint8_t width = _state.sun[row];
       if (width != 0u)
       {
-        EraseSunRow(_canvas, _state, _math, width, row);
+        EraseSunRow(_canvas, _state, wasAt, width, row);
       }
     }
 
@@ -188,13 +189,13 @@ namespace Elite
     }
   }
 
-  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, ShipType _type) noexcept
+  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, ShipType _type) noexcept
   {
     // 6502: PL2 -- LDA TYPE / LSR A / BCS P%+5 / JMP WPLS2 / JMP WPLS. The planet is 128 and the
     // sun 129, so the bottom bit is the whole of the test and no comparison is needed.
     if ((Byte(_type) & 0x01u) != 0u)
     {
-      EraseSun(_canvas, _state, _math);
+      EraseSun(_canvas, _state);
     }
     else
     {
@@ -202,57 +203,64 @@ namespace Elite
     }
   }
 
-  bool CircleOffScreen(const PlanetSunState& _state, MathWorkspace& _math, const Projection& _centre) noexcept
+  CircleExtent CircleOffScreen(const PlanetSunState& _state, std::uint8_t _radius, const Projection& _centre) noexcept
   {
+    CircleExtent extent;
     // 6502: CHKON. Four sixteen-bit comparisons, and each one's high byte is all that is looked at.
-    const AddResult rightLow = AddWithCarry(_centre.x, _math.k[0], false);
+    const AddResult rightLow = AddWithCarry(_centre.x, _radius, false);
     (void)rightLow;
     const AddResult right = AddWithCarry(_centre.x1, 0u, rightLow.carry);
     if ((right.value & 0x80u) != 0u)
     {
-      return true; // 6502: PL21 -- SEC / RTS.
+      extent.offScreen = true; // 6502: PL21 -- SEC / RTS.
+      return extent;
     }
 
-    const SubResult leftLow = SubtractWithCarry(_centre.x, _math.k[0], true);
+    const SubResult leftLow = SubtractWithCarry(_centre.x, _radius, true);
     const SubResult left = SubtractWithCarry(_centre.x1, 0u, leftLow.carry);
     if ((left.value & 0x80u) == 0u && left.value != 0u)
     {
-      return true;
+      extent.offScreen = true;
+      return extent;
     }
 
     // 6502: PL31 -- and the y half also STORES, so the answer is three values rather than a flag.
-    const AddResult bottomLow = AddWithCarry(_centre.y, _math.k[0], false);
-    _math.p1 = bottomLow.value;
+    const AddResult bottomLow = AddWithCarry(_centre.y, _radius, false);
+    extent.bottom = bottomLow.value;
     const AddResult bottom = AddWithCarry(_centre.y1, 0u, bottomLow.carry);
     if ((bottom.value & 0x80u) != 0u)
     {
-      return true;
+      extent.offScreen = true;
+      return extent;
     }
-    _math.p2 = bottom.value;
+    extent.bottomHigh = bottom.value;
 
-    const SubResult topLow = SubtractWithCarry(_centre.y, _math.k[0], true);
+    const SubResult topLow = SubtractWithCarry(_centre.y, _radius, true);
     const SubResult top = SubtractWithCarry(_centre.y1, 0u, topLow.carry);
     if ((top.value & 0x80u) != 0u)
     {
-      return false; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).
+      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).
     }
     if (top.value != 0u)
     {
-      return true;
+      extent.offScreen = true;
+      return extent;
     }
 
     // 6502: CPX Yx2M1 / RTS -- the carry from the comparison IS the return value.
-    return topLow.value >= _state.yx2M1;
+    extent.offScreen = topLow.value >= _state.yx2M1;
+    return extent;
   }
 
-  std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
-                            MathWorkspace& _math, ClipState& _clip, const Projection& _centre, std::uint8_t _x, bool _carryIn) noexcept
+  std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
+                            ClipState& _clip, const Projection& _centre, SignMag16 _offset, std::uint8_t _cnt, bool _carryIn) noexcept
   {
     // 6502: TXA / ADC K4 / STA K6+2 / LDA K4+1 / ADC T / STA K6+3 -- the segment's far end, as an
-    // offset from the circle's centre, and both halves run on the caller's carry.
-    const AddResult low = AddWithCarry(_x, _centre.y, _carryIn);
+    // offset from the circle's centre, and both halves run on the caller's carry. `X` and `T` are
+    // the two halves of that offset and both are parameters since M2-c-3.
+    const AddResult low = AddWithCarry(_offset.lo, _centre.y, _carryIn);
     _state.k6[2] = low.value;
-    _state.k6[3] = AddWithCarry(_centre.y1, _math.t, low.carry).value;
+    _state.k6[3] = AddWithCarry(_centre.y1, _offset.hi, low.carry).value;
 
     // 6502: LDA FLAG / BEQ BL1 / INC FLAG. The first segment of a circle has a start and no end
     // yet, so it goes straight to the break rather than being drawn.
@@ -334,9 +342,7 @@ namespace Elite
 
     // 6502: BL7 -- this segment's end is the next one's start, and the angle moves on.
     _state.k5 = _state.k6;
-    const AddResult next = AddWithCarry(_math.cnt, _state.stp, false);
-    _math.cnt = next.value;
-    return next.value;
+    return AddWithCarry(_cnt, _state.stp, false).value;
   }
 
   namespace
@@ -367,11 +373,12 @@ namespace Elite
   } // namespace
 
   void DrawBall(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                ClipState& _clip, const Projection& _centre, bool _carryIn) noexcept
+                ClipState& _clip, const Projection& _centre, std::uint8_t _radius, bool _carryIn) noexcept
   {
-    // 6502: LDX #&FF / STX FLAG / INX / STX CNT.
+    // 6502: LDX #&FF / STX FLAG / INX / STX CNT. `CNT` is the angle this walk is at, `CIRCLE2`'s
+    // own since M2-c-3: `BLINE` advances it and hands it back, which is what the loop below reads.
     _state.flag = 0xFF;
-    _math.cnt = 0;
+    std::uint8_t cnt = 0;
 
     bool carry = _carryIn;
 
@@ -384,30 +391,30 @@ namespace Elite
        * back by hand; that is what the two `CMP #33` tests do. 33 rather than 32 because what is
        * being compared is a count the loop has already stepped.
        */
-      const LogProduct sine = MultiplyBySine(_math.k[0], _math.cnt, carry);
+      const LogProduct sine = MultiplyBySine(_radius, cnt, carry);
       std::uint8_t across = sine.value;
-      _math.t = 0;
+      std::uint8_t high = 0; // 6502: T -- the offset's high byte, this loop's own since M2-c-3
 
-      carry = _math.cnt >= 33u; // 6502: LDX CNT / CPX #33
+      carry = cnt >= 33u; // 6502: LDX CNT / CPX #33
       if (carry)
       {
         const Negated negated = NegateWide(across, carry);
         across = negated.low;
-        _math.t = negated.high;
+        high = negated.high;
         carry = false; // 6502: CLC
       }
 
       // 6502: PL37 -- and the centre added on, sixteen bits at a time.
       const AddResult xLow = AddWithCarry(across, _centre.x, carry);
       _state.k6[0] = xLow.value;
-      _state.k6[1] = AddWithCarry(_centre.x1, _math.t, xLow.carry).value;
+      _state.k6[1] = AddWithCarry(_centre.x1, high, xLow.carry).value;
 
       // 6502: LDA CNT / CLC / ADC #16 / JSR FMLTU2 -- the same table a quarter-turn on, which is
       // the cosine.
-      const AddResult quarter = AddWithCarry(_math.cnt, 16u, false);
-      const LogProduct cosine = MultiplyBySine(_math.k[0], quarter.value, false);
+      const AddResult quarter = AddWithCarry(cnt, 16u, false);
+      const LogProduct cosine = MultiplyBySine(_radius, quarter.value, false);
       std::uint8_t down = cosine.value;
-      _math.t = 0;
+      high = 0;
 
       /*
        * 6502: LDA CNT / ADC #15 / AND #63 / CMP #33.
@@ -417,18 +424,19 @@ namespace Elite
        * is the sixteen above -- so the quarter-turn is only a quarter-turn when the multiply
        * produced something (§6.50).
        */
-      const AddResult stepped = AddWithCarry(_math.cnt, 15u, cosine.carry);
+      const AddResult stepped = AddWithCarry(cnt, 15u, cosine.carry);
       carry = static_cast<std::uint8_t>(stepped.value & 0x3Fu) >= 33u;
       if (carry)
       {
         const Negated negated = NegateWide(down, carry);
         down = negated.low;
-        _math.t = negated.high;
+        high = negated.high;
         carry = false; // 6502: CLC
       }
 
       // 6502: PL38 -- and the segment is drawn, with the y offset still in X.
-      const std::uint8_t reached = DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, down, carry);
+      const std::uint8_t reached = DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, SignMag16{down, high}, cnt, carry);
+      cnt = reached;
 
       // 6502: CMP #65 / BCS P%+5 / JMP PLL3 -- sixty-four steps of one, or eight of eight.
       if (reached >= 65u)
@@ -440,10 +448,10 @@ namespace Elite
   }
 
   bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                  ClipState& _clip, const Projection& _centre) noexcept
+                  ClipState& _clip, const Projection& _centre, std::uint8_t _radius) noexcept
   {
-    // 6502: JSR CHKON / BCS RTS2.
-    if (CircleOffScreen(_state, _math, _centre))
+    // 6502: JSR CHKON / BCS RTS2 -- `CIRCLE` wants the carry only; `(P+2 P+1)` is `SUN`'s.
+    if (CircleOffScreen(_state, _radius, _centre).offScreen)
     {
       return true;
     }
@@ -459,11 +467,11 @@ namespace Elite
      * one `CIRCLE2` starts its first multiply on.
      */
     std::uint8_t step = 8;
-    bool carry = _math.k[0] >= 8u;
+    bool carry = _radius >= 8u;
     if (carry)
     {
       step >>= 1;
-      carry = _math.k[0] >= 60u;
+      carry = _radius >= 60u;
       if (carry)
       {
         step >>= 1;
@@ -471,7 +479,7 @@ namespace Elite
     }
     _state.stp = step;
 
-    DrawBall(_canvas, _state, _geometry, _math, _clip, _centre, carry);
+    DrawBall(_canvas, _state, _geometry, _math, _clip, _centre, _radius, carry);
     return false;
   }
 
@@ -481,8 +489,9 @@ namespace Elite
     // X is 9, 11, 21 or 23: one COMPONENT of an orientation vector, whose sign is bit 7 of its
     // high byte -- not a position axis, whose sign has a byte of its own.
     const SignMag16& component = _ship.ComponentAt(_at);
-    DivideByShipZ(_ship, _math,
-                  SignMag24{component.lo, static_cast<std::uint8_t>(component.hi & 0x7Fu), static_cast<std::uint8_t>(component.hi & 0x80u)});
+    const KBlock quotient = DivideByShipZ(
+      _ship, _math,
+      SignMag24{component.lo, static_cast<std::uint8_t>(component.hi & 0x7Fu), static_cast<std::uint8_t>(component.hi & 0x80u)});
 
     /*
      * 6502: LDA K / LDY K+1 / BEQ P%+4 / LDA #254.
@@ -491,13 +500,13 @@ namespace Elite
      * anything larger SATURATES rather than wrapping. A planet close enough for the division to
      * overflow is one whose markings run off the disc, and 254 is what keeps them there.
      */
-    std::uint8_t value = _math.k[0];
-    if (_math.k[1] != 0u)
+    std::uint8_t value = quotient.low;
+    if (quotient.mid != 0u)
     {
       value = 254;
     }
 
-    return {value, _math.k[3], static_cast<std::uint8_t>(_at + 2u)};
+    return {value, quotient.top, static_cast<std::uint8_t>(_at + 2u)};
   }
 
   AxisResult ScaleAxisByZ(const Ship& _ship, MathWorkspace& _math, std::uint8_t _at) noexcept
@@ -514,8 +523,9 @@ namespace Elite
     // 6502: STA P / LDA #222 / STA Q / JSR MULTU.
     const std::uint8_t scaled = MultiplyUnsigned(axis.value, 222).high;
 
-    // 6502: LDY K+3 / BPL PL12 -- a positive axis returns as it is with a zero high byte.
-    if ((_math.k[3] & 0x80u) == 0u)
+    // 6502: LDY K+3 / BPL PL12 -- a positive axis returns as it is with a zero high byte. `K+3` is
+    // what `PLS1` returned in Y, which is `AxisResult::sign` since slice 3b.
+    if ((axis.sign & 0x80u) == 0u)
     {
       return {scaled, 0, stepped};
     }
@@ -532,7 +542,7 @@ namespace Elite
     return {negated.value, 0xFF, stepped};
   }
 
-  void SetMeridianAngle(const Ship& _ship, MathWorkspace& _math, std::uint8_t _numerator, std::uint8_t _denominator) noexcept
+  std::uint8_t SetMeridianAngle(const Ship& _ship, std::uint8_t _numerator, std::uint8_t _denominator) noexcept
   {
     // 6502: PLS4 -- STA Q / JSR ARCTAN, then the roof vector's sign decides which way round.
     std::uint8_t angle = Arctan(_numerator, _denominator);
@@ -545,26 +555,31 @@ namespace Elite
     }
 
     // Two shifts: a byte turn becomes a sixty-fourth, which is what the ellipse walk counts in.
-    _math.cnt2 = static_cast<std::uint8_t>(angle >> 2);
+    return static_cast<std::uint8_t>(angle >> 2); // 6502: STA CNT2
   }
 
-  void LoadTwoAxes(const Ship& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry, std::uint8_t _at) noexcept
+  std::pair<std::uint8_t, std::uint8_t> LoadTwoAxes(const Ship& _ship, MathWorkspace& _math, GeometryWorkspace& _geometry,
+                                                    std::uint8_t _at) noexcept
   {
     // 6502: PLS5 -- two of PLS1 into the second half of the ellipse's axes.
     AxisResult axis = DivideAxisByZ(_ship, _math, _at);
-    _math.k2[2] = axis.value;
+    const std::uint8_t second = axis.value; // 6502: STA K2+2
     _geometry.xx16[2] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, axis.at);
-    _math.k2[3] = axis.value;
     _geometry.xx16[3] = axis.sign;
+    return {second, axis.value}; // 6502: (K2+2, K2+3)
   }
 
   void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                   ClipState& _clip, const Projection& _centre) noexcept
+                   ClipState& _clip, const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle,
+                   std::uint8_t _target) noexcept
   {
-    // 6502: PLS22 -- LDX #0 / STX CNT / DEX / STX FLAG.
-    _math.cnt = 0;
+    // 6502: PLS22 -- LDX #0 / STX CNT / DEX / STX FLAG. `CNT` is `BLINE`'s segment counter and
+    // `CNT2` the angle this walk is at; both are locals since M2-c-3, and `CNT2` comes in as the
+    // start `PLS4` or `PL26` chose while `TGT` comes in as where to stop.
+    std::uint8_t cnt = 0;    // 6502: CNT
+    std::uint8_t cnt2 = _angle;
     _state.flag = 0xFF;
 
     for (;;)
@@ -577,21 +592,21 @@ namespace Elite
        */
       // 6502: LDA SNE,X / STA Q / LDA K2+2 / JSR FMLTU / STA R / LDA K2+3 / JSR FMLTU / STA K --
       // the first axis against the sine, both halves; `R` and `K` were the scratch they waited in.
-      const std::uint8_t sine = SINE_TABLE[_math.cnt2 & 0x1Fu];
-      const std::uint8_t firstAcross = MultiplyByLog(_math.k2[2], sine, false).value;
-      const std::uint8_t secondAcross = MultiplyByLog(_math.k2[3], sine, false).value;
+      const std::uint8_t sine = SINE_TABLE[cnt2 & 0x1Fu];
+      const std::uint8_t firstAcross = MultiplyByLog(_axes.secondX, sine, false).value;
+      const std::uint8_t secondAcross = MultiplyByLog(_axes.secondY, sine, false).value;
 
       // 6502: LDX CNT2 / CPX #33 / LDA #0 / ROR A / STA XX16+5 -- the sign for this quarter, as a
       // bit rotated straight out of the comparison.
-      _geometry.xx16[5] = (_math.cnt2 >= 33u) ? 0x80u : 0x00u;
-      bool carry = _math.cnt2 >= 33u;
+      _geometry.xx16[5] = (cnt2 >= 33u) ? 0x80u : 0x00u;
+      bool carry = cnt2 >= 33u;
 
       // 6502: the same table a quarter-turn on -- the cosine -- against the second axis. `K+2` and
       // `P` were the scratch these waited in.
-      const AddResult quarter = AddWithCarry(_math.cnt2, 16u, false);
+      const AddResult quarter = AddWithCarry(cnt2, 16u, false);
       const std::uint8_t cosine = SINE_TABLE[quarter.value & 0x1Fu];
-      const std::uint8_t secondDown = MultiplyByLog(_math.k2[1], cosine, false).value;
-      const LogProduct second = MultiplyByLog(_math.k2[0], cosine, false);
+      const std::uint8_t secondDown = MultiplyByLog(_axes.firstY, cosine, false).value;
+      const LogProduct second = MultiplyByLog(_axes.firstX, cosine, false);
 
       /*
        * 6502: LDA CNT2 / ADC #15 / AND #63 / CMP #33 / LDA #0 / ROR A / STA XX16+4.
@@ -601,14 +616,14 @@ namespace Elite
        * is when the value reached 33. Getting that round the wrong way puts every meridian's second
        * axis on the wrong side of the planet.
        */
-      const AddResult stepped = AddWithCarry(_math.cnt2, 15u, second.carry);
+      const AddResult stepped = AddWithCarry(cnt2, 15u, second.carry);
       _geometry.xx16[4] = (static_cast<std::uint8_t>(stepped.value & 0x3Fu) >= 33u) ? 0x80u : 0x00u;
 
       // 6502: the two `ADD`s, each combining a product with the axis sign it belongs to: (A P) is
       // the first-axis sign over the cosine product, (S R) the second-axis sign over the sine's.
       AddSignedResult sum = AddSigned(SignMag16{second.value, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[0])},
                                       SignMag16{firstAcross, static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[2])});
-      _math.t = sum.high;
+      std::uint8_t offsetHigh = sum.high; // 6502: T -- this loop's own since M2-c-3
       std::uint8_t low = sum.low;
       carry = sum.carry; // 6502: `STA T / BPL PL42` touches no flag, so `ADC K3` reads ADD's
 
@@ -618,70 +633,73 @@ namespace Elite
       {
         const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(low ^ 0xFFu), 1u, false);
         low = negated.value;
-        const AddResult high = AddWithCarry(static_cast<std::uint8_t>(sum.high ^ 0x7Fu), 0u, negated.carry);
-        _math.t = high.value;
-        carry = high.carry;
+        const AddResult raised = AddWithCarry(static_cast<std::uint8_t>(sum.high ^ 0x7Fu), 0u, negated.carry);
+        offsetHigh = raised.value;
+        carry = raised.carry;
       }
 
       // 6502: PL42 -- the centre added on.
       const AddResult xLow = AddWithCarry(low, _centre.x, carry);
       _state.k6[0] = xLow.value;
-      _state.k6[1] = AddWithCarry(_math.t, _centre.x1, xLow.carry).value;
+      _state.k6[1] = AddWithCarry(offsetHigh, _centre.x1, xLow.carry).value;
 
       // 6502: LDA K / STA R / ... / LDA K+2 / STA P / ... / JSR ADD -- the other pair of products.
       sum = AddSigned(SignMag16{secondDown, static_cast<std::uint8_t>(_geometry.xx16[4] ^ _geometry.xx16[1])},
                       SignMag16{secondAcross, static_cast<std::uint8_t>(_geometry.xx16[5] ^ _geometry.xx16[3])});
-      _math.t = static_cast<std::uint8_t>(sum.high ^ 0x80u);
+      offsetHigh = static_cast<std::uint8_t>(sum.high ^ 0x80u);
       low = sum.low;
       carry = sum.carry; // 6502: `EOR #%10000000 / STA T / BPL PL43` -- again no flag is touched
 
-      if ((_math.t & 0x80u) != 0u)
+      if ((offsetHigh & 0x80u) != 0u)
       {
         const AddResult negated = AddWithCarry(static_cast<std::uint8_t>(low ^ 0xFFu), 1u, false);
         low = negated.value;
-        const AddResult high = AddWithCarry(static_cast<std::uint8_t>(_math.t ^ 0x7Fu), 0u, negated.carry);
-        _math.t = high.value;
-        carry = high.carry;
+        const AddResult raised = AddWithCarry(static_cast<std::uint8_t>(offsetHigh ^ 0x7Fu), 0u, negated.carry);
+        offsetHigh = raised.value;
+        carry = raised.carry;
       }
 
       // 6502: PL43 -- and the segment, with the y offset in X.
-      const std::uint8_t reached = DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, low, carry);
+      const std::uint8_t reached =
+        DrawBallLine(_canvas, _state, _geometry, _math, _clip, _centre, SignMag16{low, offsetHigh}, cnt, carry);
+      cnt = reached;
 
       // 6502: CMP TGT / BEQ P%+4 / BCS PL40 -- the `BEQ` is what makes the last step INCLUSIVE, so
       // a meridian reaching exactly 31 draws its final segment and a crater reaching 64 draws its.
-      if (reached != _math.tgt && reached >= _math.tgt)
+      if (reached != _target && reached >= _target)
       {
         return;
       }
 
-      _math.cnt2 = static_cast<std::uint8_t>((_math.cnt2 + _state.stp) & 0x3Fu);
+      cnt2 = static_cast<std::uint8_t>((cnt2 + _state.stp) & 0x3Fu);
     }
   }
 
   void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                       ClipState& _clip, const Projection& _centre) noexcept
+                       ClipState& _clip, const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle) noexcept
   {
     // 6502: PLS2 -- LDA #31 / STA TGT, then straight into PLS22. Half a turn, because a meridian
     // seen from outside is a semicircle and the other half is behind the planet.
-    _math.tgt = 31;
-    DrawEllipse(_canvas, _state, _geometry, _math, _clip, _centre);
+    DrawEllipse(_canvas, _state, _geometry, _math, _clip, _centre, _axes, _angle, 31);
   }
 
   void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                        ClipState& _clip, const Ship& _ship, Projection& _centre, ShipType _type) noexcept
+                        ClipState& _clip, const Ship& _ship, Projection& _centre, KBlock _radius, ShipType _type) noexcept
   {
     // 6502: PL9 -- rub out last frame's planet, draw this frame's outline, and only then think
     // about the markings.
     EraseBall(_canvas, _state);
 
-    if (DrawCircle(_canvas, _state, _geometry, _math, _clip, _centre))
+    if (DrawCircle(_canvas, _state, _geometry, _math, _clip, _centre, _radius.low))
     {
       return; // 6502: BCS PL20 -- CHKON refused it
     }
 
     // 6502: LDA K+1 / BEQ PL25 -- a radius that needed two bytes is a planet filling the screen,
-    // and its markings would be off it.
-    if (_math.k[1] != 0u)
+    // and its markings would be off it. `K` is a `KBlock` value since M2-c-3, so the `PLS1` divides
+    // below no longer step on the byte this test reads -- in the original they do, and this test
+    // comes first for that reason.
+    if (_radius.mid != 0u)
     {
       return;
     }
@@ -700,31 +718,33 @@ namespace Elite
        *
        * `LDA K / CMP #6 / BCC PL20` -- under six pixels across there is nothing to draw them on.
        */
-      if (_math.k[0] < 6u)
+      if (_radius.low < 6u)
       {
         return;
       }
 
       // 6502: LDA INWK+14 / EOR #%10000000 / STA P / LDA INWK+20 / JSR PLS4 -- where the first
       // meridian starts, from the roof vector against the nose.
-      SetMeridianAngle(_ship, _math, static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u), _ship.roof.z.hi);
+      std::uint8_t meridian = SetMeridianAngle(_ship, static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u), _ship.roof.z.hi);
 
+      EllipseAxes axes;
       AxisResult axis = DivideAxisByZ(_ship, _math, 9);
-      _math.k2[0] = axis.value;
+      axes.firstX = axis.value;
+      _math.k2Low = axis.value; // 6502: STA K2 -- and `MV40` reads this byte a frame later (§8)
       _geometry.xx16[0] = axis.sign;
 
       axis = DivideAxisByZ(_ship, _math, axis.at);
-      _math.k2[1] = axis.value;
+      axes.firstY = axis.value;
       _geometry.xx16[1] = axis.sign;
 
-      LoadTwoAxes(_ship, _math, _geometry, 15);
-      DrawHalfEllipse(_canvas, _state, _geometry, _math, _clip, _centre);
+      std::tie(axes.secondX, axes.secondY) = LoadTwoAxes(_ship, _math, _geometry, 15);
+      DrawHalfEllipse(_canvas, _state, _geometry, _math, _clip, _centre, axes, meridian);
 
       // And the second meridian, which shares the first pair of axes and takes a new second pair.
-      SetMeridianAngle(_ship, _math, static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u), _ship.side.z.hi);
+      meridian = SetMeridianAngle(_ship, static_cast<std::uint8_t>(_ship.nose.z.hi ^ 0x80u), _ship.side.z.hi);
 
-      LoadTwoAxes(_ship, _math, _geometry, 21);
-      DrawHalfEllipse(_canvas, _state, _geometry, _math, _clip, _centre);
+      std::tie(axes.secondX, axes.secondY) = LoadTwoAxes(_ship, _math, _geometry, 21);
+      DrawHalfEllipse(_canvas, _state, _geometry, _math, _clip, _centre, axes, meridian);
       return;
     }
 
@@ -745,12 +765,12 @@ namespace Elite
     _centre.x = acrossLow.value;
     _centre.x1 = AddWithCarry(offset.sign, _centre.x1, acrossLow.carry).value;
 
+    // 6502: STA P / LDA K4 / SEC / SBC P, and again for the high byte -- `P` parks each half of
+    // the offset for one instruction. `PL26`'s own since M2-c-3, and the last of `P`'s users.
     offset = ScaleAxisByZ(_ship, _math, offset.at);
-    _math.p = offset.value;
-    const SubResult downLow = SubtractWithCarry(_centre.y, _math.p, true);
+    const SubResult downLow = SubtractWithCarry(_centre.y, offset.value, true);
     _centre.y = downLow.value;
-    _math.p = offset.sign;
-    _centre.y1 = SubtractWithCarry(_centre.y1, _math.p, downLow.carry).value;
+    _centre.y1 = SubtractWithCarry(_centre.y1, offset.sign, downLow.carry).value;
 
     /*
      * 6502: four PLS1s, each HALVED before it is stored.
@@ -759,26 +779,26 @@ namespace Elite
      * magnitude alone -- the sign in Y is untouched, so a negative axis halves towards zero rather
      * than away from it.
      */
+    EllipseAxes axes;
     AxisResult axis = DivideAxisByZ(_ship, _math, 9);
-    _math.k2[0] = static_cast<std::uint8_t>(axis.value >> 1);
+    axes.firstX = static_cast<std::uint8_t>(axis.value >> 1);
+    _math.k2Low = axes.firstX; // 6502: STA K2 -- `MV40`'s byte again (§8)
     _geometry.xx16[0] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, axis.at);
-    _math.k2[1] = static_cast<std::uint8_t>(axis.value >> 1);
+    axes.firstY = static_cast<std::uint8_t>(axis.value >> 1);
     _geometry.xx16[1] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, 21);
-    _math.k2[2] = static_cast<std::uint8_t>(axis.value >> 1);
+    axes.secondX = static_cast<std::uint8_t>(axis.value >> 1);
     _geometry.xx16[2] = axis.sign;
 
     axis = DivideAxisByZ(_ship, _math, axis.at);
-    _math.k2[3] = static_cast<std::uint8_t>(axis.value >> 1);
+    axes.secondY = static_cast<std::uint8_t>(axis.value >> 1);
     _geometry.xx16[3] = axis.sign;
 
     // 6502: LDA #64 / STA TGT / LDA #0 / STA CNT2 / JMP PLS22 -- a whole turn, from zero.
-    _math.tgt = 64;
-    _math.cnt2 = 0;
-    DrawEllipse(_canvas, _state, _geometry, _math, _clip, _centre);
+    DrawEllipse(_canvas, _state, _geometry, _math, _clip, _centre, axes, 0, 64);
   }
 
   void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
@@ -794,48 +814,50 @@ namespace Elite
      */
     if (_ship.z.sgn >= 48u || (_ship.z.sgn | _ship.z.hi) == 0u)
     {
-      ErasePlanetOrSun(_canvas, _state, _math, _type);
+      ErasePlanetOrSun(_canvas, _state, _type);
       return;
     }
 
     if (Project(_ship, _math, _centre).offScreen)
     {
-      ErasePlanetOrSun(_canvas, _state, _math, _type);
+      ErasePlanetOrSun(_canvas, _state, _type);
       return;
     }
 
     // 6502: LDA #96 / STA P+1 / LDA #0 / STA P / JSR DVID3B2 -- the radius is 96 * 256 / z, and
-    // 96 is the planet's size in the same units everything else in the geometry uses.
-    DivideByShipZ(_ship, _math, SignMag24{0, 96, 0});
+    // 96 is the planet's size in the same units everything else in the geometry uses. `K` is the
+    // `KBlock` the divide returns since M2-c-3.
+    KBlock radius = DivideByShipZ(_ship, _math, SignMag24{0, 96, 0});
 
     // 6502: LDA K+1 / BEQ PL82 / LDA #248 / STA K -- a radius that overflowed a byte is clamped,
     // and K+1 is LEFT SET, which is what `PL9` reads to skip the markings.
-    if (_math.k[1] != 0u)
+    if (radius.mid != 0u)
     {
-      _math.k[0] = 248;
+      radius.low = 248;
     }
 
     // 6502: LDA TYPE / LSR A / BCC PL9 / JMP SUN.
     if ((Byte(_type) & 0x01u) != 0u)
     {
-      DrawSun(_canvas, _state, _math, _rng, _centre);
+      DrawSun(_canvas, _state, _math, _rng, _centre, radius.low);
       return;
     }
 
-    DrawPlanetDetail(_canvas, _state, _geometry, _math, _clip, _ship, _centre, _type);
+    DrawPlanetDetail(_canvas, _state, _geometry, _math, _clip, _ship, _centre, radius, _type);
   }
 
-  void DrawSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, Rng& _rng,
-               const Projection& _centre) noexcept
+  void DrawSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, Rng& _rng, const Projection& _centre,
+               std::uint8_t _radius) noexcept
   {
     // 6502: LDA #1 / STA LSX -- entry 0 stops being the "nothing there" flag the moment the
     // routine commits to drawing, so a `WPLS` interrupted halfway still has something to erase.
     _state.sun[0] = 1;
 
-    if (CircleOffScreen(_state, _math, _centre))
+    const CircleExtent extent = CircleOffScreen(_state, _radius, _centre);
+    if (extent.offScreen)
     {
       // 6502: BCS PLF3M3 / JMP WPLS -- nothing of it is on screen, so only rub out the old one.
-      EraseSun(_canvas, _state, _math);
+      EraseSun(_canvas, _state);
       return;
     }
 
@@ -846,23 +868,21 @@ namespace Elite
      * byte is ANDed with before it is added to each row's half-width. A distant sun is a smooth
      * disc and a near one has a ragged edge, and this is the whole of that effect.
      */
-    std::uint8_t rough = 0;
-    rough = static_cast<std::uint8_t>((rough << 1) | ((_math.k[0] >= 96u) ? 1u : 0u));
-    rough = static_cast<std::uint8_t>((rough << 1) | ((_math.k[0] >= 40u) ? 1u : 0u));
-    rough = static_cast<std::uint8_t>((rough << 1) | ((_math.k[0] >= 16u) ? 1u : 0u));
-    _math.cnt = rough;
+    std::uint8_t roughness = 0; // 6502: CNT -- `SUN`'s own since M2-c-3
+    roughness = static_cast<std::uint8_t>((roughness << 1) | ((_radius >= 96u) ? 1u : 0u));
+    roughness = static_cast<std::uint8_t>((roughness << 1) | ((_radius >= 40u) ? 1u : 0u));
+    roughness = static_cast<std::uint8_t>((roughness << 1) | ((_radius >= 16u) ? 1u : 0u));
 
     /*
      * 6502: PLF18 -- where to stop. `CHKON` left the circle's top and bottom in `P+1` and `P+2`,
      * and the bottom row of the sun is whichever of that and the screen's own bottom comes first.
      * A sun whose top is at row 0 is given a `TGT` of 1 rather than 0, because row 0 is the flag.
      */
-    std::uint8_t bottom = _state.yx2M1;
-    if (_math.p2 == 0u && _state.yx2M1 >= _math.p1)
+    std::uint8_t stopAt = _state.yx2M1; // 6502: TGT -- `SUN`'s own too
+    if (extent.bottomHigh == 0u && _state.yx2M1 >= extent.bottom)
     {
-      bottom = (_math.p1 != 0u) ? _math.p1 : std::uint8_t{1};
+      stopAt = (extent.bottom != 0u) ? extent.bottom : std::uint8_t{1};
     }
-    _math.tgt = bottom;
 
     /*
      * 6502: LDA Yx2M1 / SEC / SBC K4 / TAX / LDA #0 / SBC K4+1 -- how far the bottom row is from
@@ -883,16 +903,16 @@ namespace Elite
     else if (offsetHigh.value != 0u)
     {
       // 6502: PLF4 -- further than a byte, so start at the sun's own edge.
-      at = _math.k[0];
+      at = _radius;
       sign = 0;
     }
     else if (at == 0u)
     {
       sign = 0xFF; // 6502: PLF17 -- exactly on the centre
     }
-    else if (at >= _math.k[0])
+    else if (at >= _radius)
     {
-      at = _math.k[0]; // 6502: BCC PLF5 not taken, so PLF4
+      at = _radius; // 6502: BCC PLF5 not taken, so PLF4
       sign = 0;
     }
 
@@ -901,21 +921,23 @@ namespace Elite
     _state.v = at;
     _state.vNext = sign;
 
-    const Product radiusSquared = SquareUnsigned(_math.k[0]);
-    _math.k2[1] = radiusSquared.high;
-    _math.k2[0] = radiusSquared.low;
+    // 6502: LDA K / JSR SQUA2 / STA K2+1 / LDA P / STA K2 -- the radius squared, which every row's
+    // half-width is a square root of. `SUN`'s own since M2-c-3 except for the store into `K2`,
+    // which is there for `MV40`'s read a frame later (§8).
+    const Product radiusSquared = SquareUnsigned(_radius);
+    _math.k2Low = radiusSquared.low;
 
     // 6502: part 2 -- rub out the rows BELOW the sun, with last frame's centre, before any of
     // this frame's arithmetic touches `YY`.
     std::uint8_t row = _state.yx2M1;
-    _math.yy = _state.sunX;
-    _math.yyNext = _state.sunXNext;
+    const SignMag16 wasAt{_state.sunX, _state.sunXNext}; // 6502: YY(1 0) -- where the sun was
+    const SignMag16 isAt{_centre.x, _centre.x1};         // 6502: YY(1 0) again -- and where it is
 
-    while (row != _math.tgt && row != 0u)
+    while (row != stopAt && row != 0u)
     {
       if (_state.sun[row] != 0u)
       {
-        EraseSunRow(_canvas, _state, _math, _state.sun[row], row);
+        EraseSunRow(_canvas, _state, wasAt, _state.sun[row], row);
       }
       --row;
     }
@@ -940,8 +962,8 @@ namespace Elite
       // 6502: the half-width, as sqrt(K^2 - v^2). `T` held the square's high byte and (R Q) the
       // difference, which is the radicand `LL5` takes.
       const Product vSquared = SquareUnsigned(_state.v);
-      const SubResult widthLow = SubtractWithCarry(_math.k2[0], vSquared.low, true);
-      const std::uint8_t widthHigh = SubtractWithCarry(_math.k2[1], vSquared.high, widthLow.carry).value;
+      const SubResult widthLow = SubtractWithCarry(radiusSquared.low, vSquared.low, true);
+      const std::uint8_t widthHigh = SubtractWithCarry(radiusSquared.high, vSquared.high, widthLow.carry).value;
 
       const Root root = SquareRoot(widthHigh, widthLow.value);
       _math.q = root.value; // 6502: LL5's ROL Q -- and the last row's root is the frame's Q when the sun is the last slot drawn
@@ -950,7 +972,7 @@ namespace Elite
       // saturates rather than wrapping round to nothing. The generator runs on the carry `LL5`
       // left, which is the last bit out of the square root (§6.55).
       const RngResult roll = _rng.Next(root.carry);
-      const AddResult ragged = AddWithCarry(static_cast<std::uint8_t>(roll.value & _math.cnt), root.value, false);
+      const AddResult ragged = AddWithCarry(static_cast<std::uint8_t>(roll.value & roughness), root.value, false);
       std::uint8_t width = ragged.value;
       if (ragged.carry)
       {
@@ -965,36 +987,30 @@ namespace Elite
       if (was != 0u)
       {
         // The old line, clipped against LAST frame's centre. Its two ends go in `XX(1 0)`, which
-        // `PLF23` reads back.
-        _math.yy = _state.sunX;
-        _math.yyNext = _state.sunXNext;
-        const SunRow old = ClipSunRow(_state, _math, was, row);
-        _math.xx = old.x1;
-        _math.xxNext = old.x2;
+        // `PLF23` reads back -- two locals of this loop since M2-c-3.
+        const SunRow old = ClipSunRow(_state, wasAt, was, row);
+        std::uint8_t sliverFrom = old.x1;              // 6502: XX
+        const std::uint8_t sliverTo = old.x2;          // 6502: XX+1
 
         // And the new one, against this frame's.
-        _math.yy = _centre.x;
-        _math.yyNext = _centre.x1;
-        const SunRow fresh = ClipSunRow(_state, _math, _state.sun[row], row);
+        const SunRow fresh = ClipSunRow(_state, isAt, _state.sun[row], row);
 
         if (!fresh.offScreen)
         {
           // 6502: the two ends CROSSED OVER, so what is drawn is one end of the old line to the
           // matching end of the new one -- the sliver that has appeared or gone.
           const std::uint8_t held = fresh.x2;
-          DrawHorizontalLine(_canvas, fresh.x1, _math.xx, row);
-          _math.xx = held;
+          DrawHorizontalLine(_canvas, fresh.x1, sliverFrom, row);
+          sliverFrom = held;
         }
 
         // 6502: PLF23 -- and the other sliver.
-        DrawHorizontalLine(_canvas, _math.xx, _math.xxNext, row);
+        DrawHorizontalLine(_canvas, sliverFrom, sliverTo, row);
       }
       else
       {
         // 6502: PLF11 -- nothing was there last frame, so the whole of the new line is drawn.
-        _math.yy = _centre.x;
-        _math.yyNext = _centre.x1;
-        const SunRow fresh = ClipSunRow(_state, _math, _state.sun[row], row);
+        const SunRow fresh = ClipSunRow(_state, isAt, _state.sun[row], row);
         if (fresh.offScreen)
         {
           _state.sun[row] = 0;
@@ -1018,7 +1034,7 @@ namespace Elite
         // there is no more sun below and part 4 takes over.
         const std::uint8_t next = static_cast<std::uint8_t>(_state.v + 1u);
         _state.v = next;
-        if (next > _math.k[0])
+        if (next > _radius)
         {
           eraseAbove = true;
           break;
@@ -1045,13 +1061,11 @@ namespace Elite
     // 6502: part 4 -- rub out whatever is left above the sun, again with last frame's centre.
     if (eraseAbove)
     {
-      _math.yy = _state.sunX;
-      _math.yyNext = _state.sunXNext;
       while (row != 0u)
       {
         if (_state.sun[row] != 0u)
         {
-          EraseSunRow(_canvas, _state, _math, _state.sun[row], row);
+          EraseSunRow(_canvas, _state, wasAt, _state.sun[row], row);
         }
         --row;
       }
@@ -1179,8 +1193,9 @@ namespace Elite
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
                           ClipState& _clip, const Projection& _centre, std::uint8_t _index, TunnelEffects* _pacing) noexcept
   {
-    // 6502: .HFL1 LDA XX4 / AND #7 / CLC / ADC #8 / STA K -- the ring's starting radius.
-    _math.k[0] = static_cast<std::uint8_t>((_index & 7u) + 8u);
+    // 6502: .HFL1 LDA XX4 / AND #7 / CLC / ADC #8 / STA K -- the ring's starting radius, and this
+    // routine's own since M2-c-3: it fills `K` and nothing else reads the block while it runs.
+    std::uint8_t radius = static_cast<std::uint8_t>((_index & 7u) + 8u);
 
     for (;;)
     {
@@ -1192,7 +1207,7 @@ namespace Elite
      * previous. The whole effect is one heap entry deep.
      */
       _state.lsp = 1u;
-      DrawBall(_canvas, _state, _geometry, _math, _clip, _centre, false);
+      DrawBall(_canvas, _state, _geometry, _math, _clip, _centre, radius, false);
 
       /*
        * Not in the 6502, and it is the display's absence rather than an addition to the routine.
@@ -1206,8 +1221,8 @@ namespace Elite
       }
 
       // 6502: ASL K / BCS HF8 -- a radius past 128 doubles out of the byte and ends the ring.
-      const ShiftResult doubled = RotateLeftValue(_math.k[0], false);
-      _math.k[0] = doubled.value;
+      const ShiftResult doubled = RotateLeftValue(radius, false);
+      radius = doubled.value;
 
       if (doubled.carry)
       {
@@ -1216,7 +1231,7 @@ namespace Elite
 
       // 6502: LDA K / CMP #160 / BCC HFL2 -- and 160 is half the screen's width, so a ring is
       // abandoned once it is wider than the view rather than once it is off it.
-      if (_math.k[0] >= 160u)
+      if (radius >= 160u)
       {
         return;
       }
@@ -1233,15 +1248,13 @@ namespace Elite
     centre.x1 = 0;
     centre.y1 = 0;
 
-    // 6502: .HFL5 JSR HFL1 / INC XX4 / LDX XX4 / CPX #8 / BNE HFL5.
+    // 6502: .HFL5 JSR HFL1 / INC XX4 / LDX XX4 / CPX #8 / BNE HFL5 -- `XX4` is this loop's counter
+    // and nothing reads it afterwards: `LL9` part 1 writes 31 into it before its first read, so the
+    // eight the loop leaves is dead. A local since M2-c-3, with `LL9`'s own four.
     for (std::uint8_t index = 0; index < 8u; ++index)
     {
-      _geometry.xx4 = index;
       DrawHyperspaceRing(_canvas, _state, _geometry, _math, _clip, centre, index, _pacing);
     }
-
-    // 6502: the loop leaves `XX4` at eight, and `LL9` part 1 is the next thing to read it.
-    _geometry.xx4 = 8u;
   }
 
 } // namespace Elite
