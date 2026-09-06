@@ -466,8 +466,7 @@ namespace Elite
      * here rather than duplicated. Everything in it is about the ship's OWN motion: its speed along
      * its own z axis, and its own roll and pitch.
      */
-    void MoveShipTail(Canvas& _canvas, DrawWorkspace& _draw, Ship& _work, MathWorkspace& _math, FlightState& _flight,
-                      std::uint8_t _view) noexcept
+    void MoveShipTail(Canvas& _canvas, Ship& _work, MathWorkspace& _math, FlightState& _flight, std::uint8_t _view) noexcept
     {
       // 6502: LDA DELTA / STA R / LDA #128 / LDX #6 / JSR MVT1 -- z -= the player's speed. The 128 is
       // a sign and nothing else, which is why this is the unmasked entry point.
@@ -540,11 +539,11 @@ namespace Elite
       _work.state = With(_work.state, ShipStateBit::OnScanner);
 
       // 6502: JMP SCAN -- a tail call, so it is the last thing done.
-      DrawScannerBlip(_canvas, _draw, _work, _flight.type, _view);
+      DrawScannerBlip(_canvas, _work, _flight.type, _view);
     }
   } // namespace
 
-  bool MoveShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
+  bool MoveShip(Canvas& _canvas, Ship& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
                 const Blueprint& _blueprint, std::uint8_t _view) noexcept
   {
     // 6502: LDA INWK+31 / AND #&A0 / BNE MV30 -- exploding or already dead, so straight to the
@@ -562,7 +561,7 @@ namespace Elite
       if (IsBody(_flight.type))
       {
         MovePlanetOrSun(_work, _math, _flight.alpha, _flight.beta);
-        MoveShipTail(_canvas, _draw, _work, _math, _flight, _view);
+        MoveShipTail(_canvas, _work, _math, _flight, _view);
         return true;
       }
 
@@ -583,7 +582,7 @@ namespace Elite
       }
     }
 
-    DrawScannerBlip(_canvas, _draw, _work, _flight.type, _view); // 6502: MV30 -- JSR SCAN
+    DrawScannerBlip(_canvas, _work, _flight.type, _view); // 6502: MV30 -- JSR SCAN
 
     /*
      * 6502: LDA INWK+27 / ASL A / ASL A / STA Q, then three axes of FMLTU and MVT1-2.
@@ -686,7 +685,7 @@ namespace Elite
     wide = MultiplyWide(_work.y.hi, static_cast<std::uint8_t>(_work.y.lo ^ 0xFFu), _flight.alp1);
     _work.x = AddShipCoordinateToP(_work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(_flight.alp2 ^ _work.y.sgn)}, 0u);
 
-    MoveShipTail(_canvas, _draw, _work, _math, _flight, _view); // 6502: falls into MV45
+    MoveShipTail(_canvas, _work, _math, _flight, _view); // 6502: falls into MV45
     return true;
   }
 

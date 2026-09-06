@@ -15,7 +15,6 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::Canvas;
 using Elite::ChartView;
 using Elite::Crosshairs;
-using Elite::DrawWorkspace;
 using Elite::SystemSeeds;
 using Elite::Testing::Cpu6502;
 using Elite::Testing::OracleImage;
@@ -256,7 +255,6 @@ namespace GameLogicTests
       }
 
       Canvas canvas;
-      DrawWorkspace work;
       Elite::TextState text;
       GalaxyNumber galaxy;
       Elite::Rng rng;
@@ -401,9 +399,8 @@ namespace GameLogicTests
               Assert::IsTrue(cpu.CallSubroutine(routine, 200'000).completed, L"TT15 should return");
 
               Canvas canvas;
-              DrawWorkspace work;
-              const Crosshairs at{static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y), static_cast<std::uint8_t>(size)};
-              Elite::DrawCrosshairs(canvas, work, at, static_cast<std::uint8_t>(view));
+                      const Crosshairs at{static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y), static_cast<std::uint8_t>(size)};
+              Elite::DrawCrosshairs(canvas, at, static_cast<std::uint8_t>(view));
 
               CompareScreens(cpu, zp.screen, canvas,
                              L"TT15 (x=" + std::to_wstring(x) + L" y=" + std::to_wstring(y) + L" size=" + std::to_wstring(size) +
@@ -483,8 +480,7 @@ namespace GameLogicTests
               Assert::IsTrue(cpu.CallSubroutine(routine, 200'000).completed, L"TT103 should return");
 
               Canvas canvas;
-              DrawWorkspace work;
-              Elite::DrawTargetCrosshairs(canvas, work, chart);
+                      Elite::DrawTargetCrosshairs(canvas, chart);
 
               CompareScreens(cpu, zp.screen, canvas, Where(L"TT103", chart));
               ++compared;
@@ -552,11 +548,10 @@ namespace GameLogicTests
                 Assert::IsTrue(cpu.CallSubroutine(routine, 500'000).completed, L"TT16 should return");
 
                 Canvas canvas;
-                DrawWorkspace work;
-                ChartView ours = chart;
+                          ChartView ours = chart;
 
                 // 6502: DEY / TYA / EOR #255 -- the vertical step the routine applies is -Y.
-                Elite::MoveCrosshairs(canvas, work, ours, static_cast<std::uint8_t>(dx), static_cast<std::uint8_t>(0u - dy));
+                Elite::MoveCrosshairs(canvas, ours, static_cast<std::uint8_t>(dx), static_cast<std::uint8_t>(0u - dy));
 
                 const std::wstring where = Where(L"TT16", chart) + L" step (" + std::to_wstring(dx) + L", " + std::to_wstring(dy) + L")";
                 Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq9], ours.cursorX, (where + L": QQ9").c_str());
@@ -611,9 +606,8 @@ namespace GameLogicTests
             Assert::IsTrue(cpu.CallSubroutine(routine, 500'000).completed, L"TT14 should return");
 
             Canvas canvas;
-            DrawWorkspace work;
-            RecordedShapes shapes;
-            Elite::DrawFuelRange(canvas, work, chart, &shapes);
+                  RecordedShapes shapes;
+            Elite::DrawFuelRange(canvas, chart, &shapes);
 
             const std::wstring where = Where(L"TT14", chart);
             Assert::AreEqual<std::size_t>(1u, shapes.circles.size(), (where + L": one circle").c_str());
@@ -682,7 +676,7 @@ namespace GameLogicTests
 
         PortScreen port(static_cast<std::uint8_t>(galaxyNumber - 1));
         RecordedShapes shapes;
-        Elite::DrawLongRangeChart(port.canvas, port.work, port.printer, port.text, chart, galaxy, &shapes);
+        Elite::DrawLongRangeChart(port.canvas, port.printer, port.text, chart, galaxy, &shapes);
 
         const std::wstring where = L"TT22 galaxy " + std::to_wstring(galaxyNumber);
         Assert::AreEqual<std::size_t>(1u, shapes.circles.size(), (where + L": one fuel circle").c_str());
@@ -775,7 +769,7 @@ namespace GameLogicTests
 
           PortScreen port(static_cast<std::uint8_t>(galaxyNumber - 1));
           RecordedShapes shapes;
-          Elite::DrawShortRangeChart(port.canvas, port.work, port.printer, port.text, chart, galaxy, &shapes);
+          Elite::DrawShortRangeChart(port.canvas, port.printer, port.text, chart, galaxy, &shapes);
 
           const std::wstring where = L"TT23 galaxy " + std::to_wstring(galaxyNumber) + L" at (" + std::to_wstring(home.first) + L", " +
                                      std::to_wstring(home.second) + L")";
@@ -923,10 +917,9 @@ namespace GameLogicTests
             Assert::IsTrue(cpu.CallSubroutine(oracle.Label("hm"), 2'000'000).completed, L"hm should return");
 
             Canvas canvas;
-            DrawWorkspace work;
-            CountedEffects effects;
+                  CountedEffects effects;
             ChartView ours = chart;
-            const Elite::NearestSystem nearest = Elite::SelectNearestSystem(canvas, work, ours, galaxy, &effects);
+            const Elite::NearestSystem nearest = Elite::SelectNearestSystem(canvas, ours, galaxy, &effects);
 
             const std::wstring where = Where(L"hm", chart) + L" galaxy " + std::to_wstring(galaxyNumber);
             Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq9], ours.cursorX, (where + L": QQ9").c_str());
@@ -1037,7 +1030,7 @@ namespace GameLogicTests
                     jump.controlHeld = control != 0;
 
                     ChartView ours = chart;
-                    const Elite::JumpOutcome outcome = Elite::RequestHyperspace(port.canvas, port.work, port.printer, port.extended,
+                    const Elite::JumpOutcome outcome = Elite::RequestHyperspace(port.canvas, port.printer, port.extended,
                                                                                 port.text, ours, jump, galaxy, &effects);
 
                     const std::wstring where = Where(L"hyp", chart) + L" docked=" + std::to_wstring(docked) + L" count=" +

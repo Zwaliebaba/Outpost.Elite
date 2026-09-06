@@ -130,7 +130,7 @@ namespace Elite
    * lines are drawn by LOIN, which plots by EOR, so drawing the same crosshair twice erases it --
    * that is how the cursor moves.
    */
-  void DrawCrosshairs(Canvas& _canvas, DrawWorkspace& _work, const Crosshairs& _at, std::uint8_t _view) noexcept;
+  void DrawCrosshairs(Canvas& _canvas, const Crosshairs& _at, std::uint8_t _view) noexcept;
 
   /*
    * 6502: TT103 -- draw the crosshair at the selected system, on whichever chart is showing.
@@ -141,7 +141,7 @@ namespace Elite
    * to -36. So the visible window is off-centre, by different amounts on each axis, and the two
    * constants are four instructions apart in the original.
    */
-  void DrawTargetCrosshairs(Canvas& _canvas, DrawWorkspace& _work, const ChartView& _view) noexcept;
+  void DrawTargetCrosshairs(Canvas& _canvas, const ChartView& _view) noexcept;
 
   /*
    * 6502: TT16 -- move the crosshairs and redraw them.
@@ -149,7 +149,7 @@ namespace Elite
    * Erase, move, draw. The move arrives as two signed steps and the original negates the vertical
    * one on the way in, because the keyboard's "down" is the screen's "up".
    */
-  void MoveCrosshairs(Canvas& _canvas, DrawWorkspace& _work, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY) noexcept;
+  void MoveCrosshairs(Canvas& _canvas, ChartView& _view, std::uint8_t _stepX, std::uint8_t _stepY) noexcept;
 
   /*
    * 6502: TT14 -- the circle showing how far the fuel reaches, and the crosshair at its centre.
@@ -158,7 +158,7 @@ namespace Elite
    * you are, at half vertical scale, with a radius of fuel/4. On the short-range chart it is
    * centred on the middle of the screen at four times the scale, with a radius of the fuel itself.
    */
-  void DrawFuelRange(Canvas& _canvas, DrawWorkspace& _work, const ChartView& _view, ChartShapes* _shapes) noexcept;
+  void DrawFuelRange(Canvas& _canvas, const ChartView& _view, ChartShapes* _shapes) noexcept;
 
   /*
    * 6502: NLIN2 and NLIN4 -- a rule right across the screen at a given row.
@@ -166,7 +166,7 @@ namespace Elite
    * Both charts draw one under their title. X2 is 255 rather than the screen width, so the line
    * runs into the right margin; that is the original's, not a rounding here.
    */
-  void DrawSeparator(Canvas& _canvas, DrawWorkspace& _work, std::uint8_t _y) noexcept;
+  void DrawSeparator(Canvas& _canvas, std::uint8_t _y) noexcept;
 
   /*
    * 6502: TT22 -- the long-range chart.
@@ -180,7 +180,7 @@ namespace Elite
    * reads as a distance, so the chart's dots vary in size for no reason except what the galaxy
    * happens to contain.
    */
-  void DrawLongRangeChart(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
+  void DrawLongRangeChart(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
                           const SystemSeeds& _galaxy, ChartShapes* _shapes) noexcept;
 
   /*
@@ -194,7 +194,7 @@ namespace Elite
    * A system whose row comes out below three is skipped entirely, name and disc together, because
    * the test that rejects it branches past both.
    */
-  void DrawShortRangeChart(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
+  void DrawShortRangeChart(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
                            const SystemSeeds& _galaxy, ChartShapes* _shapes) noexcept;
 
   /*
@@ -272,7 +272,7 @@ namespace Elite
    * Erase, search, redraw: the first TT103 rubs out the crosshair that is there, because LOIN
    * draws by EOR, and the second draws it at wherever TT111 settled.
    */
-  NearestSystem SelectNearestSystem(Canvas& _canvas, DrawWorkspace& _work, ChartView& _view, const SystemSeeds& _galaxy,
+  NearestSystem SelectNearestSystem(Canvas& _canvas, ChartView& _view, const SystemSeeds& _galaxy,
                                     ChartEffects* _effects) noexcept;
 
   /*
@@ -287,7 +287,7 @@ namespace Elite
    * system 25.6 light years away is out of range even with a full tank, and the message is the same
    * one you get for having no fuel.
    */
-  JumpOutcome RequestHyperspace(Canvas& _canvas, DrawWorkspace& _work, TokenPrinter& _printer, ExtendedTokenPrinter& _extended,
+  JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended,
                                 TextState& _text, ChartView& _view, JumpState& _jump, const SystemSeeds& _galaxy,
                                 ChartEffects* _effects) noexcept;
 

@@ -80,7 +80,8 @@ namespace Elite
 
   /// 6502: MLU1 -- Y1 = SY, then (A P) = |SY| * Q through `MLU2`. The carry is part of the answer:
   /// the front view adds `SYL` to it and the rear view subtracts, neither with a `CLC` or a `SEC`.
-  [[nodiscard]] Product MultiplyByHeight(DrawWorkspace& _draw, const Stardust& _dust, std::uint8_t _at, std::uint8_t _multiplier) noexcept;
+  /// The `Y1` it stages is the speck's own height, which the movers read from the speck (M2-c).
+  [[nodiscard]] Product MultiplyByHeight(const Stardust& _dust, std::uint8_t _at, std::uint8_t _multiplier) noexcept;
 
   /// 6502: MLS1 -- P = ALP1, then `MULTS`. (6502: MULTS-2 is the same without the `LDX`, reached by
   /// the movers with the multiplier already in X -- which is `MultiplyScaled` called directly.)
@@ -90,13 +91,15 @@ namespace Elite
    * 6502: PIX1 -- `ADD`, keep the answer as the particle's new y, and plot it.
    *
    * `_value` is (A P) and `_addend` is (S R), as `ADD` takes them: the movers hand it the pitch
-   * or the roll over a zero low byte, and the particle's y.
+   * or the roll over a zero low byte, and the particle's y. `_across`, `_down` and `_distance` are
+   * the `X1`, `Y1` and `ZZ` the mover had staged, which is the speck's OLD position -- `PIXEL2`
+   * plots by EOR, so this is the erase. Returns the sum's high byte, `YY+1`, which the mover reads.
    *
    * The ledger marked this ported with the rest of the pixel routines in slice 1d-a and it was not
    * (§6.41): it writes `SYL`, and the stardust arrays did not exist then.
    */
-  void PlotStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, Stardust& _dust, std::uint8_t _at, SignMag16 _value,
-                    SignMag16 _addend) noexcept;
+  [[nodiscard]] std::uint8_t PlotStardust(Canvas& _canvas, Stardust& _dust, std::uint8_t _at, SignMag16 _value, SignMag16 _addend,
+                                          std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
   /*
    * 6502: FLIP -- swap every speck's x and y, which reflects the whole field in the line x = y,
@@ -107,7 +110,7 @@ namespace Elite
    * see that the new dust is the old dust mirrored in the diagonal. `LOOK1` is slice 3d's; this is
    * here because the workspace is.
    */
-  void FlipStardust(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust) noexcept;
+  void FlipStardust(Canvas& _canvas, Stardust& _dust) noexcept;
 
   /*
    * 6502: STARS1, STARS2 and STARS6 -- move and redraw the whole field, once per frame.
@@ -125,19 +128,15 @@ namespace Elite
    * each roll a new one at the far edge, which is why the field never thins out. That makes the
    * random generator part of the routine's answer rather than a detail, so it is a parameter.
    */
-  void MoveStardustAhead(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, const FlightState& _flight, Stardust& _dust,
-                         Rng& _rng) noexcept;
-  void MoveStardustAstern(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, const FlightState& _flight, Stardust& _dust,
-                          Rng& _rng) noexcept;
-  void MoveStardustSideways(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, FlightState& _flight, Stardust& _dust, Rng& _rng,
-                            std::uint8_t _view) noexcept;
+  void MoveStardustAhead(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng) noexcept;
+  void MoveStardustAstern(Canvas& _canvas, const FlightState& _flight, Stardust& _dust, Rng& _rng) noexcept;
+  void MoveStardustSideways(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view) noexcept;
 
   /*
    * 6502: STARS -- pick one of the three by the view.
    *
    * `STARS2` takes the view in X because it has to know left from right; the other two do not care.
    */
-  void MoveStardust(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, FlightState& _flight, Stardust& _dust, Rng& _rng,
-                    std::uint8_t _view) noexcept;
+  void MoveStardust(Canvas& _canvas, FlightState& _flight, Stardust& _dust, Rng& _rng, std::uint8_t _view) noexcept;
 
 } // namespace Elite

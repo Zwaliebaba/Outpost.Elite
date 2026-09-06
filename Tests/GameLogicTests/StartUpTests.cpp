@@ -609,12 +609,12 @@ namespace GameLogicTests
         Elite::Rng rng;
         IgnoredControls controls;
         Elite::ExtendedTokenPrinter extended(characters, recursive, rng, &controls);
-        Elite::NumberWorkspace numbers;
+        std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it (M2-c)
 
         ScriptedKeys keys(script.menuKeys);
         SilentEffects lineEffects;
         DeviceStore store;
-        Elite::SaveScreen save{recursive, characters, extended, sink, text, keys, lineEffects, store, numbers};
+        Elite::SaveScreen save{recursive, characters, extended, sink, text, keys, lineEffects, store, numberWidth};
 
         Elite::Commander commander;
         std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name{};

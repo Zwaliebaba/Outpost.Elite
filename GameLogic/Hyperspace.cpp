@@ -231,8 +231,8 @@ namespace Elite
     // 6502: JSR SOLAR -- and `SpawnEffects` is `LoopSpawnEffects` over the loop, the adapter
     // FlightLoop.h already carries for exactly this (it was a seam when `Spawn.cpp` was written).
     LoopSpawnEffects spawning(_loop);
-    BuildSystem(screen.canvas, screen.draw, screen.dust, screen.heaps, screen.bubble, screen.work, screen.commander, screen.rng,
-                screen.flight, spawning, _current.techLevel, _current.seeds.bytes, screen.view, false);
+    BuildSystem(screen.canvas, screen.dust, screen.heaps, screen.bubble, screen.work, screen.commander, screen.rng, screen.flight, spawning,
+                _current.techLevel, _current.seeds.bytes, screen.view, false);
 
     /*
      * 6502: LDA QQ11 / AND #%00111111 / BNE RTS111.
@@ -248,8 +248,8 @@ namespace Elite
     }
 
     // 6502: JSR TTX66 / LDA QQ11 / BNE TT114 / INC QQ11, and then it falls into `TT110`.
-    SetUpScreenPixels(screen.canvas, screen.draw, screen.math, screen.geometry, screen.text, screen.screen, screen.bubble, screen.flight,
-                      screen.status, screen.commander.fuel, screen.compass, screen.sight, screen.view);
+    SetUpScreenPixels(screen.canvas, screen.draw, screen.text, screen.screen, screen.bubble, screen.flight, screen.status,
+                      screen.commander.fuel, screen.compass, screen.sight, screen.view);
 
     if (screen.view != 0u)
     {

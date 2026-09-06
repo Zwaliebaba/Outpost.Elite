@@ -121,7 +121,7 @@ namespace Elite
    * arriving in a new system fills the stardust, clears the ships and resets both line heaps as
    * part of the same call (§6.58).
    */
-  void BuildSystem(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
+  void BuildSystem(Canvas& _canvas, Stardust& _dust, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
                    Commander& _commander, Rng& _rng, FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
                    const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _view, bool _carryIn) noexcept;
 

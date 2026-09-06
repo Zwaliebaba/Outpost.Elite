@@ -94,7 +94,7 @@ namespace
         values(recursive, text, commander, name, current.seeds, selectedSeeds, false),
         extended(characters, recursive, rng, &shell),
         trade{recursive, characters, extended, text, shell, shell, rng},
-        save{recursive, characters, extended, screen, text, shell, shell, store, numbers},
+        save{recursive, characters, extended, screen, text, shell, shell, store, numberWidth},
         flight(window, canvas, text, characters, recursive, message, commander, rng, status, view, explosionCount, current.techLevel, sound,
                music, audio)
     {
@@ -150,7 +150,7 @@ namespace
     Elite::CharacterPrinter characters;
     Elite::TokenPrinter recursive;
     Elite::Rng rng;
-    Elite::NumberWorkspace numbers;
+    std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it, which SV1 prints the competition number at
 
     // ---- the commander and the universe ----------------------------------------------------------
     Elite::Commander commander = Elite::DefaultCommander();
@@ -333,15 +333,14 @@ namespace
       screen.heaps.yx2M1 = Elite::CHART_SCREEN_BOTTOM;
       _game.flight.Loop().clip.dontclip = Elite::CHART_SCREEN_BOTTOM;
 
-      Elite::DrawShortRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.galaxySeeds,
-                                 &_game.flight);
+      Elite::DrawShortRangeChart(_game.canvas, _game.recursive, _game.text, chart, _game.commander.galaxySeeds, &_game.flight);
 
       _game.flight.Loop().clip.dontclip = 0u;
       screen.heaps.yx2M1 = Elite::SPACE_VIEW_BOTTOM; // 6502: LDA #2*Y-1
       return;
     }
 
-    Elite::DrawLongRangeChart(_game.canvas, screen.draw, _game.recursive, _game.text, chart, _game.commander.galaxySeeds, &_game.flight);
+    Elite::DrawLongRangeChart(_game.canvas, _game.recursive, _game.text, chart, _game.commander.galaxySeeds, &_game.flight);
   }
 
   /// 6502: TT22 and TT23's opening `JSR TT66`, which the routines leave to their caller, and then
@@ -518,12 +517,12 @@ namespace
       Elite::FlightScreen& screen = _game.flight.Screen();
       Elite::ChartView chart = ChartOf(_game);
 
-      Elite::DrawTargetCrosshairs(_game.canvas, screen.draw, chart);
+      Elite::DrawTargetCrosshairs(_game.canvas, chart);
       Elite::CrosshairsToCurrentSystem(_game.commander, _game.crosshairX, _game.crosshairY);
 
       chart.cursorX = _game.crosshairX;
       chart.cursorY = _game.crosshairY;
-      Elite::DrawTargetCrosshairs(_game.canvas, screen.draw, chart);
+      Elite::DrawTargetCrosshairs(_game.canvas, chart);
       return;
     }
 
@@ -540,7 +539,7 @@ namespace
       Elite::FlightScreen& screen = _game.flight.Screen();
       Elite::ChartView chart = ChartOf(_game);
 
-      Elite::MoveCrosshairs(_game.canvas, screen.draw, chart, _game.crosshairStep.x, _game.crosshairStep.y);
+      Elite::MoveCrosshairs(_game.canvas, chart, _game.crosshairStep.x, _game.crosshairStep.y);
 
       _game.crosshairX = chart.cursorX;
       _game.crosshairY = chart.cursorY;
@@ -628,8 +627,8 @@ namespace
       Elite::JumpState jump = JumpOf(_game);
       Elite::FlightScreen& screen = _game.flight.Screen();
 
-      const Elite::JumpOutcome decided = Elite::RequestHyperspace(_game.canvas, screen.draw, _game.recursive, _game.extended, _game.text,
-                                                                  chart, jump, _game.commander.galaxySeeds, &_game.shell);
+      const Elite::JumpOutcome decided = Elite::RequestHyperspace(_game.canvas, _game.recursive, _game.extended, _game.text, chart, jump,
+                                                                  _game.commander.galaxySeeds, &_game.shell);
 
       _game.status.hyperspaceCountdown = jump.countdown;
       _game.status.hyperspaceCounter = jump.counter; // 6502: STA QQ22 -- and it was never copied back (§6.159)

@@ -321,7 +321,14 @@ namespace GameLogicTests
     cells.push_back(Direct(L"JUNK", _at.junk, _universe.bubble.junk, CellScope::Image));
     cells.push_back(Direct(L"COMX", _at.comx, _universe.compass.x, CellScope::Image));
     cells.push_back(Direct(L"COMY", _at.comy, _universe.compass.y, CellScope::Image));
-    cells.push_back(Direct(L"T2", _at.t2, _universe.draw.t2, CellScope::Image));
+    /*
+     * `T2` WAS AN IMAGE CELL AND HASHED A BYTE THE GAME DOES NOT WRITE (§8, M2-c).
+     *
+     * The port's `HLOIN` and `BOX2` parked their scratch in `T2` and `R2`, which is the BBC
+     * commentary's naming; the C64's use `T` and `R`. Nothing read either byte on either side, so
+     * the screens always agreed -- but the digest hashed the port's invention, so it moves with the
+     * fix, under Modernize.md rule 1's second case.
+     */
     cells.push_back(Direct(L"DELTA", _at.delta, _universe.flight.delta, CellScope::Image));
     cells.push_back(Direct(L"ALP1", _at.alp1, _universe.flight.alp1, CellScope::Image));
     cells.push_back(Direct(L"ALP2", _at.alp2, _universe.flight.alp2, CellScope::Image));

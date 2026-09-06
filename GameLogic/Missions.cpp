@@ -37,7 +37,7 @@ namespace Elite
       FlightLoop& loop = _mission.loop;
       FlightScreen& screen = loop.screen;
       static_cast<void>(
-        MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, *screen.flight.blueprint, screen.view));
+        MoveShip(screen.canvas, screen.work, screen.math, screen.flight, loop.tactics, *screen.flight.blueprint, screen.view));
     }
   } // namespace
 
@@ -71,7 +71,7 @@ namespace Elite
      * a ship whose `INWK+32` has bit 7 set, and the Constrictor `BRIEF` builds is made by `ZINF`
      * and `NWSHP` with no AI byte set, so there is nothing for the AI to do and nobody to do it to.
      */
-    (void)MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, loop.tactics, *screen.flight.blueprint, screen.view);
+    (void)MoveShip(screen.canvas, screen.work, screen.math, screen.flight, loop.tactics, *screen.flight.blueprint, screen.view);
 
     // 6502: JMP RDKEY -- a tail call, so what `PAS1` returns is what `RDKEY` returns.
     return _mission.effects.ScanTitleKeys(_mission.keys);

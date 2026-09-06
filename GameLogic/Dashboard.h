@@ -11,7 +11,6 @@
 namespace Elite
 {
 
-  struct MathWorkspace;
 
   /*
    * The dashboard (slice 3d-b).
@@ -165,9 +164,17 @@ namespace Elite
    * `_threshold` is `T1`: below it the bar is drawn in `K+1` and at or above it in `K`, except that
    * a `K+1` of zero falls through to `K` as well. `SC` comes in pointing at the bar's first
    * character cell and goes out pointing at the next row down, which is how four calls in a row
-   * draw four dials.
+   * draw four dials. `Q`, `R` and `COL` are the routine's own (M2-c).
    */
-  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, std::uint8_t _value, int _shifts) noexcept;
+  /// 6502: K and K+1 -- the two colours `DIALS` stores for `DIL`, as `PZW`'s (A X) or the other way
+  /// round, which is why the same threshold means the opposite thing for the energy bars.
+  struct DialColours
+  {
+    std::uint8_t atOrAbove = 0; ///< 6502: K -- drawn when the reading reaches `T1`, or when `K+1` is zero
+    std::uint8_t below = 0;     ///< 6502: K+1 -- drawn under `T1`, unless it is zero
+  };
+
+  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold, DialColours _colours) noexcept;
 
   /*
    * 6502: DIL2 -- the roll and pitch indicators, which are one lit pixel rather than a bar.
@@ -179,7 +186,7 @@ namespace Elite
    * The `ADC #&3F` at the end has no `CLC` and does not need one: the only way out of the loop is a
    * `CPY #30` that did not branch, so the carry is set and the add is 320 rather than 64.
    */
-  void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, std::uint8_t _value) noexcept;
+  void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value) noexcept;
 
   /*
    * 6502: DIALS parts 1 to 4 -- the whole dashboard, and it ends `JMP COMPAS`.
@@ -189,14 +196,14 @@ namespace Elite
    * (`LDA MCNT / AND #3 / BNE dec27`, and `dec27` is `TT26`'s own `RTS` borrowed as a branch
    * target), so three passes in four draw the other three parts and the compass alone.
    *
-   * `_geometry` is here for `XX12`, and that is not a misuse: `DIALS` part 3 writes the same four
-   * zero-page bytes `LL51` writes its dot products into. The two are never live at once -- the
-   * ships are drawn before the dashboard is -- and part 3 clears all four before reading any, so
-   * one copy is right and a second would be a §6.28 introduced by the port. The field's name is
-   * wrong for half its users, which is the ledger's shape rather than the game's.
+   * Part 3's four energy bars are dealt into `XX12`, the same four zero-page bytes `LL51` writes
+   * its dot products into. The two are never live at once -- the ships are drawn before the
+   * dashboard is -- and part 3 clears all four before reading any, so since M2-c they are this
+   * routine's own array rather than a `GeometryWorkspace` borrowed for the name. `_draw` is `SC`,
+   * the cursor the dials advance between them.
    */
-  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, MathWorkspace& _math, GeometryWorkspace& _geometry, const FlightState& _flight,
-                 const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, const Bubble& _bubble) noexcept;
+  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
+                 Compass& _compass, const Bubble& _bubble) noexcept;
 
   /*
    * 6502: MSBAR -- set missile indicator X to the colour in Y.

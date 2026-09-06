@@ -147,8 +147,7 @@ namespace GameLogicTests
     }
 
     /// The workspace bytes `DOEXP`, `PTCLS` and `EXS1` leave behind between them.
-    void CompareWorkspace(const Cpu6502& _cpu, const OracleImage& _oracle, const Elite::MathWorkspace& _math,
-                          const Elite::DrawWorkspace& _draw, const std::wstring& _context)
+    void CompareWorkspace(const Cpu6502& _cpu, const OracleImage& _oracle, const Elite::MathWorkspace& _math, const std::wstring& _context)
     {
       const auto same = [&](const char* _name, std::uint8_t _ours)
       {
@@ -163,8 +162,9 @@ namespace GameLogicTests
       same("U", _math.u);
       same("CNT", _math.cnt);
       same("TGT", _math.tgt);
-      same("ZZ", _draw.zz);
-      same("Y1", _draw.y1);
+
+      // `ZZ` and `Y1` are the particle loop's own since M2-c -- the distance each particle is
+      // plotted at and the row it landed on -- and what they produced is the screen comparison.
     }
 
     /*
@@ -518,7 +518,6 @@ namespace GameLogicTests
         {
           Cpu6502 cpu = oracle.Fresh();
           Elite::Canvas canvas;
-          Elite::DrawWorkspace draw;
           Elite::MathWorkspace math;
           Elite::GeometryWorkspace geometry;
           Elite::Rng rng;
@@ -585,14 +584,14 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(doexp);
           Assert::IsTrue(run.completed, L"DOEXP returned");
 
-          Elite::DrawExplosionCloud(canvas, draw, math, rng, work, heap, geometry, bubble, burst);
+          Elite::DrawExplosionCloud(canvas, math, rng, work, heap, geometry, bubble, burst);
 
           const std::wstring where = std::wstring(scene.what) + L", " + layout.what;
 
           CompareScreens(cpu, screenBase, canvas, where);
           CompareHeaps(cpu, heap, where);
           CompareSeeds(cpu, oracle, rng, where);
-          CompareWorkspace(cpu, oracle, math, draw, where);
+          CompareWorkspace(cpu, oracle, math, where);
           CompareBurstRegisters(cpu, burst, where);
 
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
@@ -720,7 +719,6 @@ namespace GameLogicTests
             {
               Cpu6502 cpu = oracle.Fresh();
               Elite::Canvas canvas;
-              Elite::DrawWorkspace draw;
               Elite::MathWorkspace math;
               Elite::Rng rng;
               Elite::Ship work{};
@@ -774,11 +772,11 @@ namespace GameLogicTests
 
               if (withSprite != 0)
               {
-                Elite::DrawExplosionParticlesWithSprite(canvas, draw, math, rng, work, heap, bubble, burst);
+                Elite::DrawExplosionParticlesWithSprite(canvas, math, rng, work, heap, bubble, burst);
               }
               else
               {
-                Elite::DrawExplosionParticles(canvas, draw, math, rng, work, heap, bubble);
+                Elite::DrawExplosionParticles(canvas, math, rng, work, heap, bubble);
               }
 
               const std::wstring where =
@@ -788,7 +786,7 @@ namespace GameLogicTests
               CompareScreens(cpu, screenBase, canvas, where);
               CompareHeaps(cpu, heap, where);
               CompareSeeds(cpu, oracle, rng, where);
-              CompareWorkspace(cpu, oracle, math, draw, where);
+              CompareWorkspace(cpu, oracle, math, where);
               CompareBurstRegisters(cpu, burst, where);
               Assert::AreEqual<std::uint32_t>(0u, refused.calls, (where + L": PTCLS has no sprite in it").c_str());
 
@@ -798,7 +796,7 @@ namespace GameLogicTests
                                  (where + L": INWK+" + std::to_wstring(byte)).c_str());
               }
 
-              if (canvas.Screen()[0x1000] != 0u || draw.zz != 0u)
+              if (canvas.Screen()[0x1000] != 0u || cpu.memory[oracle.Label("ZZ")] != 0u)
               {
                 ++plotted;
               }

@@ -288,7 +288,7 @@ namespace GameLogicTests
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng, &shell),
           trade{recursive, characters, extended, text, keys, shell, rng},
-          save{recursive, characters, extended, sink, text, keys, shell, store, numbers}
+          save{recursive, characters, extended, sink, text, keys, shell, store, numberWidth}
       {
         recursive.SetValueTokens(&values);
         recursive.SetCursor(&text);
@@ -312,7 +312,7 @@ namespace GameLogicTests
       Elite::CharacterPrinter characters;
       Elite::TokenPrinter recursive;
       Elite::Rng rng;
-      Elite::NumberWorkspace numbers;
+      std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it (M2-c)
 
       // ---- the commander and the universe -------------------------------------------------------
       Elite::Commander commander = Elite::DefaultCommander();

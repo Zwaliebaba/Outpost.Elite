@@ -9,14 +9,14 @@
   ],
   "ceilings": {
     "register-params": {
-      "ceiling": 22,
+      "ceiling": 20,
       "slack": 0,
-      "slice": "M2-b"
+      "slice": "M2-c-1: the pixel routines take their point, and the stardust its coordinates"
     },
     "workspace-params": {
-      "ceiling": 151,
+      "ceiling": 86,
       "slack": 0,
-      "slice": "M2-b"
+      "slice": "M2-c-1: the line, the pixel, the blip, the compass, the dials and the number printer take values"
     },
     "ship-literal-sites": {
       "ceiling": 0,
@@ -34,14 +34,14 @@
       "slice": "M0-a"
     },
     "main-lines": {
-      "ceiling": 1220,
+      "ceiling": 1219,
       "slack": 0,
-      "slice": "hyperspace key wired 2026-09-06 (plan 6.159): PressKey reads H off the matrix, Advance dispatches every pass"
+      "slice": "M2-c-1: Main.cpp holds the number printer's width byte instead of its workspace"
     },
     "outpost-elite-names": {
-      "ceiling": 226,
+      "ceiling": 225,
       "slack": 0,
-      "slice": "hyperspace key and loader sprites 2026-09-06 (plan 6.159, 6.160)"
+      "slice": "M2-c-1: NumberWorkspace goes, so the app names one fewer type"
     },
     "effects-seams": {
       "ceiling": 22,
@@ -69,9 +69,9 @@
       "slice": "M0-a"
     },
     "origin-markers": {
-      "ceiling": 3807,
+      "ceiling": 3854,
       "slack": 0,
-      "slice": "M2-b's kernel scratch labels plus the death-sequence fix, hyperspace key and loader sprites (plan 6.157-6.160), merged 2026-09-06"
+      "slice": "M2-c-1: every value a drawing routine now takes carries the byte it was, labelled (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 50,

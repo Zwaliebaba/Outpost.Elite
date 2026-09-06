@@ -9,7 +9,6 @@
 #include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
-using Elite::NumberWorkspace;
 using Elite::TextSink;
 using Elite::Testing::Cpu6502;
 using Elite::Testing::OracleImage;
@@ -121,17 +120,17 @@ namespace GameLogicTests
             }
 
             Collector collector;
-            NumberWorkspace work;
-            work.k[0] = static_cast<std::uint8_t>(value >> 24);
-            work.k[1] = static_cast<std::uint8_t>(value >> 16);
-            work.k[2] = static_cast<std::uint8_t>(value >> 8);
-            work.k[3] = static_cast<std::uint8_t>(value);
-            work.u = static_cast<std::uint8_t>(digits);
-            Elite::PrintNumber(collector, work, withPoint);
+            const Elite::NumberBytes number = {static_cast<std::uint8_t>(value >> 24), static_cast<std::uint8_t>(value >> 16),
+                                               static_cast<std::uint8_t>(value >> 8), static_cast<std::uint8_t>(value)};
+            const std::uint8_t left = Elite::PrintNumber(collector, number, static_cast<std::uint8_t>(digits), withPoint);
 
             const std::string context = "BPRNT " + std::to_string(value) + " with " + std::to_string(digits) + " decimals, point " +
                                         (withPoint ? "on" : "off") + ": game " + Show(expected) + ", port " + Show(collector.characters);
             Assert::IsTrue(expected == collector.characters, Widen(context).c_str());
+
+            // 6502: `U` as the routine leaves it -- `SV1` prints the competition number at whatever
+            // width the last `BPRNT` left there, so the byte is part of the answer (M2-c).
+            Assert::AreEqual(cpu.memory[u], left, (Widen(context) + L": U on the way out").c_str());
             ++compared;
           }
         }

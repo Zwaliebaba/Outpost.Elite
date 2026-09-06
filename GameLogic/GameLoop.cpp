@@ -117,8 +117,7 @@ namespace Elite
     // makes the speed, roll and pitch indicators move at all.
     if (screen.view == 0u)
     {
-      DrawDials(screen.canvas, screen.draw, screen.math, screen.geometry, screen.flight, screen.status, _commander.fuel,
-                screen.compass, screen.bubble);
+      DrawDials(screen.canvas, screen.draw, screen.flight, screen.status, _commander.fuel, screen.compass, screen.bubble);
 
       /*
        * AND `DIALS` COMES BACK WITH THE CARRY CLEAR, which is what the breeding roll below rotates

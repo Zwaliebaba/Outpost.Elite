@@ -93,7 +93,6 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             Elite::Canvas canvas;
-            Elite::DrawWorkspace draw;
             Elite::Rng rng;
             Elite::LaserBurst burst;
             Elite::FlightStatus status;
@@ -132,7 +131,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(lasli, 200'000);
             Assert::IsTrue(run.completed, L"LASLI returned");
 
-            (void)Elite::FireLaser(canvas, draw, rng, burst, status, view, carryIn);
+            (void)Elite::FireLaser(canvas, rng, burst, status, view, carryIn);
 
             const std::wstring where =
               Widen("LASLI seed " + std::to_string(seed) + " view " + std::to_string(view) + " carry " + std::to_string(carryIn ? 1 : 0));

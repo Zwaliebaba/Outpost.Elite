@@ -73,8 +73,8 @@
         {
           "id": "ta-selftest",
           "file": "GameLogic/Tactics.cpp",
-          "find": "    _draw.y1 = static_cast<std::uint8_t>(_draw.y1 ^ 0x80u);",
-          "replace": "    _draw.y1 = static_cast<std::uint8_t>(_draw.y1 ^ 0x00u);",
+          "find": "    _vector.y = static_cast<std::uint8_t>(_vector.y ^ 0x80u);",
+          "replace": "    _vector.y = static_cast<std::uint8_t>(_vector.y ^ 0x00u);",
           "expect": "caught",
           "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Dropping one of TAS6's three EOR #%10000000s leaves the negated vector wrong on the y axis, and TheNegationMatchesTAS6 compares all three against the shipped routine. Its job is to prove this run OBSERVES a catch -- without it, fifteen 'survivors' below could all be a harness that never rebuilt. Keep it first and never delete it.",
           "selftest": true
@@ -154,8 +154,8 @@
         {
           "id": "ta20-eor",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      SteerTowards(_loop, static_cast<std::uint8_t>(nose.high ^ 0x80u));",
-          "replace": "      SteerTowards(_loop, nose.high);",
+          "find": "      SteerTowards(_loop, NegateVector(towards), static_cast<std::uint8_t>(nose.high ^ 0x80u));",
+          "replace": "      SteerTowards(_loop, NegateVector(towards), nose.high);",
           "expect": "caught",
           "note": "TA20's EOR #%10000000, in SteerMissileTowardsTarget. A second, unreachable copy of TA20 stood in part 4 and was deleted (plan section 6.152)."
         },

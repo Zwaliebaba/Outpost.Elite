@@ -150,15 +150,17 @@ namespace Elite
     CommanderStore& store;
 
     /*
-     * 6502: K and U -- and U is the reason this is a reference rather than a local.
+     * 6502: U -- and it is a reference because it outlives the call.
      *
      * SV1 prints the competition number with `CLC / JSR BPRNT` and never sets U, which is BPRNT's
      * field width. U is a scratch byte in zero page that ZERO does not clear, so the number is
      * printed to whatever width the last caller of BPRNT happened to leave behind. The upstream
      * source says so in as many words. It is harmless -- the number always has ten digits, so all
      * that varies is a leading space -- but a port that chose a width here would be inventing one.
+     * Since M2-c `PrintNumber` takes the width and returns the byte it leaves, and this is where
+     * the save screen keeps it between saves (§8, M2-c: the port's other prints keep their own).
      */
-    NumberWorkspace& numbers;
+    std::uint8_t& numberWidth;
   };
 
   /// How the menu ended. 6502: which label it reached, and the carry it left.

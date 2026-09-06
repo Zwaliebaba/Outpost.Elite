@@ -124,12 +124,12 @@ namespace Elite
    * Byte 0 of the heap is its length in bytes, and under four there is not a whole line there, so
    * nothing is drawn. Everything after it is groups of four: x1, y1, x2, y2, which are `XX15` to
    * `XX15+3` -- the SAME zero-page bytes as `X1`, `Y1`, `X2`, `Y2`, so the loop writes straight into
-   * `LOIN`'s arguments and calls it. `DrawWorkspace` is those four bytes here.
+   * `LOIN`'s arguments and calls it. Each group is one `Line` here.
    *
    * `LOIN` plots by EOR, so this both draws a ship and rubs it out; which one it is depends only on
    * whether the same lines are already on the screen. That is the whole of Elite's ship animation.
    */
-  void DrawShipLines(Canvas& _canvas, DrawWorkspace& _draw, const LineHeap& _heap, HeapOffset _run) noexcept;
+  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run) noexcept;
 
   /*
    * 6502: LL81 -- store the heap's length in byte 0 and fall straight into `LL155`.
@@ -139,7 +139,7 @@ namespace Elite
    * already in A. Both then draw. Ported as one function with the length as a parameter, because
    * the difference between the two entry points is only where the byte came from.
    */
-  void StoreLineCountAndDraw(Canvas& _canvas, DrawWorkspace& _draw, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept;
+  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept;
 
   /*
    * 6502: EE51 -- take the ship off the screen, if it is on it.
@@ -155,7 +155,7 @@ namespace Elite
    * bytes leaves `CMP #4 / BCC LL82` -- CLEAR; and a ship that was not on the screen returns through
    * a bare `RTS` with the flag the caller arrived with, which is `_carryIn`.
    */
-  bool EraseShip(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept;
+  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept;
 
   /*
    * 6502: the six instructions after `JSR EE51` in `LL9` part 1, and the `EE55` loop -- set up a
@@ -188,8 +188,7 @@ namespace Elite
    * last one was, and reproducing that is why `_screen` is a parameter that outlives the call
    * rather than a local. It is a bug in the original, forty years old and shipped.
    */
-  void DrawShipAsPoint(Canvas& _canvas, DrawWorkspace& _draw, Ship& _ship, LineHeap& _heap, MathWorkspace& _math,
-                       Projection& _screen) noexcept;
+  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen) noexcept;
 
   /*
    * 6502: XX16 and XX12 -- the workspace `LL9`'s geometry runs in (slice 3b).

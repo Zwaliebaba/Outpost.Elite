@@ -73,14 +73,13 @@ namespace Elite
      * significant first. That is the one place in the commander block where the two conventions
      * agree, and it is why the loop is a straight copy rather than a reversal.
      */
-    NumberWorkspace work;
+    NumberBytes value{};
     for (std::size_t index = 0; index < 4; ++index)
     {
-      work.k[index] = m_commander.cash.Byte(index); // 6502: CASH to CASH+3, most significant first
+      value[index] = m_commander.cash.Byte(index); // 6502: CASH to CASH+3, most significant first
     }
-    work.u = CASH_WIDTH;
 
-    PrintNumber(_sink, work, true);
+    (void)PrintNumber(_sink, value, CASH_WIDTH, true); // 6502: STA U / SEC / JSR BPRNT
 
     PrintThenNewline(m_printer, CREDITS_TOKEN);
   }

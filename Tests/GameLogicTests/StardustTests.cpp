@@ -284,7 +284,6 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             Elite::Stardust dust;
-            Elite::DrawWorkspace draw;
             Elite::FlightState flight;
 
             // Everything each wrapper might read, on the oracle's side; the port's side is what the
@@ -336,7 +335,7 @@ namespace GameLogicTests
             {
               name = L"MLU1";
               cpu.CallSubroutine(oracle.Label("MLU1"), 20'000);
-              const Elite::Product product = Elite::MultiplyByHeight(draw, dust, slot, operand);
+              const Elite::Product product = Elite::MultiplyByHeight(dust, slot, operand);
               got = product.high;
               low = product.low;
               break;
@@ -397,7 +396,8 @@ namespace GameLogicTests
             const std::wstring where = std::wstring(name) + L"(a=" + std::to_wstring(a) + L", x=" + std::to_wstring(operand) + L")";
             Assert::AreEqual(cpu.a, got, (where + L": A").c_str());
             Assert::AreEqual(cpu.memory[at.p], low, (where + L": P").c_str());
-            Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": Y1").c_str());
+            // `Y1` is `MLU1`'s own store of the speck's height since M2-c; the movers read the same
+            // byte out of the field, and the product above is what the wrapper answers with.
             if (positionStaged)
             {
               Assert::AreEqual(cpu.memory[at.r], operand, (where + L": R is XX").c_str());
@@ -522,8 +522,6 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             Elite::Canvas canvas;
-            Elite::DrawWorkspace draw;
-            Elite::MathWorkspace math;
             Elite::FlightState state;
             Elite::Stardust dust;
             Elite::Rng rng;
@@ -546,19 +544,19 @@ namespace GameLogicTests
 
               if (_through)
               {
-                Elite::MoveStardust(canvas, draw, math, state, dust, rng, _view);
+                Elite::MoveStardust(canvas, state, dust, rng, _view);
               }
               else if (_view == 0u)
               {
-                Elite::MoveStardustAhead(canvas, draw, math, state, dust, rng);
+                Elite::MoveStardustAhead(canvas, state, dust, rng);
               }
               else if (_view == 1u)
               {
-                Elite::MoveStardustAstern(canvas, draw, math, state, dust, rng);
+                Elite::MoveStardustAstern(canvas, state, dust, rng);
               }
               else
               {
-                Elite::MoveStardustSideways(canvas, draw, math, state, dust, rng, _view);
+                Elite::MoveStardustSideways(canvas, state, dust, rng, _view);
               }
 
               const std::wstring where =

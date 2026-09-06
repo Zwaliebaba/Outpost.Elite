@@ -606,7 +606,7 @@ namespace Elite
     const bool heard = _loop.effects.PlaySound(sound, carryIn);
 
     // 6502: JSR LASLI -- the burst itself, which draws and heats the gun.
-    (void)FireLaser(screen.canvas, screen.draw, screen.rng, _loop.burst, screen.status, screen.view, heard);
+    (void)FireLaser(screen.canvas, screen.rng, _loop.burst, screen.status, screen.view, heard);
 
     // 6502: PLA / BPL ma1 / LDA #0 / .ma1 AND #%11111010 / STA LASCT -- a beam laser gets no
     // countdown at all, which is what lets it be held down.
@@ -849,8 +849,7 @@ namespace Elite
        * back only on the path that survives -- `JMP DEATH` from inside `TACTICS` never reaches
        * `MAL3` -- and `DEATH` calls `RES2`, which clears the bubble anyway (§6.122).
        */
-      if (!MoveShip(screen.canvas, screen.draw, screen.work, screen.math, screen.flight, _loop.tactics, *screen.flight.blueprint,
-                    screen.view))
+      if (!MoveShip(screen.canvas, screen.work, screen.math, screen.flight, _loop.tactics, *screen.flight.blueprint, screen.view))
       {
         return LoopOutcome::Died;
       }
@@ -987,10 +986,10 @@ namespace Elite
 
         if (!hostile && screen.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
         {
-          LoadPlanetAxes(screen.bubble, _loop.axes, screen.draw); // 6502: JSR SPS1
-          (void)NormaliseAxes(_loop.axes, screen.draw);           // the fall-through
+          (void)LoadPlanetAxes(screen.bubble, _loop.axes);                     // 6502: JSR SPS1
+          const UnitVector towards = NormaliseAxes(_loop.axes).vector; // the fall-through
 
-          if (screen.draw.x2 >= DOCK_MINIMUM_ALIGNMENT &&
+          if (towards.z >= DOCK_MINIMUM_ALIGNMENT &&
               static_cast<std::uint8_t>(screen.work.roof.x.hi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
           {
             arrived = true;
@@ -1073,7 +1072,7 @@ namespace Elite
        */
       if (Has(screen.work.newb, NewbBit::Remove))
       {
-        DrawScannerBlip(screen.canvas, screen.draw, screen.work, type, screen.view);
+        DrawScannerBlip(screen.canvas, screen.work, type, screen.view);
       }
 
       bool drawIt = true;
@@ -1231,7 +1230,7 @@ namespace Elite
      */
     if (screen.status.viewLaser != 0u && screen.status.laserCount < LASER_ERASE_LIMIT)
     {
-      (void)DrawLaserLines(screen.canvas, screen.draw, _loop.burst, screen.view);
+      (void)DrawLaserLines(screen.canvas, _loop.burst, screen.view);
       screen.status.viewLaser = 0u;
     }
 
@@ -1269,7 +1268,7 @@ namespace Elite
      */
     if (screen.view == 0u)
     {
-      MoveStardust(screen.canvas, screen.draw, screen.math, screen.flight, screen.dust, screen.rng, screen.spaceView);
+      MoveStardust(screen.canvas, screen.flight, screen.dust, screen.rng, screen.spaceView);
     }
 
     return LoopOutcome::Continued;

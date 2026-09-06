@@ -66,13 +66,13 @@ namespace Elite
     // 6502: HLOIN2 -- JSR EDGES / STY Y1 / LDA #0 / STA LSO,Y / JMP HLOIN. The carry is dropped.
     (void)ClipSunRow(_state, _math, _draw, _a, _row);
 
-    _draw.y1 = _row;
+    _draw.y1 = _row; // 6502: STY Y1 -- the byte stays faithful until M2-c takes the clipper's six
     if (_row < _state.sun.size())
     {
       _state.sun[_row] = 0;
     }
 
-    DrawHorizontalLine(_canvas, _draw);
+    DrawHorizontalLine(_canvas, _draw.x1, _draw.x2, _draw.y1); // 6502: JMP HLOIN
   }
 
   void ClearSunHeap(PlanetSunState& _state) noexcept
@@ -133,6 +133,13 @@ namespace Elite
       return;
     }
 
+    /*
+     * 6502: X1, Y1, X2, Y2 -- and the walk STARTS FROM WHATEVER X1 AND Y1 HOLD. A run's first
+     * segment has no predecessor, so when entry 0 is not a break the first `LOIN` draws from the
+     * point the last routine to write those bytes left there. `WS2` makes entry 0 a break, so the
+     * game reaches that only through a heap nothing cleared; the bytes stay on the workspace, read
+     * and left as the original leaves them, until M2-c's second commit decides where they live.
+     */
     while (true)
     {
       // 6502: WPL1 -- CPY LSP / BCS WP1.
@@ -159,7 +166,12 @@ namespace Elite
 
       _draw.y2 = y;
       _draw.x2 = _state.BallX(at);
-      DrawLine(_canvas, _draw);
+      const DrawnLine drawn = DrawLine(_canvas, Line{_draw.x1, _draw.y1, _draw.x2, _draw.y2});
+      _draw.x1 = drawn.ends.x1; // the four bytes as LOIN leaves them, the other way round when it swapped
+      _draw.y1 = drawn.ends.y1;
+      _draw.x2 = drawn.ends.x2;
+      _draw.y2 = drawn.ends.y2;
+      _draw.swap = drawn.swapped ? 0xFFu : 0u; // 6502: what LOIN's DEC SWAP left
       ++at;
 
       /*
@@ -167,7 +179,7 @@ namespace Elite
        * when it has, the coordinates in X2/Y2 are no longer this segment's end. So the hand-off to
        * the next segment is SKIPPED, and the next `LOIN` starts from whatever X1/Y1 now hold.
        */
-      if (_draw.swap == 0u)
+      if (!drawn.swapped)
       {
         _draw.x1 = _draw.x2;
         _draw.y1 = _draw.y2;
@@ -296,7 +308,7 @@ namespace Elite
         ++at;
         _state.lsp = at;
 
-        DrawLine(_canvas, _draw);
+        (void)DrawLine(_canvas, Line{_draw.x1, _draw.y1, _draw.x2, _draw.y2});
 
         // 6502: LDA XX13 / BNE BL5 -- an end that had to be moved ends the run too, because the
         // next segment does not start where this one was drawn to.
@@ -967,13 +979,13 @@ namespace Elite
           const std::uint8_t held = _draw.x2;
           _draw.x2 = _math.xx;
           _math.xx = held;
-          DrawHorizontalLine(_canvas, _draw);
+          DrawHorizontalLine(_canvas, _draw.x1, _draw.x2, _draw.y1);
         }
 
         // 6502: PLF23 -- and the other sliver.
         _draw.x1 = _math.xx;
         _draw.x2 = _math.xxNext;
-        DrawHorizontalLine(_canvas, _draw);
+        DrawHorizontalLine(_canvas, _draw.x1, _draw.x2, _draw.y1);
       }
       else
       {
@@ -986,7 +998,7 @@ namespace Elite
         }
         else
         {
-          DrawHorizontalLine(_canvas, _draw);
+          DrawHorizontalLine(_canvas, _draw.x1, _draw.x2, _draw.y1);
         }
       }
 
@@ -1065,7 +1077,7 @@ namespace Elite
     _work.nose.z.hi = static_cast<std::uint8_t>(96u | 0x80u);
   }
 
-  void SeedStardustField(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng, bool _carryIn) noexcept
+  void SeedStardustField(Canvas& _canvas, Stardust& _dust, Rng& _rng, bool _carryIn) noexcept
   {
     /*
      * 6502: nWq -- three random bytes per speck, and the generator is threaded straight through.
@@ -1083,23 +1095,22 @@ namespace Elite
     for (std::uint8_t at = _dust.count; at != 0u; --at)
     {
       RngResult roll = _rng.Next(carry);
-      _draw.zz = static_cast<std::uint8_t>(roll.value | 8u);
-      _dust.z[at] = _draw.zz;
+      const std::uint8_t distance = static_cast<std::uint8_t>(roll.value | 8u); // 6502: STA ZZ
+      _dust.z[at] = distance;
 
       roll = _rng.Next(roll.carry);
-      _dust.x[at] = roll.value;
-      _draw.x1 = roll.value;
+      _dust.x[at] = roll.value; // 6502: STA SX,Y / STA X1
+      const std::uint8_t x1 = roll.value;
 
       roll = _rng.Next(roll.carry);
-      _dust.y[at] = roll.value;
-      _draw.y1 = roll.value;
+      _dust.y[at] = roll.value; // 6502: STA SY,Y / STA Y1
+      const std::uint8_t y1 = roll.value;
 
-      carry = PlotRelativePixel(_canvas, _draw);
+      carry = PlotRelativePixel(_canvas, x1, y1, distance);
     }
   }
 
-  void ClearAllShips(Canvas& _canvas, DrawWorkspace& _draw, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight,
-                     std::uint8_t _view) noexcept
+  void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight, std::uint8_t _view) noexcept
   {
     // 6502: WPSHPS -- LDX #0 / .WSL1 LDA FRIN,X / BEQ WS2 / BMI WS1.
     for (std::size_t slot = 0; slot < _bubble.slots.size(); ++slot)
@@ -1126,7 +1137,7 @@ namespace Elite
       // `XSAV` is how the loop index survives the call.
       _flight.type = type;
       _flight.slot = static_cast<std::uint8_t>(slot);
-      DrawScannerBlip(_canvas, _draw, _work, type, _view);
+      DrawScannerBlip(_canvas, _work, type, _view);
 
       /*
        * 6502: LDY #31 / LDA (INF),Y / AND #%10100111 / STA (INF),Y.
@@ -1149,17 +1160,17 @@ namespace Elite
     ClearSunHeap(_state);
   }
 
-  void SeedStardustAndClearShips(Canvas& _canvas, DrawWorkspace& _draw, Stardust& _dust, Rng& _rng, PlanetSunState& _state, Bubble& _bubble,
-                                 Ship& _work, FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept
+  void SeedStardustAndClearShips(Canvas& _canvas, Stardust& _dust, Rng& _rng, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
+                                 FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept
   {
     // 6502: NWSTARS -- LDA QQ11 / BNE WPSHPS. `QQ11` is the view, zero for the space view, and a
     // menu has no stardust to fill. The same byte then decides whether `SCAN` draws anything.
     if (_view == 0u)
     {
-      SeedStardustField(_canvas, _draw, _dust, _rng, _carryIn);
+      SeedStardustField(_canvas, _dust, _rng, _carryIn);
     }
 
-    ClearAllShips(_canvas, _draw, _state, _bubble, _work, _flight, _view);
+    ClearAllShips(_canvas, _state, _bubble, _work, _flight, _view);
   }
 
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, DrawWorkspace& _draw, GeometryWorkspace& _geometry, MathWorkspace& _math,

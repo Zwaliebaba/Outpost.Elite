@@ -535,7 +535,6 @@ namespace GameLogicTests
     _universe.screen.colourBank = 0x33u;
     _universe.screen.bitmapMode = 0x44u;
     _universe.screen.dashboardShown = 0u;
-    _universe.draw.t2 = 0x88u;
     _universe.explosions = 0x66u;
   }
 

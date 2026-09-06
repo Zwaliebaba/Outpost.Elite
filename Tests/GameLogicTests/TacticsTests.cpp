@@ -120,9 +120,11 @@ namespace GameLogicTests
       }
     }
 
+    /// Nine bytes, not ten: `K3+9` is `TAS2`'s own shift counter (M2-c), which these routines do
+    /// not write at all.
     void CompareAxes(const Cpu6502& _cpu, const Labels& _at, const Elite::K3Block& _axes, const std::wstring& _where)
     {
-      for (std::size_t byte = 0; byte < _axes.size(); ++byte)
+      for (std::size_t byte = 0; byte < 9u; ++byte)
       {
         Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(_at.k3 + byte)], _axes[byte],
                          (_where + L": K3+" + std::to_wstring(byte)).c_str());
@@ -258,16 +260,13 @@ namespace GameLogicTests
                 PokeShip(block, which + 2u, vy);
                 PokeShip(block, which + 4u, sx);
 
-                Elite::DrawWorkspace draw;
-                draw.x1 = sx;
-                draw.y1 = vx;
-                draw.x2 = vy;
+                const Elite::UnitVector vector{sx, vx, vy}; // 6502: XX15, XX15+1, XX15+2
 
                 const std::uint16_t base = (station != 0) ? StationBlock(at) : at.inwk;
                 WriteBlock(cpu, base, block);
-                cpu.memory[at.x1] = draw.x1;
-                cpu.memory[at.y1] = draw.y1;
-                cpu.memory[at.x2] = draw.x2;
+                cpu.memory[at.x1] = vector.x;
+                cpu.memory[at.y1] = vector.y;
+                cpu.memory[at.x2] = vector.z;
                 cpu.memory[at.q] = 0x5Au;
                 cpu.memory[at.r] = 0x5Au;
                 cpu.memory[at.s] = 0x5Au;
@@ -276,7 +275,7 @@ namespace GameLogicTests
                 const Elite::Testing::RunResult run = cpu.CallSubroutine((station != 0) ? tas4 : tas3, 20'000);
                 Assert::IsTrue(run.completed, L"the dot product returned");
 
-                const Elite::AddSignedResult got = Elite::DotProductWithShip(block, draw, which);
+                const Elite::AddSignedResult got = Elite::DotProductWithShip(block, vector, which);
 
                 const std::wstring where = WidenText(std::string(station != 0 ? "TAS4" : "TAS3") + " vector " + std::to_string(which) +
                                                      " (" + std::to_string(vx) + "," + std::to_string(vy) + "," + std::to_string(sx) + ")");
@@ -320,16 +319,12 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(tas6, 2'000);
             Assert::IsTrue(run.completed, L"TAS6 returned");
 
-            Elite::DrawWorkspace draw;
-            draw.x1 = x;
-            draw.y1 = y;
-            draw.x2 = z;
-            Elite::NegateVector(draw);
+            const Elite::UnitVector negated = Elite::NegateVector(Elite::UnitVector{x, y, z});
 
             const std::wstring where = WidenText("TAS6 " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z));
-            Assert::AreEqual(cpu.memory[at.x1], draw.x1, (where + L": XX15").c_str());
-            Assert::AreEqual(cpu.memory[at.y1], draw.y1, (where + L": XX15+1").c_str());
-            Assert::AreEqual(cpu.memory[at.x2], draw.x2, (where + L": XX15+2").c_str());
+            Assert::AreEqual(cpu.memory[at.x1], negated.x, (where + L": XX15").c_str());
+            Assert::AreEqual(cpu.memory[at.y1], negated.y, (where + L": XX15+1").c_str());
+            Assert::AreEqual(cpu.memory[at.x2], negated.z, (where + L": XX15+2").c_str());
           }
         }
       }
@@ -1471,7 +1466,9 @@ namespace GameLogicTests
             CompareTacticsUniverse(cpu, universe, at, context);
 
             // 6502: K3 itself, which the AI comparison does not reach because `TACTICS` rebuilds it.
-            for (std::size_t byte = 0; byte < 10u; ++byte)
+            // Nine bytes: `K3+9` is the shift counter `TAS2` builds for itself and nothing reads,
+            // a local since M2-c, so the port leaves whatever was there.
+            for (std::size_t byte = 0; byte < 9u; ++byte)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.k3 + byte)], universe.axes[byte],
                                (context + L": K3+" + std::to_wstring(byte)).c_str());
