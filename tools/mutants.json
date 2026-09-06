@@ -233,16 +233,16 @@
           "file": "GameLogic/Hyperspace.cpp",
           "find": "if (roll.value >= WITCHSPACE_ROLL)",
           "replace": "if (roll.value > WITCHSPACE_ROLL)",
-          "expect": "survives",
-          "note": "CMP #253 / BCS MJP -- three jumps in 256 mis-jump, and `>=` to `>` makes it two. SURVIVED on this tool's first run, and it is a real gap rather than an equivalent. TheJumpMatchesTT18 sweeps four generator seeds by three fuels by three distances by four views, and its own comment says the seeds were chosen so that BOTH SIDES of the CMP are reached -- which they are. Reaching both sides is not landing ON the boundary, and 253 exactly is never rolled, so the one value that tells `>=` from `>` is the one value never tried. Section 6.132 in a new instance: the counter wanted is distinct answers per BRANCH, and here it is distinct values at the branch. Closing it is a seed that rolls 253."
+          "expect": "caught",
+          "note": "CMP #253 / BCS MJP -- three jumps in 256 mis-jump, and `>=` to `>` makes it two. Survived every run until 2026-09-06 because the four seeds rolled 0, 104, 206 and 252, and 252 is one BELOW the boundary: the only value that separates the two operators is 253 itself. The roll is the first DORND from the seed, so the fifth seed was inverted rather than searched (plan section 6.156)."
         },
         {
           "id": "hyp-ctrl-and",
           "file": "GameLogic/Hyperspace.cpp",
           "find": "if (_controlHeld && _patg)",
           "replace": "if (_controlHeld || _patg)",
-          "expect": "survives",
-          "note": "JSR CTRL / AND PATG / BMI ptg -- the cheat needs BOTH the key and the option, and `&&` to `||` is not caught. Nothing in TheJump varies the two flags: TheCheatFlagMatchesPtg tests `ptg` ALONE, over all 256 values of COK, and never enters PerformJump. The `&&` was also unreachable in the app until 2026-09-05, because JumpOf hardcoded controlHeld to false (section 6.147) -- so the fix that made the galactic hyperdrive reachable also made this gap matter, and the tool found it the same day. Closing it is four cases in PerformJump over the two flags."
+          "expect": "caught",
+          "note": "JSR CTRL / AND PATG / BMI ptg -- the cheat needs BOTH the key and the option. Survived because the sweep passed false for both and `&&` and `||` agree there. The test's own comment said the oracle could not answer `CTRL`; `CTRL` is `LDX #6` falling into `DKS4`, which on the C64 is `LDA KEYLOOK,X / TAX / RTS` over ordinary memory. All four combinations are a dimension of the sweep now (plan section 6.156)."
         },
         {
           "id": "hyp-fuel-zero",
