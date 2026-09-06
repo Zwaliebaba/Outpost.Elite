@@ -1511,7 +1511,20 @@ answer; the comparisons that were about the kernel's scratch (`T`, `T1`, `U`, `w
 The ratchet: register-params 64 → 22, workspace-params 207 → 151, origin-markers 3,721 → 3,798
 (the frame's `Q` at its five writers and the kernel's scratch where it became locals, labelled;
 rule 4). Merged the owner's death-sequence fix (`EE51`'s carry, `SeedExplosionCloud`, seven new
-mutants) from the branch mid-slice; no conflicts.
+mutants) from the branch mid-slice; no conflicts. **Mutants** (rule 3): `python tools/mutate.py
+--runner portable` against the committed slice, 72 of 72 as recorded — 68 caught and the four
+recorded survivors surviving. The first run said 67 and 5: the owner's `cs-ll9-carry-hit`
+survived, and it survived on the owner's own head too (their entry above says the tally was the
+next run's to report). Two things had hidden it. The frame comparison never mirrored or compared
+`RAND`, and the fixture's "on top of us" ships are behind the player by the time `HITCH` looks —
+`MVEIT` takes the speed off z first — so no case in the per-ship sweep ever reached `LL9` with the
+carry set; by the same token none of its "at close range" laser cases reaches `ApplyLaserHit`,
+which this entry names and does not close. The comparison now carries `RAND` both ways and a case
+two units ahead gives `HITCH` a ship to say yes to, and the mutant is caught by the generator's
+state. The harness also found its own abort on the way: the owner's death-screen test threw from
+inside a `noexcept` frame callback, which ended the runner instead of failing the test, so the
+cloud-seed self-test aborted every portable run; `Watching` records the failure and asserts after
+`Die`, and the self-test fails the test as it must.
 
 **2026-09-06 — `main` merged in, mid M1-f.** The owner's death-sequence pacing (`HoldFlightFrame`,
 a `TunnelEffects*` on `Die`) came in from `main` with one conflict — `leaving.world.dashboard`,

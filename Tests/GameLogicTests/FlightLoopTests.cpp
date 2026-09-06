@@ -1253,6 +1253,20 @@ namespace GameLogicTests
       MirrorFrame(_frame, cpu, _at, _loop);
 
       /*
+       * 6502: RAND -- the generator goes in with the frame and is compared on the way out.
+       *
+       * `Mirror` does not carry it, and until 2026-09-06 no frame here did: a frame that seeds an
+       * explosion cloud runs `DORND` four times, the first on the carry `LL9` was reached with, and
+       * with the fixture's heap pointers outside the arena the seeds it writes are compared nowhere.
+       * The generator's state after the frame is the one place that carry is visible, and the
+       * `cs-ll9-carry-hit` mutant is what found the comparison missing.
+       */
+      for (std::size_t index = 0; index < 4u; ++index)
+      {
+        cpu.memory[static_cast<std::uint16_t>(_at.rand + index)] = _frame.universe.rng.State()[index];
+      }
+
+      /*
        * The ship line heap, which the port keeps apart from the blocks and the original does not.
        *
        * `LineHeap`'s arena runs from `K%` to `LS%` and the bottom of it IS the block region, which
@@ -1432,6 +1446,12 @@ namespace GameLogicTests
       const std::uint16_t bottom =
         static_cast<std::uint16_t>(cpu.memory[_loop.slsp] | (cpu.memory[static_cast<std::uint16_t>(_loop.slsp + 1u)] << 8));
       Assert::AreEqual<std::uint32_t>(bottom, _frame.universe.bubble.heapBottom.Address(), (_context + L": SLSP").c_str());
+
+      for (std::size_t index = 0; index < 4u; ++index)
+      {
+        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(_at.rand + index)], _frame.universe.rng.State()[index],
+                         (_context + L": RAND+" + std::to_wstring(index)).c_str());
+      }
 
       for (std::size_t slot = 0; slot < _frame.universe.bubble.slots.size(); ++slot)
       {
@@ -1867,6 +1887,7 @@ namespace GameLogicTests
         std::uint8_t scoops;   ///< 6502: BST
         std::uint8_t view;     ///< 6502: QQ11
         bool empty;
+        bool inSights = false; ///< dead ahead and close: what `HITCH` says yes to
       };
 
       const std::vector<Case> CASES = {
@@ -1878,6 +1899,7 @@ namespace GameLogicTests
         {"on top of us with scoops", 0x00, 0x00, 0, 0, 0xFF, 0, false},
         {"on top of us, exploding", 0x00, 0x20, 0, 0, 0, 0, false},
         {"on top of us, already dead", 0x00, 0x80, 0, 0, 0, 0, false},
+        {"in the sights, already dead", 0x00, 0x80, 0, 0, 0, 0, false, true},
         {"the energy bomb going off", 0x20, 0x00, 0, 0xFF, 0, 0, false},
         {"the bomb with the laser on", 0x00, 0x00, 15, 0xFF, 0, 0, false},
         {"far enough to leave", 0xF0, 0x00, 0, 0, 0, 0, false},
@@ -1895,6 +1917,22 @@ namespace GameLogicTests
         {
           Frame frame(0x4Du);
           PopulateBubble(frame, item.distance, item.state, item.empty);
+
+          /*
+           * "On top of us" is BEHIND us by the time `HITCH` looks: `MVEIT` takes the player's speed
+           * off z first, so a ship at the origin has a negative z and the sights never close on it.
+           * Two units ahead survives the move with x and y still under a byte, so `HITCH` sets the
+           * carry -- and a ship that arrives at `LL9` killed seeds its cloud's first `DORND` on
+           * that carry (§6.157), which is what the `cs-ll9-carry-hit` mutant watches for.
+           */
+          if (item.inSights)
+          {
+            for (std::size_t slot = 2; slot < 5u; ++slot)
+            {
+              frame.universe.bubble.blocks[slot].z.hi = 2u;
+            }
+          }
+
           frame.universe.status.laserPower = item.laser;
           frame.universe.status.missileArmed = missileArmed;
           frame.universe.commander.energyBomb = item.bomb;
@@ -1915,7 +1953,7 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(14u * 2u, compared, L"the whole sweep ran");
+      Assert::AreEqual<std::uint32_t>(15u * 2u, compared, L"the whole sweep ran");
       Assert::IsTrue(killed > 0u, L"some bubbles emptied");
     }
   };
