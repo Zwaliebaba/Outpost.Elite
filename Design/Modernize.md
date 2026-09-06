@@ -1298,6 +1298,43 @@ at all. Doing that here would be two patterns in one slice (rule 8). So the seam
 and **`effects-seams` reaches five in M3-b rather than four** — the M3-b row's acceptance is wrong by
 one, and this is where that is recorded rather than discovered at the ratchet.
 
+**`ShipDrawEffects` CANNOT GO IN THIS SLICE EITHER, and the reason is the oracle rather than the
+port.** M3-b-1d was built and reverted; this is what it found, recorded so the next attempt starts
+from evidence rather than from the plan's optimism.
+
+`DrawPlanetOrSun` is `LL25`'s `JMP PLANET` and `DrawExplosion` is `LL14`'s `JMP DOEXP`, and both
+are routines this library has had since slices 3c and 4b-b. The removal itself is small: `DrawShip`
+takes `(Universe&, Ports&, Ship& _slot, bool _carryIn)` — thirteen arguments become four, because
+every caller passed the same nine members of the universe — and `Ports` trades `ShipDrawEffects&
+drawing` for `ExplosionEffects& explosion`, which is a port in §4.5's sense and stays. That part
+worked; `ShipDrawTests`, `TacticsTests` and `LaunchTests` went green.
+
+**THE FLIGHT LOOP DID NOT, AND THE OBSTACLE IS THAT `XX21` IS THE VIC-II.** §6.108: the oracle's
+memory is FLAT, so the sprite registers at `&D000` and the blueprint pointer table at `XX21` are the
+same bytes — the harness even names the field `Where::vic = Label("XX21")`. `SETL1` maps the I/O
+page in on real hardware and is trapped here, so `PTCLS2`'s `STA VIC+&17`, `+&1D`, `+&2`, `+&3`,
+`+&10` and `+&15` land on the pointers for ship types 2, 3, 9, 11, 12 and 15. While `DOEXP` was a
+seam the oracle never ran it and nothing was hurt. Run it on both sides and the first exploding ship
+in a frame corrupts the blueprints of the ships drawn after it: `M% whole (MCNT 2, distance 0,
+shape 2): XX0+1 -- game has 218, port has 216`. That is the ORACLE reading its own damaged table,
+which no change to `GameLogic/` can fix.
+
+**Two fixture faults came out with it and are worth keeping.** The flight-loop fixtures give every
+ship a line heap at `&0C00`, outside `LineHeap`'s `K%`-to-`LS%` window — §8 already noted in passing
+that "with the fixture's heap pointers outside the arena the seeds it writes are compared nowhere",
+and with `DOEXP` running the cloud is DRAWN from those bytes, so the port put every particle in one
+place and the game read whatever `&0C00` held (28 screen bytes apart on `MAL1 (in the sights,
+already dead)`). And `Where` has no `SUNX` and no `LSY2`, so a fixture cannot yet put a DRAWN body
+into both machines: `MA23 whole frame (a sun close enough to draw, planet at 97)` differs at screen
+offset 8033. Both are one-line fixes; neither helps while the VIC aliasing stands.
+
+**What unblocks it is a harness slice, not a library one**: `Cpu6502` has to model the 6510 port
+register that `SETL1` writes, so that a store to `&D000`-`&DFFF` with the I/O page mapped in goes to
+a VIC register file instead of to RAM. That is the same change that would let `MVTRIBS` and a drawn
+ship coexist in one frame, which `Universe::spriteRegistersAreOurs` exists to work around today. So
+`ShipDrawEffects` stays until then, and **`effects-seams` reaches six in M3-b rather than five** —
+`SpawnChildEffects` for rule 8's reason and this one for the oracle's.
+
 **M3-b-2 — `SoundSink`.** `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep` and
 `FlightLoopEffects`'s music pair collapse into one port that takes a SID REGISTER WRITE. The library
 already owns `SoundBuffer`, the music player and the tables; what it lacks is somewhere to put them,
@@ -1346,7 +1383,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 |---|---|---|---|
 | **M3-0 The app's member check** ✅ **built 2026-09-06 (§8)** | `check_outpost.py` gains a third half: every member the app names on an `Elite::`-typed variable, against that type's members as `GameLogic/*.h` declares them, bases closed over. A `--self-test` plants one that cannot resolve. | In CI as the fourteenth check; 111 accesses resolved on the tree as it stands. | 1 |
 | **M3-a Universe** ✅ **built 2026-09-06 (§8)** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`MissionBay` replaced by `(Universe&, Ports&)` on every routine; `FlightSession` and `Outpost::Game` own the universe and the ports between them. | Green on both legs; `aggregate-refs` 78 → 14, and the fourteen ARE `Ports` — "at zero" is M3-b's, which collapses that one struct. `JumpState` is values rather than references and goes with M3-c's `Game`. **The Windows job was the gate and caught two defects** (§8). | 4 |
-| **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at **five**, not four: `SpawnChildEffects` needs M4-a's typed stage result and the slice plan records why. | 4 |
+| **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at **six**, not four: `SpawnChildEffects` needs M4-a's typed stage result and `ShipDrawEffects` needs the oracle to model the 6510 port register, and the slice plan records both. | 4 |
 | **M3-c Game** | `Elite::Game` with `Reset`, `Step`, `Frame`, `Sounds`, `StateHash`; `Perform`, `Leave`, the docked pass, `Advance` and `AdvancePaused` moved from `Main.cpp`; `Mode` explicit. `Main.cpp` at its target shape. | `DockedSessionTests` and the M0-c replay drive `Game::Step` and reproduce their stored hashes; `main-lines` in the ratchet under 300. | 4–5 |
 | **M3-d ADR-007** | State ownership and the replay hash, written from M3-a..c as built. | Accepted. | 1 |
 
