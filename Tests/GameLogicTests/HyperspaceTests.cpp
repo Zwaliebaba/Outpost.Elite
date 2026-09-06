@@ -206,20 +206,18 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(tt18, 40'000'000, tt110);
               Assert::IsTrue(run.completed, L"TT18 reached its end");
 
-              Elite::FlightScreen screen = universe.universe.Screen();
-              Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
-                                     universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
+              Elite::Ports ports = universe.Ports();
 
               Elite::Rng rng;
               rng.SetState(seed);
-              screen.rng.SetState(seed);
+              universe.universe.rng.SetState(seed);
 
-              Elite::CurrentSystem current;
               Elite::SystemSeeds selected{};
               Elite::MarketState market;
 
-              const Elite::JumpResult result = Elite::PerformJump(loop, current, selected, jump, described, market, universe.effects, nullptr,
-                                                                  cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, controlHeld, patg);
+              const Elite::JumpResult result =
+                Elite::PerformJump(universe.universe, ports, selected, jump, described, market, universe.effects, nullptr,
+                                   cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, controlHeld, patg);
 
               const std::wstring context =
                 WidenText("TT18 seed " + std::to_string(seed[0]) + " fuel " + std::to_string(fuel) + " dist " + std::to_string(distance)
@@ -230,7 +228,7 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.memory[at.qq11], universe.universe.view, (context + L": QQ11").c_str());
               for (std::size_t byte = 0; byte < 4u; ++byte)
               {
-                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + byte)], screen.rng.State()[byte],
+                Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.rand + byte)], universe.universe.rng.State()[byte],
                                  (context + L": RAND+" + std::to_wstring(byte)).c_str());
               }
 
@@ -348,15 +346,12 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ghy, 40'000'000);
             Assert::IsTrue(run.completed, L"Ghy returned");
 
-            Elite::FlightScreen screen = universe.universe.Screen();
-            Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
-                                   universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
+            Elite::Ports ports = universe.Ports();
 
-            Elite::CurrentSystem current;
             Elite::SystemSeeds selected{};
             Elite::JumpState jump;
 
-            Elite::GalacticJump(loop, current, galaxySeeds, selected, jump, chart, nullptr);
+            Elite::GalacticJump(universe.universe, ports, galaxySeeds, selected, jump, chart, nullptr);
 
             const std::wstring context = WidenText("Ghy seed " + std::to_string(seedIndex) + (fitted != 0u ? " fitted" : " none") +
                                                    " galaxy " + std::to_string(galaxy));
@@ -450,11 +445,9 @@ namespace GameLogicTests
                                          std::to_wstring(run.instructions) + L" instructions")
                                           .c_str());
 
-          Elite::FlightScreen screen = universe.universe.Screen();
-          Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
-                                 universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
+          Elite::Ports ports = universe.Ports();
 
-          Elite::EnterWitchspace(loop, universe.universe.commander, universe.effects, nullptr);
+          Elite::EnterWitchspace(universe.universe, ports, universe.universe.commander, universe.effects, nullptr);
 
           const std::wstring context = WidenText("MJP seed " + std::to_string(seedIndex) + " QQ1 " + std::to_string(systemY));
 
@@ -687,12 +680,10 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(escape, 40'000'000);
         Assert::IsTrue(run.completed, L"ESCAPE reached GOIN");
 
-        Elite::FlightScreen screen = universe.universe.Screen();
-        Elite::FlightLoop loop{screen,     universe.keys,       universe.control, universe.options, universe.burst,   universe.heap,
-                               universe.clip, universe.projection, universe.axes,    universe.effects, universe.effects, universe.effects};
+        Elite::Ports ports = universe.Ports();
 
         std::uint8_t fuel = one.fuel;
-        Elite::AbandonShip(loop, fuel);
+        Elite::AbandonShip(universe.universe, ports, fuel);
 
         const std::wstring context = WidenText("ESCAPE seed " + std::to_string(one.seed) + " trib " + std::to_string(one.tribbleHigh) +
                                                "/" + std::to_string(one.tribbleLow));

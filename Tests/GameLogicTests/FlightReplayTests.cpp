@@ -123,14 +123,13 @@ namespace GameLogicTests
       const std::uint8_t homeY = commander.systemY;
       const Elite::NearestSystem home = Elite::FindNearestSystem(commander.galaxySeeds, homeX, homeY, homeX, homeY);
 
-      _port.current.seeds = home.seeds;
-      _port.current.economy = home.data.economy;
-      _port.current.government = home.data.government;
-      _port.current.techLevel = home.data.techLevel;
-      _port.universe.techLevel = home.data.techLevel;
+      _port.universe.current.seeds = home.seeds;
+      _port.universe.current.economy = home.data.economy;
+      _port.universe.current.government = home.data.government;
+      _port.universe.current.techLevel = home.data.techLevel;
       _port.universe.view = 1u; // a docked screen, which the launch replaces with the space view
 
-      Elite::ResetGame(_port.loop, _port.docked); // 6502: RESET
+      Elite::ResetGame(_port.universe, _port.ports, _port.docked); // 6502: RESET
     }
 
     using Perturbation = std::function<void(FlightPort&)>;
@@ -144,8 +143,8 @@ namespace GameLogicTests
 
       Prepare(_port);
       Elite::SystemSeeds selected{};
-      Elite::Launch(_port.loop, nullptr, _port.docked, _port.universe.commander.systemX,
-                    _port.universe.commander.systemY, _port.universe.techLevel, selected); // 6502: TT110
+      Elite::Launch(_port.universe, _port.ports, nullptr, _port.docked, _port.universe.commander.systemX,
+                    _port.universe.commander.systemY, selected); // 6502: TT110
       checkpoint();
 
       if (_perturb)
@@ -337,15 +336,19 @@ namespace GameLogicTests
       const Trace unperturbed = Fly(*baseline);
 
       const std::vector<std::pair<const wchar_t*, Perturbation>> perturbations = {
-        {L"the planet's x", [](FlightPort& _port) { _port.universe.bubble.blocks[0].x.lo = static_cast<std::uint8_t>(_port.universe.bubble.blocks[0].x.lo ^ 0x01u); }},
-        {L"the generator", [](FlightPort& _port)
+        {L"the planet's x", [](FlightPort& _port)
+         { _port.universe.bubble.blocks[0].x.lo = static_cast<std::uint8_t>(_port.universe.bubble.blocks[0].x.lo ^ 0x01u); }},
+        {L"the generator",
+         [](FlightPort& _port)
          {
            std::array<std::uint8_t, 4> state = _port.universe.rng.State();
            state[1] = static_cast<std::uint8_t>(state[1] ^ 0x80u);
            _port.universe.rng.SetState(state);
          }},
-        {L"the fuel", [](FlightPort& _port) { _port.universe.commander.fuel = static_cast<std::uint8_t>(_port.universe.commander.fuel - 1u); }},
-        {L"a speck of stardust", [](FlightPort& _port) { _port.universe.dust.z[3] = static_cast<std::uint8_t>(_port.universe.dust.z[3] ^ 0x40u); }},
+        {L"the fuel",
+         [](FlightPort& _port) { _port.universe.commander.fuel = static_cast<std::uint8_t>(_port.universe.commander.fuel - 1u); }},
+        {L"a speck of stardust",
+         [](FlightPort& _port) { _port.universe.dust.z[3] = static_cast<std::uint8_t>(_port.universe.dust.z[3] ^ 0x40u); }},
       };
 
       for (const auto& [name, perturb] : perturbations)

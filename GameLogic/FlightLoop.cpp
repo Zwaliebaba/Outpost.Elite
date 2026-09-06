@@ -274,35 +274,34 @@ namespace Elite
     return static_cast<std::uint8_t>(_blueprint.targetArea & 0xFFu) >= area.lo; // 6502: (XX0),1 -- the low byte
   }
 
-  void FireMissile(FlightLoop& _loop) noexcept
+  void FireMissile(Universe& _universe, Ports& _ports) noexcept
   {
-    FlightScreen& screen = _loop.screen;
 
     // 6502: LDX #MSL / JSR FRS1 / BCC FR1 -- a full bubble means the missile stays on the rail.
-    if (!_loop.effects.SpawnAhead(ShipType::Missile))
+    if (!_ports.loop.SpawnAhead(ShipType::Missile))
     {
       // 6502: .FR1 LDA #201 / JMP MESS -- "MISSILE JAMMED".
-      ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, MESSAGE_MISSILE_JAMMED, screen.view);
+      ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, MESSAGE_MISSILE_JAMMED,
+                  _universe.view);
       return;
     }
 
     // 6502: LDX MSTG / JSR GINF / LDA FRIN,X / JSR ANGRY -- the TARGET's slot and type, not the
     // missile's.
-    const std::uint8_t target = screen.bubble.missileTarget;
-    _loop.effects.Anger(target, TypeOf(screen.bubble.slots[target]));
+    const std::uint8_t target = _universe.bubble.missileTarget;
+    _ports.loop.Anger(target, TypeOf(_universe.bubble.slots[target]));
 
     // 6502: LDY #BLACK2 / JSR ABORT -- the lock is gone and so is the indicator.
-    AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.missiles, MISSILE_NONE);
+    AbortMissileLock(_universe.canvas, _universe.bubble, _universe.status.missileArmed, _universe.commander.missiles, MISSILE_NONE);
 
     // 6502: DEC NOMSL -- one fewer on the rail.
-    screen.commander.missiles = static_cast<std::uint8_t>(screen.commander.missiles - 1u);
+    _universe.commander.missiles = static_cast<std::uint8_t>(_universe.commander.missiles - 1u);
 
-    (void)_loop.effects.PlaySound(SOUND_MISSILE, false); // 6502: LDY #sfxwhosh / JMP NOISE
+    (void)_ports.loop.PlaySound(SOUND_MISSILE, false); // 6502: LDY #sfxwhosh / JMP NOISE
   }
 
-  LoopOutcome BeginFlightFrame(FlightLoop& _loop) noexcept
+  LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept
   {
-    FlightScreen& screen = _loop.screen;
 
     /*
      * 6502: LDA K% / STA RAND -- the planet's own x low byte, into the generator, every frame.
@@ -310,9 +309,9 @@ namespace Elite
      * Only the FIRST of the four seed bytes, so the other three carry on from wherever the last
      * call left them: this stirs the sequence rather than resetting it.
      */
-    std::array<std::uint8_t, 4> seed = screen.rng.State();
-    seed[0] = screen.bubble.blocks[0].x.lo;
-    screen.rng.SetState(seed);
+    std::array<std::uint8_t, 4> seed = _universe.rng.State();
+    seed[0] = _universe.bubble.blocks[0].x.lo;
+    _universe.rng.SetState(seed);
 
     /*
      * 6502: LDA TRIBCT / BEQ NOMVETR / JMP MVTRIBS -- and `MVTRIBS` jumps back to `NOMVETR`, so
@@ -322,24 +321,24 @@ namespace Elite
      * routine on the other side did not exist. It does now, and the seam is deleted rather than
      * answered, which is §6.73 for the ninth time.
      */
-    if (screen.trumbles.count != 0u)
+    if (_universe.trumbles.count != 0u)
     {
-      MoveTrumbleSprites(screen.trumbles, screen.video, screen.rng, screen.flight.mainLoopCounter, screen.sight);
+      MoveTrumbleSprites(_universe.trumbles, _universe.video, _universe.rng, _universe.flight.mainLoopCounter, _ports.sight);
     }
 
     // ---- part 2: the roll ------------------------------------------------------------------------
 
     // 6502: LDX JSTX / JSR cntr / JSR cntr -- twice, so the roll creeps back by two per frame.
-    std::uint8_t roll = _loop.control.roll;
-    roll = DampTowardsCentre(roll, _loop.control.dockingComputer, _loop.options.dampingDisabled);
-    roll = DampTowardsCentre(roll, _loop.control.dockingComputer, _loop.options.dampingDisabled);
+    std::uint8_t roll = _universe.control.roll;
+    roll = DampTowardsCentre(roll, _universe.control.dockingComputer, _universe.options.dampingDisabled);
+    roll = DampTowardsCentre(roll, _universe.control.dockingComputer, _universe.options.dampingDisabled);
 
     // 6502: TXA / EOR #%10000000 / TAY / AND #%10000000 / STA ALP2 / STX JSTX / EOR #%10000000 /
     // STA ALP2+1 -- the rate turned into a sign and a magnitude, and the sign kept both ways round.
     const std::uint8_t rollSigned = static_cast<std::uint8_t>(roll ^ 0x80u);
-    screen.flight.alp2 = static_cast<std::uint8_t>(rollSigned & 0x80u);
-    _loop.control.roll = roll;
-    screen.flight.alp2Next = static_cast<std::uint8_t>(screen.flight.alp2 ^ 0x80u);
+    _universe.flight.alp2 = static_cast<std::uint8_t>(rollSigned & 0x80u);
+    _universe.control.roll = roll;
+    _universe.flight.alp2Next = static_cast<std::uint8_t>(_universe.flight.alp2 ^ 0x80u);
 
     // 6502: TYA / BPL P%+7 / EOR #%11111111 / CLC / ADC #1 -- the magnitude, negated if it is on the
     // far side of the centre.
@@ -366,21 +365,21 @@ namespace Elite
       rollMagnitude = static_cast<std::uint8_t>(rollMagnitude >> 1u);
     }
 
-    screen.flight.alp1 = rollMagnitude; // 6502: STA ALP1
-    screen.flight.alpha = static_cast<std::uint8_t>(rollMagnitude | screen.flight.alp2);
+    _universe.flight.alp1 = rollMagnitude; // 6502: STA ALP1
+    _universe.flight.alpha = static_cast<std::uint8_t>(rollMagnitude | _universe.flight.alp2);
 
     // ---- part 2: the pitch, which is not the same shape ------------------------------------------
 
     // 6502: LDX JSTY / JSR cntr -- ONCE, where the roll gets two.
-    std::uint8_t pitch = _loop.control.pitch;
-    pitch = DampTowardsCentre(pitch, _loop.control.dockingComputer, _loop.options.dampingDisabled);
+    std::uint8_t pitch = _universe.control.pitch;
+    pitch = DampTowardsCentre(pitch, _universe.control.dockingComputer, _universe.options.dampingDisabled);
 
     // 6502: TXA / EOR #%10000000 / TAY / AND #%10000000 / STX JSTY / STA BET2+1 / EOR #%10000000 /
     // STA BET2 -- the two sign bytes are written the OTHER way round from the roll's.
     const std::uint8_t pitchSigned = static_cast<std::uint8_t>(pitch ^ 0x80u);
-    _loop.control.pitch = pitch;
-    screen.flight.bet2Next = static_cast<std::uint8_t>(pitchSigned & 0x80u);
-    screen.flight.bet2 = static_cast<std::uint8_t>(screen.flight.bet2Next ^ 0x80u);
+    _universe.control.pitch = pitch;
+    _universe.flight.bet2Next = static_cast<std::uint8_t>(pitchSigned & 0x80u);
+    _universe.flight.bet2 = static_cast<std::uint8_t>(_universe.flight.bet2Next ^ 0x80u);
 
     // 6502: TYA / BPL P%+4 / EOR #%11111111 -- and no negate-by-adding-one here, because the `ADC`
     // below does it.
@@ -405,37 +404,37 @@ namespace Elite
       pitchMagnitude = static_cast<std::uint8_t>(pitchMagnitude >> 1u);
     }
 
-    screen.flight.bet1 = pitchMagnitude; // 6502: STA BET1
-    screen.flight.beta = static_cast<std::uint8_t>(pitchMagnitude | screen.flight.bet2);
+    _universe.flight.bet1 = pitchMagnitude; // 6502: STA BET1
+    _universe.flight.beta = static_cast<std::uint8_t>(pitchMagnitude | _universe.flight.bet2);
 
     // ---- part 3: the keys ------------------------------------------------------------------------
 
-    Commander& commander = screen.commander;
+    Commander& commander = _universe.commander;
 
     // 6502: LDA KY2 / BEQ MA17 / LDA DELTA / CMP #40 / BCS MA17 / INC DELTA -- forty is the ceiling.
-    if (_loop.keys[KEY_SPEED_UP] != 0u && screen.flight.delta < 40u)
+    if (_universe.keys[KEY_SPEED_UP] != 0u && _universe.flight.delta < 40u)
     {
-      screen.flight.delta = static_cast<std::uint8_t>(screen.flight.delta + 1u);
+      _universe.flight.delta = static_cast<std::uint8_t>(_universe.flight.delta + 1u);
     }
 
     // 6502: .MA17 LDA KY1 / BEQ MA4 / DEC DELTA / BNE MA4 / INC DELTA -- and one is the floor, so
     // the ship never stops dead.
-    if (_loop.keys[KEY_SLOW_DOWN] != 0u)
+    if (_universe.keys[KEY_SLOW_DOWN] != 0u)
     {
-      screen.flight.delta = static_cast<std::uint8_t>(screen.flight.delta - 1u);
-      if (screen.flight.delta == 0u)
+      _universe.flight.delta = static_cast<std::uint8_t>(_universe.flight.delta - 1u);
+      if (_universe.flight.delta == 0u)
       {
-        screen.flight.delta = 1u;
+        _universe.flight.delta = 1u;
       }
     }
 
     // 6502: .MA4 LDA KY15 / AND NOMSL / BEQ MA20 -- the AND is the "have we got one" test, so the
     // key does nothing at all with an empty rail.
-    if ((_loop.keys[KEY_UNARM_MISSILE] & commander.missiles) != 0u)
+    if ((_universe.keys[KEY_UNARM_MISSILE] & commander.missiles) != 0u)
     {
-      AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, commander.missiles, MISSILE_READY);
-      (void)_loop.effects.PlaySound(SOUND_BOOP, false); // 6502: LDY #sfxboop / JSR NOISE
-      screen.status.missileArmed = 0u;                  // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
+      AbortMissileLock(_universe.canvas, _universe.bubble, _universe.status.missileArmed, commander.missiles, MISSILE_READY);
+      (void)_ports.loop.PlaySound(SOUND_BOOP, false); // 6502: LDY #sfxboop / JSR NOISE
+      _universe.status.missileArmed = 0u;                  // 6502: LDA #0 / STA MSAR, which `ABORT` has already done
     }
 
     /*
@@ -446,10 +445,10 @@ namespace Elite
      * seeking cannot be re-armed. And `STA MSAR` stores the KEY's value rather than a flag of its
      * own, which is &FF because that is what the scan writes.
      */
-    if ((screen.bubble.missileTarget & 0x80u) != 0u && _loop.keys[KEY_ARM_MISSILE] != 0u && commander.missiles != 0u)
+    if ((_universe.bubble.missileTarget & 0x80u) != 0u && _universe.keys[KEY_ARM_MISSILE] != 0u && commander.missiles != 0u)
     {
-      screen.status.missileArmed = _loop.keys[KEY_ARM_MISSILE];
-      SetMissileIndicator(screen.canvas, commander.missiles, MISSILE_ARMED);
+      _universe.status.missileArmed = _universe.keys[KEY_ARM_MISSILE];
+      SetMissileIndicator(_universe.canvas, commander.missiles, MISSILE_ARMED);
     }
 
     /*
@@ -461,15 +460,15 @@ namespace Elite
      * does anything. Nothing else in the routine branches that far forward.
      */
     bool checkedTheRest = true;
-    if (_loop.keys[KEY_FIRE_MISSILE] != 0u)
+    if (_universe.keys[KEY_FIRE_MISSILE] != 0u)
     {
-      if ((screen.bubble.missileTarget & 0x80u) != 0u)
+      if ((_universe.bubble.missileTarget & 0x80u) != 0u)
       {
         checkedTheRest = false;
       }
       else
       {
-        FireMissile(_loop);
+        FireMissile(_universe, _ports);
       }
     }
 
@@ -477,7 +476,7 @@ namespace Elite
     {
       // 6502: .MA24 LDA KY12 / BEQ MA76 / ASL BOMB / BEQ MA76 -- `BOMB` is a countdown kept as a
       // shift, so the bomb burns for as many frames as it has bits left.
-      if (_loop.keys[KEY_ENERGY_BOMB] != 0u)
+      if (_universe.keys[KEY_ENERGY_BOMB] != 0u)
       {
         commander.energyBomb = static_cast<std::uint8_t>(commander.energyBomb << 1u);
 
@@ -485,36 +484,36 @@ namespace Elite
         {
           // 6502: LDY #%11010000 / STY moonflower -- the upper half of the screen changes mode, and
           // that IS the effect: no drawing is involved.
-          screen.screen.upperBitmapMode = BOMB_BITMAP_MODE;
-          (void)_loop.effects.PlaySound(SOUND_ENERGY_BOMB, false);
+          _universe.screen.upperBitmapMode = BOMB_BITMAP_MODE;
+          (void)_ports.loop.PlaySound(SOUND_ENERGY_BOMB, false);
         }
       }
 
       // 6502: .MA76 LDA KY20 / BEQ MA78 / LDA #0 / STA auto / JSR stopbd.
-      if (_loop.keys[KEY_CANCEL_DOCKING] != 0u)
+      if (_universe.keys[KEY_CANCEL_DOCKING] != 0u)
       {
-        _loop.control.dockingComputer = 0u;
-        _loop.effects.StopDockingMusic();
+        _universe.control.dockingComputer = 0u;
+        _ports.loop.StopDockingMusic();
       }
 
       // 6502: .MA78 LDA KY13 / AND ESCP / BEQ noescp / LDA MJ / BNE noescp / JMP ESCAPE -- and it
       // does not come back, so the frame ends here.
-      if ((_loop.keys[KEY_ESCAPE_POD] & commander.escapePod) != 0u && screen.status.midJump == 0u)
+      if ((_universe.keys[KEY_ESCAPE_POD] & commander.escapePod) != 0u && _universe.status.midJump == 0u)
       {
         return LoopOutcome::Escaped;
       }
 
       // 6502: .noescp LDA KY18 / BEQ P%+5 / JSR WARP.
-      if (_loop.keys[KEY_WARP] != 0u)
+      if (_universe.keys[KEY_WARP] != 0u)
       {
-        Warp(screen);
+        Warp(_universe, _ports);
       }
 
       // 6502: LDA KY17 / AND ECM / BEQ MA64 / LDA ECMA / BNE MA64 / DEC ECMP / JSR ECBLB2 -- and
       // `DEC ECMP` on a zero byte is what makes it &FF, which is "ours" (§6.71's pair).
-      if ((_loop.keys[KEY_ECM] & commander.ecm) != 0u && screen.status.ecmCountdown == 0u)
+      if ((_universe.keys[KEY_ECM] & commander.ecm) != 0u && _universe.status.ecmCountdown == 0u)
       {
-        screen.status.ecmOurs = static_cast<std::uint8_t>(screen.status.ecmOurs - 1u);
+        _universe.status.ecmOurs = static_cast<std::uint8_t>(_universe.status.ecmOurs - 1u);
         /*
          * 6502: DEC ECMP / JSR ECBLB2, and the carry handed on is NOT KNOWN HERE (§6.118).
          *
@@ -524,7 +523,7 @@ namespace Elite
          * carry across the flight loop, so false is what it can honestly supply, and the sound
          * comparison excludes this effect by name rather than pretending to agree.
          */
-        StartEcm(screen.canvas, screen.status, _loop.effects, false);
+        StartEcm(_universe.canvas, _universe.status, _ports.loop, false);
       }
     }
 
@@ -536,43 +535,43 @@ namespace Elite
      * Nothing in the source says so and the offset is written as a number rather than as the label.
      */
     const std::uint8_t requested =
-      static_cast<std::uint8_t>((_loop.keys[KEY_DOCKING_COMPUTER] & commander.dockingComputer) ^ _loop.keys[KEY_PITCH_UP]);
-    if ((_loop.keys[KEY_DOCKING_COMPUTER] & commander.dockingComputer) != 0u && requested != 0u)
+      static_cast<std::uint8_t>((_universe.keys[KEY_DOCKING_COMPUTER] & commander.dockingComputer) ^ _universe.keys[KEY_PITCH_UP]);
+    if ((_universe.keys[KEY_DOCKING_COMPUTER] & commander.dockingComputer) != 0u && requested != 0u)
     {
-      _loop.control.dockingComputer = requested;
-      _loop.effects.StartDockingMusic();
+      _universe.control.dockingComputer = requested;
+      _ports.loop.StartDockingMusic();
     }
 
     // ---- part 3's tail: the guns -----------------------------------------------------------------
 
-    screen.status.laserPower = 0u; // 6502: .MA68 LDA #0 / STA LAS
-    screen.flight.delt4 = 0u;      // 6502: STA DELT4
+    _universe.status.laserPower = 0u; // 6502: .MA68 LDA #0 / STA LAS
+    _universe.flight.delt4 = 0u;      // 6502: STA DELT4
 
     // 6502: LDA DELTA / LSR A / ROR DELT4 / LSR A / ROR DELT4 / STA DELT4+1 -- the speed as a
     // sixteen-bit value the stardust subtracts, which is DELTA shifted up six places.
     {
-      ShiftResult step = RotateRight(screen.flight.delta, false);
-      ShiftResult low = RotateRight(screen.flight.delt4, step.carry);
+      ShiftResult step = RotateRight(_universe.flight.delta, false);
+      ShiftResult low = RotateRight(_universe.flight.delt4, step.carry);
       step = RotateRight(step.value, false);
       low = RotateRight(low.value, step.carry);
-      screen.flight.delt4 = low.value;
-      screen.flight.delt4Next = step.value;
+      _universe.flight.delt4 = low.value;
+      _universe.flight.delt4Next = step.value;
     }
 
     // 6502: LDA LASCT / BNE MA3 -- a pulse laser's countdown, which is why it cannot be held down.
-    if (screen.status.laserCount != 0u)
+    if (_universe.status.laserCount != 0u)
     {
       return LoopOutcome::Continued;
     }
 
     // 6502: LDA KY7 / BEQ MA3 / LDA GNTMP / CMP #242 / BCS MA3 -- and 242 is where the gun jams.
-    if (_loop.keys[KEY_FIRE] == 0u || screen.status.laserTemperature >= 242u)
+    if (_universe.keys[KEY_FIRE] == 0u || _universe.status.laserTemperature >= 242u)
     {
       return LoopOutcome::Continued;
     }
 
     // 6502: LDX VIEW / LDA LASER,X / BEQ MA3 -- this view's laser, if it has one.
-    const std::uint8_t fitted = commander.lasers[screen.spaceView];
+    const std::uint8_t fitted = commander.lasers[_universe.spaceView];
     if (fitted == 0u)
     {
       return LoopOutcome::Continued;
@@ -580,8 +579,8 @@ namespace Elite
 
     // 6502: PHA / AND #%01111111 / STA LAS / STA LAS2 -- the power without its top bit, which is
     // what the damage arithmetic uses.
-    screen.status.laserPower = static_cast<std::uint8_t>(fitted & 0x7Fu);
-    screen.status.viewLaser = screen.status.laserPower;
+    _universe.status.laserPower = static_cast<std::uint8_t>(fitted & 0x7Fu);
+    _universe.status.viewLaser = _universe.status.laserPower;
 
     /*
      * 6502: LDY #sfxplas / PLA / PHA / BMI bmorarm / CMP #Mlas / BNE P%+4 / LDY #sfxmlas /
@@ -611,15 +610,15 @@ namespace Elite
      * that swallows one of the loads. A silent build hands this straight back (§6.99).
      */
     const bool carryIn = ((fitted & 0x80u) != 0u) ? (fitted >= LASER_POWER_MILITARY) : (fitted >= LASER_POWER_MINING);
-    const bool heard = _loop.effects.PlaySound(sound, carryIn);
+    const bool heard = _ports.loop.PlaySound(sound, carryIn);
 
     // 6502: JSR LASLI -- the burst itself, which draws and heats the gun.
-    (void)FireLaser(screen.canvas, screen.rng, _loop.burst, screen.status, screen.view, heard);
+    (void)FireLaser(_universe.canvas, _universe.rng, _universe.burst, _universe.status, _universe.view, heard);
 
     // 6502: PLA / BPL ma1 / LDA #0 / .ma1 AND #%11111010 / STA LASCT -- a beam laser gets no
     // countdown at all, which is what lets it be held down.
     const std::uint8_t countdown = ((fitted & 0x80u) != 0u) ? std::uint8_t{0u} : fitted;
-    screen.status.laserCount = static_cast<std::uint8_t>(countdown & 0xFAu);
+    _universe.status.laserCount = static_cast<std::uint8_t>(countdown & 0xFAu);
 
     return LoopOutcome::Continued;
   }
@@ -709,19 +708,18 @@ namespace Elite
     std::uint8_t energy;
   };
 
-  [[nodiscard]] LaserHit ApplyLaserHit(FlightLoop& _loop, SpawnChildEffects& _spawn, const Blueprint& _blueprint, ShipType _type) noexcept
+  [[nodiscard]] LaserHit ApplyLaserHit(Universe& _universe, Ports& _ports, SpawnChildEffects& _spawn, const Blueprint& _blueprint,
+                                       ShipType _type) noexcept
   {
-    FlightScreen& screen = _loop.screen;
-
-    (void)PlayHitSound(screen.work, _loop.effects); // 6502: LDX #15 / JSR EXNO
+    (void)PlayHitSound(_universe.work, _ports.loop); // 6502: LDX #15 / JSR EXNO
 
     // 6502: LDA TYPE / CMP #SST / BEQ MA14+2.
     if (_type == ShipType::Station)
     {
-      return {false, screen.work.energy};
+      return {false, _universe.work.energy};
     }
 
-    std::uint8_t power = screen.status.laserPower;
+    std::uint8_t power = _universe.status.laserPower;
 
     /*
      * 6502: CMP #CON / BCC BURN / LDA LAS / CMP #(Armlas AND 127) / BNE MA14+2 / LSR LAS / LSR LAS.
@@ -734,22 +732,22 @@ namespace Elite
     {
       if (power != static_cast<std::uint8_t>(LASER_POWER_MILITARY & 0x7Fu))
       {
-        return {false, screen.work.energy};
+        return {false, _universe.work.energy};
       }
 
       power = static_cast<std::uint8_t>(power >> 1u);
       power = static_cast<std::uint8_t>(power >> 1u);
-      screen.status.laserPower = power; // 6502: LSR LAS twice, in place
+      _universe.status.laserPower = power; // 6502: LSR LAS twice, in place
     }
 
     // 6502: .BURN LDA INWK+35 / SEC / SBC LAS / BCS MA14 -- it survived with what is left.
-    const SubResult left = SubtractWithCarry(screen.work.energy, power, true);
+    const SubResult left = SubtractWithCarry(_universe.work.energy, power, true);
     if (left.carry)
     {
       return {true, left.value};
     }
 
-    screen.work.state = With(screen.work.state, ShipStateBit::Killed);
+    _universe.work.state = With(_universe.work.state, ShipStateBit::Killed);
 
     /*
      * 6502: LDA TYPE / CMP #AST / BNE nosp / LDA LAS / CMP #Mlas / BNE nosp / JSR DORND / LDX #SPL /
@@ -777,67 +775,65 @@ namespace Elite
     else
     {
       // Both compares were EQUAL, so both set the carry: the roll below sees it set.
-      const RngResult roll = screen.rng.Next(true);
+      const RngResult roll = _universe.rng.Next(true);
       carry = SpawnItems(_spawn, ShipType::Splinter, static_cast<std::uint8_t>(roll.value & 3u), roll.carry);
     }
 
     // 6502: .nosp LDY #PLT / JSR SPIN / LDY #OIL / JSR SPIN -- both, in that order, every time,
     // and the second on the carry the first left.
-    carry = SpawnDebris(screen.rng, _spawn, _blueprint, ShipType::AlloyPlate, carry);
-    static_cast<void>(SpawnDebris(screen.rng, _spawn, _blueprint, ShipType::Canister, carry));
+    carry = SpawnDebris(_universe.rng, _spawn, _blueprint, ShipType::AlloyPlate, carry);
+    static_cast<void>(SpawnDebris(_universe.rng, _spawn, _blueprint, ShipType::Canister, carry));
 
     // 6502: LDX TYPE / JSR EXNO2 -- and what `.MA14` stores is what NOISE2 left in A (§6.86's
     // dependency again: the dead ship's energy byte comes out of the sound system).
-    return {true, RecordKill(screen, _loop.effects, _type)};
+    return {true, RecordKill(_universe, _ports, _ports.loop, _type)};
   }
 
   void LoopSpawnEffects::AbortMissile(std::uint8_t _colour)
   {
-    FlightScreen& screen = m_loop.screen;
-    AbortMissileLock(screen.canvas, screen.bubble, screen.status.missileArmed, screen.commander.missiles, _colour);
+    AbortMissileLock(m_universe.canvas, m_universe.bubble, m_universe.status.missileArmed, m_universe.commander.missiles, _colour);
   }
 
   void LoopSpawnEffects::ShowMessage(std::uint8_t _token)
   {
-    FlightScreen& screen = m_loop.screen;
-    Elite::ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, _token, screen.view);
+    Elite::ShowMessage(m_universe.canvas, m_ports.printer, m_universe.text, m_ports.characters.state, m_universe.message, _token,
+                       m_universe.view);
   }
 
   void LoopSpawnEffects::ToggleStationIndicator()
   {
-    Elite::ToggleStationIndicator(m_loop.screen.canvas);
+    Elite::ToggleStationIndicator(m_universe.canvas);
   }
 
   void LoopSpawnEffects::ResetMissileIndicators()
   {
-    Elite::ResetMissileIndicators(m_loop.screen.canvas, m_loop.screen.commander.missiles);
+    Elite::ResetMissileIndicators(m_universe.canvas, m_universe.commander.missiles);
   }
 
-  LoopOutcome MoveEveryShip(FlightLoop& _loop) noexcept
+  LoopOutcome MoveEveryShip(Universe& _universe, Ports& _ports) noexcept
   {
-    FlightScreen& screen = _loop.screen;
-    Commander& commander = screen.commander;
-    LoopSpawnEffects spawning(_loop);
+    Commander& commander = _universe.commander;
+    LoopSpawnEffects spawning(_universe, _ports);
 
     // 6502: .MA3 LDX #0 / .MAL1 STX XSAV -- and the index is advanced by hand, never by the loop.
     std::uint8_t slot = 0;
 
     for (;;)
     {
-      screen.flight.slot = slot; // 6502: STX XSAV
+      _universe.flight.slot = slot; // 6502: STX XSAV
 
       // 6502: LDA FRIN,X / BNE P%+5 / JMP MA18 -- the first empty slot ends the pass.
-      const ShipType type = TypeOf(screen.bubble.slots[slot]);
+      const ShipType type = TypeOf(_universe.bubble.slots[slot]);
       if (type == ShipType::None)
       {
         return LoopOutcome::Continued;
       }
 
-      screen.flight.type = type; // 6502: STA TYPE
+      _universe.flight.type = type; // 6502: STA TYPE
 
       // 6502: JSR GINF / LDY #NI%-1 / .MAL2 LDA (INF),Y / STA INWK,Y / DEY / BPL MAL2.
-      Ship& block = screen.bubble.blocks[slot];
-      screen.work = block;
+      Ship& block = _universe.bubble.blocks[slot];
+      _universe.work = block;
 
       /*
        * 6502: LDA TYPE / BMI MA21 / ASL A / TAY / LDA XX21-2,Y / STA XX0 / LDA XX21-1,Y / STA XX0+1.
@@ -848,7 +844,7 @@ namespace Elite
       const bool isBody = IsBody(type);
       if (!isBody)
       {
-        screen.flight.blueprint = BlueprintFor(screen.bubble, type);
+        _universe.flight.blueprint = BlueprintFor(_universe.bubble, type);
 
         /*
          * 6502: part 5 -- LDA BOMB / BPL MA21 and four tests under it.
@@ -861,10 +857,10 @@ namespace Elite
          */
         const bool exempt = (type == ShipType::Station) || (type == ShipType::Thargoid) || (Byte(type) >= Byte(ShipType::Constrictor));
 
-        if ((commander.energyBomb & 0x80u) != 0u && !exempt && !Has(screen.work.state, ShipStateBit::Exploding))
+        if ((commander.energyBomb & 0x80u) != 0u && !exempt && !Has(_universe.work.state, ShipStateBit::Exploding))
         {
-          screen.work.state = MarkKilled(screen.work.state);
-          (void)RecordKill(screen, _loop.effects, type); // 6502: LDX TYPE / JSR EXNO2
+          _universe.work.state = MarkKilled(_universe.work.state);
+          (void)RecordKill(_universe, _ports, _ports.loop, type); // 6502: LDX TYPE / JSR EXNO2
         }
       }
 
@@ -875,11 +871,12 @@ namespace Elite
        * back only on the path that survives -- `JMP DEATH` from inside `TACTICS` never reaches
        * `MAL3` -- and `DEATH` calls `RES2`, which clears the bubble anyway (§6.122).
        */
-      if (!MoveShip(screen.canvas, screen.work, screen.math, screen.flight, _loop.tactics, *screen.flight.blueprint, screen.view))
+      if (!MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics, *_universe.flight.blueprint,
+                    _universe.view))
       {
         return LoopOutcome::Died;
       }
-      block = screen.work;
+      block = _universe.work;
 
       /*
        * ---- part 7: is it touching us? ---------------------------------------------------------
@@ -894,12 +891,12 @@ namespace Elite
       bool scoopable = false;
       bool collision = false;
       {
-        const std::uint8_t seed = static_cast<std::uint8_t>(screen.work.state & Mask(ShipStateBit::Killed, ShipStateBit::Exploding));
+        const std::uint8_t seed = static_cast<std::uint8_t>(_universe.work.state & Mask(ShipStateBit::Killed, ShipStateBit::Exploding));
 
-        if (LargestShipAxis(screen.work, seed) == 0u)
+        if (LargestShipAxis(_universe.work, seed) == 0u)
         {
           // 6502: LDA INWK / ORA INWK+3 / ORA INWK+6 / BMI MA65 -- and A survives to the `AND` below.
-          const std::uint8_t low = static_cast<std::uint8_t>(screen.work.x.lo | screen.work.y.lo | screen.work.z.lo);
+          const std::uint8_t low = static_cast<std::uint8_t>(_universe.work.x.lo | _universe.work.y.lo | _universe.work.z.lo);
 
           if ((low & 0x80u) == 0u && !isBody)
           {
@@ -916,7 +913,7 @@ namespace Elite
                * is "we have scoops AND it is below us" -- scooping only works on things that come
                * up from underneath. Anything else at this range is a collision.
                */
-              const std::uint8_t under = static_cast<std::uint8_t>(commander.fuelScoops & screen.work.y.sgn);
+              const std::uint8_t under = static_cast<std::uint8_t>(commander.fuelScoops & _universe.work.y.sgn);
               scoopable = (under & 0x80u) != 0u;
               collision = !scoopable;
             }
@@ -946,11 +943,11 @@ namespace Elite
           // here is `CPX #OIL / BEQ oily`, and a compare that finds its operand equal sets it. The
           // port passed a clear one until 2026-09-06, hidden behind a comparison that skipped the
           // generator on every frame that also seeded a cloud (§6.157).
-          item = static_cast<std::uint8_t>(screen.rng.Next(true).value & 7u);
+          item = static_cast<std::uint8_t>(_universe.rng.Next(true).value & 7u);
         }
         else
         {
-          const std::uint8_t nibble = screen.flight.blueprint->cargo;
+          const std::uint8_t nibble = _universe.flight.blueprint->cargo;
           const std::uint8_t worth = static_cast<std::uint8_t>(nibble >> 4u);
           if (worth == 0u)
           {
@@ -985,11 +982,12 @@ namespace Elite
 
             // 6502: TYA / ADC #208 / JSR MESS -- on the carry the store above left behind.
             const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
-            ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, token.value, screen.view);
+            ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, token.value,
+                        _universe.view);
 
             // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
             // canister is removed by part 12 rather than by anything here.
-            screen.work.newb = With(screen.work.newb, NewbBit::Remove);
+            _universe.work.newb = With(_universe.work.newb, NewbBit::Remove);
           }
         }
       }
@@ -1008,15 +1006,15 @@ namespace Elite
       {
         bool arrived = false;
 
-        const bool hostile = Has(screen.bubble.blocks[STATION_SLOT].newb, NewbBit::Hostile);
+        const bool hostile = Has(_universe.bubble.blocks[STATION_SLOT].newb, NewbBit::Hostile);
 
-        if (!hostile && screen.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
+        if (!hostile && _universe.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
         {
-          (void)LoadPlanetAxes(screen.bubble, _loop.axes);                     // 6502: JSR SPS1
-          const UnitVector towards = NormaliseAxes(_loop.axes).vector; // the fall-through
+          (void)LoadPlanetAxes(_universe.bubble, _universe.axes);                     // 6502: JSR SPS1
+          const UnitVector towards = NormaliseAxes(_universe.axes).vector; // the fall-through
 
           if (towards.z >= DOCK_MINIMUM_ALIGNMENT &&
-              static_cast<std::uint8_t>(screen.work.roof.x.hi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
+              static_cast<std::uint8_t>(_universe.work.roof.x.hi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
           {
             arrived = true;
           }
@@ -1024,12 +1022,12 @@ namespace Elite
 
         if (arrived)
         {
-          _loop.effects.StopDockingMusic(); // 6502: .GOIN JSR stopbd / JMP DOENTRY
+          _ports.loop.StopDockingMusic(); // 6502: .GOIN JSR stopbd / JMP DOENTRY
           return LoopOutcome::Docked;
         }
 
         // 6502: .MA62 LDA DELTA / CMP #5 / BCC MA67 / JMP DEATH -- fast enough and you are dead.
-        if (screen.flight.delta >= DOCK_SURVIVABLE_SPEED)
+        if (_universe.flight.delta >= DOCK_SURVIVABLE_SPEED)
         {
           return LoopOutcome::Died;
         }
@@ -1051,8 +1049,8 @@ namespace Elite
       {
         // 6502: .MA59 JSR EXNO3 -- and the carry is SET, because `BCS MA59` in part 8 is the
         // only way here: a full hold is exactly the carry the capacity test leaves.
-        (void)_loop.effects.PlaySound(SOUND_EXPLOSION, true);
-        screen.work.state = MarkKilled(screen.work.state); // 6502: .MA60
+        (void)_ports.loop.PlaySound(SOUND_EXPLOSION, true);
+        _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA60
         // 6502: .MA61 BNE MA26 -- and `ROR` has just set bit 7, so it always branches.
       }
       else if (collision || docking)
@@ -1062,20 +1060,20 @@ namespace Elite
 
         if (docking)
         {
-          screen.flight.delta = 1u;       // 6502: .MA67 LDA #1 / STA DELTA
+          _universe.flight.delta = 1u;       // 6502: .MA67 LDA #1 / STA DELTA
           damage = DOCK_SURVIVABLE_SPEED; // 6502: LDA #5 -- and the carry is the `BCC`'s, so clear
         }
         else
         {
-          screen.work.state = MarkKilled(screen.work.state); // 6502: .MA58
-          const ShiftResult halved = RotateRight(screen.work.energy, true);
+          _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA58
+          const ShiftResult halved = RotateRight(_universe.work.energy, true);
           damage = halved.value;
           carry = halved.carry;
         }
 
         // 6502: .MA63 JSR OOPS / JSR EXNO3 -- and `OOPS` makes the same noise itself on the path
         // that survives, so a hit that costs the banks is heard twice.
-        if (!TakeDamage(screen, _loop.effects, block, damage, carry))
+        if (!TakeDamage(_universe, _ports, _ports.loop, block, damage, carry))
         {
           return LoopOutcome::Died;
         }
@@ -1085,7 +1083,7 @@ namespace Elite
          * `OOPS` ends `ADC ENERGY / STA ENERGY / BEQ / BCS`, and reaching here at all means the
          * `BCS` was taken, so it is SET. Nothing between the two calls touches the flag.
          */
-        (void)_loop.effects.PlaySound(SOUND_EXPLOSION, true);
+        (void)_ports.loop.PlaySound(SOUND_EXPLOSION, true);
       }
 
       /*
@@ -1096,9 +1094,9 @@ namespace Elite
        * Bit 7 of `NEWB` is "take this out of the bubble" AND "it is on the scanner", one bit doing
        * two jobs: a ship marked for removal has its blip drawn here so that the EOR erases it.
        */
-      if (Has(screen.work.newb, NewbBit::Remove))
+      if (Has(_universe.work.newb, NewbBit::Remove))
       {
-        DrawScannerBlip(screen.canvas, screen.work, type, screen.view);
+        DrawScannerBlip(_universe.canvas, _universe.work, type, _universe.view);
       }
 
       bool drawIt = true;
@@ -1111,11 +1109,11 @@ namespace Elite
        */
       bool carry = false; // 6502: BCC MA8 -- not in the sights, and `HITCH` cleared it saying so
 
-      if (screen.view == 0u) // 6502: LDA QQ11 / BNE MA15 -- a chart means no drawing at all
+      if (_universe.view == 0u) // 6502: LDA QQ11 / BNE MA15 -- a chart means no drawing at all
       {
-        FlipAxesForView(screen.work, screen.flight, screen.spaceView); // 6502: JSR PLUT
+        FlipAxesForView(_universe.work, _universe.flight, _universe.spaceView); // 6502: JSR PLUT
 
-        if (IsHit(screen.work, *screen.flight.blueprint, type)) // 6502: JSR HITCH / BCC MA8
+        if (IsHit(_universe.work, *_universe.flight.blueprint, type)) // 6502: JSR HITCH / BCC MA8
         {
           carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it
 
@@ -1123,30 +1121,30 @@ namespace Elite
           // missile locks onto whatever the sights are on, and the indicator turns red. `BEEP` is
           // `NOISE`, whose exit carry is the answer here (§6.86); `ABORT2` and `MSBAR` are stores
           // and register moves and leave it alone.
-          if (screen.status.missileArmed != 0u)
+          if (_universe.status.missileArmed != 0u)
           {
             // The flag going IN is the one two lines above -- `HITCH`'s `SEC`, which `LDA MSAR`
             // and `BEQ` do not touch. `NOISE` hands it straight back when the sound is switched
             // off, so passing `false` here (which the port did until M2-d) changed the carry `LL9`
             // seeds an explosion cloud on, on a silent build (§8).
-            carry = _loop.effects.PlaySound(SOUND_BEEP, carry);
-            SetMissileTarget(screen.canvas, screen.bubble, screen.status.missileArmed, commander.missiles, screen.flight.slot,
+            carry = _ports.loop.PlaySound(SOUND_BEEP, carry);
+            SetMissileTarget(_universe.canvas, _universe.bubble, _universe.status.missileArmed, commander.missiles, _universe.flight.slot,
                              MISSILE_LOCKED);
           }
 
           // 6502: .MA47 LDA LAS / BEQ MA8 -- no laser firing this frame, so nothing is damaged.
-          if (screen.status.laserPower != 0u)
+          if (_universe.status.laserPower != 0u)
           {
-            const LaserHit hit = ApplyLaserHit(_loop, _loop.effects, *screen.flight.blueprint, type);
+            const LaserHit hit = ApplyLaserHit(_universe, _ports, _ports.loop, *_universe.flight.blueprint, type);
             if (hit.stores)
             {
-              screen.work.energy = hit.energy; // 6502: .MA14 STA INWK+35
+              _universe.work.energy = hit.energy; // 6502: .MA14 STA INWK+35
             }
 
             // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too. INF
             // is this ship's block here, the one the loop is on, so the slot is XSAV's. Every laser
             // path ends in this call, so its exit carry is the one `LL9` gets.
-            carry = _loop.effects.Anger(screen.flight.slot, type);
+            carry = _ports.loop.Anger(_universe.flight.slot, type);
           }
         }
       }
@@ -1158,8 +1156,8 @@ namespace Elite
       // 6502: .MA8 JSR LL9 -- and it is the same call that erases the last frame's ship.
       if (drawIt)
       {
-        DrawShip(screen.canvas, screen.geometry, screen.math, _loop.clip, _loop.projection, screen.work, block, _loop.heap,
-                 *screen.flight.blueprint, type, _loop.drawing, screen.rng, carry);
+        DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work, block,
+                 _universe.heap, *_universe.flight.blueprint, type, _ports.drawing, _universe.rng, carry);
       }
 
       /*
@@ -1169,11 +1167,11 @@ namespace Elite
        * byte 31 only on the path that keeps the ship. That asymmetry is the routine: a ship being
        * removed has its block shuffled away by `KILLSHP`, so writing its state would be wasted.
        */
-      block.energy = screen.work.energy;
+      block.energy = _universe.work.energy;
 
-      bool remove = Has(screen.work.newb, NewbBit::Remove);
+      bool remove = Has(_universe.work.newb, NewbBit::Remove);
 
-      if (!remove && Has(screen.work.state, ShipStateBit::Killed) && Has(screen.work.state, ShipStateBit::Exploding))
+      if (!remove && Has(_universe.work.state, ShipStateBit::Killed) && Has(_universe.work.state, ShipStateBit::Exploding))
       {
         /*
          * 6502: LDA NEWB / AND #%01000000 / ORA FIST / STA FIST.
@@ -1183,20 +1181,20 @@ namespace Elite
          * cannot become more of one this way.
          */
         commander.legalStatus =
-          static_cast<std::uint8_t>(commander.legalStatus | (screen.work.newb & Mask(NewbBit::Cop)));
+          static_cast<std::uint8_t>(commander.legalStatus | (_universe.work.newb & Mask(NewbBit::Cop)));
 
         // 6502: LDA DLY / ORA MJ / BNE KS1S -- no bounty while a message is up or in witchspace,
         // because the bounty IS a message and there is nowhere to put it.
-        const bool quiet = (screen.message.delay | screen.status.midJump) == 0u;
+        const bool quiet = (_universe.message.delay | _universe.status.midJump) == 0u;
 
         if (quiet)
         {
           // 6502: LDY #10 / LDA (XX0),Y / BEQ KS1S / TAX / INY / LDA (XX0),Y / TAY / JSR MCASH.
-          const std::uint8_t low = static_cast<std::uint8_t>(screen.flight.blueprint->bounty & 0xFFu);
+          const std::uint8_t low = static_cast<std::uint8_t>(_universe.flight.blueprint->bounty & 0xFFu);
 
           if (low != 0u)
           {
-            ReceiveCash(commander, screen.flight.blueprint->bounty);
+            ReceiveCash(commander, _universe.flight.blueprint->bounty);
 
             /*
              * 6502: LDA #0 / JSR MESS.
@@ -1205,7 +1203,7 @@ namespace Elite
              * player's balance printed in flight -- and `MESS` then stores that zero in `MCH`, so
              * the next message within twenty frames erases this one by printing the balance again.
              */
-            ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, 0u, screen.view);
+            ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, 0u, _universe.view);
           }
         }
 
@@ -1216,7 +1214,7 @@ namespace Elite
       {
         // 6502: .MAC1 LDA TYPE / BMI MA27 / JSR FAROF / BCC KS1S -- and the planet and the sun are
         // never out of range, because they are what range is measured against.
-        remove = !isBody && !WithinLoopRange(screen.work);
+        remove = !isBody && !WithinLoopRange(_universe.work);
       }
 
       if (remove)
@@ -1229,11 +1227,11 @@ namespace Elite
          * what processes it. A port that wrote a `for` over the slots would skip a ship for every
          * one killed.
          */
-        KillShip(screen.bubble, _loop.heap, screen.heaps, screen.work, commander, spawning, slot, screen.flight.blueprint);
+        KillShip(_universe.bubble, _universe.heap, _universe.heaps, _universe.work, commander, spawning, slot, _universe.flight.blueprint);
       }
       else
       {
-        block.state = screen.work.state; // 6502: .MA27 LDY #31 / STA (INF),Y
+        block.state = _universe.work.state; // 6502: .MA27 LDY #31 / STA (INF),Y
         ++slot;                                      // 6502: LDX XSAV / INX / JMP MAL1
       }
     }
@@ -1246,9 +1244,8 @@ namespace Elite
    * separate function for exactly that reason: `MA23S` appears four times in the source and is
    * nothing but `JMP MA23`, which is what a shared tail looks like when the branch cannot reach.
    */
-  [[nodiscard]] LoopOutcome EndFlightFrameTail(FlightLoop& _loop) noexcept
+  [[nodiscard]] LoopOutcome EndFlightFrameTail(Universe& _universe, Ports& _ports) noexcept
   {
-    FlightScreen& screen = _loop.screen;
 
     /*
      * 6502: .MA23 LDA LAS2 / BEQ MA16 / LDA LASCT / CMP #8 / BCS MA16 / JSR LASLI2 / LDA #0 /
@@ -1258,10 +1255,10 @@ namespace Elite
      * beam is rubbed out by drawing it again -- `LASLI2` is `LASLI` without the firing -- so the
      * shot is visible for a fixed number of frames however long the trigger is held.
      */
-    if (screen.status.viewLaser != 0u && screen.status.laserCount < LASER_ERASE_LIMIT)
+    if (_universe.status.viewLaser != 0u && _universe.status.laserCount < LASER_ERASE_LIMIT)
     {
-      (void)DrawLaserLines(screen.canvas, _loop.burst, screen.view);
-      screen.status.viewLaser = 0u;
+      (void)DrawLaserLines(_universe.canvas, _universe.burst, _universe.view);
+      _universe.status.viewLaser = 0u;
     }
 
     /*
@@ -1275,20 +1272,20 @@ namespace Elite
      */
     bool stop = false;
 
-    if (screen.status.ecmOurs != 0u)
+    if (_universe.status.ecmOurs != 0u)
     {
-      stop = DrainEnergy(screen.status); // 6502: JSR DENGY / BEQ MA70
+      stop = DrainEnergy(_universe.status); // 6502: JSR DENGY / BEQ MA70
     }
 
-    if (!stop && screen.status.ecmCountdown != 0u)
+    if (!stop && _universe.status.ecmCountdown != 0u)
     {
-      screen.status.ecmCountdown = static_cast<std::uint8_t>(screen.status.ecmCountdown - 1u);
-      stop = screen.status.ecmCountdown == 0u;
+      _universe.status.ecmCountdown = static_cast<std::uint8_t>(_universe.status.ecmCountdown - 1u);
+      stop = _universe.status.ecmCountdown == 0u;
     }
 
     if (stop)
     {
-      StopEcm(screen.canvas, screen.status, _loop.effects); // 6502: .MA70 JSR ECMOF
+      StopEcm(_universe.canvas, _universe.status, _ports.loop); // 6502: .MA70 JSR ECMOF
     }
 
     /*
@@ -1296,18 +1293,17 @@ namespace Elite
      * on, borrowed from another routine. So a chart on screen ends the frame with the stardust
      * left exactly where it was.
      */
-    if (screen.view == 0u)
+    if (_universe.view == 0u)
     {
-      MoveStardust(screen.canvas, screen.flight, screen.dust, screen.rng, screen.spaceView);
+      MoveStardust(_universe.canvas, _universe.flight, _universe.dust, _universe.rng, _universe.spaceView);
     }
 
     return LoopOutcome::Continued;
   }
 
-  LoopOutcome EndFlightFrame(FlightLoop& _loop) noexcept
+  LoopOutcome EndFlightFrame(Universe& _universe, Ports& _ports) noexcept
   {
-    FlightScreen& screen = _loop.screen;
-    Commander& commander = screen.commander;
+    Commander& commander = _universe.commander;
 
     /*
      * ---- part 13: the bomb, the shields and the banks -----------------------------------------
@@ -1324,23 +1320,23 @@ namespace Elite
 
       if ((commander.energyBomb & 0x80u) == 0u)
       {
-        StopEnergyBomb(screen.screen);
+        StopEnergyBomb(_universe.screen);
       }
     }
 
     // 6502: .MA77 LDA MCNT / AND #7 / BNE MA22 -- seven frames in eight skip straight to part 15.
-    const std::uint8_t counter = static_cast<std::uint8_t>(screen.flight.mainLoopCounter & 31u);
+    const std::uint8_t counter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter & 31u);
 
-    if ((screen.flight.mainLoopCounter & 7u) == 0u)
+    if ((_universe.flight.mainLoopCounter & 7u) == 0u)
     {
       /*
        * 6502: LDX ENERGY / BPL b -- the shields are fed FROM the banks, so they only recharge while
        * the banks are at least half full. `SHD` itself takes a unit of energy per shield (§6.83).
        */
-      if ((screen.status.energy & 0x80u) != 0u)
+      if ((_universe.status.energy & 0x80u) != 0u)
       {
-        screen.status.aftShield = RechargeShield(screen.status, screen.status.aftShield);
-        screen.status.forwardShield = RechargeShield(screen.status, screen.status.forwardShield);
+        _universe.status.aftShield = RechargeShield(_universe.status, _universe.status.aftShield);
+        _universe.status.forwardShield = RechargeShield(_universe.status, _universe.status.forwardShield);
       }
 
       /*
@@ -1350,10 +1346,10 @@ namespace Elite
        * eighth frame. And the overflow branch SKIPS the store rather than clamping, so banks that
        * would pass 255 are left exactly where they were.
        */
-      const AddResult banks = AddWithCarry(commander.energyUnit, screen.status.energy, true);
+      const AddResult banks = AddWithCarry(commander.energyUnit, _universe.status.energy, true);
       if (!banks.carry)
       {
-        screen.status.energy = banks.value;
+        _universe.status.energy = banks.value;
       }
 
       /*
@@ -1365,34 +1361,34 @@ namespace Elite
        * checks whether the planet is close enough to have one -- and `MAS1` is called three times
        * to DOUBLE the planet's coordinates into `INWK`, so the test is run at twice the distance.
        */
-      if (screen.status.midJump == 0u && counter == 0u && screen.bubble.Count(ShipType::Station) == 0u &&
-          LargestAxis(screen.bubble, 0u) == 0u)
+      if (_universe.status.midJump == 0u && counter == 0u && _universe.bubble.Count(ShipType::Station) == 0u &&
+          LargestAxis(_universe.bubble, 0u) == 0u)
       {
         // 6502: LDX #28 / .MAL4 LDA K%,X / STA INWK,X / DEX / BPL MAL4 -- 29 bytes, not the block:
         // the position, the orientation, the speed and the acceleration, and nothing after.
-        std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = screen.work.ToBytes();
-        const std::array<std::uint8_t, SHIP_BLOCK_SIZE> planet = screen.bubble.blocks[0].ToBytes();
+        std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _universe.work.ToBytes();
+        const std::array<std::uint8_t, SHIP_BLOCK_SIZE> planet = _universe.bubble.blocks[0].ToBytes();
         std::copy_n(planet.begin(), 29u, bytes.begin());
-        screen.work = Ship::FromBytes(bytes);
+        _universe.work = Ship::FromBytes(bytes);
 
         // 6502: INX / LDY #9 / JSR MAS1 / BNE MA23S, and twice more at (3, 11) and (6, 13).
         // The `&&`s short-circuit and have to: each `MAS1` DOUBLES the coordinate it reads, in
         // place, so a second call after a non-zero answer would move the planet twice.
-        const bool ahead = DoubleAndAddCoordinate(screen.work, 9u, 0u) == 0u && DoubleAndAddCoordinate(screen.work, 11u, 3u) == 0u &&
-                           DoubleAndAddCoordinate(screen.work, 13u, 6u) == 0u;
+        const bool ahead = DoubleAndAddCoordinate(_universe.work, 9u, 0u) == 0u && DoubleAndAddCoordinate(_universe.work, 11u, 3u) == 0u &&
+                           DoubleAndAddCoordinate(_universe.work, 13u, 6u) == 0u;
 
-        if (ahead && WithinRange(screen.work, STATION_SPAWN_RANGE))
+        if (ahead && WithinRange(_universe.work, STATION_SPAWN_RANGE))
         {
-          EraseSun(screen.canvas, screen.heaps); // 6502: JSR WPLS
+          EraseSun(_universe.canvas, _universe.heaps); // 6502: JSR WPLS
 
           // 6502: JSR NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties
           // the sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
-          LoopSpawnEffects spawning(_loop);
-          (void)AddStation(screen.bubble, screen.work, spawning, screen.techLevel, screen.flight.blueprint);
+          LoopSpawnEffects spawning(_universe, _ports);
+          (void)AddStation(_universe.bubble, _universe.work, spawning, _universe.current.techLevel, _universe.flight.blueprint);
         }
       }
 
-      return EndFlightFrameTail(_loop);
+      return EndFlightFrameTail(_universe, _ports);
     }
 
     /*
@@ -1403,9 +1399,9 @@ namespace Elite
      * `MA93` is entered from part 14 as well, with the same masked counter in A -- so the three
      * jobs below run on steps 10, 15 and 20 of a thirty-two step cycle whichever way in it came.
      */
-    if (screen.status.midJump != 0u)
+    if (_universe.status.midJump != 0u)
     {
-      return EndFlightFrameTail(_loop);
+      return EndFlightFrameTail(_universe, _ports);
     }
 
     if (counter == STEP_ENERGY_CHECK)
@@ -1418,22 +1414,22 @@ namespace Elite
        * threshold that happens to be half of the token, and the token itself is only ever 100.
        * Reading it as "50 or 100" gives a warning every sixteenth frame for the whole game.
        */
-      if (ENERGY_WARNING >= screen.status.energy)
+      if (ENERGY_WARNING >= _universe.status.energy)
       {
-        ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message,
-                    static_cast<std::uint8_t>(ENERGY_WARNING << 1u), screen.view);
+        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message,
+                    static_cast<std::uint8_t>(ENERGY_WARNING << 1u), _universe.view);
       }
 
       /*
        * 6502: LDY #&FF / STY ALTIT / INY / JSR m / BNE MA23 -- the altitude is 255 until proved
        * otherwise, so a planet too far away in any axis leaves the dial full.
        */
-      screen.status.altitude = 0xFFu;
+      _universe.status.altitude = 0xFFu;
 
-      if (LargestAxis(screen.bubble, 0u) == 0u)
+      if (LargestAxis(_universe.bubble, 0u) == 0u)
       {
         // 6502: JSR MAS3 / BCS MA23 -- and the carry is `MAS3`'s saturation, not a comparison.
-        const std::uint8_t squares = SumOfSquares(screen.bubble, 0u);
+        const std::uint8_t squares = SumOfSquares(_universe.bubble, 0u);
         if (squares != 0xFFu)
         {
           /*
@@ -1469,16 +1465,17 @@ namespace Elite
            * game rather than argued about, by `TheFramesOwnQReachesTheAltitude` over six bubble
            * shapes and by `TheAltitudeMatchesMA23` with the byte seeded on both sides (§8).
            */
-          screen.status.altitude = SquareRoot(above.value, screen.math.q).value;
+          _universe.status.altitude = SquareRoot(above.value, _universe.math.q).value;
         }
       }
     }
     else if (counter == STEP_DOCKING_REMINDER)
     {
       // 6502: .MA29 CMP #15 / BNE MA33 / LDA auto / BEQ MA23 / LDA #123 / BNE MA34.
-      if (_loop.control.dockingComputer != 0u)
+      if (_universe.control.dockingComputer != 0u)
       {
-        ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, MESSAGE_DOCKING_ON, screen.view);
+        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, MESSAGE_DOCKING_ON,
+                    _universe.view);
       }
     }
     else if (counter == STEP_CABIN_TEMPERATURE)
@@ -1490,11 +1487,11 @@ namespace Elite
        * below is a replacement rather than an increase. Inside station range there is no sun to
        * feel, which is why the check comes second.
        */
-      screen.status.cabinTemperature = CABIN_BASE;
+      _universe.status.cabinTemperature = CABIN_BASE;
 
-      if (screen.bubble.Count(ShipType::Station) != 0u || LargestAxis(screen.bubble, 1u) != 0u)
+      if (_universe.bubble.Count(ShipType::Station) != 0u || LargestAxis(_universe.bubble, 1u) != 0u)
       {
-        return EndFlightFrameTail(_loop);
+        return EndFlightFrameTail(_universe, _ports);
       }
 
       /*
@@ -1504,9 +1501,9 @@ namespace Elite
        * `MAS3`'s exit carry -- and the carry OUT is death: an overflow here means the sum passed
        * 255, which is the sun.
        */
-      const std::uint8_t squares = SumOfSquares(screen.bubble, 1u);
+      const std::uint8_t squares = SumOfSquares(_universe.bubble, 1u);
       const AddResult heat = AddWithCarry(static_cast<std::uint8_t>(squares ^ 0xFFu), CABIN_BASE, false);
-      screen.status.cabinTemperature = heat.value;
+      _universe.status.cabinTemperature = heat.value;
 
       if (heat.carry)
       {
@@ -1516,7 +1513,7 @@ namespace Elite
       // 6502: CMP #224 / BCC MA23 -- below this the sun is just warm and nothing else happens.
       if (heat.value < CABIN_SCOOPING)
       {
-        return EndFlightFrameTail(_loop);
+        return EndFlightFrameTail(_universe, _ports);
       }
 
       /*
@@ -1529,9 +1526,9 @@ namespace Elite
        */
       if (heat.value >= CABIN_TRUMBLE_DEATH)
       {
-        screen.sight.SetRasterMode(RASTER_TRUMBLE_KILL);
-        screen.sight.MaskSprites(SPRITES_KEEP);
-        screen.sight.SetRasterMode(RASTER_TRUMBLE_DONE);
+        _ports.sight.SetRasterMode(RASTER_TRUMBLE_KILL);
+        _ports.sight.MaskSprites(SPRITES_KEEP);
+        _ports.sight.SetRasterMode(RASTER_TRUMBLE_DONE);
 
         const ShiftResult high = RotateRight(commander.tribbles.hi, false);
         commander.tribbles.hi = high.value;
@@ -1547,39 +1544,40 @@ namespace Elite
        */
       if (commander.fuelScoops != 0u)
       {
-        const ShiftResult scooped = RotateRight(screen.flight.delt4Next, false);
+        const ShiftResult scooped = RotateRight(_universe.flight.delt4Next, false);
         const AddResult tank = AddWithCarry(scooped.value, commander.fuel, scooped.carry);
 
         commander.fuel = (tank.value < FUEL_MAXIMUM) ? tank.value : FUEL_MAXIMUM;
 
-        ShowMessage(screen.canvas, screen.printer, screen.text, screen.extended, screen.message, MESSAGE_SCOOPS_ON, screen.view);
+        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, MESSAGE_SCOOPS_ON,
+                    _universe.view);
       }
     }
 
-    return EndFlightFrameTail(_loop);
+    return EndFlightFrameTail(_universe, _ports);
   }
 
-  LoopOutcome MainFlightLoop(FlightLoop& _loop) noexcept
+  LoopOutcome MainFlightLoop(Universe& _universe, Ports& _ports) noexcept
   {
-    const LoopOutcome opening = BeginFlightFrame(_loop);
+    const LoopOutcome opening = BeginFlightFrame(_universe, _ports);
     if (opening != LoopOutcome::Continued)
     {
       return opening;
     }
 
-    const LoopOutcome ships = MoveEveryShip(_loop);
+    const LoopOutcome ships = MoveEveryShip(_universe, _ports);
     if (ships != LoopOutcome::Continued)
     {
       return ships;
     }
 
-    return EndFlightFrame(_loop);
+    return EndFlightFrame(_universe, _ports);
   }
 
-  CrosshairStep ScanFlightControls(FlightLoop& _loop, ControlEffects& _effects, std::uint8_t _view) noexcept
+  CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, ControlEffects& _effects, std::uint8_t _view) noexcept
   {
     // 6502: JSR DOKEY, which BOTH paths do before they differ.
-    ReadFlightControls(_loop.keys, _loop.control, _loop.options, _loop.screen.work, _loop.screen.flight, _effects);
+    ReadFlightControls(_universe.keys, _universe.control, _universe.options, _universe.work, _universe.flight, _effects);
 
     // 6502: LDA QQ11 / BNE TT17afterall -- the space view returns with X and Y untouched, so the
     // caller gets no movement rather than a movement of zero, and the two are the same thing here.
@@ -1588,7 +1586,7 @@ namespace Elite
       return {};
     }
 
-    return ReadCrosshairKeys(_loop.keys);
+    return ReadCrosshairKeys(_universe.keys);
   }
 
 } // namespace Elite

@@ -825,8 +825,8 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(tt66, 900'000);
             Assert::IsTrue(run.completed, L"TT66 returned");
 
-            Elite::FlightScreen screen = universe.Screen();
-            Elite::SetUpScreen(screen, view);
+            Elite::Ports ports = universe.Ports();
+            Elite::SetUpScreen(universe, ports, view);
 
             const std::wstring where = WidenText("TT66(QQ11 " + std::to_string(view) + ", VIEW " + std::to_string(spaceView) + ", QQ22+1 " +
                                                  std::to_string(countdown) + ")");
@@ -890,8 +890,8 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(look1, 900'000);
             Assert::IsTrue(run.completed, L"LOOK1 returned");
 
-            Elite::FlightScreen screen = universe.Screen();
-            Elite::ChangeView(screen, to);
+            Elite::Ports ports = universe.Ports();
+            Elite::ChangeView(universe, ports, to);
 
             const std::wstring where =
               WidenText("LOOK1(QQ11 " + std::to_string(view) + ", VIEW " + std::to_string(from) + " -> " + std::to_string(to) + ")");
@@ -1017,8 +1017,8 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(warp, 900'000);
         Assert::IsTrue(run.completed, L"WARP returned");
 
-        Elite::FlightScreen screen = universe.Screen();
-        Elite::Warp(screen);
+        Elite::Ports ports = universe.Ports();
+        Elite::Warp(universe, ports);
 
         const std::wstring where = WidenText(std::string("WARP (") + item.what + ")");
 
@@ -1170,8 +1170,8 @@ namespace GameLogicTests
       Universe universe;
       Elite::SetUpLoaderScreen(universe.canvas);
 
-      Elite::FlightScreen screen = universe.Screen();
-      Elite::SetUpScreen(screen, 13u);
+      Elite::Ports ports = universe.Ports();
+      Elite::SetUpScreen(universe, ports, 13u);
 
       // 6502: comirq1 reading `abraxas` -- the raster split, which the shell does once a frame.
       Assert::AreEqual<std::uint32_t>(Elite::COLOUR_BANK_DASHBOARD, universe.screen.colourBank, L"view 13 asks for the dashboard");
