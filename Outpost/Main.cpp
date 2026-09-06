@@ -685,7 +685,17 @@ namespace
   /// and hands back what the dispatch made of it, so it has already decided by the time it returns.
   void PressKey(Game& _game, std::uint8_t _key)
   {
-    Perform(_game, Elite::ActionForKey(_key, _game.dockedFlag, _game.shell.View(), _game.status.hyperspaceCountdown, false));
+    /*
+     * 6502: BIT KLO+HINT -- the dispatch tests whether H is HELD on the matrix, not whether H is the
+     * key that arrived, and `RDKEY` has just filled the logger from the matrix in both loops. So it
+     * is read live off the window here, the way `JumpOf` reads CTRL for the galactic drive.
+     *
+     * THIS WAS A CONSTANT FALSE until 2026-09-06, so no key the player pressed could ever reach
+     * `hyp`: H arrived as key &23, the dispatch discarded it as the original does, and the flag that
+     * should have carried it said nobody was holding anything (§6.159).
+     */
+    const bool hyperspaceHeld = _game.window.Held(static_cast<std::uint8_t>(Elite::KEY_HYPERSPACE));
+    Perform(_game, Elite::ActionForKey(_key, _game.dockedFlag, _game.shell.View(), _game.status.hyperspaceCountdown, hyperspaceHeld));
   }
 
   /*

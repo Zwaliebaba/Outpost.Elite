@@ -296,10 +296,10 @@ plainly: "the struct is the argument list". They are built by `FlightSession`'s 
 times over.
 
 **P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
-<!--count:main-lines-->1,199 lines, most of them the dispatch, the exits and the two loops. Plan
+<!--count:main-lines-->1,209 lines, most of them the dispatch, the exits and the two loops. Plan
 §2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
 ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->224 distinct `Elite::` names that
+the executable reaches <!--count:outpost-elite-names-->225 distinct `Elite::` names that
 only a Windows compiler can type-check.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
@@ -340,7 +340,7 @@ they are the numeric model and stay. On `RunSpawning`, `RunLoopTail`, `SpawnThar
 `AddDebris` and the two `PlaySound` seams they are a routine boundary that happens to be where a
 6502 flag was live, and every caller passes a literal.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,720 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,721 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1463,3 +1463,8 @@ is the typed form of the same load. Rule 2's "every widening happens inside a he
 sibling: every access that ran past a byte array's end on purpose needs a named helper too, and
 the Debug configuration is the check that finds the ones a slice missed. `origin-markers`
 3,718 → 3,720 for the helper's label and the load's.
+
+**2026-09-06 — The hyperspace key wired (plan §6.159) moved three counts.** `main-lines`
+1,199 → 1,209 for the read of the matrix and its comment in `PressKey`; `outpost-elite-names`
+224 → 225 for `KEY_HYPERSPACE`; `origin-markers` 3,720 → 3,721 for its label. The product moving,
+as with the pacing; M3 takes the lines down and this executable-name count with them.
