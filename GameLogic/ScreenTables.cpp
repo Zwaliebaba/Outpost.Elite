@@ -151,13 +151,13 @@ namespace Elite
     0x33,
   };
 
-  // 6502: santana -- which sprites are multicolour, per half.
+  // 6502: santana -- which sprites are multicolour, per half -- sprite 1 is the only one that differs.
   const std::array<std::uint8_t, 2> RASTER_SPRITE_MULTICOLOUR_TABLE = {
     0xFE,
     0xFC,
   };
 
-  // 6502: lotus -- the shared sprite colour %01, per half.
+  // 6502: lotus -- sprite 1's colour, which is red above the split and invisible below it.
   const std::array<std::uint8_t, 2> RASTER_SPRITE_COLOUR_TABLE = {
     0x02,
     0x00,

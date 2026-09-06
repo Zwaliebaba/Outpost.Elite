@@ -275,9 +275,9 @@ TABLES = [
     Table("RASTER_NEXT_LINE_TABLE", "shango", 2, "ScreenTables.cpp",
           "which raster line the next interrupt fires on, per half of the split"),
     Table("RASTER_SPRITE_MULTICOLOUR_TABLE", "santana", 2, "ScreenTables.cpp",
-          "which sprites are multicolour, per half"),
+          "which sprites are multicolour, per half -- sprite 1 is the only one that differs"),
     Table("RASTER_SPRITE_COLOUR_TABLE", "lotus", 2, "ScreenTables.cpp",
-          "the shared sprite colour %01, per half"),
+          "sprite 1's colour, which is red above the split and invisible below it"),
     Table("RASTER_NEXT_COUNTER_TABLE", "innersec", 2, "ScreenTables.cpp",
           "what RASTCT becomes, which is what makes the split alternate"),
     # `SPMASK` IS NOT EXTRACTED, and the absence is deliberate. Its twelve bytes are a pair of

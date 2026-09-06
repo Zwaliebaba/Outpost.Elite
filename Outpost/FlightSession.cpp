@@ -149,9 +149,14 @@ namespace Outpost
     m_canvas.SetDashboardShown(dashboard.memoryPointers == Elite::COLOUR_BANK_DASHBOARD);
     m_canvas.SetBackground(dashboard.background);
 
-    // 6502: moonflower and welcome -- the energy bomb, and nothing else reaches these.
+    // 6502: moonflower and welcome -- the energy bomb.
     m_canvas.SetSpaceViewMulticolour((spaceView.control2 & Elite::BITMAP_MODE_MULTICOLOUR) != 0u);
     m_canvas.SetSpaceViewBackground(spaceView.background);
+
+    // 6502: santana and lotus -- the explosion sprite, which is multicolour and red above the
+    // split and single-colour in colour 0 below it, so it never draws over the dashboard.
+    m_canvas.SetSpriteMulticolour(spaceView.spriteMulticolour, dashboard.spriteMulticolour);
+    m_canvas.SetExplosionColour(spaceView.explosionColour, dashboard.explosionColour);
   }
 
   // ---- the sound ----------------------------------------------------------------------------------
