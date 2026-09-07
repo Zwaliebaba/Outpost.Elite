@@ -6,6 +6,7 @@
 
 #include "Combat.h"
 #include "Market.h"
+#include "Music.h"
 #include "PlanetDraw.h"
 #include "Spawn.h"
 
@@ -35,19 +36,18 @@ namespace Elite
 
   void ClearBubbleState(Universe& _universe, Ports& _ports) noexcept
   {
-
     // 6502: FRIN and MANY -- the slots and the per-type counts, which `SSPR` is part of (§6.58).
-    for (std::size_t slot = 0; slot < _universe.bubble.slots.size(); ++slot)
+    for (std::uint8_t& slot : _universe.bubble.slots)
     {
-      _universe.bubble.slots[slot] = 0u;
+      slot = 0u;
     }
-    for (std::size_t type = 0; type < _universe.bubble.counts.size(); ++type)
+    for (std::uint8_t& count : _universe.bubble.counts)
     {
-      _universe.bubble.counts[type] = 0u;
+      count = 0u;
     }
 
     _universe.bubble.junk = 0u;             // 6502: JUNK
-    _universe.control.dockingComputer = 0u;  // 6502: auto
+    _universe.control.dockingComputer = 0u; // 6502: auto
     _universe.status.ecmOurs = 0u;          // 6502: ECMP
     _universe.status.midJump = 0u;          // 6502: MJ
     _universe.status.cabinTemperature = 0u; // 6502: CABTMP
@@ -64,8 +64,8 @@ namespace Elite
 
   void ResetShipAndBubble(Universe& _universe, Ports& _ports) noexcept
   {
-
-    _ports.loop.StopDockingMusic(); // 6502: JSR stopbd
+    // 6502: JSR stopbd
+    StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
 
     /*
      * 6502: LDA BOMB / BPL BOMBOK / JSR BOMBOFF / STA BOMB.
@@ -111,8 +111,8 @@ namespace Elite
     _universe.flight.alpha = LAUNCH_ROLL;
     _universe.flight.alp1 = LAUNCH_ROLL;
 
-    _universe.text.cellColour = TEXT_COLOUR_WHITE; // 6502: LDA #&10 / STA COL2
-    _universe.clip.dontclip = 0u;                   // 6502: LDA #0 / STA dontclip
+    _universe.text.palette = TEXT_COLOUR_WHITE; // 6502: LDA #&10 / STA COL2
+    _universe.clip.dontclip = 0u;                  // 6502: LDA #0 / STA dontclip
     _universe.heaps.yx2M1 = SPACE_VIEW_LAST_ROW;   // 6502: LDA #2*Y-1 / STA Yx2M1
 
     // 6502: LDA SSPR / BEQ P%+5 / JSR SPBLB -- the station bulb is a TOGGLE, so this puts it out
@@ -125,7 +125,7 @@ namespace Elite
     // 6502: LDA ECMA / BEQ yu / JSR ECMOF.
     if (_universe.status.ecmCountdown != 0u)
     {
-      StopEcm(_universe.canvas, _universe.status, _ports.loop);
+      StopEcm(_universe.canvas, _universe.status, _universe.sound);
     }
 
     // 6502: .yu JSR WPSHPS -- rub every ship off the screen and forget both line heaps.
@@ -139,9 +139,8 @@ namespace Elite
     ClearShip(_universe.work); // 6502: and no RTS -- it falls into ZINF
   }
 
-  void ResetGame(Universe& _universe, Ports& _ports, std::uint8_t& _docked) noexcept
+  void ResetGame(Universe& _universe, Ports& _ports) noexcept
   {
-
     ClearBubbleState(_universe, _ports); // 6502: JSR ZERO, which leaves A at zero for the loop below
 
     /*
@@ -166,7 +165,7 @@ namespace Elite
      * that says "docked", and it is the value the three shield and energy bytes are filled with.
      * The second only works because a full bank happens to be 255.
      */
-    _docked = 0xFFu;
+    _universe.dockedFlag = 0xFFu;
     _universe.status.forwardShield = 0xFFu;
     _universe.status.aftShield = 0xFFu;
     _universe.status.energy = 0xFFu;
@@ -174,11 +173,11 @@ namespace Elite
     ResetShipAndBubble(_universe, _ports); // 6502: and no RTS -- it falls into RES2
   }
 
-  void DrawLaunchTunnel(Universe& _universe, Ports& _ports, TunnelEffects* _pacing) noexcept
+  void DrawLaunchTunnel(Universe& _universe, Ports& _ports) noexcept
   {
     // 6502: .LAUN LDY #sfxwhosh / JSR NOISE -- and the carry it returns is dropped, because the
     // next instruction is a load. §6.99's third answer costs nothing here.
-    (void)_ports.view.PlaySound(SOUND_MISSILE, false);
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false);
 
     // 6502: LDA #8 -- and `HFS2`'s first instruction, `STA STP`, is what receives it. This is the
     // only writer of the step on the launch path, and its absence is what §6.95 was working around.
@@ -192,10 +191,10 @@ namespace Elite
      * showing the docked screen -- which is exactly right, because the caller has not finished
      * leaving it yet.
      */
-    DrawTunnel(_universe, _ports, LAUNCH_TUNNEL_STEP, _pacing);
+    DrawTunnel(_universe, _ports, LAUNCH_TUNNEL_STEP);
   }
 
-  void DrawTunnel(Universe& _universe, Ports& _ports, std::uint8_t _step, TunnelEffects* _pacing) noexcept
+  void DrawTunnel(Universe& _universe, Ports& _ports, std::uint8_t _step) noexcept
   {
     // 6502: .HFS2 STA STP -- the only writer of the step on either tunnel's path, which is the
     // other half of §6.94's answer.
@@ -214,10 +213,10 @@ namespace Elite
     _universe.view = saved;
 
     // 6502: falls into HFS1.
-    DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _pacing);
+    DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present);
   }
 
-  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
+  void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports) noexcept
   {
     /*
      * 6502: .HYPNOISE -- LDY #sfxhyp1 / LDA #&F5 / LDX #240 / JSR NOISE2, then `sfxwhosh` through
@@ -227,39 +226,39 @@ namespace Elite
      * whether it is already playing", so the second hyperspace sound stacks on the first rather
      * than replacing it. That bit is the argument, not a separate routine.
      */
-    (void)_sound.PlaySoundPitched(SOUND_HYPERSPACE, HYPERSPACE_SUSTAIN, HYPERSPACE_FREQUENCY);
-    (void)_sound.PlaySound(SOUND_MISSILE, false);
+    /*
+     * The carry into `NOISE2` here is the CALLER's -- `LDY`, `LDA` and `LDX` touch no flag -- and
+     * it is unobservable, which is why false is passed rather than threaded through `LL164`.
+     * `NOISE` reads it on one path only, `LDA DNOIZ / BNE SOUR1`, where it becomes the RETURN
+     * value; nothing it writes depends on it, and `HYPNOISE` discards the answer.
+     */
+    (void)PlaySoundEffectPitched(_universe.sound, SoundEffect::Hyperspace, HYPERSPACE_SUSTAIN, HYPERSPACE_FREQUENCY, false);
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false);
 
     // 6502: LDY #1 / JSR DELAY -- one vertical sync, which is what the pacing object holds for.
-    if (_pacing != nullptr)
-    {
-      _pacing->ShowFrame();
-    }
+    _ports.present.Present();
 
-    (void)_sound.PlaySound(static_cast<std::uint8_t>(SOUND_HYPERSPACE + 128u), false);
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::HyperspaceAgain, false);
 
     // 6502: LDA #4 / JSR HFS2 / RTS.
-    DrawTunnel(_universe, _ports, HYPERSPACE_TUNNEL_STEP, _pacing);
+    DrawTunnel(_universe, _ports, HYPERSPACE_TUNNEL_STEP);
   }
 
-  void Launch(Universe& _universe, Ports& _ports, TunnelEffects* _pacing, std::uint8_t& _docked, std::uint8_t _crosshairX,
-              std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept
+  void Launch(Universe& _universe, Ports& _ports, std::uint8_t _crosshairX, std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept
   {
-    LoopSpawnEffects spawning(_universe, _ports);
-
     // 6502: LDX QQ12 / BEQ NLUNCH -- pressing "1" in flight does nothing but change the view.
-    if (_docked != 0u)
+    if (_universe.dockedFlag != 0u)
     {
       // 6502: JSR LAUN, over the docked screen it is still showing.
-      DrawLaunchTunnel(_universe, _ports, _pacing);
+      DrawLaunchTunnel(_universe, _ports);
       ResetShipAndBubble(_universe, _ports); // 6502: JSR RES2
 
       /*
        * 6502: JSR TT111 -- for the SEEDS, not for the distance. The planet's look comes from the
        * system's own seeds through `tek`, so a launch has to know which system it is leaving.
        */
-      const NearestSystem found = FindNearestSystem(_universe.commander.galaxySeeds, _crosshairX, _crosshairY,
-                                                    _universe.commander.systemX, _universe.commander.systemY);
+      const NearestSystem found = FindNearestSystem(_universe.commander.galaxySeeds, _crosshairX, _crosshairY, _universe.commander.systemX,
+                                                    _universe.commander.systemY);
       _selected = found.seeds;
 
       /*
@@ -271,18 +270,16 @@ namespace Elite
        * The station is what you have just left, and this is where it goes.
        */
       _universe.work.z.sgn = static_cast<std::uint8_t>(_universe.work.z.sgn + 1u);
-      (void)AddPlanetOrSun(_universe.bubble, _universe.work, spawning, _universe.current.techLevel, _universe.flight.blueprint);
+      (void)AddPlanetOrSun(_universe, _ports);
 
       _universe.work.z.sgn = 128u;
       _universe.work.z.hi = static_cast<std::uint8_t>(_universe.work.z.hi + 1u);
-      (void)AddStation(_universe.bubble, _universe.work, spawning, _universe.current.techLevel,
-                       _universe.flight.blueprint); // 6502: JSR NWSPS
+      (void)AddStation(_universe, _ports); // 6502: JSR NWSPS
 
       _universe.flight.delta = LAUNCH_SPEED; // 6502: LDA #12 / STA DELTA
 
       // 6502: JSR BAD / ORA FIST / STA FIST -- the fine is levied by leaving, not by being scanned.
-      _universe.commander.legalStatus =
-        static_cast<std::uint8_t>(ContrabandPenalty(_universe.commander) | _universe.commander.legalStatus);
+      _universe.commander.legalStatus = static_cast<std::uint8_t>(ContrabandPenalty(_universe.commander) | _universe.commander.legalStatus);
 
       _universe.view = VIEW_LAUNCHING; // 6502: LDA #255 / STA QQ11
 
@@ -293,18 +290,17 @@ namespace Elite
        * `STP` is still the 8 `LAUN` stored, which is the second half of §6.94's answer: the step
        * IS written on this path, by the routine the port had left as a stub (§6.109).
        */
-      DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _pacing);
+      DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present);
     }
 
     // 6502: .NLUNCH LDX #0 / STX QQ12 / JMP LOOK1 -- and the X that clears the flag is the X the
     // view change is given, so a launch always ends looking forwards.
-    _docked = 0u;
+    _universe.dockedFlag = 0u;
     ChangeView(_universe, _ports, 0u);
   }
 
   std::uint8_t ShowTitleShip(Universe& _universe, Ports& _ports, std::uint8_t _token, ShipType _shipType, std::uint8_t _distance) noexcept
   {
-
     // 6502: STY distaway / PHA / STX TYPE. The distance and the token are arguments here; `TYPE`
     // is a real byte and `NWSHP` below reads it back.
     _universe.flight.type = _shipType;
@@ -317,14 +313,15 @@ namespace Elite
      * one caller of `RESET` gets a different sound from every other.
      */
     _universe.status.titleReset = 0xFFu;
-    ResetGame(_universe, _ports, _universe.dockedFlag);
+    ResetGame(_universe, _ports);
     _universe.status.titleReset = 0u;
 
-    _ports.start.ClearKeyLogger();          // 6502: JSR ZEKTRAN
-    _ports.view.SetPalette(TITLE_PALETTE); // 6502: LDA #32 / JSR DOVDU19
+    _universe.keys.fill(0u); // 6502: JSR ZEKTRAN
+
+    // 6502: LDA #32 / JSR DOVDU19 -- the title screen's palette on the Master, an RTS here.
 
     SetUpScreen(_universe, _ports, TITLE_CLEAR_VIEW); // 6502: LDA #13 / JSR TT66
-    _universe.view = 0u;                      // 6502: LDA #0 / STA QQ11
+    _universe.view = 0u;                              // 6502: LDA #0 / STA QQ11
 
     /*
      * 6502: LDA #96 / STA INWK+14 / LDA #96 / STA INWK+7 / LDX #127 / STX INWK+29 / STX INWK+30.
@@ -340,7 +337,6 @@ namespace Elite
     _universe.work.pitchCounter = TITLE_SPIN;
 
     // 6502: INX / STX QQ17 -- 128, which is sentence case, and it is what the prompt prints in.
-    _ports.printer.SetCaseFlags(0x80u);
     _universe.text.caseFlags = 0x80u;
 
     // 6502: LDA TYPE / JSR NWSHP. The slot is kept because `LL9` needs the ship's block in `K%` as
@@ -348,10 +344,10 @@ namespace Elite
     const NewShip created = AddShip(_universe.bubble, _universe.work, _shipType, _universe.flight.blueprint);
     const std::uint8_t slot = created.created ? created.slot : std::uint8_t{0};
 
-    _universe.text.column = 6u;                               // 6502: LDA #6 / JSR DOXC
+    _universe.text.column = 6u;                            // 6502: LDA #6 / JSR DOXC
     PrintThenNewline(_ports.printer, TITLE_HEADING_TOKEN); // 6502: LDA #30 / JSR plf
     _ports.sink.Put(10u);                                  // 6502: LDA #10 / JSR TT26
-    _universe.text.column = 6u;                               // 6502: LDA #6 / JSR DOXC
+    _universe.text.column = 6u;                            // 6502: LDA #6 / JSR DOXC
 
     // 6502: LDA PATG / BEQ awe / LDA #13 / JSR DETOK -- the credits, and the byte that shows them
     // also changes what the main game loop spawns.
@@ -375,9 +371,9 @@ namespace Elite
 
     _universe.text.row = TITLE_PROMPT_ROW;     // 6502: LDA #15 / STA YC
     _universe.text.column = TITLE_PROMPT_LEFT; // 6502: LDA #1 / STA XC
-    _ports.tokens.Print(_token);            // 6502: PLA / JSR DETOK -- the caller's own token
+    _ports.tokens.Print(_token);               // 6502: PLA / JSR DETOK -- the caller's own token
 
-    _universe.text.column = 3u;                 // 6502: LDA #3 / JSR DOXC
+    _universe.text.column = 3u;              // 6502: LDA #3 / JSR DOXC
     _ports.tokens.Print(TITLE_BYLINE_TOKEN); // 6502: LDA #12 / JSR DETOK
 
     _universe.flight.steerCone = TITLE_CNT2;       // 6502: LDA #12 / STA CNT2
@@ -400,8 +396,7 @@ namespace Elite
        * byte 32 to nothing. So the AI cannot run here and cannot kill anybody, and there is no
        * player to kill -- the title screen has no energy banks (§6.122).
        */
-      (void)MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics, *_universe.flight.blueprint,
-                     _universe.view);
+      (void)MoveShip(_universe, _ports);
 
       /*
        * 6502: LDX distaway / STX INWK+6 / LDA MCNT / AND #3 / LDA #0 / STA INWK / STA INWK+3.
@@ -416,12 +411,11 @@ namespace Elite
       _universe.work.y.lo = 0u;
 
       // 6502: JSR LL9 -- the title's ship is never killed, so the carry it is reached with goes unread.
-      DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work,
-               _universe.bubble.blocks[slot], _universe.heap, *_universe.flight.blueprint, _universe.flight.type, _ports.drawing,
-               _universe.rng, false);
+      DrawShip(_universe, _universe.bubble.blocks[slot], false);
 
       // 6502: JSR RDKEY / DEC MCNT.
-      const TitleKey scan = _ports.start.ScanTitleKeys(_universe.keys);
+      _ports.present.HoldTitleFrame(_universe.work.z.hi); // 6502: TLL2's pace
+      const TitleKey scan = ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard);
       _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);
 
       /*
@@ -443,11 +437,10 @@ namespace Elite
     }
   }
 
-  void PrepareDeathScene(Universe& _universe, Ports& _ports, DashboardEffects& _sound) noexcept
+  void PrepareDeathScene(Universe& _universe, Ports& _ports) noexcept
   {
-
     // 6502: JSR EXNO3 -- `LDY #sfxexpl / BNE NOISE`, and the carry is whatever killed us.
-    (void)_sound.PlaySound(SOUND_EXPLOSION, false);
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Explosion, false);
 
     ResetShipAndBubble(_universe, _ports); // 6502: JSR RES2
 
@@ -555,10 +548,9 @@ namespace Elite
     } while (_universe.bubble.slots[DEATH_DEBRIS_SLOT] == 0u);
   }
 
-  void Die(Universe& _universe, Ports& _ports, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
+  void Die(Universe& _universe, Ports& _ports) noexcept
   {
-
-    PrepareDeathScene(_universe, _ports, _sound);
+    PrepareDeathScene(_universe, _ports);
 
     ClearFlightKeys(_universe.keys); // 6502: JSR U%
 
@@ -572,32 +564,42 @@ namespace Elite
      * VIC-II was reading the bitmap the whole time, so a frame was on the screen for exactly as
      * long as the next took to compute. A port that draws sixty-five frames between two presents
      * reproduces the arithmetic and none of the sequence (§6.109's argument, and §6.149's bug).
+     *
+     * `FRIN` is walked for the ship count on every frame, because the cost of one depends on it and
+     * the wreckage flying past empties the bubble -- so the rate rises through the sequence.
      */
-    (void)MainFlightLoop(_universe, _ports);
-    HideAllSprites(_ports.sight);
-    if (_pacing != nullptr)
+    const auto hold = [&_universe, &_ports]()
     {
-      _pacing->ShowFrame();
-    }
+      std::uint8_t ships = 0;
+      for (const std::uint8_t type : _universe.bubble.slots)
+      {
+        if (type == 0u)
+        {
+          break;
+        }
+        ++ships;
+      }
+      _ports.present.HoldFlightFrame(ships);
+    };
+
+    (void)MainFlightLoop(_universe, _ports);
+    HideAllSprites(_universe.video, _universe.memoryMap);
+    hold();
 
     do
     {
       (void)MainFlightLoop(_universe, _ports);
       _universe.status.laserCount = static_cast<std::uint8_t>(_universe.status.laserCount - 1u);
 
-      if (_pacing != nullptr)
-      {
-        _pacing->ShowFrame();
-      }
+      hold();
     } while (_universe.status.laserCount != 0u);
 
     // 6502: LDX #31 / JSR DET1 / JMP DEATH2 -- the first is a bare RTS and the second is the
     // caller's own death exit, which `Main.cpp` already wires as `RES2` then `BR1` (§6.25).
   }
 
-  void AbandonShip(Universe& _universe, Ports& _ports, std::uint8_t& _fuel) noexcept
+  void AbandonShip(Universe& _universe, Ports& _ports) noexcept
   {
-
     ResetShipAndBubble(_universe, _ports); // 6502: JSR RES2
 
     /*
@@ -636,16 +638,13 @@ namespace Elite
     // reach is unreachable here, because the ship flying away is not shooting at anybody.
     while (_universe.work.ai != 0u)
     {
-      static_cast<void>(MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics,
-                                 *_universe.flight.blueprint, _universe.view));
+      static_cast<void>(MoveShip(_universe, _ports));
       /*
        * 6502: JSR LL9 -- and the SLOT it writes back to is the one `FRS1` just filled, through
        * `INF`. Handing it slot 0 would have `LL9` writing its bookkeeping into the PLANET, which
        * is what the port did until the oracle disagreed about the planet's speed byte.
        */
-      DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work,
-               _universe.bubble.blocks[abandoned.slot], _universe.heap, *_universe.flight.blueprint, _universe.flight.type, _ports.drawing,
-               _universe.rng,
+      DrawShip(_universe, _universe.bubble.blocks[abandoned.slot],
                false); // the pod is never killed, so the carry goes unread
       --_universe.work.ai;
     }
@@ -690,7 +689,7 @@ namespace Elite
 
     // 6502: .nosurviv LDA #70 / STA QQ14 / JMP GOIN -- seven light years, and the docking is the
     // caller's, the way every `JMP` out of a routine has been.
-    _fuel = ESCAPE_FUEL;
+    _universe.commander.fuel = FULL_TANK;
   }
 
 } // namespace Elite

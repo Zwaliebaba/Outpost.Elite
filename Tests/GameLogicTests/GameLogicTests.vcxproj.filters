@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="NullSeams.h" />
     <ClInclude Include="Cpu6502.h">
       <Filter>Oracle</Filter>
     </ClInclude>
@@ -82,6 +83,9 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="GalaxyTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="GameTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="MarketTests.cpp">
@@ -169,6 +173,9 @@
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="UniverseImageTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
+    <ClCompile Include="StateHashTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
     <ClCompile Include="FlightReplayTests.cpp">

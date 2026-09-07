@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "Canvas.h"
 #include "Charts.h"
 #include "Commander.h"
@@ -68,109 +70,58 @@ namespace GameLogicTests
      * The null presenter: everything the game reaches for outside GameLogic, doing nothing and
      * remembering that it was asked.
      *
-     * One object satisfying five interfaces, which is what ADR-004 says the executable does -- the
+     * One object satisfying four interfaces, which is what ADR-004 says the executable does -- the
      * screens declare what they need separately and the shell answers all of it. Building the session
-     * this way is the cheapest available check that those five declarations are consistent.
+     * this way is the cheapest available check that those declarations are consistent.
      */
-    class NullShell final : public Elite::TradeScreenEffects,
-                            public Elite::ChartEffects,
-                            public Elite::LineEntryEffects,
-                            public Elite::StartUpEffects,
-                            public Elite::ControlCodes
+    class NullShell final : public Elite::Presenter
     {
     public:
-      // 6502: TRADEMODE, CLYNS, TT66, msblob and dn2.
       /*
-       * 6502: TRADEMODE -- TT66, a keyboard flush and a palette write.
+       * `TRADEMODE`, `CLYNS`, `TT66` and `dn2` WERE ANSWERED HERE AND ARE NOT ANY MORE (M3-b-3b).
        *
-       * The text state is `SetUpTextScreen`, which is TT66's own and is compared against the shipped
-       * routine by `TheScreenSeamsMatchTheShippedRoutines`. It used to be four lines written here
-       * from a comment, and they were nearly right: XC, YC and QQ17 were correct and DTW1, DTW2 and
-       * DTW6 were not set at all, which no assertion in this file could have noticed.
+       * Four overrides, and the shape of them is why the seams went: `SetUpTradeScreen` called
+       * `ClearToView` and `FlushKeyboard`, and `ClearToView` called `Elite::SetUpTextScreen`. The
+       * library does all of that itself now -- `SetUpScreen`, `ClearMessageRows` and `Beep` -- and
+       * only the flush and the wait were left for the platform to answer. The flush went too in
+       * M3-b-3d: it is `Keyboard::Flush`, so `ScriptedKeys` notes it and this does not.
        */
-      void SetUpTradeScreen(std::uint8_t _view) override
-      {
-        ClearToView(_view);
-        FlushKeyboard();
-        Note("view " + std::to_string(_view));
-      }
-      void ClearBottomRows() override
-      {
-        Note("clyns");
-      }
-      void BeepAndPause() override
-      {
-        Note("beep");
-      }
-      void ClearToView(std::uint8_t _view) override
-      {
-        view = _view;
-        if (cursor != nullptr && printer != nullptr && extended != nullptr)
-        {
-          Elite::SetUpTextScreen(*printer, *cursor, *extended);
-        }
-        Note("clear " + std::to_string(_view));
-      }
-      void ResetMissileIndicators() override
-      {
-        Note("missiles");
-      }
 
-      // 6502: DELAY and FLKB, from two interfaces that both want them.
+      // 6502: DELAY, which is `Presenter`'s.
       void WaitFrames(std::uint8_t _frames) override
       {
         Note("wait " + std::to_string(_frames));
       }
-      void FlushKeyboard() override
+      void Present() override
       {
-        Note("flush");
+        Note("present");
+      }
+      void HoldFlightFrame(std::uint8_t _ships) override
+      {
+        Note("hold " + std::to_string(_ships));
+      }
+      void HoldTitleFrame(std::uint8_t _distance) override
+      {
+        Note("spin " + std::to_string(_distance));
       }
 
-      // 6502: RESET, RES2, ZEKTRAN, startat, stopat, LAUN and TITLE.
-      void ResetUniverse() override
-      {
-        Note("reset");
-      }
-      void ResetShip() override
-      {
-        Note("res2");
-      }
-      void ClearKeyLogger() override
-      {
-        Note("zektran");
-      }
-      void StartTheme() override
-      {
-        Note("music on");
-      }
-      void StopTheme() override
-      {
-        Note("music off");
-      }
-      /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
-      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
-      {
-        (void)_keys;
-        return {true, 0u};
-      }
+      // `RESET`, `RES2` and `msblob` were answered here until M3-b-1e, `startat` and `stopat`
+      // until M3-b-2b, `ZEKTRAN` until M6-0-h-1 and `TITLE` until M6-0-h-2; all six are the
+      // library's now, and the title screen ends on the key `ScriptedKeys` holds for it.
 
-      std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _ship, std::uint8_t) override
-      {
-        Note("title " + std::to_string(_token) + "/" + std::to_string(Elite::Byte(_ship)));
-        return titleAnswer;
-      }
-
-      /// The control codes that leave the text system, which a null presenter simply does not draw.
-      void Run(std::uint8_t _code) override
-      {
-        Note("code " + std::to_string(_code));
-      }
+      /*
+       * `Run` WAS HERE AND IS NOT ANY MORE (M3-b-4b).
+       *
+       * It noted `"code N"` into the transcript and nothing asserted on the note. A docked session
+       * is the fixture that most nearly IS the executable, so the codes run for real here now --
+       * `SetGame` in the constructor -- and what they do lands in the state and the transcript this
+       * suite already compares.
+       */
 
       Elite::TextState* cursor = nullptr;
       Elite::TokenPrinter* printer = nullptr;
       Elite::ExtendedTextState* extended = nullptr;
       std::uint8_t view = 0;
-      std::uint8_t titleAnswer = 'N';
       std::vector<std::string> log;
 
     private:
@@ -211,14 +162,33 @@ namespace GameLogicTests
       bool written = false;
     };
 
-    class ScriptedKeys final : public Elite::KeySource
+    /*
+     * The keyboard, which answers three questions and used to answer one (M3-b-3d).
+     *
+     * It was a `KeySource` -- `TT217` and nothing else -- because `RDKEY` was a seam on the shell
+     * and `FLKB` was one on the line editor. Both are this port's now, so the script gained a set
+     * of held keys (which nothing docked reads: `RDKEY`'s callers are the title screen and the
+     * flight loop) and the flush the null shell used to note.
+     */
+    class ScriptedKeys final : public Elite::Keyboard
     {
     public:
       explicit ScriptedKeys(std::vector<std::uint8_t> _keys) noexcept
         : m_keys(std::move(_keys))
       {
       }
-      std::uint8_t NextKey() override
+      /// 6502: the matrix walk -- Space, held for exactly as long as the title screens need a key
+      /// to end them (M6-0-h-2), and nothing otherwise: the docked half reads `NextKey`.
+      [[nodiscard]] bool Held(std::size_t _key) override
+      {
+        return titleHeld && _key == Elite::KEY_SPEED_UP;
+      }
+      bool titleHeld = false;
+      void Flush() override
+      {
+        ++flushes;
+      }
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         if (m_taken >= m_keys.size())
         {
@@ -234,6 +204,7 @@ namespace GameLogicTests
         return m_taken;
       }
       bool overran = false;
+      std::uint32_t flushes = 0; ///< 6502: FLKB, which was the null shell's note until M3-b-3d
 
     private:
       std::vector<std::uint8_t> m_keys;
@@ -283,19 +254,21 @@ namespace GameLogicTests
     struct Session
     {
       Session()
-        : characters(sink),
-          recursive(characters),
+        : characters(sink, universe.sentences),
+          recursive(characters, text),
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
-          extended(characters, recursive, rng, &shell),
-          trade{recursive, characters, extended, text, keys, shell, rng},
-          save{recursive, characters, extended, sink, text, keys, shell, store, numberWidth}
+          extended(characters, recursive, rng),
+          ports{recursive, characters, sink, sid,
+                extended,  shell, keys, store}
       {
+        extended.SetGame(universe, ports); // 6502: DT3 -- the codes that leave run in the library
+        commander = Elite::DefaultCommander();
+        name = Elite::DefaultCommanderName();
         recursive.SetValueTokens(&values);
-        recursive.SetCursor(&text);
         shell.cursor = &text;
         shell.printer = &recursive;
-        shell.extended = &characters.state;
-        characters.state.sentenceStart = 0xFF;
+        shell.extended = &characters.State();
+        characters.State().sentenceStart = 0xFF;
       }
 
       Session(const Session&) = delete;
@@ -306,37 +279,51 @@ namespace GameLogicTests
       MemoryStore store;
       ScriptedKeys keys{{}};
 
+      /*
+       * Every byte of game state, in one object, and the names under it are ALIASES INTO IT.
+       *
+       * This struct is the docked half's `Outpost::Game`, and `Game` owns one `Elite::Universe`
+       * since M3-a; the screens take `(Universe&, Ports&)` since M3-a-3, so a session that kept
+       * its own commander beside the universe's would be driving the screens from different bytes
+       * from the ones it asserts on -- which is the defect M3-a-2's Windows build found in the app.
+       */
+      Elite::Universe universe;
+
       // ---- the text system ---------------------------------------------------------------------
       TranscriptSink sink;
-      Elite::TextState text;
+      Elite::TextState& text = universe.text;
       Elite::CharacterPrinter characters;
       Elite::TokenPrinter recursive;
-      Elite::Rng rng;
-      std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it (M2-c)
+      Elite::Rng& rng = universe.rng;
+      std::uint8_t& numberWidth = universe.numberWidth; // 6502: U as the last BPRNT left it (M2-c)
 
       // ---- the commander and the universe -------------------------------------------------------
-      Elite::Commander commander = Elite::DefaultCommander();
-      std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
-      std::array<std::uint8_t, 16> buffer{};
-      std::uint8_t useDisk = 0;
+      Elite::Commander& commander = universe.commander;
+      std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE>& name = universe.commanderName;
+      std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE>& image = universe.commanderFile;
+      std::array<std::uint8_t, 16>& buffer = universe.lineBuffer;
+      std::uint8_t& useDisk = universe.useDisk;
 
-      Elite::SystemSeeds currentSeeds{};
-      Elite::SystemSeeds selectedSeeds{};
-      Elite::CurrentSystem current;
-      Elite::MarketState market;
-      Elite::FlightStatus status;
+      Elite::SystemSeeds& currentSeeds = universe.current.seeds;
+      Elite::SystemSeeds& selectedSeeds = universe.selectedSeeds;
+      Elite::CurrentSystem& current = universe.current;
+      Elite::MarketState& market = universe.market;
+      Elite::FlightStatus& status = universe.status;
 
-      std::uint8_t crosshairX = 0;
-      std::uint8_t crosshairY = 0;
-      std::uint8_t explosionCount = 0;
-      std::uint8_t dockedFlag = 0;
-      std::uint8_t view = 0; ///< 6502: QQ11
+      std::uint8_t& crosshairX = universe.crosshairX;
+      std::uint8_t& crosshairY = universe.crosshairY;
+      std::uint8_t& explosionCount = universe.explosions;
+      std::uint8_t& dockedFlag = universe.dockedFlag;
+      std::uint8_t& view = universe.view; ///< 6502: QQ11
 
       Elite::StateTokens values;
       Elite::ExtendedTokenPrinter extended;
-      Elite::TradeScreen trade;
-      Elite::SaveScreen save;
+      NullSeams nulls;
+      Elite::SidWriteLog sid; ///< 6502: SID -- the docked half's own writes, which are none
+
+      /// The seams, over the shell and the store. Last, because every reference in it is bound at
+      /// construction. `NullShell` answers four of them, which is what it is for.
+      Elite::Ports ports;
     };
 
     /*
@@ -358,7 +345,7 @@ namespace GameLogicTests
       case Elite::KeyAction::StatusMode:
       {
         const Elite::ShipCondition condition{_game.dockedFlag, 0, 0, _game.status.energy};
-        Elite::StatusScreen(_game.trade, _game.commander, condition, _game.crosshairX, _game.crosshairY, _game.selectedSeeds);
+        Elite::StatusScreen(_game.universe, _game.ports, condition);
         return "status";
       }
 
@@ -369,37 +356,38 @@ namespace GameLogicTests
           Elite::FindNearestSystem(_game.commander.galaxySeeds, _game.crosshairX, _game.crosshairY,
                                    _game.commander.systemX, _game.commander.systemY);
         _game.selectedSeeds = found.seeds;
-        Elite::SystemDataScreen(_game.trade, _game.selectedSeeds, found.data, found.distance);
+        Elite::SystemDataScreen(_game.universe, _game.ports, found.data, found.distance);
         return "data on system";
       }
 
       case Elite::KeyAction::MarketPrice:
-        // 6502: TT167 -- and the screen reset above it is TRADEMODE, which the caller does. That is
-        // the one place the port's split between a screen and its seam is visible from here.
-        _game.shell.SetUpTradeScreen(Elite::BUY_CARGO_VIEW);
+        // 6502: TT167 -- and the screen reset above it is TRADEMODE, which the caller does. It was
+        // a seam on the shell until M3-b-3b and is `TT66` and a keyboard flush.
+        Elite::SetUpScreen(_game.universe, _game.ports, Elite::BUY_CARGO_VIEW);
+        _game.keys.Flush();
         Elite::PrintMarketScreen(_game.recursive, _game.characters, _game.text, _game.current.economy, _game.market, false);
         return "market";
 
       case Elite::KeyAction::BuyCargo:
-        Elite::BuyScreen(_game.trade, _game.commander, _game.market, _game.current.economy, false);
+        Elite::BuyScreen(_game.universe, _game.ports, false);
         return "buy";
 
       case Elite::KeyAction::SellCargo:
-        Elite::ListCargo(_game.trade, _game.commander, _game.market, _game.current.economy, Elite::SELL_CARGO_VIEW);
+        Elite::ListCargo(_game.universe, _game.ports, Elite::SELL_CARGO_VIEW);
         return "sell";
 
       case Elite::KeyAction::Inventory:
-        Elite::InventoryScreen(_game.trade, _game.commander, _game.market, _game.current.economy);
+        Elite::InventoryScreen(_game.universe, _game.ports);
         return "inventory";
 
       case Elite::KeyAction::EquipShip:
-        Elite::EquipShipScreen(_game.trade, _game.commander, _game.current.techLevel);
+        Elite::EquipShipScreen(_game.universe, _game.ports);
         return "equip";
 
       case Elite::KeyAction::DiskAccess:
       {
         const Elite::DiskMenuResult menu =
-          Elite::DiskAccessMenu(_game.save, _game.commander, _game.name, _game.image, _game.buffer, _game.useDisk);
+          Elite::DiskAccessMenu(_game.universe, _game.ports);
         // 6502: BCC P%+5 / JMP QU5 / JMP BAY -- and QU5 is DFAULT, which installs the image.
         if (menu.newCommander)
         {
@@ -465,13 +453,10 @@ namespace GameLogicTests
       game->commander.cargoHold[3u] = 2; // radioactives
       Elite::SaveCommander(game->commander, game->name, game->image);
 
-      Elite::GameStart start{game->shell,      game->save,       game->text,           game->commander, game->name,
-                             game->image,      game->buffer,     game->useDisk,        game->current,   game->selectedSeeds,
-                             game->crosshairX, game->crosshairY, game->explosionCount, game->dockedFlag};
-
       // 6502: TT170 -- the cold start, which ends by pressing "8" on the player's behalf.
-      game->shell.titleAnswer = 'N';
-      const Elite::ForcedKey begun = Elite::ResetAndStartGame(start);
+      game->keys.titleHeld = true; // Space at both title screens, which is not "Y", so no disk menu
+      const Elite::ForcedKey begun = Elite::ResetAndStartGame(game->universe, game->ports, false);
+      game->keys.titleHeld = false;
 
       Assert::AreEqual(static_cast<int>(Elite::KeyAction::StatusMode), static_cast<int>(begun.outcome.action),
                        L"a new game opens on the status screen");
@@ -617,10 +602,9 @@ namespace GameLogicTests
       game->commander.cargoHold[3u] = 2;
       Elite::SaveCommander(game->commander, game->name, game->image);
 
-      Elite::GameStart start{game->shell,      game->save,       game->text,           game->commander, game->name,
-                             game->image,      game->buffer,     game->useDisk,        game->current,   game->selectedSeeds,
-                             game->crosshairX, game->crosshairY, game->explosionCount, game->dockedFlag};
-      (void)Elite::ResetAndStartGame(start);
+      game->keys.titleHeld = true; // Space at both title screens (M6-0-h-2)
+      (void)Elite::ResetAndStartGame(game->universe, game->ports, false);
+      game->keys.titleHeld = false;
       Elite::GenerateMarket(game->rng, game->current.economy, game->market);
 
       game->keys = ScriptedKeys({'2', 13, 13, 13, 13, 13, 13, 'Q', 'N', 'N', 13});

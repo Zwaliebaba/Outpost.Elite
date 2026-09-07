@@ -595,6 +595,7 @@ namespace GameLogicTests
 
       Cpu6502 cpu = oracle.Fresh();
       std::uint32_t state = 31337u;
+      std::uint32_t carriesLeft = 0; // how often the shipped routine returns with the carry SET
 
       for (std::uint32_t iteration = 0; iteration < 150'000; ++iteration)
       {
@@ -623,7 +624,17 @@ namespace GameLogicTests
 
         // 6502: the carry the final `ROR P` leaves, which `MVEIT`'s y arithmetic runs on (§6.33).
         Assert::AreEqual(cpu.c, product.carry, (L"carry" + where).c_str());
+        carriesLeft += cpu.c ? 1u : 0u;
       }
+
+      /*
+       * AND IT IS NEVER SET. `MLTU2` opens with `LSR A / STA P+1`, so bit 7 of P+1 is zero, and
+       * the sixteen `ROR P+1 / ROR P` pairs shift exactly that bit out on the last one -- so the
+       * `ADC K2+1` in `MVEIT` that runs on this carry with no `CLC` is safe by construction, not
+       * by luck. The mutant `sm-mltu2-carry` replaces the flag with `false` and survives; this
+       * count is what makes that an equivalent rather than a gap (M6-0-g).
+       */
+      Assert::AreEqual<std::uint32_t>(0u, carriesLeft, L"MLTU2 never leaves the carry set");
     }
 
     /// A = A / Q, saturating, over every input pair.

@@ -6,6 +6,7 @@
 
 #include "LookupTables.h"
 #include "PauseScreen.h"
+#include "Universe.h"
 
 #include <algorithm>
 #include <array>
@@ -198,6 +199,51 @@ namespace GameLogicTests
      * is the original saying "still paused", and reaching `DK2` instead is "resumed". `DEATH2` is
      * trapped, and hitting that trap is "quit".
      */
+    /*
+     * 6502: DK4's head -- LDX thiskey / STX KL / CPX #&40 / BNE DK2 (M6-0-e).
+     *
+     * `DOKEY` falls into it on every pass and `ControlsTests` traps it there, because that sweep
+     * ends where the port's `ReadFlightControls` ends. The head is `Game::Step`'s: the key that
+     * arrived goes into byte 0 of the logger and INST/DEL freezes the game. Compared here on its
+     * own -- which key reaches `FREEZE`, and what is left in `KL` -- against the constant the port
+     * tests and the store it makes.
+     */
+    TEST_METHOD(ThePauseKeyMatchesDK4)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t dk4 = oracle.Label("DK4");
+      const std::uint16_t dk2 = oracle.Label("DK2");
+      const std::uint16_t freeze = oracle.Label("FREEZE");
+      const std::uint16_t thiskey = oracle.Label("thiskey");
+      const std::uint16_t kl = oracle.Label("KL");
+
+      std::uint32_t frozen = 0;
+      for (std::uint32_t key = 0; key < 256u; ++key)
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.AddTrap(dk2);
+        cpu.AddTrap(freeze);
+        cpu.memory[thiskey] = static_cast<std::uint8_t>(key);
+        cpu.memory[kl] = 0xAAu;
+        Assert::IsTrue(cpu.CallSubroutine(dk4, 1'000).completed, (L"DK4 left at key " + std::to_wstring(key)).c_str());
+
+        bool reachedFreeze = false;
+        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+        {
+          reachedFreeze = reachedFreeze || (hit.address == freeze);
+        }
+        Assert::AreEqual<std::uint32_t>(key, cpu.memory[kl], (L"KL holds the key that arrived, key " + std::to_wstring(key)).c_str());
+        Assert::AreEqual(key == Elite::PAUSE_KEY, reachedFreeze, (L"FREEZE is reached by the pause key alone, key " + std::to_wstring(key)).c_str());
+        frozen += reachedFreeze ? 1u : 0u;
+      }
+      Assert::AreEqual<std::uint32_t>(1u, frozen, L"exactly one key freezes the game");
+    }
+
     TEST_METHOD(ThePauseLoopMatchesFREEZE)
     {
       const OracleImage& oracle = OracleImage::Instance();
@@ -224,6 +270,9 @@ namespace GameLogicTests
              * and a trap pops a return address the `JMP` never pushed -- which unbalances the
              * stack and sends the eventual `RTS` somewhere arbitrary. It is self-modifying code
              * inside the interrupt handler, so in an interpreter it is three harmless stores.
+             *
+             * `WSCAN` waits for the vertical sync -- the platform's (ADR-005 section 3), which a
+             * flat interpreter has no raster for; it is trapped here and everywhere (M6-0-e).
              */
             for (const char* seam : {"BELL", "DELAY", "NOISE", "NOISE2", "WSCAN", "RDKEY", "SOFLUSH", "BDENTRY"})
             {
@@ -252,10 +301,13 @@ namespace GameLogicTests
              * key stopped working. §6.95's rule, and the failure looked like a port bug for as
              * long as it took to read the trap log.
              */
-            std::uint8_t sound = 0;
-            std::uint8_t mutokOld = ours[Elite::OPTION_MUTOK];
+            // 6502: DNOIZ and MUTOKOLD -- both are the universe's since M5-a-2, so the fixture
+            // seeds them there rather than in two locals the routine was handed references to.
+            Elite::Universe frozen;
+            frozen.sound.soundOff = 0;
+            frozen.musicSwitchWas = ours[Elite::OPTION_MUTOK];
             cpu.memory[dnoiz] = 0;
-            cpu.memory[mutokold] = mutokOld;
+            cpu.memory[mutokold] = frozen.musicSwitchWas;
             cpu.memory[autoFlag] = docking;
 
             Elite::OptionBlock block{};
@@ -268,7 +320,7 @@ namespace GameLogicTests
             cpu.x = static_cast<std::uint8_t>(key);
             const Elite::Testing::RunResult run = cpu.CallSubroutine(freeze, 60'000, dk7);
 
-            const Elite::PausePass pass = Elite::PressPauseKey(block, sound, mutokOld, docking, static_cast<std::uint8_t>(key));
+            const Elite::PausePass pass = Elite::PressPauseKey(frozen, block, docking, static_cast<std::uint8_t>(key));
 
             const std::wstring where =
               WidenText("FREEZE key " + std::to_string(key) + " patg " + std::to_string(patg) + " auto " + std::to_string(docking));
@@ -278,8 +330,8 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(damp + byte)], ours[byte],
                                (where + L": DAMP+" + std::to_wstring(byte)).c_str());
             }
-            Assert::AreEqual(cpu.memory[dnoiz], sound, (where + L": DNOIZ").c_str());
-            Assert::AreEqual(cpu.memory[mutokold], mutokOld, (where + L": MUTOKOLD").c_str());
+            Assert::AreEqual(cpu.memory[dnoiz], frozen.sound.soundOff, (where + L": DNOIZ").c_str());
+            Assert::AreEqual(cpu.memory[mutokold], frozen.musicSwitchWas, (where + L": MUTOKOLD").c_str());
 
             /*
              * STOPPED AT `DK7`, which is exactly one pass: the toggles and `MUTOKCH` have run and
@@ -303,7 +355,7 @@ namespace GameLogicTests
             Assert::IsTrue(pass.outcome == expected, (where + L": which way it went").c_str());
 
             outcomes.insert(std::to_string(static_cast<int>(pass.outcome)) + "/" + std::to_string(static_cast<int>(pass.music)) + "/" +
-                            std::to_string(pass.delayFrames) + "/" + std::to_string(sound));
+                            std::to_string(pass.delayFrames) + "/" + std::to_string(frozen.sound.soundOff));
             ++compared;
           }
         }

@@ -3,6 +3,7 @@
 #include "OracleImage.h"
 
 #include "ExtendedTokens.h"
+#include "TextPrint.h"
 
 #include <algorithm>
 #include <array>
@@ -56,18 +57,20 @@ namespace GameLogicTests
       std::vector<std::uint8_t> characters;
     };
 
-    class DeferredControls : public Elite::ControlCodes
-    {
-    public:
-      void Run(std::uint8_t _code) override
-      {
-        reached = true;
-        lastCode = _code;
-      }
-      bool reached = false;
-      std::uint8_t lastCode = 0;
-    };
-
+    /*
+     * `DeferredControls` WAS HERE AND IS NOT ANY MORE (M3-b-4b).
+     *
+     * It recorded that a code had left the text system, and the sweep below asserted which of the
+     * thirty-one do. `Elite::RunControlCode` is the dispatch now and this printer is built WITHOUT
+     * a game, so the codes that leave are ignored -- which is exactly what a null `ControlCodes*`
+     * meant and is what keeps this sweep about the text system rather than about the game.
+     *
+     * WHAT THAT COSTS IS NAMED RATHER THAN HIDDEN. The eleven codes that leave are not compared
+     * HERE, because this printer has no game behind it. Eight of them are compared through the
+     * dispatch over a universe in `MissionTests` since M6-0-c (9, 21, 22, 24, 25, 26, 27, 28), and
+     * three (11, 30, 31) are named there and in `RunControlCode`'s `default`: routines no token
+     * this build prints reaches, unported on purpose.
+     */
     /// Value tokens reach commander state, which is phase 2's.
     class DeferredValues : public Elite::ValueTokens
     {
@@ -147,24 +150,25 @@ namespace GameLogicTests
     struct PortPrinter
     {
       explicit PortPrinter(const TextStateBytes& _state, const GeneratorState& _seed = SEED)
-        : characters(screen),
-          recursive(characters, &values),
-          printer(characters, recursive, rng, &controls)
+        : characters(screen, sentences),
+          recursive(characters, text, &values),
+          printer(characters, recursive, rng)
       {
         rng.SetState(_seed);
-        characters.state.lowerCaseBits = _state.lowerCaseBits;
-        characters.state.sentenceStart = _state.sentenceStart;
-        characters.state.toLineBuffer = _state.toLineBuffer;
-        characters.state.justify = _state.justify;
-        characters.state.alwaysLower = _state.alwaysLower;
-        characters.state.caseMask = _state.caseMask;
+        characters.State().lowerCaseBits = _state.lowerCaseBits;
+        characters.State().sentenceStart = _state.sentenceStart;
+        characters.State().toLineBuffer = _state.toLineBuffer;
+        characters.State().justify = _state.justify;
+        characters.State().alwaysLower = _state.alwaysLower;
+        characters.State().caseMask = _state.caseMask;
       }
 
       CapturingSink screen;
       Rng rng;
       DeferredValues values;
-      DeferredControls controls;
+      Elite::ExtendedTextState sentences;
       Elite::CharacterPrinter characters;
+      Elite::TextState text;
       TokenPrinter recursive;
       ExtendedTokenPrinter printer;
     };
@@ -207,7 +211,7 @@ namespace GameLogicTests
       PortPrinter port(_state, _seed);
       port.printer.Print(_token);
 
-      if (port.controls.reached || port.values.reached)
+      if (port.printer.CodesThatLeft() != 0u || port.values.reached)
       {
         return false;
       }
@@ -298,10 +302,11 @@ namespace GameLogicTests
       SeedTextState(cpu, oracle, _state);
 
       CapturingSink screen;
-      Elite::CharacterPrinter characters(screen);
-      characters.state.justify = _state.justify;
-      characters.state.caseMask = _state.caseMask;
-      characters.state.sentenceStart = _state.sentenceStart;
+      Elite::ExtendedTextState sentences;
+      Elite::CharacterPrinter characters(screen, sentences);
+      characters.State().justify = _state.justify;
+      characters.State().caseMask = _state.caseMask;
+      characters.State().sentenceStart = _state.sentenceStart;
 
       for (std::size_t index = 0; index < _text.size(); ++index)
       {
@@ -335,9 +340,9 @@ namespace GameLogicTests
 
         DascComparison port;
         port.screen = screen.characters;
-        port.sentenceStart = characters.state.sentenceStart;
-        port.bufferLength = characters.state.bufferLength;
-        port.caseMask = characters.state.caseMask;
+        port.sentenceStart = characters.State().sentenceStart;
+        port.bufferLength = characters.State().bufferLength;
+        port.caseMask = characters.State().caseMask;
         for (std::uint16_t offset = 0; offset < BUFFER_COMPARED; ++offset)
         {
           port.buffer.push_back(characters.buffer[offset]);
@@ -426,18 +431,25 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
 
       /*
-       * The codes the port cannot compare against the shipped routine.
+       * The codes this fixture cannot compare against the shipped routine, because they leave the
+       * text system and this printer has no game to leave into (M6-0-c).
        *
-       * 9, 11 and 21 reach the canvas. 22, 24 and 26 wait for a key or read a typed line, so
-       * running them in the oracle would spin until the instruction budget ran out; 25 prints a
-       * token and then delays for a hundred frames. 27, 28, 30 and 31 print a token chosen by
-       * GCNT or DISK, which is game state the printer does not hold.
+       * Eight are compared THROUGH THE DISPATCH elsewhere: `MissionTests` runs `DETOK2` with the
+       * code in A on the oracle and `PrintByte(code)` over a universe on the port for 9 (`MT9`),
+       * 21 (`CLYNS`), 22 (`PAUSE`), 24 (`PAUSE2`), 25 (`BRIS`), 26 (`MT26`), 27 and 28 (`MT27`,
+       * `MT28`), with the keyboard scripted on both sides where a code waits for a key.
        *
-       * 21 is in this list and still has a ported half -- see REACHES_SEAM below. It is here
-       * because CLYNS clears screen memory the port has no canvas for, not because its flags are
-       * unported.
+       * Three are DEFERRED FOR GOOD and named: 11 is `NLIN4`, a rule across the screen; 30 and 31
+       * are `FILEPR` and `OTHERFILEPR`, the media names under `DISK`. No token this build prints
+       * reaches them and the port's `default` does nothing for them; `MissionTests` pins the table
+       * entries they would dispatch to and the port's nothing.
+       *
+       * 21 has a ported half beside its screen half -- see REACHES_SEAM below.
        */
+      constexpr std::array<std::uint8_t, 8> COMPARED_THROUGH_THE_DISPATCH = {9, 21, 22, 24, 25, 26, 27, 28};
+      constexpr std::array<std::uint8_t, 3> DEFERRED_FOR_GOOD = {11, 30, 31};
       constexpr std::array<std::uint8_t, 11> DEFERRED = {9, 11, 21, 22, 24, 25, 26, 27, 28, 30, 31};
+      static_assert(COMPARED_THROUGH_THE_DISPATCH.size() + DEFERRED_FOR_GOOD.size() == DEFERRED.size(), "eight and three are the eleven");
 
       /// 8, 21, 23 and 29 are split: the flags they set are text state and stay here, and only the
       /// cursor move or the screen clear is passed on. So they reach the seam AND are comparable
@@ -471,8 +483,10 @@ namespace GameLogicTests
           PortPrinter port(start);
           port.printer.PrintByte(code);
 
-          Assert::AreEqual(seam, port.controls.reached,
-                           (L"control code " + std::to_wstring(code) + L" should" + (seam ? L"" : L" not") + L" reach the seam").c_str());
+          Assert::AreEqual(seam, port.printer.CodesThatLeft() != 0u,
+                           (L"control code " + std::to_wstring(code) + L" should" + (seam ? L"" : L" not") +
+                            L" leave the text system")
+                             .c_str());
           if (deferred)
           {
             continue;
@@ -501,19 +515,19 @@ namespace GameLogicTests
            */
           const std::wstring where = L" for control code " + std::to_wstring(code) + L" from DTW1=" + std::to_wstring(start.lowerCaseBits);
 
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW1")], port.characters.state.lowerCaseBits,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW1")], port.characters.State().lowerCaseBits,
                                           (L"DTW1 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW2")], port.characters.state.sentenceStart,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW2")], port.characters.State().sentenceStart,
                                           (L"DTW2 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW3")], port.characters.state.toLineBuffer,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW3")], port.characters.State().toLineBuffer,
                                           (L"DTW3 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW4")], port.characters.state.justify,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW4")], port.characters.State().justify,
                                           (L"DTW4 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW5")], port.characters.state.bufferLength,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW5")], port.characters.State().bufferLength,
                                           (L"DTW5 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW6")], port.characters.state.alwaysLower,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW6")], port.characters.State().alwaysLower,
                                           (L"DTW6 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW8")], port.characters.state.caseMask,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW8")], port.characters.State().caseMask,
                                           (L"DTW8 differs" + where).c_str());
           Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("QQ17")], port.recursive.CaseFlags(), (L"QQ17 differs" + where).c_str());
 
@@ -550,8 +564,9 @@ namespace GameLogicTests
         }
       }
 
-      Logger::WriteMessage(("JMTB: " + std::to_string(compared) + " control code expansions compared, " + std::to_string(DEFERRED.size()) +
-                            " of 31 codes deferred")
+      Logger::WriteMessage(("JMTB: " + std::to_string(compared) + " control code expansions compared here, " +
+                            std::to_string(COMPARED_THROUGH_THE_DISPATCH.size()) + " compared through the dispatch in MissionTests, " +
+                            std::to_string(DEFERRED_FOR_GOOD.size()) + " of 31 codes deferred for good")
                              .c_str());
 
       // Twenty of the thirty-one reachable codes are compared, in two case states each. The table
@@ -731,7 +746,7 @@ namespace GameLogicTests
         PortPrinter port{TextStateBytes{}};
         port.printer.PrintSystemOverride(static_cast<std::uint8_t>(token));
 
-        if (port.controls.reached || port.values.reached)
+        if (port.printer.CodesThatLeft() != 0u || port.values.reached)
         {
           continue;
         }

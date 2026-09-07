@@ -2,6 +2,8 @@
 
 #include "Dashboard.h"
 
+#include "Universe.h"
+
 #include "Arith.h"
 #include "EliteTypes.h"
 #include "LookupTables.h"
@@ -17,7 +19,8 @@ namespace Elite
     return {(flashing != 0u) ? DIAL_NORMAL : DIAL_DANGER, DIAL_NORMAL};
   }
 
-  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold, DialColours _colours) noexcept
+  void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold,
+               DialColours _colours) noexcept
   {
     // 6502: DILX -- four `LSR A`, and the entry point decides how many of them run (§6.63).
     std::uint8_t value = _value;
@@ -39,10 +42,10 @@ namespace Elite
      * as (K, K+1) and part 3 stores them the other way round, so the same test means the opposite
      * thing for the energy bars.
      */
-    std::uint8_t colour = _colours.atOrAbove; // 6502: COL
-    if (value < _threshold && _colours.below != 0u)
+    PixelPattern ink = _colours.atOrAbove; // 6502: COL
+    if (value < _threshold && _colours.below != PixelPattern::Blank)
     {
-      colour = _colours.below;
+      ink = _colours.below;
     }
 
     // 6502: LDY #2 / LDX #3 -- rows 2 to 4 of four character cells, so a bar is three pixels tall.
@@ -83,7 +86,7 @@ namespace Elite
 
       // 6502: DL5 -- AND COL / STA (SC),Y three times over. It STORES rather than EORs, which is
       // why the dashboard needs no erase and the space view does.
-      const std::uint8_t byte = static_cast<std::uint8_t>(pattern & colour);
+      const std::uint8_t byte = static_cast<std::uint8_t>(pattern & PatternByte(ink));
       for (std::uint8_t within = 0; within < 3u; ++within)
       {
         _canvas.Write(static_cast<std::uint16_t>(_draw.sc + row + within), byte);
@@ -105,7 +108,7 @@ namespace Elite
 
   void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value) noexcept
   {
-    std::uint8_t row = 1u; // 6502: LDY #1 -- rows 1 to 4, so this bar is four pixels tall
+    std::uint8_t row = 1u;   // 6502: LDY #1 -- rows 1 to 4, so this bar is four pixels tall
     std::uint8_t q = _value; // 6502: STA Q -- this routine's own (M2-c)
 
     do
@@ -126,7 +129,7 @@ namespace Elite
          * The lit pixel, and then `Q` is set to 255 so that no later block can match -- a loop exit
          * written as data rather than as a branch.
          */
-        byte = static_cast<std::uint8_t>(DASHBOARD_PIXEL_TABLE[q & 3u] & DIAL_NORMAL);
+        byte = static_cast<std::uint8_t>(DASHBOARD_PIXEL_TABLE[q & 3u] & PatternByte(DIAL_NORMAL));
         q = 0xFFu;
       }
 
@@ -149,12 +152,12 @@ namespace Elite
     _draw.sc = static_cast<std::uint16_t>(_draw.sc + 0x140u);
   }
 
-  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, std::uint8_t _colour) noexcept
+  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, CellPalette _palette) noexcept
   {
     // 6502: DEX / TXA / INX / EOR #3 -- missile 1 to 4 becomes cell 3 down to 0, so they fill from
     // the right. `STY SC / TAY / LDA SC` is a register shuffle and not a use of the screen pointer.
     const std::uint8_t cell = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_missile - 1u) ^ 3u);
-    _canvas.Write(static_cast<std::uint16_t>(MISSILE_CELL + cell), _colour);
+    _canvas.Write(static_cast<std::uint16_t>(MISSILE_CELL + cell), _palette);
   }
 
   void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles) noexcept
@@ -175,21 +178,19 @@ namespace Elite
     }
   }
 
-  void SetMissileTarget(Canvas& _canvas, Bubble& _bubble, std::uint8_t& _missileSeeking, std::uint8_t _missiles, std::uint8_t _target,
-                        std::uint8_t _colour) noexcept
+  void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, CellPalette _palette) noexcept
   {
-    _bubble.missileTarget = _target;                  // 6502: STX MSTG
-    SetMissileIndicator(_canvas, _missiles, _colour); // 6502: LDX NOMSL / JSR MSBAR
+    _universe.bubble.missileTarget = _target;                   // 6502: STX MSTG
+    SetMissileIndicator(_universe.canvas, _missiles, _palette); // 6502: LDX NOMSL / JSR MSBAR
 
     // 6502: STY MSAR -- and Y is the ZERO `MSBAR` ended on, not the colour that went in.
-    _missileSeeking = 0;
+    _universe.status.missileArmed = 0;
   }
 
-  void AbortMissileLock(Canvas& _canvas, Bubble& _bubble, std::uint8_t& _missileSeeking, std::uint8_t _missiles,
-                        std::uint8_t _colour) noexcept
+  void AbortMissileLock(Universe& _universe, std::uint8_t _missiles, CellPalette _palette) noexcept
   {
     // 6502: ABORT -- LDX #&FF, and no RTS: it runs straight into ABORT2.
-    SetMissileTarget(_canvas, _bubble, _missileSeeking, _missiles, 0xFFu, _colour);
+    SetMissileTarget(_universe, _missiles, 0xFFu, _palette);
   }
 
   void ToggleEcmIndicator(Canvas& _canvas) noexcept
@@ -205,7 +206,7 @@ namespace Elite
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(STATION_CELL + 40u), BULB_COLOUR);
   }
 
-  void StartEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects, bool _carryIn) noexcept
+  void StartEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, bool _carryIn) noexcept
   {
     /*
      * 6502: ECBLB2 -- `LDA #32 / STA ECMA / LDY #sfxecm / JSR NOISE`, and NOT ONE OF THOSE TOUCHES
@@ -213,20 +214,20 @@ namespace Elite
      * is an argument and not a constant: the pass-through §6.99 found at the seam runs through the
      * routine above it too (§6.118).
      */
-    _status.ecmCountdown = 32u;                    // 6502: LDA #32 / STA ECMA
-    (void)_effects.PlaySound(SOUND_ECM, _carryIn); // 6502: LDY #sfxecm / JSR NOISE
-    ToggleEcmIndicator(_canvas);                   // 6502: and no RTS -- it falls into ECBLB
+    _status.ecmCountdown = 32u;                                // 6502: LDA #32 / STA ECMA
+    (void)PlaySoundEffect(_sound, SoundEffect::Ecm, _carryIn); // 6502: LDY #sfxecm / JSR NOISE
+    ToggleEcmIndicator(_canvas);                               // 6502: and no RTS -- it falls into ECBLB
   }
 
-  void StopEcm(Canvas& _canvas, FlightStatus& _status, DashboardEffects& _effects) noexcept
+  void StopEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound) noexcept
   {
-    _status.ecmCountdown = 0u;     // 6502: LDA #0 / STA ECMA
-    _status.ecmOurs = 0u;          // 6502: STA ECMP
-    ToggleEcmIndicator(_canvas);   // 6502: JSR ECBLB
-    _effects.StopSound(SOUND_ECM); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
+    _status.ecmCountdown = 0u;                 // 6502: LDA #0 / STA ECMA
+    _status.ecmOurs = 0u;                      // 6502: STA ECMP
+    ToggleEcmIndicator(_canvas);               // 6502: JSR ECBLB
+    StopSoundEffect(_sound, SoundEffect::Ecm); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
   }
 
-  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel,
+  void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel,
                  Compass& _compass, const Bubble& _bubble) noexcept
   {
     // ---- part 1: the speed bar ------------------------------------------------------------------
@@ -352,7 +353,7 @@ namespace Elite
 
     DrawBar(_canvas, _draw, _status.forwardShield, 4, BAR_THRESHOLD, plain); // 6502: LDA FSH / JSR DILX
     DrawBar(_canvas, _draw, _status.aftShield, 4, BAR_THRESHOLD, plain);     // 6502: LDA ASH / JSR DILX
-    DrawBar(_canvas, _draw, _fuel, 2, BAR_THRESHOLD, plain);                 // 6502: LDA QQ14 / JSR DILX+2
+    DrawBar(_canvas, _draw, _fuel.tenths, 2, BAR_THRESHOLD, plain);                 // 6502: LDA QQ14 / JSR DILX+2
 
     // 6502: JSR PZW / STX K+1 / STA K -- part 1's order again, so the temperatures flash.
     const DangerColours heat = DangerColour(_flight.mainLoopCounter, _status.damageFlash);

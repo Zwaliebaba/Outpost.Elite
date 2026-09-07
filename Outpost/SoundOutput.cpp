@@ -127,11 +127,11 @@ namespace Outpost
     Apply(m_interrupt);
   }
 
-  void SoundOutput::Pump(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music) noexcept
+  void SoundOutput::Pump(Elite::SoundBuffer& _buffer, Elite::MusicPlayer& _music, const Elite::SidWriteLog& _gameWrites) noexcept
   {
-    // The game's own writes since the last pump come first, in the order they were made.
-    Apply(m_direct);
-    m_direct.Clear();
+    // The game's own writes since the last pump come first, in the order they were made. The log is
+    // the game's since M5-e-1; this reads it and the shell clears it.
+    Apply(_gameWrites);
 
     if (!Available())
     {

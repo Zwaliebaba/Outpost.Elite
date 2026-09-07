@@ -4,10 +4,13 @@
 #include <cstdint>
 
 #include "Canvas.h"
+#include "DockedKeys.h"
+#include "MemoryMap.h"
 #include "Commander.h"
 #include "PlanetDraw.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
+#include "VideoState.h"
 #include "Trumbles.h"
 
 namespace Elite
@@ -205,27 +208,78 @@ namespace Elite
   /// 6502: LDA #14 -- what `DOKEY` bumps and reduces the rates by on every pass.
   inline constexpr std::uint8_t CONTROL_STEP = 14;
 
-  /// 6502: the two things `DOKEY`'s flight half reaches that are not memory.
-  class ControlEffects
+  /*
+   * What the platform knows about the keyboard, and it is less than a scan (§4.5, slice M3-b-3d).
+   *
+   * `RDKEY` WAS A SEAM AND ONLY ONE LINE OF IT HAD TO BE. The routine walks `&DC00`/`&DC01` eight
+   * columns at a time and reads the joystick, which is hardware; everything AROUND that walk is
+   * not. It brackets itself in `SETL1`, which is `MemoryMap` since M3-b-3a; it switches sprite 1
+   * off, which is a `VideoState` write; it zeroes the logger, which is `ZEKTRAN` over sixty-five
+   * bytes of `Universe`; it counts DOWN so that `thiskey` ends up holding the lowest-numbered key
+   * held, which is the difference between "Y" opening the disk menu and not; and it ends by
+   * forgetting the nine keys that act rather than steer when `QQ11` is not the space view, which
+   * the port's own comment has called "the one piece of `RDKEY` that is game logic" since slice 3d.
+   *
+   * So this answers ONE question -- is this key down -- and `ScanKeyboard` below is the rest,
+   * compared against the shipped routine like anything else in the library.
+   *
+   * `NextKey` AND `Flush` ARE NOT THE SCAN. `TT217` blocks until a key is pressed, which is the
+   * docked half's whole input and ADR-004 §1's open problem (the port's routines are written
+   * against it exactly as the charts were written against the drawing they could not yet do), and
+   * `FLKB` empties a hardware buffer this side of the game has no model for.
+   */
+  class Keyboard
   {
   public:
-    virtual ~ControlEffects() = default;
+    virtual ~Keyboard() = default;
 
-    /*
-     * 6502: JSR RDKEY -- the CIA keyboard-matrix scan and the joystick port.
-     *
-     * Hardware from end to end: it walks `&DC00`/`&DC01` eight columns at a time, reads the
-     * joystick from `CIA`, and brackets the whole thing in `SETL1` calls that switch the raster
-     * interrupt. It rewrites the key logger as its output. One piece of it IS game logic -- the
-     * tail clears `KY12` to `KY20` when `QQ11` says this is not a space view -- but that depends
-     * on what the scan itself found, so it stays with the scan.
-     */
-    virtual void ScanKeyboard() = 0;
+    /// 6502: the matrix walk's `LDA &DC01` for one row -- is key `_key` down right now?
+    [[nodiscard]] virtual bool Held(std::size_t _key) = 0;
 
-    /// 6502: JSR DOCKIT -- phase 4's docking autopilot. It reads the ship block and writes
-    /// `INWK+27` to `INWK+30`, which is how it steers: as an acceleration and three rates.
-    virtual void RunDockingComputer(Ship& _work) = 0;
+    /// 6502: TT217 -- block until a key is pressed, and return its character.
+    [[nodiscard]] virtual std::uint8_t NextKey() = 0;
+
+    /// 6502: FLKB -- empty the keyboard buffer, so a key pressed before a prompt is discarded.
+    virtual void Flush() = 0;
   };
+
+  /*
+   * 6502: RDKEY's answer -- the carry and `thiskey`.
+   *
+   * It was declared on `StartUpEffects` until M3-b-3d, because the title screen was the only
+   * caller that read it: `DOKEY` calls the same routine and throws the answer away.
+   */
+  struct TitleKey
+  {
+    bool pressed = false; ///< 6502: the carry, SET when the matrix walk found something
+    std::uint8_t key = 0; ///< 6502: thiskey, which is what `TITLE` returns and `BR1` compares
+  };
+
+  /*
+   * 6502: RDKEY -- the whole routine, over a `Keyboard` that answers only which keys are down.
+   *
+   * THE LOGGER IS CLEARED AND THEN DECREMENTED, not stored into: `JSR ZEKTRAN` zeroes all
+   * sixty-five bytes and the walk does `DEC KEYLOOK,X`, so a held key reads 255. Everything
+   * downstream tests for non-zero -- but `DOKEY` also WRITES this array when the docking computer
+   * is flying, and a scan that stored rather than cleared would leave the autopilot's synthetic
+   * presses standing for ever.
+   *
+   * THE WALK COUNTS DOWN and `thiskey` is stored on every hit, so what comes back is the LOWEST
+   * numbered key held rather than the first one found.
+   */
+  [[nodiscard]] TitleKey ScanKeyboard(KeyLogger& _keys, VideoState& _video, MemoryMap& _map, std::uint8_t _view,
+                                      Keyboard& _keyboard) noexcept;
+
+  /*
+   * `ControlEffects` WAS HERE AND IS NOT ANY MORE (M6-0-h-3).
+   *
+   * It was "the one thing `DOKEY`'s flight half reaches that is neither memory nor the keyboard" --
+   * 6502: DOKEY's `auton` path -- 6502: JSR DOCKIT, the docking autopilot, which reads the ship block and writes `INWK+27` to
+   * `INWK+30` -- an acceleration and three rates -- and which M4-c-2 made `Elite::RunDockingComputer`
+   * (`Tactics.h`). Every implementer of the seam made that one call; `ReadFlightControls` makes it
+   * itself now, and the `DOKEY` sweep runs the real autopilot over a seeded bubble on both machines
+   * instead of scripting its four answers through the seam.
+   */
 
   /*
    * 6502: DOKEY's flight half -- turn what is held down into a roll rate and a pitch rate.
@@ -247,8 +301,7 @@ namespace Elite
    *
    * The routine ends by falling into `DK4`, the docked dispatcher, which is not this unit's.
    */
-  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, Ship& _work, FlightState& _flight,
-                          ControlEffects& _effects) noexcept;
+  void ReadFlightControls(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: SPOFF% -- the sprite pointer for the first sprite definition.
@@ -270,49 +323,22 @@ namespace Elite
   inline constexpr std::uint16_t SIGHT_SPRITE_CELL = Canvas::SCREEN_CELLS + 0x3F8u;
   inline constexpr std::uint16_t SIGHT_SPRITE_CELL_2 = Canvas::DASHBOARD_CELLS + 0x3F8u;
 
-  /// 6502: POW, POW+128, Armlas -- the laser powers `SIGHT` tests for, in the order it tests them.
-  /// `Armlas` is `INT(128.5 + 1.5*POW)`, which is 151; the mining laser is not tested for at all
-  /// and gets the fourth sprite by elimination.
-  inline constexpr std::uint8_t LASER_PULSE = 15;
-  inline constexpr std::uint8_t LASER_BEAM = 143;
-  inline constexpr std::uint8_t LASER_MILITARY = 151;
-
   /// What `SIGHT` reaches that is a VIC-II register rather than memory.
-  class SightEffects
-  {
-  public:
-    virtual ~SightEffects() = default;
-
-    /*
-     * 6502: JSR SETL1 -- switch the raster interrupt handler's mode, which the routine does twice,
-     * bracketing everything it touches.
-     *
-     * `SETL1` is self-modifying code inside the interrupt handler itself: `SEI / STA L1M / ... /
-     * CLI`. §6.59 refused it a place in `GameLogic` for that reason and this is the seam it gets
-     * instead. The two values are %101 on the way in and %100 on the way out.
-     */
-    virtual void SetRasterMode(std::uint8_t _mode) = 0;
-
-    /// 6502: STA VIC+&27 -- sprite 0's colour, which is the sights'.
-    virtual void SetSightColour(std::uint8_t _colour) = 0;
-
-    /// 6502: STA VIC+&15 -- which of the eight sprites are switched on. Bit 0 is the sights and
-    /// bits 2 to 7 are the Trumbles, which is why the two are ORed together here rather than set
-    /// independently.
-    virtual void SetSpritesEnabled(std::uint8_t _mask) = 0;
-
-    /*
-     * 6502: LDA VIC+&15 / AND #%00000011 / STA VIC+&15 -- and this one READS the register first.
-     *
-     * The flight loop's part 15 switches every sprite off but the lowest two when the cabin gets
-     * hot enough to kill the Trumbles, and it does it as a read-modify-write rather than by
-     * computing the new value: it does not know how many Trumbles are showing. So it cannot be
-     * expressed as `SetSpritesEnabled` -- the port has no copy of the register to AND against --
-     * and it is a second method rather than a getter, because a getter would invite a port to
-     * compute what the hardware is holding.
-     */
-    virtual void MaskSprites(std::uint8_t _mask) = 0;
-  };
+  /*
+   * `SightEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3a).
+   *
+   * Three of its four methods were VIC-II register writes, and ADR-005 §1 decided in slice 3d that
+   * they belong in `VideoState` -- `ApplySightColour`, `ApplySpritesEnabled` and `ApplyMaskSprites`
+   * have been the one-line bodies behind them ever since. `MaskSprites` stays a call of its own for
+   * the reason it always had: part 15's `LDA VIC+&15 / AND #.. / STA VIC+&15` is a read-modify-write
+   * the game makes because it does not know how many Trumble sprites are showing, so it is not a
+   * `SetSpritesEnabled` with a computed argument.
+   *
+   * THE FOURTH IS WHY THE OTHER THREE HAD TO WAIT, and the reason it gave was wrong. `SetRasterMode`
+   * was `SETL1`, which this port believed for six slices to be "self-modifying code inside the
+   * interrupt handler" -- it is the 6510's input/output port register, eight instructions, no code
+   * written. `MemoryMap.h` has the reading and the two bytes it turns into.
+   */
 
   /*
    * 6502: SIGHT -- the laser sights and the Trumbles, which are the same four instructions apart.
@@ -332,7 +358,7 @@ namespace Elite
    * instead. A port that wrote a pointer of 160 and then disabled the sprite would look the same
    * on screen and differ on every byte.
    */
-  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles,
-                       std::uint8_t _view, SightEffects& _effects) noexcept;
+  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles, std::uint8_t _view,
+                       VideoState& _video, MemoryMap& _map) noexcept;
 
 } // namespace Elite

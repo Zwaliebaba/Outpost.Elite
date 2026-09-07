@@ -179,7 +179,7 @@ namespace Outpost
      *
      * THE SAME FOUR KEYS STEER IN FLIGHT, which is not a conflict on the C64 because there it is
      * `<`, `>`, `X` and `S` that steer and the cursor keys are the chart's alone. Here one key has
-     * both jobs, and `FlightSession::ScanKeyboard` is where they are told apart: with a chart
+     * both jobs, and `Elite::ScanKeyboard` is where they are told apart: with a chart
      * showing it drops the steering entries, so the arrows aim rather than roll. That rule is the
      * port's own and is marked as such where it lives.
      *

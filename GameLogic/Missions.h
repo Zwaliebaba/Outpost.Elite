@@ -136,44 +136,29 @@ namespace Elite
   void PrintMissionToken(ExtendedTokenPrinter& _tokens, std::uint8_t _base, std::uint8_t _galaxy) noexcept;
 
   /*
-   * 6502: the entries of `JMTB` that a mission briefing reaches -- 8, 9, 22, 23, 24, 25, 27, 28
-   * and 29.
+   * 6502: DT3 and its `JMTB` jump table -- every control code that leaves the text system.
    *
    * WHY THE DISPATCH IS HERE AND NOT IN THE EXECUTABLE. It was in the executable, because every one
    * of these codes needed something the executable had and `GameLogic` did not: a canvas to clear,
-   * a keyboard to wait on, a galaxy number. All three arrived -- `TT66` in slice 3d, `RDKEY`'s seam
-   * in 3b, the commander block in 2d -- and what was left in `Outpost/Shell.cpp` was nine cases of
-   * arithmetic that no test could reach, two of which turned out to be wrong: code 9 was not moving
-   * the cursor and codes 23 and 29 were moving it when the game does not.
+   * a keyboard to wait on, a galaxy number. All three arrived -- `TT66` in slice 3d, `RDKEY` in
+   * M3-b-3d, the commander block in 2d -- and what was left in `Outpost/Shell.cpp` was nine cases
+   * of arithmetic that no test could reach, two of which turned out to be wrong: code 9 was not
+   * moving the cursor and codes 23 and 29 were moving it when the game does not.
    *
-   * The shell still owns code 21, which is `CLYNS` and belongs to the docked screens, and the codes
-   * nothing yet answers. It forwards the rest here.
+   * IT WAS A `ControlCodes` SEAM UNTIL M3-b-4b AND IS A FUNCTION NOW. The last thing the shell
+   * still owned was code 21, which is `CLYNS` -- `Elite::ClearMessageRows`, a routine this library
+   * has had since slice 2a -- so what the seam stood in front of was `GameLogic` calling
+   * `GameLogic` through the executable. §6.73 for the twelfth time.
+   *
+   * THE GALAXY IS NOT A PARAMETER. `MissionCodes` took it as a `const std::uint8_t&` and every
+   * caller bound `commander.galaxyNumber` to it, which is what M3-a removed nine of.
+   *
+   * A CODE NOTHING ANSWERS IS LEFT ALONE, and there are three: 11 (`NLIN4`, a rule across the
+   * screen) and 30 and 31 (`FILEPR` and `OTHERFILEPR`, the disk names under `DISK`). They fall to
+   * `default` here exactly as they fell to the shell's, so the port's behaviour is unchanged and
+   * the list of what is still missing is in one place.
    */
-  class MissionCodes final : public ControlCodes
-  {
-  public:
-    MissionCodes(Universe& _universe, Ports& _ports, const std::uint8_t& _galaxy) noexcept
-      : m_universe(_universe),
-        m_ports(_ports),
-        m_galaxy(_galaxy)
-    {
-    }
-
-    /// Runs `_code` and says whether it was one of this object's. A code it does not know is left
-    /// entirely alone, so the caller's own switch can have it.
-    [[nodiscard]] bool RunMissionCode(std::uint8_t _code) noexcept;
-
-    /// `ControlCodes`, for a caller that has nothing else to add. Ignores what it does not know.
-    void Run(std::uint8_t _code) override
-    {
-      static_cast<void>(RunMissionCode(_code));
-    }
-
-  private:
-    Universe& m_universe;
-    Ports& m_ports;
-    const std::uint8_t& m_galaxy;
-  };
+  void RunControlCode(Universe& _universe, Ports& _ports, std::uint8_t _code) noexcept;
 
   /// 6502: MT8 -- LDA #6 / JSR DOXC, and the `DTW2` store beside it is the printer's.
   inline constexpr std::uint8_t MT8_COLUMN = 6;
@@ -229,14 +214,11 @@ namespace Elite
    * `BRP` is `JSR DETOK` then `JMP BAY`, and every mission but `TBRIEF`'s refusal is a tail call
    * into it -- so all seven return the same thing, and it is the forced key `BAY` presses.
    */
-  struct MissionBay
-  {
-    Commander& commander; ///< 6502: TP, CASH, ENGY, TALLY and TRIBBLE
-    std::uint8_t& dockedFlag;  ///< 6502: QQ12, which `BAY` sets to &FF
-    std::uint8_t view;         ///< 6502: QQ11, for the forced key's dispatch
-    std::uint8_t countdown;    ///< 6502: QQ22+1 -- an in-flight hyperspace countdown, which is zero here
-    bool hyperspaceHeld = false;
-  };
+  // `MissionBay` was the commander, `QQ12`, `QQ11` and `QQ22+1` -- two references and two values,
+  // all four `Universe`'s since M3-a-3. What is left is the one argument below: what `KLO+HINT`
+  // held when the key was pressed, which `BAY`'s fall-through reads and no byte carries. The view
+  // and the countdown are read LIVE now rather than snapshotted, which is what `TT102` does: a
+  // briefing's `{9}` moves `QQ11` while the token is printing.
 
   /*
    * 6502: BRP -- print an extended token and go to the docking bay.
@@ -244,7 +226,7 @@ namespace Elite
    * `JSR DETOK` then `.BAYSTEP JMP BAY`, and `BAYSTEP` is the entry `TBRIEF` uses when the player
    * turns the Trumble down: it skips the token and goes straight to the bay.
    */
-  [[nodiscard]] ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, MissionBay& _bay, std::uint8_t _token) noexcept;
+  [[nodiscard]] ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, std::uint8_t _token) noexcept;
 
   /*
    * 6502: BRIEF -- start mission 1, and show the Constrictor turning while it says so.
@@ -268,14 +250,14 @@ namespace Elite
    * that is where the original splits: `BR2` ends `LDA #10 / BNE BRPS`, and everything after the
    * branch is `BRP`'s and is shared with four other missions.
    */
-  [[nodiscard]] std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /// 6502: BRIEF, whole -- the briefing and then `BRP`, which prints token 10 and goes to the bay.
-  [[nodiscard]] ForcedKey BriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey BriefMission1(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /// 6502: BRIEF2 -- set bit 2 of `TP` and print token 11, the message that sends the player to
   /// Ceerdi. Falls into `BRP`.
-  [[nodiscard]] ForcedKey BriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey BriefMission2(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: BRIEF3 -- collect the plans at Ceerdi.
@@ -284,7 +266,7 @@ namespace Elite
    * 1's two bits as well as setting mission 2's, so picking up the plans is also what forgets that
    * the Constrictor ever happened. Bit 3 is "the plans are aboard".
    */
-  [[nodiscard]] ForcedKey CollectPlans(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey CollectPlans(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: DEBRIEF -- finish mission 1 and pay for it.
@@ -294,7 +276,7 @@ namespace Elite
    * will not offer again. The commented-out `INC TALLY+1` beside it is in the original source and
    * is not ported, because it does not run.
    */
-  [[nodiscard]] ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: DEBRIEF2 -- deliver the plans at Birera.
@@ -303,7 +285,7 @@ namespace Elite
    * -- the navy's energy unit, which recharges faster than the one the shop sells -- and 256 kill
    * points, added to the HIGH byte of the tally so the low byte is untouched.
    */
-  [[nodiscard]] ForcedKey DebriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept;
+  [[nodiscard]] ForcedKey DebriefMission2(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: TBRIEF -- offer the Trumble, and take the money if it is accepted.
@@ -319,6 +301,6 @@ namespace Elite
    * every 6,553.6 credits and a poor player inside one is offered a free Trumble. Ported rather
    * than fixed, and recorded in ADR-001 §6.
    */
-  [[nodiscard]] ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, MissionBay& _bay, KeySource& _keys) noexcept;
+  [[nodiscard]] ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, Keyboard& _keys) noexcept;
 
 } // namespace Elite

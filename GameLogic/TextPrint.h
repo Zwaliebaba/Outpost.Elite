@@ -2,7 +2,10 @@
 
 #include "Canvas.h"
 #include "ExtendedTokens.h"
+#include "SoundEffects.h"
 #include "Tokens.h"
+
+#include "Colours.h"
 
 #include <array>
 #include <cstdint>
@@ -19,19 +22,20 @@ namespace Elite
    */
   /// 6502: the `&10` RES2 stores in COL2 -- colour 1 (white) for bitmap code %01 and colour 0
   /// (black) for %10. The default text colour of every screen in the game.
-  inline constexpr std::uint8_t TEXT_COLOUR_WHITE = 0x10;
+  inline constexpr CellPalette TEXT_COLOUR_WHITE{Colour::White, Colour::Black};
 
   /// 6502: MAG2 -- purple for %01, black for %10. GNUM and MT26 switch to it while the player is
   /// typing and back to `TEXT_COLOUR_WHITE` when the line is done.
-  inline constexpr std::uint8_t TEXT_COLOUR_PURPLE = 0x40;
+  inline constexpr CellPalette TEXT_COLOUR_PURPLE{Colour::Purple, Colour::Black};
 
   struct TextState
   {
     std::uint8_t column = 0; ///< 6502: XC
     std::uint8_t row = 0;    ///< 6502: YC
 
-    /// 6502: QQ17 -- the capitalisation state the token printer owns. CHPR only reads it, and only
-    /// to notice the value 255, which means "print nothing at all".
+    /// 6502: QQ17 -- the capitalisation state. The token printer works on it and CHPR reads it for
+    /// the value 255, which means "print nothing at all". ONE byte since M5-e-2c: the printer kept
+    /// a copy until then and every store of QQ17 was two stores (§8).
     std::uint8_t caseFlags = 0;
 
     /*
@@ -43,7 +47,7 @@ namespace Elite
      * prints invisibly, exactly as the original would -- the default is left at zero rather than
      * "fixed" here so that a screen compared against the oracle starts from the same byte it does.
      */
-    std::uint8_t cellColour = 0;
+    CellPalette palette{};
   };
 
   /*
@@ -63,24 +67,20 @@ namespace Elite
   };
 
   /*
-   * The two things CHPR does that this slice cannot finish.
+   * `TextEffects` WAS HERE AND IS NOT ANY MORE (M3-b-4a).
    *
-   * Character 7 rings the bell, which is a sound event and belongs to phase 5; and a character
-   * printed below the last row clears the screen and starts again, which needs TT66 and lands in
-   * 1d-c. Both are seams rather than stubs -- the printer around them is complete -- and the tests
-   * count how often they are reached rather than passing over them quietly.
+   * It carried one method, `ClearScreen`, and the header said it was "the one thing CHPR does that
+   * the library still cannot do for itself" because `TT66` reaches the dashboard, the sprites, the
+   * border and the colour bands. THAT WAS THE WRONG ROUTINE. `clss` is `JSR TT66simp`, and
+   * `TT66simp` is a bitmap wipe of rows 1 to 23 and a cursor home -- `ClearTextArea` above, ported
+   * and compared against the shipped routine since slice 2a. It is §6.73 for the eleventh time and
+   * the defect it was hiding is in §8.
+   *
+   * `Beep` WAS THE OTHER AND WENT IN M3-b-2b. Character 7 is `R5`, which is `JSR BEEP`, and `BEEP`
+   * has been `Elite::Beep` over a `SoundBuffer` since slice 5a -- so the printer takes the buffer
+   * and rings the bell itself. Every caller on this side drops the carry it answers with, which is
+   * why the call discards it.
    */
-  class TextEffects
-  {
-  public:
-    virtual ~TextEffects() = default;
-
-    /// 6502: R5 -- JSR BEEP.
-    virtual void Beep() = 0;
-
-    /// 6502: clss -- JSR TT66simp, then print the character again on the fresh screen.
-    virtual void ClearScreen() = 0;
-  };
 
   /*
    * 6502: BPRNT -- print a number, right-aligned in a fixed width, with an optional decimal point.
@@ -193,10 +193,20 @@ namespace Elite
   class TextPrinter : public TextSink
   {
   public:
-    TextPrinter(Canvas& _canvas, TextState& _state, TextEffects* _effects = nullptr) noexcept
+    /*
+     * The buffer is a POINTER and not a `Universe&`, because the printer is built over a canvas and
+     * a `TextState` and nothing else, and half the tests that build one have no universe to hand.
+     * A null buffer is a printer whose bell is not connected.
+     *
+     * THE SCREEN CLEAR IS NOT NULLABLE ANY MORE (M3-b-4a). It was, and a printer built without a
+     * `TextEffects` dropped the character that overran row 23 instead of clearing and printing it
+     * -- which was every test that built one. `clss` is `ClearTextArea` now and needs nothing this
+     * object does not already hold.
+     */
+    TextPrinter(Canvas& _canvas, TextState& _state, SoundBuffer* _sound = nullptr) noexcept
       : m_canvas(_canvas),
         m_state(_state),
-        m_effects(_effects)
+        m_sound(_sound)
     {
     }
 
@@ -220,33 +230,19 @@ namespace Elite
 
     Canvas& m_canvas;
     TextState& m_state;
-    TextEffects* m_effects = nullptr;
+    SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s JSR BEEP fills
   };
 
   /*
-   * Where a blocking key read comes from.
+   * `KeySource` WAS HERE AND IS `Keyboard::NextKey` SINCE M3-b-3d.
    *
    * 6502: TT217 -- "scan the keyboard until a key is pressed". The game BLOCKS here, inside a
-   * screen's own loop, and that is a genuine architectural problem for this port rather than a
-   * detail: ADR-004 section 1 says GameLogic's input is an `InputFrame`, which is a poll and not a
-   * wait. The two cannot both be true of the same code.
-   *
-   * Slice 2c did not resolve it, and deliberately: the routines that read the keyboard are ported
-   * against this seam, exactly as the charts were ported against the seams for the drawing they
-   * could not yet do. It lives here rather than in Market.h, where it started, because a second
-   * slice needed it -- the commander's name entry -- and a seam two slices apart both reach for
-   * belongs with the text layer rather than with the market. Whoever builds 2e decides how the seam is driven -- a pumped thread, a
-   * coroutine, or rewriting the docked screens as state machines fed by `InputFrame`. The last of
-   * those stops being a line-by-line port, which is the cost worth knowing before choosing it.
+   * screen's own loop, and ADR-004 §1's problem is unchanged by the move: `GameLogic`'s input is
+   * meant to be an `InputFrame`, which is a poll and not a wait, and the two cannot both be true of
+   * the same code. Whoever resolves it decides how the seam is driven -- a pumped thread, a
+   * coroutine, or rewriting the docked screens as state machines. The last of those stops being a
+   * line-by-line port, which is the cost worth knowing before choosing it.
    */
-  class KeySource
-  {
-  public:
-    virtual ~KeySource() = default;
-
-    /// 6502: TT217 -- block until a key is pressed, and return its character.
-    virtual std::uint8_t NextKey() = 0;
-  };
 
   /*
    * The three token wrappers that also move the cursor.

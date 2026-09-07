@@ -9,6 +9,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because it names types these headers declare
+  struct Ports;    // Ports.h, likewise
+
   /*
    * 6502: STATUS -- the Status Mode screen (slice 2c).
    *
@@ -51,7 +54,6 @@ namespace Elite
    * The rule under the title is NLIN3's and belongs to the canvas, so a caller draws it -- the same
    * split the market screen and the inventory already use.
    */
-  void StatusScreen(TradeScreen& _screen, const Commander& _commander, const ShipCondition& _condition, std::uint8_t _crosshairX,
-                    std::uint8_t _crosshairY, SystemSeeds& _outSelected) noexcept;
+  void StatusScreen(Universe& _universe, Ports& _ports, const ShipCondition& _condition) noexcept;
 
 } // namespace Elite

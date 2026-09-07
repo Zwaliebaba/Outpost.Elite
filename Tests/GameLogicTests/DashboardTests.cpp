@@ -10,6 +10,7 @@
 #include "Scanner.h"
 #include "ShipDraw.h"
 #include "ShipSlot.h"
+#include "Universe.h"
 
 #include <array>
 #include <cstdint>
@@ -138,34 +139,45 @@ namespace GameLogicTests
       }
     }
 
-    /// The sound seam, recorded in both directions -- `ECBLB2` starts the hum and `ECMOF` stops it,
-    /// and a port that called the wrong one would still put the bulb in the right state.
-    struct RecordingSound final : Elite::DashboardEffects
+    /*
+     * 6502: sound_variables -- what `ECBLB2`'s hum and `ECMOF`'s silence leave behind (M3-b-2a).
+     *
+     * `DashboardEffects` was the seam and this suite recorded which effect went in and which came
+     * out; `NOISE` and `NOISEOFF` run on both sides now, so the buffer is the comparison. It says
+     * more than the list did: a port that called the right routine on the wrong voice, or at the
+     * wrong priority, was invisible to a name.
+     */
+    void CompareSoundBuffer(const Cpu6502& _cpu, const OracleImage& _oracle, const Elite::SoundBuffer& _sound,
+                            const std::wstring& _where)
     {
-      struct Pitched
+      struct Run
       {
-        std::uint8_t effect, sustain, frequency;
+        const char* label;
+        const std::uint8_t* bytes;
+        std::size_t count;
       };
-
-      std::vector<std::uint8_t> started;
-      std::vector<std::uint8_t> stopped;
-      std::vector<Pitched> pitched;
-
-      bool PlaySound(std::uint8_t _effect, bool) override
+      const Run RUNS[] = {
+        {"SOFLG", _sound.flag.data(), _sound.flag.size()},
+        {"SOCNT", _sound.counter.data(), _sound.counter.size()},
+        {"SOPR", _sound.priority.data(), _sound.priority.size()},
+        {"SOFRCH", _sound.frequencyChange.data(), _sound.frequencyChange.size()},
+        {"SOFRQ", _sound.frequency.data(), _sound.frequency.size()},
+        {"SOCR", _sound.control.data(), _sound.control.size()},
+        {"SOATK", _sound.attack.data(), _sound.attack.size()},
+        {"SOSUS", _sound.sustain.data(), _sound.sustain.size()},
+        {"SOVCH", _sound.volumeRate.data(), _sound.volumeRate.size()},
+        {"PULSEW", &_sound.pulseWidth, 1u},
+      };
+      for (const Run& run : RUNS)
       {
-        started.push_back(_effect);
-        return true;
+        const std::uint16_t base = _oracle.Label(run.label);
+        for (std::size_t index = 0; index < run.count; ++index)
+        {
+          Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(base + index)], run.bytes[index],
+                           (_where + L": " + Widen(run.label) + L"+" + std::to_wstring(index)).c_str());
+        }
       }
-      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
-      {
-        pitched.push_back({_effect, _sustain, _frequency});
-        return true;
-      }
-      void StopSound(std::uint8_t _effect) override
-      {
-        stopped.push_back(_effect);
-      }
-    };
+    }
   } // namespace
 
   TEST_CLASS(TheDashboardDials)
@@ -203,8 +215,8 @@ namespace GameLogicTests
           const Elite::DangerColours colours = Elite::DangerColour(static_cast<std::uint8_t>(counter), static_cast<std::uint8_t>(flash));
 
           const std::wstring where = Widen("PZW(MCNT=" + std::to_string(counter) + ", FLH=" + std::to_string(flash) + ")");
-          Assert::AreEqual(cpu.a, colours.a, (where + L": A").c_str());
-          Assert::AreEqual(cpu.x, colours.x, (where + L": X").c_str());
+          Assert::AreEqual(cpu.a, Elite::PatternByte(colours.a), (where + L": A").c_str());
+          Assert::AreEqual(cpu.x, Elite::PatternByte(colours.x), (where + L": X").c_str());
 
           red += (colours.a == Elite::DIAL_DANGER) ? 1u : 0u;
           yellow += (colours.a == Elite::DIAL_NORMAL) ? 1u : 0u;
@@ -248,10 +260,10 @@ namespace GameLogicTests
       };
 
       const std::uint8_t THRESHOLDS[] = {0, 3, 11, 14, 240, 255};
-      const std::uint8_t COLOURS[][2] = {
+      const Elite::PixelPattern COLOURS[][2] = {
         {Elite::DIAL_NORMAL, Elite::DIAL_DANGER},
         {Elite::DIAL_DANGER, Elite::DIAL_NORMAL},
-        {Elite::DIAL_NORMAL, 0},
+        {Elite::DIAL_NORMAL, Elite::PixelPattern::Blank},
         {Elite::DIAL_NORMAL, Elite::DIAL_NORMAL},
       };
 
@@ -280,8 +292,8 @@ namespace GameLogicTests
               cpu.memory[at.sc] = static_cast<std::uint8_t>((at.screen + start) & 0xFFu);
               cpu.memory[static_cast<std::uint16_t>(at.sc + 1)] = static_cast<std::uint8_t>((at.screen + start) >> 8);
               cpu.memory[at.t1] = threshold;
-              cpu.memory[at.k] = pair[0];
-              cpu.memory[static_cast<std::uint16_t>(at.k + 1)] = pair[1];
+              cpu.memory[at.k] = Elite::PatternByte(pair[0]);
+              cpu.memory[static_cast<std::uint16_t>(at.k + 1)] = Elite::PatternByte(pair[1]);
               cpu.a = static_cast<std::uint8_t>(value);
 
               const Elite::Testing::RunResult run = cpu.CallSubroutine(address, 20'000);
@@ -291,7 +303,7 @@ namespace GameLogicTests
               Elite::DrawBar(canvas, draw, static_cast<std::uint8_t>(value), entry.shifts, threshold, Elite::DialColours{pair[0], pair[1]});
 
               const std::wstring where = Widen(std::string(entry.what) + "(" + std::to_string(value) + ", T1=" + std::to_string(threshold) +
-                                               ", K=" + std::to_string(pair[0]) + "/" + std::to_string(pair[1]) + ")");
+                                               ", K=" + std::to_string(Elite::PatternByte(pair[0])) + "/" + std::to_string(Elite::PatternByte(pair[1])) + ")");
 
               drawn += CompareScreens(cpu, at.screen, canvas, 0x3Cu, where);
               // `COL` and `Q` are `DIL`'s own since M2-c -- the colour it picked and the reading it
@@ -393,7 +405,7 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(msbar, 200);
           Assert::IsTrue(run.completed, L"MSBAR returned");
 
-          Elite::SetMissileIndicator(canvas, static_cast<std::uint8_t>(missile), static_cast<std::uint8_t>(colour));
+          Elite::SetMissileIndicator(canvas, static_cast<std::uint8_t>(missile), Elite::CellPalette::Of(static_cast<std::uint8_t>(colour)));
 
           const std::wstring where = Widen("MSBAR(" + std::to_string(missile) + ", " + std::to_string(colour) + ")");
           (void)CompareScreens(cpu, at.screen, canvas, 0x11u, where);
@@ -480,29 +492,31 @@ namespace GameLogicTests
       Cpu6502 cpu = oracle.Fresh();
       Elite::Canvas canvas;
 
-      // 6502: JSR NOISE -- the sound is hardware, so it is trapped on one side and recorded on the
-      // other. The trap is what makes the fall-through into `ECBLB` observable at all.
-      cpu.AddTrap(oracle.Label("NOISE"));
-
+      /*
+       * 6502: JSR NOISE -- and it RUNS on both sides since M3-b-2a.
+       *
+       * It was trapped here and recorded through `DashboardEffects`, and the trap hit was what made
+       * the fall-through into `ECBLB` observable. `NOISE` writes `sound_variables` and nothing else,
+       * so both machines run it and the buffer says the same thing with more in it.
+       */
       FillScreens(cpu, canvas, at.screen, 0x00u);
       cpu.memory[at.ecma] = 0x7Bu;
 
       const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("ECBLB2"), 2'000);
       Assert::IsTrue(run.completed, L"ECBLB2 returned");
 
-      RecordingSound effects;
+      Elite::SoundBuffer sound;
 
       Elite::FlightStatus status;
       status.ecmCountdown = 0x7Bu;
-      Elite::StartEcm(canvas, status, effects, false);
+      Elite::StartEcm(canvas, status, sound, false);
 
       (void)CompareScreens(cpu, at.screen, canvas, 0x00u, L"ECBLB2");
       Assert::AreEqual(cpu.memory[at.ecma], status.ecmCountdown, L"ECMA");
-      Assert::AreEqual<std::size_t>(1u, effects.started.size(), L"one sound was asked for");
-      Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, effects.started[0], L"and it is sfxecm");
-      Assert::AreEqual<std::size_t>(0u, effects.stopped.size(), L"and none was stopped");
-      Assert::AreEqual<std::size_t>(1u, cpu.trapHits.size(), L"the game asked for one too");
-      Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, cpu.trapHits[0].y, L"with the same number");
+      CompareSoundBuffer(cpu, oracle, sound, L"ECBLB2");
+      const std::uint8_t wanted = static_cast<std::uint8_t>(0x80u | (static_cast<std::uint8_t>(Elite::SoundEffect::Ecm) + 1u));
+      Assert::IsTrue(sound.flag[0] == wanted || sound.flag[1] == wanted || sound.flag[2] == wanted,
+                     L"and the hum took a voice");
     }
 
     /*
@@ -533,9 +547,9 @@ namespace GameLogicTests
       };
 
       const std::vector<Case> CASES = {
-        {"the bulb colour everywhere, ours, a full countdown", Elite::BULB_COLOUR, 0x20u, 0xFFu},
-        {"the bulb colour everywhere, ours, one pass left", Elite::BULB_COLOUR, 0x01u, 0xFFu},
-        {"the bulb colour everywhere, somebody else's E.C.M.", Elite::BULB_COLOUR, 0x11u, 0x00u},
+        {"the bulb colour everywhere, ours, a full countdown", Elite::BULB_COLOUR.Byte(), 0x20u, 0xFFu},
+        {"the bulb colour everywhere, ours, one pass left", Elite::BULB_COLOUR.Byte(), 0x01u, 0xFFu},
+        {"the bulb colour everywhere, somebody else's E.C.M.", Elite::BULB_COLOUR.Byte(), 0x11u, 0x00u},
         {"a blank screen and nothing running", 0x00u, 0x00u, 0x00u},
         {"a blank screen but the flags set, so the bulb LIGHTS", 0x00u, 0x20u, 0xFFu},
         {"a screen full of something else", 0x5Au, 0x07u, 0x03u},
@@ -546,7 +560,6 @@ namespace GameLogicTests
         Cpu6502 cpu = oracle.Fresh();
         Elite::Canvas canvas;
 
-        cpu.AddTrap(oracle.Label("NOISEOFF"));
 
         FillScreens(cpu, canvas, at.screen, item.fill);
         cpu.memory[at.ecma] = item.ecma;
@@ -555,12 +568,12 @@ namespace GameLogicTests
         const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("ECMOF"), 2'000);
         Assert::IsTrue(run.completed, L"ECMOF returned");
 
-        RecordingSound effects;
+        Elite::SoundBuffer sound;
 
         Elite::FlightStatus status;
         status.ecmCountdown = item.ecma;
         status.ecmOurs = item.ecmp;
-        Elite::StopEcm(canvas, status, effects);
+        Elite::StopEcm(canvas, status, sound);
 
         const std::wstring where = Widen(std::string("ECMOF (") + item.what + ")");
 
@@ -570,11 +583,7 @@ namespace GameLogicTests
         Assert::AreEqual<std::uint32_t>(0u, status.ecmCountdown, (where + L": ECMA is cleared").c_str());
         Assert::AreEqual<std::uint32_t>(0u, status.ecmOurs, (where + L": ECMP is cleared").c_str());
 
-        Assert::AreEqual<std::size_t>(0u, effects.started.size(), (where + L": nothing started").c_str());
-        Assert::AreEqual<std::size_t>(1u, effects.stopped.size(), (where + L": one sound stopped").c_str());
-        Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, effects.stopped[0], (where + L": and it is sfxecm").c_str());
-        Assert::AreEqual<std::size_t>(1u, cpu.trapHits.size(), (where + L": the game stopped one").c_str());
-        Assert::AreEqual<std::uint32_t>(Elite::SOUND_ECM, cpu.trapHits[0].y, (where + L": with the same number").c_str());
+        CompareSoundBuffer(cpu, oracle, sound, where);
       }
     }
   };
@@ -705,7 +714,7 @@ namespace GameLogicTests
             Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
             cpu.memory[at.comx] = compass.x;
             cpu.memory[at.comy] = compass.y;
-            cpu.memory[at.comc] = compass.colour;
+            cpu.memory[at.comc] = Elite::PatternByte(compass.pattern);
 
             // `XX12` is scratch that part 3 clears before it reads, so the oracle's starts dirty;
             // the port's four bytes are `DIALS`'s own array since M2-c.
@@ -734,7 +743,7 @@ namespace GameLogicTests
             status.altitude = item.altit;
             status.damageFlash = item.flash;
 
-            Elite::DrawDials(canvas, draw, flight, status, item.fuel, compass, bubble);
+            Elite::DrawDials(canvas, draw, flight, status, Elite::LightYearsTenths{item.fuel}, compass, bubble);
 
             const std::wstring where =
               Widen(std::string("DIALS: ") + item.what + ", MCNT " + std::to_string(counter) + (stations ? ", station" : ", planet"));
@@ -743,7 +752,7 @@ namespace GameLogicTests
 
             Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
             Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
-            Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
+            Assert::AreEqual(cpu.memory[at.comc], Elite::PatternByte(compass.pattern), (where + L": COMC").c_str());
             /*
              * `K`, `K+1`, `T1`, `COL` and `XX12` are not compared, and each for the same reason: they
              * are what `DIALS` hands `DIL` and what `DIL` hands itself, values since M2-c and M2-b.
@@ -793,9 +802,10 @@ namespace GameLogicTests
       const std::uint16_t nomsl = oracle.Label("NOMSL");
 
       Cpu6502 cpu = oracle.Fresh();
-      Elite::Canvas canvas;
+      // 6502: the screen -- the universe's since M5-a-2, because that is what the routine draws into.
+      Elite::Universe lock;
 
-      const std::uint8_t COLOURS[] = {Elite::MISSILE_NONE, Elite::MISSILE_LOCKED, Elite::MISSILE_ARMED, Elite::MISSILE_READY};
+      const Elite::CellPalette COLOURS[] = {Elite::MISSILE_NONE, Elite::MISSILE_LOCKED, Elite::MISSILE_ARMED, Elite::MISSILE_READY};
 
       std::uint32_t compared = 0;
 
@@ -803,40 +813,42 @@ namespace GameLogicTests
       {
         for (std::uint32_t missiles = 1; missiles <= 4; ++missiles)
         {
-          for (const std::uint8_t colour : COLOURS)
+          for (const Elite::CellPalette colour : COLOURS)
           {
             for (const std::uint8_t target : {std::uint8_t{0}, std::uint8_t{3}, std::uint8_t{0xFF}})
             {
-              FillScreens(cpu, canvas, at.screen, 0x00u);
+              FillScreens(cpu, lock.canvas, at.screen, 0x00u);
 
               cpu.memory[nomsl] = static_cast<std::uint8_t>(missiles);
               cpu.memory[mstg] = 0x2Au;
               cpu.memory[msar] = 0x2Au;
               cpu.x = target;
-              cpu.y = colour;
+              cpu.y = colour.Byte();
 
               const Elite::Testing::RunResult run = cpu.CallSubroutine(viaAbort ? abort : abort2, 2'000);
               Assert::IsTrue(run.completed, L"ABORT returned");
 
-              Elite::Bubble bubble;
-              bubble.missileTarget = 0x2Au;
-              std::uint8_t seeking = 0x2Au;
+              // 6502: MSTG and MSAR -- both are the universe's bytes since M5-a-2, so the fixture
+              // seeds them there rather than in a `Bubble` and a loose byte the routine was handed
+              // a reference to.
+              lock.bubble.missileTarget = 0x2Au;
+              lock.status.missileArmed = 0x2Au;
 
               if (viaAbort)
               {
-                Elite::AbortMissileLock(canvas, bubble, seeking, static_cast<std::uint8_t>(missiles), colour);
+                Elite::AbortMissileLock(lock, static_cast<std::uint8_t>(missiles), colour);
               }
               else
               {
-                Elite::SetMissileTarget(canvas, bubble, seeking, static_cast<std::uint8_t>(missiles), target, colour);
+                Elite::SetMissileTarget(lock, static_cast<std::uint8_t>(missiles), target, colour);
               }
 
               const std::wstring where = Widen(std::string(viaAbort ? "ABORT" : "ABORT2") + "(target " + std::to_string(target) +
-                                               ", colour " + std::to_string(colour) + ", NOMSL " + std::to_string(missiles) + ")");
+                                               ", palette " + std::to_string(colour.Byte()) + ", NOMSL " + std::to_string(missiles) + ")");
 
-              (void)CompareScreens(cpu, at.screen, canvas, 0x00u, where);
-              Assert::AreEqual(cpu.memory[mstg], bubble.missileTarget, (where + L": MSTG").c_str());
-              Assert::AreEqual(cpu.memory[msar], seeking, (where + L": MSAR").c_str());
+              (void)CompareScreens(cpu, at.screen, lock.canvas, 0x00u, where);
+              Assert::AreEqual(cpu.memory[mstg], lock.bubble.missileTarget, (where + L": MSTG").c_str());
+              Assert::AreEqual(cpu.memory[msar], lock.status.missileArmed, (where + L": MSAR").c_str());
               ++compared;
             }
           }

@@ -12,6 +12,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because it names types these headers declare
+  struct Ports;    // Ports.h, likewise
+
   /*
    * Saving and loading a commander (slice 2d).
    *
@@ -79,7 +82,7 @@ namespace Elite
    * sets the carry when the key is 'Y' or higher, and the branch it takes lands on an RTS. So the
    * "yes" answer is the comparison's own flag rather than anything the routine sets.
    */
-  [[nodiscard]] bool AskYesNo(KeySource& _keys) noexcept;
+  [[nodiscard]] bool AskYesNo(Keyboard& _keys) noexcept;
 
   /*
    * 6502: JAMESON -- put the default commander back.
@@ -138,30 +141,9 @@ namespace Elite
    * nine-argument function. `chpr` is the CHARACTER printer rather than the token one, because
    * MT26 prints through CHPR directly and the distinction is load-bearing (§6.19).
    */
-  struct SaveScreen
-  {
-    TokenPrinter& printer;
-    CharacterPrinter& characters;
-    ExtendedTokenPrinter& extended;
-    TextSink& chpr;
-    TextState& text;
-    KeySource& keys;
-    LineEntryEffects& effects;
-    CommanderStore& store;
-
-    /*
-     * 6502: U -- and it is a reference because it outlives the call.
-     *
-     * SV1 prints the competition number with `CLC / JSR BPRNT` and never sets U, which is BPRNT's
-     * field width. U is a scratch byte in zero page that ZERO does not clear, so the number is
-     * printed to whatever width the last caller of BPRNT happened to leave behind. The upstream
-     * source says so in as many words. It is harmless -- the number always has ten digits, so all
-     * that varies is a leading space -- but a port that chose a width here would be inventing one.
-     * Since M2-c `PrintNumber` takes the width and returns the byte it leaves, and this is where
-     * the save screen keeps it between saves (§8, M2-c: the port's other prints keep their own).
-     */
-    std::uint8_t& numberWidth;
-  };
+  // `SaveScreen` was eight references and `U`. The printers are `Ports`', the text state and `U`
+  // are `Universe`'s, and the keyboard, the line editor's two waits and the store are `Ports`'.
+  // It went in M3-a-3, and `GameStart` went with it because it held one.
 
   /// How the menu ended. 6502: which label it reached, and the carry it left.
   enum class DiskMenuOutcome
@@ -242,9 +224,6 @@ namespace Elite
    * from INWK+5, which is where MT26 just wrote. On the load path TRNME has not run yet, so a
    * player who types a new name loads from THAT file while the image still holds the old one.
    */
-  [[nodiscard]] DiskMenuResult DiskAccessMenu(SaveScreen& _screen, Commander& _block,
-                                              std::span<std::uint8_t, COMMANDER_NAME_SIZE> _name,
-                                              std::span<std::uint8_t, COMMANDER_FILE_SIZE> _image, std::span<std::uint8_t> _buffer,
-                                              std::uint8_t& _useDisk) noexcept;
+  [[nodiscard]] DiskMenuResult DiskAccessMenu(Universe& _universe, Ports& _ports) noexcept;
 
 } // namespace Elite

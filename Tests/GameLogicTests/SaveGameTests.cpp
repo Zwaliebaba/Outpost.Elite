@@ -1,8 +1,11 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "OracleImage.h"
 
 #include "Commander.h"
+#include "Controls.h"
 #include "ExtendedTokens.h"
 #include "Rng.h"
 #include "SaveGame.h"
@@ -21,7 +24,7 @@ using Elite::CharacterPrinter;
 using Elite::Commander;
 using Elite::CompetitionNumber;
 using Elite::Field;
-using Elite::KeySource;
+using Elite::Keyboard;
 using Elite::TokenPrinter;
 using Elite::Testing::Cpu6502;
 using Elite::Testing::OracleImage;
@@ -95,14 +98,26 @@ namespace GameLogicTests
       bool failReads = false;
     };
 
-    class ScriptedKeys : public KeySource
+    class ScriptedKeys : public Keyboard
     {
     public:
       explicit ScriptedKeys(std::vector<std::uint8_t> _keys) noexcept
         : m_keys(std::move(_keys))
       {
       }
-      std::uint8_t NextKey() override
+
+      /// 6502: FLKB, which was `LineEntryEffects`'s until M3-b-3d, and the matrix walk, which the
+      /// disk menu never reaches -- `TT217` is the whole of what it reads.
+      void Flush() override
+      {
+        ++flushes;
+      }
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         if (m_taken >= m_keys.size())
         {
@@ -125,6 +140,8 @@ namespace GameLogicTests
       {
         return m_overrun;
       }
+
+      int flushes = 0; ///< 6502: FLKB, which `MenuEffects` counted until M3-b-3d
 
     private:
       std::vector<std::uint8_t> m_keys;
@@ -203,6 +220,15 @@ namespace GameLogicTests
       for (const Commander& original : Commanders())
       {
         Cpu6502 cpu = oracle.Fresh();
+        /*
+         * The four are trapped because this test compares the SHAPE of the save -- what is printed
+         * and what is written -- and each of them is compared on its own elsewhere (M6-0-e):
+         * `GTNMEW` is `GTNME` on this build (the delay before it is the disc version's; the two
+         * labels are the same address, asserted below) and is compared key for key in
+         * `NameEntryTests`; `DETOK` is `ExtendedTokenTests`'; `BPRNT` is `NumberTests`'; `TT67` is
+         * two instructions, `LDA #12 / JMP TT27`, compared in `TokenTests`.
+         */
+        Assert::AreEqual<std::uint32_t>(oracle.Label("GTNME"), oracle.Label("GTNMEW"), L"GTNMEW is GTNME on the C64");
         cpu.AddTrap(oracle.Label("GTNMEW"));
         cpu.AddTrap(oracle.Label("DETOK"));
         cpu.AddTrap(oracle.Label("BPRNT"));
@@ -423,7 +449,7 @@ namespace GameLogicTests
     {
       Commander block = Elite::DefaultCommander();
       block.cash.tenths = (123456);
-      block.fuel = 42;
+      block.fuel.tenths = 42;
       block.galaxyNumber = 3;
       block.saveCount = 0x60;
       block.kills.hi = 0x11;
@@ -492,31 +518,19 @@ namespace GameLogicTests
       bool badFile = false;
     };
 
-    /// 6502: DELAY and FLKB, recorded rather than performed.
-    class MenuEffects : public Elite::LineEntryEffects
+    /// 6502: DELAY, recorded rather than performed. `FLKB` was here until M3-b-3d and is counted
+    /// by `ScriptedKeys`, which is the port that answers it now.
+    class MenuEffects : public Elite::Presenter
     {
     public:
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       void WaitFrames(std::uint8_t) override
       {
         ++waits;
       }
-      void FlushKeyboard() override
-      {
-        ++flushes;
-      }
       int waits = 0;
-      int flushes = 0;
-    };
-
-    /// The control codes that leave the text system. Every one of them is trapped on the other side.
-    class IgnoredControls : public Elite::ControlCodes
-    {
-    public:
-      void Run(std::uint8_t _code) override
-      {
-        codes.push_back(_code);
-      }
-      std::vector<std::uint8_t> codes;
     };
 
     /// Every character with the cursor it was printed at, exactly as the docked screens compare.
@@ -591,7 +605,7 @@ namespace GameLogicTests
       // routines that leave the text system. DOXC rather than MT8, because the port splits MT8 the
       // same way -- the column is the canvas's and the sentence-case flag is the text system's.
       for (const char* seam :
-           {"DELAY", "FLKB", "MT9", "NLIN4", "DOXC", "DOYC", "FILEPR", "OTHERFILEPR", "KERNALSETUP", "SETL1", "SWAPPZERO"})
+           {"DELAY", "FLKB", "MT9", "NLIN4", "DOXC", "DOYC", "FILEPR", "OTHERFILEPR", "KERNALSETUP", "SWAPPZERO"})
       {
         cpu.AddTrap(_oracle.Label(seam));
       }
@@ -817,7 +831,7 @@ namespace GameLogicTests
         // wrong one of the two would be visible rather than a no-op.
         Commander live = Elite::DefaultCommander();
         live.cash.tenths = (7770);
-        live.fuel = 55;
+        live.fuel.tenths = 55;
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> image{};
         Commander saved = Elite::DefaultCommander();
         saved.galaxyNumber = 1;
@@ -830,39 +844,52 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         StampedSink sink;
-        Elite::TextState text;
+
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * `SVE` takes `(Universe&, Ports&)` since M3-a-3 and reads the commander, the name, the
+         * image, the line buffer, `DISK` and `U` out of it, so a fixture that kept its own copies
+         * would be comparing a screen driven by different bytes from the ones it asserts on.
+         */
+        Elite::Universe universe;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         sink.cursor = &text;
 
-        Commander portBlock = live;
-        std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> portName = LIVE_NAME;
-        std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE> portImage = image;
-        std::array<std::uint8_t, 16> buffer{};
+        universe.commander = live;
+        Commander& portBlock = universe.commander;
+        universe.commanderName = LIVE_NAME;
+        std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE>& portName = universe.commanderName;
+        universe.commanderFile = image;
+        std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE>& portImage = universe.commanderFile;
 
-        Elite::Rng rng;
-        IgnoredControls controls;
-        Elite::CharacterPrinter characters(sink);
-        TokenPrinter recursive(characters);
-        recursive.SetCursor(&text);
+        Elite::Rng& rng = universe.rng;
+        Elite::CharacterPrinter characters(sink, universe.sentences);
+        TokenPrinter recursive(characters, text);
         Elite::SystemSeeds current{};
         Elite::SystemSeeds selected{};
         Elite::StateTokens values(recursive, text, portBlock, portName, current, selected, false);
         recursive.SetValueTokens(&values);
-        Elite::ExtendedTokenPrinter extended(characters, recursive, rng, &controls);
+        Elite::ExtendedTokenPrinter extended(characters, recursive, rng);
 
         ScriptedKeys keys(script.keys);
         MenuEffects effects;
         DeviceStore store;
         store.failDevice = script.failDevice;
         store.badFile = script.badFile;
-        std::uint8_t numberWidth = 0; ///< 6502: U as the last BPRNT left it (M2-c)
+        std::uint8_t& numberWidth = universe.numberWidth;  // 6502: U as the last BPRNT left it (M2-c)
         numberWidth = script.numberWidth; // 6502: U, exactly as it was seeded on the other side
-        std::uint8_t useDisk = script.useDisk ? std::uint8_t{0xFFu} : std::uint8_t{0};
+        std::uint8_t& useDisk = universe.useDisk;
+        useDisk = script.useDisk ? std::uint8_t{0xFFu} : std::uint8_t{0};
 
-        Elite::SaveScreen screen{recursive, characters, extended, sink, text, keys, effects, store, numberWidth};
+        NullSeams nulls;
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{recursive, characters, sink, sid,
+                           extended,  effects, keys, store};
 
-        const Elite::DiskMenuResult result = Elite::DiskAccessMenu(screen, portBlock, portName, portImage, buffer, useDisk);
+        const Elite::DiskMenuResult result = Elite::DiskAccessMenu(universe, ports);
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());

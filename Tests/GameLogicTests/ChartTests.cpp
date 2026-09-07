@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "OracleImage.h"
 
 #include "Canvas.h"
@@ -70,6 +72,7 @@ namespace GameLogicTests
       std::uint16_t qq22 = 0;
       std::uint16_t safehouse = 0;
       std::uint16_t klo = 0;
+      std::uint16_t yc = 0; ///< 6502: YC -- the row CLYNS leaves the cursor on
       std::uint16_t screen = 0;
 
       explicit Scratch(const OracleImage& _oracle)
@@ -90,7 +93,8 @@ namespace GameLogicTests
           qq12(_oracle.Label("QQ12")),
           qq22(_oracle.Label("QQ22")),
           safehouse(_oracle.Label("safehouse")),
-          klo(_oracle.Label("KLO"))
+          klo(_oracle.Label("KLO")),
+          yc(_oracle.Label("YC"))
       {
         const Cpu6502 cpu = _oracle.Fresh();
         const std::uint16_t low = _oracle.Label("ylookupl");
@@ -123,36 +127,15 @@ namespace GameLogicTests
       }
     }
 
-    /// Records what the port asked the deferred routines to draw.
-    struct RecordedShapes : public Elite::ChartShapes
-    {
-      void DrawRangeCircle(const Elite::RangeCircle& _circle) override
-      {
-        circles.push_back(_circle);
-      }
-
-      void DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius) override
-      {
-        discs.push_back({_x, _y, _radius});
-      }
-
-      struct Disc
-      {
-        std::uint8_t x = 0;
-        std::uint8_t y = 0;
-        std::uint8_t radius = 0;
-        [[nodiscard]] bool operator==(const Disc&) const = default;
-      };
-
-      std::vector<Elite::RangeCircle> circles;
-      std::vector<Disc> discs;
-    };
+    // `RecordedShapes` recorded what the port ASKED for. `ChartShapes` went in M3-b-1b, so both
+    // sides draw the circle and the discs and `CompareScreens` is what says they drew the same
+    // ones -- which the argument comparison could only imply.
 
     std::wstring Where(const wchar_t* _what, const ChartView& _view)
     {
       return std::wstring(_what) + L" (QQ9=" + std::to_wstring(_view.cursorX) + L" QQ10=" + std::to_wstring(_view.cursorY) + L" QQ0=" +
              std::to_wstring(_view.homeX) + L" QQ1=" + std::to_wstring(_view.homeY) + L" QQ11=" + std::to_wstring(_view.view) + L" QQ14=" +
-             std::to_wstring(_view.fuel) + L")";
+             std::to_wstring(_view.fuel.tenths) + L")";
     }
 
     void SeedChart(Cpu6502& _cpu, const Scratch& _zp, const ChartView& _view)
@@ -162,7 +145,7 @@ namespace GameLogicTests
       _cpu.memory[_zp.qq0] = _view.homeX;
       _cpu.memory[_zp.qq1] = _view.homeY;
       _cpu.memory[_zp.qq11] = _view.view;
-      _cpu.memory[_zp.qq14] = _view.fuel;
+      _cpu.memory[_zp.qq14] = _view.fuel.tenths;
     }
 
     /// What TT66 leaves behind. The charts are compared with it trapped, because clearing the screen
@@ -241,38 +224,49 @@ namespace GameLogicTests
     {
       explicit PortScreen(std::uint8_t _galaxy = 0)
         : screen(canvas, text),
-          characters(screen),
-          printer(characters, &galaxy),
-          extended(characters, printer, rng)
+          characters(screen, universe.sentences),
+          printer(characters, text, &galaxy),
+          extended(characters, printer, rng),
+          ports{printer,  characters, characters, sid,
+                extended, nulls, nulls, nulls}
       {
         galaxy.number = _galaxy;
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0x80;
-        text.cellColour = 0x40;
-        characters.state.sentenceStart = 0xFF;
+        text.palette = Elite::TEXT_COLOUR_PURPLE;
+        characters.State().sentenceStart = 0xFF;
         printer.SetCaseFlags(0x80);
       }
 
-      Canvas canvas;
-      Elite::TextState text;
+      /*
+       * The universe, and the three names under it are ALIASES INTO IT rather than separate
+       * objects: the charts take `(Universe&, Ports&)` since M3-b-1b, when `ChartShapes` went and
+       * `CIRCLE2` and `SUN` became calls into `DrawBall` and `DrawSun` over these very bytes.
+       */
+      Elite::Universe universe;
+      Canvas& canvas = universe.canvas;
+      Elite::TextState& text = universe.text;
+      Elite::Rng& rng = universe.rng;
+
       GalaxyNumber galaxy;
-      Elite::Rng rng;
       RecordingScreen screen;
       Elite::CharacterPrinter characters;
       Elite::TokenPrinter printer;
       Elite::ExtendedTokenPrinter extended;
+      NullSeams nulls;
+      Elite::SidWriteLog sid; ///< 6502: SID -- nothing here makes a sound, and this is where it would go
+      Elite::Ports ports;
     };
 
-    /// 6502: CLYNS, which clears screen memory the port has no canvas for.
-    struct CountedEffects : public Elite::ChartEffects
-    {
-      void ClearBottomRows() override
-      {
-        ++cleared;
-      }
-      std::uint32_t cleared = 0;
-    };
+    /*
+     * `CountedEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3b).
+     *
+     * It counted `CLYNS`, which was trapped on the oracle so that neither machine ran it -- and
+     * `Elite::ClearMessageRows` has been that routine since slice 1d. Both run it now, so what is
+     * compared is the three rows it clears and the cursor it leaves, through `CompareScreens` and
+     * the text state, rather than a tally of one (§6.73's corollary).
+     */
 
     class CapturingSink : public Elite::TextSink
     {
@@ -316,6 +310,53 @@ namespace GameLogicTests
   TEST_CLASS(ChartsAgainstTheShippedGame)
   {
   public:
+    /*
+     * 6502: NLIN -- the rule under a chart's title, and the cursor moved down first (M6-0-e).
+     *
+     * Ported since the charts were and never compared on its own: the screens that reach it
+     * trapped it, because their comparison is the text and not the canvas. This is the routine
+     * alone, over a marked screen, from every row the cursor can be on.
+     */
+    TEST_METHOD(TheTitleRuleMatchesNLIN)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Scratch zp(oracle);
+      const std::uint16_t nlin = oracle.Label("NLIN");
+      const std::uint16_t screen = zp.screen;
+
+      std::uint32_t compared = 0;
+      for (const std::uint8_t row : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{7}, std::uint8_t{22}, std::uint8_t{23}})
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        Elite::Canvas canvas;
+        for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
+        {
+          canvas.Write(offset, 0xA5u);
+          cpu.memory[static_cast<std::uint16_t>(screen + offset)] = 0xA5u;
+        }
+        cpu.memory[zp.yc] = row;
+        Elite::TextState text;
+        text.row = row;
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(nlin, 200'000);
+        Assert::IsTrue(run.completed, L"NLIN returned");
+
+        Elite::DrawTitleRule(canvas, text);
+
+        const std::string what = "NLIN from row " + std::to_string(row);
+        const std::wstring where(what.begin(), what.end());
+        Assert::AreEqual(cpu.memory[zp.yc], text.row, (where + L": YC, moved down one by INCYC").c_str());
+        CompareScreens(cpu, screen, canvas, where);
+        ++compared;
+      }
+      Assert::AreEqual<std::uint32_t>(5u, compared, L"the whole sweep ran");
+    }
+
     /*
      * 6502: TT123 -- every value against every step, all 65,536 of them.
      *
@@ -539,6 +580,9 @@ namespace GameLogicTests
                 chart.homeY = 100;
 
                 Cpu6502 cpu = oracle.Fresh();
+                // 6502: WSCAN waits for the vertical sync. It is the platform's (ADR-005 section 3)
+                // and a flat interpreter has no raster to wait for, so it is trapped and never will
+                // be compared (M6-0-e).
                 cpu.AddTrap(oracle.Label("WSCAN"));
                 SeedChart(cpu, zp, chart);
                 cpu.a = 0;
@@ -594,28 +638,26 @@ namespace GameLogicTests
           {
             ChartView chart;
             chart.view = static_cast<std::uint8_t>(view);
-            chart.fuel = static_cast<std::uint8_t>(fuel);
+            chart.fuel.tenths = static_cast<std::uint8_t>(fuel);
             chart.homeX = static_cast<std::uint8_t>(home);
             chart.homeY = static_cast<std::uint8_t>(255u - home);
 
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(oracle.Label("CIRCLE2"));
             SeedChart(cpu, zp, chart);
             cpu.a = cpu.x = cpu.y = 0;
             cpu.sp = 0xFD;
             Assert::IsTrue(cpu.CallSubroutine(routine, 500'000).completed, L"TT14 should return");
 
-            Canvas canvas;
-                  RecordedShapes shapes;
-            Elite::DrawFuelRange(canvas, chart, &shapes);
+            Elite::Universe universe;
+            Elite::DrawFuelRange(universe, chart);
 
             const std::wstring where = Where(L"TT14", chart);
-            Assert::AreEqual<std::size_t>(1u, shapes.circles.size(), (where + L": one circle").c_str());
-            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.k3], shapes.circles[0].x, (where + L": K3").c_str());
-            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.k4], shapes.circles[0].y, (where + L": K4").c_str());
-            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.k], shapes.circles[0].radius, (where + L": K").c_str());
-            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.stp], shapes.circles[0].step, (where + L": STP").c_str());
-            CompareScreens(cpu, zp.screen, canvas, where);
+
+            // 6502: K3, K4, K and STP -- what `TT14` hands `CIRCLE2`, and the circle it draws with
+            // them. The trap came off with the seam in M3-b-1b, so the pixels are the comparison
+            // and these four say WHERE a disagreement is if one turns up.
+            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.stp], universe.heaps.stp, (where + L": STP").c_str());
+            CompareScreens(cpu, zp.screen, universe.canvas, where);
             ++compared;
           }
         }
@@ -652,7 +694,7 @@ namespace GameLogicTests
       {
         ChartView chart;
         chart.view = 0x40; // 6502: LDA #64 / JSR TT66
-        chart.fuel = 70;
+        chart.fuel.tenths = 70;
         chart.homeX = 20;
         chart.homeY = 173;
         chart.cursorX = 20;
@@ -660,7 +702,6 @@ namespace GameLogicTests
 
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(oracle.Label("TT66"));
-        cpu.AddTrap(oracle.Label("CIRCLE2"));
         LoadSeeds(cpu, zp.qq21, galaxy);
         SeedChart(cpu, zp, chart);
         SeedAfterScreenReset(cpu, oracle);
@@ -675,14 +716,9 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed && !run.illegalOpcode, L"TT22 should return");
 
         PortScreen port(static_cast<std::uint8_t>(galaxyNumber - 1));
-        RecordedShapes shapes;
-        Elite::DrawLongRangeChart(port.canvas, port.printer, port.text, chart, galaxy, &shapes);
+        Elite::DrawLongRangeChart(port.universe, port.ports, chart, galaxy);
 
         const std::wstring where = L"TT22 galaxy " + std::to_wstring(galaxyNumber);
-        Assert::AreEqual<std::size_t>(1u, shapes.circles.size(), (where + L": one fuel circle").c_str());
-        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.k3], shapes.circles[0].x, (where + L": K3").c_str());
-        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.k4], shapes.circles[0].y, (where + L": K4").c_str());
-        Assert::AreEqual<std::uint32_t>(cpu.memory[zp.k], shapes.circles[0].radius, (where + L": K").c_str());
         CompareScreens(cpu, zp.screen, port.canvas, where);
         Assert::AreEqual<std::uint32_t>(0u, port.galaxy.unexpected, (where + L": only the galaxy number should be a value token").c_str());
 
@@ -710,11 +746,10 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const Scratch zp(oracle);
       const std::uint16_t routine = oracle.Label("TT23");
-      const std::uint16_t sun = oracle.Label("SUN");
 
       SystemSeeds galaxy = Elite::GALAXY_ONE_SEEDS;
       std::uint32_t compared = 0;
-      std::uint32_t discsSeen = 0;
+      std::uint32_t drawn = 0;
 
       // Lave sits at (20, 173) in galaxy 1; the others crowd the chart differently.
       const std::array<std::pair<std::uint8_t, std::uint8_t>, 4> homes = {{{20, 173}, {96, 40}, {128, 128}, {0, 0}}};
@@ -725,7 +760,7 @@ namespace GameLogicTests
         {
           ChartView chart;
           chart.view = 0x80; // 6502: LDA #128 / JSR TT66
-          chart.fuel = 70;
+          chart.fuel.tenths = 70;
           chart.homeX = home.first;
           chart.homeY = home.second;
           chart.cursorX = home.first;
@@ -733,9 +768,6 @@ namespace GameLogicTests
 
           Cpu6502 cpu = oracle.Fresh();
           cpu.AddTrap(oracle.Label("TT66"));
-          cpu.AddTrap(oracle.Label("CIRCLE2"));
-          cpu.AddTrap(sun);
-          cpu.AddTrap(oracle.Label("FLFLLS"));
 
           // SUN takes its centre in K3 and K4 and its radius in K, so the values have to be
           // snapshotted as each call happens -- by the time the chart is finished they hold
@@ -746,56 +778,59 @@ namespace GameLogicTests
           SeedAfterScreenReset(cpu, oracle);
           cpu.memory[oracle.Label("GCNT")] = static_cast<std::uint8_t>(galaxyNumber - 1);
 
+          /*
+           * 6502: RAND -- and it matters HERE and on no other chart, which is what dropping the
+           * `SUN` trap in M3-b-1b exposed.
+           *
+           * `SUN` takes one `DORND` for the streak of light down the disc, so a chart with discs
+           * on it advances the generator once per disc and the two sides diverge at the first one
+           * unless the port starts where the game does. `DrawBall` takes none, which is why the
+           * other two sweeps needed nothing.
+           */
+          std::array<std::uint8_t, 4> seed{};
+          for (std::size_t byte = 0; byte < seed.size(); ++byte)
+          {
+            seed[byte] = cpu.memory[static_cast<std::uint16_t>(oracle.Label("RAND") + byte)];
+          }
+
           cpu.a = cpu.x = cpu.y = 0;
           cpu.sp = 0xFD;
           const auto run = cpu.CallSubroutine(routine, 20'000'000);
           Assert::IsTrue(run.completed && !run.illegalOpcode, L"TT23 should return");
 
           /*
-           * 6502: ee1 -- K3 and K4 are stored immediately before the SUN call and K holds the
-           * radius, so the trap's registers are not enough; the memory is read at each hit.
-           *
-           * A trap records in order, so this is the SEQUENCE of discs, not a set. Two systems that
-           * swapped places would still fail.
+           * 6502: ee1 -- `SUN` and its two `FLFLLS` were trapped and their arguments recorded,
+           * because the disc they draw was slice 3c's. Both are ported and M3-b-1b took the seam
+           * away, so THE TRAPS CAME OFF: the discs are drawn on both sides and the whole-screen
+           * comparison below is what says they landed in the same places, in the same order, at
+           * the same radii. The trap could only say what was asked for -- and the first run
+           * without it found the port drawing NOTHING, because `TT23`'s two clipper stores had
+           * been left to the caller (§6.45) and no test could reach them.
            */
-          std::vector<RecordedShapes::Disc> expected;
-          for (const auto& hit : cpu.trapHits)
-          {
-            if (hit.address == sun)
-            {
-              expected.push_back({hit.watched[0], hit.watched[1], hit.watched[2]});
-            }
-          }
-
           PortScreen port(static_cast<std::uint8_t>(galaxyNumber - 1));
-          RecordedShapes shapes;
-          Elite::DrawShortRangeChart(port.canvas, port.printer, port.text, chart, galaxy, &shapes);
+          port.universe.rng.SetState(seed);
+          Elite::DrawShortRangeChart(port.universe, port.ports, chart, galaxy);
 
           const std::wstring where = L"TT23 galaxy " + std::to_wstring(galaxyNumber) + L" at (" + std::to_wstring(home.first) + L", " +
                                      std::to_wstring(home.second) + L")";
 
-          Assert::AreEqual<std::size_t>(expected.size(), shapes.discs.size(), (where + L": disc count").c_str());
-          for (std::size_t index = 0; index < expected.size() && index < shapes.discs.size(); ++index)
-          {
-            Assert::IsTrue(expected[index] == shapes.discs[index],
-                           (where + L": disc " + std::to_wstring(index) + L" -- game (" + std::to_wstring(expected[index].x) + L", " +
-                            std::to_wstring(expected[index].y) + L", r" + std::to_wstring(expected[index].radius) + L") port (" +
-                            std::to_wstring(shapes.discs[index].x) + L", " + std::to_wstring(shapes.discs[index].y) + L", r" +
-                            std::to_wstring(shapes.discs[index].radius) + L")")
-                             .c_str());
-          }
-
           CompareScreens(cpu, zp.screen, port.canvas, where);
-          discsSeen += static_cast<std::uint32_t>(shapes.discs.size());
+
+          // How much of the chart is actually ink, which is what `discsSeen` counted through the
+          // `SUN` trap. The discs are most of it: a chart with none is a rule and a title.
+          const std::span<const std::uint8_t> ink = port.canvas.Screen();
+          for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
+          {
+            drawn += (ink[offset] != 0u) ? 1u : 0u;
+          }
           ++compared;
         }
         Elite::NextGalaxy(galaxy);
       }
 
       Logger::WriteMessage(("TT23: " + std::to_string(compared) + " short-range charts compared by whole screen, " +
-                            std::to_string(discsSeen) + " system discs")
-                             .c_str());
-      Assert::IsTrue(discsSeen > 50, L"the sample should put a good number of systems on screen");
+                            std::to_string(drawn) + " bytes of ink").c_str());
+      Assert::IsTrue(drawn > 5000u, L"the sample should put a good number of systems on screen");
     }
 
     /*
@@ -830,9 +865,11 @@ namespace GameLogicTests
         }
 
         CapturingSink sink;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::ExtendedTextState sentences;
+        Elite::CharacterPrinter characters(sink, sentences);
+        characters.State().sentenceStart = 0xFF;
+        Elite::TextState text;
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
         Elite::PrintRangeError(printer);
 
@@ -861,8 +898,9 @@ namespace GameLogicTests
         }
 
         CapturingSink sink;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
+        Elite::ExtendedTextState sentences;
+        Elite::CharacterPrinter characters(sink, sentences);
+        characters.State().sentenceStart = 0xFF;
         Elite::TextState text;
         text.column = 9;
         text.row = 9;
@@ -909,17 +947,17 @@ namespace GameLogicTests
             chart.cursorY = static_cast<std::uint8_t>(255u - cursor);
 
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(oracle.Label("CLYNS"));
             LoadSeeds(cpu, zp.qq21, galaxy);
             SeedChart(cpu, zp, chart);
             cpu.a = cpu.x = cpu.y = 0;
             cpu.sp = 0xFD;
             Assert::IsTrue(cpu.CallSubroutine(oracle.Label("hm"), 2'000'000).completed, L"hm should return");
 
-            Canvas canvas;
-                  CountedEffects effects;
+            PortScreen port;
+            Canvas& canvas = port.canvas;
             ChartView ours = chart;
-            const Elite::NearestSystem nearest = Elite::SelectNearestSystem(canvas, ours, galaxy, &effects);
+            const Elite::NearestSystem nearest = Elite::SelectNearestSystem(canvas, port.printer, port.text, port.characters.State(),
+                                                                           port.universe.message, ours, galaxy);
 
             const std::wstring where = Where(L"hm", chart) + L" galaxy " + std::to_wstring(galaxyNumber);
             Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq9], ours.cursorX, (where + L": QQ9").c_str());
@@ -927,7 +965,9 @@ namespace GameLogicTests
             Assert::AreEqual<std::uint32_t>(cpu.memory[zp.qq8], static_cast<std::uint8_t>(nearest.distance), (where + L": QQ8").c_str());
             Assert::AreEqual<std::uint32_t>(cpu.memory[static_cast<std::uint16_t>(zp.qq8 + 1)],
                                             static_cast<std::uint8_t>(nearest.distance >> 8), (where + L": QQ8+1").c_str());
-            Assert::AreEqual<std::uint32_t>(1u, effects.cleared, (where + L": CLYNS reached once").c_str());
+            // 6502: JMP CLYNS -- it runs on both sides since M3-b-3b, so the rows it clears and the
+            // row it leaves the cursor on are compared rather than counted.
+            Assert::AreEqual<std::uint32_t>(cpu.memory[zp.yc], port.text.row, (where + L": YC after CLYNS").c_str());
             CompareScreens(cpu, zp.screen, canvas, where);
             ++compared;
           }
@@ -980,7 +1020,7 @@ namespace GameLogicTests
                   {
                     ChartView chart;
                     chart.view = static_cast<std::uint8_t>(view);
-                    chart.fuel = static_cast<std::uint8_t>(fuel);
+                    chart.fuel.tenths = static_cast<std::uint8_t>(fuel);
                     chart.homeX = 20;
                     chart.homeY = 173;
                     chart.cursorX = static_cast<std::uint8_t>(cursor);
@@ -988,7 +1028,6 @@ namespace GameLogicTests
 
                     Cpu6502 cpu = oracle.Fresh();
                     cpu.AddTrap(oracle.Label("CHPR"), Cpu6502::TrapExit::ClearCarry);
-                    cpu.AddTrap(oracle.Label("CLYNS"));
                     cpu.AddTrap(ghy);
                     LoadSeeds(cpu, zp.qq21, galaxy);
                     SeedChart(cpu, zp, chart);
@@ -1022,7 +1061,6 @@ namespace GameLogicTests
 
                     PortScreen port(static_cast<std::uint8_t>(galaxyNumber - 1));
                     port.screen.draw = false; // the oracle's CHPR is trapped, so neither side draws
-                    CountedEffects effects;
                     Elite::JumpState jump;
                     jump.docked = static_cast<std::uint8_t>(docked);
                     jump.countdown = static_cast<std::uint8_t>(countdown);
@@ -1030,8 +1068,9 @@ namespace GameLogicTests
                     jump.controlHeld = control != 0;
 
                     ChartView ours = chart;
-                    const Elite::JumpOutcome outcome = Elite::RequestHyperspace(port.canvas, port.printer, port.extended,
-                                                                                port.text, ours, jump, galaxy, &effects);
+                    const Elite::JumpOutcome outcome =
+                      Elite::RequestHyperspace(port.canvas, port.printer, port.extended, port.text, port.characters.State(),
+                                               port.universe.message, ours, jump, galaxy);
 
                     const std::wstring where = Where(L"hyp", chart) + L" docked=" + std::to_wstring(docked) + L" count=" +
                                                std::to_wstring(countdown) + L" ctrl=" + std::to_wstring(control) + L" galaxy=" +
@@ -1144,12 +1183,13 @@ namespace GameLogicTests
             Canvas scratchCanvas;
             Elite::TextState scratchText;
             Elite::TextPrinter scratchScreen(scratchCanvas, scratchText);
-            Elite::CharacterPrinter scratchCharacters(scratchScreen);
-            scratchCharacters.state.justify = 0x80;
-            Elite::TokenPrinter scratchPrinter(scratchCharacters);
+            Elite::ExtendedTextState scratchSentences;
+            Elite::CharacterPrinter scratchCharacters(scratchScreen, scratchSentences);
+            scratchCharacters.State().justify = 0x80;
+            Elite::TokenPrinter scratchPrinter(scratchCharacters, scratchText);
             SystemSeeds naming = seeds;
             Elite::PrintSystemName(scratchPrinter, naming);
-            for (std::size_t index = 0; index < scratchCharacters.state.bufferLength; ++index)
+            for (std::size_t index = 0; index < scratchCharacters.State().bufferLength; ++index)
             {
               typed.push_back(scratchCharacters.buffer[index]);
             }
@@ -1213,8 +1253,9 @@ namespace GameLogicTests
             Canvas canvas;
             Elite::TextState text;
             Elite::TextPrinter screen(canvas, text);
-            Elite::CharacterPrinter characters(screen);
-            Elite::TokenPrinter printer(characters);
+            Elite::ExtendedTextState sentences;
+            Elite::CharacterPrinter characters(screen, sentences);
+            Elite::TokenPrinter printer(characters, text);
             printer.SetCaseFlags(static_cast<std::uint8_t>(caseFlags));
 
             ChartView chart;

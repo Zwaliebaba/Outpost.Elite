@@ -88,8 +88,49 @@ namespace Elite
   inline constexpr std::size_t SID_VOICE_COUNT = 3;
   inline constexpr std::uint8_t SOUND_EFFECT_COUNT = 16;
 
-  /// 6502: sfxtrib -- the Trumbles, the one effect no constant elsewhere in the port names.
-  inline constexpr std::uint8_t SOUND_TRUMBLES = 14;
+  /*
+   * 6502: the sixteen sounds of `sfxatk` and its five sibling tables (M5-a-4).
+   *
+   * THEY WERE DECLARED IN EIGHT HEADERS, one beside whichever routine first played each: `sfxbeep`
+   * and two more in `Combat.h`, `sfxboop` in `ViewChange.h`, `sfxecm` in `Dashboard.h`, `sfxhyp1`
+   * in `Flight.h`, five in `FlightLoop.h`, two in `Tactics.h` and `sfxtrib` here. They are ONE
+   * table, indexed 0 to 15 by every one of the six `sfx*` arrays, and `SOUND_EFFECT_COUNT` was
+   * already here on its own. §6.121 said it for the ship types -- a number is a property of the
+   * table, not of the routine that first happened to want one -- and this is the same finding a
+   * second time.
+   *
+   * SLOT 8 IS NAMED FOR THE FIRST TIME. The port had fifteen constants for sixteen entries; the
+   * original calls it `sfxeng` and its own comment says "This sound is not used".
+   */
+  enum class SoundEffect : std::uint8_t
+  {
+    PulseLaser = 0,     ///< 6502: sfxplas -- pulse lasers fired by us
+    HitByLaser = 1,     ///< 6502: sfxelas
+    ShipExploding = 2,  ///< 6502: sfxhit
+    Explosion = 3,      ///< 6502: sfxexpl -- we died, or collided
+    Missile = 4,        ///< 6502: sfxwhosh -- a missile launched, and a ship launching
+    Beep = 5,           ///< 6502: sfxbeep -- short and high
+    Boop = 6,           ///< 6502: sfxboop -- long and low
+    Hyperspace = 7,     ///< 6502: sfxhyp1
+    Engine = 8,         ///< 6502: sfxeng -- and the original's own comment says it is not used
+    Ecm = 9,            ///< 6502: sfxecm
+    BeamLaser = 10,     ///< 6502: sfxblas
+    MilitaryLaser = 11, ///< 6502: sfxalas
+    MiningLaser = 12,   ///< 6502: sfxmlas
+    EnergyBomb = 13,    ///< 6502: sfxbomb
+    Trumbles = 14,      ///< 6502: sfxtrib -- the Trumbles dying
+    HitByLaser2 = 15,   ///< 6502: sfxelas2
+
+    /*
+     * 6502: LDY #sfxhyp1+128 -- and it is the ONE place in the game that sets bit 7.
+     *
+     * Not a seventeenth sound: it is sound 7 again with an index that falls PAST the end of
+     * `SFXPR`, so the priority byte reads as zero and the routine looks for a voice already playing
+     * it rather than taking a new one. `HYPNOISE` plays 7 pitched, then 4, then this. It is an
+     * enumerator rather than a `+ 128u` at the call site because the trick is the point.
+     */
+    HyperspaceAgain = 135,
+  };
 
   /*
    * 6502: sound_variables -- the buffer between the game and the interrupt.
@@ -105,7 +146,9 @@ namespace Elite
    * same slow duty-cycle wobble. It starts at 2 because that is the byte the binary loads with.
    *
    * `soundOff` is `DNOIZ`, which is a configuration byte the pause screen toggles rather than sound
-   * state, and it is here because `NOISE` is its only reader in this library.
+   * state, and it is here because `NOISE` is its only reader in this library. It is also the ONLY
+   * `DNOIZ`: `Universe` carried a second one that the pause screen wrote and nothing read, until
+   * M5-a-5 found it.
    */
   struct SoundBuffer
   {
@@ -121,6 +164,26 @@ namespace Elite
     std::array<std::uint8_t, SID_VOICE_COUNT> volumeRate{};      ///< 6502: SOVCH
 
     std::uint8_t soundOff = 0; ///< 6502: DNOIZ
+  };
+
+  /*
+   * What `NOISE` LEAVES, and A is half of it (M3-b-2a).
+   *
+   * The carry was the whole answer while `DashboardEffects` was a seam, because an interface method
+   * can return one thing and the seam chose the flag. It is not the whole answer: `.MA14 STA
+   * INWK+35` stores what `NOISE2` left in A into the dead ship's ENERGY byte, so the sound system
+   * decides a game value and a port that answered only the carry had to invent one. It invented the
+   * sustain, which is what `EXNO2` had in A on the way IN; the routine overwrites it.
+   *
+   * Three exits and three different accumulators. The path that takes a voice ends `INY / TYA /
+   * ORA #128 / STA SOFLG,X / CLI / SEC` -- so A is the flag byte it just wrote. The priority
+   * refusal is `LDA SFXPR,Y / CMP SOPR,X / BCC SOUR1`, so A is the effect's priority. And with
+   * sound switched off, `LDA DNOIZ / BNE SOUR1` leaves A holding `DNOIZ` and the carry untouched.
+   */
+  struct NoiseResult
+  {
+    bool carry = false; ///< the C flag on return -- set when the effect took a voice
+    std::uint8_t a = 0; ///< A on return, which `.MA14` stores as a ship's energy
   };
 
   /*
@@ -142,7 +205,7 @@ namespace Elite
    * WHICH VOICE: the one already playing this effect, else the lowest priority of the three -- a
    * comparison chain that prefers voice 2 on a tie with voice 1 and voice 3 on a tie with either.
    */
-  [[nodiscard]] bool PlaySoundEffect(SoundBuffer& _buffer, std::uint8_t _effect, bool _carryIn) noexcept;
+  [[nodiscard]] NoiseResult PlaySoundEffect(SoundBuffer& _buffer, SoundEffect _effect, bool _carryIn) noexcept;
 
   /*
    * 6502: NOISE2 -- NOISE with the sustain byte and the frequency supplied instead of looked up.
@@ -152,13 +215,13 @@ namespace Elite
    * supplied bytes instead of the table's. The `EQUB &50` is a `BVC` that cannot branch, swallowing
    * the `CLV` (§6.79's idiom). So this is one routine with a flag, and the port writes it that way.
    */
-  [[nodiscard]] bool PlaySoundEffectPitched(SoundBuffer& _buffer, std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency,
-                                            bool _carryIn) noexcept;
+  [[nodiscard]] NoiseResult PlaySoundEffectPitched(SoundBuffer& _buffer, SoundEffect _effect, std::uint8_t _sustain,
+                                                   std::uint8_t _frequency, bool _carryIn) noexcept;
 
   /// 6502: BEEP, BELL -- `LDY #sfxbeep / BNE NOISE`, a tail call, so the carry it returns is NOISE's.
   /// `BELL` is `LDA #7 / JMP CHPR`, and character 7 in `CHPR` is `R5`, which is `JSR BEEP`: the
-  /// text printer's `TextEffects::Beep` seam reaches this, so the bell has no routine of its own.
-  [[nodiscard]] bool Beep(SoundBuffer& _buffer, bool _carryIn) noexcept;
+  /// text printer rings it over a `SoundBuffer` since M3-b-2b, so the bell has no routine of its own.
+  [[nodiscard]] NoiseResult Beep(SoundBuffer& _buffer, bool _carryIn) noexcept;
 
   /*
    * 6502: NOISEOFF -- find the voice playing `_effect` and run its counter down.
@@ -167,7 +230,7 @@ namespace Elite
    * its next pass the ordinary way -- gate off, flag and priority cleared -- and nothing here writes
    * the chip. A voice not playing the effect is left alone, and so is everything if none is.
    */
-  void StopSoundEffect(SoundBuffer& _buffer, std::uint8_t _effect) noexcept;
+  void StopSoundEffect(SoundBuffer& _buffer, SoundEffect _effect) noexcept;
 
   /// 6502: SOFLUSH -- the same for all three voices at once: every counter to 1, so every sound
   /// ends on the next interrupt. `stopbd` calls it before silencing the chip.

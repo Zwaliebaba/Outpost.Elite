@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "NullSeams.h"
 #include "OracleImage.h"
 
 #include "Canvas.h"
@@ -149,6 +150,79 @@ namespace GameLogicTests
      * a docked screen IS entered with QQ11 non-zero, so `LDA QQ11 / BNE tt66` takes the branch that
      * skips printing the space view's name -- which is the path the shell actually takes.
      */
+    /*
+     * 6502: TRADEMODE -- `TT66` with the view in A, then `FLKB` -- as one routine (M6-0-e).
+     *
+     * Every docked screen opens with it and `MarketTests` traps it, because what that sweep
+     * compares is the prices. The port had inlined its two calls at five callers; it is
+     * `SetUpTradeScreen` now, and this compares it whole: the text state `TT66` leaves, the view,
+     * and the one flush.
+     */
+    TEST_METHOD(TheTradeScreenMatchesTRADEMODE)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t flkb = oracle.Label("FLKB");
+
+      struct CountingKeys final : NullSeams
+      {
+        std::uint32_t flushes = 0;
+        void Flush() override
+        {
+          ++flushes;
+        }
+      };
+
+      std::uint32_t compared = 0;
+      for (const std::uint8_t view : {Elite::BUY_CARGO_VIEW, Elite::INVENTORY_VIEW, Elite::EQUIP_SHIP_VIEW})
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.AddTrap(oracle.Label("TTX66K"));
+        cpu.AddTrap(oracle.Label("FLFLLS"));
+        cpu.AddTrap(flkb);
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ22") + 1u)] = 0;
+        Write(cpu, oracle, {17, 9, 0xFF, 0, 0, 0xFF});
+        cpu.a = view;
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("TRADEMODE"));
+        Assert::IsTrue(run.completed, L"TRADEMODE returned");
+
+        Elite::Universe universe;
+        Discard sink;
+        NullSeams nulls;
+        CountingKeys keys;
+        Elite::CharacterPrinter characters{sink, universe.sentences};
+        Elite::TokenPrinter printer{characters, universe.text};
+        Elite::ExtendedTokenPrinter extended{characters, printer, universe.rng};
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer, characters, characters, sid, extended, nulls, keys, nulls};
+        universe.text.column = 17;
+        universe.text.row = 9;
+        printer.SetCaseFlags(0xFF);
+        characters.State().lowerCaseBits = 0;
+        characters.State().sentenceStart = 0;
+        characters.State().alwaysLower = 0xFF;
+        Elite::SetUpTradeScreen(universe, ports, view);
+
+        const std::wstring where = Widen("TRADEMODE view " + std::to_string(view));
+        CompareTextState(FromOracle(cpu, oracle), FromPort(printer, universe.text, characters.State()), where.c_str());
+        Assert::AreEqual<std::uint8_t>(view, cpu.memory[oracle.Label("QQ11")], (where + L": the view it set").c_str());
+        Assert::AreEqual<std::uint8_t>(view, universe.view, (where + L": and the port's").c_str());
+        std::uint32_t flushed = 0;
+        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+        {
+          flushed += (hit.address == flkb) ? 1u : 0u;
+        }
+        Assert::AreEqual<std::uint32_t>(1u, flushed, (where + L": TRADEMODE ends in FLKB").c_str());
+        Assert::AreEqual<std::uint32_t>(1u, keys.flushes, (where + L": and the port flushes once").c_str());
+        ++compared;
+      }
+      Assert::AreEqual<std::uint32_t>(3u, compared, L"the whole sweep ran");
+    }
+
     TEST_METHOD(TheTradeScreenSeamLeavesTheTextSystemWhereTT66Does)
     {
       if (OracleMissing())
@@ -176,18 +250,18 @@ namespace GameLogicTests
                                      L"and the view it was given is the view it set");
 
       Discard sink;
-      Elite::CharacterPrinter characters{sink};
-      Elite::TokenPrinter printer{characters};
-      Elite::TextState text{17, 9, 0xFF, 0};
-      printer.SetCursor(&text);
+      Elite::ExtendedTextState sentences;
+      Elite::CharacterPrinter characters{sink, sentences};
+      Elite::TextState text{17, 9, 0xFF, {}};
+      Elite::TokenPrinter printer{characters, text};
       printer.SetCaseFlags(0xFF);
-      characters.state.lowerCaseBits = 0;
-      characters.state.sentenceStart = 0;
-      characters.state.alwaysLower = 0xFF;
+      characters.State().lowerCaseBits = 0;
+      characters.State().sentenceStart = 0;
+      characters.State().alwaysLower = 0xFF;
 
-      Elite::SetUpTextScreen(printer, text, characters.state);
+      Elite::SetUpTextScreen(printer, text, characters.State());
 
-      CompareTextState(FromOracle(cpu, oracle), FromPort(printer, text, characters.state), L"TT66");
+      CompareTextState(FromOracle(cpu, oracle), FromPort(printer, text, characters.State()), L"TT66");
 
       /*
        * And the assertion the whole test is about, stated so a reader does not have to reconstruct
@@ -195,7 +269,7 @@ namespace GameLogicTests
        * its top and zero into it five bytes from its end.
        */
       Assert::AreEqual<std::uint8_t>(0, printer.CaseFlags(), L"a screen change ends in ALL CAPS");
-      Assert::AreEqual<std::uint8_t>(0x80, characters.state.sentenceStart, L"but DTW2 keeps the 128");
+      Assert::AreEqual<std::uint8_t>(0x80, characters.State().sentenceStart, L"but DTW2 keeps the 128");
     }
 
     /*
@@ -219,14 +293,14 @@ namespace GameLogicTests
       Write(cpu, oracle, {17, 9, 0, 0, 0, 0xFF});
 
       Discard sink;
-      Elite::CharacterPrinter characters{sink};
-      Elite::TokenPrinter printer{characters};
-      Elite::TextState text{17, 9, 0, 0};
-      printer.SetCursor(&text);
+      Elite::ExtendedTextState sentences;
+      Elite::CharacterPrinter characters{sink, sentences};
+      Elite::TextState text{17, 9, 0, {}};
+      Elite::TokenPrinter printer{characters, text};
       printer.SetCaseFlags(0);
-      characters.state.lowerCaseBits = 0;
-      characters.state.sentenceStart = 0;
-      characters.state.alwaysLower = 0xFF;
+      characters.State().lowerCaseBits = 0;
+      characters.State().sentenceStart = 0;
+      characters.State().alwaysLower = 0xFF;
 
       Elite::Canvas canvas;
       for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
@@ -243,11 +317,11 @@ namespace GameLogicTests
       Elite::MessageState message;
       message.delay = 0x5Au;
       message.append = 0x5Au;
-      Elite::ClearMessageRows(canvas, printer, text, characters.state, message);
+      Elite::ClearMessageRows(canvas, printer, text, characters.State(), message);
       Assert::AreEqual<std::uint8_t>(0, message.delay, L"CLYNS clears DLY");
       Assert::AreEqual<std::uint8_t>(0, message.append, L"and de");
 
-      CompareTextState(FromOracle(cpu, oracle), FromPort(printer, text, characters.state), L"CLYNS");
+      CompareTextState(FromOracle(cpu, oracle), FromPort(printer, text, characters.State()), L"CLYNS");
 
       std::uint32_t cleared = 0;
       const std::span<const std::uint8_t> ours = canvas.Screen();
@@ -340,7 +414,7 @@ namespace GameLogicTests
       std::set<std::uint32_t> distinct;
       for (std::size_t index = 0; index < packed.size(); ++index)
       {
-        const Outpost::Colour& colour = Outpost::C64_PALETTE[index];
+        const Outpost::Rgb& colour = Outpost::C64_PALETTE[index];
         Assert::AreEqual<std::uint32_t>(colour.red, packed[index] & 0xFFu, L"red in the low byte");
         Assert::AreEqual<std::uint32_t>(colour.green, (packed[index] >> 8) & 0xFFu, L"then green");
         Assert::AreEqual<std::uint32_t>(colour.blue, (packed[index] >> 16) & 0xFFu, L"then blue");

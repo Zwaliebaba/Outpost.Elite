@@ -19,6 +19,7 @@
 
 namespace Elite
 {
+  class Game; // Game.h -- the shell drains its sound log
   struct SoundBuffer;
   struct MusicPlayer;
 } // namespace Elite
@@ -37,11 +38,11 @@ namespace Outpost
    * builds the same shape out of a null presenter and asserts that the declarations are mutually
    * consistent, so the arrangement here is verified before this file compiles.
    *
-   * Three of the methods below appear on two interfaces each -- `ClearBottomRows` on the trade
-   * screens and the charts, `WaitFrames` on the line editor and the start sequence,
-   * `ResetMissileIndicators` on the trade screens and the start sequence. One definition overrides
-   * both in each case, which is the language's own rule and is deliberate rather than lucky: two
-   * independent statements of what a routine needs, satisfied by one thing.
+   * `WaitFrames` used to appear on two interfaces at once -- the line editor's and the start
+   * sequence's -- and is `Presenter`'s alone since M3-b-3b. One definition
+   * overrides both in each case, which is the language's own rule and is deliberate rather than
+   * lucky: two independent statements of what a routine needs, satisfied by one thing.
+   * `ResetMissileIndicators` was a third until M3-b-1e, which took `msblob` off both.
    *
    * WHAT IS HONESTLY MISSING, and it is said here rather than left to be discovered while playing.
    * Phase 4 owns the docking tunnel and the rotating title ship; phase 5 owns sound. Every method
@@ -49,34 +50,30 @@ namespace Outpost
    * yet. Three that WERE such comments no longer are: `RESET`, `RES2` and `msblob` are ported, and
    * the shell forwards them to `FlightSession` rather than approximating them (§6.73).
    */
-  class GameShell final : public Elite::TradeScreenEffects,
-                          public Elite::ChartEffects,
-                          public Elite::LineEntryEffects,
-                          public Elite::StartUpEffects,
-                          public Elite::ControlCodes,
-                          public Elite::TextEffects,
-                          public Elite::TunnelEffects,
-                          public Elite::KeySource
+  class GameShell final : public Elite::Presenter, public Elite::Keyboard
   {
   public:
-    GameShell(Window& _window, CanvasPresenter& _presenter, Elite::Canvas& _canvas, std::uint8_t& _view) noexcept
+    GameShell(Window& _window, CanvasPresenter& _presenter) noexcept
       : m_window(_window),
-        m_presenter(_presenter),
-        m_canvas(_canvas),
-        m_view(_view)
+        m_presenter(_presenter)
     {
     }
 
-    /// The text system the shell drives, wired up by the composition root once it exists. The
-    /// message counters come with it because `CLYNS` clears them (§6.67).
-    void Attach(Elite::TokenPrinter& _printer, Elite::TextState& _text, Elite::ExtendedTextState& _extended,
-                Elite::MessageState& _message) noexcept
+    /// The canvas this presents and the view byte it reads -- `Game`'s, attached once `Game` exists
+    /// (M5-e-2), because `Game` needs this object at construction and owns the universe now.
+    void AttachUniverse(Elite::Universe& _universe) noexcept
     {
-      m_printer = &_printer;
-      m_text = &_text;
-      m_extended = &_extended;
-      m_message = &_message;
+      m_canvas = &_universe.canvas;
+      m_view = &_universe.view;
     }
+
+    /*
+     * `Attach` AND `AttachGalaxy` WERE HERE AND ARE NOT ANY MORE (M3-b-4b).
+     *
+     * The printer, the cursor, the sentence flags, the message counters and `GCNT` were five
+     * pointers this object held for one method: `Run`, the control-code seam. `Elite::RunControlCode`
+     * reaches all five through `(Universe&, Ports&)`, so the shell stopped needing any of them.
+     */
 
     /*
      * One turn of the outer loop: dispatch what the window has, then draw and wait for the vertical
@@ -92,7 +89,7 @@ namespace Outpost
      * One FLIGHT-LOOP frame has been drawn: show it for as long as the shipped loop took to
      * compute the next one.
      *
-     * NOT THE SAME THING AS `ShowFrame`, and the difference is five times over. `ShowFrame` is
+     * NOT THE SAME THING AS `Present`, and the difference is five times over. `Present` is
      * `DELAY` with a count of one -- a single vertical sync, which is what the launch and
      * hyperspace tunnels ask for because the original spells `JSR DELAY` inside them. `DEATH`'s
      * `.D2 JSR M% / DEC LASCT / BNE D2` asks for nothing of the kind: it runs the flight loop flat
@@ -104,9 +101,13 @@ namespace Outpost
      * The accumulator is the title screen's, for the same reason and with the same backlog rule:
      * a stall costs a frame rather than being repaid by running faster to catch up.
      */
-    void HoldFlightFrame(std::uint8_t _ships);
+    void HoldFlightFrame(std::uint8_t _ships) override;
 
-    // ---- Elite::KeySource ----------------------------------------------------------------------
+    // ---- Elite::Keyboard -------------------------------------------------------------------------
+
+    /// 6502: the matrix walk's read of one row, which is all of `RDKEY` that is the platform's
+    /// since M3-b-3d -- `Elite::ScanKeyboard` is the rest.
+    [[nodiscard]] bool Held(std::size_t _key) override;
 
     /*
      * 6502: TT217 -- block until a key is pressed.
@@ -125,51 +126,56 @@ namespace Outpost
      */
     std::uint8_t NextKey() override;
 
-    // ---- Elite::TradeScreenEffects and Elite::ChartEffects -------------------------------------
+    /*
+     * `TradeScreenEffects` AND `ChartEffects` WERE ANSWERED HERE AND ARE NOT ANY MORE (M3-b-3b).
+     *
+     * `SetUpTradeScreen` was `ClearToView` and `FlushKeyboard`; `ClearToView` was
+     * `Elite::SetUpScreen`; `ClearBottomRows` was `Elite::ClearMessageRows`; `BeepAndPause` was
+     * `Elite::Beep` and `WaitFrames`. Four seams, and every one of them a forwarding call.
+     *
+     * `ClearToView` SURVIVES AS A PRIVATE HELPER, because `Run(9)` and this file's own screen
+     * changes need it before the composition root has lent the shell its ports.
+     */
 
-    void SetUpTradeScreen(std::uint8_t _view) override;
-    void ClearToView(std::uint8_t _view) override;
-    void ClearBottomRows() override;
-    void BeepAndPause() override;
-    void ResetMissileIndicators() override;
+    /// 6502: TT66 -- `Elite::SetUpScreen` once the ports are lent, and `STA QQ11` alone before
+    /// then. Public because `Main.cpp` changes screens through it.
+    void ClearToView(std::uint8_t _view);
 
-    // ---- Elite::LineEntryEffects and Elite::StartUpEffects --------------------------------------
+    /// 6502: FLKB -- empty the keyboard buffer.
+    void Flush() override;
+
+    // `Elite::StartUpEffects` WAS ANSWERED HERE AND IS NOT ANY MORE (M6-0-h-2): `ShowTitleScreen`
+    // was a forward to `Elite::ShowTitleShip`, which `BR1` calls itself now.
+
+    // ---- Elite::Presenter's four ------------------------------------------------------------------
 
     void WaitFrames(std::uint8_t _frames) override;
-    void FlushKeyboard() override;
-
-    void ResetUniverse() override;
-    void ResetShip() override;
-    void ClearKeyLogger() override;
-    void StartTheme() override;
-    void StopTheme() override;
-    [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override;
-    [[nodiscard]] std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance) override;
-
-    // ---- Elite::TunnelEffects -------------------------------------------------------------------
 
     /// 6502: the vertical sync the VIC-II was giving `HFS2` for free while it drew the next circle.
-    void ShowFrame() override;
+    void Present() override;
 
-    // ---- Elite::ControlCodes and Elite::TextEffects ---------------------------------------------
+    /// The title screen's spin, held on its own cost curve -- see `Presenter.h`, and §6.110 for the
+    /// 165 Hz panel that span the ship twenty times too fast when this was a plain present.
+    void HoldTitleFrame(std::uint8_t _distance) override;
 
-    void Run(std::uint8_t _code) override;
-    void Beep() override;
-    void ClearScreen() override;
+    /*
+     * `Elite::ControlCodes` WAS ANSWERED HERE AND IS NOT ANY MORE (M3-b-4b).
+     *
+     * `Run` dispatched codes 8, 9 and 21 and forwarded the rest to `Elite::MissionCodes`. All three
+     * were `GameLogic` reached through the executable -- two cursor stores and `ClearMessageRows` --
+     * so `Elite::RunControlCode` is the whole dispatch now and the extended printer reaches it
+     * directly.
+     */
 
-    /// 6502: QQ11 -- which screen is showing. See `m_view`: the byte is the composition root's,
-    /// because the flight half writes it too.
+    /// 6502: QQ11 -- which screen is showing. See `m_view`: the byte is `Game`'s universe's, because
+    /// the flight half writes it too.
     [[nodiscard]] std::uint8_t View() const noexcept
     {
-      return m_view;
+      return *m_view;
     }
 
     /// The extended token printer, for the control codes that print. Set by the composition root
     /// after construction, because the printer needs this object to exist first.
-    void AttachExtended(Elite::ExtendedTokenPrinter& _extendedPrinter) noexcept
-    {
-      m_extendedPrinter = &_extendedPrinter;
-    }
 
     /*
      * The flight universe, for `RESET`, `RES2` and the raster handler.
@@ -179,10 +185,9 @@ namespace Outpost
      * existed). `QQ12` comes with them because `RESET` writes it, and it belongs to the composition
      * root rather than to either half -- the docked dispatch reads it on every key.
      */
-    void AttachFlight(FlightSession& _flight, std::uint8_t& _dockedFlag) noexcept
+    void AttachFlight(FlightSession& _flight) noexcept
     {
       m_flight = &_flight;
-      m_dockedFlag = &_dockedFlag;
     }
 
     /*
@@ -198,26 +203,22 @@ namespace Outpost
       m_video = &_video;
     }
 
-    /*
-     * 6502: GCNT -- which galaxy the player is in, which MT27 and MT28 add to a token number.
-     *
-     * A pointer to the commander block's byte rather than a copy, because a galactic hyperdrive
-     * changes it mid-session and a mission briefing printed afterwards names the new galaxy's
-     * captain.
-     */
-    void AttachGalaxy(const std::uint8_t& _galaxy) noexcept
+    /// The seams, which the composition root owns and this object is four of. Everything the shell
+    /// forwards into `GameLogic` takes them beside the universe since M3-a.
+    void AttachPorts(Elite::Ports& _ports) noexcept
     {
-      m_galaxy = &_galaxy;
+      m_ports = &_ports;
     }
 
     /// The SID and what feeds it. Set by the composition root, like the flight, because the sound
     /// buffer and the music player are the game's and the output is the platform's, and this object
     /// is where the two halves of the loop meet.
-    void AttachSound(SoundOutput& _audio, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music) noexcept
+    void AttachSound(SoundOutput& _audio, Elite::SoundBuffer& _sound, Elite::MusicPlayer& _music, Elite::Game& _game) noexcept
     {
       m_audio = &_audio;
       m_sound = &_sound;
       m_music = &_music;
+      m_game = &_game; // whose `Sounds()` the pump drains, since M5-e-1
     }
 
   private:
@@ -226,27 +227,18 @@ namespace Outpost
 
     Window& m_window;
     CanvasPresenter& m_presenter;
-    Elite::Canvas& m_canvas;
+    Elite::Canvas* m_canvas = nullptr; ///< attached by `AttachUniverse`
 
     /// 6502: the sprite registers, null until the composition root attaches them.
     const Elite::VideoState* m_video = nullptr;
 
-    /// 6502: GCNT. See `AttachGalaxy`. `INF` was a second byte here until M3-a: `BRIEF` wrote the
-    /// briefing ship's slot through `SetBriefingShip` and control code 22 read it back. It is
-    /// `Universe::shipSlot` now, which both of them reach without the shell carrying a copy.
-    const std::uint8_t* m_galaxy = nullptr;
-
-    Elite::TokenPrinter* m_printer = nullptr;
-    Elite::TextState* m_text = nullptr;
-    Elite::ExtendedTextState* m_extended = nullptr;
-    Elite::MessageState* m_message = nullptr;
-    Elite::ExtendedTokenPrinter* m_extendedPrinter = nullptr;
     FlightSession* m_flight = nullptr;
-    std::uint8_t* m_dockedFlag = nullptr;
+    Elite::Ports* m_ports = nullptr;
 
     SoundOutput* m_audio = nullptr;
     Elite::SoundBuffer* m_sound = nullptr;
     Elite::MusicPlayer* m_music = nullptr;
+    Elite::Game* m_game = nullptr;
 
     /*
      * 6502: QQ11 -- which screen is showing, and it is a REFERENCE because both halves write it.
@@ -255,7 +247,7 @@ namespace Outpost
      * flight loop `ChangeView`, `TT110` and the whole of `FlightScreen`, all of which write the
      * same address. Two copies would have agreed until the first launch.
      */
-    std::uint8_t& m_view;
+    std::uint8_t* m_view = nullptr; ///< attached by `AttachUniverse`
 
     /*
      * What paces the title screen's ship, and it is a CLOCK because the thing being paced is not

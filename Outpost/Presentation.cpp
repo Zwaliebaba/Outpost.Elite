@@ -29,7 +29,7 @@ namespace Outpost
     std::array<std::uint32_t, 16> packed{};
     for (std::size_t index = 0; index < C64_PALETTE.size(); ++index)
     {
-      const Colour& colour = C64_PALETTE[index];
+      const Rgb& colour = C64_PALETTE[index];
 
       // R in the low byte, so the word is R8G8B8A8 in memory on a little-endian machine -- which is
       // what DXGI_FORMAT_R8G8B8A8_UNORM expects and what a shader reads as .rgba without a swizzle.

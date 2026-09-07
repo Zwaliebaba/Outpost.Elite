@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <bitset>
 #include <cstdint>
 #include <vector>
 
@@ -48,6 +49,105 @@ namespace Elite::Testing
     // ---- state -------------------------------------------------------------------------
 
     std::array<std::uint8_t, 65536> memory{};
+
+    /*
+     * 6502: the I/O page -- what a load or store at &D000-&DFFF reaches when the 6510's port
+     * register maps it in (M6-0-a, §6.108).
+     *
+     * On a C64 the VIC-II, the SID, the colour RAM and the two CIAs sit at &D000-&DFFF ON TOP OF
+     * 4K of RAM, and bits 0 to 2 of address &0001 decide which of the two a bus cycle reaches.
+     * Elite keeps the ship blueprints in that RAM (`XX21` is &D000) and banks the chips in around
+     * every register write with `SETL1`. Until this slice the interpreter had one flat array, so
+     * `NOSPRITES`' `STA VIC+&15` zeroed a blueprint pointer and `DOEXP` corrupted the ships drawn
+     * after it -- which is why `NOSPRITES` and `DOEXP` were trapped in every composition test, why
+     * `ShipDrawEffects` outlived every other seam, and why no whole frame with an explosion in it
+     * had ever been compared. `memory` is the RAM, all 64K of it; this is the page the chips are.
+     * A fixture that seeds or reads a register addresses it through `Io`.
+     */
+    std::array<std::uint8_t, 0x1000> io{};
+
+    static constexpr std::uint16_t IO_BASE = 0xD000;
+    static constexpr std::uint16_t IO_TOP = 0xDFFF;
+
+    /*
+     * Coverage (M6-0-f): where every instruction this processor executes is marked, and where
+     * every trap it hits is marked, when the image that made it is recording. Null otherwise, and
+     * `Step` costs one branch for it. `OracleImage::TakeCoverage` turns the marks into labels --
+     * a routine a test REACHED and a routine a test RAN are different answers, and the ledger
+     * review needs the second.
+     */
+    std::bitset<65536>* executed = nullptr;
+    std::bitset<65536>* trapped = nullptr;
+
+    /*
+     * 6502: CIA1's two ports, &DC00 and &DC01 -- the keyboard matrix as the chip presents it
+     * (M6-0-a-4).
+     *
+     * The game selects columns by storing a byte with one bit CLEAR to port A and reads the rows
+     * of the selected columns from port B, where a held key reads as a clear bit; `RDKEY` walks
+     * the eight columns that way and `DEC`s a logger entry for every clear bit it finds. Port A
+     * reads back what was stored (its lines are outputs on a C64, and joystick 2 shares them:
+     * nothing is plugged in here, so they read high). Port B is computed from `keysDown` on every
+     * read, which is what lets `RDKEY` run on the oracle against the same held keys a fixture's
+     * `Keyboard` answers on the port side, instead of being trapped around.
+     */
+    static constexpr std::uint16_t CIA1_PORT_A = 0xDC00;
+    static constexpr std::uint16_t CIA1_PORT_B = 0xDC01;
+
+    /// One byte per matrix column; a SET bit is a key held in that row. `HoldKey` is how a fixture
+    /// presses one, and the ninth "column" `RDKEY`'s walk ends on selects nothing and reads &FF.
+    std::array<std::uint8_t, 8> keysDown{};
+
+    void HoldKey(std::uint8_t _column, std::uint8_t _row) noexcept
+    {
+      keysDown[static_cast<std::size_t>(_column & 0x07u)] |= static_cast<std::uint8_t>(1u << (_row & 0x07u));
+    }
+
+    /// 6502: bits 0 to 2 of &0001. The I/O page is mapped in when CHAREN (bit 2) is set and LORAM
+    /// or HIRAM is -- %101 is what `SETL1` maps in with, %100 what it maps out with, and %x00 is
+    /// RAM everywhere whatever CHAREN says.
+    [[nodiscard]] bool IoMappedIn() const noexcept
+    {
+      const std::uint8_t bits = static_cast<std::uint8_t>(memory[1] & 0x07u);
+      return (bits & 0x04u) != 0u && (bits & 0x03u) != 0u;
+    }
+
+    /// A data read as the 6510 makes it: the I/O page when it is mapped in and the address is on
+    /// it, RAM otherwise. Instruction fetches, the stack and zero-page pointers never reach the
+    /// page and read `memory` directly.
+    [[nodiscard]] std::uint8_t Read(std::uint16_t _address) const noexcept
+    {
+      if (_address >= IO_BASE && _address <= IO_TOP && IoMappedIn())
+      {
+        if (_address == CIA1_PORT_B)
+        {
+          // The rows of every selected column, pulled low where a key is held.
+          const std::uint8_t columns = io[static_cast<std::size_t>(CIA1_PORT_A - IO_BASE)];
+          std::uint8_t rows = 0xFFu;
+          for (std::size_t column = 0; column < keysDown.size(); ++column)
+          {
+            if ((columns & (1u << column)) == 0u)
+            {
+              rows = static_cast<std::uint8_t>(rows & ~keysDown[column]);
+            }
+          }
+          return rows;
+        }
+        return io[static_cast<std::size_t>(_address - IO_BASE)];
+      }
+      return memory[_address];
+    }
+
+    /// A register on the I/O page, for a fixture: `Io(0xD015)` is VIC+&15 whatever the port
+    /// register says, which is how a test seeds a chip or reads what the game left in it.
+    [[nodiscard]] std::uint8_t& Io(std::uint16_t _address) noexcept
+    {
+      return io[static_cast<std::size_t>(_address - IO_BASE) & 0x0FFFu];
+    }
+    [[nodiscard]] std::uint8_t Io(std::uint16_t _address) const noexcept
+    {
+      return io[static_cast<std::size_t>(_address - IO_BASE) & 0x0FFFu];
+    }
 
     std::uint8_t a = 0;
     std::uint8_t x = 0;
@@ -250,7 +350,8 @@ namespace Elite::Testing
     /// address only, and an RTI would pop the wrong thing.
     void Push(std::uint8_t _value) noexcept;
 
-    /// The one place a store lands, so that the store log sees every STA, STX and STY.
+    /// The one place a store lands, so that the store log sees every STA, STX and STY -- logged by
+    /// address, then routed to the I/O page or to RAM as the port register says.
     void Store(std::uint16_t _address, std::uint8_t _value) noexcept;
 
   private:

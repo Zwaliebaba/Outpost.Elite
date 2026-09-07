@@ -201,7 +201,7 @@ namespace Elite
      * `STA value5 / STX value5+1`, then `BIT MUPLA / BMI itsoff`, `BIT MUFOR / BMI april16`,
      * `BIT MUTOK / BMI itsoff`, and `april16` is `SETL1 / JSR BDENTRY / LDA #&FF / STA MUPLA`.
      */
-    void StartAt(MusicPlayer& _music, std::uint16_t _tuneStart, SidWriteLog& _log) noexcept
+    void StartAt(MusicPlayer& _music, std::uint16_t _tuneStart, MemoryMap& _map, SidWriteLog& _log) noexcept
     {
       _music.tuneStart = _tuneStart;
 
@@ -214,35 +214,41 @@ namespace Elite
         return;
       }
 
-      StartDockingMusicNow(_music, _log); // 6502: the fall-through into `april16`
+      StartDockingMusicNow(_music, _map, _log); // 6502: the fall-through into `april16`
     }
   } // namespace
 
-  void StartDockingMusicNow(MusicPlayer& _music, SidWriteLog& _log) noexcept
+  void StartDockingMusicNow(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept
   {
-    // 6502: .april16 LDA #%101 / JSR SETL1 / JSR BDENTRY / LDA #&FF / STA MUPLA.
-    BeginTune(_music, _log);
-    _music.playing = 0xFFu;
+    // 6502: .april16 LDA #%101 / JSR SETL1 -- the I/O page in, so the SID exists to be written.
+    SetMemoryMap(_map, MEMORY_MAP_IO);
+
+    BeginTune(_music, _log); // 6502: JSR BDENTRY
+    _music.playing = 0xFFu;  // 6502: LDA #&FF / STA MUPLA
+
+    // 6502: BNE coffeeex -- LDA #%100 / JMP SETL1, shared with `stopat`'s exit.
+    SetMemoryMap(_map, MEMORY_MAP_RAM);
   }
 
-  void StartDockingMusic(MusicPlayer& _music, SidWriteLog& _log) noexcept
+  void StartDockingMusic(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept
   {
     // 6502: startbd -- BIT MUDOCK / BMI startat / LDA #LO(musicstart) / LDX #HI(musicstart).
     if (IsSet(_music.options.dockingPlaysTheme))
     {
-      StartTheme(_music, _log);
+      StartTheme(_music, _map, _log);
       return;
     }
-    StartAt(_music, MUSIC_DOCKING_OFFSET, _log);
+    StartAt(_music, MUSIC_DOCKING_OFFSET, _map, _log);
   }
 
-  void StartTheme(MusicPlayer& _music, SidWriteLog& _log) noexcept
+  void StartTheme(MusicPlayer& _music, MemoryMap& _map, SidWriteLog& _log) noexcept
   {
     // 6502: startat -- LDA #LO(THEME-1) / LDX #HI(THEME-1) / BNE startat2.
-    StartAt(_music, MUSIC_THEME_OFFSET, _log);
+    StartAt(_music, MUSIC_THEME_OFFSET, _map, _log);
   }
 
-  void StopDockingMusic(MusicPlayer& _music, std::uint8_t _titleReset, SoundBuffer& _buffer, SidWriteLog& _log) noexcept
+  void StopDockingMusic(MusicPlayer& _music, std::uint8_t _titleReset, SoundBuffer& _buffer, MemoryMap& _map,
+                        SidWriteLog& _log) noexcept
   {
     // 6502: stopbd -- BIT MULIE / BMI itsoff.
     if (IsSet(_titleReset))
@@ -253,14 +259,14 @@ namespace Elite
     // 6502: BIT MUFOR / BMI startbd -- forced music is not stopped, it is started.
     if (IsSet(_music.options.dockingMusicForced))
     {
-      StartDockingMusic(_music, _log);
+      StartDockingMusic(_music, _map, _log);
       return;
     }
 
-    StopMusic(_music, _buffer, _log);
+    StopMusic(_music, _buffer, _map, _log);
   }
 
-  void StopMusic(MusicPlayer& _music, SoundBuffer& _buffer, SidWriteLog& _log) noexcept
+  void StopMusic(MusicPlayer& _music, SoundBuffer& _buffer, MemoryMap& _map, SidWriteLog& _log) noexcept
   {
     // 6502: stopat -- BIT MUPLA / BPL itsoff.
     if (!IsSet(_music.playing))
@@ -270,6 +276,7 @@ namespace Elite
 
     // 6502: JSR SOFLUSH / LDA #%101 / JSR SETL1 / LDA #0 / STA MUPLA.
     FlushSoundEffects(_buffer);
+    SetMemoryMap(_map, MEMORY_MAP_IO);
     _music.playing = 0u;
 
     // 6502: LDX #&18 / SEI / .coffeeloop STA SID,X / DEX / BPL coffeeloop -- twenty-five zeros, from
@@ -279,8 +286,11 @@ namespace Elite
       _log.Add(static_cast<std::uint8_t>(reg), 0u);
     }
 
-    // 6502: LDA #%00001111 / STA SID+&18 / CLI, and coffeeex's SETL1.
+    // 6502: LDA #%00001111 / STA SID+&18 / CLI.
     _log.Add(SID_VOLUME, FULL_VOLUME);
+
+    // 6502: .coffeeex LDA #%100 / JMP SETL1 -- the map back, and `april16` shares this exit.
+    SetMemoryMap(_map, MEMORY_MAP_RAM);
   }
 
   void BeginTune(MusicPlayer& _music, SidWriteLog& _log) noexcept

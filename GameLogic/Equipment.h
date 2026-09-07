@@ -8,6 +8,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because it names types these headers declare
+  struct Ports;    // Ports.h, likewise
+
   /*
    * The equipment shop (slice 2c).
    *
@@ -25,7 +28,7 @@ namespace Elite
    * `prx-3` is a second entry point three bytes earlier that decrements A first, because the shop
    * numbers its items from one on screen and from zero in the table.
    */
-  [[nodiscard]] std::uint16_t EquipmentPrice(std::uint8_t _item, std::uint8_t _fuel) noexcept;
+  [[nodiscard]] std::uint16_t EquipmentPrice(std::uint8_t _item, LightYearsTenths _fuel) noexcept;
 
   /*
    * 6502: the four instructions before EQL1 -- LDA #70 / SEC / SBC QQ14 / ASL A / STA PRXS.
@@ -35,7 +38,7 @@ namespace Elite
    * doubling is the price. So `prx` reads a table one of whose entries was written moments ago,
    * which is why EquipmentPrice takes the fuel level.
    */
-  [[nodiscard]] std::uint16_t FuelPrice(std::uint8_t _fuel) noexcept;
+  [[nodiscard]] std::uint16_t FuelPrice(LightYearsTenths _fuel) noexcept;
 
   /*
    * 6502: qv -- the four-view menu, and which one the player picks.
@@ -44,7 +47,7 @@ namespace Elite
    * enough equipment has a list long enough to collide with the menu. A key that is not 0 to 3
    * clears the bottom rows and asks again, for ever.
    */
-  [[nodiscard]] std::uint8_t ChooseView(TradeScreen& _screen, std::uint8_t _techLevel) noexcept;
+  [[nodiscard]] std::uint8_t ChooseView(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: refund -- fit a laser, and give back what the old one cost.
@@ -54,7 +57,7 @@ namespace Elite
    * them falls through to the mining laser's price, which is the same "anything else is the last
    * one" shape the status screen uses to name lasers.
    */
-  void Refund(Commander& _commander, std::uint8_t _view, std::uint8_t _newPower, std::uint8_t _fuel) noexcept;
+  void Refund(Commander& _commander, std::uint8_t _view, Laser _fitted, LightYearsTenths _fuel) noexcept;
 
   /*
    * 6502: EQSHP -- the Equip Ship screen.
@@ -75,6 +78,6 @@ namespace Elite
    * branches then hand it back with MCASH -- so buying an escape pod you already own moves the
    * money out and back rather than never moving it.
    */
-  void EquipShipScreen(TradeScreen& _screen, Commander& _commander, std::uint8_t _techLevel) noexcept;
+  void EquipShipScreen(Universe& _universe, Ports& _ports) noexcept;
 
 } // namespace Elite

@@ -14,7 +14,7 @@ namespace Elite
    * count below, so `Controls.h` includes THIS and not the other way round. `SetRasterMode` is
    * reached from `Trumbles.cpp`, which includes the header the class is defined in.
    */
-  class SightEffects;
+  struct MemoryMap; // MemoryMap.h -- `SETL1`'s two bytes
 
   /*
    * The Trumbles on the screen (slice 4d-a).
@@ -26,10 +26,11 @@ namespace Elite
    *
    * THE COORDINATES LIVE IN THE VIDEO CHIP AND NOWHERE ELSE. `MVTRIBS` reads `VIC+&04+Y`, adds a
    * velocity to it and writes it straight back, so the registers are the only copy of where a
-   * Trumble is -- there is no shadow of them in RAM. That is why this routine takes a `VideoState`
-   * and not a `SightEffects`: the register seams are WRITE-ONLY by design (`VideoState.h`), and a
-   * routine that has to read a register back cannot be served by one. `SETL1` still is, because
-   * it is memory banking rather than a register and nothing can read it.
+   * Trumble is -- there is no shadow of them in RAM. That is why this routine took a `VideoState`
+   * and not a `SightEffects` from the start: the register seams were WRITE-ONLY by design, and a
+   * routine that has to read a register back cannot be served by one. `SETL1` is `MemoryMap` since
+   * M3-b-3a and the seam is gone with it; this header had the reading right ("memory banking rather
+   * than a register") while `Controls.h` and `VideoState.h` had it wrong.
    */
 
   /// 6502: TRIBCT's range -- "the number of Trumble sprites we are showing, 0 to 6", and the six
@@ -52,16 +53,8 @@ namespace Elite
    */
   inline constexpr std::size_t TRUMBLE_VELOCITY_COUNT = 16;
 
-  /*
-   * 6502: LDA #%101 / JSR SETL1 ... LDA #%100 / JSR SETL1 -- the bracket around everything below.
-   *
-   * The same two values `SIGHT` and the explosion use. %101 maps the I/O registers in so the VIC-II
-   * can be written; %100 maps them back out to RAM. The port has no bank switching and the seam
-   * carries the calls anyway, because the raster handler is self-modified by them (§6.59) and
-   * dropping them would be dropping half of what the routine does to the machine.
-   */
-  inline constexpr std::uint8_t TRUMBLE_RASTER_IO = 0x05;
-  inline constexpr std::uint8_t TRUMBLE_RASTER_RAM = 0x04;
+  // The bracket around everything below is `MEMORY_MAP_IO` and `MEMORY_MAP_RAM`, which are one pair
+  // for the whole library since M3-b-3a: there is one `SETL1` and it is asked for two values.
 
   /// 6502: LDA MCNT / AND #7 -- one Trumble per pass, so any one of them moves every eighth frame.
   inline constexpr std::uint8_t TRUMBLE_TURN_MASK = 7;
@@ -152,6 +145,6 @@ namespace Elite
    * is what the presenter composites.
    */
   void MoveTrumbleSprites(TrumbleSprites& _sprites, VideoState& _video, Rng& _rng, std::uint8_t _mainLoopCounter,
-                          SightEffects& _effects) noexcept;
+                          MemoryMap& _map) noexcept;
 
 } // namespace Elite

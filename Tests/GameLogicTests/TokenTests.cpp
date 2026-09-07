@@ -2,6 +2,7 @@
 
 #include "OracleImage.h"
 
+#include "TextPrint.h"
 #include "Tokens.h"
 
 #include <cstdint>
@@ -135,7 +136,8 @@ namespace GameLogicTests
 
       CapturingSink sink;
       DeferredValueTokens deferred;
-      TokenPrinter printer(sink, &deferred);
+      Elite::TextState text;
+      TokenPrinter printer(sink, text, &deferred);
       printer.SetCaseFlags(_caseFlags);
       printer.Print(_token);
 
@@ -190,6 +192,52 @@ namespace GameLogicTests
   {
   public:
     /// Every token from 6 upward, with no capitalisation asked for.
+    /*
+     * 6502: TT67 -- LDA #12 / JMP TT27, the newline (M6-0-e).
+     *
+     * Two instructions, ported as `PrintNewline`, and trapped in `SaveGameTests` because that
+     * suite counts prints rather than reading them. Compared here on its own, from every case
+     * state a newline can be printed in: the character that reaches `TT26` and the flags it leaves.
+     */
+    TEST_METHOD(TheNewlineMatchesTT67)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      std::uint32_t compared = 0;
+      for (const std::uint8_t caseFlags : {std::uint8_t{0}, std::uint8_t{0x80}, std::uint8_t{0x20}, std::uint8_t{0xFF}})
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.AddTrap(oracle.Label("TT26"));
+        cpu.memory[oracle.Label("QQ17")] = caseFlags;
+        cpu.a = cpu.x = cpu.y = 0;
+        cpu.sp = 0xFD;
+        Assert::IsTrue(cpu.CallSubroutine(oracle.Label("TT67"), 200'000).completed, L"TT67 returned");
+
+        CapturingSink sink;
+        DeferredValueTokens deferred;
+        Elite::TextState text;
+        TokenPrinter printer(sink, text, &deferred);
+        printer.SetCaseFlags(caseFlags);
+        Elite::PrintNewline(printer);
+
+        const std::wstring where = L" for TT67 with case flags " + std::to_wstring(caseFlags);
+        std::vector<std::uint8_t> expected;
+        for (const auto& hit : cpu.trapHits)
+        {
+          expected.push_back(hit.a);
+        }
+        Assert::IsTrue(sink.characters == expected,
+                       (L"characters differ" + where + L"\n  game: " + Describe(expected) + L"\n  port: " + Describe(sink.characters)).c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("QQ17")], printer.CaseFlags(), (L"case flags differ" + where).c_str());
+        ++compared;
+      }
+      Assert::AreEqual<std::uint32_t>(4u, compared, L"the whole sweep ran");
+    }
+
     TEST_METHOD(EveryTokenMatchesInPlainMode)
     {
       if (OracleMissing())
@@ -253,7 +301,8 @@ namespace GameLogicTests
       }
 
       CapturingSink sink;
-      TokenPrinter printer(sink);
+      Elite::TextState text;
+      TokenPrinter printer(sink, text);
       printer.Print(6);
       printer.Print('A');
       printer.Print('B');
@@ -269,7 +318,8 @@ namespace GameLogicTests
     TEST_METHOD(PhraseTokensExpandToSomething)
     {
       CapturingSink sink;
-      TokenPrinter printer(sink);
+      Elite::TextState text;
+      TokenPrinter printer(sink, text);
 
       std::size_t nonEmpty = 0;
       for (std::uint32_t token = 96; token < 128; ++token)

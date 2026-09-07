@@ -5,6 +5,9 @@
 #   Tests/PortableRunner/run_tests.sh              everything
 #   Tests/PortableRunner/run_tests.sh Chart        only tests whose Suite.Method contains "Chart"
 #   OUTPOST_TEST_TIMES=1 Tests/PortableRunner/run_tests.sh    with a per-test duration
+#   Tests/PortableRunner/run_tests.sh --coverage FILE [Chart]   and, per test, the oracle labels it
+#                                                  ran and the ones its traps answered for (M6-0-f);
+#                                                  `python tools/inventory.py --coverage FILE` reads it
 #
 # The executable lands at x64/Debug/PortableTests, which is where MSBuild puts GameLogicTests.dll
 # and therefore where the oracle expects to start walking up from (Tests/GameLogicTests/

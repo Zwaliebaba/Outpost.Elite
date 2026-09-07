@@ -523,11 +523,12 @@ namespace GameLogicTests
    * from IDENTICAL starting conditions. Anything narrower would pass on the branch it happened to
    * take.
    *
-   * THE SEAMS ARE TRAPPED RATHER THAN IMPLEMENTED. `OOPS`, `EXNO2`, `EXNO3`, `ECBLB2`, `NOISE` and
-   * `MESS` are ported and reachable, but they touch the dashboard, the sound and the screen, and
-   * running them inside a 6502 interpreter that has no dashboard would compare the wrong thing.
-   * Each is trapped and COUNTED, and the counts are compared -- so a port that took the same branch
-   * for a different reason still fails.
+   * THE SEAMS ARE TRAPPED RATHER THAN IMPLEMENTED. `OOPS`, `EXNO2`, `EXNO3`, `ECBLB2` and `MESS`
+   * are ported and reachable, but they touch the dashboard and the screen, and running them inside
+   * a 6502 interpreter that has no dashboard would compare the wrong thing. Each is trapped and
+   * COUNTED, and the counts are compared -- so a port that took the same branch for a different
+   * reason still fails. `NOISE` and `NOISE2` were among them until M3-b-2a and are not: they write
+   * `sound_variables` and nothing else, so both machines run them and the buffer is compared.
    */
   namespace
   {
@@ -538,60 +539,34 @@ namespace GameLogicTests
      * or make a noise. Running them inside the interpreter would compare a dashboard the fixture
      * does not have, so both sides are trapped and counted and the COUNTS are what agree.
      */
-    struct CountingEffects final : Elite::FlightLoopEffects, Elite::ShipEffects, Elite::ShipDrawEffects
-    {
-      std::vector<std::uint8_t> sounds;
-      std::vector<std::uint8_t> spawned;
-
-      bool PlaySound(std::uint8_t _effect, bool) override
-      {
-        sounds.push_back(_effect);
-        return true;
-      }
-      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t, std::uint8_t) override
-      {
-        sounds.push_back(_effect);
-        return true;
-      }
-      void StopSound(std::uint8_t) override {}
-      void StartDockingMusic() override {}
-      void StopDockingMusic() override {}
-      bool SpawnAhead(Elite::ShipType) override
-      {
-        return false;
-      }
-      bool Anger(std::uint8_t, Elite::ShipType) override
-      {
-        return false; // a trap's answer, and no tactics case reaches the seeding that reads it
-      }
-      bool SpawnChild(std::uint8_t, Elite::ShipType _type) override
-      {
-        spawned.push_back(Elite::Byte(_type));
-        return true;
-      }
-      bool RunTactics(Elite::Ship&) override
-      {
-        return true;
-      }
-      void DrawPlanetOrSun() override {}
-      void DrawExplosion() override {}
-    };
+    /*
+     * `SpawnChildEffects` AND ITS `spawned` LIST WERE HERE AND ARE NOT ANY MORE (M4-a-1).
+     *
+     * `TACTICS` reaches `SFS1` through `SpawnEscapePod` and `SpawnShipAhead`, which are calls in
+     * `Spawn.cpp` and have been since slice 4a-b -- so the list was never filled and nothing here
+     * ever asserted on it. The seam was inherited because `Ports` carried it, not because this
+     * fixture wanted it.
+     */
+    /*
+     * `CountingEffects` -- `ShipDrawEffects` answered with nothing -- WAS HERE AND IS NOT ANY MORE
+     * (M6-0-a-3). `TACTICS` never draws, so it was one seam this fixture had to declare because
+     * `Ports` carried it.
+     */
 
     /// Everything a `TACTICS` case has to put into both machines before it can be compared.
     struct TacticsUniverse
     {
       Universe universe; ///< every byte of it, since M3-a
-      CountingEffects effects;
 
       std::array<std::uint8_t, 4> seed{};
       std::uint8_t ecm = 0;
       std::uint8_t legal = 0;
       std::uint8_t slot = 2;
 
-      /// The three seams the AI reaches, all counted in one place.
+      /// The seams the AI reaches, all answered with nothing in one place.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(effects, effects, effects, universe.unused);
+        return universe.Ports();
       }
     };
 
@@ -1096,7 +1071,7 @@ namespace GameLogicTests
            */
             const std::uint16_t death = oracle.Label("DEATH");
             for (const std::uint16_t seam :
-                 {oracle.Label("NOISE"), oracle.Label("NOISE2"), oracle.Label("MESS"), oracle.Label("ECBLB2"), death})
+                 {oracle.Label("MESS"), oracle.Label("ECBLB2"), death})
             {
               cpu.AddTrap(seam);
             }
@@ -1455,7 +1430,9 @@ namespace GameLogicTests
             Assert::IsTrue(run.completed, L"DOCKIT returned");
 
             Elite::Ports ports = universe.Ports();
-            Assert::IsTrue(Elite::RunDockingComputer(universe.universe, ports, universe.slot), L"DOCKIT does not kill anybody");
+            // 6502: DOCKIT reaches no `OOPS` and no `DEATH`, so it answers nothing (M4-c-2). This
+            // line asserted that it returned true, which was a tautology dressed as a check.
+            Elite::RunDockingComputer(universe.universe, ports, universe.slot);
 
             const std::wstring context = WidenText(std::string("DOCKIT: ") + approach.what + (type == 0xE0u ? " (ours)" : " (theirs)") +
                                                    (faces != 0u ? " faces" : " no faces"));

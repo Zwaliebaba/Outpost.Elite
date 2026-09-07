@@ -446,24 +446,16 @@ namespace Elite
                                                std::uint8_t _swapIn, std::uint8_t _secondXHigh) noexcept;
 
   /*
-   * The two places `LL9` leaves its own code (slice 3b).
-   *
-   * `PLANET` is a tail jump taken when the type is negative, and belongs to 3c. `DOEXP` is the
-   * explosion, filed under `Explosion.cpp`. The `EE55` block was a third seam here until
-   * 2026-09-06 and is `SeedExplosionCloud` above now: it is `LL9`'s own code, its carry is `EE51`'s
-   * and known, and a seam nobody implemented was the death sequence's corruption (§6.157).
+   * `ShipDrawEffects` WAS HERE AND IS NOT ANY MORE (M6-0-a-3). It was the two places `LL9` leaves
+   * its own code -- 6502: LL25's `JMP PLANET` and LL14's `JMP DOEXP` -- and it outlived every other
+   * seam for one reason: in a flat oracle image the VIC-II's registers and `XX21` were the same
+   * bytes, so an explosion drawn on the oracle side corrupted the blueprints of the ships drawn
+   * after it (§6.108), and no whole frame with an explosion in it could be compared. `Cpu6502`
+   * banks the I/O page now (M6-0-a-1), the frame fixture draws the cloud (M6-0-a-2), and the two
+   * tail jumps are the calls into `PlanetDraw.cpp` and `Explosion.cpp` they always were. The
+   * `EE55` block was a third seam here until 2026-09-06 and is `SeedExplosionCloud` above.
    */
-  class ShipDrawEffects
-  {
-  public:
-    virtual ~ShipDrawEffects() = default;
-
-    /// 6502: LL25 -- JMP PLANET, for a type with bit 7 set.
-    virtual void DrawPlanetOrSun() = 0;
-
-    /// 6502: LL14's JMP DOEXP -- redraw the explosion cloud, which is how it is erased.
-    virtual void DrawExplosion() = 0;
-  };
+  struct Universe;
 
   /*
    * 6502: LL9 parts 1 to 12 -- draw a ship.
@@ -473,22 +465,22 @@ namespace Elite
    * vertices and clip each one onto the screen. What comes out is the ship's line heap, which is
    * then drawn -- and drawn by EOR, so the same call erases the last frame's ship on the way.
    *
-   * `_work` is `INWK`, the zero-page copy. `_slot` is the same ship's block in `K%`, which part 1
-   * writes two bytes of directly through `INF` rather than waiting for the copy back.
+   * `_universe.work` is `INWK`, the zero-page copy. `_slot` is the same ship's block in `K%`, which
+   * part 1 writes two bytes of directly through `INF` rather than waiting for the copy back; it is
+   * the one thing the caller names, because which block `INF` points at is the caller's decision.
+   * The type and the blueprint are `_universe.flight`'s, as `TYPE` and `XX0` are the game's.
    *
    * A ship too far away is drawn as a dot by `SHPPT` instead, and one behind the player or wider
    * than it is distant is rubbed out and abandoned. Both are `LL9` deciding not to draw, not the
    * caller.
    *
-   * `_rng` and `_carryIn` are for one thing: a ship that arrives here killed and not yet exploding
+   * `_carryIn` is for one thing: a ship that arrives here killed and not yet exploding
    * has its cloud seeded with four `DORND`s, and the first of them rolls in the carry `JSR LL9` was
    * reached with when the ship was not on the screen to be erased (§6.157). Nothing between `LL9`'s
    * first instruction and `EE51` touches the flag -- `LDA`, `BIT`, `ORA`, `AND`, stores -- so the
    * caller's carry is the block's. Part 11 of the flight loop derives it; the title, the briefings
    * and the escape pod draw ships that are never killed, and pass a value nothing reads.
    */
-  void DrawShip(Canvas& _canvas, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip,
-                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
-                ShipDrawEffects& _effects, Rng& _rng, bool _carryIn) noexcept;
+  void DrawShip(Universe& _universe, Ship& _slot, bool _carryIn) noexcept;
 
 } // namespace Elite

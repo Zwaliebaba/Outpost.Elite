@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Colours.h"
+
+#include <array>
 #include <cstdint>
 
 namespace Elite
@@ -13,6 +16,7 @@ namespace Elite
    * the laser sights and the Trumbles, `ExplosionEffects` for the burst. Write-only means nothing
    * downstream could read them, so nothing composited the sprites and three things the player
    * should see did not appear: the crosshairs (§6.100), the Trumbles, and the explosion sprite.
+   * Both seams are gone since M3-b-3a and their callers write this struct directly.
    *
    * ADR-005 §1 settled that compositing belongs in `Canvas::Resolve` -- not because `GameLogic` is
    * where tests live, which is the reasoning it started with and which does not survive being
@@ -21,15 +25,17 @@ namespace Elite
    * readable, and this is it.
    *
    * IT IS NOT A GETTER ON THE SEAMS, and that was the explicit instruction. The reason is already
-   * written on `SightEffects::MaskSprites`: a getter invites a port to COMPUTE what the hardware is
+   * written on `ApplyMaskSprites`: a getter invites a port to COMPUTE what the hardware is
    * holding, and part 15's read-modify-write exists precisely because the game does not know how
    * many Trumble sprites are showing. A struct the game owns can be read without inviting that,
    * because reading it is not asking the hardware a question.
    *
-   * WHAT IS STILL WRITE-ONLY AND STAYS THAT WAY: `SetRasterMode`. That is `SETL1`, the 6510's
-   * input/output port -- memory banking, not a VIC-II register -- and §6.59 refused it a place in
-   * `GameLogic` because it is self-modifying code inside the interrupt handler. It has no effect a
-   * composited image can show, so it is not here.
+   * WHAT IS NOT HERE AND IS NOT A SEAM EITHER: `SETL1`. It is the 6510's input/output port --
+   * memory banking, not a VIC-II register -- and this paragraph used to say it stayed behind a
+   * write-only seam "because it is self-modifying code inside the interrupt handler". It is not,
+   * and never was (`MemoryMap.h`); it is two bytes of memory, and `Universe::memoryMap` is where
+   * they are since M3-b-3a. It is not in this struct because the same routine banks in the SID for
+   * `stopat` and the KERNAL for `SVE`, which are nothing to do with a composited image.
    *
    * WHAT THIS IS NOT VERIFIED BY, said plainly. Nothing. The game never rendered a composited
    * image into memory, so there is no oracle for the blit wherever it lives. What IS verified is
@@ -92,8 +98,8 @@ namespace Elite
 
   /// 6502: VIC+&25 and VIC+&26 -- the two shared multicolour registers, which every multicolour
   /// sprite draws %01 and %11 from. The loader sets them and the game never does.
-  inline constexpr std::uint8_t SPRITE_MULTICOLOUR_1 = 0x0A;
-  inline constexpr std::uint8_t SPRITE_MULTICOLOUR_2 = 0x02;
+  inline constexpr Colour SPRITE_MULTICOLOUR_1 = Colour::LightRed;
+  inline constexpr Colour SPRITE_MULTICOLOUR_2 = Colour::Red;
 
   struct VideoState
   {
@@ -123,12 +129,12 @@ namespace Elite
      * It is stored whole here and split only where a register is actually being imitated, which is
      * the presenter's business and not the game's.
      */
-    std::uint16_t x[SPRITE_COUNT] = {};
-    std::uint8_t y[SPRITE_COUNT] = {};
+    std::array<std::uint16_t, SPRITE_COUNT> x = {};
+    std::array<std::uint8_t, SPRITE_COUNT> y = {};
 
     /// 6502: VIC+&27 to VIC+&2E -- each sprite's own colour, which for a multicolour sprite is
     /// only the %10 bit pair; %01 and %11 come from the two shared registers above.
-    std::uint8_t colour[SPRITE_COUNT] = {};
+    std::array<Colour, SPRITE_COUNT> colour = {};
   };
 
   /*
@@ -140,7 +146,7 @@ namespace Elite
    */
 
   /// 6502: STA VIC+&27 -- sprite 0's colour, which is the sights'.
-  void ApplySightColour(VideoState& _video, std::uint8_t _colour) noexcept;
+  void ApplySightColour(VideoState& _video, Colour _colour) noexcept;
 
   /// 6502: STA VIC+&15 -- the whole enable byte, sights and Trumbles together.
   void ApplySpritesEnabled(VideoState& _video, std::uint8_t _mask) noexcept;

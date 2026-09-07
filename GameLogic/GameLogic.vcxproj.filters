@@ -37,7 +37,13 @@
     <ClInclude Include="LookupTables.h">
       <Filter>Kernel</Filter>
     </ClInclude>
+    <ClInclude Include="StateHash.h">
+      <Filter>Universe</Filter>
+    </ClInclude>
     <ClInclude Include="Canvas.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="Colours.h">
       <Filter>Canvas</Filter>
     </ClInclude>
     <ClInclude Include="Raster.h">
@@ -142,6 +148,12 @@
     <ClInclude Include="VideoState.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="MemoryMap.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
+    <ClInclude Include="Presenter.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="ViewChange.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -201,6 +213,9 @@
     </ClInclude>
     <ClInclude Include="ExtendedTokens.h">
       <Filter>Text</Filter>
+    </ClInclude>
+    <ClInclude Include="Game.h">
+      <Filter>Universe</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -355,6 +370,9 @@
     <ClCompile Include="VideoState.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
+    <ClCompile Include="MemoryMap.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
     <ClCompile Include="SpriteData.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
@@ -391,11 +409,20 @@
     <ClCompile Include="ExtendedTokens.cpp">
       <Filter>Text</Filter>
     </ClCompile>
+    <ClCompile Include="Game.cpp">
+      <Filter>Universe</Filter>
+    </ClCompile>
     <ClCompile Include="ExtendedTokenTables.cpp">
       <Filter>Generated Data</Filter>
     </ClCompile>
     <ClCompile Include="ScreenTables.cpp">
       <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="LookupTables.cpp">
+      <Filter>Generated Data</Filter>
+    </ClCompile>
+    <ClCompile Include="StateHash.cpp">
+      <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="Font.cpp">
       <Filter>Generated Data</Filter>

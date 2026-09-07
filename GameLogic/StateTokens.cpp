@@ -141,13 +141,13 @@ namespace Elite
      * The characters go through TT26 rather than TT27, so they are printed as they are and the case
      * flags do not touch them.
      */
-    for (std::size_t index = 0; index < m_name.size(); ++index)
+    for (const std::uint8_t character : m_name)
     {
-      if (m_name[index] == NAME_TERMINATOR)
+      if (character == NAME_TERMINATOR)
       {
         return;
       }
-      _sink.Put(m_name[index]);
+      _sink.Put(character);
     }
   }
 
@@ -168,7 +168,7 @@ namespace Elite
 
     // 6502: LDX QQ14 / SEC / JSR pr2 -- the fuel is in tenths of a light year, so it prints with a
     // decimal point in a width of three.
-    PrintByteValue(_sink, m_commander.fuel, true);
+    PrintByteValue(_sink, m_commander.fuel.tenths, true);
 
     PrintThenNewline(m_printer, LIGHT_YEARS_TOKEN);
     m_printer.Print(CASH_LINE_TOKEN);

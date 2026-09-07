@@ -23,11 +23,6 @@
 namespace Elite
 {
 
-  /// 6502: sfxhit and sfxexpl -- the two explosions, and they are not the same sound.
-  inline constexpr std::uint8_t SOUND_SHIP_EXPLODING = 2; ///< 6502: sfxhit
-  inline constexpr std::uint8_t SOUND_EXPLOSION = 3;      ///< 6502: sfxexpl
-  inline constexpr std::uint8_t SOUND_BEEP = 5;           ///< 6502: sfxbeep
-
   /// 6502: the three message tokens this file sends that are not arithmetic on a slot number.
   inline constexpr std::uint8_t MESSAGE_RIGHT_ON_COMMANDER = 101; ///< 6502: EXNO2 -- LDA #101
   inline constexpr std::uint8_t MESSAGE_ECM_DESTROYED = 108;      ///< 6502: ou2 -- LDA #108
@@ -57,7 +52,7 @@ namespace Elite
   [[nodiscard]] std::uint8_t KillVolume(std::uint8_t _distance) noexcept;
 
   /// 6502: EXNO -- play it. `_work` is `INWK`, and byte 7 is what picks the volume.
-  std::uint8_t PlayHitSound(const Ship& _work, DashboardEffects& _effects) noexcept;
+  std::uint8_t PlayHitSound(const Ship& _work, SoundBuffer& _sound) noexcept;
 
   /*
    * 6502: EXNO2 -- add a kill to the tally, and make the bigger noise.
@@ -70,7 +65,7 @@ namespace Elite
    *
    * Returns the byte `NOISE2` gets, which part 11 stores into the dead ship's energy.
    */
-  std::uint8_t RecordKill(Universe& _universe, Ports& _ports, DashboardEffects& _effects, ShipType _type) noexcept;
+  std::uint8_t RecordKill(Universe& _universe, Ports& _ports, ShipType _type) noexcept;
 
   /*
    * 6502: OOPS -- take `_damage`, on the shield the hit came from, and the banks under it.
@@ -84,7 +79,7 @@ namespace Elite
    *
    * Returns false when the energy banks have gone -- `JMP DEATH` -- so the caller ends the frame.
    */
-  [[nodiscard]] bool TakeDamage(Universe& _universe, Ports& _ports, DashboardEffects& _effects, const Ship& _target, std::uint8_t _damage,
+  [[nodiscard]] bool TakeDamage(Universe& _universe, Ports& _ports, const Ship& _target, std::uint8_t _damage,
                                 bool _carryIn) noexcept;
 
   /*

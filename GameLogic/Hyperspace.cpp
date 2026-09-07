@@ -51,9 +51,9 @@ namespace Elite
 
   } // namespace
 
-  void ArriveAtSystem(Commander& _commander, CurrentSystem& _current, SystemSeeds& _selected, const SystemSeeds& _target,
-                      SystemData& _described, MarketState& _market, Rng& _rng, std::uint8_t& _explosionCount, std::uint8_t _crosshairX,
-                      std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _findNearest) noexcept
+  void ArriveAtSystem(Universe& _universe, SystemSeeds& _selected, const SystemSeeds& _target, SystemData& _described,
+                      MarketState& _market, std::uint8_t _crosshairX, std::uint8_t _crosshairY, const SystemSeeds& _galaxy,
+                      bool _findNearest) noexcept
   {
     /*
      * 6502: JSR TT111 -- and `TT18` enters at `hyp1+3`, three bytes past it, because the chart has
@@ -65,7 +65,7 @@ namespace Elite
     if (_findNearest)
     {
       const NearestSystem nearest =
-        FindNearestSystem(_galaxy, crosshairX, crosshairY, _commander.systemX, _commander.systemY);
+        FindNearestSystem(_galaxy, crosshairX, crosshairY, _universe.commander.systemX, _universe.commander.systemY);
       _selected = nearest.seeds;
 
       // 6502: `TT111` ends `JMP TT24`, so `QQ3` to `QQ5` are its side effect and not its answer.
@@ -85,15 +85,15 @@ namespace Elite
 
     // 6502: JSR jmp -- LDA QQ9 / STA QQ0 / LDA QQ10 / STA QQ1: where you are becomes where the
     // crosshairs are, which is what arriving means.
-    CurrentSystemToCrosshairs(_commander, crosshairX, crosshairY);
+    CurrentSystemToCrosshairs(_universe.commander, crosshairX, crosshairY);
 
     // 6502: LDX #5 / .TT112 LDA safehouse,X / STA QQ2,X / DEX / BPL TT112 -- the seeds the
     // countdown saved, because the player has been moving the crosshairs ever since.
-    _current.seeds = _target;
+    _universe.current.seeds = _target;
 
     // 6502: INX / STX EV -- X came out of the loop at &FF and the `INX` makes it zero, so arriving
     // resets the spawner's rate limit (§6.135). One instruction doing two things.
-    _explosionCount = 0;
+    _universe.explosions = 0;
 
     /*
      * 6502: LDA QQ3 / STA QQ28 / LDA QQ5 / STA tek / LDA QQ4 / STA gov.
@@ -103,21 +103,21 @@ namespace Elite
      * left rather than recomputing them -- and on the `hyp1+3` path what they read is what the
      * CHART's last `TT111` left, which is the same system.
      */
-    _current.economy = _described.economy;
-    _current.techLevel = _described.techLevel;
-    _current.government = _described.government;
+    _universe.current.economy = _described.economy;
+    _universe.current.techLevel = _described.techLevel;
+    _universe.current.government = _described.government;
 
     // 6502: it FALLS INTO GVL -- and `GVL` reads `QQ28`, which is what was just stored, so the
     // market comes from the DESCRIBED system too and not from the seeds in `QQ2`.
-    GenerateMarket(_rng, _described.economy, _market);
+    GenerateMarket(_universe.rng, _described.economy, _market);
   }
 
-  void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander, DashboardEffects& _sound, TunnelEffects* _pacing) noexcept
+  void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander) noexcept
   {
 
     // 6502: LDA #3 / JSR TT66 / JSR LL164 / JSR RES2.
     SetUpScreen(_universe, _ports, SPACE_VIEW);
-    DrawHyperspaceTunnel(_universe, _ports, _sound, _pacing);
+    DrawHyperspaceTunnel(_universe, _ports);
     ResetShipAndBubble(_universe, _ports);
 
     /*
@@ -145,8 +145,7 @@ namespace Elite
     _commander.systemY = static_cast<std::uint8_t>(_commander.systemY ^ 0x1Fu);
   }
 
-  void EnterWitchspaceCheating(Universe& _universe, Ports& _ports, Commander& _commander, DashboardEffects& _sound,
-                               TunnelEffects* _pacing) noexcept
+  void EnterWitchspaceCheating(Universe& _universe, Ports& _ports, Commander& _commander) noexcept
   {
     /*
      * 6502: .ptg LSR COK / SEC / ROL COK -- which is `ORA #1` and NOT a rotate.
@@ -159,11 +158,11 @@ namespace Elite
     _commander.competition = static_cast<std::uint8_t>(_commander.competition | 1u);
 
     // 6502: and then it FALLS INTO MJP.
-    EnterWitchspace(_universe, _ports, _commander, _sound, _pacing);
+    EnterWitchspace(_universe, _ports, _commander);
   }
 
   JumpResult PerformJump(Universe& _universe, Ports& _ports, SystemSeeds& _selected, JumpState& _jump, SystemData& _described,
-                         MarketState& _market, DashboardEffects& _sound, TunnelEffects* _pacing, std::uint8_t _crosshairX,
+                         MarketState& _market,  std::uint8_t _crosshairX,
                          std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _controlHeld, bool _patg) noexcept
   {
 
@@ -176,8 +175,8 @@ namespace Elite
      * game that goes through `hyp`. Transcribed anyway, because what makes it unreachable is
      * another routine.
      */
-    const SubResult fuel = SubtractWithCarry(_universe.commander.fuel, static_cast<std::uint8_t>(_jump.distance & 0xFFu), true);
-    _universe.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0};
+    const FuelBurn fuel = _universe.commander.fuel.Burned(static_cast<std::uint8_t>(_jump.distance & 0xFFu));
+    _universe.commander.fuel = fuel.left;
 
     // 6502: LDA QQ11 / BNE ee5 / JSR TT66 / JSR LL164 -- the tunnel is only drawn from a space
     // view. Jumping with a chart up spends the fuel and shows nothing.
@@ -201,14 +200,14 @@ namespace Elite
     if (fromSpace)
     {
       SetUpScreen(_universe, _ports, _universe.view);
-      DrawHyperspaceTunnel(_universe, _ports, _sound, _pacing);
+      DrawHyperspaceTunnel(_universe, _ports);
       carry = true;
     }
 
     // 6502: .ee5 JSR CTRL / AND PATG / BMI ptg -- the configuration key and the option together.
     if (_controlHeld && _patg)
     {
-      EnterWitchspaceCheating(_universe, _ports, _universe.commander, _sound, _pacing);
+      EnterWitchspaceCheating(_universe, _ports, _universe.commander);
       return JumpResult::Witchspace;
     }
 
@@ -216,22 +215,19 @@ namespace Elite
     const RngResult roll = _universe.rng.Next(carry);
     if (roll.value >= WITCHSPACE_ROLL)
     {
-      EnterWitchspace(_universe, _ports, _universe.commander, _sound, _pacing);
+      EnterWitchspace(_universe, _ports, _universe.commander);
       return JumpResult::Witchspace;
     }
 
     // 6502: JSR hyp1+3 -- past the `JSR TT111`, because the chart has already chosen.
-    ArriveAtSystem(_universe.commander, _universe.current, _selected, _jump.target, _described, _market, _universe.rng,
-                   _universe.explosions, _crosshairX, _crosshairY, _galaxy, false);
+    ArriveAtSystem(_universe, _selected, _jump.target, _described, _market, _crosshairX, _crosshairY, _galaxy, false);
 
     // 6502: JSR RES2 / JSR SOLAR -- a clean bubble and then the system's own planet and sun.
     ResetShipAndBubble(_universe, _ports);
 
-    // 6502: JSR SOLAR -- and `SpawnEffects` is `LoopSpawnEffects` over the loop, the adapter
-    // FlightLoop.h already carries for exactly this (it was a seam when `Spawn.cpp` was written).
-    LoopSpawnEffects spawning(_universe, _ports);
-    BuildSystem(_universe.canvas, _universe.dust, _universe.heaps, _universe.bubble, _universe.work, _universe.commander, _universe.rng,
-                _universe.flight, spawning, _universe.current.techLevel, _universe.current.seeds.bytes, _universe.view, false);
+    // 6502: JSR SOLAR -- the four seams it reached through are four routines this library now
+    // contains, so M3-b-1 has it call them.
+    BuildSystem(_universe, _ports, false);
 
     /*
      * 6502: LDA QQ11 / AND #%00111111 / BNE RTS111.
@@ -248,7 +244,8 @@ namespace Elite
 
     // 6502: JSR TTX66 / LDA QQ11 / BNE TT114 / INC QQ11, and then it falls into `TT110`.
     SetUpScreenPixels(_universe.canvas, _universe.draw, _universe.text, _universe.screen, _universe.bubble, _universe.flight,
-                      _universe.status, _universe.commander.fuel, _universe.compass, _ports.sight, _universe.view);
+                      _universe.status, _universe.commander.fuel, _universe.compass, _universe.video,
+                      _universe.memoryMap, _universe.view);
 
     if (_universe.view != 0u)
     {
@@ -262,9 +259,8 @@ namespace Elite
   }
 
   void GalacticJump(Universe& _universe, Ports& _ports, SystemSeeds& _galaxy, SystemSeeds& _selected, JumpState& _jump,
-                    ChartView& _chart, TunnelEffects* _pacing) noexcept
+                    ChartView& _chart) noexcept
   {
-    static_cast<void>(_pacing);
 
     /*
      * 6502: LDX GHYP / BEQ zZ+1 -- and there is no code at `zZ+1`.
@@ -311,7 +307,7 @@ namespace Elite
 
     // 6502: JSR TT110 -- and this is the LAUNCH, called for its redraw: a galactic jump from a
     // chart leaves you in space looking forward.
-    Launch(_universe, _ports, _pacing, _jump.docked, _chart.cursorX, _chart.cursorY, _selected);
+    Launch(_universe, _ports, _chart.cursorX, _chart.cursorY, _selected);
 
     // 6502: JSR TT111 / LDX #5 / .dumdeedum LDA QQ15,X / STA safehouse,X -- the system nearest the
     // middle of the galaxy becomes both the selection and the countdown's target.
@@ -338,7 +334,7 @@ namespace Elite
      * The port had an `ArriveAtSystem` here, on the reasoning that arriving somewhere ought to
      * stock its market. The routine says otherwise and the routine wins.
      */
-    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, GALACTIC_MESSAGE,
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, GALACTIC_MESSAGE,
                 _universe.view);
     CurrentSystemToCrosshairs(_universe.commander, _chart.cursorX, _chart.cursorY);
   }

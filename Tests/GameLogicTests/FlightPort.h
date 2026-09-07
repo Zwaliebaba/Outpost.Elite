@@ -6,6 +6,7 @@
 #include "UniverseImage.h"
 
 #include "Charts.h"
+#include "Game.h"
 #include "Controls.h"
 #include "DockedKeys.h"
 #include "Explosion.h"
@@ -30,49 +31,50 @@
 /*
  * A flight with no window behind it (Design/Modernize.md slice M0-c).
  *
- * `Outpost::FlightSession` answers the eight seams the flight code reaches through, and most of
- * its answers are calls back into `GameLogic` -- `RunTactics` runs the ship AI, `DrawPlanetOrSun`
- * draws the planet, `SpawnAhead` is `FRS1`. Only a handful reach the platform: the keyboard, the
- * SID and the raster mode. This is the same object with the platform half replaced by data the
+ * `Outpost::FlightSession` answers the seams the flight code reaches through, and until M6-0-a-3
+ * most of its answers were calls back into `GameLogic` -- `DrawPlanetOrSun` drew the planet,
+ * `SpawnAhead` was `FRS1`; those are calls inside the library now. What is left reaches the
+ * platform: the keyboard, the SID and the raster mode. This is the same object with the platform half replaced by data the
  * script owns: the keys held this frame are an array the test fills, the sound goes into the
  * game's own buffer and log, and the raster mode is remembered. Every game-half answer is the
  * routine the executable calls, with the same arguments, so that a flight through this port is
  * the flight the app would run -- which is the property the replay hash pins.
  *
- * It is the second copy of `FlightSession`'s wiring, and the plan says so (P6): slice M3-b replaces
- * both with direct calls, and this port is what makes M3-b measurable before it lands.
+ * IT STEPS AN `Elite::Game` SINCE 2026-09-07, and that is what makes the replay digest mean
+ * something. `Main.cpp`'s `Advance` and this port's `Step` each spelled out `M%`, `MLOOP`'s head,
+ * the spawner, part 5's tail and the keyboard scan in that order; M3-c moved the executable's copy
+ * into `Elite::Game::Step` and left this one, so the digest was measuring a TRANSCRIPTION of the
+ * loop rather than the loop (ADR-007 §5). It holds the object now, so the record covers the thing
+ * M4-d rewrites -- and taking it found two defects in this fixture, both in §8.
  */
 namespace GameLogicTests
 {
 
-  class FlightPort final : public Elite::FlightLoopEffects,
-                           public Elite::ShipEffects,
-                           public Elite::ShipDrawEffects,
-                           public Elite::ControlEffects,
-                           public Elite::SightEffects,
-                           public Elite::ExplosionEffects,
-                           public Elite::ViewEffects,
-                           public Elite::ChartShapes,
-                           public Elite::ChartEffects
+  class FlightPort final : public Elite::Presenter, public Elite::Keyboard
   {
   public:
     /// 6502: what `CIRCLE` would have left in `STP` -- a launch reads it (§6.95), so the port
     /// starts as `FlightSession` does.
     static constexpr std::uint8_t LAST_CIRCLE_STEP = 4;
 
-    /// 6502: the keys `DOKEY` ignores on every screen but the space view; `RDKEY`'s answer to
-    /// `QQ11 <> 0`, copied from `FlightSession::ScanMatrix`.
-    static constexpr std::size_t NON_STEERING_KEYS[] = {
-      Elite::KEY_ENERGY_BOMB, Elite::KEY_ESCAPE_POD, Elite::KEY_ARM_MISSILE,      Elite::KEY_UNARM_MISSILE,  Elite::KEY_FIRE_MISSILE,
-      Elite::KEY_ECM,         Elite::KEY_WARP,       Elite::KEY_DOCKING_COMPUTER, Elite::KEY_CANCEL_DOCKING,
-    };
+    /*
+     * `NON_STEERING_KEYS` AND `RDKEY_SPRITE_MASK` WERE HERE AND ARE NOT ANY MORE (M3-b-3d).
+     *
+     * They were the second copy of them -- `FlightSession` in the app had the first -- because
+     * `RDKEY` was a seam and every implementation of it had to repeat the whole routine to answer
+     * one question. `Elite::ScanKeyboard` is the routine now and this port answers that question.
+     */
 
-    /// 6502: RDKEY's `AND #%11111101` -- sprite 1 off while the matrix is scanned.
-    static constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
-
+    /*
+     * The five seams a flight reaches, and `Elite::Game` builds the four text members of `Ports`
+     * over the universe exactly as `Outpost::App` does -- which is the point: a flight through this
+     * port is the flight the app would run, and it is now the same OBJECT running it.
+     *
+     * `StartUpEffects` and `CommanderStore` are the null port's: a scripted flight shows no title
+     * screen and writes no commander file.
+     */
     FlightPort()
-      : ports{universe.printer, universe.characters, universe.characters, *this,                    *this,
-              *this,            *this,               *this,               universe.extendedPrinter, universe.unused}
+      : game(*this, *this, unused)
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -87,23 +89,43 @@ namespace GameLogicTests
 
     // ---- the universe and the loop over it ----------------------------------------------------------
 
+    /// The seams this port does not answer, declared before the game that takes them.
+    UnusedSeams unused;
+
     /*
-     * The universe, and it is all of them now: the controls, the keys, the burst, the line heap,
-     * the clipper's flag, the projection and the axes were eight members here because `FlightLoop`
-     * held references to them. `Elite::Universe` owns every one since M3-a, so `universe.keys` is
-     * the byte the app's is.
+     * The game FIRST, because it owns the universe (M5-e-2) and everything below borrows from it --
+     * where until then this port owned a test wrapper and lent it to `Game`, and `Game` was last
+     * because it bound every one of the above. It builds `Ports` and the text chain over the
+     * universe exactly as `Outpost::App` does, and it is what `Step` steps.
      */
-    Universe universe;
+    Elite::Game game;
+
+    /*
+     * The universe, and it is all of them: the controls, the keys, the burst, the line heap, the
+     * clipper's flag, the projection and the axes were eight members here because `FlightLoop` held
+     * references to them. `Elite::Universe` owns every one since M3-a, `Game` owns the universe since
+     * M5-e-2, and `universe.keys` is the byte the app's is -- the same direction the executable's
+     * sessions borrow it in.
+     */
+    Elite::Universe& universe = game.State();
 
     /// 6502: the sound variables, the music player and the SID they write -- the game's own
     /// objects, so that a flight makes the same register writes it would make in the app.
-    Elite::SoundBuffer sound;
-    Elite::MusicPlayer music;
-    Elite::SidWriteLog sidLog;
+    /// 6502: sound_variables -- the universe's since M3-b-2a, and this is the name the
+    /// interrupt tick and the replay hash already used.
+    Elite::SoundBuffer& sound = universe.sound;
+    Elite::MusicPlayer& music = universe.music;
 
-    std::uint8_t docked = 0xFFu;   ///< 6502: QQ12
-    std::uint8_t rasterMode = 0;   ///< 6502: L1M -- what `SETL1` last wrote
-    std::uint32_t palettes = 0;    ///< `DOVDU19` calls, counted because the port has no VIC to write
+    /*
+     * 6502: QQ12 -- and it is the UNIVERSE'S byte, not a second one beside it.
+     *
+     * It was `std::uint8_t docked = 0xFF` here until 2026-09-07, which was one byte for the same
+     * thing `Universe::dockedFlag` already was: `Launch` cleared this one and `Game::Leave`'s
+     * arrival wrote that one, so a replay driven through `Game` would have had the two disagree.
+     * A reference rather than a rename because `RESET` and `LAUN` take it by reference and the
+     * digest names it.
+     */
+    std::uint8_t& docked = universe.dockedFlag;
 
     /// The keyboard as the script holds it: one entry per C64 matrix position, non-zero for held.
     /// `ScanKeyboard` turns it into `keys` the way `RDKEY` fills `KLO`.
@@ -118,20 +140,11 @@ namespace GameLogicTests
      */
     [[nodiscard]] Elite::LoopOutcome Step()
     {
-      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(universe, ports); // 6502: JSR M%
-      if (outcome != Elite::LoopOutcome::Continued)
-      {
-        return outcome;
-      }
-
-      if (Elite::RunLoopHead(universe, ports, *this) == Elite::LoopHead::Spawn)
-      {
-        Elite::RunSpawning(universe.bubble, universe.work, universe.rng, universe.commander, universe.current, universe.status,
-                           universe.explosions, universe.flight.blueprint, false);
-      }
-      static_cast<void>(Elite::RunLoopTail(universe, ports, universe.commander, universe.options.authorNames, false));
-      static_cast<void>(Elite::ScanFlightControls(universe, ports, *this, universe.view)); // 6502: JSR TT17
-      return Elite::LoopOutcome::Continued;
+      // 6502: `thiskey`, and ZERO IS A KEY -- `TT102` runs every pass, which is how `TT107`'s
+      // countdown ticks whether or not anything was pressed (§6.159). A scripted flight presses
+      // nothing, and until 2026-09-07 this port did not dispatch the zero either.
+      static_cast<void>(game.Step(0u));
+      return game.LastOutcome();
     }
 
     /*
@@ -154,164 +167,110 @@ namespace GameLogicTests
       }
       digest = FoldBytes(digest, arena);
 
-      const std::array<std::uint8_t, 6> rest = {universe.control.roll,             universe.control.pitch,
-                                                universe.control.dockingComputer,  universe.status.hyperspaceCounter,
-                                                universe.status.ecmOurs,           docked};
+      const std::array<std::uint8_t, 6> rest = {universe.control.roll,
+                                                universe.control.pitch,
+                                                universe.control.dockingComputer,
+                                                universe.status.hyperspaceCounter,
+                                                universe.status.ecmOurs,
+                                                docked};
       return FoldBytes(digest, rest);
     }
 
-    // ---- Elite::FlightLoopEffects, and Elite::DashboardEffects under it -------------------------
-
-    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
+    /// The library-native digest beside it (M5-e-3): `Game::StateHash()`, which already folds the
+    /// pixels, the heap and the controls because they are bytes of `Universe`.
+    [[nodiscard]] std::uint64_t StateDigest() const noexcept
     {
-      return Elite::PlaySoundEffect(sound, _effect, _carryIn);
-    }
-    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
-    {
-      return Elite::PlaySoundEffectPitched(sound, _effect, _sustain, _frequency, false);
-    }
-    void StopSound(std::uint8_t _effect) override
-    {
-      Elite::StopSoundEffect(sound, _effect); // 6502: NOISEOFF
-    }
-    void StartDockingMusic() override
-    {
-      Elite::StartDockingMusic(music, sidLog);
-    }
-    void StopDockingMusic() override
-    {
-      Elite::StopDockingMusic(music, universe.status.titleReset, sound, sidLog);
-    }
-    [[nodiscard]] bool SpawnAhead(Elite::ShipType _type) override
-    {
-      return Elite::SpawnShipAhead(universe.bubble, universe.work, _type, universe.flight.delta, universe.bubble.missileTarget,
-                                   universe.flight.blueprint)
-        .created;
-    }
-    bool Anger(std::uint8_t _slot, Elite::ShipType _type) override
-    {
-      return Elite::Anger(universe.bubble, universe.flight, _slot, _type);
-    }
-    [[nodiscard]] bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
-    {
-      return Elite::SpawnChildShip(universe.bubble, universe.work, universe.rng, universe.flight.slot, universe.flight.type, _aiFlag,
-                                   _type, universe.flight.blueprint)
-        .created;
+      return game.StateHash();
     }
 
-    // ---- Elite::ShipEffects and Elite::ShipDrawEffects ------------------------------------------
+    // `SpawnChild` WAS ANSWERED HERE AND IS NOT ANY MORE (M4-a-1): it was one call to
+    // `Elite::SpawnChildShip` over this port's own universe, which is exactly what
+    // `Elite::PerformDrop` does inside the library now.
 
-    [[nodiscard]] bool RunTactics(Elite::Ship& _work) override
+    // `Elite::ShipDrawEffects` WAS ANSWERED HERE AND IS NOT ANY MORE (M6-0-a-3): `DrawPlanetOrSun`
+    // and `DrawExplosion` were one library call each over this port's own universe, which is
+    // exactly what `Elite::DrawShip` does inside the library now.
+
+    // ---- Elite::Keyboard ------------------------------------------------------------------------
+
+    /*
+     * 6502: the matrix walk's `LDA &DC01` for one row, from `held` rather than from a window.
+     *
+     * IT WAS THE WHOLE OF `RDKEY` UNTIL M3-b-3d and is one line of it now. The `SETL1` bracket, the
+     * sprite mask, `ZEKTRAN`, the countdown that leaves `thiskey` holding the lowest-numbered key
+     * and the `QQ11` tail are all `Elite::ScanKeyboard`'s, which is the library's and is compared
+     * as such -- so this port and the app's cannot drift apart on any of them, which is what two
+     * transcriptions of the same routine were always going to do.
+     */
+    [[nodiscard]] bool Held(std::size_t _key) override
     {
-      static_cast<void>(_work);
-      return Elite::RunTactics(universe, ports, universe.flight.slot);
-    }
-    void DrawPlanetOrSun() override
-    {
-      Elite::DrawPlanetOrSun(universe.canvas, universe.heaps, universe.geometry, universe.math, universe.clip, universe.rng,
-                             universe.work, universe.projection, universe.flight.type);
-    }
-    void DrawExplosion() override
-    {
-      Elite::DrawExplosionCloud(universe.canvas, universe.math, universe.rng, universe.work, universe.heap, universe.geometry,
-                                universe.bubble, *this);
+      return _key < held.size() && held[_key] != 0u;
     }
 
-    // ---- Elite::ControlEffects ------------------------------------------------------------------
-
-    /// 6502: RDKEY, from `held` rather than from a window -- `FlightSession::ScanMatrix` with the
-    /// matrix replaced by the script's array and the same two masks after it.
-    void ScanKeyboard() override
+    /// 6502: TT217 and FLKB -- the docked half's, which nothing in a flight reaches.
+    [[nodiscard]] std::uint8_t NextKey() override
     {
-      rasterMode = 0b101;                                         // 6502: LDA #%101 / JSR SETL1
-      Elite::ApplyMaskSprites(universe.video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
-      universe.keys.fill(0u);                                     // 6502: JSR ZEKTRAN
-      for (std::size_t key = universe.keys.size(); key-- > 0u;)
+      return 0;
+    }
+    void Flush() override {}
+
+    /*
+     * 6502: the display, which this port does not have -- so the calls are FORWARDED or dropped.
+     *
+     * `Presenter` is in `Ports` since M3-b-3c, so there is no null pointer to pass any more and a
+     * suite that wants to count presents attaches a recorder here. An unattached port shows
+     * nothing, which is what every oracle comparison wants: the 6502 has no present either, and
+     * the two sides must agree on PIXELS rather than on time.
+     */
+    Elite::Presenter* watching = nullptr;
+
+    void WaitFrames(std::uint8_t _frames) override
+    {
+      if (watching != nullptr)
       {
-        if (held[key] != 0u)
-        {
-          universe.keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
-        }
+        watching->WaitFrames(_frames);
       }
-      if (universe.view != 0u)
+    }
+    void Present() override
+    {
+      if (watching != nullptr)
       {
-        for (const std::size_t index : NON_STEERING_KEYS)
-        {
-          universe.keys[index] = 0u;
-        }
+        watching->Present();
       }
-      if (Elite::IsChartView(universe.view))
+    }
+    void HoldFlightFrame(std::uint8_t _ships) override
+    {
+      if (watching != nullptr)
       {
-        for (const std::size_t index : {Elite::KEY_ROLL_LEFT, Elite::KEY_ROLL_RIGHT, Elite::KEY_PITCH_UP, Elite::KEY_PITCH_DOWN})
-        {
-          universe.keys[index] = 0u;
-        }
+        watching->HoldFlightFrame(_ships);
       }
-      rasterMode = 0b100; // 6502: LDA #%100 / JSR SETL1
+    }
+    void HoldTitleFrame(std::uint8_t _distance) override
+    {
+      if (watching != nullptr)
+      {
+        watching->HoldTitleFrame(_distance);
+      }
     }
 
-    // ---- Elite::ChartShapes and Elite::ChartEffects ---------------------------------------------
+    // `Elite::ControlEffects` WAS ANSWERED HERE AND IS NOT ANY MORE (M6-0-h-3): one call to
+    // `Elite::RunDockingComputer` over slot 0, which `ReadFlightControls` makes itself now.
+    // `ClearBottomRows` WAS ANSWERED HERE AND IS NOT ANY MORE (M3-b-3b): `CLYNS` is
+    // `Elite::ClearMessageRows`, which `MLOOP`'s head calls itself when a message's countdown ends.
 
-    void DrawRangeCircle(const Elite::RangeCircle& _circle) override
-    {
-      universe.heaps.lsp = 1u;
-      universe.heaps.stp = _circle.step;
-      const Elite::Projection centre{_circle.x, 0u, _circle.y, 0u};
-      Elite::DrawBall(universe.canvas, universe.heaps, universe.geometry, universe.math, universe.clip, centre, _circle.radius, false);
-    }
-    void DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius) override
-    {
-      Elite::ClearSunHeap(universe.heaps);
-      const Elite::Projection centre{_x, 0u, _y, 0u};
-      Elite::DrawSun(universe.canvas, universe.heaps, universe.math, universe.rng, centre, _radius);
-      Elite::ClearSunHeap(universe.heaps);
-    }
-    void RunDockingComputer(Elite::Ship& _work) override
-    {
-      static_cast<void>(_work);
-      static_cast<void>(Elite::RunDockingComputer(universe, ports, 0u));
-    }
-    /// 6502: CLYNS, which `MLOOP`'s head runs when a message's countdown expires -- what
-    /// `GameShell::ClearBottomRows` does.
-    void ClearBottomRows() override
-    {
-      Elite::ClearMessageRows(universe.canvas, universe.printer, universe.text, universe.characters.state, universe.message);
-    }
+    /*
+     * `SightEffects` AND `ExplosionEffects` WERE ANSWERED HERE AND ARE NOT ANY MORE (M3-b-3a).
+     *
+     * Six overrides, and five of them were already one line into `Universe::video`; the sixth kept
+     * `SETL1`'s byte in this object where nothing could read it. Both are library state now.
+     */
 
-    // ---- Elite::SightEffects, Elite::ExplosionEffects and Elite::ViewEffects --------------------
-
-    void SetRasterMode(std::uint8_t _mode) override
+    /// The seams as `Ports`, for the replay's own calls into `RESET` and `LAUN` -- the same struct
+    /// the game steps through, not a second one built beside it.
+    [[nodiscard]] Elite::Ports& Ports() noexcept
     {
-      rasterMode = _mode;
+      return game.PortsOf();
     }
-    void SetSightColour(std::uint8_t _colour) override
-    {
-      Elite::ApplySightColour(universe.video, _colour);
-    }
-    void SetSpritesEnabled(std::uint8_t _mask) override
-    {
-      Elite::ApplySpritesEnabled(universe.video, _mask);
-    }
-    void SetSpriteExpansion(std::uint8_t _mask) override
-    {
-      Elite::ApplySpriteExpansion(universe.video, _mask);
-    }
-    void ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y) override
-    {
-      Elite::ApplyExplosionSprite(universe.video, _x, _y);
-    }
-    void MaskSprites(std::uint8_t _mask) override
-    {
-      Elite::ApplyMaskSprites(universe.video, _mask);
-    }
-    void SetPalette(std::uint8_t) override
-    {
-      ++palettes;
-    }
-
-    /// The seams and the text machinery, last because every reference in it is bound at
-    /// construction. Ten where the two aggregates held thirty-nine (M3-a).
-    Elite::Ports ports;
   };
 
 } // namespace GameLogicTests

@@ -9,6 +9,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because a control code that leaves is run against it
+  struct Ports;    // Ports.h, likewise
+
   /*
    * 6502: DTW1 to DTW8 -- the state the extended printer carries between bytes.
    *
@@ -85,15 +88,26 @@ namespace Elite
     /// is the instruction to empty it.
     static constexpr std::uint8_t FORM_FEED = 12;
 
-    explicit CharacterPrinter(TextSink& _screen) noexcept
-      : m_screen(_screen)
+    /// The bytes are `Universe::sentences` since M5-e-2b; the printer binds to them the way
+    /// `TextPrinter` binds to `TextState`, so that the universe copies and the printer does not.
+    CharacterPrinter(TextSink& _screen, ExtendedTextState& _state) noexcept
+      : m_screen(_screen),
+        m_state(_state)
     {
+    }
+
+    /// 6502: DTW1 to DTW8 -- the universe's bytes, which this printer works on (M5-e-2b).
+    [[nodiscard]] ExtendedTextState& State() noexcept
+    {
+      return m_state;
+    }
+    [[nodiscard]] const ExtendedTextState& State() const noexcept
+    {
+      return m_state;
     }
 
     /// 6502: DASC -- route one character, and justify the buffered line when one is asked for.
     void Put(std::uint8_t _character) noexcept override;
-
-    ExtendedTextState state;
 
     /// 6502: BUF -- the line being justified. Public because MT17 reaches into it.
     std::array<std::uint8_t, BUFFER_SIZE> buffer{};
@@ -112,35 +126,41 @@ namespace Elite
      * borrowed for the purpose. It is passed by reference here for the same reason it is a
      * variable there: it carries from one gap to the next within a line.
      */
-    [[nodiscard]] bool PadToWidth(std::uint8_t& _rotor) noexcept;
+    /*
+   * 6502: SC+1 -- the rotating bit that chooses which gap, and the answer beside it (M5-a-3).
+   *
+   * It was a `std::uint8_t&` out-parameter until then, which is P10's pattern: a bare byte
+   * reference the caller has to remember to keep. It is one value carried out and back in, so the
+   * routine returns it with the flag, exactly as M2-b did for the arithmetic kernel.
+   */
+  struct PadResult
+  {
+    bool broke;         ///< false is the port's give-up on a line with no gap at all
+    std::uint8_t rotor; ///< 6502: SC+1, carried to the next gap on the same line
+  };
+
+  [[nodiscard]] PadResult PadToWidth(std::uint8_t _rotor) noexcept;
 
     TextSink& m_screen; ///< 6502: CHPR
+    ExtendedTextState& m_state; ///< `Universe::sentences`, bound the way `TextPrinter` binds its `TextState`
   };
 
   /*
-   * The control codes that leave the text system.
+   * The control codes that leave the text system, and `ControlCodes` WAS THE SEAM UNTIL M3-b-4b.
    *
    * JMTB has THIRTY-ONE reachable entries, not the twenty-one the low ones suggest, and every one
    * of them is used by a token the game prints. Codes 22 to 31 are the mission briefings and the
    * disk menu: they wait for keys, spin the title ship, read a typed line, or print a token under
    * a game-state index. Nine and eleven reach the canvas.
    *
-   * So this seam carries 9, 11, 22, 24, 25, 26, 27, 28, 30 and 31. Everything else in the range
-   * is text and is handled by the printer below.
+   * Codes 8, 21, 23 and 29 are SPLIT rather than passed on whole: the flags they set belong to the
+   * text system and are set here, and only the cursor move or the screen clear leaves. A handler
+   * for those four must not set those flags again, or it will set them twice.
    *
-   * Codes 8, 21, 23 and 29 are SPLIT rather than deferred whole: the flags they set belong to the
-   * text system and are set here, and only the cursor move or the screen clear is passed on. A
-   * handler for those four must not set those flags again, or it will set them twice.
-   *
-   * A printer built without a handler ignores the deferred codes, and the tests count how often
-   * that happens.
+   * `Elite::RunControlCode` is the handler (`Missions.h`), and this printer reaches it through the
+   * game rather than through an interface -- so a printer built without one ignores the codes that
+   * leave, exactly as a printer built without the seam did.
    */
-  class ControlCodes
-  {
-  public:
-    virtual ~ControlCodes() = default;
-    virtual void Run(std::uint8_t _code) = 0;
-  };
 
   /*
    * 6502: DETOK, DETOK2, DETOK3.
@@ -154,12 +174,43 @@ namespace Elite
   class ExtendedTokenPrinter
   {
   public:
-    ExtendedTokenPrinter(CharacterPrinter& _characters, TokenPrinter& _recursive, Rng& _rng, ControlCodes* _controls = nullptr) noexcept
+    ExtendedTokenPrinter(CharacterPrinter& _characters, TokenPrinter& _recursive, Rng& _rng) noexcept
       : m_characters(_characters),
         m_recursive(_recursive),
-        m_rng(_rng),
-        m_controls(_controls)
+        m_rng(_rng)
     {
+    }
+
+    /*
+     * The game a control code that leaves the text system is run against (M3-b-4b).
+     *
+     * IT IS A SETTER AND HAS TO BE. This object is a member of `Ports`, and `RunControlCode` takes
+     * a `Ports&` -- so the pair cannot be a constructor argument on either side without one of them
+     * existing first. `TokenPrinter::SetValueTokens` unties the same knot for the same reason, and
+     * `Main.cpp`'s composition already lends the struct back to two of the objects in it.
+     *
+     * A printer with no game ignores the codes that leave, which is what a null `ControlCodes*`
+     * meant before it and is what the token suites are built on.
+     */
+    void SetGame(Universe& _universe, Ports& _ports) noexcept
+    {
+      m_universe = &_universe;
+      m_ports = &_ports;
+    }
+
+    /*
+     * How many codes have LEFT the text system, whether or not a game was there to run them.
+     *
+     * It is a counter and not a seam, and the difference is the point: `ControlCodes` was a virtual
+     * whose only production implementation forwarded straight back into `GameLogic`, and this is a
+     * `std::uint32_t` on an object the suites already own. What it preserves is the one thing the
+     * seam gave the token suites that nothing else can -- `CompareToken` must SKIP a token that
+     * reaches a code the port defers, because such a token cannot be compared against a game that
+     * runs it, and no state comparison can tell "deferred" from "ran and did nothing".
+     */
+    [[nodiscard]] std::uint32_t CodesThatLeft() const noexcept
+    {
+      return m_codesThatLeft;
     }
 
     /// 6502: DETOK -- print extended token N from the main table.
@@ -184,7 +235,7 @@ namespace Elite
     /// and writes most of them.
     [[nodiscard]] ExtendedTextState& State() noexcept
     {
-      return m_characters.state;
+      return m_characters.State();
     }
 
   private:
@@ -197,7 +248,14 @@ namespace Elite
     void PrintRandomVariant(std::uint8_t _byte) noexcept;
 
     /// 6502: DT3 and the JMTB jump table -- one control code.
-    void RunControlCode(std::uint8_t _code) noexcept;
+    /*
+     * 6502: DT3 -- the text system's half of the dispatch.
+     *
+     * It is `RunTextCode` and not `RunControlCode` because `Elite::RunControlCode` is the game's
+     * half and lives in `Missions.h`: this one sets the flags that belong to the printer and hands
+     * on what does not, which is the split codes 8, 21, 23 and 29 make explicit.
+     */
+    void RunTextCode(std::uint8_t _code) noexcept;
 
     /// 6502: MT17 -- the current system's name, turned into an adjective.
     void PrintSystemAdjective() noexcept;
@@ -208,7 +266,9 @@ namespace Elite
     CharacterPrinter& m_characters;
     TokenPrinter& m_recursive;
     Rng& m_rng;
-    ControlCodes* m_controls = nullptr;
+    Universe* m_universe = nullptr; ///< set by `SetGame`; null is a printer that defers the codes
+    Ports* m_ports = nullptr;
+    std::uint32_t m_codesThatLeft = 0;
   };
 
 } // namespace Elite

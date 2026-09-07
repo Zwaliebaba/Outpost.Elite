@@ -5,9 +5,9 @@
 namespace Elite
 {
 
-  /// Declared in TextPrint.h. The token printer only needs to move the cursor, so a pointer to an
-  /// incomplete type keeps the include going one way: TextPrint knows about tokens, not the other
-  /// way round.
+  /// Declared in TextPrint.h. The token printer holds a reference to it and reaches two of its
+  /// bytes from Tokens.cpp, so an incomplete type here keeps the include going one way: TextPrint
+  /// knows about tokens, not the other way round.
   struct TextState;
 
   /*
@@ -50,8 +50,15 @@ namespace Elite
   class TokenPrinter
   {
   public:
-    explicit TokenPrinter(TextSink& _sink, ValueTokens* _values = nullptr) noexcept
+    /*
+     * 6502: XC and QQ17 -- the text state this printer works on, bound at construction the way
+     * `TextPrinter` and `CharacterPrinter` bind theirs (M5-e-2c). Control code 9 moves the column,
+     * and the case flags ARE `TextState::caseFlags`: until M5-e-2c this class kept a copy of QQ17
+     * and `CHPR` read the struct's, so every routine that stored QQ17 had to store it twice (§8).
+     */
+    TokenPrinter(TextSink& _sink, TextState& _text, ValueTokens* _values = nullptr) noexcept
       : m_sink(_sink),
+        m_text(_text),
         m_values(_values)
     {
     }
@@ -81,31 +88,11 @@ namespace Elite
       m_values = _values;
     }
 
-    /*
-     * 6502: XC -- the cursor, which control code 9 moves.
-     *
-     * `crlf` is `LDA #21 / JSR DOXC / JMP TT73`: tab to column 21, then a colon. Slice 1c-a printed
-     * the colon and left a comment saying the cursor move would land with the canvas; it did not,
-     * and the status screen is the first routine to notice -- it prints four headings through
-     * control code 9 and all of them came out at whatever column the previous line ended in.
-     *
-     * Optional, because every suite written before this one constructs a printer without one.
-     */
-    void SetCursor(TextState* _cursor) noexcept
-    {
-      m_cursor = _cursor;
-    }
-
     /// 6502: QQ17 -- the capitalisation state. Bit 7 asks for sentence case, bit 6 records that
-    /// the first letter has been seen, and 255 suppresses output entirely.
-    [[nodiscard]] std::uint8_t CaseFlags() const noexcept
-    {
-      return m_caseFlags;
-    }
-    void SetCaseFlags(std::uint8_t _flags) noexcept
-    {
-      m_caseFlags = _flags;
-    }
+    /// the first letter has been seen, and 255 suppresses output entirely. The byte is
+    /// `TextState::caseFlags`; these read and write it for the callers that hold the printer.
+    [[nodiscard]] std::uint8_t CaseFlags() const noexcept;
+    void SetCaseFlags(std::uint8_t _flags) noexcept;
 
   private:
     /// 6502: the TT41/TT42/TT45/TT46/TT74 chain -- one character, under the case flags.
@@ -115,9 +102,8 @@ namespace Elite
     void PrintLetterPair(std::uint8_t _token) noexcept;
 
     TextSink& m_sink;
+    TextState& m_text; ///< 6502: XC and QQ17 -- `Universe::text`, or a suite's own
     ValueTokens* m_values = nullptr;
-    TextState* m_cursor = nullptr;
-    std::uint8_t m_caseFlags = 0;
   };
 
   /*

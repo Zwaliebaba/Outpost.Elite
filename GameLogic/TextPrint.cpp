@@ -78,12 +78,12 @@ namespace Elite
       // 6502: TT36 / tt37 -- how many times ten to the eleventh goes into what is left.
       for (;;)
       {
-        std::uint8_t remainder[4] = {0, 0, 0, 0};
+        std::array<std::uint8_t, 4> remainder = {0, 0, 0, 0};
         bool noBorrow = true;
         for (int index = 3; index >= 0; --index)
         {
-          const std::uint16_t difference = static_cast<std::uint16_t>(_value[static_cast<std::size_t>(index)]) - TEN_TO_THE_ELEVENTH[index] -
-                                           (noBorrow ? 0u : 1u);
+          const std::uint16_t difference =
+            static_cast<std::uint16_t>(_value[static_cast<std::size_t>(index)]) - TEN_TO_THE_ELEVENTH[index] - (noBorrow ? 0u : 1u);
           remainder[index] = static_cast<std::uint8_t>(difference);
           noBorrow = difference < 0x100u;
         }
@@ -160,7 +160,7 @@ namespace Elite
        * 6502: TT35 -- multiply the five-byte accumulator by ten. Shift once and keep a copy, shift
        * twice more, then add the copy back: x * 8 + x * 2.
        */
-      std::uint8_t copy[4] = {0, 0, 0, 0};
+      std::array<std::uint8_t, 4> copy = {0, 0, 0, 0};
       std::uint8_t copyHigh = 0;
 
       const auto shiftLeft = [&]() noexcept
@@ -275,13 +275,11 @@ namespace Elite
     /*
      * 6502: LDX #1 / STX XC / STX YC / DEX / STX QQ17.
      *
-     * QQ17 IS ASSIGNED TWICE HERE because the port keeps one 6502 byte in two places: the token
-     * printer owns it, and `TextState` carries a copy that CHPR reads for the single value 255
-     * ("print nothing"). Every routine that assigns QQ17 has to assign both or they drift, and this
-     * is the first caller outside the token printer that holds both. Section 6.28 of the plan
-     * records why that duplication is worth removing and why doing it here would be the wrong slice.
+     * QQ17 WAS ASSIGNED TWICE HERE until M5-e-2c, because the port kept one 6502 byte in two
+     * places -- the token printer's copy and the `TextState` byte CHPR reads for 255 -- and every
+     * routine that stored it had to store both or they drifted (the conversion plan's §6.28). The
+     * printer binds to `_text` now and there is one byte.
      */
-    _printer.SetCaseFlags(0);
     _text.caseFlags = 0;
 
     _text.column = 1;
@@ -298,7 +296,6 @@ namespace Elite
 
     // 6502: CLYNS2 -- LDA #255 / STA DTW2 / LDA #128 / STA QQ17 / LDA #21 / STA YC / LDA #1 / STA XC.
     _extended.sentenceStart = 0xFF;
-    _printer.SetCaseFlags(SENTENCE_CASE);
     _text.caseFlags = SENTENCE_CASE;
     _text.row = MESSAGE_ROW;
     _text.column = 1;
@@ -331,10 +328,10 @@ namespace Elite
 
     if (_character == 7)
     {
-      // 6502: R5 -- the bell, which is a sound event and so belongs to phase 5.
-      if (m_effects != nullptr)
+      // 6502: R5 -- JSR BEEP, whose carry `dn2`, `R5` and `DK4` all drop.
+      if (m_sound != nullptr)
       {
-        m_effects->Beep();
+        (void)Beep(*m_sound, false);
       }
       return _character;
     }
@@ -379,12 +376,19 @@ namespace Elite
 
     if (m_state.row >= 24)
     {
-      // 6502: JMP clss -- off the bottom, so clear the screen and print the character again.
-      if (m_effects != nullptr)
-      {
-        m_effects->ClearScreen();
-        PrintGlyph(_character);
-      }
+      /*
+       * 6502: JMP clss -- `JSR TT66simp`, then `LDA K3 / JMP RRafter`, which is the character
+       * printed again on the fresh screen.
+       *
+       * IT IS `TT66simp` AND NOT `TT66`, and until M3-b-4a this was a seam the executable answered
+       * with the whole of `TT66` -- the palette, the dashboard, the sprites, the border and `QQ11`
+       * (§8). `ClearTextArea` is the routine: rows 1 to 23 of the bitmap and the cursor home to
+       * (1, 1), with row 0 and the dashboard left alone.
+       *
+       * The recursion terminates because the clear leaves `YC` at 1.
+       */
+      ClearTextArea(m_canvas, m_state);
+      PrintGlyph(_character);
       return;
     }
 
@@ -430,7 +434,7 @@ namespace Elite
 
     // 6502: LDY YC / celllook / LDY XC / LDA COL2 / STA (SC),Y -- the cell's colour, written after
     // the cursor moved, which is what makes the three-cell offset in celllook come out right.
-    m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.cellColour);
+    m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.palette);
   }
 
   void MoveCursorDown(TextState& _text) noexcept

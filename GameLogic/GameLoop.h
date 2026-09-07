@@ -81,7 +81,7 @@ namespace Elite
    * where it reaches zero. Reading parts 1 to 4 without this makes the bubble fill 256 times too
    * fast, which is the kind of wrong that looks like a working game for the first few seconds.
    */
-  [[nodiscard]] LoopHead RunLoopHead(Universe& _universe, Ports& _ports, ChartEffects& _rows) noexcept;
+  [[nodiscard]] LoopHead RunLoopHead(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: MLOOP's first six instructions and `EE20` -- the two countdowns, before the `QQ11` gate.
@@ -208,7 +208,6 @@ namespace Elite
    * `_carryIn` is the flag the first `DORND` rotates in, which is whatever `Main.cpp` reached the
    * spawner with -- §6.121 is the reason it is a parameter rather than an assumption.
    */
-  void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, Commander& _commander, const CurrentSystem& _current,
-                   const FlightStatus& _status, std::uint8_t& _explosionCount, const Blueprint*& _blueprint, bool _carryIn) noexcept;
+  void RunSpawning(Universe& _universe, bool _carryIn) noexcept;
 
 } // namespace Elite

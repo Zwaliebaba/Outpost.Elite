@@ -73,7 +73,7 @@ WORKSPACE_PARAM = re.compile(r"\b(?:Math|Draw|Geometry)Workspace&\s+_[a-z]")
 CLASS_HEAD = re.compile(r"\b(?:class|struct)\s+[A-Za-z_]\w*\s*(?:final\s*)?(?::[^{;]*)?\{")
 PURE_VIRTUAL = re.compile(r"\)\s*(?:const\s*)?(?:noexcept\s*)?=\s*0\s*;")
 ELITE_NAME = re.compile(r"\bElite::([A-Za-z_]\w*)")
-LEDGER_FILE = re.compile(r"`([A-Za-z0-9]+\.(?:h|cpp))`")
+LEDGER_FILE = re.compile(r"`([A-Za-z0-9_]+\.(?:h|cpp))`")
 ORIGIN_MARKER = re.compile(r"\b6502:")
 ORACLE_USE = re.compile(r"\bOracleImage\b|\bOracleMissing\b")
 ORIGIN_PATH = re.compile(r"\bUpstream\b|\bMasterFile\b")
@@ -170,16 +170,39 @@ def count_mutants(_root: Path) -> int:
     return sum(len(unit["mutants"]) for unit in recorded["units"])
 
 
+def count_mutant_files(_root: Path) -> int:
+    """The distinct files the recorded mutants edit -- what M6-0-g's floor is measured in."""
+    recorded = json.loads((_root / "tools" / "mutants.json").read_text(encoding="utf-8"))
+    return len({mutant["file"] for unit in recorded["units"] for mutant in unit["mutants"]})
+
+
 def count_inventory_stale_files(_root: Path) -> int:
-    """M5-c -- `.h`/`.cpp` names the ledger cites that name no file in any project folder."""
+    """M5-c -- `.h`/`.cpp` names in a ledger row's HOME cell that name no file in any project folder.
+
+    IT READS THE HOME CELL AND NOT THE WHOLE FILE, and M5-c narrowed it there rather than lowering a
+    ceiling to meet the tree (Risk R18 is the other way round). A home is the row's live claim about
+    where its labels live; the notes beside it are HISTORY, and the plan's rule for numbers already
+    draws that line -- a journal number was true when it was written and is never touched. Two notes
+    name a file precisely to say the tree does NOT have it (§6.129's raster row, and the workspace
+    row M5-c rewrote), so a counter over the whole file would need a finding deleted to reach zero.
+    `inventory.py --check-homes` applies the same rule and is the repository check behind it.
+    """
     ledger = _root / "Design" / "Source-Inventory.md"
-    cited = set(LEDGER_FILE.findall(ledger.read_text(encoding="utf-8", errors="replace")))
     on_disk: set[str] = set()
     for folder in ("GameLogic", "Outpost", "NeuronCore", "Tests/GameLogicTests", "Tests/PortableRunner/Shim"):
         directory = _root / folder
         if directory.is_dir():
             on_disk.update(path.name for path in directory.iterdir() if path.is_file())
-    return len([name for name in cited if name not in on_disk])
+
+    stale = 0
+    for line in ledger.read_text(encoding="utf-8", errors="replace").split("\n"):
+        if not line.startswith("|"):
+            continue
+        cells = line.split("|")
+        if len(cells) < 5:
+            continue
+        stale += len([name for name in LEDGER_FILE.findall(cells[3]) if name not in on_disk])
+    return stale
 
 
 def count_origin_markers(_root: Path) -> int:
@@ -223,6 +246,7 @@ COUNTERS = {
     "out-params": (count_out_params, "P10: std::uint8_t& output parameters in GameLogic/*.h"),
     "carry-params": (count_carry_params, "P11: bool _carryIn parameters in GameLogic/*.h"),
     "mutants": (count_mutants, "recorded mutants in tools/mutants.json"),
+    "mutant-files": (count_mutant_files, "distinct files those mutants edit"),
     "inventory-stale-files": (count_inventory_stale_files, "file names Source-Inventory.md cites that are not on disk"),
     "origin-markers": (count_origin_markers, "P12: 6502: references in GameLogic/ comments"),
     "oracle-test-files": (count_oracle_test_files, "P12: test files that load the assembled original"),
@@ -330,9 +354,18 @@ namespace Elite
 
 SAMPLE_MAIN = "#include \"pch.h\"\nint main() { Elite::Game game; Elite::Canvas canvas; return Elite::Run(); }\n"
 
-SAMPLE_MUTANTS = {"units": [{"name": "u", "mutants": [{"id": "a"}, {"id": "b"}]}, {"name": "v", "mutants": [{"id": "c"}]}]}
+SAMPLE_MUTANTS = {
+    "units": [
+        {"name": "u", "mutants": [{"id": "a", "file": "GameLogic/Sample.cpp"}, {"id": "b", "file": "GameLogic/Sample.cpp"}]},
+        {"name": "v", "mutants": [{"id": "c", "file": "GameLogic/Other.cpp"}]},
+    ]
+}
 
-SAMPLE_LEDGER = "| `ZeroPage.h` | `Present.h` | `Missing.cpp` |\n"
+SAMPLE_LEDGER = (
+    "| Labels | N | Home | Disposition | Notes |\n"
+    "|---|---|---|---|---|\n"
+    "| `alpha` | 1 | `Present.h`, `Missing.cpp` | Port | it was in `Gone.cpp` once, which is HISTORY |\n"
+)
 
 SAMPLE_ORACLE_TEST = "#include \"OracleImage.h\"\nTEST_CLASS(A) { TEST_METHOD(B) { OracleImage::Instance(); } };\n"
 SAMPLE_PLAIN_TEST = "// OracleImage only in a comment\nTEST_CLASS(C) { TEST_METHOD(D) { } };\n"
@@ -351,7 +384,8 @@ EXPECTED = {
     "out-params": 1,
     "carry-params": 1,
     "mutants": 3,
-    "inventory-stale-files": 2,
+    "mutant-files": 2,
+    "inventory-stale-files": 1,
     "origin-markers": 2,
     "oracle-test-files": 1,
     "origin-tools": 1,

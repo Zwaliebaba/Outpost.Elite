@@ -19,7 +19,7 @@ namespace Elite
      * disagree about it, which is the bug this file just had.
      */
     void ResolveCell(std::uint8_t* _out, int _outStride, const std::uint8_t* _bitmap, std::uint8_t _cellByte, std::uint8_t _colourRam,
-                     std::uint8_t _background, bool _multicolour) noexcept
+                     Colour _background, bool _multicolour) noexcept
     {
       // 6502: the nibbles of the cell's byte in screen RAM. Both modes read them; they differ only
       // in what selects between them.
@@ -27,7 +27,7 @@ namespace Elite
       const std::uint8_t low = static_cast<std::uint8_t>(_cellByte & 0x0Fu);
 
       // The four colours a multicolour cell can offer, in the order the two bits select them.
-      const std::uint8_t colours[4] = {_background, high, low, static_cast<std::uint8_t>(_colourRam & 0x0Fu)};
+      const std::array<std::uint8_t, 4> colours = {ColourIndex(_background), high, low, static_cast<std::uint8_t>(_colourRam & 0x0Fu)};
 
       for (int subRow = 0; subRow < 8; ++subRow)
       {
@@ -64,8 +64,8 @@ namespace Elite
   {
     m_screen.fill(0);
     m_colourCells.fill(0);
-    m_background = 0;
-    m_spaceViewBackground = 0;
+    m_background = Colour::Black;
+    m_spaceViewBackground = Colour::Black;
     m_spaceViewMulticolour = false;
   }
 
@@ -96,7 +96,7 @@ namespace Elite
        * &81 whatever happens, so the upper half is coloured from the first block either way.
        */
       const bool multicolour = lower || m_spaceViewMulticolour;
-      const std::uint8_t background = lower ? m_background : m_spaceViewBackground;
+      const Colour background = lower ? m_background : m_spaceViewBackground;
 
       for (int cellColumn = 0; cellColumn < CELL_COLUMNS; ++cellColumn)
       {
@@ -125,11 +125,11 @@ namespace Elite
 
     /// The colour a HI-RES sprite pixel takes, or -1 for transparent: one bit per pixel, set is the
     /// sprite's own colour and clear is the bitmap showing through.
-    [[nodiscard]] int HiresPixel(const std::uint8_t* _row, int _column, std::uint8_t _colour) noexcept
+    [[nodiscard]] int HiresPixel(const std::uint8_t* _row, int _column, Colour _colour) noexcept
     {
       const std::uint8_t byte = _row[_column >> 3];
       const std::uint8_t bit = static_cast<std::uint8_t>(0x80u >> (_column & 7));
-      return ((byte & bit) != 0u) ? static_cast<int>(_colour) : -1;
+      return ((byte & bit) != 0u) ? static_cast<int>(ColourIndex(_colour)) : -1;
     }
 
     /*
@@ -140,18 +140,18 @@ namespace Elite
      * SHARES -- which is why a Trumble cannot be recoloured on its own, and why the original never
      * tries to.
      */
-    [[nodiscard]] int MulticolourPixel(const std::uint8_t* _row, int _pair, std::uint8_t _colour) noexcept
+    [[nodiscard]] int MulticolourPixel(const std::uint8_t* _row, int _pair, Colour _colour) noexcept
     {
       const std::uint8_t byte = _row[_pair >> 2];
       const int shift = 6 - 2 * (_pair & 3);
       switch ((byte >> shift) & 3u)
       {
       case 1u:
-        return SPRITE_MULTICOLOUR_1;
+        return static_cast<int>(ColourIndex(SPRITE_MULTICOLOUR_1));
       case 2u:
-        return static_cast<int>(_colour);
+        return static_cast<int>(ColourIndex(_colour));
       case 3u:
-        return SPRITE_MULTICOLOUR_2;
+        return static_cast<int>(ColourIndex(SPRITE_MULTICOLOUR_2));
       default:
         return -1;
       }
@@ -173,10 +173,10 @@ namespace Elite
     /// the two the raster split rewrites, each as the pair `COMIRQ1` programs them in.
     struct SpriteRegisters
     {
-      int sprite = 0;                    ///< which of the eight, because &1C is indexed by it
-      std::uint8_t colour = 0;           ///< 6502: VIC+&27 + N -- this sprite's own colour
-      const std::uint8_t* multicolour{}; ///< 6502: santana -- [0] the space view's, [1] the dashboard's
-      const std::uint8_t* explosion{};   ///< 6502: lotus -- VIC+&28, and sprite 1 is the only reader
+      int sprite = 0;                               ///< which of the eight, because &1C is indexed by it
+      Colour colour = Colour::Black;                ///< 6502: VIC+&27 + N -- this sprite's own colour
+      std::span<const std::uint8_t, 2> multicolour; ///< 6502: santana -- [0] the space view's, [1] the dashboard's
+      std::span<const Colour, 2> explosion;         ///< 6502: lotus -- VIC+&28, and sprite 1 is the only reader
     };
 
     void BlitSprite(std::uint8_t* _out, const std::uint8_t* _definition, const SpriteRegisters& _registers, int _left, int _top,
@@ -208,7 +208,7 @@ namespace Elite
 
           const std::size_t half = (y >= Canvas::SPACE_VIEW_HEIGHT) ? 1u : 0u;
           const bool multicolour = ((_registers.multicolour[half] >> _registers.sprite) & 1u) != 0u;
-          const std::uint8_t colour = (_registers.sprite == EXPLOSION_SPRITE) ? _registers.explosion[half] : _registers.colour;
+          const Colour colour = (_registers.sprite == EXPLOSION_SPRITE) ? _registers.explosion[half] : _registers.colour;
 
           const int steps = multicolour ? (SPRITE_WIDTH / 2) : SPRITE_WIDTH;
           const int dots = multicolour ? 2 : 1;

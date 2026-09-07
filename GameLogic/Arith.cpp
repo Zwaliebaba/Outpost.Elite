@@ -357,13 +357,13 @@ namespace Elite
 
     // The quotient is then scaled by a shift-and-add rather than a second division.
     std::uint8_t value = t;
-    bool carry = (value & 0x01u) != 0u;
     value = static_cast<std::uint8_t>(value >> 1);
-    carry = (value & 0x01u) != 0u;
     value = static_cast<std::uint8_t>(value >> 1);
     t = value;
 
-    carry = (value & 0x01u) != 0u;
+    // Only the THIRD `LSR`'s carry is read. The first two set it in the original too and nothing
+    // between them tests it, so the port wrote all three and used one until slice 5d.
+    bool carry = (value & 0x01u) != 0u;
     value = static_cast<std::uint8_t>(value >> 1);
 
     const AddResult scaled = AddWithCarry(value, t, carry);

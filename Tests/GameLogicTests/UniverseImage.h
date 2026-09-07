@@ -59,6 +59,10 @@ namespace GameLogicTests
     /// the Trumbles own bits 2 to 7 and the laser sights own the other two.
     std::uint8_t mask = 0xFFu;
 
+    /// The byte is a chip register on the I/O page rather than RAM (the VIC-II's sprite
+    /// registers), reached through `Cpu6502::Io` whatever the port register says (M6-0-a).
+    bool io = false;
+
     /// The random number generator, which one caller asks to leave uncompared (`CompareState`'s
     /// `_compareRng`, and the reason is in `FlightUniverse.h`).
     bool generator = false;
@@ -69,10 +73,18 @@ namespace GameLogicTests
 
   /*
    * The table. Non-const because the setters write the universe; the const entry points below
-   * cast that away and call only the getters, which is the one `const_cast` in the test tree and
+   * cast that away and call only the getters, which are the only `const_cast`s in the test tree and
    * is here so that the table is written once rather than twice.
    */
-  [[nodiscard]] std::vector<Cell> ImageCells(Universe& _universe, const Where& _at);
+  /*
+   * The table over a bare `Elite::Universe`, which since M5-e-2c is every byte the image reads.
+   * M5-e-2 found `Hash(universe)` reading the test wrapper's idle printers for QQ17 and DTW1-8
+   * next to a `Game` that had printed with its own, and M5-e-2b/2c moved those nine bytes into
+   * the universe. The sprite registers were the fixture's to CLAIM until M6-0-a, because in a
+   * flat image they were `XX21`; the interpreter banks the I/O page now and they are ordinary
+   * cells, on the page rather than in RAM.
+   */
+  [[nodiscard]] std::vector<Cell> ImageCells(Elite::Universe& _universe, const Where& _at);
 
   /// Port -> 6502 memory, every cell.
   void Materialise(const Universe& _universe, Cpu6502& _cpu, const Where& _at);
@@ -95,8 +107,9 @@ namespace GameLogicTests
   [[nodiscard]] std::uint64_t Hash(const Universe& _universe, const Where& _at);
 
   /// The same, with no oracle to resolve the addresses: the cells are read in table order and
-  /// their addresses are never used. This is the hash a replay stores (slice M0-c).
-  [[nodiscard]] std::uint64_t Hash(const Universe& _universe);
+  /// their addresses are never used. This is the hash a replay stores (slice M0-c), and it takes
+  /// the bare `Elite::Universe` because that is what `Game` owns (M5-e-2).
+  [[nodiscard]] std::uint64_t Hash(const Elite::Universe& _universe);
 
   /*
    * The FNV-1a offset basis and prime, 64-bit. Any stable hash would do; this one is

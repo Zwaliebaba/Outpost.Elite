@@ -10,6 +10,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because Universe holds the `FlightState` this header declares
+  struct Ports;    // Ports.h, likewise
+
   /*
    * Moving a ship (slice 3a).
    *
@@ -147,33 +150,20 @@ namespace Elite
   void MovePlanetOrSun(Ship& _work, MathWorkspace& _math, std::uint8_t _alpha, std::uint8_t _beta) noexcept;
 
   /*
-   * What `MVEIT` still reaches outside itself.
+   * WHAT `MVEIT` REACHES OUTSIDE ITSELF IS NOTHING, and this comment is where the last of it was.
    *
-   * There were two, and `SCAN` was the other: slice 3d-a built it, so `MoveShip` now calls it
-   * directly and the seam is gone (§6.59). What is left is `TACTICS`, the combat AI, which is
-   * PHASE 4 -- and `MVEIT` calls it directly too, so a port without it would quietly do nothing
-   * where the game decides what a hostile ship does next.
+   * There were two. `SCAN` went in slice 3d-a, which built it (§6.59); `TACTICS` went here, in
+   * M3-b-1c, because slice 4a-c built that too. `ShipEffects::RunTactics` existed for the year in
+   * which the combat AI was phase 4's and `MVEIT` was slice 3a's -- a seam scoped before the thing
+   * behind it existed, which is §6.73's rule and this is its last application in the flight path.
+   *
+   * ITS `bool` SURVIVES IT, and that is not an accident of the removal. Three of the AI's paths
+   * reach `OOPS`, and `OOPS` ends `JMP DEATH` when the energy banks are gone; on the 6502 that
+   * abandons the stack, so `TACTICS`, `MVEIT` and the whole flight loop simply stop. The port has
+   * no equivalent, so the answer is carried back out through `MoveShip` to `MoveEveryShip`, which
+   * turns it into `LoopOutcome::Died` (§6.122). False still means the player died and the caller
+   * must stop the frame.
    */
-  class ShipEffects
-  {
-  public:
-    virtual ~ShipEffects() = default;
-
-    /*
-     * 6502: TACTICS -- decide what a hostile ship does next.
-     *
-     * IT ANSWERS WHETHER THE PLAYER IS STILL ALIVE, and that is not decoration. Three of the AI's
-     * paths reach `OOPS` -- a missile going off beside us, a collision, and a ship's own laser --
-     * and `OOPS` ends `JMP DEATH` when the energy banks are gone. On the 6502 that never returns:
-     * it abandons the stack, so `TACTICS`, `MVEIT` and the whole flight loop simply stop. The port
-     * has no equivalent, so the answer is carried back out instead, through `MoveShip` to
-     * `MoveEveryShip`, which turns it into `LoopOutcome::Died` -- the same shape `TakeDamage`
-     * already uses for flight loop part 15 (§6.122).
-     *
-     * False means the player died and the caller must stop the frame.
-     */
-    [[nodiscard]] virtual bool RunTactics(Ship& _work) = 0;
-  };
 
   /*
    * 6502: ALPHA, ALP1, ALP2, BETA, BET1, BET2, DELTA, MCNT, XSAV, TYPE and RAT2 -- the flight state
@@ -258,18 +248,16 @@ namespace Elite
    * runs the lot.
    */
   /*
-   * IT DRAWS, which is why the canvas is an argument. `MVEIT` calls `SCAN` twice -- once at `MV30`
-   * for every ship, and again at the end of `MV5` for one that is neither exploding nor dead -- so
-   * an ordinary ship's blip is EORed onto the scanner and off it again in the same call, at two
-   * different positions: the old one and the new one. That is the whole of how a blip moves.
+   * IT DRAWS. `MVEIT` calls `SCAN` twice -- once at `MV30` for every ship, and again at the end of
+   * `MV5` for one that is neither exploding nor dead -- so an ordinary ship's blip is EORed onto
+   * the scanner and off it again in the same call, at two different positions: the old one and the
+   * new one. That is the whole of how a blip moves.
    *
-   * `_view` is `QQ11`, which `SCAN` reads and `MVEIT` does not: the flight loop sets it, and the
-   * port has no single home for it until 3d-d.
+   * The canvas, the work block, `MathWorkspace`'s two bytes (`MV40`'s `K2`, and the `Q` the tail
+   * leaves for `EndFlightFrame`'s altitude check), the flight state, the blueprint and `QQ11` were
+   * six arguments and every caller passed the same six members of the universe.
    */
-  /// `_math` is here for two bytes since M2-b: `MV40` reads `K2`'s bottom byte, and the tail leaves
-  /// `Q` holding the pitch -- the frame's Q -- for the altitude check (`EndFlightFrame`).
-  [[nodiscard]] bool MoveShip(Canvas& _canvas, Ship& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
-                              const Blueprint& _blueprint, std::uint8_t _view) noexcept;
+  [[nodiscard]] bool MoveShip(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: PLUT and PU1 -- flip a ship's axes for the view the player is looking through.

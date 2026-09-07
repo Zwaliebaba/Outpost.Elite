@@ -332,11 +332,16 @@ namespace Elite::Testing
 
   void Cpu6502::Store(std::uint16_t _address, std::uint8_t _value) noexcept
   {
-    memory[_address] = _value;
     if (_address >= storeLogLow && _address <= storeLogHigh)
     {
       stores.push_back(StoreHit{_address, _value});
     }
+    if (_address >= IO_BASE && _address <= IO_TOP && IoMappedIn())
+    {
+      io[static_cast<std::size_t>(_address - IO_BASE)] = _value; // 6502: the chip, not the RAM under it
+      return;
+    }
+    memory[_address] = _value;
   }
 
   void Cpu6502::Push(std::uint8_t _value) noexcept
@@ -525,10 +530,14 @@ namespace Elite::Testing
     // the routine's own RTS would have done, so the caller continues as if it had run.
     if (!traps.empty())
     {
-      for (const Trap& trapped : traps)
+      for (const Trap& armed : traps)
       {
-        if (pc == trapped.address)
+        if (pc == armed.address)
         {
+          if (trapped != nullptr)
+          {
+            trapped->set(pc); // coverage: reached, and not run
+          }
           TrapHit hit{pc, a, x, y, c, {}};
           for (std::size_t slot = 0; slot < WATCH_SLOTS; ++slot)
           {
@@ -538,11 +547,11 @@ namespace Elite::Testing
           const std::uint8_t lo = Pop();
           const std::uint8_t hi = Pop();
           pc = static_cast<std::uint16_t>((lo | (hi << 8)) + 1);
-          if (trapped.exit == TrapExit::ClearCarry)
+          if (armed.exit == TrapExit::ClearCarry)
           {
             c = false;
           }
-          else if (trapped.exit == TrapExit::SetCarry)
+          else if (armed.exit == TrapExit::SetCarry)
           {
             c = true;
           }
@@ -561,6 +570,10 @@ namespace Elite::Testing
      * call Indexed coincide exactly, and an addressing mode added later would break it silently.
      */
     m_crossedPage = false;
+    if (executed != nullptr)
+    {
+      executed->set(pc); // coverage: run
+    }
 
     const std::uint16_t opcodeAddress = pc;
     const std::uint8_t opcode = Fetch();
@@ -573,31 +586,31 @@ namespace Elite::Testing
       SetNz(a);
       break;
     case 0xA5:
-      a = memory[AddrZeroPage()];
+      a = Read(AddrZeroPage());
       SetNz(a);
       break;
     case 0xB5:
-      a = memory[AddrZeroPageX()];
+      a = Read(AddrZeroPageX());
       SetNz(a);
       break;
     case 0xAD:
-      a = memory[AddrAbsolute()];
+      a = Read(AddrAbsolute());
       SetNz(a);
       break;
     case 0xBD:
-      a = memory[AddrAbsoluteX()];
+      a = Read(AddrAbsoluteX());
       SetNz(a);
       break;
     case 0xB9:
-      a = memory[AddrAbsoluteY()];
+      a = Read(AddrAbsoluteY());
       SetNz(a);
       break;
     case 0xA1:
-      a = memory[AddrIndirectX()];
+      a = Read(AddrIndirectX());
       SetNz(a);
       break;
     case 0xB1:
-      a = memory[AddrIndirectY()];
+      a = Read(AddrIndirectY());
       SetNz(a);
       break;
 
@@ -606,19 +619,19 @@ namespace Elite::Testing
       SetNz(x);
       break;
     case 0xA6:
-      x = memory[AddrZeroPage()];
+      x = Read(AddrZeroPage());
       SetNz(x);
       break;
     case 0xB6:
-      x = memory[AddrZeroPageY()];
+      x = Read(AddrZeroPageY());
       SetNz(x);
       break;
     case 0xAE:
-      x = memory[AddrAbsolute()];
+      x = Read(AddrAbsolute());
       SetNz(x);
       break;
     case 0xBE:
-      x = memory[AddrAbsoluteY()];
+      x = Read(AddrAbsoluteY());
       SetNz(x);
       break;
 
@@ -627,19 +640,19 @@ namespace Elite::Testing
       SetNz(y);
       break;
     case 0xA4:
-      y = memory[AddrZeroPage()];
+      y = Read(AddrZeroPage());
       SetNz(y);
       break;
     case 0xB4:
-      y = memory[AddrZeroPageX()];
+      y = Read(AddrZeroPageX());
       SetNz(y);
       break;
     case 0xAC:
-      y = memory[AddrAbsolute()];
+      y = Read(AddrAbsolute());
       SetNz(y);
       break;
     case 0xBC:
-      y = memory[AddrAbsoluteX()];
+      y = Read(AddrAbsoluteX());
       SetNz(y);
       break;
 
@@ -730,145 +743,153 @@ namespace Elite::Testing
       Adc(Fetch());
       break;
     case 0x65:
-      Adc(memory[AddrZeroPage()]);
+      Adc(Read(AddrZeroPage()));
       break;
     case 0x75:
-      Adc(memory[AddrZeroPageX()]);
+      Adc(Read(AddrZeroPageX()));
       break;
     case 0x6D:
-      Adc(memory[AddrAbsolute()]);
+      Adc(Read(AddrAbsolute()));
       break;
     case 0x7D:
-      Adc(memory[AddrAbsoluteX()]);
+      Adc(Read(AddrAbsoluteX()));
       break;
     case 0x79:
-      Adc(memory[AddrAbsoluteY()]);
+      Adc(Read(AddrAbsoluteY()));
       break;
     case 0x61:
-      Adc(memory[AddrIndirectX()]);
+      Adc(Read(AddrIndirectX()));
       break;
     case 0x71:
-      Adc(memory[AddrIndirectY()]);
+      Adc(Read(AddrIndirectY()));
       break;
 
     case 0xE9:
       Sbc(Fetch());
       break;
     case 0xE5:
-      Sbc(memory[AddrZeroPage()]);
+      Sbc(Read(AddrZeroPage()));
       break;
     case 0xF5:
-      Sbc(memory[AddrZeroPageX()]);
+      Sbc(Read(AddrZeroPageX()));
       break;
     case 0xED:
-      Sbc(memory[AddrAbsolute()]);
+      Sbc(Read(AddrAbsolute()));
       break;
     case 0xFD:
-      Sbc(memory[AddrAbsoluteX()]);
+      Sbc(Read(AddrAbsoluteX()));
       break;
     case 0xF9:
-      Sbc(memory[AddrAbsoluteY()]);
+      Sbc(Read(AddrAbsoluteY()));
       break;
     case 0xE1:
-      Sbc(memory[AddrIndirectX()]);
+      Sbc(Read(AddrIndirectX()));
       break;
     case 0xF1:
-      Sbc(memory[AddrIndirectY()]);
+      Sbc(Read(AddrIndirectY()));
       break;
 
     case 0xC9:
       Compare(a, Fetch());
       break;
     case 0xC5:
-      Compare(a, memory[AddrZeroPage()]);
+      Compare(a, Read(AddrZeroPage()));
       break;
     case 0xD5:
-      Compare(a, memory[AddrZeroPageX()]);
+      Compare(a, Read(AddrZeroPageX()));
       break;
     case 0xCD:
-      Compare(a, memory[AddrAbsolute()]);
+      Compare(a, Read(AddrAbsolute()));
       break;
     case 0xDD:
-      Compare(a, memory[AddrAbsoluteX()]);
+      Compare(a, Read(AddrAbsoluteX()));
       break;
     case 0xD9:
-      Compare(a, memory[AddrAbsoluteY()]);
+      Compare(a, Read(AddrAbsoluteY()));
       break;
     case 0xC1:
-      Compare(a, memory[AddrIndirectX()]);
+      Compare(a, Read(AddrIndirectX()));
       break;
     case 0xD1:
-      Compare(a, memory[AddrIndirectY()]);
+      Compare(a, Read(AddrIndirectY()));
       break;
 
     case 0xE0:
       Compare(x, Fetch());
       break;
     case 0xE4:
-      Compare(x, memory[AddrZeroPage()]);
+      Compare(x, Read(AddrZeroPage()));
       break;
     case 0xEC:
-      Compare(x, memory[AddrAbsolute()]);
+      Compare(x, Read(AddrAbsolute()));
       break;
 
     case 0xC0:
       Compare(y, Fetch());
       break;
     case 0xC4:
-      Compare(y, memory[AddrZeroPage()]);
+      Compare(y, Read(AddrZeroPage()));
       break;
     case 0xCC:
-      Compare(y, memory[AddrAbsolute()]);
+      Compare(y, Read(AddrAbsolute()));
       break;
 
     // ---- increment and decrement -------------------------------------------------------
     case 0xE6:
     {
       const std::uint16_t at = AddrZeroPage();
-      SetNz(++memory[at]);
+      Store(at, static_cast<std::uint8_t>(Read(at) + 1u));
+      SetNz(Read(at));
       break;
     }
     case 0xF6:
     {
       const std::uint16_t at = AddrZeroPageX();
-      SetNz(++memory[at]);
+      Store(at, static_cast<std::uint8_t>(Read(at) + 1u));
+      SetNz(Read(at));
       break;
     }
     case 0xEE:
     {
       const std::uint16_t at = AddrAbsolute();
-      SetNz(++memory[at]);
+      Store(at, static_cast<std::uint8_t>(Read(at) + 1u));
+      SetNz(Read(at));
       break;
     }
     case 0xFE:
     {
       const std::uint16_t at = AddrAbsoluteX();
-      SetNz(++memory[at]);
+      Store(at, static_cast<std::uint8_t>(Read(at) + 1u));
+      SetNz(Read(at));
       break;
     }
 
     case 0xC6:
     {
       const std::uint16_t at = AddrZeroPage();
-      SetNz(--memory[at]);
+      Store(at, static_cast<std::uint8_t>(Read(at) - 1u));
+      SetNz(Read(at));
       break;
     }
     case 0xD6:
     {
       const std::uint16_t at = AddrZeroPageX();
-      SetNz(--memory[at]);
+      Store(at, static_cast<std::uint8_t>(Read(at) - 1u));
+      SetNz(Read(at));
       break;
     }
     case 0xCE:
     {
       const std::uint16_t at = AddrAbsolute();
-      SetNz(--memory[at]);
+      Store(at, static_cast<std::uint8_t>(Read(at) - 1u));
+      SetNz(Read(at));
       break;
     }
     case 0xDE:
     {
       const std::uint16_t at = AddrAbsoluteX();
-      SetNz(--memory[at]);
+      Store(at, static_cast<std::uint8_t>(Read(at) - 1u));
+      SetNz(Read(at));
       break;
     }
 
@@ -891,31 +912,31 @@ namespace Elite::Testing
       SetNz(a);
       break;
     case 0x25:
-      a &= memory[AddrZeroPage()];
+      a &= Read(AddrZeroPage());
       SetNz(a);
       break;
     case 0x35:
-      a &= memory[AddrZeroPageX()];
+      a &= Read(AddrZeroPageX());
       SetNz(a);
       break;
     case 0x2D:
-      a &= memory[AddrAbsolute()];
+      a &= Read(AddrAbsolute());
       SetNz(a);
       break;
     case 0x3D:
-      a &= memory[AddrAbsoluteX()];
+      a &= Read(AddrAbsoluteX());
       SetNz(a);
       break;
     case 0x39:
-      a &= memory[AddrAbsoluteY()];
+      a &= Read(AddrAbsoluteY());
       SetNz(a);
       break;
     case 0x21:
-      a &= memory[AddrIndirectX()];
+      a &= Read(AddrIndirectX());
       SetNz(a);
       break;
     case 0x31:
-      a &= memory[AddrIndirectY()];
+      a &= Read(AddrIndirectY());
       SetNz(a);
       break;
 
@@ -924,31 +945,31 @@ namespace Elite::Testing
       SetNz(a);
       break;
     case 0x05:
-      a |= memory[AddrZeroPage()];
+      a |= Read(AddrZeroPage());
       SetNz(a);
       break;
     case 0x15:
-      a |= memory[AddrZeroPageX()];
+      a |= Read(AddrZeroPageX());
       SetNz(a);
       break;
     case 0x0D:
-      a |= memory[AddrAbsolute()];
+      a |= Read(AddrAbsolute());
       SetNz(a);
       break;
     case 0x1D:
-      a |= memory[AddrAbsoluteX()];
+      a |= Read(AddrAbsoluteX());
       SetNz(a);
       break;
     case 0x19:
-      a |= memory[AddrAbsoluteY()];
+      a |= Read(AddrAbsoluteY());
       SetNz(a);
       break;
     case 0x01:
-      a |= memory[AddrIndirectX()];
+      a |= Read(AddrIndirectX());
       SetNz(a);
       break;
     case 0x11:
-      a |= memory[AddrIndirectY()];
+      a |= Read(AddrIndirectY());
       SetNz(a);
       break;
 
@@ -957,38 +978,38 @@ namespace Elite::Testing
       SetNz(a);
       break;
     case 0x45:
-      a ^= memory[AddrZeroPage()];
+      a ^= Read(AddrZeroPage());
       SetNz(a);
       break;
     case 0x55:
-      a ^= memory[AddrZeroPageX()];
+      a ^= Read(AddrZeroPageX());
       SetNz(a);
       break;
     case 0x4D:
-      a ^= memory[AddrAbsolute()];
+      a ^= Read(AddrAbsolute());
       SetNz(a);
       break;
     case 0x5D:
-      a ^= memory[AddrAbsoluteX()];
+      a ^= Read(AddrAbsoluteX());
       SetNz(a);
       break;
     case 0x59:
-      a ^= memory[AddrAbsoluteY()];
+      a ^= Read(AddrAbsoluteY());
       SetNz(a);
       break;
     case 0x41:
-      a ^= memory[AddrIndirectX()];
+      a ^= Read(AddrIndirectX());
       SetNz(a);
       break;
     case 0x51:
-      a ^= memory[AddrIndirectY()];
+      a ^= Read(AddrIndirectY());
       SetNz(a);
       break;
 
     case 0x24:
     case 0x2C:
     {
-      const std::uint8_t operand = memory[opcode == 0x24 ? AddrZeroPage() : AddrAbsolute()];
+      const std::uint8_t operand = Read(opcode == 0x24 ? AddrZeroPage() : AddrAbsolute());
       z = (a & operand) == 0u;
       n = (operand & 0x80u) != 0u;
       v = (operand & 0x40u) != 0u;
@@ -1002,25 +1023,25 @@ namespace Elite::Testing
     case 0x06:
     {
       const std::uint16_t at = AddrZeroPage();
-      memory[at] = ShiftLeft(memory[at]);
+      Store(at, ShiftLeft(Read(at)));
       break;
     }
     case 0x16:
     {
       const std::uint16_t at = AddrZeroPageX();
-      memory[at] = ShiftLeft(memory[at]);
+      Store(at, ShiftLeft(Read(at)));
       break;
     }
     case 0x0E:
     {
       const std::uint16_t at = AddrAbsolute();
-      memory[at] = ShiftLeft(memory[at]);
+      Store(at, ShiftLeft(Read(at)));
       break;
     }
     case 0x1E:
     {
       const std::uint16_t at = AddrAbsoluteX();
-      memory[at] = ShiftLeft(memory[at]);
+      Store(at, ShiftLeft(Read(at)));
       break;
     }
 
@@ -1030,25 +1051,25 @@ namespace Elite::Testing
     case 0x46:
     {
       const std::uint16_t at = AddrZeroPage();
-      memory[at] = ShiftRight(memory[at]);
+      Store(at, ShiftRight(Read(at)));
       break;
     }
     case 0x56:
     {
       const std::uint16_t at = AddrZeroPageX();
-      memory[at] = ShiftRight(memory[at]);
+      Store(at, ShiftRight(Read(at)));
       break;
     }
     case 0x4E:
     {
       const std::uint16_t at = AddrAbsolute();
-      memory[at] = ShiftRight(memory[at]);
+      Store(at, ShiftRight(Read(at)));
       break;
     }
     case 0x5E:
     {
       const std::uint16_t at = AddrAbsoluteX();
-      memory[at] = ShiftRight(memory[at]);
+      Store(at, ShiftRight(Read(at)));
       break;
     }
 
@@ -1058,25 +1079,25 @@ namespace Elite::Testing
     case 0x26:
     {
       const std::uint16_t at = AddrZeroPage();
-      memory[at] = RollLeft(memory[at]);
+      Store(at, RollLeft(Read(at)));
       break;
     }
     case 0x36:
     {
       const std::uint16_t at = AddrZeroPageX();
-      memory[at] = RollLeft(memory[at]);
+      Store(at, RollLeft(Read(at)));
       break;
     }
     case 0x2E:
     {
       const std::uint16_t at = AddrAbsolute();
-      memory[at] = RollLeft(memory[at]);
+      Store(at, RollLeft(Read(at)));
       break;
     }
     case 0x3E:
     {
       const std::uint16_t at = AddrAbsoluteX();
-      memory[at] = RollLeft(memory[at]);
+      Store(at, RollLeft(Read(at)));
       break;
     }
 
@@ -1086,25 +1107,25 @@ namespace Elite::Testing
     case 0x66:
     {
       const std::uint16_t at = AddrZeroPage();
-      memory[at] = RollRight(memory[at]);
+      Store(at, RollRight(Read(at)));
       break;
     }
     case 0x76:
     {
       const std::uint16_t at = AddrZeroPageX();
-      memory[at] = RollRight(memory[at]);
+      Store(at, RollRight(Read(at)));
       break;
     }
     case 0x6E:
     {
       const std::uint16_t at = AddrAbsolute();
-      memory[at] = RollRight(memory[at]);
+      Store(at, RollRight(Read(at)));
       break;
     }
     case 0x7E:
     {
       const std::uint16_t at = AddrAbsoluteX();
-      memory[at] = RollRight(memory[at]);
+      Store(at, RollRight(Read(at)));
       break;
     }
 

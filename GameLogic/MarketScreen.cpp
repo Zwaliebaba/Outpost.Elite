@@ -3,6 +3,12 @@
 #include "MarketScreen.h"
 
 #include "EliteTypes.h"
+#include "Ports.h"
+#include "Universe.h"
+#include "ViewChange.h"
+#include "TextPrint.h"
+#include "SoundEffects.h"
+#include "Presenter.h"
 
 /*
  * The docked trading screens (slice 2c).
@@ -81,11 +87,12 @@ namespace Elite
      * second, and the beep a player hears on buying something comes from here rather than from the
      * buy screen.
      */
-    void PrintCashLeft(TradeScreen& _screen) noexcept
+    void PrintCashLeft(Universe& _universe, Ports& _ports) noexcept
     {
-      PrintSpace(_screen.printer);
-      PrintThenSpace(_screen.printer, CASH_LINE_TOKEN);
-      _screen.effects.BeepAndPause();
+      PrintSpace(_ports.printer);
+      PrintThenSpace(_ports.printer, CASH_LINE_TOKEN);
+      (void)Beep(_universe.sound, false);
+      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
     }
 
     /*
@@ -94,37 +101,42 @@ namespace Elite
      * One space, a one-word complaint, a question mark, a beep and a pause. Then it falls into TT224
      * and asks again.
      */
-    void Complain(TradeScreen& _screen, std::uint8_t _token) noexcept
+    void Complain(Universe& _universe, Ports& _ports, std::uint8_t _token) noexcept
     {
-      PrintSpace(_screen.printer);
-      PrintThenQuestion(_screen.printer, _token);
-      _screen.effects.BeepAndPause();
+      PrintSpace(_ports.printer);
+      PrintThenQuestion(_ports.printer, _token);
+      (void)Beep(_universe.sound, false);
+      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
     }
   } // namespace
 
-  void BuyScreen(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy, bool _misJumped) noexcept
+  void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept
   {
-    // 6502: LDA #2 / JSR TRADEMODE.
-    _screen.effects.SetUpTradeScreen(BUY_CARGO_VIEW);
+    SetUpScreen(_universe, _ports, _view); // 6502: JSR TT66
+    _ports.keyboard.Flush();               // 6502: JMP FLKB
+  }
 
-    _screen.text.column = 1;
-    _screen.text.row = 1;
-    _screen.printer.SetCaseFlags(0);
-    _screen.text.caseFlags = 0;
+  void BuyScreen(Universe& _universe, Ports& _ports, bool _misJumped) noexcept
+  {
+    SetUpTradeScreen(_universe, _ports, BUY_CARGO_VIEW); // 6502: LDA #2 / JSR TRADEMODE
+
+    _universe.text.column = 1;
+    _universe.text.row = 1;
+    _universe.text.caseFlags = 0;
 
     // 6502: JSR TT163.
-    PrintColumnHeadings(_screen.printer, _screen.text);
+    PrintColumnHeadings(_ports.printer, _universe.text);
 
     // 6502: LDA #%10000000 / STA QQ17 -- and this one is written out rather than being a JSR TT69,
     // so it does NOT print the newline that TT69 would.
-    _screen.printer.SetCaseFlags(0x80);
+    _ports.printer.SetCaseFlags(0x80);
 
     // 6502: LDA #0 / STA QQ29.
     for (int item = 0; item < MARKET_ITEM_COUNT; ++item)
     {
       // 6502: TT220 -- JSR TT151, which prints the line and leaves the price in QQ24 and the
       // availability in QQ25.
-      PrintMarketItem(_screen.printer, _screen.characters, _screen.text, item, _economy, _market, _misJumped);
+      PrintMarketItem(_ports.printer, _ports.characters, _universe.text, item, _universe.current.economy, _universe.market, _misJumped);
 
       /*
        * 6502: LDA QQ25 / BNE TT224 / JMP TT222.
@@ -133,8 +145,8 @@ namespace Elite
        * are the same two values from the same two inputs. The availability is read AFTER the line
        * is printed, which matters for the seventeenth item: printing it is what zeroes it.
        */
-      const std::uint8_t available = _market.availability[item];
-      const std::uint8_t price = MarketPrice(item, _economy, _market.randomiser);
+      const std::uint8_t available = _universe.market.availability[item];
+      const std::uint8_t price = MarketPrice(item, _universe.current.economy, _universe.market.randomiser);
 
       if (available != 0)
       {
@@ -148,24 +160,24 @@ namespace Elite
         for (;;)
         {
           // 6502: JSR CLYNS.
-          _screen.effects.ClearBottomRows();
+          ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
 
           // 6502: LDA #204 / JSR TT27 -- "QUANTITY OF ".
-          _screen.printer.Print(QUANTITY_OF_TOKEN);
+          _ports.printer.Print(QUANTITY_OF_TOKEN);
 
           // 6502: LDA QQ29 / CLC / ADC #208 / JSR TT27 -- the item's name.
-          _screen.printer.Print(static_cast<std::uint8_t>(FIRST_ITEM_TOKEN + item));
+          _ports.printer.Print(static_cast<std::uint8_t>(FIRST_ITEM_TOKEN + item));
 
           // 6502: LDA #'/' / JSR TT27 / JSR TT152 / LDA #'?' / JSR TT27 / JSR TT67.
-          _screen.printer.Print('/');
-          PrintMarketUnits(_screen.printer, _screen.characters, MarketItemAt(item).gradient);
-          _screen.printer.Print('?');
-          PrintNewline(_screen.printer);
+          _ports.printer.Print('/');
+          PrintMarketUnits(_ports.printer, _ports.characters, MarketItemAt(item).gradient);
+          _ports.printer.Print('?');
+          PrintNewline(_ports.printer);
 
           // 6502: TT223K -- JSR gnum. The LDX #0 / STX R / LDX #12 / STX T1 before it have no
           // effect: gnum repeats both at its own start. The original's comment wonders whether
           // they were left behind when code moved, and they are not reproduced here.
-          const NumberEntry entry = ReadNumber(_screen.keys, _screen.characters, _screen.text, available);
+          const NumberEntry entry = ReadNumber(_ports.keyboard, _ports.characters, _universe.text, available);
 
           // 6502: gnum's `JMP BAY2` -- a letter leaves the screen entirely, not just this item.
           if (entry.outcome == DigitResult::LeaveScreen)
@@ -176,7 +188,7 @@ namespace Elite
           // 6502: BCS TQ4 -- too large a number asks for the quantity again.
           if (entry.outcome == DigitResult::TooBig)
           {
-            Complain(_screen, QUANTITY_TOKEN);
+            Complain(_universe, _ports, QUANTITY_TOKEN);
             continue;
           }
 
@@ -187,10 +199,10 @@ namespace Elite
            * being full. It costs nothing and buys nothing, which is how the original lets a player
            * press RETURN past an item.
            */
-          const bool fits = CargoFits(_commander, static_cast<std::uint8_t>(item), entry.value);
+          const bool fits = CargoFits(_universe.commander, static_cast<std::uint8_t>(item), entry.value);
           if (entry.value != 0 && !fits)
           {
-            Complain(_screen, CARGO_TOKEN);
+            Complain(_universe, _ports, CARGO_TOKEN);
             continue;
           }
 
@@ -202,9 +214,9 @@ namespace Elite
            * what it was -- but the commander was, for the length of four subtractions, in debt.
            */
           const std::uint16_t cost = TotalPrice(price, entry.value);
-          if (!SpendCash(_commander, cost))
+          if (!SpendCash(_universe.commander, cost))
           {
-            Complain(_screen, CASH_TOKEN);
+            Complain(_universe, _ports, CASH_TOKEN);
             continue;
           }
 
@@ -214,26 +226,26 @@ namespace Elite
            * Both carries are set explicitly, so neither is one of the chained ones this port keeps
            * finding. The hold and the market move by the same amount in opposite directions.
            */
-          std::uint8_t& aboard = _commander.cargoHold[static_cast<std::size_t>(item)];
+          std::uint8_t& aboard = _universe.commander.cargoHold[static_cast<std::size_t>(item)];
           aboard = AddWithCarry(aboard, entry.value, false).value;
-          _market.availability[item] = static_cast<std::uint8_t>(_market.availability[item] - entry.value);
+          _universe.market.availability[item] = static_cast<std::uint8_t>(_universe.market.availability[item] - entry.value);
 
           // 6502: PLA / BEQ TT222 -- buying nothing prints no confirmation and makes no sound.
           if (entry.value != 0)
           {
-            PrintCashLeft(_screen);
+            PrintCashLeft(_universe, _ports);
           }
           break;
         }
       }
 
       // 6502: TT222 -- LDA QQ29 / CLC / ADC #5 / JSR DOYC / LDA #0 / JSR DOXC.
-      _screen.text.row = static_cast<std::uint8_t>(item + FIRST_ITEM_ROW_OFFSET);
-      _screen.text.column = 0;
+      _universe.text.row = static_cast<std::uint8_t>(item + FIRST_ITEM_ROW_OFFSET);
+      _universe.text.column = 0;
     }
   }
 
-  void ListCargo(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy, std::uint8_t _view) noexcept
+  void ListCargo(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept
   {
 
     // 6502: LDY #0 / TT211: STY QQ29.
@@ -248,7 +260,7 @@ namespace Elite
       for (;;)
       {
         // 6502: LDX QQ20,Y / BEQ TT212 -- nothing of this item, nothing to print.
-        const std::uint8_t held = _commander.cargoHold[static_cast<std::size_t>(item)];
+        const std::uint8_t held = _universe.commander.cargoHold[static_cast<std::size_t>(item)];
         if (held == 0)
         {
           break;
@@ -259,17 +271,17 @@ namespace Elite
         const MarketItem entry = MarketItemAt(item);
 
         // 6502: JSR TT69 -- sentence case AND a newline, because TT69 falls into TT67.
-        SetSentenceCaseAndNewline(_screen.printer);
+        SetSentenceCaseAndNewline(_ports.printer);
 
         // 6502: CLC / LDA QQ29 / ADC #208 / JSR TT27.
-        _screen.printer.Print(static_cast<std::uint8_t>(FIRST_ITEM_TOKEN + item));
+        _ports.printer.Print(static_cast<std::uint8_t>(FIRST_ITEM_TOKEN + item));
 
         // 6502: LDA #14 / JSR DOXC / PLA / TAX / STA QQ25 / CLC / JSR pr2.
-        _screen.text.column = QUANTITY_COLUMN;
-        PrintByteValue(_screen.characters, held, false);
+        _universe.text.column = QUANTITY_COLUMN;
+        PrintByteValue(_ports.characters, held, false);
 
         // 6502: JSR TT152.
-        PrintMarketUnits(_screen.printer, _screen.characters, entry.gradient);
+        PrintMarketUnits(_ports.printer, _ports.characters, entry.gradient);
 
         // 6502: LDA QQ11 / CMP #4 / BNE TT212 -- only the sell screen asks.
         if (_view != SELL_CARGO_VIEW)
@@ -278,11 +290,11 @@ namespace Elite
         }
 
         // 6502: LDA #205 / JSR TT27 / LDA #206 / JSR DETOK.
-        _screen.printer.Print(SELL_TOKEN);
-        _screen.extended.Print(YES_NO_TOKEN);
+        _ports.printer.Print(SELL_TOKEN);
+        _ports.tokens.Print(YES_NO_TOKEN);
 
         // 6502: JSR gnum -- and QQ25 is the amount HELD, so "Y" sells the lot.
-        const NumberEntry number = ReadNumber(_screen.keys, _screen.characters, _screen.text, held);
+        const NumberEntry number = ReadNumber(_ports.keyboard, _ports.characters, _universe.text, held);
 
         // 6502: gnum's JMP BAY2.
         if (number.outcome == DigitResult::LeaveScreen)
@@ -307,9 +319,10 @@ namespace Elite
         if (number.outcome == DigitResult::TooBig)
         {
           // 6502: NWDAV4 -- JSR TT67 / LDA #176 / JSR prq / JSR dn2 / LDY QQ29 / JMP NWDAVxx.
-          PrintNewline(_screen.printer);
-          PrintThenQuestion(_screen.printer, ITEM_TOKEN);
-          _screen.effects.BeepAndPause();
+          PrintNewline(_ports.printer);
+          PrintThenQuestion(_ports.printer, ITEM_TOKEN);
+          (void)Beep(_universe.sound, false);
+          _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
           continue;
         }
 
@@ -319,31 +332,24 @@ namespace Elite
          * The line is printed AGAIN with printing switched off, purely so that TT151 leaves the
          * price in QQ24. A routine whose job is to print is being called for its arithmetic.
          *
-         * QQ17 lives in two places in this port -- the token printer owns the flags and CHPR reads
-         * a copy to notice the value 255 -- so both are set. That duplication is a wart worth
-         * collapsing when something owns the text state properly; until then, setting one and not
-         * the other prints a line the original suppresses.
+         * QQ17 lived in two places in this port until M5-e-2c -- the token printer's copy and the
+         * byte CHPR reads for 255 -- and this site set both, with a note that setting one and not
+         * the other prints a line the original suppresses. One byte now.
          */
-        const std::uint8_t savedFlags = _screen.printer.CaseFlags();
-        const std::uint8_t savedTextFlags = _screen.text.caseFlags;
-        _screen.printer.SetCaseFlags(PRINTING_OFF);
-        _screen.text.caseFlags = PRINTING_OFF;
+        _universe.text.caseFlags = PRINTING_OFF;
 
-        PrintMarketItem(_screen.printer, _screen.characters, _screen.text, item, _economy, _market, false);
-        const std::uint8_t price = MarketPrice(item, _economy, _market.randomiser);
+        PrintMarketItem(_ports.printer, _ports.characters, _universe.text, item, _universe.current.economy, _universe.market, false);
+        const std::uint8_t price = MarketPrice(item, _universe.current.economy, _universe.market.randomiser);
 
         // 6502: LDA #0 / STA QQ17 -- printing back on, and it is ALL CAPS afterwards rather than
         // whatever it was before.
-        (void)savedFlags;
-        (void)savedTextFlags;
-        _screen.printer.SetCaseFlags(0);
-        _screen.text.caseFlags = 0;
+        _universe.text.caseFlags = 0;
 
         // 6502: LDA QQ20,Y / SEC / SBC R / STA QQ20,Y.
-        _commander.cargoHold[static_cast<std::size_t>(item)] = static_cast<std::uint8_t>(held - number.value);
+        _universe.commander.cargoHold[static_cast<std::size_t>(item)] = static_cast<std::uint8_t>(held - number.value);
 
         // 6502: LDA R / STA P / LDA QQ24 / STA Q / JSR GCASH / JSR MCASH.
-        ReceiveCash(_commander, TotalPrice(price, number.value));
+        ReceiveCash(_universe.commander, TotalPrice(price, number.value));
         break;
       }
     }
@@ -358,7 +364,9 @@ namespace Elite
      */
     if (_view == SELL_CARGO_VIEW)
     {
-      _screen.effects.BeepAndPause();
+      // 6502: .dn2 JSR BEEP / LDY #50 / JMP DELAY
+      (void)Beep(_universe.sound, false);
+      _ports.present.WaitFrames(BEEP_PAUSE_FRAMES);
       return;
     }
 
@@ -369,10 +377,10 @@ namespace Elite
      * count and possibly an "s". It still calls DORND, which moves the random state -- so the tail
      * is not a no-op even when it prints almost nothing.
      */
-    SetSentenceCaseAndNewline(_screen.printer);
+    SetSentenceCaseAndNewline(_ports.printer);
 
     const std::uint16_t trumbles =
-      static_cast<std::uint16_t>(_commander.tribbles.lo | (_commander.tribbles.hi << 8));
+      static_cast<std::uint16_t>(_universe.commander.tribbles.lo | (_universe.commander.tribbles.hi << 8));
 
     // 6502: LDA TRIBBLE / ORA TRIBBLE+1 / BNE P%+3 / zebra: RTS.
     if (trumbles == 0)
@@ -381,7 +389,7 @@ namespace Elite
     }
 
     // 6502: CLC / LDA #0 / LDX TRIBBLE / LDY TRIBBLE+1 / JSR TT11 -- no padding, no decimal point.
-    PrintValue(_screen.characters, trumbles, 0, false);
+    PrintValue(_ports.characters, trumbles, 0, false);
 
     /*
      * 6502: JSR DORND / AND #3 / CLC / ADC #111 / JSR DETOK.
@@ -390,40 +398,40 @@ namespace Elite
      * whatever TT11 left, which is why the random state after this is worth comparing rather than
      * assuming.
      */
-    const RngResult roll = _screen.rng.Next(false);
-    _screen.extended.Print(static_cast<std::uint8_t>(TRUMBLE_ADJECTIVE_FIRST + (roll.value & 0x03u)));
-    _screen.extended.Print(TRUMBLE_NOUN_TOKEN);
+    const RngResult roll = _universe.rng.Next(false);
+    _ports.tokens.Print(static_cast<std::uint8_t>(TRUMBLE_ADJECTIVE_FIRST + (roll.value & 0x03u)));
+    _ports.tokens.Print(TRUMBLE_NOUN_TOKEN);
 
     // 6502: LDA TRIBBLE+1 / BNE DOANS / LDX TRIBBLE / DEX / BEQ zebra / DOANS: LDA #'s' / JMP DASC.
     if (trumbles == 1)
     {
       return;
     }
-    _screen.characters.Put('s');
+    _ports.characters.Put('s');
   }
 
-  void InventoryScreen(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy) noexcept
+  void InventoryScreen(Universe& _universe, Ports& _ports) noexcept
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    _screen.effects.SetUpTradeScreen(INVENTORY_VIEW);
+    SetUpTradeScreen(_universe, _ports, INVENTORY_VIEW);
 
     // 6502: LDA #11 / JSR DOXC / LDA #164 / JSR TT60 -- and TT60 is four routines deep.
-    _screen.text.column = INVENTORY_TITLE_COLUMN;
-    PrintTitleLine(_screen.printer, _screen.text, INVENTORY_TITLE_TOKEN);
+    _universe.text.column = INVENTORY_TITLE_COLUMN;
+    PrintTitleLine(_ports.printer, _universe.text, INVENTORY_TITLE_TOKEN);
 
     // 6502: JSR NLIN4 -- the rule is the canvas's, so a caller draws it.
 
     // 6502: JSR fwl -- which is control code 5, so it goes through the token printer.
-    _screen.printer.Print(5);
+    _ports.printer.Print(5);
 
     // 6502: LDA CRGO / CMP #26 / BCC P%+7 / LDA #107 / JSR TT27.
-    if (_commander.cargoCapacity >= LARGE_HOLD_THRESHOLD)
+    if (_universe.commander.cargoCapacity >= LARGE_HOLD_THRESHOLD)
     {
-      _screen.printer.Print(LARGE_CARGO_BAY_TOKEN);
+      _ports.printer.Print(LARGE_CARGO_BAY_TOKEN);
     }
 
     // 6502: JMP TT210 -- a jump rather than a call, so the listing IS the rest of this screen.
-    ListCargo(_screen, _commander, _market, _economy, INVENTORY_VIEW);
+    ListCargo(_universe, _ports, INVENTORY_VIEW);
   }
 
 } // namespace Elite

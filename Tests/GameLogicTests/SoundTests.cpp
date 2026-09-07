@@ -355,7 +355,8 @@ namespace GameLogicTests
               const Elite::Testing::RunResult run = cpu.CallSubroutine(at.noise, 20'000);
               Assert::IsTrue(run.completed, L"NOISE returned");
 
-              const bool carry = Elite::PlaySoundEffect(ours, static_cast<std::uint8_t>(effect | flagBit), carryIn);
+              const Elite::NoiseResult answer = Elite::PlaySoundEffect(ours, static_cast<Elite::SoundEffect>(effect | flagBit), carryIn);
+              const bool carry = answer.carry;
 
               const std::wstring where = Widen("NOISE state " + std::to_string(state) + " effect " + std::to_string(effect) +
                                                (flagBit ? "+128" : "") + " carry " + std::to_string(carryIn ? 1 : 0));
@@ -414,7 +415,8 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(at.noise2, 20'000);
             Assert::IsTrue(run.completed, L"NOISE2 returned");
 
-            const bool carry = Elite::PlaySoundEffectPitched(ours, effect, sustain, frequency, (state & 1u) != 0u);
+            const bool carry =
+              Elite::PlaySoundEffectPitched(ours, static_cast<Elite::SoundEffect>(effect), sustain, frequency, (state & 1u) != 0u).carry;
 
             const std::wstring where = Widen("NOISE2 state " + std::to_string(state) + " effect " + std::to_string(effect) + " frequency " +
                                              std::to_string(frequency));
@@ -444,7 +446,7 @@ namespace GameLogicTests
           LoadBuffer(cpu, at, ours);
           cpu.y = static_cast<std::uint8_t>(effect);
           Assert::IsTrue(cpu.CallSubroutine(at.noiseoff, 20'000).completed, L"NOISEOFF returned");
-          Elite::StopSoundEffect(ours, static_cast<std::uint8_t>(effect));
+          Elite::StopSoundEffect(ours, static_cast<Elite::SoundEffect>(effect));
           CompareBuffer(cpu, at, ours, Widen("NOISEOFF state " + std::to_string(state) + " effect " + std::to_string(effect)));
         }
 
@@ -464,7 +466,7 @@ namespace GameLogicTests
           LoadBuffer(cpu, at, ours);
           cpu.c = carryIn;
           Assert::IsTrue(cpu.CallSubroutine(at.beep, 20'000).completed, L"BEEP returned");
-          const bool carry = Elite::Beep(ours, carryIn);
+          const bool carry = Elite::Beep(ours, carryIn).carry;
           const std::wstring where = Widen("BEEP state " + std::to_string(state));
           Assert::AreEqual(cpu.c, carry, (where + L": the carry").c_str());
           CompareBuffer(cpu, at, ours, where);
@@ -507,7 +509,8 @@ namespace GameLogicTests
 
         cpu.y = static_cast<std::uint8_t>(effect);
         Assert::IsTrue(cpu.CallSubroutine(at.noise, 20'000).completed, L"NOISE returned");
-        Assert::IsTrue(Elite::PlaySoundEffect(ours, static_cast<std::uint8_t>(effect), false), L"a fresh buffer takes any effect");
+        Assert::IsTrue(Elite::PlaySoundEffect(ours, static_cast<Elite::SoundEffect>(effect), false).carry,
+                       L"a fresh buffer takes any effect");
 
         // The longest effect is the E.C.M. at 255 frames; run past that so every one ends.
         for (std::uint32_t frame = 0; frame < 260u; ++frame)
@@ -569,7 +572,7 @@ namespace GameLogicTests
             cpu.y = effect;
             cpu.c = false;
             Assert::IsTrue(cpu.CallSubroutine(at.noise, 20'000).completed, L"NOISE returned");
-            const bool carry = Elite::PlaySoundEffect(ours, effect, false);
+            const bool carry = Elite::PlaySoundEffect(ours, static_cast<Elite::SoundEffect>(effect), false).carry;
             Assert::AreEqual(cpu.c, carry, Widen("frame " + std::to_string(frame) + ": NOISE's carry").c_str());
           }
 
@@ -617,13 +620,15 @@ namespace GameLogicTests
 
         Assert::IsTrue(cpu.CallSubroutine(theme ? at.startat : at.startbd, 200'000).completed, L"the start returned");
         Elite::SidWriteLog started;
+        Elite::MemoryMap map;
+        map.port = cpu.memory[0x0001u]; // 6502: l1 -- `april16` brackets `BDENTRY` with `SETL1`
         if (theme)
         {
-          Elite::StartTheme(music, started);
+          Elite::StartTheme(music, map, started);
         }
         else
         {
-          Elite::StartDockingMusic(music, started);
+          Elite::StartDockingMusic(music, map, started);
         }
 
         const std::wstring tune = theme ? L"theme" : L"docking";
@@ -723,18 +728,24 @@ namespace GameLogicTests
 
           const std::wstring where = Widen("flags " + std::to_string(flags) + (stopFirst ? " stopbd" : " startbd"));
           Elite::SidWriteLog log;
+          Elite::MemoryMap map;
+          map.port = cpu.memory[0x0001u]; // 6502: l1, as the image has it before the routine runs
           if (stopFirst)
           {
             Assert::IsTrue(cpu.CallSubroutine(at.stopbd, 200'000).completed, L"stopbd returned");
-            Elite::StopDockingMusic(music, titleReset, ours, log);
+            Elite::StopDockingMusic(music, titleReset, ours, map, log);
           }
           else
           {
             Assert::IsTrue(cpu.CallSubroutine(at.startbd, 200'000).completed, L"startbd returned");
-            Elite::StartDockingMusic(music, log);
+            Elite::StartDockingMusic(music, map, log);
           }
 
           CompareWrites(cpu, log, where);
+
+          // 6502: l1 -- `april16` and `stopat` bracket their SID writes with `SETL1`, which the
+          // port dropped until M3-b-3a: the routines said so in their comments and did not do it.
+          Assert::AreEqual(cpu.memory[0x0001u], map.port, (where + L": l1 after the bracket").c_str());
           CompareMusic(cpu, at, music, where);
           CompareBuffer(cpu, at, ours, where);
         }

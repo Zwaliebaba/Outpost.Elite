@@ -147,8 +147,11 @@
     <ClInclude Include="EliteConfig.h" />
     <ClInclude Include="EliteTypes.h" />
     <ClInclude Include="ExtendedTokens.h" />
+    <ClInclude Include="Game.h" />
     <ClInclude Include="LookupTables.h" />
+    <ClInclude Include="StateHash.h" />
     <ClInclude Include="Canvas.h" />
+    <ClInclude Include="Colours.h" />
     <ClInclude Include="LoaderScreen.h" />
     <ClInclude Include="TextPrint.h" />
     <ClInclude Include="Galaxy.h" />
@@ -167,6 +170,8 @@
     <ClInclude Include="FlightLoop.h" />
     <ClInclude Include="Controls.h" />
     <ClInclude Include="VideoState.h" />
+    <ClInclude Include="MemoryMap.h" />
+    <ClInclude Include="Presenter.h" />
     <ClInclude Include="ViewChange.h" />
     <ClInclude Include="Lasers.h" />
     <ClInclude Include="Messages.h" />
@@ -220,6 +225,8 @@
     <ClCompile Include="Font.cpp" />
     <ClCompile Include="Canvas.cpp" />
     <ClCompile Include="LoaderScreen.cpp" />
+    <ClCompile Include="LookupTables.cpp" />
+    <ClCompile Include="StateHash.cpp" />
     <ClCompile Include="Lines.cpp" />
     <ClCompile Include="TextPrint.cpp" />
     <ClCompile Include="Galaxy.cpp" />
@@ -255,6 +262,7 @@
     <ClCompile Include="FlightLoop.cpp" />
     <ClCompile Include="Controls.cpp" />
     <ClCompile Include="VideoState.cpp" />
+    <ClCompile Include="MemoryMap.cpp" />
     <ClCompile Include="ViewChange.cpp" />
     <ClCompile Include="SpriteData.cpp" />
     <ClCompile Include="DashboardImage.cpp" />
@@ -273,6 +281,7 @@
     <ClCompile Include="SoundEffects.cpp" />
     <ClCompile Include="Music.cpp" />
     <ClCompile Include="ExtendedTokens.cpp" />
+    <ClCompile Include="Game.cpp" />
     <ClCompile Include="TokenTables.cpp" />
     <ClCompile Include="Tokens.cpp" />
   </ItemGroup>

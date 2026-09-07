@@ -1,8 +1,10 @@
 #include "pch.h"
 
+#include "Controls.h"
 #include "Cpu6502.h"
 #include "FlightUniverse.h"
 #include "OracleImage.h"
+#include "UniverseImage.h"
 
 #include "Missions.h"
 #include "ShipBlueprint.h"
@@ -31,19 +33,15 @@ namespace GameLogicTests
      * `quiet` is how many scans answer "no key" before one answers `key`. `PAUSE` needs at least
      * one of each in that order; `PAUSE2` needs the same.
      */
-    struct ScriptedStart final : Elite::StartUpEffects
+    struct ScriptedStart final : Elite::Presenter, Elite::Keyboard
     {
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       std::uint32_t quiet = 0;
       std::uint8_t key = 0;
       std::uint32_t scans = 0;
       std::vector<std::uint8_t> delays;
-
-      void ResetUniverse() override {}
-      void ResetShip() override {}
-      void ClearKeyLogger() override {}
-      void StartTheme() override {}
-      void StopTheme() override {}
-      void ResetMissileIndicators() override {}
 
       /// How many scans answer "pressed" BEFORE the quiet run -- the state `PAUSE`'s first loop
       /// exists for, and the one a script that starts empty cannot reach.
@@ -58,26 +56,49 @@ namespace GameLogicTests
        */
       bool alternate = false;
 
-      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger&) override
+      /*
+       * WHICH KEYS ARE DOWN, and it answered a `TitleKey` until M3-b-3d.
+       *
+       * `RDKEY` was a seam then. It is `Elite::ScanKeyboard` now, so the script says what the
+       * matrix holds and the library's walk turns that into the carry and `thiskey` -- the same
+       * two answers, arrived at by the routine being ported rather than by this class.
+       *
+       * A WALK IS COUNTED AT ITS FIRST KEY: `ScanKeyboard` counts DOWN from the top of the logger,
+       * so the highest index is where a scan begins and `scans` still counts scans.
+       */
+      static constexpr std::size_t WALK_START = std::tuple_size_v<Elite::KeyLogger> - 1u;
+
+      [[nodiscard]] bool Held(std::size_t _key) override
       {
-        ++scans;
+        if (_key == WALK_START)
+        {
+          ++scans;
+        }
         if (alternate)
         {
-          return ((scans & 1u) == 0u) ? Elite::TitleKey{true, key} : Elite::TitleKey{};
+          return ((scans & 1u) == 0u) && _key == key;
         }
         const std::uint32_t index = scans - 1u;
         const bool pressed = (index < held) || (index >= held + quiet && ((index - held - quiet) % 2u) == 0u);
-        return pressed ? Elite::TitleKey{true, key} : Elite::TitleKey{};
+        return pressed && _key == key;
+      }
+
+      /// 6502: TT217 -- the keys a line entry types, in order, and RETURN once they run out.
+      std::vector<std::uint8_t> typed;
+      std::size_t taken = 0;
+      std::uint32_t flushes = 0;
+      [[nodiscard]] std::uint8_t NextKey() override
+      {
+        return (taken < typed.size()) ? typed[taken++] : std::uint8_t{13};
+      }
+      void Flush() override
+      {
+        ++flushes;
       }
 
       void WaitFrames(std::uint8_t _frames) override
       {
         delays.push_back(_frames);
-      }
-
-      std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override
-      {
-        return 0;
       }
     };
 
@@ -149,10 +170,54 @@ namespace GameLogicTests
       return static_cast<std::uint32_t>(_cpu.memory[static_cast<std::uint16_t>(_rdkey + 15u)]) + 1u;
     }
 
+    /*
+     * 6502: TT217, scripted the same way (M6-0-c) -- the same eleven-byte counted stub, over a
+     * table of the keys a line entry types, with RETURN filling the table past the script so a
+     * routine that asks for one key too many ends rather than runs off the end.
+     */
+    void ScriptTyping(Cpu6502& _cpu, std::uint16_t _tt217, const std::vector<std::uint8_t>& _typed)
+    {
+      const std::uint16_t calls = static_cast<std::uint16_t>(_tt217 + 15u);
+      const std::uint16_t table = static_cast<std::uint16_t>(_tt217 + RDKEY_TABLE);
+      const std::uint8_t stub[16] = {0xEEu,
+                                     static_cast<std::uint8_t>(calls & 0xFFu),
+                                     static_cast<std::uint8_t>(calls >> 8),
+                                     0xAEu,
+                                     static_cast<std::uint8_t>(calls & 0xFFu),
+                                     static_cast<std::uint8_t>(calls >> 8),
+                                     0xBDu,
+                                     static_cast<std::uint8_t>(table & 0xFFu),
+                                     static_cast<std::uint8_t>(table >> 8),
+                                     0xAAu,
+                                     0x60u,
+                                     0u,
+                                     0u,
+                                     0u,
+                                     0u,
+                                     0xFFu};
+      _cpu.Load(_tt217, stub, sizeof(stub));
+      std::uint8_t answers[RDKEY_TABLE_SIZE]{};
+      for (std::size_t index = 0; index < RDKEY_TABLE_SIZE; ++index)
+      {
+        answers[index] = (index < _typed.size()) ? _typed[index] : std::uint8_t{13};
+      }
+      _cpu.Load(table, answers, sizeof(answers));
+    }
+
+    /// 6502: DETOK2 with the code in A -- the dispatch, which is how a token reaches every one of
+    /// the routines below, rather than the routine's own label (M6-0-c).
+    [[nodiscard]] bool Dispatch(Cpu6502& _cpu, std::uint8_t _code, std::uint32_t _budget)
+    {
+      _cpu.a = _code;
+      _cpu.x = 0u;
+      _cpu.y = 0u;
+      return _cpu.CallSubroutine(OracleImage::Instance().Label("DETOK2"), _budget).completed;
+    }
+
     /// Where the mission routines live, looked up once.
     struct MissionWhere
     {
-      std::uint16_t pause, pas1, pause2, bris, mt27, mt28, rdkey, detok, delay, gcnt, xc, yc, ll9, setl1, dovdu19, nosprites;
+      std::uint16_t pause, pas1, pause2, bris, mt27, mt28, rdkey, detok, delay, gcnt, xc, yc, ll9, dovdu19, nosprites;
       std::uint16_t alpha, alp2Next, bet2, bet2Next, typeByte, xsav, inf, kPercent;
       std::uint16_t brief, brief2, brief3, brp, debrief, debrief2, tbrief, bay, yesno, tp, mcnt, slsp;
 
@@ -171,7 +236,6 @@ namespace GameLogicTests
         xc = _oracle.Label("XC");
         yc = _oracle.Label("YC");
         ll9 = _oracle.Label("LL9");
-        setl1 = _oracle.Label("SETL1");
         dovdu19 = _oracle.Label("DOVDU19");
         nosprites = _oracle.Label("NOSPRITES");
 
@@ -212,21 +276,17 @@ namespace GameLogicTests
 
   namespace
   {
-    /// The seams that are not this slice's, trapped so both sides do the same nothing.
+    /// The seam that is not this slice's, trapped so both sides do the same nothing.
     static void Trap(Cpu6502& _cpu, const MissionWhere& _to)
     {
-      _cpu.AddTrap(_to.setl1);
       _cpu.AddTrap(_to.dovdu19);
 
       /*
-       * `NOSPRITES` is trapped for §6.108's reason and not because it is a seam: `XX21` is at
-       * &D000 and so are the VIC-II registers, so its `STA VIC+&15` lands on a blueprint pointer
-       * in a flat image and `NWSHP` then refuses the ship it names.
+       * `NOSPRITES`, `DOEXP` and `PLANET` WERE TRAPPED HERE AND ARE NOT ANY MORE (M6-0-a-1 and -3).
+       * `NOSPRITES` was trapped for §6.108's reason, which the banked I/O page has undone; the other
+       * two were `ShipDrawEffects`' tail jumps, which a briefing's ship -- never a body, never
+       * killed -- does not take, so nothing here reached them on either machine.
        */
-      _cpu.AddTrap(_to.nosprites);
-      _cpu.AddTrap(OracleImage::Instance().Label("TACTICS"));
-      _cpu.AddTrap(OracleImage::Instance().Label("DOEXP"));
-      _cpu.AddTrap(OracleImage::Instance().Label("PLANET"));
     }
 
     /// A Constrictor-shaped ship in slot 0, turning, which is what `BRIEF` leaves for `PAS1`.
@@ -286,9 +346,9 @@ namespace GameLogicTests
     }
 
     /// The seams a briefing reaches: the frame's three recorded, and the script answering `TITLE`'s.
-    [[nodiscard]] static Elite::Ports PortsOver(LoopUniverse& _universe, Elite::StartUpEffects& _start)
+    [[nodiscard]] static Elite::Ports PortsOver(LoopUniverse& _universe, ScriptedStart& _start)
     {
-      return _universe.universe.PortsWith(_universe.effects, _universe.effects, _universe.effects, _start);
+      return _universe.universe.PortsWith(_start, _start);
     }
 
     /// What `Mirror` does not send: the line heap, the flight model's rotation rates, and `INF`.
@@ -467,7 +527,7 @@ namespace GameLogicTests
           Mirror(universe.universe, cpu, at);
           MirrorMission(universe, cpu, at, to, 0u);
 
-          Assert::IsTrue(cpu.CallSubroutine(to.pause, 20'000'000).completed, L"PAUSE returned");
+          Assert::IsTrue(Dispatch(cpu, 22u, 20'000'000), L"DETOK2 returned from PAUSE");
           const std::uint32_t theirScans = RdkeyCalls(cpu, to.rdkey);
 
           ScriptedStart start;
@@ -475,9 +535,7 @@ namespace GameLogicTests
           start.quiet = quiet;
           start.key = 0x27u;
           Elite::Ports ports = PortsOver(universe, start);
-          std::uint8_t galaxy = 0;
-          Elite::MissionCodes codes{universe.universe, ports, galaxy};
-          universe.universe.codes.to = &codes;
+          universe.universe.RunCodesThrough(ports);
 
           /*
            * Through the PRINTER rather than by calling `PauseForKey`, because the fall-through into
@@ -546,7 +604,7 @@ namespace GameLogicTests
           Cpu6502 cpu = oracle.Fresh();
           ScriptRdkey(cpu, to.rdkey, held, quiet, 0x27u);
 
-          Assert::IsTrue(cpu.CallSubroutine(to.pause2, 200'000).completed, L"PAUSE2 returned");
+          Assert::IsTrue(Dispatch(cpu, 24u, 200'000), L"DETOK2 returned from PAUSE2");
           const std::uint32_t theirScans = RdkeyCalls(cpu, to.rdkey);
 
           ScriptedStart start;
@@ -556,7 +614,8 @@ namespace GameLogicTests
 
           LoopUniverse universe;
           Elite::Ports ports = PortsOver(universe, start);
-          Elite::WaitForKeyPress(universe.universe, ports);
+          universe.universe.RunCodesThrough(ports);
+          universe.universe.extendedPrinter.PrintByte(24u);
 
           const std::wstring where = WidenText("PAUSE2 (" + std::to_string(held) + " held, " + std::to_string(quiet) + " quiet)");
           Assert::AreEqual<std::uint32_t>(theirScans, start.scans, (where + L": RDKEY calls").c_str());
@@ -599,7 +658,7 @@ namespace GameLogicTests
       Mirror(universe.universe, cpu, at);
       MirrorMission(universe, cpu, at, to, 0u);
 
-      Assert::IsTrue(cpu.CallSubroutine(to.bris, 4'000'000).completed, L"BRIS returned");
+      Assert::IsTrue(Dispatch(cpu, 25u, 4'000'000), L"DETOK2 returned from BRIS");
 
       std::uint32_t theirDelays = 0;
       std::uint8_t theirFrames = 0;
@@ -613,12 +672,9 @@ namespace GameLogicTests
       }
 
       ScriptedStart start;
-      std::uint8_t galaxy = 0;
       Elite::Ports ports = PortsOver(universe, start);
-      Elite::MissionCodes codes{universe.universe, ports, galaxy};
-      universe.universe.codes.to = &codes;
-
-      Elite::ShowIncomingMessage(universe.universe, ports);
+      universe.universe.RunCodesThrough(ports);
+      universe.universe.extendedPrinter.PrintByte(25u);
 
       Assert::AreEqual<std::uint32_t>(1u, theirDelays, L"BRIS delays exactly once");
       Assert::AreEqual<std::size_t>(1u, start.delays.size(), L"and so does the port");
@@ -686,10 +742,8 @@ namespace GameLogicTests
         Assert::IsTrue(cpu.CallSubroutine(oracle.Label("DETOK2"), 4'000'000).completed, L"DETOK2 returned");
 
         ScriptedStart start;
-        std::uint8_t galaxy = 0;
         Elite::Ports ports = PortsOver(universe, start);
-        Elite::MissionCodes codes{universe.universe, ports, galaxy};
-        universe.universe.codes.to = &codes;
+        universe.universe.RunCodesThrough(ports);
 
         universe.universe.extendedPrinter.PrintByte(9u);
 
@@ -813,12 +867,11 @@ namespace GameLogicTests
           Mirror(universe.universe, cpu, at);
           MirrorMission(universe, cpu, at, to, 0u);
 
-          Assert::IsTrue(cpu.CallSubroutine(captain ? to.mt27 : to.mt28, 4'000'000).completed, (where + L": printed").c_str());
+          Assert::IsTrue(Dispatch(cpu, captain ? std::uint8_t{27u} : std::uint8_t{28u}, 4'000'000), (where + L": printed").c_str());
 
           ScriptedStart start;
           Elite::Ports ports = PortsOver(universe, start);
-          Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
-          universe.universe.codes.to = &codes;
+          universe.universe.RunCodesThrough(ports);
 
           /*
            * Through the control-code dispatch rather than by calling `PrintMissionToken` -- these
@@ -837,6 +890,201 @@ namespace GameLogicTests
 
       Assert::AreEqual<std::uint32_t>(16u, compared, L"every galaxy's token number was compared");
       Assert::AreEqual<std::uint32_t>(CAPTAIN_GALAXIES + PLANET_GALAXIES, printed, L"and the five that are prose were printed");
+    }
+
+    /*
+     * 6502: DETOK2 with A = 21 -- CLYNS through the dispatch (M6-0-c).
+     *
+     * `ShellTests` compares the routine on its own over bare printers; this is the same clear
+     * reached the way a token reaches it, over a universe, with the message counters it zeroes.
+     */
+    TEST_METHOD(TheMessageRowsMatchCLYNSThroughTheDispatch)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const MissionWhere to(oracle);
+
+      LoopUniverse universe;
+      Seed(universe.universe, 0x21u);
+      universe.universe.LendSunHeap();
+      universe.universe.trumbles.count = 0u;
+      universe.universe.text.column = 17u;
+      universe.universe.text.row = 9u;
+      universe.universe.message.delay = 0x5Au;
+      universe.universe.message.append = 0x5Au;
+
+      Cpu6502 cpu = oracle.Fresh();
+      Trap(cpu, to);
+      FillScreens(cpu, universe.universe.canvas, at.screen, 0xA5u);
+      Mirror(universe.universe, cpu, at);
+      MirrorMission(universe, cpu, at, to, 0u);
+
+      Assert::IsTrue(Dispatch(cpu, 21u, 4'000'000), L"DETOK2 returned from CLYNS");
+
+      ScriptedStart start;
+      Elite::Ports ports = PortsOver(universe, start);
+      universe.universe.RunCodesThrough(ports);
+      universe.universe.extendedPrinter.PrintByte(21u);
+
+      Assert::AreEqual<std::uint8_t>(0u, universe.universe.message.delay, L"CLYNS: DLY");
+      Assert::AreEqual<std::uint8_t>(0u, universe.universe.message.append, L"CLYNS: de");
+      Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], universe.universe.text.column, L"CLYNS: XC");
+      Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], universe.universe.text.row, L"CLYNS: YC");
+      CompareState(cpu, universe.universe, at, L"CLYNS");
+      CompareScreens(cpu, at.screen, universe.universe.canvas, 0xA5u, L"CLYNS");
+    }
+
+    /*
+     * 6502: DETOK2 with A = 26 -- MT26 through the dispatch (M6-0-c).
+     *
+     * `NameEntryTests` compares the routine key for key over a recording sink; this is the same
+     * entry reached the way a token would reach it, over a universe, printing onto the canvas and
+     * reading into `INWK+5` -- which is `Universe::lineBuffer`, and is compared against those bytes
+     * rather than against the ship block the image would otherwise read them as.
+     */
+    TEST_METHOD(TheLineEntryMatchesMT26ThroughTheDispatch)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Where at(oracle);
+      const MissionWhere to(oracle);
+      const std::uint16_t tt217 = oracle.Label("TT217");
+      const std::uint16_t flkb = oracle.Label("FLKB");
+      const std::uint16_t col2 = oracle.Label("COL2");
+
+      struct Script
+      {
+        const char* what;
+        std::vector<std::uint8_t> typed;
+      };
+      const std::vector<Script> SCRIPTS = {
+        {"a name", {'J', 'A', 'M', 'E', 'S', 'O', 'N', 13}},
+        {"nothing but RETURN", {13}},
+        {"past the limit of nine", {'1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 13}},
+        {"a deletion", {'A', 'B', 127, 'C', 13}},
+        {"escape", {'A', 27}},
+      };
+
+      std::uint32_t compared = 0;
+      for (const Script& script : SCRIPTS)
+      {
+        const std::wstring where = WidenText(std::string("MT26 through DETOK2 (") + script.what + ")");
+
+        LoopUniverse universe;
+        Seed(universe.universe, 0x26u + compared);
+        universe.universe.LendSunHeap();
+        universe.universe.trumbles.count = 0u;
+        universe.universe.text.column = 1u;
+        universe.universe.text.row = 3u;
+        universe.universe.lineBuffer.fill(0xAAu);
+
+        Cpu6502 cpu = oracle.Fresh();
+        Trap(cpu, to);
+        cpu.AddTrap(to.delay);
+        cpu.AddTrap(flkb);
+        ScriptTyping(cpu, tt217, script.typed);
+        FillScreens(cpu, universe.universe.canvas, at.screen, 0x1Du);
+        Mirror(universe.universe, cpu, at);
+        MirrorMission(universe, cpu, at, to, 0u);
+        for (std::size_t index = 0; index < universe.universe.lineBuffer.size(); ++index)
+        {
+          cpu.memory[static_cast<std::uint16_t>(at.inwk + 5u + index)] = 0xAAu; // 6502: INWK+5, the line's home
+        }
+
+        Assert::IsTrue(Dispatch(cpu, 26u, 4'000'000), (where + L": DETOK2 returned").c_str());
+        std::uint32_t theirDelays = 0;
+        std::uint32_t theirFlushes = 0;
+        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+        {
+          theirDelays += (hit.address == to.delay) ? 1u : 0u;
+          theirFlushes += (hit.address == flkb) ? 1u : 0u;
+        }
+
+        ScriptedStart start;
+        start.typed = script.typed;
+        Elite::Ports ports = PortsOver(universe, start);
+        universe.universe.RunCodesThrough(ports);
+        universe.universe.extendedPrinter.PrintByte(26u);
+
+        Assert::AreEqual<std::uint32_t>(1u, theirDelays, (where + L": MT26 delays once").c_str());
+        Assert::AreEqual<std::size_t>(1u, start.delays.size(), (where + L": and so does the port").c_str());
+        Assert::AreEqual<std::uint32_t>(theirFlushes, start.flushes, (where + L": FLKB").c_str());
+        Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(script.typed.size()), static_cast<std::uint32_t>(start.taken),
+                                        (where + L": keys read").c_str());
+        Assert::AreEqual(cpu.memory[col2], universe.universe.text.palette.Byte(), (where + L": COL2").c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[to.xc], universe.universe.text.column, (where + L": XC").c_str());
+        Assert::AreEqual<std::uint32_t>(cpu.memory[to.yc], universe.universe.text.row, (where + L": YC").c_str());
+        for (std::size_t index = 0; index < universe.universe.lineBuffer.size(); ++index)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at.inwk + 5u + index)], universe.universe.lineBuffer[index],
+                           (where + L": INWK+5+" + std::to_wstring(index)).c_str());
+        }
+        CompareScreens(cpu, at.screen, universe.universe.canvas, 0x1Du, where);
+        ++compared;
+      }
+      Assert::AreEqual<std::uint32_t>(5u, compared, L"the whole sweep ran");
+    }
+
+    /*
+     * 6502: JMTB -- the jump table itself, for the eleven codes that leave the text system (M6-0-c).
+     *
+     * Eight of them are compared through `DETOK2` above and in `TheNewViewMatchesMT9`; the table
+     * entry is what sends each code to its routine, and an off-by-one there sends every code to
+     * its neighbour's. The other three -- 11, 30 and 31 -- are `NLIN4`, `FILEPR` and `OTHERFILEPR`
+     * in the original and `default` in the port: routines no token this build prints from here
+     * reaches, named here rather than ported, and pinned as doing nothing on the port's side.
+     */
+    TEST_METHOD(TheDispatchTableNamesTheElevenThatLeave)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t jmtb = oracle.Label("JMTB");
+      const Cpu6502 image = oracle.Fresh();
+      const auto entry = [&](std::uint8_t _code)
+      {
+        // Indexed from one, and read as pairs out of the two bytes BEFORE the label.
+        const std::uint16_t at = static_cast<std::uint16_t>(jmtb - 2u + 2u * _code);
+        return static_cast<std::uint16_t>(image.memory[at] | (image.memory[static_cast<std::uint16_t>(at + 1u)] << 8));
+      };
+
+      const std::vector<std::pair<std::uint8_t, const char*>> COMPARED = {
+        {9, "MT9"}, {21, "CLYNS"}, {22, "PAUSE"}, {24, "PAUSE2"}, {25, "BRIS"}, {26, "MT26"}, {27, "MT27"}, {28, "MT28"},
+      };
+      const std::vector<std::pair<std::uint8_t, const char*>> NAMED = {{11, "NLIN4"}, {30, "FILEPR"}, {31, "OTHERFILEPR"}};
+
+      for (const auto& [code, label] : COMPARED)
+      {
+        Assert::AreEqual<std::uint32_t>(oracle.Label(label), entry(code), (L"JMTB entry " + std::to_wstring(code)).c_str());
+      }
+      for (const auto& [code, label] : NAMED)
+      {
+        Assert::AreEqual<std::uint32_t>(oracle.Label(label), entry(code), (L"JMTB entry " + std::to_wstring(code)).c_str());
+
+        // The port's side: `default`, which leaves the universe as it was.
+        LoopUniverse universe;
+        Seed(universe.universe, code);
+        ScriptedStart start;
+        Elite::Ports ports = PortsOver(universe, start);
+        universe.universe.RunCodesThrough(ports);
+        const std::uint64_t before = Hash(universe.universe);
+        universe.universe.extendedPrinter.PrintByte(code);
+        Assert::AreEqual<std::uint32_t>(1u, universe.universe.extendedPrinter.CodesThatLeft(),
+                                        (L"code " + std::to_wstring(code) + L" leaves").c_str());
+        Assert::AreEqual(before, Hash(universe.universe), (L"and the port does nothing for code " + std::to_wstring(code)).c_str());
+      }
     }
   };
 
@@ -879,7 +1127,7 @@ namespace GameLogicTests
         const wchar_t* name;
         std::uint16_t entry;
         std::uint8_t token;
-        Elite::ForcedKey (*run)(Elite::Universe&, Elite::Ports&, Elite::MissionBay&);
+        Elite::ForcedKey (*run)(Elite::Universe&, Elite::Ports&, bool);
       };
 
       const Case CASES[] = {
@@ -939,20 +1187,17 @@ namespace GameLogicTests
           start.alternate = true;
           start.key = 0x27u;
 
-          std::uint8_t dockedFlag = 0;
           Elite::Ports ports = PortsOver(universe, start);
-          Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
-          Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
-          universe.universe.codes.to = &codes;
+          universe.universe.RunCodesThrough(ports);
 
-          const Elite::ForcedKey key = item.run(universe.universe, ports, bay);
+          const Elite::ForcedKey key = item.run(universe.universe, ports, false);
 
           const std::wstring where = std::wstring(item.name) + L" (TP " + std::to_wstring(progress * 17u) + L")";
 
           Assert::AreEqual<std::uint32_t>(1u, detoks, (where + L": one DETOK").c_str());
           Assert::AreEqual<std::uint32_t>(1u, bays, (where + L": one BAY").c_str());
           Assert::AreEqual<std::uint32_t>(theirToken, item.token, (where + L": the token").c_str());
-          Assert::AreEqual<std::uint32_t>(0xFFu, dockedFlag, (where + L": QQ12 -- BAY sets it to &FF").c_str());
+          Assert::AreEqual<std::uint32_t>(0xFFu, universe.universe.dockedFlag, (where + L": QQ12 -- BAY sets it to &FF").c_str());
           static_cast<void>(key);
 
           for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
@@ -1043,13 +1288,10 @@ namespace GameLogicTests
             start.key = 0x27u;
 
             ScriptedKeys keys{accept};
-            std::uint8_t dockedFlag = 0;
             Elite::Ports ports = PortsOver(universe, start);
-            Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
-            Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
-            universe.universe.codes.to = &codes;
+            universe.universe.RunCodesThrough(ports);
 
-            static_cast<void>(Elite::OfferTrumble(universe.universe, ports, bay, keys));
+            static_cast<void>(Elite::OfferTrumble(universe.universe, ports, false, keys));
 
             const std::wstring where = WidenText(std::string("TBRIEF (") + (accept ? "yes" : "no") + ", " + (rich ? "rich" : "poor") +
                                                  ", TP " + std::to_string(progress * 17u) + ")");
@@ -1057,7 +1299,7 @@ namespace GameLogicTests
             Assert::AreEqual<std::uint32_t>(1u, detoks, (where + L": one DETOK").c_str());
             Assert::AreEqual<std::uint32_t>(Elite::TRUMBLE_OFFER, theirToken, (where + L": the offer token").c_str());
             Assert::AreEqual<std::uint32_t>(1u, bays, (where + L": one BAY").c_str());
-            Assert::AreEqual<std::uint32_t>(0xFFu, dockedFlag, (where + L": QQ12").c_str());
+            Assert::AreEqual<std::uint32_t>(0xFFu, universe.universe.dockedFlag, (where + L": QQ12").c_str());
 
             for (std::size_t byte = 0; byte < Elite::COMMANDER_BLOCK_SIZE; ++byte)
             {
@@ -1166,13 +1408,10 @@ namespace GameLogicTests
         start.alternate = true;
         start.key = 0x27u;
 
-        std::uint8_t dockedFlag = 0;
         Elite::Ports ports = PortsOver(universe, start);
-        Elite::MissionBay bay{universe.universe.commander, dockedFlag, 0u, 0u, false};
-        Elite::MissionCodes codes{universe.universe, ports, universe.universe.commander.galaxyNumber};
-        universe.universe.codes.to = &codes;
+        universe.universe.RunCodesThrough(ports);
 
-        const std::uint8_t ourToken = Elite::RunConstrictorBriefing(universe.universe, ports, bay);
+        const std::uint8_t ourToken = Elite::RunConstrictorBriefing(universe.universe, ports, false);
 
         const std::wstring where = WidenText("BRIEF (TP " + std::to_string(progress * 85u) + ")");
 
@@ -1205,14 +1444,20 @@ namespace GameLogicTests
 
   private:
     /// 6502: TT217 -- the one key `YESNO` reads, scripted. "Y" is 89 and anything else is a no.
-    struct ScriptedKeys final : Elite::KeySource
+    /// The matrix and `FLKB` are the other two questions this port answers and `YESNO` asks neither.
+    struct ScriptedKeys final : Elite::Keyboard
     {
       bool yes = false;
       explicit ScriptedKeys(bool _yes) noexcept
         : yes(_yes)
       {
       }
-      std::uint8_t NextKey() override
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+      void Flush() override {}
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         return yes ? std::uint8_t{'Y'} : std::uint8_t{'N'};
       }

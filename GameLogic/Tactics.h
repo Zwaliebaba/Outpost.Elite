@@ -158,10 +158,6 @@ namespace Elite
   inline constexpr std::uint8_t DOCKING_RAT2 = 6;
   inline constexpr std::uint8_t DOCKING_CNT2 = 29;
 
-  /// 6502: sfxelas and sfxelas2 -- the two halves of being hit by a laser, played back to back.
-  inline constexpr std::uint8_t SOUND_HIT_BY_LASER = 1;
-  inline constexpr std::uint8_t SOUND_HIT_BY_LASER_2 = 15;
-
   /// 6502: LDA #80 / JSR OOPS and LDA #250 / JMP OOPS -- a collision and a missile going off.
   inline constexpr std::uint8_t COLLISION_DAMAGE = 80;
   inline constexpr std::uint8_t MISSILE_DAMAGE = 250;
@@ -214,6 +210,14 @@ namespace Elite
    * visibility of the ELEVENTH FACE OF THE LAST SHIP DRAWN, and whether an NPC completes its
    * docking depends on it (§6.125).
    */
-  [[nodiscard]] bool RunDockingComputer(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept;
+  /*
+   * IT ANSWERS NOTHING, and that is a finding rather than a simplification (M4-c-2).
+   *
+   * It returned "did the player survive" until 2026-09-07, and the answer was always yes: the
+   * original `DOCKIT` reaches no `OOPS` and no `DEATH` -- every exit is an `RTS`, `JMP GOPL` or
+   * `JMP TA151` -- so there is no path on which it could say no. Every caller discarded the byte
+   * except one assertion in `TacticsTests`, which asserted the tautology.
+   */
+  void RunDockingComputer(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept;
 
 } // namespace Elite

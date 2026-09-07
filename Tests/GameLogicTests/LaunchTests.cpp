@@ -166,7 +166,7 @@ namespace GameLogicTests
                             std::to_wstring(run.instructions) + L", stoppedAt " + std::to_wstring(run.stoppedAt))
                              .c_str());
 
-            Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, geometry, math, clip, nullptr);
+            Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, geometry, math, clip, universe.unused);
           }
 
           const std::wstring where = WidenText("HFS1 (STP " + std::to_string(step) + ", " + std::to_string(pass + 1u) + " pass(es))");
@@ -252,10 +252,7 @@ namespace GameLogicTests
 
         // The three the platform owns, plus §6.108's: `TT66` reaches `NOSPRITES`, and `NOSPRITES`
         // writes VIC registers that are the ship blueprint table in the oracle's flat memory.
-        cpu.AddTrap(noise, Cpu6502::TrapExit::SetCarry);
-        cpu.AddTrap(oracle.Label("SETL1"));
         cpu.AddTrap(oracle.Label("DOVDU19"));
-        cpu.AddTrap(oracle.Label("NOSPRITES"));
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(laun, 40'000'000);
         Assert::IsTrue(run.completed, (std::wstring(L"LAUN returned -- illegal ") + std::to_wstring(run.illegalOpcode) + L", stoppedAt " +
@@ -263,19 +260,17 @@ namespace GameLogicTests
                                         .c_str());
 
         Elite::Ports ports = universe.Ports();
-        Elite::DrawLaunchTunnel(universe, ports, nullptr);
+        Elite::DrawLaunchTunnel(universe, ports);
 
         const std::wstring where = WidenText("LAUN (QQ11 " + std::to_string(view) + ")");
 
         // 6502: LDY #sfxwhosh / JSR NOISE -- effect 4, once, and its carry is dropped.
-        std::uint32_t whooshes = 0;
-        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
-        {
-          whooshes += (hit.address == noise) ? 1u : 0u;
-        }
-        Assert::AreEqual<std::uint32_t>(1u, whooshes, (where + L": the shipped routine makes one noise").c_str());
-        Assert::AreEqual<std::size_t>(1u, universe.effects.sounds.size(), (where + L": and so does the port").c_str());
-        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, universe.effects.sounds.front(), (where + L": sfxwhosh").c_str());
+        // And the port's, which is the BUFFER since M3-b-2a: `SOFLG` holds the effect plus one
+        // with bit 7 set for "new, not yet started", so the flag says which voice took `sfxwhosh`.
+        constexpr std::uint8_t LAUNCH_FLAG =
+          static_cast<std::uint8_t>(0x80u | (static_cast<std::uint8_t>(Elite::SoundEffect::Missile) + 1u));
+        Assert::AreEqual<std::uint8_t>(LAUNCH_FLAG, universe.sound.flag[2],
+                                       (where + L": and so does the port").c_str());
 
         // 6502: LDA #8 / STA STP -- the step, which is the whole of §6.94's missing writer.
         Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, cpu.memory[stp], (where + L": the shipped STP").c_str());
@@ -314,13 +309,16 @@ namespace GameLogicTests
         return;
       }
 
-      struct Counting final : Elite::TunnelEffects
+      struct Counting final : Elite::Presenter
       {
         std::uint32_t frames = 0;
-        void ShowFrame() override
+        void Present() override
         {
           ++frames;
         }
+        void WaitFrames(std::uint8_t) override {}
+        void HoldFlightFrame(std::uint8_t) override {}
+        void HoldTitleFrame(std::uint8_t) override {}
       };
 
       const OracleImage& oracle = OracleImage::Instance();
@@ -347,19 +345,15 @@ namespace GameLogicTests
         cpu.memory[oracle.Label("dontclip")] = 0u;
         cpu.memory[stp] = 8u;
 
-        cpu.AddTrap(noise, Cpu6502::TrapExit::SetCarry);
-        cpu.AddTrap(noise2);
         cpu.AddTrap(delay);
-        cpu.AddTrap(oracle.Label("SETL1"));
         cpu.AddTrap(oracle.Label("DOVDU19"));
-        cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, third time
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll164, 40'000'000);
         Assert::IsTrue(run.completed, L"LL164 returned");
 
         Counting counting;
-        Elite::Ports ports = universe.Ports();
-        Elite::DrawHyperspaceTunnel(universe, ports, universe.dashboard, &counting);
+        Elite::Ports ports = universe.PortsWith(counting);
+        Elite::DrawHyperspaceTunnel(universe, ports);
 
         const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
 
@@ -369,25 +363,23 @@ namespace GameLogicTests
 
         // 6502: LDY #1 / JSR DELAY -- one vertical sync, plus one frame for each circle drawn.
         std::uint32_t delays = 0;
-        std::uint32_t noises = 0;
-        std::uint32_t pitched = 0;
         for (const Cpu6502::TrapHit& hit : cpu.trapHits)
         {
           delays += (hit.address == delay) ? 1u : 0u;
-          noises += (hit.address == noise) ? 1u : 0u;
-          pitched += (hit.address == noise2) ? 1u : 0u;
         }
         Assert::AreEqual<std::uint32_t>(1u, delays, (where + L": one DELAY").c_str());
-        Assert::AreEqual<std::uint32_t>(2u, noises, (where + L": two NOISE calls").c_str());
-        Assert::AreEqual<std::uint32_t>(1u, pitched, (where + L": one NOISE2 call").c_str());
         Assert::AreEqual<std::uint32_t>(35u, counting.frames, (where + L": 34 circles and the DELAY").c_str());
 
-        // The sounds, in order: pitched sfxhyp1, sfxwhosh, then sfxhyp1 layered with bit 7 set.
-        Assert::AreEqual<std::size_t>(2u, universe.dashboard.sounds.size(), (where + L": sounds").c_str());
-        Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, universe.dashboard.sounds[0], (where + L": sfxwhosh").c_str());
-        Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(Elite::SOUND_HYPERSPACE + 128u), universe.dashboard.sounds[1],
-                                       (where + L": sfxhyp1 layered").c_str());
-        Assert::AreEqual<std::size_t>(1u, universe.dashboard.pitched.size(), (where + L": one pitched sound").c_str());
+        /*
+         * 6502: HYPNOISE's three calls -- pitched sfxhyp1, then sfxwhosh, then sfxhyp1 layered with
+         * bit 7 set -- and the BUFFER is what says so since M3-b-2a.
+         *
+         * `NOISE` and `NOISE2` were trapped on the oracle and counted here; both run on both sides
+         * now, so what is compared is which voice each effect took, at what priority, with what
+         * frequency and envelope. A list of effect numbers could not tell a layered `sfxhyp1` from
+         * a plain one that lost its voice.
+         */
+        CompareSound(cpu, universe, at, where);
 
         // 6502: QQ11 is saved across the TT66 inside HFS2, exactly as the launch's is.
         Assert::AreEqual(cpu.memory[at.qq11], universe.view, (where + L": QQ11").c_str());
@@ -398,13 +390,16 @@ namespace GameLogicTests
 
     TEST_METHOD(ThePacingIsOneFramePerCircle)
     {
-      struct Counting final : Elite::TunnelEffects
+      struct Counting final : Elite::Presenter
       {
         std::uint32_t circles = 0;
-        void ShowFrame() override
+        void Present() override
         {
           ++circles;
         }
+        void WaitFrames(std::uint8_t) override {}
+        void HoldFlightFrame(std::uint8_t) override {}
+        void HoldTitleFrame(std::uint8_t) override {}
       };
 
       for (const std::uint8_t step : {std::uint8_t{2}, std::uint8_t{4}, std::uint8_t{8}})
@@ -417,7 +412,7 @@ namespace GameLogicTests
 
         Elite::ClipState clip;
         Counting counting;
-        Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, &counting);
+        Elite::DrawHyperspaceRings(universe.canvas, universe.heaps, universe.geometry, universe.math, clip, counting);
 
         Assert::AreEqual<std::uint32_t>(34u, counting.circles, (WidenText("STP " + std::to_string(step)) + L": circles shown").c_str());
       }
@@ -439,8 +434,8 @@ namespace GameLogicTests
       Elite::ClipState clipA;
       Elite::ClipState clipB;
       Counting counting;
-      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.geometry, unpaced.math, clipA, nullptr);
-      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.geometry, paced.math, clipB, &counting);
+      Elite::DrawHyperspaceRings(unpaced.canvas, unpaced.heaps, unpaced.geometry, unpaced.math, clipA, unpaced.unused);
+      Elite::DrawHyperspaceRings(paced.canvas, paced.heaps, paced.geometry, paced.math, clipB, counting);
 
       const std::span<const std::uint8_t> quiet = unpaced.canvas.Screen();
       const std::span<const std::uint8_t> watched = paced.canvas.Screen();
@@ -462,100 +457,76 @@ namespace GameLogicTests
      * tunnel as well as everything after it. What remains here is `StartUpEffects` for the
      * routines that still take one; `Launch` no longer does.
      */
-    struct RecordingStart final : Elite::StartUpEffects
+    struct RecordingStart final : Elite::Presenter, Elite::Keyboard
     {
-      void ResetUniverse() override {}
-      void ResetShip() override {}
-      void ClearKeyLogger() override {}
-      void StartTheme() override {}
-      void StopTheme() override {}
-      void ResetMissileIndicators() override {}
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
+
       /*
-       * 6502: JSR RDKEY inside `TLL2` -- scripted, because the loop it drives is key-driven and
-       * nothing else decides how many frames the title screen runs for.
+       * WHICH KEYS ARE DOWN, scripted, because the loop `RDKEY` drives is key-driven and nothing
+       * else decides how many frames the title screen runs for.
        *
-       * `quiet` passes answer "no key"; the one after it answers `key`, and sets `KY7` first when
-       * `fire` is on so that the loop takes `BMI TL3` instead of `INC JSTK`. The oracle is driven
-       * by a stub written over `RDKEY` that counts the same way.
+       * It answered `TitleKey` until M3-b-3d, when `RDKEY` stopped being a seam: the walk is
+       * `Elite::ScanKeyboard`'s now and this is the one line of it that was ever the platform's.
+       * `quiet` walks answer "nothing down"; the one after holds `key`, and `KY7` too when `fire`
+       * is on so that the loop takes `BMI TL3` instead of `INC JSTK`. The oracle is driven by a
+       * stub written over `RDKEY` that counts the same way.
+       *
+       * A WALK IS COUNTED AT ITS FIRST KEY. `ScanKeyboard` counts DOWN from the top of the logger,
+       * so the highest index is where a scan begins and `scans` still counts scans.
        */
+      static constexpr std::size_t WALK_START = std::tuple_size_v<Elite::KeyLogger> - 1u;
+
       std::uint32_t quiet = 0;
       std::uint8_t key = 0;
       bool fire = false;
       std::uint32_t scans = 0;
 
-      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
+      [[nodiscard]] bool Held(std::size_t _key) override
       {
-        ++scans;
+        if (_key == WALK_START)
+        {
+          ++scans;
+        }
         if (scans <= quiet)
         {
-          return {};
+          return false;
         }
-        if (fire)
-        {
-          _keys[Elite::KEY_FIRE] = 0xFFu;
-        }
-        return {true, key};
+        return (_key == key) || (fire && _key == Elite::KEY_FIRE);
       }
+
+      [[nodiscard]] std::uint8_t NextKey() override { return 0; }
+      void Flush() override {}
 
       void WaitFrames(std::uint8_t) override {}
-
-      std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override
-      {
-        return 0;
-      }
     };
 
-    struct RecordingLaunch final : Elite::FlightLoopEffects
-    {
-      std::vector<std::uint8_t> sounds;
-      std::uint32_t musicStops = 0;
+    /*
+     * `StopDockingMusic` WAS COUNTED HERE AND IS NOT ANY MORE (M3-b-2b).
+     *
+     * `RES2` opens with `JSR stopbd` and the seam counted it, with the oracle trapped at `stopbd`
+     * so that neither machine ran it. Both run it now, and on this path it does nothing on either:
+     * no tune is playing, so `stopbd` falls to `stopat` and `stopat`'s first test returns. That is
+     * an assertion about SILENCE rather than about a call, and `CompareMusic` below is where it is
+     * made -- against the oracle's own `MUPLA` and its own SID writes, which are also none.
+     */
+    /*
+     * `RecordingLaunch` WAS HERE AND IS NOT ANY MORE (M4-a-1). It was `SFS1` answering "there was
+     * room" for a launch that never spawns a child, so it was one seam this fixture had to declare
+     * because `Ports` carried it.
+     */
 
-      bool PlaySound(std::uint8_t _effect, bool) override
-      {
-        sounds.push_back(_effect);
-        return true;
-      }
-      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t, std::uint8_t) override
-      {
-        sounds.push_back(_effect);
-        return true;
-      }
-      void StopSound(std::uint8_t) override {}
-      void StartDockingMusic() override {}
-      void StopDockingMusic() override
-      {
-        ++musicStops;
-      }
-      bool SpawnAhead(Elite::ShipType) override
-      {
-        return true;
-      }
-      bool Anger(std::uint8_t, Elite::ShipType) override
-      {
-        return false; // a trap's answer, and no launch reaches the seeding that reads it
-      }
-      bool SpawnChild(std::uint8_t, Elite::ShipType) override
-      {
-        return true;
-      }
-    };
-
-    struct RecordingOutside final : Elite::ShipEffects, Elite::ShipDrawEffects
-    {
-      bool RunTactics(Elite::Ship&) override
-      {
-        return true;
-      }
-      void DrawPlanetOrSun() override {}
-      void DrawExplosion() override {}
-    };
+    /*
+     * `RecordingOutside` -- `ShipDrawEffects` answered with nothing -- WAS HERE AND IS NOT ANY
+     * MORE (M6-0-a-3). A launch draws the tunnel and the station and never a body or a cloud, so
+     * it was one seam this fixture had to declare because `Ports` carried it.
+     */
 
     /// Everything the launch works on, and the oracle's memory beside it.
     struct Leaving
     {
       Universe universe; ///< every byte of it, since M3-a
-      RecordingOutside outside;
-      RecordingLaunch effects;
       RecordingStart start;
 
       // 6502: LSO -- `NWSPS` hands the station the sun's heap, and this launch creates one, so the
@@ -565,10 +536,10 @@ namespace GameLogicTests
         universe.LendSunHeap();
       }
 
-      /// The seams a launch reaches: the AI and the drawing, the sounds, and `RESET`'s own.
+      /// The seams a launch reaches: the sounds, and `RESET`'s own.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(outside, outside, effects, start);
+        return universe.PortsWith(start, start);
       }
     };
 
@@ -577,7 +548,7 @@ namespace GameLogicTests
     {
       std::uint16_t nostm, lsx2, lsy2, mstg, jstx, jsty, alp2Next, bet2, bet2Next;
       std::uint16_t col2, dontclip, yx2m1, slsp, bomb, qq12, qq22, hfx, autoByte;
-      std::uint16_t inwk, fist, stp, res2, reset, tt110, stopbd, noise;
+      std::uint16_t inwk, fist, stp, res2, reset, tt110, noise;
 
       explicit LaunchWhere(const OracleImage& _oracle)
       {
@@ -605,7 +576,6 @@ namespace GameLogicTests
         res2 = _oracle.Label("RES2");
         reset = _oracle.Label("RESET");
         tt110 = _oracle.Label("TT110");
-        stopbd = _oracle.Label("stopbd");
         noise = _oracle.Label("NOISE");
       }
     };
@@ -616,7 +586,6 @@ namespace GameLogicTests
       Universe& universe = _leaving.universe;
       Seed(universe, _seed);
 
-      universe.commander.fuel = universe.fuel;
       universe.message.token = 101u;
       universe.message.column = 9u;
       universe.message.append = 1u;
@@ -643,7 +612,7 @@ namespace GameLogicTests
     }
 
     /// Send everything `Mirror` does not, and everything the launch reads.
-    void MirrorLeaving(const Leaving& _leaving, Cpu6502& _cpu, const Where& _at, const LaunchWhere& _to, std::uint8_t _docked)
+    void MirrorLeaving(const Leaving& _leaving, Cpu6502& _cpu, const Where& _at, const LaunchWhere& _to)
     {
       const Universe& universe = _leaving.universe;
 
@@ -655,12 +624,12 @@ namespace GameLogicTests
       _cpu.memory[_to.alp2Next] = universe.flight.alp2Next;
       _cpu.memory[_to.bet2] = universe.flight.bet2;
       _cpu.memory[_to.bet2Next] = universe.flight.bet2Next;
-      _cpu.memory[_to.col2] = universe.text.cellColour;
+      _cpu.memory[_to.col2] = universe.text.palette.Byte();
       _cpu.memory[_to.dontclip] = _leaving.universe.clip.dontclip;
       _cpu.memory[_to.yx2m1] = universe.heaps.yx2M1;
       _cpu.memory[_to.qq22] = universe.status.hyperspaceCounter;
       _cpu.memory[_to.hfx] = universe.screen.hyperspaceEffect;
-      _cpu.memory[_to.qq12] = _docked;
+      _cpu.memory[_to.qq12] = universe.dockedFlag;
 
       /*
        * 6502: STP -- and `TT110` does not set it either (§6.94, §6.95).
@@ -685,8 +654,7 @@ namespace GameLogicTests
     }
 
     /// Compare the same.
-    void CompareLeaving(const Cpu6502& _cpu, const Leaving& _leaving, const LaunchWhere& _to, std::uint8_t _docked,
-                        const std::wstring& _context)
+    void CompareLeaving(const Cpu6502& _cpu, const Leaving& _leaving, const LaunchWhere& _to, const std::wstring& _context)
     {
       const Universe& universe = _leaving.universe;
 
@@ -701,12 +669,12 @@ namespace GameLogicTests
       same(_to.alp2Next, universe.flight.alp2Next, L"ALP2+1");
       same(_to.bet2, universe.flight.bet2, L"BET2");
       same(_to.bet2Next, universe.flight.bet2Next, L"BET2+1");
-      same(_to.col2, universe.text.cellColour, L"COL2");
+      same(_to.col2, universe.text.palette.Byte(), L"COL2");
       same(_to.dontclip, _leaving.universe.clip.dontclip, L"dontclip");
       same(_to.yx2m1, universe.heaps.yx2M1, L"Yx2M1");
       same(_to.qq22, universe.status.hyperspaceCounter, L"QQ22");
       same(_to.hfx, universe.screen.hyperspaceEffect, L"HFX");
-      same(_to.qq12, _docked, L"QQ12");
+      same(_to.qq12, universe.dockedFlag, L"QQ12");
       same(_to.bomb, universe.commander.energyBomb, L"BOMB");
       same(_to.fist, universe.commander.legalStatus, L"FIST");
 
@@ -764,11 +732,10 @@ namespace GameLogicTests
         leaving.universe.commander.energyBomb = ((shape & 4u) != 0u) ? 0xC0u : 0x40u;
 
         Cpu6502 cpu = oracle.Fresh();
-        cpu.AddTrap(to.stopbd);
-        cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
         FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+        leaving.universe.dockedFlag = 0xFFu; // 6502: QQ12
         Mirror(leaving.universe, cpu, at);
-        MirrorLeaving(leaving, cpu, at, to, 0xFFu);
+        MirrorLeaving(leaving, cpu, at, to);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.res2, 2'000'000);
         Assert::IsTrue(run.completed, L"RES2 returned");
@@ -780,9 +747,7 @@ namespace GameLogicTests
 
         CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
         CompareState(cpu, leaving.universe, at, where);
-        CompareLeaving(cpu, leaving, to, 0xFFu, where);
-
-        Assert::AreEqual<std::uint32_t>(1u, leaving.effects.musicStops, (where + L": stopbd").c_str());
+        CompareLeaving(cpu, leaving, to, where);
 
         bulbs += ((shape & 1u) != 0u) ? 1u : 0u;
         bombs += ((shape & 4u) != 0u) ? 1u : 0u;
@@ -821,27 +786,26 @@ namespace GameLogicTests
         leaving.universe.status.ecmCountdown = ((shape & 2u) != 0u) ? 20u : 0u;
 
         Cpu6502 cpu = oracle.Fresh();
-        cpu.AddTrap(to.stopbd);
-        cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
         FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+        leaving.universe.dockedFlag = 0u; // 6502: QQ12
         Mirror(leaving.universe, cpu, at);
-        MirrorLeaving(leaving, cpu, at, to, 0u);
+        MirrorLeaving(leaving, cpu, at, to);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.reset, 2'000'000);
         Assert::IsTrue(run.completed, L"RESET returned");
 
         Elite::Ports ports = leaving.Ports();
 
-        std::uint8_t docked = 0;
-        Elite::ResetGame(leaving.universe, ports, docked);
+        leaving.universe.dockedFlag = 0; // 6502: QQ12 -- `RESET` sets it, so it starts clear
+        Elite::ResetGame(leaving.universe, ports);
 
         const std::wstring where = WidenText("RESET (shape " + std::to_string(shape) + ")");
 
         CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
         CompareState(cpu, leaving.universe, at, where);
-        CompareLeaving(cpu, leaving, to, docked, where);
+        CompareLeaving(cpu, leaving, to, where);
 
-        Assert::AreEqual<std::uint8_t>(0xFFu, docked, (where + L": QQ12 is the loop's leftover").c_str());
+        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.dockedFlag, (where + L": QQ12 is the loop's leftover").c_str());
         Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.status.forwardShield, (where + L": FSH").c_str());
         Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.status.aftShield, (where + L": ASH").c_str());
         Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.status.energy, (where + L": ENERGY").c_str());
@@ -895,9 +859,6 @@ namespace GameLogicTests
             leaving.universe.view = 1u;
 
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(to.stopbd);
-            cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
-            cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
 
             /*
@@ -907,19 +868,18 @@ namespace GameLogicTests
              * a planet and a station AFTER the tunnel, so an untrapped store here makes `NWSPS`
              * refuse and the two sides disagree about the bubble rather than about the drawing.
              */
-            cpu.AddTrap(oracle.Label("NOSPRITES"));
             FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
             Mirror(leaving.universe, cpu, at);
-            MirrorLeaving(leaving, cpu, at, to, docked);
+            leaving.universe.dockedFlag = docked; // 6502: QQ12 -- the scenario, on the byte `LAUN` reads
+            MirrorLeaving(leaving, cpu, at, to);
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(to.tt110, 8'000'000);
             Assert::IsTrue(run.completed, L"TT110 returned");
 
             Elite::Ports ports = leaving.Ports();
 
-            std::uint8_t flag = docked;
             Elite::SystemSeeds selected{};
-            Elite::Launch(leaving.universe, ports, nullptr, flag, leaving.universe.commander.systemX,
+            Elite::Launch(leaving.universe, ports, leaving.universe.commander.systemX,
                           leaving.universe.commander.systemY, selected);
 
             const std::wstring where = WidenText("TT110 (" + std::string(docked != 0u ? "docked" : "in flight") + ", tek " +
@@ -927,9 +887,9 @@ namespace GameLogicTests
 
             CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
             CompareState(cpu, leaving.universe, at, where);
-            CompareLeaving(cpu, leaving, to, flag, where);
+            CompareLeaving(cpu, leaving, to, where);
 
-            Assert::AreEqual<std::uint8_t>(0u, flag, (where + L": QQ12 is cleared on both paths").c_str());
+            Assert::AreEqual<std::uint8_t>(0u, leaving.universe.dockedFlag, (where + L": QQ12 is cleared on both paths").c_str());
 
             launched += (docked != 0u) ? 1u : 0u;
             refused += (docked == 0u) ? 1u : 0u;
@@ -961,25 +921,28 @@ namespace GameLogicTests
   public:
     TEST_METHOD(ALaunchPacesBothOfItsTunnels)
     {
-      struct Counting final : Elite::TunnelEffects
+      struct Counting final : Elite::Presenter
       {
         std::uint32_t circles = 0;
-        void ShowFrame() override
+        void Present() override
         {
           ++circles;
         }
+        void WaitFrames(std::uint8_t) override {}
+        void HoldFlightFrame(std::uint8_t) override {}
+        void HoldTitleFrame(std::uint8_t) override {}
       };
 
       Leaving leaving;
       Occupy(leaving, 0x4Du);
       leaving.universe.view = 1u;
 
-      Elite::Ports ports = leaving.Ports();
-
       Counting counting;
-      std::uint8_t flag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
+      Elite::Ports ports = leaving.universe.PortsWith(counting);
+
+      leaving.universe.dockedFlag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
       Elite::SystemSeeds selected{};
-      Elite::Launch(leaving.universe, ports, &counting, flag, leaving.universe.commander.systemX,
+      Elite::Launch(leaving.universe, ports, leaving.universe.commander.systemX,
                     leaving.universe.commander.systemY, selected);
 
       Assert::AreEqual<std::uint32_t>(68u, counting.circles, L"both tunnels are paced, not just the second");
@@ -987,12 +950,13 @@ namespace GameLogicTests
       // And the refusal path draws nothing at all, so it asks the platform for nothing either.
       Leaving flying;
       Occupy(flying, 0x4Du);
-      Elite::Ports flyingPorts = flying.Ports();
 
       Counting none;
-      std::uint8_t inFlight = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
+      Elite::Ports flyingPorts = flying.universe.PortsWith(none);
+
+      flying.universe.dockedFlag = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
       Elite::SystemSeeds ignored{};
-      Elite::Launch(flying.universe, flyingPorts, &none, inFlight, flying.universe.commander.systemX,
+      Elite::Launch(flying.universe, flyingPorts, flying.universe.commander.systemX,
                     flying.universe.commander.systemY, ignored);
 
       Assert::AreEqual<std::uint32_t>(0u, none.circles, L"pressing 1 in flight is a view change and draws no tunnel");
@@ -1094,13 +1058,12 @@ namespace GameLogicTests
 
       Cpu6502 cpu = oracle.Fresh();
       FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+      leaving.universe.dockedFlag = 0u; // 6502: QQ12
       Mirror(leaving.universe, cpu, at);
-      MirrorLeaving(leaving, cpu, at, LaunchWhere(oracle), 0u);
+      MirrorLeaving(leaving, cpu, at, LaunchWhere(oracle));
 
       cpu.AddTrap(oracle.Label("EXNO3"), Cpu6502::TrapExit::SetCarry);
-      cpu.AddTrap(oracle.Label("SETL1"));
       cpu.AddTrap(oracle.Label("DOVDU19"));
-      cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, fourth time
 
       cpu.a = cpu.x = cpu.y = 0;
       cpu.sp = 0xFD;
@@ -1123,7 +1086,7 @@ namespace GameLogicTests
 
       Elite::Ports ports = leaving.Ports();
 
-      Elite::PrepareDeathScene(leaving.universe, ports, leaving.universe.dashboard);
+      Elite::PrepareDeathScene(leaving.universe, ports);
 
       const std::wstring where = L"DEATH (the scene)";
 
@@ -1161,8 +1124,16 @@ namespace GameLogicTests
       {
         explosions += (hit.address == oracle.Label("EXNO3")) ? 1u : 0u;
       }
-      Assert::AreEqual<std::size_t>(explosions, leaving.universe.dashboard.sounds.size(), (where + L": sounds").c_str());
-      Assert::AreEqual<std::uint8_t>(Elite::SOUND_EXPLOSION, leaving.universe.dashboard.sounds.front(), (where + L": sfxexpl").c_str());
+      /*
+       * 6502: EXNO3's `JMP NOISE` -- and the BUFFER carries it since M3-b-2a.
+       *
+       * The count came off a trap and the port's off a recorded list; the routine runs on both
+       * sides now, so `SOFLG` says which voice took `sfxexpl` and at what priority. `EXNO3` is
+       * still trapped, which is why the game's side is a count of ITS hits and not of `NOISE`'s.
+       */
+      Assert::IsTrue(explosions > 0u, (where + L": the shipped routine explodes").c_str());
+      Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(0x80u | (static_cast<std::uint8_t>(Elite::SoundEffect::Explosion) + 1u)),
+                                     leaving.universe.sound.flag[2], (where + L": sfxexpl").c_str());
 
       Assert::AreEqual(cpu.memory[oracle.Label("LASCT")], leaving.universe.status.laserCount, (where + L": LASCT").c_str());
       Assert::AreEqual(cpu.memory[oracle.Label("MCNT")], leaving.universe.flight.mainLoopCounter, (where + L": MCNT").c_str());
@@ -1268,7 +1239,7 @@ namespace GameLogicTests
 
       Elite::Ports ports = leaving.Ports();
 
-      Elite::Die(leaving.universe, ports, leaving.universe.dashboard, nullptr);
+      Elite::Die(leaving.universe, ports);
 
       Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.keys[0], L"KLO+0 is below U%'s range and is untouched");
       for (std::size_t index = 1; index <= Elite::FLIGHT_KEYS_CLEARED; ++index)
@@ -1300,10 +1271,10 @@ namespace GameLogicTests
     {
       auto port = std::make_unique<FlightPort>();
       port->universe.commander = Elite::DefaultCommander();
-      Elite::ResetGame(port->universe, port->ports, port->docked); // 6502: RESET
+      Elite::ResetGame(port->universe, port->Ports()); // 6502: RESET
 
       Elite::SystemSeeds selected{};
-      Elite::Launch(port->universe, port->ports, nullptr, port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
+      Elite::Launch(port->universe, port->Ports(), port->universe.commander.systemX, port->universe.commander.systemY,
                     selected); // 6502: TT110
 
       // Some way out from the station at speed, so `ASL DELTA` twice has something to work on.
@@ -1320,7 +1291,7 @@ namespace GameLogicTests
        * the process rather than the test -- which is what the mutation harness saw when the cloud's
        * vertex count was zeroed (the run aborted with no summary, on both runners' shims).
        */
-      struct Watching final : Elite::TunnelEffects
+      struct Watching final : Elite::Presenter
       {
         FlightPort& port;
         std::vector<std::uint8_t> cells;
@@ -1332,7 +1303,10 @@ namespace GameLogicTests
         {
         }
 
-        void ShowFrame() override
+      void WaitFrames(std::uint8_t) override {}
+      void Present() override {}
+      void HoldTitleFrame(std::uint8_t) override {}
+      void HoldFlightFrame(std::uint8_t) override
         {
           ++frames;
           if (!failure.empty())
@@ -1391,7 +1365,8 @@ namespace GameLogicTests
       };
 
       Watching watching(*port);
-      Elite::Die(port->universe, port->ports, *port, &watching);
+      port->watching = &watching;
+      Elite::Die(port->universe, port->Ports());
 
       Assert::IsTrue(watching.failure.empty(), watching.failure.c_str());
       Assert::AreEqual<std::uint32_t>(Elite::DEATH_FRAMES + 1u, watching.frames, L"every frame of the sequence was shown");
@@ -1450,7 +1425,6 @@ namespace GameLogicTests
                 leaving.start.fire = fire;
 
                 Cpu6502 cpu = oracle.Fresh();
-                cpu.AddTrap(oracle.Label("SETL1"));
                 cpu.AddTrap(oracle.Label("DOVDU19"));
 
                 /*
@@ -1466,10 +1440,7 @@ namespace GameLogicTests
                  * The port writes those registers through `SightEffects` and touches no memory, so
                  * trapping the routine is what makes the two sides agree rather than a convenience.
                  */
-                cpu.AddTrap(oracle.Label("NOSPRITES"));
-                cpu.AddTrap(to.stopbd);
-                cpu.AddTrap(to.noise, Cpu6502::TrapExit::SetCarry);
-
+                
                 /*
                  * The counted `RDKEY`, written over the real one.
                  *
@@ -1510,8 +1481,9 @@ namespace GameLogicTests
                 cpu.Load(rdkey, stub, sizeof(stub));
 
                 FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+                leaving.universe.dockedFlag = 0xFFu; // 6502: QQ12
                 Mirror(leaving.universe, cpu, at);
-                MirrorLeaving(leaving, cpu, at, to, 0xFFu);
+                MirrorLeaving(leaving, cpu, at, to);
                 cpu.memory[patg] = authors;
 
                 cpu.a = Elite::TITLE_START_TOKEN;
@@ -1521,6 +1493,18 @@ namespace GameLogicTests
                 Assert::IsTrue(run.completed, L"TITLE returned");
 
                 Elite::Ports ports = leaving.Ports();
+
+                /*
+                 * 6502: DT3 -- and BOTH SIDES RUN IT SINCE M3-b-4b.
+                 *
+                 * This asserted `codes.ran.empty()` until the seam went: a recorder counted the
+                 * control codes `TITLE`'s three tokens reached and the test said there were none.
+                 * The oracle has always RUN them, so what that assertion was really claiming is
+                 * that the two screens agree -- which `CompareScreens` below says directly, and
+                 * says for the right reason. §6.73's corollary: the seam was what the suite
+                 * counted, and the count goes with it.
+                 */
+                leaving.universe.RunCodesThrough(ports);
 
                 // 6502: QQ12 -- docked, which is where `TITLE` is reached from. It is the
                 // universe's own byte since M3-a, where `TitleScreen` held a reference to it.
@@ -1543,10 +1527,9 @@ namespace GameLogicTests
                 }
 
                 Assert::AreEqual(cpu.a, answer, (where + L": thiskey").c_str());
-                Assert::IsTrue(leaving.universe.codes.ran.empty(), (where + L": no token reached a control code").c_str());
 
                 CompareState(cpu, leaving.universe, at, where);
-                CompareLeaving(cpu, leaving, to, leaving.universe.dockedFlag, where);
+                CompareLeaving(cpu, leaving, to, where);
                 CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
 
                 Assert::AreEqual(cpu.memory[jstk], leaving.universe.options.joystick, (where + L": JSTK").c_str());

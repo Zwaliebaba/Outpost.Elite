@@ -49,9 +49,15 @@ namespace Elite
    * sources: a port that derived the cache from the seeds it just copied matched the oracle on
    * `QQ2` and disagreed on `QQ28` for the first crosshair position tried.
    */
-  void ArriveAtSystem(Commander& _commander, CurrentSystem& _current, SystemSeeds& _selected, const SystemSeeds& _target,
-                      SystemData& _described, MarketState& _market, Rng& _rng, std::uint8_t& _explosionCount, std::uint8_t _crosshairX,
-                      std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _findNearest) noexcept;
+  /*
+   * `_explosionCount` WAS A `std::uint8_t&` UNTIL M5-a-3 (P10). It is `EV`, the encounter counter,
+   * and it is `Universe::explosions` at every call site -- so the universe comes in and the
+   * reference goes, along with the commander, the current system and the generator, which are the
+   * same three fields at every site too. What stays by value is what varies by caller.
+   */
+  void ArriveAtSystem(Universe& _universe, SystemSeeds& _selected, const SystemSeeds& _target, SystemData& _described,
+                      MarketState& _market, std::uint8_t _crosshairX, std::uint8_t _crosshairY, const SystemSeeds& _galaxy,
+                      bool _findNearest) noexcept;
 
   /*
    * 6502: MJP -- witchspace, which is a jump that did not arrive.
@@ -65,8 +71,7 @@ namespace Elite
    * compares against is then stored into `NOSTM`: witchspace has three specks of dust instead of
    * the usual eighteen, and the constant is shared between the two on purpose.
    */
-  void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander, DashboardEffects& _sound,
-                       TunnelEffects* _pacing) noexcept;
+  void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander) noexcept;
 
   /*
    * 6502: ptg -- `LSR COK / SEC / ROL COK`, and then it FALLS INTO `MJP`.
@@ -78,8 +83,7 @@ namespace Elite
    * `COK` is the competition flags byte, so holding the configuration key through a jump is
    * recorded in the commander file for ever.
    */
-  void EnterWitchspaceCheating(Universe& _universe, Ports& _ports, Commander& _commander, DashboardEffects& _sound,
-                               TunnelEffects* _pacing) noexcept;
+  void EnterWitchspaceCheating(Universe& _universe, Ports& _ports, Commander& _commander) noexcept;
 
   /*
    * What `TT18` did, which the original says by WHERE IT ENDS UP -- and that is four places.
@@ -110,7 +114,7 @@ namespace Elite
    * forces witchspace. Then one roll in 256 -- `CMP #253 / BCS MJP` -- does it anyway.
    */
   [[nodiscard]] JumpResult PerformJump(Universe& _universe, Ports& _ports, SystemSeeds& _selected, JumpState& _jump,
-                                       SystemData& _described, MarketState& _market, DashboardEffects& _sound, TunnelEffects* _pacing,
+                                       SystemData& _described, MarketState& _market, 
                                        std::uint8_t _crosshairX, std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _controlHeld,
                                        bool _patg) noexcept;
 
@@ -130,6 +134,6 @@ namespace Elite
    * round into bit 0. Two instructions to rotate a byte the 6502 cannot rotate in place.
    */
   void GalacticJump(Universe& _universe, Ports& _ports, SystemSeeds& _galaxy, SystemSeeds& _selected, JumpState& _jump,
-                    ChartView& _chart, TunnelEffects* _pacing) noexcept;
+                    ChartView& _chart) noexcept;
 
 } // namespace Elite

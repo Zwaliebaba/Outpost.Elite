@@ -4,6 +4,7 @@
 
 #include "Canvas.h"
 #include "Commander.h"
+#include "Controls.h"
 #include "ExtendedTokens.h"
 #include "NameEntry.h"
 #include "Rng.h"
@@ -17,7 +18,7 @@
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::CharacterPrinter;
-using Elite::KeySource;
+using Elite::Keyboard;
 using Elite::LineLimits;
 using Elite::LineResult;
 using Elite::TextState;
@@ -56,7 +57,7 @@ namespace GameLogicTests
 
     /// The port's side of a scripted keyboard. Records an overrun rather than throwing, because
     /// GameLogic is noexcept and an assertion here would unwind through it into std::terminate.
-    class ScriptedKeys : public KeySource
+    class ScriptedKeys : public Keyboard
     {
     public:
       explicit ScriptedKeys(std::vector<std::uint8_t> _keys) noexcept
@@ -64,7 +65,31 @@ namespace GameLogicTests
       {
       }
 
-      std::uint8_t NextKey() override
+      /*
+       * 6502: FLKB, which was `LineEntryEffects`'s until M3-b-3d and is this port's.
+       *
+       * It writes into a log the caller lends it, and that is the point rather than an economy:
+       * what these tests compare is the ORDER a line editor reaches its two C64 things in, and an
+       * order needs one list. `DELAY` is `Presenter`'s and `FLKB` is this one's, so the two ports
+       * share the recording the way the game shares a screen.
+       */
+      std::vector<std::uint32_t>* log = nullptr;
+
+      void Flush() override
+      {
+        if (log != nullptr)
+        {
+          log->push_back(0x200u);
+        }
+      }
+
+      /// 6502: the matrix walk, which the line editor never reaches -- `TT217` is its whole input.
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         if (m_taken >= m_keys.size())
         {
@@ -89,17 +114,18 @@ namespace GameLogicTests
       bool m_overrun = false;
     };
 
-    /// The two C64 things the line editor reaches for, recorded rather than performed.
-    class RecordingEffects : public Elite::LineEntryEffects
+    /// The two C64 things the line editor reaches for, recorded rather than performed. `DELAY` is
+    /// `Presenter`'s since M3-b-3b; `FLKB` is `Keyboard::Flush`'s since M3-b-3d and writes into
+    /// this same log, because what the tests compare is the ORDER the two are reached in.
+    class RecordingEffects : public Elite::Presenter
     {
     public:
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       void WaitFrames(std::uint8_t _frames) override
       {
         log.push_back(static_cast<std::uint32_t>(0x100u + _frames));
-      }
-      void FlushKeyboard() override
-      {
-        log.push_back(0x200u);
       }
 
       std::vector<std::uint32_t> log;
@@ -297,6 +323,7 @@ namespace GameLogicTests
 
         ScriptedKeys keys(script.keys);
         RecordingEffects effects;
+        keys.log = &effects.log;
         std::array<std::uint8_t, 16> buffer;
         buffer.fill(0xAA);
 
@@ -332,7 +359,7 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.c, result.escaped, (where + L": the carry ESCAPE sets").c_str());
 
         // 6502: COL2 -- purple while typing, white on both exits.
-        Assert::AreEqual(cpu.memory[col2], text.cellColour, (where + L": the text colour on exit").c_str());
+        Assert::AreEqual(cpu.memory[col2], text.palette.Byte(), (where + L": the text colour on exit").c_str());
 
         // The buffer itself, including the carriage return RETURN writes into it and the bytes
         // beyond the line that must be left alone.
@@ -485,16 +512,17 @@ namespace GameLogicTests
         text.column = 1;
         text.row = 1;
         sink.cursor = &text;
-        CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
-        TokenPrinter printer(characters);
+        Elite::ExtendedTextState sentences;
+        CharacterPrinter characters(sink, sentences);
+        characters.State().sentenceStart = 0xFF;
+        TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
-        printer.SetCursor(&text);
         Elite::Rng rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
 
         ScriptedKeys keys(item.keys);
         RecordingEffects effects;
+        keys.log = &effects.log;
         std::array<std::uint8_t, 16> buffer;
         buffer.fill(0x77);
         LineLimits limits;

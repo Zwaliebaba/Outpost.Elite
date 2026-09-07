@@ -469,27 +469,6 @@ namespace GameLogicTests
       at.frin = oracle.Label("FRIN");
       at.t2 = oracle.Label("T2");
 
-      struct Recorder final : Elite::SightEffects
-      {
-        std::vector<std::uint8_t> modes;
-        std::vector<std::uint8_t> masks;
-        std::uint32_t colours = 0;
-
-        void SetRasterMode(std::uint8_t _mode) override
-        {
-          modes.push_back(_mode);
-        }
-        void SetSightColour(std::uint8_t) override
-        {
-          ++colours;
-        }
-        void SetSpritesEnabled(std::uint8_t _mask) override
-        {
-          masks.push_back(_mask);
-        }
-        void MaskSprites(std::uint8_t) override {}
-      };
-
       std::uint32_t compared = 0;
       std::uint32_t copies = 0;
 
@@ -499,7 +478,6 @@ namespace GameLogicTests
         {
           Cpu6502 cpu = oracle.Fresh();
           Elite::Canvas canvas;
-          cpu.AddTrap(oracle.Label("SETL1"));
 
           FillScreens(cpu, canvas, screen, 0x00u);
 
@@ -547,7 +525,7 @@ namespace GameLogicTests
           Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
           cpu.memory[at.comx] = compass.x;
           cpu.memory[at.comy] = compass.y;
-          cpu.memory[at.comc] = compass.colour;
+          cpu.memory[at.comc] = Elite::PatternByte(compass.pattern);
 
           const Elite::Testing::RunResult run = cpu.CallSubroutine(wantdials, 400'000);
           Assert::IsTrue(run.completed, L"wantdials returned");
@@ -573,8 +551,13 @@ namespace GameLogicTests
           status.altitude = READINGS[11];
           status.damageFlash = READINGS[12];
 
-          Recorder effects;
-          Elite::ShowDashboard(canvas, draw, screenState, bubble, flight, status, READINGS[8], compass, effects);
+          // 6502: VIC+&15 and l1 -- seeded so that "NOSPRITES ran" is a byte and not a call count.
+          Elite::VideoState video{};
+          Elite::MemoryMap map;
+          video.enabled = 0xA7u;
+          map.port = 0xE7u;
+
+          Elite::ShowDashboard(canvas, draw, screenState, bubble, flight, status, Elite::LightYearsTenths{READINGS[8]}, compass, video, map);
 
           const std::wstring where = WidenText("wantdials(DFLAG " + std::to_string(already) + ", MCNT " + std::to_string(counter) + ")");
 
@@ -585,7 +568,7 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[at.dflag], screenState.dashboardShown, (where + L": DFLAG").c_str());
           Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
           Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
-          Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
+          Assert::AreEqual(cpu.memory[at.comc], Elite::PatternByte(compass.pattern), (where + L": COMC").c_str());
 
           for (std::size_t slot = 0; slot < 2u; ++slot)
           {
@@ -597,11 +580,10 @@ namespace GameLogicTests
             }
           }
 
-          // `NOSPRITES` runs either way, so the seam sees the same three calls whatever `DFLAG` is.
-          Assert::AreEqual<std::size_t>(2u, effects.modes.size(), (where + L": two raster switches").c_str());
-          Assert::AreEqual<std::size_t>(1u, effects.masks.size(), (where + L": one sprite mask").c_str());
-          Assert::AreEqual<std::uint32_t>(0u, effects.masks[0], (where + L": and it is zero").c_str());
-          Assert::AreEqual<std::size_t>(2u, cpu.trapHits.size(), (where + L": the game switched twice").c_str());
+          // `NOSPRITES` runs either way, so the sprites are off and the map is back whatever
+          // `DFLAG` is (M3-b-3a: the state where three counted calls used to be).
+          Assert::AreEqual<std::uint32_t>(0u, video.enabled, (where + L": NOSPRITES switched every sprite off").c_str());
+          Assert::AreEqual<std::uint32_t>(0xE4u, map.port, (where + L": and put the memory map back").c_str());
 
           Assert::IsTrue(touched > 0u, (where + L": something was drawn").c_str());
           copies += (already == 0u) ? 1u : 0u;
@@ -650,22 +632,6 @@ namespace GameLogicTests
       const std::uint16_t t2 = oracle.Label("T2");
       const std::uint16_t mcnt = oracle.Label("MCNT");
 
-      struct Recorder final : Elite::SightEffects
-      {
-        std::vector<std::uint8_t> modes;
-        std::vector<std::uint8_t> masks;
-        void SetRasterMode(std::uint8_t _mode) override
-        {
-          modes.push_back(_mode);
-        }
-        void SetSightColour(std::uint8_t) override {}
-        void SetSpritesEnabled(std::uint8_t _mask) override
-        {
-          masks.push_back(_mask);
-        }
-        void MaskSprites(std::uint8_t) override {}
-      };
-
       std::uint32_t compared = 0;
       std::uint32_t dashboards = 0;
       std::uint32_t oneBand = 0;
@@ -677,7 +643,6 @@ namespace GameLogicTests
         {
           Cpu6502 cpu = oracle.Fresh();
           Elite::Canvas canvas;
-          cpu.AddTrap(oracle.Label("SETL1"));
 
           FillScreens(cpu, canvas, screen, 0x1Du);
 
@@ -724,10 +689,13 @@ namespace GameLogicTests
           Elite::DrawWorkspace draw;
           Elite::TextState textState;
           Elite::ScreenState screenState;
-          Elite::Compass compass{0xC3u, 0x9Cu, 0x55u};
+          Elite::Compass compass{0xC3u, 0x9Cu, Elite::PixelPattern::Red};
           Elite::FlightState flight;
           Elite::FlightStatus status;
-          Recorder effects;
+          Elite::VideoState video{};
+          Elite::MemoryMap map;
+          video.enabled = 0xA7u;
+          map.port = 0xE7u;
 
           screenState.colourBank = 0x33u;
           screenState.bitmapMode = 0x44u;
@@ -735,7 +703,7 @@ namespace GameLogicTests
           textState.column = 0x66u;
           textState.row = 0x77u;
 
-          Elite::SetUpScreenPixels(canvas, draw, textState, screenState, bubble, flight, status, 0u, compass, effects, view);
+          Elite::SetUpScreenPixels(canvas, draw, textState, screenState, bubble, flight, status, Elite::LightYearsTenths{}, compass, video, map, view);
 
           const std::wstring where = WidenText("TTX66K(QQ11 " + std::to_string(view) + ", DFLAG " + std::to_string(already) + ")");
 
@@ -743,7 +711,7 @@ namespace GameLogicTests
           Assert::AreEqual(cpu.memory[abraxas], screenState.colourBank, (where + L": abraxas").c_str());
           Assert::AreEqual(cpu.memory[caravanserai], screenState.bitmapMode, (where + L": caravanserai").c_str());
           Assert::AreEqual(cpu.memory[dflag], screenState.dashboardShown, (where + L": DFLAG").c_str());
-          Assert::AreEqual(cpu.memory[comc], compass.colour, (where + L": COMC").c_str());
+          Assert::AreEqual(cpu.memory[comc], Elite::PatternByte(compass.pattern), (where + L": COMC").c_str());
           Assert::AreEqual(cpu.memory[xc], textState.column, (where + L": XC").c_str());
           Assert::AreEqual(cpu.memory[yc], textState.row, (where + L": YC").c_str());
 
@@ -757,8 +725,9 @@ namespace GameLogicTests
             }
           }
 
-          Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.modes.size(),
-                                        (where + L": the same number of raster switches").c_str());
+          // Every path reaches `NOSPRITES`, so both sides end with the sprites off and the map back.
+          Assert::AreEqual<std::uint32_t>(0u, video.enabled, (where + L": every sprite off").c_str());
+          Assert::AreEqual<std::uint32_t>(0xE4u, map.port, (where + L": and the memory map back").c_str());
 
           dashboards += (view == 0u || view == 13u) ? 1u : 0u;
           oneBand += (view == 2u || view == 64u || view == 128u) ? 1u : 0u;
@@ -817,7 +786,6 @@ namespace GameLogicTests
             universe.status.hyperspaceCountdown = countdown;
 
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(oracle.Label("SETL1"));
             FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
             Mirror(universe, cpu, at);
 
@@ -881,7 +849,6 @@ namespace GameLogicTests
             universe.spaceView = from;
 
             Cpu6502 cpu = oracle.Fresh();
-            cpu.AddTrap(oracle.Label("SETL1"));
             cpu.AddTrap(oracle.Label("DOVDU19"));
             FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
             Mirror(universe, cpu, at);
@@ -899,9 +866,14 @@ namespace GameLogicTests
             CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
             CompareState(cpu, universe, at, where);
 
-            // The palette change happens on every path, including the one that does nothing else.
-            Assert::AreEqual<std::size_t>(1u, universe.effects.palettes.size(), (where + L": one palette change").c_str());
-            Assert::AreEqual<std::uint32_t>(0u, universe.effects.palettes[0], (where + L": and it asks for zero").c_str());
+            /*
+             * 6502: LDA #0 / JSR DOVDU19 -- ASSERTED HERE UNTIL M3-b-2b, AND IT ASSERTED NOTHING.
+             *
+             * `DOVDU19` is a bare `RTS` on this build; the two lines that stood here counted the
+             * port's calls to a seam whose every implementation was empty, on both sides of a
+             * comparison that could not see the difference. `CompareScreens` and `CompareState`
+             * above are what the routine's palette change is worth, which is nothing.
+             */
 
             if (view == 0u && to == from)
             {
@@ -1008,9 +980,7 @@ namespace GameLogicTests
         universe.bubble.blocks[1].z.hi = item.sunHigh;
 
         Cpu6502 cpu = oracle.Fresh();
-        cpu.AddTrap(oracle.Label("SETL1"));
         cpu.AddTrap(oracle.Label("DOVDU19"));
-        cpu.AddTrap(oracle.Label("NOISE"));
         FillScreens(cpu, universe.canvas, at.screen, 0x1Du);
         Mirror(universe, cpu, at);
 
@@ -1025,19 +995,17 @@ namespace GameLogicTests
         CompareScreens(cpu, at.screen, universe.canvas, 0x1Du, where);
         CompareState(cpu, universe, at, where);
 
-        // The refusal noise is the seam, and the game asking for it is a trap hit at `NOISE`.
-        std::size_t noises = 0;
-        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
-        {
-          noises += (hit.address == oracle.Label("NOISE")) ? 1u : 0u;
-        }
-        Assert::AreEqual<std::size_t>(noises, universe.effects.sounds.size(), (where + L": the same number of refusals").c_str());
-        for (const std::uint8_t effect : universe.effects.sounds)
-        {
-          Assert::AreEqual<std::uint32_t>(Elite::SOUND_BOOP, effect, (where + L": sfxboop").c_str());
-        }
-
-        if (universe.effects.sounds.empty())
+        /*
+         * 6502: LDY #sfxboop / JMP NOISE -- the refusal, and `CompareState` above already carries
+         * it since M3-b-2a.
+         *
+         * It was `ViewEffects::PlaySound`, trapped on the oracle and recorded here, and this
+         * counted the two lists against each other. Both machines run `NOISE` now, so the refusal
+         * is `SOFLG` on the voice `sfxboop` took -- compared byte for byte with the rest of the
+         * universe rather than as a tally, and the coverage counters read it back the same way.
+         */
+        const bool refusedThis = universe.sound.flag[2] != 0u;
+        if (!refusedThis)
         {
           ++jumped;
         }
@@ -1110,7 +1078,7 @@ namespace GameLogicTests
            * on black outside it, and the bottom row yellow so a text screen's box has a floor.
            * Everything else is the white `TTX66K` rewrites on every clear.
            */
-          std::uint8_t expected = Elite::TEXT_COLOUR_WHITE;
+          Elite::CellPalette expected = Elite::TEXT_COLOUR_WHITE;
           if (column < 3 || column > 36)
           {
             expected = Elite::SCREEN_BLACK_ON_BLACK;
@@ -1119,7 +1087,7 @@ namespace GameLogicTests
           {
             expected = Elite::SCREEN_YELLOW_ON_BLACK;
           }
-          Assert::AreEqual<std::uint32_t>(expected, canvas.Read(static_cast<std::uint16_t>(Elite::Canvas::SCREEN_CELLS + cell)),
+          Assert::AreEqual<std::uint32_t>(expected.Byte(), canvas.Read(static_cast<std::uint16_t>(Elite::Canvas::SCREEN_CELLS + cell)),
                                           (L"screen RAM, " + where).c_str());
 
           /*
@@ -1130,9 +1098,9 @@ namespace GameLogicTests
           if (row >= Elite::Canvas::DASHBOARD_CELL_ROW)
           {
             const std::size_t index = static_cast<std::size_t>(cell) - Elite::Canvas::DASHBOARD_CELL_ROW * Elite::Canvas::CELL_COLUMNS;
-            expected = Elite::DASHBOARD_SCREEN_COLOURS[index];
+            expected = Elite::CellPalette::Of(Elite::DASHBOARD_SCREEN_COLOURS[index]); // sdump's bytes are pairs too
           }
-          Assert::AreEqual<std::uint32_t>(expected, canvas.Read(static_cast<std::uint16_t>(Elite::Canvas::DASHBOARD_CELLS + cell)),
+          Assert::AreEqual<std::uint32_t>(expected.Byte(), canvas.Read(static_cast<std::uint16_t>(Elite::Canvas::DASHBOARD_CELLS + cell)),
                                           (L"dashboard screen RAM, " + where).c_str());
 
           /*
@@ -1154,7 +1122,7 @@ namespace GameLogicTests
         }
       }
 
-      Assert::AreEqual<std::uint32_t>(0u, canvas.Background(), L"the background register is black");
+      Assert::AreEqual<std::uint32_t>(0u, Elite::ColourIndex(canvas.Background()), L"the background register is black");
     }
 
     /*

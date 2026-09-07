@@ -21,11 +21,11 @@ namespace Elite
   namespace
   {
     /*
-     * 6502: PTCLS and PTCLS2, which are one body -- see the header. `_effects` is null for `PTCLS`
-     * and the seam for `PTCLS2`.
+     * 6502: PTCLS and PTCLS2, which are one body -- see the header. The two pointers are null for
+     * `PTCLS` and the state for `PTCLS2`, which is what tells the two entries apart.
      */
     void DrawParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap, const Bubble& _bubble,
-                       ExplosionEffects* _effects) noexcept
+                       VideoState* _video, MemoryMap* _map) noexcept
     {
       const HeapOffset address = _work.heap;
 
@@ -38,14 +38,14 @@ namespace Elite
       std::uint8_t sprx = 0;
       std::uint8_t spry = 0;
 
-      if (_effects != nullptr)
+      if (_video != nullptr)
       {
-        _effects->SetRasterMode(0x05u); // 6502: LDA #%101 / JSR SETL1 -- map the I/O page in
+        SetMemoryMap(*_map, MEMORY_MAP_IO); // 6502: LDA #%101 / JSR SETL1 -- map the I/O page in
 
         // 6502: LDA INWK+7 / CMP #7 -- the compare is made with A already loaded for the register
         // write, so the two answers are chosen before the branch rather than after it.
         const bool distant = _work.z.hi >= 7u;
-        _effects->SetSpriteExpansion(distant ? 0xFDu : 0xFFu);
+        ApplySpriteExpansion(*_video, distant ? 0xFDu : 0xFFu);
         sprx = distant ? 44u : 32u;
         spry = distant ? 40u : 30u;
       }
@@ -102,7 +102,7 @@ namespace Elite
         }
         const std::uint8_t cnt = vertex; // 6502: STY CNT
 
-        if (_effects != nullptr)
+        if (_video != nullptr)
         {
           /*
            * 6502: the burst sprite, placed at the vertex plus the offset chosen above.
@@ -122,7 +122,7 @@ namespace Elite
 
             if (highY.value == 0u && lowY.value < EXPLOSION_SPRITE_BOTTOM)
             {
-              _effects->ShowExplosionSprite(static_cast<std::uint16_t>(lowX.value | (highX.value << 8)), lowY.value);
+              ApplyExplosionSprite(*_video, static_cast<std::uint16_t>(lowX.value | (highX.value << 8)), lowY.value);
             }
           }
         }
@@ -196,9 +196,9 @@ namespace Elite
       std::array<std::uint8_t, 4> state = _rng.State();
       state[1] = stacked;
 
-      if (_effects != nullptr)
+      if (_map != nullptr)
       {
-        _effects->SetRasterMode(0x04u); // 6502: LDA #%100 / JSR SETL1 -- map the I/O page back out
+        SetMemoryMap(*_map, MEMORY_MAP_RAM); // 6502: LDA #%100 / JSR SETL1 -- map the I/O page back out
       }
 
       state[3] = _bubble.blocks[0].z.lo;
@@ -248,17 +248,17 @@ namespace Elite
   void DrawExplosionParticles(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
                               const Bubble& _bubble) noexcept
   {
-    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr);
   }
 
   void DrawExplosionParticlesWithSprite(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
-                                        const Bubble& _bubble, ExplosionEffects& _effects) noexcept
+                                        const Bubble& _bubble, VideoState& _video, MemoryMap& _map) noexcept
   {
-    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_effects);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_video, &_map);
   }
 
   void DrawExplosionCloud(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap, const GeometryWorkspace& _geometry,
-                          const Bubble& _bubble, ExplosionEffects& _effects) noexcept
+                          const Bubble& _bubble, VideoState& _video, MemoryMap& _map) noexcept
   {
     const HeapOffset address = _work.heap;
 
@@ -266,7 +266,7 @@ namespace Elite
     // to rub it out. Always through `PTCLS`; the burst sprite is placed once and left alone.
     if (Has(_work.state, ShipStateBit::CloudDrawn))
     {
-      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr);
+      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr);
     }
 
     /*
@@ -381,11 +381,11 @@ namespace Elite
      */
     if (frump == EXPLOSION_CLOUD_START)
     {
-      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_effects);
+      DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, &_video, &_map);
       return;
     }
 
-    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr);
+    DrawParticles(_canvas, _math, _rng, _work, _heap, _bubble, nullptr, nullptr);
   }
 
 } // namespace Elite

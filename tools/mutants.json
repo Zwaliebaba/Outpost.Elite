@@ -12,7 +12,7 @@
     "  unit.name     what to pass to --unit",
     "  unit.slice    the plan row this list belongs to",
     "  unit.filter   substrings handed to the test runner, one per TEST_CLASS that covers this",
-    "                unit, so a mutant runs its own tests rather than all 349",
+    "                unit, so a mutant runs its own tests rather than the whole suite",
     "  unit.tests    how many tests those filters select, VERIFIED against the unmutated build",
     "                before any mutant is applied. A filter that selects the wrong tests reports",
     "                survivors for code it never ran, which is worse than no filter at all --",
@@ -90,8 +90,8 @@
         {
           "id": "ta-240",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (roll.value < 240u || _universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
-          "replace": "if (roll.value < 239u || _universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
+          "find": "if (roll.value < 240u || _frame.universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
+          "replace": "if (roll.value < 239u || _frame.universe.bubble.Count(ShipType::Viper) >= MAXIMUM_POLICE)",
           "expect": "caught",
           "note": "The police roll. Closed by a seed that reads 239 there."
         },
@@ -130,23 +130,23 @@
         {
           "id": "ta-half",
           "file": "GameLogic/Tactics.cpp",
-          "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < work.energy;",
-          "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < work.energy;",
+          "find": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 1u) < _frame.work.energy;",
+          "replace": "const bool fightsOn = static_cast<std::uint8_t>(maximumEnergy >> 2u) < _frame.work.energy;",
           "expect": "caught",
           "note": "TA7's first LSR A -- and its BCC goes to CAPITAL TA3, part SIX, so a ship above half energy skips the missile launch. THIS ONE WAS A DEFECT: the port ran both energy branches into part five. Closed by the fix plus three cases WITH missiles straddling the threshold (plan section 6.153)."
         },
         {
           "id": "ta7-three",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= work.energy)",
-          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= work.energy)",
+          "find": "if (static_cast<std::uint8_t>(maximumEnergy >> 3u) >= _frame.work.energy)",
+          "replace": "if (static_cast<std::uint8_t>(maximumEnergy >> 2u) >= _frame.work.energy)",
           "expect": "caught",
           "note": "TA7's second and third LSR A -- an EIGHTH of the maximum, not a quarter."
         },
         {
           "id": "ta3-ecm",
           "file": "GameLogic/Tactics.cpp",
-          "find": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && _universe.status.ecmCountdown == 0u)",
+          "find": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles && _frame.universe.status.ecmCountdown == 0u)",
           "replace": "if (static_cast<std::uint8_t>(chance.value & 31u) < missiles)",
           "expect": "caught",
           "note": "ta3's LDA ECMA / BNE TA3 stops a launch. ECMA was zero in every case that reached it; closed by a pirate with missiles and an ECM running."
@@ -170,8 +170,8 @@
         {
           "id": "msl-82",
           "file": "GameLogic/Tactics.cpp",
-          "find": "destroyed = (work.ai == MissileAiFor(1u));",
-          "replace": "destroyed = (work.ai == With(MissileAiFor(1u), AiBit::HasEcm));",
+          "find": "destroyed = (_frame.work.ai == MissileAiFor(1u));",
+          "replace": "destroyed = (_frame.work.ai == With(MissileAiFor(1u), AiBit::HasEcm));",
           "expect": "caught",
           "note": "The station a missile dies against. Closed by cases that put the target at the missile's own position, which is the only way part 1's tail runs at all."
         },
@@ -186,16 +186,16 @@
         {
           "id": "msl-kill",
           "file": "GameLogic/Tactics.cpp",
-          "find": "          return TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], MISSILE_DAMAGE, false);",
-          "replace": "          return TakeDamage(_universe, _ports, _ports.loop, _universe.bubble.blocks[_slot], COLLISION_DAMAGE, false);",
+          "find": "return TakeDamage(_frame.universe, _frame.ports, _frame.universe.bubble.blocks[_frame.slot], MISSILE_DAMAGE, heard)",
+          "replace": "return TakeDamage(_frame.universe, _frame.ports, _frame.universe.bubble.blocks[_frame.slot], COLLISION_DAMAGE, heard)",
           "expect": "caught",
           "note": "250 into OOPS when a missile arrives."
         },
         {
           "id": "kill-rotate",
           "file": "GameLogic/Tactics.cpp",
-          "find": "      RecordKill(_universe, _ports, _ports.loop, TypeOf(MissileTargetOf(work.ai)));",
-          "replace": "      RecordKill(_universe, _ports, _ports.loop, TypeOf(static_cast<std::uint8_t>(work.ai & 0x7Fu)));",
+          "find": "RecordKill(_frame.universe, _frame.ports, TypeOf(MissileTargetOf(_frame.work.ai)));",
+          "replace": "RecordKill(_frame.universe, _frame.ports, TypeOf(static_cast<std::uint8_t>(_frame.work.ai & 0x7Fu)));",
           "expect": "caught",
           "note": "TA87's AND #%01111111 / LSR A -- the AI byte becomes the TARGET's slot for EXNO2. Not a coverage gap: TALLY and TALLYL were neither pushed nor compared, so what EXNO2 scores was invisible. Closed by comparing all three bytes (plan section 6.153)."
         }
@@ -246,11 +246,11 @@
         },
         {
           "id": "hyp-fuel-zero",
-          "file": "GameLogic/Hyperspace.cpp",
-          "find": "_universe.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0};",
-          "replace": "_universe.commander.fuel = fuel.carry ? fuel.value : std::uint8_t{0u};",
+          "file": "GameLogic/Commander.h",
+          "find": "return {{held ? static_cast<std::uint8_t>(tenths - _tenths) : std::uint8_t{0}}, held};",
+          "replace": "return {{held ? static_cast<std::uint8_t>(tenths - _tenths) : std::uint8_t{0u}}, held};",
           "expect": "equivalent",
-          "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made."
+          "note": "A deliberate no-op: 0 and 0u are the same std::uint8_t. It is here so a run exercises the equivalent path, and it must never be 'caught' -- if it is, the harness is reporting on something other than the edit it made. Re-anchored by M5-a-10 (rule 3): the empty-tank clamp moved from Hyperspace.cpp into LightYearsTenths::Burned."
         }
       ]
     },
@@ -460,16 +460,16 @@
         {
           "id": "mi-pause2-loop",
           "file": "GameLogic/Missions.cpp",
-          "find": "      if (_ports.start.ScanTitleKeys(_universe.keys).key != 0u)\n      {\n        return; // 6502: .newyearseve RTS\n      }\n    }\n  }",
-          "replace": "      while (_ports.start.ScanTitleKeys(_universe.keys).key == 0u)\n      {\n      }\n      return; // 6502: .newyearseve RTS\n    }\n  }",
+          "find": "      if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)\n      {\n        return; // 6502: .newyearseve RTS\n      }\n    }\n  }",
+          "replace": "      while (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key == 0u)\n      {\n      }\n      return; // 6502: .newyearseve RTS\n    }\n  }",
           "expect": "caught",
           "note": "PAUSE2's `BEQ PAUSE2` goes back to the TOP of the routine and not to the scan above it, so an empty second scan re-checks for a release the routine has already had. The mutant turns that into a do-while, which is the reading everybody has first. It shows only when the keyboard goes empty, empty, PRESSED: the real routine treats that third scan as 'still held' and goes round again, and the do-while takes it as the answer. Two scans apart, and nothing is drawn, so the scan count is the only instrument -- which is why the script counts calls in a byte that cannot wrap. The first version of this mutant was `continue` against an inner `while`, and those two ARE the same loop."
         },
         {
           "id": "mi-captain",
           "file": "GameLogic/Missions.cpp",
-          "find": "      PrintMissionToken(m_ports.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN, m_galaxy);",
-          "replace": "      PrintMissionToken(m_ports.tokens, (_code == 27) ? MISSION_PLANET_TOKEN : MISSION_CAPTAIN_TOKEN, m_galaxy);",
+          "find": "      PrintMissionToken(_ports.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN,\n                        _universe.commander.galaxyNumber);",
+          "replace": "      PrintMissionToken(_ports.tokens, (_code == 27) ? MISSION_PLANET_TOKEN : MISSION_CAPTAIN_TOKEN,\n                        _universe.commander.galaxyNumber);",
           "expect": "caught",
           "note": "MT27 and MT28 swapped. The two ranges are three apart and OVERLAP, so galaxy 3's captain is galaxy 0's planet -- which means a swap is invisible for exactly one pair of inputs and visible for the rest. The sweep covers all eight galaxies of both."
         },
@@ -492,16 +492,16 @@
         {
           "id": "mi-brief-frames",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _ports.start.WaitFrames(INCOMING_MESSAGE_FRAMES);",
-          "replace": "    _ports.start.WaitFrames(50u);",
+          "find": "    _ports.present.WaitFrames(INCOMING_MESSAGE_FRAMES);",
+          "replace": "    _ports.present.WaitFrames(50u);",
           "expect": "caught",
           "note": "`LDY #100 / JMP DELAY` -- two seconds on PAL. Compared as a number rather than as elapsed time, because neither side has a raster."
         },
         {
           "id": "mi-mt9-view",
           "file": "GameLogic/Missions.cpp",
-          "find": "      m_universe.text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(m_universe, m_ports, MT9_COLUMN_AND_VIEW);",
-          "replace": "      SetUpScreen(m_universe, m_ports, MT9_COLUMN_AND_VIEW);",
+          "find": "      _universe.text.column = MT9_COLUMN_AND_VIEW;\n      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);",
+          "replace": "      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);",
           "expect": "equivalent",
           "note": "MT9's column store, DROPPED -- and it makes no difference, which is not what this mutant was written to show. `LDA #1 / JSR DOXC / JMP TT66` is one load serving as a column and a view, and the port had only the view; adding the store is faithful and is what the routine does. But `TT66` sets `XC` to 1 ITSELF, twice -- once near the top and again at `.tt66 LDX #1 / STX XC / STX YC` -- and nothing between `DOXC` and `TT66` reads the byte, because `JMP TT66` is the next instruction. So the `DOXC` is DEAD, and the port was accidentally right for two slices. Recorded as an equivalent, with the store kept: it is the FIFTH piece of dead code found in the original, after `cntr`'s `REDU`, `.OLDBOX`'s cursor store, `MAS2`'s second entry and `TITLE`'s `LDA MCNT / AND #3`. It must never come back caught -- if it does, something has stopped writing `XC` in `TT66`."
         },
@@ -532,24 +532,24 @@
         {
           "id": "mi-reward",
           "file": "GameLogic/Missions.cpp",
-          "find": "    ReceiveCash(_bay.commander, MISSION_REWARD);",
-          "replace": "    ReceiveCash(_bay.commander, 5000u);",
+          "find": "    ReceiveCash(_universe.commander, MISSION_REWARD);",
+          "replace": "    ReceiveCash(_universe.commander, 5000u);",
           "expect": "caught",
           "note": "5,000 CREDITS IS 50,000 TENTHS. The cash is held in tenths of a credit throughout, so a reward written in credits pays a tenth of what the game pays -- and the whole commander block is compared, so it is the four cash bytes that say so."
         },
         {
           "id": "mi-engy",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _bay.commander.energyUnit = NAVY_ENERGY_UNIT;",
-          "replace": "    _bay.commander.energyUnit = 1u;",
+          "find": "    _universe.commander.energyUnit = NAVY_ENERGY_UNIT;",
+          "replace": "    _universe.commander.energyUnit = 1u;",
           "expect": "caught",
           "note": "`LDA #2 / STA ENGY` -- the navy's energy unit, which the flight loop reads as three units a pass where the shop's one gives two. A 1 is the shop's."
         },
         {
           "id": "mi-tally",
           "file": "GameLogic/Missions.cpp",
-          "find": "    _bay.commander.kills.hi = static_cast<std::uint8_t>(_bay.commander.kills.hi + 1u);",
-          "replace": "    _bay.commander.kills.lo = static_cast<std::uint8_t>(_bay.commander.kills.lo + 1u);",
+          "find": "    _universe.commander.kills.hi = static_cast<std::uint8_t>(_universe.commander.kills.hi + 1u);",
+          "replace": "    _universe.commander.kills.lo = static_cast<std::uint8_t>(_universe.commander.kills.lo + 1u);",
           "expect": "caught",
           "note": "`INC TALLY+1` -- the HIGH byte, so the reward is 256 kills and a whole combat rank rather than one kill. This pair is low byte first, unlike the cash above it, which is exactly the trap."
         },
@@ -617,7 +617,7 @@
       "filter": [
         "TheRasterInterrupt"
       ],
-      "tests": 7,
+      "tests": 8,
       "note": [
         "COMIRQ1's VIC-II half (plan section 6.155). Written with the slice, so this unit is a",
         "measurement from its first run rather than a test of a reconstruction.",
@@ -783,6 +783,328 @@
           "note": "HITCH's SEC is the flag JSR LL9 gets for a ship in the sights with no missile armed and no laser firing, and a ship that arrives there killed and not on the screen seeds its first DORND on it. ThePerShipLoopMatchesMAL1's 'in the sights, already dead' is that ship, and its RAND is compared -- 'on top of us' is not, because MVEIT takes the player's speed off z before HITCH looks, and the generator was not compared by the frame tests until this mutant survived (2026-09-06)."
         }
       ]
+    },
+    {
+      "name": "rng",
+      "slice": "M6-0-g",
+      "filter": [
+        "RngAgainstOracle"
+      ],
+      "tests": 5,
+      "note": [
+        "`DORND` (plan section 6.1). Thirty-nine lines, and every byte the game rolls comes through them, so a",
+        "slip here is invisible to every test that compares an outcome and visible only to the one that",
+        "compares the generator's own four bytes. M6-0-g put mutants on the two carries the routine",
+        "threads: the one between its halves, and the one the caller arrives with."
+      ],
+      "mutants": [
+        {
+          "id": "rng-selftest",
+          "file": "GameLogic/Rng.cpp",
+          "find": "    m_state[3] = previous;",
+          "replace": "    m_state[3] = main.value;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. The fourth state byte takes the new value instead of the old one, and every sequence comparison sees it on the second call. Keep it first.",
+          "selftest": true
+        },
+        {
+          "id": "rng-half-carry",
+          "file": "GameLogic/Rng.cpp",
+          "find": "    const AddResult main = AddWithCarry(previous, partner, feeder.carry);",
+          "replace": "    const AddResult main = AddWithCarry(previous, partner, false);",
+          "expect": "caught",
+          "note": "The feeder half's carry is what the main half adds in; dropping it leaves a generator that is right for a while and then one out. Would have hidden: every downstream table, spawn and stardust field drifting from the shipped game after the first carry."
+        },
+        {
+          "id": "rng-entry-carry",
+          "file": "GameLogic/Rng.cpp",
+          "find": "    const ShiftResult rotated = RotateLeft(m_state[0], _carryIn);",
+          "replace": "    const ShiftResult rotated = RotateLeft(m_state[0], false);",
+          "expect": "caught",
+          "note": "The carry the caller arrives with is an operand -- DORND2 exists because it is. Forcing it clear makes every DORND a DORND2. Would have hidden: every section-6.121-shaped finding, where a caller's flag state is what the port got wrong."
+        }
+      ]
+    },
+    {
+      "name": "arith",
+      "slice": "M6-0-g",
+      "filter": [
+        "MultiplicationAgainstTheShippedGame",
+        "SignedAdditionAgainstTheShippedGame",
+        "DivisionAndAccumulateAgainstTheShippedGame",
+        "LogarithmRoutinesAgainstTheShippedGame"
+      ],
+      "tests": 24,
+      "note": [
+        "The arithmetic kernel (plan section 6.2 onwards), compared exhaustively or over sweeps. Three of the",
+        "four mutants are dropped flags, because a dropped flag is what this file's history is made of:",
+        "`MU1`'s `CLC`, `ADD`'s exit carry and `LL5`'s last `ROL` are each read by a caller that does",
+        "nothing to set them itself."
+      ],
+      "mutants": [
+        {
+          "id": "ar-selftest",
+          "file": "GameLogic/Arith.cpp",
+          "find": "    for (int step = 0; step < 8; ++step)\n    {\n      ShiftAndAddStep(a, low, t, carry);",
+          "replace": "    for (int step = 0; step < 7; ++step)\n    {\n      ShiftAndAddStep(a, low, t, carry);",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Seven shift-and-add steps instead of eight leaves every product a bit short, and the exhaustive MULTU sweep cannot miss it. Keep it first.",
+          "selftest": true
+        },
+        {
+          "id": "ar-mu1-clc",
+          "file": "GameLogic/Arith.cpp",
+          "find": "      // overflow to the caller below it.\n      return Product{0, 0, false};",
+          "replace": "      // overflow to the caller below it.\n      return Product{0, 0, true};",
+          "expect": "caught",
+          "note": "`MU1` is `CLC / STX P / TXA / RTS`: a zero multiplier clears the carry as well as both halves. Would have hidden: a zero multiply reading as an overflow to the three callers that take the carry before setting it."
+        },
+        {
+          "id": "ar-add-carry",
+          "file": "GameLogic/Arith.cpp",
+          "find": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | t), low.value, high.carry};",
+          "replace": "      return AddSignedResult{static_cast<std::uint8_t>(high.value | t), low.value, false};",
+          "expect": "caught",
+          "note": "`ADD`'s same-sign path leaves the carry `ADC T1` produced and `ORA T` does not touch it. Would have hidden: a caller whose next `ADC` runs on the addition's carry getting a clean one instead."
+        },
+        {
+          "id": "ar-ll5-carry",
+          "file": "GameLogic/Arith.cpp",
+          "find": "    return Root{q, exitCarry};",
+          "replace": "    return Root{q, false};",
+          "expect": "caught",
+          "note": "`LL5`'s exit carry is the last `ROL A` before `DEC T / BNE / RTS`, and `SUN` hands it straight to `DORND` (plan section 6.55, the tenth dropped flag). Would have hidden: the sun's ragged edge seeded from the wrong bit."
+        }
+      ]
+    },
+    {
+      "name": "shipmove",
+      "slice": "M6-0-g",
+      "filter": [
+        "TheSignMagnitudeAdders",
+        "TheRotationSteppers",
+        "TidyingAShipsOrientation",
+        "MovingThePlanetAndTheSun",
+        "MovingAShip",
+        "TheViewAxes"
+      ],
+      "tests": 10,
+      "note": [
+        "`MVEIT` and what it calls (plan sections 6.33 to 6.38). The mutants sit on the three places the port",
+        "was wrong first time or the original is not what it looks like: the inverted `BPL MV43`, the",
+        "`ADC` with no `CLC` under it, and `TIDY`'s loop that stops one byte short."
+      ],
+      "mutants": [
+        {
+          "id": "sm-selftest",
+          "file": "GameLogic/ShipMove.cpp",
+          "find": "    const std::uint8_t speed = static_cast<std::uint8_t>(work.speed << 2);",
+          "replace": "    const std::uint8_t speed = static_cast<std::uint8_t>(work.speed << 1);",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. Speed times two instead of four moves every ship half as far along its nose, and twenty iterations of MVEIT see it on the first. Keep it first.",
+          "selftest": true
+        },
+        {
+          "id": "sm-mv43-sense",
+          "file": "GameLogic/ShipMove.cpp",
+          "find": "    if (((k2.sgn ^ flight.bet2 ^ work.z.sgn) & 0x80u) != 0u)",
+          "replace": "    if (((k2.sgn ^ flight.bet2 ^ work.z.sgn) & 0x80u) == 0u)",
+          "expect": "caught",
+          "note": "`BPL MV43` branches to the SUBTRACTION when the signs agree, the opposite way round from every other sign test in the file. Would have hidden: the y coordinate one out on the first iteration, which is how the port's first reading was found."
+        },
+        {
+          "id": "sm-mltu2-carry",
+          "file": "GameLogic/ShipMove.cpp",
+          "find": "      AddResult sum = AddWithCarry(wide.mid, k2.lo, wide.carry);",
+          "replace": "      AddResult sum = AddWithCarry(wide.mid, k2.lo, false);",
+          "expect": "equivalent",
+          "note": "EQUIVALENT, AND PROVABLY SO. `LDA P+1 / ADC K2+1` has no `CLC` and runs on the carry `MLTU2` left -- but that carry is ALWAYS CLEAR. `MLTU2` opens with `LSR A / STA P+1`, so bit 7 of P+1 is zero, and its sixteen `ROR P+1 / ROR P` pairs shift exactly that bit out on the last one; `WideMultiplyMatchesOverASweep` counts the carries the shipped routine leaves over 150,000 samples and asserts the count is zero. The mutant replaces a flag that is never set with `false`, so it survives, and the ADC-without-CLC the port reproduces is safe for a reason rather than by luck. First run 2026-09-07: survived, as an equivalent must."
+        },
+        {
+          "id": "sm-tidy-last-byte",
+          "file": "GameLogic/ShipMove.cpp",
+          "find": "                                    &_work.nose.z.lo, &_work.nose.y.lo, &_work.nose.x.lo})",
+          "replace": "                                    &_work.nose.z.lo, &_work.nose.y.lo, &_work.nose.x.lo, &_work.side.z.lo})",
+          "expect": "caught",
+          "note": "`TIL1` counts X down in twos from 14 and stops at INWK+23, so the side vector's z_lo survives the tidy. Clearing it too is the obvious port and the wrong one. Would have hidden: an orientation byte the original keeps and the port threw away."
+        }
+      ]
+    },
+    {
+      "name": "planetdraw",
+      "slice": "M6-0-g",
+      "filter": [
+        "TheSunLineHeap",
+        "ThePlanetLineHeap",
+        "TheBallDrawing",
+        "ThePlanet",
+        "TheSun",
+        "TheBubbleReset"
+      ],
+      "tests": 21,
+      "note": [
+        "`PLANET`, `SUN`, `CHKON` and `ZINF` (plan sections 6.40 to 6.57). The mutants are the clamp",
+        "`PL82` writes, the branch `CHKON` takes to `PLS6`'s `CLC` rather than `EDGES`'s (section 6.45), and",
+        "the middle of `SUN`'s three roughness thresholds.",
+        "",
+        "The filters overlap on purpose: `ThePlanet` also selects `ThePlanetLineHeap` and `TheSun` selects",
+        "`TheSunLineHeap`, so the twenty-one the tool counts are twelve tests, some run twice. The",
+        "filter gate caught the first record of twelve, which is what the gate is for."
+      ],
+      "mutants": [
+        {
+          "id": "pd-selftest",
+          "file": "GameLogic/PlanetDraw.cpp",
+          "find": "    _work.nose.z.hi = static_cast<std::uint8_t>(96u | 0x80u);",
+          "replace": "    _work.nose.z.hi = static_cast<std::uint8_t>(96u | 0x00u);",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. `ZINF`'s nose sign is what makes a new ship face the player; without it the cleared block differs in one byte and the block comparison says so. Keep it first.",
+          "selftest": true
+        },
+        {
+          "id": "pd-pl82-clamp",
+          "file": "GameLogic/PlanetDraw.cpp",
+          "find": "      radius.low = 248;",
+          "replace": "      radius.low = 255;",
+          "expect": "caught",
+          "note": "A radius that overflowed a byte is clamped to 248, not 255, and K+1 is left set for `PL9`. Would have hidden: a close planet drawn seven pixels too wide."
+        },
+        {
+          "id": "pd-pl44-clc",
+          "file": "GameLogic/PlanetDraw.cpp",
+          "find": "      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).",
+          "replace": "      extent.offScreen = true;\n      return extent; // 6502: BMI PL44 -- which is `PLS6`'s `CLC`, not `EDGES`'s (§6.45).",
+          "expect": "caught",
+          "note": "A circle whose top is above the screen is ON screen -- `BMI PL44` lands on a `CLC`, not on a rejection (plan section 6.45). Would have hidden: a planet vanishing the moment its top edge left the view."
+        },
+        {
+          "id": "pd-sun-roughness",
+          "file": "GameLogic/PlanetDraw.cpp",
+          "find": "    roughness = static_cast<std::uint8_t>((roughness << 1) | ((_radius >= 40u) ? 1u : 0u));",
+          "replace": "    roughness = static_cast<std::uint8_t>((roughness << 1) | ((_radius >= 48u) ? 1u : 0u));",
+          "expect": "caught",
+          "note": "`CPX #40 / ROL A` is the middle of the three thresholds that make `CNT` 0, 1, 3 or 7. Would have hidden: a sun between 40 and 47 wide drawn with a smoother edge than the shipped one."
+        }
+      ]
+    },
+    {
+      "name": "spawn",
+      "slice": "M6-0-g",
+      "filter": [
+        "TheStationSpawn",
+        "TheBubbleKill",
+        "TheSystemBuild",
+        "TheDebrisBlock",
+        "TheChildSpawns"
+      ],
+      "tests": 6,
+      "note": [
+        "`NWSPS`, `KILLSHP`, `SOLAR`, `ze`, `FRS1` and `SFS1` (plan sections 6.58, 6.117, 6.121). Two of the",
+        "mutants are the two carries into `DORND` that the port got wrong before the oracle corrected it,",
+        "and the third is the Dodo's tech-level threshold."
+      ],
+      "mutants": [
+        {
+          "id": "sp-selftest",
+          "file": "GameLogic/Spawn.cpp",
+          "find": "    _universe.work.rollCounter = 0xFFu; // 6502: DEX / STX INWK+29 -- the roll counter, at maximum",
+          "replace": "    _universe.work.rollCounter = 0x7Fu; // 6502: DEX / STX INWK+29 -- the roll counter, at maximum",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. The station's roll counter at 127 instead of 255 is one byte in the block NWSPS is compared on. Keep it first.",
+          "selftest": true
+        },
+        {
+          "id": "sp-ze-dornd2",
+          "file": "GameLogic/Spawn.cpp",
+          "find": "    return _rng.Next(false);",
+          "replace": "    return _rng.Next(true);",
+          "expect": "caught",
+          "note": "`ze` has no RTS: it falls into `DORND2`, whose `CLC` is what the second roll rotates in, whatever the `ROL A` above shifted out (plan section 6.117). Would have hidden: the generator one bit off after every debris block."
+        },
+        {
+          "id": "sp-sfs1-carry",
+          "file": "GameLogic/Spawn.cpp",
+          "find": "      const RngResult roll = _rng.Next(true);",
+          "replace": "      const RngResult roll = _rng.Next(false);",
+          "expect": "caught",
+          "note": "The carry into `SFS1`'s `DORND` is SET every time, because reaching it means `CMP #PLT` did not borrow and `PHA` leaves the flag alone (plan section 6.121). The port had `false` here once. Would have hidden: every tumbling canister's spin and speed."
+        },
+        {
+          "id": "sp-dodo-threshold",
+          "file": "GameLogic/Spawn.cpp",
+          "find": "    if (_universe.current.techLevel >= STATION_DODO_TECH_LEVEL)",
+          "replace": "    if (_universe.current.techLevel > STATION_DODO_TECH_LEVEL)",
+          "expect": "caught",
+          "note": "`CMP #10 / BCC notadodo`: tech level 10 gets the Dodo. Would have hidden: a Coriolis at exactly the level that earns the other station."
+        }
+      ]
+    },
+    {
+      "name": "flight",
+      "slice": "M6-0-g",
+      "filter": [
+        "TheResets",
+        "TheLaunch",
+        "TheDeathScreen",
+        "TheTitleScreen"
+      ],
+      "tests": 17,
+      "note": [
+        "`RESET`, `RES2`, `ZERO`, `TT110`, `TITLE` and `DEATH` (plan sections 6.94 to 6.108). The mutants",
+        "are the two findings in the reset pair -- `RES2` re-centres the pitch and not the roll, and",
+        "`RESET`'s seven zeroed bytes are this build's, not the BBC's -- and the station's launch position."
+      ],
+      "mutants": [
+        {
+          "id": "fl-selftest",
+          "file": "GameLogic/Flight.cpp",
+          "find": "    _universe.status.energy = 0xFFu;",
+          "replace": "    _universe.status.energy = 0xFEu;",
+          "expect": "caught",
+          "note": "THE HARNESS'S OWN OracleIsPresent for this unit. `RESET`'s energy is the same 255 that means docked; one less is one byte off in the flight state the reset test compares. Keep it first.",
+          "selftest": true
+        },
+        {
+          "id": "fl-res2-jstx",
+          "file": "GameLogic/Flight.cpp",
+          "find": "    _universe.control.pitch = CONTROL_CENTRE;",
+          "replace": "    _universe.control.pitch = CONTROL_CENTRE;\n    _universe.control.roll = CONTROL_CENTRE;",
+          "expect": "caught",
+          "note": "`STA JSTY` is in `RES2` and `STA JSTX` is not, and neither is inside `ZERO`'s range: a launch inherits the last flight's roll. Re-centring both is the natural port. Would have hidden: the roll rate a launch starts with."
+        },
+        {
+          "id": "fl-reset-seven",
+          "file": "GameLogic/Flight.cpp",
+          "find": "    _universe.status.hyperspaceCountdown = 0u;",
+          "replace": "    // (the hyperspace countdown left alone)",
+          "expect": "caught",
+          "note": "`LDX #6 / STA BETA,X` clears seven bytes from `BETA`, and in this build the third is `QQ22+1`, the hyperspace countdown -- the BBC's layout at those addresses is the text cursor. Would have hidden: a countdown surviving a reset."
+        },
+        {
+          "id": "fl-launch-station",
+          "file": "GameLogic/Flight.cpp",
+          "find": "      _universe.work.z.hi = static_cast<std::uint8_t>(_universe.work.z.hi + 1u);",
+          "replace": "      _universe.work.z.hi = static_cast<std::uint8_t>(_universe.work.z.hi + 2u);",
+          "expect": "caught",
+          "note": "`INC INWK+7` once: the station you have just left is one high-byte unit behind. Would have hidden: the station spawned twice as far away on every launch."
+        }
+      ]
     }
+  ],
+  "floor": [
+    "GameLogic/Arith.cpp",
+    "GameLogic/Canvas.cpp",
+    "GameLogic/Flight.cpp",
+    "GameLogic/FlightLoop.cpp",
+    "GameLogic/Hyperspace.cpp",
+    "GameLogic/Missions.cpp",
+    "GameLogic/PlanetDraw.cpp",
+    "GameLogic/Raster.cpp",
+    "GameLogic/Rng.cpp",
+    "GameLogic/ShipDraw.cpp",
+    "GameLogic/ShipMove.cpp",
+    "GameLogic/Spawn.cpp",
+    "GameLogic/Tactics.cpp",
+    "GameLogic/Trumbles.cpp"
   ]
 }
