@@ -288,27 +288,11 @@ namespace Outpost
     }
   }
 
-  std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance)
-  {
-    /*
-     * 6502: TITLE -- ported in full now, so this is a forward rather than a placeholder.
-     *
-     * The rotating ship was a box for as long as `LL9` was slice 3b's. It has not been since 3b
-     * landed; what kept the box was that nothing revisited the seam, which is the same pattern the
-     * launch path hit three times (§6.73). `AddShip` becoming public for `NWSPS` was the last piece.
-     *
-     * IT RETURNS `thiskey`, THE KEY NUMBER, and that is the fix as much as the ship is. `BR1`
-     * compares the answer against 39 -- the internal number for "Y" -- and this used to return
-     * `NextKey()`, which is the CHARACTER. 89 never equals 39, so the disk menu could not be opened
-     * from the title screen at all (§6.107).
-     */
-    if (m_flight == nullptr || m_ports == nullptr || m_dockedFlag == nullptr)
-    {
-      return 0;
-    }
-
-    return Elite::ShowTitleShip(m_flight->Universe(), *m_ports, _token, _shipType, _distance);
-  }
+  /*
+   * `ShowTitleScreen` WAS HERE AND IS NOT ANY MORE (M6-0-h-2). It was a forward to
+   * `Elite::ShowTitleShip` -- 6502: TITLE, ported in full since §6.107 -- and `BR1` makes the
+   * call itself now, which is what `JSR TITLE` is.
+   */
 
   // ---- the control codes that leave the text system ------------------------------------------------
 

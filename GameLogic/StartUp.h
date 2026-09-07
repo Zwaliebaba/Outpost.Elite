@@ -70,98 +70,19 @@ namespace Elite
   void CurrentSystemToCrosshairs(Commander& _commander, std::uint8_t _crosshairX, std::uint8_t _crosshairY) noexcept;
 
   /*
-   * What the start sequence reaches for outside GameLogic.
+   * `StartUpEffects` WAS HERE AND IS NOT ANY MORE (M6-0-h-2).
    *
-   * Every one of these is either the flight model's or the machine's, and all of them are phase 3's
-   * or the executable's. They are separate methods rather than one "start" because the ORDER is the
-   * thing being ported, and an interface that bundled them would have nothing left to compare.
+   * It was "what the start sequence reaches for outside GameLogic", and every one of its methods
+   * turned out to be the library's: `ResetUniverse` and `ResetShip` (`RESET`, `RES2`) went in
+   * M3-b-1e, `StartTheme` and `StopTheme` in M3-b-2b, `ShowDockingTunnel` when `LAUN` was ported
+   * (§6.109), `ScanTitleKeys` in M3-b-3d -- 6502: RDKEY, whose answer `TitleKey` lives in
+   * `Controls.h` beside `ScanKeyboard` -- and `WaitFrames` to `Presenter` in M3-b-3b, `ClearKeyLogger`
+   * in M6-0-h-1 -- 6502: ZEKTRAN, which is `Universe::keys` zeroed by its callers -- and
+   * `ShowTitleScreen` last: 6502: TITLE is `Elite::ShowTitleShip`
+   * (`Flight.h`), and the executable had answered the seam by forwarding to it since §6.107. `BR1`
+   * calls it directly, which is what `JSR TITLE` is, and a fixture that drives the start sequence
+   * runs the title screen for real and ends it the way a player does -- with a key held.
    */
-  /// 6502: what `RDKEY` leaves behind -- the carry, and `thiskey` in both X and A.
-  // `TitleKey` moved to `Controls.h` in M3-b-3d, beside the routine that answers it: `RDKEY` is
-  // `Elite::ScanKeyboard` and the title screen is one of its two callers rather than its owner.
-
-  class StartUpEffects
-  {
-  public:
-    virtual ~StartUpEffects() = default;
-
-    /*
-     * `RESET` AND `RES2` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-1e).
-     *
-     * `ResetUniverse` was `RESET`, which zeroes the ship slots, clears the roll and pitch, sets
-     * `QQ12` and clears the fuel-scoop damage and then RUNS OFF ITS END into `RES2` -- so a caller
-     * of `RESET` gets both, which is not visible from the call site and is why `ResetGame` ends
-     * with `ResetShipAndBubble` rather than calling it. `ResetShip` was `RES2` on its own, which
-     * `DEATH2` enters and `TT170` reaches a SECOND time (§6.25). Both are `Flight.cpp`'s since the
-     * stardust, the heaps and the dashboard were built, and the start sequence calls them.
-     */
-
-    /*
-     * `ClearKeyLogger` WAS A SEAM HERE AND IS NOT ANY MORE (M6-0-h-1).
-     *
-     * 6502: ZEKTRAN -- zero the key logger and `thiskey`. Sixty-five bytes of KEYLOOK, one per key
-     * the game watches, and the seam said they were "keyboard state that belongs with the key map
-     * in the executable". They are `Universe::keys`, and have been since M3-a; `ScanKeyboard`
-     * already zeroes them for its own `JSR ZEKTRAN`, and the two callers here (`BR1` and `TITLE`)
-     * do the same. The executable answered the seam by flushing the WINDOW's pressed-key list,
-     * which is `FLKB`'s job and is done where the game does `FLKB`. The routine ends in TWO
-     * consecutive RTS instructions, the second of which nothing can reach.
-     */
-
-    /*
-     * `StartTheme` AND `StopTheme` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-2b).
-     *
-     * `startat` is the title theme through the same `startat2` as the docking music, and `stopat`
-     * is "stop whatever is playing" -- `SOFLUSH` down the effects, `MUPLA` to zero, the chip's
-     * twenty-five registers run down and the volume back to fifteen. Both are `Music.cpp`'s since
-     * slice 5b; the start sequence calls them over `Universe::music` and `Ports::sid` (§6.73).
-     *
-     * THE STOP TAKES THE EFFECT BUFFER AS WELL AS THE PLAYER, because `SOFLUSH` is the first thing
-     * it does: stopping the music ends the sound effects too, on a chip that can still be heard.
-     * The seam hid that -- the executable reached for its own `SoundBuffer` -- and the signature
-     * is where it belongs.
-     */
-
-    /*
-     * `ShowDockingTunnel` WAS HERE, and it is gone because `LAUN` is ported (§6.109).
-     *
-     * It was scoped in 2e, when the ball line heap the tunnel draws through did not exist. The heap
-     * arrived in 3c and the stub stayed, so a launch cut straight to the rings and an arrival had
-     * no tunnel at all -- §6.73's pattern for the seventh time, and the seventh time the fix was to
-     * delete the seam rather than to implement it. `DOENTRY` and `TT110` now call
-     * `Elite::DrawLaunchTunnel` directly, which is what the 6502 does.
-     */
-
-    /*
-     * `ScanTitleKeys` WAS HERE AND IS NOT ANY MORE (M3-b-3d).
-     *
-     * It was a SECOND seam for `RDKEY`, and the reason given was that the two callers want
-     * different things from the platform AROUND the scan rather than different things from the
-     * scan: the title screen is the only thing standing between two drawn frames and must present,
-     * where a flight loop that presented would cap itself at one frame in five. That was true and
-     * is answered by `Presenter` -- `HoldTitleFrame` before the scan, `ScanKeyboard` for the scan.
-     */
-
-    /*
-     * `WaitFrames` WAS HERE AND IS `Presenter`'s SINCE M3-b-3b.
-     *
-     * It was declared here AND on `LineEntryEffects`, deliberately -- "two independent statements
-     * of what a routine needs rather than one interface pretending to be shared", and the
-     * executable satisfied both with one method. That was the right call while the alternative was
-     * a shared interface invented to hold it; §4.5's `Presenter` is not that, and there is one
-     * `DELAY` in the game.
-     */
-
-    /*
-     * 6502: TITLE -- a rotating ship, a token under it, and a wait for a key.
-     *
-     * Returns the key that ended it, which BR1 compares against "Y". The ship rotates through the
-     * flight model's own projection (`LL9`), so this waits on phase 3b and is a seam rather than a
-     * screen; `_distance` is how far away it settles once it has finished moving towards the
-     * viewer, and it is 210 for the Cobra and 48 for the Adder.
-     */
-    [[nodiscard]] virtual std::uint8_t ShowTitleScreen(std::uint8_t _token, ShipType _shipType, std::uint8_t _distance) = 0;
-  };
 
   /// 6502: the two title screens BR1 shows, which differ in every argument.
   inline constexpr std::uint8_t TITLE_LOAD_TOKEN = 6;  ///< "LOAD NEW COMMANDER (Y/N)?"

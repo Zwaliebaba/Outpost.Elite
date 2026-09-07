@@ -40,7 +40,7 @@ namespace Elite
    * ONE key and run ONE pass, and how many passes a wall-clock second is worth stays where the
    * clock is. That is `Step(InputFrame)` as §2.1 wrote it, arrived at from the other direction.
    *
-   * THE PLATFORM ARRIVES AS FIVE REFERENCES AND A `ControlEffects`, which is `Ports` minus the
+   * THE PLATFORM ARRIVES AS FOUR REFERENCES AND A `ControlEffects`, which is `Ports` minus the
    * four members that are this library's own: the token printer, the character printer, the sink
    * and the extended printer are built HERE, over the universe, because nothing about them is the
    * platform's. `ControlEffects` is separate because it is not in `Ports` -- `DOCKIT` is passed
@@ -49,7 +49,7 @@ namespace Elite
   class Game
   {
   public:
-    Game(StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard, CommanderStore& _store, ControlEffects& _controls) noexcept;
+    Game(Presenter& _present, Keyboard& _keyboard, CommanderStore& _store, ControlEffects& _controls) noexcept;
 
     Game(const Game&) = delete;
     Game& operator=(const Game&) = delete;

@@ -25,7 +25,8 @@ namespace Elite
    * after M3-b-3a (which removed `SightEffects` and landed no port), twelve after M3-b-3b, where
    * `Presenter` spent that credit and `TradeScreenEffects` went, and ELEVEN after M3-b-3d, which
    * landed `Keyboard` over the two seams it replaces (§8, 2026-09-06). TEN after M4-a-1, which
-   * took `SFS1` out of it, and NINE after M6-0-a-3, which took `LL9`'s two tail jumps out.
+   * took `SFS1` out of it, NINE after M6-0-a-3, which took `LL9`'s two tail jumps out, and EIGHT
+   * after M6-0-h-2, which took the title screen out.
    *
    * THE DECLARATIONS BELOW ARE FORWARD ONES ON PURPOSE. A reference member needs no complete type,
    * and this header including `ViewChange.h` while `ViewChange.h`'s routines take a `Ports&` is a
@@ -36,7 +37,6 @@ namespace Elite
   class TokenPrinter;
   class CharacterPrinter;
   class ExtendedTokenPrinter;
-  class StartUpEffects;
   class Keyboard;
   class Presenter;
   class CommanderStore;
@@ -88,15 +88,16 @@ namespace Elite
     SidWriteLog& sid;
 
     /*
-     * The two the title screen and the briefings need and a flight frame does not.
+     * The one the title screen and the briefings need and a flight frame does not.
      *
      * `ExtendedTokenPrinter` is text machinery like the three above -- it is here rather than in
-     * `Universe` because it takes the control codes as a `ControlCodes*` -- and `StartUpEffects`
-     * is the seam `TITLE` and `BRIEF` wait and scan through. They joined when `TitleScreen` and
-     * `MissionScreen` went, because both of those held a `FlightLoop&` and could not outlive it.
+     * `Universe` because it takes the control codes as a `ControlCodes*`. It joined when
+     * `TitleScreen` and `MissionScreen` went, because both of those held a `FlightLoop&` and could
+     * not outlive it. `StartUpEffects& start` WAS BESIDE IT AND IS NOT ANY MORE (M6-0-h-2): it was
+     * the seam `TITLE` and `BRIEF` waited and scanned through, and every method it ever had is a
+     * library call now (`StartUp.h`).
      */
     ExtendedTokenPrinter& tokens;
-    StartUpEffects& start;
 
     /*
      * 6502: DELAY -- §4.5's `Presenter`, and the second of the four to arrive (M3-b-3b).

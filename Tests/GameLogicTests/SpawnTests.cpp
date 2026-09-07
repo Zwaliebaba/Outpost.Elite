@@ -652,7 +652,7 @@ namespace GameLogicTests
         universe.current.techLevel = system.techLevel;
         universe.current.seeds.bytes = system.seeds;
         universe.view = 0;
-        Elite::Ports ports = universe.PortsWith(universe.unused);
+        Elite::Ports ports = universe.Ports();
         Elite::BuildSystem(universe, ports, system.carryIn);
 
         const std::wstring where = std::wstring(L"SOLAR ") + system.what;

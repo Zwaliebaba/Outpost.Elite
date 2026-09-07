@@ -593,7 +593,7 @@ namespace GameLogicTests
         NullSeams nulls;
         Elite::SidWriteLog sid;
         Elite::Ports ports{printer,  characters, sink, sid,
-                           extended, nulls,      effects, keys,  nulls};
+                           extended, effects, keys, nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
         Elite::BuyScreen(universe, ports, false);
@@ -843,7 +843,7 @@ namespace GameLogicTests
         NullSeams nulls;
         Elite::SidWriteLog sid;
         Elite::Ports ports{printer,  characters, sink, sid,
-                           extended, nulls,      effects, keys,  nulls};
+                           extended, effects, keys, nulls};
 
         universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
 
@@ -1096,7 +1096,7 @@ namespace GameLogicTests
         NullSeams nulls;
         Elite::SidWriteLog sid;
         Elite::Ports ports{printer,  characters, sink, sid,
-                           extended, nulls,      effects, keys,  nulls};
+                           extended, effects, keys, nulls};
 
         const Elite::ShipCondition condition{s.docked, s.junk, s.firstShip, s.energy};
         universe.crosshairX = CROSSHAIR_X; // 6502: QQ9 and QQ10, which the screen reads for `TT111`
@@ -1350,7 +1350,7 @@ namespace GameLogicTests
         NullSeams nulls;
         Elite::SidWriteLog sid;
         Elite::Ports ports{printer,  characters, sink, sid,
-                           extended, nulls,      effects, keys,  nulls};
+                           extended, effects, keys, nulls};
 
         universe.current.techLevel = s.tech; // 6502: tek -- the byte the shop reads
 

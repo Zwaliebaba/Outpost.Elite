@@ -74,8 +74,7 @@ namespace GameLogicTests
      * screens declare what they need separately and the shell answers all of it. Building the session
      * this way is the cheapest available check that those declarations are consistent.
      */
-    class NullShell final : public Elite::Presenter,
-                            public Elite::StartUpEffects
+    class NullShell final : public Elite::Presenter
     {
     public:
       /*
@@ -106,13 +105,9 @@ namespace GameLogicTests
         Note("spin " + std::to_string(_distance));
       }
 
-      // 6502: TITLE. `RESET`, `RES2` and `msblob` were here until M3-b-1e, `startat` and `stopat`
-      // until M3-b-2b, and `ZEKTRAN` until M6-0-h-1; all six are the library's now.
-      std::uint8_t ShowTitleScreen(std::uint8_t _token, Elite::ShipType _ship, std::uint8_t) override
-      {
-        Note("title " + std::to_string(_token) + "/" + std::to_string(Elite::Byte(_ship)));
-        return titleAnswer;
-      }
+      // `RESET`, `RES2` and `msblob` were answered here until M3-b-1e, `startat` and `stopat`
+      // until M3-b-2b, `ZEKTRAN` until M6-0-h-1 and `TITLE` until M6-0-h-2; all six are the
+      // library's now, and the title screen ends on the key `ScriptedKeys` holds for it.
 
       /*
        * `Run` WAS HERE AND IS NOT ANY MORE (M3-b-4b).
@@ -127,7 +122,6 @@ namespace GameLogicTests
       Elite::TokenPrinter* printer = nullptr;
       Elite::ExtendedTextState* extended = nullptr;
       std::uint8_t view = 0;
-      std::uint8_t titleAnswer = 'N';
       std::vector<std::string> log;
 
     private:
@@ -183,10 +177,13 @@ namespace GameLogicTests
         : m_keys(std::move(_keys))
       {
       }
-      [[nodiscard]] bool Held(std::size_t) override
+      /// 6502: the matrix walk -- Space, held for exactly as long as the title screens need a key
+      /// to end them (M6-0-h-2), and nothing otherwise: the docked half reads `NextKey`.
+      [[nodiscard]] bool Held(std::size_t _key) override
       {
-        return false;
+        return titleHeld && _key == Elite::KEY_SPEED_UP;
       }
+      bool titleHeld = false;
       void Flush() override
       {
         ++flushes;
@@ -262,7 +259,7 @@ namespace GameLogicTests
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng),
           ports{recursive, characters, sink, sid,
-                extended,  shell,      shell, keys,  store}
+                extended,  shell, keys, store}
       {
         extended.SetGame(universe, ports); // 6502: DT3 -- the codes that leave run in the library
         commander = Elite::DefaultCommander();
@@ -457,8 +454,9 @@ namespace GameLogicTests
       Elite::SaveCommander(game->commander, game->name, game->image);
 
       // 6502: TT170 -- the cold start, which ends by pressing "8" on the player's behalf.
-      game->shell.titleAnswer = 'N';
+      game->keys.titleHeld = true; // Space at both title screens, which is not "Y", so no disk menu
       const Elite::ForcedKey begun = Elite::ResetAndStartGame(game->universe, game->ports, false);
+      game->keys.titleHeld = false;
 
       Assert::AreEqual(static_cast<int>(Elite::KeyAction::StatusMode), static_cast<int>(begun.outcome.action),
                        L"a new game opens on the status screen");
@@ -604,7 +602,9 @@ namespace GameLogicTests
       game->commander.cargoHold[3u] = 2;
       Elite::SaveCommander(game->commander, game->name, game->image);
 
+      game->keys.titleHeld = true; // Space at both title screens (M6-0-h-2)
       (void)Elite::ResetAndStartGame(game->universe, game->ports, false);
+      game->keys.titleHeld = false;
       Elite::GenerateMarket(game->rng, game->current.economy, game->market);
 
       game->keys = ScriptedKeys({'2', 13, 13, 13, 13, 13, 13, 'Q', 'N', 'N', 13});

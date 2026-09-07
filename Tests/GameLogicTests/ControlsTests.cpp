@@ -402,7 +402,7 @@ namespace GameLogicTests
       Elite::ExtendedTokenPrinter extended{characters, printer, universe.rng};
       Elite::SidWriteLog sid;
       Elite::Ports ports{printer,  characters, characters, sid,
-                         extended, nulls,      nulls,      board, nulls};
+                         extended, nulls, board, nulls};
 
       std::uint32_t recentredByStick = 0;
       std::uint32_t bigRollRequests = 0;
