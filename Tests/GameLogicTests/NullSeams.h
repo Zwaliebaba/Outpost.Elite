@@ -60,7 +60,6 @@ namespace GameLogicTests
      */
 
     // Elite::StartUpEffects
-    void ClearKeyLogger() override {}
     std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override { return 0; }
 
     // Elite::Presenter

@@ -68,10 +68,6 @@ namespace GameLogicTests
       void Present() override {}
       void HoldFlightFrame(std::uint8_t) override {}
       void HoldTitleFrame(std::uint8_t) override {}
-      void ClearKeyLogger() override
-      {
-        seams.push_back("ZEKTRAN");
-      }
       void WaitFrames(std::uint8_t _frames) override
       {
         seams.push_back("DELAY");

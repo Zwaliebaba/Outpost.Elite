@@ -113,11 +113,6 @@ namespace GameLogicTests
       {
       }
 
-      void ClearKeyLogger() override
-      {
-        seams.push_back({"ZEKTRAN", 0, 0, 0});
-      }
-
       void WaitFrames(std::uint8_t _frames) override
       {
         seams.push_back({"DELAY", _frames, 0, 0});
@@ -422,18 +417,17 @@ namespace GameLogicTests
       Assert::AreNotEqual<std::uint8_t>(0x60, oracle.Fresh().memory[static_cast<std::uint16_t>(oracle.Label("RES2") - 1)],
                                         L"RESET should fall into RES2 rather than returning");
 
-      const Seam ZEK{"ZEKTRAN", 0, 0, 0};
       const Seam FIRST{"TITLE", Elite::TITLE_LOAD_TOKEN, Elite::Byte(Elite::ShipType::CobraMk3), Elite::TITLE_COBRA_DISTANCE};
       const Seam SECOND{"TITLE", Elite::TITLE_START_TOKEN, Elite::Byte(Elite::ShipType::Adder), Elite::TITLE_ADDER_DISTANCE};
 
       const std::vector<Script> SCRIPTS = {
-        {"N at the prompt", false, 'N', {}, {ZEK, FIRST, SECOND}},
-        {"a key that is not Y", false, ' ', {}, {ZEK, FIRST, SECOND}},
-        {"no key at all", false, 0, {}, {ZEK, FIRST, SECOND}},
-        {"Y, then leave the menu", false, Elite::KEY_YES_INTERNAL, {'5'}, {ZEK, FIRST, SECOND}},
-        {"Y, toggle the media, then leave", false, Elite::KEY_YES_INTERNAL, {'3', '5'}, {ZEK, FIRST, SECOND}},
-        {"a cold start", true, 'N', {}, {ZEK, FIRST, SECOND}},
-        {"a cold start into the menu", true, Elite::KEY_YES_INTERNAL, {'5'}, {ZEK, FIRST, SECOND}},
+        {"N at the prompt", false, 'N', {}, {FIRST, SECOND}},
+        {"a key that is not Y", false, ' ', {}, {FIRST, SECOND}},
+        {"no key at all", false, 0, {}, {FIRST, SECOND}},
+        {"Y, then leave the menu", false, Elite::KEY_YES_INTERNAL, {'5'}, {FIRST, SECOND}},
+        {"Y, toggle the media, then leave", false, Elite::KEY_YES_INTERNAL, {'3', '5'}, {FIRST, SECOND}},
+        {"a cold start", true, 'N', {}, {FIRST, SECOND}},
+        {"a cold start into the menu", true, Elite::KEY_YES_INTERNAL, {'5'}, {FIRST, SECOND}},
       };
 
       std::uint32_t compared = 0;
@@ -462,17 +456,12 @@ namespace GameLogicTests
         constexpr std::uint16_t KERNAL_LOAD = 0xFFD5;
 
         /*
-         * ONE TRAP WHERE THERE WERE FOUR (M3-b-2b). `startat`, `stopat` and `stopbd` are trapped
-         * nowhere now: both machines run the music player, and the SID writes below are what the
-         * comparison is made of.
+         * NO NAMED TRAP WHERE THERE WERE FOUR (M3-b-2b, M6-0-h-1). `startat`, `stopat` and `stopbd`
+         * are trapped nowhere: both machines run the music player, and the SID writes below are
+         * what the comparison is made of. `ZEKTRAN` was the last of them, trapped and counted as a
+         * seam until M6-0-h-1; it runs on both machines now, over a logger seeded FULL on both, and
+         * the sixty-five bytes it leaves are compared.
          */
-        std::vector<std::pair<std::uint16_t, std::string>> named = {
-          {oracle.Label("ZEKTRAN"), "ZEKTRAN"},
-        };
-        for (const auto& entry : named)
-        {
-          cpu.AddTrap(entry.first);
-        }
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
         for (const char* seam :
              {"DOXC", "DOYC", "MT9", "NLIN4", "FILEPR", "OTHERFILEPR", "KERNALSETUP", "SWAPPZERO", "DELAY", "FLKB"})
@@ -496,6 +485,11 @@ namespace GameLogicTests
           cpu.memory[oracle.Label(byte)] = 0;
         }
         cpu.memory[oracle.Label("DTW8")] = 0xFF;
+        const std::uint16_t klo = oracle.Label("KLO");
+        for (std::size_t slot = 0; slot < std::tuple_size_v<Elite::KeyLogger>; ++slot)
+        {
+          cpu.memory[static_cast<std::uint16_t>(klo + slot)] = 0xFFu; // 6502: KEYLOOK -- full, for ZEKTRAN to clear
+        }
 
         cpu.a = cpu.x = cpu.y = 0;
         cpu.sp = 0xFD;
@@ -573,14 +567,6 @@ namespace GameLogicTests
             sawColumn = true;
           }
 
-          for (const auto& entry : named)
-          {
-            if (cpu.pc == entry.first)
-            {
-              seams.push_back({entry.second, 0, 0, 0});
-            }
-          }
-
           Assert::IsTrue(cpu.Step(), (where + L": BR1 should not reach an unimplemented opcode").c_str());
         }
         Assert::IsTrue(completed, (where + L": BR1 should run off its end into BAY").c_str());
@@ -596,6 +582,7 @@ namespace GameLogicTests
          * the assertions below still read as they did.
          */
         Elite::Universe universe;
+        universe.keys.fill(0xFFu); // 6502: KEYLOOK -- full, as on the oracle
         Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
@@ -660,6 +647,14 @@ namespace GameLogicTests
           Assert::IsTrue(
             seams[index] == effects.seams[index] && seams[index] == script.expected[index],
             (where + L": seam " + std::to_wstring(index) + L" -- game " + Describe(seams) + L", port " + Describe(effects.seams)).c_str());
+        }
+
+        // 6502: KEYLOOK after ZEKTRAN -- sixty-five bytes, cleared on both machines rather than
+        // counted as a seam on both (M6-0-h-1).
+        for (std::size_t slot = 0; slot < std::tuple_size_v<Elite::KeyLogger>; ++slot)
+        {
+          Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(klo + slot)], universe.keys[slot],
+                           (where + L": KLO+" + std::to_wstring(slot)).c_str());
         }
 
         /*
