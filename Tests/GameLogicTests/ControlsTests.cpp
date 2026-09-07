@@ -243,7 +243,6 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t dokey = oracle.Label("DOKEY");
-      const std::uint16_t dockit = oracle.Label("DOCKIT");
       const std::uint16_t klo = oracle.Label("KLO");
       const std::uint16_t inwk = oracle.Label("INWK");
       const std::uint16_t jstx = oracle.Label("JSTX");
@@ -253,31 +252,72 @@ namespace GameLogicTests
       const std::uint16_t autoPilot = oracle.Label("auto");
       const std::uint16_t delta = oracle.Label("DELTA");
       const std::uint16_t type = oracle.Label("TYPE");
+      const std::uint16_t frin = oracle.Label("FRIN");
+      const std::uint16_t many = oracle.Label("MANY");
+      const std::uint16_t kPercent = oracle.Label("K%");
+      const std::uint16_t rand = oracle.Label("RAND");
+      const std::uint16_t k3 = oracle.Label("K3");
+      const std::uint16_t rat = oracle.Label("RAT");
+      const std::uint16_t rat2 = oracle.Label("RAT2");
+      const std::uint16_t cnt2 = oracle.Label("CNT2");
 
-      struct Autopilot
+      /*
+       * 6502: the bubble `DOCKIT` steers by, since M6-0-h-3 -- the real autopilot runs on both
+       * machines, so what varies is WHERE THE STATION IS rather than what a stub answers.
+       *
+       * `auton` builds the player's block in `INWK` at the origin with the nose along +z, so the
+       * station's position IS the vector `VCSU1` takes, and its nose is the slot `DOCKIT` measures
+       * the approach against. Any high byte with magnitude sends the routine to the planet (`GOPL`),
+       * which is the first approach; a bubble with no station at all is the other way there.
+       */
+      struct Approach
       {
-        std::uint8_t speed, acceleration, roll, pitch;
+        const char* what;
+        bool station;
+        std::uint8_t xLo, xHi, xSign, yLo, yHi, ySign, zLo, zHi, zSign;
+        std::uint8_t noseX, noseY, noseZ;
+        std::uint8_t roofX = 0x08u, roofY = 0x60u, roofZ = 0x08u;
+      };
+      const std::vector<Approach> APPROACHES = {
+        {"no station, planet ahead", false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {"station too far, planet ahead", true, 0, 0x40, 0, 0, 0x02, 0, 0, 0x02, 0, 0x60, 0x10, 0x20},
+        {"slot facing us, straight ahead", true, 0x40, 0, 0, 0x02, 0, 0, 0x02, 0, 0, 0x60, 0x10, 0x20},
+        {"slot facing us, dead ahead on z", true, 0, 0, 0, 0, 0, 0, 0x40, 0, 0, 0x08, 0x08, 0xE0},
+        {"slot turned away", true, 0x40, 0, 0, 0x02, 0, 0, 0x02, 0, 0, 0xE0, 0x10, 0x20},
+        {"station behind us", true, 0x40, 0, 0x80, 0x02, 0, 0, 0x02, 0, 0x80, 0x60, 0x10, 0x20},
+        {"station above", true, 0x04, 0, 0, 0x50, 0, 0, 0x04, 0, 0, 0x60, 0x10, 0x20},
+        {"station below and left", true, 0x30, 0, 0x80, 0x30, 0, 0x80, 0x08, 0, 0, 0x60, 0x10, 0x20},
+        {"close along a diagonal slot", true, 0x30, 0, 0, 0x30, 0, 0, 0x30, 0, 0, 0x60, 0x60, 0x60},
+        {"lined up on the slot, far down z", true, 0x02, 0, 0, 0x02, 0, 0, 0xF0, 0, 0, 0x08, 0x08, 0x60},
+        {"lined up on the slot, close", true, 0x02, 0, 0, 0x02, 0, 0, 0x30, 0, 0, 0x08, 0x08, 0x60},
+        {"off the slot's axis", true, 0x14, 0, 0x80, 0x0A, 0, 0, 0x40, 0, 0, 0x08, 0x08, 0x60},
+        /*
+         * The fine approach -- our nose along the slot within 12 of the axis, the slot's nose along
+         * ours -- and then the station's ROOF against our side, which is the last test before a
+         * ship is lined up: a roof across our side rolls hard (`TN11`, roll 127 and speed up), a
+         * roof along it stops and turns (`PH22`). Ours is (0, 0, +96) with the side on +x, so the
+         * slot has to point back down z at us and the roof either along x or along y.
+         */
+        {"lined up, roof across our side", true, 0x02, 0, 0, 0x02, 0, 0, 0x60, 0, 0, 0x02, 0x02, 0xE0, 0x60, 0x08, 0x08},
+        {"lined up, roof along our side", true, 0x02, 0, 0, 0x02, 0, 0, 0x60, 0, 0, 0x02, 0x02, 0xE0, 0x08, 0x60, 0x08},
       };
 
       struct Case
       {
         std::uint8_t docking, joystick, recentre;
         std::uint8_t roll, pitch;
-        std::uint8_t keys; ///< bits 0-3: KY3, KY4, KY5, KY6 held
-        Autopilot autopilot;
+        std::uint8_t keys;     ///< bits 0-3: KY3, KY4, KY5, KY6 held
+        std::uint8_t delta;    ///< 6502: DELTA going in, which `auton` hands `DOCKIT` in `INWK+27`
+        std::uint8_t approach; ///< an index into `APPROACHES`, for the docking computer
+        std::uint8_t faces;    ///< 6502: K3+10, the last drawn ship's eleventh face, which `DOCKIT` reads
       };
 
       // The rates that matter: both clamps, both sides of the centre, the centre itself, and the
       // exact 14 that `REDU2` turns into zero.
       const std::vector<std::uint8_t> RATES = {1, 14, 15, 64, 127, 128, 129, 200, 241, 255};
 
-      // What the autopilot can ask for. `ASL` doubles it, so 0x40 is the smallest roll request
-      // whose doubling sets bit 7 -- the boundary the `BIT` after the shift is testing.
-      const std::vector<std::uint8_t> REQUESTS = {0x00, 0x01, 0x3F, 0x40, 0x7F, 0x80, 0xC0, 0xFF};
-      // EORed with DELTA, which every case starts at 7, so the speeds coming back out of the
-      // stub are 7, 23, 22, 21 and 248 -- the clamp's boundary from both sides and one far
-      // above it.
-      const std::vector<std::uint8_t> SPEEDS = {0, 16, 17, 18, 255};
+      // `DELTA` going in for the autopilot: 22 is the clamp, from both sides and from far above.
+      const std::vector<std::uint8_t> SPEEDS = {0, 7, 21, 22, 23, 255};
 
       std::vector<Case> cases;
 
@@ -290,7 +330,7 @@ namespace GameLogicTests
           {
             for (const std::uint8_t rate : RATES)
             {
-              cases.push_back({0, joystick, recentre, rate, static_cast<std::uint8_t>(255u - rate), keys, {0, 0, 0, 0}});
+              cases.push_back({0, joystick, recentre, rate, static_cast<std::uint8_t>(255u - rate), keys, 7, 0, 0});
             }
           }
         }
@@ -301,14 +341,13 @@ namespace GameLogicTests
       {
         for (const std::uint8_t speed : SPEEDS)
         {
-          for (const std::uint8_t acceleration :
-               {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{0x7F}, std::uint8_t{0x80}, std::uint8_t{0xFF}})
+          for (std::uint8_t approach = 0; approach < APPROACHES.size(); ++approach)
           {
-            for (const std::uint8_t roll : REQUESTS)
+            for (const std::uint8_t faces : {std::uint8_t{0}, std::uint8_t{0xFF}})
             {
-              for (const std::uint8_t pitch : REQUESTS)
+              for (const std::uint8_t roll : {std::uint8_t{1}, std::uint8_t{100}, std::uint8_t{128}, std::uint8_t{255}})
               {
-                cases.push_back({0xFF, joystick, 0, 100, 190, 0, {speed, acceleration, roll, pitch}});
+                cases.push_back({0xFF, joystick, 0, roll, static_cast<std::uint8_t>(255u - roll), 0, speed, approach, faces});
               }
             }
           }
@@ -317,6 +356,8 @@ namespace GameLogicTests
 
       Cpu6502 cpu = oracle.Fresh();
       cpu.AddTrap(oracle.Label("DK4")); // which is `.ant`, where the port's function ends
+      cpu.AddTrap(oracle.Label("NOISE")); // `DOCKIT` reaches neither; `TacticsTests` traps both too
+      cpu.AddTrap(oracle.Label("MESS"));
 
       /*
        * The port's side of `RDKEY`, and IT IS A COMPARISON OF `RDKEY` since M6-0-a-4.
@@ -366,25 +407,10 @@ namespace GameLogicTests
       } board;
 
       /*
-       * 6502: JSR DOCKIT, replaced on the port's side by the same stub the oracle is loaded with.
-       *
-       * The speed is EORed rather than stored for the reason the oracle's stub is: `DOCKIT` READS
-       * `INWK+27`, so a stub that only wrote it would make `LDA DELTA / STA INWK+27` invisible.
+       * `Stub` -- `ControlEffects` answering `DOCKIT` with the four bytes a case asked for -- WAS
+       * HERE AND IS NOT ANY MORE (M6-0-h-3), and so is the eleven-byte stub the oracle ran in
+       * `DOCKIT`'s place. Both machines run the autopilot for real over the bubble each case seeds.
        */
-      struct Stub final : Elite::ControlEffects
-      {
-        Autopilot answer{};
-        std::uint32_t runs = 0;
-
-        void RunDockingComputer(Elite::Ship& _work) override
-        {
-          _work.speed = static_cast<std::uint8_t>(_work.speed ^ answer.speed);
-          _work.acceleration = answer.acceleration;
-          _work.rollCounter = answer.roll;
-          _work.pitchCounter = answer.pitch;
-          ++runs;
-        }
-      };
 
       /*
        * The universe and the ports, built ONCE -- `DOKEY` reaches eight of its bytes and none of
@@ -407,45 +433,76 @@ namespace GameLogicTests
       std::uint32_t recentredByStick = 0;
       std::uint32_t bigRollRequests = 0;
       std::uint32_t clampedSpeed = 0;
+      std::uint32_t autopilotRan = 0;
+      std::uint32_t pressedFaster = 0, pressedSlower = 0, pressedRollLeft = 0, pressedRollRight = 0, pressedPitchUp = 0, pressedPitchDown = 0;
 
       for (const Case& item : cases)
       {
         /*
-         * 6502: JSR DOCKIT, replaced -- LDA INWK+27 / EOR #n / STA INWK+27, then LDA #n /
-         * STA INWK+28 .. INWK+30, then RTS.
-         *
-         * The speed is EORed rather than stored because the real `DOCKIT` READS `INWK+27`: it is
-         * handed the current speed and gives back an adjusted one. A stub that only wrote it would
-         * make `LDA DELTA / STA INWK+27` invisible, and a port that dropped that instruction would
-         * pass -- which is exactly what the mutation sweep found before this was an EOR.
+         * 6502: the bubble on both machines -- the planet in slot 0, the station the case places
+         * in slot 1 (or not), `MANY` counting it (which is `SSPR`), `K3+10` and `RAND`. `DOKEY`
+         * builds `INWK` itself.
          */
-        const std::uint8_t stub[] = {
-          0xAD,
-          static_cast<std::uint8_t>((inwk + 27) & 0xFFu),
-          static_cast<std::uint8_t>((inwk + 27) >> 8),
-          0x49,
-          item.autopilot.speed,
-          0x8D,
-          static_cast<std::uint8_t>((inwk + 27) & 0xFFu),
-          static_cast<std::uint8_t>((inwk + 27) >> 8),
-          0xA9,
-          item.autopilot.acceleration,
-          0x8D,
-          static_cast<std::uint8_t>((inwk + 28) & 0xFFu),
-          static_cast<std::uint8_t>((inwk + 28) >> 8),
-          0xA9,
-          item.autopilot.roll,
-          0x8D,
-          static_cast<std::uint8_t>((inwk + 29) & 0xFFu),
-          static_cast<std::uint8_t>((inwk + 29) >> 8),
-          0xA9,
-          item.autopilot.pitch,
-          0x8D,
-          static_cast<std::uint8_t>((inwk + 30) & 0xFFu),
-          static_cast<std::uint8_t>((inwk + 30) >> 8),
-          0x60,
-        };
-        cpu.Load(dockit, stub, sizeof(stub));
+        const Approach& approach = APPROACHES[item.approach];
+        universe.bubble.slots.fill(0u);
+        universe.bubble.counts.fill(0u);
+        universe.bubble.slots[0] = 128u;
+        for (std::size_t slot = 0; slot < 2u; ++slot)
+        {
+          std::array<std::uint8_t, Elite::SHIP_BLOCK_SIZE> blockBytes{};
+          universe.bubble.blocks[slot] = Elite::Ship::FromBytes(blockBytes);
+        }
+        universe.bubble.blocks[0].z.hi = 0x60u; // the planet, a way off ahead, for `GOPL` to aim at
+        universe.bubble.blocks[0].y.hi = 0x08u;
+        if (approach.station)
+        {
+          universe.bubble.slots[1] = Elite::Byte(Elite::ShipType::Station);
+          universe.bubble.counts[Elite::Byte(Elite::ShipType::Station)] = 1u;
+          Elite::Ship& station = universe.bubble.blocks[1];
+          station.x.lo = approach.xLo;
+          station.x.hi = approach.xHi;
+          station.x.sgn = approach.xSign;
+          station.y.lo = approach.yLo;
+          station.y.hi = approach.yHi;
+          station.y.sgn = approach.ySign;
+          station.z.lo = approach.zLo;
+          station.z.hi = approach.zHi;
+          station.z.sgn = approach.zSign;
+          station.nose.x.hi = approach.noseX;
+          station.nose.y.hi = approach.noseY;
+          station.nose.z.hi = approach.noseZ;
+          station.roof.x.hi = approach.roofX;
+          station.roof.y.hi = approach.roofY;
+          station.roof.z.hi = approach.roofZ;
+          station.side.x.hi = 0x60u;
+          station.side.z.hi = 0x08u;
+        }
+        for (std::size_t slot = 0; slot < Elite::MAX_SHIPS; ++slot)
+        {
+          cpu.memory[static_cast<std::uint16_t>(frin + slot)] = universe.bubble.slots[slot];
+          for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
+          {
+            cpu.memory[static_cast<std::uint16_t>(kPercent + slot * Elite::SHIP_BLOCK_SIZE + byte)] =
+              universe.bubble.blocks[slot].ToBytes()[byte];
+          }
+        }
+        for (std::size_t kind = 0; kind < universe.bubble.counts.size(); ++kind)
+        {
+          cpu.memory[static_cast<std::uint16_t>(many + kind)] = universe.bubble.counts[kind];
+        }
+        universe.geometry.xx2[10] = item.faces;
+        cpu.memory[static_cast<std::uint16_t>(k3 + 10u)] = item.faces;
+        const std::array<std::uint8_t, 4> seed = {0x3Cu, 0xA5u, 0x5Au, 0xC3u};
+        for (std::size_t byte = 0; byte < seed.size(); ++byte)
+        {
+          cpu.memory[static_cast<std::uint16_t>(rand + byte)] = seed[byte];
+        }
+        universe.rng.SetState(seed);
+        // 6502: RAT, RAT2, CNT2 -- `DOCKIT` writes all three on entry, so a value nothing else
+        // writes is how "the autopilot ran" is read off the state on both sides.
+        cpu.memory[rat] = 0x55u;
+        cpu.memory[rat2] = 0x55u;
+        cpu.memory[cnt2] = 0x55u;
 
         Elite::KeyLogger keys{};
         keys[Elite::KEY_ROLL_LEFT] = ((item.keys & 1u) != 0u) ? 0xFFu : 0u;
@@ -476,7 +533,7 @@ namespace GameLogicTests
         cpu.memory[djd] = item.recentre;
         cpu.memory[jstx] = item.roll;
         cpu.memory[jsty] = item.pitch;
-        cpu.memory[delta] = 7u;
+        cpu.memory[delta] = item.delta;
         cpu.memory[type] = 0u;
 
         cpu.ClearTrapHits();
@@ -484,8 +541,6 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"DOKEY reached .ant");
 
         // ---- the port -------------------------------------------------------------------------
-        Stub effects;
-        effects.answer = item.autopilot;
         board.held = item.keys;
         board.scans = 0;
 
@@ -502,12 +557,15 @@ namespace GameLogicTests
         universe.options.joystick = item.joystick;
 
         universe.flight = Elite::FlightState{};
-        universe.flight.delta = 7u;
+        universe.flight.delta = item.delta;
         universe.flight.type = Elite::ShipType::None;
+        universe.flight.rat = 0x55u;
+        universe.flight.rat2 = 0x55u;
+        universe.flight.steerCone = 0x55u;
 
         universe.work = work;
 
-        Elite::ReadFlightControls(universe, ports, effects);
+        Elite::ReadFlightControls(universe, ports);
 
         Elite::ControlState& control = universe.control;
         Elite::FlightState& flight = universe.flight;
@@ -516,14 +574,16 @@ namespace GameLogicTests
 
         const std::wstring where = Widen("DOKEY(auto " + std::to_string(item.docking) + ", JSTK " + std::to_string(item.joystick) +
                                          ", DJD " + std::to_string(item.recentre) + ", JSTX " + std::to_string(item.roll) + ", JSTY " +
-                                         std::to_string(item.pitch) + ", keys " + std::to_string(item.keys) + ", autopilot " +
-                                         std::to_string(item.autopilot.speed) + "/" + std::to_string(item.autopilot.acceleration) + "/" +
-                                         std::to_string(item.autopilot.roll) + "/" + std::to_string(item.autopilot.pitch) + ")");
+                                         std::to_string(item.pitch) + ", keys " + std::to_string(item.keys) + ", DELTA " +
+                                         std::to_string(item.delta) + ", " + approach.what + ", faces " + std::to_string(item.faces) + ")");
 
         Assert::AreEqual(cpu.memory[jstx], control.roll, (where + L": JSTX").c_str());
         Assert::AreEqual(cpu.memory[jsty], control.pitch, (where + L": JSTY").c_str());
         Assert::AreEqual(cpu.memory[delta], flight.delta, (where + L": DELTA").c_str());
         Assert::AreEqual(cpu.memory[type], Elite::Byte(flight.type), (where + L": TYPE").c_str());
+        Assert::AreEqual(cpu.memory[rat], flight.rat, (where + L": RAT").c_str());
+        Assert::AreEqual(cpu.memory[rat2], flight.rat2, (where + L": RAT2").c_str());
+        Assert::AreEqual(cpu.memory[cnt2], flight.steerCone, (where + L": CNT2").c_str());
 
         for (std::size_t slot = 0; slot < keys.size(); ++slot)
         {
@@ -537,8 +597,17 @@ namespace GameLogicTests
         }
 
         Assert::AreEqual<std::uint32_t>(1u, board.scans, (where + L": one keyboard scan").c_str());
-        Assert::AreEqual<std::uint32_t>(item.docking != 0u ? 1u : 0u, effects.runs,
-                                        (where + L": the autopilot ran only when it is on").c_str());
+        Assert::AreEqual(item.docking != 0u, flight.rat2 != 0x55u, (where + L": the autopilot ran only when it is on").c_str());
+        autopilotRan += (flight.rat2 != 0x55u) ? 1u : 0u;
+        if (item.docking != 0u)
+        {
+          pressedFaster += (keys[Elite::KEY_SPEED_UP] != 0u) ? 1u : 0u;
+          pressedSlower += (keys[Elite::KEY_SLOW_DOWN] != 0u) ? 1u : 0u;
+          pressedRollLeft += (keys[Elite::KEY_ROLL_LEFT] != 0u) ? 1u : 0u;
+          pressedRollRight += (keys[Elite::KEY_ROLL_RIGHT] != 0u) ? 1u : 0u;
+          pressedPitchUp += (keys[Elite::KEY_PITCH_UP] != 0u) ? 1u : 0u;
+          pressedPitchDown += (keys[Elite::KEY_PITCH_DOWN] != 0u) ? 1u : 0u;
+        }
 
         if (item.docking == 0u && item.joystick != 0u && item.keys == 0u)
         {
@@ -548,10 +617,21 @@ namespace GameLogicTests
         clampedSpeed += (item.docking != 0u && flight.delta == 22u) ? 1u : 0u;
       }
 
-      Assert::IsTrue(cases.size() > 3'000u, L"the sweep is worth its name");
+      Logger::WriteMessage(("DOKEY: " + std::to_string(cases.size()) + " cases; the autopilot ran " + std::to_string(autopilotRan) +
+                            " times and pressed faster/slower/left/right/up/down " + std::to_string(pressedFaster) + "/" +
+                            std::to_string(pressedSlower) + "/" + std::to_string(pressedRollLeft) + "/" + std::to_string(pressedRollRight) +
+                            "/" + std::to_string(pressedPitchUp) + "/" + std::to_string(pressedPitchDown) + ", wrote JSTX directly " +
+                            std::to_string(bigRollRequests) + ", clamped the speed " + std::to_string(clampedSpeed) + "\n")
+                             .c_str());
+      Assert::IsTrue(cases.size() > 1'500u, L"the sweep is worth its name"); // 3,840 with a stubbed DOCKIT; the real one is the depth now
       Assert::IsTrue(recentredByStick > 0u, L"the joystick's spring-back fired");
       Assert::IsTrue(bigRollRequests > 0u, L"the autopilot's direct write to JSTX fired");
       Assert::IsTrue(clampedSpeed > 0u, L"and its speed was clamped at 22");
+      // §6.36's rule for the autopilot's six synthetic presses: a sweep in which `DOCKIT` never
+      // asked for one of them would agree with the game about not pressing it.
+      Assert::IsTrue(pressedFaster > 0u && pressedSlower > 0u, L"the autopilot asked for both speeds");
+      Assert::IsTrue(pressedRollLeft > 0u && pressedRollRight > 0u, L"and both rolls");
+      Assert::IsTrue(pressedPitchUp > 0u && pressedPitchDown > 0u, L"and both pitches");
     }
   };
 

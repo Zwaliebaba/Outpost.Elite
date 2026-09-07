@@ -420,6 +420,6 @@ namespace Elite
    * The joystick half of `TT17afterall` is not ported: `JSTK` is zero for a keyboard player from
    * the moment the title screen is dismissed with a key, and this build has no joystick.
    */
-  [[nodiscard]] CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, ControlEffects& _effects, std::uint8_t _view) noexcept;
+  [[nodiscard]] CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept;
 
 } // namespace Elite

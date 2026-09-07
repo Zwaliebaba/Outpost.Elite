@@ -50,7 +50,7 @@
 namespace GameLogicTests
 {
 
-  class FlightPort final : public Elite::ControlEffects, public Elite::Presenter, public Elite::Keyboard
+  class FlightPort final : public Elite::Presenter, public Elite::Keyboard
   {
   public:
     /// 6502: what `CIRCLE` would have left in `STP` -- a launch reads it (§6.95), so the port
@@ -74,7 +74,7 @@ namespace GameLogicTests
      * screen and writes no commander file.
      */
     FlightPort()
-      : game(*this, *this, unused, *this)
+      : game(*this, *this, unused)
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -253,13 +253,8 @@ namespace GameLogicTests
       }
     }
 
-    // ---- Elite::ControlEffects's docking computer -------------------------------------------------
-
-    void RunDockingComputer(Elite::Ship& _work) override
-    {
-      static_cast<void>(_work);
-      Elite::RunDockingComputer(universe, game.PortsOf(), 0u);
-    }
+    // `Elite::ControlEffects` WAS ANSWERED HERE AND IS NOT ANY MORE (M6-0-h-3): one call to
+    // `Elite::RunDockingComputer` over slot 0, which `ReadFlightControls` makes itself now.
     // `ClearBottomRows` WAS ANSWERED HERE AND IS NOT ANY MORE (M3-b-3b): `CLYNS` is
     // `Elite::ClearMessageRows`, which `MLOOP`'s head calls itself when a message's countdown ends.
 

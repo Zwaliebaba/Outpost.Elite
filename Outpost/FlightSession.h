@@ -51,10 +51,11 @@ namespace Outpost
    * raster mode: the platform, which is what a session was always supposed to be.
    *
    * It does not build `Elite::Ports` either, since M3-a-3: the struct grew the docked half's four
-   * seams, and eight of its thirteen references are then the shell's and the store's rather than
-   * this object's. `Outpost::Game` owns it and lends it back through `AttachPorts`, which is what
-   * the one seam below needs that takes a `Ports&` to answer -- `DOCKIT`. `TACTICS` was the other
-   * until M3-b-1c, which took the seam away and let `MVEIT` call the routine directly.
+   * seams, and most of its references are the shell's and the store's rather than this object's.
+   * `Elite::Game` owns it, and until M6-0-h-3 lent it back through `AttachPorts` for the one seam
+   * here that took a `Ports&` to answer -- `DOCKIT`. `TACTICS` was the other until M3-b-1c, which
+   * took the seam away and let `MVEIT` call the routine directly; `DOKEY` calls `DOCKIT` the same
+   * way now, and this object answers no seam at all.
    *
    * WHAT IS HONESTLY MISSING, said here rather than left to be found while flying.
    *
@@ -67,7 +68,7 @@ namespace Outpost
    * What DOES work is the frame itself: the controls, the stardust, the dashboard, the planet, the
    * ship renderer and all sixteen parts of `M%`.
    */
-  class FlightSession final : public Elite::ControlEffects
+  class FlightSession final
   {
   public:
     explicit FlightSession(Window& _window) noexcept;
@@ -87,13 +88,8 @@ namespace Outpost
       return *m_universe;
     }
 
-    /// The seams, lent back by the composition root once it has built them. This object's own
-    /// `RunDockingComputer` is a call that needs them, and the interface it satisfies does not
-    /// carry them.
-    void AttachPorts(Elite::Ports& _ports) noexcept
-    {
-      m_ports = &_ports;
-    }
+    // `AttachPorts` WAS HERE AND IS NOT ANY MORE (M6-0-h-3): the seams were lent back for the one
+    // call this object made that needed them, `DOCKIT`, and `DOKEY` makes that call itself now.
 
     /*
      * 6502: comirq1 -- what the raster interrupt does with `abraxas` and `caravanserai` on its way
@@ -133,12 +129,11 @@ namespace Outpost
      * rather than anything in here.
      */
 
-    // ---- Elite::ControlEffects ------------------------------------------------------------------
-
-    // `ChartShapes` was answered here rather than removed "because the charts are compared against
-    // the shipped game through it (§6.115)". M3-b-1b removed it: the charts draw through the
-    // universe's own heaps and the comparison is the chart's pixels.
-    void RunDockingComputer(Elite::Ship& _work) override;
+    // `Elite::ControlEffects` WAS ANSWERED HERE AND IS NOT ANY MORE (M6-0-h-3): `RunDockingComputer`
+    // was one call to `Elite::RunDockingComputer` over the universe and the lent ports, which is
+    // exactly what `ReadFlightControls` does inside the library now. `ChartShapes` was answered
+    // here too rather than removed "because the charts are compared against the shipped game
+    // through it (§6.115)"; M3-b-1b removed it.
 
     /*
      * `SightEffects` AND `ExplosionEffects` WERE ANSWERED HERE AND ARE NOT ANY MORE (M3-b-3a).
@@ -166,8 +161,6 @@ namespace Outpost
     /// 6502: the sound buffer, the music player and the chip they write -- the composition root's,
     /// because the docked half beeps and starts the theme through the shell.
 
-    /// 6502: the seams, null until the composition root attaches them -- see `AttachPorts`.
-    Elite::Ports* m_ports = nullptr;
   };
 
   /*

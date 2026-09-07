@@ -5,7 +5,6 @@
 #include "LoaderScreen.h"
 #include "SoundOutput.h"
 
-#include "Tactics.h"
 
 #include "DockedKeys.h"
 
@@ -162,24 +161,10 @@ namespace Outpost
    * of `Universe`, and the `QQ11` tail was the piece this file's own comment called game logic.
    */
 
-  void FlightSession::RunDockingComputer(Elite::Ship& _work)
-  {
-    /*
-     * 6502: JSR DOCKIT from `DOKEY`'s `auton` path.
-     *
-     * It steers by writing `INWK+27` to `INWK+30`, which `DOKEY` then turns into synthetic key
-     * presses -- so the autopilot flies the ship through the same key logger the player uses, and
-     * nothing downstream can tell them apart.
-     *
-     * `auton` has already built the block this reads: `ZINF`, a nose vector, and `STA TYPE` with
-     * &E0, which is the NEGATIVE type `DOCKIT` tests for to know it is flying the player's ship
-     * rather than an NPC's. Slot 0 is what `INF` points at on that path.
-     */
-    (void)_work;
-    if (m_ports != nullptr)
-    {
-      Elite::RunDockingComputer(*m_universe, *m_ports, 0u);
-    }
-  }
+  /*
+   * `RunDockingComputer` WAS HERE AND IS NOT ANY MORE (M6-0-h-3). 6502: JSR DOCKIT from `DOKEY`'s
+   * `auton` path -- one call to `Elite::RunDockingComputer` over slot 0, which `ReadFlightControls`
+   * makes itself now.
+   */
 
 } // namespace Outpost
