@@ -205,8 +205,13 @@ jobs:
       - name: Assemble the reference build
         run: python tools/labels.py --assemble
 
-      - name: Build and run the suite
-        run: Tests/PortableRunner/run_tests.sh
+      - name: Build and run the suite, recording which labels each test runs
+        run: Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt
+
+      # M6-0-f: the coverage review as a tool's output. Every Port row of the ledger names files
+      # some test RUNS on the oracle, or carries a note saying which it does not and why.
+      - name: Review the ledger's Port rows against what the suite ran
+        run: python tools/inventory.py --coverage x64/Debug/coverage.txt
 
   windows:
     name: Debug x64 build and tests

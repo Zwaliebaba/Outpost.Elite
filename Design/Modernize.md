@@ -1530,7 +1530,7 @@ were safe after M6-f, and none of them waited.
 | **M6-0-c The eleven control codes** ✅ **built 2026-09-07 (§8)** | Task #12. Five (9, 21, 25, 27, 28) are comparable now given a `Ports` and a canvas comparison; three (22, 24, 26) need a scripted keyboard on both sides first; three (11, 30, 31) have nothing behind them on either side and fall to `default`. The eight get compared; the three get the sentence that says why not, next to the `DEFERRED` array. | `ExtendedTokenTests` defers three and says which; the eight compared against the original. | 2 |
 | **M6-0-d Two fixture faults from M3-b** ✅ **built 2026-09-07 (§8)** | `Where` has no `SUNX` and no `LSY2`, so a fixture cannot put a DRAWN sun into both machines and `MA23 whole frame (a sun close enough to draw)` has differed at screen offset 8033 since it was first run; the flight-loop fixtures give every ship a line heap at `&0C00`, outside `LineHeap`'s window, so "the seeds it writes are compared nowhere." Both were called one-line fixes at the time and neither was made. **Built:** nine planet-and-sun cells, the heaps carved from `LS%`, `PLANET` untrapped and drawn on both machines — and the first drawn-sun frames found a stale zero-page read in the original's `WPLS` that no game state reaches. | The sun frame compared on the whole bitmap; the heaps inside the arena and compared; no case excluded by name that this row could include. | 1 |
 | **M6-0-e Seven routines only ever trapped** ✅ **built 2026-09-07 (§8)** | `TRADEMODE`, `NLIN`, `TT67` and `DK4` are ported and have no direct comparison against the original anywhere — every test that reaches them traps them; `WSCAN` is the platform's (ADR-005 §3), `REDU` is proven unreachable, `GTNMEW` is the load path's name entry. A trapped routine's fixture records the TRAP's answer. Each of the seven gets a ruling: compared before M6-a, or a sentence beside its trap saying it never will be and why. | No `AddTrap` on a label that has neither a direct comparison nor a recorded reason. | 1 |
-| **M6-0-f A coverage instrument** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
+| **M6-0-f A coverage instrument** ✅ **built 2026-09-07 (§8)** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
 | **M6-0-g Mutants to a stated floor** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
 | **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
 | **M6-a Coverage review and the recorder** | **Blocked on M6-0.** Every *Port* row of the ledger has a test that calls it, read off M6-0-f's instrument rather than reviewed by eye; the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | M6-0's eight rows green first. Then the suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
@@ -1812,6 +1812,37 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-f: the coverage instrument, and the first honest reading of the Port rows.**
+
+The interpreter gains two optional bitsets, one bit per address, and `Step` sets a bit in the
+first for every instruction it executes and in the second for every trap it takes. `OracleImage`
+attaches them to every `Fresh()` while recording is on and hands back, per test, the sorted labels
+at the addresses set; the generated runner takes `--coverage FILE` as its first argument and writes
+one line per test — name, the labels run, the labels trapped. `inventory.py --coverage FILE` reads
+that file against the ledger: for every *Port* row it takes each stem that names a file under
+`subroutine/`, reads that file's labels through the C64 filter, and asks whether any test ran one.
+A stem with no label of its own is judged by its family. A row may say, in a
+`<!--uncovered: stem -- why-->` note, which of its files no test runs and why, and the tool prints
+every note it honoured. The CI Linux job runs the suite through the instrument and then the review,
+so the review is the tool's output and never a person's, which is the acceptance.
+
+**THE FIRST READING WAS WRONG THREE TIMES BEFORE IT WAS RIGHT.** Labels were first read from every
+branch of a shared file, so the 6502SP's labels in a `common/` routine counted as gaps; then data
+and workspace files were judged as if they were code; then the review had 265 stems run and 19 not,
+in ten rows, and every one of the nineteen got a reason it could carry. Six are the other version's
+or the machine's: `DOCOL`'s every caller sits under `_6502SP_VERSION`, `CLDELAY` is an `RTS` on this
+build, `DOHFX` and `DOSVN` are empty labels, `NEWOSRDCH` has no C64 caller, `MUT3` has no caller at
+all. Four are the platform's, trapped and not run: `DELAY` in sixteen tests and `WSCAN` in two
+(ADR-005 §3), `BELL` for its beep, `TT114` for the view it chooses. Three are what the port does not
+have: the loader's `BEGIN`, the Kernal's `CHPR2`, the integrity `checksum`. Two are M6-0-c's named
+three, trapped at their labels by the disk-menu tests. **AND FOUR ARE GAPS**, written into the
+ledger as gaps rather than dressed as exemptions: `ISDK`, the station's docking test, is run by no
+test and `GOIN` is only ever trapped; `MTT4`, the trader spawn, is reached only through part 2's
+generator rolls and no test rolls one; music commands 6 and 11 are ported and no tune the suite
+plays contains either. They are M6-a's first four items, and the tool will keep saying so until a
+test runs them. The Windows job does not run the instrument — one reading is enough and the labels
+are the same image. 28 Port rows, 265 stems run, 19 exempted, 408 of 408; all 16 checks.
 
 **2026-09-07 — M6-0-e: the seven routines only ever trapped, each with its ruling.**
 

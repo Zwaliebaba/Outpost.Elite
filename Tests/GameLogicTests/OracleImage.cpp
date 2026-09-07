@@ -2,6 +2,8 @@
 
 #include "OracleImage.h"
 
+#include <algorithm>
+
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -221,7 +223,41 @@ namespace Elite::Testing
     cpu.sp = 0xFD;
     cpu.pc = 0;
     cpu.c = cpu.z = cpu.i = cpu.d = cpu.v = cpu.n = false;
+    if (s_recording)
+    {
+      cpu.executed = &m_executed;
+      cpu.trapped = &m_trapped;
+    }
     return cpu;
+  }
+
+  void OracleImage::RecordCoverage(bool _on) noexcept
+  {
+    s_recording = _on;
+  }
+
+  OracleImage::Coverage OracleImage::TakeCoverage() const
+  {
+    Coverage coverage;
+    if (m_executed.any() || m_trapped.any())
+    {
+      for (const auto& [name, address] : m_labels)
+      {
+        if (m_executed.test(address))
+        {
+          coverage.executed.push_back(name);
+        }
+        if (m_trapped.test(address))
+        {
+          coverage.trapped.push_back(name);
+        }
+      }
+      std::sort(coverage.executed.begin(), coverage.executed.end());
+      std::sort(coverage.trapped.begin(), coverage.trapped.end());
+    }
+    m_executed.reset();
+    m_trapped.reset();
+    return coverage;
   }
 
 } // namespace Elite::Testing

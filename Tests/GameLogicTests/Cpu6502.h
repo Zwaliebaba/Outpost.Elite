@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <bitset>
 #include <cstdint>
 #include <vector>
 
@@ -67,6 +68,16 @@ namespace Elite::Testing
 
     static constexpr std::uint16_t IO_BASE = 0xD000;
     static constexpr std::uint16_t IO_TOP = 0xDFFF;
+
+    /*
+     * Coverage (M6-0-f): where every instruction this processor executes is marked, and where
+     * every trap it hits is marked, when the image that made it is recording. Null otherwise, and
+     * `Step` costs one branch for it. `OracleImage::TakeCoverage` turns the marks into labels --
+     * a routine a test REACHED and a routine a test RAN are different answers, and the ledger
+     * review needs the second.
+     */
+    std::bitset<65536>* executed = nullptr;
+    std::bitset<65536>* trapped = nullptr;
 
     /*
      * 6502: CIA1's two ports, &DC00 and &DC01 -- the keyboard matrix as the chip presents it
