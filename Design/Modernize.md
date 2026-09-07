@@ -633,18 +633,34 @@ and whether the bubble had room -- are booleans on it rather than second classes
 a function with a typed result, so that the local `bool`s become one value:
 
 ```cpp
-enum class Contact : std::uint8_t { None, Docking, Scoopable, Collision };   // part 7's four answers
-struct ScoopResult { bool crashed; bool holdFull; std::optional<Cargo> item; };  // part 8
-enum class DockingTest : std::uint8_t { Arrived, Bounced, Fatal };             // part 9
-struct LaserHit { ... };                                                       // part 11, already a struct
+enum class Contact : std::uint8_t { Clear, Docking, Scoopable, Collision };  // part 7's four answers
+enum class ScoopResult : std::uint8_t { Stowed, HoldFull, Crashed };         // part 8
+enum class DockingTest : std::uint8_t { Arrived, TooFast, Bumped };          // part 9
+enum class Impact : std::uint8_t { None, Bounced, Bumped, Crashed };         // part 10's three entries
+struct Aim { bool draws; bool carry; };                                      // part 11's answer to `LL9`
+struct LaserHit { bool stores; std::uint8_t energy; };                       // part 11's, already a struct
+enum class KillOutcome : std::uint8_t { Kept, Removed };                     // part 12
 ```
 
-and the slot loop is `while (auto slot = bubble.NextOccupied(slot))` with `KillShip` returning
-whether the index must not advance — the same control flow, said once.
+**AMENDED FROM WHAT WAS BUILT (M4-a-2, §8).** The sketch above had `ScoopResult` as a struct with an
+`optional<Cargo>`; it is an enum, because part 8's item never leaves the routine — it goes straight
+into `QQ20` and the caller only needs to know which of `MA59`, `MA58` and "stowed" it took. Part 10's
+three entries needed a name of their own (`Impact`) and part 11 needed `Aim` for the pair `LL9` is
+reached with, so seven types where the sketch drew four. `Contact::None` is `Clear` and
+`DockingTest::Bounced`/`Fatal` are `Bumped`/`TooFast`, each named for the 6502 label rather than for
+the consequence.
 
-**`LL9`** becomes six stages over a `ShipRender` frame object: `Visible?` → `ScaledOrientation` →
+`KillShip` returning "the index must not advance" is what `KillOutcome` says, and the slot loop is
+still `for(;;)` with the index advanced by hand rather than `while (auto slot =
+bubble.NextOccupied(slot))`: `KILLSHP` shuffles every slot above the dead one down, so the loop must
+go round on the SAME index, and a `while` over an iterator would have to un-advance it. The
+original's shape is the honest one and the comment on it is the whole explanation.
+
+**`LL9`** becomes SEVEN stages over a `ShipRender` frame object: `Visible?` → `ScaledOrientation` →
 `FaceVisibility` → `ProjectedVertices` → `EdgeSelection` → `ClippedLines` → `HeapRun`, each a
-function of the previous stage's result; `DrawShipAsPoint` and `EraseShip` stay as they are (the
+function of the previous stage's result. (This row said "six" and then listed seven, which is also
+the number of annotated part blocks `DrawShip` carries — parts 1, 2, 3, 4–5, 6–8, 9 and 10–11.
+Counted from the tree rather than from the sentence, M4-a-3.) `DrawShipAsPoint` and `EraseShip` stay as they are (the
 ADR-001 §6 row on `SHPPT` is about `Projection` outliving a call, and the stage form makes that
 visible rather than hiding it).
 
