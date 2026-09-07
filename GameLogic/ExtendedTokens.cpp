@@ -128,7 +128,7 @@ namespace Elite
     }
   }
 
-  bool CharacterPrinter::PadToWidth(std::uint8_t& _rotor) noexcept
+  CharacterPrinter::PadResult CharacterPrinter::PadToWidth(std::uint8_t _rotor) noexcept
   {
     int scan = 0;
     bool restart = true;
@@ -151,7 +151,7 @@ namespace Elite
          */
         if (!sawGap && !firstPass)
         {
-          return false;
+          return {false, _rotor};
         }
 
         if ((_rotor & 0x80u) == 0u)
@@ -167,7 +167,7 @@ namespace Elite
       // 6502: DAL1 -- the line is ready the moment the thirty-first character is a space.
       if (buffer[LINE_WIDTH] == SPACE)
       {
-        return true;
+        return {true, _rotor};
       }
 
       // 6502: DAL2 -- back through the line looking for a gap this pass is allowed to widen.
@@ -208,7 +208,7 @@ namespace Elite
 
       if (static_cast<std::size_t>(state.bufferLength) >= buffer.size())
       {
-        return false;
+        return {false, _rotor};
       }
 
       /*
@@ -270,7 +270,9 @@ namespace Elite
 
       rotor = static_cast<std::uint8_t>(rotor >> 1);
 
-      const bool broke = PadToWidth(rotor);
+      const PadResult padded = PadToWidth(rotor);
+      rotor = padded.rotor;
+      const bool broke = padded.broke;
 
       // 6502: DA2 -- thirty characters and a newline. The space that broke the line goes with
       // them, which is why the subtraction below takes thirty-ONE away: CHPR returns with the

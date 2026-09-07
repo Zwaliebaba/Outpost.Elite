@@ -51,9 +51,9 @@ namespace Elite
 
   } // namespace
 
-  void ArriveAtSystem(Commander& _commander, CurrentSystem& _current, SystemSeeds& _selected, const SystemSeeds& _target,
-                      SystemData& _described, MarketState& _market, Rng& _rng, std::uint8_t& _explosionCount, std::uint8_t _crosshairX,
-                      std::uint8_t _crosshairY, const SystemSeeds& _galaxy, bool _findNearest) noexcept
+  void ArriveAtSystem(Universe& _universe, SystemSeeds& _selected, const SystemSeeds& _target, SystemData& _described,
+                      MarketState& _market, std::uint8_t _crosshairX, std::uint8_t _crosshairY, const SystemSeeds& _galaxy,
+                      bool _findNearest) noexcept
   {
     /*
      * 6502: JSR TT111 -- and `TT18` enters at `hyp1+3`, three bytes past it, because the chart has
@@ -65,7 +65,7 @@ namespace Elite
     if (_findNearest)
     {
       const NearestSystem nearest =
-        FindNearestSystem(_galaxy, crosshairX, crosshairY, _commander.systemX, _commander.systemY);
+        FindNearestSystem(_galaxy, crosshairX, crosshairY, _universe.commander.systemX, _universe.commander.systemY);
       _selected = nearest.seeds;
 
       // 6502: `TT111` ends `JMP TT24`, so `QQ3` to `QQ5` are its side effect and not its answer.
@@ -85,15 +85,15 @@ namespace Elite
 
     // 6502: JSR jmp -- LDA QQ9 / STA QQ0 / LDA QQ10 / STA QQ1: where you are becomes where the
     // crosshairs are, which is what arriving means.
-    CurrentSystemToCrosshairs(_commander, crosshairX, crosshairY);
+    CurrentSystemToCrosshairs(_universe.commander, crosshairX, crosshairY);
 
     // 6502: LDX #5 / .TT112 LDA safehouse,X / STA QQ2,X / DEX / BPL TT112 -- the seeds the
     // countdown saved, because the player has been moving the crosshairs ever since.
-    _current.seeds = _target;
+    _universe.current.seeds = _target;
 
     // 6502: INX / STX EV -- X came out of the loop at &FF and the `INX` makes it zero, so arriving
     // resets the spawner's rate limit (§6.135). One instruction doing two things.
-    _explosionCount = 0;
+    _universe.explosions = 0;
 
     /*
      * 6502: LDA QQ3 / STA QQ28 / LDA QQ5 / STA tek / LDA QQ4 / STA gov.
@@ -103,13 +103,13 @@ namespace Elite
      * left rather than recomputing them -- and on the `hyp1+3` path what they read is what the
      * CHART's last `TT111` left, which is the same system.
      */
-    _current.economy = _described.economy;
-    _current.techLevel = _described.techLevel;
-    _current.government = _described.government;
+    _universe.current.economy = _described.economy;
+    _universe.current.techLevel = _described.techLevel;
+    _universe.current.government = _described.government;
 
     // 6502: it FALLS INTO GVL -- and `GVL` reads `QQ28`, which is what was just stored, so the
     // market comes from the DESCRIBED system too and not from the seeds in `QQ2`.
-    GenerateMarket(_rng, _described.economy, _market);
+    GenerateMarket(_universe.rng, _described.economy, _market);
   }
 
   void EnterWitchspace(Universe& _universe, Ports& _ports, Commander& _commander) noexcept
@@ -220,8 +220,7 @@ namespace Elite
     }
 
     // 6502: JSR hyp1+3 -- past the `JSR TT111`, because the chart has already chosen.
-    ArriveAtSystem(_universe.commander, _universe.current, _selected, _jump.target, _described, _market, _universe.rng,
-                   _universe.explosions, _crosshairX, _crosshairY, _galaxy, false);
+    ArriveAtSystem(_universe, _selected, _jump.target, _described, _market, _crosshairX, _crosshairY, _galaxy, false);
 
     // 6502: JSR RES2 / JSR SOLAR -- a clean bubble and then the system's own planet and sun.
     ResetShipAndBubble(_universe, _ports);

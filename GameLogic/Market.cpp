@@ -378,7 +378,7 @@ namespace Elite
     }
   }
 
-  DigitResult TypeDigit(std::uint8_t& _value, std::uint8_t _key, std::uint8_t _available) noexcept
+  TypedDigit TypeDigit(std::uint8_t _value, std::uint8_t _key, std::uint8_t _available) noexcept
   {
     /*
      * 6502: LDX R / BNE NWDAV2 / CMP #'Y' / BEQ NWDAV1 / CMP #'N' / BEQ NWDAV3.
@@ -391,19 +391,19 @@ namespace Elite
       if (_key == 'Y')
       {
         _value = _available;
-        return DigitResult::TakeAll;
+        return {DigitResult::TakeAll, _value};
       }
       if (_key == 'N')
       {
         _value = 0;
-        return DigitResult::TakeNone;
+        return {DigitResult::TakeNone, _value};
       }
     }
 
     // 6502: NWDAV2 -- STA Q / SEC / SBC #'0' / BCC OUT. Anything below '0' ends the number.
     if (_key < '0')
     {
-      return DigitResult::Complete;
+      return {DigitResult::Complete, _value};
     }
 
     const std::uint8_t digit = static_cast<std::uint8_t>(_key - '0');
@@ -411,14 +411,14 @@ namespace Elite
     // 6502: CMP #10 / BCS BAY2 -- and a letter does not end the number, it leaves the screen.
     if (digit >= 10u)
     {
-      return DigitResult::LeaveScreen;
+      return {DigitResult::LeaveScreen, _value};
     }
 
     // 6502: LDA R / CMP #26 / BCS OUT -- past 26 no further digit is taken, and the carry the CMP
     // leaves is SET, which is what tells the caller the number was refused rather than finished.
     if (_value >= 26u)
     {
-      return DigitResult::TooBig;
+      return {DigitResult::TooBig, _value};
     }
 
     /*
@@ -454,10 +454,10 @@ namespace Elite
      */
     if (_value != _available && _value > _available)
     {
-      return DigitResult::TooBig;
+      return {DigitResult::TooBig, _value};
     }
 
-    return DigitResult::Accepted;
+    return {DigitResult::Accepted, _value};
   }
 
   NumberEntry ReadNumber(Keyboard& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept
@@ -472,7 +472,9 @@ namespace Elite
     {
       // 6502: TT223 -- JSR TT217, which does not return until a key is pressed.
       const std::uint8_t key = _keys.NextKey();
-      entry.outcome = TypeDigit(entry.value, key, _available);
+      const TypedDigit typed = TypeDigit(entry.value, key, _available);
+      entry.value = typed.value;
+      entry.outcome = typed.outcome;
 
       /*
        * 6502: TT226's `LDA Q / JSR TT26`, and the same call at the top of NWDAV1 and NWDAV3.

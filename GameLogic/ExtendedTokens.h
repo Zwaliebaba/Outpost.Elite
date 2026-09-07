@@ -115,7 +115,20 @@ namespace Elite
      * borrowed for the purpose. It is passed by reference here for the same reason it is a
      * variable there: it carries from one gap to the next within a line.
      */
-    [[nodiscard]] bool PadToWidth(std::uint8_t& _rotor) noexcept;
+    /*
+   * 6502: SC+1 -- the rotating bit that chooses which gap, and the answer beside it (M5-a-3).
+   *
+   * It was a `std::uint8_t&` out-parameter until then, which is P10's pattern: a bare byte
+   * reference the caller has to remember to keep. It is one value carried out and back in, so the
+   * routine returns it with the flag, exactly as M2-b did for the arithmetic kernel.
+   */
+  struct PadResult
+  {
+    bool broke;         ///< false is the port's give-up on a line with no gap at all
+    std::uint8_t rotor; ///< 6502: SC+1, carried to the next gap on the same line
+  };
+
+  [[nodiscard]] PadResult PadToWidth(std::uint8_t _rotor) noexcept;
 
     TextSink& m_screen; ///< 6502: CHPR
   };

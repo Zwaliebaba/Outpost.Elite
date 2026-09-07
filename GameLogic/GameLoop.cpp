@@ -801,17 +801,17 @@ namespace Elite
     return SpawnPass::Ended;
   }
 
-  void RunSpawning(Bubble& _bubble, Ship& _work, Rng& _rng, Commander& _commander, const CurrentSystem& _current,
-                   const FlightStatus& _status, std::uint8_t& _explosionCount, const Blueprint*& _blueprint, bool _carryIn) noexcept
+  void RunSpawning(Universe& _universe, bool _carryIn) noexcept
   {
     // 6502: LDA MJ / BNE ytq -- nothing spawns in witchspace, because witchspace has no system to
     // spawn from. `MJP` puts the Thargoids there itself.
-    if (_status.midJump != 0u)
+    if (_universe.status.midJump != 0u)
     {
       return;
     }
 
-    SpawnFrame frame{_bubble, _work, _rng, _commander, _current, _explosionCount, _blueprint, _carryIn};
+    SpawnFrame frame{_universe.bubble,     _universe.work,       _universe.rng,   _universe.commander,
+                     _universe.current,    _universe.explosions, _universe.flight.blueprint, _carryIn};
 
     if (SpawnTraderOrLoner(frame) == SpawnPass::Ended) // 6502: parts 1 and 2
     {

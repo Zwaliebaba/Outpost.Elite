@@ -350,7 +350,7 @@ cop, trader...). The screen's mode is `QQ11`'s value (`BUY_CARGO_VIEW = 2`, `SEL
 are `std::uint8_t` constants — **M1-b took the ship types and the three flag bytes of a ship to
 `ShipType`, `ShipStateBit`, `AiBit` and `NewbBit`** — booleans are `0`/`0xFF` (`BST`, `ECM`, `DISK`); the thirteen pause-
 screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making them contiguous
-would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->4 parameters are
+would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->0 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
 
 **P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->30 `bool
@@ -362,7 +362,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,101 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,105 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1486,7 +1486,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). | Green; `out-params` at zero. | 3 |
+| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. | Green; `out-params` at <!--count:out-params-->0. The strong types and the `Options` struct are still to do. | 3 |
 | **M5-b constexpr data** | The generated tables as `constexpr std::array`; the codecs, the trig lookups and the token decoder evaluated at compile time where the tests can `static_assert` a known value. | `TableTests` green; one `static_assert` per table against the oracle-checked value. | 2 |
 | **M5-c The ledger** | The <!--count:inventory-stale-files-->20 file names in `Source-Inventory.md` that name no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. | In CI. | 1 |
 | **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture, written at M2's opening) amended from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
@@ -1774,6 +1774,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-3: `out-params` at ZERO, which is M5-a's acceptance, and the last four split two
+ways.**
+
+**Two were state and took the universe.** `RunSpawning`'s `_explosionCount` and `ArriveAtSystem`'s
+are both `EV`, and both are `Universe::explosions` at every call site — so the universe comes in and
+the reference goes, along with the commander, the current system and the generator, which are the
+same fields at every site too. `RunSpawning` goes from nine parameters to two.
+
+**Two were NOT state, and returned instead.** `CharacterPrinter::PadToWidth`'s `_rotor` is `SC+1`,
+the rotating bit that carries from one gap to the next within a line, and `TypeDigit`'s `_value` is
+`R`, the digits accumulating inside one prompt. Neither is a byte anybody keeps, so neither belongs
+in `Universe`; they go back as `PadResult` and `TypedDigit`, which is M2-b's rule for the arithmetic
+kernel applied to the two places P10 had left. **That distinction is the whole of why P10 is a
+pattern worth counting**: a `std::uint8_t&` says nothing about whether the byte is the game's or the
+call's, and every one of the sixteen turned out to be one or the other.
+
+**Two fixtures converged and one of them caught a real difference.** `GameLoopTests` built nine
+separate objects for the spawner and `HyperspaceTests` four for the arrival; both now seed one
+`Elite::Universe` and name the pieces they set. The spawner's blueprint pointer is the one worth
+recording: it was `const Blueprint*& _blueprint`, which the routine WRITES, and taking it as a
+snapshot rather than a reference made the comparison read the pointer that went in — `XX0: expected
+58635 actual 55491` on the first run. The fixture holds a reference into the universe now, which is
+what the app has.
+
+**P10 is closed.** 402 of 402, the replay digest unchanged, all 14 repository checks.
 
 **2026-09-07 — M5-a-2: the six stragglers take `Universe&`, which is M3-a's pattern finishing three
 phases late.**
