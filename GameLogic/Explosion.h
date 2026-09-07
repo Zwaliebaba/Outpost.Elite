@@ -3,9 +3,11 @@
 #include "Arith.h"
 #include "Canvas.h"
 #include "LineHeap.h"
+#include "MemoryMap.h"
 #include "Rng.h"
 #include "ShipDraw.h"
 #include "ShipSlot.h"
+#include "VideoState.h"
 
 #include <cstdint>
 
@@ -60,46 +62,19 @@ namespace Elite
    * says "put sprite 1 here", the presenter owns the struct -- because the alternative is a getter
    * on the state, which is the mistake `SightEffects::MaskSprites` warns about.
    */
-  class ExplosionEffects
-  {
-  public:
-    virtual ~ExplosionEffects() = default;
-
-    /*
-     * 6502: JSR SETL1 -- the 6510 input/output port register, which `PTCLS2` brackets itself with:
-     * %101 to map the I/O page in so the VIC-II registers exist, %100 to map it back to RAM.
-     *
-     * The same routine and the same two values as `SightEffects::SetRasterMode`, which is why the
-     * signature matches: a class implementing both interfaces overrides one method for both, and
-     * that is the truth of it -- there is one `SETL1` in the game.
-     */
-    virtual void SetRasterMode(std::uint8_t _mode) = 0;
-
-    /*
-     * 6502: STA VIC+&17 / STA VIC+&1D -- the sprite y-expand and x-expand registers, written with
-     * the SAME byte, so a sprite is either double size in both directions or neither.
-     *
-     * %11111101 clears bit 1 and %11111111 sets it, and bit 1 is sprite 1's. So a ship exploding
-     * at z_hi of 7 or more gets a normal-sized burst and a closer one gets a double-sized burst;
-     * every other sprite is left expanded, which is what the other six bits say.
-     */
-    virtual void SetSpriteExpansion(std::uint8_t _mask) = 0;
-
-    /*
-     * 6502: the five register writes that place sprite 1 and switch it on.
-     *
-     * `_x` is NINE BITS, because the C64's sprite x-coordinate is: the low eight go to VIC+&2 and
-     * the ninth is bit 1 of VIC+&10, which the original sets with `LDA VIC+&10 / AND #%11111101 /
-     * ORA exlook,X` -- a two-byte table holding %00 and %10 whose only job is to shift a 0 or 1
-     * left by one place. Both that register and the enable register at VIC+&15 are READ-MODIFY-
-     * WRITE, because the other seven sprites' bits live in them, so this is one method over the
-     * pair rather than two setters the port would have to compose (the argument on `MaskSprites`).
-     *
-     * It is not called when the burst would be off the screen; `PTCLS2` skips it and draws the
-     * particles anyway, so an off-screen burst leaves the sprite wherever it was.
-     */
-    virtual void ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y) = 0;
-  };
+  /*
+   * `ExplosionEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3a).
+   *
+   * `SetSpriteExpansion` is `ApplySpriteExpansion` and `ShowExplosionSprite` is
+   * `ApplyExplosionSprite`, both of them `VideoState` writes since ADR-005 §1 and both of them
+   * already the whole body of every implementation. `SetRasterMode` was `SETL1` and is
+   * `SetMemoryMap` -- the same routine `SightEffects` declared, which is why one class implementing
+   * both interfaces overrode it once: there is one `SETL1` in the game.
+   *
+   * The two coordinate registers stay ONE call rather than two setters, and the reason is on
+   * `ApplyExplosionSprite`: VIC+&10 and VIC+&15 are read-modify-writes over all eight sprites, so
+   * a port composing them from setters would have to know what the other seven are doing.
+   */
 
   /*
    * 6502: EXS1 -- (A X) = (A R) +/- random * cloud size, with the flags set for the high byte.
@@ -148,7 +123,7 @@ namespace Elite
                               const Bubble& _bubble) noexcept;
 
   void DrawExplosionParticlesWithSprite(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, const Ship& _work, LineHeap& _heap,
-                                        const Bubble& _bubble, ExplosionEffects& _effects) noexcept;
+                                        const Bubble& _bubble, VideoState& _video, MemoryMap& _map) noexcept;
 
   /*
    * 6502: DOEXP (with EX2, EXL1 and TT48) -- age the cloud by one frame and draw it.
@@ -171,6 +146,6 @@ namespace Elite
    * grew -- through `PTCLS2`, so the burst sprite appears once and is never moved again.
    */
   void DrawExplosionCloud(Canvas& _canvas, MathWorkspace& _math, Rng& _rng, Ship& _work, LineHeap& _heap, const GeometryWorkspace& _geometry,
-                          const Bubble& _bubble, ExplosionEffects& _effects) noexcept;
+                          const Bubble& _bubble, VideoState& _video, MemoryMap& _map) noexcept;
 
 } // namespace Elite

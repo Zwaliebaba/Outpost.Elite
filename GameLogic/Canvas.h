@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Colours.h"
+
 #include <array>
 #include <cstdint>
 #include <span>
@@ -135,6 +137,12 @@ namespace Elite
       }
     }
 
+    /// A cell's palette is a screen RAM byte, and this is the store that says which byte is one.
+    void Write(std::uint16_t _offset, CellPalette _palette) noexcept
+    {
+      Write(_offset, _palette.Byte());
+    }
+
     /// 6502: EOR (SC),Y / STA (SC),Y -- the only way the drawing code puts anything on screen,
     /// and the reason drawing a thing twice erases it (plan section 4.6).
     void ExclusiveOr(std::uint16_t _offset, std::uint8_t _mask) noexcept
@@ -143,6 +151,12 @@ namespace Elite
       {
         m_screen[_offset] ^= _mask;
       }
+    }
+
+    /// 6502: EOR #BULBCOL / STA (SC),Y -- the bulbs toggle a PALETTE in and out of screen RAM.
+    void ExclusiveOr(std::uint16_t _offset, CellPalette _palette) noexcept
+    {
+      ExclusiveOr(_offset, _palette.Byte());
     }
 
     [[nodiscard]] std::span<const std::uint8_t> Screen() const noexcept
@@ -156,8 +170,16 @@ namespace Elite
 
     // ---- colour -----------------------------------------------------------------------------
 
-    /// Colour RAM, which supplies %11. One nibble per cell on the hardware; a byte here, because
-    /// the high nibble is never read and pretending otherwise would invent an invariant.
+    /*
+     * Colour RAM, which supplies %11. One nibble per cell on the hardware; a byte here, because the
+     * high nibble is never read and pretending otherwise would invent an invariant.
+     *
+     * AND A BYTE RATHER THAN A `Colour` BECAUSE THIS IS MEMORY AND NOT A REGISTER (slice 5a). The
+     * oracle compares colour RAM address by address, the loader dumps a table straight into it, and
+     * `sdump`'s bytes are what they are. A register is where the chip takes four bits and a value
+     * becomes a colour, and that is where `Colour` starts -- `ResolveCell` masks this one on the way
+     * out, exactly as the VIC-II does on the way in.
+     */
     [[nodiscard]] std::uint8_t CellColour(int _cell) const noexcept
     {
       return m_colourCells[_cell];
@@ -177,25 +199,35 @@ namespace Elite
      * bitmap modes (§6.155).
      *
      * This one is the lower half's, and it is the one the loader sets before any interrupt exists.
+     *
+     * THE SETTER TAKES A BYTE AND THE GETTER ANSWERS A `Colour`, WHICH IS THE LATCH (slice 5a).
+     * `STA VIC+&21` puts eight bits on the bus and the chip keeps four; the game relies on it,
+     * because `COMIRQ1` increments `welcome` on every pass while the energy bomb burns and stores
+     * the running count straight into the register. After eight frames of bomb that byte is past
+     * 15, and this port resolves the canvas into COLOUR INDICES that the presenter looks up in a
+     * sixteen-entry palette -- so the mask is not tidiness, it is the register. It was missing
+     * until slice 5a and nothing measured it: the oracle holds the same unlatched byte the port
+     * did (`TheRasterInterruptMatchesCOMIRQ1` compares `welcome` at &9C and &FF and agrees), and
+     * no test had ever resolved a canvas with a bomb-flashed background.
      */
-    [[nodiscard]] std::uint8_t Background() const noexcept
+    [[nodiscard]] Colour Background() const noexcept
     {
       return m_background;
     }
-    void SetBackground(std::uint8_t _colour) noexcept
+    void SetBackground(std::uint8_t _stored) noexcept
     {
-      m_background = _colour;
+      m_background = ColourOf(_stored);
     }
 
     /// 6502: welcome -- the SPACE VIEW's background, and only visible while `moonflower` has put
     /// the upper half into multicolour, which is the energy bomb and nothing else.
-    [[nodiscard]] std::uint8_t SpaceViewBackground() const noexcept
+    [[nodiscard]] Colour SpaceViewBackground() const noexcept
     {
       return m_spaceViewBackground;
     }
-    void SetSpaceViewBackground(std::uint8_t _colour) noexcept
+    void SetSpaceViewBackground(std::uint8_t _stored) noexcept
     {
-      m_spaceViewBackground = _colour;
+      m_spaceViewBackground = ColourOf(_stored);
     }
 
     /*
@@ -236,8 +268,8 @@ namespace Elite
     }
     void SetExplosionColour(std::uint8_t _spaceView, std::uint8_t _dashboard) noexcept
     {
-      m_explosionColour[0] = _spaceView;
-      m_explosionColour[1] = _dashboard;
+      m_explosionColour[0] = ColourOf(_spaceView);
+      m_explosionColour[1] = ColourOf(_dashboard);
     }
 
     /*
@@ -248,6 +280,17 @@ namespace Elite
      * whole screen is standard bitmap mode coloured from the first block, which is every docked
      * screen; the flight half sets it every frame through `FlightSession::SyncVideoRegisters`.
      */
+    /// The two sprite multicolour registers as stored, and the two explosion colours -- one each
+    /// for the space view and the dashboard. Read by the state hash (M5-e-3).
+    [[nodiscard]] std::span<const std::uint8_t, 2> SpriteMulticolour() const noexcept
+    {
+      return m_spriteMulticolour;
+    }
+    [[nodiscard]] std::span<const Colour, 2> ExplosionColour() const noexcept
+    {
+      return m_explosionColour;
+    }
+
     [[nodiscard]] bool DashboardShown() const noexcept
     {
       return m_dashboardShown;
@@ -303,13 +346,13 @@ namespace Elite
   private:
     std::array<std::uint8_t, SCREEN_SIZE> m_screen{};
     std::array<std::uint8_t, CELL_COLUMNS * CELL_ROWS> m_colourCells{};
-    std::uint8_t m_background = 0;
-    std::uint8_t m_spaceViewBackground = 0;
+    Colour m_background = Colour::Black;
+    Colour m_spaceViewBackground = Colour::Black;
     bool m_spaceViewMulticolour = false;
 
     /// 6502: santana and lotus -- see `SetSpriteMulticolour`. Initialised to what the game holds.
-    std::uint8_t m_spriteMulticolour[2] = {0xFEu, 0xFCu};
-    std::uint8_t m_explosionColour[2] = {0x02u, 0x00u};
+    std::array<std::uint8_t, 2> m_spriteMulticolour = {0xFEu, 0xFCu};
+    std::array<Colour, 2> m_explosionColour = {Colour::Red, Colour::Black};
     bool m_dashboardShown = false;
   };
 
@@ -390,12 +433,12 @@ namespace Elite
   /// WHITE are four multicolour pixels each rather than a colour number). The second pixel can
   /// land in the next character cell, and the routine detects that from the mask rather than from
   /// x -- which is why the cursor it returns can point one cell to the right of (X1, Y1)'s own.
-  CellCursor PlotDash(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _colour) noexcept;
+  CellCursor PlotDash(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept;
 
   /// 6502: CPIX4 -- a two-by-two block: CPIX2, then the row above it. The cursor is the SECOND
   /// call's, which is the row `SCAN` starts its stick from. The original leaves `Y1` decremented;
   /// nothing reads it, and since M2-c nothing can.
-  CellCursor PlotBlock(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _colour) noexcept;
+  CellCursor PlotBlock(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept;
 
   /*
    * What `LOIN` leaves behind: the four bytes as it left them -- the other way round from the line

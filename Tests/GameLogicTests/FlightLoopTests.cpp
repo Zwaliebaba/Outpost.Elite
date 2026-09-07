@@ -9,6 +9,7 @@
 #include "FlightLoop.h"
 #include "Rng.h"
 #include "Dashboard.h"
+#include "Explosion.h"
 #include "ShipBlueprint.h"
 #include "ShipSlot.h"
 #include "Tactics.h"
@@ -369,6 +370,13 @@ namespace GameLogicTests
      * ship slots out of it: `SFS1` would fill the bubble on the first case and then start failing,
      * and a routine that ignores its carry would look identical either way.
      *
+     * AND SINCE M4-a-1 THE PORT'S SIDE IS AN ANSWER RATHER THAN A SECOND SET OF CALLS. `PlanItems`
+     * and `PlanDebris` return an `Elite::Drop` -- a type, a count, an AI byte and the carry an
+     * empty drop hands back -- and `Elite::PerformDrop` is what calls `SFS1`. So this compares the
+     * DECISION against the oracle's trapped call sequence with no seam standing in for the bubble,
+     * and the loop itself is compared where a real bubble exists: the frame fixtures below run
+     * `SFS1` untrapped on both machines and `CompareState` walks the slots (§8).
+     *
      * `SPIN2` IS ENTERED WITH A FLAG, not just a value. `STA CNT` sets nothing, so the `BEQ` at the
      * top of its loop reads the caller's Z -- and this sets `cpu.z` from the count on purpose, to
      * match what every real caller has just done with an `AND`. Setting it the other way is the one
@@ -400,16 +408,24 @@ namespace GameLogicTests
        * pulls and stores. `SPIN` hands that flag back to `MA47`, whose second `JSR SPIN` runs on
        * it (M2-d), so the trap ends `SEC` and the seam here answers the same.
        */
-      struct Recorder final : Elite::SpawnChildEffects
+      /*
+       * What the port's answer says the oracle's calls should have been. A `Drop` is `count` calls
+       * of one type with one AI byte, so the sequence it describes is flat -- and that is a claim
+       * about the routines rather than a convenience: neither `SPIN` nor `SPIN2` varies either
+       * across the loop, and a port that did would fail the per-hit comparison below.
+       */
+      const auto CheckDrop = [](const Cpu6502& _cpu, const Elite::Drop& _drop, const std::wstring& _where)
       {
-        std::vector<std::uint8_t> flags;
-        std::vector<std::uint8_t> types;
-        bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
+        Assert::AreEqual<std::size_t>(_cpu.trapHits.size(), _drop.count, (_where + L": how many were spawned").c_str());
+        for (std::size_t hit = 0; hit < _cpu.trapHits.size(); ++hit)
         {
-          flags.push_back(_aiFlag);
-          types.push_back(Elite::Byte(_type));
-          return true;
+          Assert::AreEqual(_cpu.trapHits[hit].a, _drop.aiFlag, (_where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
+          Assert::AreEqual(_cpu.trapHits[hit].x, Elite::Byte(_drop.type), (_where + L": the type of #" + std::to_wstring(hit)).c_str());
         }
+
+        // The trap ends `SEC`, so the oracle's exit carry is `SFS1` succeeding when anything was
+        // spawned and `oh`'s pass-through when nothing was -- which is `PerformDrop`'s two answers.
+        Assert::AreEqual(_cpu.c, _drop.count == 0u ? _drop.carryIfNone : true, (_where + L": the exit carry").c_str());
       };
 
       Cpu6502 cpu = oracle.Fresh();
@@ -434,20 +450,10 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(spin2, 20'000);
           Assert::IsTrue(run.completed, L"SPIN2 returned");
 
-          Recorder effects;
-          const bool exit = Elite::SpawnItems(effects, Elite::TypeOf(type), static_cast<std::uint8_t>(count), carryIn);
+          const Elite::Drop drop = Elite::PlanItems(Elite::TypeOf(type), static_cast<std::uint8_t>(count), carryIn);
 
           const std::wstring where = WidenText("SPIN2(count " + std::to_string(count) + ", type " + std::to_string(type) + ")");
-
-          Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.types.size(), (where + L": how many were spawned").c_str());
-          for (std::size_t hit = 0; hit < cpu.trapHits.size(); ++hit)
-          {
-            Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit], (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
-            Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit], (where + L": the type of #" + std::to_wstring(hit)).c_str());
-          }
-          // `CNT` is `SPIN2`'s loop counter and its own since M2-c-3. How many times it went round
-          // is what the seam above records, spawn for spawn.
-          Assert::AreEqual(cpu.c, exit, (where + L": the exit carry").c_str());
+          CheckDrop(cpu, drop, where);
 
           placed += static_cast<std::uint32_t>(cpu.trapHits.size());
         }
@@ -491,22 +497,13 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(spin, 20'000);
             Assert::IsTrue(run.completed, L"SPIN returned");
 
-            Recorder effects;
             Elite::Rng rng;
             rng.SetState(bytes);
-            const bool exit = Elite::SpawnDebris(rng, effects, *blueprint, Elite::TypeOf(type), carry);
+            const Elite::Drop drop = Elite::PlanDebris(rng, *blueprint, Elite::TypeOf(type), carry);
 
             const std::wstring where = WidenText("SPIN(type " + std::to_string(type) + ", seed " + std::to_string(seed) + ", carry " +
                                                  std::to_string(carry ? 1 : 0) + ")");
-
-            Assert::AreEqual<std::size_t>(cpu.trapHits.size(), effects.types.size(), (where + L": how many were spawned").c_str());
-            for (std::size_t hit = 0; hit < cpu.trapHits.size(); ++hit)
-            {
-              Assert::AreEqual(cpu.trapHits[hit].a, effects.flags[hit], (where + L": the AI flag of #" + std::to_wstring(hit)).c_str());
-              Assert::AreEqual(cpu.trapHits[hit].x, effects.types[hit], (where + L": the type of #" + std::to_wstring(hit)).c_str());
-            }
-            // `CNT` is `SPIN2`'s own since M2-c-3; the seam records every spawn it made.
-            Assert::AreEqual(cpu.c, exit, (where + L": the exit carry").c_str());
+            CheckDrop(cpu, drop, where);
             for (std::size_t byte = 0; byte < bytes.size(); ++byte)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(rand + byte)], rng.State()[byte],
@@ -794,9 +791,9 @@ namespace GameLogicTests
       std::uint16_t las, lasct, lasx, lasy, msar, mstg, ecmp, moonflower;
       std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
-      std::uint16_t ma3, ma18, escape, frs1, angry, startbd, stopbd, noise;
-      std::uint16_t mainLoop, death, doentry, tactics, doexp, planet, sfs1, noise2;
-      std::uint16_t setl1, dovdu19, slsp;
+      std::uint16_t ma3, ma18, escape;
+      std::uint16_t mainLoop, death, doentry, sfs1;
+      std::uint16_t dovdu19, slsp;
 
       explicit LoopWhere(const OracleImage& _oracle)
       {
@@ -828,138 +825,40 @@ namespace GameLogicTests
 
         ma3 = _oracle.Label("MA3");
         escape = _oracle.Label("ESCAPE");
-        frs1 = _oracle.Label("FRS1");
-        angry = _oracle.Label("ANGRY");
-        startbd = _oracle.Label("startbd");
-        stopbd = _oracle.Label("stopbd");
-        noise = _oracle.Label("NOISE");
         mainLoop = _oracle.Label("M%");
         ma18 = _oracle.Label("MA18");
         death = _oracle.Label("DEATH");
         doentry = _oracle.Label("DOENTRY");
-        tactics = _oracle.Label("TACTICS");
-        doexp = _oracle.Label("DOEXP");
-        planet = _oracle.Label("PLANET");
         sfs1 = _oracle.Label("SFS1");
-        noise2 = _oracle.Label("NOISE2");
-        setl1 = _oracle.Label("SETL1");
         dovdu19 = _oracle.Label("DOVDU19");
         slsp = _oracle.Label("SLSP");
       }
     };
 
     /*
-     * The flight loop's own seams, recording into the universe's sound list.
+     * `RecordingLoop` WAS THE FLIGHT LOOP'S ONE REMAINING SEAM AND IS NOT ANY MORE (M4-a-1).
      *
-     * One list, because `NOISE` is one routine: the loop reaches it through `FlightLoopEffects` and
-     * `WARP` reaches it through `ViewEffects`, and a frame that boops for a refused warp and then
-     * whooshes for a missile has to compare in that order against the oracle's trap hits.
+     * It was the sounds too, and then the music: `startbd` and `stopbd` were counted here against
+     * the oracle's trap hits until M3-b-2b, and both machines run the player now -- so whether a
+     * tune is playing is `MUPLA`, which `ImageCells` mirrors in and `CompareState` compares out
+     * with everything else the frame touches. `FRS1` and `ANGRY` went the same way in M3-b-1d, and
+     * `SFS1` has now gone the same way for the third time in a row: the trap comes OFF, both
+     * machines really spawn, and what is compared is the bubble -- the slot list, the ship blocks,
+     * the line heap, `SLSP` and `RAND` -- rather than two lists of calls.
+     *
+     * THAT IS STRICTLY MORE THAN THE SEAM COULD SAY. The recorder answered `childSucceeds` and the
+     * trap answered `SEC`, so both machines were told the bubble always had room; a frame that
+     * filled it was indistinguishable from one that did not, and `NWSHP`'s allocation was compared
+     * nowhere on this path.
      */
-    struct RecordingLoop final : Elite::FlightLoopEffects
-    {
-      struct Pitched
-      {
-        std::uint8_t effect, sustain, frequency;
-      };
 
-      std::vector<std::uint8_t>& sounds;
-
-      /// The universe's carry list, not this object's: the 6502 has ONE `NOISE` and the port reaches
-      /// it through two interfaces, so a comparison against one list needs both to write to it.
-      std::vector<std::uint8_t>& soundCarries;
-      std::vector<Pitched> pitched;
-      std::vector<std::uint8_t> stopped;
-      std::vector<std::uint8_t> spawned;
-      std::uint32_t musicStarts = 0;
-      std::uint32_t musicStops = 0;
-
-      /// What `FRS1` answers -- carry set for "there was room", clear for a full bubble.
-      bool spawnSucceeds = true;
-
-      /// The bubble `ANGRY` writes and the loop byte it reads: the routine RUNS here, on both sides
-      /// of the comparison, because `LL9` reads the carry it exits with (§6.157).
-      Universe& universe;
-
-      RecordingLoop(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries, Universe& _universe) noexcept
-        : sounds(_sounds),
-          soundCarries(_carries),
-          universe(_universe)
-      {
-      }
-
-      bool PlaySound(std::uint8_t _effect, bool _carryIn) override
-      {
-        sounds.push_back(_effect);
-        soundCarries.push_back(_carryIn ? 1u : 0u);
-        return true;
-      }
-      /// `NOISE2` is trapped at its own address, so its hits never reach `NOISE` and belong in
-      /// their own list -- putting them in `sounds` as well would double-count every explosion.
-      bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
-      {
-        pitched.push_back({_effect, _sustain, _frequency});
-        return true;
-      }
-      void StopSound(std::uint8_t _effect) override
-      {
-        stopped.push_back(_effect);
-      }
-      void StartDockingMusic() override
-      {
-        ++musicStarts;
-      }
-      void StopDockingMusic() override
-      {
-        ++musicStops;
-      }
-      bool SpawnAhead(Elite::ShipType _type) override
-      {
-        spawned.push_back(Elite::Byte(_type));
-        return spawnSucceeds;
-      }
-      bool Anger(std::uint8_t _slot, Elite::ShipType _type) override
-      {
-        // 6502: ANGRY, for real -- it was trapped on the oracle and recorded here until 2026-09-06,
-        // and a trap's exit carry is whatever the caller had, which is not what the routine leaves
-        // for `LL9` (§6.157). Its writes are compared through the ship blocks like everything else.
-        return Elite::Anger(universe.bubble, universe.flight, _slot, _type);
-      }
-      bool SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type) override
-      {
-        children.push_back({_aiFlag, Elite::Byte(_type)});
-        return childSucceeds;
-      }
-
-      struct Child
-      {
-        std::uint8_t aiFlag, type;
-      };
-
-      std::vector<Child> children;
-      bool childSucceeds = true;
-    };
-
-    /// What `MVEIT` and `LL9` reach that this slice does not build.
-    struct RecordingUniverse final : Elite::ShipEffects, Elite::ShipDrawEffects
-    {
-      std::vector<std::uint8_t> tactics;
-      std::uint32_t planets = 0;
-      std::uint32_t explosions = 0;
-
-      bool RunTactics(Elite::Ship& _work) override
-      {
-        tactics.push_back(_work.ai);
-        return true; // the counted double never kills the player -- §6.122's answer for "nothing happened"
-      }
-      void DrawPlanetOrSun() override
-      {
-        ++planets;
-      }
-      void DrawExplosion() override
-      {
-        ++explosions;
-      }
-    };
+    /*
+     * `RecordingUniverse` -- `ShipDrawEffects` over the frame's universe -- WAS HERE AND IS NOT ANY
+     * MORE (M6-0-a-3). It counted `LL9`'s two tail jumps while `CompareFrames` trapped `PLANET` and
+     * `DOEXP` on the oracle, so no frame had ever put a drawn body or a cloud on the bitmap of
+     * both; M6-0-d made it draw the planet and the sun, M6-0-a-2 the cloud, and with both drawn on
+     * both machines there was nothing left for it to count. `Elite::DrawShip` makes the calls.
+     */
 
     /// Everything one frame needs that the shared `Universe` does not carry.
     struct Frame
@@ -967,8 +866,6 @@ namespace GameLogicTests
       Universe universe; ///< every byte of it, since M3-a -- the controls, the keys, the burst,
                          ///< the heap, the clipper's flag, the projection and the axes were eight
                          ///< members here while `FlightLoop` held references to them
-      RecordingUniverse outside;
-      RecordingLoop effects{universe.effects.sounds, universe.effects.soundCarries, universe};
 
       explicit Frame(std::uint32_t _seed)
       {
@@ -1107,7 +1004,7 @@ namespace GameLogicTests
      * player -- which is what parts 7 to 12 branch on. `Seed`'s own blocks are random, and random is
      * exactly wrong here: a ship at a random distance is almost always too far to do anything.
      */
-    void PopulateBubble(Frame& _frame, std::uint8_t _distance, std::uint8_t _state, bool _empty)
+    void PopulateBubble(Frame& _frame, std::uint8_t _distance, std::uint8_t _state, bool _empty, bool _asteroids = false)
     {
       Universe& universe = _frame.universe;
 
@@ -1126,7 +1023,21 @@ namespace GameLogicTests
         return;
       }
 
-      const std::uint8_t TYPES[] = {128u, 129u, 3u, 5u, 11u};
+      /*
+       * The three shootable ships are asteroids when the case says so, and they have to be so HERE
+       * rather than retyped afterwards: the heap is carved to the blueprint's size, and an
+       * asteroid's explosion count (byte 2 of its heap, 34) runs past the 29 bytes a type 3 gets.
+       * On the machine those bytes are whatever sits above `LS%`; in the port they are outside the
+       * arena and read as zero, which is the last-vertex mismatch M6-0-a-2 found in the cloud.
+       */
+      const std::uint8_t asteroid = Elite::Byte(Elite::ShipType::Asteroid);
+      const std::uint8_t TYPES[] = {128u, 129u, _asteroids ? asteroid : std::uint8_t{3u}, _asteroids ? asteroid : std::uint8_t{5u},
+                                    _asteroids ? asteroid : std::uint8_t{11u}};
+
+      // 6502: SLSP -- the ships' line heaps, carved down from LS% the way `NWSHP` carves them, each
+      // the size its blueprint asks for. They were all at &0C00 until M6-0-d, outside the arena the
+      // frame compares, so the lines a drawn ship wrote were compared nowhere.
+      std::uint16_t nextHeap = Elite::LineHeap::TOP;
 
       for (std::size_t slot = 0; slot < 5u; ++slot)
       {
@@ -1157,11 +1068,16 @@ namespace GameLogicTests
         block.speed = 20u; // speed
         block.state = _state;
         block.ai = 0u;    // no AI, so `TACTICS` is not reached
-        block.heap = Elite::HeapOffset::FromAddress(0x0C00u); // the heap pointer's high byte
+        if (TYPES[slot] < 34u)
+        {
+          nextHeap = static_cast<std::uint16_t>(nextHeap - Elite::BlueprintOf(static_cast<Elite::ShipType>(TYPES[slot]))->heapBytes);
+          block.heap = Elite::HeapOffset::FromAddress(nextHeap);
+        }
         block.energy = 60u;   // energy
       }
 
       universe.bubble.junk = 0u;
+      universe.bubble.heapBottom = Elite::HeapOffset::FromAddress(nextHeap);
     }
 
     /*
@@ -1222,20 +1138,16 @@ namespace GameLogicTests
         cpu.Load(EXITS[index], leave, sizeof(leave));
       }
 
-      cpu.AddTrap(_loop.tactics);
-      cpu.AddTrap(_loop.doexp);
-      cpu.AddTrap(_loop.planet);
-      cpu.AddTrap(_loop.setl1);
       cpu.AddTrap(_loop.dovdu19);
-      cpu.AddTrap(_loop.noise2);
-      cpu.AddTrap(_loop.sfs1, _frame.effects.childSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
-      cpu.AddTrap(_loop.startbd);
-      cpu.AddTrap(_loop.stopbd);
-      cpu.AddTrap(_loop.frs1, _frame.effects.spawnSucceeds ? Cpu6502::TrapExit::SetCarry : Cpu6502::TrapExit::ClearCarry);
+      /*
+       * `SFS1` IS NOT TRAPPED (M4-a-1). It was, to `SEC` or `CLC` depending on what the port's seam
+       * was going to answer, which made "was there room in the bubble" an input to the comparison
+       * rather than a thing the two machines could disagree about. `Elite::PerformDrop` calls
+       * `Elite::SpawnChildShip` now and the oracle runs the real `SFS1`, so a child that fits lands
+       * in both bubbles and one that does not is refused by both -- and `CompareState`, the heap
+       * walk and `RAND` are what say so.
+       */
 
-      // `NOISE` ends `SEC / RTS` on the path that gives the effect a voice, and `LASLI`'s opening
-      // `DORND` rolls that carry into its own answer (§6.86).
-      cpu.AddTrap(_loop.noise, Cpu6502::TrapExit::SetCarry);
 
       /*
        * `MVTRIBS` USED TO BE PATCHED OUT HERE and is not any more (slice 4d-a).
@@ -1263,9 +1175,10 @@ namespace GameLogicTests
        *
        * `Mirror` does not carry it, and until 2026-09-06 no frame here did: a frame that seeds an
        * explosion cloud runs `DORND` four times, the first on the carry `LL9` was reached with, and
-       * with the fixture's heap pointers outside the arena the seeds it writes are compared nowhere.
-       * The generator's state after the frame is the one place that carry is visible, and the
-       * `cs-ll9-carry-hit` mutant is what found the comparison missing.
+       * with the fixture's heap pointers outside the arena the seeds it wrote were compared nowhere
+       * (they are inside it since M6-0-d, and the heap comparison below sees them). The generator's
+       * state after the frame is the one place that carry is visible, and the `cs-ll9-carry-hit`
+       * mutant is what found the comparison missing.
        */
       for (std::size_t index = 0; index < 4u; ++index)
       {
@@ -1296,7 +1209,7 @@ namespace GameLogicTests
       const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 8'000'000);
       Assert::IsTrue(run.completed, (_context + L": M% reached an exit").c_str());
 
-      Elite::Ports ports = _frame.universe.PortsWith(_frame.outside, _frame.outside, _frame.effects, _frame.universe.unused);
+      Elite::Ports ports = _frame.universe.Ports();
       const Elite::LoopOutcome outcome = (_reach == Reach::Ships)   ? Elite::MoveEveryShip(_frame.universe, ports)
                                          : (_reach == Reach::Tail)  ? Elite::EndFlightFrame(_frame.universe, ports)
                                          : (_reach == Reach::Whole) ? Elite::MainFlightLoop(_frame.universe, ports)
@@ -1307,39 +1220,12 @@ namespace GameLogicTests
       std::uint32_t escaped = 0;
       std::uint32_t died = 0;
       std::uint32_t docked = 0;
-      std::vector<Elite::Testing::Cpu6502::TrapHit> pitched;
-      std::vector<std::uint8_t> sounds;
-      std::vector<std::uint8_t> soundCarries;
-      std::vector<std::uint8_t> spawned;
-      std::uint32_t starts = 0;
-      std::uint32_t stops = 0;
 
       for (const Cpu6502::TrapHit& hit : cpu.trapHits)
       {
         if (hit.address == _loop.ma3 || hit.address == _loop.ma18)
         {
           ++reachedEnd;
-        }
-        else if (hit.address == _loop.noise2)
-        {
-          pitched.push_back(hit);
-        }
-        else if (hit.address == _loop.noise)
-        {
-          sounds.push_back(hit.y);
-          soundCarries.push_back(hit.carry ? 1u : 0u);
-        }
-        else if (hit.address == _loop.frs1)
-        {
-          spawned.push_back(hit.x);
-        }
-        else if (hit.address == _loop.startbd)
-        {
-          ++starts;
-        }
-        else if (hit.address == _loop.stopbd)
-        {
-          ++stops;
         }
       }
 
@@ -1358,79 +1244,21 @@ namespace GameLogicTests
           (_context + L": fell through to the next part -- outcome " + std::to_wstring(static_cast<int>(outcome))).c_str());
       }
 
-      Assert::AreEqual(pitched.size(), _frame.effects.pitched.size(), (_context + L": NOISE2 calls").c_str());
-      for (std::size_t index = 0; index < pitched.size(); ++index)
-      {
-        const std::wstring where = _context + L": NOISE2 " + std::to_wstring(index);
-        Assert::AreEqual(pitched[index].y, _frame.effects.pitched[index].effect, (where + L" effect").c_str());
-        Assert::AreEqual(pitched[index].a, _frame.effects.pitched[index].sustain, (where + L" sustain").c_str());
-        Assert::AreEqual(pitched[index].x, _frame.effects.pitched[index].frequency, (where + L" frequency").c_str());
-      }
-
-      // ---- the seams -----------------------------------------------------------------------------
-      {
-        std::wstring wanted;
-        for (const std::uint8_t effect : sounds)
-        {
-          wanted += std::to_wstring(effect) + L" ";
-        }
-        std::wstring got;
-        for (const std::uint8_t effect : _frame.universe.effects.sounds)
-        {
-          got += std::to_wstring(effect) + L" ";
-        }
-        Assert::AreEqual(sounds.size(), _frame.universe.effects.sounds.size(),
-                         (_context + L": sounds asked for -- game [" + wanted + L"] port [" + got + L"]").c_str());
-      }
       /*
-       * THE CARRY GOING IN, compared as well as the effect (§6.99).
+       * 6502: NOISE, NOISE2 and NOISEOFF -- and the BUFFER is what compares them since M3-b-2a.
        *
-       * `NOISE` passes it straight back when sound is off, and `OUCH` and `LASLI` both open a
-       * `DORND` on what comes back -- so a port that asked for the right effect with the wrong
-       * carry would break a different piece of equipment on a silent build and no comparison of
-       * effect numbers alone would say so. The seam could not carry this until it took the
-       * argument; `Cpu6502::TrapHit` could not report it until it recorded the flag.
+       * All three were trapped on the oracle and recorded on the port, and this was a comparison of
+       * two lists: which effect, in what order, with what carry going in. Both machines run the
+       * routines now, so what is compared is `sound_variables` -- ten runs of three plus `PULSEW`
+       * and `DNOIZ` -- through `CompareState` below, along with everything else the frame touches.
+       *
+       * IT SUBSUMES §6.118's GAP rather than losing it. The old comparison could only check the
+       * carry going INTO four hand-picked effects, because every other call passes a flag through
+       * from somewhere the port does not model; the carry coming OUT was never compared at all.
+       * `NOISE`'s answer now comes from two buffers that agree byte for byte, and its consequence
+       * -- `LASLI` and `OUCH` open a `DORND` on it (§6.86, §6.88) -- lands in `RAND`, which this
+       * comparison already carries. Nothing is excluded by name any more.
        */
-      Assert::AreEqual(soundCarries.size(), _frame.universe.effects.soundCarries.size(), (_context + L": carries recorded").c_str());
-      for (std::size_t index = 0; index < soundCarries.size() && index < _frame.universe.effects.soundCarries.size(); ++index)
-      {
-        /*
-         * ONLY THE LASER SOUNDS ARE COMPARED, and the exclusion is named rather than quiet (§6.118).
-         *
-         * The four laser effects are the ones whose carry the port DERIVES: `.custard` is reached
-         * from a `CMP`, so the flag is the laser power measured against `Mlas` or `Armlas`, and
-         * §6.86 is the finding that made it matter. Every other call is a PASS-THROUGH from
-         * somewhere the port does not model -- `ECBLB2` touches no flag, `BEEP` touches no flag,
-         * and `MA63`'s `JSR EXNO3` runs on whatever `OUCH` left several routines deep. Comparing
-         * those would be fitting a constant to whatever this fixture happens to produce.
-         *
-         * Excluded the way §6.91 excludes the explosion cloud's six bytes: in the open, by name,
-         * with the reason beside it. What is left of the gap is §6.118.
-         */
-        const bool derived =
-          index < sounds.size() && (sounds[index] == 0u || sounds[index] == 10u || sounds[index] == 11u || sounds[index] == 12u);
-        if (!derived)
-        {
-          continue;
-        }
-        Assert::AreEqual(
-          soundCarries[index], _frame.universe.effects.soundCarries[index],
-          (_context + L": the carry into NOISE " + std::to_wstring(index) + L" (effect " + std::to_wstring(sounds[index]) + L")").c_str());
-      }
-
-      for (std::size_t index = 0; index < sounds.size(); ++index)
-      {
-        Assert::AreEqual(sounds[index], _frame.universe.effects.sounds[index], (_context + L": sound " + std::to_wstring(index)).c_str());
-      }
-
-      Assert::AreEqual(spawned.size(), _frame.effects.spawned.size(), (_context + L": FRS1 calls").c_str());
-      for (std::size_t index = 0; index < spawned.size(); ++index)
-      {
-        Assert::AreEqual(spawned[index], _frame.effects.spawned[index], (_context + L": FRS1 type").c_str());
-      }
-
-      Assert::AreEqual(starts, _frame.effects.musicStarts, (_context + L": startbd").c_str());
-      Assert::AreEqual(stops, _frame.effects.musicStops, (_context + L": stopbd").c_str());
 
       // ---- the universe -----------------------------------------------------------------------------
       CompareScreens(cpu, _at.screen, _frame.universe.canvas, 0x1Du, _context);
@@ -1521,7 +1349,6 @@ namespace GameLogicTests
              * `MCNT` at zero, `MVTRIBS` moves sprite 0 and takes a random number for it, which is
              * why the generator's state is part of what `CompareState` checks.
              */
-            frame.universe.spriteRegistersAreOurs = true;
             frame.universe.trumbles.count = ((roll & 1u) != 0u) ? 0u : 3u;
             for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
             {
@@ -1634,7 +1461,22 @@ namespace GameLogicTests
         frame.universe.commander.missiles = item.missiles;
         frame.universe.bubble.missileTarget = item.target;
         frame.universe.status.missileArmed = item.armed;
-        frame.effects.spawnSucceeds = item.spawns;
+        /*
+         * "The bubble is full" is now a FULL BUBBLE rather than a trap answering `BCC`.
+         *
+         * `FRS1` was trapped on the oracle with its carry chosen by the case and answered on the
+         * port by a seam that returned the same bool. M3-b-1d took the seam away, so `NWSHP`
+         * decides on both sides -- and the only way to make it refuse is to leave it no slot.
+         * `Seed` fills three; this fills the rest with the type already in slot 2.
+         */
+        if (!item.spawns)
+        {
+          for (std::size_t slot = 3; slot < Elite::MAX_SHIPS; ++slot)
+          {
+            frame.universe.bubble.slots[slot] = frame.universe.bubble.slots[2];
+            ++frame.universe.bubble.counts[frame.universe.bubble.slots[2]];
+          }
+        }
 
         frame.universe.keys[Elite::KEY_UNARM_MISSILE] = item.unarm ? 0xFFu : 0u;
         frame.universe.keys[Elite::KEY_ARM_MISSILE] = item.arm ? 0xFFu : 0u;
@@ -1656,13 +1498,24 @@ namespace GameLogicTests
         if (item.fire && (item.target & 0x80u) != 0u)
         {
           ++skipped;
-          Assert::AreEqual<std::uint32_t>(0u, frame.effects.musicStops, (where + L": the cancel key was skipped").c_str());
+          Assert::AreEqual<std::uint8_t>(0xFFu, frame.universe.control.dockingComputer,
+                                         (where + L": the cancel key was skipped").c_str());
           Assert::AreEqual<std::uint8_t>(1u, frame.universe.commander.energyBomb,
                                          (where + L": and so was the bomb").c_str());
         }
         if (item.fire && (item.target & 0x80u) == 0u && !item.spawns)
         {
           ++jammed;
+
+          /*
+           * AND THE JAM IS OBSERVED rather than merely counted (M3-b-1d).
+           *
+           * The case used to be "the trap answered `BCC`", which cannot stop being true; it is
+           * "`NWSHP` found no slot" now, which can -- a fixture that quietly stopped filling the
+           * bubble would spawn the missile and this loop would still tick over. `FR1` gives up
+           * before `DEC NOMSL`, so the count still standing is what says the rail kept it.
+           */
+          Assert::AreEqual(item.missiles, frame.universe.commander.missiles, (where + L": the missile stayed on the rail").c_str());
         }
       }
 
@@ -1760,7 +1613,7 @@ namespace GameLogicTests
       const Where at(oracle);
       const LoopWhere loop(oracle);
 
-      const std::uint8_t FITTED[] = {0u, Elite::LASER_PULSE, Elite::LASER_BEAM, Elite::LASER_MILITARY, Elite::LASER_POWER_MINING};
+      const Elite::Laser FITTED[] = {Elite::LASER_NONE, Elite::LASER_PULSE, Elite::LASER_BEAM, Elite::LASER_MILITARY, Elite::LASER_MINING};
       const std::uint8_t HEAT[] = {0u, 100u, 241u, 242u, 243u};
       const std::uint8_t COUNTS[] = {0u, 1u, 7u};
 
@@ -1769,13 +1622,13 @@ namespace GameLogicTests
 
       for (std::uint8_t view = 0; view < 4u; ++view)
       {
-        for (const std::uint8_t fitted : FITTED)
+        for (const Elite::Laser fitted : FITTED)
         {
           for (const std::uint8_t heat : HEAT)
           {
             for (const std::uint8_t count : COUNTS)
             {
-              Frame frame(view * 13u + fitted + heat + count);
+              Frame frame(view * 13u + fitted.byte + heat + count);
               frame.universe.spaceView = view;
               frame.universe.view = 0u;
               frame.universe.status.laserTemperature = heat;
@@ -1783,10 +1636,10 @@ namespace GameLogicTests
               frame.universe.keys[Elite::KEY_FIRE] = 0xFFu;
               for (std::size_t index = 0; index < 4u; ++index)
               {
-                frame.universe.commander.lasers[index] = (index == view) ? fitted : 0u;
+                frame.universe.commander.lasers[index] = (index == view) ? fitted : Elite::LASER_NONE;
               }
 
-              const std::wstring where = WidenText("M% (VIEW " + std::to_string(view) + ", LASER " + std::to_string(fitted) + ", GNTMP " +
+              const std::wstring where = WidenText("M% (VIEW " + std::to_string(view) + ", LASER " + std::to_string(fitted.byte) + ", GNTMP " +
                                                    std::to_string(heat) + ", LASCT " + std::to_string(count) + ")");
               CompareFrames(frame, oracle, at, loop, where);
 
@@ -1939,7 +1792,7 @@ namespace GameLogicTests
         for (const std::uint8_t missileArmed : {std::uint8_t{0}, std::uint8_t{0xFF}})
         {
           Frame frame(0x4Du);
-          PopulateBubble(frame, item.distance, item.state, item.empty);
+          PopulateBubble(frame, item.distance, item.state, item.empty, item.asteroids);
 
           /*
            * "On top of us" is BEHIND us by the time `HITCH` looks: `MVEIT` takes the player's speed
@@ -1956,20 +1809,10 @@ namespace GameLogicTests
             }
           }
 
-          // 6502: INWK+35 and FRIN/MANY -- what a laser has to get through, and what it is shooting.
+          // 6502: INWK+35 -- what a laser has to get through. FRIN/MANY were set by `PopulateBubble`.
           for (std::size_t slot = 2; slot < 5u; ++slot)
           {
             frame.universe.bubble.blocks[slot].energy = item.energy;
-            if (item.asteroids)
-            {
-              const std::uint8_t was = frame.universe.bubble.slots[slot];
-              if (was < 34u && frame.universe.bubble.counts[was] != 0u)
-              {
-                --frame.universe.bubble.counts[was];
-              }
-              frame.universe.bubble.slots[slot] = Elite::Byte(Elite::ShipType::Asteroid);
-              ++frame.universe.bubble.counts[Elite::Byte(Elite::ShipType::Asteroid)];
-            }
           }
 
           frame.universe.status.laserPower = item.laser;
@@ -2105,8 +1948,7 @@ namespace GameLogicTests
           frame.universe.flight.mainLoopCounter = 20u;
           frame.universe.status.midJump = 0u;
           frame.universe.commander.fuelScoops = scoops;
-          frame.universe.commander.fuel = 40u;
-          frame.universe.fuel = 40u;
+          frame.universe.commander.fuel.tenths = 40u;
           frame.universe.commander.tribbles.lo = 0x40u;
           frame.universe.commander.tribbles.hi = 0x21u;
           frame.universe.flight.delt4Next = 0xC0u;
@@ -2115,8 +1957,10 @@ namespace GameLogicTests
             WidenText("MA33 (sun at " + std::to_string(distance) + (scoops != 0u ? ", scoops fitted)" : ", no scoops)"));
           CompareFrames(frame, oracle, at, loop, where, Reach::Tail);
 
-          scooped += (frame.universe.commander.fuel > 40u) ? 1u : 0u;
-          cooked += (frame.universe.sight.maskedWith.empty() ? 0u : 1u);
+          scooped += (frame.universe.commander.fuel.tenths > 40u) ? 1u : 0u;
+          // 6502: part 15's `AND #%00000011` -- the mask leaves only sprites 0 and 1, so an enable
+          // byte with no Trumble bit left is a cabin that got hot enough to kill them (M3-b-3a).
+          cooked += ((frame.universe.video.enabled & 0xFCu) == 0u) ? 1u : 0u;
           ++compared;
         }
       }
@@ -2387,11 +2231,11 @@ namespace GameLogicTests
       frame.universe.view = 0u;
       frame.universe.spaceView = 0u;
 
-      Elite::Ports ports = frame.universe.PortsWith(frame.outside, frame.outside, frame.effects, frame.universe.unused);
+      Elite::Ports ports = frame.universe.Ports();
 
-      std::uint8_t docked = 0xFFu;
+      frame.universe.dockedFlag = 0xFFu; // 6502: QQ12 -- docked, which is the path that launches
       Elite::SystemSeeds selected{};
-      Elite::Launch(frame.universe, ports, nullptr, docked, frame.universe.commander.systemX, frame.universe.commander.systemY, selected);
+      Elite::Launch(frame.universe, ports, frame.universe.commander.systemX, frame.universe.commander.systemY, selected);
 
       Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.Count(Elite::ShipType::Station),
                                       L"the launch leaves the station in the bubble");
@@ -2450,10 +2294,10 @@ namespace GameLogicTests
      * at the NTSC vertical refresh, which is four to six times too fast.
      *
      * THE TRAPS ARE THE ONES THAT ARE REALLY OUTSIDE, and no others. A trapped call costs nothing
-     * (`CycleTests::ATrappedCallCostsNothing`), so trapping `PLANET` or `TACTICS` -- as the
-     * comparison runs do, because their effects are seams -- would leave out the planet's drawing
-     * and every ship's thinking, which is most of a frame. Here only the sound and the VIC-II
-     * registers are trapped, and everything the 6510 would have computed is computed.
+     * (`CycleTests::ATrappedCallCostsNothing`), so trapping `PLANET` -- as the comparison runs do,
+     * because its effect is a seam -- would leave out the planet's drawing, which is a large part
+     * of a frame. Here only the sound and the VIC-II registers are trapped, and everything the
+     * 6510 would have computed is computed.
      *
      * The measurement is a lower bound all the same, for the two reasons the `cycles` field
      * documents: the trapped sound calls are free here and cost the machine something, and the
@@ -2479,11 +2323,12 @@ namespace GameLogicTests
 
       /*
        * Three scenes, and the FOURTH is missing for a reason worth writing down: `Seed`'s third
-       * slot is a space STATION, and `TACTICS` is trapped in every comparison in this file because
-       * its effects are a seam. Untrapped -- which a cost measurement needs it to be, since a
-       * trapped call costs nothing -- the station's own thinking does not come back inside forty
-       * million instructions. So the crowded end of the range is not measured here, and the port's
-       * rate is derived from what is (§6.114).
+       * slot is a space STATION, and a station's own thinking does not come back inside forty
+       * million instructions. That was written when `TACTICS` was trapped in every comparison in
+       * this file and untrapped only here; M3-b-1c took the seam away and every comparison runs
+       * the AI now, but this measurement is the one that has to run it in FULL -- a comparison
+       * stops at `MA18`, and this does not. So the crowded end of the range is still not measured
+       * here, and the port's rate is derived from what is (§6.114).
        */
       const Scene SCENES[] = {
         {11u, 0u, "an empty bubble"},
@@ -2517,12 +2362,7 @@ namespace GameLogicTests
         }
 
         // Sound and the VIC-II only: everything that draws or thinks runs for real.
-        cpu.AddTrap(loop.setl1);
         cpu.AddTrap(loop.dovdu19);
-        cpu.AddTrap(loop.noise2);
-        cpu.AddTrap(loop.startbd);
-        cpu.AddTrap(loop.stopbd);
-        cpu.AddTrap(loop.noise, Cpu6502::TrapExit::SetCarry);
 
         FillScreens(cpu, frame.universe.canvas, at.screen, 0x1Du);
         Mirror(frame.universe, cpu, at);

@@ -2,6 +2,7 @@
 
 #include "Commander.h"
 #include "ExtendedTokens.h"
+#include "Presenter.h"
 #include "TextPrint.h"
 
 #include <cstdint>
@@ -9,6 +10,9 @@
 
 namespace Elite
 {
+
+  /// Declared rather than included, for the reason `Market.h` gives: `Keyboard` is `Controls.h`'s.
+  class Keyboard;
 
   /*
    * Typing a line at the keyboard, and the commander's name (slice 2d).
@@ -56,18 +60,14 @@ namespace Elite
    * Both are the C64's rather than the game's: a wait measured in vertical syncs, and a hardware
    * keyboard buffer to empty.
    */
-  class LineEntryEffects
-  {
-  public:
-    virtual ~LineEntryEffects() = default;
-
-    /// 6502: LDY #8 / JSR DELAY -- eight VERTICAL SYNCS before the first key is read, which is
-    /// 0.16 seconds on PAL and 0.13 on NTSC. §6.17 records why that distinction is not pedantry.
-    virtual void WaitFrames(std::uint8_t _frames) = 0;
-
-    /// 6502: FLKB -- empty the keyboard buffer, so a key pressed before the prompt is discarded.
-    virtual void FlushKeyboard() = 0;
-  };
+  /*
+   * `LineEntryEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3d).
+   *
+   * Two methods: `WaitFrames`, which went to `Presenter` in M3-b-3b, and `FlushKeyboard`, which is
+   * `Keyboard::Flush`. Both were the C64's rather than the game's -- a wait measured in vertical
+   * syncs and a hardware buffer to empty -- and both belong to the port that answers for the
+   * machine rather than to the routine that happens to want one.
+   */
 
   /*
    * 6502: MT26 -- read a line of text.
@@ -90,7 +90,7 @@ namespace Elite
    * so the line is terminated in place -- which is what makes the commander's name a CR-terminated
    * eight bytes rather than a length and seven characters.
    */
-  [[nodiscard]] LineResult ReadLine(KeySource& _keys, TextSink& _screen, TextState& _text, LineEntryEffects& _effects,
+  [[nodiscard]] LineResult ReadLine(Keyboard& _keys, TextSink& _screen, TextState& _text, Presenter& _present,
                                     std::span<std::uint8_t> _buffer, const LineLimits& _limits) noexcept;
 
   /*
@@ -128,8 +128,8 @@ namespace Elite
    * `SaveStore` in the executable, so it is not reproduced here -- the port's name is eight bytes
    * with nothing in front of it.
    */
-  [[nodiscard]] LineResult AskCommanderName(KeySource& _keys, TextSink& _screen, TextState& _text, ExtendedTokenPrinter& _extended,
-                                            LineEntryEffects& _effects, std::span<std::uint8_t> _buffer,
+  [[nodiscard]] LineResult AskCommanderName(Keyboard& _keys, TextSink& _screen, TextState& _text, ExtendedTokenPrinter& _extended,
+                                            Presenter& _present, std::span<std::uint8_t> _buffer,
                                             std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name, LineLimits& _limits) noexcept;
 
 } // namespace Elite

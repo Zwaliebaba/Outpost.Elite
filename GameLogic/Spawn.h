@@ -12,6 +12,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, so this header stays under it
+  struct Ports;    // Ports.h, likewise
+
   /*
    * Taking a ship out of the bubble, and putting the system's own two in (slice 3c).
    *
@@ -27,27 +30,10 @@ namespace Elite
 
   /// What `KILLSHP` and `SOLAR` reach outside this slice. Everything left in it is dashboard
   /// state that slice 3d-b and 3d-c own; the scanner was here too until 3d-a built it (§6.59).
-  class SpawnEffects
-  {
-  public:
-    virtual ~SpawnEffects() = default;
-
-    /// 6502: ABORT -- unlock the player's missile and put its indicator back to green. The missile
-    /// display is the dashboard's, which is slice 3d.
-    virtual void AbortMissile(std::uint8_t _colour) = 0;
-
-    /// 6502: GREEN2 -- the palette byte `KILLSHP` hands `ABORT`.
-    static constexpr std::uint8_t MISSILE_GREEN = 0x57;
-
-    /// 6502: MESS -- put a message on screen. Slice 3d.
-    virtual void ShowMessage(std::uint8_t _token) = 0;
-
-    /// 6502: SPBLB -- the space station indicator on the dashboard. Slice 3d.
-    virtual void ToggleStationIndicator() = 0;
-
-    /// 6502: msblob -- the missile indicators. Slice 3d, and `SOS1` reaches it.
-    virtual void ResetMissileIndicators() = 0;
-  };
+  // `SpawnEffects` was `AbortMissile`, `ShowMessage`, `ToggleStationIndicator` and
+  // `ResetMissileIndicators` -- four routines `GameLogic` did not contain when `KILLSHP` and
+  // `SOLAR` were ported and contains now. M3-b-1 calls them, and `MISSILE_GREEN` (now `MISSILE_READY`) moved to
+  // `Dashboard.h` beside the routine that takes it.
 
   /*
    * 6502: KILLSHP -- take the ship in slot X out of the bubble.
@@ -60,8 +46,7 @@ namespace Elite
    * The space station is the exception and it does not shuffle anything: `KS4` clears the bubble
    * back to just a sun.
    */
-  void KillShip(Bubble& _bubble, LineHeap& _heap, PlanetSunState& _state, Ship& _work, Commander& _commander,
-                SpawnEffects& _effects, std::uint8_t _slot, const Blueprint*& _blueprint) noexcept;
+  void KillShip(Universe& _universe, Ports& _ports, std::uint8_t _slot) noexcept;
 
   /*
    * 6502: SOS1 -- put the system's planet or sun into the bubble.
@@ -71,8 +56,7 @@ namespace Elite
    * crater (§6.53's other half). The 127s in `INWK+29` and `INWK+30` are the maximum roll and
    * pitch counters, which is what makes a planet rotate.
    */
-  [[nodiscard]] NewShip AddPlanetOrSun(Bubble& _bubble, Ship& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
-                                       const Blueprint*& _blueprint) noexcept;
+  [[nodiscard]] NewShip AddPlanetOrSun(Universe& _universe, Ports& _ports) noexcept;
 
   /// 6502: DOD -- the Dodo station's ship type, which is the last blueprint this build carries.
   /// Measured rather than counted: entry 33 of the pointer table is 60973, and `SHIP_DODO` is at
@@ -101,8 +85,7 @@ namespace Elite
    * 7 and steps X by two -- so what it negates is the three HIGH bytes of the nose vector, turning
    * the station round to face the player it has just let go.
    */
-  [[nodiscard]] NewShip AddStation(Bubble& _bubble, Ship& _work, SpawnEffects& _effects, std::uint8_t _techLevel,
-                                   const Blueprint*& _blueprint) noexcept;
+  [[nodiscard]] NewShip AddStation(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: SOLAR -- build the system: a sun, a planet, and however many Trumbles have bred.
@@ -121,9 +104,7 @@ namespace Elite
    * arriving in a new system fills the stardust, clears the ships and resets both line heaps as
    * part of the same call (§6.58).
    */
-  void BuildSystem(Canvas& _canvas, Stardust& _dust, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
-                   Commander& _commander, Rng& _rng, FlightState& _flight, SpawnEffects& _effects, std::uint8_t _techLevel,
-                   const std::array<std::uint8_t, 6>& _seeds, std::uint8_t _view, bool _carryIn) noexcept;
+  void BuildSystem(Universe& _universe, Ports& _ports, bool _carryIn) noexcept;
 
   /*
    * 6502: Ze -- a ship block for the death sequence's debris, and it ends in a SECOND `DORND`.

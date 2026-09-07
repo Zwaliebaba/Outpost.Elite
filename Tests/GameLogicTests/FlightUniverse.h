@@ -3,6 +3,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "NullSeams.h"
 #include "OracleImage.h"
 
 #include "Arith.h"
@@ -100,59 +101,29 @@ namespace GameLogicTests
     return touched;
   }
 
-  struct RecordingSight final : Elite::SightEffects
-  {
-    std::vector<std::uint8_t> modes;
-    std::vector<std::uint8_t> masks;
-    std::vector<std::uint8_t> colours;
+  /*
+   * `RecordingSight` WAS HERE AND IS NOT ANY MORE (M3-b-3a).
+   *
+   * Four lists -- the raster modes, the enable masks, the sight colours and part 15's read-modify-
+   * write -- because `SightEffects` was write-only and a list of calls was the only thing a suite
+   * could compare. Three of the four are `Universe::video` now and the fourth is
+   * `Universe::memoryMap`, both of them mirrored into the oracle and compared out of it like every
+   * other byte, so what the routine DID is compared rather than what it was asked to do.
+   */
 
-    void SetRasterMode(std::uint8_t _mode) override
-    {
-      modes.push_back(_mode);
-    }
-    void SetSightColour(std::uint8_t _colour) override
-    {
-      colours.push_back(_colour);
-    }
-    void SetSpritesEnabled(std::uint8_t _mask) override
-    {
-      masks.push_back(_mask);
-    }
-    void MaskSprites(std::uint8_t _mask) override
-    {
-      maskedWith.push_back(_mask);
-    }
-
-    std::vector<std::uint8_t> maskedWith;
-  };
-
-  struct RecordingView final : Elite::ViewEffects
-  {
-    std::vector<std::uint8_t> palettes;
-    std::vector<std::uint8_t> sounds;
-
-    /*
-     * The carry each `PlaySound` was handed, parallel to `sounds` (§6.99). Both seams that reach
-     * `NOISE` push here, because the 6502 has one routine and the port has two interfaces onto it.
-     *
-     * `std::uint8_t` AND NOT `bool`, which is not a style choice: `std::vector<bool>` is bit-packed
-     * and its `operator[]` hands back a PROXY, and MSVC's `Assert::AreEqual` static-asserts that it
-     * has no `ToString` for one. g++ has no such assertion, so a `vector<bool>` here compiles on the
-     * Ubuntu leg and fails the Windows one -- which is what it did (§6.116).
-     */
-    std::vector<std::uint8_t> soundCarries;
-
-    void SetPalette(std::uint8_t _colour) override
-    {
-      palettes.push_back(_colour);
-    }
-    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
-    {
-      sounds.push_back(_effect);
-      soundCarries.push_back(_carryIn ? 1u : 0u);
-      return true;
-    }
-  };
+  /*
+   * `RecordingView` WAS HERE AND IS NOT ANY MORE (M3-b-2b).
+   *
+   * It counted `DOVDU19`, which on this build is a bare `RTS` -- so the suite was comparing the
+   * port's call against nothing at all, and `ViewChangeTests` asserted the count. The library makes
+   * no call now and the comment at `LOOK1` is what carries the label.
+   *
+   * It had a `PlaySound` too, until M3-b-2a: `WARP`'s refusal noise was `ViewEffects::PlaySound`
+   * and the same `NOISE` that `DashboardEffects` declared, so the port had one routine behind two
+   * interfaces and the fixtures kept a list of calls to each. Both are `PlaySoundEffect` over
+   * `Universe::sound` now, and what they write is compared through `SOFLG` and its nine
+   * neighbours like every other byte.
+   */
 
   /*
    * The port's whole flight universe, and the `FlightScreen` over it.
@@ -161,84 +132,15 @@ namespace GameLogicTests
    * message counters, the laser, the stardust and the dashboard -- and building it twice per test
    * method would be the same eighteen arguments in a different disguise.
    */
-  /*
-   * 6502: the three seams `NOISE`, `NOISE2` and `NOISEOFF` sit behind, recorded rather than played.
-   *
-   * Separate from `RecordingView`, which answers `LOOK1`'s and `WARP`'s single `PlaySound`: this is
-   * the whole sound interface, and `HYPNOISE` is the first routine in the port that needs the
-   * pitched entry as well as the plain one.
-   */
-  struct RecordingDashboard final : Elite::DashboardEffects
-  {
-    struct Pitched
-    {
-      std::uint8_t effect;
-      std::uint8_t sustain;
-      std::uint8_t frequency;
-    };
-
-    std::vector<std::uint8_t> sounds;
-    std::vector<std::uint8_t> carries;
-    std::vector<Pitched> pitched;
-    std::vector<std::uint8_t> stopped;
-
-    bool PlaySound(std::uint8_t _effect, bool _carryIn) override
-    {
-      sounds.push_back(_effect);
-      carries.push_back(_carryIn ? 1u : 0u);
-      return true;
-    }
-    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t _frequency) override
-    {
-      pitched.push_back({_effect, _sustain, _frequency});
-      return true;
-    }
-    void StopSound(std::uint8_t _effect) override
-    {
-      stopped.push_back(_effect);
-    }
-  };
 
   /*
-   * The four seams a fixture that is not running a frame never reaches, answered with nothing.
+   * The seams a screen change never reaches, answered with nothing.
    *
-   * `Ports` binds ten references and a screen-change test supplies two of them; without this the
-   * other eight would have to be written out at every call site, which is the argument list M3-a
-   * exists to remove. A test that WANTS to see one of these passes its own through `PortsWith`.
+   * `NullSeams` since M3-a-3, when `Ports` grew the docked half's four and every fixture had to
+   * name ten. It is in its own header because the docked suites need it too and they must not
+   * drag the oracle in with it.
    */
-  struct UnusedSeams final : Elite::ShipEffects,
-                             Elite::ShipDrawEffects,
-                             Elite::FlightLoopEffects,
-                             Elite::StartUpEffects
-  {
-    // Elite::ShipEffects
-    bool RunTactics(Elite::Ship&) override { return false; }
-
-    // Elite::ShipDrawEffects
-    void DrawPlanetOrSun() override {}
-    void DrawExplosion() override {}
-
-    // Elite::FlightLoopEffects, and Elite::DashboardEffects and Elite::SpawnChildEffects under it
-    bool PlaySound(std::uint8_t, bool) override { return false; }
-    bool PlaySoundPitched(std::uint8_t, std::uint8_t, std::uint8_t) override { return false; }
-    void StopSound(std::uint8_t) override {}
-    void StartDockingMusic() override {}
-    void StopDockingMusic() override {}
-    bool SpawnAhead(Elite::ShipType) override { return false; }
-    bool Anger(std::uint8_t, Elite::ShipType) override { return false; }
-    bool SpawnChild(std::uint8_t, Elite::ShipType) override { return false; }
-
-    // Elite::StartUpEffects
-    void ResetUniverse() override {}
-    void ResetShip() override {}
-    void ClearKeyLogger() override {}
-    void StartTheme() override {}
-    void StopTheme() override {}
-    void ResetMissileIndicators() override {}
-    Elite::TitleKey ScanTitleKeys(Elite::KeyLogger&) override { return {}; }
-    void WaitFrames(std::uint8_t) override {}
-    std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override { return 0; }
-  };
+  using UnusedSeams = NullSeams;
 
   /*
    * The fixture's universe: `Elite::Universe`'s bytes, plus what a test needs beside them.
@@ -251,7 +153,15 @@ namespace GameLogicTests
    */
   struct Universe : Elite::Universe
   {
-    RecordingView effects; ///< first, because the character printer's bell records into its list
+    /*
+     * 6502: SID -- what the game side of the code writes, which for a flight fixture is nothing.
+     *
+     * `Ports::sid` needs somewhere to point and this is it. `stopat` and `BDENTRY` are the only
+     * routines that reach it, and the suites that run them -- `StartUpTests`, `LaunchTests` --
+     * assert on `Universe::music` rather than on the log, because the player's state is what the
+     * oracle can be compared against and a register write is not (yet: §6.108's harness slice).
+     */
+    Elite::SidWriteLog sid;
 
     /*
      * The real character printer, drawing into the canvas -- `CHPR` is NOT trapped on the oracle's
@@ -261,127 +171,81 @@ namespace GameLogicTests
      * here is checked by.
      */
     /*
-     * `CHPR`'s two seams, wired to the sound list.
+     * `CHPR`'s ONE remaining seam, which is the screen clear.
      *
-     * Character 7 rings the bell, which is `JSR BEEP` and so `NOISE` -- and the flight loop prints
-     * a token that contains one, so a comparison that let the bell fall on the floor would count
-     * one sound fewer than the game on every energy warning.
+     * The bell was the other and is not a seam any more (M3-b-2b): character 7 is `JSR BEEP` and
+     * `BEEP` has been `Elite::Beep` over a `SoundBuffer` since slice 5a, so `TextPrinter` takes the
+     * buffer and rings it. `CHPR` is not trapped on the oracle's side here, so the game's bell
+     * reaches the real `NOISE` and writes `sound_variables` -- and the flight loop prints a token
+     * that contains one, so a port that only counted the call would be one effect short on every
+     * energy warning.
      */
-    struct Chars final : Elite::TextEffects
-    {
-      std::vector<std::uint8_t>& sounds;
-      std::vector<std::uint8_t>& carries;
-      std::uint32_t cleared = 0;
-
-      Chars(std::vector<std::uint8_t>& _sounds, std::vector<std::uint8_t>& _carries) noexcept
-        : sounds(_sounds),
-          carries(_carries)
-      {
-      }
-
-      void Beep() override
-      {
-        sounds.push_back(SOUND_BEEP_EFFECT);
-        carries.push_back(0u); // `BEEP` is `LDY #sfxbeep / JMP NOISE`: the carry is CHPR's (§6.118)
-      }
-      void ClearScreen() override
-      {
-        ++cleared;
-      }
-    };
-
-    /// 6502: sfxbeep -- what `BEEP` asks `NOISE` for.
-    static constexpr std::uint8_t SOUND_BEEP_EFFECT = 5;
-
-    Chars chars{effects.sounds, effects.soundCarries};
-    Elite::TextPrinter glyphs{canvas, text, &chars};
-    Elite::CharacterPrinter characters{glyphs};
-    Elite::TokenPrinter printer{characters};
+    Elite::TextPrinter glyphs{canvas, text, &sound};
+    Elite::CharacterPrinter characters{glyphs, sentences};
+    Elite::TokenPrinter printer{characters, text};
 
     /*
-     * 6502: DETOK's seam, and it RECORDS rather than acts.
+     * `Codes` WAS HERE AND IS NOT ANY MORE (M3-b-4b).
      *
-     * `TITLE` prints three extended tokens and the port has no answer for a control code outside
-     * the shell, so this exists to say out loud whether any of them contains one. The tests assert
-     * the list is empty; if a token ever grows a code, the assertion is what says so rather than a
-     * screen quietly diverging from the game's.
+     * It recorded which control codes left the text system, and forwarded them to a `MissionCodes`
+     * when a suite had one. `Elite::RunControlCode` is the whole dispatch now, so a suite that
+     * wants the codes to RUN calls `RunCodesThrough` and the comparison is the state they produced
+     * -- which is §6.73's corollary for the twelfth time: the seam was what a suite counted, and
+     * the count goes with it.
      */
-    struct Codes final : Elite::ControlCodes
-    {
-      std::vector<std::uint8_t> ran;
 
-      /*
-       * A real handler to pass the code on to, when a suite has one (slice 4d-b).
-       *
-       * `MissionCodes` is `GameLogic`'s answer to nine of these and a mission suite needs it bound
-       * to the SAME printer the fixture built, which is a knot: the handler needs a `MissionScreen`
-       * and the screen needs the printer. Forwarding unties it -- the printer keeps this object and
-       * this object gains the handler afterwards -- and the recording carries on either way, so the
-       * suites that assert the list is empty are unaffected.
-       */
-      Elite::ControlCodes* to = nullptr;
-
-      void Run(std::uint8_t _code) override
-      {
-        ran.push_back(_code);
-        if (to != nullptr)
-        {
-          to->Run(_code);
-        }
-      }
-    };
-
-    Codes codes;
-
-        
     /// Declared after `rng` because it binds one, and the order here is the construction order.
-    Elite::ExtendedTokenPrinter extendedPrinter{characters, printer, rng, &codes};
+    Elite::ExtendedTokenPrinter extendedPrinter{characters, printer, rng};
+
+    /*
+     * Point the extended printer at a `Ports` the caller owns, so a control code that leaves the
+     * text system runs in the library instead of being ignored.
+     *
+     * THE `Ports` MUST OUTLIVE THE PRINTING. `Ports()` and `PortsWith` return by value, so this
+     * takes a reference to a named local rather than binding a temporary -- a fixture that passed
+     * `RunCodesThrough(Ports())` would leave the printer pointing at a dead struct of references.
+     *
+     * A fixture that does NOT call this has a printer that ignores the codes that leave, which is
+     * what a null `ControlCodes*` meant before M3-b-4b and is what the token suites are built on.
+     */
+    void RunCodesThrough(Elite::Ports& _ports) noexcept
+    {
+      extendedPrinter.SetGame(*this, _ports);
+    }
 
     
-    /*
-     * Whether the Trumbles' COORDINATE REGISTERS are mirrored into the oracle and compared back.
-     *
-     * Off by default, and the reason is `Where::vic`: those registers are `XX21` in a flat image,
-     * so mirroring them overwrites the blueprint pointers for ship types 3 to 9 on one side of the
-     * comparison and nothing on the other. A fixture turns this on when it intends `MVTRIBS` to
-     * run, which is also a promise that the frame stops before any ship is drawn. `TRIBCT` and the
-     * three velocity tables are real RAM and are always mirrored, so a fixture that only wants to
-     * see the count written leaves this alone.
-     */
-    bool spriteRegistersAreOurs = false;
+    // `spriteRegistersAreOurs` WAS HERE AND IS NOT ANY MORE (M6-0-a): the interpreter banks the I/O
+    // page, so the sprite registers are ordinary cells and no fixture has to claim them.
 
-    RecordingSight sight;
-    RecordingDashboard dashboard;
-
-    /// 6502: QQ14 -- kept only so the fixtures can name it; the byte the port reads is the
-    /// commander block's, because part 15's fuel scooping writes it and a copy would drift.
-    std::uint8_t fuel = 0;
-
-    Universe()
-    {
-      printer.SetCursor(&text);
-    }
 
     /*
      * The seams and the text machinery this fixture answers with, as `Elite::Ports` (M3-a-2).
      *
      * It was `Screen()` returning a `FlightScreen` of twenty-seven references, twenty-two of which
      * were the universe's own bytes. What is left is the recordings, and `LoopRecording` supplies
-     * the three a frame needs -- so a fixture that only changes screens passes `sight`/`effects`
-     * for all five and one that runs a frame passes its recorder.
+     * the two a frame needs -- so a fixture that only changes screens passes `unused` for all three
+     * and one that runs a frame passes its recorder.
      */
     UnusedSeams unused;
 
-    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipEffects& _tactics, Elite::ShipDrawEffects& _drawing,
-                                         Elite::FlightLoopEffects& _loop, Elite::StartUpEffects& _start) noexcept
+    [[nodiscard]] Elite::Ports PortsWith(Elite::Presenter& _present, Elite::Keyboard& _keyboard) noexcept
     {
-      return Elite::Ports{printer, characters, characters, sight, effects, _tactics, _drawing, _loop, extendedPrinter, _start};
+      return Elite::Ports{printer, characters, characters, sid, extendedPrinter, _present, _keyboard, unused};
     }
 
-    /// The four a screen change never reaches, answered with nothing.
+    /// The same, for a fixture that does not reach the keyboard -- which `RDKEY` made most of them
+    /// until M3-b-3d, when the walk became `Elite::ScanKeyboard` and its callers started asking.
+    [[nodiscard]] Elite::Ports PortsWith(Elite::Presenter& _present) noexcept
+    {
+      return PortsWith(_present, unused);
+    }
+
+    /// The same, for a fixture whose start recorder is its presenter too -- which is most of them,
+    /// because `DELAY` is declared beside `TITLE` in the game.
+    /// The two a screen change never reaches, answered with nothing.
     [[nodiscard]] Elite::Ports Ports() noexcept
     {
-      return PortsWith(unused, unused, unused, unused);
+      return PortsWith(unused, unused);
     }
   };
 
@@ -391,48 +255,6 @@ namespace GameLogicTests
    * this slice decides. Counted rather than ignored, because `LL164` makes a noise and a
    * comparison that dropped it would agree with a port that had lost the hyperspace sound.
    */
-  struct LoopRecording final : Elite::FlightLoopEffects, Elite::ShipEffects, Elite::ShipDrawEffects
-  {
-    std::vector<std::uint8_t> sounds;
-
-    bool PlaySound(std::uint8_t _effect, bool) override
-    {
-      sounds.push_back(_effect);
-      return true;
-    }
-    /// The sustain is recorded too, because `MLOOP`'s Trumble squeak and its BURN are the same
-    /// effect at two sustains (&80 and &F1), and a list of effect numbers cannot tell them apart.
-    std::vector<std::uint8_t> sustains;
-
-    bool PlaySoundPitched(std::uint8_t _effect, std::uint8_t _sustain, std::uint8_t) override
-    {
-      sounds.push_back(_effect);
-      sustains.push_back(_sustain);
-      return true;
-    }
-    void StopSound(std::uint8_t) override {}
-    void StartDockingMusic() override {}
-    void StopDockingMusic() override {}
-    bool SpawnAhead(Elite::ShipType) override
-    {
-      return false;
-    }
-    bool Anger(std::uint8_t, Elite::ShipType) override
-    {
-      return false; // a trap's answer: nothing ran, and no fixture here reaches the seeding that reads it
-    }
-    bool SpawnChild(std::uint8_t, Elite::ShipType) override
-    {
-      return true;
-    }
-    bool RunTactics(Elite::Ship&) override
-    {
-      return true;
-    }
-    void DrawPlanetOrSun() override {}
-    void DrawExplosion() override {}
-  };
-
   /*
    * The port's side of a case: the whole flight universe and the one recorder a frame reaches
    * through.
@@ -443,13 +265,28 @@ namespace GameLogicTests
    */
   struct LoopUniverse
   {
-    Universe universe;
-    LoopRecording effects; ///< the AI, the drawing and the sounds, all three recorded in one place
+    /*
+     * `LoopRecording` WAS A SECOND CLASS HERE AND IS NOT ANY MORE (M3-b-4c).
+     *
+     * It was named for a recording it had stopped making: two empty draw methods and a `SpawnChild`
+     * that returned true, where `NullSeams` returned false. One boolean, and it became `spawnRoom`
+     * on the null port -- which is §4.5's "one class" for the tests, arrived at by deleting the
+     * other one rather than by merging two. M4-a-1 removed the boolean as well.
+     */
+    /*
+     * `spawnRoom` WAS SET HERE AND THERE IS NO SUCH BYTE ANY MORE (M4-a-1).
+     *
+     * It was `SFS1`'s carry -- "the bubble had room" -- which a frame worth running needs because a
+     * kill spawns debris. `Elite::PerformDrop` spawns into the real bubble now, so the answer comes
+     * from the slot list rather than from a fixture's boolean, and there is nothing to set.
+     */
 
-    /// The seams as `Elite::Ports`: the recorder for the three a frame reaches, nothing for the rest.
+    Universe universe;
+
+    /// The seams as `Elite::Ports`: nothing, and `SFS1` answering that the bubble had room.
     [[nodiscard]] Elite::Ports Ports() noexcept
     {
-      return universe.PortsWith(effects, effects, effects, universe.unused);
+      return universe.PortsWith(universe.unused, universe.unused);
     }
   };
 
@@ -517,9 +354,20 @@ namespace GameLogicTests
       _universe.heaps.ball[index] = next();
     }
     _universe.heaps.lsp = 0x37u;
+    /*
+     * 6502: SUNX(1 0) -- an old sun for the frame to rub out (M6-0-d), with a centre the game could
+     * have LEFT THERE: `SUN` writes it from `K3` only when it has drawn, so the high byte is 0 or 1.
+     * A random high byte reaches a path no game state reaches -- `WPLS`'s `EDGES` finds the row's
+     * right end off the LEFT of the screen, takes `ED1` without ever writing `X1`, and `HLOIN2`
+     * draws from whatever `X1` last held. The original reads a stale zero-page byte there and the
+     * port, whose `X1` is a local since M2-c, cannot; §8 (M6-0-d) records the deviation.
+     */
+    _universe.heaps.sunX = next();
+    _universe.heaps.sunXNext = static_cast<std::uint8_t>(next() & 0x01u);
+    _universe.heaps.yx2M1 = 143u;    // 6502: Yx2M1 -- what RES2 leaves, and what CHKON reads
 
     _universe.commander.lasers[0] = Elite::LASER_PULSE;
-    _universe.commander.lasers[1u] = 0u;
+    _universe.commander.lasers[1u] = Elite::LASER_NONE;
     _universe.commander.lasers[2u] = Elite::LASER_BEAM;
     _universe.commander.lasers[3u] = Elite::LASER_MILITARY;
     _universe.commander.tribbles.lo = 0x40u;
@@ -530,11 +378,11 @@ namespace GameLogicTests
 
     _universe.text.column = 0x1Fu;
     _universe.text.row = 0x0Bu;
-    _universe.text.cellColour = Elite::TEXT_COLOUR_WHITE;
+    _universe.text.palette = Elite::TEXT_COLOUR_WHITE;
     _universe.printer.SetCaseFlags(0x40u);
-    _universe.characters.state.lowerCaseBits = 0u;
-    _universe.characters.state.sentenceStart = 0u;
-    _universe.characters.state.alwaysLower = 0xFFu;
+    _universe.sentences.lowerCaseBits = 0u;
+    _universe.sentences.sentenceStart = 0u;
+    _universe.sentences.alwaysLower = 0xFFu;
 
     _universe.message.delay = 0x2Au;
     _universe.message.append = 0x3Bu;
@@ -547,8 +395,7 @@ namespace GameLogicTests
     _universe.status.altitude = 120u;
     _universe.status.damageFlash = 0u;
     _universe.status.ecmCountdown = 0u;
-    _universe.fuel = 40u;
-    _universe.commander.fuel = _universe.fuel; // `Mirror` sends the block, not the byte
+    _universe.commander.fuel.tenths = 40u;
 
     _universe.flight.delta = 14u;
     _universe.flight.alp1 = 5u;
@@ -568,6 +415,7 @@ namespace GameLogicTests
   {
     std::uint16_t frin, kPercent, many, inwk, sx, sxl, sy, syl, sz, szl, nostm;
     std::uint16_t lso, lsx2, lsp, xc, yc, qq17, dtw1, dtw2, dtw6, col2;
+    std::uint16_t lsy2, sunx, yx2m1, k5, k6, stp, flag, pltog, v; ///< 6502: the rest of the planet and sun state (M6-0-d)
     std::uint16_t dtw3, dtw4, dtw5, dtw8;
     std::uint16_t dly, de, las2, qq22, viewByte, qq11, mj, junk, ev, rand;
     std::uint16_t abraxas, caravanserai, dflag, comx, comy, comc, t2;
@@ -577,8 +425,46 @@ namespace GameLogicTests
     std::uint16_t tp, mch, messxc, screen;
     std::uint16_t tek, xx21Station, spasto; ///< 6502: tek, XX21+2*SST-2, and BEGIN's saved copy of it
 
+    /*
+     * 6502: sound_variables -- ten runs of three, one byte on its own, and the toggle (M3-b-2a).
+     *
+     * `NOISE`, `NOISE2` and `NOISEOFF` were seams until then and the fixtures counted their calls;
+     * they are `SoundEffects.cpp`'s routines over `Universe::sound` now, so what they write is
+     * compared like every other byte the frame touches.
+     */
+    std::uint16_t soflg, socnt, sopr, pulsew, sofrch, sofrq, socr, soatk, sosus, sovch, dnoiz;
+
+    /*
+     * 6502: safehouse, QQ8, JSTGY, JSTE and MUTOKOLD -- five bytes M3's follow-on moved into
+     * `Universe` and the digest could not see (ADR-007 §5, closed by this widening).
+     */
+    std::uint16_t safehouse, qq8, jstgy, jste, mutokold;
+
+    /*
+     * 6502: MUPLA and MULIE -- the music player's own two bytes that a routine outside `Music.cpp`
+     * can reach (M3-b-2b).
+     *
+     * `startbd`, `stopbd`, `startat` and `stopat` run on both machines now, so a fixture that
+     * reaches one has to be able to say whether the two agree on it. The rest of the player --
+     * `BDBUFF`, the pointers, the vibrato -- is `SoundTests`', which drives the tick itself; these
+     * are what the GAME side of the code sets and reads.
+     */
+    std::uint16_t mupla, mulie;
+
+    /*
+     * 6502: L1M and `l1` -- the 6510's input/output port, and the second is address &0001 rather
+     * than a label (M3-b-3a).
+     *
+     * `SETL1` runs on both machines now, so a routine that brackets its register writes leaves the
+     * same two bytes on both. `l1` is written with the datasette bits ridden along, which is why
+     * the fixtures seed it non-zero: a comparison against zero would agree with a port that had
+     * lost the `AND #%11111000`.
+     */
+    std::uint16_t l1m;
+    static constexpr std::uint16_t IO_PORT = 0x0001;
+
     /// Unresolved -- every address zero -- for the one use that needs none: hashing the image,
-    /// which reads cells in table order and never their addresses (`Hash(const Universe&)`).
+    /// which reads cells in table order and never their addresses (`Hash(const Elite::Universe&)`).
     Where() = default;
 
     explicit Where(const OracleImage& _oracle)
@@ -596,6 +482,15 @@ namespace GameLogicTests
       nostm = _oracle.Label("NOSTM");
       lso = _oracle.Label("LSO");
       lsx2 = _oracle.Label("LSX2");
+      lsy2 = _oracle.Label("LSY2");
+      sunx = _oracle.Label("SUNX");
+      yx2m1 = _oracle.Label("Yx2M1");
+      k5 = _oracle.Label("K5");
+      k6 = _oracle.Label("K6");
+      stp = _oracle.Label("STP");
+      flag = _oracle.Label("FLAG");
+      pltog = _oracle.Label("PLTOG");
+      v = _oracle.Label("V");
       lsp = _oracle.Label("LSP");
       xc = _oracle.Label("XC");
       yc = _oracle.Label("YC");
@@ -659,11 +554,30 @@ namespace GameLogicTests
        * Trumbles has to stop before the ships are drawn, and `TheControlRatesMatchM` -- the only
        * one that does -- runs the frame's HEAD.
        */
-      vic = _oracle.Label("XX21");
+      vic = Cpu6502::IO_BASE; // 6502: VIC -- the chip, which the flat image labelled `XX21` until M6-0-a banked the page
       tp = _oracle.Label("TP");
       mch = _oracle.Label("MCH");
       messxc = _oracle.Label("messXC");
       tek = _oracle.Label("tek");
+      soflg = _oracle.Label("SOFLG");
+      socnt = _oracle.Label("SOCNT");
+      sopr = _oracle.Label("SOPR");
+      pulsew = _oracle.Label("PULSEW");
+      sofrch = _oracle.Label("SOFRCH");
+      sofrq = _oracle.Label("SOFRQ");
+      socr = _oracle.Label("SOCR");
+      soatk = _oracle.Label("SOATK");
+      sosus = _oracle.Label("SOSUS");
+      sovch = _oracle.Label("SOVCH");
+      dnoiz = _oracle.Label("DNOIZ");
+      safehouse = _oracle.Label("safehouse");
+      qq8 = _oracle.Label("QQ8");
+      jstgy = _oracle.Label("JSTGY");
+      jste = _oracle.Label("JSTE");
+      mutokold = _oracle.Label("MUTOKOLD");
+      mupla = _oracle.Label("MUPLA");
+      mulie = _oracle.Label("MULIE");
+      l1m = _oracle.Label("L1M");
 
       /*
        * 6502: XX21+2*SST-2 -- the only two bytes of the pointer table the game writes.
@@ -687,6 +601,17 @@ namespace GameLogicTests
    * difference turned into an assertion. Nothing a suite passes has changed.
    */
   void Mirror(const Universe& _universe, Cpu6502& _cpu, const Where& _at);
+
+  /*
+   * 6502: sound_variables, compared on its own (M3-b-2a).
+   *
+   * `CompareState` covers it for the fixtures that call that; this is for the ones that mirror the
+   * universe in and check a handful of things out, which used to assert on a recorded list of
+   * `NOISE` calls. The buffer says more than the list did: which voice took the effect, what
+   * priority it went in at, what the frequency and the envelope are, and what an effect that was
+   * REFUSED left behind.
+   */
+  void CompareSound(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context);
   void CompareState(const Cpu6502& _cpu, const Universe& _universe, const Where& _at, const std::wstring& _context,
                     bool _compareRng = true);
 

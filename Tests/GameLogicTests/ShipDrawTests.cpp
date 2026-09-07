@@ -10,6 +10,7 @@
 #include "LineHeap.h"
 #include "ShipDraw.h"
 #include "ShipSlot.h"
+#include "Universe.h"
 
 #include <array>
 #include <cstdint>
@@ -1532,26 +1533,12 @@ namespace GameLogicTests
     }
   };
 
-  namespace
-  {
-    /// The seams `LL9` leaves its own code through, counted rather than performed. `DOEXP` and
-    /// `PLANET` are trapped in the oracle so that both sides stop at the same place.
-    class CountingDrawEffects final : public Elite::ShipDrawEffects
-    {
-    public:
-      std::uint32_t planets = 0;
-      std::uint32_t explosions = 0;
-
-      void DrawPlanetOrSun() override
-      {
-        ++planets;
-      }
-      void DrawExplosion() override
-      {
-        ++explosions;
-      }
-    };
-  } // namespace
+  /*
+   * `CountingDrawEffects` WAS HERE AND IS NOT ANY MORE (M6-0-a-3). It counted `LL9`'s two tail
+   * jumps while `DOEXP` and `PLANET` were trapped in the oracle, so that both sides stopped at the
+   * same place; the jumps are calls inside `Elite::DrawShip` now, and a sweep that reached one
+   * would draw on both machines and be compared on the screen and the heap like any other.
+   */
 
   TEST_CLASS(TheShipDrawing)
   {
@@ -1567,10 +1554,12 @@ namespace GameLogicTests
      * stops at 192, well below where the 6502's own stack is working. The largest blueprint fills
      * 148 bytes of it.
      *
-     * `DOEXP` and `PLANET` are trapped on both sides. The explosion-cloud block is NOT exercised:
-     * reaching it needs a ship that has just been killed, and the `JSR DORND` in it runs on a carry
-     * this port cannot determine, which is why it is behind the seam. The test asserts the seam is
-     * never reached rather than pretending otherwise.
+     * `DOEXP` and `PLANET` are not trapped since M6-0-a-3. No placement is a body, so `PLANET` is
+     * not reached; the exploding placement reaches `DOEXP` and both machines draw the cloud, which
+     * is why its heap is seeded the way `EE55` leaves one (below) and `RAND` is seeded on both
+     * sides. The `EE55` block itself -- a ship that arrives killed and not yet exploding -- is NOT
+     * exercised here: its first `JSR DORND` runs on the carry `LL9` was reached with, which part 11
+     * of the flight loop derives (§6.157) and the frame fixture compares (`FlightLoopTests`).
      */
     TEST_METHOD(DrawingAShipMatchesLL9)
     {
@@ -1587,9 +1576,8 @@ namespace GameLogicTests
       const std::uint16_t inf = oracle.Label("INF");
       const std::uint16_t type = oracle.Label("TYPE");
       const std::uint16_t ll9 = oracle.Label("LL9");
-      const std::uint16_t doexp = oracle.Label("DOEXP");
-      const std::uint16_t planet = oracle.Label("PLANET");
       const std::uint16_t dontclip = oracle.Label("dontclip");
+      const std::uint16_t rand = oracle.Label("RAND");
       const std::uint16_t screenBase = ScreenBase(oracle);
 
       constexpr std::uint16_t SLOT_AT = 0xF900; // 6502: K%, the first slot.
@@ -1685,21 +1673,44 @@ namespace GameLogicTests
           for (const std::array<std::uint8_t, 18>& orientation : ORIENTATIONS)
           {
             Cpu6502 cpu = oracle.Fresh();
-            Elite::Canvas canvas;
-            Elite::GeometryWorkspace geometry;
-            Elite::MathWorkspace math;
-            Elite::ClipState clip;
-            Elite::Projection screen;
-            Elite::Ship work;
-            Elite::Ship slot;
-            Elite::LineHeap heap;
-            CountingDrawEffects effects;
-            Elite::Rng rng; // no placement here is killed, so the seeding never reads it
 
-            cpu.AddTrap(doexp);
-            cpu.AddTrap(planet);
+            // `DrawShip` takes the universe since M6-0-a-3; what it reads of it is what was eight
+            // locals here, and the rest starts as zeroes.
+            Elite::Universe universe;
+            Elite::Canvas& canvas = universe.canvas;
+            Elite::GeometryWorkspace& geometry = universe.geometry;
+            Elite::Ship& work = universe.work;
+            Elite::Ship& slot = universe.bubble.blocks[0];
+            Elite::LineHeap& heap = universe.heap;
+            universe.flight.type = Elite::TypeOf(shipType);
+            universe.flight.blueprint = blueprint;
 
-            SeedHeap(cpu, heap, {});
+            /*
+             * 6502: RAND -- `DOEXP` regenerates the cloud from the generator and leaves it in a
+             * mixture, so the exploding placement reads it on both machines. The same four bytes
+             * on both sides; every other placement leaves them alone.
+             */
+            const std::array<std::uint8_t, 4> seed = {0x5Au, 0xA5u, 0x3Cu, 0xC3u};
+            for (std::size_t byte = 0; byte < seed.size(); ++byte)
+            {
+              cpu.memory[static_cast<std::uint16_t>(rand + byte)] = seed[byte];
+            }
+            universe.rng.SetState(seed);
+
+            /*
+             * A ship that is exploding has a heap `EE55` wrote when it died -- the counter, the
+             * blueprint's explosion count and four seed bytes -- and `DOEXP` walks byte 2 DOWN to
+             * byte 7 copying vertices. On an all-zero heap that walk runs from 0 through 255, and
+             * the original reads its own stack page where the port reads zero (the same shape as
+             * M6-0-d's fixture faults: a state the game never produces). Until M6-0-a-3 the
+             * placement stopped at the `DOEXP` trap and the heap was never walked.
+             */
+            std::vector<std::uint8_t> heapStart;
+            if ((placement.state & 0x20u) != 0u)
+            {
+              heapStart = {0u, 18u, blueprint->explosionCount, 0x11u, 0x22u, 0x33u, 0x44u};
+            }
+            SeedHeap(cpu, heap, heapStart);
 
             // XX3's compared range, cleared on both sides so an unwritten byte cannot pass by luck.
             for (std::uint16_t byte = 0; byte < XX3_BYTES; ++byte)
@@ -1743,8 +1754,7 @@ namespace GameLogicTests
             const Elite::Testing::RunResult run = cpu.CallSubroutine(ll9, 4'000'000);
             Assert::IsTrue(run.completed, L"LL9 returned");
 
-            Elite::DrawShip(canvas, geometry, math, clip, screen, work, slot, heap, *blueprint, Elite::TypeOf(shipType), effects, rng,
-                            false);
+            Elite::DrawShip(universe, slot, false);
 
             const std::wstring where = Widen("LL9(type=" + std::to_string(shipType) + "): ") + placement.what;
 
@@ -1781,7 +1791,15 @@ namespace GameLogicTests
              * flag cannot be read at all, aliased or otherwise. The four bytes are compared under
              * their other name by `ProjectingAShipMatchesPROJ` and `DrawingADistantShipMatchesSHPPT`.
              */
-            for (std::size_t byte = 2; byte < 14u; ++byte)
+            /*
+             * And two fewer for the exploding placement, since M6-0-a-3 lets `DOEXP` run: the four
+             * bytes it copies each vertex into are `K3`, which is `XX2+0` to `XX2+3`, so the
+             * original leaves its last vertex's coordinates over the first four face flags. The
+             * port's `k3` is a local (`Explosion.cpp`), and nothing reads those four flags after a
+             * cloud is drawn -- every reader of `XX2` writes it first.
+             */
+            const std::size_t firstFlag = ((placement.state & 0x20u) != 0u) ? 4u : 2u;
+            for (std::size_t byte = firstFlag; byte < 14u; ++byte)
             {
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx2 + byte)], geometry.xx2[byte],
                                (where + L": XX2+" + std::to_wstring(byte)).c_str());
@@ -1791,10 +1809,6 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(xx3 + byte)], geometry.xx3[byte],
                                (where + L": XX3+" + std::to_wstring(byte)).c_str());
             }
-
-            Assert::AreEqual<std::uint32_t>(0u, effects.planets, (where + L": not a planet").c_str());
-            Assert::AreEqual<std::uint32_t>(static_cast<std::uint32_t>(cpu.trapHits.size()), effects.explosions,
-                                            (where + L": the explosion seam agreed").c_str());
 
             // Did the edge loop stop because the blueprint's own heap allowance ran out? That is
             // the one path in `LL9` a whole-heap comparison cannot distinguish from the loop simply

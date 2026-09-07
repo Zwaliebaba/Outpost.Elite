@@ -12,7 +12,7 @@
 namespace Elite
 {
   // 6502: TGINT -- the key each configuration toggle answers to, in the order `DKS3` walks `DAMP`.
-  const std::array<std::uint8_t, 13> OPTION_KEY_TABLE = {
+  constexpr std::array<std::uint8_t, 13> OPTION_KEY_TABLE = {
     0x01, 0x36, 0x29, 0x2B, 0x27, 0x1E, 0x1B, 0x1C, 0x2E, 0x17, 0x2C, 0x32, 0x24,
   };
 

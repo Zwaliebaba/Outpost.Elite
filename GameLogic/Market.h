@@ -12,6 +12,12 @@ namespace Elite
 {
 
   /*
+   * Declared rather than included: `Keyboard` lives in `Controls.h` beside `RDKEY`, and the flight
+   * controls have no business in a header about prices. A reference parameter needs no more.
+   */
+  class Keyboard;
+
+  /*
    * Elite's economy (slice 2c, the price model).
    *
    * Seventeen goods, and no price is stored for any of them. A price is the item's base, plus a
@@ -233,7 +239,20 @@ namespace Elite
    * equal value carry on and a larger one finish, so the caller has to check. It is the buy screen
    * that says no, not this.
    */
-  [[nodiscard]] DigitResult TypeDigit(std::uint8_t& _value, std::uint8_t _key, std::uint8_t _available) noexcept;
+  /*
+   * 6502: R -- the number typed so far, and what the key did to it (M5-a-3).
+   *
+   * `_value` was a `std::uint8_t&` until then. It is not state anybody keeps -- it is the digits
+   * accumulating inside one prompt -- so it goes back with the outcome rather than through a
+   * reference the caller has to remember, which is M2-b's rule for the kernel applied here.
+   */
+  struct TypedDigit
+  {
+    DigitResult outcome;
+    std::uint8_t value; ///< 6502: R
+  };
+
+  [[nodiscard]] TypedDigit TypeDigit(std::uint8_t _value, std::uint8_t _key, std::uint8_t _available) noexcept;
 
   /// What gnum returned: the number in R, and which of its exits produced it.
   struct NumberEntry
@@ -260,6 +279,6 @@ namespace Elite
    * typed in purple and the screen goes back to white afterwards -- and it does that on EVERY exit,
    * including the ones that abandon the number.
    */
-  [[nodiscard]] NumberEntry ReadNumber(KeySource& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept;
+  [[nodiscard]] NumberEntry ReadNumber(Keyboard& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept;
 
 } // namespace Elite

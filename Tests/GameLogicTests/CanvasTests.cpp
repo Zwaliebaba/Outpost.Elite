@@ -279,11 +279,11 @@ namespace GameLogicTests
               Canvas canvas;
               if (isBlock)
               {
-                (void)Elite::PlotBlock(canvas, static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y), colour);
+                (void)Elite::PlotBlock(canvas, static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y), Elite::PatternOf(colour));
               }
               else
               {
-                (void)Elite::PlotDash(canvas, static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y), colour);
+                (void)Elite::PlotDash(canvas, static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y), Elite::PatternOf(colour));
               }
 
               CompareScreens(cpu, zp.screen, canvas, Context(Widen(name).c_str(), x, y, colour));
@@ -497,7 +497,7 @@ namespace GameLogicTests
       Canvas canvas;
 
       Elite::PlotPixel(canvas, 137, 61, 0);
-      (void)Elite::PlotDash(canvas, 90, 44, 0xAAu);
+      (void)Elite::PlotDash(canvas, 90, 44, Elite::PixelPattern::Yellow);
       Elite::DrawHorizontalLine(canvas, 10, 55, 33);
 
       bool anythingDrawn = false;
@@ -508,7 +508,7 @@ namespace GameLogicTests
       Assert::IsTrue(anythingDrawn, L"the setup should have drawn something to erase");
 
       Elite::PlotPixel(canvas, 137, 61, 0);
-      (void)Elite::PlotDash(canvas, 90, 44, 0xAAu);
+      (void)Elite::PlotDash(canvas, 90, 44, Elite::PixelPattern::Yellow);
       Elite::DrawHorizontalLine(canvas, 10, 55, 33);
 
       for (std::size_t offset = 0; offset < Canvas::SCREEN_SIZE; ++offset)

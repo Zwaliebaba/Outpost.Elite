@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Canvas.h"
+#include "Commander.h"
 #include "ExtendedTokens.h"
 #include "TextPrint.h"
 #include "Tokens.h"
@@ -11,6 +12,9 @@
 
 namespace Elite
 {
+
+  struct Universe; // Universe.h -- forward, so this header stays under it
+  struct Ports;    // Ports.h, likewise
 
   /*
    * The two galactic charts (slice 2b).
@@ -49,8 +53,8 @@ namespace Elite
     /// routine here branches on it rather than taking a chart as an argument.
     std::uint8_t view = 0;
 
-    /// 6502: QQ14 -- fuel, in light years times ten. It is the fuel circle's radius.
-    std::uint8_t fuel = 0;
+    /// 6502: QQ14 -- fuel, in light years times ten. Its tenths are the fuel circle's radius.
+    LightYearsTenths fuel;
   };
 
   /*
@@ -68,11 +72,16 @@ namespace Elite
    * LDA #2*Y-1 / STA Yx2M1` it ends with.
    *
    * The short-range chart draws system discs down to the bottom of the screen, so it lifts the
-   * clipper's limits for the length of the routine and puts them back afterwards. Both bytes live
-   * with the drawing rather than with the chart -- `Yx2M1` in `PlanetSunState` and `dontclip` in
-   * `ClipState` -- which is why they are the CALLER's to set here (§6.45). Only the 199 is named
-   * here: what it goes back to is `SPACE_VIEW_BOTTOM` in `ShipDraw.h`, which is the same `2*Y-1`
-   * the clipper already had a name for.
+   * clipper's limits for the length of the routine and puts them back afterwards.
+   *
+   * THEY WERE THE CALLER'S TO SET UNTIL M3-b-1b, on §6.45's argument that both bytes live with the
+   * drawing rather than with the chart. The argument was sound and the placement was not: the game
+   * stores them INSIDE `TT23`, and the port could put them outside only because `ChartShapes`
+   * meant the chart drew no discs at all. It draws them now, so the stores are where the original
+   * has them -- and the chart sweep was drawing nothing until they moved, which is what found this.
+   *
+   * Only the 199 is named here: what it goes back to is `SPACE_VIEW_BOTTOM` in `ShipDraw.h`, which
+   * is the same `2*Y-1` the clipper already had a name for.
    */
   inline constexpr std::uint8_t CHART_SCREEN_BOTTOM = 199;
 
@@ -93,24 +102,9 @@ namespace Elite
     std::uint8_t step = 0;   ///< 6502: STP -- how far round the circle each segment goes
   };
 
-  /*
-   * 6502: CIRCLE2 -- the fuel range circle, and SUN -- a system's disc on the short-range chart.
-   *
-   * Both draw by walking a line heap so that the next frame can erase exactly what the last one
-   * drew, and that heap is the flight model's (slice 3c). Until it exists the charts hand their
-   * arguments here instead, which is enough to compare them against the game.
-   */
-  class ChartShapes
-  {
-  public:
-    virtual ~ChartShapes() = default;
-
-    /// 6502: TT128's tail -- JMP CIRCLE2.
-    virtual void DrawRangeCircle(const RangeCircle& _circle) = 0;
-
-    /// 6502: TT23's ee1 -- FLFLLS, SUN, FLFLLS. The radius is two or three, from a seed bit.
-    virtual void DrawSystemDisc(std::uint8_t _x, std::uint8_t _y, std::uint8_t _radius) = 0;
-  };
+  // `ChartShapes` was `CIRCLE2` and `SUN`, deferred because "that heap is the flight model's
+  // (slice 3c)". Slice 3c landed; M3-b-1b calls `DrawBall` and `DrawSun` over the universe, and
+  // what compares them is the chart's pixels rather than the arguments it asked for.
 
   /*
    * 6502: TT123 -- move one coordinate of the crosshairs by a signed step.
@@ -158,7 +152,7 @@ namespace Elite
    * you are, at half vertical scale, with a radius of fuel/4. On the short-range chart it is
    * centred on the middle of the screen at four times the scale, with a radius of the fuel itself.
    */
-  void DrawFuelRange(Canvas& _canvas, const ChartView& _view, ChartShapes* _shapes) noexcept;
+  void DrawFuelRange(Universe& _universe, const ChartView& _view) noexcept;
 
   /*
    * 6502: NLIN2 and NLIN4 -- a rule right across the screen at a given row.
@@ -167,6 +161,11 @@ namespace Elite
    * runs into the right margin; that is the original's, not a rounding here.
    */
   void DrawSeparator(Canvas& _canvas, std::uint8_t _y) noexcept;
+
+  /// 6502: NLIN -- LDA #23 / JSR INCYC / NLIN2. The cursor moves down one line and a rule is drawn
+  /// at pixel row 23, in that order; the increment is `INCYC`'s and has nothing to do with the 23.
+  /// One routine rather than two calls at its caller, so that it can be compared as one (M6-0-e).
+  void DrawTitleRule(Canvas& _canvas, TextState& _text) noexcept;
 
   /*
    * 6502: TT22 -- the long-range chart.
@@ -180,8 +179,7 @@ namespace Elite
    * reads as a distance, so the chart's dots vary in size for no reason except what the galaxy
    * happens to contain.
    */
-  void DrawLongRangeChart(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
-                          const SystemSeeds& _galaxy, ChartShapes* _shapes) noexcept;
+  void DrawLongRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept;
 
   /*
    * 6502: TT23 -- the short-range chart.
@@ -194,22 +192,15 @@ namespace Elite
    * A system whose row comes out below three is skipped entirely, name and disc together, because
    * the test that rejects it branches past both.
    */
-  void DrawShortRangeChart(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, const ChartView& _view,
-                           const SystemSeeds& _galaxy, ChartShapes* _shapes) noexcept;
+  void DrawShortRangeChart(Universe& _universe, Ports& _ports, const ChartView& _view, const SystemSeeds& _galaxy) noexcept;
 
   /*
-   * 6502: CLYNS -- clear the bottom two rows of the screen and put the cursor there.
+   * `ChartEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3b).
    *
-   * The chart routines reach it through `hm`, and it clears screen memory the way TT66 does, so it
-   * is the same seam control code 21 already declares. The two flags it sets are text state and are
-   * set by the caller rather than here.
+   * One method, `ClearBottomRows`, which is `CLYNS` -- and `Elite::ClearMessageRows` has been that
+   * routine since slice 1d. It was declared twice, here and on `TradeScreenEffects`, because two
+   * slices needed it and neither could call it; both call it now.
    */
-  class ChartEffects
-  {
-  public:
-    virtual ~ChartEffects() = default;
-    virtual void ClearBottomRows() = 0;
-  };
 
   /*
    * 6502: QQ12, QQ22, QQ8 and safehouse -- what choosing a hyperspace target reads and writes
@@ -272,8 +263,8 @@ namespace Elite
    * Erase, search, redraw: the first TT103 rubs out the crosshair that is there, because LOIN
    * draws by EOR, and the second draws it at wherever TT111 settled.
    */
-  NearestSystem SelectNearestSystem(Canvas& _canvas, ChartView& _view, const SystemSeeds& _galaxy,
-                                    ChartEffects* _effects) noexcept;
+  NearestSystem SelectNearestSystem(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _sentences,
+                                    MessageState& _message, ChartView& _view, const SystemSeeds& _galaxy) noexcept;
 
   /*
    * 6502: hyp -- the hyperspace key, up to the point where the countdown starts.
@@ -287,9 +278,9 @@ namespace Elite
    * system 25.6 light years away is out of range even with a full tank, and the message is the same
    * one you get for having no fuel.
    */
-  JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended,
-                                TextState& _text, ChartView& _view, JumpState& _jump, const SystemSeeds& _galaxy,
-                                ChartEffects* _effects) noexcept;
+  JumpOutcome RequestHyperspace(Canvas& _canvas, TokenPrinter& _printer, ExtendedTokenPrinter& _extended, TextState& _text,
+                                ExtendedTextState& _sentences, MessageState& _message, ChartView& _view, JumpState& _jump,
+                                const SystemSeeds& _galaxy) noexcept;
 
   /*
    * 6502: HME2's HME3 loop -- find a system by the name that was typed.

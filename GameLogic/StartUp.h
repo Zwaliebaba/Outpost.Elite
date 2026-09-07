@@ -11,6 +11,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because Universe.h includes this one for `CurrentSystem`
+  struct Ports;    // Ports.h, likewise
+
   /*
    * Starting a game, and going back to the docking bay (slice 2e).
    *
@@ -55,7 +58,7 @@ namespace Elite
    * The crosshairs to where the ship is, both coordinates, counting DOWN -- so the loop moves the y
    * first. It reads the COMMANDER, because QQ0 and QQ1 are two of its bytes.
    */
-  void CrosshairsToCurrentSystem(const Commander& _commander, std::uint8_t& _crosshairX, std::uint8_t& _crosshairY) noexcept;
+  void CrosshairsToCurrentSystem(Universe& _universe) noexcept;
 
   /*
    * 6502: jmp -- the other direction, and it is what makes a hyperspace jump arrive.
@@ -67,101 +70,19 @@ namespace Elite
   void CurrentSystemToCrosshairs(Commander& _commander, std::uint8_t _crosshairX, std::uint8_t _crosshairY) noexcept;
 
   /*
-   * What the start sequence reaches for outside GameLogic.
+   * `StartUpEffects` WAS HERE AND IS NOT ANY MORE (M6-0-h-2).
    *
-   * Every one of these is either the flight model's or the machine's, and all of them are phase 3's
-   * or the executable's. They are separate methods rather than one "start" because the ORDER is the
-   * thing being ported, and an interface that bundled them would have nothing left to compare.
+   * It was "what the start sequence reaches for outside GameLogic", and every one of its methods
+   * turned out to be the library's: `ResetUniverse` and `ResetShip` (`RESET`, `RES2`) went in
+   * M3-b-1e, `StartTheme` and `StopTheme` in M3-b-2b, `ShowDockingTunnel` when `LAUN` was ported
+   * (§6.109), `ScanTitleKeys` in M3-b-3d -- 6502: RDKEY, whose answer `TitleKey` lives in
+   * `Controls.h` beside `ScanKeyboard` -- and `WaitFrames` to `Presenter` in M3-b-3b, `ClearKeyLogger`
+   * in M6-0-h-1 -- 6502: ZEKTRAN, which is `Universe::keys` zeroed by its callers -- and
+   * `ShowTitleScreen` last: 6502: TITLE is `Elite::ShowTitleShip`
+   * (`Flight.h`), and the executable had answered the seam by forwarding to it since §6.107. `BR1`
+   * calls it directly, which is what `JSR TITLE` is, and a fixture that drives the start sequence
+   * runs the title screen for real and ends it the way a player does -- with a key held.
    */
-  /// 6502: what `RDKEY` leaves behind -- the carry, and `thiskey` in both X and A.
-  struct TitleKey
-  {
-    bool pressed = false; ///< 6502: the carry, SET when the matrix walk found something
-    std::uint8_t key = 0; ///< 6502: thiskey, which is what `TITLE` returns and `BR1` compares
-  };
-
-  class StartUpEffects
-  {
-  public:
-    virtual ~StartUpEffects() = default;
-
-    /*
-     * 6502: RESET, which falls into RES2 -- the whole universe and then the ship.
-     *
-     * RESET zeroes the ship slots, clears the roll and pitch, sets QQ12 to zero and clears the
-     * fuel-scoop damage, and then runs off its end into RES2. So a caller of RESET gets both, and
-     * that is not visible from the call site.
-     */
-    virtual void ResetUniverse() = 0;
-
-    /// 6502: RES2 on its own -- the ship, the line heap, the dashboard, the missile lock and the
-    /// stardust. DEATH2 enters here, and so does TT170 a second time (see ResetAndStartGame).
-    virtual void ResetShip() = 0;
-
-    /*
-     * 6502: ZEKTRAN -- zero the key logger and `thiskey`.
-     *
-     * Sixty-five bytes of KEYLOOK, one per key the game watches. It is keyboard state and belongs
-     * with the key map in the executable. The routine ends in TWO consecutive RTS instructions,
-     * the second of which nothing can reach.
-     */
-    virtual void ClearKeyLogger() = 0;
-
-    /// 6502: startat -- begin the title theme on the SID.
-    virtual void StartTheme() = 0;
-
-    /// 6502: stopat -- stop it, and silence all three voices.
-    virtual void StopTheme() = 0;
-
-    /// 6502: msblob -- the dashboard's missile indicators, green up to NOMSL and black above it.
-    virtual void ResetMissileIndicators() = 0;
-
-    /*
-     * `ShowDockingTunnel` WAS HERE, and it is gone because `LAUN` is ported (§6.109).
-     *
-     * It was scoped in 2e, when the ball line heap the tunnel draws through did not exist. The heap
-     * arrived in 3c and the stub stayed, so a launch cut straight to the rings and an arrival had
-     * no tunnel at all -- §6.73's pattern for the seventh time, and the seventh time the fix was to
-     * delete the seam rather than to implement it. `DOENTRY` and `TT110` now call
-     * `Elite::DrawLaunchTunnel` directly, which is what the 6502 does.
-     */
-
-    /*
-     * 6502: JSR RDKEY at the bottom of `TLL2` -- the title screen's per-frame keyboard scan.
-     *
-     * IT IS A SECOND SEAM FOR THE SAME ROUTINE, and that is deliberate rather than the §6.59
-     * mistake. `ControlEffects::ScanKeyboard` is `RDKEY` for `DOKEY`, inside the flight loop, where
-     * the app has already presented the frame before stepping; this one is `RDKEY` for `TITLE`,
-     * whose loop is entirely inside `GameLogic` and so is the only thing standing between two drawn
-     * frames. The two callers want different things from the platform AROUND the scan, not
-     * different things from the scan, which is why the difference is in the seam rather than in an
-     * argument: an implementation that presented on both would cap the flight loop at one frame in
-     * five, and one that presented on neither would leave the title ship invisible.
-     *
-     * It answers what `RDKEY` answers: the carry, and `thiskey` -- the LOWEST-numbered held key,
-     * because the matrix walk counts down from &40 and the last store wins.
-     */
-    [[nodiscard]] virtual TitleKey ScanTitleKeys(KeyLogger& _keys) = 0;
-
-    /*
-     * 6502: DELAY -- wait for _frames VERTICAL SYNCS.
-     *
-     * Declared here as well as on `LineEntryEffects`, deliberately, and for the reason that one
-     * says: two independent statements of what a routine needs rather than one interface
-     * pretending to be shared. The executable satisfies both with one object.
-     */
-    virtual void WaitFrames(std::uint8_t _frames) = 0;
-
-    /*
-     * 6502: TITLE -- a rotating ship, a token under it, and a wait for a key.
-     *
-     * Returns the key that ended it, which BR1 compares against "Y". The ship rotates through the
-     * flight model's own projection (`LL9`), so this waits on phase 3b and is a seam rather than a
-     * screen; `_distance` is how far away it settles once it has finished moving towards the
-     * viewer, and it is 210 for the Cobra and 48 for the Adder.
-     */
-    [[nodiscard]] virtual std::uint8_t ShowTitleScreen(std::uint8_t _token, ShipType _shipType, std::uint8_t _distance) = 0;
-  };
 
   /// 6502: the two title screens BR1 shows, which differ in every argument.
   inline constexpr std::uint8_t TITLE_LOAD_TOKEN = 6;  ///< "LOAD NEW COMMANDER (Y/N)?"
@@ -198,43 +119,11 @@ namespace Elite
   [[nodiscard]] ForcedKey ForceKey(std::uint8_t _key, std::uint8_t _dockedFlag, std::uint8_t _view, std::uint8_t _countdown,
                                    bool _hyperspaceHeld) noexcept;
 
-  /*
-   * Everything the start sequence works on.
-   *
-   * One struct for the reason `TradeScreen` and `SaveScreen` are structs: the alternative is a
-   * function with a dozen arguments, written twice. `save` is here because BR1 offers the disk
-   * menu, which is the one place the title screen reaches all the way into slice 2d.
-   */
-  struct GameStart
-  {
-    StartUpEffects& effects;
-    SaveScreen& save;
-    TextState& text;
-
-    Commander& commander;                          ///< 6502: TP, through NAME
-    std::span<std::uint8_t, COMMANDER_NAME_SIZE> name;  ///< 6502: NAME
-    std::span<std::uint8_t, COMMANDER_FILE_SIZE> image; ///< 6502: NA%
-    std::span<std::uint8_t> buffer;                     ///< 6502: INWK+5, the line editor's
-    std::uint8_t& useDisk;                              ///< 6502: DISK -- a byte, not a flag: it is
-                                                        ///< one of the pause screen's thirteen toggles
-
-    CurrentSystem& current;
-    SystemSeeds& selected;        ///< 6502: QQ15
-    std::uint8_t& crosshairX;     ///< 6502: QQ9
-    std::uint8_t& crosshairY;     ///< 6502: QQ10
-    std::uint8_t& explosionCount; ///< 6502: EV
-
-    /*
-     * What the fall-through into BAY needs, which is the dispatch's state rather than the start
-     * sequence's. None of it can change the answer for the key BAY forces -- "8" is settled in
-     * TT102's first block, above every test of a view or a counter -- but the port passes what the
-     * original would have had rather than assuming that stays true.
-     */
-    std::uint8_t& dockedFlag;    ///< 6502: QQ12
-    std::uint8_t view = 0;       ///< 6502: QQ11
-    std::uint8_t countdown = 0;  ///< 6502: QQ22+1
-    bool hyperspaceHeld = false; ///< 6502: KLO+HINT
-  };
+  // `GameStart` was fourteen references and four values, and it went with `SaveScreen` in M3-a-3:
+  // it held one, because `BR1` offers the disk menu, and could not outlive it. Every byte of it is
+  // `Universe`'s and the one seam is `Ports::start`. The last of the four values is the argument
+  // below: what `KLO+HINT` held when the key was pressed, which the fall-through into `BAY` reads
+  // and nothing in the universe carries.
 
   /*
    * 6502: BR1 -- the title sequence, and the start of a game.
@@ -262,7 +151,7 @@ namespace Elite
    * docking bay are one instruction stream: the last thing the title sequence does is press "8" on
    * the player's behalf and enter the docked main loop. That is why this hands back a ForcedKey.
    */
-  [[nodiscard]] ForcedKey StartGame(GameStart& _game) noexcept;
+  [[nodiscard]] ForcedKey StartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: TT170, which falls through DEATH2 into BR1 -- the cold start.
@@ -277,7 +166,7 @@ namespace Elite
    * is how the original discards whatever frames the death or the start left behind. There is no
    * port equivalent and none is needed: the port's callers return normally.
    */
-  [[nodiscard]] ForcedKey ResetAndStartGame(GameStart& _game) noexcept;
+  [[nodiscard]] ForcedKey ResetAndStartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept;
 
   /*
    * 6502: BAY -- go to the docking bay.
@@ -286,7 +175,7 @@ namespace Elite
    * game, indistinguishable from the player pressing the status key while docked -- and the docked
    * flag is set to &FF rather than to 1, which is what makes `TT102`'s `BIT QQ12 / BPL` work.
    */
-  [[nodiscard]] ForcedKey EnterDockingBay(std::uint8_t& _dockedFlag, std::uint8_t _view, std::uint8_t _countdown,
+  [[nodiscard]] ForcedKey EnterDockingBay(Universe& _universe, std::uint8_t _view, std::uint8_t _countdown,
                                           bool _hyperspaceHeld) noexcept;
 
 } // namespace Elite

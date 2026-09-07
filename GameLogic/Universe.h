@@ -8,8 +8,12 @@
 #include "Dashboard.h"
 #include "ExtendedTokens.h"
 #include "Lasers.h"
+#include "Market.h"
+#include "MemoryMap.h"
+#include "Music.h"
 #include "LineHeap.h"
 #include "Rng.h"
+#include "SoundEffects.h"
 #include "Scanner.h"
 #include "ShipDraw.h"
 #include "ShipMove.h"
@@ -99,9 +103,8 @@ namespace Elite
    * what `Game::StateHash` (M3-c) and the M0-c replay are built on.
    *
    * The two things that are NOT here are the text machinery and the seams, because both need what
-   * this deliberately excludes: `TextPrinter` takes the bell as a `TextEffects*` and
-   * `ExtendedTokenPrinter` the control codes as a `ControlCodes*`, so a universe that owned them
-   * would own a pointer to the platform. They travel beside it in `Ports` (M3-a-2), which is the
+   * this deliberately excludes: `ExtendedTokenPrinter` takes the control codes as a `ControlCodes*`,
+   * so a universe that owned it would own a pointer to the platform. They travel beside it in `Ports` (M3-a-2), which is the
    * struct M3-b collapses to §4.5's four.
    *
    * The order below is §4.4's, which is the order the game's own memory map runs in as nearly as
@@ -130,10 +133,22 @@ namespace Elite
     TextState text;       ///< 6502: XC, YC, QQ17 and COL
     MessageState message; ///< 6502: DLY, de, MCH and messXC
 
-    // 6502: DTW1 to DTW8 -- `ExtendedTextState` is NOT here, because it is a member of
-    // `CharacterPrinter` and the printers stay outside a universe that has to copy. Moving it in
-    // means giving the printer a reference to it, which is M3-b's question and not M3-a's.
+    /// 6502: DTW1 to DTW8 -- the sentence machinery's bytes. They were `CharacterPrinter`'s member
+    /// until M5-e-2b found the replay digest reading a printer the flight never drove (§8); the
+    /// printer binds to these now, as `TextPrinter` binds to `text`, and the universe still copies.
+    ExtendedTextState sentences;
     VideoState video{};         ///< 6502: the VIC-II registers `MVTRIBS` reads back
+
+    /*
+     * 6502: L1M and `l1` -- the 6510's input/output port, which decides what the address space
+     * holds (M3-b-3a).
+     *
+     * It is here and not in `VideoState` because it is not a video register: the same routine banks
+     * the SID in for `stopat`, the CIA in for `RDKEY` and the KERNAL in for `SVE`. `MemoryMap.h`
+     * has the finding that put it in the library at all -- `SETL1` is neither self-modifying nor
+     * inside an interrupt handler, which is what the seam it used to sit behind was justified by.
+     */
+    MemoryMap memoryMap;
     TrumbleSprites trumbles;    ///< 6502: TRIBCT, TRIBVX, TRIBVXH, TRIBXH
 
     std::uint8_t view = 0;      ///< 6502: QQ11 -- which screen is up
@@ -168,6 +183,52 @@ namespace Elite
     Rng rng;
 
     /*
+     * 6502: QQ9 and QQ10 -- where the crosshairs are on whichever chart is up.
+     *
+     * The player's, not the chart's: `ping` copies the commander's own position into them and `jmp`
+     * copies them back, so they outlive every screen that draws them. `ChartView` is still the
+     * argument the chart routines take, because it is a VIEW over four owners; these two are the
+     * pair of them it borrows.
+     */
+    std::uint8_t crosshairX = 0;
+    std::uint8_t crosshairY = 0;
+
+    /// 6502: QQ15 -- the seeds of the system under the crosshairs, which `TT111` writes and the
+    /// status, system-data and hyperspace screens all read back.
+    SystemSeeds selectedSeeds{};
+
+    /// 6502: QQ26, QQ19 and AVL -- the market this station is offering, which lasts as long as the
+    /// docking does: `GenerateMarket` writes it on arrival and every trading screen reads it.
+    MarketState market;
+
+    /*
+     * 6502: NAME, NA% and DISK -- the commander's FILE, which is not the commander.
+     *
+     * `NAME` is the eight bytes the save and load prompts read and write; `NA%` is the save image,
+     * which `JAMESON` overwrites and `DFAULT` loads back, so it is what a reset actually resets;
+     * and `DISK` is one of the pause screen's thirteen toggles, a byte rather than a flag. All
+     * three are memory in the original and were `GameStart`'s spans until M3-a-3.
+     */
+    std::array<std::uint8_t, COMMANDER_NAME_SIZE> commanderName{};
+    std::array<std::uint8_t, COMMANDER_FILE_SIZE> commanderFile{};
+    std::uint8_t useDisk = 0;
+
+    /// 6502: INWK+5 -- the line editor's buffer, which the original carves out of the ship
+    /// workspace and the port keeps beside it. Sixteen bytes, which is what `MT26`'s limits allow.
+    std::array<std::uint8_t, 16> lineBuffer{};
+
+    /*
+     * 6502: U -- the field width `BPRNT` was last given, and it is state because SV1 does not set it.
+     *
+     * The competition number is printed with `CLC / JSR BPRNT` and no store to `U` first, so it
+     * comes out at whatever width the last caller left behind. `U` is a scratch byte in zero page
+     * that `ZERO` does not clear, and the upstream source says so in as many words. Harmless -- the
+     * number always has ten digits, so all that varies is a leading space -- but a port that chose
+     * a width here would be inventing one. It was `SaveScreen::numberWidth` until M3-a-3.
+     */
+    std::uint8_t numberWidth = 0;
+
+    /*
      * 6502: QQ2, QQ28, tek and gov -- the system you are IN, as opposed to the one under the
      * crosshairs.
      *
@@ -178,6 +239,93 @@ namespace Elite
      * arrival, so it belongs to neither half and therefore to the universe.
      */
     CurrentSystem current;
+
+    /*
+     * 6502: sound_variables -- the buffer between the game and the raster interrupt (M3-b-2a).
+     *
+     * `NOISE`, `NOISE2` and `NOISEOFF` write ten arrays of three and one byte on their own, and
+     * nothing in the game reads the SID back: `SOINT` runs once a frame from `COMIRQ1` and is the
+     * only thing that touches the chip. So the buffer is MEMORY the routines own, not a seam --
+     * `DashboardEffects` existed only because the port had nowhere to put it while sound was
+     * phase 5's, and `SoundEffects.cpp` has had the routines since slice 5a.
+     *
+     * IT IS A PLAIN STRUCT, which is why it can live here at all: no reference, no vtable, and it
+     * copies with the rest of the universe.
+     */
+    SoundBuffer sound;
+
+    /*
+     * 6502: music_variables and MUPLA -- the docking music and the title theme (M3-b-2b).
+     *
+     * The same argument as the buffer above and one step further out: `startbd`, `stopbd`, `startat`
+     * and `stopat` are `Music.cpp`'s routines over this struct, and what makes them a PORT rather
+     * than pure memory is that they write the SID directly -- `BDENTRY` zeroes the chip and `stopat`
+     * runs its twenty-five registers down -- where `NOISE` only fills a buffer. So the state is
+     * here and the register writes go to `Ports::sid`, which is §4.5's `SoundSink`.
+     *
+     * `MusicOptions` travels inside it because the pause screen's four toggles are what `startbd`
+     * reads to decide whether to play at all, and they are the player's rather than the screen's.
+     */
+    MusicPlayer music;
+
+    /*
+     * The seven that were loose in the executable's composition struct until M3-c and on
+     * `Elite::Game` until this slice, and every one of them has a 6502 name (ADR-007 §3).
+     *
+     * They are here because §4.4's rule is "every byte of game state, and nothing else" and a byte
+     * with a label in the original is game state by definition. They were on `Game` for one reason
+     * and it was not a design one: they were loose members of `Main.cpp`'s struct when M3-c moved
+     * the dispatch, and carrying them across with it was the smallest change that compiled.
+     *
+     * `Game::m_paused` is the one that did NOT come with them and stays where it is: the original
+     * has no such byte, `FREEZE` is a loop that reads the keyboard and does not return, and the
+     * state a windowed program is in instead is the port's own (ADR-005 §3's trade).
+     */
+
+    /*
+     * 6502: what `TT17` leaves in X and Y -- the crosshair steps, held between the scan and the
+     * dispatch that uses them.
+     *
+     * On the 6502 they are registers and the two routines are consecutive; here `TT102`'s work is
+     * a function call away, so they have to live somewhere. Both halves of the loop write it.
+     */
+    CrosshairStep crosshairStep;
+
+    /*
+     * 6502: safehouse and QQ8 -- the system the countdown is running towards, and its distance.
+     *
+     * Separate from `selectedSeeds` (`QQ15`) because the player keeps moving the crosshairs while
+     * the countdown runs, and `TT18` arrives at what was chosen when the key was pressed rather
+     * than at whatever is under the crosshairs when it expires. `QQ8` is here for the same reason:
+     * `hyp` measures the distance once and `TT18` spends that much fuel.
+     */
+    SystemSeeds jumpTarget{};
+    std::uint16_t jumpDistance = 0;
+
+    /*
+     * 6502: JSTGY and JSTE -- two of the thirteen that NOTHING ELSE IN THE PORT READS.
+     *
+     * They are the joystick's y-inversion and its enable, and the flight controls read `JSTK` for
+     * both. They are here because `DKS3` walks a contiguous run and the run is thirteen long: a
+     * port that left them out would shift every option after them by two, and the "D" key would
+     * switch the music instead of the disk.
+     */
+    std::uint8_t joystickGeometry = 0;
+    std::uint8_t joystickEnabled = 0;
+
+    /// 6502: MUTOKOLD -- what `MUTOKCH` saw last, which is how it notices the switch moving.
+    std::uint8_t musicSwitchWas = 0;
+
+    /*
+     * `soundDisabled` WAS HERE AND IT WAS A SECOND `DNOIZ` (M5-a-5).
+     *
+     * The original has ONE: `DK4` writes it (`STX DNOIZ`, the key code itself) and `NOISE` reads it
+     * (`LDA DNOIZ / BNE SOUR1`). This port had two -- this one, which the pause screen wrote, and
+     * `SoundBuffer::soundOff`, which `MakeNoise` reads -- so the byte was written twice and read
+     * NEVER, and pressing "2" on the pause screen did not switch the sound off. The same shape as
+     * the duplicate `QQ12` the replay slice found in `FlightPort`, and found the same way: by
+     * asking which bytes the digest was not watching.
+     */
 
     /*
      * 6502: LSO -- the sun's heap, which `NWSPS` hands to the SPACE STATION (§6.112).

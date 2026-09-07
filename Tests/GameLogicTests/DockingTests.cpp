@@ -62,49 +62,16 @@ namespace GameLogicTests
       return "?";
     }
 
-    class RecordingEffects : public Elite::StartUpEffects
+    class RecordingEffects : public Elite::Presenter
     {
     public:
-      void ResetUniverse() override
-      {
-        seams.push_back("RESET");
-      }
-      void ResetShip() override
-      {
-        seams.push_back("RES2");
-      }
-      void ClearKeyLogger() override
-      {
-        seams.push_back("ZEKTRAN");
-      }
-      void StartTheme() override
-      {
-        seams.push_back("startat");
-      }
-      void StopTheme() override
-      {
-        seams.push_back("stopat");
-      }
-      void ResetMissileIndicators() override
-      {
-        seams.push_back("msblob");
-      }
-      /// 6502: JSR RDKEY inside `TLL2`. Nothing here rotates a ship, so the first scan dismisses it.
-      [[nodiscard]] Elite::TitleKey ScanTitleKeys(Elite::KeyLogger& _keys) override
-      {
-        (void)_keys;
-        return {true, 0u};
-      }
-
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
       void WaitFrames(std::uint8_t _frames) override
       {
         seams.push_back("DELAY");
         frames = _frames;
-      }
-      std::uint8_t ShowTitleScreen(std::uint8_t, Elite::ShipType, std::uint8_t) override
-      {
-        seams.push_back("TITLE");
-        return 0;
       }
 
       std::vector<std::string> seams;
@@ -201,7 +168,6 @@ namespace GameLogicTests
 
                 // ---- the shipped routine -------------------------------------------------------
                 Cpu6502 cpu = oracle.Fresh();
-                cpu.AddTrap(oracle.Label("RES2"));
                 cpu.AddTrap(oracle.Label("LAUN"));
                 cpu.AddTrap(oracle.Label("DELAY"));
 
@@ -285,7 +251,6 @@ namespace GameLogicTests
       const std::uint16_t bay = oracle.Label("BAY");
 
       Cpu6502 cpu = oracle.Fresh();
-      cpu.AddTrap(oracle.Label("RES2"));
       cpu.AddTrap(oracle.Label("LAUN"));
       const std::uint16_t delay = oracle.Label("DELAY");
       cpu.AddTrap(delay);
@@ -350,16 +315,15 @@ namespace GameLogicTests
       universe.status.forwardShield = 0x5C;
       universe.status.aftShield = 0x5C;
       universe.status.energy = 0x5C;
-      std::uint8_t dockedFlag = 0;
 
-      Elite::Ports ports = universe.Ports();
-      const Elite::DockingResult result = Elite::DockAtStation(effects, universe, ports, nullptr, dockedFlag, 0, false);
+      Elite::Ports ports = universe.PortsWith(effects);
+      const Elite::DockingResult result = Elite::DockAtStation(universe, ports, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome), L"this commander earns no briefing");
 
-      // 6502: JSR RES2 / JSR LAUN / ... / LDY #44 / JSR DELAY, in that order -- and `LAUN` is not
-      // in this list any more because it is not a seam any more.
-      const std::vector<std::string> EXPECTED = {"RES2", "DELAY"};
+      // 6502: JSR RES2 / JSR LAUN / ... / LDY #44 / JSR DELAY, in that order -- and neither `RES2`
+      // nor `LAUN` is in this list any more, because neither is a seam any more.
+      const std::vector<std::string> EXPECTED = {"DELAY"};
       Assert::AreEqual(EXPECTED.size(), effects.seams.size(), L"how many seams arriving reaches");
       for (std::size_t index = 0; index < EXPECTED.size(); ++index)
       {
@@ -371,9 +335,25 @@ namespace GameLogicTests
        * a seam. What it leaves behind says so instead: the step it stores and the noise it makes.
        * Without this, deleting the call from `DOENTRY` would pass every other assertion here.
        */
+      /*
+       * 6502: JSR RES2 -- and what it leaves behind says it happened, for the same reason `LAUN`'s
+       * does (M3-b-1e). It was a seam that could only be counted; it empties the bubble, so a slot
+       * still occupied is a `RES2` that did not run.
+       */
+      Assert::AreEqual<std::uint8_t>(0u, universe.bubble.slots[0], L"RES2 emptied the bubble");
+      Assert::AreEqual<std::uint8_t>(0u, universe.flight.delta, L"and stopped the ship");
+
       Assert::AreEqual<std::uint8_t>(Elite::LAUNCH_TUNNEL_STEP, universe.heaps.stp, L"LAUN stored the step");
-      Assert::AreEqual<std::size_t>(1u, universe.effects.sounds.size(), L"LAUN made one noise");
-      Assert::AreEqual<std::uint8_t>(Elite::SOUND_MISSILE, universe.effects.sounds.front(), L"and it is sfxwhosh");
+      /*
+       * 6502: LDY #sfxwhosh / JSR NOISE -- and the BUFFER says so since M3-b-2a.
+       *
+       * It was a recorded list of one; `PlaySoundEffect` writes `sound_variables` now, and `SOFLG`
+       * holds the effect number PLUS ONE with bit 7 set for "new, not yet started". So the flag on
+       * the voice `sfxwhosh` takes is what says the noise was made, and which voice took it.
+       */
+      constexpr std::uint8_t LAUNCH_FLAG = static_cast<std::uint8_t>(0x80u | (static_cast<std::uint8_t>(Elite::SoundEffect::Missile) + 1u));
+      Assert::AreEqual<std::uint8_t>(LAUNCH_FLAG, universe.sound.flag[2],
+                                     L"LAUN made the sfxwhosh noise");
 
       std::uint8_t frames = 0;
       for (const Cpu6502::TrapHit& hit : cpu.trapHits)
@@ -394,7 +374,7 @@ namespace GameLogicTests
       Assert::AreEqual(cpu.memory[oracle.Label("ENERGY")], universe.status.energy, L"ENERGY");
 
       // 6502: BAY's own stores, which the JMP tail reaches.
-      Assert::AreEqual<std::uint8_t>(0xFF, dockedFlag, L"BAY sets the docked flag");
+      Assert::AreEqual<std::uint8_t>(0xFF, universe.dockedFlag, L"BAY sets the docked flag");
       Assert::AreEqual(static_cast<int>(Elite::KeyAction::StatusMode), static_cast<int>(result.bay.outcome.action),
                        L"BAY forces the status key");
 
@@ -417,14 +397,13 @@ namespace GameLogicTests
       Universe earnerUniverse;
       earnerUniverse.commander = earner;
       earnerUniverse.heaps.stp = 4u; // §6.95, as above
-      std::uint8_t earnerDocked = 0;
-      Elite::Ports earnerPorts = earnerUniverse.Ports();
+      Elite::Ports earnerPorts = earnerUniverse.PortsWith(briefed);
       const Elite::DockingResult briefing =
-        Elite::DockAtStation(briefed, earnerUniverse, earnerPorts, nullptr, earnerDocked, 0, false);
+        Elite::DockAtStation(earnerUniverse, earnerPorts, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::BriefMission1), static_cast<int>(briefing.outcome),
                        L"this commander has earned the Constrictor mission");
-      Assert::AreEqual<std::uint8_t>(0, earnerDocked, L"a briefing does not set the docked flag");
+      Assert::AreEqual<std::uint8_t>(0, earnerUniverse.dockedFlag, L"a briefing does not set the docked flag");
       Assert::AreEqual(
         static_cast<int>(Elite::KeyAction::Nothing),
         static_cast<int>(briefing.outcome == DockingOutcome::DockingBay ? briefing.bay.outcome.action : Elite::KeyAction::Nothing),
@@ -490,8 +469,7 @@ namespace GameLogicTests
         commander.cash.tenths = (item.tenths);
 
         Cpu6502 cpu = oracle.Fresh();
-        cpu.AddTrap(oracle.Label("RES2"));
-        cpu.AddTrap(oracle.Label("LAUN"));
+          cpu.AddTrap(oracle.Label("LAUN"));
         cpu.AddTrap(oracle.Label("DELAY"));
         cpu.memory[oracle.Label("TP")] = 0x02;
         cpu.memory[oracle.Label("GCNT")] = 7;

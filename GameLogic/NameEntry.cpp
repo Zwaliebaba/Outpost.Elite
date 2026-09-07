@@ -2,6 +2,8 @@
 
 #include "NameEntry.h"
 
+#include "Controls.h"
+
 /*
  * The line editor and the commander's name (slice 2d).
  */
@@ -11,10 +13,6 @@ namespace Elite
 
   namespace
   {
-    /// 6502: MAG2 = $40, purple, and the &10 that OSW03 and OSW04 put back. The same pair gnum uses.
-    constexpr std::uint8_t TEXT_COLOUR_TYPING = 0x40;
-    constexpr std::uint8_t TEXT_COLOUR_NORMAL = 0x10;
-
     /// 6502: CMP #13 / CMP #27 / CMP #127 -- the three keys that are not text.
     constexpr std::uint8_t KEY_RETURN = 13;
     constexpr std::uint8_t KEY_ESCAPE = 27;
@@ -41,15 +39,15 @@ namespace Elite
     constexpr std::size_t NAME_BYTES = COMMANDER_NAME_SIZE;
   } // namespace
 
-  LineResult ReadLine(KeySource& _keys, TextSink& _screen, TextState& _text, LineEntryEffects& _effects, std::span<std::uint8_t> _buffer,
+  LineResult ReadLine(Keyboard& _keys, TextSink& _screen, TextState& _text, Presenter& _present, std::span<std::uint8_t> _buffer,
                       const LineLimits& _limits) noexcept
   {
     // 6502: LDA #MAG2 / STA COL2 -- purple for what the player types, as gnum does.
-    _text.cellColour = TEXT_COLOUR_TYPING;
+    _text.palette = TEXT_COLOUR_PURPLE; // 6502: MAG2 -- TextPrint.h's, not a second copy (slice 5a-8)
 
     // 6502: LDY #8 / JSR DELAY / JSR FLKB -- settle, then throw away anything already buffered.
-    _effects.WaitFrames(SETTLE_FRAMES);
-    _effects.FlushKeyboard();
+    _present.WaitFrames(SETTLE_FRAMES);
+    _keys.Flush();
 
     LineResult result{};
 
@@ -70,7 +68,7 @@ namespace Elite
         {
           _buffer[result.length] = KEY_RETURN;
         }
-        _text.cellColour = TEXT_COLOUR_NORMAL;
+        _text.palette = TEXT_COLOUR_WHITE;
         _screen.Put(NEWLINE);
         return result;
       }
@@ -78,7 +76,7 @@ namespace Elite
       if (key == KEY_ESCAPE)
       {
         // 6502: OSW04 -- LDA #&10 / STA COL2 / SEC / RTS. No newline, and no terminator written.
-        _text.cellColour = TEXT_COLOUR_NORMAL;
+        _text.palette = TEXT_COLOUR_WHITE;
         result.escaped = true;
         return result;
       }
@@ -156,9 +154,9 @@ namespace Elite
     }
   }
 
-  LineResult AskCommanderName(KeySource& _keys, TextSink& _screen, TextState& _text, ExtendedTokenPrinter& _extended,
-                              LineEntryEffects& _effects, std::span<std::uint8_t> _buffer,
-                              std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name, LineLimits& _limits) noexcept
+  LineResult AskCommanderName(Keyboard& _keys, TextSink& _screen, TextState& _text, ExtendedTokenPrinter& _extended, Presenter& _present,
+                              std::span<std::uint8_t> _buffer, std::span<const std::uint8_t, COMMANDER_NAME_SIZE> _name,
+                              LineLimits& _limits) noexcept
   {
     /*
      * 6502: LDX #4 / GTL3: LDA NA%-5,X / STA INWK,X / DEX / BPL GTL3.
@@ -175,7 +173,7 @@ namespace Elite
     // 6502: LDA #8 / JSR DETOK.
     _extended.Print(NAME_PROMPT_TOKEN);
 
-    const LineResult result = ReadLine(_keys, _screen, _text, _effects, _buffer, _limits);
+    const LineResult result = ReadLine(_keys, _screen, _text, _present, _buffer, _limits);
 
     // 6502: LDA #9 / STA RLINE+2 -- and it is restored whether a name was typed or not.
     _limits.maxLength = LINE_MAX_LENGTH;

@@ -150,17 +150,38 @@ namespace Elite
    */
   [[nodiscard]] bool IsHit(const Ship& _work, const Blueprint& _blueprint, ShipType _type) noexcept;
 
-  /// 6502: SFS1 -- phase 4's "spawn a child ship from this one", which is where the wreckage
-  /// actually comes from. It is here rather than in `Spawn.h` because the only thing in this slice
-  /// that calls it is `SPIN`, and `SPIN` is the flight loop's.
-  class SpawnChildEffects
-  {
-  public:
-    virtual ~SpawnChildEffects() = default;
+  /*
+   * `SpawnChildEffects` WAS HERE AND IS NOT ANY MORE (M4-a-1).
+   *
+   * It was one method -- `JSR SFS1` with A = the AI flag and X = the type -- and `SFS1` has been
+   * `Elite::SpawnChildShip` in `Spawn.cpp` since slice 4a-b, so by §6.73's rule it should have gone
+   * with the other seven in M3-b-1. It could not, and the reason was the SUITE rather than the
+   * code: `TheWreckageMatchesSPINAndSPIN2` traps `SFS1` on the oracle to `SEC` and let the port's
+   * seam answer `true`, so both sides are told "there was always room". Call the routine for real
+   * and the bubble fills at ten slots, the carry flips, and the two are no longer comparing the
+   * same thing (Modernize.md M3-b's own note).
+   *
+   * The answer is this slice's pattern rather than that one's: `SPIN` and `SPIN2` ANSWER what to
+   * drop and the caller drops it, so what the suite compares is the ANSWER and no trap has to lie
+   * to it. See `Drop` below.
+   */
 
-    /// 6502: JSR SFS1 with A = the AI flag and X = the type. It returns a carry saying whether the
-    /// ship fitted; `SPIN` does not look at it, and this slice has no other caller.
-    [[nodiscard]] virtual bool SpawnChild(std::uint8_t _aiFlag, ShipType _type) = 0;
+  /*
+   * 6502: what `SPIN` and `SPIN2` decide before a single `SFS1` runs -- the typed stage result
+   * M4-a is named for.
+   *
+   * `SPIN2` is a loop around one `JSR SFS1` and `SPIN` is a roll in front of `SPIN2`, so between
+   * them they choose exactly three things: a type, a count, and the AI byte the children get. The
+   * fourth field is not a decision but a CARRY: both routines have a path that spawns nothing and
+   * hands the caller's own flag straight back (`oh` is a bare `RTS`), and `MA47` runs its second
+   * `JSR SPIN` on whatever the first left, so the flag has to survive the split (M2-d).
+   */
+  struct Drop
+  {
+    ShipType type;         ///< 6502: X on the way into `SFS1`
+    std::uint8_t count;    ///< 6502: CNT, and zero means `oh`
+    std::uint8_t aiFlag;   ///< 6502: A on the way into `SFS1`, which is `LDA #0` for both callers
+    bool carryIfNone;      ///< 6502: the flag `oh`'s `RTS` hands back when the count is zero
   };
 
   /*
@@ -186,9 +207,13 @@ namespace Elite
    * kept the test inside the loop would agree with the game on every input and be a different
    * routine.
    */
-  /// Returns the exit carry, which is the caller's own when the count is zero and the last
-  /// `SFS1`'s -- `NWSHP`'s "was it made" -- otherwise. `SPIN` and `.nosp` both read it (M2-d).
-  bool SpawnItems(SpawnChildEffects& _effects, ShipType _type, std::uint8_t _count, bool _carryIn) noexcept;
+  /*
+   * AND WHAT IS LEFT OF IT AFTER THE SPLIT IS THE COUNT AND NOTHING ELSE, which is the finding
+   * M4-a-1 produces rather than a shape it imposes. Every subtlety above is about a LOOP, and the
+   * loop is `PerformDrop`'s now; `SPIN2`'s own decision is "this type, this many, AI byte zero",
+   * and the `BEQ oh` the caller's `AND` set is `count == 0` seen from the other side.
+   */
+  [[nodiscard]] Drop PlanItems(ShipType _type, std::uint8_t _count, bool _carryIn) noexcept;
 
   /*
    * 6502: SPIN -- a destroyed ship drops some of its cargo, or does not.
@@ -203,9 +228,25 @@ namespace Elite
    * The port had it the obvious way round and the oracle disagreed on the first blueprint whose
    * byte 0 differed from the roll (§6.74).
    */
-  /// Returns the exit carry: `DORND`'s when the roll drops nothing, else `SPIN2`'s. `MA47` runs
-  /// the second `JSR SPIN` on what the first one left (M2-d).
-  bool SpawnDebris(Rng& _rng, SpawnChildEffects& _effects, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept;
+  /// The roll is HERE and not in `PerformDrop`, because `MA47`'s two `JSR SPIN`s roll, spawn, roll
+  /// and spawn in that order -- the second roll runs on the first drop's carry (M2-d), so planning
+  /// both up front would run the generator twice before either loop.
+  [[nodiscard]] Drop PlanDebris(Rng& _rng, const Blueprint& _blueprint, ShipType _type, bool _carryIn) noexcept;
+
+  /*
+   * 6502: `SPIN2`'s loop body -- `LDA #0 / JSR SFS1 / DEC CNT / BNE spl+2`, run over a `Drop`.
+   *
+   * `.spl BEQ oh` READS A FLAG THE INSTRUCTION ABOVE IT DID NOT SET, and the loop's back edge lands
+   * one instruction PAST that `BEQ`, so the test runs once on entry and never again. `Drop::count`
+   * carries the answer the flag encoded, and this runs the loop the same number of times: a port
+   * that put the test back inside the loop would agree with the game on every input and be a
+   * different routine.
+   *
+   * Returns the exit carry: `carryIfNone` for an empty drop, and otherwise the LAST `SFS1`'s --
+   * `NWSHP`'s `NW3` CLC for a full bubble and `NWL3` SEC for a ship that was made. That answer is
+   * real now rather than a seam's constant, which is the whole point of the split.
+   */
+  [[nodiscard]] bool PerformDrop(Universe& _universe, const Drop& _drop) noexcept;
 
   /*
    * 6502: KY12 to KY20 -- the flight keys the loop reads that `DOKEY` does not.
@@ -223,56 +264,46 @@ namespace Elite
   inline constexpr std::size_t KEY_DOCKING_COMPUTER = 44; ///< 6502: KY19 -- "C"
   inline constexpr std::size_t KEY_CANCEL_DOCKING = 23;   ///< 6502: KY20 -- "P"
 
-  /// 6502: the sound effects the flight loop asks for, from the block at the top of the source.
-  inline constexpr std::uint8_t SOUND_PULSE_LASER = 0;     ///< 6502: sfxplas
-  inline constexpr std::uint8_t SOUND_BEAM_LASER = 10;     ///< 6502: sfxblas
-  inline constexpr std::uint8_t SOUND_MILITARY_LASER = 11; ///< 6502: sfxalas
-  inline constexpr std::uint8_t SOUND_MINING_LASER = 12;   ///< 6502: sfxmlas
-  inline constexpr std::uint8_t SOUND_ENERGY_BOMB = 13;    ///< 6502: sfxbomb
-  inline constexpr std::uint8_t SOUND_MISSILE = 4;         ///< 6502: sfxwhosh
-
   /// 6502: the bitmap mode the energy bomb switches the upper half of the screen to.
   inline constexpr std::uint8_t BOMB_BITMAP_MODE = 0xD0;
-
-  /// 6502: Mlas and Armlas -- the two laser powers the sound picker tests for by name. The third
-  /// test is `BMI`, on bit 7, which is what makes a beam laser a beam laser.
-  inline constexpr std::uint8_t LASER_POWER_MINING = 50;
-  inline constexpr std::uint8_t LASER_POWER_MILITARY = 151;
 
   /*
    * What the flight loop reaches that phase 4 owns, plus the sound.
    *
-   * It IS a `DashboardEffects`, because part 3 starts the E.C.M. through `ECBLB2` and part 16 stops
-   * it through `ECMOF`, and both of those already had a seam for the SID. And it IS a
-   * `SpawnChildEffects`, because part 11's `SPIN` and `SPIN2` drop wreckage through `SFS1`.
+   * It WAS a `DashboardEffects` and is not since M3-b-2a: the E.C.M.'s two calls and the frame's
+   * sounds are `SoundEffects.cpp`'s routines over `Universe::sound`. It WAS a `SpawnChildEffects`
+   * as well, because part 11's `SPIN` and `SPIN2` dropped wreckage through `SFS1`; M4-a-1 took that
+   * away, and the flight loop reaches nothing of phase 4's through a seam any more.
    */
-  class FlightLoopEffects : public DashboardEffects, public SpawnChildEffects
-  {
-  public:
-    /// 6502: JSR startbd and JSR stopbd -- the docking music, which is a second interrupt handler.
-    virtual void StartDockingMusic() = 0;
-    virtual void StopDockingMusic() = 0;
-
-    /// 6502: JSR FRS1 with X = the type -- phase 4's "put a ship right in front of us". The carry
-    /// says whether it fitted, and `FRMIS` gives up when it did not.
-    [[nodiscard]] virtual bool SpawnAhead(ShipType _type) = 0;
-
-    /*
-     * 6502: JSR ANGRY with A = the type and INF pointing at the ship -- "that ship has noticed".
-     *
-     * THE SLOT IS AN ARGUMENT BECAUSE THE TWO CALLERS POINT `INF` AT DIFFERENT SHIPS. Part 3 fires a
-     * missile and angers its TARGET: `LDX MSTG / JSR GINF` first, so INF is the locked ship's block.
-     * Part 11 angers the ship OUR LASER has just hit, and there INF is the ship the loop is on --
-     * `XSAV`'s slot -- with nothing locked at all in the common case. A seam that took only the type
-     * had to guess which, guessed `MSTG`, and read block 255 the first time a laser landed without
-     * a missile lock (§6.142).
-     *
-     * RETURNS THE CARRY `ANGRY` EXITS WITH, because part 11 falls from it into `JSR LL9` and a ship
-     * the laser has just killed seeds its explosion cloud on that flag (§6.157). `Elite::Anger` says
-     * what the flag is; an implementation that does not run the routine answers for a trap.
-     */
-    virtual bool Anger(std::uint8_t _slot, ShipType _type) = 0;
-  };
+  /*
+   * `FlightLoopEffects` WAS HERE AND IS NOT ANY MORE (M3-b-2b).
+   *
+   * It was `SpawnChildEffects` plus the docking music's pair, and with the pair gone there was
+   * nothing of its own left to declare -- so `Ports::loop` became a `SpawnChildEffects&` and the
+   * derived class was not needed to hold it. M4-a-1 removed the last of it, and `Ports` is ten
+   * members rather than eleven.
+   *
+   * `StartDockingMusic` was `JSR startbd` and `StopDockingMusic` was `JSR stopbd`, and both are
+   * `Music.cpp`'s routines over `Universe::music`, writing the chip through `Ports::sid`. `stopbd`
+   * READS A BYTE THE SEAM COULD NOT SEE: `BIT MULIE / BMI itsoff`, the title screen's bracket
+   * around its `RESET`, which is `Status::titleReset` and is why the call takes it. The executable
+   * was passing it in from the universe it happened to hold; the library passes it from the
+   * universe it is given.
+   *
+   * `FRS1` AND `ANGRY` WERE SEAMS HERE AND ARE NOT ANY MORE (M3-b-1d).
+   *
+   * `SpawnAhead` was `JSR FRS1` with X = the type -- "put a ship right in front of us" -- and
+   * `Anger` was `JSR ANGRY` with the ship's slot and type. Slice 4a-b built both, in `Spawn.cpp`
+   * and `Tactics.cpp`, and the flight loop calls them: §6.73's rule again.
+   *
+   * TWO THINGS THEY TAUGHT SURVIVE THEM. `ANGRY`'s SLOT had to be an argument because the two
+   * callers point `INF` at different ships -- part 3 angers the missile's TARGET (`LDX MSTG /
+   * JSR GINF`) and part 11 the ship OUR LASER hit (`XSAV`'s) -- and the seam that took only the
+   * type guessed `MSTG` and read block 255 the first time a laser landed without a lock (§6.142).
+   * And `ANGRY`'s EXIT CARRY is part 11's, because it falls from there into `JSR LL9` and a ship
+   * the laser has just killed seeds its explosion cloud on that flag (§6.157). `Elite::Anger`
+   * takes the slot and answers the carry; the seam only ever forwarded to it.
+   */
 
   /*
    * `NWSPS` WAS A SEAM HERE AND IS NOT ANY MORE.
@@ -332,33 +363,8 @@ namespace Elite
    */
   void FireMissile(Universe& _universe, Ports& _ports) noexcept;
 
-  /*
-   * 6502: what `KILLSHP` and `SOS1` call, wired to the routines the port already has.
-   *
-   * `SpawnEffects` was a seam when `Spawn.cpp` was written, because the dashboard and the message
-   * printer did not exist yet. All four of its calls are ported now, so anything holding a
-   * `FlightLoop` can hand the real thing over instead of counting calls it could make for real
-   * (§6.73's rule, applied forwards). It is here rather than in a .cpp because both the flight
-   * loop and the launch need it.
-   */
-  class LoopSpawnEffects final : public SpawnEffects
-  {
-  public:
-    LoopSpawnEffects(Universe& _universe, Ports& _ports) noexcept
-      : m_universe(_universe),
-        m_ports(_ports)
-    {
-    }
-
-    void AbortMissile(std::uint8_t _colour) override;
-    void ShowMessage(std::uint8_t _token) override;
-    void ToggleStationIndicator() override;
-    void ResetMissileIndicators() override;
-
-  private:
-    Universe& m_universe;
-    Ports& m_ports;
-  };
+  // `LoopSpawnEffects` was the adapter that answered `SpawnEffects` out of a universe and its
+  // ports. It went with the seam in M3-b-1: the spawn routines take the two objects it held.
 
   [[nodiscard]] LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept;
 
@@ -414,6 +420,6 @@ namespace Elite
    * The joystick half of `TT17afterall` is not ported: `JSTK` is zero for a keyboard player from
    * the moment the title screen is dismissed with a key, and this build has no joystick.
    */
-  [[nodiscard]] CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, ControlEffects& _effects, std::uint8_t _view) noexcept;
+  [[nodiscard]] CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept;
 
 } // namespace Elite

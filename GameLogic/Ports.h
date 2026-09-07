@@ -6,16 +6,27 @@ namespace Elite
   /*
    * Everything the library needs that is not a byte of `Universe` (Modernize.md §4.4, slice M3-a).
    *
-   * When the state came out of `FlightScreen`, `FlightLoop`, `MissionScreen` and `TitleScreen` this
-   * is what was left: the text machinery, which cannot live in a universe that has to copy because
-   * two of its objects take a seam, and the seven interfaces the platform answers. Ten references
-   * where the four structs held forty-nine.
+   * When the state came out of the six argument-list structs this is what was left: the text
+   * machinery, which cannot live in a universe that has to copy because two of its objects take a
+   * seam, and the interfaces the platform answers. Thirteen references where the six structs held
+   * sixty-six.
    *
    * IT IS A STRUCT OF REFERENCES FOR ONE SLICE. §4.5's four ports -- `Presenter`, `Keyboard`,
-   * `SoundSink`, `SaveStore` -- are M3-b's, and most of what the seven below carry is not a port at
+   * `SoundSink`, `SaveStore` -- are M3-b's, and most of what the rest below carry is not a port at
    * all but a call into a routine that now exists. Collapsing them here would be two patterns in
    * one slice (rule 8), so this is the shape that lets M3-a change every signature once and M3-b
    * change what is behind them without touching a signature again.
+   *
+   * THE COUNT DOES NOT FALL WHILE THE PHASE RUNS AND IT CANNOT. Each of the four ports has to be
+   * here before the seams it replaces can go, so a slice that lands one and removes none would put
+   * `aggregate-refs` ABOVE the ceiling M3-a-3 recorded -- which rule 5 forbids outright, and rightly:
+   * a ratchet that can be argued past is not one. So each of M3-b's remaining slices lands its port
+   * in the same commit as at least one removal: thirteen before M3-b-2b and thirteen after, TWELVE
+   * after M3-b-3a (which removed `SightEffects` and landed no port), twelve after M3-b-3b, where
+   * `Presenter` spent that credit and `TradeScreenEffects` went, and ELEVEN after M3-b-3d, which
+   * landed `Keyboard` over the two seams it replaces (§8, 2026-09-06). TEN after M4-a-1, which
+   * took `SFS1` out of it, NINE after M6-0-a-3, which took `LL9`'s two tail jumps out, and EIGHT
+   * after M6-0-h-2, which took the title screen out.
    *
    * THE DECLARATIONS BELOW ARE FORWARD ONES ON PURPOSE. A reference member needs no complete type,
    * and this header including `ViewChange.h` while `ViewChange.h`'s routines take a `Ports&` is a
@@ -25,38 +36,93 @@ namespace Elite
   class TextSink;
   class TokenPrinter;
   class CharacterPrinter;
-  class SightEffects;
-  class ViewEffects;
-  class ShipEffects;
-  class ShipDrawEffects;
-  class FlightLoopEffects;
   class ExtendedTokenPrinter;
-  class StartUpEffects;
+  class Keyboard;
+  class Presenter;
+  class CommanderStore;
+
+  struct SidWriteLog; // SoundEffects.h -- a plain aggregate, so this cannot be a class declaration
 
   struct Ports
   {
     // ---- the text machinery, bound to the universe's own bytes -------------------------------
-    TokenPrinter& printer;       ///< 6502: TT27 and the routines it falls into
+    TokenPrinter& printer;        ///< 6502: TT27 and the routines it falls into
     CharacterPrinter& characters; ///< 6502: CHPR, and `DTW1` to `DTW8` are its own state
-    TextSink& sink;              ///< what `printer` and `characters` put characters through
+    TextSink& sink;               ///< what `printer` and `characters` put characters through
 
     // ---- the seams the platform answers ------------------------------------------------------
-    SightEffects& sight;      ///< 6502: SIGHT's sprite pokes
-    ViewEffects& view;        ///< 6502: what a screen change reaches outside the library
-    ShipEffects& tactics;     ///< 6502: JSR TACTICS, from inside `MVEIT`
-    ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
-    FlightLoopEffects& loop;  ///< 6502: the frame's sounds, spawns and music
 
     /*
-     * The two the title screen and the briefings need and a flight frame does not.
+     * `ShipDrawEffects& drawing` WAS HERE AND IS NOT ANY MORE (M6-0-a-3), which takes this struct
+     * to NINE. It was `LL9`'s two tail jumps -- 6502: LL25 and LL14 -- and every implementer
+     * answered them with the same two library calls; `DrawShip` makes those calls itself now that
+     * the oracle can run `DOEXP` without its sprite writes landing on `XX21` (`ShipDraw.h`).
+     *
+     * `SpawnChildEffects& loop` WAS HERE AND IS NOT ANY MORE (M4-a-1), which took this struct to
+     * TEN. It was `SFS1`, and the typed stage result it was waiting on is `Elite::Drop`: `SPIN` and
+     * `SPIN2` answer what to drop and `PerformDrop` calls `Elite::SpawnChildShip` for real, so the
+     * suite compares an answer instead of a trap's fixed carry (`FlightLoop.h`).
+     */
+
+    /*
+     * 6502: SID -- the chip, as the game side of the code writes it (M3-b-2b).
+     *
+     * THE FIRST OF SECTION 4.5's FOUR TO ARRIVE, and it is a `SidWriteLog` rather than an interface
+     * because that is what the port has meant by a sound sink since slice 5a: the library runs
+     * `NOISE` and the music player itself and emits REGISTER WRITES IN ORDER, and the order is the
+     * observable (`SoundEffects.h`). A method per register would be the same thing with a vtable.
+     *
+     * It is the GAME side's log and not the interrupt's. `SOINT` and the music player's own tick
+     * are called by the executable once a frame with a log of its own; what comes through here is
+     * the handful of writes the game makes between interrupts -- `stopat` running the chip down and
+     * `BDENTRY` zeroing it -- which the executable applies ahead of the next interrupt's, because
+     * that is the order they happen in.
+     *
+     * It is here and not in `Universe` because it is not state: nothing in the library reads it
+     * back, it is drained and cleared every frame, and the M0-c replay hashes the universe.
+     *
+     * SINCE M5-e-1 THE LOG IS `Game`'s (`Game::Sounds()`) and this reference binds to it. Until then
+     * the executable owned it and the game wrote into the executable's buffer -- the one place the
+     * app reached into library state rather than being handed a value.
+     */
+    SidWriteLog& sid;
+
+    /*
+     * The one the title screen and the briefings need and a flight frame does not.
      *
      * `ExtendedTokenPrinter` is text machinery like the three above -- it is here rather than in
-     * `Universe` because it takes the control codes as a `ControlCodes*` -- and `StartUpEffects`
-     * is the seam `TITLE` and `BRIEF` wait and scan through. They joined when `TitleScreen` and
-     * `MissionScreen` went, because both of those held a `FlightLoop&` and could not outlive it.
+     * `Universe` because it takes the control codes as a `ControlCodes*`. It joined when
+     * `TitleScreen` and `MissionScreen` went, because both of those held a `FlightLoop&` and could
+     * not outlive it. `StartUpEffects& start` WAS BESIDE IT AND IS NOT ANY MORE (M6-0-h-2): it was
+     * the seam `TITLE` and `BRIEF` waited and scanned through, and every method it ever had is a
+     * library call now (`StartUp.h`).
      */
     ExtendedTokenPrinter& tokens;
-    StartUpEffects& start;
+
+    /*
+     * 6502: DELAY -- §4.5's `Presenter`, and the second of the four to arrive (M3-b-3b).
+     *
+     * It is here rather than beside `SidWriteLog` because both halves of the loop wait: the docked
+     * screens pause after a beep and the title sequence between its frames. `Presenter.h` has why
+     * this one is a port where `TT66`, `CLYNS`, `TRADEMODE` and `dn2` were not.
+     */
+    Presenter& present;
+
+    /*
+     * The four the DOCKED screens need and a flight frame does not (M3-a-3).
+     *
+     * §4.5's `Keyboard`, the third of the four to arrive (M3-b-3d), and `SaveStore` under its old
+     * name. `keyboard` answers three questions and no more: is this key down, what is the next one
+     * (`TT217`, which BLOCKS -- ADR-004 §1's open problem), and empty the buffer (`FLKB`). `RDKEY`
+     * itself is `Elite::ScanKeyboard` and runs in the library over the first of those.
+     *
+     * `keys` AND `entry` WERE HERE UNTIL M3-b-3d and `trade` until M3-b-3b. `KeySource` was one
+     * method of this port under another name; `LineEntryEffects` was `DELAY` and `FLKB`, which are
+     * `Presenter`'s and this one's; and `TradeScreenEffects` was four calls into routines the
+     * library already had.
+     */
+    Keyboard& keyboard;
+    CommanderStore& store;
   };
 
 } // namespace Elite

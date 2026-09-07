@@ -9,14 +9,14 @@
   ],
   "ceilings": {
     "register-params": {
-      "ceiling": 16,
+      "ceiling": 13,
       "slack": 0,
-      "slice": "M2-c-3: LL9's frame, the planet, the sun and the explosion take values"
+      "slice": "M3-b-3a: DrawLaserSights takes the state, not a _view plus a seam"
     },
     "workspace-params": {
-      "ceiling": 46,
+      "ceiling": 43,
       "slack": 0,
-      "slice": "M2-c-3: MathWorkspace is Q and K2's bottom byte, and no drawing routine takes the others"
+      "slice": "M6-0-a-3: DrawShip takes Universe& -- its eight workspaces were the universe's"
     },
     "ship-literal-sites": {
       "ceiling": 0,
@@ -29,49 +29,54 @@
       "slice": "M1-a"
     },
     "aggregate-refs": {
-      "ceiling": 39,
+      "ceiling": 8,
       "slack": 0,
-      "slice": "M3-a-2: FlightScreen, FlightLoop, MissionScreen and TitleScreen go; Ports is ten where they were forty-nine"
+      "slice": "M6-0-h-2: StartUpEffects leaves Ports, which is eight references"
     },
     "main-lines": {
-      "ceiling": 1219,
+      "ceiling": 250,
       "slack": 0,
-      "slice": "M2-c-1: Main.cpp holds the number printer's width byte instead of its workspace"
+      "slice": "M6-0-h-3: FlightSession is no longer lent the ports"
     },
     "outpost-elite-names": {
-      "ceiling": 205,
+      "ceiling": 61,
       "slack": 0,
-      "slice": "M3-a-2: four argument-list structs go, so the app names four fewer types"
+      "slice": "M6-0-h-3: FlightSession stops answering DOCKIT"
     },
     "effects-seams": {
-      "ceiling": 22,
+      "ceiling": 5,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M6-0-h-3: ControlEffects goes -- DOKEY calls DOCKIT itself; five is the four ports' three and the text system's two"
     },
     "out-params": {
-      "ceiling": 18,
+      "ceiling": 0,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M5-a-3: P10 at zero -- M5-a's acceptance"
     },
     "carry-params": {
-      "ceiling": 32,
+      "ceiling": 30,
       "slack": 0,
-      "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is §4.3.1)"
+      "slice": "M2-d: SPIN2 hands its caller's carry back, so it takes one (the audit is \u00a74.3.1)"
     },
     "mutants": {
-      "ceiling": 72,
+      "ceiling": 95,
       "slack": 0,
-      "slice": "death-sequence fix 2026-09-06 (plan 6.157): the cloud-seed unit, seven mutants"
+      "slice": "M6-0-g: six new units on the files that had none -- rng, arith, shipmove, planetdraw, spawn, flight -- twenty-three mutants"
+    },
+    "mutant-files": {
+      "ceiling": 16,
+      "slack": 0,
+      "slice": "M6-0-g: the floor is fourteen .cpp files, and Commander.h and Missions.h carry the other two"
     },
     "inventory-stale-files": {
-      "ceiling": 21,
+      "ceiling": 0,
       "slack": 0,
-      "slice": "M0-a"
+      "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 3937,
+      "ceiling": 4143,
       "slack": 0,
-      "slice": "M3-a-2: the markers on the reference members that named a byte Universe.h already names"
+      "slice": "M6-0-e: NLIN, TRADEMODE and DK4's store carry their labels as routines of their own"
     },
     "oracle-test-files": {
       "ceiling": 48,

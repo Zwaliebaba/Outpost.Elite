@@ -148,8 +148,9 @@ namespace GameLogicTests
 
                 Cpu6502 cpu = oracle.Fresh();
                 // `TT114` is the chart's own redraw, which `TT18` JUMPS to rather than calls -- the
-                // port hands it back as an outcome for the caller, so here it is a trap.
-                for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY", "TT114"})
+                // port hands it back as an outcome for the caller, so here it is a trap. `WSCAN`
+                // and `DELAY` wait for the raster and are the platform's (ADR-005 section 3; M6-0-e).
+                for (const char* seam : {"MESS", "WSCAN", "DELAY", "TT114"})
                 {
                   std::uint16_t address = 0;
                   if (oracle.TryLabel(seam, address))
@@ -160,7 +161,7 @@ namespace GameLogicTests
 
               LoopUniverse universe;
               Seed(universe.universe, 5u);
-              universe.universe.commander.fuel = fuel;
+              universe.universe.commander.fuel.tenths = fuel;
               universe.universe.view = view;
               universe.universe.status.midJump = 0u;
 
@@ -216,14 +217,14 @@ namespace GameLogicTests
               Elite::MarketState market;
 
               const Elite::JumpResult result =
-                Elite::PerformJump(universe.universe, ports, selected, jump, described, market, universe.effects, nullptr,
+                Elite::PerformJump(universe.universe, ports, selected, jump, described, market,
                                    cpu.memory[at.qq9], cpu.memory[at.qq10], galaxySeeds, controlHeld, patg);
 
               const std::wstring context =
                 WidenText("TT18 seed " + std::to_string(seed[0]) + " fuel " + std::to_string(fuel) + " dist " + std::to_string(distance)
                           + " view " + std::to_string(view) + " ctrl " + std::to_string(controlHeld) + " patg " + std::to_string(patg));
 
-              Assert::AreEqual(cpu.memory[at.qq14], universe.universe.commander.fuel, (context + L": QQ14").c_str());
+              Assert::AreEqual(cpu.memory[at.qq14], universe.universe.commander.fuel.tenths, (context + L": QQ14").c_str());
               Assert::AreEqual(cpu.memory[where.mj], universe.universe.status.midJump, (context + L": MJ").c_str());
               Assert::AreEqual(cpu.memory[at.qq11], universe.universe.view, (context + L": QQ11").c_str());
               for (std::size_t byte = 0; byte < 4u; ++byte)
@@ -309,7 +310,7 @@ namespace GameLogicTests
           for (const std::uint8_t galaxy : {std::uint8_t{0}, std::uint8_t{3}, std::uint8_t{7}})
           {
             Cpu6502 cpu = oracle.Fresh();
-            for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY"})
+            for (const char* seam : {"MESS", "WSCAN", "DELAY"})
             {
               std::uint16_t address = 0;
               if (oracle.TryLabel(seam, address))
@@ -351,7 +352,7 @@ namespace GameLogicTests
             Elite::SystemSeeds selected{};
             Elite::JumpState jump;
 
-            Elite::GalacticJump(universe.universe, ports, galaxySeeds, selected, jump, chart, nullptr);
+            Elite::GalacticJump(universe.universe, ports, galaxySeeds, selected, jump, chart);
 
             const std::wstring context = WidenText("Ghy seed " + std::to_string(seedIndex) + (fitted != 0u ? " fitted" : " none") +
                                                    " galaxy " + std::to_string(galaxy));
@@ -429,7 +430,7 @@ namespace GameLogicTests
           // `WSCAN` waits on the VIC-II raster, which never advances in an interpreter -- it is a
           // hardware wait and not code, so it is trapped like the sound seams (ChartTests does the
           // same). Without it `LL164`'s tunnel spins for ever on the first circle.
-          for (const char* seam : {"NOISE", "MESS", "NOISE2", "WSCAN", "DELAY"})
+          for (const char* seam : {"MESS", "WSCAN", "DELAY"})
           {
             std::uint16_t address = 0;
             if (oracle.TryLabel(seam, address))
@@ -447,7 +448,7 @@ namespace GameLogicTests
 
           Elite::Ports ports = universe.Ports();
 
-          Elite::EnterWitchspace(universe.universe, ports, universe.universe.commander, universe.effects, nullptr);
+          Elite::EnterWitchspace(universe.universe, ports, universe.universe.commander);
 
           const std::wstring context = WidenText("MJP seed " + std::to_string(seedIndex) + " QQ1 " + std::to_string(systemY));
 
@@ -531,18 +532,23 @@ namespace GameLogicTests
               cpu.memory[static_cast<std::uint16_t>(at.rand + byte)] = seed[byte];
             }
 
-            Elite::Rng rng;
+            // 6502: EV, QQ2, the commander and RAND -- all the universe's, and `hyp1` takes the
+            // universe since M5-a-3; the fixture names the pieces it seeds rather than building
+            // four separate objects the routine was handed one by one.
+            Elite::Universe arriving;
+            Elite::Rng& rng = arriving.rng;
             rng.SetState(seed);
 
             const std::uint16_t entry = static_cast<std::uint16_t>(at.hyp1 + (skipFind != 0u ? 3u : 0u));
             const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 400'000);
             Assert::IsTrue(run.completed, L"hyp1 returned");
 
-            Elite::Commander commander{};
-            Elite::CurrentSystem current;
+            Elite::Commander& commander = arriving.commander;
+            Elite::CurrentSystem& current = arriving.current;
             Elite::SystemSeeds selected{};
             Elite::MarketState market;
-            std::uint8_t explosions = 0x7Fu;
+            std::uint8_t& explosions = arriving.explosions;
+            explosions = 0x7Fu;
 
             /*
              * `QQ3` to `QQ5` -- what the last `TT111` left, and NOT the system `QQ2` is about to
@@ -555,8 +561,7 @@ namespace GameLogicTests
             described.government = cpu.memory[at.qq4];
             described.techLevel = cpu.memory[at.qq5];
 
-            Elite::ArriveAtSystem(commander, current, selected, target, described, market, rng, explosions, where[0], where[1], galaxy,
-                                  skipFind == 0u);
+            Elite::ArriveAtSystem(arriving, selected, target, described, market, where[0], where[1], galaxy, skipFind == 0u);
 
             const std::wstring context = WidenText("hyp1" + std::string(skipFind != 0u ? "+3" : "") + " at " + std::to_string(where[0]) +
                                                    "," + std::to_string(where[1]) + " seed " + std::to_string(seed[0]));
@@ -644,7 +649,7 @@ namespace GameLogicTests
       for (const Case& one : CASES)
       {
         Cpu6502 cpu = oracle.Fresh();
-        for (const char* seam : {"NOISE", "NOISE2", "MESS", "WSCAN", "DELAY", "BELL"})
+        for (const char* seam : {"MESS", "WSCAN", "DELAY", "BELL"})
         {
           std::uint16_t address = 0;
           if (oracle.TryLabel(seam, address))
@@ -660,7 +665,7 @@ namespace GameLogicTests
         universe.universe.commander.tribbles.hi = one.tribbleHigh;
         universe.universe.commander.legalStatus = one.legal;
         universe.universe.commander.escapePod = 0xFFu;
-        universe.universe.commander.fuel = one.fuel;
+        universe.universe.commander.fuel.tenths = one.fuel;
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
           universe.universe.commander.cargoHold[item] = static_cast<std::uint8_t>(3u + item);
@@ -682,8 +687,9 @@ namespace GameLogicTests
 
         Elite::Ports ports = universe.Ports();
 
-        std::uint8_t fuel = one.fuel;
-        Elite::AbandonShip(universe.universe, ports, fuel);
+        // 6502: QQ14 -- `ESCAPE` writes the commander's own fuel byte, and it is the universe's
+        // since M3-a; the local this used to pass meant the comparison below saw an untouched one.
+        Elite::AbandonShip(universe.universe, ports);
 
         const std::wstring context = WidenText("ESCAPE seed " + std::to_string(one.seed) + " trib " + std::to_string(one.tribbleHigh) +
                                                "/" + std::to_string(one.tribbleLow));
@@ -703,7 +709,7 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tribble + 1u)],
                          universe.universe.commander.tribbles.hi,
                          (context + L": TRIBBLE+1").c_str());
-        Assert::AreEqual(cpu.memory[qq14], fuel, (context + L": QQ14").c_str());
+        Assert::AreEqual(cpu.memory[qq14], universe.universe.commander.fuel.tenths, (context + L": QQ14").c_str());
 
         outcomes.insert(std::to_string(universe.universe.commander.tribbles.lo) + "/" +
                         std::to_string(universe.universe.bubble.slots[0]));

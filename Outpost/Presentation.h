@@ -27,17 +27,22 @@ namespace Outpost
    * the game: the C64 names a colour by its index and the hardware decides what that looks like,
    * so this table is the one part of the picture the port has to supply rather than port.
    *
+   * WHICH IS WHY THE STRUCT IS `Rgb` AND NOT `Colour` (slice 5a). A colour in this game is the
+   * INDEX -- `Elite::Colour`, in the library, where the chip's four bits are -- and this is what a
+   * modern display has to be told to make that index visible. One name for each and neither
+   * borrowing the other's.
+   *
    * The order is the VIC-II's own, which is why yellow is 7 and orange is 8 rather than anything
    * an artist would choose.
    */
-  struct Colour
+  struct Rgb
   {
     std::uint8_t red = 0;
     std::uint8_t green = 0;
     std::uint8_t blue = 0;
   };
 
-  inline constexpr std::array<Colour, 16> C64_PALETTE = {{
+  inline constexpr std::array<Rgb, 16> C64_PALETTE = {{
     {0x00, 0x00, 0x00}, // 0  black
     {0xFF, 0xFF, 0xFF}, // 1  white
     {0x68, 0x37, 0x2B}, // 2  red

@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->389 tests, oracle present), all <!--count:checks-->thirteen repository checks pass,
+(<!--count:tests-->408 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -48,7 +48,7 @@ Six moves, in order, each a phase with slices and a fidelity gate:
 | **M3** | **Ownership.** `Elite::Universe` owns every byte of game state; `Elite::Game` owns the outer loops, the dispatch and the mode machine; the twenty-two seams collapse to four platform ports; `Outpost.exe` becomes a presenter. | The whole program is deterministic, hashable and driven from a test — which is what ADR-003 §3 and ADR-004 §1 said in September and never got. |
 | **M4** | **Control flow.** The flight frame, the ship renderer, the AI and the docking computer become pipelines of named stages with typed intermediate results; implicit state machines become explicit ones. | The three routines over five hundred lines each become readable in one sitting. |
 | **M5** | **Polish and the ledger.** Strong types for the remaining bytes, `constexpr` where the data allows, the twenty-one stale file names in `Source-Inventory.md`, and the ADRs that record the decisions. | The corpus describes the tree again. |
-| **M6** | **Detach.** The oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
+| **M6** | **Detach — behind the M6-0 gate, which closed 2026-09-07.** Eight things the oracle could pin and nothing would pin afterwards were closed first (§6 Phase M6, §8); then the oracle's answers are recorded as checked-in fixtures and the live oracle is retired; the identifiers named for 6502 labels, the assembly quoted in comments, the `// 6502:` markers and the ledger go; `MasterFile/`, `Upstream/`, the interpreter and the tools that read the original leave the tree. | A C++ program that builds, tests and reads on its own, with the original's data as its only inheritance (owner ruling, §1). |
 
 Four rules hold across all of it and are restated in §5: **the oracle decides, until M6 records
 it**; **a byte's width and wraparound never change**; **a mutant is re-anchored, never dropped**;
@@ -149,7 +149,7 @@ aggregates, which is the shape M4 changes and M3 makes possible.
 |---|---|---|---|---|
 | `BeginFlightFrame` | `M%` to `MA3` (parts 1–3) | Seeds `RAND` from the planet's x, moves the Trumbles, reads the key logger into roll/pitch/speed, fires lasers, missiles, the E.C.M., the energy bomb, the escape pod, the docking computer | keys, controls, commander, status | `FlightState` (alpha/beta/delta and their sign/magnitude copies), `RAND`, sounds |
 | `MoveEveryShip` | `MA3` to `MAL1` (parts 4–12) and `KS1` | Per occupied slot: copy the block into `INWK`, look up the blueprint, let the bomb kill it, `MVEIT` (motion, tactics one pass in eight, scanner blip), copy back, contact test, scooping, docking, collision damage, `LL9`, laser hit, kill or write-back | bubble, `INWK`, blueprint, status, commander | the same, plus the canvas, the line heap, the scanner, sounds |
-| `EndFlightFrame` | `MA18` to `STARS` (parts 13–16) | Shield and bank recharge every eighth frame, the sixteen-step housekeeping cycle (energy warning, docking-computer reminder, cabin temperature, altitude, fuel scooping, the planet and sun through `PLANET`), then the stardust | status, bubble slots 0 and 1 | status, canvas, `FlightState::delt4` |
+| `EndFlightFrame` | `MA18` to `STARS` (parts 13–16) | Shield and bank recharge every eighth frame, the thirty-two-step housekeeping cycle (energy warning, docking-computer reminder, cabin temperature, altitude, fuel scooping, the planet and sun through `PLANET`), then the stardust | status, bubble slots 0 and 1 | status, canvas, `FlightState::delt4` |
 
 The loop over slots is a `for (;;)` with a hand-advanced index because `KILLSHP` shuffles the slots
 down and the slot that took the dead one's place is processed next. Three things leave the frame
@@ -236,12 +236,27 @@ Three instruments are in place and every slice below leans on them:
 - **The whole-bitmap comparisons**: `TITLE`, `TT110`, the dashboard, the planet and the stardust
   suites compare the whole `SCBASE` region byte for byte. They see composition where the per-routine
   tests see routines.
-- **The mutants**: <!--count:mutants-->72 recorded edits in nine files, each anchored to a line of
-  source that must match exactly once, each expected to be caught. `mutate.py --check` runs in CI;
-  the run itself works through the portable runner on Linux (`--runner portable`).
+- **The mutants**: <!--count:mutants-->95 recorded edits in <!--count:mutant-files-->sixteen files,
+  each anchored to a line of source that must match exactly once, each expected to be caught or
+  recorded as an equivalent with its proof. `mutate.py --check` runs in CI; the run itself works
+  through the portable runner on Linux (`--runner portable`). **The floor (M6-0-g)**: `mutants.json`
+  names fourteen `.cpp` files that must each carry a mutant the suite catches -- the arithmetic
+  kernel and the generator, the flight model (`ShipMove`, `Spawn`, `Flight`, `FlightLoop`,
+  `Tactics`), the drawing that composes (`PlanetDraw`, `ShipDraw`, `Canvas`, `Raster`) and the
+  three state machines with their own rows (`Hyperspace`, `Missions`, `Trumbles`) -- because in
+  each of them a slip is invisible to every per-routine comparison except the one on that file.
+  `mutate.py --check` refuses a floor file whose only mutants are survivors or equivalents. A
+  ported file that composes what these do (`GameLoop`, `Controls`, `Docking`, the screens) is
+  covered by the whole-frame comparisons and the replay and is not on the floor; the floor grows
+  when a file joins that list, never shrinks.
 
-What nothing pins: the outer loops and the mode machine in `Main.cpp` (Windows only, no test); the
-presenter (R5, by design); timing (ADR-005 §3, by design). M0 closes the first of those.
+What nothing pins: the presenter (R5, by design) and timing (ADR-005 §3, by design). The things
+M6-0 named — a whole frame with an explosion in it, the escape pod and the death sequence in
+composition, eight control codes, and seven routines that were only ever trapped — were on this
+list until 2026-09-07, when the gate closed (§6 Phase M6, §8); the outer loops and the mode machine
+came off it earlier, when M3-c and M4-d moved them into `Game`, which the replay drives. What the
+coverage instrument still names as unreached — `ISDK`, `MTT4`, music commands 6 and 11 — is M6-a's
+first work.
 
 ---
 
@@ -252,7 +267,7 @@ counted. `tools/check_modernize.py` counts them and **fails the build if any cou
 ratchet is what stops a slice reintroducing what another slice removed (§5, rule 5). The recorded
 ceilings are in `tools/modernize_ratchet.json` and are lowered as slices land.
 
-**P1 — The register-shaped calling convention.** <!--count:register-params-->16 parameters in
+**P1 — The register-shaped calling convention.** <!--count:register-params-->13 parameters in
 `GameLogic/*.h` are named `_a`, `_x` or `_y` and typed `std::uint8_t`: the routine takes what the
 6502 routine took in that register, and its meaning is in the comment. Twelve result structs carry
 a field named `a` or `carry` for the same reason (`ProjectResult::a`, `ScreenOffset::a`). Example:
@@ -267,8 +282,8 @@ left, and both outlive their writer on purpose (§4.3). `DrawWorkspace`, `Geomet
 `Projection` and `K3Block` are the same pattern for other zero-page runs. M2-c emptied most of
 them: `NumberWorkspace` went with M2-c-1, `DrawWorkspace` is the dashboard's screen cursor since
 M2-c-2, `MathWorkspace` is `Q` and `K2`'s bottom byte since M2-c-3, and `GeometryWorkspace` is
-`LL9`'s four stage results. <!--count:workspace-params-->46 parameters in the headers are still one
-of them by reference. The pattern is faithful and it is also the reason no signature says what a function
+`LL9`'s four stage results. <!--count:workspace-params-->43 parameters in the headers are still one
+of them by reference (`DrawShip` handed its eight back to the universe in M6-0-a-3). The pattern is faithful and it is also the reason no signature says what a function
 consumes or produces.
 
 **P3 — Flat byte blobs addressed by number.** `ShipBlock` is `std::array<std::uint8_t, 37>` with
@@ -291,37 +306,59 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->39 reference members,
-and they were seventy-eight until M3-a-2. `FlightScreen`, `FlightLoop`, `MissionScreen` and
-`TitleScreen` held forty-nine of them and are gone: every routine takes `(Universe&, Ports&)`, and
-`Ports` is ten. What is left is the docked half's three — `TradeScreen` (nine), `SaveScreen` (nine)
-and `GameStart` (eleven) — which M3-a's second commit and M3-c take. `ViewChange.h` said it plainly
-while they existed: "the struct is the argument list".
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->8 reference members,
+and they were seventy-eight before M3-a. All seven argument-list structs are gone — `FlightScreen`,
+`FlightLoop`, `MissionScreen` and `TitleScreen` in M3-a-2, `TradeScreen`, `SaveScreen`, `GameStart`
+and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The eight that
+remain ARE `Ports`**, which is the one struct §4.5 exists to collapse: M3-b replaces its interfaces
+with four ports without touching a signature again, and three of the four have landed; M4-a-1 took
+`SFS1` out, M6-0-a-3 took `LL9`'s two tail jumps out and M6-0-h-2 the title screen. `ViewChange.h` said it plainly while
+the rest existed: "the struct is the argument list".
 
-**P6 — Game state and the top of the program in the executable.** §2.6. `Outpost/Main.cpp` is
-<!--count:main-lines-->1,219 lines, most of them the dispatch, the exits and the two loops. Plan
-§2.1's `class Game { Reset(); Step(InputFrame); Frame(); Sounds(); StateHash(); }` was the seam
-ADR-004 §1 drew "from day one" and it does not exist; `check_outpost.py` exists precisely because
-the executable reaches <!--count:outpost-elite-names-->205 distinct `Elite::` names that
-only a Windows compiler can type-check.
+**P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
+`Outpost/Main.cpp` is <!--count:main-lines-->250 lines and every one of them is the platform: the
+window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
+paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
+state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
+<!--count:outpost-elite-names-->61 distinct `Elite::` names where it reached 205 when M3 opened.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->22 abstract classes in
-`GameLogic/*.h`. Some are platform (`TextSink`, `KeySource`, `DashboardEffects::PlaySound`,
-`TunnelEffects::ShowFrame`, `SaveStore` through `SaveScreen`). Most are **phase order**:
-`ShipEffects::RunTactics`, `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`,
-`FlightLoopEffects::SpawnAhead` and `Anger`, `SpawnChildEffects::SpawnChild`, `ChartShapes`,
+What §2.1 asked for and this did not have until M5-e is `Frame()`, `Sounds()` and `StateHash()` —
+`Sounds()` is built (M5-e-1), `StateHash()` is built library-native (M5-e-3, `Elite::HashState`) and
+`Frame()` is `State().canvas`, which the executable already reaches —
+and one thing it did not ask for, which M5-e-2 closed: `Elite::Universe` was the composition root's
+until then, because both sessions bound it at construction and `Game` needs both of them at its own.
+The sessions take it afterwards now (`AttachUniverse`) and `Game` owns it, as §4.4 drew.
+
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->5 abstract classes in
+`GameLogic/*.h`. Some are platform (`Keyboard`, `Presenter`, `CommanderStore`); `TextSink` and
+`ValueTokens` are the text system's own and are argued about in §8 rather than assumed away. Most were **phase order**:
+`ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
 `ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each declared when the routine on the
 far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
-times. Three methods are declared on two interfaces each and one override satisfies both, which is
+times. `SpawnEffects`, `ChartShapes`, `ShipEffects::RunTactics`, `FlightLoopEffects`'s `SpawnAhead`
+and `Anger`, and `StartUpEffects`'s `ResetUniverse`, `ResetShip` and `ResetMissileIndicators` are
+gone (M3-b-1a to M3-b-1e); `SpawnChildEffects` went in M4-a-1, `ShipDrawEffects`, the one the
+flat oracle image kept alive (§6.108), in M6-0-a-3, and `StartUpEffects` — `ZEKTRAN` and then
+`TITLE`, the last two methods of a seam the plan had already written off as empty — and
+`ControlEffects`, which was `DOCKIT` beside `Ports`, in M6-0-h. The five that remain are the
+three platform ports and the text system's two, which is the number §4.5 can explain. Three methods
+are declared on two interfaces each and one override satisfies both, which is
 the language's rule and a smell. One seam carries a CPU flag across the platform boundary:
 `PlaySound(std::uint8_t _effect, bool _carryIn)` returns a carry because `NOISE` does (§6.99), and
 the *window* is asked to preserve it.
 
-**P8 — Monolithic frame procedures.** `MoveEveryShip` is four hundred lines over nine annotated
+**P8 — Monolithic frame procedures.** `MoveEveryShip` was four hundred lines over nine annotated
 parts; `BeginFlightFrame` and `EndFlightFrame` about the same between them; `DrawShip` 531 and
 `RunTactics` 567; `RunDockingComputer` two hundred. Each is one routine in the original and one
 function here, with local `bool`s standing in for the branch targets (`docking`, `scoopable`,
 `collision`, `holdFull`, `crashed`) and results carried in the workspaces.
+
+**M4-a HAS DONE THE THREE IN THE FLIGHT LOOP** (§8, 2026-09-07). `MoveEveryShip` is 143 lines and
+its parts answer `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim`, `LaserHit` and
+`KillOutcome`; `BeginFlightFrame` is 14 over `StirTheFrame`, `TurnTheShip`, `RunFlightKeys` and
+`FireTheGuns`; `EndFlightFrame` is 43 over `BurnEnergyBomb`, `RechargeBanks`, `MaybeSpawnStation`
+and `RunCycleStep`. Every one of the five `bool`s is a value some stage returns. `DrawShip` is
+M4-b's and `RunTactics` and `RunDockingComputer` are M4-c's.
 
 **P9 — Implicit state machines.** The game's mode is `dockedFlag` (a `std::uint8_t&` written by
 `RESET`, `DOENTRY` and `TT110`), `paused` (a `bool` in `Main.cpp`), `LoopOutcome` plus `Leave`, and
@@ -334,10 +371,10 @@ cop, trader...). The screen's mode is `QQ11`'s value (`BUY_CARGO_VIEW = 2`, `SEL
 are `std::uint8_t` constants — **M1-b took the ship types and the three flag bytes of a ship to
 `ShipType`, `ShipStateBit`, `AiBit` and `NewbBit`** — booleans are `0`/`0xFF` (`BST`, `ECM`, `DISK`); the thirteen pause-
 screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making them contiguous
-would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->18 parameters are
+would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->0 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
 
-**P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->32 `bool
+**P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->30 `bool
 _carryIn` parameters in headers. Inside the kernel (`AddWithCarry`, `Rng::Next`, the multipliers)
 they are the numeric model and stay. The other twenty-four are a routine boundary that happens to
 be where a 6502 flag was live, and this pattern's original entry said "every caller passes a
@@ -346,7 +383,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,937 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,143 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -479,19 +516,19 @@ never global.
 <!--census:start-->
 | Field | 6502 | Written by | Read before written, from the caller | Read after a call | Verdict |
 |---|---|---|---|---|---|
-| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail | EndFlightFrame | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
-| `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
-| `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
-| `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
-| `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, DrawShip, MeasureSlope | FaceVisibility | DrawShip (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
-| `GeometryWorkspace.xx2` | `XX2` | DrawShip | EitherFaceVisible, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
-| `GeometryWorkspace.xx3` | `XX3` | DrawShip | DrawExplosionCloud | — | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
-| `ClipState.dontclip` | `dontclip` | ResetShipAndBubble | ClipLineKeepingSwap | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
-| `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
-| `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
-| `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
-| `Projection.y1` | `K4+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
-| `K3Block.*` | `K3 to K3+9` | LoadPlanetAxis, LoadStationAxes, NormaliseAxes, OffsetAxis, RunTactics, SubtractShipAxis | BuildUnitVector, NormaliseAxes, OffsetAxis | RunDockingComputer (after SubtractStationAxes) | **Parameter and result** (M2-c). `SPS1` (`LoadPlanetAxis`, `NormaliseAxes`) leaves the vector `BuildUnitVector` and part 9 read; `TAS2`/`OffsetAxis` take and return it: `UnitVector`/`Vector24`, §4.3's `XX15 after SPS1` row. |
+| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail, ProjectVertices | FoldIntoStateHash, RunCycleStep | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
+| `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | FoldIntoStateHash, MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
+| `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator, FoldIntoStateHash | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
+| `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, FoldIntoStateHash, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
+| `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, MeasureSlope, OpenHeapRun, PushEdges, SelectFaces | FaceVisibility, FoldIntoStateHash | ProjectVertices (after ?), SelectFaces (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
+| `GeometryWorkspace.xx2` | `XX2` | ScaleShip, SelectFaces | EitherFaceVisible, FoldIntoStateHash, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
+| `GeometryWorkspace.xx3` | `XX3` | MeasureRange, ProjectVertices | DrawExplosionCloud, FoldIntoStateHash, OpenHeapRun | PushEdges (after EitherFaceVisible) | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
+| `ClipState.dontclip` | `dontclip` | DrawShortRangeChart, Game::DrawChart, ResetShipAndBubble | ClipLineKeepingSwap, FoldIntoStateHash | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
+| `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, FoldIntoStateHash, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
+| `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, FoldIntoStateHash | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
+| `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine, FoldIntoStateHash | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
+| `Projection.y1` | `K4+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine, FoldIntoStateHash | DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
+| `K3Block.*` | `K3 to K3+9` | DecideDisposition, DecideMissile, LoadPlanetAxis, LoadStationAxes, NormaliseAxes, OffsetAxis, SubtractShipAxis | BuildUnitVector, NormaliseAxes, OffsetAxis | RunDockingComputer (after SubtractStationAxes) | **Parameter and result** (M2-c). `SPS1` (`LoadPlanetAxis`, `NormaliseAxes`) leaves the vector `BuildUnitVector` and part 9 read; `TAS2`/`OffsetAxis` take and return it: `UnitVector`/`Vector24`, §4.3's `XX15 after SPS1` row. |
 <!--census:end-->
 
 The `_a`/`_x`/`_y` parameters are renamed for what they carry (`_seed`, `_axisOffset`, `_highBits`)
@@ -512,7 +549,7 @@ the flag. Three classes come out, and three of the twenty-four were being passed
 | the missile-lock `Beep` at `MA47` | `HITCH`'s `SEC`, which `LDA MSAR` and `BEQ` do not touch | `false`, beside a local already set to `true` for the same flag | **Wrong, fixed.** Observable on a silent build: `NOISE` hands it back and `LL9` seeds a cloud on it (§6.157) |
 | `TakeDamage` (`OOPS`), `DamageEquipment`, `FireLaser` (`LASLI`), `SeedExplosionCloud`, `EraseShip`, `DrawShip` (`LL9`), `DrawBall`/`DrawBallLine`, `SeedDebris` (`Ze`), `SpawnThargoidPair` (`GTHG`), `AddDebris` (`fq1`), `SeedStardustAndClearShips` | a computed flag: a compare, a shift, or a callee's answer | the same flag, computed | **Live and modelled.** The parameter is the routine's operand and stays |
 | `RunSpawning` (`MTT1`), `RunLoopTail` (part 5), `BuildSystem` (`SOLAR`), `StartEcm` from the flight loop's E.C.M. key | inherited from before anything the port models: `M%`'s exit for the spawner, `RES2`'s (and `ZERO`'s) for `SOLAR`, and possibly `WARP`'s for the key | `false` at every caller | **Honest assumption.** The parameter is what puts it at the call site instead of inside the routine; `false` is what the port can supply. Collapsing it would hide the assumption, which is why M2-d does not |
-| `PlaySoundEffectPitched` (`NOISE2`) | `CPY #&E0` at the Trumble squeak: set for a burning cabin, clear otherwise | `false`, because `DashboardEffects::PlaySoundPitched` has no flag | **Dropped at the seam**, and unobservable: the only reader is `NOISE`'s sound-off return and every caller discards it. M3-b's seams are where it would go |
+| `PlaySoundEffectPitched` (`NOISE2`) | `CPY #&E0` at the Trumble squeak: set for a burning cabin, clear otherwise | the compare, since M3-b-2a | **Restored when the seam went.** `DashboardEffects::PlaySoundPitched` had no flag to carry; the routine takes one now, and `EXNO`/`EXNO2` were audited with it — four `ASL A` on an X between 11 and 15 cannot carry out, so both reach `NOISE2` clear |
 
 **Why the count went up rather than down.** The M2-d row promised `carry-params` "at the kernel's
 floor". The audit is the reason it is not: twenty of the twenty-four are the routine's operand, and
@@ -542,10 +579,10 @@ namespace Elite
     void Step(const InputFrame& _input);              // one pass of FRCE: a docked pass, a flight frame, or a paused pass
     [[nodiscard]] const Canvas& Frame() const noexcept;
     [[nodiscard]] std::span<const SoundEvent> Sounds() const noexcept;
-    [[nodiscard]] std::uint64_t StateHash() const noexcept;  // over UniverseImage (§4.7), so it survives refactors
+    [[nodiscard]] std::uint64_t StateHash() const noexcept;  // built M5-e-3 as a library-native fold (StateHash.cpp), recorded beside §4.7's label hash until M6-f
     [[nodiscard]] const Universe& State() const noexcept;
   private:
-    Universe m_universe;  Ports& m_ports;
+    Universe m_universe;  Ports m_ports;   // both members as built: the universe since M5-e-2, the ports since M3-c
   };
 }
 ```
@@ -579,17 +616,37 @@ port because a windowed program cannot block and the plan does not change that (
 
 | Port | Replaces | Methods |
 |---|---|---|
-| `Presenter` | `TunnelEffects::ShowFrame`, `TradeScreenEffects::ClearToView` (the pixels half), `LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames`, `ExplosionEffects`/`SightEffects`'s VIC pokes (they become `VideoState` writes the library makes itself) | `Present()`, `WaitFrames(n)` |
-| `Keyboard` | `KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys`, `FlushKeyboard`, `JumpState::controlHeld` | `Scan(KeyLogger&)`, `NextKey()`, `Flush()` |
-| `SoundSink` | `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep`, `FlightLoopEffects::Start/StopDockingMusic` | `Write(SidRegister, value)` — the library runs `NOISE` and the music player itself and emits register writes, which ADR-003 §1 already says is the port's `SoundEvent` stream |
-| `SaveStore` | the `SaveScreen` half that reads and writes files | `Load(name) -> std::optional<Image>`, `Save(name, Image)` |
+| `Presenter` ✅ **M3-b-3b/3c** | `TunnelEffects::ShowFrame`, `TradeScreenEffects::ClearToView` (the pixels half), `LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames`, `ExplosionEffects`/`SightEffects`'s VIC pokes (they become `VideoState` writes the library makes itself) | `WaitFrames(n)`, `Present()`, `HoldFlightFrame(ships)`, `HoldTitleFrame(distance)` — four, because one `ShowFrame` was carrying three pacing policies and the two holds are two different cost curves |
+| `Keyboard` ✅ **M3-b-3d** | `KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys`, `LineEntryEffects::FlushKeyboard` (`JumpState::controlHeld` is a chart's own byte and stays) | `Held(key)`, `NextKey()`, `Flush()` — **not** `Scan(KeyLogger&)`: `RDKEY` is `Elite::ScanKeyboard` in the library and only the row read is the platform's (§8, 2026-09-06) |
+| `SoundSink` ✅ **M3-b-2b** | `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep`, `FlightLoopEffects::Start/StopDockingMusic` | `Write(SidRegister, value)` — the library runs `NOISE` and the music player itself and emits register writes, which ADR-003 §1 already says is the port's `SoundEvent` stream |
+| `CommanderStore` — **not renamed** | the `SaveScreen` half that reads and writes files, which it became in M3-a-3 | `Write(name, file)`, `Read(name, outFile)` — the row said `SaveStore`, and `Outpost::SaveStore` has been the executable's implementation of it since slice 2d, so the rename would give `class SaveStore : public Elite::SaveStore`. `CommanderStore` says what is stored and `Outpost::SaveStore` says where it goes (§8, 2026-09-06) |
+
+**`Elite::Ports` is the intermediate this table collapses.** M3-a-3 left one struct of fourteen
+references — three printers and eleven interfaces — where seven argument-list structs had held
+seventy-eight, and that is the whole surface M3-b works on: the four rows above replace the eleven,
+and no signature changes again. Eleven references after M3-b-3d, with `SaveStore` the row still to
+land — and each port has arrived in the same commit as at least one removal, because a ceiling with
+zero slack does not let a struct grow first and shrink afterwards (§8, 2026-09-06).
 
 Everything else in the twenty-two is either a call into a routine that now exists (`RunTactics`,
 `DrawPlanetOrSun`, `SpawnAhead`, `Anger`, `SpawnChild`, `ChartShapes`, `DrawExplosion`,
 `SeedExplosionCloud`, `ResetUniverse`, `ResetShip`, `ClearKeyLogger`, `StartTheme`, `StopTheme`,
-`ShowTitleScreen`, `Run(controlCode)`) or a `VideoState` write. `PlaySound`'s carry stays inside
-the library where `NOISE` lives. The null port for tests is one class with four interfaces and a
-transcript, which is what `NullShell` and `LoopRecording` are today in two halves.
+`ShowTitleScreen`, `Run(controlCode)`, `ClearScreen`) or a `VideoState` write.
+
+**`TextSink` AND `ValueTokens` ARE NOT IN THE TWENTY-TWO AND DO NOT GO.** This section used to group
+them with `ControlCodes` as "the text system's own polymorphism", and then concluded they should go
+because `CHPR` and the value tokens exist — which does not follow. `TextSink` is not a seam in front
+of `CHPR`; it is the interface `CHPR` IMPLEMENTS. Both production implementations are inside
+`GameLogic` and form a chain — `TokenPrinter` → `CharacterPrinter` → `TextPrinter` → `Canvas` — and
+seventeen fixtures use it to compare token expansion as a CHARACTER STREAM against the shipped
+routine, which is a more precise instrument than the pixel comparison that would replace it. §6.73's
+corollary points the other way here, and this is the first seam in M3-b where it does (§8,
+2026-09-06). `ValueTokens` is the same shape: `StateTokens` is its only production implementation
+and it exists to break a construction cycle inside the library. `PlaySound`'s carry stays inside
+the library where `NOISE` lives. The null port for tests is `NullSeams`, one class over six interfaces
+(M3-b-4c). It carries no transcript and must not grow one: a fixture that wants to know a seam was
+reached passes something that counts, and the two things it DOES decide -- whether the store failed
+and whether the bubble had room -- are booleans on it rather than second classes.
 
 ### 4.6 Pipelines with named stages
 
@@ -597,18 +654,34 @@ transcript, which is what `NullShell` and `LoopRecording` are today in two halve
 a function with a typed result, so that the local `bool`s become one value:
 
 ```cpp
-enum class Contact : std::uint8_t { None, Docking, Scoopable, Collision };   // part 7's four answers
-struct ScoopResult { bool crashed; bool holdFull; std::optional<Cargo> item; };  // part 8
-enum class DockingTest : std::uint8_t { Arrived, Bounced, Fatal };             // part 9
-struct LaserHit { ... };                                                       // part 11, already a struct
+enum class Contact : std::uint8_t { Clear, Docking, Scoopable, Collision };  // part 7's four answers
+enum class ScoopResult : std::uint8_t { Stowed, HoldFull, Crashed };         // part 8
+enum class DockingTest : std::uint8_t { Arrived, TooFast, Bumped };          // part 9
+enum class Impact : std::uint8_t { None, Bounced, Bumped, Crashed };         // part 10's three entries
+struct Aim { bool draws; bool carry; };                                      // part 11's answer to `LL9`
+struct LaserHit { bool stores; std::uint8_t energy; };                       // part 11's, already a struct
+enum class KillOutcome : std::uint8_t { Kept, Removed };                     // part 12
 ```
 
-and the slot loop is `while (auto slot = bubble.NextOccupied(slot))` with `KillShip` returning
-whether the index must not advance — the same control flow, said once.
+**AMENDED FROM WHAT WAS BUILT (M4-a-2, §8).** The sketch above had `ScoopResult` as a struct with an
+`optional<Cargo>`; it is an enum, because part 8's item never leaves the routine — it goes straight
+into `QQ20` and the caller only needs to know which of `MA59`, `MA58` and "stowed" it took. Part 10's
+three entries needed a name of their own (`Impact`) and part 11 needed `Aim` for the pair `LL9` is
+reached with, so seven types where the sketch drew four. `Contact::None` is `Clear` and
+`DockingTest::Bounced`/`Fatal` are `Bumped`/`TooFast`, each named for the 6502 label rather than for
+the consequence.
 
-**`LL9`** becomes six stages over a `ShipRender` frame object: `Visible?` → `ScaledOrientation` →
+`KillShip` returning "the index must not advance" is what `KillOutcome` says, and the slot loop is
+still `for(;;)` with the index advanced by hand rather than `while (auto slot =
+bubble.NextOccupied(slot))`: `KILLSHP` shuffles every slot above the dead one down, so the loop must
+go round on the SAME index, and a `while` over an iterator would have to un-advance it. The
+original's shape is the honest one and the comment on it is the whole explanation.
+
+**`LL9`** becomes SEVEN stages over a `ShipRender` frame object: `Visible?` → `ScaledOrientation` →
 `FaceVisibility` → `ProjectedVertices` → `EdgeSelection` → `ClippedLines` → `HeapRun`, each a
-function of the previous stage's result; `DrawShipAsPoint` and `EraseShip` stay as they are (the
+function of the previous stage's result. (This row said "six" and then listed seven, which is also
+the number of annotated part blocks `DrawShip` carries — parts 1, 2, 3, 4–5, 6–8, 9 and 10–11.
+Counted from the tree rather than from the sentence, M4-a-3.) `DrawShipAsPoint` and `EraseShip` stay as they are (the
 ADR-001 §6 row on `SHPPT` is about `Projection` outliving a call, and the stage form makes that
 visible rather than hiding it).
 
@@ -633,8 +706,10 @@ there is no generated `Labels.h`. The table maps port fields to label NAMES and 
 exactly as `Where` does; Q7 closes as "not needed".
 The invariant every M1–M4 slice is measured by: **`Materialise` produces the same bytes before and
 after the slice for the same game**, and every oracle test compares through it rather than through
-`math.k[3]`. `Game::StateHash` is `Hash`, so the replay suite ADR-003 §3 asked for — the docked
-transcript and a flight script through the null port, hashed at every step, stored — is
+`math.k[3]`. `Game::StateHash` was to be `Hash`; **built M5-e-3 as `Elite::HashState`**, a
+library-native fold over `Universe` that needs no label, recorded BESIDE `Hash` in the replay until
+M6-f retires the labels and the fold is the record. So the replay suite ADR-003 §3 asked for — the
+docked transcript and a flight script through the null port, hashed at every step, stored — is
 layout-independent by construction and is the one instrument that sees composition.
 
 ### 4.8 What the executable becomes
@@ -692,7 +767,9 @@ original was here. A behaviour no test reached before M6-b is unpinned for ever 
 nothing can ask the original again. That is Risk R19, and it is why M6 is last and why M6-a begins
 with a coverage review: every routine the ledger marks *Port* must have a test that calls it before
 its answers are recorded, and the M0-c replay must cover launch, flight, combat, docking, death and
-the escape pod. The data tables need nothing here: their oracle comparison (`extract_tables.py
+the escape pod. Both are instruments since the M6-0 gate (2026-09-07): the review is
+`inventory.py --coverage` over what the interpreter recorded, run in CI (M6-0-f), and the replay
+holds a `Died` and an `Escaped` table beside `Docked` (M6-0-b). The data tables need nothing here: their oracle comparison (`extract_tables.py
 --check` and `TableTests`) was retired on 2026-09-07, and the tables are already the port's own C++.
 
 **What M6 removes, in order**: the label names from identifiers (M6-c), the assembly from the
@@ -1256,6 +1333,139 @@ need a seam — `TextPrinter` takes the bell and `ExtendedTokenPrinter` the cont
 `Universe` that held them would not be a plain aggregate, which is the one property M3-c's
 `StateHash` needs.
 
+#### M3-b slice plan (written before the build, 2026-09-06; four commits; §8 records what each found)
+
+**Twenty-two seams become four, and most of them are not ports.** §4.5's table is the destination:
+`Presenter`, `Keyboard`, `SoundSink`, `SaveStore`. Everything else in the twenty-two is either a
+call into a routine that now exists — the phase order that scoped it has since been built — or a
+`VideoState` write, or a piece of the text system's own internal polymorphism.
+
+**M3-b-1 — the phase-order seams go, ONE COMMIT EACH.** `SpawnEffects`, `SpawnChildEffects`,
+`ShipEffects`, `ShipDrawEffects`, `ChartShapes` and the spawn and reset halves of
+`FlightLoopEffects` and `StartUpEffects`: every method of them is a routine `GameLogic` now
+contains, reached through an interface because it did not when the seam was written (§6.73's rule,
+which this slice is the last application of). The routines that reached through them take
+`(Universe&, Ports&)` and call. No new abstraction.
+
+**One commit each, and the reason is the tests.** A seam is what a suite COUNTS: the oracle traps
+the routine, the port records the call, and the two tallies are compared. Take the seam away and
+both sides run the routine, so the trap has to come off and the comparison becomes the pixels or
+the state the routine produced — which is a stronger statement and a per-suite piece of work. §8
+records what each one found.
+
+**`SpawnChildEffects` CANNOT GO IN THIS SLICE, and the reason is worth writing down before the
+build rather than after.** §4.5 lists `SpawnChild` among the calls into routines that now exist, and
+it is one — but its callers are `SpawnItems` and `SpawnDebris`, whose entire contract IS the call
+sequence: `SPIN2` is a loop that calls `SFS1` `CNT` times and hands back the LAST one's carry, which
+is `NWSHP`'s "was there room". `TheWreckageMatchesSPIN` compares that sequence argument by argument
+with `SFS1` trapped to `SEC` on the oracle and the seam answering `true` on the port — both sides
+told "always room". Let the routine spawn for real and the bubble fills at ten slots, the carry
+flips, and the comparison is no longer of the same thing.
+
+The honest fix is M4-a's pattern, not M3-b's: `SpawnItems` ANSWERS which ships to spawn and the
+caller spawns them, so the sequence is a typed stage result and the test compares it without a seam
+at all. Doing that here would be two patterns in one slice (rule 8). So the seam stays until M4-a,
+and **`effects-seams` reaches five in M3-b rather than four** — the M3-b row's acceptance is wrong by
+one, and this is where that is recorded rather than discovered at the ratchet.
+
+**`ShipDrawEffects` CANNOT GO IN THIS SLICE EITHER, and the reason is the oracle rather than the
+port.** It was built and reverted, and it takes no slice letter because a reverted slice should not
+own one — `M3-b-1d` is the spawn half of `FlightLoopEffects`, which went in its place. This is what
+the attempt found, recorded so the next one starts from evidence rather than from the plan's
+optimism.
+
+`DrawPlanetOrSun` is `LL25`'s `JMP PLANET` and `DrawExplosion` is `LL14`'s `JMP DOEXP`, and both
+are routines this library has had since slices 3c and 4b-b. The removal itself is small: `DrawShip`
+takes `(Universe&, Ports&, Ship& _slot, bool _carryIn)` — thirteen arguments become four, because
+every caller passed the same nine members of the universe — and `Ports` trades `ShipDrawEffects&
+drawing` for `ExplosionEffects& explosion`, which is a port in §4.5's sense and stays. That part
+worked; `ShipDrawTests`, `TacticsTests` and `LaunchTests` went green.
+
+**THE FLIGHT LOOP DID NOT, AND THE OBSTACLE IS THAT `XX21` IS THE VIC-II.** §6.108: the oracle's
+memory is FLAT, so the sprite registers at `&D000` and the blueprint pointer table at `XX21` are the
+same bytes — the harness even names the field `Where::vic = Label("XX21")`. `SETL1` maps the I/O
+page in on real hardware and is trapped here, so `PTCLS2`'s `STA VIC+&17`, `+&1D`, `+&2`, `+&3`,
+`+&10` and `+&15` land on the pointers for ship types 2, 3, 9, 11, 12 and 15. While `DOEXP` was a
+seam the oracle never ran it and nothing was hurt. Run it on both sides and the first exploding ship
+in a frame corrupts the blueprints of the ships drawn after it: `M% whole (MCNT 2, distance 0,
+shape 2): XX0+1 -- game has 218, port has 216`. That is the ORACLE reading its own damaged table,
+which no change to `GameLogic/` can fix.
+
+**Two fixture faults came out with it and are worth keeping.** The flight-loop fixtures give every
+ship a line heap at `&0C00`, outside `LineHeap`'s `K%`-to-`LS%` window — §8 already noted in passing
+that "with the fixture's heap pointers outside the arena the seeds it writes are compared nowhere",
+and with `DOEXP` running the cloud is DRAWN from those bytes, so the port put every particle in one
+place and the game read whatever `&0C00` held (28 screen bytes apart on `MAL1 (in the sights,
+already dead)`). And `Where` has no `SUNX` and no `LSY2`, so a fixture cannot yet put a DRAWN body
+into both machines: `MA23 whole frame (a sun close enough to draw, planet at 97)` differs at screen
+offset 8033. Both are one-line fixes; neither helps while the VIC aliasing stands.
+
+**What unblocks it is a harness slice, not a library one**: `Cpu6502` has to model the 6510 port
+register that `SETL1` writes, so that a store to `&D000`-`&DFFF` with the I/O page mapped in goes to
+a VIC register file instead of to RAM. That is the same change that would let `MVTRIBS` and a drawn
+ship coexist in one frame, which `Universe::spriteRegistersAreOurs` exists to work around today. So
+`ShipDrawEffects` stays until then, and **`effects-seams` reaches six in M3-b rather than five** —
+`SpawnChildEffects` for rule 8's reason and this one for the oracle's.
+
+**M3-b-2 — `SoundSink`.** `DashboardEffects`, `ViewEffects::PlaySound`, `TextEffects::Beep` and
+`FlightLoopEffects`'s music pair collapse into one port that takes a SID REGISTER WRITE. The library
+already owns `SoundBuffer`, the music player and the tables; what it lacks is somewhere to put them,
+so `Universe` gains the two objects and the port is what `SidWriteLog` already is.
+
+**AND THE SLICE HAS TO PAY FOR THE PORT IT LANDS, which this plan did not say and M3-b-2b found.**
+Every M3-b slice before it only REMOVED from `Ports`, so the struct sits on `aggregate-refs`'s
+ceiling of thirteen with no slack; a slice that adds `SoundSink` and removes nothing puts the count
+at fourteen, and rule 5 fails a count above its ceiling with no exception — rightly, since a ratchet
+that can be argued past is not one. The four ports of §4.5 all have to arrive before the eleven
+seams they replace can go, so **each of M3-b-2b, M3-b-3 and M3-b-4 lands its port in the same commit
+as at least one removal**, and the count leaves the phase at four without ever going up. 2b pays with
+`ViewEffects`, which the §4.5 table already names in the `SoundSink` row (§8, 2026-09-06).
+
+**M3-b-3 — `Presenter` and `Keyboard`.** `TunnelEffects::ShowFrame`, `LineEntryEffects::WaitFrames`,
+`StartUpEffects::WaitFrames` and `TradeScreenEffects::ClearToView`'s pixels become `Presenter`;
+`KeySource`, `ControlEffects::ScanKeyboard`, `StartUpEffects::ScanTitleKeys` and `FlushKeyboard`
+become `Keyboard`. `SightEffects` and `ExplosionEffects` become `VideoState` writes the library
+makes itself, which ADR-005 §1 already decided.
+
+**M3-b-3a did that last part first, and it is what pays for the two ports.** Both seams go and
+nothing replaces them, so `aggregate-refs` reaches twelve with the credit standing. What held them
+back was `SetRasterMode` — `SETL1`, which this plan's own row called "self-modifying code inside a
+raster interrupt handler" and which is nothing of the kind (§8, `MemoryMap.h`).
+
+**M3-b-3b spent it on `Presenter`, and the row above is wrong about what that port carries.**
+`TradeScreenEffects::ClearToView` is not the presenter's: it is `TT66`, which the library has. Nor
+are `SetUpTradeScreen`, `ClearBottomRows` or `BeepAndPause`'s beep. What `Presenter` carries is
+`DELAY`, because `WSCAN` waits for a raster line and nothing in `GameLogic` knows what one is —
+which is also why the oracle traps it and a suite that untrapped it would hang (§8).
+`TunnelEffects::ShowFrame` became `Present()` in M3-b-3c — and it was one method carrying three
+answers, one of which the executable was getting wrong (§8).
+
+**M3-b-3d landed `Keyboard`, and the row above is wrong about that one too.** `ControlEffects::
+ScanKeyboard` does not become a method of it: `RDKEY` is `Elite::ScanKeyboard` in the library and
+the port answers `Held(key)`, because the walk is the only part of the routine that reads hardware
+and everything around it was already the library's (§8). `StartUpEffects::ScanTitleKeys` goes with
+it, its reason answered by `Presenter::HoldTitleFrame`. **M3-b-3 is complete**; three of §4.5's four
+ports have landed and `SaveStore` is M3-b-4's.
+
+**M3-b-4 — the text system's seams, and the null port.** The row said `CommanderStore` would be
+renamed to §4.5's name and that `TextSink`, `ValueTokens` and `ControlCodes` would all go; two of
+those three claims are wrong and §4.5 above now says so. What the slice actually is:
+
+  - **4a ✅ `TextEffects`**, which the row did not mention at all. `clss` is `TT66simp`, the library
+    has had it since slice 2a, and the executable was answering the seam with the whole of `TT66`
+    (§8).
+  - **4b ✅ `ControlCodes`**. `DT3`'s dispatch is `Elite::RunControlCode` over `(Universe&, Ports&)`;
+    the last thing the shell still owned was `CLYNS`, which is `Elite::ClearMessageRows`.
+  - **4c ✅ the null port**, and three of the five classes the row named had already gone with their
+    seams. `LoopRecording` was a second null port for one boolean and is folded in; `NullShell` is
+    a RECORDER and stays one, which is the distinction `NullSeams.h` has always insisted on.
+  - **`CommanderStore` keeps its name** and `TextSink` and `ValueTokens` stay, for the reasons §4.5
+    now records. `effects-seams` stops at the number that leaves them standing rather than the
+    ratchet quietly failing to reach zero.
+
+**What this slice does not do.** `Elite::Game` is M3-c's. The seams that survive are four, and the
+count is what says so.
+
 ### Phase M2 — Explicit calling conventions
 
 | Slice | Scope | Acceptance | Sittings |
@@ -1283,35 +1493,69 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
 | **M3-0 The app's member check** ✅ **built 2026-09-06 (§8)** | `check_outpost.py` gains a third half: every member the app names on an `Elite::`-typed variable, against that type's members as `GameLogic/*.h` declares them, bases closed over. A `--self-test` plants one that cannot resolve. | In CI as the fourteenth check; 111 accesses resolved on the tree as it stands. | 1 |
-| **M3-a Universe** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`JumpState` replaced by `Universe&` (plus the ports) on every routine; `FlightSession` and `Outpost::Game` lend their members to it. | Green on both legs; `aggregate-refs` at zero. **Windows job is the gate** — this slice cannot be compiled here. | 4 |
-| **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at four. | 4 |
-| **M3-c Game** | `Elite::Game` with `Reset`, `Step`, `Frame`, `Sounds`, `StateHash`; `Perform`, `Leave`, the docked pass, `Advance` and `AdvancePaused` moved from `Main.cpp`; `Mode` explicit. `Main.cpp` at its target shape. | `DockedSessionTests` and the M0-c replay drive `Game::Step` and reproduce their stored hashes; `main-lines` in the ratchet under 300. | 4–5 |
-| **M3-d ADR-007** | State ownership and the replay hash, written from M3-a..c as built. | Accepted. | 1 |
+| **M3-a Universe** ✅ **built 2026-09-06 (§8)** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`MissionBay` replaced by `(Universe&, Ports&)` on every routine; `FlightSession` and `Outpost::Game` own the universe and the ports between them. | Green on both legs; `aggregate-refs` 78 → 14, and the fourteen ARE `Ports` — "at zero" is M3-b's, which collapses that one struct. `JumpState` is values rather than references and goes with M3-c's `Game`. **The Windows job was the gate and caught two defects** (§8). | 4 |
+| **M3-b Ports** ✅ **built 2026-09-06 (§8)** | Three of the four port interfaces (`CommanderStore` keeps its name — §4.5); **five seams that turned out to be `GameLogic` reached through the executable**: `TradeScreenEffects`, `TunnelEffects`, `ControlEffects::ScanKeyboard`, `TextEffects` and `ControlCodes`; the null port folded to one class. | Green; `effects-seams` at **nine**, not six. Two more than the row expected and both are named rather than counted away: `TextSink` and `ValueTokens` are the text system's own polymorphism and stay (§4.5). `SpawnChildEffects` needs M4-a's typed stage result and `ShipDrawEffects` needs the emulator to model the 6510 port register, as the row said. `aggregate-refs` 14 → 11, `outpost-elite-names` 205 → 157. | 4 |
+| **M3-c Game** ✅ **built 2026-09-06 (§8)** | `Elite::Game` with `Reset` and three `Step`s; `Perform`, `Leave`, `MissionOf`, the chart draw, the docked pass and the pause pass moved from `Main.cpp`, with the eight bytes of game state that were in no struct and the five text objects. `Advance` SPLIT rather than moved — the count of passes is a `double` and the determinism guard forbids one here. | `main-lines` 1,219 → 256, under the 300 the row asked for, and `outpost-elite-names` 205 → 71. (Both plain rather than marked: an acceptance records what the slice ACHIEVED and a `count:` marker asserts what the tree holds TODAY, so a marker here is dragged wrong by the next slice that moves the number — M4-a-1 is the one that did. The live counts are §3's.) `GameTests` drives the object as `Run` drives it. `Frame`, `Sounds` and `StateHash` are not built and `DockedSessionTests` still owns its own composition (§8). | 4–5 |
+| **M3-d ADR-007** ✅ **built 2026-09-07 (§8)** | State ownership and the replay hash, written from M3-a..c as built — with the three places ADR-006 §4 was wrong, the eight bytes that should be in `Universe` and are not, and what the digest does not cover. ADR-006 §4 amended in place. | Accepted; `Design/ADR/ADR-007-state-ownership.md`. | 1 |
 
 ### Phase M4 — Control flow
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M4-a Flight frame stages** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the sixteen-step cycle as a table. | `FlightLoopTests` green frame for frame; replay hashes unchanged. | 4 |
-| **M4-b LL9 stages** | `DrawShip` as the six stages of §4.6 over a `ShipRender` frame. | `ShipDrawTests` green; the whole-bitmap comparisons unchanged. | 4 |
-| **M4-c Decisions** | `TACTICS`, `DOCKIT` and `MLOOP` parts 1–4 return `Decision`s applied by one function; the sixteen `tactics` mutants re-anchored and re-run to zero survivors. | `TacticsTests` green; `mutate.py --unit tactics` at the recorded tally. | 5 |
-| **M4-d Mode machine polish** | The mission sub-machine, the death sequence and the pause as explicit states; `LoopOutcome` retired. | Replay hashes unchanged. | 2 |
+| **M4-a Flight frame stages** ✅ **built 2026-09-07 (§8)** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the housekeeping cycle as a table. **M4-a-1 built 2026-09-07 (§8):** `SPIN` and `SPIN2` answer an `Elite::Drop` and `PerformDrop` spawns, which is what `SpawnChildEffects` was waiting on — the seam goes, and the frame fixtures untrap `SFS1` on both machines. **M4-a-2 built 2026-09-07 (§8):** parts 7 to 12 as `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and `KillOutcome` beside the existing `LaserHit`; `MoveEveryShip` 426 → 143 lines, and three dead stores at the end of part 9 that only a type could show were dead. **M4-a-3 built 2026-09-07 (§8):** the head and the tail split at their annotated parts — 324 → 14 and 254 → 43 — with the cycle as a table, the thirty-two-step count corrected in three places, and part 14's fall-through into part 15 restored. **M4-a is complete.** | `FlightLoopTests` green frame for frame; replay hashes unchanged. M4-a-1: both, plus `effects-seams` 9 → 8 and `aggregate-refs` 11 → 10. | 4 |
+| **M4-b LL9 stages** ✅ **built 2026-09-07 (§8)** | `DrawShip` as the SEVEN stages of §4.6 over a `ShipRender` frame — `TestPresence`, `MeasureRange`, `ScaleShip`, `SelectFaces`, `ProjectVertices`, `OpenHeapRun`, `PushEdges`; 551 → 38 lines of pipeline. | `ShipDrawTests` green; the whole-bitmap comparisons unchanged; the replay digest unchanged. The channel census names a PART rather than `DrawShip` for `xx2`, `xx3`, `xx12` and `q`, and raises three inherited inputs one function had hidden. | 4 |
+| **M4-c Decisions** ✅ **built 2026-09-07 (§8)** | `TACTICS` answers a `Tactic` over five parts (M4-c-1); `DOCKIT`'s `bool` was a PHANTOM — the original reaches no `OOPS` and no `DEATH`, so it is `void` (M4-c-2); `MLOOP` parts 1–4 answer a `SpawnPass` over a `SpawnFrame`, because §6.125's carry is live across all four (M4-c-3). | `TacticsTests` green at 7,326 cases; SEVEN `tactics` mutants re-anchored, none dropped, `mutate.py --check` at 72 of 72. The row said sixteen mutants and the unit has seven that name a line in `RunTactics`. | 5 |
+| **M4-d Mode machine polish** ✅ **built 2026-09-07 (§8)** | `Game::Mode` built — `Flight`, `Docked`, `Paused` — which takes the pause-before-`QQ12` ordering out of `Main.cpp` (`main-lines` 256 → 253). The mission sub-machine was already `MissionOf` (M3-c). **`LoopOutcome` is NOT retired and the row was wrong to ask**: `Continued` is not a mode and the other three are transitions, so a mode cannot carry what four routines have to return. **The death sequence stays synchronous**, because making it a state would change the pacing this row's own acceptance forbids from moving. | Replay hashes unchanged. | 2 |
 
 ### Phase M5 — Polish and the ledger
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). | Green; `out-params` at zero. | 3 |
-| **M5-b constexpr data** | The generated tables as `constexpr std::array`; the codecs, the trig lookups and the token decoder evaluated at compile time where the tests can `static_assert` a known value. | `TableTests` green; one `static_assert` per table against the oracle-checked value. | 2 |
-| **M5-c The ledger** | The <!--count:inventory-stale-files-->21 file names in `Source-Inventory.md` that name no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. | In CI. | 1 |
-| **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture, written at M2's opening) amended from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
+| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. M1's deferred `LightYearsTenths` is built (**M5-a-10**, and it found a seventy defined three times) and so is `Laser` (**M5-a-11**, four constant families for four bytes); `Equipment` is refused (**M5-a-12**) with the reason in ADR-006 §2 — the bytes are four encodings, and hold slots besides (§8). | 3 |
+| **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
+| **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
+| **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
+| **M5-e `Game` as §2.1 drew it** | Task #13, the M3-c follow-ons, under the owner's ruling of 2026-09-07: `Sounds()` real (**M5-e-1**, built), `Frame()` recorded as `State().canvas`, `Universe m_universe` (**M5-e-2**, built — and the replay digest was found hashing the fixture's idle printers, §8), the eight `DTW` bytes into `Universe` (**M5-e-2b**, built) and the doubled `QQ17` collapsed into `TextState` with the token printer bound to it (**M5-e-2c**, built), `StateHash()` library-native beside the label hash (**M5-e-3**, built — `Elite::HashState`, with a completeness test that walks the label table and found five fields the first fold forgot). | The executable holds no game state and lends no buffer; the replay hashes what `Game` drove; `check_outpost.py` agrees with every signature. | 4 |
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
 
+**M6-0 IS A GATE, AND IT EXISTS BECAUSE OF WHAT M6-b MAKES PERMANENT.** A recorded fixture pins
+exactly the calls the tests made while the original was here (R19); a behaviour no test reached
+before M6-b can never again be asked of the original. So the question to settle before M6-a records
+anything is not "is every row built" — every M0–M5 row is — but "is there anything the oracle can
+pin today that nothing will pin afterwards." The assessment of 2026-09-07 (§8) found eight such
+things, and they are the rows below, **ordered by irreversibility**: the ones at the top are the
+ones that can only be done while the interpreter is in the tree. Three were known and parked as
+tasks since M3-b; two are preconditions §4.10 already states and nothing enforces; three are
+instruments M6-a's own acceptance needs and does not have. None of them is a refactor: `GameLogic/`
+changes only where a defect is found, and the replay record moves only under rule 1.
+
+**THE GATE CLOSED 2026-09-07**, all eight rows, thirteen commits (§8, from M6-0-d through M6-0-g).
+Two of the three instruments it built are now CI steps — the coverage review on every push and the
+mutant floor under `mutate.py --check` — and the third, the replay reaching death and the escape
+pod, is two more recorded tables. Five seams remain and the count is final for M6: three platform
+ports and the text system's two. What the gate handed M6-a is a list, not a feeling: four *Port*
+stems no test runs, written into the ledger as gaps rather than dressed as exemptions.
+
+What is NOT in the gate, deliberately: `Frame()`, `Sounds()`, `StateHash()` and `Game` owning its
+`Universe` (task #13, structure, no oracle involved); M1's deferred `LightYearsTenths`, `Laser` and
+`Equipment` types, which ADR-006 §2 parked "for M5, where a type earns its operators" and M5 did not
+build — that is a decision to take, not a gap to close, and it needs no original; M5-a-8 and
+M5-a-9 (both built the same day); `modernize-avoid-c-arrays`' sites (M5-d-2, built). All of them
+were safe after M6-f, and none of them waited.
+
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M6-a Coverage review and the recorder** | Every *Port* row of the ledger has a test that calls it (the review is the ledger's last job); the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | The suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
-| **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the five mutation units at their M0-d tallies. | 2 |
+| **M6-0-a The 6510 port register** ✅ **built 2026-09-07 (§8, four sittings)** | `Cpu6502` models the port register `SETL1` writes, so that with the I/O page mapped in a store to `&D000`–`&DFFF` reaches a VIC register file rather than RAM. Known since M3-b (§8, `ShipDrawEffects`): the oracle's memory is flat, the VIC registers alias `XX21`, and an explosion drawn on the oracle side corrupts the blueprints of the ships drawn after it. Then `ShipDrawEffects` goes the way of every other seam — `DrawPlanetOrSun` and `DrawExplosion` become library calls — and `MVTRIBS` and a drawn ship can share one oracle frame. | **The first whole-frame comparison with an explosion in it**, green; `effects-seams` 8 → 7; the trap on `DOEXP` gone from every composition test; `RDKEY` compared with the banked writes rather than around them. This is the one row that cannot be done after M6-b at any price. | 3 |
+| **M6-0-b The replay reaches death and the escape pod** ✅ **built 2026-09-07 (§8)** | §4.10 says the replay "must cover launch, flight, combat, docking, death and the escape pod" and it covers four of the six: the script has a launch, a coast, a Viper and the docking computer. Two more scripted phases — a flight that ends in `DEATH`'s wreckage, and one that ends in the escape pod — each digested at its turns; both are rule 1's first case and the journal names them. Death and the pod are compared per routine today and nowhere in composition, and composition is what the replay is for (R14). | Sixteen-plus checkpoints re-recorded with the two endings named; every other test unmoved; the digests taken while the original can still say whether a moved one is a defect. | 2 |
+| **M6-0-c The eleven control codes** ✅ **built 2026-09-07 (§8)** | Task #12. Five (9, 21, 25, 27, 28) are comparable now given a `Ports` and a canvas comparison; three (22, 24, 26) need a scripted keyboard on both sides first; three (11, 30, 31) have nothing behind them on either side and fall to `default`. The eight get compared; the three get the sentence that says why not, next to the `DEFERRED` array. | `ExtendedTokenTests` defers three and says which; the eight compared against the original. | 2 |
+| **M6-0-d Two fixture faults from M3-b** ✅ **built 2026-09-07 (§8)** | `Where` has no `SUNX` and no `LSY2`, so a fixture cannot put a DRAWN sun into both machines and `MA23 whole frame (a sun close enough to draw)` has differed at screen offset 8033 since it was first run; the flight-loop fixtures give every ship a line heap at `&0C00`, outside `LineHeap`'s window, so "the seeds it writes are compared nowhere." Both were called one-line fixes at the time and neither was made. **Built:** nine planet-and-sun cells, the heaps carved from `LS%`, `PLANET` untrapped and drawn on both machines — and the first drawn-sun frames found a stale zero-page read in the original's `WPLS` that no game state reaches. | The sun frame compared on the whole bitmap; the heaps inside the arena and compared; no case excluded by name that this row could include. | 1 |
+| **M6-0-e Seven routines only ever trapped** ✅ **built 2026-09-07 (§8)** | `TRADEMODE`, `NLIN`, `TT67` and `DK4` are ported and have no direct comparison against the original anywhere — every test that reaches them traps them; `WSCAN` is the platform's (ADR-005 §3), `REDU` is proven unreachable, `GTNMEW` is the load path's name entry. A trapped routine's fixture records the TRAP's answer. Each of the seven gets a ruling: compared before M6-a, or a sentence beside its trap saying it never will be and why. | No `AddTrap` on a label that has neither a direct comparison nor a recorded reason. | 1 |
+| **M6-0-f A coverage instrument** ✅ **built 2026-09-07 (§8)** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
+| **M6-0-g Mutants to a stated floor** ✅ **built 2026-09-07 (§8)** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
+| **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
+| **M6-a Coverage review and the recorder** | **Next — M6-0 closed 2026-09-07.** First the four gaps M6-0-f's instrument named (`ISDK` and `GOIN` run rather than trapped, a test that rolls `MTT4`, a tune that reaches music commands 6 and 11); then every *Port* row of the ledger has a test that calls it, read off M6-0-f's instrument rather than reviewed by eye; the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | M6-0's eight rows green first. Then the suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
+| **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged. | 2 |
 | **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
 | **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. | A ratchet counter over opcode-shaped comment lines at zero; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone; `origin-markers` at zero. | 1 |
@@ -1356,7 +1600,7 @@ M1-a's first file and the worked example every later slice copies.
 | **R16** | A typed field silently widens a byte (an `int` promotion in a codec, a `bool` that was `0xFF`). | The codec `static_assert`s and the byte compare. | Rule 2; the ratchet counts `int` arithmetic on model fields as a pattern from M1-c. |
 | **R17** | The mutant corpus degrades under renaming — a `find` that matches once by accident on a different line. | `mutate.py --check` per commit, `--unit` per slice. | Rule 3; the selftest mutant per unit is the harness's `OracleIsPresent`. |
 | **R18** | The ratchet's ceilings are lowered to match the tree rather than the tree lowered to match the plan (a number with no decision behind it). | `check_modernize.py`'s slack check. | Rule 5; a ceiling change needs a journal entry naming the slice. |
-| **R19** | A recorded fixture pins only what the tests asked while the original was here; a behaviour no test reached before M6-b is unpinned for ever. | M6-a's coverage review; the M0-c replay's breadth. | M6 is last; the review is a gate, not a report; a fixture is never re-recorded (rule 1). |
+| **R19** | A recorded fixture pins only what the tests asked while the original was here; a behaviour no test reached before M6-b is unpinned for ever. | M6-0-f's instrument, on every push since 2026-09-07; the M0-c replay's breadth, which reaches death and the escape pod since M6-0-b. | M6 is last; the review is a tool's output and a gate, not a report; a fixture is never re-recorded (rule 1). |
 | **R20** | Rewriting the comments loses the reasons — the commentary records WHY a carry matters, and prose that says only WHAT is worth less than the assembly it replaced. | M6-d, per file. | The rule for M6-d is "keep the reason, drop the transcription"; a comment that cannot be rewritten without losing its reason keeps the instruction sequence as a quotation. |
 | **R21** | Deleting `MasterFile/` and `Upstream/` at the tip leaves them in every commit before M6-f; a reader of the history still finds them. | Not validated by this plan. | Owner decision, out of this plan's scope (§1 R-d); recorded so that M6-f is not mistaken for having done it. |
 | **R22** ✅ **closed 2026-09-06** | The altitude's radicand low byte is a stale scratch byte: `MA23`'s `LL5` takes `(R Q)` with `Q` whatever the frame last left. The risk as written also said `LOIN` writes `Q` on every line and the port keeps it local — **and that half was false**: this build's `LOIN` works in `P2`, `Q2`, `R2`, `S2` at 188–191 and never touches `Q` at 154. The claim came from the BBC commentary, which is where M2-c-1's `T`/`T2` defect came from too. | `TheAltitudeMatchesMA23` seeds `Q` on both sides over eight values and eight distances; `TheFramesOwnQReachesTheAltitude` runs the whole of `M%` with the planet in range over six bubble shapes and lets each side decide `Q` for itself. `ALTIT` is in the compared image. | **Closed by measurement, not by ruling.** Neither fix was needed: `LOIN` had nothing to publish, and the frame's `Q` agrees with the game's on every shape the sweep covers. The fixture found a different defect on the way — `MA23` reaches `SBC #36` with the carry CLEAR, so the planet's radius costs 37 — which is fixed and the replay re-taken (§8). |
@@ -1589,6 +1833,2294 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-g: the floor, and twenty-three mutants on the six files that had none.**
+
+The floor is fourteen files, written in §2.7 and carried as data in `tools/mutants.json`, and
+`mutate.py --check` -- the half that runs on every push -- now refuses a floor file whose mutants
+are all survivors or equivalents. `--unit` is repeatable, so the six new units run on one worktree
+and one baseline. Each of `Rng`, `Arith`, `ShipMove`, `PlanetDraw`, `Spawn` and `Flight` gets a
+selftest and three mutants, and every one of the twenty-three is placed on a line the plan has a
+section about: the two carries `DORND` threads; `MU1`'s `CLC`, `ADD`'s exit carry and `LL5`'s last
+`ROL` (§6.55); the inverted `BPL MV43` and `TIDY`'s loop that stops at INWK+23; `PL82`'s 248,
+`CHKON`'s branch to `PLS6`'s `CLC` (§6.45) and `SUN`'s middle threshold; `ze`'s fall into `DORND2`
+(§6.117), `SFS1`'s set carry (§6.121) and the Dodo's tech level; `RES2` re-centring the pitch and
+not the roll, `RESET`'s seven bytes being this build's, and `INC INWK+7` once on launch. Each
+mutant's note says what it would have hidden, which is the acceptance.
+
+**TWENTY-TWO CAUGHT, AND THE ONE SURVIVOR IS A PROOF.** `sm-mltu2-carry` turns the carry `MVEIT`'s
+`ADC K2+1` runs on -- the one `MLTU2` left, with no `CLC` between them -- into `false`, and the
+suite did not notice. It cannot: `MLTU2` opens with `LSR A / STA P+1`, so bit 7 of P+1 is zero,
+and its sixteen `ROR P+1 / ROR P` pairs shift exactly that bit out on the last one. The carry is
+never set, the `ADC` without a `CLC` is safe by construction, and the wide-multiply sweep now
+COUNTS the carries the shipped routine leaves over 150,000 samples and asserts zero, so the
+equivalence is measured rather than argued. It is recorded as an equivalent with that proof in its
+note, which is what rule 3 says a survivor becomes or does not stay. 95 mutants in sixteen files,
+94 expected caught and one equivalent; the floor's fourteen all carry a catch. 408 of 408; all 16
+checks.
+
+**2026-09-07 — M6-0-f: the coverage instrument, and the first honest reading of the Port rows.**
+
+The interpreter gains two optional bitsets, one bit per address, and `Step` sets a bit in the
+first for every instruction it executes and in the second for every trap it takes. `OracleImage`
+attaches them to every `Fresh()` while recording is on and hands back, per test, the sorted labels
+at the addresses set; the generated runner takes `--coverage FILE` as its first argument and writes
+one line per test — name, the labels run, the labels trapped. `inventory.py --coverage FILE` reads
+that file against the ledger: for every *Port* row it takes each stem that names a file under
+`subroutine/`, reads that file's labels through the C64 filter, and asks whether any test ran one.
+A stem with no label of its own is judged by its family. A row may say, in a
+`<!--uncovered: stem -- why-->` note, which of its files no test runs and why, and the tool prints
+every note it honoured. The CI Linux job runs the suite through the instrument and then the review,
+so the review is the tool's output and never a person's, which is the acceptance.
+
+**THE FIRST READING WAS WRONG THREE TIMES BEFORE IT WAS RIGHT.** Labels were first read from every
+branch of a shared file, so the 6502SP's labels in a `common/` routine counted as gaps; then data
+and workspace files were judged as if they were code; then the review had 265 stems run and 19 not,
+in ten rows, and every one of the nineteen got a reason it could carry. Six are the other version's
+or the machine's: `DOCOL`'s every caller sits under `_6502SP_VERSION`, `CLDELAY` is an `RTS` on this
+build, `DOHFX` and `DOSVN` are empty labels, `NEWOSRDCH` has no C64 caller, `MUT3` has no caller at
+all. Four are the platform's, trapped and not run: `DELAY` in sixteen tests and `WSCAN` in two
+(ADR-005 §3), `BELL` for its beep, `TT114` for the view it chooses. Three are what the port does not
+have: the loader's `BEGIN`, the Kernal's `CHPR2`, the integrity `checksum`. Two are M6-0-c's named
+three, trapped at their labels by the disk-menu tests. **AND FOUR ARE GAPS**, written into the
+ledger as gaps rather than dressed as exemptions: `ISDK`, the station's docking test, is run by no
+test and `GOIN` is only ever trapped; `MTT4`, the trader spawn, is reached only through part 2's
+generator rolls and no test rolls one; music commands 6 and 11 are ported and no tune the suite
+plays contains either. They are M6-a's first four items, and the tool will keep saying so until a
+test runs them. The Windows job does not run the instrument — one reading is enough and the labels
+are the same image. 28 Port rows, 265 stems run, 19 exempted, 408 of 408; all 16 checks.
+
+**2026-09-07 — M6-0-e: the seven routines only ever trapped, each with its ruling.**
+
+Four were ported and never compared on their own, and each is now: `TRADEMODE` is
+`SetUpTradeScreen` — `TT66` and then `FLKB`, one routine where the port had inlined the two calls
+at five callers — compared whole in `ShellTests` on the text state, the view and the one flush;
+`NLIN` is `DrawTitleRule` — `INCYC` first, then the rule at row 23 — compared in `ChartTests` on
+the canvas and `YC` from five rows, where the two screens that reach it had trapped it because
+their comparison is the text; `TT67`, two instructions, is compared in `TokenTests` from four case
+states; and `DK4`'s head — `LDX thiskey / STX KL / CPX #&40 / BNE DK2` — is compared in
+`PauseScreenTests` over all 256 keys, which key reaches `FREEZE` and what is left in `KL`.
+
+**`KL` WAS THE ONE STORE THE PORT DID NOT MAKE.** Byte 0 of the logger takes the key that arrived,
+on every pass; nothing on this build reads it back, but the image compares it, and a frame fixture
+that holds a key now that `RDKEY` runs for real (M6-0-a-4) would have found the two machines
+disagreeing about a byte the game writes. `Game::Step` makes the store, `GameTests` asserts it,
+and the replay does not move: its key is always zero.
+
+**THREE GET THE SENTENCE.** `WSCAN` waits for the vertical sync and is the platform's (ADR-005 §3)
+— a flat interpreter has no raster to wait for — and the sentence now sits beside every one of its
+four traps rather than beside one. `REDU` has had its sentence since the `cntr` sweep: the trap is
+armed across the whole input space to prove the tail is dead. `GTNMEW` is `GTNME` on this build —
+the delay before it is the disc version's — and the two labels are the same address, which
+`SaveGameTests` asserts beside the trap; `GTNME` is compared key for key in `NameEntryTests`. The
+acceptance holds: no trap on any of the seven without a direct comparison or a recorded reason.
+408 of 408; all 16 checks.
+
+**2026-09-07 — M6-0-c: the eleven control codes — eight compared through the dispatch, three named.**
+
+The codes that leave the text system are compared the way a token reaches them now: `DETOK2`
+with the code in A on the oracle, `PrintByte(code)` over a universe on the port, in
+`MissionTests`. Six of the eight were already compared as routines there — `PAUSE`, `PAUSE2`,
+`BRIS`, `MT27`, `MT28` by their own labels, `MT9` alone through the dispatch — and the labels are
+`DETOK2` now, so the jump table's entry and the push and pop of `V` around it are inside every
+comparison. Two are new: `CLYNS` through the dispatch, over a universe with the message counters
+it zeroes (`ShellTests` had it over bare printers), and `MT26`, which needed a port first.
+
+**CODE 26 IS PORTED.** `RunControlCode`'s `default` had said `MT26` "has no answer for whose
+buffer the line goes into"; the answer is `INWK+5`, which is `Universe::lineBuffer`, and the
+line's limits are `RLINE`'s at rest — nine — because the one routine that lowers them, `GTNME`,
+calls `MT26` directly and never through a token. The case reads a line with `ReadLine`, and its
+comparison scripts `TT217` on the oracle the way `RDKEY` was scripted for `PAUSE` (an eleven-byte
+counted stub over a table of typed keys) and gives `ScriptedStart` a typed script on the port,
+compared on the screen, `COL2`, `XC`, `YC`, the delay, the flush, and the sixteen bytes at `INWK+5`.
+
+**THE THREE ARE NAMED, NOT DEFERRED SILENTLY.** 11 is `NLIN4`, 30 and 31 are `FILEPR` and
+`OTHERFILEPR` — routines in the original, `default` in the port — and the row's "nothing behind
+them on either side" was wrong about the oracle: the jump table has an entry for each, and the
+new table test reads all eleven entries out of the image and pins them to their labels, then runs
+the three through the port and asserts its universe does not move. `ExtendedTokenTests` says the
+same in its own terms: eight compared through the dispatch elsewhere, three deferred for good.
+404 of 404; all 16 checks.
+
+**2026-09-07 — M6-0-b: the replay reaches death and the escape pod.**
+
+Two more scripted flights beside the docked one, each with its own record, and the first record
+does not move — so this is not a re-take at all, and rule 1 is not invoked: the digests that
+existed are the digests that exist. The death flight is the same launch and coast, then full
+speed straight at the planet the launch put dead ahead, until `MA23` runs out of altitude at step
+1,078; the escape flight is the same launch, coast and roll, then the pod pulled at step 102 with
+`ESCP` set. Both run off through `Game::Leave`, so what each record ends on is the docked game
+the ending leaves behind — `ESCAPE`'s Cobra spawned and the arrival flown through; `DEATH`'s
+`RES2` and then `BR1`'s two title screens, which run for real since M6-0-h-2 and are ended here
+by RETURN held through the ramming.
+
+**THE WRECKAGE IS DIGESTED, NOT JUST THE END OF IT.** `DEATH`'s `.D2 JSR M% / DEC LASCT` loop
+paces its sixty-five frames through `Presenter::HoldFlightFrame` and nothing else, so a presenter
+watching that one call sees every frame of the wreckage; the record holds the first, the
+thirty-third and the sixty-fifth, and asserts the count. Sixteen checkpoints for the death, four
+for the pod, twenty-one for the docked flight: forty-one where the acceptance asked for "sixteen-
+plus". §4.10's six are covered — launch, flight, combat, docking, death and the escape pod — and
+death and the pod are compared in composition for the first time, which is what the replay is for
+(R14). 401 of 401; all 16 checks.
+
+**2026-09-07 — M6-0-h-3: `DOKEY` calls `DOCKIT`, and the row closes at five seams.**
+
+`ControlEffects` is gone. It was `DOCKIT` beside `Ports` — M4-c-2 made the routine
+`Elite::RunDockingComputer` and every implementer of the seam made that one call — and
+`ReadFlightControls` makes it itself now, over slot 0, which is what `INF` points at on `auton`'s
+path. `Game` takes three references; `FlightSession` answers no seam at all and stops being lent
+the ports; `effects-seams` 6 → 5, `outpost-elite-names` 64 → 61, `main-lines` 251 → 250. Five is
+the number §4.5 can explain: `Keyboard`, `Presenter` and `CommanderStore`, and the text system's
+`TextSink` and `ValueTokens`.
+
+**THE `DOKEY` SWEEP RUNS THE REAL AUTOPILOT.** It had stubbed `DOCKIT` on both machines — eleven
+bytes on the oracle, the seam on the port — to hand `DOKEY` four scripted answers, which is how
+it isolated the seventy-seven instructions from the routine they call. With the seam gone the
+port cannot be handed an answer, so the oracle is not either: each docking case seeds a bubble on
+both machines — the planet, a station where the case puts it with the slot pointing where the
+case says, `MANY`, `K3+10`, `RAND` — and both run `DOKEY` into `DOCKIT` into the key synthesis.
+Fourteen approaches replace the scripted answers, chosen by reading `DOCKIT` for what reaches
+each branch of `DOKEY`: the planet (no station, or one too far), the wide approach, the fine
+approach's halt-and-turn, and the lined-up ship whose roof-against-side test either rolls hard —
+`TN11`, roll 127 and speed up, which is the one way `DOKEY`'s direct write to `JSTX` is ever
+reached — or halts. The sweep is 1,984 cases where it was 3,840, every one of them agreeing byte
+for byte, and it asserts what §6.36 asks: that the autopilot asked for both speeds, both rolls and
+both pitches, wrote `JSTX` directly and hit the speed clamp, so a port that never took a branch
+could not agree with a game that did. `RAT`, `RAT2` and `CNT2` are compared as well now, seeded
+with a value `DOCKIT` overwrites, which is also how "the autopilot ran only when it is on" is read
+off the state instead of off a counter. 399 of 399; all 16 checks.
+
+**2026-09-07 — M6-0-h-2: `BR1` calls `TITLE`, and the title screen runs on both machines.**
+
+`StartUpEffects` is gone. Its last method was a forward to `Elite::ShowTitleShip`, and `BR1` makes
+that call itself now, which is what `JSR TITLE` is. `Ports` is eight references, `Game` takes four
+and a `ControlEffects`, `GameShell` stops answering it and stops holding `QQ12` for it;
+`effects-seams` 7 → 6, `aggregate-refs` 9 → 8, `outpost-elite-names` 66 → 64.
+
+**A TITLE SCREEN ENDS ONLY ON A KEY, and that is the cost of the call.** Every fixture that drives
+the start sequence runs the title screen for real now and has to end it the way a player does:
+`GameTests` holds Space for exactly as long as `Reset` runs, `DockedSessionTests` for exactly as
+long as `ResetAndStartGame` runs, and `StartUpTests` holds the script's key at the first screen
+and Space at the second — on the port through `ScriptedKeys`, counting scans, and on the oracle
+by pressing the key on the CIA matrix at the label, which M6-0-a-4 made possible. So `TITLE` runs
+on the oracle inside `BR1` for the first time: `RESET`, `NWSHP`, `LL9` drawing a Cobra and then an
+Adder, `MVEIT`, `RDKEY` walking the matrix. The scripts hold matrix positions rather than
+characters now, pinned against `TRANTABLE`; "no key at all" was a script only a stub could answer
+and is "the fire button", the one key that ends a title screen with `JSTK` still set.
+
+**WHAT IS COMPARED CHANGED SHAPE.** The port had nothing left to record a `TITLE` call with, so the
+seam sequence is the oracle's alone — the two `JSR TITLE`s with their arguments, watched at the
+label — and the port's side is state: `TYPE`, `INWK`, `FRIN`, `JSTK`, `DELTA`, `MCNT`, `CNT2` and
+`QQ11` after the second screen, the sixty-five logger bytes, and one title frame per screen. One
+assertion is lost and said so in place: the prompt column the port sets before the first title,
+which the title's own prints move on both machines while the oracle's `DOXC` stays trapped. The
+replay is untouched — it enters at `RESET` and `LAUN`, not at `BR1`. 399 of 399; all 16 checks.
+
+**2026-09-07 — M6-0-h-1: `ZEKTRAN` is the library's, and the row was written on a false premise.**
+
+M6-0-h said `StartUpEffects` was "an abstract class with nothing but a virtual destructor". It
+was not: it declared `ClearKeyLogger` and `ShowTitleScreen`, both called from `StartUp.cpp`, and
+the sentence had been true of nothing since M3-b-3d took `ScanTitleKeys` out and left those two.
+The row is corrected in place (three pieces, three sittings) rather than rewritten, because the
+mistake is part of the record: a plan row written from memory of a header, not from the header.
+
+The first piece is the small one. `ZEKTRAN` zeroes the sixty-five bytes of `KEYLOOK`, which are
+`Universe::keys` and have been since M3-a; `ScanKeyboard` already does exactly that for its own
+`JSR ZEKTRAN`, and `BR1` and `TITLE` now do it for theirs. What the executable had answered the
+seam with was `Window::FlushKeys` — the pressed-key list that feeds `NextKey`, which is `FLKB`'s
+list and is flushed where the game does `FLKB` — so the seam was doing a different job on the
+platform from the one it was named for, and taking it out changes nothing the game can see.
+`StartUpTests` stops counting it on both machines and compares it instead: both loggers are
+seeded full before `BR1` and all sixty-five bytes are compared after; `DockingTests`,
+`DockedSessionTests`, `LaunchTests`, `MissionTests` and `NullSeams` drop an override each.
+
+`ShowTitleScreen` is h-2 and is not small: it is a forward to `Elite::ShowTitleShip`, and calling
+that directly means every fixture that drives a `Game` — `GameTests`, `DockedSessionTests`, the
+replay's `FlightPort` — runs the title screen for real on `Reset()`, and a title screen ends only
+on a key, so each of their keyboards has to hold one; the oracle side of `StartUpTests` then runs
+`TITLE` for real too, which M6-0-a-4's matrix makes possible. `ControlEffects` is h-3: the
+`DOKEY` sweep stubs `DOCKIT` on both machines through it, and the direct call means the real
+autopilot over a seeded bubble in place of four scripted answers. 399 of 399; all 16 checks.
+
+**2026-09-07 — M6-0-a-4: `RDKEY` runs on the oracle, and the row closes.**
+
+The last line of M6-0-a's acceptance, and the smallest: `Cpu6502` answers CIA1's port B from a
+keyboard matrix — eight column bytes a fixture presses keys into with `HoldKey`, read back as the
+rows of whichever columns the last store to port A selected, a held key pulling its bit low — and
+port A reads back what was stored, which on a C64 with nothing in joystick port 2 is what the chip
+does. That is all `RDKEY` needs to run: `SETL1`, the sprite register, `ZEKTRAN`, the eight-column
+walk with its stable-read loop, the ninth pass that selects nothing, and the `QQ11` tail. Both of
+`ControlsTests`' traps on it are gone. The `DOKEY` sweep presses the case's steering keys on the
+matrix and holds the same keys on the port's `Keyboard`, seeds both loggers FULL beforehand, and
+compares all sixty-five bytes the two scans built — so a scan that failed to clear would fail on
+`DELTA` and `JSTX` as well as on the logger; the `TT17` sweep presses its five keys the same way.
+The logger index is the walk run backwards, column `(&40 - X) / 8` and row `(&40 - X) % 8`, and
+the three positions `Controls.h` already names (Space, "A", RETURN) check it.
+
+What is NOT compared, said plainly: `RDKEY`'s joystick branch. With `JSTK` set the routine reads
+port A first and takes `dojoystick` when any of bits 0 to 4 is low; the fixture leaves the port
+as the previous scan's `STA &DC00` leaves it, so the joystick is idle and the oracle falls into
+the walk, which is the path the port's `ScanKeyboard` is. The ledger has said since 2026-09-04
+that the joystick is read inside `RDKEY` and is the seam's; that stands, and it is a `Keyboard`
+question for the executable, not a comparison this fixture can make.
+
+**M6-0-a IS BUILT**, in four sittings against the row's three: the interpreter banks the I/O page
+(a-1), the frame fixture draws the cloud (a-2), the seam goes (a-3) and `RDKEY` runs (a-4). Every
+line of the acceptance is met — the first whole-frame comparison with an explosion in it is green
+(a-2), `effects-seams` 8 → 7 (a-3), no composition test traps `DOEXP` (a-2, a-3), and `RDKEY` is
+compared with the banked writes rather than around them (a-4). 399 of 399; all 16 checks.
+
+**2026-09-07 — M6-0-a-3: `ShipDrawEffects` goes, and `DrawShip` takes the universe.**
+
+The last of the phase-order seams, and the one §6.108 kept alive after every other had gone.
+`LL25`'s `JMP PLANET` and `LL14`'s `JMP DOEXP` are calls inside `DrawShip` now — the same two
+library calls every implementer of the seam had been making, `FlightSession`, `FlightPort` and
+the frame fixture's recorder alike — and `DrawShip(Universe&, Ship& _slot, bool _carryIn)` replaces
+the twelve-parameter signature, because eleven of the twelve were `_universe.x` at every call site
+and the twelfth, the slot `INF` points at, is the caller's decision. `Ports` is nine references;
+`Game` takes five and a `ControlEffects`; `effects-seams` 8 → 7, `aggregate-refs` 10 → 9,
+`workspace-params` 45 → 43, `outpost-elite-names` 69 → 66. Seven fixtures stop declaring a seam
+they never reached; `NullSeams`, `FlightPort` and `FlightSession` stop answering it.
+
+**THE SHIP-DRAW SWEEP'S EXPLODING PLACEMENT WAS ANOTHER UNREACHABLE STATE.** Its heap was all
+zeroes with the exploding bit set, which the game never produces — `EE55` writes the counter, the
+explosion count and four seeds the moment a ship dies — and the `DOEXP` trap had hidden it: with
+the trap gone the oracle walked byte 2 (zero) down through 255 copying vertices and read its own
+stack page where the port reads zero. The placement's heap is seeded the way `EE55` leaves one,
+`RAND` is seeded on both sides because the cloud consumes it, and the first four face flags are
+left out of that placement's `XX2` comparison because they are `K3` and `DOEXP` writes its last
+vertex over them (the port's `k3` is a local). The same shape as M6-0-d and M6-0-a-2: not a port
+defect, a fixture describing a state the game has no path to. The `DOEXP` traps in `MissionTests`
+and `ShipDrawTests` are gone with the seam; `RDKEY` is M6-0-a-4. 399 of 399; all 16 checks.
+
+**2026-09-07 — M6-0-a-2: `DOEXP` untrapped, and the first whole-frame comparison with an explosion in it.**
+
+The second third of M6-0-a, and the row's own acceptance line. The frame fixture's recorder no
+longer counts `DrawExplosion`: it draws the cloud, the way M6-0-d made it draw the planet, and the
+trap on `DOEXP` comes off `CompareFrames`. Every case of the per-ship sweep that kills a ship now
+draws its cloud on both machines — the sprite writes reach the banked page (M6-0-a-1), the
+particles reach the bitmap, `RAND` leaves the routine in the mixture §6.86 records — and the
+frame compares the bitmap, the seventeen sprite cells, the heap and `RAND` afterwards.
+
+**ONE CASE FAILED, AND IT WAS THE FIXTURE.** The asteroid shot to bits differed on five bitmap
+bytes with every cell agreeing, which is the signature of the arena's edge and nothing else.
+`PopulateBubble` carves the three ships' heaps for types 3, 5 and 11 and the case retyped them as
+asteroids afterwards: an asteroid's explosion count is 34, the heap carved for type 3 is 29 bytes,
+and the last two vertices `EXL1` copies land above `LS%` — in RAM the oracle happily reads back,
+and outside the arena the port reads as zero. `PopulateBubble` takes the asteroid flag now and
+carves the heaps to the blueprint that will explode. Not a port defect: the port's `LineHeap`
+reads zero past the arena on purpose, and a ship whose heap `NWSHP` carved never overruns it.
+
+The replay record does not move: the replay never trapped `DOEXP`. 399 of 399; all 16 checks.
+The seam itself, and the two `DOEXP` traps still standing in `MissionTests` and `ShipDrawTests`
+that count its calls, are M6-0-a-3.
+
+**2026-09-07 — M6-0-a-1: the interpreter banks the I/O page, and `NOSPRITES` runs on both machines.**
+
+The first third of the row that cannot be done after M6-b at any price. `Cpu6502` models the
+6510's port register: `memory` is the 64K of RAM and a second array, `io`, is the 4K page the
+VIC-II, the SID, the colour RAM and the CIAs occupy at `&D000`–`&DFFF`; a data read or a store on
+that page reaches the chips when bits 0 to 2 of `&0001` say so (CHAREN set and LORAM or HIRAM set —
+`%101` is what `SETL1` maps in with, `%100` what it maps out with) and the RAM under them
+otherwise. Instruction fetches, the stack and zero-page pointers never reach the page. Every one of
+the interpreter's sixty-two data reads and twenty-four read-modify-writes goes through `Read` and
+`Store` now; the store log is by address and sees both. A fixture that seeds or reads a register
+does so through `Io`, whatever the port register holds.
+
+**WHAT THAT UNDOES.** §6.108 found that in a flat image `XX21` — the blueprint pointer table at
+`&D000` — and the VIC-II's registers were the same bytes, so `NOSPRITES`' `STA VIC+&15` zeroed
+ship type 11's pointer and `NWSHP` refused the ship; the fix was to trap `NOSPRITES` in five suites,
+trap `DOEXP` in every composition test, keep `ShipDrawEffects` as a seam after every other seam
+had gone, and have each fixture CLAIM the sprite registers (`spriteRegistersAreOurs`) before the
+image would carry them. The five `NOSPRITES` traps are gone and the routine runs on both machines;
+the claim is gone and the seventeen sprite cells are ordinary cells, marked `io` so the image
+reads and writes the page; `TrumbleTests`, `ExplosionTests`, `ControlsTests` and `RasterTests`
+address the registers as registers. The first build routed every read above `&D000` to the page,
+which put the line-heap arena at `&F900` behind the chips and broke the explosion cloud; the
+bound is on both ends now.
+
+The replay record's label column moves (the sprite cells joined the image) and the state column
+does not — rule 1's first case, witnessed. 399 of 399; all 16 checks. `DOEXP` and the seam are
+M6-0-a-2 and -3.
+
+**2026-09-07 — M6-0-d: the two fixture faults, and a drawn sun on both machines for the first time.**
+
+The first M6-0 row built, and the smallest; it was "two one-line fixes" in M3-b's journal and is
+neither. `Where` gains `SUNX`, `LSY2`, `Yx2M1`, `K5`, `K6`, `STP`, `FLAG`, `PLTOG` and `V`, and the
+image gains the cells: `SUNX`, `SUNX+1`, `Yx2M1`, `STP`, `FLAG` and `PLTOG` compared, `K5`, `K6` and
+`V` image-only — `V` because the original uses the pair as a pointer in `LL9`, `TACTICS` and the
+printers and as the sun's counter, and `K5`/`K6` because trying them compared first showed the
+same shape: eight suites differed on them after frames that drew a ship and no planet, the line
+clipper and the escape pod's launch write them as scratch the port keeps in stage results. `LSY2`
+needs no cell — `ball` is one block because `BLINE` indexes across the join — and the image test
+now asserts the join is where the port says (`LSX2 + 256`). The flight-loop fixture's ships get
+line heaps carved down from `LS%` at their blueprints' sizes, with `SLSP` below them, so the arena
+comparison sees the lines a drawn ship writes; `RecordingUniverse::DrawPlanetOrSun` DRAWS, and
+`CompareFrames` no longer traps `PLANET` — so the altitude sweep's "a sun close enough to draw"
+puts a drawn sun into both machines and compares the whole bitmap, which it had never done.
+
+**WHAT THAT FOUND, AND WHAT IT IS.** Three whole-frame comparisons differed on screen once both
+machines drew: a three-pixel column at the left edge of the space view, full height, on the port
+only. Bisected with the machines drawing in isolation from the same state (they agree), with the
+sun skipped on both (they agree), with the game's `SUN` trapped and its inputs watched (identical
+in the frame and in isolation), and with the game's stores to the sun heap logged: `WPLS` was
+erasing the old sun's rows, and its `EDGES` found every row's RIGHT end off the LEFT of the screen
+— the fixture had seeded `SUNX` with a random high byte, 238. On that exit `EDGES` never writes
+`X1`, and `HLOIN2` draws anyway (it drops the carry), so the original's row ran from whatever `X1`
+last held: 96 in the frame, left by the planet's draw, and 0 in isolation, left by a fresh zero
+page. A STALE ZERO-PAGE READ in the original, which the port cannot reproduce — `X1` is a local
+since M2-c — and which no game state reaches: `SUN` writes `SUNX` from `K3` only after it has
+drawn, so the high byte is 0 or 1 and a row's right end cannot land left of the screen. The
+fixture seeds a reachable centre now; `ClipSunRow`'s `ED1` branch carries the sentence. Not a
+port defect and not a re-take under rule 1's second case; it is the kind of thing this row exists
+to find before the oracle goes, and the answer is in writing.
+
+The replay record moves on every checkpoint in the LABEL column and not at all in the STATE
+column — nine new cells widen the label hash, `Game::StateHash` already folded them, and its
+sixteen digests are unmoved to the bit. That is the state column doing the job M5-e-3 built it
+for: rule 1's first case, proven rather than argued. 399 of 399; all 16 checks; the plan's M6-0-d
+row is built.
+
+**2026-09-07 — M5-a-12: `Equipment` examined and refused, and the reason is four encodings.**
+
+The last of M1's deferred types, and the owner's ruling was to refuse it with the reason written
+down. The reason is the same shape as `Options` and `View` in ADR-006 §2: the bytes the plan would
+gather under one type are not one kind of thing. `ECM`, `BST`, `ESCP`, `GHYP` and `DKCMP` are flags
+the game writes as `0` and `&FF` and tests with `BEQ`. `ENGY` is a COUNT — one for the extra unit,
+two for the naval one — that multiplies the recharge. `BOMB` is a STATE MACHINE: `&7F` when fitted,
+shifted left on arming so bit 7 comes up, then shifted left again every frame the screen flashes
+(`ASL BOMB / BMI`) until it is zero and the bomb is gone — the byte is the countdown and the
+fitted flag at once, and `Flight.cpp`'s launch clears it only when bit 7 is set. And all of them
+are ALSO hold slots: `OUCH` damages equipment by indexing the block as cargo slots 17 to 20
+(`Commander::HoldOrFitting`), so a type over these bytes would have to be indexable as the cargo
+hold as well. A `struct Equipment` would be a struct of five differently-encoded bytes with no
+operator to earn, and a scoped enum or a flag type would misdescribe two of them outright. The
+named bytes on `Commander` are the honest form, and the equipment screen's member-pointer table
+walks them as the original's `LDA #&FF / STA` sequence does.
+
+No line of `GameLogic/` changed; the decision is ADR-006 §2's and the M5-a row's. With this, every
+strong type M1 deferred and M5-a named has been built or refused with its reason in writing, and
+the `Options`/`View`/`Message`/`Equipment` refusals share one test: the bytes are not one kind of
+thing.
+
+**2026-09-07 — M5-a-11: `Laser`, and the four powers that lived in four places.**
+
+The second of M1's deferred types. `LASER,Y` is one byte per mount and THE BYTE IS THE LASER'S
+IDENTITY — there is no separate type in the original: `POW` (15) is a pulse laser, `POW+128` the
+same power with bit 7 set, which is what `MA3`'s `BMI` fires every frame, `Armlas` is
+`INT(128.5 + 1.5 * POW)` = 151 and `Mlas` is 50, two values that happen not to collide. So the
+type is a byte with the three questions the game asks of it — `Fitted()`, `IsBeam()` (bit 7) and
+`Power()` (`AND #%01111111 / STA LAS`, what the damage arithmetic takes) — and the five named
+values, `LASER_NONE`, `LASER_PULSE`, `LASER_BEAM`, `LASER_MILITARY`, `LASER_MINING`; the two `>=`
+compares the sound picker makes on the whole byte read `.byte`, because that is what they compare.
+
+**THE FINDING IS THE FOUR FAMILIES.** `Controls.h` had `LASER_PULSE`/`BEAM`/`MILITARY` for `SIGHT`,
+`FlightLoop.h` had `LASER_POWER_MINING`/`MILITARY` for the sound picker, `Equipment.cpp` had
+`PULSE_POWER`/`BEAM_POWER`/`MILITARY_POWER`/`MINING_POWER` for the refund, and `StatusScreen.cpp`
+had the same four again for the token — twelve constants for four bytes, each family with its own
+comment explaining `Armlas`. One definition each now, on the type. `Refund` takes the laser it
+fits rather than a power byte; `LaserToken` takes a laser; the codec writes and reads the six
+mount bytes explicitly, since `run` copied a byte array and the array is of lasers.
+
+Twenty-two suite sites follow the type — the sight sweep's table is a `std::vector<Laser>` with
+`Laser{99}` for the power the game does not have, and the frame sweep's `FITTED` likewise. 399 of
+399, every oracle comparison and both replay columns unmoved; `origin-markers` 4,133 → 4,136 (the
+type's markers, rule 4); all 16 checks. `Equipment` is the next entry, and it is a refusal.
+
+**2026-09-07 — M5-a-10: `LightYearsTenths`, and the seventy that was defined three times.**
+
+The first of M1's three deferred types, under the owner's ruling of the same day (build fuel and
+the lasers; refuse the equipment bytes with the reason). ADR-006 §2 parked `fuel` at M1 because
+"a type would be arithmetic operators with a name", and the count it gave — twenty-nine sites —
+was the count of READS. Reading the sites again with the type in mind, the byte has exactly three
+arithmetic rules and everything else reads it as a byte: `MA23`'s scoop (`LSR A / ADC QQ14 / CMP
+#70 / BCC / LDA #70` — the amount plus the bit the shift dropped, saturating), the jump's `SEC /
+SBC QQ8 / BCS / LDA #0` (an empty tank rather than a wrapped one, and the carry the tunnel roll
+rotates in), and `TT111`'s two-byte range check. Those are `Scooped`, `Burned` and `Reaches`, each
+written once against the instruction it is; the dial, the fuel circle, the printer and the codec
+read `tenths`, because for them it is a byte. `Burned` returns a `FuelBurn` — the tank and the
+flag — because `hyp` goes on to use the `SBC`'s carry, and a type that dropped it would have moved
+the record.
+
+**THE FINDING IS THE SEVENTY.** `FlightLoop.cpp` had `FUEL_MAXIMUM = 70`, `Flight.h` had
+`ESCAPE_FUEL = 70` and `Equipment.cpp` had `FULL_TANK = 70`, three names for the one `LDA #70` the
+original writes in `NA%`, `nosurviv`, `MA23` and the equipment screen — the `DNOIZ`/`MISSILE_GREEN`
+shape a third time, found by the same route. `Elite::FULL_TANK` is the one definition. And the test
+wrapper carried a `Universe::fuel` beside `commander.fuel` "so the fixtures can name it", written by
+`Seed` and two suites and read by nothing in the library — a second `QQ14` in the M5-e-2 sense, deleted.
+
+`ChartView::fuel`, `DrawDials`, `ShowDashboard`, `SetUpScreenPixels`, `FuelPrice`, `EquipmentPrice`
+and `Refund` take the type; twenty-one suite sites read `.tenths`. The `hyp-fuel-zero` equivalent
+mutant re-anchored to `Burned` (rule 3). 399 of 399, every oracle comparison unmoved and the replay
+record unmoved in both columns; `origin-markers` 4,130 → 4,133 (the three rules' markers, rule 4);
+all 16 checks.
+
+**2026-09-07 — M5-e-3: `Game::StateHash()`, library-native, and the record's second column.**
+
+Task #13's last item, under the ruling of the same day: library-native, kept beside the label
+hash. `Elite::HashState(const Universe&)` is FNV-1a over every byte of game state, folded in
+`Universe`'s declaration order through the codecs where a struct has one (`Ship`, `Commander`) and
+byte by byte where it is bytes — one `FoldIntoStateHash` overload per state struct in
+`StateHash.cpp`, and the fold order is the whole definition. No label, no oracle, nothing from the test tree: `UniverseImage`'s
+hash is the same idea over the label table and needs `Where`; this one ships. `Game::StateHash()`
+answers it over the universe it owns, and `FlightPort::StateDigest()` is that call — the pixels, the
+heap arena and the controls the label digest has to fold on beside the image are bytes of `Universe`
+and need no folding on.
+
+**THE RECORD GAINS A COLUMN AND THE FIRST DOES NOT MOVE.** `Checkpoint` carries both digests; the
+label column is the one M5-e-2 took, to the bit, and the state column is new — taken from the same
+flight, not a re-take under rule 1 at all. Both are compared on every run until M6-f retires the
+labels, when the state column is the record.
+
+**WHAT HOLDS A HAND-WRITTEN FOLD TO THE STATE.** The risk of a fold is a field it forgot, and the
+first build forgot five: the completeness test in `StateHashTests` walks the label table UNRESOLVED
+(every address zero, as the replay hashes it, so the suite loads no oracle), flips each cell through
+its own setter and asks whether the state hash moved — and it named `safehouse`, `QQ8+1`, `JSTGY`,
+`JSTE` and `MUTOKOLD`, the five bytes M5-a-6 appended to `Universe` after `crosshairStep`, which the
+member listing the fold was written from had been cut before. 1,473 cells move the hash; the seven
+that cannot are the table's own no-op setter (`XX0`'s high byte) and the low halves of its word
+pairs, which `AddressPair` holds back until the high half commits. That last one is worth a line:
+the pair helper is stateful, and a walker that flips a low half and moves on without restoring it
+carries the flipped byte into the next cell's commit — the test restores every cell, inert or not.
+The three things the image leaves to the replay's digest are checked by hand, and `Game` is shown
+to hash its own universe and nothing else.
+
+Two accessors for the fold — `Canvas::SpriteMulticolour()`/`ExplosionColour()` and
+`LineHeap::Bytes()` (the arena only; the lent sun heap is `PlanetSunState::sun`'s and is folded
+there). 399 of 399 (four new); `origin-markers` 4,127 → 4,130 for the three codec layouts the fold
+names (rule 4); `oracle-test-files` unmoved at 48, because the suite walks the table unresolved;
+all 16 checks; the channel census regenerated, since a fold that reads every workspace field is a
+reader the census has to list.
+
+**2026-09-07 — M5-e-2c: `QQ17` is one byte, and the token printer binds to `TextState`.**
+
+The second of M5-e-2's follow-ons, and the oldest open wart in the text system: `TokenPrinter`
+kept `QQ17` as `m_caseFlags`, `TextState` carried it as `caseFlags` for `CHPR`'s check against 255,
+and `TextPrint.cpp` had said since slice 1c that "every routine that assigns QQ17 has to assign
+both or they drift" — the conversion plan's §6.28 shape, seven sites storing it twice
+(`SetUpTextScreen`, `ClearMessageRows`, `ShowMessage`, `SetUpScreenPixels` twice, `Launch`, the
+market's buy path) and nine storing only the printer's (`TT27`'s tokens 6 and 8, the three bit
+toggles in `TT41`/`TT45`/`TT46`, `SetSentenceCaseAndNewline`, and `MT6`, `MT21` and `MT17` in the
+extended printer). `TokenPrinter` takes a `TextState&` at construction now, as the other two
+printers take theirs, and `m_caseFlags` and the optional `m_cursor` are that one reference:
+`CaseFlags()`/`SetCaseFlags()` stay for the forty-eight callers and read the struct's byte, control
+code 9 moves the column unconditionally rather than when a cursor was set, and the seven paired
+stores are seven single stores of `text.caseFlags`. `MarketScreen`'s dead `savedFlags` pair goes
+with its wart.
+
+**WHAT THE EVIDENCE IS AND IS NOT.** The suite is green at 395 with no oracle comparison moved,
+and the replay record did not move either: the `QQ17` cell read the printer's copy before and the
+one byte now, and they agree at all sixteen checkpoints. That is evidence that no TESTED path had
+let the two drift — not a proof that none could, which is exactly why one byte is right: the nine
+printer-only stores could put the printer's copy at 128 while `CHPR` still read 255 from the
+struct's, and the original has no such state. `TT27` under 255 returns before it stores, so the
+collapse cannot introduce a drift the original lacks. `Universe.text`'s comment already listed
+`QQ17`; the `TextState` and `Tokens.h` comments say whose byte it is now.
+
+The image reads `_universe.text.caseFlags` directly, `Beside` is gone — the primary `ImageCells`
+takes the bare `Elite::Universe` and the fixture's sprite claim as a `bool` — and `Hash(const
+Elite::Universe&)` is the replay's with nothing beside it; `Game::Recursive()` goes with its last
+caller. Twenty-seven suite printers gain a `TextState`, fourteen `SetCursor` calls go, and three
+suites that had never named `TextState` include `TextPrint.h`. 395 of 395; all 16 checks;
+`origin-markers` unmoved at 4,127 (one marker left `Game.h`, one arrived on `TokenPrinter::m_text`).
+
+**2026-09-07 — M5-e-2b: `DTW1`–`DTW8` are the universe's bytes, and the printer binds to them.**
+
+The first of M5-e-2's two follow-ons. `ExtendedTextState` — eight bytes with 6502 labels and eight
+cells in the image — was `CharacterPrinter`'s member, and `Universe.h` had said since M3-a why:
+the printers stay outside a universe that has to copy, and moving the bytes in "means giving the
+printer a reference to it, which is M3-b's question". It is `Universe::sentences` now, in the
+screen block beside `text` and `message`, and `CharacterPrinter` takes an `ExtendedTextState&` at
+construction exactly as `TextPrinter` takes its `TextState&` — the universe still has no reference
+member, no virtual and no printer, and the printer's vtable was never a property of its bytes.
+`Game` hands its printer `m_universe.sentences`; the test wrapper hands its own base's.
+
+**THE MEMBER IS PRIVATE, AND THE RATCHET IS WHY.** A public `ExtendedTextState& state;` is what P5's
+counter reads as an argument-list reference (`Type& name;`), and `aggregate-refs` went 10 → 11 on
+the first build. The AGENTS convention is the answer rather than an exclusion: `m_state` behind
+`State()`, which is the shape `TextPrinter::m_state` already had and the counter already did not
+count. The library reads the universe's bytes where it has the universe — the twenty-six
+`_ports.characters.state` arguments to `ShowMessage` and `ClearMessageRows` are `_universe.sentences`
+now, `Game`'s two are `m_universe.sentences`, and `FindSystemByName`, which takes the printer and not
+the universe, goes through `State()`. Fifty-one suite sites do the same mechanically.
+
+The image's `DTW` cells read `_universe.sentences` and `Beside` is down to the token printer and the
+sprite claim; `Game::Characters()` goes with the last reason for it. 395 of 395 on the first
+build, the replay record unmoved — the bytes hashed are the bytes `Game`'s printer wrote, exactly
+as M5-e-2 left them, which is the evidence the move changed no value. `origin-markers` 4,126 →
+4,127 (the marker on `Universe::sentences`, rule 4); `aggregate-refs` back at 10; all 16 checks.
+`QQ17` — the byte that is two bytes — is M5-e-2c.
+
+**2026-09-07 — M5-e-2: `Game` owns `Universe`, and the digest had been hashing an idle printer.**
+
+Task #13's second item and §4.4's `Universe m_universe`, which M3-c built as `Universe&` and blamed
+on the seams `FlightSession` answers. That was the wrong diagnosis: the seams were never in the way,
+the CONSTRUCTION ORDER was. Both sessions bound the universe in their constructors and `Game` needs
+both sessions in its own, so whichever was built first needed the other. `GameShell` and
+`FlightSession` take the universe afterwards now — `AttachUniverse`, the shape the four `Attach`es
+already had — and `Main.cpp`'s `App` holds no game state at all: `game.State()` is the one universe
+and the sessions are pointed at it. `Main.cpp` is 251 lines, from 253, and the ceiling follows it.
+`FlightPort` and `GameTests`' `Bare` lose the universe member the same way.
+
+**THE FINDING IS IN THE REPLAY, AND IT IS THE SECOND-`QQ12` SHAPE A LEVEL UP.** Nine cells of the
+image are not `Elite::Universe` fields: `QQ17` reads the token printer's case flags and `DTW1`–`DTW8`
+read the character printer's `ExtendedTextState`, because ADR-007 §6 keeps the text objects out of
+the universe. `Hash(universe)` took the TEST WRAPPER, whose printers those were — and `FlightPort`
+had two of everything: the wrapper's printers, which its constructor set and the flight never drove,
+and `Game`'s, which printed every message of the flight. The digest hashed the idle pair. It could
+not be told apart from a correct digest by any test, because nine constants hash as well as nine
+bytes; what exposed it is that the wrapper's base is no longer the universe `Game` runs on, so the
+old call stopped compiling. `UniverseImage` now takes what it reads BESIDE the universe as an
+argument (`Beside`: the two printers and the fixture's sprite-register claim), the wrapper overloads
+forward their own, and the replay hashes `Game`'s (`Hash(universe, game.Recursive(),
+game.Characters())`). Rule 1's second case: the record is re-taken and every checkpoint moves, with
+the proof taken before the re-take rather than argued after it — hashing a fresh idle wrapper's
+printers in the new call reproduces the previous sixteen digests to the bit, so the flight is the
+flight it was (1,170 steps ending `Docked`) and what moved is nine bytes that had been constants.
+
+Two consequences, both slices rather than fixes here. **M5-e-2b**: nine bytes with 6502 labels that
+the digest reads through a fixture argument are game state by ADR-007 §6's own rule, and the reason
+they are outside `Universe` — the printers have vtables — is about the PRINTERS, not their bytes;
+`ExtendedTextState` and `QQ17` move into `Universe` and `Beside` shrinks to the sprite claim. And
+`QQ17` is TWO bytes on the tree: `TokenPrinter::m_caseFlags` and `TextState::caseFlags` both carry
+the marker, `CHPR` reads the second to notice 255 and the token printer reads the first for
+everything else, and `TextPrint.cpp` writes both in step at two sites while `Tokens.cpp` and
+`ExtendedTokens.cpp` write only the first — the same doubling as `QQ12` and `DNOIZ`, found by the
+same route, and M5-e-2b's to collapse. 395 of 395; all 16 repository checks; `main-lines` 253 → 251;
+`outpost-elite-names` unmoved at 69 (`AttachUniverse` is a member of the app's own classes);
+`origin-markers` 4,125 → 4,126, the marker on `Game`'s two printer accessors (rule 4).
+
+**2026-09-07 — M5-e-1: `Game::Sounds()`, and the one place the executable reached INTO the library.**
+
+Task #13's first item, and the owner's ruling on the three §4.4 sketched: `Sounds()` real, `Frame()`
+recorded, `StateHash()` library-native (M5-e-3). `Game` owns the SID log now — `SidWriteLog m_sid`,
+declared before the `Ports` that binds `sid` to it — and answers it through `Sounds()`, with
+`ClearSounds()` for the executable to call once it has applied what it read. Until this slice the
+executable owned the log: `SoundOutput::Direct()` handed the game a reference into the app's own
+buffer, `Pump` applied that buffer and cleared it, and the library wrote into memory it did not own.
+It was the only place the app reached into library state rather than being handed a value, and
+ADR-007 §1's rule — a byte of game state goes in the library — had not been applied to it because
+`Ports.h` argued, correctly, that the log is not STATE. It is not; but it is the library's output,
+and the executable reads outputs, it does not lend buffers for them.
+
+**WHAT MOVED IN THE EXECUTABLE.** `SoundOutput::Pump` takes the log as an argument and `Direct()`
+and `m_direct` are gone; `GameShell::AttachSound` takes the `Game` whose log it drains, and `Turn`
+reads `Sounds()` before the present and clears it after — the same point in the frame the old
+buffer was applied at, so the writes reach the chip in the same order relative to the interrupt's.
+`Main.cpp`'s construction loses `audio.Direct()`; `check_outpost.py` sees the arity change and
+agrees with the header.
+
+**`Sounds()` answers the log, not §4.4's span.** The sketch said `std::span<const SoundEvent>`; the
+log carries a `dropped` count beside its writes and `Apply` takes a log, so a span would lose the
+count and gain a conversion. `Frame()` is not built because `State().canvas` is what it would
+return and the executable already reaches it; §2.1 and ADR-007 say so rather than leave a line
+unbuilt.
+
+Two test fixtures had been handing `Game` a log of their own — `FlightPort` and `GameTests`' `Bare` —
+and neither read it back. Both members go. 395 of 395; all 16 repository checks; the replay digest
+unmoved; `outpost-elite-names` unmoved at 69, because `Game` was already a name the executable
+reached and its members are not counted; `origin-markers` 4,123 → 4,125.
+
+**2026-09-07 — M5-d-2: the hundred C arrays were thirteen, and the thirteen are `std::array`.**
+
+M5-d left `-modernize-avoid-c-arrays` excluded with the note "100 real findings, its own slice". The
+hundred was a phantom: clang-tidy reports a diagnostic in a HEADER once for every translation unit
+that includes it, and 96 of the hundred were three lines of `VideoState.h` and two of `Canvas.h`
+counted over the files that include them. Unique sites: thirteen, in nine files. That is worth
+recording as a lesson about reading the tool — a count from a sweep is a count of REPORTS, and the
+assessment that wrote "100" into M6-0's prose had not de-duplicated it.
+
+Eleven of the thirteen were indexed and are `std::array` by substitution. The two that were not
+are the pair `Canvas` hands `BlitSprite` — `santana` and `lotus` as the raster split leaves them,
+one entry per half — which `SpriteRegisters` held as raw pointers because a C array decays to one.
+They are `std::span<const T, 2>` now: the extent is in the type, the aggregate initialiser is
+unchanged, and `[half]` reads the same. The exclusion is gone and `check_tidy.py` is clean with the
+check on; `modernize-*` runs less two — trailing return types and `auto`, both style decisions this
+tree has made and neither of them a site count.
+
+395 of 395; all 16 repository checks; no ratchet count moved.
+
+**2026-09-07 — M5-a-8: a screen RAM byte is two colours, and the type makes the original's names
+tell the truth.**
+
+The second family. `RED2`, `GREEN2`, `YELLOW2`, `BLACK2`, `MAG2` and `BULBCOL` are screen RAM bytes
+in multicolour bitmap mode — the high nibble is what a `%01` pixel draws in and the low nibble what
+`%10` draws in — and the port had them as `std::uint8_t` constants whose names were the original's.
+`CellPalette` is the pair, built from two `Colour`s, and writing the constants as pairs is the
+finding made permanent: `MISSILE_ARMED` is `{Orange, Yellow}` and the original calls it `YELLOW2`;
+`MISSILE_NONE` is `{DarkGrey, Yellow}` and the original calls it `BLACK2`. A `static_assert` in
+`Colours.h` pins both. The default is `{Black, Black}`, because that is `COL2`'s shipped value and
+a printer that runs before `RES2` must print invisibly, as the original's does.
+
+**TWO CONSTANTS WERE DEFINED TWICE, and the type is how they were found.** `Market.cpp` and
+`NameEntry.cpp` each carried a private `TEXT_COLOUR_TYPING = 0x40` and `TEXT_COLOUR_NORMAL = 0x10`
+in an anonymous namespace — the same bytes `TextPrint.h` exports as `TEXT_COLOUR_PURPLE` and
+`TEXT_COLOUR_WHITE`, two files away, under other names. And `Dashboard.h`'s `MISSILE_GREEN` was
+`MISSILE_READY` under a second name: both `GREEN2`, both `&57`, one for `msblob`'s indicator and one
+for the byte `KILLSHP` hands `ABORT`, which are the same green for the same reason. Four constants
+collapsed to two headers' worth; nothing in the game changed.
+
+`Canvas::Write` and `ExclusiveOr` take a `CellPalette` beside the byte, because the bulbs toggle a
+palette and the text printer stores one; `TextState::cellColour` is `palette`, named for what it
+holds (rule 7); the missile API takes the type; the loader's border pair joins the family;
+`UniverseImage` gains a `Palette` cell and `COL2` uses it. The two sweeps that hand the routines every
+byte — `MSBAR` over 256, `CHPR` over `COL2` — go through `CellPalette::Of`, because every byte IS a
+palette and the sweep is the point.
+
+The one thing that is NOT a pair and stays a byte: `COLOUR_RAM_YELLOW`, colour RAM's single nibble,
+which is a `Colour` in memory the oracle compares — M5-a-7's line, unchanged.
+
+395 of 395; all 16 repository checks; the replay digest unmoved; `origin-markers` 4,122 → 4,123.
+
+**2026-09-07 — M5-a-9: `COL` is a pixel pattern, and the compass and the dials had been calling one
+a colour since slice 3d.**
+
+The first of the two families M5-a-7 named. `RED`, `YELLOW`, `GREEN` and `WHITE` are four
+multicolour pixels packed in a byte — `%01010101`, `%10101010`, `%11111111`, `%01011010` — and the
+port had them as `std::uint8_t` constants called `DIAL_DANGER`, `DIAL_NORMAL`, `COMPASS_AHEAD` and
+`COMPASS_BEHIND`, a `Compass::colour` field, a `DangerColours` pair and a `DialColours` pair. Every
+consumer ANDs the byte with a mask — `CPIX2` with `CTWOS2`, `DIL` with the block it has just
+shifted, `DIL2` with `CTWOS` — and a byte whose only operation is AND-with-a-mask is a pattern.
+`PixelPattern` is the type: `Red`, `Yellow`, `Green`, `Striped` for the Thargoid's `%01 %01 %10 %10`,
+and `Blank` for the `%00` four times that `DIL` falls through to when `K+1` is zero — which the
+port had been spelling as a literal `0` with no name. `BLUE`, `CYAN` and `MAG` get no enumerator,
+because the original defines all three as `YELLOW`.
+
+**THE ASSESSMENT THAT SCOPED THIS SLICE HAD FILED TWO OF ITS SITES UNDER THE WRONG FAMILY.**
+M5-a-8's task description listed `DangerColours` and `DialColours` among the palette pairs. They are
+`PZW`'s `RED`/`YELLOW` and `DIALS`' `K`/`K+1` — patterns, this slice's — and reading the AND sites
+is what said so. Which is the point of building the types: a name can be filed wrongly and an
+operation cannot.
+
+`PlotDash` and `PlotBlock` take a `PixelPattern`; `SCAN`'s `scacol` read goes through `PatternOf`,
+because every byte is a pattern and the table is the assembler's; the compass field is `pattern`,
+named for what it holds (rule 7). `UniverseImage` gains an `Enumerated` cell for a byte the port
+holds as a scoped enum, and `COMC` is the first to use it. Every site was a rename or a cast at a
+boundary; the replay digest did not move.
+
+395 of 395; all 16 repository checks; `origin-markers` 4,121 → 4,122, rule 4's reason.
+
+**2026-09-07 — M6-0: every M0–M5 row is built, and M6 is not safe to start.**
+
+The owner asked whether anything was still open beside M6, on the ground that M6 removes the
+oracle and so must find no gap. The answer is that "no rows open" and "no gaps" are different
+questions, and the difference is R19: a fixture pins what the tests asked while the original was
+here, so anything the oracle can pin today and no test asks is unpinned for ever after M6-b. Sorted
+by that lens, the tree has eight such things, and they are now the M6-0 rows in §6 — a gate M6-a
+is blocked on, ordered by irreversibility.
+
+**THREE WERE KNOWN AND PARKED.** The 6510 port register (task #11) has been named since M3-b as
+"what unblocks it is a harness slice", and it is the largest single gap in the tree: the oracle's
+flat memory aliases the VIC registers onto `XX21`, so `ShipDrawEffects` is still a seam, `DOEXP`
+is trapped in every composition test, and **no whole-frame comparison with an explosion in it has
+ever been made against the original**. The eleven control codes (task #12) split three ways and
+eight of them are comparable now. And two fixture faults M3-b called one-line fixes — `Where`
+without `SUNX`/`LSY2`, the heaps at `&0C00` — were never made.
+
+**TWO ARE PRECONDITIONS §4.10 ALREADY STATES AND NOTHING ENFORCES.** "The M0-c replay must cover
+launch, flight, combat, docking, death and the escape pod": it covers four of the six. And seven
+routines are only ever trapped — `TRADEMODE`, `NLIN`, `TT67`, `DK4` ported and never compared on
+their own; `WSCAN`, `REDU`, `GTNMEW` not ported — and a trapped routine's fixture records the trap.
+
+**THREE ARE INSTRUMENTS M6-a's OWN ACCEPTANCE NEEDS.** "Every *Port* row has a test that calls it"
+cannot be read off anything: the ledger's ✅ is per label and inconsistent (twelve of thirty-three
+Port rows have none, including the flight loop's sixteen parts, the most-tested code in the tree),
+and a marker-to-test name match over 3,117 markers is noise — the attempt in this assessment
+returned 433 "uncovered" labels, nearly all of them opcodes and sub-labels. Mutants cover eight of
+fifty-two hand-written files, and after M6-b they are the only instrument that says whether a test
+would NOTICE rather than merely what it asked; M6-b's acceptance still counts "five units" from
+before the corpus reached nine files. And `StartUpEffects` is an abstract class with nothing in it
+but a destructor, still counted.
+
+**AND TWO SENTENCES OF THIS PLAN WERE NO LONGER TRUE.** §2.7's "what nothing pins: the outer loops
+and the mode machine in `Main.cpp`" — they are `Game`'s since M3-c and M4-d and the replay drives
+them; the sentence now names M6-0's list instead. And §4.10's coverage requirement, the strongest
+sentence in the document, had no row enforcing it; M6-0-b is that row.
+
+Nothing in `GameLogic/` changed. The rows are the deliverable, and the order is the point.
+
+**2026-09-07 — M5-d: `.clang-tidy` calls itself this repository's single source of truth, and
+nothing in this repository had ever run it.**
+
+The row asked for ADR-006 amended from what was built and `.clang-tidy` widened one `modernize-`
+check per commit. The ADR half is four sections and is below. The tidy half turned out not to be a
+widening at all until something ran the file.
+
+**IT IS ANOTHER REPOSITORY'S FILE, AND NOT ONLY IN ITS VALUES.** `.clang-tidy` was adopted whole
+from the sibling tree Outpost.Warzone so that engine code could move between the two without a
+rename pass, which is a good reason and is still true of the option values. What came with them was
+the STATUS and the REASONS. The file claimed "CI gates this over GameLogic and NeuronServer"; there
+is no `NeuronServer` here. It named `Build/CheckProjectFiles.py` and
+`Design/Archive/MmoScalabilityPlan.md`; neither exists here. It justified three of its four
+exclusions by wire records, mesh vertices, GPU instance structs and "metres to eighth-metre lattice
+steps, radians to turns16, i64 sectors to the wire's i32" — this port's numeric model is eight-bit
+arithmetic with explicit carries and there is no wire at all. And it said GameLogic "has been swept
+clean", on a tree where **no job, script or check has ever invoked clang-tidy**. `WarningsAsErrors:
+'*'` was a setting with nothing behind it.
+
+**THE FIRST SWEEP FOUND THIRTY-SIX DIAGNOSTICS, AND WIDENING `modernize-*` TOOK IT TO FORTY-FOUR;
+sixteen of them were code, and two were undefined behaviour.** `ReadFlightControls`
+held five locals still wearing the `_` that AGENTS.md gives a PARAMETER — aliases left behind when
+M3-a and M5-a turned those parameters into fields of the `Universe` the routine already takes.
+Three dead stores were transcriptions of a 6502 flag nothing reads: two `LSR` carries in the
+divider's scaling tail, where only the third is read, and the initialiser of a loop-local carry in
+`AddDebris`. **And the fourth is the fourth vestigial assignment this port has carried**: part 4's
+`LDA SSPR / BNE MTT1` had been transcribed as `toPart3 = true`, four hundred lines after the only
+thing that reads `toPart3` has run — the branch is the `if`, and falling out of the block IS
+reaching part 3. **AND `DecideMissile` AND `DecideStation` COULD FALL OFF THEIR OWN ENDS.** Both open with
+`if (_frame.type == ShipType::Missile)` — or `::Station` — around their whole body and have no
+return after it, so a call with any other type runs off the end of a function that returns a
+`Tactic`, which is undefined behaviour. It is unreachable only because `RunTactics` dispatches on
+the same type first, which the compiler cannot see: `CPX #MSL / BEQ TA18` is ONE test in the
+original and was two here. The guards are gone and the dispatch is the test.
+
+The rest were a lambda named as if it were a type twice, a local dodging a keyword with a trailing
+underscore, a `const` C array of offsets shouting in capitals, two index loops that were walks, and
+two more dead carries. All sixteen are fixed; 395 of 395 and the replay digest unmoved, which is
+what says the dead stores were dead rather than merely unread.
+
+**THE REST ARE EXCLUDED WITH THIS TREE'S OWN REASONS, and measuring each one changed the answer
+twice.** `-bugprone-narrowing-conversions` and `-clang-analyzer-optin.performance.Padding` were
+inherited exclusions that fire NOTHING here once one struct's fields are ordered — the padding
+finding was a five-entry local table in `Equipment.cpp` with no layout obligation at all — so both
+are **removed** rather than carried, which is a strengthening the row did not ask for. Three
+exclusions are new and each is about the port's method: `-bugprone-branch-clone`, because two 6502
+branch instructions to one label are two branches and folding them into a `||` would stop saying
+what the original does; `-bugprone-implicit-widening-of-multiplication-result`, because the screen
+arithmetic is `int` on purpose and its largest term is 64,000; and
+`-clang-analyzer-optin.core.EnumCastOutOfRange`, because the analyser is simply wrong about a
+scoped enum with a fixed underlying type — `TypeOf` exists so a sweep over all 256 bytes can go
+through it, and C++ says every one of them is a value of `ShipType`.
+
+**AND THE WIDENING IS THREE CHECKS SHORT OF `modernize-*`, each one a decision.**
+`-modernize-use-trailing-return-type` is 3,835 findings and a style this tree does not use;
+`-modernize-use-auto` is 174 and would hide the WIDTH, which in a port whose numeric model is the
+byte is the one thing a reader needs; `-modernize-avoid-c-arrays` is 100 real findings and is its
+own slice rather than a rider on this one. `-performance-enum-size` stays, and its reason here is
+the opposite of the inherited one: the 78 enums it wants smaller are the port's own OUTCOME types
+(`JumpOutcome`, `KeyAction`, `DockingOutcome`, `DigitResult`) which live between two functions and
+never in memory — the enums that ARE bytes the game stores already say `: std::uint8_t`, and
+blurring the two would lose a distinction M4-c and M5-a spent slices establishing.
+
+`tools/check_tidy.py` is the gate, and it runs where the compiler cannot: `GameLogic/pch.h` reaches
+`<WinSock2.h>` through `NeuronCore.h`, so the sweep goes through `Tests/PortableRunner/Shim` — the
+stand-in that already lets g++ compile these sources. `Outpost/` is deliberately not swept; its
+DirectX headers are the Windows job's, and a linter that has never seen them would bury this
+library's findings under theirs.
+
+**ADR-006 IS AMENDED IN FOUR PLACES, and §5 is the one worth reading.** It had predicted M4's
+pipelines as `ScaledOrientation → FaceVisibility → ProjectedVertices → EdgeSelection → ClippedLines
+→ HeapRun` plus a `Decision`/`Apply` pair, and four of those predictions did not survive: `LL9` is
+SEVEN stages and they are the original's own part blocks rather than a renderer's; the flight
+frame's are `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and `KillOutcome`; the one
+`Decision` type is three different answers because the `bool`s it replaced were three different
+things; and `LoopOutcome` is not retired. §2 carries the strong types that were refused, §8 the
+`constexpr` tables, and the status table says M2, M4 and M5 are built rather than planned.
+
+`check_all.py` is sixteen checks and the sweep comes back **clean over all sixty-eight files** under LLVM 18 -- the first time that sentence has been measured in this repository rather than
+inherited. It runs a process per file over a pool, because serially it is half an hour and
+`check_all.py` is meant to be run whole before every commit.
+
+395 of 395; the replay digest unmoved.
+
+**2026-09-07 — M5-b: the tables are `constexpr`, and the row's acceptance named a suite that had
+been deleted eight hours earlier.**
+
+**THE ACCEPTANCE HAD TO BE REWRITTEN BEFORE ANY OF IT COULD BE BUILT.** The row read "`TableTests`
+green; one `static_assert` per table against the oracle-checked value", and `TableTests.cpp` is not
+in the tree: `main` retired the oracle comparison of the generated tables this morning, on the
+ground that the tables are the port's own data now and the three pictures among them are EDITED
+through `tools/bitmaps.py` rather than regenerated. So the row asked for a suite that no longer
+exists to stay green, and for assertions "against the oracle-checked value" when nothing checks them
+against the oracle any more. That is §6.73's pattern for the fourth time — a criterion scoped before
+the thing behind it changed — and the criterion is rewritten here rather than quietly met.
+
+**WHAT THE TABLES BECOMING `constexpr` IS ACTUALLY WORTH, stated plainly because it is less than it
+sounds.** `const std::array<std::uint8_t, N>` with a brace initialiser is already
+constant-initialised into read-only data; `constexpr` changes no byte of the program. What it does
+is make that a GUARANTEE the compiler checks rather than an optimisation it happens to perform, and
+it is the precondition for anything reading a table in a constant expression. One line of
+`extract_tables.py` emits it, thirteen files regenerate byte-identical apart from the keyword, and
+the three pictures — which that tool deliberately does not overwrite — take it by hand. `bitmaps.py`
+finds an array by `identifier = {`, so it is unaffected, and the no-op import still changes nothing.
+
+**AND THE ASSERTIONS ARE ABOUT SHAPE, WHICH IS THE HALF A COMPILER CAN HOLD.** The row imagined
+"a known value" per table. A hand-typed `SINE_TABLE[8] == 0x59` would be a worse instrument than the
+byte-for-byte oracle comparison that was just retired, and it would pin nothing anybody could get
+wrong in a generated file. What IS worth pinning is what `LookupTables.h` already claims in prose
+and nothing checks: the font is "96 characters of eight rows"; the sprite sheet is
+`SPRITE_DEFINITION_COUNT * SPRITE_BYTES`; the scanner colours are "sized by what indexes it, which
+is a ship TYPE", so `SHIP_TYPE_COUNT + 1`; `celllook` has one entry per `Canvas::CELL_ROWS`; the
+dashboard's two palettes cover exactly the cells below the raster split; `CTWOS2` is the aligned
+masks PLUS TWO, because the extra pair are the wrapped cases and not padding; the eight per-effect
+sound tables are eight columns of one table with `SOUND_EFFECT_COUNT` rows; `TGINT` is the thirteen
+`DKS3` walks. Every one of those is §6.8's own rule — size a table from what can INDEX it — and
+every one was previously checked by a person reading two files at once.
+
+They live in `GameLogic/LookupTables.cpp`, a translation unit that emits nothing. It is not in the
+header because the constants belong to the code that INDEXES each table, and `LookupTables.h` is
+included by nearly everything: reaching `SHIP_TYPE_COUNT` or `Canvas::CELL_ROWS` from there would
+make the tables depend on the port rather than the other way round. And the assertions read
+`std::tuple_size_v` — the DECLARATION, never the bytes — which is why they hold with the big tables
+still in their own `.cpp` rather than putting 160 KB of initialiser into every translation unit that
+wants a font.
+
+Shortening `SCANNER_COLOUR_TABLE`'s declaration by one entry gives
+`static assertion failed: the scanner has a colour for every ship type and for none`, which is the
+check that they measure something.
+
+`origin-markers` 4,107 → 4,121, rule 4's reason: each assertion names the 6502 label it is about.
+395 of 395; all 15 repository checks; the replay digest unmoved.
+
+**2026-09-07 — M5-c: twenty ledger homes named files the port never built, and ten more names are
+history that must NOT be corrected.**
+
+`Source-Inventory.md` is the coverage ledger: one row per family of 6502 labels, with a HOME cell
+saying which port file holds them. Twenty of those cells named files that are not on disk, and the
+ratchet had been counting them since M3-c without anybody reading what they were. Reading them is
+the slice, and the twenty split cleanly:
+
+  - **Most are the port filing a routine by what it TOUCHES rather than by what it is near**, which
+    the journal has recorded happening nine separate times. `main_game_loop` went to `GameLoop.cpp`
+    and not `Spawner.cpp`; `circle`/`circle2`/`bline` to `PlanetDraw.cpp` and not `Circles.cpp`;
+    `TITLE` to `Flight.cpp`, because it creates a ship, moves it and draws it. `MAS1`–`MAS3` are in
+    `FlightLoop.cpp` and `TAS1`–`TAS6` in `Tactics.cpp`, where the plan had one `Orientation.cpp`
+    for both.
+  - **Some are a plan file that was never built at all**, and the workspace row is the one worth
+    naming. `ZeroPage.h` and `Workspace.h` do not exist because §4.4 files a byte with its OWNER, so
+    the zero page split across `MathWorkspace` (`Arith.h`), `GeometryWorkspace`, `Projection` and
+    `ClipState` (`ShipDraw.h`), `Universe` and `ShipSlot.h`. The row now says that rather than
+    pointing at two files nobody wrote.
+  - **And one row already knew**: §6.129's raster row says in as many words that "this row is
+    misnamed, and its home does not exist". It is `ScreenTables.cpp` and `Raster.cpp` now.
+
+**THE TEN THAT REMAIN ARE THE FINDING, AND CORRECTING THEM WOULD BE VANDALISM.** With every home
+fixed the counter still read ten, because it counted every backticked file name in the file and the
+NOTES are history: "built 2026-09-05 in `Spawner.cpp` as one function" was true the day it was
+written. The plan's own rule for numbers says the same thing — a journal number is history and is
+never touched, only a marked one describes the tree. Two of the ten are stronger than that: §6.129's
+note and the workspace note above name a missing file precisely IN ORDER TO SAY the tree does not
+have it, so a counter over the whole file demands that a finding be deleted to reach zero.
+
+So the counter reads the HOME cell and nothing else, and that is a narrowing of what it measures
+rather than a ceiling lowered to meet the tree — R18's failure mode is the other direction, and the
+ceiling went 20 → **0**, not up. `inventory.py --check-homes` applies the same rule and is the
+repository check behind it; `inventory.py --self-test` plants BOTH traps, a stale home that must
+fail and a stale note that must not, because a check that could not tell them apart is the one that
+would have made this slice destroy history to go green.
+
+`check_all.py` is fifteen checks (`--check-homes` and `--self-test`), the workflow runs both,
+`inventory-stale-files` 20 → 0. 395 of 395; nothing in `GameLogic/` or `Outpost/` changed.
+
+**2026-09-07 — M5-a-7: `Colour`, and the original has no colour constants at all.**
+
+The last of M5-a's strong types the owner asked for, and building it found that the plan's own
+description of it could not be met. The row says "scoped enums with the ORIGINAL VALUES". The C64
+build defines eleven constants with colour names and **not one of them is a colour**:
+
+  - `RED` (%01010101), `YELLOW` (%10101010), `GREEN` (%11111111) and `WHITE` (%01011010) are FOUR
+    MULTICOLOUR PIXELS packed in a byte. They are what `COL` holds and what `CPIX2` ANDs with a
+    mask out of `CTWOS2` — pixel patterns, not colours. `BLUE`, `CYAN` and `MAG` are all defined as
+    `YELLOW`, because `scacol` carries scanner colours from the BBC build that this machine cannot
+    honour, so three of the seven names describe nothing at all on a C64.
+  - `RED2` (&27), `GREEN2` (&57), `YELLOW2` (&87), `BLACK2` (&B7), `MAG2` (&40) and `BULBCOL` (&E0)
+    are SCREEN RAM palette bytes, each holding TWO indices: the high nibble is what %01 draws in and
+    the low nibble what %10 draws in. Their names describe the high nibble and two describe it
+    **wrongly** — `YELLOW2` is orange (8) over yellow (7), and `BLACK2` is dark grey (&B) over
+    yellow. `MISSILE_NONE` was zero in this port until slice 3d-d-iii-b for exactly that reason: a
+    name that sounds like an index, over a byte that is a pair.
+
+The thing that IS one colour is the VIC-II index 0 to 15, and the original never names it. So
+`Elite::Colour` is that index with the sixteen VIC-II names, and the two constant families above are
+not forced into it — they get their own slices (M5-a-8 for the palette pairs, M5-a-9 for the pixel
+patterns), which is rule 8 rather than three patterns in one commit.
+
+**AND THE LINE THE TYPE DRAWS IS BETWEEN MEMORY AND A REGISTER, which is what found the defect.**
+Colour RAM and screen RAM stay bytes: the oracle compares them address by address and the loader
+dumps tables straight into them. A REGISTER is where the chip takes four bits and a byte becomes a
+colour, so `Canvas`'s three colour registers take the byte that was stored and answer a `Colour`,
+and `VideoState::colour` — which is already documented as the registers rather than the stores —
+holds `Colour` outright.
+
+**THE PORT HAD NEVER LATCHED VIC+&21, and the energy bomb is what makes that matter.** `COMIRQ1`
+does `BIT BOMB / BPL nobombef / INC welcome` and then stores `welcome` whole into the background
+register, so eight frames of bomb carry the byte past 15 and it keeps counting to 255 and wraps. The
+VIC-II keeps four bits; this port resolved its canvas into COLOUR INDICES that the presenter looks
+up in a sixteen-entry palette, and handed it 39, or 200, or whatever the counter had reached.
+**Nothing could have caught it.** The oracle holds the same unlatched byte the port did —
+`TheRasterInterruptMatchesCOMIRQ1` already compares `welcome` at &9C and &FF and agrees, because the
+STORE was always right — and the defect is one step further on, in what the port then does with the
+register, where no comparison looks. It is the `DNOIZ` shape again: a comparison cannot see a
+difference that both sides do not have.
+
+`TheBombFlashCountsPastEveryColourTheChipHas` is the instrument: forty passes of bomb, the byte
+past 15, the canvas latching it to seven, and no resolved pixel indexing past the palette. Removing
+the mask makes it read `expected 7 actual 39`, which is the check that it measures the fix.
+
+`Outpost::Colour` is `Outpost::Rgb` now. It is the presenter's RGB triple and `Elite::Colour` is the
+index — one name each, and the header's own comment already said which of the two the game means.
+
+The three strong types M5-a named and did not get — `Options`, `View` and `Message` — are refused
+with their evidence in ADR-006 §2 rather than left looking unfinished: `Options` would undo §4.4's
+split and `DKS3`'s ordering is pinned better by the byte-checked `TGINT` table anyway, and `QQ11`
+and the message tokens are both indexed AND combined arithmetically, so an enum would cost more
+casts than it removes.
+
+403 of 403 (one new test); all 14 repository checks; the replay digest unmoved. `origin-markers`
+4,106 → 4,107, which rule 5 permits for rule 4's reason: `Colours.h` is new code and the marker ties
+`ColourOf` to what the chip does.
+
+**2026-09-07 — M5-a-6: the digest gap ADR-007 §5 named is closed, and the seven bytes it named were
+three kinds.**
+
+The owner's ruling was "close it now", and closing it is the FIRST time this project has re-taken
+the replay record under rule 1's first case — a deliberate widening — in five re-takes. The other
+four were all the second case, a defect found and fixed. **No line of `GameLogic/` changed.** What
+changed is what the digest looks at: `Where` gained five label lookups and `UniverseImage` five
+cells, and every one of the sixteen checkpoints moved while the flight did not — 1,170 steps ending
+`Docked`, before and after, which is what a widening should look like and what a behavioural change
+would not.
+
+**THE ARITHMETIC IS THE FINDING.** ADR-007 §5 listed seven bytes as one gap. They are three kinds
+and the section is amended to say so:
+
+  - **Five can have cells and now do** — `safehouse`, `QQ8`, `JSTGY`, `JSTE`, `MUTOKOLD`. `QQ8` is
+    two bytes the port keeps as one `std::uint16_t`, so it goes through the same `AddressPair`
+    helper `XX0` uses; `safehouse` is six bytes and goes through `Run`.
+  - **One was a duplicate**: `soundDisabled`, a second `DNOIZ` beside the one the sound system
+    reads, which M5-a-5 found and deleted. It never needed a cell; `DNOIZ` has had one since
+    M3-b-2a and it was bound to the working half all along.
+  - **One cannot have a cell at all, and this is the durable part.** `crosshairStep` is what `TT17`
+    leaves in X and Y. A cell is a port field paired with a 6502 LABEL, and REGISTERS have no
+    address for `Where` to look up — so there is nothing to name, and no amount of widening reaches
+    it. It is pinned by `KeyboardTests` comparing `TT17` against the oracle and by nothing in the
+    digest. ADR-007 §5 and §6 now say that outright rather than leaving it filed as an open edit,
+    which is how it would have been rediscovered.
+
+**AND THE OTHER 401 TESTS PASSING IS THE EVIDENCE THE WIDENING IS SOUND.** The five new cells are
+`CellScope::Compared`, so `CompareState` now checks them against the oracle everywhere it already
+ran; the first run after adding them was 401 passed, 1 failed, and the one failure was the record
+itself. Had any of the five disagreed with the original the suite would have said which byte and
+where, before the record was touched. Re-taking a record on a suite that is otherwise green is the
+only safe order to do it in, and it is the order the failure message is designed for.
+
+402 of 402; all 14 repository checks; no ratchet count moved (`origin-markers` counts `GameLogic/`
+and the change is entirely in `Tests/`).
+
+**2026-09-07 — M5-a-5: there were TWO `DNOIZ` bytes, and the pause screen's sound-off key has never
+worked in this port.**
+
+Found while preparing the widening the owner has now authorised, by asking which bytes the replay
+digest was not watching. `Universe::soundDisabled` and `SoundBuffer::soundOff` are both `DNOIZ`.
+**The original has one**: `DK4` writes it — `CPX #&02 / BNE DK6 / STX DNOIZ`, the key code itself —
+and `NOISE` reads it, `LDA DNOIZ / BNE SOUR1`. This port had the pause screen write one and the
+sound system read the other, so `Universe::soundDisabled` was **written twice and read nowhere**,
+and pressing "2" on the pause screen left every sound playing.
+
+**IT IS THE DUPLICATE `QQ12` AGAIN, and it was found the same way.** The replay slice found
+`FlightPort` holding a second `dockedFlag`; this is a second `DNOIZ`, and both surfaced from the
+same question — which bytes does the digest see? `UniverseImage` has had a `DNOIZ` cell since
+M3-b-2a and it is bound to `sound.soundOff`, the byte the sound system reads, so the digest was
+watching the half that worked. A byte written and never read cannot be caught by any comparison; it
+can only be caught by looking.
+
+`Universe::soundDisabled` is gone, `PressPauseKey` writes `_universe.sound.soundOff`, and
+`PauseScreenTests` compares the byte `NOISE` reads against the oracle's `DNOIZ` as it always did —
+which now means something. The seven bytes M3's follow-on moved into `Universe` are **six**.
+
+`origin-markers` 4,107 → 4,106, one marker gone with the duplicate. 402 of 402, the replay digest
+unchanged — the scripted flight presses no pause key, which is exactly why nothing caught this.
+All 14 repository checks.
+
+**2026-09-07 — M5-a-4: `SoundEffect`, and the sixteen sounds were declared in eight different
+headers.**
+
+M5-a asks for `SoundEffect` as a strong type, and building it found why it was worth asking. The
+sixteen ids were `inline constexpr std::uint8_t` declarations spread over EIGHT headers — three in
+`Combat.h`, five in `FlightLoop.h`, two in `Tactics.h`, one each in `Dashboard.h`, `Flight.h`,
+`ViewChange.h` and `SoundEffects.h` — each sitting beside whichever routine first played it, while
+`SOUND_EFFECT_COUNT = 16` sat on its own. **They are one table**: `sfxatk`, `sfxcnt`, `sfxvch`,
+`sfxpr`, `sfxsus` and `sfxfrq` are six arrays indexed 0 to 15 by the same number. §6.121 said this
+for the ship types — a number is a property of the table, not of the routine that first happened to
+want one — and it is the same finding a second time.
+
+**SLOT 8 IS NAMED FOR THE FIRST TIME.** The port had fifteen constants for sixteen entries and
+nothing said which was missing. The original calls it `sfxeng` and its own comment says "This sound
+is not used".
+
+**TWO OF THE `SOUND_*` NAMES WERE NOT SOUNDS.** `SOUND_OFF_KEY = 0x02` and `SOUND_ON_KEY = 0x33`
+are C64 key codes that the pause screen tests for; they are `KEY_SOUND_OFF` and `KEY_SOUND_ON` now.
+A prefix that means two different things is the kind of thing a strong type makes impossible to keep.
+
+**AND THE `+ 128` IS AN ENUMERATOR RATHER THAN A CAST.** `HYPNOISE` plays `sfxhyp1` pitched, then
+`sfxwhosh`, then `LDY #sfxhyp1+128` — the one place in the game that sets bit 7. It is not a
+seventeenth sound: it is sound 7 with an index that falls PAST the end of `SFXPR`, so the priority
+byte reads as zero and the routine looks for a voice already playing it rather than taking a new
+one. It was `static_cast<std::uint8_t>(SOUND_HYPERSPACE + 128u)` at the call site and is
+`SoundEffect::HyperspaceAgain = 135` in the enum, because the trick is the point.
+
+`origin-markers` 4,105 → 4,107 for the two slots the port had never named. 402 of 402, the replay
+digest unchanged, all 14 repository checks.
+
+**2026-09-07 — M5-a-3: `out-params` at ZERO, which is M5-a's acceptance, and the last four split two
+ways.**
+
+**Two were state and took the universe.** `RunSpawning`'s `_explosionCount` and `ArriveAtSystem`'s
+are both `EV`, and both are `Universe::explosions` at every call site — so the universe comes in and
+the reference goes, along with the commander, the current system and the generator, which are the
+same fields at every site too. `RunSpawning` goes from nine parameters to two.
+
+**Two were NOT state, and returned instead.** `CharacterPrinter::PadToWidth`'s `_rotor` is `SC+1`,
+the rotating bit that carries from one gap to the next within a line, and `TypeDigit`'s `_value` is
+`R`, the digits accumulating inside one prompt. Neither is a byte anybody keeps, so neither belongs
+in `Universe`; they go back as `PadResult` and `TypedDigit`, which is M2-b's rule for the arithmetic
+kernel applied to the two places P10 had left. **That distinction is the whole of why P10 is a
+pattern worth counting**: a `std::uint8_t&` says nothing about whether the byte is the game's or the
+call's, and every one of the sixteen turned out to be one or the other.
+
+**Two fixtures converged and one of them caught a real difference.** `GameLoopTests` built nine
+separate objects for the spawner and `HyperspaceTests` four for the arrival; both now seed one
+`Elite::Universe` and name the pieces they set. The spawner's blueprint pointer is the one worth
+recording: it was `const Blueprint*& _blueprint`, which the routine WRITES, and taking it as a
+snapshot rather than a reference made the comparison read the pointer that went in — `XX0: expected
+58635 actual 55491` on the first run. The fixture holds a reference into the universe now, which is
+what the app has.
+
+**P10 is closed.** 402 of 402, the replay digest unchanged, all 14 repository checks.
+
+**2026-09-07 — M5-a-2: the six stragglers take `Universe&`, which is M3-a's pattern finishing three
+phases late.**
+
+M3-a gave every routine `(Universe&, Ports&)`. Six were missed, and the tell is that each was handed
+a `std::uint8_t&` to a universe field by EVERY caller while not taking the universe:
+`CrosshairsToCurrentSystem` (`QQ9`, `QQ10`), `EnterDockingBay` (`QQ12`), `SetMissileTarget` and
+`AbortMissileLock` (`MSAR`, and `MSTG` and the canvas beside it), `NoteMusicSwitch` and
+`PressPauseKey` (`MUTOKOLD`, `DNOIZ`). **`out-params` 12 → 4.**
+
+**ONLY THE OUT-PARAMETERS FOLDED, and the value inputs stayed.** `EnterDockingBay` still takes
+`_view` and `_countdown` by value, because `DockAtStation` passes its own `_view` at one site and
+`0` at another; `SetMissileTarget` still takes `_missiles`, `_target` and `_colour`, because
+`DashboardTests` sweeps them. Folding an input that varies by caller would have changed which byte
+the routine reads, which is a behaviour change dressed as a tidy-up — the discipline is that a
+parameter goes only when it is provably the same field at every call site.
+
+**Four fixtures converged again, and one of them was drawing into the wrong canvas.**
+`DashboardTests` built an `Elite::Canvas`, an `Elite::Bubble` and a loose `seeking` byte;
+`PauseScreenTests` two loose bytes; `StartUpTests` a `Commander` with two crosshairs, and a
+`portDocked`. All five now seed an `Elite::Universe`, which is what the app hands the routine. The
+canvas is the one worth naming: the fixture filled ITS canvas from the oracle and compared ITS
+canvas back, and once the routine drew into the universe's the comparison was looking at a screen
+nothing had written — `ABORT2(target 0, colour 183): screen differs at offset 10185`. The suite said
+so on the first run, which is the third time in two days that a fixture holding its own copy of a
+byte the app keeps in the universe has been found by a failure rather than by reading.
+
+402 of 402, the replay digest unchanged, all 14 repository checks.
+
+**2026-09-07 — M5-a-1: four out-parameters were a field of the `Universe` the routine already
+took, and one of them was bound to a copy.**
+
+M5-a's acceptance is `out-params` at zero, and the first four are the easiest kind: `ResetGame`,
+`Launch`, `AbandonShip` and `DockAtStation` all take `(Universe&, Ports&)` since M3-a and were ALSO
+handed a `std::uint8_t&` to one of that universe's own bytes — `dockedFlag` three times and
+`commander.fuel` once. That is §4.4's rule broken in the signature: the byte is game state, the
+universe holds it, and a second name for it is the duplicate-`QQ12` defect the replay slice found in
+`FlightPort`, one level up. **`out-params` 16 → 12.**
+
+**AND ONE OF THE FOUR WAS BOUND TO A COPY.** `Ghy` calls `Launch(_universe, _ports, _jump.docked,
+…)`, and `JumpState::docked` is a `std::uint8_t` VALUE that `JumpOf()` fills from the universe — so
+`Launch`'s `_docked = 0u` wrote a temporary the caller discarded. Checked rather than assumed: it is
+not a defect, because `RequestHyperspace` returns `JumpOutcome::Docked` before it can return
+`Galactic`, so that path is only ever reached with the flag already clear and the write was a no-op
+whether or not it landed. **It is still the exact failure mode P10 exists to remove** — a reference
+parameter silently bound to something that is not the state — demonstrated rather than argued, and
+the suite and the digest both say nothing moved.
+
+**Four fixtures were carrying their own `QQ12` and one its own `QQ14`**, and all five are the
+universe's now: `LaunchTests` had a `docked`/`flag`/`inFlight` local per case and two helpers taking
+it as a parameter, `FlightLoopTests` had one, `DockingTests` two, and `HyperspaceTests` a `fuel`
+local that meant `AbandonShip` wrote the local while `CompareState` compared an untouched
+`commander.fuel`. Each is the same convergence the replay slice made, and each was found by the
+suite failing rather than by reading.
+
+402 of 402, the replay digest unchanged, all 14 repository checks.
+
+**2026-09-07 — M4-d: `Game::Mode` is built, and `LoopOutcome` is NOT retired — the row asked for
+three things and the tree already had two of them.**
+
+**`Mode` IS REAL AND IT IS NOT INVENTED.** `FRCE` is `LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100`,
+a two-way dispatch on a byte the game keeps, so two of `Mode`'s three values are the game's own; the
+third is `Paused`, which the port adds because `FREEZE` is a loop that does not return and a
+windowed program cannot stop pumping messages (ADR-007 §3 already records that byte as the port's).
+What it buys is an ORDERING: a frozen game is frozen in both halves, so the pause test has to come
+above the `QQ12` test, and `Main.cpp` was keeping that rule by hand with a paragraph explaining it.
+One value cannot be got wrong. `main-lines` 256 → **253**, which is the rule leaving the executable.
+
+**`LoopOutcome` STAYS, and the row's premise does not survive contact.** The plan says M4-d retires
+it into the mode machine. It cannot: `LoopOutcome::Continued` is not a mode — it is "the frame
+finished, go round again" — and the other three are TRANSITIONS rather than states. It is the return
+value of `BeginFlightFrame`, `MoveEveryShip`, `EndFlightFrame` and `MainFlightLoop`, which have to
+say "I left early and by which of `DOENTRY`, `DEATH` and `ESCAPE`"; a mode cannot carry that,
+because by the time the mode has changed the routine has already returned. `Mode` and `LoopOutcome`
+answer different questions and both are needed. ADR-007 §2 is amended, since it is where the claim
+was written down.
+
+**The other two items were already built or are deliberately not done.** The mission sub-machine is
+`Game::MissionOf(DockingOutcome) -> ForcedKey`, built in M3-c: `DOENTRY`'s six exits are the
+briefings and the seventh is `BAY`. The death sequence as an explicit state is NOT built, and the
+reason is this row's own acceptance: `DEATH` runs sixty-four iterations of the flight loop to fly
+the wreckage past, and making that a state the outer loop pumps would change the pacing — the
+acceptance says "replay hashes unchanged", and a pacing change is exactly what would move them. It
+stays a synchronous sequence, which is what the original does.
+
+**M4 IS COMPLETE.** `origin-markers` 4,098 → 4,101 for `Mode`'s three values. 402 of 402, the replay
+digest unchanged, all 14 repository checks.
+
+**2026-09-07 — M4-c-3: `MLOOP`'s spawner in four parts, and the carry is why it needed a frame.**
+
+`RunSpawning` was 430 lines over `MLOOP`'s parts 1 to 4 with FOURTEEN `return;` statements, every
+one of them the same `JMP MLOOPS` — "this pass of the spawner is over". `SpawnPass` has two values
+and the parts are `SpawnTraderOrLoner` (1 and 2, which are one function because the same roll
+chooses between them and `.whips` is the tail both reach), `SpawnPolice` (3) and `SpawnEncounter`
+(4), over a `SpawnFrame`. `RunSpawning` is 24 lines.
+
+**THE CARRY IS WHY THERE IS A FRAME AT ALL, and it is §6.125 running the length of the routine.**
+Every `CMP` overwrites the generator's own flag and the next `DORND` rotates in what the compare
+left, so ONE boolean is live across all four parts and thirty-odd statements. Passing it between
+four functions would be four more `bool _carryIn` parameters — P11's pattern, which M2-d spent a
+slice removing from the headers and whose ratchet sits at thirty — so it travels in the frame as
+one named field instead. That is the same trade `TacticFrame` makes for `CNT` and `ShipRender` for
+`XX4`, and it is the third time the answer has been "a frame, because a value is live across a
+boundary the original has and the port did not".
+
+**And `Ze` is called twice.** The port had one `RngResult ze` for both calls because it was one
+function; part 3's roll is dead by the time part 4's runs — every read of it is behind the `fothg`
+branch, which returns — so part 4 declares its own. One variable standing for two different rolls
+is the kind of thing only a split can show.
+
+**M4-c is complete.** `origin-markers` 4,088 → 4,098, the sixth and last of M4's rises: ten labels
+where the parts split and on `SpawnPass`'s two values. 402 of 402 on the first run, the replay
+digest unchanged, all 14 repository checks.
+
+**2026-09-07 — M4-c-2: `DOCKIT`'s answer was a phantom, and the mechanical edit that removed it
+broke the game in a way the oracle caught on the first run.**
+
+`RunDockingComputer` returned "did the player survive" and the answer was ALWAYS yes. Checked
+against the original rather than inferred from the port: `DOCKIT`'s every exit is an `RTS`,
+`JMP GOPL` or `JMP TA151`, and it reaches no `OOPS` and no `DEATH` — so there is no path on which it
+could say no. §4.6's "`OOPS`'s three paths become `Decision::Fatal`" belongs to `TACTICS`, where
+`OOPS` genuinely is reached, and not here. Every caller discarded the byte with a `(void)` or a
+`static_cast<void>` except one line in `TacticsTests`, which asserted `IsTrue(...)` — **a tautology
+dressed as a check**, and it is a plain call now with the reason beside it. The routine is `void`.
+
+**AND THE FIRST ATTEMPT AT IT WAS WRONG, which is worth recording rather than quietly fixing.** The
+edit blanked every `return true;` in the function. Eight of the nine were EARLY EXITS and only the
+last was the tail, so the change turned eight guards into fall-throughs. The run said so
+immediately and said it three ways: `DOCKIT: straight in front of the slot (theirs) no faces:
+INWK+29 — expected 131 actual 0`, a `TACTICS` case one byte out, and the M0-c replay diverging from
+step 342. Three instruments, one cause, no ambiguity. The lesson is the one M2-c learned about
+scripted deletions and `check_outpost.py` grew two halves for: **a mechanical edit over a control
+statement has to distinguish the tail from the guards**, and here the suite is what distinguished
+them.
+
+Nothing else moved: 402 of 402, the replay digest unchanged, all 14 repository checks, and no count
+touched.
+
+**2026-09-07 — M4-c-1: `TACTICS` answers a `Tactic`, and the `bool` it returned was three things
+wearing one costume.**
+
+`RunTactics` was 583 lines over seven annotated parts and returned "did the player survive". That
+boolean conflated THREE outcomes: a ship finished with for this frame (`TA22`'s `RTS`), the player
+killed by `OOPS` reaching `DEATH`, and `TN2`'s `JMP DOCKIT` handing the ship to a different routine
+altogether — the third hidden as a tail call whose boolean was passed straight through. `Tactic` has
+four values (`Steer`, `Done`, `Fatal`, `Docking`), the parts are `DecideMissile`, `DecideStation`,
+`DecideDisposition`, `DecideCombat` and `SteerTowardsTarget` over a `TacticFrame`, and `RunTactics`
+is 48 lines that performs what they answer. **`JMP DOCKIT` is a call at the top level now**, which
+is the one place `TACTICS` hands a ship to another routine and it was the least visible line in the
+function.
+
+**PARTS 4, 5 AND 6 ARE ONE FUNCTION, and the reason is the same one that kept the roll and the pitch
+together in M4-a-3.** `fightsOn` is `TA7`'s first `BCC TA3` jumping clean over part 5 and
+`fellFromFleeTest` is the carry `CMP #230` leaves for the `DORND` inside it; both are live from part
+4 into part 5, so a split between them would need two parameters to say what two locals already say.
+§6.85's rule, applied a second time and named as such.
+
+**§4.6's four names are five, and one of them does not map.** The row asks for `DecideMissile`,
+`DecideStation`, `DecideEscorts` and `DecideCombat`. `DecideEscorts` has nowhere to go — part 2 IS
+the station launching escorts, so it is `DecideStation` — and parts 3 and 7 had no name at all.
+Recorded rather than forced.
+
+**Seven mutants re-anchored, none dropped (rule 3).** `ta-240`, `ta-half`, `ta7-three`, `ta3-ecm`,
+`msl-82`, `msl-kill` and `kill-rotate` all name lines whose `_universe`/`work` became
+`_frame.universe`/`_frame.work`; each was re-anchored to the same expression in its new stage and
+`mutate.py --check` is back at 72 of 72. The tally is the next run's to report, because `mutate.py`
+builds HEAD.
+
+**Counts.** `origin-markers` 4,072 → 4,088, the fifth rise: sixteen labels where the parts split and
+on `Tactic`'s four values, each of which is a 6502 label — `TA22`, `DEATH`, `DOCKIT`, `TA4`. The
+census names `DecideDisposition` and `DecideMissile` as the writers of `K3` where it said
+`RunTactics`. 402 of 402 on the first run, TACTICS still 7,326 cases with 22 fatal, all 14 checks.
+
+**2026-09-07 — M4-b: `LL9` as its seven part blocks, and the census can name a part for the first
+time.**
+
+`DrawShip` was 551 lines over seven annotated part blocks, taking thirteen arguments and carrying
+four locals across them under comment rules. The rules are function boundaries: `TestPresence`,
+`MeasureRange`, `ScaleShip`, `SelectFaces`, `ProjectVertices`, `OpenHeapRun` and `PushEdges`, over a
+`ShipRender` frame, with `DrawShip` itself 38 lines of pipeline. §4.6 said "six stages" and listed
+seven; seven is what the tree has and M4-a-3 corrected the row.
+
+**THE FRAME IS FILE-LOCAL AND THAT IS THE POINT, not a way round P5.** `aggregate-refs` counts
+reference members of the argument-list structs in the HEADERS, because those are signatures threaded
+through the whole library — the thing M3-a spent a phase removing. `ShipRender` is the opposite: it
+exists so that seven stages in ONE translation unit stop passing thirteen arguments each, and no
+caller outside this file can see it. Said here rather than left to look like ratchet-dodging.
+
+**AND THE FOUR ZERO-PAGE BYTES ARE NOT IN IT.** `XX2`, `XX3`, `XX12` and `XX16` stay in
+`GeometryWorkspace`, because two of them have a reader OUTSIDE the routine — `DOEXP` copies the
+projected vertices off `XX3` to build the cloud (§4.3) — so they are the universe's state and not a
+frame's. What the frame holds is only what the parts carry between themselves: `XX4`, `XX18`, the
+heap run and `U`.
+
+**THE CENSUS CAN NAME A PART NOW, and that is the finding worth keeping.** `channel_census.py`
+listed `DrawShip` as the writer of `xx2`, `xx3` and `xx12` and as a reader of `q`, because one
+function was the whole answer. It now says `ScaleShip` and `SelectFaces` write `xx2`;
+`MeasureRange` and `ProjectVertices` write `xx3` and `OpenHeapRun` reads it; `ProjectVertices` is
+the `q` writer the altitude check inherits from. **It also raises three inherited inputs that were
+invisible while everything was one function**: `PushEdges` reads `xx3` after `EitherFaceVisible`,
+and both `ProjectVertices` and `SelectFaces` read `xx12` after a writer the tool cannot name. Each
+is real — they are the stage results parts 4 to 11 hand each other — and each is now a row rather
+than a property of a 551-line function nobody could see inside.
+
+**Two vestigial locals came out.** `V(1 0)` was assigned zero in parts 4–5 and again in parts 6–8
+and read in neither: the blueprint carries the faces and the vertices as spans, so the pointer
+set-up IS the loop index. Both assignments are gone and the comment says why, which is the same
+correction M1-e made to `V` in parts 10–11 and did not finish.
+
+**Counts.** `origin-markers` 4,053 → 4,072, the fourth rise: nineteen labels where the code splits.
+Nothing else moved. 402 of 402 on the first run, the replay digest unchanged, all 14 repository
+checks.
+
+**2026-09-07 — M4-a-3: the frame's head and tail split at their annotated parts, and the port had
+been collapsing a branch the original does not.**
+
+`BeginFlightFrame` was 324 lines and `EndFlightFrame` 254, each with the original's part numbers
+written into the comments as rules across the page. The rules are function boundaries now:
+`StirTheFrame`, `TurnTheShip`, `RunFlightKeys` and `FireTheGuns` for parts 1, 2, 3 and 3's tail;
+`BurnEnergyBomb`, `RechargeBanks`, `MaybeSpawnStation` and `RunCycleStep` for parts 13's two halves,
+14 and 15. The two entry points are 14 and 43 lines. **The roll and the pitch stay in ONE function
+on purpose** — the roll's exit carry is the pitch's `ADC #4` input (§6.85), a flag live across what
+looks like a boundary, and splitting there would need a carry parameter to say what a local already
+says.
+
+**AND THE SPLIT FOUND A BRANCH THE PORT WAS NOT TAKING.** Part 14 ends `LDA MCNT / AND #31 /
+BNE MA93`, and `MA93` is part 15's first compare — so on a frame where `MCNT` is 0 mod 8 but not 0
+mod 32, the original runs part 13's tail and then falls into part 15's three tests. The port
+returned the frame tail on BOTH sides of that branch. It is observationally identical, and the
+argument is arithmetic: a step that is 0 mod 8 is never 10, 15 or 20 mod 32, so the three jobs could
+not have fired. **Nothing had written that argument down**, and the comment above part 15 asserted
+the opposite — "`MA93` is entered from part 14 as well ... whichever way in it came" — which is
+false of this port and true of the original. The fall-through is restored, so the shape is the
+original's again and the argument is not needed.
+
+**THE CYCLE IS THIRTY-TWO STEPS AND NOT SIXTEEN.** The M4-a row asked for "the sixteen-step cycle as
+a table", §2's decode table said "the sixteen-step housekeeping cycle", and part 15's own heading
+said "one job every sixteen frames". All three are wrong: `MCNT` is masked with 31, the three jobs
+fire at steps 10, 15 and 20 of a thirty-two step block, and the shields and banks fire once per
+eight. Sixteen appears nowhere in the original. `RunCycleStep` carries the table, all three places
+are corrected, and `MCNT`'s DECREMENT is recorded beside it — the residues are visited backwards and
+all thirty-two are still visited once per block.
+
+**Counts.** `origin-markers` 4,042 → 4,053, the third rise and the last of M4-a's: eleven labels on
+the new function boundaries, which is `MA18`, `MA77`, `MA22`, `MA93`, `MA23S`, `MA68` and the rest
+written where the code splits rather than inside a comment rule. The channel census moves one
+reader with the code — `MathWorkspace.q`'s is `RunCycleStep` rather than `EndFlightFrame`, which is
+the same read in a smaller function — and P8's paragraph in §3 records what M4-a did to the three
+frame procedures it names. 402 of 402, all 14 repository checks, the replay digest unchanged.
+
+**2026-09-07 — M4-a-2: parts 7 to 12 as typed stages, and five booleans that were a state machine
+nobody had written down.**
+
+`MoveEveryShip` was four hundred and twenty-six lines with parts 5 and 7 to 12 spelled out inside
+its `for(;;)`, and the parts talked to each other through FIVE BOOLEANS declared above the block
+that set them and read two parts later: `docking`, `scoopable`, `collision`, `holdFull`, `drawIt`.
+Each part is a function now and each answers a named type — `Contact`, `ScoopResult`,
+`DockingTest`, `Impact`, `Aim`, `KillOutcome`, beside the `LaserHit` part 11 already had — and the
+loop body is a pipeline of seven calls in ninety lines.
+
+**AND THE TYPES SAID SOMETHING THE BOOLEANS COULD NOT.** Part 7 sets exactly one of `docking`,
+`scoopable` and `collision` — a station takes the first branch and nothing else can reach the other
+two — so the three lines at the end of part 9 that cleared `collision`, `scoopable` and `holdFull`
+were DEAD STORES on every path that reached them. They read as defensive and they were unreachable,
+and only an enumeration can say that: `Contact` has four values because the original has four
+answers, and there is no state in which two of them hold. Nothing else changed; the suite is 402 of
+402 on the first run and the replay digest did not move, which is the acceptance the M4-a row asks
+for.
+
+**THE STAGES ARE FILE-LOCAL, and that is the M4 pattern rather than a shortcut.** `ApplyLaserHit`
+has been file-local since it was extracted and `LaserHit` with it; what M4-a buys is the SHAPE of
+the routine, not a wider header. Exposing seven more names would put them through rule 6 into
+`Outpost/` for nothing — the app calls `MainFlightLoop` and always has.
+
+**Counts.** `origin-markers` 4,026 → 4,042, and this is the second rise in a row: sixteen
+enumerators and struct fields, every one of them a 6502 label the code previously expressed only in
+its shape — `MA65`, `ISDK`, `MA58`, `MA59`, `MA67`, `GOIN`, `KS1`, `MA27`, `MA15`. **M4's pattern
+moves P12 UP and that is expected**, which is worth saying plainly rather than discovering at the
+ratchet a third time: naming a label in a type is still naming a label, rule 4 wants it labelled
+until M6-e, and M6-e strips the lot in one pass. Nothing else moved.
+
+**2026-09-07 — M4-a-1: `SpawnChildEffects` goes, and the seam that outlived a phase was being
+kept alive by a TRAP rather than by the code.**
+
+M3-b-1's rule was §6.73's: a seam scoped before the routine behind it existed goes when the routine
+exists. `SFS1` has been `Elite::SpawnChildShip` in `Spawn.cpp` since slice 4a-b, and both
+implementations of `SpawnChild` — the app's and the replay port's — were ONE LINE calling it over a
+universe the object already held. It should have gone with the other seven. The M3-b row says why it
+did not and the reason is in the suite: `TheWreckageMatchesSPINAndSPIN2` traps `SFS1` on the oracle
+to `SEC` and let the port's seam answer `true`, so both machines were told the bubble always had
+room. Call the routine for real and the bubble fills at ten slots, the carry flips, and the two are
+no longer comparing the same thing.
+
+**SO THE SEAM WAS A SEAM BECAUSE OF WHAT A SUITE COUNTED, which is §6.73's corollary read from the
+other end.** The fix is M4-a's pattern rather than M3-b's: `PlanItems` and `PlanDebris` ANSWER an
+`Elite::Drop` — a type, a count, an AI byte, and the carry an empty drop hands back — and
+`PerformDrop` runs the loop. `SPIN2` decides a count and nothing else, which is the finding rather
+than a shape imposed on it: every subtlety in that routine's twelve-line comment is about a LOOP,
+and the loop is now the caller's.
+
+**AND THE TRAP CAME OFF WHERE A BUBBLE EXISTS.** The SPIN sweep keeps its trap and compares the
+ANSWER against the oracle's call sequence, which needs no fixture bubble at all. The FRAME fixtures
+untrap `SFS1` entirely: both machines really spawn, and what is compared is the slot list, the ship
+blocks, the whole line heap, `SLSP` and `RAND` — `CompareState` and the walks that were already
+there. That is strictly more than the seam could say. `NWSHP`'s allocation was compared NOWHERE on
+this path before, because the recorder answered `childSucceeds` and the trap answered `SEC`: a frame
+that filled the bubble was indistinguishable from one that did not.
+
+**Three fixtures were carrying the seam without using it**, which is what a `Ports` member costs
+even when nobody reaches it: `TacticsTests::CountingEffects` collected a `spawned` list nothing
+asserted on (the AI reaches `SFS1` through `SpawnEscapePod` and `SpawnShipAhead`, which are calls
+and not seams since 4a-b); `LaunchTests::RecordingLaunch` was a whole class answering "there was
+room" for a launch that spawns no child; and `NullSeams::spawnRoom` was a boolean two fixtures set
+to true so that a kill could drop debris — the answer comes from the slot list now.
+
+**Counts.** `effects-seams` 9 → 8, `aggregate-refs` 11 → 10, `outpost-elite-names` 71 → 69.
+`origin-markers` 4,022 → 4,026, and it ROSE on purpose: `Drop`'s four fields are X, `CNT`, A and
+`oh`'s carry, four 6502 things the seam's one method named in a sentence, and rule 4 wants each of
+them labelled. **The replay digest did not move** — the port's `SpawnChild` and `PerformDrop` make
+the same call in the same order, which is what a refactor is supposed to look like from the outside.
+402 of 402 on the first run, all 14 repository checks.
+
+**One documentation defect found on the way out.** The M3-c acceptance row carried `<!--count:-->`
+markers on `main-lines` and `outpost-elite-names`. An acceptance records what a slice ACHIEVED and a
+`count:` marker asserts what the tree holds TODAY, so the marker drags the history wrong at the next
+slice that moves the number — and this was that slice. Both are plain numbers now; §3's are the live
+ones. The M3-b row above it had it right already.
+
+**2026-09-07 — the replay drives `Elite::Game`, the record is re-taken, and yesterday's
+measurement of it was wrong.**
+
+**THE CORRECTION FIRST.** The entry below says pointing `FlightPort` at an `Elite::Game` turns
+"1,170 steps ending `Docked`" into "2,589 ending `Died`" and attributes it to the two causes that
+bisection separated. **It does neither.** The flight is 1,170 steps and it ends `Docked`, exactly as
+recorded; every digest moves and not one step does. There was a THIRD cause the bisection did not
+separate out because I did not know the byte existed, and with it fixed the length and the outcome
+come back. The two causes below are real and the record moves for them; the length and the death
+were the third, and putting a wrong number in front of the owner as the reason to park a decision is
+the mistake worth recording, not the byte.
+
+**THE THIRD CAUSE IS A DUPLICATE `QQ12`.** `FlightPort` held `std::uint8_t docked = 0xFF` beside
+`Universe::dockedFlag`, and both are the same 6502 byte. Nothing noticed while the port stepped its
+own transcription: `Launch` took the port's by reference and cleared it, the transcription never
+wrote either, and `dockedFlag` sat at whatever `Universe` starts with. Step it through `Game` and
+the two diverge on the first pass — `Game::Leave` writes the universe's byte and `Game::Docked`
+reads it, while the replay's own loop tests the port's — so the flight neither stopped when it
+docked nor knew it had. It is a reference now (`std::uint8_t& docked = universe.dockedFlag`) rather
+than a rename, because `RESET` and `LAUN` take it by reference and the image names it.
+
+**AND THE OTHER TWO ARE THE FIXTURE BECOMING WHAT THE APP IS.** `FlightPort` built `Ports` itself
+out of `universe.printer`, `universe.characters` and `universe.extendedPrinter` with the value-token
+and control-code seams left null, so the scripted flight deferred eleven control codes the app runs;
+and it never ran `NA%`, so the flight has been flown by a commander of all zeros — no fuel, no
+laser, a galaxy seed of zero. `Elite::Game`'s constructor does both, because the app's does. Both
+are rule 1's second case, the record follows the fix, and this entry names them.
+
+**WHAT THE RECORD MEASURES NOW IS THE LOOP AND NOT A TRANSCRIPTION OF IT.** `FlightPort::Step` was
+`M%`, `MLOOP`'s head, the spawner, part 5's tail and the keyboard scan spelled out a second time —
+M3-c moved the executable's copy into `Elite::Game::Step` and left this one, and ADR-007 §5 recorded
+the gap. It is `game.Step(0u)` now, one call, and the zero is a key: `TT102` dispatches every pass,
+which is how `TT107`'s countdown ticks when nothing is pressed (§6.159), and the old transcription
+did not dispatch it. `Game::LastOutcome` is added for it — the replay compares outcomes digest for
+digest and wants `M%`'s answer rather than the boolean `Step` takes from it (`origin-markers`
+4,021 → 4,022, rule 4). `FlightPort::Ports()` hands back `game.PortsOf()`, so `RESET`, `LAUN` and
+`DOCKIT` reach the struct the game steps through instead of a second one built beside it.
+
+**WHAT IS STILL NOT MEASURED.** The seven bytes that moved into `Universe` yesterday have no cells
+in `UniverseImage`, so the digest still does not see them, and `Game::m_paused` is outside the
+universe by design. Closing the first is rule 1's FIRST case — a deliberate widening — and it would
+move all sixteen checkpoints a second time; it is one edit and it is not this slice's. ADR-007 §5
+says so.
+
+402 of 402; all 14 repository checks; the record re-taken, 16 of 16 checkpoints moved, 0 steps.
+
+**2026-09-07 — the ADR-007 §3 follow-on: seven bytes go where they belong, and the replay slice
+that was to come first turns out to be a decision rather than a tidy-up.**
+
+**THE SEVEN BYTES ARE IN `Universe`.** `crosshairStep`, `jumpTarget`, `jumpDistance`,
+`joystickGeometry`, `joystickEnabled`, `musicSwitchWas` and `soundDisabled` — `TT17`'s X and Y,
+`safehouse`, `QQ8`, `JSTGY`, `JSTE`, `MUTOKOLD` and `DNOIZ`. Every one has a 6502 name, which makes
+it game state, which §4.4's rule puts in the universe; they were on `Game` because M3-c carried them
+across from `Main.cpp`'s composition struct and not because anything decided they belonged.
+`Game::m_paused` stays: the original has no such byte, `FREEZE` is a loop that does not return, and
+the state a windowed program is in instead is the port's own.
+
+**AND MOVING THEM DID NOT MOVE THE DIGEST, which is the half of the finding worth keeping.** `Hash`
+walks `UniverseImage`'s table of cells rather than the struct's bytes, so a field added to `Universe`
+is not hashed until a cell names it. The gap ADR-007 §5 records is relocated rather than closed — but
+it is one edit away from closing now instead of a refactor away, and that edit is a deliberate
+widening under rule 1's first case which moves every checkpoint in the record.
+
+**THE REPLAY SLICE WAS BUILT, MEASURED AND PARKED.** `FlightPort::Step` is a second transcription of
+`M%`, `MLOOP`'s head, the spawner, part 5's tail and the keyboard scan, sitting beside
+`Elite::Game::Step`'s — M3-c deleted the executable's copy and left this one, so the replay digest
+measures a TRANSCRIPTION of the loop rather than the loop. Pointing `FlightPort` at an `Elite::Game`
+compiles and runs. It also changes the flight:
+
+  - ~~**1,170 steps ending `Docked` becomes 2,589 ending `Died`**, and every checkpoint differs.~~
+    **THIS MEASUREMENT WAS WRONG. The next entry corrects it: the flight keeps its length and its
+    ending, and only the digests move.** The 2,589-step death was a third cause this bisection did
+    not separate out — `FlightPort` holding a second `QQ12` byte beside `universe.dockedFlag` — and
+    it was read as an effect of the two below.
+  - Bisecting the composition says why, in two independent parts. **Without `SetValueTokens` and
+    `SetGame` the flight is 1,170 steps again** and only the digests differ — so the value tokens
+    and the control codes running rather than deferring is what changes the LENGTH of the flight.
+    **With `Game` present but its ports unused the record first differs at step 400** — so
+    `Game`'s constructor writing `NA%` into the commander is a second, separate cause: the replay
+    has been flying a commander of all zeros, with no fuel, no laser and a galaxy seed of zero.
+    Both parts of the bisection stand; only the length and the outcome attributed to them do not.
+
+Both are the fixture becoming what the app is, and both are defensible as rule 1's second case — a
+defect in the port found and fixed. But the two together replace the project's primary regression
+instrument with a different flight, and "the record moved and the flight is now a death" is not a
+change to make on a slice's own judgement. **It is recorded here and put to the owner rather than
+taken.** What is committed is the diagnosis, the `FlightPort::Ports()` accessor the change pivots on,
+and this entry; `FlightPort` still steps its own transcription.
+
+402 of 402, all 14 repository checks, the digest unchanged.
+
+**2026-09-07 — M3-d: ADR-007, and writing it from what was built found three things the plan had
+wrong and one the build has wrong.** The row asks for state ownership and the replay hash "written
+from M3-a..c as built", and the value of that phrasing is that it forces a comparison. ADR-006 §4
+planned `Elite::Game` with `Universe m_universe; Ports& m_ports;` and a `Step(const InputFrame&)`.
+What exists is the ownership INVERTED — `Universe& m_universe; Ports m_ports;` — three `Step`s
+rather than one, and no `Frame`, `Sounds`, `StateHash` or `Mode`. Each has a reason and ADR-007
+records it; ADR-006 §4 is amended in place rather than left to disagree with the tree.
+
+**THE THREE `Step`s ARE THE ORIGINAL'S SHAPE AND NOT A COMPROMISE.** `FRCE` is
+`LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100` — a jump to one of two entry points — and `FREEZE` is
+a third that `DK4` reaches and does not return from. One method behind a mode byte would be
+inventing the machine `Mode` is, which is M4-d's when it retires `LoopOutcome`. Until then the
+caller's choice IS the game's.
+
+**AND THE BUILD HAS EIGHT BYTES IN THE WRONG PLACE, which is the finding this ADR exists to
+produce.** `Game` holds `crosshairStep`, `jumpTarget`, `jumpDistance`, `joystickGeometry`,
+`joystickEnabled`, `musicSwitchWas`, `soundDisabled` and `paused`. **Seven of the eight have a 6502
+name** — `TT17`'s X and Y, `safehouse`, `QQ8`, `JSTGY`, `JSTE`, `MUTOKOLD`, `DNOIZ` — which by §4.4's
+own rule makes them game state, which puts them in `Universe`. They are not there because they were
+loose in `Main.cpp`'s composition struct when M3-c moved the dispatch and carrying them across was
+the smallest change that compiled. The consequence is exact and is now written down: they are not
+cells in `UniverseImage`, so a slice that broke `MUTOKOLD` or `QQ8` would not move the replay
+digest. Moving them in and giving them cells is a deliberate widening under rule 1's first case.
+`paused` is the one that stays: the original has no such byte, it FREEZES in a loop, and a windowed
+program cannot.
+
+**THE DIGEST DID NOT MOVE ACROSS THE PHASE, and that is the sentence the whole apparatus exists to
+be able to write.** It moved twice, both in M3-b, both for defects the slice found — `NOISE2`
+answering the sustain it went in with rather than the flag byte it wrote (2a), and `Music.cpp`
+missing the `SETL1` brackets around `stopat` and `BDENTRY` (2b) — each with the defect named, which
+is rule 1's second case. From M3-b-3a to M3-c inclusive it has not moved: eleven commits, eleven
+interfaces collapsed to four ports and five direct calls, eight hundred lines of dispatch out of the
+executable, `Main.cpp` from 1,197 lines to 256. That is "no behavioural change" measured rather than
+asserted, and it is the one thing the per-routine oracle cannot say (risk R14).
+
+**WHAT THE DIGEST DOES NOT COVER IS NAMED RATHER THAN ASSUMED**, because a hash everybody trusts and
+nobody has bounded is worse than no hash: the eight bytes above; the docked half, which is
+`DockedSessionTests`' transcript and a different instrument; `Ports` and the text objects, which are
+not state; and — the one that matters most — **the replay does not drive `Game`**. `FlightReplayTests`
+composes `FlightPort` and calls the library's routines directly, as it has since M0-c, so the digest
+is a statement about the ROUTINES and not about the object that dispatches them. M3-c's row asked
+for the replay and `DockedSessionTests` to drive `Game::Step` and neither does; `GameTests` is what
+covers the object until that changes.
+
+**M3 IS COMPLETE.** Five slices over two days: M3-0 (the app's member check, which grew to seven
+halves under seven Windows-only breaks), M3-a (`Universe`), M3-b (the ports), M3-c (`Game`) and this.
+`aggregate-refs` 78 → 11, `effects-seams` 22 → 9, `outpost-elite-names` 205 → 71, `main-lines`
+1,219 → 256. The M3-b row expected `effects-seams` at six and it closes at nine, which is two seams
+the row did not know were the text system's own and is recorded as a correction to §4.5 rather than
+as a shortfall. Next is M4-a, which is also what unblocks `SpawnChildEffects`.
+
+**2026-09-06 — M3-c: the top of the program moves into the library, and `Main.cpp` goes from 1,160
+lines to 256.** `Outpost/Main.cpp` held the universe, the text system, the ports, eight bytes of
+game state that are in no struct, and every dispatch the main loop makes — `TT102`'s twenty-odd
+actions, `M%`'s outcomes, `DOENTRY`'s six mission exits, `FREEZE`, the chart draw, the docked pass
+and the flight pass. Eight hundred lines of 6502 in the ONE FILE NO LINUX RUNNER COMPILES, which is
+the whole of R15's surface and the reason `check_outpost.py` has grown seven halves this week.
+`Elite::Game` is where all of it lives now. `main-lines` 1,160 → 256, `outpost-elite-names` 157 →
+71 (205 when M3 opened).
+
+**THE LINE THE SPLIT FALLS ON IS THE DETERMINISM GUARD'S, and that is the finding.** The plan's row
+says `Advance` and `AdvancePaused` move here. `AdvancePaused` did. `Advance` COULD NOT: it turns
+elapsed seconds into a count of passes, over ADR-005 §3's accumulator, and `GameLogic` may not
+touch a float (AGENTS.md §5, `check_gamelogic.py`). So it SPLIT — `PlanSteps` and the seconds stay
+in the executable and `Game::Step` takes one key and runs one pass. That is §2.1's
+`Step(InputFrame)` arrived at from the other direction, and it is a better shape than the row
+described: the count of passes is a property of the display and the passes are the game's.
+
+**`Step` ANSWERS A BOOLEAN, which is the `return` the old loop used.** `Advance`'s body returned out
+of the whole batch when `M%` left the flight half or the pause key froze it; a `Step` that could not
+say so would let the caller run a docked pass through the flight loop. It is the one piece of
+control flow that had to become a value.
+
+**EVERY PLATFORM REACH IN THE MOVED CODE HAD AN EXACT PORT EQUIVALENT, and that is M3-b's dividend
+rather than a coincidence.** `_game.shell.ClearToView(v)` is `SetUpScreen(universe, ports, v)`;
+`_game.shell.Flush()` is `ports.keyboard.Flush()`; `_game.shell.View()` is `universe.view`;
+`_game.audio.Direct()` is `ports.sid`; and `_game.window.Held(KEY_CONTROL)` — the galactic drive's
+modifier, read live — is `ports.keyboard.Held`, which is the port M3-b-3d landed four commits ago.
+Nine reaches, nine one-for-one replacements, no new seam.
+
+**WHAT §2.1 ASKED FOR AND THIS DOES NOT HAVE, said plainly.** `Frame()`, `Sounds()` and
+`StateHash()` are not built: the first two are the executable's draw and drain, which have no caller
+in the library yet, and the third wants `UniverseImage`'s hash, which lives in the test tree.
+`DockedSessionTests` still owns its own composition rather than driving `Game` — it asserts on a
+CHARACTER STREAM and `Game` builds its own text chain down to the canvas, so pointing it at `Game`
+would cost the transcript that suite is made of. `GameTests` is the new suite instead: four methods
+that drive the object the way `Run` drives it — the cold start ends docked with a rolled market, the
+pause key freezes and the resume key thaws, a keyless docked pass still ticks `TT107`'s countdown,
+and sixty-four docked passes followed by flight passes end in `M%` answering `Docked` and `Leave`
+performing the arrival. That last one is the real one: it runs `DOENTRY`, the missions and the
+status screen, so a `Game` whose dispatch were unwired would still be flying at the end of it.
+
+**AND `Elite::Universe` IS STILL THE COMPOSITION ROOT'S, which §2.1 does not ask for.**
+`Outpost::FlightSession` binds the universe at construction and answers three of the seams `Game`'s
+`Ports` needs, so whichever of the two is built first needs the other, and the only ways out are a
+deferred binding on the app side or the reference this took. Two of those three seams are already
+scheduled to go — `ShipDrawEffects` when the emulator models the banking §6.108 found,
+`SpawnChildEffects` in M4-a — and what is left of that class afterwards is `DOCKIT`. When it goes,
+`m_universe` becomes a member and the composition root stops holding any game state at all. Named
+here so the next person does not have to re-derive why it is a reference.
+
+Two smaller things went with the slice: `GameShell::AttachExtended` and `m_extendedPrinter`, which
+existed for a null check that never dereferenced the pointer; and `Main.cpp`'s `Game` struct, which
+is `App` now and holds seven members where it held twenty.
+
+402 of 402, all 14 repository checks, `origin-markers` 3,925 → 4,021 — UP by ninety-six, the
+direction rule 5 allows before M6, because that is the dispatch's own markers arriving with it
+(rule 4).
+
+**2026-09-06 — M3-b-4c: the null port was already one class, and the second one was a boolean.**
+The plan's row asks for `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView` and
+`RecordingDashboard` to become one null port. THREE OF THE FIVE HAD ALREADY GONE with the seams they
+answered — `SightEffects` in M3-b-3a, `ViewEffects` and `DashboardEffects` in M3-b-2 — and of the two
+left, one is not a null port and the other was not two things.
+
+`LoopRecording` was named for a recording it had stopped making: two empty draw methods and a
+`SpawnChild` that returned true where `NullSeams` returns false. ONE BOOLEAN, and it is `spawnRoom`
+on the null port now — so §4.5's "one class" is reached by deleting the other rather than by merging
+them. `LoopUniverse` loses a member and two suites lose a name.
+
+`NullShell` is a RECORDER and stays one. `NullSeams.h` has said since M3-a-3 that it is not a
+recorder and must not become one, and folding a transcript into it would be exactly that: a fixture
+that wants to know a seam was reached passes something that counts, and this exists so the seams a
+routine cannot reach cost a fixture nothing to declare. The distinction is the whole value of the
+class and the plan's row would have destroyed it.
+
+**M3-b IS COMPLETE.** Three of §4.5's four ports landed — `SoundSink` (2b), `Presenter` (3b, 3c) and
+`Keyboard` (3d) — and the fourth keeps the name it has, for the reason §4.5 now records. Eleven
+interfaces became four ports and five seams that turned out to be `GameLogic` reached through the
+executable: `TradeScreenEffects`, `TunnelEffects`, `ControlEffects::ScanKeyboard`, `TextEffects` and
+`ControlCodes`. `effects-seams` 22 → 9 across the phase, `aggregate-refs` 39 → 11,
+`outpost-elite-names` 205 → 157, `main-lines` 1,219 → 1,160.
+
+Two seams survive the phase deliberately and are named so nobody has to re-derive it: `TextSink` and
+`ValueTokens` are the text system's own polymorphism and are argued about in §4.5. Two survive
+because a comparison is blocked rather than because they are right: `ShipDrawEffects` needs the
+banking §6.108 found, and `SpawnChildEffects` is M4-a's typed stage result. `StartUpEffects` is down
+to `ClearKeyLogger` and `ShowTitleScreen`, and `ControlEffects` to `RunDockingComputer`.
+
+**2026-09-06 — M3-b-4b: `ControlCodes` goes, and what the seam stood in front of was `GameLogic`
+reaching `GameLogic` through the executable.** `DT3` and its `JMTB` table are the control codes that
+leave the text system, and `GameShell::Run` answered three of them before forwarding the rest to
+`Elite::MissionCodes`. All three were the library's: codes 8 and 9 are stores into `Universe::text`
+plus `SetUpScreen`, and code 21 is `CLYNS`, which is `Elite::ClearMessageRows` and has been since
+slice 2a. So `MissionCodes` becomes `Elite::RunControlCode(Universe&, Ports&, code)`, absorbs 21,
+and the extended printer reaches it directly. §6.73 for the twelfth time.
+
+**THE GALAXY WAS A PARAMETER THAT WAS A UNIVERSE BYTE.** `MissionCodes` took `const std::uint8_t&
+_galaxy` and every caller bound `commander.galaxyNumber` to it — the executable through
+`AttachGalaxy`, the suites through a local. It reads the commander now, which is what M3-a removed
+nine of, and `out-params` fell with it.
+
+**THE SEAM WAS HOLDING FIVE OF THE SHELL'S POINTERS UP.** `GameShell` carried the token printer, the
+cursor, the sentence flags, the message counters and `GCNT` for one method, and `Attach` and
+`AttachGalaxy` existed to set them. `RunControlCode` reaches all five through `(Universe&, Ports&)`,
+so both methods and all five members go and `Main.cpp` loses two lines of wiring.
+`outpost-elite-names` 165 → 157: eight names the app reached ONLY to answer codes.
+
+**`SetGame` IS A SETTER AND HAS TO BE.** `ExtendedTokenPrinter` is a member of `Ports` and
+`RunControlCode` takes a `Ports&`, so neither can be the other's constructor argument.
+`TokenPrinter::SetValueTokens` unties the same knot for the same reason and `Main.cpp`'s composition
+already lends the struct back to two of the objects inside it. A printer with no game ignores the
+codes that leave, which is exactly what a null `ControlCodes*` meant — so the token suites are
+unaffected by construction rather than by luck.
+
+**AND A COUNTER REPLACES THE RECORDER, WHICH IS THE ONE THING §6.73's COROLLARY COULD NOT COVER.**
+Three suites needed to know that a token had reached a code the port defers: `CompareToken` must
+SKIP such a token, because it cannot be compared against a game that runs it, and no state
+comparison can tell "deferred" from "ran and did nothing". So `ExtendedTokenPrinter` counts the codes
+that leave — a `std::uint32_t`, not a virtual — and `CodesThatLeft()` is what the suites ask.
+`GalaxyTests` still asserts that none of 2,048 generated descriptions reaches one; `ExtendedTokenTests`
+still asserts exactly which fourteen of the thirty-one leave.
+
+**WHAT THIS DOES NOT DO, named rather than left to be discovered.** The eleven codes
+`ExtendedTokenTests` defers are still deferred. Five of them — 9, 21, 25, 27 and 28 — could be
+compared there against a real universe and are not, because doing it means giving that sweep a
+`Ports` and a canvas comparison, which is a second pattern and belongs in its own slice. Three more
+(22, 24, 26) need a scripted keyboard on both sides first. Three (11, 30, 31) have nothing behind
+them on either side and fall to `default` in `RunControlCode` exactly as they fell to the shell's.
+
+**Two suites now run the codes for real.** `MissionTests` reaches them through
+`Universe::RunCodesThrough`, and `DockedSessionTests` — the fixture that most nearly IS the
+executable — calls `SetGame` in its constructor. `LaunchTests` lost its `codes.ran.empty()`
+assertion and gained the attachment instead: the oracle has always RUN `TITLE`'s codes, so what that
+assertion really claimed is that the two screens agree, which `CompareScreens` says directly and for
+the right reason. Falsified before it was believed: stubbing `SetGame` out fails four methods across
+`PAUSE`, `BRIS`, `MT9` and `MT27`.
+
+`effects-seams` 10 → 9, `outpost-elite-names` 165 → 157, `main-lines` 1,161 → 1,160, `out-params`
+17 → 16, and `origin-markers` 3,923 → 3,925 — UP, the direction rule 5 allows before M6, because
+the shell's markers moved into `GameLogic` with the dispatch (rule 4). `mi-captain` and
+`mi-mt9-view` re-anchored on the free function.
+
+**AND `ExtendedTokenPrinter::RunControlCode` HAD TO BE RENAMED, which is worth one line.** The
+printer already had a private member of that name — the text system's own half of `DT3` — and a
+member hides a namespace-scope function of the same name at unqualified lookup, so the first build
+of this slice reported four calls to a member "expecting 1 argument, 3 provided". It is `RunTextCode`
+now, and the pair of names says which half is which.
+
+**2026-09-06 — M3-b-4a: `TextEffects` goes, and the seam was answering with the wrong routine.**
+`clss` is what `CHPR` does with a character printed below the last row, and this port had it as a
+one-method seam whose header said it was "the one thing CHPR does that the library still cannot do
+for itself" — because `TT66` reaches the dashboard, the sprites, the border and the colour bands.
+**That is the wrong routine.** `clss` is `JSR TT66simp / LDA K3 / JMP RRafter`, and `TT66simp` is a
+bitmap wipe of character rows 1 to 23 followed by `INY / STY XC / STY YC`: the cursor home to
+(1, 1), with row 0 and the dashboard left alone. `Elite::ClearTextArea` has been that routine, ported
+and compared against the shipped one, since slice 2a. So the seam was in front of a routine the
+library already had — §6.73 for the eleventh time — and the executable was answering it with
+`GameShell::ClearScreen`, which is `ClearToView`, which is the whole of `TT66`: a palette fill, the
+dashboard, the sprites, the border and a `QQ11` write, none of which `clss` performs.
+
+**AND THE NULLABILITY WAS HIDING A SECOND DEFECT, which is §6.149's shape for the third time in this
+milestone.** `TextPrinter` took the seam as a pointer, and a printer built without one did not clear
+AND did not print the character — the overrunning glyph was simply dropped. That was every
+`TextPrinter` in the suite. `ClearTextArea` needs only the canvas and the `TextState` the printer
+already holds, so there is no pointer to be null: the branch is unconditional now.
+
+**NOTHING IN THE SUITE REACHED THE BRANCH, and that is why neither defect had been found.**
+`PrintableCharactersMatchTheShippedRoutine` sweeps rows 0, 1, 11 and 23 — the row after the last one
+is exactly the row it stops before. `TheOffTheBottomPathMatchesClss` is the new method: rows 24, 25
+and 30, three columns, three characters, both screens SEEDED WITH INK first, compared on the whole
+screen plus `XC`, `YC` and the returned character. The seeding is the point — over two blank screens
+the comparison would pass whether the routine cleared everything, nothing, or exactly the right
+band, and those are the three answers being told apart. Falsified twice before it was believed:
+dropping the character reports `screen differs at offset 352 -- game has 0, port has 163`, and
+clearing row 0 as well reports `offset 32 -- game has 227, port has 0`.
+
+**Two findings about what is left of M3-b-4, because the plan's row is wrong about both.**
+
+  - **`SaveStore` IS ALREADY TAKEN.** §4.5 asks for `CommanderStore` to be renamed to `SaveStore`,
+    and `Outpost::SaveStore` has been the executable's implementation of it since slice 2d — so the
+    rename produces `class SaveStore : public Elite::SaveStore`. The name has to move on one side or
+    the other, and `CommanderStore` says what is stored where `SaveStore` says only that saving
+    happens. Recorded here rather than decided unilaterally.
+  - **`TextSink` IS NOT A PLATFORM SEAM AND ITS REASON HAS NOT EXPIRED.** The plan groups it with
+    `ValueTokens` and `ControlCodes` as "the text system's own polymorphism", which is right, and
+    then concludes it should go "since `CHPR` … exist[s]", which does not follow: `TextSink` is not
+    in front of `CHPR`, it is the interface `CHPR` implements. Both production implementations are
+    in `GameLogic` and form a chain — `TokenPrinter` → `CharacterPrinter` → `TextPrinter` → `Canvas`
+    — and seventeen fixtures use it to compare token expansion as a CHARACTER STREAM against the
+    shipped routine, which is a strictly more precise instrument than the pixel comparison that
+    would replace it. §6.73's corollary cuts the other way here for the first time.
+
+`effects-seams` 11 → 10, `outpost-elite-names` 166 → 165, `origin-markers` 3,924 → 3,923, tests
+397 → 398.
+
+**2026-09-06 — M3-b-3d's fix: a member reached through an expression, and a seventh half for
+`check_outpost.py`.** `Main.cpp` called `_game.shell.FlushKeyboard()` in the market-price case, and
+the method is `Keyboard::Flush` since the slice that renamed it. Six halves of the check passed the
+file: `MarketPrice` reads through TWO hops and `APP_ACCESS` sees `_game.shell` and
+`shell.FlushKeyboard` as unrelated pairs, neither of which resolves — `shell` is not a variable that
+file declares. `Main.cpp(401,19): error C2039` from the Windows job and from nothing else, which is
+R15 for the sixth time.
+
+**So the check walks the chain now, and the walk is the point rather than the pattern.** `_game` is
+declared `Game& _game`; `Game::shell` is a `GameShell`; `GameShell` is a type whose members are
+known. Three lookups, each of which may fail — and a failure ends the walk rather than reporting
+one, so `_game.flight.Loop().options` is checked as far as `flight` and no further. Two things had
+to change to make it reach anything: the member map gains each member's own TYPE, and it reads
+`Outpost/*.cpp` as well as the headers, because `Main.cpp`'s composition struct is declared in an
+anonymous namespace in the file that walks it. 292 chains resolved on the tree as it stands, where
+the flat member pass resolves 227 single hops.
+
+**The self-test's plant is a chain whose FIRST hop is good.** A check that reported the whole
+expression whenever any part of it failed to resolve would report every call in `Main.cpp`; one
+that stopped at the first hop would never reach the bad one. So the plant is `_it.held.kept` beside
+`_it.held.gone` and the test requires that exactly the second be named. `CanvasPresenter.cpp`'s two
+`view`s are declined here as they are by the flat pass — one scope per file cannot tell an
+`Outpost::Viewport` from a `D3D12_SHADER_RESOURCE_VIEW_DESC`.
+
+**Six Windows-only breaks, six halves, and the pattern in them is worth stating.** `check_members`
+after M3-a-2, `check_initialisers` after M3-a-3, `check_braces` after M3-b-2a, the app-type pass
+after M3-b-3a, `check_switch_scopes` after M3-b-3c and this after M3-b-3d. Every one was found by
+MSVC and every one was cheap to catch once it had been seen; none of them was predicted. That is
+what R15's mitigation actually looks like — not a check written in advance, but a check written the
+same afternoon as the break, which is only affordable because the slices are small.
+
+Mutants re-run on the committed tree: 72, 68 caught, 4 survived, the four recorded equivalents.
+Rule 3 met for M3-b-3d.
+
+**2026-09-06 — M3-b-3d: `Keyboard` lands, and `RDKEY` turns out to be one line of platform under
+fifty of game.** The third of §4.5's four ports replaces `KeySource`, `LineEntryEffects` and
+`StartUpEffects::ScanTitleKeys`, and it does NOT have the `Scan(KeyLogger&)` the table asked for.
+The routine walks `&DC00`/`&DC01` eight columns at a time, and everything around that walk had
+already stopped being the platform's: the `SETL1` bracket is `MemoryMap` since M3-b-3a, the sprite
+mask is a `VideoState` write, `ZEKTRAN` is sixty-five bytes of `Universe`, the countdown that leaves
+`thiskey` holding the LOWEST-numbered held key is arithmetic, and the `QQ11` tail is the piece this
+port's own comment has called "the one piece of `RDKEY` that is game logic" since slice 3d. So the
+port answers `Held(key)` and `Elite::ScanKeyboard` is the rest — compared, ratcheted and mutated
+like anything else in the library.
+
+**IT WAS TRANSCRIBED THREE TIMES AND IS NOW WRITTEN ONCE.** `FlightSession::ScanMatrix` in the app,
+`FlightPort::ScanKeyboard` in the tests and `GameShell`'s title-screen path were three copies of the
+same fifty lines, each with its own `NON_STEERING_KEYS` array and its own `RDKEY_SPRITE_MASK`, and
+two of them also carried ADR-005 §4's chart-view steering rule — which is the port's own and not
+`RDKEY`'s, and so exactly the kind of rule that drifts when it lives in three places. Two copies are
+deleted and the third is the library's.
+
+**AND THE SECOND SEAM FOR THE SAME ROUTINE GOES WITH IT.** `StartUpEffects::ScanTitleKeys` existed
+because the title screen must PRESENT between two drawn frames where a flight loop must not, and the
+argument recorded beside it was that the difference is in the platform AROUND the scan rather than
+in the scan. That was true and is answered by `Presenter::HoldTitleFrame`, which M3-b-3c's shape
+made available: the hold happens at the call site and the scan is one routine again. `TITLE`'s loop,
+`PAS1` and `PAUSE2` all now read `HoldTitleFrame` then `ScanKeyboard`, which is the order the 6510
+had for free.
+
+**`ReadNumber` AND `ReadLine` LOST A PARAMETER EACH, AND `ReadFlightControls` LOST FOUR.** The line
+editor took a `LineEntryEffects&` for one method; `DOKEY` took the five bytes it reads and a seam,
+and takes `(Universe&, Ports&, ControlEffects&)` — which is M3-a's shape, arrived at here because
+`ScanKeyboard` needs `video`, `memoryMap`, `keys` and `QQ11` and they are all in the universe.
+`ControlEffects` is down to `RunDockingComputer`.
+
+**WHAT THE SUITE STILL DOES NOT COMPARE, said plainly.** `Elite::ScanKeyboard` has no oracle test.
+The shipped `RDKEY` selects a matrix column by writing `&DC00` and reads the answer from `&DC01`,
+and `Cpu6502`'s memory is FLAT — one byte at `&DC01` whatever was written — so an oracle running the
+real routine would read the same column eight times and compare nothing. Comparing it needs CIA
+1 modelled in the emulator, which is the same shape of blocker `ShipDrawEffects` waits on (§6.108's
+banking) and belongs in the same slice. Until then both sides of `DOKEY` are stubbed at `RDKEY` and
+the port's stub is a `Keyboard` that holds down the four steering keys the case names, so the logger
+`ScanKeyboard` rebuilds is the one the test seeded. That is a comparison of `DOKEY`, which is what
+it always was, and not of the walk.
+
+**Three fixtures learned that a seam is what a suite COUNTS (§6.73's corollary, for the tenth
+time).** `MissionTests` scripted `TitleKey{pressed, key}` and now scripts which key is DOWN, with
+the walk turning that into the carry and `thiskey`; `LaunchTests` the same, `KY7` included so the
+title loop still takes `BMI TL3`; `NameEntryTests` compared the ORDER `DELAY` and `FLKB` are reached
+in, so the keyboard writes into the presenter's log rather than keeping one of its own. `PortsWith`
+gained a fifth argument for the fixtures that reach the keyboard, and the four-argument form fills
+it with nothing — which is what made `TheBriefingShipMatchesPAS1` fail loudly and the two `PAUSE`
+tests HANG rather than fail, the first sign of a fixture whose keyboard was answering the wrong
+object.
+
+397 of 397 green. `aggregate-refs` 12 → 11, `effects-seams` 12 → 11, `outpost-elite-names` 174 →
+166, and `origin-markers` 3,910 → 3,924 -- UP, which is the one direction rule 5 allows before M6:
+`Outpost/FlightSession.cpp` lost nine markers and `GameLogic/Controls.cpp` gained them, because they
+came with the routine (rule 4). `mi-pause2-loop` is re-anchored on the call it now names.
+
+**2026-09-06 — M3-b-3c's fix: the braces a scripted deletion took were the ones holding a `case`
+label off a declaration, and a sixth half of `check_outpost.py` is what says so now.** Removing
+`DeathPacing` took the block that had enclosed it, and the `switch` in `Perform` was left with
+`const Elite::ForcedKey begun = Elite::StartGame(...)` bare in its body. A `switch` body is ONE
+scope, so the two labels below that line jump past an initialisation and the file does not compile:
+`Main.cpp(794,5): error C2360: initialization of 'begun' is skipped by 'case' label`, twice, from
+the Windows job and nothing else. The scope is restored — the case is braced, as every other case
+in that switch that declares anything already was.
+
+**IT IS THE FIFTH TIME A SCRIPTED DELETION IN `Outpost/` HAS BROKEN ONLY THE WINDOWS LEG, AND THE
+FIRST THAT `check_braces` SHOULD HAVE CAUGHT AND COULD NOT.** The braces balanced. That check
+counts delimiters and by construction cannot tell one nesting from another, so a deletion that
+removes a matched PAIR is exactly the shape it is blind to — which makes this the second lesson of
+the same afternoon: a cheap half of a parse catches the mistakes it was written for and no others.
+
+So `check_switch_scopes` reads each `switch (...) { ... }` body, tracks depth over both kinds of
+bracket, and fails a declaration-with-initialiser at depth zero when a `case` or `default` label
+follows it there. It is deliberately narrow: a braced case may declare what it likes, and so may
+the last case of a switch, because neither is a shape a compiler objects to. The self-test plants
+all three — a legal braced declaration, the illegal bare one, and a legal bare one below the final
+label — and requires that only the middle be reported, so a check that simply hated declarations in
+switches would fail its own test. Reverting the braces on the tree reproduces the Windows error
+here, in a tenth of a second, which is the point.
+
+`main-lines` stays at 1,161 and the ratchet is why the entry is worth reading: bracing the case is
+two lines, and paying for them meant rewrapping the comment above it to the width the rest of the
+file already uses. A ceiling with zero slack makes every fix name its own cost.
+
+**2026-09-06 — M3-b-3c: one seam was carrying three answers, and the executable was choosing between
+them.** `TunnelEffects::ShowFrame` is `Presenter`'s now, and it did not survive the move as one
+method. The interface had exactly one, threaded as a NULLABLE POINTER through eleven routines, and
+what the pointer selected was not an implementation but a POLICY:
+
+  - `GameShell::ShowFrame` was `DELAY` with a count of one -- the vertical sync the launch and
+    hyperspace tunnels ask for, because the original spells `JSR DELAY` inside `LL164` and `HFL2`.
+  - `Main.cpp`'s own `DeathPacing::ShowFrame` was a frame held for as long as the NEXT took to
+    compute, which is what `DEATH`'s `.D2 JSR M% / DEC LASCT / BNE D2` gets from a machine that
+    waits for nothing. Paced by vertical sync instead, sixty-four frames go past in a second and
+    read as a glitch -- §6.149's bug, found once and prevented here by a second signature.
+  - A null pointer was NO present at all, which `PlanetDraw.h` documented as the oracle's: the 6502
+    has none either, and the two sides must agree on pixels rather than on time.
+
+So `Presenter` gains `Present()` and `HoldFlightFrame(ships)`, the third is a presenter that does
+nothing, and `Main.cpp`'s pacing struct goes. `Die` walks `FRIN` for the ship count itself, which is
+where that walk belonged: the cost of a frame depends on how full the bubble is and the wreckage
+empties it, so the rate rises through the sequence exactly as the original's did.
+`effects-seams` 13 → 12, `main-lines` 1,197 → 1,161, `outpost-elite-names` 175 → 174.
+
+**AND A NULL WAS BEING PASSED WHERE THE GAME HAS AN INSTRUCTION.** `Main.cpp` handed `PerformJump`
+and the `Launch` after it a null pacing on the IN-FLIGHT hyperspace jump -- the one the countdown
+expires into -- where the docked chart's jump passed the shell. `TT18` is one routine whichever door
+it is reached through, and the `JSR DELAY` is inside `LL164`, not at the call site; so the in-flight
+jump drew its tunnel with no frame shown and cut straight to the arrival. It is a defect of the same
+shape as §6.149 and the seam's NULLABILITY is what allowed it: a port that must name an object at
+every call site can drop a present, and one that gets it from `Ports` cannot. Nothing in the suite
+covers it -- it is the app's, and R15's -- so the evidence is the shipped source rather than a
+comparison, and this note is the record.
+
+**`TheLaunchPacing` was written to catch exactly this and now cannot fail.** The test exists because
+someone replaced one of `TT110`'s two pacing arguments with `nullptr`, changed no pixel, failed no
+assertion, and put half of §6.109 back. Its assertion survives -- sixty-eight circles across the two
+tunnels -- but what it guards is now guarded by the type: there is no argument to get wrong.
+
+**2026-09-06 — M3-b-3a's fix: `Main.cpp` read an accessor the slice had deleted, and the fifth half
+of `check_outpost.py` is the one that would have said so.** `Outpost::FlightSession::Video()` handed
+the presenter the sprite registers to composite from; it sat inside the block of `SightEffects` and
+`ExplosionEffects` overrides, and the script that cut that block took it too. MSVC said
+`Main.cpp(109): error C2039: 'Video': is not a member of 'Outpost::FlightSession'` and nothing else.
+The accessor is not restored: `Universe::video` is where the registers live since ADR-005 §1, so the
+composition root hands the presenter that, and the flight session has one fewer thing to own.
+
+**IT IS THE FOURTH TIME A SCRIPTED DELETION IN `Outpost/` HAS BROKEN ONLY THE WINDOWS LEG**, and the
+first three each added a half to this check -- `check_members` after M3-a-2, `check_initialisers`
+after M3-a-3, `check_braces` after M3-b-2a. `check_members` resolved `name.member` against the type
+of `name` for `Elite::`-typed variables ONLY, and `flight` is an `Outpost::FlightSession`. So the
+check ran, resolved 124 accesses, and could not see the one that mattered. It runs twice now, over
+both namespaces, and the self-test's second plant is that access restored.
+
+**Two things the app-type pass has to decline, and it declines both.** `CanvasPresenter.cpp`
+declares two different `view`s -- an `Outpost::Viewport` and a `D3D12_SHADER_RESOURCE_VIEW_DESC` --
+and this check keeps one scope per file, so a name also declared with a type it cannot parse is not
+checked at all. The Direct3D headers are not read and never will be; what the check knows is what
+`Outpost/*.h` declares, and everything else is somebody else's compiler's business.
+
+**2026-09-06 — M3-b-3b: `Presenter` arrives, and four of the five seams it was supposed to collapse
+turned out to be forwarding calls.** §4.5 lists `TunnelEffects::ShowFrame`,
+`LineEntryEffects::WaitFrames`, `StartUpEffects::WaitFrames` and `TradeScreenEffects::ClearToView` as
+`Presenter`'s. Reading the executable's implementations first is what changed the slice: three of
+`TradeScreenEffects`' four methods called library routines and nothing else -- `ClearToView` was
+`Elite::SetUpScreen`, `ClearBottomRows` was `Elite::ClearMessageRows`, `SetUpTradeScreen` was those
+two calls one after the other -- and `BeepAndPause` was `Elite::Beep` plus the one thing that is not
+the library's. So `TradeScreenEffects` and `ChartEffects` GO, and what `Presenter` carries out of
+this slice is `DELAY` alone. `effects-seams` 14 → 13, `outpost-elite-names` 177 → 175,
+`aggregate-refs` twelve before and twelve after.
+
+**WHY `DELAY` IS A PORT WHEN THE OTHER FOUR WERE NOT, and a test that would hang says so.** `DELAY`
+is `LDY #n / JSR WSCAN / DEY / BNE`, and `WSCAN` waits for the raster to reach the bottom of the
+screen. There is no way to wait for a vertical sync that does not know what a screen is -- and the
+oracle cannot run it either: a flat-memory interpreter never reaches that raster line, so every
+suite that drives a docked screen traps `DELAY` and would spin for ever without the trap. That is
+the sharpest statement of the difference between a seam and a call that this phase has produced.
+
+**`ClearBottomRows` WAS DECLARED TWICE, WHICH IS WHAT §6.59's MISTAKE LOOKS LIKE FROM INSIDE.**
+`TradeScreenEffects` and `ChartEffects` each had it, because two slices needed `CLYNS` and neither
+could call it. `Elite::ClearMessageRows` has been that routine since slice 1d.
+
+**Five suites stopped counting seams and started comparing screens.** `MarketScreenTests` compared
+the port's list of `TRADEMODE`/`CLYNS`/`TT66`/`dn2` calls against the oracle's trap hits, four
+sweeps of it; `SystemScreenTests` asserted the one `TRADEMODE` and its view number; `ChartTests`
+counted `CLYNS`; `GameLoopTests` folded a `CLYNS` tally into its coverage key; `DockedSessionTests`
+answered all four from its null shell. `TRADEMODE`, `CLYNS` and `TT66` are trapped nowhere now, so
+what those sweeps compare is the character stream and the text state the routines produce. `dn2`
+splits: `JSR BEEP` runs on both machines and `JMP DELAY` cannot, so the oracle keeps that one trap
+and the port's `Presenter::WaitFrames` is counted against it.
+
+**One assertion was replaced by a weaker one and it is worth naming.** `SystemScreenTests` asserted
+that the data screen reached exactly one seam and that its argument was the view number. What it
+asserts now is `QQ11` -- the byte `TRADEMODE`'s `STA QQ11` leaves -- which cannot tell one call from
+two. The character stream is what carries the rest, and it is compared in full.
+
+**2026-09-06 — M3-b-3a: `SETL1` is not what six slices of this port believed it was.** `SightEffects`
+and `ExplosionEffects` go, and with them the last write-only seams over the VIC-II. Five of their six
+methods were already one line into `ApplySightColour`, `ApplySpritesEnabled`, `ApplyMaskSprites`,
+`ApplySpriteExpansion` and `ApplyExplosionSprite` -- ADR-005 §1 decided that in slice 3d and the
+implementations have been forwarding ever since. `effects-seams` 16 → 14, `aggregate-refs` 13 → 12,
+`outpost-elite-names` 180 → 177, `main-lines` 1,198 → 1,197, `register-params` 14 → 13.
+
+**THE SIXTH IS WHY THE OTHER FIVE WAITED, AND THE REASON WAS A MISREADING.** The conversion plan's
+3d row says in as many words: "`SETL1` is NOT one of them: it is self-modifying code inside a raster
+interrupt handler and belongs behind a seam like the sound." `Controls.h` repeated it, `VideoState.h`
+gave it as the reason the byte could never live there, and `TrumbleTests` explained a trap with it.
+The routine is eight instructions -- `SEI / STA L1M / LDA l1 / AND #%11111000 / ORA L1M / STA l1 /
+CLI / RTS` -- and none of them writes code. `l1` is &0001, the 6510's own port register; the
+`SEI`/`CLI` is there so an interrupt cannot be taken with the memory map half-written, and that
+bracket is the whole of what the "interrupt handler" reading was built on. `Trumbles.h` had it right
+("memory banking rather than a register") and was overruled by the other three.
+
+**So it is two bytes, and `MemoryMap.h` is where they and the reading now live.** The same argument
+as `SoundBuffer` in M3-b-2a and `MusicPlayer` in M3-b-2b: the game writes them and what a port does
+about the banking is the port's business. It is not part of `VideoState`, and the shipped source is
+what says so -- the fourteen callers bracket the sprite registers, the SID (`startbd`, `stopat`), the
+keyboard's CIA (`RDKEY`, `DKSANYKEY`) and the KERNAL's disk routines (`SVE`, `LOD`). One register,
+four chips. The executable had been keeping it as `FlightSession::m_rasterMode`, a byte nothing read.
+
+**A PORT DEFECT CAME OUT OF IT, AND THE SEAM IS WHY IT WAS INVISIBLE.** `april16` brackets `BDENTRY`
+with `SETL1` and `stopat` brackets its twenty-five SID writes with it, because the chip has to be
+banked in before it can be written. `Music.cpp` had said so in its comments since slice 5b and had
+never made the calls -- there was nowhere to make them to. Both are there now, and `SoundTests`
+compares `l1` across `startbd` and `stopbd` over all thirty-two flag combinations.
+
+**FOUR SUITES COMPARE THE BRACKET AND THE OTHERS CANNOT, WHICH IS §6.108 AGAIN.** `SETL1` is trapped
+nowhere now; `ControlsTests` (`SIGHT`), `TrumbleTests` (`MVTRIBS`), `ExplosionTests` (`PTCLS2`) and
+`SoundTests` run it on both machines and compare the byte. ONE BYTE STILL TELLS THE CASES APART,
+which was the doubt worth checking before the assertions were rewritten: the bracket's two modes
+DIFFER, so no call leaves the seed, one leaves %101 and both leave %100 -- and the fixtures seed the
+top five bits non-zero, so a port that had lost the `AND #%11111000` would not agree by accident.
+What a final byte cannot see is a doubled bracket, and the oracle's own store log pins the shipped
+routines to exactly two. The whole-universe image MIRRORS `l1` and `L1M` and does not compare them,
+because every fixture that changes a screen still traps `NOSPRITES` for §6.108's reason -- in flat
+memory its `STA VIC+&15` lands on the blueprint pointer table -- so the game does not reach the
+`SETL1` inside it and the port does.
+
+**Two counts had to be earned back rather than excused.** `main-lines` and `origin-markers` both rose
+on the first pass, and the way down was to stop saying the same thing three times: there is one
+`SETL1` in the game and there are now one pair of constants for it, `MEMORY_MAP_IO` and
+`MEMORY_MAP_RAM`, where `Trumbles.h`, `FlightLoop.cpp` and `FlightSession.cpp` each had their own.
+
+**What a recorder could count and a byte cannot.** `ExplosionTests` counted the port's calls to
+`ShowExplosionSprite` per cloud -- six vertices, some refused -- and only the LAST placement survives
+in the registers, on the hardware as much as in `VideoState`. So the seam let the suite count
+something no screen could show. The coverage counters read the oracle's own stores to VIC+&2 now, and
+the two machines are compared on the state they end in.
+
+**2026-09-06 — M3-b-2b: the music comes inside, and one of the two seams it removed was in front of
+an `RTS`.** `FlightLoopEffects::Start/StopDockingMusic` were `JSR startbd` and `JSR stopbd`,
+`StartUpEffects::Start/StopTheme` were `JSR startat` and `JSR stopat`, and `TextEffects::Beep` was
+`R5`'s `JSR BEEP` -- five seams in front of routines `Music.cpp` and `SoundEffects.cpp` have had
+since slice 5. `Universe` gains `MusicPlayer music` for the same reason it gained `SoundBuffer` in
+2a: the player is memory the game writes and the interrupt reads. `Ports` gains `SidWriteLog& sid`,
+which is §4.5's `SoundSink` and the first of the four to arrive -- the handful of writes the GAME
+side makes between interrupts, which the executable applies ahead of the next tick. `effects-seams`
+18 → 16, `outpost-elite-names` 184 → 180, `origin-markers` 3,915 → 3,911, `main-lines` 1,198 → 1,197,
+and `aggregate-refs` thirteen before and thirteen after.
+
+**THE PLAN PUT THIS SLICE BEFORE THE ONES THAT PAY FOR IT, AND THE RATCHET SAID SO.** Every M3-b
+slice up to here only removed from `Ports`, so it sits on `aggregate-refs`'s ceiling of thirteen with
+zero slack; adding the sink and removing nothing is fourteen, which rule 5 fails outright. Three ways
+out were weighed and two rejected. Threading the sink as a parameter is M3-a's pattern run backwards.
+Putting `SidWriteLog` in `Universe` is worse than it looks: the log is not state -- nothing in the
+library reads it back, it is drained every frame, and the M0-c replay HASHES the universe, so a
+growing write log would be in the digest. What is left is to make the slice pay, and §4.5's own
+`SoundSink` row names the payer.
+
+**`ViewEffects` WAS THAT PAYER, AND ITS LAST METHOD WAS IN FRONT OF NOTHING AT ALL.** After 2a took
+`PlaySound` it held only `SetPalette`, which is `DOVDU19` -- and the C64 build assembles that label
+and an `RTS` and nothing between them: `setvdu19-dovdu19.asm` guards the `STA VNT3+1` with
+`IF _6502SP_VERSION OR _MASTER_VERSION`, and the call sites say "this doesn't actually do anything in
+this version of Elite" in as many words. The port's header claimed it "writes a VIC-II colour
+register" (the Master's reading); `Outpost`'s implementation was an empty function with the right
+comment on it. So the seam was a claim that something is outside the library which was never true --
+§6.73 arriving from the other side, where what was scoped too early was the READING and not the
+routine. The two `JSR`s are comments now.
+
+**FOUR ORACLE SUITES STOPPED COUNTING AND STARTED COMPARING.** `StartUpTests` trapped `ZEKTRAN`,
+`startat`, `stopat` and `stopbd` on the 6502 and matched the four against the port's list; it traps
+`ZEKTRAN` alone now, logs every store to `SID`..`SID+&18`, and compares the write sequence against
+`Ports::sid` write for write -- order and all, because a new tune zeroes the chip and then sets four
+registers, which a real SID hears as a gate falling and rising. `FlightLoopTests` counted `startbd`
+and `stopbd` trap hits against two integers on its recorder; `LaunchTests` counted `RES2`'s single
+`stopbd`; `DockedSessionTests` and `DockingTests` noted "music on"/"music off" in a transcript. All
+of them are `MUPLA` and `MULIE` in `ImageCells` now, mirrored in and compared out with every other
+byte, so the whole oracle suite carries the music rather than five suites carrying a tally of calls.
+`LaunchTests`'s case is the sharpest: `RES2`'s `stopbd` writes NOTHING on either machine, because no
+tune is playing and `stopat` returns on its first test -- an assertion about silence, which a count
+of calls could never have made.
+
+**The M0-c replay record moves, and it is rule 1's first case rather than its second.** `MUPLA` and
+`MULIE` are two new cells in the universe image, so the digest is two bytes wider at step 0 --
+before a frame has run. No comparison in the suite changed answer, the flight is still 1,170 steps
+to `Docked`, and every oracle sweep is green.
+
+**`TextPrinter` holds a `SoundBuffer*` beside its `TextEffects*` and that is a wart worth naming.**
+`CHPR`'s bell needs the buffer and its screen clear still needs the seam, so the printer takes both;
+the pointer is null in the tests that build a printer with no universe. It goes when M3-b-3 turns
+`ClearScreen` into `Presenter` and the printer takes one object again.
+
+**2026-09-06 — M3-b-2a's fix: one brace, sixteen errors, and a check that would have caught it.**
+The script that deleted `FlightSession`'s three sound methods began its cut at the `/*` above them,
+which belonged to `SyncVideoRegisters`'s BODY, and took the body and its closing brace with it. The
+Linux leg cannot see that -- `Outpost/` compiles on the Windows job alone (R15) -- and the file
+still parsed far enough for `check_outpost.py` to read its names, its arities, its members and its
+initialisers and pass all four. MSVC reported sixteen `local function definitions are illegal` and
+one `C1075: '{': no matching token found`, which is one missing brace wearing seventeen costumes.
+
+**`outpost-elite-names` was 180 and the tree's real number is 184.** The four names the deleted body
+used went with it, so the count the slice recorded was measured on a broken tree. The ceiling is
+corrected upward to 184 rather than left at a figure no working tree can reach -- nothing that was
+removed came back, a miscount is being undone -- and M3-b-2a's true saving is three names, not seven.
+
+**`check_outpost.py` counts delimiters now.** It is the cheapest half of a parse and it is the
+second time a scripted deletion has unbalanced an app file that only CI could see; `check_members`
+and `check_initialisers` were each added after a Windows failure for the same reason. Strings,
+character literals and comments come out first, because a brace inside any of them is not a brace --
+and the self-test plants exactly that, a `"}"` and a `'{'` around a function whose closing brace is
+missing, so a check that counted them would pass the planted file and fail the real ones.
+
+**2026-09-06 — M3-b-2a: `DashboardEffects` goes, and the sound system was deciding a ship's energy
+byte behind it.** `PlaySound` was `NOISE`, `PlaySoundPitched` was `NOISE2` and `StopSound` was
+`NOISEOFF` -- three routines `SoundEffects.cpp` has had since slice 5a. `ViewEffects::PlaySound` was
+the SAME routine declared a second time and went with them. `Universe` gains `SoundBuffer sound`,
+which is where the seam's reason went: the SID is written from a raster interrupt and not from the
+game, `NOISE` fills a buffer and `SOINT` drains it, and the port had nowhere to keep the buffer
+between them. It is memory, not a port. `effects-seams` 19 → 18, `outpost-elite-names` 187 → 184,
+`carry-params` 32 → 30.
+
+**`.MA14 STA INWK+35` STORES WHAT `NOISE2` LEFT IN A, AND THAT IS NOT THE SUSTAIN.** The dead
+ship's energy byte comes out of the sound system -- the port's own comment said so -- but a seam
+method returns one thing and `DashboardEffects::PlaySoundPitched` returned the carry, so `RecordKill`
+answered the sustain it went IN with. `NOISE`'s successful exit is `INY / TYA / ORA #128 /
+STA SOFLG,X / CLI / SEC`: A is the flag byte it just wrote. The oracle said `game has 132, port has
+243` on three ships at once the first time `NOISE2` ran on both sides. `PlaySoundEffect` and its
+pitched twin answer a `NoiseResult` now -- the carry AND the accumulator -- and the two refusal
+paths carry their own: the priority byte the failed `CMP` was made on, and `DNOIZ` with the sound
+switched off.
+
+**And `EXNO3`'s carry is `OOPS`'s, which is §6.87 a second time.** A missile that arrives runs
+`JSR EXNO3 / LDA #250 / JMP OOPS`, and `LDA` touches no flag -- so `OOPS` subtracts on whatever
+`NOISE` returned. The port passed false while the seam's answer was discarded. `FSH` was one point
+out on a missile that touched us, which is what the oracle reported.
+
+**Two carries came back that the plan had written off.** §5's table recorded `NOISE2`'s Trumble
+squeak carry as "dropped at the seam ... M3-b's seams are where it would go", and this is where:
+`LDY CABTMP / CPY #&E0 / BCC burnthebastards` is the flag, so a burning cabin squeaks with it set.
+Auditing the other two `NOISE2` callers with it found both are always CLEAR and said why -- four
+`ASL A` on an X the volume ladder leaves between 11 and 15 cannot carry out.
+
+**The suites stopped counting `NOISE` and started comparing `sound_variables`.** `Where` gains the
+ten runs plus `PULSEW` and `DNOIZ`, so `CompareState` carries the buffer for every fixture that uses
+it and a new `CompareSound` does the same for the ones that mirror in and check a handful of things
+out. It subsumes §6.118's documented gap rather than losing it: the old comparison could check the
+carry going INTO four hand-picked effects and never the one coming out; `NOISE`'s answer now comes
+from two buffers that agree byte for byte, and its consequence -- `LASLI` and `OUCH` open a `DORND`
+on it -- lands in `RAND`, which was already compared. Nothing is excluded by name any more.
+
+**The M0-c replay record moves, under rule 1's second case.** Two port defects found and fixed, the
+same 1,170 steps and the same `Docked` outcome, every digest different.
+
+**2026-09-06 — M3-b-1e: the reset half of `StartUpEffects` goes, and untrapping `RES2` found a
+routine hidden behind a trap's address.** `ResetUniverse` was `RESET`, `ResetShip` was `RES2` and
+`ResetMissileIndicators` was `msblob` — three routines `Flight.cpp` and `Dashboard.cpp` have had
+since the stardust, the heaps and the dashboard were built. `msblob` was declared on TWO interfaces,
+`StartUpEffects` and `TradeScreenEffects`, and both copies went; `DockAtStation` lost its
+`StartUpEffects&` parameter with them and reaches `WaitFrames` through `Ports` like everything else.
+`outpost-elite-names` 189 → 187.
+
+**`RES2` OPENS `JSR stopbd`, AND `stopbd` FALLS INTO `stopat`.** `StartUpTests` traps `stopat` for
+the title theme and the port records `StopTheme` against it. Untrap `RESET` and `RES2` and the
+oracle's sequence grows two `stopat` hits the port cannot match — not because the port is missing a
+stop, but because a trap catches an address rather than a routine, and `stopbd` is ten bytes in
+front of `stopat` with no `RTS` between them. The fix says what is really there: `stopbd` gets its
+own trap, and the port's `StopDockingMusic` — which `ResetShipAndBubble` has always called — is
+recorded into the same list. A cold start now shows `stopbd` twice at the head of the sequence,
+which is `TT170`'s fall-through into `DEATH2` reaching `RES2` a second time (§6.25) made visible.
+
+**Three suites replaced a count with an observation.** `DockingTests` asserted the list `{RES2,
+DELAY}`; `RES2` empties the bubble and stops the ship, so that is what it asserts now — the same
+shape §6.109 gave `LAUN` when it stopped being a seam. `MarketScreenTests` and `StartUpTests`
+counted `msblob`; it is the ONLY thing in either screen that touches the canvas (the text goes into
+a recording sink and `CLYNS`, `TT66`, `dn2` and `TITLE` are still seams), so ink on the canvas is
+the routine having run. Both were checked by deleting the call and watching the assertion come back.
+
+**2026-09-06 — M3-b-1d: the spawn half of `FlightLoopEffects` goes, and "the bubble is full" stops
+being a trap's answer.** `SpawnAhead` was `JSR FRS1` and `Anger` was `JSR ANGRY`; slice 4a-b built
+both, in `Spawn.cpp` and `Tactics.cpp`, and the flight loop calls them. `outpost-elite-names`
+191 → 189.
+
+**`Anger` had already stopped being a seam without anybody removing it.** §6.157 made every
+implementation forward to `Elite::Anger`, because a trap's exit carry is the caller's and part 11
+falls from `ANGRY` into `JSR LL9` where that flag seeds an explosion cloud. So the interface was a
+dispatch to one function from four places that all wrote the same line. Taking it out changed no
+behaviour and removed the last place where an implementation could get it wrong.
+
+**`SpawnAhead` was still real, and the test that counted it now fills the bubble instead.**
+`FRS1` was trapped on the oracle with `TrapExit::SetCarry` or `ClearCarry` chosen by the case, and
+answered on the port by a seam returning the same `bool` — both sides told what to say. With the
+seam gone `NWSHP` decides, and the only way to make it refuse is to leave it no slot: `M% (fire with
+a lock, bubble full)` now fills every one of the ten. That is a stronger case in two directions —
+the refusal is the routine's rather than the fixture's, and the frame that follows runs a full
+bubble.
+
+**And the jam is OBSERVED rather than counted.** The old case could not stop being true; the new one
+can, because a fixture that quietly stopped filling the bubble would spawn the missile and the loop
+would still tick over. `FR1` gives up before `DEC NOMSL`, so the count still standing is what says
+the rail kept it — checked by removing the fill and watching `expected 3 actual 2` come back.
+
+**2026-09-06 — M3-b-1c: `ShipEffects` goes, and `MVEIT` becomes a routine that reaches all of
+`Universe`.** One method — `RunTactics` — and it is the seam that stood longest for the plainest
+reason: `MVEIT` was slice 3a's and `TACTICS` was phase 4's, so the AI had to be an interface for a
+year. Slice 4a-c built it. `MoveShip` now takes `(Universe&, Ports&)` and calls `RunTactics`
+directly; the six arguments it took — canvas, work block, `MathWorkspace`, `FlightState`,
+blueprint and `QQ11` — were the same six members of the universe at every one of its five call
+sites, so they went with the seam. `effects-seams` 20 → 19, `workspace-params` 46 → 45,
+`aggregate-refs` 14 → 13 (`Ports` is thirteen references), `outpost-elite-names` 193 → 191.
+
+**THE BOOL SURVIVES THE INTERFACE, and that is the part worth saying out loud.** §6.122 gave
+`RunTactics` a `bool` because three of the AI's paths reach `OOPS`, `OOPS` ends `JMP DEATH`, and on
+the 6502 that abandons the stack — `TACTICS`, `MVEIT` and the frame simply stop. It reads like a
+seam's concession and it is not: the answer is threaded out through `MoveShip` to `MoveEveryShip`,
+which turns it into `LoopOutcome::Died`, and every one of those hops is port code. The interface
+went; the return type is unchanged.
+
+**Four suites stopped counting and started comparing.** `FlightLoopTests`, `MissionTests`,
+`LaunchTests` and `ShipMoveTests` each held a recorder whose `RunTactics` did nothing and answered
+`true`, against an oracle with `TACTICS` trapped. All four traps are off. In `FlightLoopTests` that
+is nearly free — `Seed` gives its fleet a random `INWK+32`, so half the bubble was already asking
+for an AI that neither side ran, and the frame comparison covers what it does. `ShipMoveTests` is
+where the work was.
+
+**`ShipMoveTests` had no universe to run the AI in, and that is the seam's real cost.** It built an
+`Elite::Ship`, a `MathWorkspace`, a `FlightState` and a `Canvas` — four objects, enough for the
+arithmetic and nothing more — and asserted `item.tactics`, a per-case count of how often `MV26` was
+reached: three times in twenty for a hostile ship, twenty for a missile. The AI reads the bubble,
+the commander, the ECM countdown, the message line and the generator, and writes ships, sounds and
+screen bytes, none of which four loose objects can put into the oracle. So the suite takes
+`FlightUniverse.h` now — the shared fixture `ViewChangeTests` and `FlightLoopTests` already use —
+and `Mirror`/`CompareState` replace the count with the whole universe, compared on every one of the
+twenty iterations. That says how often the AI ran AND what it did each time.
+
+**And it was checked rather than assumed.** A suite that compares more can still be comparing
+nothing, so `RunTactics` was made to return early for exactly this fixture's shape and the run
+repeated: `MVEIT: a HOSTILE ship, so tactics run: iteration 3, INWK+29 -- expected 2 actual 6`. The
+roll counter the AI writes is the byte that says so. Reverted, and 397 pass.
+
+**2026-09-06 — M3-b-1b: `ChartShapes` goes, and the first run without its traps found the port
+drawing nothing at all.** `CIRCLE2` is `DrawBall` and `SUN` is `DrawSun`, both ported since slice
+3c; the seam survived because "the charts are compared against the shipped game through it"
+(§6.115), which is the argument that kept it and the reason nothing noticed what follows.
+`effects-seams` 21 → 20, `register-params` 16 → 14 (the seam's `DrawSystemDisc` took an x and a y),
+`outpost-elite-names` 199 → 193.
+
+**THE PORT'S SHORT-RANGE CHART DREW NO DISCS, and no test could see it.** `TT23` opens
+`LDA #199 / STA Yx2M1 / STA dontclip` and closes by putting both back — it lifts the clipper's
+limits because the system discs go below the space view's floor. §6.45 moved those two stores OUT
+of `DrawShortRangeChart` and into the caller, on the sound-sounding argument that both bytes live
+with the drawing rather than with the chart; `Main.cpp` did them and the app was right. The suite
+could not be, because `ChartShapes` meant the chart asked for discs and drew none, so the clipper
+never came into it. Take the seam away and the port's canvas comes back empty against a game that
+drew 114 bytes of ink on the first chart. The stores are inside the routine now, where the original
+has them.
+
+**What the tests compare changed shape, and got stronger.** `TT14` and `TT22` compared `K3`, `K4`,
+`K` and `STP` at a `CIRCLE2` trap; `TT23` compared the SEQUENCE of `SUN`'s arguments through a
+watched trap. All three now draw on both sides and compare the whole screen, which subsumes every
+one of those: a circle at a different centre draws different pixels. `TT23`'s "how many discs"
+became "how much ink", because the count was the trap's and the ink is the port's own.
+
+**One thing the sweep needed that the seam had hidden**: `SUN` takes a `DORND` for the streak down
+the disc, so the port's generator has to start where the game's does. `DrawBall` takes none, which
+is why the other two sweeps needed nothing.
+
+**2026-09-06 — M3-b-1a: `SpawnEffects` goes, and three traps come off with it.** The seam's four
+methods — `ABORT`, `MESS`, `SPBLB` and `msblob` — are four routines this library contains, reached
+through an interface because it did not when `KILLSHP` and `SOLAR` were ported. `KillShip`,
+`AddPlanetOrSun`, `AddStation` and `BuildSystem` take `(Universe&, Ports&)` and call them;
+`LoopSpawnEffects`, the adapter that answered the seam out of a universe and its ports, went with
+it, and `MISSILE_GREEN` moved to `Dashboard.h` beside the routine that takes it. `effects-seams`
+22 → 21.
+
+**The tests are what made this a commit rather than a rename.** A seam is what a suite COUNTS: the
+oracle traps the routine, the port records the call, and the two tallies are compared. With the
+seam gone both sides run the routine, so the three traps in `SpawnTests` came off and the
+comparison became the WHOLE SCREEN — the missile indicator, the message row and the station light
+are all pixels, and one comparison covers them where three tallies did. `NWSPS` gained a screen
+comparison it never had, and it asserts the indicator was actually drawn rather than that a call
+was made. That is what §6.73 has been arguing a seam owes the port every time it comes up, and it
+is why the remaining phase-order seams are a commit each rather than one sweep.
+
+**2026-09-06 — the Windows job on M3-a-3, and a fourth half for `check_outpost.py`.** `Main.cpp`
+would not compile: `Game`'s constructor still initialised `trade` and `save` and still named
+`name`, `selectedSeeds` and `numberWidth` bare, all five in the MEMBER-INITIALISER LIST, which is
+the one place none of the tool's three checks could see. That is the second consecutive slice to
+fail this way — M3-a-2's was `recursive.SetCursor(&text)` in the same constructor — and twice is a
+pattern rather than a slip.
+
+The tool has a fourth check now: **every name a constructor's initialiser list initialises must be
+a member of its own type, a base of it, or the type itself.** That is exactly MSVC's C2614, and it
+is the half a regex can settle soundly; the C2065s that come with it — a bare identifier used as an
+argument inside one of those initialisers — need a real parser, and both times they arrived
+together, so catching the one catches the commit.
+
+**Its own first draft would have passed the tree it was written to fail**, which is why the
+self-test now plants a brace initialiser before the bad one. `ports{a, b}` opens a brace at depth
+zero exactly as the constructor's body does, so the list-finder stopped at the first
+brace-initialised member and read the rest of the list as empty — and `Game`'s two bad entries are
+brace-initialised. The difference is what precedes the brace: an initialiser's follows its name,
+the body's follows whitespace. Fourteen initialisers are read on the tree as it stands.
+
+**2026-09-06 — M3-a-3 built, and M3-a is done: all seven argument-list structs are gone and what
+is left IS `Ports`.** `TradeScreen`, `SaveScreen`, `GameStart` and `MissionBay` went the way the
+flight half's four did: every docked screen, the disk menu, the start sequence and the six mission
+exits take `(Universe&, Ports&)`. `aggregate-refs` **39 → 14**, and the fourteen are `Ports` itself
+— the M3-a row's "at zero" is reached exactly when M3-b collapses that one struct to §4.5's four
+ports, which is the slice it was always describing.
+
+**`GameStart` was not a separate commit in the end, and could not be.** It held a `SaveScreen&`,
+so it could not outlive it — the same knot `TitleScreen` and `MissionScreen` had with `FlightLoop`
+one commit earlier, and the same answer: it goes with what it held. Rule 8 is satisfied because it
+is one pattern, not two; recording it because the slice plan had it as M3-a-4.
+
+**Nine parameters went with the structs, and every one of them was a second name for a byte the
+universe owns**: the commander, `QQ28`, `tek`, `QQ9`, `QQ10`, `QQ15`, the market, `NA%`/`NAME`, and
+`U`. `StatusScreen`'s `SystemSeeds& _outSelected` was the last of the out-parameters this phase can
+reach (`out-params` 18 → 17): `TT111` writes `QQ15` and the screen reads it back, which is a field
+and not a result. `Universe` gained `QQ9`, `QQ10`, `QQ15`, the market, `NAME`, `NA%`, the line
+editor's buffer, `DISK` and `U` — nine byte ranges that were the composition root's, and are memory
+in the original.
+
+**`MissionBay` bought a small fidelity gain on the way out.** It carried `QQ11` and `QQ22+1` as
+VALUES snapshotted at entry, and `BAY`'s fall-through reads them live in the original — which
+matters, because a briefing's `{9}` runs `TT66` and moves `QQ11` while the token is still printing.
+The port reads the universe now. Two mission tests asserted on their own `dockedFlag` local and had
+to be pointed at the universe's; nothing else moved.
+
+**`Ports` grew to fourteen and `Outpost::Game` took it over.** Eight of the fourteen are
+`GameShell`'s and `SaveStore`'s rather than the flight session's, so a session that built the struct
+would be composing the docked half; the root owns it and lends it back to the two objects whose own
+seams are calls that need it (`FlightSession::AttachPorts` for `TACTICS` and `DOCKIT`,
+`GameShell::AttachPorts` for `TT66`, `RESET` and the mission codes). `main-lines` 1,219 → 1,199,
+`outpost-elite-names` 205 → 199.
+
+**The test tree gained one header and lost nothing.** `NullSeams.h` answers all ten interfaces with
+nothing, so a suite says which seams it cares about by passing its own recorder for those; the
+flight fixture's `UnusedSeams` is an alias for it. The docked suites name the universe's fields
+through local references rather than holding their own bytes — the same mistake in a fixture that
+M3-a-2's Windows build found in the app, and the reason the aliases are written as aliases.
+
+397 of 397 pass, all fourteen checks pass, and three more of the seventy-two mutants were
+re-anchored with none dropped.
 
 **2026-09-06 — M3-a-2 built: the routines take `(Universe&, Ports&)`, and four argument-list
 structs are gone.** `FlightScreen`, `FlightLoop`, `MissionScreen` and `TitleScreen` held forty-nine

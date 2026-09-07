@@ -1,8 +1,9 @@
 # ADR-006 — Modernisation Architecture
 
 **Status:** Accepted · 2026-09-06, written at Phase M2's opening from what M0 and M1 built and from
-[Modernize.md](../Modernize.md) §4 as accepted; amended as each later phase lands (M3-d adds
-ADR-007 on state ownership and the replay hash; M5-d revises this document from what was built)
+[Modernize.md](../Modernize.md) §4 as accepted; amended as each later phase lands. **§4 amended
+2026-09-07 at M3's close**, where three of its claims did not survive the build; ADR-007 records the
+ownership and the replay hash as they are. M5-d revises this document from what was built.
 **Depends on:** ADR-001 (fidelity — unchanged: the game does not change), ADR-002 (numeric model —
 unchanged: every byte keeps its width), ADR-003 (the oracle stays the judge until M6 records it),
 ADR-004 (projects and layout), ADR-005 (presentation)
@@ -62,6 +63,54 @@ Deferred, with the reason in the plan: strong types for the one-byte fields that
 subtracted at many sites (`fuel`, the lasers, the equipment bytes) wait for M5, where a type earns
 its operators; the flag bytes' owning types likewise.
 
+**M5-a's strong types, and the three that were examined and NOT built** (2026-09-07). `SoundEffect`
+and `Colour` are built. The other three the plan named are refused, each for a reason the build
+found rather than for want of time, and this is where they are recorded so the plan's row is not
+read as unfinished work:
+
+- **`Options`, the thirteen pause-screen toggles as one struct.** §4.4 deliberately splits the
+  thirteen bytes across six owners, because each is state some part of the game already owns.
+  Gathering them into one struct so `DKS3` can walk an array of member pointers would put them back
+  where §4.4 took them from, and the array of member pointers needs exactly that one struct. The
+  ordering `DKS3` depends on is pinned instead by the byte-checked `TGINT` table and the 3,328-case
+  sweep that closed slice 4e — a stronger statement than a struct's field order, because it is the
+  original's table rather than a C++ declaration order that anybody could reorder.
+- **`View`.** `QQ11` is BOTH an index and an arithmetic value: the space views are 0..3 and the
+  docked screens are bit values (2, 4, 8, 32) that the game tests with `AND` and combines. A scoped
+  enum makes the indexing a cast at every site and forbids the combination outright, so it would
+  cost more casts than it removes and misdescribe the byte besides.
+- **`Message`.** The same shape: token numbers are indexed into tables and added to, and `MESS`
+  reaches them by arithmetic on a base.
+
+**And the three M1 deferred, ruled on 2026-09-07** (build `fuel` and the lasers; refuse the
+equipment bytes with the reason):
+
+- **`LightYearsTenths` is built (M5-a-10).** The deferral's arithmetic-operators-with-a-name worry
+  was about the twenty-nine READS; the byte has three arithmetic RULES — `MA23`'s saturating scoop,
+  the jump's floored burn with its carry, `TT111`'s range check — and the type is those three,
+  written once each, with `tenths` for everything that reads a byte. It found the number seventy
+  defined three times under three names.
+- **`Laser` is built (M5-a-11).** The power byte is the laser's identity in the original, so the
+  type is that byte with the three questions the game asks of it — fitted, beam (bit 7), power
+  (the byte without bit 7) — and the five named values. It found the four powers defined in four
+  files under four naming schemes, twelve constants for four bytes.
+- **`Equipment` is refused (M5-a-12), for `Options`' reason: the bytes are not one kind of thing.**
+  `ECM`, `BST`, `ESCP`, `GHYP` and `DKCMP` are `0`/`&FF` flags; `ENGY` is a count that multiplies
+  the recharge; `BOMB` is a state machine — `&7F` fitted, shifted left on arming and again every
+  flashing frame until it is gone, the countdown and the fitted flag in one byte; and `OUCH`
+  indexes all of them as cargo-hold slots 17 to 20. A struct of five differently-encoded bytes has
+  no operator to earn, and a flag or enum type would misdescribe two of them. The named bytes on
+  `Commander` stay.
+
+**AND `Colour` DID NOT SURVIVE THE PLAN'S OWN DESCRIPTION EITHER**, which is why it is worth
+recording next to the three. The row asked for "scoped enums with the original values", and the
+C64 build's colour constants are not colours: `RED`, `YELLOW`, `GREEN` and `WHITE` are four
+multicolour PIXELS packed in a byte (with `BLUE`, `CYAN` and `MAG` all aliased to `YELLOW`), and
+`RED2`, `GREEN2`, `YELLOW2`, `BLACK2`, `MAG2` and `BULBCOL` are screen RAM palette bytes holding TWO
+colour indices each, two of them named for the wrong nibble. The thing that is one colour is the
+VIC-II index, which the original never names at all. `Elite::Colour` is that index, and the two
+constant families get their own slices rather than being forced into it (§8).
+
 ### §3 Calling conventions: value in, value out
 
 **Opened by M2-a, 2026-09-06.** Every kernel routine's inputs are parameters and its outputs a
@@ -90,21 +139,61 @@ register until M6.
 
 ### §4 Ownership: `Universe`, `Game`, four ports
 
-**Planned, M3.** `Elite::Universe` is a plain aggregate owning every byte of game state and nothing
-else; `Elite::Game` owns `Reset`, `Step(InputFrame)`, `Frame()`, `Sounds()` and `StateHash()`, with
-`Mode` the explicit machine `Main.cpp` spells out by hand today. The twenty-two effects seams collapse
-to four ports — `Presenter`, `Keyboard`, `SoundSink`, `SaveStore` — and everything else in them is a
-call into a routine that now exists or a `VideoState` write the library makes itself. The executive
-decides how many steps and the library takes them. ADR-007 records the ownership and the replay hash
-when M3 has built them.
+**Built by M3, 2026-09-06/07, and ADR-007 records it — including the three places this paragraph
+was wrong.** `Elite::Universe` is a plain aggregate owning every byte of game state and nothing
+else, `Elite::Game` owns the dispatch and both outer loops, and `Outpost/Main.cpp` is 256 lines of
+platform. The twenty-two effects seams became four ports — `Presenter`, `Keyboard`, `SoundSink` and
+`CommanderStore` — plus five that turned out to be `GameLogic` reached through the executable, and
+nine abstract classes remain rather than four: two are the text system's own polymorphism and two
+are blocked on a comparison the emulator cannot yet make (ADR-007 §6, Modernize.md §4.5).
+
+**Amended 2026-09-07, after M4-a and the M6-0 gate: five abstract classes remain, and the count is
+final for M6.** The two that were blocked went when their blocker did — `SpawnChildEffects` with
+M4-a's typed stage result, `ShipDrawEffects` when the interpreter learned to bank the I/O page
+(M6-0-a-3) — and M6-0-h removed the two that had outlived their reason, `StartUpEffects` and
+`ControlEffects`, by giving `ZEKTRAN`, `TITLE` and `DOCKIT` to the library. `SoundSink` stopped
+being a port at M5-e-1: `Game` owns the SID write log and the executable drains it through
+`Sounds()`. What is left is three platform ports — `Presenter`, `Keyboard`, `CommanderStore` — and
+the text system's own two, `TextSink` and `ValueTokens`; `Ports` is eight references and `Game`'s
+constructor takes the three (ADR-007, amended the same day).
+
+**Three claims above did not survive the build.** `Step(InputFrame)` is three `Step`s taking a key,
+because `FRCE` chooses between three routines rather than three branches of one. `Frame()`,
+`Sounds()`, `StateHash()` and `Mode` were not built by M3-c: `Mode` is M4-d's, `Sounds()` M5-e-1's,
+`StateHash()` M5-e-3's (library-native), and `Frame()` is served by `State().canvas`. And the executive decides
+how many steps because it MUST: the count is floating point and the determinism guard forbids the
+library one. ADR-007 §2 and §3 have the reasoning; the ownership and the replay hash are its §1 and
+§4.
 
 ### §5 Control flow: pipelines with named stages
 
-**Planned, M4.** The flight frame, `LL9`, `TACTICS` and `DOCKIT` become pipelines of functions with
-typed results (`Contact`, `ScoopResult`, `DockingTest`, `ScaledOrientation` → `FaceVisibility` →
-`ProjectedVertices` → `EdgeSelection` → `ClippedLines` → `HeapRun`, `Decision` and `Apply`), the same
-control flow said once. Original bugs stay ported (ADR-001 §3, §6): a stage that could not express
-`SHPPT`'s stale read would be wrong, and the ADR-001 row is the test that says so.
+**Built by M4, 2026-09-07, and this section is amended from what was built rather than left to
+predict it.** The flight frame, `LL9`, `TACTICS`, `DOCKIT` and `MLOOP`'s spawner are pipelines of
+functions over a frame struct, each stage answering a typed result. Original bugs stayed ported
+(ADR-001 §3, §6): no stage was allowed to be unable to express `SHPPT`'s stale read.
+
+**Four things the paragraph above predicted did not survive the build, and the pattern in all four
+is the same — the stage list was written from the routine's SHAPE and the routine's shape is not
+what its 6502 control flow is.**
+
+- **The frame's stages are `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and
+  `KillOutcome`** (M4-a), and the finding that produced them was five booleans that were an
+  unwritten state machine. Part 14's `BNE MA93` fall-through, which the port had been collapsing,
+  is a branch again.
+- **`LL9` is SEVEN stages, not five**, and they are the original's own part blocks rather than a
+  graphics pipeline: `TestPresence`, `MeasureRange`, `ScaleShip`, `SelectFaces`, `ProjectVertices`,
+  `OpenHeapRun`, `PushEdges`. `DrawShip` went 551 lines to 38 and the channel census can name a
+  PART for the first time. The predicted `ScaledOrientation → FaceVisibility → ProjectedVertices →
+  EdgeSelection → ClippedLines → HeapRun` reads like a renderer and `LL9` is not one.
+- **`Decision` and `Apply` are not one pair but three different answers**, because the `bool`s they
+  replaced were three different things. `TACTICS` answers a `Tactic` (`Steer`, `Done`, `Fatal`,
+  `Docking`) because its `bool` was three outcomes in one costume; `DOCKIT`'s `bool` was a PHANTOM
+  — no caller could act on it and the original reaches no `OOPS` and no `DEATH` — so it is `void`;
+  and `MLOOP`'s spawner answers a `SpawnPass` over a `SpawnFrame` that carries §6.125's live carry
+  across all four parts.
+- **`LoopOutcome` is NOT retired, and `Game::Mode` was built anyway** (M4-d). ADR-007 §2 had said
+  M4-d would retire it; the reason it cannot is recorded there rather than here, and the death
+  sequence stays synchronous for the same reason.
 
 ### §6 Verification through the change
 
@@ -132,12 +221,30 @@ A fixture pins exactly the calls the tests made while the original was here (Ris
 why M6 is last and begins with a coverage review. The derived data tables and the recorded fixtures
 stay: the tree carries the original's data and the port's own code, and nothing of its source.
 
+**The M6-0 gate closed 2026-09-07** (Modernize.md §6 Phase M6, §8): the eight things the oracle
+could pin and nothing would pin afterwards are done — the interpreter's port register and keyboard
+matrix, a whole frame with an explosion in it, the replay reaching death and the escape pod, the
+control codes compared through the dispatch, two fixture faults, a ruling on every routine that was
+only ever trapped, a coverage instrument CI reads against the ledger, and a mutant floor. The
+coverage review is that instrument's output, not a reading by eye, and its first run names four
+gaps M6-a closes before anything is recorded.
+
 ### §8 Language level
 
 C++20, by ruling: `std::span` with fixed extents for the codecs, `constexpr` codecs with
 `static_assert` round trips, scoped enums, concepts where a helper must refuse the wrong bit type
 (`ShipFlagBit`), `[[nodiscard]]` wherever a result carries a flag. C++23 is held; nothing in the plan
 needs it.
+
+**M5-b, 2026-09-07: every generated table is `constexpr` and its SHAPE is a `static_assert`.**
+`tools/extract_tables.py` emits `constexpr std::array` and `GameLogic/LookupTables.cpp` — a
+translation unit that emits nothing — ties each table's length to the constant that INDEXES it
+(`SHIP_TYPE_COUNT`, `SPRITE_DEFINITION_COUNT`, `Canvas::CELL_ROWS`, `SOUND_EFFECT_COUNT`,
+`EQUIPMENT_ITEM_COUNT`), which is §6.8's rule for the whole ledger made mechanical. The assertions
+read `std::tuple_size_v`, so they hold from the DECLARATION and the big tables stay in their own
+`.cpp` rather than putting 160 KB of initialiser into every translation unit that wants a font. What
+the bytes ARE is the assembler's; what shape they have to be is the port's, and that is the half a
+compiler can hold.
 
 ## Consequences
 
@@ -159,8 +266,8 @@ needs it.
 |---|---|---|
 | M0 The safety net | Built 2026-09-06 | Modernize.md §6 M0, §8 |
 | M1 Typed data | Built 2026-09-06 | §2 above; Modernize.md §6 M1 |
-| M2 Calling conventions | M2-a and M2-b built 2026-09-06 (the kernel takes values and returns structs; the frame's `Q` named, Modernize.md §8 and R22); M2-c's first of three commits built the same day (the line, the pixel, the blip, the compass, the dials and the number printer); M2-c-2, M2-c-3 and M2-d open | §3 above; Modernize.md §4.3 |
-| M3 Ownership | Planned | §4; ADR-007 when built |
-| M4 Control flow | Planned | §5 |
-| M5 Polish and the ledger | Planned; amends this document | Modernize.md §6 M5 |
-| M6 Detach | Planned | §7 |
+| M2 Calling conventions | Built 2026-09-06 (M2-a, M2-b, M2-c-1/2/3, M2-d). The kernel takes values and returns structs; the frame's `Q` and `K2`'s bottom byte are the two channels that stay, each named (Modernize.md §8, R22 closed) | §3 above; Modernize.md §4.3 |
+| M3 Ownership | Built 2026-09-06/07 (M3-0, M3-a, M3-b, M3-c, M3-d) | §4 above, amended from what was built; ADR-007 |
+| M4 Control flow | Built 2026-09-07 (M4-a, M4-b, M4-c-1/2/3, M4-d) | §5 above, amended from what was built |
+| M5 Polish and the ledger | Built 2026-09-07 (M5-a to its acceptance plus `SoundEffect` and `Colour`, M5-b, M5-c, M5-d). §2 carries the three strong types that were refused and why; §5 and §8 are amended from what was built | §2, §5, §8 above; Modernize.md §6 M5, §8 |
+| M6 Detach | M6-0 gate closed 2026-09-07 (eight rows, §8 of Modernize.md); M6-a next, opening on the four gaps the coverage instrument named | §7 |

@@ -743,7 +743,7 @@ namespace GameLogicTests
       {
         for (const std::uint8_t y : {143u, 144u, 150u, 156u, 160u, 167u, 168u, 190u})
         {
-          for (const std::uint8_t colour : {Elite::COMPASS_AHEAD, Elite::COMPASS_BEHIND, std::uint8_t{0x55}})
+          for (const Elite::PixelPattern colour : {Elite::COMPASS_AHEAD, Elite::COMPASS_BEHIND, Elite::PixelPattern::Red})
           {
             ClearScreen(cpu, at.screen);
             canvas.Clear();
@@ -751,7 +751,7 @@ namespace GameLogicTests
             const Elite::Compass compass{static_cast<std::uint8_t>(x), y, colour};
             cpu.memory[at.comx] = compass.x;
             cpu.memory[at.comy] = compass.y;
-            cpu.memory[at.comc] = compass.colour;
+            cpu.memory[at.comc] = Elite::PatternByte(compass.pattern);
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(dot, 20'000);
             Assert::IsTrue(run.completed, L"DOT returned");
@@ -759,7 +759,7 @@ namespace GameLogicTests
             Elite::DrawCompassDot(canvas, compass);
 
             const std::wstring where =
-              Widen("DOT(" + std::to_string(x) + ", " + std::to_string(y) + ", colour " + std::to_string(colour) + ")");
+              Widen("DOT(" + std::to_string(x) + ", " + std::to_string(y) + ", pattern " + std::to_string(Elite::PatternByte(colour)) + ")");
             const Marks marks = CompareAndMeasure(cpu, at.screen, canvas, where);
 
             // `X1`, `Y1` and `COL` are the compass's own bytes copied into the plot's since M2-c:
@@ -834,12 +834,12 @@ namespace GameLogicTests
 
           Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
           Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
-          Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
+          Assert::AreEqual(cpu.memory[at.comc], Elite::PatternByte(compass.pattern), (where + L": COMC").c_str());
           // `T` is `SP2`'s own since M2-c: it parks the vertical offset for one subtraction.
           (void)CompareAndMeasure(cpu, at.screen, canvas, where);
 
-          ahead += (compass.colour == Elite::COMPASS_AHEAD) ? 1u : 0u;
-          behind += (compass.colour == Elite::COMPASS_BEHIND) ? 1u : 0u;
+          ahead += (compass.pattern == Elite::COMPASS_AHEAD) ? 1u : 0u;
+          behind += (compass.pattern == Elite::COMPASS_BEHIND) ? 1u : 0u;
           ++compared;
         }
       }
@@ -887,7 +887,7 @@ namespace GameLogicTests
           Elite::Compass compass{0xC3u, 0x9Cu, Elite::COMPASS_AHEAD};
           cpu.memory[at.comx] = compass.x;
           cpu.memory[at.comy] = compass.y;
-          cpu.memory[at.comc] = compass.colour;
+          cpu.memory[at.comc] = Elite::PatternByte(compass.pattern);
 
           // 6502: SSPR is MANY+SST, so setting the count IS setting the flag (§6.58).
           bubble.Count(Elite::ShipType::Station) = stations;
@@ -919,7 +919,7 @@ namespace GameLogicTests
 
             Assert::AreEqual(cpu.memory[at.comx], compass.x, (where + L": COMX").c_str());
             Assert::AreEqual(cpu.memory[at.comy], compass.y, (where + L": COMY").c_str());
-            Assert::AreEqual(cpu.memory[at.comc], compass.colour, (where + L": COMC").c_str());
+            Assert::AreEqual(cpu.memory[at.comc], Elite::PatternByte(compass.pattern), (where + L": COMC").c_str());
 
             const Marks marks = CompareAndMeasure(cpu, at.screen, canvas, where);
             marked += marks.bytes;

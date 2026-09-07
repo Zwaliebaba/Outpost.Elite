@@ -96,7 +96,7 @@ essay — the source is vendored and a reader can go and read it.
 | `NeuronCore/` | Foundation static library: the shared precompiled-header content and `Debug.h`'s assert/trace family. No game semantics. | Yes |
 | `GameLogic/` | **The port.** Namespace `Elite`. Deterministic, no window, no GPU, no audio device, no clock, no file system, no float. Draws into an in-memory canvas and emits sound events. | Yes |
 | `Outpost/` | The executable: composition root, window, D3D12 canvas presenter, SID synthesiser, key map, save store. The only project that knows both the game and the platform. | Yes |
-| `Tests/GameLogicTests/` | MSVC CppUnitTest DLL: the 6502 interpreter, the oracle fixture, and the suites. | Yes |
+| `Tests/GameLogicTests/` | MSVC CppUnitTest DLL: the 6502 interpreter (with the 6510 port banking and the CIA keyboard matrix the start sequence needs, and the per-address coverage bits), the oracle fixture, and the suites. | Yes |
 | `Tests/PortableRunner/` | The same suite under g++: three shim headers, a generator and a shell script. Compiles the test files unmodified — see its own README. | Yes |
 | `Design/` | ADRs, the conversion plan, the source inventory, the risk register. | Yes — see §7 |
 | `MasterFile/` | The 13 annotated master `.asm` files. **Reference only** — never compiled, never on an include path. | **No** |
@@ -207,26 +207,47 @@ and always run.
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all twelve in CI's order and takes no
-arguments. Do not retype the list into a loop: that is how a push went red on 2026-09-05 with the
-one check that would have caught it left out (§6.127). What it runs:
+**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->sixteen in CI's
+order and takes no arguments. Do not retype the list into a loop: that is how a push went red on
+2026-09-05 with the one check that would have caught it left out (§6.127). What it runs:
 
 ```
 python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
-python tools/inventory.py --strict            # coverage ledger: every master-level include has a row
+python tools/check_gamelogic.py               # GameLogic/ has no clock, no randomness, no float, no file or Win32 call
+python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted; pch.h is every source's first line
 python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
+python tools/check_outpost.py --self-test     # that check still catches its planted breakages
 python tools/check_docs.py                    # no table row is wider than its header
 python tools/check_counts.py                  # every <!--count:NAME--> number in a document matches the tree
 python tools/check_modernize.py               # the legacy-pattern counts Design/Modernize.md states sit at their recorded ceilings
-python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
-python tools/mutate.py --check                # every recorded mutant still applies to the code it names
+python tools/mutate.py --check                # every recorded mutant still applies, and every floor file carries a caught one
 python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles
+python tools/inventory.py --strict            # coverage ledger: every master-level include has a row
+python tools/inventory.py --check-homes       # every file a ledger row's HOME cell names is on disk
+python tools/inventory.py --self-test         # that check still catches a planted stale home
+python tools/check_tidy.py                    # clang-tidy over GameLogic/, through the portable runner's shim
+python tools/channel_census.py --check        # the channel census names every workspace field and matches the plan
 ```
+
+**And one review that needs the suite to have run first**, so it is a step of the Ubuntu suite
+job rather than a repository check:
+
+```
+Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt   # the suite, recording which oracle labels each test ran
+python tools/inventory.py --coverage x64/Debug/coverage.txt           # every Port row's files are run by some test, or the row says why not
+```
+
+The instrument is M6-0-f's: the interpreter marks every address it executes and every trap it
+takes, the runner writes the labels per test, and the review reads them against
+`Source-Inventory.md`'s *Port* rows. A row may exempt a file with `<!--uncovered: stem -- why-->`
+inside its notes cell, and the review prints every exemption it honoured; four of the current
+nineteen are written as GAPS for M6-a rather than as exemptions, and the tool will say so until a
+test runs them.
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->389 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->408 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.
@@ -280,15 +301,21 @@ tally can be confidently wrong.
 ```
 python tools/mutate.py --list             # what is recorded, and for which slice
 python tools/mutate.py --unit tactics     # run one unit's mutants
+python tools/mutate.py --unit rng --unit arith   # or several, on one worktree and one baseline
 python tools/mutate.py --id ta-253        # run one
 python tools/mutate.py --check            # they all still apply, without building (this is in CI)
 ```
+
+**There is a floor** (plan M6-0-g): `mutants.json` names the files that must each carry a mutant
+the suite catches, and `--check` refuses one whose mutants are all survivors or equivalents. A
+slice that ports a file where a slip would be invisible to every per-routine comparison but its
+own adds the file to the floor with its first caught mutant, in the same commit.
 
 Add a `{id, file, find, replace, expect, note}` per mutant when the slice lands. `find` must match
 its file EXACTLY ONCE — the tool refuses anything else, because a mutant that applies nowhere runs
 the unmutated suite and reports a survivor. `expect` is `caught` unless the note says why not.
 
-Four things the tool does that a hand run kept getting wrong, so that reading them here is enough:
+Six things the tool does that a hand run kept getting wrong, so that reading them here is enough:
 
 - **The baseline is proven before any mutant is believed.** With the oracle missing the suite
   reports `N passed, 1 failed` on every run (`OracleIsPresent`, by design); a harness that reads
@@ -354,7 +381,9 @@ patience:
   clone every time.
 - **Suite on Ubuntu (portable runner)** (Ubuntu, ~85s): builds BeebAsm at the pinned commit (cached
   across runs), assembles the reference build, then builds and runs
-  the whole suite through `Tests/PortableRunner/`. Not the authority (ADR-004 §1) — it is here so a
+  the whole suite through `Tests/PortableRunner/` with `--coverage`, and reads the coverage file
+  against the ledger's *Port* rows (`inventory.py --coverage`, M6-0-f). Not the authority
+  (ADR-004 §1) — it is here so a
   broken push says so in a minute rather than five, and because a second compiler catches what the
   first tolerates. It is also more permissive than MSVC in ways nothing measures (§6.116).
 - **Debug x64 build and tests** (Windows, ~5 min): builds BeebAsm with `cl`, assembles the

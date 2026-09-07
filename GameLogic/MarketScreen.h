@@ -12,6 +12,9 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, because it names types these headers declare
+  struct Ports;    // Ports.h, likewise
+
   /*
    * The docked trading screens (slice 2c).
    *
@@ -28,54 +31,30 @@ namespace Elite
    * independent statements of what a screen needs rather than one interface pretending to be
    * shared, and the executable satisfies both with one object.
    */
-  class TradeScreenEffects
-  {
-  public:
-    virtual ~TradeScreenEffects() = default;
+  /*
+   * `TradeScreenEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3b).
+   *
+   * All four of its methods were in front of routines the library already had, and the executable's
+   * implementations were forwarding calls with a null check in front of them:
+   *
+   *   `ClearToView`       is `TT66`, which is `Elite::SetUpScreen` since slice 3d-d-iii-a.
+   *   `SetUpTradeScreen`  is `TRADEMODE`, which is `TT66` and then `FLKB` -- the flush is the only
+   *                       part that is not the library's, and it is `Keyboard::Flush` since
+   *                       M3-b-3d.
+   *   `ClearBottomRows`   is `CLYNS`, which is `Elite::ClearMessageRows`.
+   *   `BeepAndPause`      is `dn2` -- `JSR BEEP / LDY #50 / JMP DELAY` -- and both halves exist:
+   *                       `Elite::Beep` since slice 5a and `Presenter::WaitFrames` since this one.
+   *
+   * THE TEXT STATE `TTX66` ENDS ON STAYS THE ROUTINE'S, and the comment that used to be here is
+   * worth keeping because it took a redrawing screen to see it: the equipment shop loops back to
+   * the top after every purchase and carries the cursor and the case flags over from the first
+   * pass, so a caller that reset them would print its title in the wrong place and in the wrong
+   * case. `SetUpScreen` does what `TTX66` does, which is why the callers do not.
+   */
 
-    /*
-     * 6502: TRADEMODE -- TT66 (set QQ11, clear the screen, draw the border box), FLKB (flush the
-     * keyboard buffer) and DOVDU19 (a palette change this build does not act on).
-     *
-     * ALL of it is the seam's, including the text state TTX66 ends on -- `LDX #1 / STX XC / STX YC
-     * / DEX / STX QQ17`, so column 1, row 1, ALL CAPS. An earlier draft had the screens set those
-     * themselves on the grounds that pixels are the seam's and state is the port's, which is the
-     * split CLYNS uses. It is wrong here, and only a screen that REDRAWS ITSELF shows why: the
-     * equipment shop loops back to the top after every purchase, and on the second pass the game
-     * carries the cursor and the case flags over from the first. A port that reset them would print
-     * its title in the wrong place and in the wrong case, and the three screens that run once would
-     * never have noticed.
-     *
-     * What TTX66 also does to the ball line heap, the laser, DLY and `de` is flight state and
-     * belongs to phase 3.
-     */
-    virtual void SetUpTradeScreen(std::uint8_t _view) = 0;
-
-    /// 6502: CLYNS -- clear the bottom three text rows of the upper screen.
-    virtual void ClearBottomRows() = 0;
-
-    /*
-     * 6502: TT66 on its own -- set QQ11, clear the screen, draw the border box.
-     *
-     * Separate from SetUpTradeScreen above because TRADEMODE is TT66 plus a keyboard flush plus a
-     * palette write, and the equipment shop's view menu calls the bare TT66. The flush is invisible
-     * to a test that scripts its keys, which is exactly why it is worth keeping the two apart
-     * rather than letting one stand in for the other.
-     */
-    virtual void ClearToView(std::uint8_t _view) = 0;
-
-    /// 6502: msblob -- reset the dashboard's missile indicators. The dashboard is phase 3's.
-    virtual void ResetMissileIndicators() = 0;
-
-    /*
-     * 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.
-     *
-     * Fifty VERTICAL SYNCS, not a duration: DELAY is one of the three routines in the C64 build
-     * that calls WSCAN (§6.17), so this is one second on PAL and five sixths of one on NTSC. A
-     * presenter that implemented it as a wall-clock second would be right on one machine only.
-     */
-    virtual void BeepAndPause() = 0;
-  };
+  /// 6502: dn2's `LDY #50` -- fifty VERTICAL SYNCS and not a second (§6.17), which is why
+  /// `Presenter::WaitFrames` counts frames.
+  inline constexpr std::uint8_t BEEP_PAUSE_FRAMES = 50;
 
   /*
    * Everything a trading screen prints, draws and reads through.
@@ -84,16 +63,9 @@ namespace Elite
    * members are the seams and the state the screens share; what varies between them stays an
    * argument.
    */
-  struct TradeScreen
-  {
-    TokenPrinter& printer;
-    CharacterPrinter& characters;
-    ExtendedTokenPrinter& extended;
-    TextState& text;
-    KeySource& keys;
-    TradeScreenEffects& effects;
-    Rng& rng;
-  };
+  // `TradeScreen` was these seven references: the three printers and the sink are `Ports`', the
+  // text state and the generator are `Universe`'s, and the keyboard and `TRADEMODE` are `Ports`'
+  // two docked seams. It went in M3-a-3.
 
   /// 6502: QQ11 -- which trading screen this is. The value decides whether the cargo listing offers
   /// each item for sale or only lists it, so it is an argument rather than a constant.
@@ -123,7 +95,12 @@ namespace Elite
    * And the market is changed by PRINTING it, not only by buying: `var` zeroes Alien Items'
    * availability on every price it computes (§6.16), so the seventeenth line always offers nothing.
    */
-  void BuyScreen(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy, bool _misJumped) noexcept;
+  void BuyScreen(Universe& _universe, Ports& _ports, bool _misJumped) noexcept;
+
+  /// 6502: TRADEMODE -- `TT66` with the view in A, then `FLKB`. Every docked screen opens with it;
+  /// one routine here rather than the two calls at each caller, so that it can be compared as one
+  /// (M6-0-e), which the trap `MarketTests` puts on its label stands in for.
+  void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept;
 
   /*
    * 6502: TT210 -- list what is in the hold, and on the Sell Cargo screen offer each item for sale.
@@ -146,7 +123,7 @@ namespace Elite
    * blank in this version of Elite, so nothing of it is visible except the count and a possible
    * "s" -- but it calls DORND, so it moves the random state, and that is observable.
    */
-  void ListCargo(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy,
+  void ListCargo(Universe& _universe, Ports& _ports,
                  std::uint8_t _view) noexcept;
 
   /*
@@ -160,6 +137,6 @@ namespace Elite
    * The rule is NLIN4, which is the canvas's rather than this routine's, so a caller draws
    * DrawSeparator at row 19 -- the same split the market screen already uses for NLIN3.
    */
-  void InventoryScreen(TradeScreen& _screen, Commander& _commander, MarketState& _market, std::uint8_t _economy) noexcept;
+  void InventoryScreen(Universe& _universe, Ports& _ports) noexcept;
 
 } // namespace Elite

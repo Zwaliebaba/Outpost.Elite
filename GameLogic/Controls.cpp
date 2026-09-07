@@ -3,7 +3,11 @@
 #include "Controls.h"
 
 #include "EliteTypes.h"
+#include "FlightLoop.h" // for the KY12..KY20 offsets `RDKEY`'s `QQ11` tail clears
 #include "LookupTables.h"
+#include "Ports.h"
+#include "Tactics.h" // for DOCKIT, which `DOKEY`'s autopilot path calls (M6-0-h-3)
+#include "Universe.h"
 
 namespace Elite
 {
@@ -81,16 +85,94 @@ namespace Elite
     return moved;
   }
 
-  void ReadFlightControls(KeyLogger& _keys, ControlState& _control, const ControlOptions& _options, Ship& _work, FlightState& _flight,
-                          ControlEffects& _effects) noexcept
+  namespace
   {
-    _effects.ScanKeyboard(); // 6502: JSR RDKEY
+    /*
+     * 6502: the keys `DOKEY` ignores on every screen but the space view -- `RDKEY`'s answer to
+     * `QQ11 <> 0`.
+     *
+     * The bomb, the pod, the missiles, the E.C.M., the warp and the docking computer are the keys
+     * that DO something rather than steer; with a chart or a market on screen the scan reports them
+     * as unheld regardless of the keyboard. `DOKEY`'s six steering keys are deliberately not here.
+     */
+    constexpr std::array<std::size_t, 9> NON_STEERING_KEYS = {
+      KEY_ENERGY_BOMB, KEY_ESCAPE_POD, KEY_ARM_MISSILE,      KEY_UNARM_MISSILE,  KEY_FIRE_MISSILE,
+      KEY_ECM,         KEY_WARP,       KEY_DOCKING_COMPUTER, KEY_CANCEL_DOCKING,
+    };
+
+    /// 6502: RDKEY's `AND #%11111101` -- sprite 1 off while the matrix is scanned, and it is not
+    /// one of the four the sights use.
+    constexpr std::uint8_t RDKEY_SPRITE_MASK = 0b11111101;
+  } // namespace
+
+  TitleKey ScanKeyboard(KeyLogger& _keys, VideoState& _video, MemoryMap& _map, std::uint8_t _view, Keyboard& _keyboard) noexcept
+  {
+    SetMemoryMap(_map, MEMORY_MAP_IO);           // 6502: LDA #%101 / JSR SETL1
+    ApplyMaskSprites(_video, RDKEY_SPRITE_MASK); // 6502: AND #%11111101 -- sprite 1 off
+    _keys.fill(0u);                              // 6502: JSR ZEKTRAN
+
+    // 6502: LDX #&40 / .Rdi1 ... / DEC KEYLOOK,X / STX thiskey / SEC / .Rdi3 DEX / BMI Rdiex.
+    TitleKey answer;
+    for (std::uint8_t key = static_cast<std::uint8_t>(_keys.size()); key-- > 0u;)
+    {
+      if (_keyboard.Held(key))
+      {
+        _keys[key] = 0xFFu; // 6502: DEC KEYLOOK,X, on a byte that has just been zeroed
+        answer.pressed = true;
+        answer.key = key;
+      }
+    }
+
+    // 6502: LDA QQ11 / BEQ allkeys -- with anything but the space view up, the nine keys that act
+    // rather than steer are forgotten.
+    if (_view != 0u)
+    {
+      for (const std::size_t index : NON_STEERING_KEYS)
+      {
+        _keys[index] = 0u;
+      }
+    }
+
+    /*
+     * AND THE STEERING KEYS GO ON A CHART, which is the port's rule and NOT `RDKEY`'s.
+     *
+     * On a C64 the two sets never collide: `<`, `>`, `X` and `S` steer and the cursor keys move the
+     * crosshairs, so `RDKEY` has no reason to drop the steering entries and does not. This port's
+     * map is a modern one (ADR-005 §4) and the arrows do both jobs, so one of them has to give way
+     * while a chart is up -- and it is the steering, because a chart is the one screen where the
+     * arrows are what you aim with. The alternative is a ship that rolls while you read the map.
+     *
+     * It is here rather than in `KeyMap` because this is where the game itself sorts keys by view,
+     * one statement above; and it is marked as the port's own so nobody looks for it in `RDKEY`.
+     */
+    if (IsChartView(_view))
+    {
+      for (const std::size_t index : {KEY_ROLL_LEFT, KEY_ROLL_RIGHT, KEY_PITCH_UP, KEY_PITCH_DOWN})
+      {
+        _keys[index] = 0u;
+      }
+    }
+
+    SetMemoryMap(_map, MEMORY_MAP_RAM); // 6502: LDA #%100 / JSR SETL1
+    return answer;
+  }
+
+  void ReadFlightControls(Universe& _universe, Ports& _ports) noexcept
+  {
+    KeyLogger& keys = _universe.keys;
+    ControlState& control = _universe.control;
+    const ControlOptions& options = _universe.options;
+    Ship& work = _universe.work;
+    FlightState& flight = _universe.flight;
+
+    // 6502: JSR RDKEY, whose answer `DOKEY` does not read.
+    static_cast<void>(ScanKeyboard(keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard));
 
     // 6502: LDA auto / BEQ DK15 -- with the docking computer off, what is held down is what the
     // player is holding down.
-    if (_control.dockingComputer != 0u)
+    if (control.dockingComputer != 0u)
     {
-      ClearShip(_work); // 6502: JSR ZINF
+      ClearShip(work); // 6502: JSR ZINF
 
       /*
        * 6502: LDA #96 / STA INWK+14 / ORA #%10000000 / STA INWK+22 / STA TYPE.
@@ -99,35 +181,38 @@ namespace Elite
        * this puts them back the other way round -- so the block the autopilot is handed is not the
        * one `ZINF` makes, and the two instructions that differ are easy to read as a repeat.
        */
-      _work.nose.z.hi = 96u;
-      _work.side.x.hi = static_cast<std::uint8_t>(96u | 0x80u);
-      _flight.type = TypeOf(static_cast<std::uint8_t>(96u | 0x80u));
+      work.nose.z.hi = 96u;
+      work.side.x.hi = static_cast<std::uint8_t>(96u | 0x80u);
+      flight.type = TypeOf(static_cast<std::uint8_t>(96u | 0x80u));
 
-      _work.speed = _flight.delta;          // 6502: LDA DELTA / STA INWK+27
-      _effects.RunDockingComputer(_work); // 6502: JSR DOCKIT
+      work.speed = flight.delta; // 6502: LDA DELTA / STA INWK+27
+
+      // 6502: JSR DOCKIT -- over the block `auton` just built in `INWK`, whose slot is 0: `INF`
+      // points at the player's own block on this path, which is what `DOCKIT` steers.
+      RunDockingComputer(_universe, _ports, 0u);
 
       // 6502: LDA INWK+27 / CMP #22 / BCC P%+4 / LDA #22 / STA DELTA -- the autopilot is not
       // allowed to fly faster than 22, whatever it asked for.
-      _flight.delta = (_work.speed < 22u) ? _work.speed : std::uint8_t{22u};
+      flight.delta = (work.speed < 22u) ? work.speed : std::uint8_t{22u};
 
       // 6502: LDA #&FF / LDX #(KY1-KLO) / LDY INWK+28 / BEQ DK11 / BMI P%+4 / LDX #(KY2-KLO) /
       // STA KLO,X -- the acceleration becomes "?" held down or Space held down, and neither if it
       // is zero.
-      if (_work.acceleration != 0u)
+      if (work.acceleration != 0u)
       {
-        const std::size_t slot = ((_work.acceleration & 0x80u) != 0u) ? KEY_SLOW_DOWN : KEY_SPEED_UP;
-        _keys[slot] = 0xFFu;
+        const std::size_t slot = ((work.acceleration & 0x80u) != 0u) ? KEY_SLOW_DOWN : KEY_SPEED_UP;
+        keys[slot] = 0xFFu;
       }
 
       // ---- .DK11: the roll ------------------------------------------------------------------
       //
       // 6502: LDA #128 / LDX #(KY3-KLO) / ASL INWK+29 / BEQ DK12.
-      const ShiftResult roll = RotateLeftValue(_work.rollCounter, false);
-      _work.rollCounter = roll.value;
+      const ShiftResult roll = RotateLeftValue(work.rollCounter, false);
+      work.rollCounter = roll.value;
 
       if (roll.value == 0u)
       {
-        _control.roll = 128u; // 6502: BEQ DK12 with A still 128 -- nothing asked for, so centred
+        control.roll = 128u; // 6502: BEQ DK12 with A still 128 -- nothing asked for, so centred
       }
       else
       {
@@ -138,12 +223,12 @@ namespace Elite
         // the request overflowed, which is what "a big request" means here.
         if ((roll.value & 0x80u) != 0u)
         {
-          _control.roll = 64u; // 6502: LDA #64 / STA JSTX
-          _keys[slot] = 0u;    // 6502: LDA #0 / .DK14 STA KLO,X -- and the key is released
+          control.roll = 64u; // 6502: LDA #64 / STA JSTX
+          keys[slot] = 0u;    // 6502: LDA #0 / .DK14 STA KLO,X -- and the key is released
         }
         else
         {
-          _keys[slot] = 128u; // 6502: .DK14 STA KLO,X with A still 128
+          keys[slot] = 128u; // 6502: .DK14 STA KLO,X with A still 128
         }
         // 6502: LDA JSTX / .DK12 STA JSTX -- which writes back what is already there.
       }
@@ -155,16 +240,16 @@ namespace Elite
       //
       // No `BIT` and no direct write: the pitch has no large-request path, and the carry test is
       // the other way round from the roll's.
-      const ShiftResult pitch = RotateLeftValue(_work.pitchCounter, false);
-      _work.pitchCounter = pitch.value;
+      const ShiftResult pitch = RotateLeftValue(work.pitchCounter, false);
+      work.pitchCounter = pitch.value;
 
       if (pitch.value == 0u)
       {
-        _control.pitch = 128u;
+        control.pitch = 128u;
       }
       else
       {
-        _keys[pitch.carry ? KEY_PITCH_UP : KEY_PITCH_DOWN] = 128u;
+        keys[pitch.carry ? KEY_PITCH_UP : KEY_PITCH_DOWN] = 128u;
       }
     }
 
@@ -172,29 +257,29 @@ namespace Elite
 
     // 6502: LDX JSTX / LDA #14 / LDY KY3 / BEQ P%+5 / JSR BUMP2 / LDY KY4 / BEQ P%+5 / JSR REDU2 /
     // STX JSTX -- and A survives both calls, which is why the 14 is loaded once.
-    std::uint8_t roll = _control.roll;
-    if (_keys[KEY_ROLL_LEFT] != 0u)
+    std::uint8_t roll = control.roll;
+    if (keys[KEY_ROLL_LEFT] != 0u)
     {
-      roll = BumpControl(roll, CONTROL_STEP, _options.recentreDisabled);
+      roll = BumpControl(roll, CONTROL_STEP, options.recentreDisabled);
     }
-    if (_keys[KEY_ROLL_RIGHT] != 0u)
+    if (keys[KEY_ROLL_RIGHT] != 0u)
     {
-      roll = ReduceControl(roll, CONTROL_STEP, _options.recentreDisabled);
+      roll = ReduceControl(roll, CONTROL_STEP, options.recentreDisabled);
     }
-    _control.roll = roll;
+    control.roll = roll;
 
     // 6502: LDX JSTY / LDY KY5 / BEQ P%+5 / JSR REDU2 / LDY KY6 / BEQ P%+5 / JSR BUMP2 / STX JSTY
     // -- the pitch keys are the other way round from the roll's.
-    std::uint8_t pitch = _control.pitch;
-    if (_keys[KEY_PITCH_UP] != 0u)
+    std::uint8_t pitch = control.pitch;
+    if (keys[KEY_PITCH_UP] != 0u)
     {
-      pitch = ReduceControl(pitch, CONTROL_STEP, _options.recentreDisabled);
+      pitch = ReduceControl(pitch, CONTROL_STEP, options.recentreDisabled);
     }
-    if (_keys[KEY_PITCH_DOWN] != 0u)
+    if (keys[KEY_PITCH_DOWN] != 0u)
     {
-      pitch = BumpControl(pitch, CONTROL_STEP, _options.recentreDisabled);
+      pitch = BumpControl(pitch, CONTROL_STEP, options.recentreDisabled);
     }
-    _control.pitch = pitch;
+    control.pitch = pitch;
 
     /*
      * 6502: LDA JSTK / BEQ ant / LDA auto / BNE ant / LDX #128 / ... -- the joystick's own
@@ -205,18 +290,18 @@ namespace Elite
      * while the docking computer is flying, because the autopilot's synthetic presses would be
      * cancelled by it.
      */
-    if (_options.joystick != 0u && _control.dockingComputer == 0u)
+    if (options.joystick != 0u && control.dockingComputer == 0u)
     {
       // 6502: LDA KY3 / ORA KY4 / BNE termite / STX JSTX.
-      if ((_keys[KEY_ROLL_LEFT] | _keys[KEY_ROLL_RIGHT]) == 0u)
+      if ((keys[KEY_ROLL_LEFT] | keys[KEY_ROLL_RIGHT]) == 0u)
       {
-        _control.roll = 128u;
+        control.roll = 128u;
       }
 
       // 6502: .termite LDA KY5 / ORA KY6 / BNE ant / STX JSTY.
-      if ((_keys[KEY_PITCH_UP] | _keys[KEY_PITCH_DOWN]) == 0u)
+      if ((keys[KEY_PITCH_UP] | keys[KEY_PITCH_DOWN]) == 0u)
       {
-        _control.pitch = 128u;
+        control.pitch = 128u;
       }
     }
 
@@ -224,15 +309,17 @@ namespace Elite
     // unit's. A caller of `DOKEY` gets that as well, and the call site does not say so.
   }
 
-  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles,
-                       std::uint8_t _view, SightEffects& _effects) noexcept
+  void DrawLaserSights(Canvas& _canvas, const Commander& _commander, TrumbleSprites& _trumbles, std::uint8_t _view, VideoState& _video,
+                       MemoryMap& _map) noexcept
   {
-    _effects.SetRasterMode(0x05u); // 6502: LDA #%101 / JSR SETL1
+    SetMemoryMap(_map, MEMORY_MAP_IO); // 6502: LDA #%101 / JSR SETL1
 
-    // 6502: LDY VIEW / LDA LASER,Y / BEQ SIG3.
-    const std::uint8_t laser = _commander.lasers[_view];
+    // 6502: LDY VIEW / LDA LASER,Y / BEQ SIG3. `SIGHT` tests for the pulse, beam and military
+    // powers in that order; the mining laser is not tested for at all and gets the fourth sprite
+    // by elimination.
+    const Laser laser = _commander.lasers[_view];
 
-    if (laser != 0u)
+    if (laser.Fitted())
     {
       /*
        * 6502: LDY #SPOFF% / CMP #POW / BEQ SIG1 / INY / CMP #POW+128 / BEQ SIG1 / INY /
@@ -261,12 +348,14 @@ namespace Elite
       _canvas.Write(SIGHT_SPRITE_CELL_2, pointer);
 
       // 6502: LDA sightcol-SPOFF%,Y / STA VIC+&27.
-      _effects.SetSightColour(LASER_SIGHT_COLOUR_TABLE[static_cast<std::size_t>(pointer - SPRITE_POINTER_BASE)]);
+      // `sightcol` is an extracted table of bytes and the register takes four bits, so the
+      // conversion is the VIC-II's latch and belongs here (slice 5a).
+      ApplySightColour(_video, ColourOf(LASER_SIGHT_COLOUR_TABLE[static_cast<std::size_t>(pointer - SPRITE_POINTER_BASE)]));
     }
 
     // 6502: LDA #1 / .SIG3 STA T -- one if a laser was found, and the zero `LDA LASER,Y` left if
     // not, which is the whole of how the sights get switched off. `SIGHT`'s own since M2-c-3.
-    const std::uint8_t sightsBit = (laser != 0u) ? std::uint8_t{1u} : std::uint8_t{0u};
+    const std::uint8_t sightsBit = laser.Fitted() ? std::uint8_t{1u} : std::uint8_t{0u};
 
     // 6502: LDA TRIBBLE+1 / AND #%01111111 / LSR A x4 / TAX.
     const std::uint8_t population = _commander.tribbles.hi;
@@ -275,9 +364,9 @@ namespace Elite
     _trumbles.count = TRUMBLE_COUNT_TABLE[index]; // 6502: LDA TRIBTA,X / STA TRIBCT
 
     // 6502: LDA TRIBMA,X / ORA T / STA VIC+&15 -- the sights and the Trumbles in one byte.
-    _effects.SetSpritesEnabled(static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | sightsBit));
+    ApplySpritesEnabled(_video, static_cast<std::uint8_t>(TRUMBLE_SPRITE_TABLE[index] | sightsBit));
 
-    _effects.SetRasterMode(0x04u); // 6502: LDA #%100 / JMP SETL1, a tail call
+    SetMemoryMap(_map, MEMORY_MAP_RAM); // 6502: LDA #%100 / JMP SETL1, a tail call
   }
 
   void ClearFlightKeys(KeyLogger& _keys) noexcept

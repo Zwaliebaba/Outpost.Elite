@@ -196,15 +196,16 @@ namespace GameLogicTests
             Commander commander;
             commander.cash.tenths = (situation.cash);
             commander.galaxyNumber = situation.galaxy;
-            commander.fuel = situation.fuel;
+            commander.fuel.tenths = situation.fuel;
 
             SystemSeeds current = situation.current;
             SystemSeeds selected = situation.selected;
 
             Recording recording;
-            CharacterPrinter characters(recording);
+            Elite::ExtendedTextState sentences;
+            CharacterPrinter characters(recording, sentences);
             TextState text;
-            TokenPrinter printer(characters);
+            TokenPrinter printer(characters, text);
             printer.SetCaseFlags(caseFlags);
 
             StateTokens tokens(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(situation.name), current,

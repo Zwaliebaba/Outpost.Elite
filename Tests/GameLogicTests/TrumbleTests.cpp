@@ -353,10 +353,10 @@ namespace GameLogicTests
     /*
      * 6502: the two `JSR SETL1` calls, and what they are called with.
      *
-     * They bracket everything the routine does to the video chip and they are the only thing in it
-     * that is not memory, so a port that dropped them would compare perfectly and leave the raster
-     * handler in the wrong mode for the rest of the frame. The pass that returns early makes
-     * neither call, which is what the second half of this asserts.
+     * They bracket everything the routine does to the video chip, and the byte they leave tells
+     * the three cases apart because the two modes differ: no call leaves the seed, one leaves
+     * %101, both leave %100. The pass that returns early makes neither, which is what the second
+     * half of this asserts.
      */
     TEST_METHOD(TheRasterModesBracketTheMove)
     {
@@ -374,17 +374,17 @@ namespace GameLogicTests
         bank.seed = quiet;
 
         const std::wstring where = WidenText("MVTRIBS SETL1 (TRIBCT " + std::to_string(count) + ")");
-        const std::vector<std::uint8_t> modes = Compare(bank, 0u, where);
+        const std::uint8_t port = Compare(bank, 0u, where);
 
         if (count == 0u)
         {
-          Assert::AreEqual<std::size_t>(0u, modes.size(), (where + L": no calls").c_str());
+          Assert::AreEqual<std::uint8_t>(PORT_AFTER_NONE, port, (where + L": the early exit calls neither").c_str());
         }
         else
         {
-          Assert::AreEqual<std::size_t>(2u, modes.size(), (where + L": two calls").c_str());
-          Assert::AreEqual<std::uint8_t>(Elite::TRUMBLE_RASTER_IO, modes[0], (where + L": in").c_str());
-          Assert::AreEqual<std::uint8_t>(Elite::TRUMBLE_RASTER_RAM, modes[1], (where + L": out").c_str());
+          // Both, in that order: one call would have left %101 and none the seed.
+          Assert::AreEqual<std::uint8_t>(PORT_AFTER_BOTH, port, (where + L": in and back out").c_str());
+          Assert::AreNotEqual<std::uint8_t>(PORT_AFTER_IN, port, (where + L": and not just in").c_str());
         }
       }
     }
@@ -410,19 +410,19 @@ namespace GameLogicTests
       std::array<std::uint8_t, 4> seed{0x11u, 0x22u, 0x33u, 0x44u};
     };
 
-    /// Records `SETL1`, which is the routine's only reach outside memory.
-    struct RasterLog final : Elite::SightEffects
-    {
-      std::vector<std::uint8_t> modes;
-
-      void SetRasterMode(std::uint8_t _mode) override
-      {
-        modes.push_back(_mode);
-      }
-      void SetSightColour(std::uint8_t) override {}
-      void SetSpritesEnabled(std::uint8_t) override {}
-      void MaskSprites(std::uint8_t) override {}
-    };
+    /*
+     * 6502: l1 -- what the port register is seeded with, on both sides (M3-b-3a).
+     *
+     * `SETL1` used to be trapped here and recorded on the port through `SightEffects`, and the two
+     * lists were compared. Both machines run it now, and ONE BYTE STILL TELLS THE THREE CASES
+     * APART because the bracket's two modes differ: no call leaves the seed, one call leaves
+     * %101 in the bottom three bits, two calls leave %100. The top five bits are untouched by
+     * either, which is what a non-zero seed is for.
+     */
+    static constexpr std::uint8_t PORT_SEED = 0xE7;
+    static constexpr std::uint8_t PORT_AFTER_NONE = PORT_SEED;
+    static constexpr std::uint8_t PORT_AFTER_IN = (PORT_SEED & 0xF8u) | Elite::MEMORY_MAP_IO;
+    static constexpr std::uint8_t PORT_AFTER_BOTH = (PORT_SEED & 0xF8u) | Elite::MEMORY_MAP_RAM;
 
     /*
      * A seed whose first roll is below 235, so the direction under test survives the pass.
@@ -471,15 +471,15 @@ namespace GameLogicTests
     }
 
     /*
-     * One case, both sides, everything compared -- and it returns the port's `SETL1` calls so a
-     * test that cares about them does not have to run the case twice.
+     * One case, both sides, everything compared -- and it returns the port register both machines
+     * ended on, so a test that cares about the bracket does not have to run the case twice.
      *
      * `MVTRIBS` is entered by `JMP` and leaves by `JMP NOMVETR`, so the oracle is stopped at
-     * `NOMVETR` rather than on an `RTS`. `SETL1` is trapped on that side: it is self-modifying code
-     * inside the raster handler (§6.59) and running it would rewrite an instruction the image needs
-     * to keep for the next case.
+     * `NOMVETR` rather than on an `RTS`. `SETL1` is trapped on NEITHER side since M3-b-3a: it is
+     * eight instructions over two bytes of memory, not the self-modifying code §6.59 called it
+     * (`MemoryMap.h`), so both machines run it and the byte it leaves is compared.
      */
-    static std::vector<std::uint8_t> Compare(Bank& _bank, std::uint8_t _counter, const std::wstring& _where)
+    static std::uint8_t Compare(Bank& _bank, std::uint8_t _counter, const std::wstring& _where)
     {
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t mvtribs = oracle.Label("MVTRIBS");
@@ -490,13 +490,13 @@ namespace GameLogicTests
       const std::uint16_t tribxh = oracle.Label("TRIBXH");
       const std::uint16_t mcnt = oracle.Label("MCNT");
       const std::uint16_t rand = oracle.Label("RAND");
-      const std::uint16_t setl1 = oracle.Label("SETL1");
 
-      // 6502: VIC -- and in a flat image the label at that address is `XX21` (§6.108).
-      const std::uint16_t vic = oracle.Label("XX21");
+      // 6502: VIC -- the chip's own address. The flat image's label there was `XX21`, and until
+      // M6-0-a the two were one page; the interpreter banks them now, so these are `Io` accesses.
+      const std::uint16_t vic = Cpu6502::IO_BASE;
 
       Cpu6502 cpu = oracle.Fresh();
-      cpu.AddTrap(setl1);
+      cpu.memory[0x0001u] = PORT_SEED; // 6502: l1
 
       cpu.memory[tribct] = _bank.count;
       cpu.memory[mcnt] = _counter;
@@ -516,14 +516,14 @@ namespace GameLogicTests
       for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
         const std::uint16_t at = static_cast<std::uint16_t>(vic + 2u * sprite);
-        cpu.memory[at] = static_cast<std::uint8_t>(_bank.video.x[sprite] & 0xFFu);
-        cpu.memory[static_cast<std::uint16_t>(at + 1u)] = _bank.video.y[sprite];
+        cpu.Io(at) = static_cast<std::uint8_t>(_bank.video.x[sprite] & 0xFFu);
+        cpu.Io(static_cast<std::uint16_t>(at + 1u)) = _bank.video.y[sprite];
         if ((_bank.video.x[sprite] & 0x100u) != 0u)
         {
           shared = static_cast<std::uint8_t>(shared | (1u << sprite));
         }
       }
-      cpu.memory[static_cast<std::uint16_t>(vic + 0x10u)] = static_cast<std::uint8_t>(shared | _bank.sharedEntry);
+      cpu.Io(static_cast<std::uint16_t>(vic + 0x10u)) = static_cast<std::uint8_t>(shared | _bank.sharedEntry);
       for (std::size_t index = 0; index < 4u; ++index)
       {
         cpu.memory[static_cast<std::uint16_t>(rand + index)] = _bank.seed[index];
@@ -536,8 +536,9 @@ namespace GameLogicTests
       rng.SetState(_bank.seed);
       _bank.sprites.count = _bank.count;
 
-      RasterLog log;
-      Elite::MoveTrumbleSprites(_bank.sprites, _bank.video, rng, _counter, log);
+      Elite::MemoryMap map;
+      map.port = PORT_SEED;
+      Elite::MoveTrumbleSprites(_bank.sprites, _bank.video, rng, _counter, map);
 
       for (std::size_t index = 0; index < Elite::TRUMBLE_VELOCITY_COUNT; ++index)
       {
@@ -556,14 +557,14 @@ namespace GameLogicTests
        * corresponding to VIC+&10, so asserting on one would be asserting about a fiction. What the
        * two OTHER bits of that register do is checked separately, by `TheSpriteBitsAreThisSpritesOnly`.
        */
-      const std::uint8_t theirShared = cpu.memory[static_cast<std::uint16_t>(vic + 0x10u)];
+      const std::uint8_t theirShared = cpu.Io(static_cast<std::uint16_t>(vic + 0x10u));
       for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
         const std::uint16_t at = static_cast<std::uint16_t>(vic + 2u * sprite);
         const std::wstring where = _where + L" [sprite " + std::to_wstring(sprite) + L"]";
-        const std::uint16_t theirX = static_cast<std::uint16_t>(cpu.memory[at] | (((theirShared >> sprite) & 1u) != 0u ? 0x100u : 0u));
+        const std::uint16_t theirX = static_cast<std::uint16_t>(cpu.Io(at) | (((theirShared >> sprite) & 1u) != 0u ? 0x100u : 0u));
         Assert::AreEqual(theirX, _bank.video.x[sprite], (where + L": sprite x").c_str());
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at + 1u)], _bank.video.y[sprite], (where + L": sprite y").c_str());
+        Assert::AreEqual(cpu.Io(static_cast<std::uint16_t>(at + 1u)), _bank.video.y[sprite], (where + L": sprite y").c_str());
       }
       Assert::AreEqual(cpu.memory[tribct], _bank.sprites.count, (_where + L": TRIBCT").c_str());
 
@@ -576,23 +577,10 @@ namespace GameLogicTests
                          (_where + L": RAND+" + std::to_wstring(index)).c_str());
       }
 
-      // The oracle's `SETL1` calls, counted from the traps, against the port's.
-      std::vector<std::uint8_t> theirs;
-      for (const Cpu6502::TrapHit& hit : cpu.trapHits)
-      {
-        if (hit.address == setl1)
-        {
-          theirs.push_back(hit.a);
-        }
-      }
+      // 6502: l1 -- the map both machines ended on, which is where the bracket shows.
+      Assert::AreEqual(cpu.memory[0x0001u], map.port, (_where + L": l1 after SETL1").c_str());
 
-      Assert::AreEqual(theirs.size(), log.modes.size(), (_where + L": SETL1 calls").c_str());
-      for (std::size_t index = 0; index < theirs.size(); ++index)
-      {
-        Assert::AreEqual(theirs[index], log.modes[index], (_where + L": SETL1 mode").c_str());
-      }
-
-      return log.modes;
+      return map.port;
     }
   };
 

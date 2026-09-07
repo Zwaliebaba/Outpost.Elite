@@ -36,7 +36,7 @@ namespace Elite
 
     // The index is a ship TYPE, 1 to `SHIP_TYPE_COUNT`, which is what the table is sized by and
     // what `FRIN` can hold. The `BMI` above has already taken the planet and the sun out of it.
-    const std::uint8_t colour = SCANNER_COLOUR_TABLE[Byte(_type)]; // 6502: STA COL
+    const PixelPattern pattern = PatternOf(SCANNER_COLOUR_TABLE[Byte(_type)]); // 6502: STA COL
 
     /*
      * 6502: LDA INWK+1 / ORA INWK+4 / ORA INWK+7 / AND #%11000000 / BNE SCR1.
@@ -77,7 +77,7 @@ namespace Elite
      * down, when `CPIX4` overwrites it; until then it is the row the stick is drawn back to.
      */
     std::uint8_t depth = static_cast<std::uint8_t>(_ship.z.hi >> 2);
-    bool depthCarry = false;      // 6502: CLC
+    bool depthCarry = false;         // 6502: CLC
     if ((_ship.z.sgn & 0x80u) != 0u) // 6502: LDX INWK+8 / BPL SC3
     {
       depth = static_cast<std::uint8_t>(depth ^ 0xFFu);
@@ -94,7 +94,7 @@ namespace Elite
      * above the plane of flight has to move to a smaller row number.
      */
     std::uint8_t height = static_cast<std::uint8_t>(_ship.y.hi >> 1);
-    bool heightCarry = false;     // 6502: CLC
+    bool heightCarry = false;        // 6502: CLC
     if ((_ship.y.sgn & 0x80u) == 0u) // 6502: LDX INWK+5 / BMI SCD6
     {
       height = static_cast<std::uint8_t>(height ^ 0xFFu);
@@ -120,7 +120,7 @@ namespace Elite
     // and it survives `CPIX4` on the stack, because `TAX` below sets N and Z but not C.
     const SubResult stick = SubtractWithCarry(row, ground, true);
 
-    const CellCursor cursor = PlotBlock(_canvas, x1, y1, colour); // 6502: JSR CPIX4
+    const CellCursor cursor = PlotBlock(_canvas, x1, y1, pattern); // 6502: JSR CPIX4
 
     /*
      * 6502: LDA CTWOS2+2,X / AND COL / STA X1.
@@ -130,7 +130,8 @@ namespace Elite
      * becomes that pattern. The cursor's cell has already followed the same wrap, so the two agree
      * about which character block the stick belongs in.
      */
-    const std::uint8_t stickMask = static_cast<std::uint8_t>(MULTICOLOUR_MASK_TABLE[cursor.pixel + 2u] & colour); // 6502: STA X1
+    const std::uint8_t stickMask =
+      static_cast<std::uint8_t>(MULTICOLOUR_MASK_TABLE[cursor.pixel + 2u] & PatternByte(pattern)); // 6502: STA X1
 
     // 6502: TAX / BEQ RTS -- a ship exactly on the plane of flight has a dot and no stick.
     if (stick.value == 0u)
@@ -209,13 +210,13 @@ namespace Elite
     // 6502: LDA COMY / STA Y1 / LDA COMX / STA X1 / LDA COMC / STA COL.
     // 6502: CMP #YELLOW / BNE CPIX2 -- and the fall-through when it matches is `CPIX4`, because
     // `dot.asm` is assembled immediately in front of it.
-    if (_compass.colour == COMPASS_AHEAD)
+    if (_compass.pattern == COMPASS_AHEAD)
     {
-      (void)PlotBlock(_canvas, _compass.x, _compass.y, _compass.colour);
+      (void)PlotBlock(_canvas, _compass.x, _compass.y, _compass.pattern);
       return;
     }
 
-    (void)PlotDash(_canvas, _compass.x, _compass.y, _compass.colour);
+    (void)PlotDash(_canvas, _compass.x, _compass.y, _compass.pattern);
   }
 
   void LoadPlanetAxis(const Ship& _planet, K3Block& _axes, std::uint8_t _at) noexcept
@@ -356,7 +357,7 @@ namespace Elite
     _compass.y = SubtractWithCarry(156u, t, down.carry).value;
 
     // 6502: LDA #YELLOW / LDX XX15+2 / BPL P%+4 / LDA #GREEN / STA COMC.
-    _compass.colour = ((_towards.z & 0x80u) != 0u) ? COMPASS_BEHIND : COMPASS_AHEAD;
+    _compass.pattern = ((_towards.z & 0x80u) != 0u) ? COMPASS_BEHIND : COMPASS_AHEAD;
 
     DrawCompassDot(_canvas, _compass); // 6502: JMP DOT
   }

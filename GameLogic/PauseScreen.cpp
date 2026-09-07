@@ -2,6 +2,8 @@
 
 #include "PauseScreen.h"
 
+#include "Universe.h"
+
 namespace Elite
 {
 
@@ -57,16 +59,16 @@ namespace Elite
     return frames;
   }
 
-  MusicChange NoteMusicSwitch(std::uint8_t _mutok, std::uint8_t& _mutokOld, std::uint8_t _dockingComputer) noexcept
+  MusicChange NoteMusicSwitch(Universe& _universe, std::uint8_t _mutok, std::uint8_t _dockingComputer) noexcept
   {
     // 6502: LDA MUTOK / CMP MUTOKOLD / BEQ P%+5 -- nothing to do unless the switch moved.
-    if (_mutok == _mutokOld)
+    if (_mutok == _universe.musicSwitchWas)
     {
       return MusicChange::None;
     }
 
     // 6502: .MUTOKCH STA MUTOKOLD -- and A is `MUTOK`, so the record is of the NEW setting.
-    _mutokOld = _mutok;
+    _universe.musicSwitchWas = _mutok;
 
     /*
      * 6502: EOR #&FF / AND auto / BMI april16.
@@ -79,8 +81,7 @@ namespace Elite
     return ((started & 0x80u) != 0u) ? MusicChange::StartNow : MusicChange::Stop;
   }
 
-  PausePass PressPauseKey(const OptionBlock& _options, std::uint8_t& _soundDisabled, std::uint8_t& _mutokOld, std::uint8_t _dockingComputer,
-                          std::uint8_t _key) noexcept
+  PausePass PressPauseKey(Universe& _universe, const OptionBlock& _options, std::uint8_t _dockingComputer, std::uint8_t _key) noexcept
   {
     PausePass pass;
 
@@ -91,9 +92,9 @@ namespace Elite
      * a TWO there. Everything that reads `DNOIZ` tests it for non-zero, so the value never matters
      * -- and the port stores the same two, because the byte is in the commander file.
      */
-    if (_key == SOUND_OFF_KEY)
+    if (_key == KEY_SOUND_OFF)
     {
-      _soundDisabled = _key;
+      _universe.sound.soundOff = _key;
     }
 
     // 6502: .DK6 LDY #0 / DKL4 ... / nosillytog -- ten toggles, or thirteen behind `PATG`.
@@ -101,12 +102,12 @@ namespace Elite
 
     // 6502: LDA MUTOK / CMP MUTOKOLD / BEQ P%+5 / JSR MUTOKCH -- and `MUTOK` is the eighth byte of
     // the block, so one of the toggles above may have just moved it.
-    pass.music = NoteMusicSwitch(*_options[OPTION_MUTOK], _mutokOld, _dockingComputer);
+    pass.music = NoteMusicSwitch(_universe, *_options[OPTION_MUTOK], _dockingComputer);
 
     // 6502: CPX #&33 / BNE DK7 / LDA #0 / STA DNOIZ -- and this one DOES load a value.
-    if (_key == SOUND_ON_KEY)
+    if (_key == KEY_SOUND_ON)
     {
-      _soundDisabled = 0u;
+      _universe.sound.soundOff = 0u;
     }
 
     // 6502: .DK7 CPX #&07 / BNE P%+5 / JMP DEATH2 -- and `DEATH2` does not come back.

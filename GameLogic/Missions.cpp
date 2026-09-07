@@ -4,6 +4,7 @@
 
 #include "EliteTypes.h"
 #include "Market.h"
+#include "NameEntry.h"
 #include "PlanetDraw.h"
 #include "SaveGame.h"
 #include "ShipDraw.h"
@@ -16,11 +17,9 @@ namespace Elite
   namespace
   {
     /// 6502: JSR LL9 -- the briefing's ship, drawn from `INWK` with its block in `K%`.
-    void DrawBriefingShip(Universe& _universe, Ports& _ports) noexcept
+    void DrawBriefingShip(Universe& _universe) noexcept
     {
-      DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work,
-               _universe.bubble.blocks[_universe.shipSlot], _universe.heap, *_universe.flight.blueprint, _universe.flight.type,
-               _ports.drawing, _universe.rng,
+      DrawShip(_universe, _universe.bubble.blocks[_universe.shipSlot],
                false); // a briefing's ship is never killed, so the carry goes unread
     }
 
@@ -33,8 +32,7 @@ namespace Elite
      */
     void MoveBriefingShip(Universe& _universe, Ports& _ports) noexcept
     {
-      static_cast<void>(MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics,
-                                 *_universe.flight.blueprint, _universe.view));
+      static_cast<void>(MoveShip(_universe, _ports));
     }
   } // namespace
 
@@ -55,9 +53,7 @@ namespace Elite
     _universe.work.z.hi = BRIEFING_SHIP_DISTANCE;
 
     // 6502: JSR LL9 -- a briefing's ship is never killed, so the carry it is reached with goes unread.
-    DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work,
-             _universe.bubble.blocks[_universe.shipSlot], _universe.heap, *_universe.flight.blueprint, _universe.flight.type,
-             _ports.drawing, _universe.rng, false);
+    DrawShip(_universe, _universe.bubble.blocks[_universe.shipSlot], false);
 
     /*
      * 6502: JSR MVEIT.
@@ -66,11 +62,11 @@ namespace Elite
      * a ship whose `INWK+32` has bit 7 set, and the Constrictor `BRIEF` builds is made by `ZINF`
      * and `NWSHP` with no AI byte set, so there is nothing for the AI to do and nobody to do it to.
      */
-    (void)MoveShip(_universe.canvas, _universe.work, _universe.math, _universe.flight, _ports.tactics, *_universe.flight.blueprint,
-                   _universe.view);
+    (void)MoveShip(_universe, _ports);
 
     // 6502: JMP RDKEY -- a tail call, so what `PAS1` returns is what `RDKEY` returns.
-    return _ports.start.ScanTitleKeys(_universe.keys);
+    _ports.present.HoldTitleFrame(_universe.work.z.hi); // 6502: TLL2's pace
+    return ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard);
   }
 
   void PauseForKey(Universe& _universe, Ports& _ports) noexcept
@@ -94,7 +90,7 @@ namespace Elite
     SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);
 
     // 6502: JSR LL9 -- one more draw, onto the screen that was just cleared.
-    DrawBriefingShip(_universe, _ports);
+    DrawBriefingShip(_universe);
 
     /*
      * 6502: the fall-through into MT23 -- `LDA #10 / JSR DOYC`, and that is all of it that lands
@@ -110,7 +106,8 @@ namespace Elite
     for (;;)
     {
       // 6502: .PAUSE2 JSR RDKEY / BNE PAUSE2.
-      if (_ports.start.ScanTitleKeys(_universe.keys).key != 0u)
+      _ports.present.HoldTitleFrame(_universe.work.z.hi); // 6502: TLL2's pace
+      if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)
       {
         continue;
       }
@@ -122,7 +119,8 @@ namespace Elite
        * check for a release it has already had. Written as two scans in a loop rather than as a
        * do-while, because that is the shape: the first scan is reached again on every failure.
        */
-      if (_ports.start.ScanTitleKeys(_universe.keys).key != 0u)
+      _ports.present.HoldTitleFrame(_universe.work.z.hi); // 6502: TLL2's pace
+      if (ScanKeyboard(_universe.keys, _universe.video, _universe.memoryMap, _universe.view, _ports.keyboard).key != 0u)
       {
         return; // 6502: .newyearseve RTS
       }
@@ -135,7 +133,7 @@ namespace Elite
     _ports.tokens.Print(INCOMING_MESSAGE_TOKEN);
 
     // 6502: LDY #100 / JMP DELAY.
-    _ports.start.WaitFrames(INCOMING_MESSAGE_FRAMES);
+    _ports.present.WaitFrames(INCOMING_MESSAGE_FRAMES);
   }
 
   void PrintMissionToken(ExtendedTokenPrinter& _tokens, std::uint8_t _base, std::uint8_t _galaxy) noexcept
@@ -145,14 +143,14 @@ namespace Elite
     _tokens.Print(AddWithCarry(_base, _galaxy, false).value);
   }
 
-  bool MissionCodes::RunMissionCode(std::uint8_t _code) noexcept
+  void RunControlCode(Universe& _universe, Ports& _ports, std::uint8_t _code) noexcept
   {
     switch (_code)
     {
     case 8:
       // 6502: MT8 -- LDA #6 / JSR DOXC. The `DTW2` store is the printer's and is already done.
-      m_universe.text.column = MT8_COLUMN;
-      return true;
+      _universe.text.column = MT8_COLUMN;
+      return;
 
     case 9:
       /*
@@ -163,15 +161,26 @@ namespace Elite
        * the column store is DEAD, because `TT66` writes the same `XC` on its own. Ported because
        * the routine does it, not because anything can see it.
        */
-      m_universe.text.column = MT9_COLUMN_AND_VIEW;
-      SetUpScreen(m_universe, m_ports, MT9_COLUMN_AND_VIEW);
-      return true;
+      _universe.text.column = MT9_COLUMN_AND_VIEW;
+      SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);
+      return;
+
+    case 21:
+      /*
+       * 6502: CLYNS -- the bottom rows, which belong to the docked screens rather than to a
+       * mission, and which the executable answered until M3-b-4b.
+       *
+       * The two flags it sets are the printer's and the extended printer has already set them, so
+       * what is left is the screen half -- and that half is `Elite::ClearMessageRows`.
+       */
+      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
+      return;
 
     case 22:
       // 6502: PAUSE. Its fall-through into MT23 sets the row here and the case flags in the
       // printer, which is the same split codes 23 and 29 already have.
-      PauseForKey(m_universe, m_ports);
-      return true;
+      PauseForKey(_universe, _ports);
+      return;
 
     case 23:
     case 29:
@@ -182,32 +191,50 @@ namespace Elite
        * briefing that moves to row 10 keeps whatever column it was printing at. `WHITETEXT` is a
        * bare `RTS` on this build and `MT13`'s two stores are the printer's.
        */
-      m_universe.text.row = (_code == 23) ? MT23_ROW : MT29_ROW;
-      return true;
+      _universe.text.row = (_code == 23) ? MT23_ROW : MT29_ROW;
+      return;
 
     case 24:
       // 6502: PAUSE2 -- the same wait with no ship, and no fall-through after it.
-      WaitForKeyPress(m_universe, m_ports);
-      return true;
+      WaitForKeyPress(_universe, _ports);
+      return;
 
     case 25:
-      ShowIncomingMessage(m_universe, m_ports);
-      return true;
+      ShowIncomingMessage(_universe, _ports);
+      return;
+    case 26:
+      /*
+       * 6502: MT26 -- read a line from the keyboard into `INWK+5`, which is `Universe::lineBuffer`
+       * (M6-0-c). `RLINE+2` is the line's length limit and is nine except inside `GTNME`, which
+       * lowers it to seven and calls `MT26` directly rather than through a token -- so a code 26
+       * reached THROUGH the dispatch reads with the limits `RLINE` holds at rest. No token this
+       * build prints from here contains one; the dispatch is compared in `MissionTests`.
+       */
+      static_cast<void>(ReadLine(_ports.keyboard, _ports.sink, _universe.text, _ports.present, _universe.lineBuffer, LineLimits{}));
+      return;
 
     case 27:
     case 28:
       // 6502: MT27 and MT28 -- the captain and the planet, one token per galaxy.
-      PrintMissionToken(m_ports.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN, m_galaxy);
-      return true;
+      PrintMissionToken(_ports.tokens, (_code == 27) ? MISSION_CAPTAIN_TOKEN : MISSION_PLANET_TOKEN,
+                        _universe.commander.galaxyNumber);
+      return;
 
     default:
-      return false;
+      /*
+       * THE THREE NAMED (M6-0-c): 11 is `NLIN4`, a rule across the screen at pixel row 19; 30 and
+       * 31 are `FILEPR` and `OTHERFILEPR`, the selected and the other medium's name under `DISK`.
+       * All three are routines in the original and this is `default` in the port: no token this
+       * build prints from here contains one, `MissionTests` pins the table entries they would
+       * dispatch to, and porting a routine nothing reaches would be a routine nothing compares.
+       */
+      return;
     }
   }
 
   // ---- the missions themselves (slice 4d-c) ---------------------------------------------------
 
-  ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, MissionBay& _bay, std::uint8_t _token) noexcept
+  ForcedKey PrintAndEnterBay(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, std::uint8_t _token) noexcept
   {
     // 6502: JSR DETOK -- and `BAYSTEP`, the entry that skips it, is the caller passing no token.
     if (_token != 0u)
@@ -216,10 +243,10 @@ namespace Elite
     }
 
     // 6502: .BAYSTEP JMP BAY -- a tail call, so what a mission returns is what `BAY` returns.
-    return EnterDockingBay(_bay.dockedFlag, _bay.view, _bay.countdown, _bay.hyperspaceHeld);
+    return EnterDockingBay(_universe, _universe.view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
   }
 
-  std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  std::uint8_t RunConstrictorBriefing(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
 
     /*
@@ -229,7 +256,7 @@ namespace Elite
      * all back with a one going into bit 0. Every other bit ends where it started, so it is
      * `ORA #1` written for a machine whose author preferred shifts.
      */
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_1_STARTED);
 
     ShowIncomingMessage(_universe, _ports); // 6502: JSR BRIS
@@ -264,7 +291,7 @@ namespace Elite
       _universe.work.rollCounter = BRIEFING_SPIN;
       _universe.work.pitchCounter = BRIEFING_SPIN;
 
-      DrawBriefingShip(_universe, _ports); // 6502: JSR LL9
+      DrawBriefingShip(_universe); // 6502: JSR LL9
       MoveBriefingShip(_universe, _ports); // 6502: JSR MVEIT
 
       _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);
@@ -307,7 +334,7 @@ namespace Elite
       }
       _universe.work.y.lo = height;
 
-      DrawBriefingShip(_universe, _ports); // 6502: JSR LL9
+      DrawBriefingShip(_universe); // 6502: JSR LL9
       MoveBriefingShip(_universe, _ports); // 6502: JSR MVEIT
 
       _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);
@@ -320,22 +347,22 @@ namespace Elite
     return MISSION_1_BRIEFING;
   }
 
-  ForcedKey BriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey BriefMission1(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
-    return PrintAndEnterBay(_universe, _ports, _bay, RunConstrictorBriefing(_universe, _ports, _bay));
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, RunConstrictorBriefing(_universe, _ports, _hyperspaceHeld));
   }
 
-  ForcedKey BriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey BriefMission2(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     // 6502: LDA TP / ORA #%00000100 / STA TP -- in progress, plans not yet collected.
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_2_STARTED);
 
     // 6502: LDA #11 -- and then a FALL-THROUGH into BRP rather than a branch.
-    return PrintAndEnterBay(_universe, _ports, _bay, MISSION_2_CONTACT);
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, MISSION_2_CONTACT);
   }
 
-  ForcedKey CollectPlans(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey CollectPlans(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     /*
      * 6502: LDA TP / AND #%11110000 / ORA #%00001010 / STA TP.
@@ -344,13 +371,13 @@ namespace Elite
      * both its bits go, not just the "in progress" one. Bit 1 is then set again by the `ORA`, which
      * is what `MissionOnDocking` reads as "mission 1 finished and paid", and bit 3 is the plans.
      */
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>((progress & MISSION_2_KEEP) | MISSION_2_PLANS);
 
-    return PrintAndEnterBay(_universe, _ports, _bay, MISSION_2_BRIEFING);
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, MISSION_2_BRIEFING);
   }
 
-  ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey DebriefMission1(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     /*
      * 6502: LSR TP / ASL TP -- clear bit 0 and nothing else.
@@ -363,38 +390,38 @@ namespace Elite
      * `\INC TALLY+1` sits between the two halves of this routine, commented out in the original,
      * so the Constrictor is worth no kill points. Not ported, because it does not run.
      */
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress & ~MISSION_1_STARTED);
 
     // 6502: LDX #LO(50000) / LDY #HI(50000) / JSR MCASH -- 5,000 credits.
-    ReceiveCash(_bay.commander, MISSION_REWARD);
+    ReceiveCash(_universe.commander, MISSION_REWARD);
 
     // 6502: LDA #15 / .BRPS BNE BRP.
-    return PrintAndEnterBay(_universe, _ports, _bay, MISSION_1_DEBRIEFING);
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, MISSION_1_DEBRIEFING);
   }
 
-  ForcedKey DebriefMission2(Universe& _universe, Ports& _ports, MissionBay& _bay) noexcept
+  ForcedKey DebriefMission2(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
   {
     // 6502: LDA TP / ORA #%00000100 / STA TP -- bit 2 again, so 2 and 3 are both up and the pair
     // reads as "complete".
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_2_STARTED);
 
     // 6502: LDA #2 / STA ENGY -- the navy's energy unit.
-    _bay.commander.energyUnit = NAVY_ENERGY_UNIT;
+    _universe.commander.energyUnit = NAVY_ENERGY_UNIT;
 
     // 6502: INC TALLY+1 -- 256 kill points, into the HIGH byte, so the low one is untouched and
     // the combat rank jumps by a whole step.
-    _bay.commander.kills.hi = static_cast<std::uint8_t>(_bay.commander.kills.hi + 1u);
+    _universe.commander.kills.hi = static_cast<std::uint8_t>(_universe.commander.kills.hi + 1u);
 
-    return PrintAndEnterBay(_universe, _ports, _bay, MISSION_2_DEBRIEFING);
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, MISSION_2_DEBRIEFING);
   }
 
-  ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, MissionBay& _bay, KeySource& _keys) noexcept
+  ForcedKey OfferTrumble(Universe& _universe, Ports& _ports, bool _hyperspaceHeld, Keyboard& _keys) noexcept
   {
     // 6502: LDA TP / ORA #%00010000 / STA TP -- BEFORE the question, so declining still counts as
     // having been asked and the Trumble is never offered again.
-    std::uint8_t& progress = _bay.commander.missionProgress;
+    std::uint8_t& progress = _universe.commander.missionProgress;
     progress = static_cast<std::uint8_t>(progress | MISSION_TRUMBLES);
 
     _ports.tokens.Print(TRUMBLE_OFFER); // 6502: LDA #199 / JSR DETOK
@@ -403,7 +430,7 @@ namespace Elite
     // is what `BAYSTEP` is for.
     if (!AskYesNo(_keys))
     {
-      return PrintAndEnterBay(_universe, _ports, _bay, 0u);
+      return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, 0u);
     }
 
     /*
@@ -412,13 +439,13 @@ namespace Elite
      * `INC TRIBBLE` follows unconditionally and `LCASH` puts the money back when it cannot afford
      * the spend, so a commander who is short gets the Trumble for nothing (ADR-001 §6).
      */
-    static_cast<void>(SpendCash(_bay.commander, MISSION_REWARD));
+    static_cast<void>(SpendCash(_universe.commander, MISSION_REWARD));
 
     // 6502: INC TRIBBLE -- the LOW byte, from nothing to one, and `MLOOP` breeds the rest.
-    std::uint8_t& trumbles = _bay.commander.tribbles.lo;
+    std::uint8_t& trumbles = _universe.commander.tribbles.lo;
     trumbles = static_cast<std::uint8_t>(trumbles + 1u);
 
-    return PrintAndEnterBay(_universe, _ports, _bay, 0u); // 6502: JMP BAY
+    return PrintAndEnterBay(_universe, _ports, _hyperspaceHeld, 0u); // 6502: JMP BAY
   }
 
 } // namespace Elite

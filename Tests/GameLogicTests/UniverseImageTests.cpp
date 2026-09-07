@@ -43,10 +43,13 @@ namespace GameLogicTests
       const Where at(oracle);
 
       Universe universe;
-      universe.spriteRegistersAreOurs = true; // so the sprite cells are in the table too
       const std::vector<Cell> cells = ImageCells(universe, at);
 
       Assert::IsTrue(cells.size() > 500u, L"the table is far shorter than the state it describes");
+
+      // 6502: LSX2 then LSY2 -- `PlanetSunState::ball` is one block because `BLINE` indexes across
+      // the join, and the one `LSX2` run covers both halves only if the join is where the port says.
+      Assert::AreEqual<std::uint32_t>(at.lsx2 + Elite::BALL_HEAP_SIZE, at.lsy2, L"LSY2 is not immediately after LSX2 in this build");
       for (const Cell& cell : cells)
       {
         Assert::AreNotEqual(std::uint16_t{0}, cell.address, (L"cell " + cell.name + L" resolved to address zero").c_str());
@@ -67,7 +70,6 @@ namespace GameLogicTests
 
       Universe seeded;
       Seed(seeded, 7u);
-      seeded.spriteRegistersAreOurs = true;
       for (std::size_t sprite = 0; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
         seeded.video.x[sprite] = static_cast<std::uint16_t>(0x120u + 3u * sprite);
@@ -78,7 +80,6 @@ namespace GameLogicTests
       Materialise(seeded, cpu, at);
 
       Universe absorbed;
-      absorbed.spriteRegistersAreOurs = true;
       Absorb(cpu, absorbed, at);
 
       Assert::AreEqual(Hash(seeded, at), Hash(absorbed, at), L"a round trip through memory changed the image");

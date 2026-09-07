@@ -2,9 +2,12 @@
 
 #include "ExtendedTokens.h"
 
+#include "Missions.h"
+
 #include "EliteConfig.h"
 #include "LookupTables.h"
 
+#include <array>
 #include <algorithm>
 
 /*
@@ -50,7 +53,7 @@ namespace Elite
     constexpr std::uint8_t SPACE = ' ';
 
     /// The four thresholds that turn a random byte into one of five alternatives.
-    constexpr std::uint8_t VARIANT_THRESHOLDS[4] = {51, 102, 153, 204};
+    constexpr std::array<std::uint8_t, 4> VARIANT_THRESHOLDS = {51, 102, 153, 204};
 
     /// 6502: VOWEL -- ORA #%00100000 folds the case, then five comparisons. The carry is set on a
     /// match and cleared by the CLC that the fall-through reaches, so "carry set" means vowel.
@@ -72,7 +75,7 @@ namespace Elite
   {
     // 6502: LDX #255 / STX DTW8. The case mask lasts exactly one character: MT19 sets it just
     // before the letter it applies to, and this is what takes it away again.
-    state.caseMask = 0xFF;
+    m_state.caseMask = 0xFF;
 
     /*
      * 6502: the CMP ladder into DA8. X arrives at the store as 255 when one of the five matched
@@ -80,12 +83,12 @@ namespace Elite
      * letter through DTS is left capitalised on the strength of it, which is how the game gets
      * sentence case out of one byte and no lookahead.
      */
-    state.sentenceStart = (_character == '.' || _character == ':' || _character == 10 || _character == FORM_FEED || _character == SPACE)
+    m_state.sentenceStart = (_character == '.' || _character == ':' || _character == 10 || _character == FORM_FEED || _character == SPACE)
                             ? std::uint8_t{0xFF}
                             : std::uint8_t{0x00};
 
     // 6502: BIT DTW4 / BPL -- nobody asked for justification, so this goes straight to the screen.
-    if ((state.justify & 0x80u) == 0u)
+    if ((m_state.justify & 0x80u) == 0u)
     {
       m_screen.Put(_character);
       return;
@@ -98,17 +101,17 @@ namespace Elite
      * measure it and centre it by hand, and a form feed inside such a message is a character to
      * be kept rather than an instruction to obey.
      */
-    if ((state.justify & 0x40u) == 0u && _character == FORM_FEED)
+    if ((m_state.justify & 0x40u) == 0u && _character == FORM_FEED)
     {
       Justify();
       return;
     }
 
     // 6502: LDX DTW5 / STA BUF,X / INC DTW5.
-    if (state.bufferLength < buffer.size())
+    if (m_state.bufferLength < buffer.size())
     {
-      buffer[state.bufferLength] = _character;
-      ++state.bufferLength;
+      buffer[m_state.bufferLength] = _character;
+      ++m_state.bufferLength;
     }
     // Past the buffer the original writes on into the recursive token table, which would be a
     // real defect rather than the benign spill into the ship tables below it. Nothing in the game
@@ -126,7 +129,7 @@ namespace Elite
     }
   }
 
-  bool CharacterPrinter::PadToWidth(std::uint8_t& _rotor) noexcept
+  CharacterPrinter::PadResult CharacterPrinter::PadToWidth(std::uint8_t _rotor) noexcept
   {
     int scan = 0;
     bool restart = true;
@@ -149,7 +152,7 @@ namespace Elite
          */
         if (!sawGap && !firstPass)
         {
-          return false;
+          return {false, _rotor};
         }
 
         if ((_rotor & 0x80u) == 0u)
@@ -165,7 +168,7 @@ namespace Elite
       // 6502: DAL1 -- the line is ready the moment the thirty-first character is a space.
       if (buffer[LINE_WIDTH] == SPACE)
       {
-        return true;
+        return {true, _rotor};
       }
 
       // 6502: DAL2 -- back through the line looking for a gap this pass is allowed to widen.
@@ -204,9 +207,9 @@ namespace Elite
         continue;
       }
 
-      if (static_cast<std::size_t>(state.bufferLength) >= buffer.size())
+      if (static_cast<std::size_t>(m_state.bufferLength) >= buffer.size())
       {
-        return false;
+        return {false, _rotor};
       }
 
       /*
@@ -217,14 +220,14 @@ namespace Elite
        * the copy lands beyond it.
        */
       const int gap = scan;
-      for (int index = static_cast<int>(state.bufferLength); index >= gap; --index)
+      for (int index = static_cast<int>(m_state.bufferLength); index >= gap; --index)
       {
         if (static_cast<std::size_t>(index) + 1 < buffer.size())
         {
           buffer[static_cast<std::size_t>(index) + 1] = buffer[static_cast<std::size_t>(index)];
         }
       }
-      ++state.bufferLength;
+      ++m_state.bufferLength;
 
       /*
        * 6502: DAL3 -- step back over the whole run of spaces this gap belongs to. A still holds
@@ -256,19 +259,21 @@ namespace Elite
      */
     std::uint8_t rotor = 0;
 
-    while (state.bufferLength != 0)
+    while (m_state.bufferLength != 0)
     {
-      if (state.bufferLength <= LINE_WIDTH)
+      if (m_state.bufferLength <= LINE_WIDTH)
       {
         // 6502: DA6 -- CPX #31 / BCC. Short enough to print as it stands.
-        Emit(state.bufferLength);
-        state.bufferLength = 0;
+        Emit(m_state.bufferLength);
+        m_state.bufferLength = 0;
         break;
       }
 
       rotor = static_cast<std::uint8_t>(rotor >> 1);
 
-      const bool broke = PadToWidth(rotor);
+      const PadResult padded = PadToWidth(rotor);
+      rotor = padded.rotor;
+      const bool broke = padded.broke;
 
       // 6502: DA2 -- thirty characters and a newline. The space that broke the line goes with
       // them, which is why the subtraction below takes thirty-ONE away: CHPR returns with the
@@ -278,12 +283,12 @@ namespace Elite
 
       if (!broke)
       {
-        state.bufferLength = 0;
+        m_state.bufferLength = 0;
         break;
       }
 
-      state.bufferLength = static_cast<std::uint8_t>(state.bufferLength - LINE_WIDTH - 1);
-      if (state.bufferLength == 0)
+      m_state.bufferLength = static_cast<std::uint8_t>(m_state.bufferLength - LINE_WIDTH - 1);
+      if (m_state.bufferLength == 0)
       {
         break;
       }
@@ -292,7 +297,7 @@ namespace Elite
        * 6502: DAL4 -- move what is left down to the front. X is one more than the count, so the
        * original copies one byte more than there is text; DTW5 stops it ever being printed.
        */
-      for (std::size_t index = 0; index <= static_cast<std::size_t>(state.bufferLength); ++index)
+      for (std::size_t index = 0; index <= static_cast<std::size_t>(m_state.bufferLength); ++index)
       {
         const std::size_t source = index + LINE_WIDTH + 1u;
         if (index >= buffer.size())
@@ -362,11 +367,11 @@ namespace Elite
     if (_byte < FIRST_CHARACTER)
     {
       // 6502: DT3 -- a control code, dispatched through the JMTB jump table.
-      RunControlCode(_byte);
+      RunTextCode(_byte);
       return;
     }
 
-    if ((m_characters.state.toLineBuffer & 0x80u) != 0u)
+    if ((m_characters.State().toLineBuffer & 0x80u) != 0u)
     {
       /*
        * 6502: BIT DTW3 / BPL DT8.
@@ -411,7 +416,7 @@ namespace Elite
 
   void ExtendedTokenPrinter::PrintCharacter(std::uint8_t _character) noexcept
   {
-    ExtendedTextState& state = m_characters.state;
+    ExtendedTextState& state = m_characters.State();
 
     if (_character >= UPPER_A)
     {
@@ -467,9 +472,9 @@ namespace Elite
   // The control codes
   // ======================================================================================
 
-  void ExtendedTokenPrinter::RunControlCode(std::uint8_t _code) noexcept
+  void ExtendedTokenPrinter::RunTextCode(std::uint8_t _code) noexcept
   {
-    ExtendedTextState& state = m_characters.state;
+    ExtendedTextState& state = m_characters.State();
 
     switch (_code)
     {
@@ -521,9 +526,10 @@ namespace Elite
     case 8:
       // 6502: MT8 -- LDA #6 / JSR DOXC, then DTW2. The column belongs to the canvas and goes to
       // the seam; the flag belongs here.
-      if (m_controls != nullptr)
+      ++m_codesThatLeft;
+      if (m_universe != nullptr && m_ports != nullptr)
       {
-        m_controls->Run(_code);
+        RunControlCode(*m_universe, *m_ports, _code);
       }
       state.sentenceStart = 0xFF;
       return;
@@ -572,9 +578,10 @@ namespace Elite
       // are text state and are set here; the rest is the seam's.
       state.sentenceStart = 0xFF;
       m_recursive.SetCaseFlags(0x80);
-      if (m_controls != nullptr)
+      ++m_codesThatLeft;
+      if (m_universe != nullptr && m_ports != nullptr)
       {
-        m_controls->Run(_code);
+        RunControlCode(*m_universe, *m_ports, _code);
       }
       return;
 
@@ -595,9 +602,10 @@ namespace Elite
        * WHITETEXT between them is an RTS in this version; the C64's text is one colour. So all
        * that is left besides the cursor move is MT13's pair of stores, which land here.
        */
-      if (m_controls != nullptr)
+      ++m_codesThatLeft;
+      if (m_universe != nullptr && m_ports != nullptr)
       {
-        m_controls->Run(_code);
+        RunControlCode(*m_universe, *m_ports, _code);
       }
       state.alwaysLower = 0x80;
       state.lowerCaseBits = 0x20;
@@ -623,9 +631,10 @@ namespace Elite
        * the two bytes before the table and jumps to $6060. No token can contain it either --
        * zero is what terminates one.
        */
-      if (m_controls != nullptr)
+      ++m_codesThatLeft;
+      if (m_universe != nullptr && m_ports != nullptr)
       {
-        m_controls->Run(_code);
+        RunControlCode(*m_universe, *m_ports, _code);
       }
       return;
     }
@@ -633,7 +642,7 @@ namespace Elite
 
   void ExtendedTokenPrinter::PrintSystemAdjective() noexcept
   {
-    ExtendedTextState& state = m_characters.state;
+    ExtendedTextState& state = m_characters.State();
 
     // 6502: MT17 -- LDA QQ17 / AND #%10111111. Clearing the "first letter seen" bit makes the
     // recursive printer capitalise the name again.
@@ -669,7 +678,7 @@ namespace Elite
   void ExtendedTokenPrinter::PrintRandomWord() noexcept
   {
     // 6502: JSR MT19 -- upper case for one letter, which is the word's initial.
-    m_characters.state.caseMask = 0xDF;
+    m_characters.State().caseMask = 0xDF;
 
     /*
      * 6502: JSR DORND / AND #3 / TAY, then the loop.

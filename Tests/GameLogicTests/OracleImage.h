@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include <unordered_map>
 
 /*
@@ -75,6 +76,21 @@ namespace Elite::Testing
       return m_blockCount;
     }
 
+    /*
+     * The coverage mode (M6-0-f). While recording, every processor `Fresh()` hands out marks the
+     * addresses it executes and the traps it hits on this image, and `TakeCoverage` turns the
+     * marks since the last take into the labels at those addresses -- which is what the portable
+     * runner writes per test, and what `tools/inventory.py --coverage` reads against the ledger's
+     * Port rows. Off by default, and a test that never asks costs nothing.
+     */
+    struct Coverage
+    {
+      std::vector<std::string> executed; ///< labels whose address an instruction was fetched from
+      std::vector<std::string> trapped;  ///< labels a trap answered for, which is reached and not run
+    };
+    static void RecordCoverage(bool _on) noexcept;
+    [[nodiscard]] Coverage TakeCoverage() const;
+
   private:
     OracleImage(const char* _labelsFile, const char* _binariesFile);
 
@@ -84,6 +100,10 @@ namespace Elite::Testing
 
     std::array<std::uint8_t, 65536> m_memory{};
     std::unordered_map<std::string, std::uint16_t> m_labels;
+
+    static inline bool s_recording = false;
+    mutable std::bitset<65536> m_executed{};
+    mutable std::bitset<65536> m_trapped{};
   };
 
 } // namespace Elite::Testing

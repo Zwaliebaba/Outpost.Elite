@@ -1,9 +1,12 @@
 #include "pch.h"
 
+#include "NullSeams.h"
+
 #include "OracleImage.h"
 
 #include "Canvas.h"
 #include "Commander.h"
+#include "Controls.h"
 #include "ExtendedTokens.h"
 #include "Market.h"
 #include "Rng.h"
@@ -23,7 +26,7 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 using Elite::Canvas;
 using Elite::CharacterPrinter;
 using Elite::DigitResult;
-using Elite::KeySource;
+using Elite::Keyboard;
 using Elite::NumberEntry;
 using Elite::TextState;
 using Elite::Testing::Cpu6502;
@@ -68,7 +71,7 @@ namespace GameLogicTests
      * caught mutation into a dead process with no named failing test. Found exactly that way, by a
      * mutation that asked for a thirteenth key.
      */
-    class ScriptedKeys : public KeySource
+    class ScriptedKeys : public Keyboard
     {
     public:
       explicit ScriptedKeys(std::vector<std::uint8_t> _keys) noexcept
@@ -76,7 +79,14 @@ namespace GameLogicTests
       {
       }
 
-      std::uint8_t NextKey() override
+      /// 6502: the matrix walk and FLKB, which no trading screen reaches -- `TT217` is its input.
+      [[nodiscard]] bool Held(std::size_t) override
+      {
+        return false;
+      }
+      void Flush() override {}
+
+      [[nodiscard]] std::uint8_t NextKey() override
       {
         if (m_taken >= m_keys.size())
         {
@@ -232,30 +242,25 @@ namespace GameLogicTests
              std::to_wstring(_port.size()) + L"; game " + window(_game, at) + L", port " + window(_port, at);
     }
 
-    /// The seams a trading screen reaches, recorded rather than performed -- so the two sides can be
-    /// compared on WHEN they were reached as well as on what was printed.
-    class RecordingEffects : public Elite::TradeScreenEffects
+    /*
+     * What is left of the seams a trading screen reaches, which is the WAIT (M3-b-3b).
+     *
+     * `TRADEMODE`, `CLYNS` and `TT66` were three more entries in this log and are `SetUpScreen` and
+     * `ClearMessageRows` now, so they run on both machines and land in the character stream the
+     * sweep already compares. `dn2` is half gone: `JSR BEEP` runs on both sides, and `JMP DELAY`
+     * cannot -- `DELAY` calls `WSCAN`, which waits for a raster line that a flat-memory interpreter
+     * never reaches, so the oracle keeps its trap on `dn2` and this counts the port's wait against
+     * it. That is `Presenter`'s reason for existing, stated by a test that would hang without it.
+     */
+    class RecordingEffects : public Elite::Presenter
     {
     public:
-      void SetUpTradeScreen(std::uint8_t _view) override
-      {
-        log.push_back(static_cast<std::uint32_t>(0x100u + _view));
-      }
-      void ClearBottomRows() override
-      {
-        log.push_back(0x200u);
-      }
-      void BeepAndPause() override
+      void Present() override {}
+      void HoldFlightFrame(std::uint8_t) override {}
+      void HoldTitleFrame(std::uint8_t) override {}
+      void WaitFrames(std::uint8_t) override
       {
         log.push_back(0x300u);
-      }
-      void ClearToView(std::uint8_t _view) override
-      {
-        log.push_back(static_cast<std::uint32_t>(0x400u + _view));
-      }
-      void ResetMissileIndicators() override
-      {
-        log.push_back(0x500u);
       }
 
       std::vector<std::uint32_t> log;
@@ -341,7 +346,8 @@ namespace GameLogicTests
         Canvas canvas;
         TextState text;
         Elite::TextPrinter screen(canvas, text);
-        CharacterPrinter characters(screen);
+        Elite::ExtendedTextState sentences;
+        CharacterPrinter characters(screen, sentences);
         ScriptedKeys keys(script.keys);
 
         std::vector<std::uint8_t> ourEchoed;
@@ -361,7 +367,8 @@ namespace GameLogicTests
           std::vector<std::uint8_t>& m_into;
         };
         Recording recording(ourEchoed);
-        CharacterPrinter recordingCharacters(recording);
+        Elite::ExtendedTextState recordingSentences;
+        CharacterPrinter recordingCharacters(recording, recordingSentences);
 
         const NumberEntry entry = Elite::ReadNumber(keys, recordingCharacters, text, script.available);
 
@@ -369,7 +376,7 @@ namespace GameLogicTests
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
         Assert::AreEqual(run.keysTaken, keys.Taken(), (where + L": how many keys were read").c_str());
         Assert::AreEqual(cpu.memory[r], entry.value, (where + L": the number in R").c_str());
-        Assert::AreEqual(cpu.memory[col2], text.cellColour, (where + L": the text colour on exit").c_str());
+        Assert::AreEqual(cpu.memory[col2], text.palette.Byte(), (where + L": the text colour on exit").c_str());
 
         /*
          * What a CALLER can tell apart, which is less than this enum carries.
@@ -432,8 +439,6 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t chpr = oracle.Label("CHPR");
       const std::uint16_t tt217 = oracle.Label("TT217");
-      const std::uint16_t trademode = oracle.Label("TRADEMODE");
-      const std::uint16_t clyns = oracle.Label("CLYNS");
       const std::uint16_t dn2 = oracle.Label("dn2");
 
       struct Scenario
@@ -475,19 +480,26 @@ namespace GameLogicTests
         // ---- the shipped routine ------------------------------------------------------------
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
-        cpu.AddTrap(trademode);
-        cpu.AddTrap(clyns);
         cpu.AddTrap(dn2);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
-        Elite::Commander commander = Elite::DefaultCommander();
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * The screens take `(Universe&, Ports&)` since M3-a-3, so every byte one of them reads has
+         * to be this object's; the aliases keep the rest of the fixture reading as it did, and a
+         * test that assigned to one of them would be writing the byte the routine reads.
+         */
+        Elite::Universe universe;
+        universe.commander = Elite::DefaultCommander();
+        Elite::Commander& commander = universe.commander;
         commander.cash.tenths = (scenario.cash);
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
           commander.cargoHold[item] = scenario.alreadyHeld;
         }
 
-        Elite::MarketState market;
+        Elite::MarketState& market = universe.market;
         market.randomiser = RANDOMISER;
         for (std::size_t item = 0; item < Elite::MARKET_ITEM_COUNT; ++item)
         {
@@ -511,7 +523,8 @@ namespace GameLogicTests
           cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ20") + item)] = scenario.alreadyHeld;
         }
 
-        // The state TRADEMODE would have left, since it is trapped on both sides.
+        // The state TRADEMODE leaves -- seeded because the screens are entered below TRADEMODE
+        // rather than through it, and it is what the port's `SetUpScreen` writes on entry.
         cpu.memory[oracle.Label("QQ17")] = 0;
         cpu.memory[oracle.Label("XC")] = 1;
         cpu.memory[oracle.Label("YC")] = 1;
@@ -538,14 +551,6 @@ namespace GameLogicTests
             expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8) |
                                (static_cast<std::uint32_t>(hit.watched[1]) << 16));
           }
-          else if (hit.address == trademode)
-          {
-            gameEffects.push_back(0x100u + hit.a);
-          }
-          else if (hit.address == clyns)
-          {
-            gameEffects.push_back(0x200u);
-          }
           else if (hit.address == dn2)
           {
             gameEffects.push_back(0x300u);
@@ -554,14 +559,14 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         RecordingSink sink;
-        Elite::TextState text;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0;
         sink.cursor = &text;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::CharacterPrinter characters(sink, universe.sentences);
+        characters.State().sentenceStart = 0xFF;
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
 
         /*
@@ -573,20 +578,25 @@ namespace GameLogicTests
          * has one TT27 and one QQ17: a screen that owned its own would be a second token printer.
          */
         static constexpr std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> NAME = {'J', 'A', 'M', 'E', 'S', 'O', 'N', 13};
-        Elite::SystemSeeds current = commander.galaxySeeds;
-        Elite::SystemSeeds selected = commander.galaxySeeds;
+        Elite::SystemSeeds& current = universe.current.seeds;
+        current = commander.galaxySeeds;
+        Elite::SystemSeeds& selected = universe.selectedSeeds;
+        selected = commander.galaxySeeds;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(NAME), current,
                                   selected, false);
         printer.SetValueTokens(&values);
-        printer.SetCursor(&text);
 
         ScriptedKeys keys(scenario.keys);
         RecordingEffects effects;
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
-        Elite::TradeScreen screen{printer, characters, extended, text, keys, effects, rng};
+        NullSeams nulls;
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer,  characters, sink, sid,
+                           extended, effects, keys, nulls};
 
-        Elite::BuyScreen(screen, commander, market, ECONOMY, false);
+        universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
+        Elite::BuyScreen(universe, ports, false);
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
@@ -652,8 +662,6 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t chpr = oracle.Label("CHPR");
       const std::uint16_t tt217 = oracle.Label("TT217");
-      const std::uint16_t trademode = oracle.Label("TRADEMODE");
-      const std::uint16_t clyns = oracle.Label("CLYNS");
       const std::uint16_t dn2 = oracle.Label("dn2");
       const std::uint16_t rand = oracle.Label("RAND");
 
@@ -712,12 +720,19 @@ namespace GameLogicTests
         // ---- the shipped routine ------------------------------------------------------------
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
-        cpu.AddTrap(trademode);
-        cpu.AddTrap(clyns);
         cpu.AddTrap(dn2);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
-        Elite::Commander commander = Elite::DefaultCommander();
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * The screens take `(Universe&, Ports&)` since M3-a-3, so every byte one of them reads has
+         * to be this object's; the aliases keep the rest of the fixture reading as it did, and a
+         * test that assigned to one of them would be writing the byte the routine reads.
+         */
+        Elite::Universe universe;
+        universe.commander = Elite::DefaultCommander();
+        Elite::Commander& commander = universe.commander;
         commander.cash.tenths = (1000);
         commander.cargoCapacity = scenario.capacity;
         commander.tribbles.lo = static_cast<std::uint8_t>(scenario.trumbles & 0xFFu);
@@ -727,7 +742,7 @@ namespace GameLogicTests
           commander.cargoHold[item] = scenario.held;
         }
 
-        Elite::MarketState market;
+        Elite::MarketState& market = universe.market;
         market.randomiser = RANDOMISER;
         for (auto& stock : market.availability)
         {
@@ -741,7 +756,7 @@ namespace GameLogicTests
           cpu.memory[static_cast<std::uint16_t>(rand + index)] = SEED[index];
         }
         cpu.memory[oracle.Label("CRGO")] = scenario.capacity;
-        cpu.memory[oracle.Label("QQ14")] = commander.fuel;
+        cpu.memory[oracle.Label("QQ14")] = commander.fuel.tenths;
         cpu.memory[oracle.Label("GCNT")] = commander.galaxyNumber;
         cpu.memory[oracle.Label("QQ28")] = ECONOMY;
         cpu.memory[oracle.Label("QQ26")] = RANDOMISER;
@@ -793,14 +808,6 @@ namespace GameLogicTests
             expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8) |
                                (static_cast<std::uint32_t>(hit.watched[1]) << 16));
           }
-          else if (hit.address == trademode)
-          {
-            gameEffects.push_back(0x100u + hit.a);
-          }
-          else if (hit.address == clyns)
-          {
-            gameEffects.push_back(0x200u);
-          }
           else if (hit.address == dn2)
           {
             gameEffects.push_back(0x300u);
@@ -809,38 +816,44 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         RecordingSink sink;
-        Elite::TextState text;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0;
         sink.cursor = &text;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::CharacterPrinter characters(sink, universe.sentences);
+        characters.State().sentenceStart = 0xFF;
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-        Elite::SystemSeeds current = seeds;
-        Elite::SystemSeeds selected = seeds;
+        Elite::SystemSeeds& current = universe.current.seeds;
+        current = seeds;
+        Elite::SystemSeeds& selected = universe.selectedSeeds;
+        selected = seeds;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
-        printer.SetCursor(&text);
 
         ScriptedKeys keys(scenario.keys);
         RecordingEffects effects;
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         rng.SetState(SEED);
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
-        Elite::TradeScreen screen{printer, characters, extended, text, keys, effects, rng};
+        NullSeams nulls;
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer,  characters, sink, sid,
+                           extended, effects, keys, nulls};
+
+        universe.current.economy = ECONOMY; // 6502: QQ28 -- the byte the screen reads, not an argument
 
         if (inventory)
         {
-          Elite::InventoryScreen(screen, commander, market, ECONOMY);
+          Elite::InventoryScreen(universe, ports);
         }
         else
         {
-          Elite::ListCargo(screen, commander, market, ECONOMY, scenario.view);
+          Elite::ListCargo(universe, ports, scenario.view);
         }
 
         // ---- compare -------------------------------------------------------------------------
@@ -906,7 +919,6 @@ namespace GameLogicTests
 
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t chpr = oracle.Label("CHPR");
-      const std::uint16_t trademode = oracle.Label("TRADEMODE");
 
       struct Situation
       {
@@ -950,7 +962,16 @@ namespace GameLogicTests
       {
         const std::wstring where = Widen(std::string("STATUS: ") + s.what);
 
-        Elite::Commander commander = Elite::DefaultCommander();
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * The screens take `(Universe&, Ports&)` since M3-a-3, so every byte one of them reads has
+         * to be this object's; the aliases keep the rest of the fixture reading as it did, and a
+         * test that assigned to one of them would be writing the byte the routine reads.
+         */
+        Elite::Universe universe;
+        universe.commander = Elite::DefaultCommander();
+        Elite::Commander& commander = universe.commander;
         commander.legalStatus = s.legal;
         commander.kills.lo = static_cast<std::uint8_t>(s.kills & 0xFFu);
         commander.kills.hi = static_cast<std::uint8_t>(s.kills >> 8);
@@ -963,7 +984,7 @@ namespace GameLogicTests
         commander.galacticDrive = s.galactic;
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          commander.lasers[mount] = s.lasers[mount];
+          commander.lasers[mount].byte = s.lasers[mount];
         }
 
         constexpr std::uint8_t CROSSHAIR_X = 30;
@@ -972,7 +993,8 @@ namespace GameLogicTests
         // ---- the shipped routine -----------------------------------------------------------
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
-        cpu.AddTrap(trademode);
+        // `NLIN` is trapped because this compares the text and not the canvas; the rule itself is
+        // `DrawTitleRule` and is compared on its own in `ChartTests` (M6-0-e).
         cpu.AddTrap(oracle.Label("NLIN"));
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
@@ -1001,7 +1023,7 @@ namespace GameLogicTests
 
         // The status screen's top four lines print the fuel and the cash through control codes 5
         // and 0, which is not obvious from its source -- they arrive inside recursive token 126.
-        cpu.memory[oracle.Label("QQ14")] = commander.fuel;
+        cpu.memory[oracle.Label("QQ14")] = commander.fuel.tenths;
         cpu.memory[oracle.Label("GCNT")] = commander.galaxyNumber;
         for (std::size_t index = 0; index < 4; ++index)
         {
@@ -1050,32 +1072,38 @@ namespace GameLogicTests
 
         // ---- the port ------------------------------------------------------------------------
         RecordingSink sink;
-        Elite::TextState text;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0;
         sink.cursor = &text;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::CharacterPrinter characters(sink, universe.sentences);
+        characters.State().sentenceStart = 0xFF;
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-        Elite::SystemSeeds current = galaxy;
-        Elite::SystemSeeds selected = galaxy;
+        Elite::SystemSeeds& current = universe.current.seeds;
+        current = galaxy;
+        Elite::SystemSeeds& selected = universe.selectedSeeds;
+        selected = galaxy;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
-        printer.SetCursor(&text);
 
         ScriptedKeys keys({});
         RecordingEffects effects;
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
-        Elite::TradeScreen screen{printer, characters, extended, text, keys, effects, rng};
+        NullSeams nulls;
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer,  characters, sink, sid,
+                           extended, effects, keys, nulls};
 
         const Elite::ShipCondition condition{s.docked, s.junk, s.firstShip, s.energy};
-        Elite::StatusScreen(screen, commander, condition, CROSSHAIR_X, CROSSHAIR_Y, selected);
+        universe.crosshairX = CROSSHAIR_X; // 6502: QQ9 and QQ10, which the screen reads for `TT111`
+        universe.crosshairY = CROSSHAIR_Y;
+        Elite::StatusScreen(universe, ports, condition);
 
         if (sink.stamped != expected)
         {
@@ -1131,10 +1159,7 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
       const std::uint16_t chpr = oracle.Label("CHPR");
       const std::uint16_t tt217 = oracle.Label("TT217");
-      const std::uint16_t trademode = oracle.Label("TRADEMODE");
-      const std::uint16_t clyns = oracle.Label("CLYNS");
       const std::uint16_t dn2 = oracle.Label("dn2");
-      const std::uint16_t tt66 = oracle.Label("TT66");
       const std::uint16_t msblob = oracle.Label("msblob");
 
       struct Scenario
@@ -1213,9 +1238,18 @@ namespace GameLogicTests
       {
         const std::wstring where = Widen(std::string("EQSHP: ") + s.what);
 
-        Elite::Commander commander = Elite::DefaultCommander();
+        /*
+         * The universe, and the names below are ALIASES INTO IT rather than separate objects.
+         *
+         * The screens take `(Universe&, Ports&)` since M3-a-3, so every byte one of them reads has
+         * to be this object's; the aliases keep the rest of the fixture reading as it did, and a
+         * test that assigned to one of them would be writing the byte the routine reads.
+         */
+        Elite::Universe universe;
+        universe.commander = Elite::DefaultCommander();
+        Elite::Commander& commander = universe.commander;
         commander.cash.tenths = (s.cash);
-        commander.fuel = s.fuel;
+        commander.fuel.tenths = s.fuel;
         commander.cargoCapacity = s.capacity;
         commander.missiles = s.missiles;
         commander.ecm = s.fitted[0];
@@ -1227,17 +1261,13 @@ namespace GameLogicTests
         commander.galacticDrive = s.fitted[6];
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          commander.lasers[mount] = s.lasers[mount];
+          commander.lasers[mount].byte = s.lasers[mount];
         }
 
         // ---- the shipped routine ------------------------------------------------------------
         Cpu6502 cpu = oracle.Fresh();
         cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
-        cpu.AddTrap(trademode);
-        cpu.AddTrap(clyns);
         cpu.AddTrap(dn2);
-        cpu.AddTrap(tt66);
-        cpu.AddTrap(msblob);
         cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 
         cpu.memory[oracle.Label("tek")] = s.tech;
@@ -1288,55 +1318,65 @@ namespace GameLogicTests
             expected.push_back(static_cast<std::uint32_t>(hit.a) | (static_cast<std::uint32_t>(hit.watched[0]) << 8) |
                                (static_cast<std::uint32_t>(hit.watched[1]) << 16));
           }
-          else if (hit.address == trademode)
-          {
-            gameEffects.push_back(0x100u + hit.a);
-          }
-          else if (hit.address == clyns)
-          {
-            gameEffects.push_back(0x200u);
-          }
           else if (hit.address == dn2)
           {
             gameEffects.push_back(0x300u);
-          }
-          else if (hit.address == tt66)
-          {
-            gameEffects.push_back(0x400u + hit.a);
-          }
-          else if (hit.address == msblob)
-          {
-            gameEffects.push_back(0x500u);
           }
         }
 
         // ---- the port ------------------------------------------------------------------------
         RecordingSink sink;
-        Elite::TextState text;
+        Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0;
         sink.cursor = &text;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
-        Elite::TokenPrinter printer(characters);
+        Elite::CharacterPrinter characters(sink, universe.sentences);
+        characters.State().sentenceStart = 0xFF;
+        Elite::TokenPrinter printer(characters, text);
         printer.SetCaseFlags(0);
 
         const std::array<std::uint8_t, Elite::COMMANDER_NAME_SIZE> name = Elite::DefaultCommanderName();
-        Elite::SystemSeeds current = commander.galaxySeeds;
-        Elite::SystemSeeds selected = commander.galaxySeeds;
+        Elite::SystemSeeds& current = universe.current.seeds;
+        current = commander.galaxySeeds;
+        Elite::SystemSeeds& selected = universe.selectedSeeds;
+        selected = commander.galaxySeeds;
         Elite::StateTokens values(printer, text, commander, std::span<const std::uint8_t, Elite::COMMANDER_NAME_SIZE>(name), current,
                                   selected, false);
         printer.SetValueTokens(&values);
-        printer.SetCursor(&text);
 
         ScriptedKeys keys(s.keys);
         RecordingEffects effects;
-        Elite::Rng rng;
+        Elite::Rng& rng = universe.rng;
         Elite::ExtendedTokenPrinter extended(characters, printer, rng);
-        Elite::TradeScreen screen{printer, characters, extended, text, keys, effects, rng};
+        NullSeams nulls;
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer,  characters, sink, sid,
+                           extended, effects, keys, nulls};
 
-        Elite::EquipShipScreen(screen, commander, s.tech);
+        universe.current.techLevel = s.tech; // 6502: tek -- the byte the shop reads
+
+        /*
+         * 6502: msblob -- the ONE thing in this screen that touches the canvas (M3-b-1e).
+         *
+         * It was a seam and the comparison counted it; `Dashboard.cpp` has had the routine since
+         * slice 3d-d-iii-b, so the shop calls it. Nothing else here draws -- the text goes into
+         * `RecordingSink` and `CLYNS`, `TT66` and `dn2` are still seams -- so a canvas that changed
+         * is a `msblob` that ran, and one that did not is a call that went missing.
+         */
+        std::uint32_t inkBefore = 0;
+        for (const std::uint8_t byte : universe.canvas.Screen())
+        {
+          inkBefore += (byte != 0u) ? 1u : 0u;
+        }
+
+        Elite::EquipShipScreen(universe, ports);
+
+        std::uint32_t inkAfter = 0;
+        for (const std::uint8_t byte : universe.canvas.Screen())
+        {
+          inkAfter += (byte != 0u) ? 1u : 0u;
+        }
 
         // ---- compare -------------------------------------------------------------------------
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
@@ -1351,6 +1391,12 @@ namespace GameLogicTests
         for (std::size_t index = 0; index < gameEffects.size(); ++index)
         {
           Assert::AreEqual(gameEffects[index], effects.log[index], (where + L": seam " + std::to_wstring(index)).c_str());
+        }
+
+        // And `msblob`, which a count cannot say any more: a missile bought redraws the indicators.
+        if (commander.missiles > s.missiles)
+        {
+          Assert::IsTrue(inkAfter != inkBefore, (where + L": msblob redrew the missile indicators").c_str());
         }
 
         // Everything a purchase can change.
@@ -1374,12 +1420,13 @@ namespace GameLogicTests
         };
         for (const Check& check : CHECKS)
         {
-          Assert::AreEqual(cpu.memory[check.address], commander.ToBytes()[static_cast<std::size_t>(check.field)], (where + L": " + Widen(check.name)).c_str());
+          Assert::AreEqual(cpu.memory[check.address], commander.ToBytes()[static_cast<std::size_t>(check.field)],
+                           (where + L": " + Widen(check.name)).c_str());
         }
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)],
-                           commander.lasers[mount],
+                           commander.lasers[mount].byte,
                            (where + L": laser mount " + std::to_wstring(mount)).c_str());
         }
         for (std::size_t index = 0; index < 4; ++index)

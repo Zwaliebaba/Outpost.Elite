@@ -2,6 +2,8 @@
 
 #include "Shell.h"
 
+#include "Game.h"
+
 #include "FlightSession.h"
 #include "Presentation.h"
 #include "SoundOutput.h"
@@ -20,7 +22,6 @@ namespace Outpost
   namespace
   {
     /// 6502: dn2 -- JSR BEEP / LDY #50 / JMP DELAY.
-    constexpr std::uint8_t BEEP_PAUSE_FRAMES = 50;
 
   } // namespace
 
@@ -46,9 +47,10 @@ namespace Outpost
      * here are what the device plays while this thread waits on the display, and a queue filled
      * afterwards would be a frame later than it needs to be.
      */
-    if (m_audio != nullptr && m_sound != nullptr && m_music != nullptr)
+    if (m_audio != nullptr && m_sound != nullptr && m_music != nullptr && m_game != nullptr)
     {
-      m_audio->Pump(*m_sound, *m_music);
+      m_audio->Pump(*m_sound, *m_music, m_game->Sounds());
+      m_game->ClearSounds();
     }
 
     if (!m_window.Pump())
@@ -76,7 +78,7 @@ namespace Outpost
       return !m_window.Closed();
     }
 
-    return m_presenter.Present(m_canvas, m_video, width, height);
+    return m_presenter.Present(*m_canvas, m_video, width, height);
   }
 
   std::uint8_t GameShell::NextKey()
@@ -119,13 +121,6 @@ namespace Outpost
 
   // ---- the screen -------------------------------------------------------------------------------
 
-  void GameShell::SetUpTradeScreen(std::uint8_t _view)
-  {
-    // 6502: TRADEMODE -- TT66, then FLKB, then DOVDU19 (a palette change this build does not act on).
-    ClearToView(_view);
-    FlushKeyboard();
-  }
-
   void GameShell::ClearToView(std::uint8_t _view)
   {
     /*
@@ -143,55 +138,13 @@ namespace Outpost
      * path puts both back. A docked screen reached through the old three calls after a launch would
      * have kept the flight settings and drawn its bottom seven rows as multicolour nonsense.
      */
-    if (m_flight == nullptr)
+    if (m_flight == nullptr || m_ports == nullptr)
     {
-      m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the universe
+      *m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the universe
       return;
     }
 
-    Elite::SetUpScreen(m_flight->Universe(), m_flight->Ports(), _view);
-  }
-
-  void GameShell::ClearBottomRows()
-  {
-    if (m_text == nullptr || m_printer == nullptr || m_extended == nullptr || m_message == nullptr)
-    {
-      return;
-    }
-    Elite::ClearMessageRows(m_canvas, *m_printer, *m_text, *m_extended, *m_message);
-  }
-
-  void GameShell::ClearScreen()
-  {
-    // 6502: clss -- CHPR reaching past the last row clears the screen and prints again. The caller
-    // does the printing; this is the clear.
-    ClearToView(m_view);
-  }
-
-  void GameShell::BeepAndPause()
-  {
-    Beep();
-    WaitFrames(BEEP_PAUSE_FRAMES);
-  }
-
-  void GameShell::Beep()
-  {
-    // 6502: BEEP -- and every caller on this side (dn2, R5, DK4) drops the carry it returns.
-    if (m_sound != nullptr)
-    {
-      (void)Elite::Beep(*m_sound, false);
-    }
-  }
-
-  void GameShell::ResetMissileIndicators()
-  {
-    // 6502: msblob -- ported in slice 3d-d-iii-b, because `KILLSHP`'s seam needed it, so this is a
-    // forward rather than a stub. `NOMSL` is the commander's, which is why the count is passed
-    // rather than read: the routine draws as many blocks as the ship still carries.
-    if (m_flight != nullptr)
-    {
-      Elite::ResetMissileIndicators(m_canvas, m_flight->Universe().commander.missiles);
-    }
+    Elite::SetUpScreen(m_flight->Universe(), *m_ports, _view);
   }
 
   // ---- waiting and the keyboard ------------------------------------------------------------------
@@ -213,66 +166,28 @@ namespace Outpost
     }
   }
 
-  void GameShell::FlushKeyboard()
+  void GameShell::Flush()
   {
     m_window.FlushKeys(); // 6502: FLKB
   }
 
-  void GameShell::ClearKeyLogger()
+  bool GameShell::Held(std::size_t _key)
   {
-    m_window.FlushKeys(); // 6502: ZEKTRAN -- sixty-five bytes of KEYLOOK and `thiskey`
+    // 6502: the matrix walk's read of one row. Everything around it -- the `SETL1` bracket, the
+    // sprite mask, `ZEKTRAN`'s clear and the countdown that produces `thiskey` -- is
+    // `Elite::ScanKeyboard`'s since M3-b-3d.
+    return m_window.Held(static_cast<std::uint8_t>(_key));
   }
 
   // ---- the start sequence -------------------------------------------------------------------------
 
-  void GameShell::ResetUniverse()
-  {
-    // 6502: RESET, and it falls into RES2 rather than calling it -- which is why the port's
-    // `ResetGame` ends with `ResetShipAndBubble` and this does not call `ResetShip` as well.
-    if (m_flight != nullptr && m_dockedFlag != nullptr)
-    {
-      Elite::ResetGame(m_flight->Universe(), m_flight->Ports(), *m_dockedFlag);
-    }
-  }
-
-  void GameShell::ResetShip()
-  {
-    /*
-     * 6502: RES2 -- the ship, both line heaps, the dashboard state and the stardust.
-     *
-     * This was the shell's own approximation of one instruction of it (`LDA #&10 / STA COL2`) for
-     * as long as the stardust, the heaps and the dashboard were phase 3's. All three exist, so the
-     * seam is gone and the routine runs: §6.73's rule, which is that a seam scoped before the thing
-     * behind it existed has to be revisited once it does.
-     *
-     * It is NOT idempotent, and the cold start calls it twice (§6.25) -- once through `RESET`'s
-     * fall-through and once through `DEATH2`'s. The port reproduces both calls rather than
-     * collapsing them.
-     */
-    if (m_flight != nullptr)
-    {
-      Elite::ResetShipAndBubble(m_flight->Universe(), m_flight->Ports());
-    }
-  }
-
-  void GameShell::StartTheme()
-  {
-    // 6502: startat -- and BDENTRY's writes to the chip go through the output's direct log, so they
-    // land before the interrupt's next frame rather than being lost to it.
-    if (m_music != nullptr && m_audio != nullptr)
-    {
-      Elite::StartTheme(*m_music, m_audio->Direct());
-    }
-  }
-
-  void GameShell::StopTheme()
-  {
-    // 6502: stopat.
-    if (m_music != nullptr && m_sound != nullptr && m_audio != nullptr)
-    {
-      Elite::StopMusic(*m_music, *m_sound, m_audio->Direct());
-    }
-  }
+  /*
+   * `StartTheme` AND `StopTheme` WERE HERE AND ARE NOT ANY MORE (M3-b-2b).
+   *
+   * `startat` and `stopat` are `Elite::StartTheme` and `Elite::StopMusic` over `Universe::music`,
+   * and the start sequence calls them itself through `Ports::sid`. What this object was adding was
+   * the null checks, and the checks were on members that are always bound by the composition root.
+   */
 
   void GameShell::HoldFlightFrame(std::uint8_t _ships)
   {
@@ -311,7 +226,7 @@ namespace Outpost
     }
   }
 
-  void GameShell::ShowFrame()
+  void GameShell::Present()
   {
     /*
      * One circle of a launch or hyperspace tunnel has been drawn; show it and let a frame pass.
@@ -324,16 +239,13 @@ namespace Outpost
     WaitFrames(1u);
   }
 
-  Elite::TitleKey GameShell::ScanTitleKeys(Elite::KeyLogger& _keys)
+  void GameShell::HoldTitleFrame(std::uint8_t _distance)
   {
     /*
-     * 6502: JSR RDKEY at the bottom of `TLL2` -- and the PRESENT that comes with it on this
-     * platform.
-     *
      * `LL9` has just drawn the ship into the canvas and nothing else stands between this frame and
      * the next, so the turn belongs here: the C64 had a VIC-II showing the bitmap continuously and
-     * this does not. It is also the only place the keyboard can be read at all, because the table
-     * `Held` walks is filled by the message pump `Turn` runs.
+     * this does not. It is also what fills the table `Held` reads, because that is the message
+     * pump `Turn` runs -- so a scan without one of these would see a keyboard nobody had polled.
      */
     /*
      * AND THE WAIT, WHICH IS THE POINT. `TITLE` runs `MVEIT` and `LL9` and comes straight back
@@ -359,12 +271,11 @@ namespace Outpost
       m_lastSpin = now;
 
       /*
-       * The rate is read fresh every time because it CHANGES: the ship is a dot when it starts and
-       * a wireframe across the middle of the screen when it arrives, and those cost 15,600 and
-       * 121,276 cycles. `INWK+7` is the byte `TLL2` walks down, so it is what the curve is indexed
-       * by -- the port is reading the same counter the original's cost depends on.
+       * The rate changes as the sequence runs: the ship is a dot when it starts and a wireframe
+       * across the middle of the screen when it arrives, and those cost 15,600 and 121,276 cycles.
+       * `_distance` is `INWK+7`, the byte `TLL2` walks down, and the library passes it (M3-b-3d).
        */
-      const double period = TitleTurnSeconds(m_flight->Universe().work.z.hi);
+      const double period = TitleTurnSeconds(_distance);
 
       m_spinLeftover += elapsed;
       if (m_spinLeftover >= period)
@@ -375,99 +286,14 @@ namespace Outpost
         break;
       }
     }
-
-    return (m_flight != nullptr) ? m_flight->ScanMatrix(_keys) : Elite::TitleKey{true, 0u};
   }
 
-  std::uint8_t GameShell::ShowTitleScreen(std::uint8_t _token, Elite::ShipType _shipType, std::uint8_t _distance)
-  {
-    /*
-     * 6502: TITLE -- ported in full now, so this is a forward rather than a placeholder.
-     *
-     * The rotating ship was a box for as long as `LL9` was slice 3b's. It has not been since 3b
-     * landed; what kept the box was that nothing revisited the seam, which is the same pattern the
-     * launch path hit three times (§6.73). `AddShip` becoming public for `NWSPS` was the last piece.
-     *
-     * IT RETURNS `thiskey`, THE KEY NUMBER, and that is the fix as much as the ship is. `BR1`
-     * compares the answer against 39 -- the internal number for "Y" -- and this used to return
-     * `NextKey()`, which is the CHARACTER. 89 never equals 39, so the disk menu could not be opened
-     * from the title screen at all (§6.107).
-     */
-    if (m_flight == nullptr || m_extendedPrinter == nullptr || m_dockedFlag == nullptr)
-    {
-      return 0;
-    }
-
-    return Elite::ShowTitleShip(m_flight->Universe(), m_flight->Ports(), _token, _shipType, _distance);
-  }
+  /*
+   * `ShowTitleScreen` WAS HERE AND IS NOT ANY MORE (M6-0-h-2). It was a forward to
+   * `Elite::ShowTitleShip` -- 6502: TITLE, ported in full since §6.107 -- and `BR1` makes the
+   * call itself now, which is what `JSR TITLE` is.
+   */
 
   // ---- the control codes that leave the text system ------------------------------------------------
-
-  void GameShell::Run(std::uint8_t _code)
-  {
-    /*
-     * 6502: DT3 and the `JMTB` jump table, minus what the text system keeps for itself.
-     *
-     * NINE OF THESE MOVED INTO `GameLogic` in slice 4d-b. `MissionCodes` answers 8, 9, 22, 23, 24,
-     * 25, 27, 28 and 29 -- everything a mission briefing contains -- and this is the outer switch
-     * for the two that are not its: `CLYNS`, which belongs to the docked screens, and the codes
-     * nothing answers yet. What is left here is the null checks, because a control code can be
-     * printed before there is a flight session to run it on.
-     */
-    if (m_flight != nullptr && m_extendedPrinter != nullptr && m_text != nullptr && m_galaxy != nullptr)
-    {
-      Elite::MissionCodes codes{m_flight->Universe(), m_flight->Ports(), *m_galaxy};
-      if (codes.RunMissionCode(_code))
-      {
-        return;
-      }
-    }
-
-    switch (_code)
-    {
-    case 8:
-      /*
-       * 6502: MT8 -- LDA #6 / JSR DOXC, answered here only when there is no flight session.
-       *
-       * The docked screens print tokens before the universe is built, and this is the one code among
-       * them that a screen with no universe can still honour: it is a number into a byte.
-       */
-      if (m_text != nullptr)
-      {
-        m_text->column = Elite::MT8_COLUMN;
-      }
-      return;
-
-    case 9:
-      /*
-       * 6502: MT9, likewise. `DOXC` is `STA XC / RTS` and `TT66` gets the same 1 as its view.
-       *
-       * On the full path the column store is dead, because `TT66` writes `XC` itself; here there
-       * is no `TT66` to run (see `ClearToView`), so it is the only part of the code that happens.
-       */
-      if (m_text != nullptr)
-      {
-        m_text->column = Elite::MT9_COLUMN_AND_VIEW;
-      }
-      ClearToView(Elite::MT9_COLUMN_AND_VIEW);
-      return;
-
-    case 21:
-      // 6502: CLYNS -- the bottom rows, which belong to the docked screens rather than to a
-      // mission. The two flags it sets are the printer's and are already set.
-      ClearBottomRows();
-      return;
-
-    default:
-      /*
-       * 11 (`NLIN4`, a rule across the screen) is phase 3's, with the border box it belongs to.
-       *
-       * 26 (`MT26`, read a line) and 30, 31 (`FILEPR` and `OTHERFILEPR`, tokens under `DISK`) are
-       * what is left. `MT26` is ported and could be called from here; what it has no answer for
-       * yet is whose buffer the line goes into, and no token a mission prints contains one.
-       */
-      return;
-    }
-  }
 
 } // namespace Outpost

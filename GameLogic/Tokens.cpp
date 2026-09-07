@@ -55,6 +55,16 @@ namespace Elite
     constexpr std::uint8_t LOW_PHRASE_LAST = 31;
   } // namespace
 
+  std::uint8_t TokenPrinter::CaseFlags() const noexcept
+  {
+    return m_text.caseFlags;
+  }
+
+  void TokenPrinter::SetCaseFlags(std::uint8_t _flags) noexcept
+  {
+    m_text.caseFlags = _flags;
+  }
+
   void TokenPrinter::Print(std::uint8_t _token) noexcept
   {
     // Tokens 0 to 5 print values rather than text, and those values are game state.
@@ -75,23 +85,20 @@ namespace Elite
 
     if (_token == 6)
     {
-      m_caseFlags = FLAG_SENTENCE_CASE;
+      m_text.caseFlags = FLAG_SENTENCE_CASE;
       return;
     }
 
     if (_token == 8)
     {
-      m_caseFlags = 0;
+      m_text.caseFlags = 0;
       return;
     }
 
     if (_token == 9)
     {
       // 6502: crlf -- LDA #21 / JSR DOXC / JMP TT73. Tab to column 21, then a colon.
-      if (m_cursor != nullptr)
-      {
-        m_cursor->column = CONTROL_CODE_9_COLUMN;
-      }
+      m_text.column = CONTROL_CODE_9_COLUMN;
       Print(':');
       return;
     }
@@ -113,7 +120,7 @@ namespace Elite
 
   void TokenPrinter::PrintCharacter(std::uint8_t _character) noexcept
   {
-    const std::uint8_t flags = m_caseFlags;
+    const std::uint8_t flags = m_text.caseFlags;
 
     // Nothing asked for any transformation.
     if (flags == 0)
@@ -147,7 +154,7 @@ namespace Elite
         }
 
         // A non-letter ends the run, so the next letter starts a word again.
-        m_caseFlags = static_cast<std::uint8_t>(flags & ~FLAG_SEEN_FIRST_LETTER);
+        m_text.caseFlags = static_cast<std::uint8_t>(flags & ~FLAG_SEEN_FIRST_LETTER);
         m_sink.Put(_character);
         return;
       }
@@ -159,7 +166,7 @@ namespace Elite
         return;
       }
 
-      m_caseFlags = static_cast<std::uint8_t>(flags | FLAG_SEEN_FIRST_LETTER);
+      m_text.caseFlags = static_cast<std::uint8_t>(flags | FLAG_SEEN_FIRST_LETTER);
       m_sink.Put(_character);
       return;
     }
@@ -167,7 +174,7 @@ namespace Elite
     if ((flags & FLAG_SEEN_FIRST_LETTER) != 0u)
     {
       // 6502: TT46 -- clear the marker and print as-is.
-      m_caseFlags = static_cast<std::uint8_t>(flags & ~FLAG_SEEN_FIRST_LETTER);
+      m_text.caseFlags = static_cast<std::uint8_t>(flags & ~FLAG_SEEN_FIRST_LETTER);
       m_sink.Put(_character);
       return;
     }

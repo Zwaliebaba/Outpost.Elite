@@ -107,6 +107,7 @@
     <ClInclude Include="GoldenCanvas.h" />
     <ClInclude Include="FlightPort.h" />
     <ClInclude Include="FlightUniverse.h" />
+    <ClInclude Include="NullSeams.h" />
     <ClInclude Include="ShipBytes.h" />
     <ClInclude Include="UniverseImage.h" />
     <ClInclude Include="pch.h" />
@@ -133,8 +134,10 @@
     <ClCompile Include="GoldenTests.cpp" />
     <ClCompile Include="NumberTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
+    <ClCompile Include="GameTests.cpp" />
     <ClCompile Include="UniverseImage.cpp" />
     <ClCompile Include="UniverseImageTests.cpp" />
+    <ClCompile Include="StateHashTests.cpp" />
     <ClCompile Include="FlightReplayTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MissionTests.cpp" />

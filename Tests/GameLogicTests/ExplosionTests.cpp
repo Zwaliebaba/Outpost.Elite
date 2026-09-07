@@ -92,13 +92,23 @@ namespace GameLogicTests
     /// Put all seven where both sides can see them.
     void SeedVideoRegisters(Cpu6502& _cpu)
     {
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x02u)] = SPRITE_X_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x03u)] = SPRITE_Y_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x10u)] = SPRITE_X_HIGH_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x15u)] = SPRITE_ENABLE_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x17u)] = SPRITE_EXPAND_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x1Du)] = SPRITE_EXPAND_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x02u)) = SPRITE_X_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x03u)) = SPRITE_Y_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x10u)) = SPRITE_X_HIGH_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x15u)) = SPRITE_ENABLE_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x17u)) = SPRITE_EXPAND_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x1Du)) = SPRITE_EXPAND_SEED;
       _cpu.memory[IO_PORT] = IO_PORT_SEED;
+    }
+
+    /// The same seven bytes on the port's side, so that "left alone" is the same answer here.
+    void SeedVideoState(Elite::VideoState& _video, Elite::MemoryMap& _map)
+    {
+      _video.x[1] = static_cast<std::uint16_t>(SPRITE_X_SEED | ((SPRITE_X_HIGH_SEED & 0x02u) >> 1) << 8);
+      _video.y[1] = SPRITE_Y_SEED;
+      _video.enabled = SPRITE_ENABLE_SEED;
+      _video.expanded = SPRITE_EXPAND_SEED;
+      _map.port = IO_PORT_SEED;
     }
 
     /// 6502: SCBASE, derived as `CanvasTests.cpp` derives it -- from ylookup's first entry less the
@@ -181,49 +191,15 @@ namespace GameLogicTests
      * the fact that a call happened. Doing it here rather than in `GameLogic` is the point of the
      * seam: the read-modify-writes belong to whoever owns the hardware.
      */
-    class RecordingBurst final : public Elite::ExplosionEffects
-    {
-    public:
-      std::vector<std::uint8_t> rasterModes;
-      std::vector<std::uint8_t> expansions;
-      std::vector<std::uint16_t> spriteX;
-      std::vector<std::uint8_t> spriteY;
-
-      void SetRasterMode(std::uint8_t _mode) override
-      {
-        rasterModes.push_back(_mode);
-      }
-      void SetSpriteExpansion(std::uint8_t _mask) override
-      {
-        expansions.push_back(_mask);
-      }
-      void ShowExplosionSprite(std::uint16_t _x, std::uint8_t _y) override
-      {
-        spriteX.push_back(_x);
-        spriteY.push_back(_y);
-      }
-    };
-
-    /// Nothing is expected to reach the seam -- `PTCLS` has no sprite in it, and any call is a
-    /// failure rather than something to record.
-    class NoBurst final : public Elite::ExplosionEffects
-    {
-    public:
-      std::uint32_t calls = 0;
-
-      void SetRasterMode(std::uint8_t) override
-      {
-        ++calls;
-      }
-      void SetSpriteExpansion(std::uint8_t) override
-      {
-        ++calls;
-      }
-      void ShowExplosionSprite(std::uint16_t, std::uint8_t) override
-      {
-        ++calls;
-      }
-    };
+    /*
+     * `RecordingBurst` AND `NoBurst` WERE HERE AND ARE NOT ANY MORE (M3-b-3a).
+     *
+     * Three lists and a call counter, because `ExplosionEffects` was write-only: the only thing a
+     * suite could hold was what the routine had ASKED for. `Universe::video` and
+     * `Universe::memoryMap` hold what it DID, seeded on the port's side with the same bytes
+     * `SeedVideoRegisters` puts in the oracle's -- so "left alone" and "written with the same
+     * value" are still different answers, which is what the seeds were for.
+     */
 
     /*
      * Turn what the seam recorded into the registers the original writes, and compare.
@@ -233,37 +209,24 @@ namespace GameLogicTests
      * its other seven and has bit 1 set. `l1` keeps its top five bits and takes the raster mode in
      * its bottom three, which is what `SETL1` does.
      */
-    void CompareBurstRegisters(const Cpu6502& _cpu, const RecordingBurst& _burst, const std::wstring& _context)
+    void CompareBurstRegisters(const Cpu6502& _cpu, const Elite::VideoState& _video, const Elite::MemoryMap& _map,
+                               const std::wstring& _context)
     {
-      std::uint8_t xHigh = SPRITE_X_HIGH_SEED;
-      std::uint8_t enable = SPRITE_ENABLE_SEED;
-      std::uint8_t port = IO_PORT_SEED;
-      std::uint8_t expansion = SPRITE_EXPAND_SEED;
-      std::uint8_t lowX = SPRITE_X_SEED;
-      std::uint8_t row = SPRITE_Y_SEED;
+      // `VideoState` keeps sprite 1's x whole and the enable byte as one byte; the register layout
+      // is the presenter's business, so this is where the two are put back together.
+      const std::uint8_t lowX = static_cast<std::uint8_t>(_video.x[1] & 0xFFu);
+      const std::uint8_t row = _video.y[1];
+      const std::uint8_t xHigh = static_cast<std::uint8_t>((SPRITE_X_HIGH_SEED & 0xFDu) | ((_video.x[1] >> 8) << 1));
+      const std::uint8_t enable = _video.enabled;
+      const std::uint8_t expansion = _video.expanded;
+      const std::uint8_t port = _map.port;
 
-      for (const std::uint8_t mode : _burst.rasterModes)
-      {
-        port = static_cast<std::uint8_t>((port & 0xF8u) | mode);
-      }
-      if (!_burst.expansions.empty())
-      {
-        expansion = _burst.expansions.back();
-      }
-      for (std::size_t placed = 0; placed < _burst.spriteX.size(); ++placed)
-      {
-        lowX = static_cast<std::uint8_t>(_burst.spriteX[placed] & 0xFFu);
-        row = _burst.spriteY[placed];
-        xHigh = static_cast<std::uint8_t>((xHigh & 0xFDu) | ((_burst.spriteX[placed] >> 8) << 1));
-        enable = static_cast<std::uint8_t>(enable | 0x02u);
-      }
-
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x17u)], expansion, (_context + L": VIC+&17").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x1Du)], expansion, (_context + L": VIC+&1D").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x02u)], lowX, (_context + L": VIC+&2").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x03u)], row, (_context + L": VIC+&3").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x10u)], xHigh, (_context + L": VIC+&10").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x15u)], enable, (_context + L": VIC+&15").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x17u)), expansion, (_context + L": VIC+&17").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x1Du)), expansion, (_context + L": VIC+&1D").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x02u)), lowX, (_context + L": VIC+&2").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x03u)), row, (_context + L": VIC+&3").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x10u)), xHigh, (_context + L": VIC+&10").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x15u)), enable, (_context + L": VIC+&15").c_str());
       Assert::AreEqual(_cpu.memory[IO_PORT], port, (_context + L": the 6510 port register").c_str());
     }
 
@@ -530,7 +493,9 @@ namespace GameLogicTests
           Elite::Ship work{};
           Elite::LineHeap heap;
           Elite::Bubble bubble;
-          RecordingBurst burst;
+          Elite::VideoState video{};
+          Elite::MemoryMap map;
+          SeedVideoState(video, map);
 
           // The heap: a stale cloud size, the counter, the explosion count, four seed bytes, and a
           // recognisable pattern above them so that a copy which did not happen is visible.
@@ -590,7 +555,7 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(doexp);
           Assert::IsTrue(run.completed, L"DOEXP returned");
 
-          Elite::DrawExplosionCloud(canvas, math, rng, work, heap, geometry, bubble, burst);
+          Elite::DrawExplosionCloud(canvas, math, rng, work, heap, geometry, bubble, video, map);
 
           const std::wstring where = std::wstring(scene.what) + L", " + layout.what;
 
@@ -598,7 +563,7 @@ namespace GameLogicTests
           CompareHeaps(cpu, heap, where);
           CompareSeeds(cpu, oracle, rng, where);
           CompareWorkspace(cpu, oracle, math, where);
-          CompareBurstRegisters(cpu, burst, where);
+          CompareBurstRegisters(cpu, video, map, where);
 
           for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
           {
@@ -621,10 +586,17 @@ namespace GameLogicTests
             ++drawn;
           }
 
-          if (!burst.expansions.empty())
+          /*
+           * Was the burst sized, and was it placed? Both are read out of the state now (M3-b-3a).
+           *
+           * `PTCLS2` brackets itself with `SETL1` and `PTCLS` does not, so a port register that
+           * moved off its seed is the first; bit 1 of the enable byte, which only
+           * `ApplyExplosionSprite` sets, is the second.
+           */
+          if (map.port != IO_PORT_SEED)
           {
             ++bursts;
-            if (burst.spriteX.empty())
+            if ((video.enabled & 0x02u) == 0u)
             {
               ++burstsRefused;
             }
@@ -730,8 +702,9 @@ namespace GameLogicTests
               Elite::Ship work{};
               Elite::LineHeap heap;
               Elite::Bubble bubble;
-              RecordingBurst burst;
-              NoBurst refused;
+              Elite::VideoState video{};
+              Elite::MemoryMap map;
+              SeedVideoState(video, map);
 
               constexpr std::uint8_t COUNT = 30; // six vertices
               std::vector<std::uint8_t> bytes = {size, counter, COUNT};
@@ -773,12 +746,16 @@ namespace GameLogicTests
 
               SeedVideoRegisters(cpu);
 
+              // 6502: STA VIC+&2 -- one store per vertex the burst is placed at, which is the only
+              // count of them either machine keeps.
+              cpu.LogStores(static_cast<std::uint16_t>(VIC + 0x02u), static_cast<std::uint16_t>(VIC + 0x02u));
+
               const Elite::Testing::RunResult run = cpu.CallSubroutine(withSprite != 0 ? ptcls2 : ptcls);
               Assert::IsTrue(run.completed, L"the routine returned");
 
               if (withSprite != 0)
               {
-                Elite::DrawExplosionParticlesWithSprite(canvas, math, rng, work, heap, bubble, burst);
+                Elite::DrawExplosionParticlesWithSprite(canvas, math, rng, work, heap, bubble, video, map);
               }
               else
               {
@@ -793,8 +770,15 @@ namespace GameLogicTests
               CompareHeaps(cpu, heap, where);
               CompareSeeds(cpu, oracle, rng, where);
               CompareWorkspace(cpu, oracle, math, where);
-              CompareBurstRegisters(cpu, burst, where);
-              Assert::AreEqual<std::uint32_t>(0u, refused.calls, (where + L": PTCLS has no sprite in it").c_str());
+              CompareBurstRegisters(cpu, video, map, where);
+              if (withSprite == 0)
+              {
+                // `PTCLS` has no sprite in it, and the seeds are what say so: nothing it does can
+                // move a register or the port. The old fixture counted calls to a seam it was
+                // passed a null for; this compares the bytes, which says the same about more of them.
+                Assert::AreEqual<std::uint32_t>(IO_PORT_SEED, map.port, (where + L": PTCLS leaves the memory map alone").c_str());
+                Assert::AreEqual<std::uint32_t>(SPRITE_ENABLE_SEED, video.enabled, (where + L": and the sprite switched off").c_str());
+              }
 
               for (std::size_t byte = 0; byte < Elite::SHIP_BLOCK_SIZE; ++byte)
               {
@@ -806,11 +790,20 @@ namespace GameLogicTests
               {
                 ++plotted;
               }
-              placed += static_cast<std::uint32_t>(burst.spriteX.size());
+              /*
+               * How many of the six vertices got a burst, COUNTED ON THE GAME'S SIDE (M3-b-3a).
+               *
+               * `PTCLS2` writes the sprite registers once per vertex that passes the bounds tests,
+               * and only the last one survives -- on the hardware as much as in `VideoState` -- so
+               * the port cannot be asked how many there were. The oracle can: every store to VIC+&2
+               * is one placement. What the two machines are compared on is the state they end in,
+               * which is what a screen could show; this is the coverage the layouts exist for.
+               */
+              placed += static_cast<std::uint32_t>(cpu.stores.size());
               if (withSprite != 0)
               {
                 const std::size_t which = static_cast<std::size_t>(&layout - LAYOUTS.data());
-                placedBy[which] += static_cast<std::uint32_t>(burst.spriteX.size());
+                placedBy[which] += static_cast<std::uint32_t>(cpu.stores.size());
                 offeredBy[which] += 6u; // six vertices per cloud, at an explosion count of 30
               }
               ++compared;

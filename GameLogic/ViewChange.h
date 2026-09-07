@@ -95,7 +95,6 @@ namespace Elite
   // 6502: abraxas, caravanserai, DFLAG, moonflower, welcome and HFX -- `ScreenState` moved to
   // `Universe.h` with M3-a, because it is state and that is where the state lives now.
 
-
   /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
   /// extra bit the dashboard's bottom half needs.
   inline constexpr std::uint8_t COLOUR_BANK_DASHBOARD = 0x91;
@@ -103,7 +102,7 @@ namespace Elite
 
   /// 6502: NOSPRITES -- switch every sprite off, bracketed by the two raster-mode changes like
   /// `SIGHT`. Six instructions, and all six are the seam.
-  void HideAllSprites(SightEffects& _effects) noexcept;
+  void HideAllSprites(VideoState& _video, MemoryMap& _map) noexcept;
 
   /*
    * 6502: BOX2 -- the border: two vertical edges, a byte in the top right, and a rule across row 0.
@@ -169,7 +168,8 @@ namespace Elite
    * time and differ on the first.
    */
   void ShowDashboard(Canvas& _canvas, DrawWorkspace& _draw, ScreenState& _screen, Bubble& _bubble, const FlightState& _flight,
-                     const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass, SightEffects& _effects) noexcept;
+                     const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass, VideoState& _video,
+                     MemoryMap& _map) noexcept;
 
   /*
    * 6502: TTX66K -- clear the screen and draw whichever furniture this view wants.
@@ -188,27 +188,31 @@ namespace Elite
    * that get one band of colour cells rather than two.
    */
   void SetUpScreenPixels(Canvas& _canvas, DrawWorkspace& _draw, TextState& _text, ScreenState& _screen, Bubble& _bubble,
-                         const FlightState& _flight, const FlightStatus& _status, std::uint8_t _fuel, Compass& _compass,
-                         SightEffects& _effects, std::uint8_t _view) noexcept;
+                         const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel, Compass& _compass,
+                         VideoState& _video, MemoryMap& _map, std::uint8_t _view) noexcept;
 
   /// What `LOOK1` and `WARP` reach that is neither memory nor the canvas.
-  class ViewEffects
-  {
-  public:
-    virtual ~ViewEffects() = default;
-
-    /// 6502: LDA #0 / JSR DOVDU19 -- a palette change, which on this build writes a VIC-II colour
-    /// register. `LOOK1` makes it the first thing it does, before it has even looked at the view.
-    virtual void SetPalette(std::uint8_t _colour) = 0;
-
-    /// 6502: LDY #sfxboop / JMP NOISE -- the refusal noise `WARP` makes when it will not warp.
-    /// Takes and returns the carry, as `DashboardEffects::PlaySound` does and for the reason
-    /// written out there (§6.99); `WARP` tail-calls and drops both, so its `_carryIn` is false.
-    virtual bool PlaySound(std::uint8_t _effect, bool _carryIn) = 0;
-  };
-
-  /// 6502: sfxboop -- the effect number `WARP` asks for when it refuses.
-  inline constexpr std::uint8_t SOUND_BOOP = 6;
+  /*
+   * `ViewEffects` WAS HERE AND IS NOT ANY MORE (M3-b-2b).
+   *
+   * It ended with one method, `SetPalette`, and the method was in front of NOTHING. `DOVDU19` on
+   * the 6502 Second Processor rewrites `VNT3+1` in the interrupt handler to choose a mode 1
+   * palette; on THIS build the upstream source assembles the label and the `RTS` and skips the
+   * store -- "this subroutine has no effect in this version of Elite", in as many words. So the
+   * two `JSR`s are two `JSR`s to an `RTS`, and the port keeps them as the comments below, which is
+   * the whole of what they are.
+   *
+   * THE HEADER SAID OTHERWISE AND WAS WRONG. The comment on the method claimed the call "on this
+   * build writes a VIC-II colour register", which is the Master's reading; `Outpost`'s empty
+   * implementation had the right one all along and said so. A seam is a claim that something is
+   * outside the library, and this one was never true (§6.73's rule, arriving from the other side:
+   * a seam scoped before the thing behind it was READ).
+   *
+   * `PlaySound` went in M3-b-2a: it was `LDY #sfxboop / JMP NOISE`, the refusal noise `WARP` makes
+   * when it will not warp, and the SECOND declaration of one routine -- `DashboardEffects` having
+   * the other. Both are `PlaySoundEffect` over `Universe::sound` now. `WARP` tail-calls and drops
+   * the carry both ways, which is why its caller passed false and discarded the answer (§6.99).
+   */
 
   // `FlightScreen` was the argument list a screen change took -- twenty-seven references, each one
   // 6502 label. Every byte of it is `Universe`'s since M3-a and the four seams are `Ports`'.

@@ -4,6 +4,8 @@
 
 #include "Scanner.h"
 #include "ShipBlueprint.h"
+#include "Tactics.h"
+#include "Universe.h"
 
 #include <utility>
 
@@ -222,14 +224,14 @@ namespace Elite
       }
 
       // 6502: ORA T / [EOR #128] / EOR RAT2 -- the sign back on, the half's own flip, the direction.
-      std::uint8_t signed_ = static_cast<std::uint8_t>(high | t);
+      std::uint8_t withSign = static_cast<std::uint8_t>(high | t);
       if (_flip)
       {
-        signed_ = static_cast<std::uint8_t>(signed_ ^ 0x80u);
+        withSign = static_cast<std::uint8_t>(withSign ^ 0x80u);
       }
-      signed_ = static_cast<std::uint8_t>(signed_ ^ _rat2);
+      withSign = static_cast<std::uint8_t>(withSign ^ _rat2);
 
-      return AddSigned(SignMag16{p, signed_}, shrunk); // 6502: JSR ADD
+      return AddSigned(SignMag16{p, withSign}, shrunk); // 6502: JSR ADD
     }
   } // namespace
 
@@ -500,8 +502,8 @@ namespace Elite
        */
       // 6502: the component offsets MVS5 is handed -- roofv against nosev's x, y and z for the
       // pitch, and against sidev's for the roll.
-      const std::uint8_t VECTORS[2][3] = {{SHIP_NOSE_OFFSET, SHIP_NOSE_OFFSET + 2u, SHIP_NOSE_OFFSET + 4u},
-                                          {SHIP_SIDE_OFFSET, SHIP_SIDE_OFFSET + 2u, SHIP_SIDE_OFFSET + 4u}};
+      const std::array<std::array<std::uint8_t, 3>, 2> vectors = {{{SHIP_NOSE_OFFSET, SHIP_NOSE_OFFSET + 2u, SHIP_NOSE_OFFSET + 4u},
+                                                                   {SHIP_SIDE_OFFSET, SHIP_SIDE_OFFSET + 2u, SHIP_SIDE_OFFSET + 4u}}};
 
       for (int which = 0; which < 2; ++which)
       {
@@ -519,9 +521,9 @@ namespace Elite
 
         // 6502: LDX #15 / LDY #9 / JSR MVS5, three times over -- the orientation vectors turned
         // against the ship's own roll or pitch.
-        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET, VECTORS[which][0], _flight.rat2);
-        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 2u, VECTORS[which][1], _flight.rat2);
-        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 4u, VECTORS[which][2], _flight.rat2);
+        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET, vectors[which][0], _flight.rat2);
+        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 2u, vectors[which][1], _flight.rat2);
+        RotateCoordinatePair(_work, SHIP_ROOF_OFFSET + 4u, vectors[which][2], _flight.rat2);
       }
 
       /*
@@ -543,25 +545,28 @@ namespace Elite
     }
   } // namespace
 
-  bool MoveShip(Canvas& _canvas, Ship& _work, MathWorkspace& _math, FlightState& _flight, ShipEffects& _effects,
-                const Blueprint& _blueprint, std::uint8_t _view) noexcept
+  bool MoveShip(Universe& _universe, Ports& _ports) noexcept
   {
+    Ship& work = _universe.work;
+    FlightState& flight = _universe.flight;
+    const Blueprint& blueprint = *_universe.flight.blueprint;
+
     // 6502: LDA INWK+31 / AND #&A0 / BNE MV30 -- exploding or already dead, so straight to the
     // scanner. Nothing below moves it, which is why a wreck hangs where it died.
-    if (!HasAny(_work.state, ShipStateBit::Killed, ShipStateBit::Exploding))
+    if (!HasAny(work.state, ShipStateBit::Killed, ShipStateBit::Exploding))
     {
       // 6502: LDA MCNT / EOR XSAV / AND #15 / BNE MV3 / JSR TIDY -- one ship every sixteenth pass.
-      if ((static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 15u) == 0u)
+      if ((static_cast<std::uint8_t>(flight.mainLoopCounter ^ flight.slot) & 15u) == 0u)
       {
-        TidyOrientation(_work);
+        TidyOrientation(work);
       }
 
       // 6502: MV3 -- LDX TYPE / BPL P%+5 / JMP MV40. The planet and the sun move differently and
       // rejoin at MV45.
-      if (IsBody(_flight.type))
+      if (IsBody(flight.type))
       {
-        MovePlanetOrSun(_work, _math, _flight.alpha, _flight.beta);
-        MoveShipTail(_canvas, _work, _math, _flight, _view);
+        MovePlanetOrSun(work, _universe.math, flight.alpha, flight.beta);
+        MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view);
         return true;
       }
 
@@ -571,18 +576,18 @@ namespace Elite
        * A missile thinks on EVERY iteration and everything else on one in eight, which is the whole
        * reason a missile is frightening and a Krait is not.
        */
-      if (Has(_work.ai, AiBit::Active) &&
-          (_flight.type == ShipType::Missile || (static_cast<std::uint8_t>(_flight.mainLoopCounter ^ _flight.slot) & 7u) == 0u))
+      if (Has(work.ai, AiBit::Active) &&
+          (flight.type == ShipType::Missile || (static_cast<std::uint8_t>(flight.mainLoopCounter ^ flight.slot) & 7u) == 0u))
       {
         // 6502: JSR TACTICS at MV26 -- and it can end in `JMP DEATH`, which does not come back.
-        if (!_effects.RunTactics(_work))
+        if (!RunTactics(_universe, _ports, flight.slot))
         {
           return false;
         }
       }
     }
 
-    DrawScannerBlip(_canvas, _work, _flight.type, _view); // 6502: MV30 -- JSR SCAN
+    DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view); // 6502: MV30 -- JSR SCAN
 
     /*
      * 6502: LDA INWK+27 / ASL A / ASL A / STA Q, then three axes of FMLTU and MVT1-2.
@@ -591,17 +596,17 @@ namespace Elite
      * along the direction it is pointing, and the multiply is the unsigned high-byte one because
      * only the magnitude matters here. The sign comes from the coordinate byte handed to `MVT1-2`.
      */
-    const std::uint8_t speed = static_cast<std::uint8_t>(_work.speed << 2);
+    const std::uint8_t speed = static_cast<std::uint8_t>(work.speed << 2);
 
     // 6502: INWK+10, +12 and +14 -- the nose vector's high bytes -- against x, y and z in turn.
-    const auto step = [&_work, speed](const std::uint8_t& _high, std::uint8_t _axis) noexcept
+    const auto step = [&work, speed](const std::uint8_t& _high, std::uint8_t _axis) noexcept
     {
       const std::uint8_t along = MultiplyByLog(static_cast<std::uint8_t>(_high & 0x7Fu), speed, false).value; // 6502: STA R
-      AddToShipCoordinate(_work, _high, along, _axis, true);
+      AddToShipCoordinate(work, _high, along, _axis, true);
     };
-    step(_work.nose.x.hi, SHIP_X_OFFSET);
-    step(_work.nose.y.hi, SHIP_Y_OFFSET);
-    step(_work.nose.z.hi, SHIP_Z_OFFSET);
+    step(work.nose.x.hi, SHIP_X_OFFSET);
+    step(work.nose.y.hi, SHIP_Y_OFFSET);
+    step(work.nose.z.hi, SHIP_Z_OFFSET);
 
     /*
      * 6502: LDA INWK+27 / CLC / ADC INWK+28 / BPL P%+4 / LDA #0 / LDY #15 / CMP (XX0),Y / BCC P%+4 /
@@ -612,16 +617,16 @@ namespace Elite
      * it is a one-shot each iteration, not a persistent force, which is why a ship that stops being
      * pushed stops accelerating immediately rather than coasting up to speed.
      */
-    AddResult speedNext = AddWithCarry(_work.speed, _work.acceleration, false);
+    AddResult speedNext = AddWithCarry(work.speed, work.acceleration, false);
     std::uint8_t wanted = ((speedNext.value & 0x80u) != 0u) ? std::uint8_t{0} : speedNext.value;
 
-    const std::uint8_t maximum = _blueprint.maxSpeed;
+    const std::uint8_t maximum = blueprint.maxSpeed;
     if (wanted >= maximum)
     {
       wanted = maximum;
     }
-    _work.speed = wanted;
-    _work.acceleration = 0;
+    work.speed = wanted;
+    work.acceleration = 0;
 
     /*
      * 6502: the rotation of the ship's POSITION by the player's roll and pitch -- y -= a*x,
@@ -633,16 +638,17 @@ namespace Elite
      * reused for the next multiply, and both are locals here.
      */
     // 6502: LDX ALP1 / JSR MLTU2-2 -- (A P+1 P) = (~x_lo, x_hi) * alp1, then MVT6 on y.
-    Product24 wide = MultiplyWide(_work.x.hi, static_cast<std::uint8_t>(_work.x.lo ^ 0xFFu), _flight.alp1);
-    const SignMag24 k2 = AddShipCoordinateToP(_work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(_flight.alp2Next ^ _work.x.sgn)}, 3u);
+    Product24 wide = MultiplyWide(work.x.hi, static_cast<std::uint8_t>(work.x.lo ^ 0xFFu), flight.alp1);
+    const SignMag24 k2 =
+      AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(flight.alp2Next ^ work.x.sgn)}, 3u);
 
     // 6502: LDX BET1 / JSR MLTU2-2 -- and the same on z, with K2's low byte complemented into P.
-    wide = MultiplyWide(k2.hi, static_cast<std::uint8_t>(k2.lo ^ 0xFFu), _flight.bet1);
-    _work.z = AddShipCoordinateToP(_work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(k2.sgn ^ _flight.bet2)}, 6u);
+    wide = MultiplyWide(k2.hi, static_cast<std::uint8_t>(k2.lo ^ 0xFFu), flight.bet1);
+    work.z = AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(k2.sgn ^ flight.bet2)}, 6u);
 
     // 6502: JSR MLTU2 -- Q is still BET1, and ITS CARRY is what the arithmetic below runs on.
-    wide = MultiplyWide(_work.z.hi, static_cast<std::uint8_t>(_work.z.lo ^ 0xFFu), _flight.bet1);
-    _work.y.sgn = k2.sgn;
+    wide = MultiplyWide(work.z.hi, static_cast<std::uint8_t>(work.z.lo ^ 0xFFu), flight.bet1);
+    work.y.sgn = k2.sgn;
 
     /*
      * 6502: EOR BET2 / EOR INWK+8 / BPL MV43.
@@ -652,40 +658,40 @@ namespace Elite
      * every other sign test in this file. Reading it the natural way put the ship's y coordinate one
      * out on the first iteration, which is how it was found.
      */
-    if (((k2.sgn ^ _flight.bet2 ^ _work.z.sgn) & 0x80u) != 0u)
+    if (((k2.sgn ^ flight.bet2 ^ work.z.sgn) & 0x80u) != 0u)
     {
       /*
        * 6502: `LDA P+1 / ADC K2+1` with NO `CLC`. It runs on the carry `MLTU2` left, because
        * nothing between them touches it -- `STA`, `LDA` and `EOR` do not.
        */
       AddResult sum = AddWithCarry(wide.mid, k2.lo, wide.carry);
-      _work.y.lo = sum.value;
+      work.y.lo = sum.value;
       sum = AddWithCarry(wide.high, k2.hi, sum.carry);
-      _work.y.hi = sum.value;
+      work.y.hi = sum.value;
     }
     else
     {
       // 6502: MV43 -- `LDA K2+1 / SBC P+1`, and no `SEC` either, for the same reason.
       SubResult difference = SubtractWithCarry(k2.lo, wide.mid, wide.carry);
-      _work.y.lo = difference.value;
+      work.y.lo = difference.value;
       difference = SubtractWithCarry(k2.hi, wide.high, difference.carry);
-      _work.y.hi = difference.value;
+      work.y.hi = difference.value;
 
       if (!difference.carry)
       {
-        SubResult negated = SubtractWithCarry(1, _work.y.lo, false);
-        _work.y.lo = negated.value;
-        negated = SubtractWithCarry(0, _work.y.hi, negated.carry);
-        _work.y.hi = negated.value;
-        _work.y.sgn = static_cast<std::uint8_t>(_work.y.sgn ^ 0x80u);
+        SubResult negated = SubtractWithCarry(1, work.y.lo, false);
+        work.y.lo = negated.value;
+        negated = SubtractWithCarry(0, work.y.hi, negated.carry);
+        work.y.hi = negated.value;
+        work.y.sgn = static_cast<std::uint8_t>(work.y.sgn ^ 0x80u);
       }
     }
 
     // 6502: MV44 -- LDX ALP1 / ... / JSR MVT6 -- x = x + alpha * y.
-    wide = MultiplyWide(_work.y.hi, static_cast<std::uint8_t>(_work.y.lo ^ 0xFFu), _flight.alp1);
-    _work.x = AddShipCoordinateToP(_work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(_flight.alp2 ^ _work.y.sgn)}, 0u);
+    wide = MultiplyWide(work.y.hi, static_cast<std::uint8_t>(work.y.lo ^ 0xFFu), flight.alp1);
+    work.x = AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(flight.alp2 ^ work.y.sgn)}, 0u);
 
-    MoveShipTail(_canvas, _work, _math, _flight, _view); // 6502: falls into MV45
+    MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view); // 6502: falls into MV45
     return true;
   }
 
