@@ -152,6 +152,29 @@ namespace GameLogicTests
     cells.push_back(Direct(L"DTW2", _at.dtw2, _universe.sentences.sentenceStart, CellScope::Compared));
     cells.push_back(Direct(L"DTW6", _at.dtw6, _universe.sentences.alwaysLower, CellScope::Compared));
     cells.push_back(Direct(L"LSP", _at.lsp, _universe.heaps.lsp, CellScope::Compared));
+
+    /*
+     * 6502: SUNX, Yx2M1, K5, K6, STP, FLAG and PLTOG -- the rest of the planet and sun state, cells
+     * since M6-0-d. `Where` had no `SUNX` and no `LSY2` from M3-b on, so a fixture could not put a
+     * DRAWN sun into both machines; these are what `SUN`, `CIRCLE` and `BLINE` leave behind. `V` is
+     * an IMAGE cell only: the original uses the pair as a pointer in `LL9`, `TACTICS` and the
+     * printers and as the sun's counter, and the port keeps the two apart (`PlanetSunState::v`),
+     * so after a frame the game's byte is whichever user ran last and a comparison would be noise.
+     * `K5` and `K6` are the same shape and were found so by making them `Compared` first: the ball
+     * walk's segment ends here, and `LL9`'s line clipper and the escape pod's launch write the same
+     * eight bytes as scratch the port keeps in its stage results (M2-c), so eight suites differed
+     * on them after a frame that drew a ship and no planet.
+     */
+    cells.push_back(Direct(L"SUNX", _at.sunx, _universe.heaps.sunX, CellScope::Compared));
+    cells.push_back(Direct(L"SUNX+1", static_cast<std::uint16_t>(_at.sunx + 1u), _universe.heaps.sunXNext, CellScope::Compared));
+    cells.push_back(Direct(L"Yx2M1", _at.yx2m1, _universe.heaps.yx2M1, CellScope::Compared));
+    Run(cells, L"K5", _at.k5, _universe.heaps.k5.data(), _universe.heaps.k5.size(), CellScope::Image);
+    Run(cells, L"K6", _at.k6, _universe.heaps.k6.data(), _universe.heaps.k6.size(), CellScope::Image);
+    cells.push_back(Direct(L"STP", _at.stp, _universe.heaps.stp, CellScope::Compared));
+    cells.push_back(Direct(L"FLAG", _at.flag, _universe.heaps.flag, CellScope::Compared));
+    cells.push_back(Direct(L"PLTOG", _at.pltog, _universe.heaps.pltog, CellScope::Compared));
+    cells.push_back(Direct(L"V", _at.v, _universe.heaps.v, CellScope::Image));
+    cells.push_back(Direct(L"V+1", static_cast<std::uint16_t>(_at.v + 1u), _universe.heaps.vNext, CellScope::Image));
     cells.push_back(Direct(L"DLY", _at.dly, _universe.message.delay, CellScope::Compared));
     cells.push_back(Direct(L"de", _at.de, _universe.message.append, CellScope::Compared));
     cells.push_back(Direct(L"LAS2", _at.las2, _universe.status.viewLaser, CellScope::Compared));

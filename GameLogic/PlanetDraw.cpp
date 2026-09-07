@@ -23,7 +23,15 @@ namespace Elite
 
     if ((rightHigh.value & 0x80u) != 0u)
     {
-      // 6502: ED1 -- even the right-hand end is off the left of the screen.
+      /*
+       * 6502: ED1 -- even the right-hand end is off the left of the screen. `X1` IS NOT WRITTEN on
+       * this exit, and `HLOIN2` draws anyway (it drops the carry), so the original's row runs from
+       * whatever `X1` last held -- a stale zero-page read. The port's `x1` is this struct's zero.
+       * No game state reaches the exit: `SUNX` is written from `K3` only after a sun has been
+       * drawn, so its high byte is 0 or 1 and a row's right end cannot land left of the screen.
+       * A fixture that seeds `SUNX` with a random high byte does reach it, and M6-0-d found the
+       * two machines differing there (§8); the fixture seeds a reachable centre now.
+       */
       if (_row < _state.sun.size())
       {
         _state.sun[_row] = 0;

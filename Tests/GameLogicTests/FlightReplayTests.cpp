@@ -68,9 +68,9 @@ namespace GameLogicTests
 
     /// The record. Empty is a failure, so a tree can never carry an unpinned replay.
     /*
-     * RE-TAKEN SIX TIMES. Five were Modernize.md rule 1's second case (the port was wrong); the
-     * fifth, M5-a-6, is the FIRST case (the digest was deliberately widened). The count said
-     * "twice" until 2026-09-07 and had never counted the owner's fix below.
+     * RE-TAKEN SEVEN TIMES. Five were Modernize.md rule 1's second case (the port was wrong); the
+     * fifth, M5-a-6, and the seventh, M6-0-d, are the FIRST case (the digest was deliberately
+     * widened). The count said "twice" until 2026-09-07 and had never counted the owner's fix below.
      *
      * 2026-09-06, M2-c-1: every digest moved and not one step did. What changed was the SHAPE of
      * the image the digest is taken over -- `UniverseImage` hashed a `T2` cell holding a byte the
@@ -108,6 +108,13 @@ namespace GameLogicTests
      * which is the evidence that the five new cells agree with the oracle wherever `CompareState`
      * already looks; only the record needed re-taking.
      *
+     * 2026-09-07, M6-0-d: the label column moves on every checkpoint and THE STATE COLUMN DOES
+     * NOT -- which is the state column doing the job it was built for. Nine planet-and-sun cells
+     * joined the image (`SUNX`, `Yx2M1`, `K5`, `K6`, `STP`, `FLAG`, `PLTOG`, `V`), so the label hash
+     * reads more bytes than it did; `Game::StateHash` already folded all of them, and its sixteen
+     * digests are the ones above to the bit, so the flight is unchanged and the widening is the
+     * whole of the move. Rule 1's first case, proven by the second column rather than argued.
+     *
      * 2026-09-07, M5-e-3: the record gains a SECOND COLUMN and the first does not move. Each
      * checkpoint carries `Game::StateHash()` beside the label digest -- the library-native fold
      * over `Universe` (`Elite::HashState`), which needs no oracle and is the hash that outlives
@@ -125,22 +132,22 @@ namespace GameLogicTests
      * flight is the flight it was, and what moved is nine bytes that had been constants.
      */
     constexpr Checkpoint RECORDED[] = {
-      {0, 0x909fe1b60aaeaaa3ull, 0x2ab36cb10fc3d025ull},     // launched from Lave
-      {40, 0x675c4ebfead5ddd7ull, 0x41c73e56e5b6dec0ull},    // coasted
-      {100, 0xc1e7f6396098466eull, 0x52b4ee3425808769ull},   // at full speed
-      {200, 0xeed0525c4ecf84acull, 0x38f68d860fee04daull},
-      {300, 0x23a0db1828f5a272ull, 0x8cacc02d70b22da1ull},
-      {340, 0x646cdd1bb2e870daull, 0xf1365571ec21753bull},   // the Viper fought
-      {342, 0xb743e871a6d2709cull, 0xe40530ef96dd4a8aull},   // the docking computer engaged
-      {400, 0xa2bd18019dcd16e2ull, 0x7cc5be3c31affc57ull},
-      {500, 0xdbeeebc08212af5full, 0x650920d3bf96ad4dull},
-      {600, 0xa8dcfa3259952a30ull, 0x6ab3ccd16ef631ccull},
-      {700, 0x0dcdd86e1fe21826ull, 0x8e7b06a8fc599754ull},
-      {800, 0xc4f44d9e16fc2ad5ull, 0x5625267a616ccbd3ull},
-      {900, 0x3f14440f7e4f27a3ull, 0xece8c828544e5bc6ull},
-      {1000, 0xfdd2b0e7814f9d63ull, 0xb8e25422b42eb7b9ull},
-      {1100, 0x718387e97ffa1260ull, 0xb2527b82bca1dbf0ull},
-      {1170, 0xd0ab7775735990d0ull, 0xf42b8700b049cf7cull},  // docked
+      {0, 0xe78eb14b5d1bf7f0ull, 0x2ab36cb10fc3d025ull},     // launched from Lave
+      {40, 0x06a203f1b099a3eeull, 0x41c73e56e5b6dec0ull},    // coasted
+      {100, 0xb67addd5dfecde33ull, 0x52b4ee3425808769ull},   // at full speed
+      {200, 0x36b048c68d25f975ull, 0x38f68d860fee04daull},
+      {300, 0x3d8bbf2a94bf7683ull, 0x8cacc02d70b22da1ull},
+      {340, 0xa5f58d6b5237f0ebull, 0xf1365571ec21753bull},   // the Viper fought
+      {342, 0x6d7d1b0c25a52355ull, 0xe40530ef96dd4a8aull},   // the docking computer engaged
+      {400, 0xf5c0ff2eec8bb7e7ull, 0x7cc5be3c31affc57ull},
+      {500, 0xf699debe2e23b0e6ull, 0x650920d3bf96ad4dull},
+      {600, 0x761c2d0688bf8d55ull, 0x6ab3ccd16ef631ccull},
+      {700, 0x1358ee82a6032d2full, 0x8e7b06a8fc599754ull},
+      {800, 0xec713d92fac6d8dcull, 0x5625267a616ccbd3ull},
+      {900, 0x47b4ece6085d6c3eull, 0xece8c828544e5bc6ull},
+      {1000, 0x069441bb19953ed2ull, 0xb8e25422b42eb7b9ull},
+      {1100, 0xd8fa081acbeb751dull, 0xb2527b82bca1dbf0ull},
+      {1170, 0x4d18c62bec68382bull, 0xf42b8700b049cf7cull},  // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;
