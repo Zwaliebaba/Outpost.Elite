@@ -57,7 +57,7 @@ namespace Elite
    * them falls through to the mining laser's price, which is the same "anything else is the last
    * one" shape the status screen uses to name lasers.
    */
-  void Refund(Commander& _commander, std::uint8_t _view, std::uint8_t _newPower, LightYearsTenths _fuel) noexcept;
+  void Refund(Commander& _commander, std::uint8_t _view, Laser _fitted, LightYearsTenths _fuel) noexcept;
 
   /*
    * 6502: EQSHP -- the Equip Ship screen.

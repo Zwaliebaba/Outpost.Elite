@@ -267,11 +267,6 @@ namespace Elite
   /// 6502: the bitmap mode the energy bomb switches the upper half of the screen to.
   inline constexpr std::uint8_t BOMB_BITMAP_MODE = 0xD0;
 
-  /// 6502: Mlas and Armlas -- the two laser powers the sound picker tests for by name. The third
-  /// test is `BMI`, on bit 7, which is what makes a beam laser a beam laser.
-  inline constexpr std::uint8_t LASER_POWER_MINING = 50;
-  inline constexpr std::uint8_t LASER_POWER_MILITARY = 151;
-
   /*
    * What the flight loop reaches that phase 4 owns, plus the sound.
    *

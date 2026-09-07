@@ -53,12 +53,6 @@ namespace Elite
     constexpr std::uint8_t TECH_CAP_TEST = 12;
     constexpr std::uint8_t TECH_CAP_VALUE = 14;
 
-    /// 6502: LDA #POW / #POW+128 / #Armlas / #Mlas, from elite-source.asm.
-    constexpr std::uint8_t PULSE_POWER = 15;
-    constexpr std::uint8_t BEAM_POWER = 128 + PULSE_POWER;
-    constexpr std::uint8_t MILITARY_POWER = 151;
-    constexpr std::uint8_t MINING_POWER = 50;
-
     /// 6502: the item numbers those four lasers occupy in PRXS, which is what refund reads.
     constexpr std::uint8_t PULSE_ITEM = 4;
     constexpr std::uint8_t BEAM_ITEM = 5;
@@ -164,27 +158,27 @@ namespace Elite
     }
   }
 
-  void Refund(Commander& _commander, std::uint8_t _view, std::uint8_t _newPower, LightYearsTenths _fuel) noexcept
+  void Refund(Commander& _commander, std::uint8_t _view, Laser _fitted, LightYearsTenths _fuel) noexcept
   {
-    std::uint8_t& mount = _commander.lasers[_view];
-    const std::uint8_t existing = mount;
+    Laser& mount = _commander.lasers[_view];
+    const Laser existing = mount;
 
     /*
      * 6502: LDA LASER,X / BEQ ref3 -- an empty mount is refunded nothing, and the chain of CMPs is
      * skipped entirely rather than falling through to the mining laser's price.
      */
-    if (existing != 0)
+    if (existing.Fitted())
     {
       std::uint8_t item = MINING_ITEM;
-      if (existing == PULSE_POWER)
+      if (existing == LASER_PULSE)
       {
         item = PULSE_ITEM;
       }
-      else if (existing == BEAM_POWER)
+      else if (existing == LASER_BEAM)
       {
         item = BEAM_ITEM;
       }
-      else if (existing == MILITARY_POWER)
+      else if (existing == LASER_MILITARY)
       {
         item = MILITARY_ITEM;
       }
@@ -194,7 +188,7 @@ namespace Elite
     }
 
     // 6502: ref3 -- LDA T1 / STA LASER,X.
-    mount = _newPower;
+    mount = _fitted;
   }
 
   void EquipShipScreen(Universe& _universe, Ports& _ports) noexcept
@@ -366,7 +360,7 @@ namespace Elite
       if (!alreadyFitted && (item == 4 || item == 5))
       {
         const std::uint8_t view = ChooseView(_universe, _ports);
-        Refund(_universe.commander, view, (item == 4) ? PULSE_POWER : BEAM_POWER, fuel);
+        Refund(_universe.commander, view, (item == 4) ? LASER_PULSE : LASER_BEAM, fuel);
       }
 
       // 6502: et5 -- LDY #111, CMP #6, and the ONLY branch that falls into pres rather than
@@ -436,13 +430,13 @@ namespace Elite
         if (item == 12)
         {
           const std::uint8_t view = ChooseView(_universe, _ports);
-          Refund(_universe.commander, view, MILITARY_POWER, fuel);
+          Refund(_universe.commander, view, LASER_MILITARY, fuel);
         }
         ++complaint;
         if (item == 13)
         {
           const std::uint8_t view = ChooseView(_universe, _ports);
-          Refund(_universe.commander, view, MINING_POWER, fuel);
+          Refund(_universe.commander, view, LASER_MINING, fuel);
         }
       }
 

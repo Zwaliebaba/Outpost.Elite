@@ -373,7 +373,7 @@ namespace GameLogicTests
     _universe.heaps.lsp = 0x37u;
 
     _universe.commander.lasers[0] = Elite::LASER_PULSE;
-    _universe.commander.lasers[1u] = 0u;
+    _universe.commander.lasers[1u] = Elite::LASER_NONE;
     _universe.commander.lasers[2u] = Elite::LASER_BEAM;
     _universe.commander.lasers[3u] = Elite::LASER_MILITARY;
     _universe.commander.tribbles.lo = 0x40u;

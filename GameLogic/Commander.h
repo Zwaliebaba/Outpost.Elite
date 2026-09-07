@@ -189,6 +189,46 @@ namespace Elite
   }
 
   /*
+   * 6502: LASER,Y -- one mount's laser (M5-a-11).
+   *
+   * THE POWER BYTE IS THE LASER'S IDENTITY: there is no separate type. `POW` is 15 and a pulse
+   * laser is that; a beam laser is `POW+128`, the same power with bit 7 set, which is what makes it
+   * fire every frame (`MA3`'s `BMI`); `Armlas` is `INT(128.5 + 1.5 * POW)`, 151, and `Mlas` is 50,
+   * two values that happen not to collide. Zero is no laser on the mount. The damage arithmetic
+   * takes the byte without its top bit (`AND #%01111111 / STA LAS`), and that is `Power()`.
+   *
+   * Until this slice the four values lived in FOUR places -- `Controls.h`, `FlightLoop.h`,
+   * `Equipment.cpp` and `StatusScreen.cpp`, each with its own names for the same bytes.
+   */
+  struct Laser
+  {
+    std::uint8_t byte = 0;
+
+    [[nodiscard]] constexpr bool Fitted() const noexcept
+    {
+      return byte != 0u;
+    }
+    /// 6502: bit 7 -- a beam of some kind: fires every frame, and the sound picker's `BMI`.
+    [[nodiscard]] constexpr bool IsBeam() const noexcept
+    {
+      return (byte & 0x80u) != 0u;
+    }
+    /// 6502: LAS -- the power the damage arithmetic uses, which is the byte without bit 7.
+    [[nodiscard]] constexpr std::uint8_t Power() const noexcept
+    {
+      return static_cast<std::uint8_t>(byte & 0x7Fu);
+    }
+
+    [[nodiscard]] constexpr bool operator==(const Laser&) const noexcept = default;
+  };
+
+  inline constexpr Laser LASER_NONE{0};       ///< an empty mount
+  inline constexpr Laser LASER_PULSE{15};     ///< 6502: POW
+  inline constexpr Laser LASER_BEAM{143};     ///< 6502: POW+128
+  inline constexpr Laser LASER_MILITARY{151}; ///< 6502: Armlas
+  inline constexpr Laser LASER_MINING{50};    ///< 6502: Mlas
+
+  /*
    * 6502: TP to CHK -- the commander, as the fields the seventy-seven bytes are.
    *
    * In the bytes' order, with the two bytes no label names kept as fields so that the codec is a
@@ -208,7 +248,7 @@ namespace Elite
     LightYearsTenths fuel;                    ///< 6502: QQ14 -- light years times ten
     std::uint8_t competition = 0;             ///< 6502: COK
     std::uint8_t galaxyNumber = 0;            ///< 6502: GCNT
-    std::array<std::uint8_t, 6> lasers{};     ///< 6502: LASER -- front, rear, left, right, and two nothing names
+    std::array<Laser, 6> lasers{};            ///< 6502: LASER -- front, rear, left, right, and two nothing names
     std::uint8_t cargoCapacity = 0;           ///< 6502: CRGO -- two more than the hold holds
     std::array<std::uint8_t, 17> cargoHold{}; ///< 6502: QQ20 -- seventeen goods
     std::uint8_t ecm = 0;                     ///< 6502: ECM
@@ -285,7 +325,10 @@ namespace Elite
       at(Field::Fuel) = fuel.tenths;
       at(Field::Competition) = competition;
       at(Field::GalaxyNumber) = galaxyNumber;
-      run(Field::Lasers, lasers);
+      for (std::size_t index = 0; index < lasers.size(); ++index)
+      {
+        bytes[static_cast<std::size_t>(Field::Lasers) + index] = lasers[index].byte;
+      }
       at(Field::CargoCapacity) = cargoCapacity;
       run(Field::CargoHold, cargoHold);
       at(Field::Ecm) = ecm;
@@ -335,7 +378,10 @@ namespace Elite
       commander.fuel.tenths = at(Field::Fuel);
       commander.competition = at(Field::Competition);
       commander.galaxyNumber = at(Field::GalaxyNumber);
-      run(Field::Lasers, commander.lasers);
+      for (std::size_t index = 0; index < commander.lasers.size(); ++index)
+      {
+        commander.lasers[index].byte = _bytes[static_cast<std::size_t>(Field::Lasers) + index];
+      }
       commander.cargoCapacity = at(Field::CargoCapacity);
       run(Field::CargoHold, commander.cargoHold);
       commander.ecm = at(Field::Ecm);

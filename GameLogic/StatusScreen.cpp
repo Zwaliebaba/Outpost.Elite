@@ -53,19 +53,6 @@ namespace Elite
     constexpr std::uint8_t VIEW_NAME_BASE = 96;
     constexpr int LASER_MOUNTS = 4;
 
-    /*
-     * 6502: POW = 15, Mlas = 50, Armlas = INT(128.5 + 1.5 * POW) = 151, from elite-source.asm.
-     *
-     * The power byte IS the laser's identity: there is no separate type. A beam laser is a pulse
-     * laser's power with bit 7 set, and the other two are values that happen not to collide. A mount
-     * holding anything else prints as a pulse laser, because 103 is the value A starts at and only a
-     * match overwrites it.
-     */
-    constexpr std::uint8_t PULSE_POWER = 15;
-    constexpr std::uint8_t BEAM_POWER = 128 + PULSE_POWER;
-    constexpr std::uint8_t MILITARY_POWER = 151;
-    constexpr std::uint8_t MINING_POWER = 50;
-
     constexpr std::uint8_t PULSE_TOKEN = 103;
     constexpr std::uint8_t BEAM_TOKEN = 104;
     constexpr std::uint8_t MILITARY_TOKEN = 117;
@@ -118,18 +105,20 @@ namespace Elite
       return shifts;
     }
 
-    /// 6502: the four CPYs that turn a laser's power byte into the token that names it.
-    [[nodiscard]] std::uint8_t LaserToken(std::uint8_t _power) noexcept
+    /// 6502: the four CPYs that turn a laser's power byte into the token that names it. A mount
+    /// holding anything else prints as a pulse laser, because 103 is the value A starts at and only
+    /// a match overwrites it.
+    [[nodiscard]] std::uint8_t LaserToken(Laser _laser) noexcept
     {
-      if (_power == BEAM_POWER)
+      if (_laser == LASER_BEAM)
       {
         return BEAM_TOKEN;
       }
-      if (_power == MILITARY_POWER)
+      if (_laser == LASER_MILITARY)
       {
         return MILITARY_TOKEN;
       }
-      if (_power == MINING_POWER)
+      if (_laser == LASER_MINING)
       {
         return MINING_TOKEN;
       }
@@ -267,15 +256,15 @@ namespace Elite
     // 6502: LDX #0 / st: STX CNT / LDY LASER,X / BEQ st1 / ... / CPX #4 / BCC st.
     for (int mount = 0; mount < LASER_MOUNTS; ++mount)
     {
-      const std::uint8_t power = _universe.commander.lasers[static_cast<std::size_t>(mount)];
-      if (power == 0)
+      const Laser laser = _universe.commander.lasers[static_cast<std::size_t>(mount)];
+      if (!laser.Fitted())
       {
         continue;
       }
 
       // 6502: TXA / CLC / ADC #96 / JSR spc -- the mount's name and a space.
       PrintThenSpace(_ports.printer, static_cast<std::uint8_t>(VIEW_NAME_BASE + mount));
-      PrintThenIndent(_ports.printer, _universe.text, LaserToken(power));
+      PrintThenIndent(_ports.printer, _universe.text, LaserToken(laser));
     }
   }
 

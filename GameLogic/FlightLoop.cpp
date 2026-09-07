@@ -628,15 +628,15 @@ namespace Elite
     }
 
     // 6502: LDX VIEW / LDA LASER,X / BEQ MA3 -- this view's laser, if it has one.
-    const std::uint8_t fitted = commander.lasers[_universe.spaceView];
-    if (fitted == 0u)
+    const Laser fitted = commander.lasers[_universe.spaceView];
+    if (!fitted.Fitted())
     {
       return LoopOutcome::Continued;
     }
 
     // 6502: PHA / AND #%01111111 / STA LAS / STA LAS2 -- the power without its top bit, which is
     // what the damage arithmetic uses.
-    _universe.status.laserPower = static_cast<std::uint8_t>(fitted & 0x7Fu);
+    _universe.status.laserPower = fitted.Power();
     _universe.status.viewLaser = _universe.status.laserPower;
 
     /*
@@ -647,11 +647,11 @@ namespace Elite
      * sound survives (§6.79). Sixth time in this port.
      */
     SoundEffect sound = SoundEffect::PulseLaser;
-    if ((fitted & 0x80u) != 0u)
+    if (fitted.IsBeam())
     {
-      sound = (fitted == LASER_POWER_MILITARY) ? SoundEffect::MilitaryLaser : SoundEffect::BeamLaser;
+      sound = (fitted == LASER_MILITARY) ? SoundEffect::MilitaryLaser : SoundEffect::BeamLaser;
     }
-    else if (fitted == LASER_POWER_MINING)
+    else if (fitted == LASER_MINING)
     {
       sound = SoundEffect::MiningLaser;
     }
@@ -666,7 +666,7 @@ namespace Elite
      * compare and the call touches the flag -- `LDY` does not, and neither does the `EQUB &2C`
      * that swallows one of the loads. A silent build hands this straight back (§6.99).
      */
-    const bool carryIn = ((fitted & 0x80u) != 0u) ? (fitted >= LASER_POWER_MILITARY) : (fitted >= LASER_POWER_MINING);
+    const bool carryIn = fitted.IsBeam() ? (fitted.byte >= LASER_MILITARY.byte) : (fitted.byte >= LASER_MINING.byte);
     const bool heard = PlaySoundEffect(_universe.sound, sound, carryIn).carry;
 
     // 6502: JSR LASLI -- the burst itself, which draws and heats the gun.
@@ -674,7 +674,7 @@ namespace Elite
 
     // 6502: PLA / BPL ma1 / LDA #0 / .ma1 AND #%11111010 / STA LASCT -- a beam laser gets no
     // countdown at all, which is what lets it be held down.
-    const std::uint8_t countdown = ((fitted & 0x80u) != 0u) ? std::uint8_t{0u} : fitted;
+    const std::uint8_t countdown = fitted.IsBeam() ? std::uint8_t{0u} : fitted.byte;
     _universe.status.laserCount = static_cast<std::uint8_t>(countdown & 0xFAu);
 
     return LoopOutcome::Continued;
@@ -793,7 +793,7 @@ namespace Elite
      */
     if (_type >= ShipType::Constrictor)
     {
-      if (power != static_cast<std::uint8_t>(LASER_POWER_MILITARY & 0x7Fu))
+      if (power != LASER_MILITARY.Power())
       {
         return {false, _universe.work.energy};
       }
@@ -831,9 +831,9 @@ namespace Elite
     {
       carry = Byte(_type) >= Byte(ShipType::Asteroid); // 6502: CMP #AST, then `BNE nosp`
     }
-    else if (power != LASER_POWER_MINING)
+    else if (power != LASER_MINING.Power())
     {
-      carry = power >= LASER_POWER_MINING; // 6502: CMP #Mlas, then `BNE nosp`
+      carry = power >= LASER_MINING.Power(); // 6502: CMP #Mlas, then `BNE nosp`
     }
     else
     {

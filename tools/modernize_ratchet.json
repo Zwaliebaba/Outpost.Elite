@@ -69,9 +69,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4133,
+      "ceiling": 4136,
       "slack": 0,
-      "slice": "M5-a-10: LightYearsTenths names QQ14, MA23's scoop, the jump's SBC and TT111's compare"
+      "slice": "M5-a-11: Laser names LASER,Y, bit 7, LAS and the four powers once each"
     },
     "oracle-test-files": {
       "ceiling": 48,

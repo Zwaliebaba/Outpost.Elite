@@ -366,7 +366,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,133 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,136 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1492,7 +1492,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. M1's deferred `LightYearsTenths` is built (**M5-a-10**, and it found a seventy defined three times); `Laser` and `Equipment` follow under the same ruling (§8). | 3 |
+| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. M1's deferred `LightYearsTenths` is built (**M5-a-10**, and it found a seventy defined three times) and so is `Laser` (**M5-a-11**, four constant families for four bytes); `Equipment` is refused with the reason in ADR-006 §2 (§8). | 3 |
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
@@ -1807,6 +1807,30 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-11: `Laser`, and the four powers that lived in four places.**
+
+The second of M1's deferred types. `LASER,Y` is one byte per mount and THE BYTE IS THE LASER'S
+IDENTITY — there is no separate type in the original: `POW` (15) is a pulse laser, `POW+128` the
+same power with bit 7 set, which is what `MA3`'s `BMI` fires every frame, `Armlas` is
+`INT(128.5 + 1.5 * POW)` = 151 and `Mlas` is 50, two values that happen not to collide. So the
+type is a byte with the three questions the game asks of it — `Fitted()`, `IsBeam()` (bit 7) and
+`Power()` (`AND #%01111111 / STA LAS`, what the damage arithmetic takes) — and the five named
+values, `LASER_NONE`, `LASER_PULSE`, `LASER_BEAM`, `LASER_MILITARY`, `LASER_MINING`; the two `>=`
+compares the sound picker makes on the whole byte read `.byte`, because that is what they compare.
+
+**THE FINDING IS THE FOUR FAMILIES.** `Controls.h` had `LASER_PULSE`/`BEAM`/`MILITARY` for `SIGHT`,
+`FlightLoop.h` had `LASER_POWER_MINING`/`MILITARY` for the sound picker, `Equipment.cpp` had
+`PULSE_POWER`/`BEAM_POWER`/`MILITARY_POWER`/`MINING_POWER` for the refund, and `StatusScreen.cpp`
+had the same four again for the token — twelve constants for four bytes, each family with its own
+comment explaining `Armlas`. One definition each now, on the type. `Refund` takes the laser it
+fits rather than a power byte; `LaserToken` takes a laser; the codec writes and reads the six
+mount bytes explicitly, since `run` copied a byte array and the array is of lasers.
+
+Twenty-two suite sites follow the type — the sight sweep's table is a `std::vector<Laser>` with
+`Laser{99}` for the power the game does not have, and the frame sweep's `FITTED` likewise. 399 of
+399, every oracle comparison and both replay columns unmoved; `origin-markers` 4,133 → 4,136 (the
+type's markers, rule 4); all 16 checks. `Equipment` is the next entry, and it is a refusal.
 
 **2026-09-07 — M5-a-10: `LightYearsTenths`, and the seventy that was defined three times.**
 

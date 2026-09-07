@@ -310,10 +310,12 @@ namespace Elite
   {
     SetMemoryMap(_map, MEMORY_MAP_IO); // 6502: LDA #%101 / JSR SETL1
 
-    // 6502: LDY VIEW / LDA LASER,Y / BEQ SIG3.
-    const std::uint8_t laser = _commander.lasers[_view];
+    // 6502: LDY VIEW / LDA LASER,Y / BEQ SIG3. `SIGHT` tests for the pulse, beam and military
+    // powers in that order; the mining laser is not tested for at all and gets the fourth sprite
+    // by elimination.
+    const Laser laser = _commander.lasers[_view];
 
-    if (laser != 0u)
+    if (laser.Fitted())
     {
       /*
        * 6502: LDY #SPOFF% / CMP #POW / BEQ SIG1 / INY / CMP #POW+128 / BEQ SIG1 / INY /
@@ -349,7 +351,7 @@ namespace Elite
 
     // 6502: LDA #1 / .SIG3 STA T -- one if a laser was found, and the zero `LDA LASER,Y` left if
     // not, which is the whole of how the sights get switched off. `SIGHT`'s own since M2-c-3.
-    const std::uint8_t sightsBit = (laser != 0u) ? std::uint8_t{1u} : std::uint8_t{0u};
+    const std::uint8_t sightsBit = laser.Fitted() ? std::uint8_t{1u} : std::uint8_t{0u};
 
     // 6502: LDA TRIBBLE+1 / AND #%01111111 / LSR A x4 / TAX.
     const std::uint8_t population = _commander.tribbles.hi;

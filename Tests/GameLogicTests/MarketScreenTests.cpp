@@ -984,7 +984,7 @@ namespace GameLogicTests
         commander.galacticDrive = s.galactic;
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          commander.lasers[mount] = s.lasers[mount];
+          commander.lasers[mount].byte = s.lasers[mount];
         }
 
         constexpr std::uint8_t CROSSHAIR_X = 30;
@@ -1259,7 +1259,7 @@ namespace GameLogicTests
         commander.galacticDrive = s.fitted[6];
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
-          commander.lasers[mount] = s.lasers[mount];
+          commander.lasers[mount].byte = s.lasers[mount];
         }
 
         // ---- the shipped routine ------------------------------------------------------------
@@ -1424,7 +1424,7 @@ namespace GameLogicTests
         for (std::size_t mount = 0; mount < 4; ++mount)
         {
           Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(oracle.Label("LASER") + mount)],
-                           commander.lasers[mount],
+                           commander.lasers[mount].byte,
                            (where + L": laser mount " + std::to_wstring(mount)).c_str());
         }
         for (std::size_t index = 0; index < 4; ++index)

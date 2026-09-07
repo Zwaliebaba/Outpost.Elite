@@ -323,13 +323,6 @@ namespace Elite
   inline constexpr std::uint16_t SIGHT_SPRITE_CELL = Canvas::SCREEN_CELLS + 0x3F8u;
   inline constexpr std::uint16_t SIGHT_SPRITE_CELL_2 = Canvas::DASHBOARD_CELLS + 0x3F8u;
 
-  /// 6502: POW, POW+128, Armlas -- the laser powers `SIGHT` tests for, in the order it tests them.
-  /// `Armlas` is `INT(128.5 + 1.5*POW)`, which is 151; the mining laser is not tested for at all
-  /// and gets the fourth sprite by elimination.
-  inline constexpr std::uint8_t LASER_PULSE = 15;
-  inline constexpr std::uint8_t LASER_BEAM = 143;
-  inline constexpr std::uint8_t LASER_MILITARY = 151;
-
   /// What `SIGHT` reaches that is a VIC-II register rather than memory.
   /*
    * `SightEffects` WAS HERE AND IS NOT ANY MORE (M3-b-3a).

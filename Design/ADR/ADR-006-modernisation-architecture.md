@@ -90,6 +90,10 @@ equipment bytes with the reason):
   the jump's floored burn with its carry, `TT111`'s range check — and the type is those three,
   written once each, with `tenths` for everything that reads a byte. It found the number seventy
   defined three times under three names.
+- **`Laser` is built (M5-a-11).** The power byte is the laser's identity in the original, so the
+  type is that byte with the three questions the game asks of it — fitted, beam (bit 7), power
+  (the byte without bit 7) — and the five named values. It found the four powers defined in four
+  files under four naming schemes, twelve constants for four bytes.
 
 **AND `Colour` DID NOT SURVIVE THE PLAN'S OWN DESCRIPTION EITHER**, which is why it is worth
 recording next to the three. The row asked for "scoped enums with the original values", and the
