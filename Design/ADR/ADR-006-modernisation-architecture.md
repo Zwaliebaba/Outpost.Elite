@@ -147,6 +147,16 @@ platform. The twenty-two effects seams became four ports — `Presenter`, `Keybo
 nine abstract classes remain rather than four: two are the text system's own polymorphism and two
 are blocked on a comparison the emulator cannot yet make (ADR-007 §6, Modernize.md §4.5).
 
+**Amended 2026-09-07, after M4-a and the M6-0 gate: five abstract classes remain, and the count is
+final for M6.** The two that were blocked went when their blocker did — `SpawnChildEffects` with
+M4-a's typed stage result, `ShipDrawEffects` when the interpreter learned to bank the I/O page
+(M6-0-a-3) — and M6-0-h removed the two that had outlived their reason, `StartUpEffects` and
+`ControlEffects`, by giving `ZEKTRAN`, `TITLE` and `DOCKIT` to the library. `SoundSink` stopped
+being a port at M5-e-1: `Game` owns the SID write log and the executable drains it through
+`Sounds()`. What is left is three platform ports — `Presenter`, `Keyboard`, `CommanderStore` — and
+the text system's own two, `TextSink` and `ValueTokens`; `Ports` is eight references and `Game`'s
+constructor takes the three (ADR-007, amended the same day).
+
 **Three claims above did not survive the build.** `Step(InputFrame)` is three `Step`s taking a key,
 because `FRCE` chooses between three routines rather than three branches of one. `Frame()`,
 `Sounds()`, `StateHash()` and `Mode` were not built by M3-c: `Mode` is M4-d's, `Sounds()` M5-e-1's,
@@ -211,6 +221,14 @@ A fixture pins exactly the calls the tests made while the original was here (Ris
 why M6 is last and begins with a coverage review. The derived data tables and the recorded fixtures
 stay: the tree carries the original's data and the port's own code, and nothing of its source.
 
+**The M6-0 gate closed 2026-09-07** (Modernize.md §6 Phase M6, §8): the eight things the oracle
+could pin and nothing would pin afterwards are done — the interpreter's port register and keyboard
+matrix, a whole frame with an explosion in it, the replay reaching death and the escape pod, the
+control codes compared through the dispatch, two fixture faults, a ruling on every routine that was
+only ever trapped, a coverage instrument CI reads against the ledger, and a mutant floor. The
+coverage review is that instrument's output, not a reading by eye, and its first run names four
+gaps M6-a closes before anything is recorded.
+
 ### §8 Language level
 
 C++20, by ruling: `std::span` with fixed extents for the codecs, `constexpr` codecs with
@@ -252,4 +270,4 @@ compiler can hold.
 | M3 Ownership | Built 2026-09-06/07 (M3-0, M3-a, M3-b, M3-c, M3-d) | §4 above, amended from what was built; ADR-007 |
 | M4 Control flow | Built 2026-09-07 (M4-a, M4-b, M4-c-1/2/3, M4-d) | §5 above, amended from what was built |
 | M5 Polish and the ledger | Built 2026-09-07 (M5-a to its acceptance plus `SoundEffect` and `Colour`, M5-b, M5-c, M5-d). §2 carries the three strong types that were refused and why; §5 and §8 are amended from what was built | §2, §5, §8 above; Modernize.md §6 M5, §8 |
-| M6 Detach | Planned | §7 |
+| M6 Detach | M6-0 gate closed 2026-09-07 (eight rows, §8 of Modernize.md); M6-a next, opening on the four gaps the coverage instrument named | §7 |

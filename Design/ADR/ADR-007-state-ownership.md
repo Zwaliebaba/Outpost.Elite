@@ -31,7 +31,8 @@ places it departs from §4.4, and what the replay hash does and does not cover.
 Outpost::App        the window, the swap chain, the audio device, the files, the clock   -- Outpost/Main.cpp, 256 lines
 Elite::Game         the dispatch, the text chain, the ports, and eight bytes             -- GameLogic/Game.h
 Elite::Universe     every byte of game state                                             -- GameLogic/Universe.h
-Elite::Ports        eleven references: four the library's own, seven the platform's      -- GameLogic/Ports.h
+Elite::Ports        eleven references at M3's close: four the library's own, seven the platform's   -- GameLogic/Ports.h
+                    (eight since M6-0-h, 2026-09-07: four and four -- see the amendment under §1)
 ```
 
 **THE RULE IS THE DETERMINISM GUARD'S, and it is mechanised rather than agreed.** `GameLogic` may
@@ -56,6 +57,14 @@ takes the seven and builds the four, which is the whole of what "the executable 
 platform" means in this port. `ControlEffects` arrives beside them rather than inside `Ports`,
 because `DOCKIT` is passed separately at every call site (§4.5) and adding it would push
 `aggregate-refs` up, which rule 5 forbids.
+
+**Amended 2026-09-07: `Ports` is eight references, and `ControlEffects` is gone.** The platform's
+seven became four as their reasons expired — `SpawnChildEffects` at M4-a-1, `SidWriteLog` at M5-e-1
+(the log is `Game`'s, drained through `Sounds()`), `ShipDrawEffects` at M6-0-a-3 once the
+interpreter banked the I/O page, and `StartUpEffects` at M6-0-h-2 once `TITLE` ran on both machines
+— so `Game(Presenter&, Keyboard&, CommanderStore&)` takes three and builds the library's four.
+`ControlEffects` went at M6-0-h-3: `DOKEY` calls `DOCKIT` itself. `effects-seams` is five:
+`Presenter`, `Keyboard`, `CommanderStore`, `TextSink`, `ValueTokens`.
 
 ### §2 Three `Step`s, not one, and the count of passes stays outside
 
@@ -250,14 +259,16 @@ the seconds, the files, the device). **And a byte in `Universe` gets a cell in `
   polymorphism, not platform (Modernize.md §4.5) — **and two because a comparison is blocked**:
   `ShipDrawEffects` on the emulator's flat memory, `SpawnChildEffects` on M4-a's typed stage result.
   `effects-seams` therefore closes M3 at nine rather than at four, and the four numbers are not a
-  shortfall against the same target.
+  shortfall against the same target. **Both blocked ones went when their blockers did** (M4-a-1,
+  M6-0-a-3), `StartUpEffects` and `ControlEffects` in M6-0-h, and `SoundSink` became memory `Game`
+  owns (M5-e-1): five remain, the two text seams and three platform ports (2026-09-07).
 
 ## Status
 
 | Claim | State | Recorded in |
 |---|---|---|
 | `Universe` owns every byte of game state | Built; §3's seven moved in 2026-09-07 and are not yet hashed | Modernize.md §8, M3-a and the follow-on |
-| Twenty-two seams to four ports | Built; nine abstract classes remain, four of them named above | §8, M3-b |
+| Twenty-two seams to four ports | Built; five abstract classes remain since M6-0-h (2026-09-07): three platform ports and the text system's two | §8, M3-b; §1's amendment |
 | `Game` owns the dispatch and both loops | Built | §8, M3-c |
 | `Universe` owned by `Game` | Built 2026-09-07 (M5-e-2) — see Consequences | §8, M3-c, M5-e-2 |
 | `Frame`, `Sounds`, `StateHash` | `Sounds` built (M5-e-1); `Frame` served by `State().canvas`; `StateHash` built library-native (M5-e-3) | §8, M3-c, M5-e |
