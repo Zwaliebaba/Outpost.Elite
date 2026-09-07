@@ -65,6 +65,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 | 4 | the ADRs below | the decisions the plan rests on. **The ADR wins on *what*, the plan on *when*.** |
 | 5 | [Risk-Register.md](Risk-Register.md) | what is most likely to go wrong, and where each risk is validated early |
 | 6 | [Modernize.md](Modernize.md) | **the modernisation plan** (opened 2026-09-06; M0–M5 built 2026-09-06/07, the M6-0 gate closed 2026-09-07, M6-a next): what the port carried from the 6502 as its architecture, measured and ratcheted; the target C++ shape; six phases of slices, each gated on the oracle; and the owner's rulings on its eight questions — including the one that ends it: Phase M6 detaches the port from the original, replacing the oracle with recorded fixtures and removing `MasterFile/`, `Upstream/`, the markers and the assembly from the tree. Reads after the plan, because it starts where the plan's build order ends. |
+| 7 | [Resolution.md](Resolution.md) | **the 640×400 design** (proposed 2026-09-07, four owner rulings taken the same day, nothing built): the executable presents a second, 640×400 rendering of the same frame — the space view at twice the line resolution, the dashboard redrawn at twice its detail, 8×8 text on an 80×50 grid with every docked screen re-flowed — drawn beside the C64 canvas by twins of the drawing routines, while the canvas stays the view every oracle test, golden and fixture reads. Reads after Modernize.md, because it obeys that plan's rules and sequences around its M6. |
 
 ## Decisions at a glance
 
