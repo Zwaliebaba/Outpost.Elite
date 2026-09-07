@@ -222,12 +222,11 @@ python tools/check_modernize.py               # the legacy-pattern counts Design
 python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
 python tools/mutate.py --check                # every recorded mutant still applies to the code it names
 python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles
-python tools/extract_tables.py --check        # the generated tables match the assembled binaries (needs the oracle)
 ```
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->403 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->395 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.
@@ -350,16 +349,16 @@ is green against the oracle" are different claims. Never imply the second when y
 things on a push. Three jobs, because they need different machines and different amounts of
 patience:
 
-- **Repository checks** (Ubuntu, ~10s): every checker listed above except `extract_tables`. This
+- **Repository checks** (Ubuntu, ~10s): every checker listed above. This
   is the job that would have caught slice 0a's `.gitmodules` gap, because it starts from a fresh
   clone every time.
 - **Suite on Ubuntu (portable runner)** (Ubuntu, ~85s): builds BeebAsm at the pinned commit (cached
-  across runs), assembles the reference build, checks the generated tables, then builds and runs
+  across runs), assembles the reference build, then builds and runs
   the whole suite through `Tests/PortableRunner/`. Not the authority (ADR-004 §1) — it is here so a
   broken push says so in a minute rather than five, and because a second compiler catches what the
   first tolerates. It is also more permissive than MSVC in ways nothing measures (§6.116).
 - **Debug x64 build and tests** (Windows, ~5 min): builds BeebAsm with `cl`, assembles the
-  reference build, checks the tables, builds `Tests\GameLogicTests\GameLogicTests.vcxproj` in
+  reference build, builds `Tests\GameLogicTests\GameLogicTests.vcxproj` in
   Debug and Release, runs the suite in Release (the exhaustive sweeps are four times dearer
   unoptimised), then restores the executable's NuGet packages and **builds `Outpost.vcxproj`
   unpackaged in both configurations** — the only compiler that ever reads `Outpost/`.

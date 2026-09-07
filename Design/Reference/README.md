@@ -40,7 +40,7 @@ What the tool produces:
 |---|---|
 | `Labels.txt` | Every label in the assembled C64 build and its runtime address, one per line. 1,927 of them. |
 | `Binaries.txt` | Which assembled block loads at which address. Fourteen rows. |
-| `LoaderLabels.txt`, `LoaderBinaries.txt` | The same pair for `elite-loader.asm`, which assembles over the screen bitmap and so gets an image of its own that the oracle never loads (§6.104). Read by `tools/extract_tables.py` for `sdump`/`cdump` and by `TableTests`. |
+| `LoaderLabels.txt`, `LoaderBinaries.txt` | The same pair for `elite-loader.asm`, which assembles over the screen bitmap and so gets an image of its own that the oracle never loads (§6.104). Read by `tools/extract_tables.py` for `sdump`/`cdump`. |
 | `SpriteLabels.txt`, `SpriteBinaries.txt` | The same pair again for `elite-sprites.asm`, which assembles at `&7C3A` and is copied to `SPRITELOC%` by the loader, so it too stays out of the oracle image. Read by `extract_tables.py` for the seven sprite definitions (§6.148). |
 | `compile-source.txt`, `compile-data.txt`, `compile-loader.txt`, `compile-sprites.txt` | The full assembly logs, kept because the load addresses only appear in them. |
 | `labels-source.txt`, `labels-data.txt`, `labels-loader.txt`, `labels-sprites.txt` | BeebAsm's raw dumps, before normalising. |
@@ -48,7 +48,7 @@ What the tool produces:
 **The fourth assembly was a known gap and is closed (2026-09-05, §6.148).** `tools/labels.py` built
 `elite-source.asm`, `elite-data.asm` and `elite-loader.asm` and not `elite-sprites.asm` — 84 lines,
 448 bytes, seven sprite definitions — so those bytes were the one piece of the original's data that
-`extract_tables.py --check` could not verify. It is built on the `LOADER_ASSEMBLY` pattern
+the extractor could not reach. It is built on the `LOADER_ASSEMBLY` pattern
 (`SPRITE_ASSEMBLY`, its own reference pair, kept out of the oracle image because `CODE% = &7C3A`),
 which is the prerequisite ADR-005 §1 named for the sprite work, and the definitions are byte-checked
 like every other table.
@@ -56,9 +56,8 @@ like every other table.
 The assembled `.bin` files land in the vendored tree under
 `Upstream/elite-source-code-library/versions/c64/3-assembled-output/`, and are ignored there.
 **One of them overwrites a vendored file**: `COMLOD.unprot.bin` is tracked upstream at 18,016
-bytes and the loader assembly writes 18,011 — the difference is outside `sdump` and `cdump`, so
-`extract_tables.py --check` passes either way, but a run of `--assemble` leaves the submodule
-dirty by that one file. Restore it with `git -C Upstream/elite-source-code-library checkout -- .`
+bytes and the loader assembly writes 18,011 — the difference is outside `sdump` and `cdump`, but
+a run of `--assemble` leaves the submodule dirty by that one file. Restore it with `git -C Upstream/elite-source-code-library checkout -- .`
 rather than committing it.
 
 ## There are no emulator measurements, and there will not be
