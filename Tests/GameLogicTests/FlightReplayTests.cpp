@@ -67,7 +67,8 @@ namespace GameLogicTests
 
     /// The record. Empty is a failure, so a tree can never carry an unpinned replay.
     /*
-     * RE-TAKEN FOUR TIMES, every one under Modernize.md rule 1's second case (the port was wrong).
+     * RE-TAKEN FIVE TIMES. The first four were Modernize.md rule 1's second case (the port was
+     * wrong); the fifth, at the bottom, is the FIRST case (the digest was deliberately widened).
      * The count said "twice" until 2026-09-07 and had never counted the owner's fix below.
      *
      * 2026-09-06, M2-c-1: every digest moved and not one step did. What changed was the SHAPE of
@@ -95,24 +96,34 @@ namespace GameLogicTests
      * `Universe::dockedFlag` -- `Launch` cleared one and the flight loop's arrival wrote the other.
      * The last of the three is why the first measurement of this change read 2,589 steps ending
      * `Died` (§8, and the entry that corrects it).
+     *
+     * 2026-09-07, M5-a-6, and the only one so far under rule 1's FIRST case: every digest moved,
+     * not one step did, and no line of `GameLogic/` changed at all -- the image got wider. ADR-007
+     * §5 had named seven bytes the digest could not see; five of them can have cells and now do
+     * (`safehouse`, `QQ8`, `JSTGY`, `JSTE`, `MUTOKOLD`). The other two were never one gap with
+     * these five: `soundDisabled` was a SECOND `DNOIZ` and M5-a-5 deleted it, and `crosshairStep`
+     * is what `TT17` leaves in X and Y -- REGISTERS, with no address for `Where` to look up and so
+     * nothing a cell can name. Everything else in the suite stayed green through the widening,
+     * which is the evidence that the five new cells agree with the oracle wherever `CompareState`
+     * already looks; only the record needed re-taking.
      */
     constexpr Checkpoint RECORDED[] = {
-      {0, 0xa44a6fb6a58dd618ull},     // launched from Lave
-      {40, 0xe98f78ab0cd43ed0ull},    // coasted
-      {100, 0x39e05581c2ea6e0dull},   // at full speed
-      {200, 0x3be781674cf06ccbull},
-      {300, 0x15e5811af91bb01bull},
-      {340, 0xf2eb232f70dad2e3ull},   // the Viper fought
-      {342, 0x77c41a23fd0d1519ull},   // the docking computer engaged
-      {400, 0xd620b66bd70cf6c2ull},
-      {500, 0x7f131b23a8fbdd77ull},
-      {600, 0xe63c34cda4695ba0ull},
-      {700, 0xc96ee5ba798a5d06ull},
-      {800, 0x4bbfd05b7daf18f1ull},
-      {900, 0xdad5f822cc12febbull},
-      {1000, 0x3531163c35a6662bull},
-      {1100, 0x4702fd986054d344ull},
-      {1170, 0x35fc8447923426a7ull},  // docked
+      {0, 0xc2a3e48227134ddaull},     // launched from Lave
+      {40, 0x179e0ca78bc8cc96ull},    // coasted
+      {100, 0x08d647f8922541bbull},   // at full speed
+      {200, 0x35b55f993da2a5ddull},
+      {300, 0xc1df956a3c8771fbull},
+      {340, 0x783b9fa74aba4373ull},   // the Viper fought
+      {342, 0x9ae380cc6842cc5dull},   // the docking computer engaged
+      {400, 0xcd89c8a02d449682ull},
+      {500, 0x31f671da70802fbfull},
+      {600, 0x642a182c731f46d0ull},
+      {700, 0x501ad714c1b984c6ull},
+      {800, 0x18b0e72bb30c53b5ull},
+      {900, 0xdb175a33f8463103ull},
+      {1000, 0x60853975fbdae483ull},
+      {1100, 0xc2eb3b28251bfe80ull},
+      {1170, 0xe52cedff9e152e2dull},  // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;
