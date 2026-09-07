@@ -144,26 +144,37 @@ eleven interfaces collapsed to four ports, five seams removed, eight hundred lin
 moved from the executable into the library, `Main.cpp` from 1,197 lines to 256 — **the digest did
 not change**. That is what "no behavioural change" means when it is measured rather than asserted.
 
+It moved a third time on 2026-09-07, when the replay stopped stepping its own transcription of the
+flight pass and started stepping `Elite::Game` (§5). Every checkpoint moved and the flight did not:
+1,170 steps ending `Docked`, before and after. Three defects came out of the fixture with it and the
+journal names all three — which is the second case working exactly as written, on the one instrument
+that could have hidden them.
+
 ### §5 What the hash does not cover, named rather than assumed
 
 - **The seven bytes of §3.** They are in `Universe` now and still not cells in the image, so a slice
   that broke `MUTOKOLD` or `QQ8` would not move the digest. Giving them cells is the widening under
   rule 1's first case, and it moves the record for every checkpoint — which is why it is a decision
-  rather than a tidy-up, and why it is taken with the one below rather than separately.
+  rather than a tidy-up. It was to be taken with the one below and was not: the one below was rule
+  1's SECOND case once the defects behind it were named, and a widening does not ride along with a
+  fix. It stands on its own and is still open.
 - **The docked half.** The replay is a FLIGHT replay. The docked side is `DockedSessionTests`'
   transcript — a character stream and a screen — which is a different instrument and not a hash.
 - **`Ports` and the text objects.** They are not state and are not hashed. What they do reaches the
   universe or the canvas, and that is where it is compared.
-- **The replay does not drive `Game`, and pointing it at one changes the flight.** `FlightReplayTests`
-  composes `FlightPort` and calls the library's routines directly, as it has since M0-c —
-  `FlightPort::Step` is a second transcription of `M%`, `MLOOP`'s head, the spawner, part 5's tail
-  and the keyboard scan, beside `Game::Step`'s. **It was measured on 2026-09-07 and the answer is
-  not a tidy-up** (§8): a `FlightPort` built over an `Elite::Game` starts from `NA%` rather than a
-  zeroed commander, and its text chain runs the value tokens and the control codes rather than
-  deferring them. The scripted flight becomes a different flight — 1,170 steps ending `Docked`
-  becomes 2,589 ending `Died` — so the record moves for a reason that is neither of rule 1's two
-  cases as written. Until that is decided the digest is a statement about the ROUTINES and not about
-  the object that dispatches them, and `GameTests` is what covers the object.
+- **~~The replay does not drive `Game`~~ — it does, since 2026-09-07, and this entry is what it
+  found.** `FlightReplayTests` composed `FlightPort` and called the library's routines directly from
+  M0-c until then, so `FlightPort::Step` was a second transcription of `M%`, `MLOOP`'s head, the
+  spawner, part 5's tail and the keyboard scan sitting beside `Game::Step`'s, and the digest was a
+  statement about the ROUTINES rather than about the object that dispatches them. It is one
+  `game.Step(0u)` now, and the zero is a key — `TT102` dispatches every pass, which the
+  transcription did not do. Three defects in the fixture came out with it: it built `Ports` with the
+  value-token and control-code seams null where the app's are wired, it never ran `NA%` so the
+  scripted flight was flown by a commander of all zeros, and it held a second `QQ12` beside
+  `Universe::dockedFlag`. All three are rule 1's second case; the record is re-taken and every
+  checkpoint moves. **The flight itself does not** — 1,170 steps ending `Docked`, before and after.
+  This ADR said on 2026-09-07 that it became 2,589 ending `Died`; that measurement was taken before
+  the duplicate `QQ12` was found and is wrong. §8 corrects it in full.
 
 ### §6 The rule that follows from all of it
 
@@ -206,3 +217,4 @@ seconds, the files, the device).
 | `Universe` owned by `Game` | Not built — see Consequences | §8, M3-c |
 | `Frame`, `Sounds`, `StateHash`, `Mode` | Not built | §8, M3-c; M4-d for `Mode` |
 | The replay digest survives M3 | Verified — unchanged across ten commits | §4 above |
+| The replay drives `Game` | Built 2026-09-07; record re-taken for three fixture defects, 0 steps moved | §5 above; §8 |

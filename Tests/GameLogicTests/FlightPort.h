@@ -6,6 +6,7 @@
 #include "UniverseImage.h"
 
 #include "Charts.h"
+#include "Game.h"
 #include "Controls.h"
 #include "DockedKeys.h"
 #include "Explosion.h"
@@ -39,13 +40,12 @@
  * routine the executable calls, with the same arguments, so that a flight through this port is
  * the flight the app would run -- which is the property the replay hash pins.
  *
- * IT IS THE SECOND COPY OF THE FLIGHT PASS AND THE LAST ONE. `Main.cpp`'s `Advance` and this port's
- * `Step` each spelled out `M%`, `MLOOP`'s head, the spawner, part 5's tail and the keyboard scan in
- * that order; M3-c moved the executable's into `Elite::Game::Step` and left this one, so the replay
- * digest measures a TRANSCRIPTION of the loop rather than the loop (ADR-007 §5). Pointing it at
- * `Elite::Game` is a decided change rather than a tidy-up: the game's own composition sets `NA%` and
- * runs the value tokens and the control codes, and the scripted flight becomes a different flight.
- * The measurement is in §8, 2026-09-07.
+ * IT STEPS AN `Elite::Game` SINCE 2026-09-07, and that is what makes the replay digest mean
+ * something. `Main.cpp`'s `Advance` and this port's `Step` each spelled out `M%`, `MLOOP`'s head,
+ * the spawner, part 5's tail and the keyboard scan in that order; M3-c moved the executable's copy
+ * into `Elite::Game::Step` and left this one, so the digest was measuring a TRANSCRIPTION of the
+ * loop rather than the loop (ADR-007 §5). It holds the object now, so the record covers the thing
+ * M4-d rewrites -- and taking it found two defects in this fixture, both in §8.
  */
 namespace GameLogicTests
 {
@@ -69,10 +69,16 @@ namespace GameLogicTests
      * one question. `Elite::ScanKeyboard` is the routine now and this port answers that question.
      */
 
+    /*
+     * The seven seams a flight reaches, and `Elite::Game` builds the four text members of `Ports`
+     * over the universe exactly as `Outpost::App` does -- which is the point: a flight through this
+     * port is the flight the app would run, and it is now the same OBJECT running it.
+     *
+     * `StartUpEffects` and `CommanderStore` are the null port's: a scripted flight shows no title
+     * screen and writes no commander file.
+     */
     FlightPort()
-      : ports{universe.printer,      universe.characters,      universe.characters, *this,  *this,
-              sidLog,                universe.extendedPrinter, universe.unused,     *this,
-              *this,                 universe.unused}
+      : game(universe, *this, *this, sidLog, universe.unused, *this, *this, universe.unused, *this)
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -103,7 +109,16 @@ namespace GameLogicTests
     Elite::MusicPlayer& music = universe.music;
     Elite::SidWriteLog sidLog;
 
-    std::uint8_t docked = 0xFFu; ///< 6502: QQ12
+    /*
+     * 6502: QQ12 -- and it is the UNIVERSE'S byte, not a second one beside it.
+     *
+     * It was `std::uint8_t docked = 0xFF` here until 2026-09-07, which was one byte for the same
+     * thing `Universe::dockedFlag` already was: `Launch` cleared this one and `Game::Leave`'s
+     * arrival wrote that one, so a replay driven through `Game` would have had the two disagree.
+     * A reference rather than a rename because `RESET` and `LAUN` take it by reference and the
+     * digest names it.
+     */
+    std::uint8_t& docked = universe.dockedFlag;
 
     /// The keyboard as the script holds it: one entry per C64 matrix position, non-zero for held.
     /// `ScanKeyboard` turns it into `keys` the way `RDKEY` fills `KLO`.
@@ -118,20 +133,11 @@ namespace GameLogicTests
      */
     [[nodiscard]] Elite::LoopOutcome Step()
     {
-      const Elite::LoopOutcome outcome = Elite::MainFlightLoop(universe, ports); // 6502: JSR M%
-      if (outcome != Elite::LoopOutcome::Continued)
-      {
-        return outcome;
-      }
-
-      if (Elite::RunLoopHead(universe, ports) == Elite::LoopHead::Spawn)
-      {
-        Elite::RunSpawning(universe.bubble, universe.work, universe.rng, universe.commander, universe.current, universe.status,
-                           universe.explosions, universe.flight.blueprint, false);
-      }
-      static_cast<void>(Elite::RunLoopTail(universe, ports, universe.commander, universe.options.authorNames, false));
-      static_cast<void>(Elite::ScanFlightControls(universe, ports, *this, universe.view)); // 6502: JSR TT17
-      return Elite::LoopOutcome::Continued;
+      // 6502: `thiskey`, and ZERO IS A KEY -- `TT102` runs every pass, which is how `TT107`'s
+      // countdown ticks whether or not anything was pressed (§6.159). A scripted flight presses
+      // nothing, and until 2026-09-07 this port did not dispatch the zero either.
+      static_cast<void>(game.Step(0u));
+      return game.LastOutcome();
     }
 
     /*
@@ -249,7 +255,7 @@ namespace GameLogicTests
     void RunDockingComputer(Elite::Ship& _work) override
     {
       static_cast<void>(_work);
-      static_cast<void>(Elite::RunDockingComputer(universe, ports, 0u));
+      static_cast<void>(Elite::RunDockingComputer(universe, game.PortsOf(), 0u));
     }
     // `ClearBottomRows` WAS ANSWERED HERE AND IS NOT ANY MORE (M3-b-3b): `CLYNS` is
     // `Elite::ClearMessageRows`, which `MLOOP`'s head calls itself when a message's countdown ends.
@@ -261,14 +267,18 @@ namespace GameLogicTests
      * `SETL1`'s byte in this object where nothing could read it. Both are library state now.
      */
 
-    /// The seams and the text machinery, last because every reference in it is bound at
-    /// construction. Eleven where the two aggregates held thirty-nine (M3-a).
-    Elite::Ports ports;
+    /*
+     * The game, LAST because it binds every one of the above, and the whole of what this port is
+     * for since 2026-09-07: it builds `Ports` and the text chain over the universe exactly as
+     * `Outpost::App` does, and it is what `Step` steps.
+     */
+    Elite::Game game;
 
-    /// The seams as `Ports`, for the replay's own calls into `RESET` and `LAUN`.
+    /// The seams as `Ports`, for the replay's own calls into `RESET` and `LAUN` -- the same struct
+    /// the game steps through, not a second one built beside it.
     [[nodiscard]] Elite::Ports& Ports() noexcept
     {
-      return ports;
+      return game.PortsOf();
     }
   };
 

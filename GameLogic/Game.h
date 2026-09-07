@@ -80,6 +80,19 @@ namespace Elite
     /// 6502: FREEZE -- one pass of the pause loop, which is one key.
     void StepPaused(std::uint8_t _key) noexcept;
 
+    /*
+     * 6502: what `M%` answered on the last `Step`, for a caller that needs more than "may I step
+     * again".
+     *
+     * The M0-c replay records the outcome of every pass and compares the record digest for digest,
+     * so it wants the answer rather than the decision taken from it. `Continued` until the first
+     * `Step`, which is what the loop is in before it has run.
+     */
+    [[nodiscard]] LoopOutcome LastOutcome() const noexcept
+    {
+      return m_lastOutcome;
+    }
+
     /// 6502: QQ12 -- which half of the main loop the game is in.
     [[nodiscard]] bool Docked() const noexcept
     {
@@ -202,6 +215,11 @@ namespace Elite
      * decision with no 6502 byte behind it.
      */
     bool m_paused = false;
+
+    /// What `LastOutcome` answers. It is the return value of a call held, not game state, and it is
+    /// not in `Universe` for that reason -- which is the rule the seven bytes above obey from the
+    /// other side.
+    LoopOutcome m_lastOutcome = LoopOutcome::Continued;
 
     /// LAST, because every reference in it is bound at construction (§4.5).
     Ports m_ports;
