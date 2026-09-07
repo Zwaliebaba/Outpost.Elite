@@ -143,8 +143,8 @@ namespace Elite
       &controls.recentreDisabled,         // 6502: DJD
       &controls.authorNames,              // 6502: PATG
       &m_universe.status.damageFlash, // 6502: FLH
-      &m_joystickGeometry,            // 6502: JSTGY
-      &m_joystickEnabled,             // 6502: JSTE
+      &m_universe.joystickGeometry,            // 6502: JSTGY
+      &m_universe.joystickEnabled,             // 6502: JSTE
       &controls.joystick,                 // 6502: JSTK
       &tunes.dockingMusicOff,             // 6502: MUTOK
       &m_universe.useDisk,            // 6502: DISK
@@ -167,10 +167,10 @@ namespace Elite
     jump.docked = m_universe.dockedFlag;
     jump.countdown = m_universe.status.hyperspaceCountdown;
     jump.counter = m_universe.status.hyperspaceCounter;
-    jump.distance = m_jumpDistance;
+    jump.distance = m_universe.jumpDistance;
     // 6502: JSR CTRL -- key-logger entry 6, read LIVE, because that is when the original reads it.
     jump.controlHeld = m_ports.keyboard.Held(KEY_CONTROL);
-    jump.target = m_jumpTarget;
+    jump.target = m_universe.jumpTarget;
     return jump;
   }
 
@@ -381,7 +381,7 @@ namespace Elite
        */
       ChartView chart = ChartOf();
 
-      MoveCrosshairs(m_universe.canvas, chart, m_crosshairStep.x, m_crosshairStep.y);
+      MoveCrosshairs(m_universe.canvas, chart, m_universe.crosshairStep.x, m_universe.crosshairStep.y);
 
       m_universe.crosshairX = chart.cursorX;
       m_universe.crosshairY = chart.cursorY;
@@ -443,7 +443,7 @@ namespace Elite
           m_universe.crosshairX, m_universe.crosshairY, m_universe.commander.galaxySeeds,
           m_ports.keyboard.Held(KEY_CONTROL), m_universe.options.authorNames != 0u);
 
-        m_jumpDistance = jump.distance;
+        m_universe.jumpDistance = jump.distance;
 
         if (jumped == JumpResult::Arrived)
         {
@@ -475,8 +475,8 @@ namespace Elite
 
       m_universe.status.hyperspaceCountdown = jump.countdown;
       m_universe.status.hyperspaceCounter = jump.counter; // 6502: STA QQ22 -- and it was never copied back (§6.159)
-      m_jumpDistance = jump.distance;
-      m_jumpTarget = jump.target;
+      m_universe.jumpDistance = jump.distance;
+      m_universe.jumpTarget = jump.target;
       m_universe.crosshairX = chart.cursorX;
       m_universe.crosshairY = chart.cursorY;
 
@@ -504,8 +504,8 @@ namespace Elite
 
         m_universe.status.hyperspaceCountdown = jump.countdown;
         m_universe.status.hyperspaceCounter = jump.counter; // 6502: `Ghy` falls into `wW`, which stores QQ22 as well
-        m_jumpTarget = jump.target;
-        m_jumpDistance = jump.distance;
+        m_universe.jumpTarget = jump.target;
+        m_universe.jumpDistance = jump.distance;
         m_universe.crosshairX = chart.cursorX;
         m_universe.crosshairY = chart.cursorY;
       }
@@ -775,7 +775,7 @@ namespace Elite
      */
     CoolTheGuns(m_universe.status);
 
-    m_crosshairStep = ScanFlightControls(m_universe, m_ports, m_controls, m_universe.view);
+    m_universe.crosshairStep = ScanFlightControls(m_universe, m_ports, m_controls, m_universe.view);
 
     PressKey(_key); // 6502: `thiskey`, which is zero when nothing is held
   }
@@ -791,7 +791,7 @@ namespace Elite
   void Game::StepPaused(std::uint8_t _key) noexcept
   {
     const PausePass pass =
-      PressPauseKey(OptionsOf(), m_soundDisabled, m_musicSwitchWas, m_universe.control.dockingComputer, _key);
+      PressPauseKey(OptionsOf(), m_universe.soundDisabled, m_universe.musicSwitchWas, m_universe.control.dockingComputer, _key);
 
     /*
      * 6502: JSR MUTOKCH -- the `Stop` answer goes through `stopbd`, which starts the music again
