@@ -365,7 +365,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,126 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,127 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1804,6 +1804,33 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-e-2b: `DTW1`–`DTW8` are the universe's bytes, and the printer binds to them.**
+
+The first of M5-e-2's two follow-ons. `ExtendedTextState` — eight bytes with 6502 labels and eight
+cells in the image — was `CharacterPrinter`'s member, and `Universe.h` had said since M3-a why:
+the printers stay outside a universe that has to copy, and moving the bytes in "means giving the
+printer a reference to it, which is M3-b's question". It is `Universe::sentences` now, in the
+screen block beside `text` and `message`, and `CharacterPrinter` takes an `ExtendedTextState&` at
+construction exactly as `TextPrinter` takes its `TextState&` — the universe still has no reference
+member, no virtual and no printer, and the printer's vtable was never a property of its bytes.
+`Game` hands its printer `m_universe.sentences`; the test wrapper hands its own base's.
+
+**THE MEMBER IS PRIVATE, AND THE RATCHET IS WHY.** A public `ExtendedTextState& state;` is what P5's
+counter reads as an argument-list reference (`Type& name;`), and `aggregate-refs` went 10 → 11 on
+the first build. The AGENTS convention is the answer rather than an exclusion: `m_state` behind
+`State()`, which is the shape `TextPrinter::m_state` already had and the counter already did not
+count. The library reads the universe's bytes where it has the universe — the twenty-six
+`_ports.characters.state` arguments to `ShowMessage` and `ClearMessageRows` are `_universe.sentences`
+now, `Game`'s two are `m_universe.sentences`, and `FindSystemByName`, which takes the printer and not
+the universe, goes through `State()`. Fifty-one suite sites do the same mechanically.
+
+The image's `DTW` cells read `_universe.sentences` and `Beside` is down to the token printer and the
+sprite claim; `Game::Characters()` goes with the last reason for it. 395 of 395 on the first
+build, the replay record unmoved — the bytes hashed are the bytes `Game`'s printer wrote, exactly
+as M5-e-2 left them, which is the evidence the move changed no value. `origin-markers` 4,126 →
+4,127 (the marker on `Universe::sentences`, rule 4); `aggregate-refs` back at 10; all 16 checks.
+`QQ17` — the byte that is two bytes — is M5-e-2c.
 
 **2026-09-07 — M5-e-2: `Game` owns `Universe`, and the digest had been hashing an idle printer.**
 

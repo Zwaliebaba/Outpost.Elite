@@ -952,7 +952,7 @@ namespace Elite
                            ShipType::Missile, _frame.universe.flight.blueprint)
               .created)
         {
-          ShowMessage(_frame.universe.canvas, _frame.ports.printer, _frame.universe.text, _frame.ports.characters.state,
+          ShowMessage(_frame.universe.canvas, _frame.ports.printer, _frame.universe.text, _frame.universe.sentences,
                       _frame.universe.message, MESSAGE_INCOMING_MISSILE, _frame.universe.view);
           (void)PlaySoundEffect(_frame.universe.sound, SoundEffect::Missile, false);
         }

@@ -181,7 +181,7 @@ namespace GameLogicTests
      * energy warning.
      */
     Elite::TextPrinter glyphs{canvas, text, &sound};
-    Elite::CharacterPrinter characters{glyphs};
+    Elite::CharacterPrinter characters{glyphs, sentences};
     Elite::TokenPrinter printer{characters};
 
     /*
@@ -395,9 +395,9 @@ namespace GameLogicTests
     _universe.text.row = 0x0Bu;
     _universe.text.palette = Elite::TEXT_COLOUR_WHITE;
     _universe.printer.SetCaseFlags(0x40u);
-    _universe.characters.state.lowerCaseBits = 0u;
-    _universe.characters.state.sentenceStart = 0u;
-    _universe.characters.state.alwaysLower = 0xFFu;
+    _universe.sentences.lowerCaseBits = 0u;
+    _universe.sentences.sentenceStart = 0u;
+    _universe.sentences.alwaysLower = 0xFFu;
 
     _universe.message.delay = 0x2Au;
     _universe.message.append = 0x3Bu;

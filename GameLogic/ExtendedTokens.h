@@ -88,15 +88,26 @@ namespace Elite
     /// is the instruction to empty it.
     static constexpr std::uint8_t FORM_FEED = 12;
 
-    explicit CharacterPrinter(TextSink& _screen) noexcept
-      : m_screen(_screen)
+    /// The bytes are `Universe::sentences` since M5-e-2b; the printer binds to them the way
+    /// `TextPrinter` binds to `TextState`, so that the universe copies and the printer does not.
+    CharacterPrinter(TextSink& _screen, ExtendedTextState& _state) noexcept
+      : m_screen(_screen),
+        m_state(_state)
     {
+    }
+
+    /// 6502: DTW1 to DTW8 -- the universe's bytes, which this printer works on (M5-e-2b).
+    [[nodiscard]] ExtendedTextState& State() noexcept
+    {
+      return m_state;
+    }
+    [[nodiscard]] const ExtendedTextState& State() const noexcept
+    {
+      return m_state;
     }
 
     /// 6502: DASC -- route one character, and justify the buffered line when one is asked for.
     void Put(std::uint8_t _character) noexcept override;
-
-    ExtendedTextState state;
 
     /// 6502: BUF -- the line being justified. Public because MT17 reaches into it.
     std::array<std::uint8_t, BUFFER_SIZE> buffer{};
@@ -131,6 +142,7 @@ namespace Elite
   [[nodiscard]] PadResult PadToWidth(std::uint8_t _rotor) noexcept;
 
     TextSink& m_screen; ///< 6502: CHPR
+    ExtendedTextState& m_state; ///< `Universe::sentences`, bound the way `TextPrinter` binds its `TextState`
   };
 
   /*
@@ -223,7 +235,7 @@ namespace Elite
     /// and writes most of them.
     [[nodiscard]] ExtendedTextState& State() noexcept
     {
-      return m_characters.state;
+      return m_characters.State();
     }
 
   private:

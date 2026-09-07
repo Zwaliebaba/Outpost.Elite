@@ -35,7 +35,7 @@ namespace Elite
   Game::Game(ShipDrawEffects& _drawing, StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard, CommanderStore& _store,
              ControlEffects& _controls) noexcept
     : m_screen(m_universe.canvas, m_universe.text, &m_universe.sound),
-      m_characters(m_screen),
+      m_characters(m_screen, m_universe.sentences),
       m_recursive(m_characters),
       m_values(m_recursive, m_universe.text, m_universe.commander, m_universe.commanderName, m_universe.current.seeds,
                m_universe.selectedSeeds, false),
@@ -55,7 +55,7 @@ namespace Elite
 
     // 6502: DTW2 -- the extended printer starts between sentences, which is what the first capital
     // letter of the first screen depends on.
-    m_characters.state.sentenceStart = 0xFF;
+    m_universe.sentences.sentenceStart = 0xFF;
   }
 
   std::uint8_t Game::ShipsInBubble() const noexcept
@@ -459,7 +459,7 @@ namespace Elite
       ChartView chart = ChartOf();
       JumpState jump = JumpOf();
 
-      const JumpOutcome decided = RequestHyperspace(m_universe.canvas, m_recursive, m_extended, m_universe.text, m_characters.state,
+      const JumpOutcome decided = RequestHyperspace(m_universe.canvas, m_recursive, m_extended, m_universe.text, m_universe.sentences,
                                                     m_universe.message, chart, jump, m_universe.commander.galaxySeeds);
 
       m_universe.status.hyperspaceCountdown = jump.countdown;

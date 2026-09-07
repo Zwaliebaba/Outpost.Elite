@@ -50,7 +50,7 @@ namespace Elite
       if (_universe.view != 0u)
       {
         // 6502: JSR CLYNS -- a text screen's message is in the bottom rows. A seam until M3-b-3b.
-        ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message);
+        ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
       }
       else
       {
@@ -61,7 +61,7 @@ namespace Elite
          * a message rubs out the first. And `MESS` sets `DLY` to twenty, which is why the `LDA #0 /
          * STA DLY` after it is not redundant -- it undoes what the call just did.
          */
-        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, _universe.message.token,
+        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, _universe.message.token,
                     _universe.view);
         _universe.message.delay = 0u;
       }

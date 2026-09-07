@@ -224,7 +224,7 @@ namespace GameLogicTests
     {
       explicit PortScreen(std::uint8_t _galaxy = 0)
         : screen(canvas, text),
-          characters(screen),
+          characters(screen, universe.sentences),
           printer(characters, &galaxy),
           extended(characters, printer, rng),
           ports{printer,  characters, characters, nulls, sid,
@@ -235,7 +235,7 @@ namespace GameLogicTests
         text.row = 1;
         text.caseFlags = 0x80;
         text.palette = Elite::TEXT_COLOUR_PURPLE;
-        characters.state.sentenceStart = 0xFF;
+        characters.State().sentenceStart = 0xFF;
         printer.SetCaseFlags(0x80);
       }
 
@@ -815,8 +815,9 @@ namespace GameLogicTests
         }
 
         CapturingSink sink;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
+        Elite::ExtendedTextState sentences;
+        Elite::CharacterPrinter characters(sink, sentences);
+        characters.State().sentenceStart = 0xFF;
         Elite::TokenPrinter printer(characters);
         printer.SetCaseFlags(0);
         Elite::PrintRangeError(printer);
@@ -846,8 +847,9 @@ namespace GameLogicTests
         }
 
         CapturingSink sink;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
+        Elite::ExtendedTextState sentences;
+        Elite::CharacterPrinter characters(sink, sentences);
+        characters.State().sentenceStart = 0xFF;
         Elite::TextState text;
         text.column = 9;
         text.row = 9;
@@ -903,7 +905,7 @@ namespace GameLogicTests
             PortScreen port;
             Canvas& canvas = port.canvas;
             ChartView ours = chart;
-            const Elite::NearestSystem nearest = Elite::SelectNearestSystem(canvas, port.printer, port.text, port.characters.state,
+            const Elite::NearestSystem nearest = Elite::SelectNearestSystem(canvas, port.printer, port.text, port.characters.State(),
                                                                            port.universe.message, ours, galaxy);
 
             const std::wstring where = Where(L"hm", chart) + L" galaxy " + std::to_wstring(galaxyNumber);
@@ -1016,7 +1018,7 @@ namespace GameLogicTests
 
                     ChartView ours = chart;
                     const Elite::JumpOutcome outcome =
-                      Elite::RequestHyperspace(port.canvas, port.printer, port.extended, port.text, port.characters.state,
+                      Elite::RequestHyperspace(port.canvas, port.printer, port.extended, port.text, port.characters.State(),
                                                port.universe.message, ours, jump, galaxy);
 
                     const std::wstring where = Where(L"hyp", chart) + L" docked=" + std::to_wstring(docked) + L" count=" +
@@ -1130,12 +1132,13 @@ namespace GameLogicTests
             Canvas scratchCanvas;
             Elite::TextState scratchText;
             Elite::TextPrinter scratchScreen(scratchCanvas, scratchText);
-            Elite::CharacterPrinter scratchCharacters(scratchScreen);
-            scratchCharacters.state.justify = 0x80;
+            Elite::ExtendedTextState scratchSentences;
+            Elite::CharacterPrinter scratchCharacters(scratchScreen, scratchSentences);
+            scratchCharacters.State().justify = 0x80;
             Elite::TokenPrinter scratchPrinter(scratchCharacters);
             SystemSeeds naming = seeds;
             Elite::PrintSystemName(scratchPrinter, naming);
-            for (std::size_t index = 0; index < scratchCharacters.state.bufferLength; ++index)
+            for (std::size_t index = 0; index < scratchCharacters.State().bufferLength; ++index)
             {
               typed.push_back(scratchCharacters.buffer[index]);
             }
@@ -1199,7 +1202,8 @@ namespace GameLogicTests
             Canvas canvas;
             Elite::TextState text;
             Elite::TextPrinter screen(canvas, text);
-            Elite::CharacterPrinter characters(screen);
+            Elite::ExtendedTextState sentences;
+            Elite::CharacterPrinter characters(screen, sentences);
             Elite::TokenPrinter printer(characters);
             printer.SetCaseFlags(static_cast<std::uint8_t>(caseFlags));
 

@@ -334,7 +334,7 @@ namespace Elite
      * The port had an `ArriveAtSystem` here, on the reasoning that arriving somewhere ought to
      * stock its market. The routine says otherwise and the routine wins.
      */
-    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, GALACTIC_MESSAGE,
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, GALACTIC_MESSAGE,
                 _universe.view);
     CurrentSystemToCrosshairs(_universe.commander, _chart.cursorX, _chart.cursorY);
   }

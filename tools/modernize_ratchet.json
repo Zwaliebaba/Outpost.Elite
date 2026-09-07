@@ -69,9 +69,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4126,
+      "ceiling": 4127,
       "slack": 0,
-      "slice": "M5-e-2: Game owns the universe, one marker on the two printer accessors the replay hashes through"
+      "slice": "M5-e-2b: DTW1-8 are Universe::sentences, one marker on the field"
     },
     "oracle-test-files": {
       "ceiling": 48,

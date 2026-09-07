@@ -599,7 +599,7 @@ namespace GameLogicTests
         Elite::TextState& text = universe.text;
         text.column = 1;
         text.row = 1;
-        Elite::CharacterPrinter characters(sink);
+        Elite::CharacterPrinter characters(sink, universe.sentences);
         Elite::TokenPrinter recursive(characters);
         recursive.SetCursor(&text);
         Elite::Rng& rng = universe.rng;

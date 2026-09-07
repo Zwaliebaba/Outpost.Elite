@@ -75,16 +75,16 @@ namespace GameLogicTests
   [[nodiscard]] std::vector<Cell> ImageCells(Universe& _universe, const Where& _at);
 
   /*
-   * What the table reads that is NOT in `Elite::Universe`: the two printers (6502: QQ17 and
-   * DTW1-8) and the fixture's claim on the VIC-II sprite registers. An oracle fixture's cells read
-   * the wrapper's printers, which are what it drove; the replay's must read `Game`'s, which is what
-   * IT drove, and until M5-e-2 they did not: `Hash(universe)` hashed the wrapper's idle printers next
-   * to a `Game` that had printed with its own. M5-e-2b moves the nine bytes into `Elite::Universe`.
+   * What the table reads that is NOT in `Elite::Universe`: the token printer (6502: QQ17) and the
+   * fixture's claim on the VIC-II sprite registers. An oracle fixture's cells read the wrapper's
+   * printer, which is what it drove; the replay's must read `Game`'s, which is what IT drove, and
+   * until M5-e-2 they did not: `Hash(universe)` hashed the wrapper's idle printers next to a `Game`
+   * that had printed with its own. DTW1-8 were here too until M5-e-2b moved them into
+   * `Elite::Universe`; M5-e-2c collapses QQ17 and the printer goes the same way.
    */
   struct Beside
   {
     Elite::TokenPrinter& recursive;
-    Elite::CharacterPrinter& characters;
     bool spriteRegistersAreOurs = false;
   };
   [[nodiscard]] std::vector<Cell> ImageCells(Elite::Universe& _universe, Beside _beside, const Where& _at);
@@ -115,8 +115,7 @@ namespace GameLogicTests
 
   /// The replay's hash: `Game`'s universe and `Game`'s printers (M5-e-2). Const like the entry
   /// points above, and cast away inside for the same reason: only the getters run.
-  [[nodiscard]] std::uint64_t Hash(const Elite::Universe& _universe, const Elite::TokenPrinter& _recursive,
-                                   const Elite::CharacterPrinter& _characters);
+  [[nodiscard]] std::uint64_t Hash(const Elite::Universe& _universe, const Elite::TokenPrinter& _recursive);
 
   /*
    * The FNV-1a offset basis and prime, 64-bit. Any stable hash would do; this one is

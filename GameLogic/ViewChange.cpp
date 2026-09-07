@@ -293,8 +293,8 @@ namespace Elite
 
     // 6502: JSR MT2 -- LDA #32 / STA DTW1 / LDA #0 / STA DTW6. Sentence case for the extended
     // printer, which is the first thing a new screen is put back to.
-    _ports.characters.state.lowerCaseBits = 32u;
-    _ports.characters.state.alwaysLower = 0u;
+    _universe.sentences.lowerCaseBits = 32u;
+    _universe.sentences.alwaysLower = 0u;
 
     _universe.heaps.lsp = 0u; // 6502: LDA #0 / STA LSP -- the ball heap is forgotten
 
@@ -309,7 +309,7 @@ namespace Elite
      */
     _ports.printer.SetCaseFlags(0x80u);
     _universe.text.caseFlags = 0x80u;
-    _ports.characters.state.sentenceStart = 0x80u;
+    _universe.sentences.sentenceStart = 0x80u;
 
     ClearSunHeap(_universe.heaps); // 6502: JSR FLFLLS -- and the sun's heap with it
 

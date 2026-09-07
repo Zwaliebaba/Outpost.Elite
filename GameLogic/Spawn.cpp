@@ -31,7 +31,7 @@ namespace Elite
     if (_universe.bubble.missileTarget == _slot)
     {
       AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_READY); // 6502: JSR ABORT with GREEN2 -- the indicator's own green
-      ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, 200,
+      ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 200,
                   _universe.view); // 6502: LDA #200 / JSR MESS
     }
 

@@ -539,7 +539,8 @@ namespace GameLogicTests
           }
 
           Collector screen;
-          Elite::CharacterPrinter characters(screen);
+          Elite::ExtendedTextState sentences;
+          Elite::CharacterPrinter characters(screen, sentences);
           SystemNameTokens names;
           names.seeds = seeds;
           Elite::TokenPrinter recursive(characters, &names);
@@ -587,7 +588,8 @@ namespace GameLogicTests
       // 6502: PDL1K -- LDA QQ15+2,X / STA RAND,X, counting X down from 3.
       Elite::Rng rng;
       Collector screen;
-      Elite::CharacterPrinter characters(screen);
+      Elite::ExtendedTextState sentences;
+      Elite::CharacterPrinter characters(screen, sentences);
       Elite::TokenPrinter recursive(characters, nullptr);
       Elite::ExtendedTokenPrinter printer(characters, recursive, rng);
 

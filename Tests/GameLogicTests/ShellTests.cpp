@@ -176,18 +176,19 @@ namespace GameLogicTests
                                      L"and the view it was given is the view it set");
 
       Discard sink;
-      Elite::CharacterPrinter characters{sink};
+      Elite::ExtendedTextState sentences;
+      Elite::CharacterPrinter characters{sink, sentences};
       Elite::TokenPrinter printer{characters};
       Elite::TextState text{17, 9, 0xFF, {}};
       printer.SetCursor(&text);
       printer.SetCaseFlags(0xFF);
-      characters.state.lowerCaseBits = 0;
-      characters.state.sentenceStart = 0;
-      characters.state.alwaysLower = 0xFF;
+      characters.State().lowerCaseBits = 0;
+      characters.State().sentenceStart = 0;
+      characters.State().alwaysLower = 0xFF;
 
-      Elite::SetUpTextScreen(printer, text, characters.state);
+      Elite::SetUpTextScreen(printer, text, characters.State());
 
-      CompareTextState(FromOracle(cpu, oracle), FromPort(printer, text, characters.state), L"TT66");
+      CompareTextState(FromOracle(cpu, oracle), FromPort(printer, text, characters.State()), L"TT66");
 
       /*
        * And the assertion the whole test is about, stated so a reader does not have to reconstruct
@@ -195,7 +196,7 @@ namespace GameLogicTests
        * its top and zero into it five bytes from its end.
        */
       Assert::AreEqual<std::uint8_t>(0, printer.CaseFlags(), L"a screen change ends in ALL CAPS");
-      Assert::AreEqual<std::uint8_t>(0x80, characters.state.sentenceStart, L"but DTW2 keeps the 128");
+      Assert::AreEqual<std::uint8_t>(0x80, characters.State().sentenceStart, L"but DTW2 keeps the 128");
     }
 
     /*
@@ -219,14 +220,15 @@ namespace GameLogicTests
       Write(cpu, oracle, {17, 9, 0, 0, 0, 0xFF});
 
       Discard sink;
-      Elite::CharacterPrinter characters{sink};
+      Elite::ExtendedTextState sentences;
+      Elite::CharacterPrinter characters{sink, sentences};
       Elite::TokenPrinter printer{characters};
       Elite::TextState text{17, 9, 0, {}};
       printer.SetCursor(&text);
       printer.SetCaseFlags(0);
-      characters.state.lowerCaseBits = 0;
-      characters.state.sentenceStart = 0;
-      characters.state.alwaysLower = 0xFF;
+      characters.State().lowerCaseBits = 0;
+      characters.State().sentenceStart = 0;
+      characters.State().alwaysLower = 0xFF;
 
       Elite::Canvas canvas;
       for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
@@ -243,11 +245,11 @@ namespace GameLogicTests
       Elite::MessageState message;
       message.delay = 0x5Au;
       message.append = 0x5Au;
-      Elite::ClearMessageRows(canvas, printer, text, characters.state, message);
+      Elite::ClearMessageRows(canvas, printer, text, characters.State(), message);
       Assert::AreEqual<std::uint8_t>(0, message.delay, L"CLYNS clears DLY");
       Assert::AreEqual<std::uint8_t>(0, message.append, L"and de");
 
-      CompareTextState(FromOracle(cpu, oracle), FromPort(printer, text, characters.state), L"CLYNS");
+      CompareTextState(FromOracle(cpu, oracle), FromPort(printer, text, characters.State()), L"CLYNS");
 
       std::uint32_t cleared = 0;
       const std::span<const std::uint8_t> ours = canvas.Screen();

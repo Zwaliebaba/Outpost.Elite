@@ -261,7 +261,7 @@ namespace GameLogicTests
     struct Session
     {
       Session()
-        : characters(sink),
+        : characters(sink, universe.sentences),
           recursive(characters),
           values(recursive, text, commander, name, currentSeeds, selectedSeeds, false),
           extended(characters, recursive, rng),
@@ -275,8 +275,8 @@ namespace GameLogicTests
         recursive.SetCursor(&text);
         shell.cursor = &text;
         shell.printer = &recursive;
-        shell.extended = &characters.state;
-        characters.state.sentenceStart = 0xFF;
+        shell.extended = &characters.State();
+        characters.State().sentenceStart = 0xFF;
       }
 
       Session(const Session&) = delete;

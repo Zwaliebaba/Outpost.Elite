@@ -100,7 +100,7 @@ namespace Elite
         static_cast<std::uint8_t>(commander.kills.hi + 1u);
 
       // 6502: LDA #101 / JSR MESS -- "RIGHT ON COMMANDER", once every 256 whole kills.
-      ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, MESSAGE_RIGHT_ON_COMMANDER,
+      ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_RIGHT_ON_COMMANDER,
                   _universe.view);
     }
 
@@ -230,7 +230,7 @@ namespace Elite
       token = static_cast<std::uint8_t>(slot + 94u);
     }
 
-    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, token, _universe.view);
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token, _universe.view);
   }
 
   void StopEnergyBomb(ScreenState& _screen) noexcept
