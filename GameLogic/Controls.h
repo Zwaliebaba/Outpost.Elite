@@ -270,16 +270,16 @@ namespace Elite
   [[nodiscard]] TitleKey ScanKeyboard(KeyLogger& _keys, VideoState& _video, MemoryMap& _map, std::uint8_t _view,
                                       Keyboard& _keyboard) noexcept;
 
-  /// 6502: the one thing `DOKEY`'s flight half reaches that is neither memory nor the keyboard.
-  class ControlEffects
-  {
-  public:
-    virtual ~ControlEffects() = default;
-
-    /// 6502: JSR DOCKIT -- phase 4's docking autopilot. It reads the ship block and writes
-    /// `INWK+27` to `INWK+30`, which is how it steers: as an acceleration and three rates.
-    virtual void RunDockingComputer(Ship& _work) = 0;
-  };
+  /*
+   * `ControlEffects` WAS HERE AND IS NOT ANY MORE (M6-0-h-3).
+   *
+   * It was "the one thing `DOKEY`'s flight half reaches that is neither memory nor the keyboard" --
+   * 6502: DOKEY's `auton` path -- 6502: JSR DOCKIT, the docking autopilot, which reads the ship block and writes `INWK+27` to
+   * `INWK+30` -- an acceleration and three rates -- and which M4-c-2 made `Elite::RunDockingComputer`
+   * (`Tactics.h`). Every implementer of the seam made that one call; `ReadFlightControls` makes it
+   * itself now, and the `DOKEY` sweep runs the real autopilot over a seeded bubble on both machines
+   * instead of scripting its four answers through the seam.
+   */
 
   /*
    * 6502: DOKEY's flight half -- turn what is held down into a roll rate and a pitch rate.
@@ -301,7 +301,7 @@ namespace Elite
    *
    * The routine ends by falling into `DK4`, the docked dispatcher, which is not this unit's.
    */
-  void ReadFlightControls(Universe& _universe, Ports& _ports, ControlEffects& _effects) noexcept;
+  void ReadFlightControls(Universe& _universe, Ports& _ports) noexcept;
 
   /*
    * 6502: SPOFF% -- the sprite pointer for the first sprite definition.

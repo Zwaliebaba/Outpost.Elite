@@ -1756,10 +1756,10 @@ namespace Elite
     return EndFlightFrame(_universe, _ports);
   }
 
-  CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, ControlEffects& _effects, std::uint8_t _view) noexcept
+  CrosshairStep ScanFlightControls(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept
   {
     // 6502: JSR DOKEY, which BOTH paths do before they differ.
-    ReadFlightControls(_universe, _ports, _effects);
+    ReadFlightControls(_universe, _ports);
 
     // 6502: LDA QQ11 / BNE TT17afterall -- the space view returns with X and Y untouched, so the
     // caller gets no movement rather than a movement of zero, and the two are the same thing here.

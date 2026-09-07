@@ -34,14 +34,13 @@ namespace Elite
    * the character printer, the state tokens need the token printer AND the commander, and the token
    * printer needs the state tokens back -- which is the cycle `SetValueTokens` exists to break.
    */
-  Game::Game(Presenter& _present, Keyboard& _keyboard, CommanderStore& _store, ControlEffects& _controls) noexcept
+  Game::Game(Presenter& _present, Keyboard& _keyboard, CommanderStore& _store) noexcept
     : m_screen(m_universe.canvas, m_universe.text, &m_universe.sound),
       m_characters(m_screen, m_universe.sentences),
       m_recursive(m_characters, m_universe.text),
       m_values(m_recursive, m_universe.text, m_universe.commander, m_universe.commanderName, m_universe.current.seeds,
                m_universe.selectedSeeds, false),
       m_extended(m_characters, m_recursive, m_universe.rng),
-      m_controls(_controls),
       m_ports{m_recursive, m_characters, m_characters, m_sid, m_extended, _present, _keyboard, _store}
   {
     m_recursive.SetValueTokens(&m_values);
@@ -725,7 +724,7 @@ namespace Elite
      * green -- was never called by anything but its own test: no key the player HELD reached the
      * game, which is every flight control there is (§6.111).
      */
-    (void)ScanFlightControls(m_universe, m_ports, m_controls, m_universe.view);
+    (void)ScanFlightControls(m_universe, m_ports, m_universe.view);
 
     /*
      * 6502: `DOKEY` FALLS INTO `DK4`, which the port has never followed -- `Controls.cpp` says
@@ -765,7 +764,7 @@ namespace Elite
      */
     CoolTheGuns(m_universe.status);
 
-    m_universe.crosshairStep = ScanFlightControls(m_universe, m_ports, m_controls, m_universe.view);
+    m_universe.crosshairStep = ScanFlightControls(m_universe, m_ports, m_universe.view);
 
     PressKey(_key); // 6502: `thiskey`, which is zero when nothing is held
   }

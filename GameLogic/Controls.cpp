@@ -6,6 +6,7 @@
 #include "FlightLoop.h" // for the KY12..KY20 offsets `RDKEY`'s `QQ11` tail clears
 #include "LookupTables.h"
 #include "Ports.h"
+#include "Tactics.h" // for DOCKIT, which `DOKEY`'s autopilot path calls (M6-0-h-3)
 #include "Universe.h"
 
 namespace Elite
@@ -156,7 +157,7 @@ namespace Elite
     return answer;
   }
 
-  void ReadFlightControls(Universe& _universe, Ports& _ports, ControlEffects& _effects) noexcept
+  void ReadFlightControls(Universe& _universe, Ports& _ports) noexcept
   {
     KeyLogger& keys = _universe.keys;
     ControlState& control = _universe.control;
@@ -184,8 +185,11 @@ namespace Elite
       work.side.x.hi = static_cast<std::uint8_t>(96u | 0x80u);
       flight.type = TypeOf(static_cast<std::uint8_t>(96u | 0x80u));
 
-      work.speed = flight.delta;         // 6502: LDA DELTA / STA INWK+27
-      _effects.RunDockingComputer(work); // 6502: JSR DOCKIT
+      work.speed = flight.delta; // 6502: LDA DELTA / STA INWK+27
+
+      // 6502: JSR DOCKIT -- over the block `auton` just built in `INWK`, whose slot is 0: `INF`
+      // points at the player's own block on this path, which is what `DOCKIT` steers.
+      RunDockingComputer(_universe, _ports, 0u);
 
       // 6502: LDA INWK+27 / CMP #22 / BCC P%+4 / LDA #22 / STA DELTA -- the autopilot is not
       // allowed to fly faster than 22, whatever it asked for.

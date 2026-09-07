@@ -304,11 +304,11 @@ with four ports without touching a signature again, and three of the four have l
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
-`Outpost/Main.cpp` is <!--count:main-lines-->251 lines and every one of them is the platform: the
+`Outpost/Main.cpp` is <!--count:main-lines-->250 lines and every one of them is the platform: the
 window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
 paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
-<!--count:outpost-elite-names-->64 distinct `Elite::` names where it reached 205 when M3 opened.
+<!--count:outpost-elite-names-->61 distinct `Elite::` names where it reached 205 when M3 opened.
 
 What §2.1 asked for and this did not have until M5-e is `Frame()`, `Sounds()` and `StateHash()` —
 `Sounds()` is built (M5-e-1), `StateHash()` is built library-native (M5-e-3, `Elite::HashState`) and
@@ -317,7 +317,7 @@ and one thing it did not ask for, which M5-e-2 closed: `Elite::Universe` was the
 until then, because both sessions bound it at construction and `Game` needs both of them at its own.
 The sessions take it afterwards now (`AttachUniverse`) and `Game` owns it, as §4.4 drew.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->6 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->5 abstract classes in
 `GameLogic/*.h`. Some are platform (`Keyboard`, `Presenter`, `CommanderStore`); `TextSink` and
 `ValueTokens` are the text system's own and are argued about in §8 rather than assumed away. Most were **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
@@ -327,7 +327,9 @@ times. `SpawnEffects`, `ChartShapes`, `ShipEffects::RunTactics`, `FlightLoopEffe
 and `Anger`, and `StartUpEffects`'s `ResetUniverse`, `ResetShip` and `ResetMissileIndicators` are
 gone (M3-b-1a to M3-b-1e); `SpawnChildEffects` went in M4-a-1, `ShipDrawEffects`, the one the
 flat oracle image kept alive (§6.108), in M6-0-a-3, and `StartUpEffects` — `ZEKTRAN` and then
-`TITLE`, the last two methods of a seam the plan had already written off as empty — in M6-0-h. Three methods
+`TITLE`, the last two methods of a seam the plan had already written off as empty — and
+`ControlEffects`, which was `DOCKIT` beside `Ports`, in M6-0-h. The five that remain are the
+three platform ports and the text system's two, which is the number §4.5 can explain. Three methods
 are declared on two interfaces each and one override satisfies both, which is
 the language's rule and a smell. One seam carries a CPU flag across the platform boundary:
 `PlaySound(std::uint8_t _effect, bool _carryIn)` returns a carry because `NOISE` does (§6.99), and
@@ -1530,7 +1532,7 @@ were safe after M6-f, and none of them waited.
 | **M6-0-e Seven routines only ever trapped** | `TRADEMODE`, `NLIN`, `TT67` and `DK4` are ported and have no direct comparison against the original anywhere — every test that reaches them traps them; `WSCAN` is the platform's (ADR-005 §3), `REDU` is proven unreachable, `GTNMEW` is the load path's name entry. A trapped routine's fixture records the TRAP's answer. Each of the seven gets a ruling: compared before M6-a, or a sentence beside its trap saying it never will be and why. | No `AddTrap` on a label that has neither a direct comparison nor a recorded reason. | 1 |
 | **M6-0-f A coverage instrument** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
 | **M6-0-g Mutants to a stated floor** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
-| **M6-0-h The two seams that outlived their reason** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
+| **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
 | **M6-a Coverage review and the recorder** | **Blocked on M6-0.** Every *Port* row of the ledger has a test that calls it, read off M6-0-f's instrument rather than reviewed by eye; the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | M6-0's eight rows green first. Then the suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
 | **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged. | 2 |
 | **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
@@ -1810,6 +1812,33 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-h-3: `DOKEY` calls `DOCKIT`, and the row closes at five seams.**
+
+`ControlEffects` is gone. It was `DOCKIT` beside `Ports` — M4-c-2 made the routine
+`Elite::RunDockingComputer` and every implementer of the seam made that one call — and
+`ReadFlightControls` makes it itself now, over slot 0, which is what `INF` points at on `auton`'s
+path. `Game` takes three references; `FlightSession` answers no seam at all and stops being lent
+the ports; `effects-seams` 6 → 5, `outpost-elite-names` 64 → 61, `main-lines` 251 → 250. Five is
+the number §4.5 can explain: `Keyboard`, `Presenter` and `CommanderStore`, and the text system's
+`TextSink` and `ValueTokens`.
+
+**THE `DOKEY` SWEEP RUNS THE REAL AUTOPILOT.** It had stubbed `DOCKIT` on both machines — eleven
+bytes on the oracle, the seam on the port — to hand `DOKEY` four scripted answers, which is how
+it isolated the seventy-seven instructions from the routine they call. With the seam gone the
+port cannot be handed an answer, so the oracle is not either: each docking case seeds a bubble on
+both machines — the planet, a station where the case puts it with the slot pointing where the
+case says, `MANY`, `K3+10`, `RAND` — and both run `DOKEY` into `DOCKIT` into the key synthesis.
+Fourteen approaches replace the scripted answers, chosen by reading `DOCKIT` for what reaches
+each branch of `DOKEY`: the planet (no station, or one too far), the wide approach, the fine
+approach's halt-and-turn, and the lined-up ship whose roof-against-side test either rolls hard —
+`TN11`, roll 127 and speed up, which is the one way `DOKEY`'s direct write to `JSTX` is ever
+reached — or halts. The sweep is 1,984 cases where it was 3,840, every one of them agreeing byte
+for byte, and it asserts what §6.36 asks: that the autopilot asked for both speeds, both rolls and
+both pitches, wrote `JSTX` directly and hit the speed clamp, so a port that never took a branch
+could not agree with a game that did. `RAT`, `RAT2` and `CNT2` are compared as well now, seeded
+with a value `DOCKIT` overwrites, which is also how "the autopilot ran only when it is on" is read
+off the state instead of off a counter. 399 of 399; all 16 checks.
 
 **2026-09-07 — M6-0-h-2: `BR1` calls `TITLE`, and the title screen runs on both machines.**
 

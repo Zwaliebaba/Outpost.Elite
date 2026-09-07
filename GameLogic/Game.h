@@ -40,16 +40,16 @@ namespace Elite
    * ONE key and run ONE pass, and how many passes a wall-clock second is worth stays where the
    * clock is. That is `Step(InputFrame)` as §2.1 wrote it, arrived at from the other direction.
    *
-   * THE PLATFORM ARRIVES AS FOUR REFERENCES AND A `ControlEffects`, which is `Ports` minus the
-   * four members that are this library's own: the token printer, the character printer, the sink
-   * and the extended printer are built HERE, over the universe, because nothing about them is the
-   * platform's. `ControlEffects` is separate because it is not in `Ports` -- `DOCKIT` is passed
-   * beside it (§4.5) -- and putting it in would push `aggregate-refs` up, which rule 5 forbids.
+   * THE PLATFORM ARRIVES AS FOUR REFERENCES, which is `Ports` minus the four members that are this
+   * library's own: the token printer, the character printer, the sink and the extended printer are
+   * built HERE, over the universe, because nothing about them is the platform's. A `ControlEffects`
+   * arrived beside them until M6-0-h-3 -- 6502: JSR DOCKIT, which was never in `Ports` (§4.5) and
+   * is a library call now.
    */
   class Game
   {
   public:
-    Game(Presenter& _present, Keyboard& _keyboard, CommanderStore& _store, ControlEffects& _controls) noexcept;
+    Game(Presenter& _present, Keyboard& _keyboard, CommanderStore& _store) noexcept;
 
     Game(const Game&) = delete;
     Game& operator=(const Game&) = delete;
@@ -239,9 +239,6 @@ namespace Elite
     TokenPrinter m_recursive;
     StateTokens m_values;
     ExtendedTokenPrinter m_extended;
-
-    /// 6502: JSR DOCKIT -- not in `Ports`, so it arrives on its own and is held here.
-    ControlEffects& m_controls;
 
     /*
      * THE SEVEN BYTES THAT WERE HERE ARE IN `Universe` SINCE THE ADR-007 §3 FOLLOW-ON.

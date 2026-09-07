@@ -34,19 +34,19 @@
       "slice": "M6-0-h-2: StartUpEffects leaves Ports, which is eight references"
     },
     "main-lines": {
-      "ceiling": 251,
+      "ceiling": 250,
       "slack": 0,
-      "slice": "M5-e-2: the composition root holds no game state, and says so in fewer lines"
+      "slice": "M6-0-h-3: FlightSession is no longer lent the ports"
     },
     "outpost-elite-names": {
-      "ceiling": 64,
+      "ceiling": 61,
       "slack": 0,
-      "slice": "M6-0-h-2: GameShell stops answering the title screen"
+      "slice": "M6-0-h-3: FlightSession stops answering DOCKIT"
     },
     "effects-seams": {
-      "ceiling": 6,
+      "ceiling": 5,
       "slack": 0,
-      "slice": "M6-0-h-2: StartUpEffects goes -- BR1 calls ShowTitleShip itself"
+      "slice": "M6-0-h-3: ControlEffects goes -- DOKEY calls DOCKIT itself; five is the four ports' three and the text system's two"
     },
     "out-params": {
       "ceiling": 0,

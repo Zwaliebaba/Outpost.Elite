@@ -40,7 +40,7 @@ namespace GameLogicTests
     struct Bare
     {
       Bare()
-        : game(nulls, keys, nulls, controls)
+        : game(nulls, keys, nulls)
       {
       }
 
@@ -63,15 +63,11 @@ namespace GameLogicTests
       Bare(const Bare&) = delete;
       Bare& operator=(const Bare&) = delete;
 
-      /// 6502: JSR DOCKIT -- the one seam that is not in `Ports`, so it arrives on its own.
-      struct NoAutopilot final : Elite::ControlEffects
-      {
-        void RunDockingComputer(Elite::Ship&) override {}
-      };
+      // `NoAutopilot` -- `ControlEffects` answered with nothing -- WAS HERE AND IS NOT ANY MORE
+      // (M6-0-h-3): `DOCKIT` is a library call from `DOKEY`, and nothing here switches it on.
 
       NullSeams nulls;
       TitleKey keys;
-      NoAutopilot controls;
       Elite::Game game;
     };
   } // namespace
