@@ -362,7 +362,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,088 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,098 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1479,7 +1479,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 |---|---|---|---|
 | **M4-a Flight frame stages** ✅ **built 2026-09-07 (§8)** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the housekeeping cycle as a table. **M4-a-1 built 2026-09-07 (§8):** `SPIN` and `SPIN2` answer an `Elite::Drop` and `PerformDrop` spawns, which is what `SpawnChildEffects` was waiting on — the seam goes, and the frame fixtures untrap `SFS1` on both machines. **M4-a-2 built 2026-09-07 (§8):** parts 7 to 12 as `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and `KillOutcome` beside the existing `LaserHit`; `MoveEveryShip` 426 → 143 lines, and three dead stores at the end of part 9 that only a type could show were dead. **M4-a-3 built 2026-09-07 (§8):** the head and the tail split at their annotated parts — 324 → 14 and 254 → 43 — with the cycle as a table, the thirty-two-step count corrected in three places, and part 14's fall-through into part 15 restored. **M4-a is complete.** | `FlightLoopTests` green frame for frame; replay hashes unchanged. M4-a-1: both, plus `effects-seams` 9 → 8 and `aggregate-refs` 11 → 10. | 4 |
 | **M4-b LL9 stages** ✅ **built 2026-09-07 (§8)** | `DrawShip` as the SEVEN stages of §4.6 over a `ShipRender` frame — `TestPresence`, `MeasureRange`, `ScaleShip`, `SelectFaces`, `ProjectVertices`, `OpenHeapRun`, `PushEdges`; 551 → 38 lines of pipeline. | `ShipDrawTests` green; the whole-bitmap comparisons unchanged; the replay digest unchanged. The channel census names a PART rather than `DrawShip` for `xx2`, `xx3`, `xx12` and `q`, and raises three inherited inputs one function had hidden. | 4 |
-| **M4-c Decisions** | `TACTICS`, `DOCKIT` and `MLOOP` parts 1–4 return `Decision`s applied by one function; the sixteen `tactics` mutants re-anchored and re-run to zero survivors. | `TacticsTests` green; `mutate.py --unit tactics` at the recorded tally. | 5 |
+| **M4-c Decisions** ✅ **built 2026-09-07 (§8)** | `TACTICS` answers a `Tactic` over five parts (M4-c-1); `DOCKIT`'s `bool` was a PHANTOM — the original reaches no `OOPS` and no `DEATH`, so it is `void` (M4-c-2); `MLOOP` parts 1–4 answer a `SpawnPass` over a `SpawnFrame`, because §6.125's carry is live across all four (M4-c-3). | `TacticsTests` green at 7,326 cases; SEVEN `tactics` mutants re-anchored, none dropped, `mutate.py --check` at 72 of 72. The row said sixteen mutants and the unit has seven that name a line in `RunTactics`. | 5 |
 | **M4-d Mode machine polish** | The mission sub-machine, the death sequence and the pause as explicit states; `LoopOutcome` retired. | Replay hashes unchanged. | 2 |
 
 ### Phase M5 — Polish and the ledger
@@ -1774,6 +1774,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M4-c-3: `MLOOP`'s spawner in four parts, and the carry is why it needed a frame.**
+
+`RunSpawning` was 430 lines over `MLOOP`'s parts 1 to 4 with FOURTEEN `return;` statements, every
+one of them the same `JMP MLOOPS` — "this pass of the spawner is over". `SpawnPass` has two values
+and the parts are `SpawnTraderOrLoner` (1 and 2, which are one function because the same roll
+chooses between them and `.whips` is the tail both reach), `SpawnPolice` (3) and `SpawnEncounter`
+(4), over a `SpawnFrame`. `RunSpawning` is 24 lines.
+
+**THE CARRY IS WHY THERE IS A FRAME AT ALL, and it is §6.125 running the length of the routine.**
+Every `CMP` overwrites the generator's own flag and the next `DORND` rotates in what the compare
+left, so ONE boolean is live across all four parts and thirty-odd statements. Passing it between
+four functions would be four more `bool _carryIn` parameters — P11's pattern, which M2-d spent a
+slice removing from the headers and whose ratchet sits at thirty — so it travels in the frame as
+one named field instead. That is the same trade `TacticFrame` makes for `CNT` and `ShipRender` for
+`XX4`, and it is the third time the answer has been "a frame, because a value is live across a
+boundary the original has and the port did not".
+
+**And `Ze` is called twice.** The port had one `RngResult ze` for both calls because it was one
+function; part 3's roll is dead by the time part 4's runs — every read of it is behind the `fothg`
+branch, which returns — so part 4 declares its own. One variable standing for two different rolls
+is the kind of thing only a split can show.
+
+**M4-c is complete.** `origin-markers` 4,088 → 4,098, the sixth and last of M4's rises: ten labels
+where the parts split and on `SpawnPass`'s two values. 402 of 402 on the first run, the replay
+digest unchanged, all 14 repository checks.
 
 **2026-09-07 — M4-c-2: `DOCKIT`'s answer was a phantom, and the mechanical edit that removed it
 broke the game in a way the oracle caught on the first run.**
