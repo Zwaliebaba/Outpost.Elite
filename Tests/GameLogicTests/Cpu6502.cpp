@@ -530,10 +530,14 @@ namespace Elite::Testing
     // the routine's own RTS would have done, so the caller continues as if it had run.
     if (!traps.empty())
     {
-      for (const Trap& trapped : traps)
+      for (const Trap& armed : traps)
       {
-        if (pc == trapped.address)
+        if (pc == armed.address)
         {
+          if (trapped != nullptr)
+          {
+            trapped->set(pc); // coverage: reached, and not run
+          }
           TrapHit hit{pc, a, x, y, c, {}};
           for (std::size_t slot = 0; slot < WATCH_SLOTS; ++slot)
           {
@@ -543,11 +547,11 @@ namespace Elite::Testing
           const std::uint8_t lo = Pop();
           const std::uint8_t hi = Pop();
           pc = static_cast<std::uint16_t>((lo | (hi << 8)) + 1);
-          if (trapped.exit == TrapExit::ClearCarry)
+          if (armed.exit == TrapExit::ClearCarry)
           {
             c = false;
           }
-          else if (trapped.exit == TrapExit::SetCarry)
+          else if (armed.exit == TrapExit::SetCarry)
           {
             c = true;
           }
@@ -566,6 +570,10 @@ namespace Elite::Testing
      * call Indexed coincide exactly, and an addressing mode added later would break it silently.
      */
     m_crossedPage = false;
+    if (executed != nullptr)
+    {
+      executed->set(pc); // coverage: run
+    }
 
     const std::uint16_t opcodeAddress = pc;
     const std::uint8_t opcode = Fetch();

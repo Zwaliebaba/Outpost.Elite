@@ -7,6 +7,8 @@ same assertions, a different way of calling them.
 python tools/labels.py --assemble        # once: the oracle needs the assembled game
 Tests/PortableRunner/run_tests.sh        # <!--count:tests-->408 tests, about a minute from cold
 Tests/PortableRunner/run_tests.sh Chart  # only tests whose Suite.Method contains "Chart"
+Tests/PortableRunner/run_tests.sh --coverage x64/Debug/coverage.txt   # and which oracle labels each test ran
+python tools/inventory.py --coverage x64/Debug/coverage.txt           # read against the ledger's Port rows (M6-0-f)
 ```
 
 Needs `g++` with C++20, `make`, and Python 3. Nothing else.
