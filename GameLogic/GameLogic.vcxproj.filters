@@ -88,6 +88,9 @@
     <ClInclude Include="ShipDraw.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="ShipDraw2x.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="LineHeap.h">
       <Filter>Canvas</Filter>
     </ClInclude>
@@ -317,6 +320,9 @@
       <Filter>Universe</Filter>
     </ClCompile>
     <ClCompile Include="ShipDraw.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="ShipDraw2x.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="SoundEffects.cpp">

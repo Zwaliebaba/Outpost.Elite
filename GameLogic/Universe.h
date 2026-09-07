@@ -16,6 +16,7 @@
 #include "SoundEffects.h"
 #include "Scanner.h"
 #include "Picture.h"
+#include "ShipDraw2x.h"
 #include "ShipDraw.h"
 #include "ShipMove.h"
 #include "ShipSlot.h"
@@ -148,6 +149,19 @@ namespace Elite
     Bubble bubble;         ///< 6502: FRIN, K%, MANY, JUNK and SLSP
     Ship work{};           ///< 6502: INWK -- the ship the loop is working on
     LineHeap heap;         ///< 6502: the `LS%` region, and `SLSP` inside it
+
+    /*
+     * The 640x400 picture's record of the same lines (Resolution.md §4.1, slice RS-2).
+     *
+     * The game erases a ship by drawing its lines again, so a surface with no record of what it drew
+     * cannot rub anything out -- rule T3. This is that record, addressed by the SAME `HeapOffset` as
+     * the faithful bytes it twins, so `KILLSHP` shuffling a run and `NWSHP` carving one move both
+     * without a second piece of arithmetic anywhere.
+     *
+     * `HashState` walks past it, for `picture`'s reason and with the same test behind it: it is a
+     * second rendering of lines the game has already decided on, not a second set of decisions.
+     */
+    LineHeap2x heap2x;
     ClipState clip;        ///< 6502: dontclip -- the short-range chart's, which the clipper reads
     Projection projection; ///< 6502: K3 and K4 -- where the last ship landed on screen
     K3Block axes{};        ///< 6502: K3, which `SPS1` fills for the docking check

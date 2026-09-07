@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->427 green against the oracle and all <!--count:checks-->18 repository checks
+<!--count:tests-->434 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -77,7 +77,7 @@ the ruling on the space view can be honoured at all:
 
 | Element | Drawn today by | Precision of its input today | What 2× gets, and from where |
 |---|---|---|---|
-| Ship lines | `LL9`: `PROJ` centre at scale 256, `LL28` vertex offsets (8-bit), `LL145` clips 16-bit to 8-bit, `LOIN` | One pixel; the divides truncate to it | A twin `PROJ` and `LL28` at scale 512 from the SAME rotated, scaled vertex the faithful stage produced; one extra bit, honest, no interpolation (§4.1) |
+| Ship lines | `LL9`: `PROJ` centre at scale 256, `LL28` vertex offsets (8-bit), `LL145` clips 16-bit to 8-bit, `LOIN` | **CORRECTED at RS-2: none.** `LL28` is a LOGARITHM-TABLE lookup, not a truncating divide — measured against exact division over all 32,640 pairs it is out by up to 3, by 0.70 on average, and by more than one in 13% of them | **Thinner lines, and nothing else.** There is no dropped bit to recover: a twin dividing exactly at 512 would put vertices up to three canvas pixels from where the game puts them, which is a different wireframe and what rule T2 forbids. The wide line is the faithful 16-bit line doubled, drawn one wide pixel thick instead of two, and cut to the wide view at the finer boundary (§4.1, §13) |
 | Planet circle | `PROJ` centre, `DVID3B` radius, `CIRCLE2` steps, `BLINE` | One pixel for the centre, the radius and each arc point | Twin centre and radius at scale 512; arc points as a 16-bit multiply of the twin radius by the same `SNE` entry |
 | Sun | `SUN`: a half-width per row from `LL5`'s square root | One pixel per row, 8-bit root | Twin: an integer root of the 2× radius per hi-res row — 288 rows, each its own |
 | Stardust | `PIXEL2` from `SX`/`SY` | The high byte; the low byte `SXL`/`SYL` is thrown away | The twin reads the top bit of the low byte. The precision was always there |
@@ -313,13 +313,17 @@ routine. Four constraints make it a rule rather than a habit:
 vertex's rotated, scaled coordinates go through `LL28` (`R = 256 * A / Q`) and land in `XX3` as a
 16-bit offset from the ship's centre, which `PROJ` put in `K3`/`K4` at scale 256. The twin is:
 
-- `Project2x`: `PROJ` with the numerator shifted left once before `DVID3B` and the overflow test at
-  2048 rather than 1024 — the same routine at scale 512. Its `Projection2x` is `(x, y)` as
-  `std::int32_t` and is stored beside `Universe::projection`.
-- `Divide512`: `512 * A / Q` as a 16-bit integer quotient. Not `LL28` and not `LL61`; a plain
-  division, because the faithful routine's saturation at 255 is a decision `ProjectVertices` has
-  already taken for this vertex (T1) and the twin only needs the number.
-- `ClipLine2x`: Cohen–Sutherland on 32-bit ints against 0..511 × 0..287. Not a port of `LL145`: the
+- **CORRECTED at RS-2: there is no `Project2x` and no `Divide512`, and there cannot usefully be
+  one.** Both rested on `LL28` truncating an exact quotient. It does not — it is a logarithm-table
+  lookup, and §1's table now carries the measurement. What replaced them is one line of arithmetic:
+  the wide vertex is the faithful 16-bit vertex `XX3` already holds, DOUBLED (`Doubled` in
+  `ShipDraw2x.h`). That is provably the same wireframe at twice the scale, which is what rule T2
+  asks for, and it removes a whole class of divergence rather than managing it.
+- `Project2x` itself moves to **RS-3**, where the planet's centre and radius need it and where
+  `DVID3B` has to be twinned anyway; `SHPPT`'s dot doubles the faithful heap bytes until then.
+- `ClipLine2x`: Cohen–Sutherland on 32-bit ints against 0..511 × 0..287, in the VIEW's own
+  coordinates — the doubled left margin is added by `Bresenham2x` at the plot and nowhere else,
+  exactly as `ylookup` adds the faithful one. Not a port of `LL145`: the
   faithful clipper's job is to decide what goes on the heap, the twin's is to cut a line it has been
   told to draw. A line the faithful clipper rejected is never handed to the twin; a line it accepted
   is cut to the 2× rectangle and, in the corner case where the 2× line ends half a pixel inside a
@@ -335,7 +339,11 @@ vertex's rotated, scaled coordinates go through `LL28` (`R = 256 * A / Q`) and l
 `Bresenham2x` is the line drawer: integer, one hi-res pixel wide, exclusive-or into the bitmap
 plane. It is deliberately not `LOIN`'s shape — `LOIN`'s two loops exist to plot one bit at a time
 through a mask table so that a line alternates a cell's two colours, and a hi-res standard-mode
-line does the same thing by being a bit plane, with no table.
+line does the same thing by being a bit plane, with no table. **It is HALF-OPEN, which RS-2
+measured rather than assumed**: `LOIN` lights `max(|dx|, |dy|)` pixels — a span of four lights four,
+and a line whose ends coincide lights none — so the twin draws the start and not the end. Getting
+that wrong is nearly invisible, because every extra endpoint is an exclusive-or and cancels wherever
+an even number of edges meet; it surfaces as one stray pixel where an odd number do (§13).
 
 ### 4.2 Planet and sun
 
@@ -674,7 +682,7 @@ path the layout did not see — are what the estimate cannot price.
 |---|---|---|---|
 | **RS-0 The picture and the presenter** ✅ **built 2026-09-07 (§13)** | `Picture` (§3) with `Resolve`, `Hash` and the energy-bomb decode; `Universe::picture` and the hash exclusion (§3.4); `ScreenPresenter`, `FitPicture`, the root constants, `INITIAL_SCALE = 2`; **the upscale**: `Picture::Resolve` fills every region it has no native content for from the canvas doubled, per region flag, so the tree plays at 1280×800 from this slice on; `GoldenCanvas.cpp` and `golden_diff.py` at both sizes | The game plays at 640×400 looking exactly as today; `ShellTests` moved; `UniverseImage` names the field excluded; §8.4 green with nothing to twin yet | 2 |
 | **RS-1 The text layer** ✅ **built 2026-09-07 (§13)** | `PrintGlyph2x`, `EraseCell2x`, `ClearTextArea2x`, `TextLayout` and `LayoutForView` (§6.2), the centred default and the space view's layout; `check_twins.py` (§8.6). **NOT the borders or `CLYNS`** — see §13. The space-view REGION does not flip here — it flips when RS-3 completes it, so this slice's pixels are drawn and not shown | The text shadow test (§8.1) green over eight scenes; the glyph lands on the cell the layout names; the check in CI | 2–3 |
-| **RS-2 Ship lines** | `Project2x`, `Divide512`, `ClipLine2x`, `Bresenham2x`, `LineHeap2x`, `PushEdges`' and `EraseShip`'s twins, `SHPPT`'s dot (§4.1) | The title ship and a flight with ships at 2×; the space-view shadow test green on `MA23`'s ship frames; the property sweeps of §8.2 for `Project2x` and `Divide512`; the first screen golden | 3–4 |
+| **RS-2 Ship lines** ✅ **built 2026-09-07 (§13)** | `Bresenham2x`, `ClipLine2x`, `LineHeap2x`, `Doubled`, `PushEdges`' and `EraseShip`'s twins, `SHPPT`'s dot (§4.1). **NOT `Project2x` or `Divide512`** — the premise for them was measured false; they move to RS-3 where the planet needs `DVID3B` twinned anyway. The borders and the loader move there too, for a different reason (§13) | The space-view shadow test green over three ship distances; the wide vertex is the faithful one doubled over all 65,536 values; the half-open line drawer measured against `LOIN` | 3–4 |
 | **RS-3 Planet, sun, dust, beams, rings** | §4.2 and §4.3: `ball2x`, `sun2x`, `isqrt`, the stardust and particle twins, the laser and tunnel twins. **The space-view region flips here**, which is the first slice a person sees any of RS-1 to RS-3 | Shadow test green on the sun frame and the explosion frame; `isqrt` swept; the launch tunnel presents thin rings; a hand-check of the whole upper region | 2–3 |
 | **RS-4 The dashboard** | §5: the dial, indicator, missile and bulb twins, the scanner and compass twins, `bitmaps.py`'s fourth sheet and `bootstrap-2x`, `DASHBOARD_IMAGE_2X` as bootstrapped, the rectangle table and its import check, sprites pixel-doubled in `Resolve` | The per-instrument shadow properties green; the flight view entirely native (no region upscaled) and a hand-check recorded; the scanner sweep of §8.2 | 3 |
 | **RS-4-art The picture** | The owner redraws `DASHBOARD_IMAGE_2X` on the bootstrap (§5.3, ruling §11.1); no slice waits on it | Imports clean; a hand-check; a screen golden re-recorded with the diff attached | owner's |
@@ -732,7 +740,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->427 tests with the oracle present, all passing, and all
+<!--count:tests-->434 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -816,7 +824,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->427 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->434 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -863,3 +871,63 @@ check that went red from RS-1 to RS-4 would teach people to skip it.
 this slice draws goes onto a surface nobody presents, and the picture on screen is still the canvas
 doubled. There is no screenshot to sign off and no hand-check to record; the shadow test is the whole
 of the evidence, which is what §10 said this slice would be.
+
+### RS-2 — the ship lines, 2026-09-07
+
+**Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
+`Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
+wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->434 tests, green with the
+oracle present, and all <!--count:checks-->eighteen repository checks pass.
+
+**THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
+§1's table had the space view gaining a bit of precision because "the divides truncate to a pixel",
+and §4.1 built `Project2x` and `Divide512` on that. `LL28` does not truncate a quotient: it is a
+LOGARITHM-TABLE lookup, and swept against exact division over all 32,640 pairs it is out by up to 3,
+by 0.70 on average, and by more than one in 13% of them. So there is no dropped bit to recover, and
+a twin that divided exactly would place vertices up to three canvas pixels from where the game
+places them — a different wireframe, which is precisely what rule T2 exists to forbid.
+
+**What the ship actually gains is thinness.** The wide line is the faithful sixteen-bit line
+doubled, drawn one wide pixel thick where the canvas draws two, and cut to the wide view at the
+finer boundary. That is worth having — a wireframe in one-pixel lines at 640×400 reads far better
+than one in two-pixel lines at 320×200 — and it is a smaller claim than the design made. Where a
+real bit DOES exist it is a byte the faithful plot throws away rather than a table's resolution: the
+stardust's `SXL`/`SYL` fractions (RS-3) and the scanner's `x_lo` (RS-4) still gain what §1 says.
+
+**And the arithmetic collapsed to one line.** With the divide gone, the twin is `Doubled` — the
+sixteen-bit vertex `XX3` already holds, times two — so there is no second projection to keep in step
+and no second visibility decision anywhere. The test that replaced the two property sweeps is
+stronger than either: the wide vertex equals the faithful one doubled for **all 65,536** sixteen-bit
+values, and a second test pins the log divide's error so the claim above cannot rot.
+
+**The line drawer is HALF-OPEN, and that was measured, not assumed.** `LOIN` lights
+`max(|dx|, |dy|)` pixels: from (100, 50) to (104, 50) it lights four rather than five, and a line
+whose ends coincide lights none. Bresenham as first written included both endpoints. The error is
+nearly invisible — every extra endpoint is an exclusive-or, so at a vertex where an even number of
+edges meet the two mistakes cancel — and the whole of it surfaced as ONE stray pixel at the view
+centre, where a degenerate edge in the Cobra's blueprint meets an odd number of others. The shadow
+test found it because it counts pixels in both directions; nothing else in the tree would have.
+
+**One thing the diagnosis turned up that is not a defect.** At some distances a ship's coincident
+edges exclusive-or each other away and the frame is blank — on both surfaces, identically. That is
+the original's behaviour, and a test that read a blank frame as a broken twin would reach exactly
+the wrong conclusion; `RedrawingAShipRemovesItFromBoth` now asserts the canvas has ink before it
+asserts anything about the picture, and says why.
+
+**Two things moved to RS-3.** `Project2x` goes with the planet, which needs `DVID3B` twinned anyway
+and is the only caller that can justify it. The borders and the loader — which RS-1 moved here —
+move again, and this is the last time: a border lives in the four-cell MARGIN, outside the view
+coordinates every line primitive in this slice works in, so it needs a surface-coordinate primitive
+nothing else wants and a visual judgement about its weight that only makes sense once the region
+flips and somebody looks at it. Both are stated in `check_twins.py`'s `NEEDS_NO_TWIN` rather than
+left silent.
+
+**And the checker caught an imprecision in itself.** Its `DRAWS` pattern matched any `.Write(`,
+which counts a `LineHeap` write as drawing — so it reported `StoreLineCountAndDraw`, which forwards
+the surface and draws on both perfectly well. The pattern now checks the receiver, which is what it
+always claimed to measure.
+
+**What RS-2 does NOT do.** Nothing is shown yet. The space-view region flips at RS-3, so the ships
+this slice draws go onto a surface nobody presents; the picture on screen is still the canvas
+doubled. There is no screenshot to sign off, and the shadow test remains the whole of the evidence.

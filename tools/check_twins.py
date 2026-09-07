@@ -52,6 +52,8 @@ LOGIC = REPO / "GameLogic"
 TWINNED: dict[str, str] = {
     "TextPrint.cpp": "RS-1",
     "TextPrint2x.cpp": "RS-1",
+    "ShipDraw.cpp": "RS-2",
+    "ShipDraw2x.cpp": "RS-2",
 }
 
 # Routines whose twin is the CALLER's to call, and the twin each one names. Rule 3 checks them.
@@ -62,14 +64,23 @@ PAIRED_BY_CALLER: dict[str, str] = {
 # A function in a twinned file that draws on the canvas and needs no twin, with the reason. Kept as
 # data rather than as a silence, so that a reader can see what has been decided and disagree.
 NEEDS_NO_TWIN: dict[str, str] = {
+    "StorePoint": "the two heap writes SHPPT's dot is made of; DrawShipAsPoint doubles what they "
+                  "leave, in one place, so that the dot cannot get an arithmetic of its own",
+    "SeedExplosionCloud": "the explosion's seed bytes, not pixels -- the cloud is RS-3's",
+    "PushHeapLine": "the faithful four bytes; its twin is called beside it in PushEdges, where the "
+                    "wide line is built from the vertices those bytes came from",
     "ResetCellColours": "screen RAM palettes for the whole canvas, which the picture keeps per cell "
                         "and the glyph twin writes; there is no second surface to reset",
     "ClearMessageRows": "RS-5's, with the docked screens it serves -- its ten callers are spread "
                         "over six files and most have no picture in scope yet",
 }
 
-# What "draws on the canvas" is: a write through a `Canvas&`, or one of the pixel primitives.
-DRAWS = re.compile(r"\.(?:Write|ExclusiveOr)\s*\(|\b(?:PlotPixel|PlotRelativePixel|PlotDash|PlotBlock|DrawLine|DrawHorizontalLine)\s*\(")
+# What "draws on the canvas" is: a write through something NAMED like a canvas, or one of the pixel
+# primitives. The receiver is checked because a `LineHeap` has `Write` too and a heap write is not
+# drawing -- counting one made the check report `StoreLineCountAndDraw`, which forwards the surface
+# to `DrawShipLines` and draws on both perfectly well.
+DRAWS = re.compile(r"\b(?:_canvas|canvas|m_canvas)\.(?:Write|ExclusiveOr)\s*\(|"
+                   r"\b(?:PlotPixel|PlotRelativePixel|PlotDash|PlotBlock|DrawLine|DrawHorizontalLine)\s*\(")
 CALLS_TWIN = re.compile(r"\b[A-Za-z_]\w*2x\s*\(")
 TWIN_MARKER = re.compile(r"///\s*2x of:\s*([A-Za-z_][\w:]*)")
 DECLARED = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
@@ -172,7 +183,7 @@ def self_test() -> int:
                                         "void Wipe(Canvas& _c);\n", encoding="utf-8")
 
         # A drawing function with its twin beside it passes; the same one without it does not.
-        good = "void PaintIt(Canvas& _c)\n{\n  _c.Write(0, 1);\n  PaintIt2x(picture);\n}\n"
+        good = "void PaintIt(Canvas& _canvas)\n{\n  _canvas.Write(0, 1);\n  PaintIt2x(picture);\n}\n"
         (root / "Planted.cpp").write_text(good, encoding="utf-8")
         _, _, clean = check(root, {"Planted.cpp": "test"}, {})
         if clean:
@@ -181,14 +192,14 @@ def self_test() -> int:
                 print(line)
             return 1
 
-        (root / "Planted.cpp").write_text("void PaintIt(Canvas& _c)\n{\n  _c.Write(0, 1);\n}\n", encoding="utf-8")
+        (root / "Planted.cpp").write_text("void PaintIt(Canvas& _canvas)\n{\n  _canvas.Write(0, 1);\n}\n", encoding="utf-8")
         _, _, missing = check(root, {"Planted.cpp": "test"}, {})
         if not any("calls no 2x twin" in line for line in missing):
             print("FAIL  the self-test's unpaired drawing function was not reported")
             return 1
 
         # And a caller that drops the twin beside a routine paired by its callers.
-        (root / "Planted.cpp").write_text("void Wipe(Canvas& _c)\n{\n  _c.Write(0, 0);\n  Wipe2x(p);\n}\n"
+        (root / "Planted.cpp").write_text("void Wipe(Canvas& _canvas)\n{\n  _canvas.Write(0, 0);\n  Wipe2x(p);\n}\n"
                                           "void User()\n{\n  Wipe(canvas);\n}\n", encoding="utf-8")
         _, _, dropped = check(root, {"Planted.cpp": "test"}, {"Wipe": "Wipe2x"})
         if not any("calls Wipe and not Wipe2x" in line for line in dropped):

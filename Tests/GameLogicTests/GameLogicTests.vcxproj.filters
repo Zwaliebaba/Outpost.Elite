@@ -172,6 +172,9 @@
     <ClCompile Include="PictureTextTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="PictureLineTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="TacticsTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>

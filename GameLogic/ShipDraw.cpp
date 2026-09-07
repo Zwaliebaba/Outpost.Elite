@@ -157,8 +157,15 @@ namespace Elite
 
   } // namespace
 
-  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run) noexcept
+  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run, Picture* _picture, const LineHeap2x* _wide) noexcept
   {
+    // Resolution.md §4, rule T3: the same run on the wide surface, so that the erase below matches
+    // what was drawn. Nothing attached is a fixture comparing the canvas, which is most of them.
+    if (_picture != nullptr && _wide != nullptr)
+    {
+      DrawShipLines2x(*_picture, _heap, *_wide, _run);
+    }
+
     const std::uint8_t length = _heap.Read(_run);
     if (length < 4u)
     {
@@ -187,13 +194,14 @@ namespace Elite
     } while (y < length);
   }
 
-  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept
+  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count, Picture* _picture,
+                             const LineHeap2x* _wide) noexcept
   {
     _heap.Write(_run, _count);
-    DrawShipLines(_canvas, _heap, _run);
+    DrawShipLines(_canvas, _heap, _run, _picture, _wide);
   }
 
-  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept
+  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn, Picture* _picture, const LineHeap2x* _wide) noexcept
   {
     if (!Has(_ship.state, ShipStateBit::OnScreen))
     {
@@ -201,7 +209,7 @@ namespace Elite
     }
 
     _ship.state = static_cast<std::uint8_t>(_ship.state ^ Mask(ShipStateBit::OnScreen));
-    DrawShipLines(_canvas, _heap, _ship.heap);
+    DrawShipLines(_canvas, _heap, _ship.heap, _picture, _wide);
 
     // 6502: LL155's exit -- `CMP #4 / BCC LL82` clears it for a heap with no line on it, and the
     // `CPY XX20 / BCC LL27` that ends the loop leaves it set for every heap that had one.
@@ -223,10 +231,11 @@ namespace Elite
     }
   }
 
-  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen) noexcept
+  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen, Picture* _picture,
+                       LineHeap2x* _wide) noexcept
   {
     // The flag `EE51` returns goes nowhere from here: `SHPPT` overwrites it in `PROJ`'s arithmetic.
-    static_cast<void>(EraseShip(_canvas, _ship, _heap, false));
+    static_cast<void>(EraseShip(_canvas, _ship, _heap, false, _picture, _wide));
 
     const ProjectResult projected = Project(_ship, _math, _screen);
 
@@ -249,7 +258,31 @@ namespace Elite
     }
 
     _ship.state = With(_ship.state, ShipStateBit::OnScreen);
-    StoreLineCountAndDraw(_canvas, _heap, heap, 8);
+
+    /*
+     * `SHPPT` draws a distant ship as TWO short horizontal lines, one above the other, which is
+     * what `StorePoint` has just put on the heap. The wide surface gets the same two at twice the
+     * position, which keeps a far ship the same SIZE on screen and places it twice as finely.
+     *
+     * Its position is the faithful one doubled and not a `Project2x`, and that is a scoping call
+     * rather than an oversight: `PROJ` divides through `DVID3B`, and twinning that is the planet
+     * centre's problem as much as the dot's, so it lands with the planet in RS-3 (§13). Doubling
+     * loses the half-pixel a `Project2x` would recover, on a mark four pixels wide.
+     */
+    if (_picture != nullptr && _wide != nullptr)
+    {
+      for (std::uint16_t at = 1u; at <= 5u; at += 4u)
+      {
+        // The four bytes `LL155` would read, doubled -- the same rule every other line follows, so
+        // the dot cannot drift from the edges by having an arithmetic of its own.
+        const auto doubled = [&](std::uint16_t _offset) {
+          return static_cast<std::int16_t>(2 * _heap.Read(heap.Byte(static_cast<std::uint16_t>(at + _offset))));
+        };
+        _wide->Write(heap.Byte(at), Line2x{doubled(0u), doubled(1u), doubled(2u), doubled(3u), true});
+      }
+    }
+
+    StoreLineCountAndDraw(_canvas, _heap, heap, 8, _picture, _wide);
   }
 
   void DotProducts(Vector16 _vector, GeometryWorkspace& _geometry) noexcept
@@ -857,10 +890,16 @@ namespace Elite
     LineHeap& heap;
     const Blueprint& blueprint;
 
+    /// The wide surface and its heap (Resolution.md RS-2). References rather than pointers: inside
+    /// `DrawShip` there is always a universe, and the nullable pointers are the public routines'.
+    Picture& picture;
+    LineHeap2x& wide;
+
     std::uint8_t detail = 31;               ///< 6502: XX4 -- how much detail the distance allows
     std::array<std::uint8_t, 9> position{}; ///< 6502: XX18 -- the position, halved, then rotated
     HeapOffset run{};                       ///< 6502: the ship's own block of the line heap
     std::uint8_t used = 1;                  ///< 6502: U -- heap bytes used, one because byte 0 is the count
+
   };
 
   /*
@@ -891,7 +930,7 @@ namespace Elite
     if (Has(_render.work.newb, NewbBit::Remove))
     {
       // 6502: BMI EE51 -- a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
-      static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn));
+      static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture, &_render.wide));
       return Presence::Erased;
     }
 
@@ -909,7 +948,7 @@ namespace Elite
 
       // 6502: JSR EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
       // carry the erase returns, which is the caller's when there was nothing to erase (§6.157).
-      const bool carry = EraseShip(_render.canvas, _render.work, _render.heap, _carryIn);
+      const bool carry = EraseShip(_render.canvas, _render.work, _render.heap, _carryIn, &_render.picture, &_render.wide);
       SeedExplosionCloud(_render.heap, _render.work.heap, _render.blueprint.explosionCount, _rng, carry); // 6502: (XX0),7
     }
 
@@ -933,7 +972,8 @@ namespace Elite
       // 6502: LL14.
       if (!Has(_render.work.state, ShipStateBit::Exploding))
       {
-        static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, false)); // 6502: JMP EE51 -- and the flag is `LL9`'s exit
+        // 6502: JMP EE51 -- and the flag is `LL9`'s exit
+        static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, false, &_render.picture, &_render.wide));
         return Presence::Erased;
       }
 
@@ -1291,6 +1331,7 @@ namespace Elite
           ++x;
           _render.geometry.xx3[x] = SubtractWithCarry(0, projectedY.high, low.carry).value;
         }
+
       }
 
       // 6502: LL50 -- on to the next vertex, six bytes along, and stop when the count runs out or
@@ -1329,7 +1370,7 @@ namespace Elite
     _render.run = _render.work.heap;
     if (Has(_render.work.state, ShipStateBit::OnScreen))
     {
-      DrawShipLines(_render.canvas, _render.heap, _render.run);
+      DrawShipLines(_render.canvas, _render.heap, _render.run, &_render.picture, &_render.wide);
     }
     _render.work.state = With(_render.work.state, ShipStateBit::OnScreen);
 
@@ -1428,6 +1469,34 @@ namespace Elite
 
         if (!clipped.rejected)
         {
+          /*
+           * The wide line goes where the faithful four bytes go, which is why `used` is read BEFORE
+           * `PushHeapLine` advances it (Resolution.md §4.1).
+           *
+           * `LL145` has already decided this edge is visible -- rule T1 -- so `ClipLine2x` only CUTS
+           * the wide line to the wide view, and a cut that finds nothing inside is the half-pixel
+           * corner §8.1 allows one pixel of slack for. The bottom row follows `dontclip`, which is
+           * the short-range chart letting the drawing run past the space view and down the screen.
+           */
+          const int bottom = (_render.clip.dontclip != 0u) ? WHOLE_SCREEN_BOTTOM_2X : SPACE_VIEW_BOTTOM_2X;
+
+          // The UNCLIPPED sixteen-bit ends `XX3` holds, doubled -- see `Doubled` for why that is
+          // the whole of the twin's arithmetic and why a finer divide would be a different ship.
+          const Line2x unclipped{Doubled(_render.geometry.xx3[from], _render.geometry.xx3[from + 1u]),
+                                 Doubled(_render.geometry.xx3[from + 2u], _render.geometry.xx3[from + 3u]),
+                                 Doubled(_render.geometry.xx3[to], _render.geometry.xx3[to + 1u]),
+                                 Doubled(_render.geometry.xx3[to + 2u], _render.geometry.xx3[to + 3u]), true};
+
+          Line2x wide;
+          if (ClipLine2x(unclipped, bottom, wide))
+          {
+            PushHeapLine2x(_render.wide, _render.run.Byte(_render.used), wide);
+          }
+          else
+          {
+            PushHeapLine2x(_render.wide, _render.run.Byte(_render.used), Line2x{});
+          }
+
           // 6502: LL80 -- and stop as soon as the heap this blueprint asked for is full.
           PushHeapLine(_render.heap, _render.run, clipped.line, _render.used);
           if (_render.used >= heapLimit)
@@ -1447,7 +1516,7 @@ namespace Elite
     }
 
     // 6502: LL81 -- the heap's length goes in byte 0, and then it is drawn.
-    StoreLineCountAndDraw(_render.canvas, _render.heap, _render.run, _render.used);
+    StoreLineCountAndDraw(_render.canvas, _render.heap, _render.run, _render.used, &_render.picture, &_render.wide);
   }
 
   /*
@@ -1470,8 +1539,8 @@ namespace Elite
 
   void DrawShip(Universe& _universe, Ship& _slot, bool _carryIn) noexcept
   {
-    ShipRender render{_universe.canvas, _universe.geometry, _universe.math,           _universe.clip,
-                      _universe.projection, _universe.work, _universe.heap, *_universe.flight.blueprint};
+    ShipRender render{_universe.canvas, _universe.geometry, _universe.math,  _universe.clip,   _universe.projection,
+                      _universe.work,   _universe.heap,     *_universe.flight.blueprint, _universe.picture, _universe.heap2x};
 
     switch (TestPresence(render, _slot, _universe.flight.type, _universe.rng, _carryIn)) // 6502: part 1
     {
@@ -1492,7 +1561,9 @@ namespace Elite
 
     if (MeasureRange(render) == Range::Dot) // 6502: part 2
     {
-      DrawShipAsPoint(_universe.canvas, _universe.work, _universe.heap, _universe.math, _universe.projection); // 6502: LL13's JMP SHPPT
+      // 6502: LL13's JMP SHPPT
+      DrawShipAsPoint(_universe.canvas, _universe.work, _universe.heap, _universe.math, _universe.projection, &_universe.picture,
+                      &_universe.heap2x);
       return;
     }
 
