@@ -362,7 +362,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,107 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,106 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1774,6 +1774,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-5: there were TWO `DNOIZ` bytes, and the pause screen's sound-off key has never
+worked in this port.**
+
+Found while preparing the widening the owner has now authorised, by asking which bytes the replay
+digest was not watching. `Universe::soundDisabled` and `SoundBuffer::soundOff` are both `DNOIZ`.
+**The original has one**: `DK4` writes it — `CPX #&02 / BNE DK6 / STX DNOIZ`, the key code itself —
+and `NOISE` reads it, `LDA DNOIZ / BNE SOUR1`. This port had the pause screen write one and the
+sound system read the other, so `Universe::soundDisabled` was **written twice and read nowhere**,
+and pressing "2" on the pause screen left every sound playing.
+
+**IT IS THE DUPLICATE `QQ12` AGAIN, and it was found the same way.** The replay slice found
+`FlightPort` holding a second `dockedFlag`; this is a second `DNOIZ`, and both surfaced from the
+same question — which bytes does the digest see? `UniverseImage` has had a `DNOIZ` cell since
+M3-b-2a and it is bound to `sound.soundOff`, the byte the sound system reads, so the digest was
+watching the half that worked. A byte written and never read cannot be caught by any comparison; it
+can only be caught by looking.
+
+`Universe::soundDisabled` is gone, `PressPauseKey` writes `_universe.sound.soundOff`, and
+`PauseScreenTests` compares the byte `NOISE` reads against the oracle's `DNOIZ` as it always did —
+which now means something. The seven bytes M3's follow-on moved into `Universe` are **six**.
+
+`origin-markers` 4,107 → 4,106, one marker gone with the duplicate. 402 of 402, the replay digest
+unchanged — the scripted flight presses no pause key, which is exactly why nothing caught this.
+All 14 repository checks.
 
 **2026-09-07 — M5-a-4: `SoundEffect`, and the sixteen sounds were declared in eight different
 headers.**

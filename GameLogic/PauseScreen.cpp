@@ -94,7 +94,7 @@ namespace Elite
      */
     if (_key == KEY_SOUND_OFF)
     {
-      _universe.soundDisabled = _key;
+      _universe.sound.soundOff = _key;
     }
 
     // 6502: .DK6 LDY #0 / DKL4 ... / nosillytog -- ten toggles, or thirteen behind `PATG`.
@@ -107,7 +107,7 @@ namespace Elite
     // 6502: CPX #&33 / BNE DK7 / LDA #0 / STA DNOIZ -- and this one DOES load a value.
     if (_key == KEY_SOUND_ON)
     {
-      _universe.soundDisabled = 0u;
+      _universe.sound.soundOff = 0u;
     }
 
     // 6502: .DK7 CPX #&07 / BNE P%+5 / JMP DEATH2 -- and `DEATH2` does not come back.

@@ -69,9 +69,9 @@
       "slice": "M3-c"
     },
     "origin-markers": {
-      "ceiling": 4107,
+      "ceiling": 4106,
       "slack": 0,
-      "slice": "M5-a-4: SoundEffect names all sixteen sfx* slots, slot 8 for the first time (rule 4)"
+      "slice": "M5-a-5: the duplicate DNOIZ goes, and one marker with it"
     },
     "oracle-test-files": {
       "ceiling": 50,

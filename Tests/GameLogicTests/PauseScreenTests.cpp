@@ -256,7 +256,7 @@ namespace GameLogicTests
             // 6502: DNOIZ and MUTOKOLD -- both are the universe's since M5-a-2, so the fixture
             // seeds them there rather than in two locals the routine was handed references to.
             Elite::Universe frozen;
-            frozen.soundDisabled = 0;
+            frozen.sound.soundOff = 0;
             frozen.musicSwitchWas = ours[Elite::OPTION_MUTOK];
             cpu.memory[dnoiz] = 0;
             cpu.memory[mutokold] = frozen.musicSwitchWas;
@@ -282,7 +282,7 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(damp + byte)], ours[byte],
                                (where + L": DAMP+" + std::to_wstring(byte)).c_str());
             }
-            Assert::AreEqual(cpu.memory[dnoiz], frozen.soundDisabled, (where + L": DNOIZ").c_str());
+            Assert::AreEqual(cpu.memory[dnoiz], frozen.sound.soundOff, (where + L": DNOIZ").c_str());
             Assert::AreEqual(cpu.memory[mutokold], frozen.musicSwitchWas, (where + L": MUTOKOLD").c_str());
 
             /*
@@ -307,7 +307,7 @@ namespace GameLogicTests
             Assert::IsTrue(pass.outcome == expected, (where + L": which way it went").c_str());
 
             outcomes.insert(std::to_string(static_cast<int>(pass.outcome)) + "/" + std::to_string(static_cast<int>(pass.music)) + "/" +
-                            std::to_string(pass.delayFrames) + "/" + std::to_string(frozen.soundDisabled));
+                            std::to_string(pass.delayFrames) + "/" + std::to_string(frozen.sound.soundOff));
             ++compared;
           }
         }

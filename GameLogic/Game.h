@@ -226,6 +226,10 @@ namespace Elite
      * `JSTE`, `MUTOKOLD` and `DNOIZ`. Every one has a 6502 name, which makes it game state, which
      * §4.4's rule puts in `Universe`. They were here because M3-c carried them across from
      * `Main.cpp`'s composition struct, not because anything decided they belonged.
+     *
+     * SIX, SINCE M5-a-5: `soundDisabled` was a SECOND `DNOIZ` beside `SoundBuffer::soundOff`, so
+     * the pause screen wrote a byte `NOISE` never read. It is gone and the pause screen writes the
+     * one the sound system reads.
      */
 
     /*
