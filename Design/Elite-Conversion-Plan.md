@@ -3,28 +3,12 @@
 **Status:** Accepted · 2026-09-02 · **revised in place** (this document is the sequence of
 record; the ADRs decide *what*, this decides *when*).
 **Owner decisions:** all five taken on 2026-09-02, and four more on 2026-09-03. All recorded in §8.
-**Phase 2's computational content is complete and verified; what remains of it is the input
-layer and the shell.** 2a and 2b are done. 2c has its price model, its trade arithmetic, its
-market screen and `gnum`; its remaining screens are loops around the keyboard. 2d has the
-commander block, both checksums and the save format; its file I/O and name entry read the
-keyboard. **2e's decisions are settled and it still needs a Windows machine** — Risk R3 is
-answered (count cycles, and the counter is built; §6.17 explains why the question was not the one
-being asked) and its verification is split between a CI replay-hash leg and a human sign-off, but
-its criterion is that a person can play it and nothing here can launch a window.
-
-**Phase 1 is closed.** 1c-c-b built 2026-09-03: twenty of the thirty-one extended control codes
-are ported and compared against the shipped dispatch, the justification line buffer with them,
-and the three that reach the canvas stay a counted seam. §6.11 records what the drawing slices
-cost and §6.12 what the last one was hiding.
-**Phase 0 is closed**, bar slice 0e — which turned out to have been breached before it was
-written: the repository is public and has tracked `MasterFile/` since `92a3c7f`. Ruled 2026-09-03,
-after a reversal the same day: **it stays public, knowingly.** That makes the exposure an accepted
-decision rather than an unexamined default; it does not close the slice, which needs a written
-answer from the rights holders. The rest: 0a (upstream referenced, §6.9), 0b-a (the
-assembler and label map), 0c (skeleton, the 6502 interpreter), 0f (the determinism guard) are
-built; 0b-b is cancelled and 0d deferred, both by owner ruling. **Phase 1 is under way**: 1b-a
-and 1b-b have ported eighteen arithmetic routines. **The oracle is live**, which is the gate
-phases 1 to 4 were waiting on.
+**Where it stands is §0's second paragraph**, revised as the build order closed: phases 0 to 5
+are built and compared against the assembled original, and the paragraph that stood here on
+2026-09-03 — phase 2's screens still to come, 2e waiting on a Windows machine — is preserved in the
+history and was true then. What has moved since is not this plan's: the modernisation of the
+PROGRAM is [Modernize.md](Modernize.md)'s, its phases M0 to M5 are built and its M6-0 gate closed
+on 2026-09-07, and this document is unchanged by it because no behaviour changed.
 
 ---
 
@@ -59,6 +43,15 @@ bomb or the hyperspace tearing**: ADR-005 §1 settled where those effects live a
 which is the documentation pass's finding rather than any slice's (§6.154).
 [§1.2](#12-what-the-solution-contains-today) is the inventory of what that means in files, and it
 also lists what is left.
+
+**And 2026-09-07.** The modernisation plan's phases M0 to M5 are built and its M6-0 gate is
+closed ([Modernize.md](Modernize.md) §6, §8): the program that plays that game is now typed
+structs with byte codecs, value-in value-out routines, `Universe` and `Game` over three platform
+ports, and pipelines of named stages, with the replay digest as the proof that none of it changed
+the game. The two instruments this plan's verification leaned on grew with it — the interpreter
+banks the I/O page and answers a keyboard matrix, so the start sequence runs on both machines, and
+it records which labels each test ran, so the ledger's *Port* rows are read by a tool on every
+push (ADR-003, amended). The mutant corpus is 95 edits in sixteen files with a fourteen-file floor.
 
 ---
 
@@ -135,14 +128,17 @@ is preserved in the history and was true then.
   against the shipped routine, **and slice 4d closed the phase**: the three missions, their
   briefings, and the Trumbles that wander the dashboard.
 - `Outpost/` — the executable: a raw Win32 window, a D3D12 flip-model presenter for the indexed
-  canvas, the key map, the commander store, `FlightSession` (the flight world and its eight
-  effects interfaces) and `GameShell` (the docked world's eight), and the composition root in
-  `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
-  WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
-  docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->408 tests in <!--count:test-files-->57 files: the 6502 interpreter with its cycle counter and
-  its in-order store log, the oracle fixture over the assembled game and the loader, and the
-  suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
+  canvas, the SID synthesiser and its XAudio2 output, the key map, the commander store, and a
+  composition root in `Main.cpp` of <!--count:main-lines-->250 lines that builds `Elite::Game`
+  over three ports and paces it. Both outer loops, the dispatch and every game byte are the
+  library's since Modernize.md M3 (ADR-007); `FlightSession` and `Shell` are what remains of the
+  two worlds' plumbing, and reach <!--count:outpost-elite-names-->61 `Elite::` names between them.
+  It builds unpackaged on CI; MSIX stays and WinUI 3 is ignored rather than stripped (ADR-005 §5,
+  owner ruling). It launches, flies, fights, docks and dies.
+- `Tests/GameLogicTests/` — <!--count:tests-->408 tests in <!--count:test-files-->57 files: the 6502 interpreter with its cycle counter,
+  its in-order store log, the 6510 port banking and CIA keyboard matrix the start sequence needs
+  and its per-address coverage bits (Modernize.md M6-0-a, M6-0-f), the oracle fixture over the
+  assembled game and the loader, and the suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
 - `tools/` — the label map and table extractors, `c64_source.py`, and the
   <!--count:checks-->sixteen repository checks CI runs on every push, of <!--count:tools-->16 scripts
@@ -181,9 +177,12 @@ to head this list is gone, and so is the item below it:
 2. **The presenter has no test of any kind**, per the item above, and that is R5's residual: the
    sprite blit rule gained logic in slice 4f (mode and colour per screen row) and still has nothing
    to compare against.
-3. ~~**Two live mutation survivors.**~~ **Closed 2026-09-06** (§6.156). All five units are at zero
-   and the five not-caught entries left in `tools/mutants.json` are recorded EQUIVALENTS with the
-   proof on them, which is a measurement and not debt. **R13 does not close on it**: every tally
+3. ~~**Two live mutation survivors.**~~ **Closed 2026-09-06** (§6.156). Every unit is at zero
+   and the not-caught entries left in `tools/mutants.json` are recorded EQUIVALENTS with the
+   proof on them, which is a measurement and not debt — <!--count:mutants-->95 mutants in
+   <!--count:mutant-files-->sixteen files since Modernize.md M6-0-g (2026-09-07), which also put
+   a floor under the corpus: fourteen files that must each carry a caught mutant, enforced by
+   `mutate.py --check`. **R13 does not close on it**: every tally
    published before `mutate.py` existed is still an assertion nobody can re-run, and that half of
    the row is not recoverable by anything.
 4. **Slice 0e is owner acceptance**, and what closes it is a written answer from the rights holders
@@ -293,7 +292,7 @@ Three instruments, each cheap to keep running:
 | Instrument | What it proves | Lands in |
 |---|---|---|
 | **6502 oracle** — a `Cpu6502` interpreter in `GameLogicTests` loads the assembled ELTA–ELTK, WORDS, IANTOK and SHIPS binaries at their original addresses, sets zero page / registers, `JSR`s a labelled routine, and returns the resulting memory and registers. Each ported pure routine is compared against it over exhaustive or sampled inputs. | Arithmetic, RNG, tokens, universe generation, market, checksums, ship transforms, line clipping — the ~78% that is hardware-free | Slice 0c (the interpreter), then every slice |
-| **Golden canvases** — the port's 320×200 canvas after a scripted sequence, hashed and stored; first goldens taken by comparing against emulator screenshots by eye, then frozen | Screens, dashboard, planet/sun/ship rendering | Slice 1d onward |
+| **Golden canvases** — the port's canvas after a scripted sequence, compared against the bitmap the shipped drawing routines write into the oracle's own image, pixel for pixel (ADR-003 §2, amended 2026-09-03: there is no emulator and nothing is accepted by eye); a stored hash only where the oracle cannot compose the screen, which so far is the rendered sound | Screens, dashboard, planet/sun/ship rendering | Slice 1d onward |
 | **Replay hash** — a scripted `InputFrame` sequence run twice (and across Debug/Release) must yield identical `StateHash` per step | Whole-game determinism, the precondition for everything above staying meaningful | Slice 2e onward |
 
 The reference binaries are built with BeebAsm from the upstream tree (`make encrypt=no
@@ -6740,6 +6739,12 @@ wanted: window/fullscreen and scale options; key remapping and gamepad; a "fixed
 (`NRU%`, others found on the way); PAL/NTSC timing option; save-slot UI; then the things that
 change the game (higher internal resolution for lines, smoother iteration rate). Each is gated
 on the fidelity suites staying green with the option *off*.
+
+**What is NOT this phase is the modernisation of the program**, which has its own plan and is
+most of the way through it: [Modernize.md](Modernize.md) restructures the code with no behavioural
+change — phases M0 to M5 built 2026-09-06/07, the M6-0 gate closed 2026-09-07, M6 detaching the
+port from the original next — and every slice of it is gated on the same oracle as this plan's.
+A feature above changes the game; a slice there changes only how the program that plays it reads.
 
 ---
 

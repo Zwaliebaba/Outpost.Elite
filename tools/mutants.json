@@ -12,7 +12,7 @@
     "  unit.name     what to pass to --unit",
     "  unit.slice    the plan row this list belongs to",
     "  unit.filter   substrings handed to the test runner, one per TEST_CLASS that covers this",
-    "                unit, so a mutant runs its own tests rather than all 349",
+    "                unit, so a mutant runs its own tests rather than the whole suite",
     "  unit.tests    how many tests those filters select, VERIFIED against the unmutated build",
     "                before any mutant is applied. A filter that selects the wrong tests reports",
     "                survivors for code it never ran, which is worse than no filter at all --",

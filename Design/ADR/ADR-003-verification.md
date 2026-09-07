@@ -10,6 +10,10 @@ found three (§6.149, §6.150, §6.151). The two `Labels.json`/`Oracle.json` ref
 the judge through the modernisation's phases M1–M5 and is then RECORDED — Phase M6 replaces every
 live comparison with a checked-in fixture and retires the interpreter, the assembler and the
 submodule. Nothing below changes until M6-b lands; ADR-008 will say what pins behaviour after it.
+**Amended 2026-09-07 at the close of the M6-0 gate (Modernize.md §6 Phase M6, §8):** §1's
+interpreter banks the I/O page and answers a keyboard matrix, so the start sequence and the sprite
+register writes run on the oracle rather than being trapped; the interpreter records which labels
+each test ran and CI reads that against the ledger (§4); and the mutation rule of §4 gains a floor.
 **Depends on:** ADR-001 (fidelity), ADR-002 (exact semantics — without it there is nothing to compare)
 **Feeds:** the acceptance column of every slice in the plan; ADR-004 (test project shape)
 
@@ -67,6 +71,11 @@ build can be told to skip the encryption and the workspace-noise matching
   compared, the pokes are captured by a memory-write hook and compared as a list). The
   interrupt-driven sound and music players are run by calling the handler N times with the
   hook recording writes to `$D400–$D41C`, which is exactly the port's `SoundEvent` stream.
+  **Amended 2026-09-07 (M6-0-a):** `Cpu6502` models the 6510 port register (`SETL1`'s banking of
+  the I/O page over `&D000`) and CIA1's keyboard matrix, because the oracle's flat memory had put
+  the VIC-II registers on top of the blueprint pointer table (plan §6.108) and the keyboard scan
+  behind a trap. `NOSPRITES`, `RDKEY`, `ZEKTRAN`, `TITLE`, `DOCKIT` and `DOEXP`'s sprite stores run
+  on both machines now; the registers are compared as bytes of the banked page.
 
 ### §2 Golden canvases
 
@@ -130,6 +139,14 @@ makes this a check on the architecture as well as on the game.
   one on every run and reads it as a catch. So a mutation run starts by running the unmutated
   suite and requiring zero failures; a tally produced without that step is not a measurement
   (§6.119, `AGENTS.md` §6).
+- **The corpus has a floor, and the review of what the suite reaches is an instrument.** Amended
+  2026-09-07 (Modernize.md M6-0-f and M6-0-g). `tools/mutants.json` names the files that must each
+  carry a mutant the suite catches and `mutate.py --check` enforces it, so a file the tests would
+  not NOTICE a slip in cannot sit at zero mutants. And the interpreter marks every address a test
+  executes and every trap it takes; `run_tests.sh --coverage` writes the labels per test and
+  `inventory.py --coverage` reads them against every *Port* row of `Source-Inventory.md`, in CI.
+  A row may exempt a file with a reason; a gap is written as a gap. That reading is what Risk R19's
+  "coverage review" means from here on, and M6-a records nothing until its four named gaps close.
 
 ## Alternatives considered
 

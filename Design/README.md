@@ -15,7 +15,15 @@ and a written answer from the rights holders for 0e. Plan §1.2 has them. Two it
 2026-09-06 — ADR-005 §1's raster effects, built as slice 4f, where the hyperspace tearing turned out
 not to exist in this build at all (§6.155); and the missing goldens, three of which were already
 covered by whole-bitmap oracle comparisons and the fourth of which is a sound hash now (§6.156).
-**A fresh clone needs
+**The modernisation of the PROGRAM is under way in [Modernize.md](Modernize.md), and its
+phases M0 to M5 are built, 2026-09-06/07**: typed data, value-in value-out routines, `Universe` and
+`Game` over the ports, the flight frame and `LL9` as pipelines of named stages, and the ledger and
+the ADRs brought back into agreement with the tree. **The M6-0 gate closed 2026-09-07** — the eight
+things the oracle could pin and nothing would pin after it is recorded, among them the interpreter
+banking the I/O page so the start sequence runs on both machines, a whole frame with an explosion in
+it, the replay reaching death and the escape pod, a coverage instrument CI reads against the
+ledger's *Port* rows, and a mutant floor of fourteen files. **M6-a is next**: the four gaps the
+instrument named, then the recorder. **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
 anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->408 tests** and
 CI runs **<!--count:checks-->sixteen repository checks** beside it.
@@ -56,7 +64,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 | 3 | [Source-Inventory.md](Source-Inventory.md) | every group of original routines, which C++ file it becomes, and whether it is ported, replaced or dropped. The coverage ledger the port is measured against. |
 | 4 | the ADRs below | the decisions the plan rests on. **The ADR wins on *what*, the plan on *when*.** |
 | 5 | [Risk-Register.md](Risk-Register.md) | what is most likely to go wrong, and where each risk is validated early |
-| 6 | [Modernize.md](Modernize.md) | **the modernisation plan** (opened 2026-09-06, Proposed): what the port carries from the 6502 as its architecture, measured; the target C++ shape; five phases of slices, each gated on the oracle; and the owner's rulings on its eight questions — including the one that ends it: Phase M6 detaches the port from the original, replacing the oracle with recorded fixtures and removing `MasterFile/`, `Upstream/`, the markers and the assembly from the tree. Reads after the plan, because it starts where the plan's build order ends. |
+| 6 | [Modernize.md](Modernize.md) | **the modernisation plan** (opened 2026-09-06; M0–M5 built 2026-09-06/07, the M6-0 gate closed 2026-09-07, M6-a next): what the port carried from the 6502 as its architecture, measured and ratcheted; the target C++ shape; six phases of slices, each gated on the oracle; and the owner's rulings on its eight questions — including the one that ends it: Phase M6 detaches the port from the original, replacing the oracle with recorded fixtures and removing `MasterFile/`, `Upstream/`, the markers and the assembly from the tree. Reads after the plan, because it starts where the plan's build order ends. |
 
 ## Decisions at a glance
 
@@ -64,7 +72,7 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
 |---|---|---|
 | [001](ADR/ADR-001-scope-and-fidelity.md) | Scope and fidelity | **Port the C64 game as it is, bit-faithful in logic, before changing anything.** GMA85 variant as configured in `elite-build-options.asm`; the assembled original running in an emulator is the reference. Modernisation is a later phase with its own decisions. |
 | [002](ADR/ADR-002-numeric-model.md) | Numeric model | **8-bit integer semantics preserved exactly** — same widths, same wraparound, same lookup tables, same RNG — in the space view's 256×144 logical coordinates, on a canvas that holds the C64's own multicolour bitmap and cell-colour planes and resolves to 320×200 indices at the presenter seam (§4, amended 2026-09-03). No floats in game logic. |
-| [003](ADR/ADR-003-verification.md) | Verification | **A 6502 oracle in the test project** runs the assembled original's routines and the C++ port on the same inputs; **golden canvases** for screens; **replay hashes** for whole-game determinism. |
+| [003](ADR/ADR-003-verification.md) | Verification | **A 6502 oracle in the test project** runs the assembled original's routines and the C++ port on the same inputs; **golden canvases** for screens; **replay hashes** for whole-game determinism. Amended 2026-09-07 (§1, §4): the interpreter banks the I/O page and answers a keyboard matrix, records which labels each test ran, and the mutant corpus has a floor. |
 | [004](ADR/ADR-004-projects-and-layout.md) | Projects and layout | **Our own codebase — nothing lifted from a sibling repository.** `GameLogic` (namespace `Elite`) holds the port, platform-free and deterministic; presentation lives in `Outpost.exe`; tests under `Tests/`. Flat folders, unique PascalCase names, generated data tables checked in, `MasterFile/` and `Upstream/` are reference only. |
 | [005](ADR/ADR-005-presentation.md) | Presentation | **Packaged Win32, no XAML: MSIX stays, WinUI 3 goes.** Raw window, flip-model D3D12 swap chain blitting the indexed canvas at integer scale, XAudio2 with a small SID-style synthesiser. |
 | [006](ADR/ADR-006-modernisation-architecture.md) | Modernisation architecture | **The port becomes a C++ program with no behavioural change**: typed structs with byte codecs, value-in value-out routines, `Universe` and `Game` over four ports, pipelines of named stages, the oracle as judge until recorded fixtures replace it — the architecture [Modernize.md](Modernize.md) builds toward, recorded at M2's opening and amended as phases land. |
@@ -78,8 +86,8 @@ and `tools/inventory.py --check-includes` is the standing proof either way. See
   the plan is shaped to avoid. **What the corpus does hold, since 2026-09-06, is a modernisation
   plan for the PROGRAM rather than the game**: [Modernize.md](Modernize.md) restructures the code
   with no behavioural change and its own ratchet (`tools/check_modernize.py`), and every one of
-  its slices is gated on the same oracle. The gate ADR-001 §4 set is met; that document is
-  its questions were ruled on 2026-09-06 and its last phase removes the original from the tree.
+  its slices is gated on the same oracle. The gate ADR-001 §4 set is met; that document's
+  eight questions were ruled on 2026-09-06 and its last phase removes the original from the tree.
 - **Not a licence.** The upstream source carries no licence (ADR-001 §5, Risk R1), and the
   owner intends to publish eventually, which makes this the project's largest exposure rather
   than a footnote. Slice **0e** seeks the rights holders' permission. **The repository is
