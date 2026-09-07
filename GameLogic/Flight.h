@@ -61,7 +61,7 @@ namespace Elite
    * `YC` instead of the last three, which is the BBC's layout -- the third time a documented range
    * has turned out to be another version's (§6.38, §6.45).
    */
-  void ResetGame(Universe& _universe, Ports& _ports, std::uint8_t& _docked) noexcept;
+  void ResetGame(Universe& _universe, Ports& _ports) noexcept;
 
   /// 6502: LDA #12 / STA DELTA -- how fast you leave the slot, and it is four times `RES2`'s 3.
   inline constexpr std::uint8_t LAUNCH_SPEED = 12;
@@ -137,7 +137,7 @@ namespace Elite
    * contraband fine is ORed into `FIST` on the way out, so leaving is what levies it rather than
    * being scanned.
    */
-  void Launch(Universe& _universe, Ports& _ports,  std::uint8_t& _docked, std::uint8_t _crosshairX,
+  void Launch(Universe& _universe, Ports& _ports, std::uint8_t _crosshairX,
               std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept;
 
   /*
@@ -168,7 +168,7 @@ namespace Elite
   /// 6502: LDA #70 / STA QQ14 -- seven light years, which is what the pod is worth.
   inline constexpr std::uint8_t ESCAPE_FUEL = 70;
 
-  void AbandonShip(Universe& _universe, Ports& _ports, std::uint8_t& _fuel) noexcept;
+  void AbandonShip(Universe& _universe, Ports& _ports) noexcept;
 
   /// 6502: LDA #13 / JSR TT66 / LDA #0 / STA QQ11 -- and it is two values on purpose. `TTX66K`
   /// tail-jumps to `wantdials` for view 0 AND for view 13, so both draw the same pixels; what

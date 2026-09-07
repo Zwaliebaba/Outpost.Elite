@@ -620,7 +620,7 @@ namespace GameLogicTests
     }
 
     /// Send everything `Mirror` does not, and everything the launch reads.
-    void MirrorLeaving(const Leaving& _leaving, Cpu6502& _cpu, const Where& _at, const LaunchWhere& _to, std::uint8_t _docked)
+    void MirrorLeaving(const Leaving& _leaving, Cpu6502& _cpu, const Where& _at, const LaunchWhere& _to)
     {
       const Universe& universe = _leaving.universe;
 
@@ -637,7 +637,7 @@ namespace GameLogicTests
       _cpu.memory[_to.yx2m1] = universe.heaps.yx2M1;
       _cpu.memory[_to.qq22] = universe.status.hyperspaceCounter;
       _cpu.memory[_to.hfx] = universe.screen.hyperspaceEffect;
-      _cpu.memory[_to.qq12] = _docked;
+      _cpu.memory[_to.qq12] = universe.dockedFlag;
 
       /*
        * 6502: STP -- and `TT110` does not set it either (§6.94, §6.95).
@@ -662,8 +662,7 @@ namespace GameLogicTests
     }
 
     /// Compare the same.
-    void CompareLeaving(const Cpu6502& _cpu, const Leaving& _leaving, const LaunchWhere& _to, std::uint8_t _docked,
-                        const std::wstring& _context)
+    void CompareLeaving(const Cpu6502& _cpu, const Leaving& _leaving, const LaunchWhere& _to, const std::wstring& _context)
     {
       const Universe& universe = _leaving.universe;
 
@@ -683,7 +682,7 @@ namespace GameLogicTests
       same(_to.yx2m1, universe.heaps.yx2M1, L"Yx2M1");
       same(_to.qq22, universe.status.hyperspaceCounter, L"QQ22");
       same(_to.hfx, universe.screen.hyperspaceEffect, L"HFX");
-      same(_to.qq12, _docked, L"QQ12");
+      same(_to.qq12, universe.dockedFlag, L"QQ12");
       same(_to.bomb, universe.commander.energyBomb, L"BOMB");
       same(_to.fist, universe.commander.legalStatus, L"FIST");
 
@@ -742,8 +741,9 @@ namespace GameLogicTests
 
         Cpu6502 cpu = oracle.Fresh();
         FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+        leaving.universe.dockedFlag = 0xFFu; // 6502: QQ12
         Mirror(leaving.universe, cpu, at);
-        MirrorLeaving(leaving, cpu, at, to, 0xFFu);
+        MirrorLeaving(leaving, cpu, at, to);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.res2, 2'000'000);
         Assert::IsTrue(run.completed, L"RES2 returned");
@@ -755,7 +755,7 @@ namespace GameLogicTests
 
         CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
         CompareState(cpu, leaving.universe, at, where);
-        CompareLeaving(cpu, leaving, to, 0xFFu, where);
+        CompareLeaving(cpu, leaving, to, where);
 
         bulbs += ((shape & 1u) != 0u) ? 1u : 0u;
         bombs += ((shape & 4u) != 0u) ? 1u : 0u;
@@ -795,24 +795,25 @@ namespace GameLogicTests
 
         Cpu6502 cpu = oracle.Fresh();
         FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+        leaving.universe.dockedFlag = 0u; // 6502: QQ12
         Mirror(leaving.universe, cpu, at);
-        MirrorLeaving(leaving, cpu, at, to, 0u);
+        MirrorLeaving(leaving, cpu, at, to);
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(to.reset, 2'000'000);
         Assert::IsTrue(run.completed, L"RESET returned");
 
         Elite::Ports ports = leaving.Ports();
 
-        std::uint8_t docked = 0;
-        Elite::ResetGame(leaving.universe, ports, docked);
+        leaving.universe.dockedFlag = 0; // 6502: QQ12 -- `RESET` sets it, so it starts clear
+        Elite::ResetGame(leaving.universe, ports);
 
         const std::wstring where = WidenText("RESET (shape " + std::to_string(shape) + ")");
 
         CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
         CompareState(cpu, leaving.universe, at, where);
-        CompareLeaving(cpu, leaving, to, docked, where);
+        CompareLeaving(cpu, leaving, to, where);
 
-        Assert::AreEqual<std::uint8_t>(0xFFu, docked, (where + L": QQ12 is the loop's leftover").c_str());
+        Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.dockedFlag, (where + L": QQ12 is the loop's leftover").c_str());
         Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.status.forwardShield, (where + L": FSH").c_str());
         Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.status.aftShield, (where + L": ASH").c_str());
         Assert::AreEqual<std::uint8_t>(0xFFu, leaving.universe.status.energy, (where + L": ENERGY").c_str());
@@ -878,16 +879,16 @@ namespace GameLogicTests
             cpu.AddTrap(oracle.Label("NOSPRITES"));
             FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
             Mirror(leaving.universe, cpu, at);
-            MirrorLeaving(leaving, cpu, at, to, docked);
+            leaving.universe.dockedFlag = docked; // 6502: QQ12 -- the scenario, on the byte `LAUN` reads
+            MirrorLeaving(leaving, cpu, at, to);
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(to.tt110, 8'000'000);
             Assert::IsTrue(run.completed, L"TT110 returned");
 
             Elite::Ports ports = leaving.Ports();
 
-            std::uint8_t flag = docked;
             Elite::SystemSeeds selected{};
-            Elite::Launch(leaving.universe, ports, flag, leaving.universe.commander.systemX,
+            Elite::Launch(leaving.universe, ports, leaving.universe.commander.systemX,
                           leaving.universe.commander.systemY, selected);
 
             const std::wstring where = WidenText("TT110 (" + std::string(docked != 0u ? "docked" : "in flight") + ", tek " +
@@ -895,9 +896,9 @@ namespace GameLogicTests
 
             CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
             CompareState(cpu, leaving.universe, at, where);
-            CompareLeaving(cpu, leaving, to, flag, where);
+            CompareLeaving(cpu, leaving, to, where);
 
-            Assert::AreEqual<std::uint8_t>(0u, flag, (where + L": QQ12 is cleared on both paths").c_str());
+            Assert::AreEqual<std::uint8_t>(0u, leaving.universe.dockedFlag, (where + L": QQ12 is cleared on both paths").c_str());
 
             launched += (docked != 0u) ? 1u : 0u;
             refused += (docked == 0u) ? 1u : 0u;
@@ -948,9 +949,9 @@ namespace GameLogicTests
       Counting counting;
       Elite::Ports ports = leaving.universe.PortsWith(leaving.outside, leaving.start, counting);
 
-      std::uint8_t flag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
+      leaving.universe.dockedFlag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
       Elite::SystemSeeds selected{};
-      Elite::Launch(leaving.universe, ports, flag, leaving.universe.commander.systemX,
+      Elite::Launch(leaving.universe, ports, leaving.universe.commander.systemX,
                     leaving.universe.commander.systemY, selected);
 
       Assert::AreEqual<std::uint32_t>(68u, counting.circles, L"both tunnels are paced, not just the second");
@@ -962,9 +963,9 @@ namespace GameLogicTests
       Counting none;
       Elite::Ports flyingPorts = flying.universe.PortsWith(flying.outside, flying.start, none);
 
-      std::uint8_t inFlight = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
+      flying.universe.dockedFlag = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
       Elite::SystemSeeds ignored{};
-      Elite::Launch(flying.universe, flyingPorts, inFlight, flying.universe.commander.systemX,
+      Elite::Launch(flying.universe, flyingPorts, flying.universe.commander.systemX,
                     flying.universe.commander.systemY, ignored);
 
       Assert::AreEqual<std::uint32_t>(0u, none.circles, L"pressing 1 in flight is a view change and draws no tunnel");
@@ -1066,8 +1067,9 @@ namespace GameLogicTests
 
       Cpu6502 cpu = oracle.Fresh();
       FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+      leaving.universe.dockedFlag = 0u; // 6502: QQ12
       Mirror(leaving.universe, cpu, at);
-      MirrorLeaving(leaving, cpu, at, LaunchWhere(oracle), 0u);
+      MirrorLeaving(leaving, cpu, at, LaunchWhere(oracle));
 
       cpu.AddTrap(oracle.Label("EXNO3"), Cpu6502::TrapExit::SetCarry);
       cpu.AddTrap(oracle.Label("DOVDU19"));
@@ -1279,10 +1281,10 @@ namespace GameLogicTests
     {
       auto port = std::make_unique<FlightPort>();
       port->universe.commander = Elite::DefaultCommander();
-      Elite::ResetGame(port->universe, port->Ports(), port->docked); // 6502: RESET
+      Elite::ResetGame(port->universe, port->Ports()); // 6502: RESET
 
       Elite::SystemSeeds selected{};
-      Elite::Launch(port->universe, port->Ports(), port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
+      Elite::Launch(port->universe, port->Ports(), port->universe.commander.systemX, port->universe.commander.systemY,
                     selected); // 6502: TT110
 
       // Some way out from the station at speed, so `ASL DELTA` twice has something to work on.
@@ -1490,8 +1492,9 @@ namespace GameLogicTests
                 cpu.Load(rdkey, stub, sizeof(stub));
 
                 FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
+                leaving.universe.dockedFlag = 0xFFu; // 6502: QQ12
                 Mirror(leaving.universe, cpu, at);
-                MirrorLeaving(leaving, cpu, at, to, 0xFFu);
+                MirrorLeaving(leaving, cpu, at, to);
                 cpu.memory[patg] = authors;
 
                 cpu.a = Elite::TITLE_START_TOKEN;
@@ -1537,7 +1540,7 @@ namespace GameLogicTests
                 Assert::AreEqual(cpu.a, answer, (where + L": thiskey").c_str());
 
                 CompareState(cpu, leaving.universe, at, where);
-                CompareLeaving(cpu, leaving, to, leaving.universe.dockedFlag, where);
+                CompareLeaving(cpu, leaving, to, where);
                 CompareScreens(cpu, at.screen, leaving.universe.canvas, 0x1Du, where);
 
                 Assert::AreEqual(cpu.memory[jstk], leaving.universe.options.joystick, (where + L": JSTK").c_str());

@@ -350,7 +350,7 @@ cop, trader...). The screen's mode is `QQ11`'s value (`BUY_CARGO_VIEW = 2`, `SEL
 are `std::uint8_t` constants — **M1-b took the ship types and the three flag bytes of a ship to
 `ShipType`, `ShipStateBit`, `AiBit` and `NewbBit`** — booleans are `0`/`0xFF` (`BST`, `ECM`, `DISK`); the thirteen pause-
 screen options are an `OptionBlock` of thirteen `std::uint8_t*` because "making them contiguous
-would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->16 parameters are
+would touch eighty-seven call sites" (`Main.cpp`); <!--count:out-params-->12 parameters are
 `std::uint8_t&` outputs (`_docked`, `_fuel`, `_crosshairX`).
 
 **P11 — Carry-in parameters across non-kernel boundaries.** <!--count:carry-params-->30 `bool
@@ -1774,6 +1774,34 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-1: four out-parameters were a field of the `Universe` the routine already
+took, and one of them was bound to a copy.**
+
+M5-a's acceptance is `out-params` at zero, and the first four are the easiest kind: `ResetGame`,
+`Launch`, `AbandonShip` and `DockAtStation` all take `(Universe&, Ports&)` since M3-a and were ALSO
+handed a `std::uint8_t&` to one of that universe's own bytes — `dockedFlag` three times and
+`commander.fuel` once. That is §4.4's rule broken in the signature: the byte is game state, the
+universe holds it, and a second name for it is the duplicate-`QQ12` defect the replay slice found in
+`FlightPort`, one level up. **`out-params` 16 → 12.**
+
+**AND ONE OF THE FOUR WAS BOUND TO A COPY.** `Ghy` calls `Launch(_universe, _ports, _jump.docked,
+…)`, and `JumpState::docked` is a `std::uint8_t` VALUE that `JumpOf()` fills from the universe — so
+`Launch`'s `_docked = 0u` wrote a temporary the caller discarded. Checked rather than assumed: it is
+not a defect, because `RequestHyperspace` returns `JumpOutcome::Docked` before it can return
+`Galactic`, so that path is only ever reached with the flag already clear and the write was a no-op
+whether or not it landed. **It is still the exact failure mode P10 exists to remove** — a reference
+parameter silently bound to something that is not the state — demonstrated rather than argued, and
+the suite and the digest both say nothing moved.
+
+**Four fixtures were carrying their own `QQ12` and one its own `QQ14`**, and all five are the
+universe's now: `LaunchTests` had a `docked`/`flag`/`inFlight` local per case and two helpers taking
+it as a parameter, `FlightLoopTests` had one, `DockingTests` two, and `HyperspaceTests` a `fuel`
+local that meant `AbandonShip` wrote the local while `CompareState` compared an untouched
+`commander.fuel`. Each is the same convergence the replay slice made, and each was found by the
+suite failing rather than by reading.
+
+402 of 402, the replay digest unchanged, all 14 repository checks.
 
 **2026-09-07 — M4-d: `Game::Mode` is built, and `LoopOutcome` is NOT retired — the row asked for
 three things and the tree already had two of them.**

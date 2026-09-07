@@ -141,7 +141,7 @@ namespace Elite
     ClearShip(_universe.work); // 6502: and no RTS -- it falls into ZINF
   }
 
-  void ResetGame(Universe& _universe, Ports& _ports, std::uint8_t& _docked) noexcept
+  void ResetGame(Universe& _universe, Ports& _ports) noexcept
   {
 
     ClearBubbleState(_universe, _ports); // 6502: JSR ZERO, which leaves A at zero for the loop below
@@ -168,7 +168,7 @@ namespace Elite
      * that says "docked", and it is the value the three shield and energy bytes are filled with.
      * The second only works because a full bank happens to be 255.
      */
-    _docked = 0xFFu;
+    _universe.dockedFlag = 0xFFu;
     _universe.status.forwardShield = 0xFFu;
     _universe.status.aftShield = 0xFFu;
     _universe.status.energy = 0xFFu;
@@ -247,12 +247,12 @@ namespace Elite
     DrawTunnel(_universe, _ports, HYPERSPACE_TUNNEL_STEP);
   }
 
-  void Launch(Universe& _universe, Ports& _ports,  std::uint8_t& _docked, std::uint8_t _crosshairX,
+  void Launch(Universe& _universe, Ports& _ports, std::uint8_t _crosshairX,
               std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept
   {
 
     // 6502: LDX QQ12 / BEQ NLUNCH -- pressing "1" in flight does nothing but change the view.
-    if (_docked != 0u)
+    if (_universe.dockedFlag != 0u)
     {
       // 6502: JSR LAUN, over the docked screen it is still showing.
       DrawLaunchTunnel(_universe, _ports);
@@ -301,7 +301,7 @@ namespace Elite
 
     // 6502: .NLUNCH LDX #0 / STX QQ12 / JMP LOOK1 -- and the X that clears the flag is the X the
     // view change is given, so a launch always ends looking forwards.
-    _docked = 0u;
+    _universe.dockedFlag = 0u;
     ChangeView(_universe, _ports, 0u);
   }
 
@@ -320,7 +320,7 @@ namespace Elite
      * one caller of `RESET` gets a different sound from every other.
      */
     _universe.status.titleReset = 0xFFu;
-    ResetGame(_universe, _ports, _universe.dockedFlag);
+    ResetGame(_universe, _ports);
     _universe.status.titleReset = 0u;
 
     _ports.start.ClearKeyLogger(); // 6502: JSR ZEKTRAN
@@ -610,7 +610,7 @@ namespace Elite
     // caller's own death exit, which `Main.cpp` already wires as `RES2` then `BR1` (§6.25).
   }
 
-  void AbandonShip(Universe& _universe, Ports& _ports, std::uint8_t& _fuel) noexcept
+  void AbandonShip(Universe& _universe, Ports& _ports) noexcept
   {
 
     ResetShipAndBubble(_universe, _ports); // 6502: JSR RES2
@@ -704,7 +704,7 @@ namespace Elite
 
     // 6502: .nosurviv LDA #70 / STA QQ14 / JMP GOIN -- seven light years, and the docking is the
     // caller's, the way every `JMP` out of a routine has been.
-    _fuel = ESCAPE_FUEL;
+    _universe.commander.fuel = ESCAPE_FUEL;
   }
 
 } // namespace Elite

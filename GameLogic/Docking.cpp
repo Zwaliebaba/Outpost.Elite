@@ -157,7 +157,7 @@ namespace Elite
     return TrumblesOrBay(_commander);
   }
 
-  DockingResult DockAtStation(Universe& _universe, Ports& _ports,  std::uint8_t& _dockedFlag,
+  DockingResult DockAtStation(Universe& _universe, Ports& _ports,
                               std::uint8_t _view, bool _hyperspaceHeld) noexcept
   {
     // 6502: JSR RES2 -- once here, where the cold start reaches it twice (§6.25).
@@ -192,7 +192,7 @@ namespace Elite
      */
     if (result.outcome == DockingOutcome::DockingBay)
     {
-      result.bay = EnterDockingBay(_dockedFlag, _view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
+      result.bay = EnterDockingBay(_universe.dockedFlag, _view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
     }
 
     return result;

@@ -308,7 +308,7 @@ namespace Elite
 
     // 6502: JSR TT110 -- and this is the LAUNCH, called for its redraw: a galactic jump from a
     // chart leaves you in space looking forward.
-    Launch(_universe, _ports, _jump.docked, _chart.cursorX, _chart.cursorY, _selected);
+    Launch(_universe, _ports, _chart.cursorX, _chart.cursorY, _selected);
 
     // 6502: JSR TT111 / LDX #5 / .dumdeedum LDA QQ15,X / STA safehouse,X -- the system nearest the
     // middle of the galaxy becomes both the selection and the countdown's target.

@@ -156,7 +156,7 @@ namespace Elite
   {
     // 6502: TT170 -- LDX #&FF / TXS / JSR RESET, and RESET runs off its end into RES2, which is
     // why `ResetGame` ends with `ResetShipAndBubble` rather than this calling both.
-    ResetGame(_universe, _ports, _universe.dockedFlag);
+    ResetGame(_universe, _ports);
 
     // 6502: the fall-through into DEATH2 -- LDX #&FF / TXS / JSR RES2, a SECOND time.
     ResetShipAndBubble(_universe, _ports);

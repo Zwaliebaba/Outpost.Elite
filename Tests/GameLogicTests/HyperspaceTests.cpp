@@ -682,8 +682,9 @@ namespace GameLogicTests
 
         Elite::Ports ports = universe.Ports();
 
-        std::uint8_t fuel = one.fuel;
-        Elite::AbandonShip(universe.universe, ports, fuel);
+        // 6502: QQ14 -- `ESCAPE` writes the commander's own fuel byte, and it is the universe's
+        // since M3-a; the local this used to pass meant the comparison below saw an untouched one.
+        Elite::AbandonShip(universe.universe, ports);
 
         const std::wstring context = WidenText("ESCAPE seed " + std::to_string(one.seed) + " trib " + std::to_string(one.tribbleHigh) +
                                                "/" + std::to_string(one.tribbleLow));
@@ -703,7 +704,7 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(tribble + 1u)],
                          universe.universe.commander.tribbles.hi,
                          (context + L": TRIBBLE+1").c_str());
-        Assert::AreEqual(cpu.memory[qq14], fuel, (context + L": QQ14").c_str());
+        Assert::AreEqual(cpu.memory[qq14], universe.universe.commander.fuel, (context + L": QQ14").c_str());
 
         outcomes.insert(std::to_string(universe.universe.commander.tribbles.lo) + "/" +
                         std::to_string(universe.universe.bubble.slots[0]));
