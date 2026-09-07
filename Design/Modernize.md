@@ -355,7 +355,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,026 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,042 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1454,7 +1454,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M4-a Flight frame stages** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the sixteen-step cycle as a table. **M4-a-1 built 2026-09-07 (§8):** `SPIN` and `SPIN2` answer an `Elite::Drop` and `PerformDrop` spawns, which is what `SpawnChildEffects` was waiting on — the seam goes, and the frame fixtures untrap `SFS1` on both machines. | `FlightLoopTests` green frame for frame; replay hashes unchanged. M4-a-1: both, plus `effects-seams` 9 → 8 and `aggregate-refs` 11 → 10. | 4 |
+| **M4-a Flight frame stages** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the sixteen-step cycle as a table. **M4-a-1 built 2026-09-07 (§8):** `SPIN` and `SPIN2` answer an `Elite::Drop` and `PerformDrop` spawns, which is what `SpawnChildEffects` was waiting on — the seam goes, and the frame fixtures untrap `SFS1` on both machines. **M4-a-2 built 2026-09-07 (§8):** parts 7 to 12 as `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and `KillOutcome` beside the existing `LaserHit`; `MoveEveryShip` 426 → 143 lines, and three dead stores at the end of part 9 that only a type could show were dead. | `FlightLoopTests` green frame for frame; replay hashes unchanged. M4-a-1: both, plus `effects-seams` 9 → 8 and `aggregate-refs` 11 → 10. | 4 |
 | **M4-b LL9 stages** | `DrawShip` as the six stages of §4.6 over a `ShipRender` frame. | `ShipDrawTests` green; the whole-bitmap comparisons unchanged. | 4 |
 | **M4-c Decisions** | `TACTICS`, `DOCKIT` and `MLOOP` parts 1–4 return `Decision`s applied by one function; the sixteen `tactics` mutants re-anchored and re-run to zero survivors. | `TacticsTests` green; `mutate.py --unit tactics` at the recorded tally. | 5 |
 | **M4-d Mode machine polish** | The mission sub-machine, the death sequence and the pause as explicit states; `LoopOutcome` retired. | Replay hashes unchanged. | 2 |
@@ -1751,6 +1751,37 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M4-a-2: parts 7 to 12 as typed stages, and five booleans that were a state machine
+nobody had written down.**
+
+`MoveEveryShip` was four hundred and twenty-six lines with parts 5 and 7 to 12 spelled out inside
+its `for(;;)`, and the parts talked to each other through FIVE BOOLEANS declared above the block
+that set them and read two parts later: `docking`, `scoopable`, `collision`, `holdFull`, `drawIt`.
+Each part is a function now and each answers a named type — `Contact`, `ScoopResult`,
+`DockingTest`, `Impact`, `Aim`, `KillOutcome`, beside the `LaserHit` part 11 already had — and the
+loop body is a pipeline of seven calls in ninety lines.
+
+**AND THE TYPES SAID SOMETHING THE BOOLEANS COULD NOT.** Part 7 sets exactly one of `docking`,
+`scoopable` and `collision` — a station takes the first branch and nothing else can reach the other
+two — so the three lines at the end of part 9 that cleared `collision`, `scoopable` and `holdFull`
+were DEAD STORES on every path that reached them. They read as defensive and they were unreachable,
+and only an enumeration can say that: `Contact` has four values because the original has four
+answers, and there is no state in which two of them hold. Nothing else changed; the suite is 402 of
+402 on the first run and the replay digest did not move, which is the acceptance the M4-a row asks
+for.
+
+**THE STAGES ARE FILE-LOCAL, and that is the M4 pattern rather than a shortcut.** `ApplyLaserHit`
+has been file-local since it was extracted and `LaserHit` with it; what M4-a buys is the SHAPE of
+the routine, not a wider header. Exposing seven more names would put them through rule 6 into
+`Outpost/` for nothing — the app calls `MainFlightLoop` and always has.
+
+**Counts.** `origin-markers` 4,026 → 4,042, and this is the second rise in a row: sixteen
+enumerators and struct fields, every one of them a 6502 label the code previously expressed only in
+its shape — `MA65`, `ISDK`, `MA58`, `MA59`, `MA67`, `GOIN`, `KS1`, `MA27`, `MA15`. **M4's pattern
+moves P12 UP and that is expected**, which is worth saying plainly rather than discovering at the
+ratchet a third time: naming a label in a type is still naming a label, rule 4 wants it labelled
+until M6-e, and M6-e strips the lot in one pass. Nothing else moved.
 
 **2026-09-07 — M4-a-1: `SpawnChildEffects` goes, and the seam that outlived a phase was being
 kept alive by a TRAP rather than by the code.**

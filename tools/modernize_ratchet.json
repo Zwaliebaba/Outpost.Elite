@@ -69,9 +69,9 @@
       "slice": "M3-c"
     },
     "origin-markers": {
-      "ceiling": 4026,
+      "ceiling": 4042,
       "slack": 0,
-      "slice": "M4-a-1: Drop names four 6502 things the seam named in one sentence (rule 4)"
+      "slice": "M4-a-2: parts 7 to 12 as typed stages -- every enumerator names a 6502 label (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 50,
