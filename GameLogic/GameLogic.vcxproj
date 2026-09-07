@@ -224,6 +224,7 @@
     <ClCompile Include="Font.cpp" />
     <ClCompile Include="Canvas.cpp" />
     <ClCompile Include="LoaderScreen.cpp" />
+    <ClCompile Include="LookupTables.cpp" />
     <ClCompile Include="Lines.cpp" />
     <ClCompile Include="TextPrint.cpp" />
     <ClCompile Include="Galaxy.cpp" />

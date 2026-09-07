@@ -386,7 +386,7 @@ def load_image(_binaries: dict[str, int]) -> bytearray:
 def format_table(_table: Table, _bytes: bytes) -> str:
     lines = [
         f"// 6502: {_table.label} -- {_table.summary}.",
-        f"const std::array<std::uint8_t, {len(_bytes)}> {_table.identifier} = {{",
+        f"constexpr std::array<std::uint8_t, {len(_bytes)}> {_table.identifier} = {{",
     ]
     for offset in range(0, len(_bytes), 12):
         chunk = ", ".join(f"0x{value:02X}" for value in _bytes[offset : offset + 12])
