@@ -325,7 +325,7 @@ namespace Elite
        * `_selected` comes back written: the launch runs `TT111` for the SEEDS rather than for the
        * distance, because the planet's appearance is generated from the system you are leaving.
        */
-      Launch(m_universe, m_ports, m_universe.dockedFlag, m_universe.crosshairX,
+      Launch(m_universe, m_ports, m_universe.crosshairX,
                     m_universe.crosshairY, m_universe.selectedSeeds);
       return;
 
@@ -448,7 +448,7 @@ namespace Elite
         if (jumped == JumpResult::Arrived)
         {
           // 6502: the fall-through into `TT110`, which is the launch the arrival ends with.
-          Launch(m_universe, m_ports, m_universe.dockedFlag, m_universe.crosshairX,
+          Launch(m_universe, m_ports, m_universe.crosshairX,
                         m_universe.crosshairY, m_universe.selectedSeeds);
         }
       }
@@ -608,8 +608,7 @@ namespace Elite
        * is here anyway because the routine is built and the alternative is a hole that looks like
        * a decision.
        */
-      const DockingResult arrival = DockAtStation(m_universe, m_ports,
-                                                                m_universe.dockedFlag, m_universe.view, false);
+      const DockingResult arrival = DockAtStation(m_universe, m_ports, m_universe.view, false);
 
       /*
        * 6502: the seven exits, and six of them are a briefing (slice 4d-c).
@@ -662,7 +661,7 @@ namespace Elite
        * way `TT18`'s fall into `TT110` was. A default commander cannot reach here at all: `KY13` is
        * ANDed with `ESCP`, so it needs one that has bought a pod.
        */
-      AbandonShip(m_universe, m_ports, m_universe.commander.fuel);
+      AbandonShip(m_universe, m_ports);
 
       // 6502: JMP GOIN -- `stopbd` and then `DOENTRY`, which is the arrival slice 2d built.
       StopDockingMusic(m_universe.music, m_universe.status.titleReset, m_universe.sound,

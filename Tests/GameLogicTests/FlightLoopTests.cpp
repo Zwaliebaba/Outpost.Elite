@@ -2237,9 +2237,9 @@ namespace GameLogicTests
 
       Elite::Ports ports = frame.universe.PortsWith(frame.outside, frame.universe.unused);
 
-      std::uint8_t docked = 0xFFu;
+      frame.universe.dockedFlag = 0xFFu; // 6502: QQ12 -- docked, which is the path that launches
       Elite::SystemSeeds selected{};
-      Elite::Launch(frame.universe, ports, docked, frame.universe.commander.systemX, frame.universe.commander.systemY, selected);
+      Elite::Launch(frame.universe, ports, frame.universe.commander.systemX, frame.universe.commander.systemY, selected);
 
       Assert::AreEqual<std::uint32_t>(1u, frame.universe.bubble.Count(Elite::ShipType::Station),
                                       L"the launch leaves the station in the bubble");

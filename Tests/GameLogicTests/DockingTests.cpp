@@ -324,10 +324,9 @@ namespace GameLogicTests
       universe.status.forwardShield = 0x5C;
       universe.status.aftShield = 0x5C;
       universe.status.energy = 0x5C;
-      std::uint8_t dockedFlag = 0;
 
       Elite::Ports ports = universe.PortsWith(universe.unused, effects, effects);
-      const Elite::DockingResult result = Elite::DockAtStation(universe, ports, dockedFlag, 0, false);
+      const Elite::DockingResult result = Elite::DockAtStation(universe, ports, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome), L"this commander earns no briefing");
 
@@ -383,7 +382,7 @@ namespace GameLogicTests
       Assert::AreEqual(cpu.memory[oracle.Label("ENERGY")], universe.status.energy, L"ENERGY");
 
       // 6502: BAY's own stores, which the JMP tail reaches.
-      Assert::AreEqual<std::uint8_t>(0xFF, dockedFlag, L"BAY sets the docked flag");
+      Assert::AreEqual<std::uint8_t>(0xFF, universe.dockedFlag, L"BAY sets the docked flag");
       Assert::AreEqual(static_cast<int>(Elite::KeyAction::StatusMode), static_cast<int>(result.bay.outcome.action),
                        L"BAY forces the status key");
 
@@ -406,14 +405,13 @@ namespace GameLogicTests
       Universe earnerUniverse;
       earnerUniverse.commander = earner;
       earnerUniverse.heaps.stp = 4u; // §6.95, as above
-      std::uint8_t earnerDocked = 0;
       Elite::Ports earnerPorts = earnerUniverse.PortsWith(earnerUniverse.unused, briefed, briefed);
       const Elite::DockingResult briefing =
-        Elite::DockAtStation(earnerUniverse, earnerPorts, earnerDocked, 0, false);
+        Elite::DockAtStation(earnerUniverse, earnerPorts, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::BriefMission1), static_cast<int>(briefing.outcome),
                        L"this commander has earned the Constrictor mission");
-      Assert::AreEqual<std::uint8_t>(0, earnerDocked, L"a briefing does not set the docked flag");
+      Assert::AreEqual<std::uint8_t>(0, earnerUniverse.dockedFlag, L"a briefing does not set the docked flag");
       Assert::AreEqual(
         static_cast<int>(Elite::KeyAction::Nothing),
         static_cast<int>(briefing.outcome == DockingOutcome::DockingBay ? briefing.bay.outcome.action : Elite::KeyAction::Nothing),

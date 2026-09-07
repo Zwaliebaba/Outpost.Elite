@@ -98,8 +98,7 @@ namespace Elite
    * is an argument at all: the commander, the status and the flight state came in separately until
    * the tunnel was ported, and every one of them is inside `Universe` since M3-a.
    */
-  [[nodiscard]] DockingResult DockAtStation(Universe& _universe, Ports& _ports,
-                                             std::uint8_t& _dockedFlag, std::uint8_t _view,
+  [[nodiscard]] DockingResult DockAtStation(Universe& _universe, Ports& _ports, std::uint8_t _view,
                                             bool _hyperspaceHeld) noexcept;
 
 } // namespace Elite
