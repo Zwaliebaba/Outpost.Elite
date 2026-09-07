@@ -207,21 +207,25 @@ and always run.
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all twelve in CI's order and takes no
-arguments. Do not retype the list into a loop: that is how a push went red on 2026-09-05 with the
-one check that would have caught it left out (§6.127). What it runs:
+**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->sixteen in CI's
+order and takes no arguments. Do not retype the list into a loop: that is how a push went red on
+2026-09-05 with the one check that would have caught it left out (§6.127). What it runs:
 
 ```
 python tools/inventory.py --check-includes    # every master INCLUDE resolves in Upstream/
 python tools/inventory.py --strict            # coverage ledger: every master-level include has a row
+python tools/inventory.py --check-homes       # every file a ledger row's HOME cell names is on disk
+python tools/inventory.py --self-test         # that check still catches a planted stale home
 python tools/check_projects.py                # .vcxproj paths resolve; nothing on disk is unlisted; pch.h is every source's first line
 python tools/check_outpost.py                 # Outpost/ still calls GameLogic names, with the right arity
 python tools/check_docs.py                    # no table row is wider than its header
 python tools/check_counts.py                  # every <!--count:NAME--> number in a document matches the tree
 python tools/check_modernize.py               # the legacy-pattern counts Design/Modernize.md states sit at their recorded ceilings
 python tools/check_gamelogic.py --self-test   # the determinism guard still detects violations
+python tools/check_tidy.py                    # clang-tidy over GameLogic/, through the portable runner's shim
 python tools/mutate.py --check                # every recorded mutant still applies to the code it names
 python tools/c64_source.py --check-all        # the source resolver reads every file the build assembles
+python tools/channel_census.py --check        # the channel census names every workspace field and matches the plan
 ```
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a

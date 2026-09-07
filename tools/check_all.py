@@ -40,6 +40,7 @@ CHECKS: list[list[str]] = [
     ["inventory.py", "--strict"],
     ["inventory.py", "--check-homes"],
     ["inventory.py", "--self-test"],
+    ["check_tidy.py"],
     ["channel_census.py", "--check"],
 ]
 

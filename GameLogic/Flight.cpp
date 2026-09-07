@@ -36,19 +36,18 @@ namespace Elite
 
   void ClearBubbleState(Universe& _universe, Ports& _ports) noexcept
   {
-
     // 6502: FRIN and MANY -- the slots and the per-type counts, which `SSPR` is part of (§6.58).
-    for (std::size_t slot = 0; slot < _universe.bubble.slots.size(); ++slot)
+    for (std::uint8_t& slot : _universe.bubble.slots)
     {
-      _universe.bubble.slots[slot] = 0u;
+      slot = 0u;
     }
-    for (std::size_t type = 0; type < _universe.bubble.counts.size(); ++type)
+    for (std::uint8_t& count : _universe.bubble.counts)
     {
-      _universe.bubble.counts[type] = 0u;
+      count = 0u;
     }
 
     _universe.bubble.junk = 0u;             // 6502: JUNK
-    _universe.control.dockingComputer = 0u;  // 6502: auto
+    _universe.control.dockingComputer = 0u; // 6502: auto
     _universe.status.ecmOurs = 0u;          // 6502: ECMP
     _universe.status.midJump = 0u;          // 6502: MJ
     _universe.status.cabinTemperature = 0u; // 6502: CABTMP
@@ -65,7 +64,6 @@ namespace Elite
 
   void ResetShipAndBubble(Universe& _universe, Ports& _ports) noexcept
   {
-
     // 6502: JSR stopbd
     StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
 
@@ -114,7 +112,7 @@ namespace Elite
     _universe.flight.alp1 = LAUNCH_ROLL;
 
     _universe.text.cellColour = TEXT_COLOUR_WHITE; // 6502: LDA #&10 / STA COL2
-    _universe.clip.dontclip = 0u;                   // 6502: LDA #0 / STA dontclip
+    _universe.clip.dontclip = 0u;                  // 6502: LDA #0 / STA dontclip
     _universe.heaps.yx2M1 = SPACE_VIEW_LAST_ROW;   // 6502: LDA #2*Y-1 / STA Yx2M1
 
     // 6502: LDA SSPR / BEQ P%+5 / JSR SPBLB -- the station bulb is a TOGGLE, so this puts it out
@@ -143,7 +141,6 @@ namespace Elite
 
   void ResetGame(Universe& _universe, Ports& _ports) noexcept
   {
-
     ClearBubbleState(_universe, _ports); // 6502: JSR ZERO, which leaves A at zero for the loop below
 
     /*
@@ -247,10 +244,8 @@ namespace Elite
     DrawTunnel(_universe, _ports, HYPERSPACE_TUNNEL_STEP);
   }
 
-  void Launch(Universe& _universe, Ports& _ports, std::uint8_t _crosshairX,
-              std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept
+  void Launch(Universe& _universe, Ports& _ports, std::uint8_t _crosshairX, std::uint8_t _crosshairY, SystemSeeds& _selected) noexcept
   {
-
     // 6502: LDX QQ12 / BEQ NLUNCH -- pressing "1" in flight does nothing but change the view.
     if (_universe.dockedFlag != 0u)
     {
@@ -262,8 +257,8 @@ namespace Elite
        * 6502: JSR TT111 -- for the SEEDS, not for the distance. The planet's look comes from the
        * system's own seeds through `tek`, so a launch has to know which system it is leaving.
        */
-      const NearestSystem found = FindNearestSystem(_universe.commander.galaxySeeds, _crosshairX, _crosshairY,
-                                                    _universe.commander.systemX, _universe.commander.systemY);
+      const NearestSystem found = FindNearestSystem(_universe.commander.galaxySeeds, _crosshairX, _crosshairY, _universe.commander.systemX,
+                                                    _universe.commander.systemY);
       _selected = found.seeds;
 
       /*
@@ -284,8 +279,7 @@ namespace Elite
       _universe.flight.delta = LAUNCH_SPEED; // 6502: LDA #12 / STA DELTA
 
       // 6502: JSR BAD / ORA FIST / STA FIST -- the fine is levied by leaving, not by being scanned.
-      _universe.commander.legalStatus =
-        static_cast<std::uint8_t>(ContrabandPenalty(_universe.commander) | _universe.commander.legalStatus);
+      _universe.commander.legalStatus = static_cast<std::uint8_t>(ContrabandPenalty(_universe.commander) | _universe.commander.legalStatus);
 
       _universe.view = VIEW_LAUNCHING; // 6502: LDA #255 / STA QQ11
 
@@ -307,7 +301,6 @@ namespace Elite
 
   std::uint8_t ShowTitleShip(Universe& _universe, Ports& _ports, std::uint8_t _token, ShipType _shipType, std::uint8_t _distance) noexcept
   {
-
     // 6502: STY distaway / PHA / STX TYPE. The distance and the token are arguments here; `TYPE`
     // is a real byte and `NWSHP` below reads it back.
     _universe.flight.type = _shipType;
@@ -328,7 +321,7 @@ namespace Elite
     // 6502: LDA #32 / JSR DOVDU19 -- the title screen's palette on the Master, an RTS here.
 
     SetUpScreen(_universe, _ports, TITLE_CLEAR_VIEW); // 6502: LDA #13 / JSR TT66
-    _universe.view = 0u;                      // 6502: LDA #0 / STA QQ11
+    _universe.view = 0u;                              // 6502: LDA #0 / STA QQ11
 
     /*
      * 6502: LDA #96 / STA INWK+14 / LDA #96 / STA INWK+7 / LDX #127 / STX INWK+29 / STX INWK+30.
@@ -352,10 +345,10 @@ namespace Elite
     const NewShip created = AddShip(_universe.bubble, _universe.work, _shipType, _universe.flight.blueprint);
     const std::uint8_t slot = created.created ? created.slot : std::uint8_t{0};
 
-    _universe.text.column = 6u;                               // 6502: LDA #6 / JSR DOXC
+    _universe.text.column = 6u;                            // 6502: LDA #6 / JSR DOXC
     PrintThenNewline(_ports.printer, TITLE_HEADING_TOKEN); // 6502: LDA #30 / JSR plf
     _ports.sink.Put(10u);                                  // 6502: LDA #10 / JSR TT26
-    _universe.text.column = 6u;                               // 6502: LDA #6 / JSR DOXC
+    _universe.text.column = 6u;                            // 6502: LDA #6 / JSR DOXC
 
     // 6502: LDA PATG / BEQ awe / LDA #13 / JSR DETOK -- the credits, and the byte that shows them
     // also changes what the main game loop spawns.
@@ -379,9 +372,9 @@ namespace Elite
 
     _universe.text.row = TITLE_PROMPT_ROW;     // 6502: LDA #15 / STA YC
     _universe.text.column = TITLE_PROMPT_LEFT; // 6502: LDA #1 / STA XC
-    _ports.tokens.Print(_token);            // 6502: PLA / JSR DETOK -- the caller's own token
+    _ports.tokens.Print(_token);               // 6502: PLA / JSR DETOK -- the caller's own token
 
-    _universe.text.column = 3u;                 // 6502: LDA #3 / JSR DOXC
+    _universe.text.column = 3u;              // 6502: LDA #3 / JSR DOXC
     _ports.tokens.Print(TITLE_BYLINE_TOKEN); // 6502: LDA #12 / JSR DETOK
 
     _universe.flight.steerCone = TITLE_CNT2;       // 6502: LDA #12 / STA CNT2
@@ -449,7 +442,6 @@ namespace Elite
 
   void PrepareDeathScene(Universe& _universe, Ports& _ports) noexcept
   {
-
     // 6502: JSR EXNO3 -- `LDY #sfxexpl / BNE NOISE`, and the carry is whatever killed us.
     (void)PlaySoundEffect(_universe.sound, SoundEffect::Explosion, false);
 
@@ -561,7 +553,6 @@ namespace Elite
 
   void Die(Universe& _universe, Ports& _ports) noexcept
   {
-
     PrepareDeathScene(_universe, _ports);
 
     ClearFlightKeys(_universe.keys); // 6502: JSR U%
@@ -612,7 +603,6 @@ namespace Elite
 
   void AbandonShip(Universe& _universe, Ports& _ports) noexcept
   {
-
     ResetShipAndBubble(_universe, _ports); // 6502: JSR RES2
 
     /*

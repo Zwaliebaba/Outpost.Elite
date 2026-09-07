@@ -8,38 +8,37 @@
 # overlap: clang-tidy has no check that reports a wrong brace position or an over-long line, and
 # clang-format cannot see that a parameter is missing its `_`.
 #
-# ── Status: CI gates this over GameLogic and NeuronServer ──────────────────────────────────
+# ── Status: CI gates this over GameLogic, on the Linux leg ────────────────────────────────
 #
-# Both linters gate (AGENTS.md §6): clang-format over the whole tree on Linux, clang-tidy on
-# Windows after the build, over GameLogic and NeuronServer -- the second promoted on 2026-08-30
-# after two clean runs under the runner's LLVM 22, which is how a linter arrives here and starts
-# gating. The .vcxproj files still do not enable MSBuild code
-# analysis, so on the other seven projects this file is enforced by review and by whoever remembers
-# to run it. Slice 23 of Design/Archive/MmoScalabilityPlan.md widens the job a project at a time; NeuronCore
-# is next, and slice 22 already swept its one header.
-# Run it by hand ON THE FILES YOU WROTE -- not on the tree, where the engine projects reach D3D12
-# and C++/WinRT headers that have never been swept and will bury your own findings:
+# REWRITTEN 2026-09-07 (slice 5d), BECAUSE EVERY WORD OF THE BLOCK THAT STOOD HERE WAS ABOUT A
+# DIFFERENT REPOSITORY. This file was adopted whole from the sibling tree Outpost.Warzone so that
+# engine code could move between the two without a rename pass, and the option values are still
+# adopted -- but the STATUS, the projects and the reasons came with them. It claimed CI gated this
+# over "GameLogic and NeuronServer", named `Build/CheckProjectFiles.py` and
+# `Design/Archive/MmoScalabilityPlan.md`, and justified three exclusions by wire records, mesh
+# vertices, GPU instance structs and "metres to eighth-metre lattice steps". None of those exists
+# here. `NeuronServer` does not exist here. And NOTHING IN THIS REPOSITORY HAD EVER RUN
+# CLANG-TIDY: `WarningsAsErrors: '*'` was a setting with no gate behind it, and the first sweep
+# found thirty-six diagnostics in a tree this block called "swept clean".
 #
-#   clang-tidy --quiet NeuronCore/YourNewFile.cpp -- -I . -D _WIN32 -D _DEBUG /std:c++latest
+# What is true now. `tools/check_tidy.py` sweeps `GameLogic/*.cpp` and CI runs it on the Linux leg
+# of every push. It gets there through `Tests/PortableRunner/Shim`: `GameLogic/pch.h` includes
+# `NeuronCore.h`, which includes `<WinSock2.h>`, so the real precompiled header cannot be parsed on
+# Linux any more than `Outpost/` can be compiled there (Risk R15) -- and the portable runner had
+# already built the stand-in. `Outpost/` is NOT swept: its DirectX and Win32 headers are the
+# Windows job's, and a linter that has never seen them would bury this library's findings under
+# theirs.
 #
-# GameLogic has been swept clean under clang-tidy 18 (Linux) and LLVM 20.1.8 (the CI runner),
-# so a finding there is new work rather than archaeology. What that cost: two identifier
-# findings (local constexpr constants, a lambda parameter), one truncating division split out
-# of the float expression it fed so the intent reads, the `-performance-enum-size` exclusion
-# below, and -- from the Windows run only, which is the argument for having it -- a `noexcept`
-# on `ComputeUniverseHash` that its own per-list allocation could not keep.
+# Run it by hand on the files you wrote:
 #
-# NeuronServer was swept under clang-tidy 18 (Linux) before the job was widened to it and came back
-# with nothing at all -- three headers and one translation unit, which is why it was the project to
-# take next. The runner's LLVM 22 then found it clean on two consecutive main runs (2026-08-30),
-# and it gates.
+#   python tools/check_tidy.py GameLogic/YourNewFile.cpp
 #
-# Unlike the sibling tree there is nothing grandfathered here — this is a greenfield repository,
-# so a whole-tree pass should come back clean and a finding is a defect, not archaeology. That
-# claim has now been tested on two projects; the graphics-facing ones are still untested, and the
-# version spread is itself a finding: the newer clang-tidy saw a defect the older one did not, so
-# "clean" is always clean *under something*.
-
+# Under LLVM 18 the library is clean as of slice 5d. Five diagnostics were code and were fixed --
+# five locals in `ReadFlightControls` still wearing the `_` a parameter wears, and four dead stores
+# that were transcriptions of a 6502 flag nothing reads, one of which was the fourth vestigial
+# assignment this port has carried. The rest are excluded below, each with THIS repository's
+# reason.
+#
 # Three rules of AGENTS.md §1 this file cannot express — R2's banned type affixes, R7's file naming
 # and .vcxproj/.filters registration, and R11's standing spelling families — are checked by
 # Build/CheckProjectFiles.py, which runs in the same CI job that builds. A check that exists
@@ -52,30 +51,45 @@ Checks: >
   readability-identifier-naming,
   bugprone-*,
   performance-*,
-  modernize-use-nullptr,
-  modernize-use-override,
+  modernize-*,
   -bugprone-easily-swappable-parameters,
-  -bugprone-narrowing-conversions,
-  -clang-analyzer-optin.performance.Padding,
+  -bugprone-branch-clone,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -clang-analyzer-optin.core.EnumCastOutOfRange,
+  -modernize-use-trailing-return-type,
+  -modernize-use-auto,
+  -modernize-avoid-c-arrays,
   -performance-enum-size
 
-# `-clang-analyzer-optin.performance.Padding` is a judgement call, not a mechanical exclusion. It
-# is an OPT-IN analyzer that arrives with clang-tidy's defaults because this list does not begin
-# with `-*`. Wire records, mesh vertices and GPU instance structs have layouts that are
-# load-bearing — a snapshot record is the size the wire says it is — and
-# reordering fields to save padding is exactly the change this repository must not make casually.
+# THE EXCLUSIONS, EACH WITH THIS REPOSITORY'S REASON. Slice 5d measured every one of them against
+# the tree rather than inheriting its justification, and three of the four it inherited turned out
+# to fire nothing here at all -- they are enabled again and the sweep stays clean without them.
 #
-# `-bugprone-narrowing-conversions` is off because quantisation is pervasive and deliberate:
-# metres to eighth-metre lattice steps, radians to turns16, i64 sectors to the wire's i32, float to
-# the integer wire types. It would fire on most of the serialization layer, where the narrowing IS
-# the design. This block described that layer for a year before there was one and said centimetres
-# when the tree does eighth-metres; both are now true rather than aspirational (ADR 0042).
+# `-bugprone-easily-swappable-parameters` stays, and it is the one exclusion the port genuinely
+# needs. A routine that takes `(_a, _x, _y)` takes the 6502's three registers, in the order the
+# original left them in; a routine that takes `(_high, _low)` takes a sixteen-bit value the way the
+# machine held it. The check is right that they are swappable and wrong that this is a defect: the
+# ORDER IS THE ORIGINAL'S and changing it to please a linter would break the correspondence every
+# `// 6502:` comment in the tree depends on.
 #
-# `-performance-enum-size` is off for the same reason as the padding check: it asks a closed
-# taxonomy to shrink to the smallest type its current enumerators happen to fit in. Every such
-# taxonomy in this tree is a wire value first and a C++ type second, so "no enumerator needs that
-# many bits yet" is an argument for renumbering a protocol, which is the change this repository
-# must not make casually.
+# `-bugprone-branch-clone` is off because this port transcribes 6502 CONTROL FLOW, and two branch
+# instructions to the same label are two branches. `LL5`'s `CPX Q / BCC LL7 / BNE / CPY #64 /
+# BCC LL7` is two tests and two branches to one destination; folding the two `if` bodies into one
+# `||` would read better and would stop saying what the original does. The same shape is in the
+# divider at the other site the check finds, where the comment on the first arm explains why the
+# two paths reach the same statement for different reasons.
+#
+# `-bugprone-implicit-widening-of-multiplication-result` is off because the screen arithmetic is
+# `int` on purpose. A cell offset is `cellRow * 8 * WIDTH`; the values are small, bounded by the
+# canvas, and every one of the twenty-two sites is an index into a 64,000-byte array. Widening the
+# operands to `std::size_t` would say that overflow was a live risk in a calculation whose largest
+# term is 64,000.
+#
+# `-clang-analyzer-optin.core.EnumCastOutOfRange` is off because it is wrong about scoped enums
+# with a fixed underlying type. `ShipType` is `: std::uint8_t`, so C++ makes EVERY byte a value of
+# the enumeration, and `TypeOf` exists precisely so that a sweep over all 256 can go through it --
+# which several oracle suites do. The analyser reads the enumerator list and calls 224 out of
+# range; the standard does not.
 #
 # NOTE ON THE FORMAT: `Checks:` is a FOLDED scalar, so a `#` line indented under it is not a
 # comment — it folds into the value and corrupts the check list. Every comment belongs here.
@@ -90,7 +104,7 @@ WarningsAsErrors: '*'
 # flat-directory rule). The `.*` this replaced also matched build output -- the C++/WinRT
 # projection under <Project>/x64/Debug/Generated Files/winrt/ -- and 46 of the 77 diagnostics in
 # the first sweep were from headers no one in this repository wrote.
-HeaderFilterRegex: '(NeuronCore|GameLogic|NeuronServer|NeuronClient|Outpost)[/\\][A-Za-z0-9]+\.h$'
+HeaderFilterRegex: '(NeuronCore|GameLogic|Outpost)[/\\][A-Za-z0-9]+\.h$'
 
 CheckOptions:
   # ── Types: PascalCase, no prefix of any kind (R2, R5) ──────────────────────────────
