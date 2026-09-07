@@ -154,6 +154,7 @@
     <ClInclude Include="Colours.h" />
     <ClInclude Include="LoaderScreen.h" />
     <ClInclude Include="TextPrint.h" />
+    <ClInclude Include="TextPrint2x.h" />
     <ClInclude Include="Galaxy.h" />
     <ClInclude Include="HeapOffset.h" />
     <ClInclude Include="ShipBlueprint.h" />
@@ -230,6 +231,7 @@
     <ClCompile Include="StateHash.cpp" />
     <ClCompile Include="Lines.cpp" />
     <ClCompile Include="TextPrint.cpp" />
+    <ClCompile Include="TextPrint2x.cpp" />
     <ClCompile Include="Galaxy.cpp" />
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="Missions.cpp" />

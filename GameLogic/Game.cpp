@@ -43,6 +43,10 @@ namespace Elite
       m_extended(m_characters, m_recursive, m_universe.rng),
       m_ports{m_recursive, m_characters, m_characters, m_sid, m_extended, _present, _keyboard, _store}
   {
+    // Resolution.md RS-1: the printer draws the 640x400 surface beside the canvas, and reads `QQ11`
+    // for the layout that says where. Attached here because this is where both first exist.
+    m_screen.AttachPicture(&m_universe.picture, &m_universe.view);
+
     m_recursive.SetValueTokens(&m_values);
     m_extended.SetGame(m_universe, m_ports); // 6502: DT3 -- a control code that leaves is the library's
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Canvas.h"
+#include "TextPrint2x.h"
 #include "ExtendedTokens.h"
 #include "SoundEffects.h"
 #include "Tokens.h"
@@ -210,6 +211,29 @@ namespace Elite
     {
     }
 
+    /*
+     * The 640x400 surface this ALSO prints on, and the view whose layout says where
+     * (Design/Resolution.md section 6, slice RS-1).
+     *
+     * POINTERS, as the two members are, and for the reason the sound buffer above is one: a printer
+     * that has not been attached to a picture is a printer that draws the canvas alone, and that is
+     * a state rather than a missing argument.
+     *
+     * ATTACHED RATHER THAN CONSTRUCTED, and nullable, for the reason the sound buffer above is: a
+     * printer is built over a canvas and a `TextState`, and most of the fixtures that build one
+     * have no universe to hand and are comparing the canvas anyway. A printer with nothing attached
+     * draws the canvas alone, which is exactly what those fixtures assert.
+     *
+     * THE VIEW AND NOT A LAYOUT, because a layout kept here would be a second copy of something the
+     * game already knows, needing a writer on every screen change to stay true. `QQ11` IS the
+     * screen that is up; the layout is read off it per glyph, and there is nothing to keep in step.
+     */
+    void AttachPicture(Picture* _picture, const std::uint8_t* _view) noexcept
+    {
+      m_picture = _picture;
+      m_view = _view;
+    }
+
     /// 6502: CHPR. Returns the character, as the routine does in A.
     std::uint8_t Print(std::uint8_t _character) noexcept;
 
@@ -228,9 +252,18 @@ namespace Elite
     /// 6502: RR1 onwards -- the printable path, which is the glyph and its cell colour.
     void PrintGlyph(std::uint8_t _character) noexcept;
 
+    /// The layout for whatever screen is up, or the centred default when nothing is attached.
+    [[nodiscard]] TextLayout Layout() const noexcept
+    {
+      return (m_view != nullptr) ? LayoutForView(*m_view) : CENTRED_LAYOUT;
+    }
+
     Canvas& m_canvas;
     TextState& m_state;
     SoundBuffer* m_sound = nullptr; ///< 6502: what `R5`'s JSR BEEP fills
+
+    Picture* m_picture = nullptr;        ///< the second surface, or none -- see `AttachPicture`
+    const std::uint8_t* m_view = nullptr; ///< `QQ11`, read for its layout and never written
   };
 
   /*
