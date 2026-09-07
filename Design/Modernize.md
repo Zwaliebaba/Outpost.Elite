@@ -362,7 +362,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,072 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,088 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -507,7 +507,7 @@ never global.
 | `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
 | `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
 | `Projection.y1` | `K4+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
-| `K3Block.*` | `K3 to K3+9` | LoadPlanetAxis, LoadStationAxes, NormaliseAxes, OffsetAxis, RunTactics, SubtractShipAxis | BuildUnitVector, NormaliseAxes, OffsetAxis | RunDockingComputer (after SubtractStationAxes) | **Parameter and result** (M2-c). `SPS1` (`LoadPlanetAxis`, `NormaliseAxes`) leaves the vector `BuildUnitVector` and part 9 read; `TAS2`/`OffsetAxis` take and return it: `UnitVector`/`Vector24`, §4.3's `XX15 after SPS1` row. |
+| `K3Block.*` | `K3 to K3+9` | DecideDisposition, DecideMissile, LoadPlanetAxis, LoadStationAxes, NormaliseAxes, OffsetAxis, SubtractShipAxis | BuildUnitVector, NormaliseAxes, OffsetAxis | RunDockingComputer (after SubtractStationAxes) | **Parameter and result** (M2-c). `SPS1` (`LoadPlanetAxis`, `NormaliseAxes`) leaves the vector `BuildUnitVector` and part 9 read; `TAS2`/`OffsetAxis` take and return it: `UnitVector`/`Vector24`, §4.3's `XX15 after SPS1` row. |
 <!--census:end-->
 
 The `_a`/`_x`/`_y` parameters are renamed for what they carry (`_seed`, `_axisOffset`, `_highBits`)
@@ -1774,6 +1774,41 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M4-c-1: `TACTICS` answers a `Tactic`, and the `bool` it returned was three things
+wearing one costume.**
+
+`RunTactics` was 583 lines over seven annotated parts and returned "did the player survive". That
+boolean conflated THREE outcomes: a ship finished with for this frame (`TA22`'s `RTS`), the player
+killed by `OOPS` reaching `DEATH`, and `TN2`'s `JMP DOCKIT` handing the ship to a different routine
+altogether — the third hidden as a tail call whose boolean was passed straight through. `Tactic` has
+four values (`Steer`, `Done`, `Fatal`, `Docking`), the parts are `DecideMissile`, `DecideStation`,
+`DecideDisposition`, `DecideCombat` and `SteerTowardsTarget` over a `TacticFrame`, and `RunTactics`
+is 48 lines that performs what they answer. **`JMP DOCKIT` is a call at the top level now**, which
+is the one place `TACTICS` hands a ship to another routine and it was the least visible line in the
+function.
+
+**PARTS 4, 5 AND 6 ARE ONE FUNCTION, and the reason is the same one that kept the roll and the pitch
+together in M4-a-3.** `fightsOn` is `TA7`'s first `BCC TA3` jumping clean over part 5 and
+`fellFromFleeTest` is the carry `CMP #230` leaves for the `DORND` inside it; both are live from part
+4 into part 5, so a split between them would need two parameters to say what two locals already say.
+§6.85's rule, applied a second time and named as such.
+
+**§4.6's four names are five, and one of them does not map.** The row asks for `DecideMissile`,
+`DecideStation`, `DecideEscorts` and `DecideCombat`. `DecideEscorts` has nowhere to go — part 2 IS
+the station launching escorts, so it is `DecideStation` — and parts 3 and 7 had no name at all.
+Recorded rather than forced.
+
+**Seven mutants re-anchored, none dropped (rule 3).** `ta-240`, `ta-half`, `ta7-three`, `ta3-ecm`,
+`msl-82`, `msl-kill` and `kill-rotate` all name lines whose `_universe`/`work` became
+`_frame.universe`/`_frame.work`; each was re-anchored to the same expression in its new stage and
+`mutate.py --check` is back at 72 of 72. The tally is the next run's to report, because `mutate.py`
+builds HEAD.
+
+**Counts.** `origin-markers` 4,072 → 4,088, the fifth rise: sixteen labels where the parts split and
+on `Tactic`'s four values, each of which is a 6502 label — `TA22`, `DEATH`, `DOCKIT`, `TA4`. The
+census names `DecideDisposition` and `DecideMissile` as the writers of `K3` where it said
+`RunTactics`. 402 of 402 on the first run, TACTICS still 7,326 cases with 22 fatal, all 14 checks.
 
 **2026-09-07 — M4-b: `LL9` as its seven part blocks, and the census can name a part for the first
 time.**
