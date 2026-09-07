@@ -131,23 +131,15 @@ namespace Outpost
   // ---- the bubble ---------------------------------------------------------------------------------
 
   /*
-   * 6502: SFS1, and it is the LAST of three -- `FRS1` and `ANGRY` were seams here until M3-b-1d
-   * and are calls the flight loop makes for itself now.
+   * `SFS1` WAS THE LAST OF THREE ANSWERED HERE AND IS NOT ANY MORE (M4-a-1).
    *
-   * All three were stubs that said "phase 4" when slice 4a-b answered them, and each carried a
-   * comment explaining which answer an empty implementation had to give so that its caller stayed
-   * honest. Nothing is missing behind them any more: `TACTICS` was the last of that, and M3-b-1c
-   * let `MVEIT` call it, so a ship that `ANGRY` makes hostile does something about it. This one
-   * stays only because `SPIN` and `SPIN2` compare the SEQUENCE of calls, which is M4-a's to fix.
+   * `FRS1` and `ANGRY` went in M3-b-1d and are calls the flight loop makes for itself. All three
+   * were stubs that said "phase 4" when slice 4a-b answered them, and each carried a comment
+   * explaining which answer an empty implementation had to give so that its caller stayed honest.
+   * This one outlived the other two by a phase because `SPIN` and `SPIN2` compared the SEQUENCE of
+   * calls through it; they answer an `Elite::Drop` now and the comparison is that answer, so the
+   * bubble is a real bubble on both sides of the trap.
    */
-  bool FlightSession::SpawnChild(std::uint8_t _aiFlag, Elite::ShipType _type)
-  {
-    // 6502: SFS1 with `INF` at the ship being processed, which is `XSAV`'s slot.
-    return Elite::SpawnChildShip(m_universe.bubble, m_universe.work, m_universe.rng, m_universe.flight.slot, m_universe.flight.type,
-                                 _aiFlag, _type, m_universe.flight.blueprint)
-      .created;
-  }
-
   // ---- the ships ----------------------------------------------------------------------------------
 
   void FlightSession::DrawPlanetOrSun()

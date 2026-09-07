@@ -690,8 +690,9 @@ namespace GameLogicTests
          * `(Universe&, Ports&)` since M3-b-1c and the case still pokes the work block by hand.
          */
         Universe universe;
-        universe.unused.spawnRoom = true; // 6502: SFS1's carry -- `LoopRecording` was this, until M3-b-4c
-        Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, universe.unused);
+        // 6502: SFS1's carry was a fixture boolean here until M4-a-1, when `PerformDrop` started
+        // spawning into the real bubble and the answer became the slot list's.
+        Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused);
         Elite::Ship& work = universe.work;
         Elite::FlightState& flight = universe.flight;
         Elite::Canvas& canvas = universe.canvas;

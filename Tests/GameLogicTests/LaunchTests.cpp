@@ -352,7 +352,7 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"LL164 returned");
 
         Counting counting;
-        Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, universe.unused, counting);
+        Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, counting);
         Elite::DrawHyperspaceTunnel(universe, ports);
 
         const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
@@ -517,13 +517,11 @@ namespace GameLogicTests
      * an assertion about SILENCE rather than about a call, and `CompareMusic` below is where it is
      * made -- against the oracle's own `MUPLA` and its own SID writes, which are also none.
      */
-    struct RecordingLaunch final : Elite::SpawnChildEffects
-    {
-      bool SpawnChild(std::uint8_t, Elite::ShipType) override
-      {
-        return true;
-      }
-    };
+    /*
+     * `RecordingLaunch` WAS HERE AND IS NOT ANY MORE (M4-a-1). It was `SFS1` answering "there was
+     * room" for a launch that never spawns a child, so it was one seam this fixture had to declare
+     * because `Ports` carried it.
+     */
 
     struct RecordingOutside final : Elite::ShipDrawEffects
     {
@@ -536,7 +534,6 @@ namespace GameLogicTests
     {
       Universe universe; ///< every byte of it, since M3-a
       RecordingOutside outside;
-      RecordingLaunch effects;
       RecordingStart start;
 
       // 6502: LSO -- `NWSPS` hands the station the sun's heap, and this launch creates one, so the
@@ -549,7 +546,7 @@ namespace GameLogicTests
       /// The seams a launch reaches: the AI and the drawing, the sounds, and `RESET`'s own.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(outside, effects, start, start, start);
+        return universe.PortsWith(outside, start, start, start);
       }
     };
 
@@ -949,7 +946,7 @@ namespace GameLogicTests
       leaving.universe.view = 1u;
 
       Counting counting;
-      Elite::Ports ports = leaving.universe.PortsWith(leaving.outside, leaving.effects, leaving.start, counting);
+      Elite::Ports ports = leaving.universe.PortsWith(leaving.outside, leaving.start, counting);
 
       std::uint8_t flag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
       Elite::SystemSeeds selected{};
@@ -963,7 +960,7 @@ namespace GameLogicTests
       Occupy(flying, 0x4Du);
 
       Counting none;
-      Elite::Ports flyingPorts = flying.universe.PortsWith(flying.outside, flying.effects, flying.start, none);
+      Elite::Ports flyingPorts = flying.universe.PortsWith(flying.outside, flying.start, none);
 
       std::uint8_t inFlight = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
       Elite::SystemSeeds ignored{};

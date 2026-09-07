@@ -246,34 +246,32 @@ namespace GameLogicTests
      */
     UnusedSeams unused;
 
-    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::SpawnChildEffects& _loop,
-                                         Elite::StartUpEffects& _start, Elite::Presenter& _present,
-                                         Elite::Keyboard& _keyboard) noexcept
+    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::StartUpEffects& _start,
+                                         Elite::Presenter& _present, Elite::Keyboard& _keyboard) noexcept
     {
-      return Elite::Ports{printer,         characters, characters, _drawing,  _loop, sid,
-                          extendedPrinter, _start,     _present,   _keyboard, unused};
+      return Elite::Ports{printer,         characters, characters, _drawing,   sid,
+                          extendedPrinter, _start,     _present,   _keyboard,  unused};
     }
 
     /// The same, for a fixture that does not reach the keyboard -- which `RDKEY` made most of them
     /// until M3-b-3d, when the walk became `Elite::ScanKeyboard` and its callers started asking.
-    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::SpawnChildEffects& _loop,
-                                         Elite::StartUpEffects& _start, Elite::Presenter& _present) noexcept
+    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::StartUpEffects& _start,
+                                         Elite::Presenter& _present) noexcept
     {
-      return PortsWith(_drawing, _loop, _start, _present, unused);
+      return PortsWith(_drawing, _start, _present, unused);
     }
 
     /// The same, for a fixture whose start recorder is its presenter too -- which is most of them,
     /// because `DELAY` is declared beside `TITLE` in the game.
-    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::SpawnChildEffects& _loop,
-                                         Elite::StartUpEffects& _start) noexcept
+    [[nodiscard]] Elite::Ports PortsWith(Elite::ShipDrawEffects& _drawing, Elite::StartUpEffects& _start) noexcept
     {
-      return PortsWith(_drawing, _loop, _start, unused);
+      return PortsWith(_drawing, _start, unused);
     }
 
-    /// The four a screen change never reaches, answered with nothing.
+    /// The three a screen change never reaches, answered with nothing.
     [[nodiscard]] Elite::Ports Ports() noexcept
     {
-      return PortsWith(unused, unused, unused, unused);
+      return PortsWith(unused, unused, unused);
     }
   };
 
@@ -297,22 +295,24 @@ namespace GameLogicTests
      * `LoopRecording` WAS A SECOND CLASS HERE AND IS NOT ANY MORE (M3-b-4c).
      *
      * It was named for a recording it had stopped making: two empty draw methods and a `SpawnChild`
-     * that returned true, where `NullSeams` returns false. One boolean, and it is `spawnRoom` on
-     * the null port now -- which is §4.5's "one class" for the tests, arrived at by deleting the
-     * other one rather than by merging two.
+     * that returned true, where `NullSeams` returned false. One boolean, and it became `spawnRoom`
+     * on the null port -- which is §4.5's "one class" for the tests, arrived at by deleting the
+     * other one rather than by merging two. M4-a-1 removed the boolean as well.
      */
-    LoopUniverse() noexcept
-    {
-      // 6502: SFS1's carry. A frame worth running kills a ship, and a kill spawns debris.
-      universe.unused.spawnRoom = true;
-    }
+    /*
+     * `spawnRoom` WAS SET HERE AND THERE IS NO SUCH BYTE ANY MORE (M4-a-1).
+     *
+     * It was `SFS1`'s carry -- "the bubble had room" -- which a frame worth running needs because a
+     * kill spawns debris. `Elite::PerformDrop` spawns into the real bubble now, so the answer comes
+     * from the slot list rather than from a fixture's boolean, and there is nothing to set.
+     */
 
     Universe universe;
 
     /// The seams as `Elite::Ports`: nothing, and `SFS1` answering that the bubble had room.
     [[nodiscard]] Elite::Ports Ports() noexcept
     {
-      return universe.PortsWith(universe.unused, universe.unused, universe.unused);
+      return universe.PortsWith(universe.unused, universe.unused);
     }
   };
 

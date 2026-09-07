@@ -42,7 +42,6 @@ namespace GameLogicTests
 {
 
   struct NullSeams : Elite::ShipDrawEffects,
-                     Elite::SpawnChildEffects,
                      Elite::StartUpEffects,
                      Elite::Keyboard,
                      Elite::Presenter,
@@ -53,16 +52,14 @@ namespace GameLogicTests
     void DrawExplosion() override {}
 
     /*
-     * Elite::SpawnChildEffects -- and this is the SECOND place this object makes a choice.
+     * `Elite::SpawnChildEffects` AND ITS `spawnRoom` WERE HERE AND ARE NOT ANY MORE (M4-a-1).
      *
-     * 6502: SFS1's carry, which says whether the bubble had room for the child. False is the answer
-     * a fixture that never meant to reach the seam gets; a fixture that DOES reach it -- a kill
-     * spawning debris, which is every flight frame worth running -- sets `spawnRoom` and gets the
-     * other one. `LoopRecording` was a second class for exactly that one boolean until M3-b-4c.
+     * 6502: SFS1's carry, which says whether the bubble had room for the child. It was the SECOND
+     * place this object made a choice, and the choice was a lie either way: a fixture that reached
+     * the seam set `spawnRoom` to true and got "there is always room" however full the bubble was.
+     * `SPIN` and `SPIN2` answer an `Elite::Drop` now and `Elite::PerformDrop` spawns into the real
+     * bubble, so the answer comes from the ship slots rather than from a boolean here.
      */
-    bool spawnRoom = false;
-
-    bool SpawnChild(std::uint8_t, Elite::ShipType) override { return spawnRoom; }
 
     // Elite::StartUpEffects
     void ClearKeyLogger() override {}

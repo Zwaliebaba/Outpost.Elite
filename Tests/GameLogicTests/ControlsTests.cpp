@@ -379,7 +379,7 @@ namespace GameLogicTests
       Elite::TokenPrinter printer{characters};
       Elite::ExtendedTokenPrinter extended{characters, printer, universe.rng};
       Elite::SidWriteLog sid;
-      Elite::Ports ports{printer,  characters, characters, nulls, nulls, sid,
+      Elite::Ports ports{printer,  characters, characters, nulls, sid,
                          extended, nulls,      nulls,      board, nulls};
 
       std::uint32_t recentredByStick = 0;
