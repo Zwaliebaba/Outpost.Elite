@@ -69,9 +69,9 @@
       "slice": "M3-c"
     },
     "origin-markers": {
-      "ceiling": 4053,
+      "ceiling": 4072,
       "slack": 0,
-      "slice": "M4-a-3: the frame's head and tail split at their annotated parts, each one labelled (rule 4)"
+      "slice": "M4-b: LL9's seven part blocks become seven stages, each labelled where it splits (rule 4)"
     },
     "oracle-test-files": {
       "ceiling": 50,

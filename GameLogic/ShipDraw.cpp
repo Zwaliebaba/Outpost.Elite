@@ -823,45 +823,79 @@ namespace Elite
 
   } // namespace
 
-  void DrawShip(Canvas& _canvas, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip,
-                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
-                ShipDrawEffects& _effects, Rng& _rng, bool _carryIn) noexcept
+  /*
+   * 6502: what `LL9`'s eleven entry points share (M4-b).
+   *
+   * `DrawShip` was 551 lines over seven annotated part blocks, taking thirteen arguments and
+   * carrying four locals across them under comment rules. The rules are function boundaries now and
+   * this is what the stages hand each other.
+   *
+   * IT IS FILE-LOCAL AND THAT IS THE POINT, not a way round P5. The ratchet's `aggregate-refs`
+   * counts reference members of the argument-list structs in the HEADERS, because those are
+   * signatures threaded through the whole library -- the thing M3-a spent a phase removing. This is
+   * the opposite: it exists so that seven stages in ONE translation unit stop passing thirteen
+   * arguments each, and no caller outside this file can see it. `LaserHit` and M4-a-2's stage
+   * results are file-local for the same reason.
+   *
+   * THE FOUR ZERO-PAGE BYTES ARE NOT IN IT. `XX2`, `XX3`, `XX12` and `XX16` stay in
+   * `GeometryWorkspace` because two of them have a reader OUTSIDE this routine -- `DOEXP` copies
+   * the projected vertices off `XX3` to build the cloud (§4.3) -- so they are the universe's state
+   * and not a frame's. What is here is only what the parts carry between themselves.
+   */
+  struct ShipRender
   {
-    /*
-     * `XX4`, `XX17`, `XX18`, `XX20` and `V` are LOCALS since M2-c-3, and the four bytes the frame
-     * keeps -- `XX2`, `XX3`, `XX12` and `XX16` -- are the stage results parts 3 to 11 hand each
-     * other, two of them with a reader outside the routine (§4.3). These five never were: they
-     * had to be zero page because parts 1 to 11 are eleven entry points sharing one workspace,
-     * and this port is one function.
-     */
-    std::uint8_t detailThreshold = 31;      ///< 6502: XX4 -- how much detail the distance allows
-    std::array<std::uint8_t, 9> shipPosition{}; ///< 6502: XX18 -- the position, halved, then rotated
-    std::uint16_t walker = 0;               ///< 6502: V(1 0) -- the blueprint walker, an index since M1-e
-    std::uint8_t heapLimit = 0;             ///< 6502: T1 -- how many heap bytes this blueprint allows
+    Canvas& canvas;
+    GeometryWorkspace& geometry;
+    MathWorkspace& math;
+    const ClipState& clip;
+    Projection& screen;
+    Ship& work;
+    LineHeap& heap;
+    const Blueprint& blueprint;
 
-    // ---- part 1: is there anything to draw at all? ------------------------------------------
+    std::uint8_t detail = 31;               ///< 6502: XX4 -- how much detail the distance allows
+    std::array<std::uint8_t, 9> position{}; ///< 6502: XX18 -- the position, halved, then rotated
+    HeapOffset run{};                       ///< 6502: the ship's own block of the line heap
+    std::uint8_t used = 1;                  ///< 6502: U -- heap bytes used, one because byte 0 is the count
+  };
 
+  /*
+   * ---- part 1: is there anything to draw at all? ------------------------------------------------
+   *
+   * Four ways of not being drawn, and the caller performs the two that need the seam: `LL25`'s
+   * `JMP PLANET` and `LL14`'s `JMP DOEXP` are `ShipDrawEffects` calls, so the stage answers which
+   * one rather than reaching through it. `EE51` and the `EE55` cloud seeding ARE part 1 and stay.
+   */
+  enum class Presence : std::uint8_t
+  {
+    Draw,     ///< fall through to `EE28` -- there is a ship to draw
+    Body,     ///< 6502: LL25 -- the planet or the sun, which is a different routine
+    Erased,   ///< 6502: EE51, and `LL14`'s `JMP EE51` -- rubbed out and gone
+    Exploded, ///< 6502: LL14's `JMP DOEXP` -- off the screen and still burning
+  };
+
+  [[nodiscard]] Presence TestPresence(ShipRender& _render, Ship& _slot, ShipType _type, Rng& _rng, bool _carryIn) noexcept
+  {
     // 6502: LL25 -- a negative type is the planet or the sun, which is a different routine.
     if (IsBody(_type))
     {
-      _effects.DrawPlanetOrSun();
-      return;
+      return Presence::Body;
     }
 
     // 6502: bit 7 of NEWB -- scooped or docked, so take it off the screen and forget it.
-    if (Has(_work.newb, NewbBit::Remove))
+    if (Has(_render.work.newb, NewbBit::Remove))
     {
       // 6502: BMI EE51 -- a tail call, and the flag it leaves is `LL9`'s exit, which nothing reads.
-      static_cast<void>(EraseShip(_canvas, _work, _heap, _carryIn));
-      return;
+      static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, _carryIn));
+      return Presence::Erased;
     }
 
-    const std::uint8_t entryState = _work.state;
+    const std::uint8_t entryState = _render.work.state;
     if (!Has(entryState, ShipStateBit::Exploding) && Has(entryState, ShipStateBit::Killed))
     {
       // Killed and not yet exploding. Bits 6 and 7 are cleared by the same instruction that sets
       // bit 5, so the ship stops firing in the moment it starts to blow up.
-      _work.state = Without(With(entryState, ShipStateBit::Exploding), ShipStateBit::Firing, ShipStateBit::Killed);
+      _render.work.state = Without(With(entryState, ShipStateBit::Exploding), ShipStateBit::Firing, ShipStateBit::Killed);
 
       // Written through INF into the ship's block in K% rather than into INWK, so that the
       // caller's copy back does not undo them.
@@ -870,51 +904,65 @@ namespace Elite
 
       // 6502: JSR EE51, then the six instructions and the EE55 loop that seed the cloud -- on the
       // carry the erase returns, which is the caller's when there was nothing to erase (§6.157).
-      const bool carry = EraseShip(_canvas, _work, _heap, _carryIn);
-      SeedExplosionCloud(_heap, _work.heap, _blueprint.explosionCount, _rng, carry); // 6502: (XX0),7
+      const bool carry = EraseShip(_render.canvas, _render.work, _render.heap, _carryIn);
+      SeedExplosionCloud(_render.heap, _render.work.heap, _render.blueprint.explosionCount, _rng, carry); // 6502: (XX0),7
     }
 
     // 6502: EE28 / EE49 and LL10 -- four ways of being not worth drawing, sharing one exit. The
     // two coordinate tests are sixteen-bit: |x| or |y| at least as large as z puts the ship outside
     // a ninety-degree view whatever the projection would make of it.
-    bool gone = (_work.z.sgn & 0x80u) != 0u;
+    bool gone = (_render.work.z.sgn & 0x80u) != 0u;
     if (!gone)
     {
-      gone = _work.z.hi >= 192u;
+      gone = _render.work.z.hi >= 192u;
     }
     for (std::size_t axis = 0; !gone && axis < 2u; ++axis)
     {
-      const auto other = _work.PositionAt((axis == 0u) ? SHIP_X_OFFSET : SHIP_Y_OFFSET);
-      const SubResult low = SubtractWithCarry(other.lo, _work.z.lo, true);
-      gone = SubtractWithCarry(other.hi, _work.z.hi, low.carry).carry;
+      const auto other = _render.work.PositionAt((axis == 0u) ? SHIP_X_OFFSET : SHIP_Y_OFFSET);
+      const SubResult low = SubtractWithCarry(other.lo, _render.work.z.lo, true);
+      gone = SubtractWithCarry(other.hi, _render.work.z.hi, low.carry).carry;
     }
 
     if (gone)
     {
       // 6502: LL14.
-      if (!Has(_work.state, ShipStateBit::Exploding))
+      if (!Has(_render.work.state, ShipStateBit::Exploding))
       {
-        static_cast<void>(EraseShip(_canvas, _work, _heap, false)); // 6502: JMP EE51 -- and the flag is `LL9`'s exit
-        return;
+        static_cast<void>(EraseShip(_render.canvas, _render.work, _render.heap, false)); // 6502: JMP EE51 -- and the flag is `LL9`'s exit
+        return Presence::Erased;
       }
 
-      _work.state = Without(_work.state, ShipStateBit::OnScreen);
-      _effects.DrawExplosion();
-      return;
+      _render.work.state = Without(_render.work.state, ShipStateBit::OnScreen);
+      return Presence::Exploded;
     }
 
-    // ---- part 2: how far away is it, and is that too far? -----------------------------------
+    return Presence::Draw;
+  }
 
+  /*
+   * ---- part 2: how far away is it, and is that too far? ----------------------------------------
+   *
+   * Writes `XX4` into the frame, and answers whether a dot will do. The caller draws the dot,
+   * because `LL13`'s `JMP SHPPT` is a tail call and this stage's job is the measurement.
+   */
+  enum class Range : std::uint8_t
+  {
+    Detailed, ///< close enough for the vertices and the edges
+    Dot,      ///< 6502: LL13 -- past the blueprint's own visibility distance
+  };
+
+  [[nodiscard]] Range MeasureRange(ShipRender& _render) noexcept
+  {
     // Blueprint byte 6 is a vertex's offset in XX3, and 255 there means "this one did not
     // project". The laser line in part 9 reads it back and gives up when it is still 255.
-    const std::uint8_t laserVertex = _blueprint.laserVertex;
-    _geometry.xx3[laserVertex] = 255;
-    _geometry.xx3[static_cast<std::size_t>(laserVertex) + 1u] = 255;
+    const std::uint8_t laserVertex = _render.blueprint.laserVertex;
+    _render.geometry.xx3[laserVertex] = 255;
+    _render.geometry.xx3[static_cast<std::size_t>(laserVertex) + 1u] = 255;
 
     // z divided by sixteen into (A T), and then by another eight. The `ROR A` after the fourth
     // `LSR A` picks up the carry that shift left, so the two halves are one number and not two.
-    std::uint8_t distanceLow = _work.z.lo;
-    std::uint8_t distanceHigh = _work.z.hi;
+    std::uint8_t distanceLow = _render.work.z.lo;
+    std::uint8_t distanceHigh = _render.work.z.hi;
     for (int shift = 0; shift < 3; ++shift)
     {
       const bool into = (distanceHigh & 0x01u) != 0u;
@@ -926,109 +974,113 @@ namespace Elite
 
     if (distanceHigh == 0u)
     {
-      detailThreshold = static_cast<std::uint8_t>(RotateRight(distanceLow, spare).value >> 3);
+      _render.detail = static_cast<std::uint8_t>(RotateRight(distanceLow, spare).value >> 3);
     }
-    else if (_blueprint.visibility < _work.z.hi &&
-             !Has(_work.state, ShipStateBit::Exploding))
+    else if (_render.blueprint.visibility < _render.work.z.hi &&
+             !Has(_render.work.state, ShipStateBit::Exploding))
     {
       // 6502: LL13 -- past the blueprint's own visibility distance, so a dot will do.
-      DrawShipAsPoint(_canvas, _work, _heap, _math, _screen);
-      return;
+      return Range::Dot;
     }
 
-    // ---- part 3: the orientation vectors, scaled -------------------------------------------
+    return Range::Detailed;
+  }
 
-    ScaleOrientation(_work, _geometry);
+  /// ---- part 3: the orientation vectors, scaled -------------------------------------------------
+  void ScaleShip(ShipRender& _render) noexcept
+  {
+    ScaleOrientation(_render.work, _render.geometry);
 
-    const std::array<std::uint8_t, SHIP_BLOCK_SIZE> position = _work.ToBytes();
+    const std::array<std::uint8_t, SHIP_BLOCK_SIZE> position = _render.work.ToBytes();
     for (int byte = 8; byte >= 0; --byte)
     {
-      shipPosition[static_cast<std::size_t>(byte)] = position[static_cast<std::size_t>(byte)];
+      _render.position[static_cast<std::size_t>(byte)] = position[static_cast<std::size_t>(byte)];
     }
-    _geometry.xx2[15] = 255;
+    _render.geometry.xx2[15] = 255;
+  }
 
-    const std::uint8_t faceBytes = _blueprint.faceBytes;
+  /// ---- parts 4 and 5: which faces can be seen --------------------------------------------------
+  void SelectFaces(ShipRender& _render) noexcept
+  {
+    const std::uint8_t faceBytes = _render.blueprint.faceBytes;
 
-    // ---- parts 4 and 5: which faces can be seen --------------------------------------------
-
-    if (Has(_work.state, ShipStateBit::Exploding))
+    if (Has(_render.work.state, ShipStateBit::Exploding))
     {
       // 6502: EE30 -- an exploding ship shows every face and every vertex, so that the whole cloud
       // can be built out of them.
       for (int face = faceBytes >> 2; face >= 0; --face)
       {
-        _geometry.xx2[static_cast<std::size_t>(face)] = 255;
+        _render.geometry.xx2[static_cast<std::size_t>(face)] = 255;
       }
-      detailThreshold = 0;
+      _render.detail = 0;
     }
     else if (faceBytes != 0u)
     {
       // 6502: EE29 -- halve the ship's position until its z fits in a byte, counting the halvings
       // on top of the blueprint's own scale in byte 18.
-      std::uint8_t shifts = _blueprint.normalShifts;
-      std::uint8_t z = shipPosition[7];
+      std::uint8_t shifts = _render.blueprint.normalShifts;
+      std::uint8_t z = _render.position[7];
       while (z != 0u)
       {
         ++shifts;
 
-        const bool intoY = (shipPosition[4] & 0x01u) != 0u;
-        shipPosition[4] = static_cast<std::uint8_t>(shipPosition[4] >> 1);
-        shipPosition[3] = RotateRight(shipPosition[3], intoY).value;
+        const bool intoY = (_render.position[4] & 0x01u) != 0u;
+        _render.position[4] = static_cast<std::uint8_t>(_render.position[4] >> 1);
+        _render.position[3] = RotateRight(_render.position[3], intoY).value;
 
-        const bool intoX = (shipPosition[1] & 0x01u) != 0u;
-        shipPosition[1] = static_cast<std::uint8_t>(shipPosition[1] >> 1);
-        shipPosition[0] = RotateRight(shipPosition[0], intoX).value;
+        const bool intoX = (_render.position[1] & 0x01u) != 0u;
+        _render.position[1] = static_cast<std::uint8_t>(_render.position[1] >> 1);
+        _render.position[0] = RotateRight(_render.position[0], intoX).value;
 
         const bool intoZ = (z & 0x01u) != 0u;
         z = static_cast<std::uint8_t>(z >> 1);
-        shipPosition[6] = RotateRight(shipPosition[6], intoZ).value;
+        _render.position[6] = RotateRight(_render.position[6], intoZ).value;
       }
 
       // 6502: LL91 -- the position, rotated into the ship's own frame. `XX15`'s six bytes are the
       // three sign-magnitude pairs `LL51` reads, which is a `Vector16` since M2-c-2.
-      DotProducts(Vector16{SignMag16{shipPosition[0], shipPosition[2]}, SignMag16{shipPosition[3], shipPosition[5]},
-                           SignMag16{shipPosition[6], shipPosition[8]}},
-                  _geometry);
-      shipPosition[0] = _geometry.xx12[0];
-      shipPosition[2] = _geometry.xx12[1];
-      shipPosition[3] = _geometry.xx12[2];
-      shipPosition[5] = _geometry.xx12[3];
-      shipPosition[6] = _geometry.xx12[4];
-      shipPosition[8] = _geometry.xx12[5];
+      DotProducts(Vector16{SignMag16{_render.position[0], _render.position[2]}, SignMag16{_render.position[3], _render.position[5]},
+                           SignMag16{_render.position[6], _render.position[8]}},
+                  _render.geometry);
+      _render.position[0] = _render.geometry.xx12[0];
+      _render.position[2] = _render.geometry.xx12[1];
+      _render.position[3] = _render.geometry.xx12[2];
+      _render.position[5] = _render.geometry.xx12[3];
+      _render.position[6] = _render.geometry.xx12[4];
+      _render.position[8] = _render.geometry.xx12[5];
 
       // 6502: LDY #4 / LDA (XX0),Y / CLC / ADC XX0 / STA V / LDY #17 / LDA (XX0),Y / ADC XX0+1 /
-      // STA V+1 -- V is the faces, which the blueprint carries as a span; V's index starts at 0.
-      walker = 0;
-
+      // STA V+1 -- V is the faces, and in this port it is `at`: the blueprint carries them as a
+      // span, so the pointer set-up is an index starting at zero and nothing else (M4-b).
       std::uint8_t at = 0;
       do
       {
         // 6502: LL86 -- a face whose own distance is under the ship's is taken as visible without
         // the arithmetic.
-        const std::uint8_t flags = _blueprint.faces[at];
-        _geometry.xx12[1] = flags;
+        const std::uint8_t flags = _render.blueprint.faces[at];
+        _render.geometry.xx12[1] = flags;
 
-        if ((flags & 0x1Fu) < detailThreshold)
+        if ((flags & 0x1Fu) < _render.detail)
         {
-          _geometry.xx2[static_cast<std::size_t>(at >> 2)] = 255;
+          _render.geometry.xx2[static_cast<std::size_t>(at >> 2)] = 255;
           at = static_cast<std::uint8_t>(at + 4u);
           continue;
         }
 
         // 6502: LL87 -- the face's normal, with its three sign bits spread out by doubling.
-        _geometry.xx12[3] = static_cast<std::uint8_t>(flags << 1);
-        _geometry.xx12[5] = static_cast<std::uint8_t>(flags << 2);
-        _geometry.xx12[0] = _blueprint.faces[at + 1u];
-        _geometry.xx12[2] = _blueprint.faces[at + 2u];
-        _geometry.xx12[4] = _blueprint.faces[at + 3u];
+        _render.geometry.xx12[3] = static_cast<std::uint8_t>(flags << 1);
+        _render.geometry.xx12[5] = static_cast<std::uint8_t>(flags << 2);
+        _render.geometry.xx12[0] = _render.blueprint.faces[at + 1u];
+        _render.geometry.xx12[2] = _render.blueprint.faces[at + 2u];
+        _render.geometry.xx12[4] = _render.blueprint.faces[at + 3u];
 
         Vector16 normal; // 6502: XX15's six bytes, the face's normal plus the ship's position
 
         if (shifts >= 4u) // 6502: XX17, the shift count part 3 left
         {
           // 6502: LL143 -- the position is already small enough to use as it stands.
-          normal = Vector16{SignMag16{shipPosition[0], shipPosition[2]}, SignMag16{shipPosition[3], shipPosition[5]},
-                            SignMag16{shipPosition[6], shipPosition[8]}};
+          normal = Vector16{SignMag16{_render.position[0], _render.position[2]}, SignMag16{_render.position[3], _render.position[5]},
+                            SignMag16{_render.position[6], _render.position[8]}};
         }
         else
         {
@@ -1044,9 +1096,9 @@ namespace Elite
           std::uint8_t scale = shifts;
           for (;;)
           {
-            std::uint8_t first = _geometry.xx12[0];
-            std::uint8_t second = _geometry.xx12[2];
-            std::uint8_t third = _geometry.xx12[4];
+            std::uint8_t first = _render.geometry.xx12[0];
+            std::uint8_t second = _render.geometry.xx12[2];
+            std::uint8_t third = _render.geometry.xx12[4];
             for (std::uint8_t left = scale; left != 0u; --left)
             {
               first = static_cast<std::uint8_t>(first >> 1);
@@ -1056,17 +1108,18 @@ namespace Elite
 
             // 6502: STA R / LDA XX12+5 / STA S / LDA XX18+6 / STA Q / LDA XX18+8 / JSR LL38, and the
             // same for x and y: each is the halved coordinate under the ship's sign, plus the vertex.
-            const SignedSum alongZ = CombineSigned(shipPosition[8], shipPosition[6], SignMag16{third, _geometry.xx12[5]});
+            const SignedSum alongZ = CombineSigned(_render.position[8], _render.position[6], SignMag16{third, _render.geometry.xx12[5]});
             if (!alongZ.carry)
             {
               normal.z = SignMag16{alongZ.value, alongZ.sign};
 
-              const SignedSum alongX = CombineSigned(shipPosition[2], shipPosition[0], SignMag16{first, _geometry.xx12[1]});
+              const SignedSum alongX = CombineSigned(_render.position[2], _render.position[0], SignMag16{first, _render.geometry.xx12[1]});
               if (!alongX.carry)
               {
                 normal.x = SignMag16{alongX.value, alongX.sign};
 
-                const SignedSum alongY = CombineSigned(shipPosition[5], shipPosition[3], SignMag16{second, _geometry.xx12[3]});
+                const SignedSum alongY =
+                  CombineSigned(_render.position[5], _render.position[3], SignMag16{second, _render.geometry.xx12[3]});
                 if (!alongY.carry)
                 {
                   normal.y = SignMag16{alongY.value, alongY.sign};
@@ -1076,23 +1129,26 @@ namespace Elite
             }
 
             // 6502: ovflw.
-            shipPosition[0] = static_cast<std::uint8_t>(shipPosition[0] >> 1);
-            shipPosition[6] = static_cast<std::uint8_t>(shipPosition[6] >> 1);
-            shipPosition[3] = static_cast<std::uint8_t>(shipPosition[3] >> 1);
+            _render.position[0] = static_cast<std::uint8_t>(_render.position[0] >> 1);
+            _render.position[6] = static_cast<std::uint8_t>(_render.position[6] >> 1);
+            _render.position[3] = static_cast<std::uint8_t>(_render.position[3] >> 1);
             scale = 1;
           }
         }
 
-        _geometry.xx2[static_cast<std::size_t>(at >> 2)] = FaceVisibility(normal, _geometry);
+        _render.geometry.xx2[static_cast<std::size_t>(at >> 2)] = FaceVisibility(normal, _render.geometry);
         at = static_cast<std::uint8_t>(at + 4u);
       } while (at < faceBytes); // 6502: XX20
     }
+  }
 
-    // ---- parts 6 to 8: project the vertices the visible faces touch --------------------------
+  /// ---- parts 6 to 8: project the vertices the visible faces touch ------------------------------
+  void ProjectVertices(ShipRender& _render) noexcept
+  {
+    TransposeOrientation(_render.geometry);
 
-    TransposeOrientation(_geometry);
-
-    walker = 0; // 6502: XX0+20 -- the vertices, which the blueprint carries as a span
+    // 6502: XX0+20 -- V is the vertices here, and the loop's own `vertex` is it: the blueprint
+    // carries them as a span, so the pointer set-up is an index starting at zero (M4-b).
 
     /*
      * 6502: CNT -- where in `XX3` the next projected vertex goes, four bytes at a time.
@@ -1105,41 +1161,41 @@ namespace Elite
 
     for (std::uint8_t vertex = 0;;)
     {
-      const std::uint8_t flags = _blueprint.vertices[vertex + 3u];
+      const std::uint8_t flags = _render.blueprint.vertices[vertex + 3u];
 
-      const bool nearEnough = (flags & 0x1Fu) >= detailThreshold;
-      const bool visible = nearEnough && (EitherFaceVisible(_geometry, _blueprint.vertices[vertex + 4u]) ||
-                                          EitherFaceVisible(_geometry, _blueprint.vertices[vertex + 5u]));
+      const bool nearEnough = (flags & 0x1Fu) >= _render.detail;
+      const bool visible = nearEnough && (EitherFaceVisible(_render.geometry, _render.blueprint.vertices[vertex + 4u]) ||
+                                          EitherFaceVisible(_render.geometry, _render.blueprint.vertices[vertex + 5u]));
 
       if (visible)
       {
         // 6502: LL49 -- the vertex's three sign bits, spread out by doubling, then rotated into
         // the player's frame and added to the ship's own position.
-        DotProducts(Vector16{SignMag16{_blueprint.vertices[vertex], flags},
-                             SignMag16{_blueprint.vertices[vertex + 1u], static_cast<std::uint8_t>(flags << 1)},
-                             SignMag16{_blueprint.vertices[vertex + 2u], static_cast<std::uint8_t>(flags << 2)}},
-                    _geometry);
+        DotProducts(Vector16{SignMag16{_render.blueprint.vertices[vertex], flags},
+                             SignMag16{_render.blueprint.vertices[vertex + 1u], static_cast<std::uint8_t>(flags << 1)},
+                             SignMag16{_render.blueprint.vertices[vertex + 2u], static_cast<std::uint8_t>(flags << 2)}},
+                    _render.geometry);
 
         // 6502: XX15's six bytes again, now as x in (2 1 0) and y in (5 4 3).
-        SignMag24 across = PlaceVertexAxis(_geometry.xx12[0], _geometry.xx12[1], _work, SHIP_X_OFFSET);
-        SignMag24 down = PlaceVertexAxis(_geometry.xx12[2], _geometry.xx12[3], _work, SHIP_Y_OFFSET);
+        SignMag24 across = PlaceVertexAxis(_render.geometry.xx12[0], _render.geometry.xx12[1], _render.work, SHIP_X_OFFSET);
+        SignMag24 down = PlaceVertexAxis(_render.geometry.xx12[2], _render.geometry.xx12[3], _render.work, SHIP_Y_OFFSET);
 
         // 6502: LL55 / LL56 / LL140 -- and z, which is a plain sixteen-bit add or subtract with a
         // floor of four rather than a sign-magnitude one, because a vertex behind the player has
         // to be pulled in front of it before anything is divided by it. `(U T)` is this loop's own
         // since M2-c-3.
         SignMag16 depth{}; // 6502: (U T) -- the vertex's distance
-        if ((_geometry.xx12[5] & 0x80u) == 0u)
+        if ((_render.geometry.xx12[5] & 0x80u) == 0u)
         {
-          const AddResult sum = AddWithCarry(_geometry.xx12[4], _work.z.lo, false);
+          const AddResult sum = AddWithCarry(_render.geometry.xx12[4], _render.work.z.lo, false);
           depth.lo = sum.value;
-          depth.hi = AddWithCarry(_work.z.hi, 0, sum.carry).value;
+          depth.hi = AddWithCarry(_render.work.z.hi, 0, sum.carry).value;
         }
         else
         {
-          const SubResult low = SubtractWithCarry(_work.z.lo, _geometry.xx12[4], true);
+          const SubResult low = SubtractWithCarry(_render.work.z.lo, _render.geometry.xx12[4], true);
           depth.lo = low.value;
-          const SubResult high = SubtractWithCarry(_work.z.hi, 0, low.carry);
+          const SubResult high = SubtractWithCarry(_render.work.z.hi, 0, low.carry);
           depth.hi = high.value;
 
           if (!high.carry || (high.value == 0u && low.value < 4u))
@@ -1176,7 +1232,7 @@ namespace Elite
         // well as read here because, for the last vertex of the last ship drawn, it is the frame's Q
         // the altitude check reads (`EndFlightFrame`) -- unless the clipper writes it after.
         const std::uint8_t distance = depth.lo;
-        _math.q = distance;
+        _render.math.q = distance;
         Quotient16 projectedX{depth.hi, 0};
         if (across.lo < distance)
         {
@@ -1191,16 +1247,16 @@ namespace Elite
         {
           // 6502: LL62 -- 128 - (U R), for a vertex to the left of centre.
           const SubResult low = SubtractWithCarry(128, projectedX.low, true);
-          _geometry.xx3[x] = low.value;
+          _render.geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = SubtractWithCarry(0, projectedX.high, low.carry).value;
+          _render.geometry.xx3[x] = SubtractWithCarry(0, projectedX.high, low.carry).value;
         }
         else
         {
           const AddResult low = AddWithCarry(projectedX.low, 128, false);
-          _geometry.xx3[x] = low.value;
+          _render.geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = AddWithCarry(projectedX.high, 0, low.carry).value;
+          _render.geometry.xx3[x] = AddWithCarry(projectedX.high, 0, low.carry).value;
         }
 
         // 6502: LL66 -- and the same again for y, with U cleared first because `LL28` does not
@@ -1220,16 +1276,16 @@ namespace Elite
         {
           // 6502: LL70 -- below the centre of the view.
           const AddResult low = AddWithCarry(SPACE_VIEW_CENTRE_Y, projectedY.low, false);
-          _geometry.xx3[x] = low.value;
+          _render.geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = AddWithCarry(0, projectedY.high, low.carry).value;
+          _render.geometry.xx3[x] = AddWithCarry(0, projectedY.high, low.carry).value;
         }
         else
         {
           const SubResult low = SubtractWithCarry(SPACE_VIEW_CENTRE_Y, projectedY.low, true);
-          _geometry.xx3[x] = low.value;
+          _render.geometry.xx3[x] = low.value;
           ++x;
-          _geometry.xx3[x] = SubtractWithCarry(0, projectedY.high, low.carry).value;
+          _render.geometry.xx3[x] = SubtractWithCarry(0, projectedY.high, low.carry).value;
         }
       }
 
@@ -1241,80 +1297,96 @@ namespace Elite
       const AddResult nextVertex = AddWithCarry(vertex, 6, nextCnt.carry);
       vertex = nextVertex.value;
 
-      if (nextVertex.carry || vertex >= _blueprint.vertexBytes) // 6502: XX20
+      if (nextVertex.carry || vertex >= _render.blueprint.vertexBytes) // 6502: XX20
       {
         break;
       }
     }
+  }
 
-    // ---- part 9: the ship is on the screen from here, and the laser goes on the heap ---------
-
-    if (Has(_work.state, ShipStateBit::Exploding))
+  /*
+   * ---- part 9: the ship is on the screen from here, and the laser goes on the heap --------------
+   *
+   * Answers false for the exploding path, which is the caller's `DrawExplosion`. Everything else --
+   * `EE31`'s erase, the `OnScreen` bit and the laser beam -- is this stage's, and it opens the heap
+   * run the edges are pushed onto.
+   */
+  [[nodiscard]] bool OpenHeapRun(ShipRender& _render) noexcept
+  {
+    if (Has(_render.work.state, ShipStateBit::Exploding))
     {
-      _work.state = With(_work.state, ShipStateBit::OnScreen);
-      _effects.DrawExplosion();
-      return;
+      _render.work.state = With(_render.work.state, ShipStateBit::OnScreen);
+      return false;
     }
 
-    // 6502: EE31 -- rub out the last frame's ship, then mark this one as being on the screen.
-    const HeapOffset heap = _work.heap;
-    if (Has(_work.state, ShipStateBit::OnScreen))
+    // 6502: EE31 -- rub out the last frame's ship, then mark this one as being on the screen. The
+    // run is the frame's from here: parts 10 and 11 push onto the same block and count against the
+    // same total, which is why `U` and the offset travel together (M4-b).
+    _render.run = _render.work.heap;
+    if (Has(_render.work.state, ShipStateBit::OnScreen))
     {
-      DrawShipLines(_canvas, _heap, heap);
+      DrawShipLines(_render.canvas, _render.heap, _render.run);
     }
-    _work.state = With(_work.state, ShipStateBit::OnScreen);
+    _render.work.state = With(_render.work.state, ShipStateBit::OnScreen);
 
     // 6502: U -- how many bytes of the heap this ship has used, which starts at one because byte 0
-    // is the count itself. A local since M2-c-3, and `XX17`/`XX20` with it.
-    std::uint8_t heapUsed = 1;
-    std::uint8_t edgeIndex = 0; // 6502: XX17
+    // is the count itself.
+    _render.used = 1;
 
-    if (Has(_work.state, ShipStateBit::Firing))
+    if (Has(_render.work.state, ShipStateBit::Firing))
     {
-      _work.state = Without(_work.state, ShipStateBit::Firing);
+      _render.work.state = Without(_render.work.state, ShipStateBit::Firing);
 
-      const std::size_t muzzle = _blueprint.laserVertex;
+      const std::size_t muzzle = _render.blueprint.laserVertex;
       Line16 beam;
-      beam.first.xLow = _geometry.xx3[muzzle];
-      beam.first.xHigh = _geometry.xx3[muzzle + 1u];
+      beam.first.xLow = _render.geometry.xx3[muzzle];
+      beam.first.xHigh = _render.geometry.xx3[muzzle + 1u];
 
       // Both bytes are tested by incrementing them, so 255 -- which is what part 2 wrote there and
       // what a vertex that did not project leaves -- is the one value that means "no laser".
       if (static_cast<std::uint8_t>(beam.first.xLow + 1u) != 0u && static_cast<std::uint8_t>(beam.first.xHigh + 1u) != 0u)
       {
-        beam.first.yLow = _geometry.xx3[muzzle + 2u];
-        beam.first.yHigh = _geometry.xx3[muzzle + 3u];
+        beam.first.yLow = _render.geometry.xx3[muzzle + 2u];
+        beam.first.yHigh = _render.geometry.xx3[muzzle + 3u];
         beam.second.xLow = 0;
         beam.second.xHigh = 0;
 
         // 6502: the far end's y is `XX12(1 0)`, which is where `LL145` reads it and where the port
         // keeps writing it: `XX12` is `LL9`'s frame until M2-c-3.
-        _geometry.xx12[1] = 0;
-        _geometry.xx12[0] = _work.z.lo;
-        beam.second.yLow = _geometry.xx12[0];
-        beam.second.yHigh = _geometry.xx12[1];
+        _render.geometry.xx12[1] = 0;
+        _render.geometry.xx12[0] = _render.work.z.lo;
+        beam.second.yLow = _render.geometry.xx12[0];
+        beam.second.yHigh = _render.geometry.xx12[1];
 
         // The laser fires towards the player, so the far end is the origin -- and to the left of
         // it when the ship is to the left, which is the whole of this `DEC`.
-        if ((_work.x.sgn & 0x80u) != 0u)
+        if ((_render.work.x.sgn & 0x80u) != 0u)
         {
           beam.second.xLow = 255;
         }
 
-        const ClipResult clipped = ClipLine(beam, _geometry, _math, _clip);
+        const ClipResult clipped = ClipLine(beam, _render.geometry, _render.math, _render.clip);
         if (!clipped.rejected)
         {
-          PushHeapLine(_heap, heap, clipped.line, heapUsed);
+          PushHeapLine(_render.heap, _render.run, clipped.line, _render.used);
         }
       }
     }
 
-    // ---- parts 10 and 11: the edges ---------------------------------------------------------
+    return true;
+  }
+
+  /// ---- parts 10 and 11: the edges, and the heap's own length byte ------------------------------
+  void PushEdges(ShipRender& _render) noexcept
+  {
+    std::uint16_t walker = 0;   // 6502: V(1 0) -- the edges, which the blueprint carries as a span
+    std::uint8_t heapLimit = 0; // 6502: T1 -- how many heap bytes this blueprint allows
+    std::uint8_t edgeIndex = 0; // 6502: XX17
 
     // 6502: LDY #3 / LDA (XX0),Y / CLC / ADC XX0 / STA V / LDY #16 / LDA (XX0),Y / ADC XX0+1 /
     // STA V+1 -- V is the edges, which the blueprint carries as a span; V's index starts at 0.
     walker = 0;
-    heapLimit = _blueprint.heapBytes;
+    heapLimit = _render.blueprint.heapBytes;
 
     // 6502: SWAP, which `LL147` decrements and nothing in `LL9` reads: `LOIN` zeroes it before it
     // sets it again, and `WPLS2`'s reader is the ball's. The accumulation is the byte's, so the
@@ -1325,36 +1397,36 @@ namespace Elite
     {
       // 6502: LL75 -- four bytes per edge: how far away it stays visible, the two faces it joins,
       // and the two vertices it runs between.
-      const std::uint8_t distance = _blueprint.edges[walker];
-      if (distance >= detailThreshold && EitherFaceVisible(_geometry, _blueprint.edges[walker + 1u]))
+      const std::uint8_t distance = _render.blueprint.edges[walker];
+      if (distance >= _render.detail && EitherFaceVisible(_render.geometry, _render.blueprint.edges[walker + 1u]))
       {
-        const std::size_t from = _blueprint.edges[walker + 2u];
-        const std::size_t to = _blueprint.edges[walker + 3u];
+        const std::size_t from = _render.blueprint.edges[walker + 2u];
+        const std::size_t to = _render.blueprint.edges[walker + 3u];
 
         Line16 edge;
-        edge.first.xHigh = _geometry.xx3[from + 1u];
-        edge.first.xLow = _geometry.xx3[from];
-        edge.first.yLow = _geometry.xx3[from + 2u];
-        edge.first.yHigh = _geometry.xx3[from + 3u];
-        edge.second.xLow = _geometry.xx3[to];
+        edge.first.xHigh = _render.geometry.xx3[from + 1u];
+        edge.first.xLow = _render.geometry.xx3[from];
+        edge.first.yLow = _render.geometry.xx3[from + 2u];
+        edge.first.yHigh = _render.geometry.xx3[from + 3u];
+        edge.second.xLow = _render.geometry.xx3[to];
 
         // 6502: `XX12(1 0)` again -- the far end's y, in `LL9`'s frame until M2-c-3.
-        _geometry.xx12[1] = _geometry.xx3[to + 3u];
-        _geometry.xx12[0] = _geometry.xx3[to + 2u];
-        edge.second.yHigh = _geometry.xx12[1];
-        edge.second.yLow = _geometry.xx12[0];
-        edge.second.xHigh = _geometry.xx3[to + 1u];
+        _render.geometry.xx12[1] = _render.geometry.xx3[to + 3u];
+        _render.geometry.xx12[0] = _render.geometry.xx3[to + 2u];
+        edge.second.yHigh = _render.geometry.xx12[1];
+        edge.second.yLow = _render.geometry.xx12[0];
+        edge.second.xHigh = _render.geometry.xx3[to + 1u];
 
         // 6502: `LL147` is entered with `XX15+5` in the accumulator, and `SWAP` accumulates across
         // the edges rather than being zeroed for each.
-        const ClipResult clipped = ClipLineKeepingSwap(edge, _geometry, _math, _clip, swap, edge.second.xHigh);
+        const ClipResult clipped = ClipLineKeepingSwap(edge, _render.geometry, _render.math, _render.clip, swap, edge.second.xHigh);
         swap = clipped.swap;
 
         if (!clipped.rejected)
         {
           // 6502: LL80 -- and stop as soon as the heap this blueprint asked for is full.
-          PushHeapLine(_heap, heap, clipped.line, heapUsed);
-          if (heapUsed >= heapLimit)
+          PushHeapLine(_render.heap, _render.run, clipped.line, _render.used);
+          if (_render.used >= heapLimit)
           {
             break;
           }
@@ -1363,7 +1435,7 @@ namespace Elite
 
       // 6502: LL78.
       edgeIndex = static_cast<std::uint8_t>(edgeIndex + 1u);
-      if (edgeIndex >= _blueprint.edgeCount) // 6502: XX20
+      if (edgeIndex >= _render.blueprint.edgeCount) // 6502: XX20
       {
         break;
       }
@@ -1371,7 +1443,52 @@ namespace Elite
     }
 
     // 6502: LL81 -- the heap's length goes in byte 0, and then it is drawn.
-    StoreLineCountAndDraw(_canvas, _heap, heap, heapUsed);
+    StoreLineCountAndDraw(_render.canvas, _render.heap, _render.run, _render.used);
+  }
+
+  /*
+   * 6502: LL9 -- the ship renderer, as the seven stages its part blocks always were (M4-b).
+   *
+   * Every stage answers and this performs: the two seam calls, the dot and the explosion are here,
+   * where the `ShipDrawEffects` reference is, and no stage carries it.
+   */
+  void DrawShip(Canvas& _canvas, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip,
+                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
+                ShipDrawEffects& _effects, Rng& _rng, bool _carryIn) noexcept
+  {
+    ShipRender render{_canvas, _geometry, _math, _clip, _screen, _work, _heap, _blueprint};
+
+    switch (TestPresence(render, _slot, _type, _rng, _carryIn)) // 6502: part 1
+    {
+      case Presence::Draw:
+        break;
+      case Presence::Body:
+        _effects.DrawPlanetOrSun(); // 6502: LL25's JMP PLANET
+        return;
+      case Presence::Erased:
+        return; // 6502: EE51 -- and the flag it leaves is `LL9`'s exit, which nothing reads
+      case Presence::Exploded:
+        _effects.DrawExplosion(); // 6502: LL14's JMP DOEXP
+        return;
+    }
+
+    if (MeasureRange(render) == Range::Dot) // 6502: part 2
+    {
+      DrawShipAsPoint(_canvas, _work, _heap, _math, _screen); // 6502: LL13's JMP SHPPT
+      return;
+    }
+
+    ScaleShip(render);       // 6502: part 3
+    SelectFaces(render);     // 6502: parts 4 and 5
+    ProjectVertices(render); // 6502: parts 6 to 8
+
+    if (!OpenHeapRun(render)) // 6502: part 9
+    {
+      _effects.DrawExplosion();
+      return;
+    }
+
+    PushEdges(render); // 6502: parts 10 and 11, and `LL81`'s count byte with them
   }
 
 } // namespace Elite
