@@ -195,9 +195,10 @@ that could have hidden them.
   the replay, were the test wrapper's idle pair and not `Game`'s. The image takes them as an
   argument now (`Beside`) and the replay passes `Game`'s; the record moved on every checkpoint and
   the flight on none. That the bytes have labels and cells makes them game state by §6's rule, and
-  M5-e-2b moves them into `Universe` — the vtable reason is the printers', not their bytes' — and
-  collapses `QQ17`, which is two bytes on the tree (`TokenPrinter::m_caseFlags` and
-  `TextState::caseFlags`, written in step at two sites and separately at five).
+  M5-e-2b moved `DTW1`–`DTW8` into `Universe` the same day (`sentences`; the vtable reason is the
+  printers', not their bytes'). `QQ17` is M5-e-2c's, and it is two bytes on the tree
+  (`TokenPrinter::m_caseFlags` and `TextState::caseFlags`, written in step at two sites and
+  separately at five).
 - **~~The replay does not drive `Game`~~ — it does, since 2026-09-07, and this entry is what it
   found.** `FlightReplayTests` composed `FlightPort` and called the library's routines directly from
   M0-c until then, so `FlightPort::Step` was a second transcription of `M%`, `MLOOP`'s head, the
@@ -217,8 +218,10 @@ that could have hidden them.
 **A byte of game state goes in `Universe`.** If it cannot, the reason is written down where it
 lives and named here. There are three such reasons on the tree today and no others: it is not the
 game's (`m_paused`, which no 6502 byte backs); it would cost `Universe` one of its three properties
-(the text objects); or it is the platform's by the determinism guard (the clock, the seconds, the
-files, the device). **And a byte in `Universe` gets a cell in `UniverseImage`, unless it has no
+(the text objects — and since M5-e-2b that reason covers the OBJECTS and not their bytes: `DTW1`–`DTW8`
+are `Universe::sentences`, bound into `CharacterPrinter` by reference the way `TextPrinter` binds
+`text`, and `QQ17` follows in M5-e-2c); or it is the platform's by the determinism guard (the clock,
+the seconds, the files, the device). **And a byte in `Universe` gets a cell in `UniverseImage`, unless it has no
 6502 label to pair with** — which on the tree today is `crosshairStep` and nothing else (§5).
 
 ## Consequences

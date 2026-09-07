@@ -228,8 +228,8 @@ namespace GameLogicTests
           text.row = 1;
           text.caseFlags = 0;
           sink.cursor = &text;
-          Elite::CharacterPrinter characters(sink);
-          characters.state.sentenceStart = 0xFF;
+          Elite::CharacterPrinter characters(sink, universe.sentences);
+          characters.State().sentenceStart = 0xFF;
           Elite::TokenPrinter printer(characters);
           printer.SetCaseFlags(0);
           printer.SetCursor(&text);

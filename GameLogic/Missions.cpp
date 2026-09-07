@@ -176,7 +176,7 @@ namespace Elite
        * The two flags it sets are the printer's and the extended printer has already set them, so
        * what is left is the screen half -- and that half is `Elite::ClearMessageRows`.
        */
-      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message);
+      ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
       return;
 
     case 22:

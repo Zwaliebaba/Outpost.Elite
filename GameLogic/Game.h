@@ -174,9 +174,9 @@ namespace Elite
     }
 
     /*
-     * 6502: QQ17 and DTW1-8 -- the bytes of game state that live in two printers rather than in
-     * `Universe`. The replay digest reads them beside `State()` so that it hashes the printers the
-     * frames actually drove (M5-e-2); M5-e-2b moves the bytes into `Universe` and removes these.
+     * 6502: QQ17 -- the one byte of game state still living in a printer rather than in `Universe`
+     * (DTW1-8 moved in M5-e-2b). The replay digest reads it beside `State()` so that it hashes the
+     * printer the frames actually drove (M5-e-2); M5-e-2c collapses it and removes this.
      */
     [[nodiscard]] TokenPrinter& Recursive() noexcept
     {
@@ -185,14 +185,6 @@ namespace Elite
     [[nodiscard]] const TokenPrinter& Recursive() const noexcept
     {
       return m_recursive;
-    }
-    [[nodiscard]] CharacterPrinter& Characters() noexcept
-    {
-      return m_characters;
-    }
-    [[nodiscard]] const CharacterPrinter& Characters() const noexcept
-    {
-      return m_characters;
     }
 
     [[nodiscard]] Ports& PortsOf() noexcept

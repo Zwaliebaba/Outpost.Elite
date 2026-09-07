@@ -148,22 +148,23 @@ namespace GameLogicTests
     struct PortPrinter
     {
       explicit PortPrinter(const TextStateBytes& _state, const GeneratorState& _seed = SEED)
-        : characters(screen),
+        : characters(screen, sentences),
           recursive(characters, &values),
           printer(characters, recursive, rng)
       {
         rng.SetState(_seed);
-        characters.state.lowerCaseBits = _state.lowerCaseBits;
-        characters.state.sentenceStart = _state.sentenceStart;
-        characters.state.toLineBuffer = _state.toLineBuffer;
-        characters.state.justify = _state.justify;
-        characters.state.alwaysLower = _state.alwaysLower;
-        characters.state.caseMask = _state.caseMask;
+        characters.State().lowerCaseBits = _state.lowerCaseBits;
+        characters.State().sentenceStart = _state.sentenceStart;
+        characters.State().toLineBuffer = _state.toLineBuffer;
+        characters.State().justify = _state.justify;
+        characters.State().alwaysLower = _state.alwaysLower;
+        characters.State().caseMask = _state.caseMask;
       }
 
       CapturingSink screen;
       Rng rng;
       DeferredValues values;
+      Elite::ExtendedTextState sentences;
       Elite::CharacterPrinter characters;
       TokenPrinter recursive;
       ExtendedTokenPrinter printer;
@@ -298,10 +299,11 @@ namespace GameLogicTests
       SeedTextState(cpu, oracle, _state);
 
       CapturingSink screen;
-      Elite::CharacterPrinter characters(screen);
-      characters.state.justify = _state.justify;
-      characters.state.caseMask = _state.caseMask;
-      characters.state.sentenceStart = _state.sentenceStart;
+      Elite::ExtendedTextState sentences;
+      Elite::CharacterPrinter characters(screen, sentences);
+      characters.State().justify = _state.justify;
+      characters.State().caseMask = _state.caseMask;
+      characters.State().sentenceStart = _state.sentenceStart;
 
       for (std::size_t index = 0; index < _text.size(); ++index)
       {
@@ -335,9 +337,9 @@ namespace GameLogicTests
 
         DascComparison port;
         port.screen = screen.characters;
-        port.sentenceStart = characters.state.sentenceStart;
-        port.bufferLength = characters.state.bufferLength;
-        port.caseMask = characters.state.caseMask;
+        port.sentenceStart = characters.State().sentenceStart;
+        port.bufferLength = characters.State().bufferLength;
+        port.caseMask = characters.State().caseMask;
         for (std::uint16_t offset = 0; offset < BUFFER_COMPARED; ++offset)
         {
           port.buffer.push_back(characters.buffer[offset]);
@@ -503,19 +505,19 @@ namespace GameLogicTests
            */
           const std::wstring where = L" for control code " + std::to_wstring(code) + L" from DTW1=" + std::to_wstring(start.lowerCaseBits);
 
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW1")], port.characters.state.lowerCaseBits,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW1")], port.characters.State().lowerCaseBits,
                                           (L"DTW1 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW2")], port.characters.state.sentenceStart,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW2")], port.characters.State().sentenceStart,
                                           (L"DTW2 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW3")], port.characters.state.toLineBuffer,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW3")], port.characters.State().toLineBuffer,
                                           (L"DTW3 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW4")], port.characters.state.justify,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW4")], port.characters.State().justify,
                                           (L"DTW4 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW5")], port.characters.state.bufferLength,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW5")], port.characters.State().bufferLength,
                                           (L"DTW5 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW6")], port.characters.state.alwaysLower,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW6")], port.characters.State().alwaysLower,
                                           (L"DTW6 differs" + where).c_str());
-          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW8")], port.characters.state.caseMask,
+          Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("DTW8")], port.characters.State().caseMask,
                                           (L"DTW8 differs" + where).c_str());
           Assert::AreEqual<std::uint32_t>(cpu.memory[oracle.Label("QQ17")], port.recursive.CaseFlags(), (L"QQ17 differs" + where).c_str());
 

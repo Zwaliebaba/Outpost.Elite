@@ -134,7 +134,7 @@ namespace GameLogicTests
 
   std::vector<Cell> ImageCells(Universe& _universe, const Where& _at)
   {
-    return ImageCells(static_cast<Elite::Universe&>(_universe), Beside{_universe.printer, _universe.characters, _universe.spriteRegistersAreOurs}, _at);
+    return ImageCells(static_cast<Elite::Universe&>(_universe), Beside{_universe.printer, _universe.spriteRegistersAreOurs}, _at);
   }
 
   std::vector<Cell> ImageCells(Elite::Universe& _universe, Beside _beside, const Where& _at)
@@ -158,9 +158,9 @@ namespace GameLogicTests
       cell.set = [recursive](std::uint8_t _flags) { recursive->SetCaseFlags(_flags); };
       cells.push_back(std::move(cell));
     }
-    cells.push_back(Direct(L"DTW1", _at.dtw1, _beside.characters.state.lowerCaseBits, CellScope::Compared));
-    cells.push_back(Direct(L"DTW2", _at.dtw2, _beside.characters.state.sentenceStart, CellScope::Compared));
-    cells.push_back(Direct(L"DTW6", _at.dtw6, _beside.characters.state.alwaysLower, CellScope::Compared));
+    cells.push_back(Direct(L"DTW1", _at.dtw1, _universe.sentences.lowerCaseBits, CellScope::Compared));
+    cells.push_back(Direct(L"DTW2", _at.dtw2, _universe.sentences.sentenceStart, CellScope::Compared));
+    cells.push_back(Direct(L"DTW6", _at.dtw6, _universe.sentences.alwaysLower, CellScope::Compared));
     cells.push_back(Direct(L"LSP", _at.lsp, _universe.heaps.lsp, CellScope::Compared));
     cells.push_back(Direct(L"DLY", _at.dly, _universe.message.delay, CellScope::Compared));
     cells.push_back(Direct(L"de", _at.de, _universe.message.append, CellScope::Compared));
@@ -403,10 +403,10 @@ namespace GameLogicTests
      * stale byte in either would centre the message in the wrong column. `DTW7` is not in this
      * build -- the Master's literal-character byte has no C64 label.
      */
-    cells.push_back(Direct(L"DTW3", _at.dtw3, _beside.characters.state.toLineBuffer, CellScope::Image));
-    cells.push_back(Direct(L"DTW4", _at.dtw4, _beside.characters.state.justify, CellScope::Image));
-    cells.push_back(Direct(L"DTW5", _at.dtw5, _beside.characters.state.bufferLength, CellScope::Image));
-    cells.push_back(Direct(L"DTW8", _at.dtw8, _beside.characters.state.caseMask, CellScope::Image));
+    cells.push_back(Direct(L"DTW3", _at.dtw3, _universe.sentences.toLineBuffer, CellScope::Image));
+    cells.push_back(Direct(L"DTW4", _at.dtw4, _universe.sentences.justify, CellScope::Image));
+    cells.push_back(Direct(L"DTW5", _at.dtw5, _universe.sentences.bufferLength, CellScope::Image));
+    cells.push_back(Direct(L"DTW8", _at.dtw8, _universe.sentences.caseMask, CellScope::Image));
     cells.push_back(Direct(L"MCH", _at.mch, _universe.message.token, CellScope::Image));
     cells.push_back(Direct(L"messXC", _at.messxc, _universe.message.column, CellScope::Image));
     cells.push_back(Direct(L"QQ22+1", static_cast<std::uint16_t>(_at.qq22 + 1u), _universe.status.hyperspaceCountdown, CellScope::Image));
@@ -539,10 +539,10 @@ namespace GameLogicTests
     return Hash(_universe, unresolved);
   }
 
-  std::uint64_t Hash(const Elite::Universe& _universe, const Elite::TokenPrinter& _recursive, const Elite::CharacterPrinter& _characters)
+  std::uint64_t Hash(const Elite::Universe& _universe, const Elite::TokenPrinter& _recursive)
   {
     const Where unresolved{};
-    const Beside beside{const_cast<Elite::TokenPrinter&>(_recursive), const_cast<Elite::CharacterPrinter&>(_characters), false};
+    const Beside beside{const_cast<Elite::TokenPrinter&>(_recursive), false};
     return HashCells(ImageCells(const_cast<Elite::Universe&>(_universe), beside, unresolved));
   }
 

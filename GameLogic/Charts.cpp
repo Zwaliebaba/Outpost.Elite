@@ -621,13 +621,13 @@ namespace Elite
     {
       // 6502: JSR MT14 -- justification on, so the name goes into the buffer rather than the
       // screen. This is the whole trick, and it is why the search needed slice 1c-c-b.
-      _characters.state.justify = 0x80;
-      _characters.state.bufferLength = 0;
+      _characters.State().justify = 0x80;
+      _characters.State().bufferLength = 0;
 
       SystemSeeds naming = seeds;
       PrintSystemName(_printer, naming);
 
-      const std::size_t length = _characters.state.bufferLength;
+      const std::size_t length = _characters.State().bufferLength;
 
       /*
        * 6502: LDX DTW5 / LDA INWK+5,X / CMP #13 -- the typed name must END where the printed one
@@ -657,8 +657,8 @@ namespace Elite
           _view.cursorY = seeds.bytes[1];
 
           // 6502: JSR MT15 -- justification off again, and the buffer thrown away.
-          _characters.state.justify = 0;
-          _characters.state.bufferLength = 0;
+          _characters.State().justify = 0;
+          _characters.State().bufferLength = 0;
           return true;
         }
       }
@@ -666,8 +666,8 @@ namespace Elite
       NextSystem(seeds);
     }
 
-    _characters.state.justify = 0;
-    _characters.state.bufferLength = 0;
+    _characters.State().justify = 0;
+    _characters.State().bufferLength = 0;
     return false;
   }
 

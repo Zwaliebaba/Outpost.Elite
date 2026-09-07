@@ -300,7 +300,7 @@ namespace Elite
            .created)
     {
       // 6502: .FR1 LDA #201 / JMP MESS -- "MISSILE JAMMED".
-      ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, MESSAGE_MISSILE_JAMMED,
+      ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_MISSILE_JAMMED,
                   _universe.view);
       return;
     }
@@ -971,7 +971,7 @@ namespace Elite
 
     // 6502: TYA / ADC #208 / JSR MESS -- on the carry the store above left behind.
     const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
-    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, token.value, _universe.view);
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, token.value, _universe.view);
 
     // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
     // canister is removed by part 12 rather than by anything here.
@@ -1211,7 +1211,7 @@ namespace Elite
            * player's balance printed in flight -- and `MESS` then stores that zero in `MCH`, so the
            * next message within twenty frames erases this one by printing the balance again.
            */
-          ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, 0u, _universe.view);
+          ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, 0u, _universe.view);
         }
       }
 
@@ -1560,7 +1560,7 @@ namespace Elite
        */
       if (ENERGY_WARNING >= _universe.status.energy)
       {
-        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message,
+        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
                     static_cast<std::uint8_t>(ENERGY_WARNING << 1u), _universe.view);
       }
 
@@ -1618,7 +1618,7 @@ namespace Elite
       // 6502: .MA29 CMP #15 / BNE MA33 / LDA auto / BEQ MA23 / LDA #123 / BNE MA34.
       if (_universe.control.dockingComputer != 0u)
       {
-        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, MESSAGE_DOCKING_ON,
+        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_DOCKING_ON,
                     _universe.view);
       }
     }
@@ -1693,7 +1693,7 @@ namespace Elite
 
         commander.fuel = (tank.value < FUEL_MAXIMUM) ? tank.value : FUEL_MAXIMUM;
 
-        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, MESSAGE_SCOOPS_ON,
+        ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, MESSAGE_SCOOPS_ON,
                     _universe.view);
       }
     }

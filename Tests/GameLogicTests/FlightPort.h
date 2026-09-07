@@ -157,7 +157,7 @@ namespace GameLogicTests
      */
     [[nodiscard]] std::uint64_t Digest() const
     {
-      std::uint64_t digest = Hash(universe, game.Recursive(), game.Characters());
+      std::uint64_t digest = Hash(universe, game.Recursive());
       digest = FoldBytes(digest, universe.canvas.Screen());
 
       std::array<std::uint8_t, Elite::LineHeap::SIZE> arena{};

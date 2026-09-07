@@ -375,7 +375,7 @@ namespace GameLogicTests
 
       Elite::Universe universe;
       NullSeams nulls;
-      Elite::CharacterPrinter characters{discard};
+      Elite::CharacterPrinter characters{discard, universe.sentences};
       Elite::TokenPrinter printer{characters};
       Elite::ExtendedTokenPrinter extended{characters, printer, universe.rng};
       Elite::SidWriteLog sid;

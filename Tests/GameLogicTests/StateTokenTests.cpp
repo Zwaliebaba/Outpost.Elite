@@ -202,7 +202,8 @@ namespace GameLogicTests
             SystemSeeds selected = situation.selected;
 
             Recording recording;
-            CharacterPrinter characters(recording);
+            Elite::ExtendedTextState sentences;
+            CharacterPrinter characters(recording, sentences);
             TextState text;
             TokenPrinter printer(characters);
             printer.SetCaseFlags(caseFlags);

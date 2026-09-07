@@ -512,8 +512,9 @@ namespace GameLogicTests
         text.column = 1;
         text.row = 1;
         sink.cursor = &text;
-        CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
+        Elite::ExtendedTextState sentences;
+        CharacterPrinter characters(sink, sentences);
+        characters.State().sentenceStart = 0xFF;
         TokenPrinter printer(characters);
         printer.SetCaseFlags(0);
         printer.SetCursor(&text);

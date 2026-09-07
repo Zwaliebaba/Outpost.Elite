@@ -133,9 +133,10 @@ namespace Elite
     TextState text;       ///< 6502: XC, YC, QQ17 and COL
     MessageState message; ///< 6502: DLY, de, MCH and messXC
 
-    // 6502: DTW1 to DTW8 -- `ExtendedTextState` is NOT here, because it is a member of
-    // `CharacterPrinter` and the printers stay outside a universe that has to copy. Moving it in
-    // means giving the printer a reference to it, which is M3-b's question and not M3-a's.
+    /// 6502: DTW1 to DTW8 -- the sentence machinery's bytes. They were `CharacterPrinter`'s member
+    /// until M5-e-2b found the replay digest reading a printer the flight never drove (§8); the
+    /// printer binds to these now, as `TextPrinter` binds to `text`, and the universe still copies.
+    ExtendedTextState sentences;
     VideoState video{};         ///< 6502: the VIC-II registers `MVTRIBS` reads back
 
     /*

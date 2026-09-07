@@ -52,7 +52,7 @@ namespace GameLogicTests
     {
       PortText()
         : screen(canvas, text),
-          characters(screen),
+          characters(screen, sentences),
           printer(characters),
           extended(characters, printer, rng)
       {
@@ -62,6 +62,7 @@ namespace GameLogicTests
       Elite::TextState text;
       Elite::Rng rng;
       Elite::TextPrinter screen;
+      Elite::ExtendedTextState sentences;
       Elite::CharacterPrinter characters;
       Elite::TokenPrinter printer;
       Elite::ExtendedTokenPrinter extended;
@@ -193,14 +194,14 @@ namespace GameLogicTests
               port.text.column = 7u;
               port.text.caseFlags = 0x80u;
               port.text.palette = Elite::TEXT_COLOUR_PURPLE;
-              port.characters.state.sentenceStart = 0xFFu;
+              port.characters.State().sentenceStart = 0xFFu;
               port.printer.SetCaseFlags(0x80u);
 
               cpu.a = token;
               const Elite::Testing::RunResult run = cpu.CallSubroutine(at.mess, 400'000);
               Assert::IsTrue(run.completed, L"MESS returned");
 
-              Elite::ShowMessage(port.canvas, port.printer, port.text, port.characters.state, port.message, token, view);
+              Elite::ShowMessage(port.canvas, port.printer, port.text, port.characters.State(), port.message, token, view);
 
               const std::wstring where = Widen("MESS(token " + std::to_string(token) + ", view " + std::to_string(view) + ", de " +
                                                std::to_string(destroyed) + ", DLY " + std::to_string(already) + ")");
@@ -213,8 +214,8 @@ namespace GameLogicTests
               Assert::AreEqual(cpu.memory[at.messXC], port.message.column, (where + L": messXC").c_str());
               Assert::AreEqual(cpu.memory[at.yc], port.text.row, (where + L": YC").c_str());
               Assert::AreEqual(cpu.memory[at.xc], port.text.column, (where + L": XC").c_str());
-              Assert::AreEqual(cpu.memory[at.dtw4], port.characters.state.justify, (where + L": DTW4").c_str());
-              Assert::AreEqual(cpu.memory[at.dtw5], port.characters.state.bufferLength, (where + L": DTW5").c_str());
+              Assert::AreEqual(cpu.memory[at.dtw4], port.characters.State().justify, (where + L": DTW4").c_str());
+              Assert::AreEqual(cpu.memory[at.dtw5], port.characters.State().bufferLength, (where + L": DTW5").c_str());
 
               erased += (already != 0u) ? 1u : 0u;
               ++compared;
@@ -291,7 +292,7 @@ namespace GameLogicTests
         port.text.column = 1u;
         port.text.caseFlags = 0u;
         port.text.palette = Elite::TEXT_COLOUR_PURPLE;
-        port.characters.state.sentenceStart = 0xFFu;
+        port.characters.State().sentenceStart = 0xFFu;
         port.printer.SetCaseFlags(0u);
 
         cpu.a = static_cast<std::uint8_t>(token);

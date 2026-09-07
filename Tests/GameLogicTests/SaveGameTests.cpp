@@ -857,7 +857,7 @@ namespace GameLogicTests
         std::array<std::uint8_t, Elite::COMMANDER_FILE_SIZE>& portImage = universe.commanderFile;
 
         Elite::Rng& rng = universe.rng;
-        Elite::CharacterPrinter characters(sink);
+        Elite::CharacterPrinter characters(sink, universe.sentences);
         TokenPrinter recursive(characters);
         recursive.SetCursor(&text);
         Elite::SystemSeeds current{};

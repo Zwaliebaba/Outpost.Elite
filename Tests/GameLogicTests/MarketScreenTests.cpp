@@ -346,7 +346,8 @@ namespace GameLogicTests
         Canvas canvas;
         TextState text;
         Elite::TextPrinter screen(canvas, text);
-        CharacterPrinter characters(screen);
+        Elite::ExtendedTextState sentences;
+        CharacterPrinter characters(screen, sentences);
         ScriptedKeys keys(script.keys);
 
         std::vector<std::uint8_t> ourEchoed;
@@ -366,7 +367,8 @@ namespace GameLogicTests
           std::vector<std::uint8_t>& m_into;
         };
         Recording recording(ourEchoed);
-        CharacterPrinter recordingCharacters(recording);
+        Elite::ExtendedTextState recordingSentences;
+        CharacterPrinter recordingCharacters(recording, recordingSentences);
 
         const NumberEntry entry = Elite::ReadNumber(keys, recordingCharacters, text, script.available);
 
@@ -562,8 +564,8 @@ namespace GameLogicTests
         text.row = 1;
         text.caseFlags = 0;
         sink.cursor = &text;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
+        Elite::CharacterPrinter characters(sink, universe.sentences);
+        characters.State().sentenceStart = 0xFF;
         Elite::TokenPrinter printer(characters);
         printer.SetCaseFlags(0);
 
@@ -820,8 +822,8 @@ namespace GameLogicTests
         text.row = 1;
         text.caseFlags = 0;
         sink.cursor = &text;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
+        Elite::CharacterPrinter characters(sink, universe.sentences);
+        characters.State().sentenceStart = 0xFF;
         Elite::TokenPrinter printer(characters);
         printer.SetCaseFlags(0);
 
@@ -1075,8 +1077,8 @@ namespace GameLogicTests
         text.row = 1;
         text.caseFlags = 0;
         sink.cursor = &text;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
+        Elite::CharacterPrinter characters(sink, universe.sentences);
+        characters.State().sentenceStart = 0xFF;
         Elite::TokenPrinter printer(characters);
         printer.SetCaseFlags(0);
 
@@ -1330,8 +1332,8 @@ namespace GameLogicTests
         text.row = 1;
         text.caseFlags = 0;
         sink.cursor = &text;
-        Elite::CharacterPrinter characters(sink);
-        characters.state.sentenceStart = 0xFF;
+        Elite::CharacterPrinter characters(sink, universe.sentences);
+        characters.State().sentenceStart = 0xFF;
         Elite::TokenPrinter printer(characters);
         printer.SetCaseFlags(0);
 
