@@ -492,7 +492,7 @@ namespace Elite
     if ((_universe.bubble.missileTarget & 0x80u) != 0u && _universe.keys[KEY_ARM_MISSILE] != 0u && commander.missiles != 0u)
     {
       _universe.status.missileArmed = _universe.keys[KEY_ARM_MISSILE];
-      SetMissileIndicator(_universe.canvas, commander.missiles, MISSILE_ARMED);
+      SetMissileIndicator(_universe.canvas, commander.missiles, MISSILE_ARMED, &_universe.picture);
     }
 
     /*
@@ -567,7 +567,7 @@ namespace Elite
          * carry across the flight loop, so false is what it can honestly supply, and the sound
          * comparison excludes this effect by name rather than pretending to agree.
          */
-        StartEcm(_universe.canvas, _universe.status, _universe.sound, false);
+        StartEcm(_universe.canvas, _universe.status, _universe.sound, false, &_universe.picture);
       }
     }
 
@@ -1104,7 +1104,7 @@ namespace Elite
   {
     if (Has(_universe.work.newb, NewbBit::Remove))
     {
-      DrawScannerBlip(_universe.canvas, _universe.work, _type, _universe.view);
+      DrawScannerBlip(_universe.canvas, _universe.work, _type, _universe.view, &_universe.picture);
     }
 
     if (_universe.view != 0u) // 6502: LDA QQ11 / BNE MA15 -- a chart means no drawing at all
@@ -1410,7 +1410,7 @@ namespace Elite
 
     if (stop)
     {
-      StopEcm(_universe.canvas, _universe.status, _universe.sound); // 6502: .MA70 JSR ECMOF
+      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture); // 6502: .MA70 JSR ECMOF
     }
 
     /*

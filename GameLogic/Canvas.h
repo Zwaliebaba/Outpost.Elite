@@ -180,6 +180,18 @@ namespace Elite
      * becomes a colour, and that is where `Colour` starts -- `ResolveCell` masks this one on the way
      * out, exactly as the VIC-II does on the way in.
      */
+    /*
+     * The four colours one MULTICOLOUR cell can show, in the order its two bits select them:
+     * background, high nibble of screen RAM, low nibble, colour RAM.
+     *
+     * Lifted for the 640x400 dashboard (Resolution.md section 5), which is an index plane: a twin
+     * there holds a `PixelPattern` -- four two-bit codes -- and has to turn it into a colour, and
+     * the only honest place to get one is the cell the faithful store lands in. `_cell` is a cell
+     * number 0..999, and the block is the DASHBOARD's, which is the only block that is ever read
+     * in this mode (ADR-002 section 4).
+     */
+    [[nodiscard]] std::array<std::uint8_t, 4> DashboardChoices(int _cell) const noexcept;
+
     [[nodiscard]] std::uint8_t CellColour(int _cell) const noexcept
     {
       return m_colourCells[_cell];

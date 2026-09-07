@@ -493,14 +493,13 @@ namespace GameLogicTests
     }
 
     /*
-     * The whole upper region is native from this slice, and the fallback must not be reachable for
-     * it -- which is what makes every test above the thing a person sees rather than a rehearsal.
+     * The upper region is native, which is what makes every test above the thing a person sees
+     * rather than a rehearsal. RS-4 turned the lower one over beside it.
      */
-    TEST_METHOD(TheUpperRegionIsNativeAndTheDashboardIsNot)
+    TEST_METHOD(TheUpperRegionIsNative)
     {
       const Picture picture;
       Assert::IsTrue(picture.Native().spaceView, L"RS-3 did not turn the upper region over");
-      Assert::IsFalse(picture.Native().dashboard, L"the dashboard is RS-4's and is still upscaled");
     }
   };
 

@@ -90,18 +90,22 @@ namespace Elite
      * than by eye, and the picture changes region by region rather than half a picture at a time.
      * `Complete()` is what the last slice asserts before the canvas fallback is deleted.
      *
-     * THE UPPER REGION FLIPPED AT RS-3 AND THE DEFAULT IS HOW IT DID. There is no runtime decision
-     * here and no setter in the library: which regions are native is a fact about which slices have
-     * been built, so it is stated where a reader looks for it. What RS-3 had to finish before it
-     * could be turned over was more than section 4.2 and 4.3 named -- the borders and the rules, the
-     * screen clears, the cell palettes every one of those bits is coloured through, the charts, and
-     * `CLYNS` -- because a region is native for EVERY screen that draws in it, not only for the
-     * space view it is named after (section 13).
+     * BOTH REGIONS ARE NATIVE SINCE RS-4 AND THE DEFAULTS ARE HOW THEY GOT THERE. There is no
+     * runtime decision here and no setter in the library: which regions are native is a fact about
+     * which slices have been built, so it is stated where a reader looks for it. What RS-3 had to
+     * finish before the upper one could be turned over was more than sections 4.2 and 4.3 named --
+     * the borders and the rules, the screen clears, the cell palettes every one of those bits is
+     * coloured through, the charts, and `CLYNS` -- because a region is native for EVERY screen that
+     * draws in it, not only for the space view it is named after (section 13).
+     *
+     * `Complete()` now holds, which is what RS-6 asserts before deleting `UpscaleCell`. It is not
+     * deleted yet: the canvas fallback is still what a `Picture` nobody has drawn on resolves
+     * through, which is what every test that compares the doubling relies on.
      */
     struct NativeRegions
     {
-      bool spaceView = true;  ///< rows 0..287, and every row of a docked screen -- LANDED at RS-3
-      bool dashboard = false; ///< rows 288..399, while the dashboard is shown -- RS-4
+      bool spaceView = true; ///< rows 0..287, and every row of a docked screen -- LANDED at RS-3
+      bool dashboard = true; ///< rows 288..399, while the dashboard is shown -- LANDED at RS-4
 
       [[nodiscard]] constexpr bool Complete() const noexcept
       {

@@ -3,6 +3,7 @@
 #include "Scanner.h"
 
 #include "Arith.h"
+#include "Dashboard2x.h"
 #include "EliteTypes.h"
 #include "LookupTables.h"
 
@@ -13,7 +14,7 @@ namespace Elite
 
   // ---- the scanner ------------------------------------------------------------------------------
 
-  void DrawScannerBlip(Canvas& _canvas, const Ship& _ship, ShipType _type, std::uint8_t _view) noexcept
+  void DrawScannerBlip(Canvas& _canvas, const Ship& _ship, ShipType _type, std::uint8_t _view, Picture* _picture) noexcept
   {
     // 6502: LDA QQ11 / BNE SCR1 -- no dashboard on any view but the space view, so no scanner.
     if (_view != 0u)
@@ -120,6 +121,26 @@ namespace Elite
     // and it survives `CPIX4` on the stack, because `TAX` below sets N and Z but not C.
     const SubResult stick = SubtractWithCarry(row, ground, true);
 
+    if (_picture != nullptr)
+    {
+      /*
+       * `x_lo` is a byte the game maintains on every ship in the bubble and `SCAN` never reads: the
+       * fraction under `x_hi`, which is one blip position of four at twice the resolution. It is
+       * signed the way the magnitude is -- `SC2` negates a negative x before adding 123, so a
+       * larger fraction moves the blip LEFT there and right here (Resolution.md section 5.2).
+       *
+       * The vertical fractions under `z_lo` and `y_lo` are the same kind of byte and are NOT taken
+       * this slice, which is a scoping call rather than an oversight: the row is a clamped sum of
+       * two negated magnitudes and reconstructing it at twice the scale is a second copy of `SCAN`'s
+       * arithmetic to keep in step, for one hi-res row of a fifty-two row scale (§13).
+       */
+      const int acrossBit = ((_ship.x.sgn & 0x80u) != 0u) ? -static_cast<int>(_ship.x.lo >> 7) : static_cast<int>(_ship.x.lo >> 7);
+      const bool up = stick.carry;
+      const std::uint8_t height = up ? stick.value : static_cast<std::uint8_t>(0u - stick.value);
+
+      DrawScannerBlip2x(*_picture, _canvas, x1, acrossBit, y1, height, up, pattern);
+    }
+
     const CellCursor cursor = PlotBlock(_canvas, x1, y1, pattern); // 6502: JSR CPIX4
 
     /*
@@ -205,8 +226,13 @@ namespace Elite
 
   // ---- the compass ------------------------------------------------------------------------------
 
-  void DrawCompassDot(Canvas& _canvas, const Compass& _compass) noexcept
+  void DrawCompassDot(Canvas& _canvas, const Compass& _compass, Picture* _picture) noexcept
   {
+    if (_picture != nullptr)
+    {
+      DrawCompassDot2x(*_picture, _canvas, _compass.x, _compass.y, _compass.pattern);
+    }
+
     // 6502: LDA COMY / STA Y1 / LDA COMX / STA X1 / LDA COMC / STA COL.
     // 6502: CMP #YELLOW / BNE CPIX2 -- and the fall-through when it matches is `CPIX4`, because
     // `dot.asm` is assembled immediately in front of it.
@@ -339,7 +365,7 @@ namespace Elite
     return {whole, 0u, divided.carry}; // 6502: LDY #0
   }
 
-  void DrawCompass(Canvas& _canvas, Compass& _compass, UnitVector _towards) noexcept
+  void DrawCompass(Canvas& _canvas, Compass& _compass, UnitVector _towards, Picture* _picture) noexcept
   {
     /*
      * 6502: LDA XX15 / JSR SPS2 / TXA / ADC #195 / STA COMX.
@@ -359,30 +385,30 @@ namespace Elite
     // 6502: LDA #YELLOW / LDX XX15+2 / BPL P%+4 / LDA #GREEN / STA COMC.
     _compass.pattern = ((_towards.z & 0x80u) != 0u) ? COMPASS_BEHIND : COMPASS_AHEAD;
 
-    DrawCompassDot(_canvas, _compass); // 6502: JMP DOT
+    DrawCompassDot(_canvas, _compass, _picture); // 6502: JMP DOT
   }
 
-  void AimCompassAtStation(Canvas& _canvas, Compass& _compass, const Bubble& _bubble, K3Block& _axes) noexcept
+  void AimCompassAtStation(Canvas& _canvas, Compass& _compass, const Bubble& _bubble, K3Block& _axes, Picture* _picture) noexcept
   {
     const UnitVector towards = LoadStationAxes(_bubble, _axes); // 6502: JSR SPS4
-    DrawCompass(_canvas, _compass, towards);                    // 6502: the fall-through into SP2
+    DrawCompass(_canvas, _compass, towards, _picture);          // 6502: the fall-through into SP2
   }
 
-  void UpdateCompass(Canvas& _canvas, Compass& _compass, const Bubble& _bubble) noexcept
+  void UpdateCompass(Canvas& _canvas, Compass& _compass, const Bubble& _bubble, Picture* _picture) noexcept
   {
-    DrawCompassDot(_canvas, _compass); // 6502: JSR DOT -- draw the old dot again to erase it
+    DrawCompassDot(_canvas, _compass, _picture); // 6502: JSR DOT -- draw the old dot again to erase it
 
     K3Block axes{};
 
     // 6502: LDA SSPR / BNE SP1 -- and `SSPR` is the station's entry in `MANY` (§6.58).
     if (_bubble.StationPresent() != 0u)
     {
-      AimCompassAtStation(_canvas, _compass, _bubble, axes);
+      AimCompassAtStation(_canvas, _compass, _bubble, axes, _picture);
       return;
     }
 
     const UnitVector towards = LoadPlanetAxes(_bubble, axes); // 6502: JSR SPS1
-    DrawCompass(_canvas, _compass, towards);                  // 6502: JMP SP2
+    DrawCompass(_canvas, _compass, towards, _picture);        // 6502: JMP SP2
   }
 
 } // namespace Elite

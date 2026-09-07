@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "Canvas.h"
+#include "Picture.h"
 #include "ShipSlot.h"
 
 namespace Elite
@@ -48,7 +49,7 @@ namespace Elite
    * and `COL` is the type's scanner colour. `SCAN` is a leaf that nobody reads them back from, and
    * since M2-c they are its locals.
    */
-  void DrawScannerBlip(Canvas& _canvas, const Ship& _ship, ShipType _type, std::uint8_t _view) noexcept;
+  void DrawScannerBlip(Canvas& _canvas, const Ship& _ship, ShipType _type, std::uint8_t _view, Picture* _picture = nullptr) noexcept;
 
   // ---- the compass ----------------------------------------------------------------------------
 
@@ -122,7 +123,7 @@ namespace Elite
    * four-pixel block and one pointing backwards is a two-pixel dash. That is not a separate
    * decision from the colour: it is the same byte read twice.
    */
-  void DrawCompassDot(Canvas& _canvas, const Compass& _compass) noexcept;
+  void DrawCompassDot(Canvas& _canvas, const Compass& _compass, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: SPS3 -- copy one of the planet's coordinates into `K3`, as (mid, high, sign).
@@ -198,11 +199,12 @@ namespace Elite
    * The colour comes from the sign of the third coordinate alone: ahead is yellow and behind is
    * green, and `DOT` reads that same byte again to decide whether to draw a block or a dash.
    */
-  void DrawCompass(Canvas& _canvas, Compass& _compass, UnitVector _towards) noexcept;
+  void DrawCompass(Canvas& _canvas, Compass& _compass, UnitVector _towards, Picture* _picture = nullptr) noexcept;
 
   /// 6502: SP1 -- `JSR SPS4` and then a fall-through into `SP2`. Aim the compass at the station
   /// and draw it.
-  void AimCompassAtStation(Canvas& _canvas, Compass& _compass, const Bubble& _bubble, K3Block& _axes) noexcept;
+  void AimCompassAtStation(Canvas& _canvas, Compass& _compass, const Bubble& _bubble, K3Block& _axes,
+                           Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: COMPAS -- erase the old dot, work out the new one, draw it.
@@ -215,6 +217,6 @@ namespace Elite
    * count, not a flag of its own (§6.58). So the compass points at the station whenever there is
    * one and at the planet otherwise.
    */
-  void UpdateCompass(Canvas& _canvas, Compass& _compass, const Bubble& _bubble) noexcept;
+  void UpdateCompass(Canvas& _canvas, Compass& _compass, const Bubble& _bubble, Picture* _picture = nullptr) noexcept;
 
 } // namespace Elite

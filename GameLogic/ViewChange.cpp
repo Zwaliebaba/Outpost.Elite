@@ -3,6 +3,7 @@
 #include "ViewChange.h"
 
 #include "Charts.h"
+#include "Dashboard2x.h"
 #include "FlightLoop.h"
 #include "Lines2x.h"
 #include "LookupTables.h"
@@ -202,11 +203,19 @@ namespace Elite
       CopyPagesDown(_canvas, DASHBOARD_IMAGE.data(), DASHBOARD_BITMAP, 8u, 0u);
       CopyPagesDown(_canvas, DASHBOARD_IMAGE.data() + 8u * 256u, static_cast<std::uint16_t>(DASHBOARD_BITMAP + 8u * 256u), 1u, 0xC0u);
 
+      if (_picture != nullptr)
+      {
+        // The same picture on the index plane, decoded through the cells the loader coloured and
+        // doubled (Dashboard2x.h). This is the bootstrap RS-4-art paints over; the twins below draw
+        // over it at twice the detail from here.
+        CopyDashboardPicture2x(*_picture, _canvas);
+      }
+
       ForgetScannerBlips(_bubble); // 6502: JSR zonkscanners
 
       // 6502: JSR DIALS -- all seven dials and the compass, on a dashboard that has just arrived
       // as a picture with every bar empty.
-      DrawDials(_canvas, _draw, _flight, _status, _fuel, _compass, _bubble);
+      DrawDials(_canvas, _draw, _flight, _status, _fuel, _compass, _bubble, _picture);
     }
 
     DrawColourBands(_canvas, _picture); // 6502: .nearlyxmas JSR BLUEBAND
@@ -432,7 +441,8 @@ namespace Elite
     FlipStardust(_universe.canvas, _universe.dust, &_universe.picture);
 
     // 6502: JSR WPSHPS, and then it falls into SIGHT.
-    ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view);
+    ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view,
+                  &_universe.picture);
 
     DrawLaserSights(_universe.canvas, _universe.commander, _universe.trumbles, _universe.spaceView, _universe.video, _universe.memoryMap);
   }

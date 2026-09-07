@@ -5,6 +5,7 @@
 #include "Universe.h"
 
 #include "Arith.h"
+#include "Dashboard2x.h"
 #include "EliteTypes.h"
 #include "LookupTables.h"
 
@@ -20,7 +21,7 @@ namespace Elite
   }
 
   void DrawBar(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, int _shifts, std::uint8_t _threshold,
-               DialColours _colours) noexcept
+               DialColours _colours, Picture* _picture) noexcept
   {
     // 6502: DILX -- four `LSR A`, and the entry point decides how many of them run (§6.63).
     std::uint8_t value = _value;
@@ -102,11 +103,26 @@ namespace Elite
       row = static_cast<std::uint8_t>(row + 2u + 6u);
     }
 
+    if (_picture != nullptr)
+    {
+      /*
+       * Thirty-two steps from the same byte with one fewer shift (Dashboard2x.h), and the
+       * saturation is `DIL`'s: four blocks of four fat pixels is sixteen and no more, so four
+       * blocks of eight is thirty-two and no more.
+       *
+       * `DILX` entered with no shift at all is the four ENERGY bars, whose value is already 0..16
+       * with nothing under it -- so there the twin doubles, and the bar is the same bar at half the
+       * step. The ink is `DIL`'s own: the danger flash is `PZW`'s decision (rule T1).
+       */
+      const int wide = (_shifts >= 1) ? static_cast<int>(_value >> (_shifts - 1)) : 2 * static_cast<int>(_value);
+      DrawBar2x(*_picture, _canvas, _draw.sc, (wide > 32) ? 32 : wide, ink);
+    }
+
     // 6502: DL6 -- SC += 320, one character row down, ready for the next dial.
     _draw.sc = static_cast<std::uint16_t>(_draw.sc + 0x140u);
   }
 
-  void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value) noexcept
+  void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value, Picture* _picture, std::uint8_t _wideValue) noexcept
   {
     std::uint8_t row = 1u;   // 6502: LDY #1 -- rows 1 to 4, so this bar is four pixels tall
     std::uint8_t q = _value; // 6502: STA Q -- this routine's own (M2-c)
@@ -149,39 +165,52 @@ namespace Elite
      * No `CLC`, and none is needed: the only way out of the loop is a `CPY #30` that did not
      * branch, so the carry is set and this adds 320 rather than 64.
      */
+    if (_picture != nullptr)
+    {
+      // The lit block is the value itself: each of the four blocks absorbs four, so a value under
+      // sixteen lights fat pixel `value` and anything else lights nothing. Thirty-two slots here,
+      // and the same rule.
+      DrawIndicator2x(*_picture, _canvas, _draw.sc, (_wideValue < 32u) ? static_cast<int>(_wideValue) : -1);
+    }
+
     _draw.sc = static_cast<std::uint16_t>(_draw.sc + 0x140u);
   }
 
-  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, CellPalette _palette) noexcept
+  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, CellPalette _palette, Picture* _picture) noexcept
   {
     // 6502: DEX / TXA / INX / EOR #3 -- missile 1 to 4 becomes cell 3 down to 0, so they fill from
     // the right. `STY SC / TAY / LDA SC` is a register shuffle and not a use of the screen pointer.
     const std::uint8_t cell = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_missile - 1u) ^ 3u);
     _canvas.Write(static_cast<std::uint16_t>(MISSILE_CELL + cell), _palette);
+
+    if (_picture != nullptr)
+    {
+      SetMissileIndicator2x(*_picture, _canvas, _missile);
+    }
   }
 
-  void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles) noexcept
+  void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles, Picture* _picture) noexcept
   {
     // 6502: LDX #4 / .ss CPX NOMSL / BEQ SAL8 / LDY #BLACK2 / JSR MSBAR / DEX / BNE ss.
     std::uint8_t indicator = 4u;
     while (indicator != _missiles && indicator != 0u)
     {
-      SetMissileIndicator(_canvas, indicator, MISSILE_NONE);
+      SetMissileIndicator(_canvas, indicator, MISSILE_NONE, _picture);
       --indicator;
     }
 
     // 6502: .SAL8 LDY #GREEN2 / JSR MSBAR / DEX / BNE SAL8 -- the same X, carrying on downwards.
     while (indicator != 0u)
     {
-      SetMissileIndicator(_canvas, indicator, MISSILE_READY);
+      SetMissileIndicator(_canvas, indicator, MISSILE_READY, _picture);
       --indicator;
     }
   }
 
   void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, CellPalette _palette) noexcept
   {
-    _universe.bubble.missileTarget = _target;                   // 6502: STX MSTG
-    SetMissileIndicator(_universe.canvas, _missiles, _palette); // 6502: LDX NOMSL / JSR MSBAR
+    _universe.bubble.missileTarget = _target;                                       // 6502: STX MSTG
+    SetMissileIndicator(_universe.canvas, _missiles, _palette, &_universe.picture); // 6502: LDX NOMSL / JSR MSBAR
 
     // 6502: STY MSAR -- and Y is the ZERO `MSBAR` ended on, not the colour that went in.
     _universe.status.missileArmed = 0;
@@ -193,20 +222,30 @@ namespace Elite
     SetMissileTarget(_universe, _missiles, 0xFFu, _palette);
   }
 
-  void ToggleEcmIndicator(Canvas& _canvas) noexcept
+  void ToggleEcmIndicator(Canvas& _canvas, Picture* _picture) noexcept
   {
     // 6502: ECBLB -- two cells, one above the other, EORed in and out.
     _canvas.ExclusiveOr(ECM_CELL, BULB_COLOUR);
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(ECM_CELL + 40u), BULB_COLOUR);
+
+    if (_picture != nullptr)
+    {
+      ToggleBulb2x(*_picture, _canvas, ECM_CELL);
+    }
   }
 
-  void ToggleStationIndicator(Canvas& _canvas) noexcept
+  void ToggleStationIndicator(Canvas& _canvas, Picture* _picture) noexcept
   {
     _canvas.ExclusiveOr(STATION_CELL, BULB_COLOUR);
     _canvas.ExclusiveOr(static_cast<std::uint16_t>(STATION_CELL + 40u), BULB_COLOUR);
+
+    if (_picture != nullptr)
+    {
+      ToggleBulb2x(*_picture, _canvas, STATION_CELL);
+    }
   }
 
-  void StartEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, bool _carryIn) noexcept
+  void StartEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, bool _carryIn, Picture* _picture) noexcept
   {
     /*
      * 6502: ECBLB2 -- `LDA #32 / STA ECMA / LDY #sfxecm / JSR NOISE`, and NOT ONE OF THOSE TOUCHES
@@ -216,19 +255,19 @@ namespace Elite
      */
     _status.ecmCountdown = 32u;                                // 6502: LDA #32 / STA ECMA
     (void)PlaySoundEffect(_sound, SoundEffect::Ecm, _carryIn); // 6502: LDY #sfxecm / JSR NOISE
-    ToggleEcmIndicator(_canvas);                               // 6502: and no RTS -- it falls into ECBLB
+    ToggleEcmIndicator(_canvas, _picture);                     // 6502: and no RTS -- it falls into ECBLB
   }
 
-  void StopEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound) noexcept
+  void StopEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound, Picture* _picture) noexcept
   {
     _status.ecmCountdown = 0u;                 // 6502: LDA #0 / STA ECMA
     _status.ecmOurs = 0u;                      // 6502: STA ECMP
-    ToggleEcmIndicator(_canvas);               // 6502: JSR ECBLB
+    ToggleEcmIndicator(_canvas, _picture);     // 6502: JSR ECBLB
     StopSoundEffect(_sound, SoundEffect::Ecm); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
   }
 
   void DrawDials(Canvas& _canvas, DrawWorkspace& _draw, const FlightState& _flight, const FlightStatus& _status, LightYearsTenths _fuel,
-                 Compass& _compass, const Bubble& _bubble) noexcept
+                 Compass& _compass, const Bubble& _bubble, Picture* _picture) noexcept
   {
     // ---- part 1: the speed bar ------------------------------------------------------------------
 
@@ -240,7 +279,7 @@ namespace Elite
     const DialColours speedColours{danger.a, danger.x};
 
     // 6502: LDA #14 / STA T1, then LDA DELTA / JSR DIL-1.
-    DrawBar(_canvas, _draw, _flight.delta, 1, 14u, speedColours);
+    DrawBar(_canvas, _draw, _flight.delta, 1, 14u, speedColours, _picture);
 
     // ---- part 2: roll and pitch -----------------------------------------------------------------
 
@@ -256,7 +295,20 @@ namespace Elite
      * indicator moves the other way from the roll.
      */
     const std::uint8_t roll = static_cast<std::uint8_t>(((_flight.alp1 >> 2) | _flight.alp2) ^ 0x80u);
-    DrawIndicator(_canvas, _draw, AddSigned(SignMag16{0u, roll}, INDICATOR_CENTRE).high);
+
+    /*
+     * And the same again with ONE fewer shift, which is the bit the dial throws away.
+     *
+     * `alp1` is the roll magnitude and `LSR A / LSR A` drops two of its bits before the indicator
+     * ever sees it, so `alp1 >> 1` is one of them back -- and the centre doubles with it, because
+     * the wide dial has thirty-two slots where this one has sixteen. Nothing faithful reads this
+     * (Resolution.md section 5.1, and rule T2: the same arithmetic at twice the scale).
+     */
+    constexpr SignMag16 WIDE_CENTRE{0u, 16u};
+    const std::uint8_t wideRoll = static_cast<std::uint8_t>(((_flight.alp1 >> 1) | _flight.alp2) ^ 0x80u);
+
+    DrawIndicator(_canvas, _draw, AddSigned(SignMag16{0u, roll}, INDICATOR_CENTRE).high, _picture,
+                  AddSigned(SignMag16{0u, wideRoll}, WIDE_CENTRE).high);
 
     /*
      * 6502: LDA BETA / LDX BET1 / BEQ P%+4 / SBC #1 / JSR ADD / JSR DIL2.
@@ -276,7 +328,15 @@ namespace Elite
     {
       pitch = SubtractWithCarry(pitch, 1u, false).value;
     }
-    DrawIndicator(_canvas, _draw, AddSigned(SignMag16{0u, pitch}, INDICATOR_CENTRE).high);
+    /*
+     * The pitch has NO bit to recover, and saying so is the point (Dashboard2x.h). `beta` is `bet1`
+     * with its sign on, and `bet1` was shifted down four places in the flight loop within four
+     * instructions of the joystick -- so by the time the dial sees it the bit is game state that no
+     * longer exists, and recovering it would mean recomputing the roll rate rather than drawing it.
+     * The wide value is therefore the faithful one at twice the scale and no finer.
+     */
+    DrawIndicator(_canvas, _draw, AddSigned(SignMag16{0u, pitch}, INDICATOR_CENTRE).high, _picture,
+                  AddSigned(SignMag16{0u, DoubledMagnitude(pitch)}, WIDE_CENTRE).high);
 
     // ---- part 3: the four energy bars, on one pass in four --------------------------------------
 
@@ -338,7 +398,7 @@ namespace Elite
       // `DILX`, so the bars are drawn unshifted; `P` parks the index and nothing else reads it.
       for (std::uint8_t which = 0; which < 4u; ++which)
       {
-        DrawBar(_canvas, _draw, xx12[which], 0, BAR_THRESHOLD, barColours);
+        DrawBar(_canvas, _draw, xx12[which], 0, BAR_THRESHOLD, barColours, _picture);
       }
     }
 
@@ -351,22 +411,22 @@ namespace Elite
     // not flash whatever `T1` says -- and `T1` is still part 3's 3.
     const DialColours plain{DIAL_NORMAL, DIAL_NORMAL};
 
-    DrawBar(_canvas, _draw, _status.forwardShield, 4, BAR_THRESHOLD, plain); // 6502: LDA FSH / JSR DILX
-    DrawBar(_canvas, _draw, _status.aftShield, 4, BAR_THRESHOLD, plain);     // 6502: LDA ASH / JSR DILX
-    DrawBar(_canvas, _draw, _fuel.tenths, 2, BAR_THRESHOLD, plain);                 // 6502: LDA QQ14 / JSR DILX+2
+    DrawBar(_canvas, _draw, _status.forwardShield, 4, BAR_THRESHOLD, plain, _picture); // 6502: LDA FSH / JSR DILX
+    DrawBar(_canvas, _draw, _status.aftShield, 4, BAR_THRESHOLD, plain, _picture);     // 6502: LDA ASH / JSR DILX
+    DrawBar(_canvas, _draw, _fuel.tenths, 2, BAR_THRESHOLD, plain, _picture);         // 6502: LDA QQ14 / JSR DILX+2
 
     // 6502: JSR PZW / STX K+1 / STA K -- part 1's order again, so the temperatures flash.
     const DangerColours heat = DangerColour(_flight.mainLoopCounter, _status.damageFlash);
     const DialColours heatColours{heat.a, heat.x};
 
     // 6502: LDX #11 / STX T1
-    DrawBar(_canvas, _draw, _status.cabinTemperature, 4, 11u, heatColours); // 6502: LDA CABTMP / JSR DILX
-    DrawBar(_canvas, _draw, _status.laserTemperature, 4, 11u, heatColours); // 6502: LDA GNTMP / JSR DILX
+    DrawBar(_canvas, _draw, _status.cabinTemperature, 4, 11u, heatColours, _picture); // 6502: LDA CABTMP / JSR DILX
+    DrawBar(_canvas, _draw, _status.laserTemperature, 4, 11u, heatColours, _picture); // 6502: LDA GNTMP / JSR DILX
 
     // 6502: LDA #240 / STA T1 -- the altitude never reaches its threshold, so it never flashes.
-    DrawBar(_canvas, _draw, _status.altitude, 4, 240u, heatColours); // 6502: LDA ALTIT / JSR DILX
+    DrawBar(_canvas, _draw, _status.altitude, 4, 240u, heatColours, _picture); // 6502: LDA ALTIT / JSR DILX
 
-    UpdateCompass(_canvas, _compass, _bubble); // 6502: JMP COMPAS
+    UpdateCompass(_canvas, _compass, _bubble, _picture); // 6502: JMP COMPAS
   }
 
 } // namespace Elite

@@ -492,7 +492,8 @@ namespace Elite
    * happens. The port has no single home for `QQ11` yet -- 3d-d's flight loop is where it gets
    * one -- so it is passed.
    */
-  void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight, std::uint8_t _view) noexcept;
+  void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight,
+                     std::uint8_t _view, Picture* _picture = nullptr) noexcept;
 
   void SeedStardustAndClearShips(Canvas& _canvas, Stardust& _dust, Rng& _rng, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
                                  FlightState& _flight, std::uint8_t _view, bool _carryIn, Picture* _picture = nullptr) noexcept;

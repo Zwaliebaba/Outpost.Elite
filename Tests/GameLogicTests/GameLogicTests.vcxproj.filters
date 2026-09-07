@@ -178,6 +178,9 @@
     <ClCompile Include="PicturePlanetTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>
+    <ClCompile Include="PictureDashboardTests.cpp">
+      <Filter>Suites</Filter>
+    </ClCompile>
     <ClCompile Include="TacticsTests.cpp">
       <Filter>Suites</Filter>
     </ClCompile>

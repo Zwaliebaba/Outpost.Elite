@@ -24,6 +24,15 @@ namespace Elite
     }
   } // namespace
 
+  std::array<std::uint8_t, 4> Canvas::DashboardChoices(int _cell) const noexcept
+  {
+    if (_cell < 0 || _cell >= CELL_COLUMNS * CELL_ROWS)
+    {
+      return {0, 0, 0, 0};
+    }
+    return MulticolourChoices(m_screen[DASHBOARD_CELLS + _cell], m_colourCells[_cell], m_background);
+  }
+
   /*
    * One character cell, resolved into eight rows of the output image.
    *

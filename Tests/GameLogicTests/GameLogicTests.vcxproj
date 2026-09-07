@@ -175,6 +175,7 @@
     <ClCompile Include="PictureTextTests.cpp" />
     <ClCompile Include="PictureLineTests.cpp" />
     <ClCompile Include="PicturePlanetTests.cpp" />
+    <ClCompile Include="PictureDashboardTests.cpp" />
     <ClCompile Include="TacticsTests.cpp" />
     <ClCompile Include="RasterTests.cpp" />
     <ClCompile Include="SidRenderTests.cpp" />

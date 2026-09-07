@@ -1169,8 +1169,8 @@ namespace Elite
     }
   }
 
-  void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight,
-                     std::uint8_t _view) noexcept
+  void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight, std::uint8_t _view,
+                     Picture* _picture) noexcept
   {
     // 6502: WPSHPS -- LDX #0 / .WSL1 LDA FRIN,X / BEQ WS2 / BMI WS1.
     for (std::size_t slot = 0; slot < _bubble.slots.size(); ++slot)
@@ -1197,7 +1197,7 @@ namespace Elite
       // `XSAV` is how the loop index survives the call.
       _flight.type = type;
       _flight.slot = static_cast<std::uint8_t>(slot);
-      DrawScannerBlip(_canvas, _work, type, _view);
+      DrawScannerBlip(_canvas, _work, type, _view, _picture);
 
       /*
        * 6502: LDY #31 / LDA (INF),Y / AND #%10100111 / STA (INF),Y.
@@ -1231,7 +1231,7 @@ namespace Elite
       SeedStardustField(_canvas, _dust, _rng, _carryIn, _picture);
     }
 
-    ClearAllShips(_canvas, _state, _bubble, _work, _flight, _view);
+    ClearAllShips(_canvas, _state, _bubble, _work, _flight, _view, _picture);
   }
 
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math, ClipState& _clip,

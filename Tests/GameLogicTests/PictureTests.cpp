@@ -311,15 +311,29 @@ namespace GameLogicTests
       DrawAScene(canvas);
       Picture picture;
 
-      // The DASHBOARD is still upscaled (RS-4 has not landed), so a canvas byte in its rows moves
-      // the hash. `DASHBOARD_BITMAP` is character row 18, and the flag is what puts those rows in
-      // that region at all.
+      /*
+       * WITH BOTH REGIONS NATIVE THE HASH IS THE SURFACE'S, and the canvas reaches it only through
+       * the handful of raster bytes `Resolve` reads from there rather than keeping twice (section
+       * 3.2). A bitmap byte no longer moves it -- that is what "native" means -- and the flag that
+       * decides which region the lower rows belong to still does.
+       */
       canvas.SetDashboardShown(true);
       const std::uint64_t base = picture.Hash(canvas);
       Assert::AreEqual(base, picture.Hash(canvas), L"the same surface hashed differently twice");
 
       canvas.Write(0x1D00u, static_cast<std::uint8_t>(canvas.Read(0x1D00u) ^ 0xFFu));
-      Assert::AreNotEqual(base, picture.Hash(canvas), L"a canvas byte in the upscaled region did not move the hash");
+      Assert::AreEqual(base, picture.Hash(canvas), L"a canvas bitmap byte still reaches a native picture");
+
+      /*
+       * The raster split still reaches the picture, and showing it needs ink in the plane: with the
+       * dashboard off, all fifty rows belong to the upper region and the index plane is not read at
+       * all. An empty surface hashes the same either way, because black is black.
+       */
+      picture.SetDot(100, 300, 5u);
+      const std::uint64_t withDashboard = picture.Hash(canvas);
+      canvas.SetDashboardShown(false);
+      Assert::AreNotEqual(withDashboard, picture.Hash(canvas), L"the raster split stopped reaching the picture");
+      canvas.SetDashboardShown(true);
 
       /*
        * In the NATIVE region the hash follows the SURFACE -- and the cell has to be painted first,
@@ -335,22 +349,28 @@ namespace GameLogicTests
     }
 
     /*
-     * The regions are incomplete, and saying so is the point (Risk R27).
+     * The regions are COMPLETE, which is the state Risk R27's tripwire was waiting for.
      *
-     * The last resolution slice deletes the upscale, and what licenses that is `Complete()` -- so
-     * this test fails the day every region is native and the fallback is still there, which is the
-     * reminder nobody would otherwise get.
+     * It fired at RS-4, as designed: from here every pixel of every screen is drawn natively and
+     * `UpscaleCell` has no caller in the game. What it still has is this test and the two below it,
+     * which is deliberate -- RS-6 deletes the fallback, and until it does, the fallback has to keep
+     * working, because a `Picture` asked for it explicitly is how every test that compares the
+     * doubling is written. So the reminder moves to where the work is: section 10's RS-6 row.
      */
     TEST_METHOD(TheRegionsSayWhichSlicesHaveLanded)
     {
       const Picture picture;
       Assert::IsTrue(picture.Native().spaceView, L"RS-3 completed the upper region and turned it over");
-      Assert::IsFalse(picture.Native().dashboard, L"RS-4 has not landed");
-      Assert::IsFalse(picture.Native().Complete(), L"the canvas fallback is still what draws the dashboard");
+      Assert::IsTrue(picture.Native().dashboard, L"RS-4 completed the lower one");
+      Assert::IsTrue(picture.Native().Complete(), L"Complete() is what RS-6 asserts before deleting the upscale");
 
-      Picture done;
-      done.SetNative({true, true});
-      Assert::IsTrue(done.Native().Complete(), L"Complete() is what RS-6 asserts before deleting the upscale");
+      // And the fallback is still there and still right, which is what RS-6 removes rather than
+      // what it fixes.
+      Canvas canvas;
+      DrawAScene(canvas);
+      Picture fallback;
+      fallback.SetNative({false, false});
+      Assert::IsTrue(TheCanvasDoubled(ResolveBoth(canvas, fallback, nullptr)).empty(), L"the upscale stopped working before RS-6 removed it");
     }
 
     /*

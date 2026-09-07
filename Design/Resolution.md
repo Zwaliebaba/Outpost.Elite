@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->445 green against the oracle and all <!--count:checks-->18 repository checks
+<!--count:tests-->452 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -400,53 +400,92 @@ doubled numbers and the `TT66` that ends the effect clears both surfaces.
 
 `DIL` lights `value >> shifts` of sixteen fat pixels across four cells, storing the bytes rather
 than exclusive-oring them. `DrawBar2x` lights `value >> (shifts - 1)` of thirty-two steps, each two
-hi-res pixels wide and fourteen tall, into the dashboard plane at twice `SC`'s position, in the
-colour `DialColours` chose (the danger flash is `PZW`'s decision, T1). The same entry-point shape —
-the shift count is the argument, because `DILX`, `DILX+2`, `DIL-1` and `DIL` are four scales of one
-routine — so the four callers change nothing but which twin they name.
+hi-res pixels wide and **six tall** — corrected at RS-4 from "fourteen", which was an arithmetic
+slip: `DIL` writes three canvas rows and three doubled is six. The bar keeps its height because
+ruling 1 keeps the dashboard the same share of the screen; what it gains is the step.
+
+**Corrected at RS-4: the four ENERGY bars are the exception, and they are named because the sweep
+found them.** `DILX` is reached with no shift at all for those, and the value has already been dealt
+out sixteen at a time by `DLL24`, so it is 0..16 with nothing under it: there the twin doubles, and
+the bar is the same bar at half the step. Everything else — the speed at one shift, the fuel at two,
+the shields and the two temperatures and the altitude at four — has a real bit and takes it.
+
+The ink is `DIL`'s own, because the danger flash is `PZW`'s decision (T1). The same entry-point
+shape — the shift count is the argument, because `DILX`, `DILX+2`, `DIL-1` and `DIL` are four scales
+of one routine — so the four callers change nothing but which twin they name.
 
 `DIL2`'s roll and pitch indicators light one block of sixteen; the twin lights one of thirty-two,
-two pixels wide. `MSBAR` writes a palette byte to a missile cell; the twin fills the missile's
-16×16 block in the dashboard plane from the same `CellPalette`'s high nibble. The bulbs toggle a
-palette in and out of two cells; the twins toggle the same two blocks between the bulb's colour and
-the picture's. All four are STORE-semantics and are redrawn every frame by `DIALS`, so none needs a
-heap.
+two pixels wide. **Corrected at RS-4: only the ROLL has a bit to spend on the extra slots.** `DIALS`
+builds it from `alp1 >> 2`, two bits thrown away, so `alp1 >> 1` is one of them back — and the
+centre doubles with it. The pitch's `beta` is `bet1` with its sign on, and `bet1` was shifted down
+in the flight loop within four instructions of the joystick: the bit is gone before the dial sees
+it, and recovering it would mean recomputing game state rather than rendering it. The pitch
+indicator therefore doubles.
+
+`MSBAR` writes a palette byte to a missile cell and the bulbs exclusive-or one into two cells.
+**Corrected at RS-4: all three twins are the same one function**, and it is not a fill. What a
+palette write does on the hardware is recolour whatever bits are already in the cell, so the honest
+twin is to decode that cell again through `Canvas::ResolveCell` and double what comes out — which is
+also the bootstrap below, and the one place the two meet. All are STORE-semantics and are redrawn
+every frame by `DIALS`, so none needs a heap.
 
 ### 5.2 The scanner and the compass
 
 `SCAN` puts a blip at `(123 + x_hi, ...)` across, `z_hi >> 2` down the ellipse and `y_hi >> 1` up
-the stick, discarding `x_lo`, `z_lo` and `y_lo`. `PlotBlip2x` takes the same block and reads
-`(x_hi << 2) | (x_lo >> 6)` across — a fat pixel is four hi-res pixels, so two bits of the fraction
-are exactly what fills them — and `(z_hi << 1 | z_lo >> 7) >> 2` and `(y_hi << 1 | y_lo >> 7) >> 1`
-for the depth and the height. The blip is a 4×4 hi-res block in the ship type's scanner colour,
-the stick is a two-pixel-wide vertical, both exclusive-ored into the dashboard plane so that
-`WPSHPS`'s second call erases them (T3). `SCAN`'s decision whether a ship is on the scanner at all
-is its own (T1).
+the stick, discarding `x_lo`, `z_lo` and `y_lo`. The twin takes the same three answers and adds the
+top bit of `x_lo`, signed the way the magnitude is — which is four times finer across than the
+canvas, because `CPIX2` indexes the ALIGNED mask table and the faithful dot snaps to a fat pixel,
+losing `X1`'s bottom bit as well. The blip is a 4×4 hi-res block in the ship type's scanner colour,
+the stick a two-pixel-wide vertical, both exclusive-ored into the plane so that `WPSHPS`'s second
+call erases them (T3). `SCAN`'s decision whether a ship is on the scanner at all is its own (T1).
 
-`COMPAS` scales a unit vector of length 96 to a dot at `2 * A / 20` from the centre; `PlotCompass2x`
-scales the same seven-bit magnitude to a radius of forty, which is twice the resolution with no
-rounding the faithful routine did not also do. `DOT`'s block-or-dash by colour is a decision; the
-twin draws a 4×4 block for ahead and a 4×2 dash for behind.
+**Corrected at RS-4: the VERTICAL fractions are not taken, and that is a scoping call rather than an
+oversight.** `z_lo` and `y_lo` are the same kind of byte and the same bit is there, but the row is a
+clamped sum of two negated magnitudes — `~(z_hi >> 2 + 83)` plus a complemented `y_hi >> 1`, clamped
+into 146..198 — and reproducing it at twice the scale is a second copy of `SCAN`'s arithmetic to
+keep in step, in eight-bit wrapping that is load-bearing. What it would buy is one hi-res row on a
+fifty-two row scale. It is written down here rather than left for somebody to rediscover, and it is
+a small follow-up with a sweep behind it if the owner wants it.
+
+`COMPAS` scales a unit vector of length 96 to a dot at `2 * A / 20` from the centre. **Corrected at
+RS-4: the twin does NOT scale to a radius of forty, and this is the one place the building declined
+a bit it had measured.** `DVID4`'s whole part is exact division — swept over all 65,280 pairs — so a
+twin dividing at twice the radius would be the same function on a bigger domain and entirely
+legitimate. It may not, because `COMPAS` erases last frame's dot by drawing it again out of `COMX`
+and `COMY`, and those two bytes are the game's: a finer position would have to be remembered beside
+them, unhashed, and kept in step by hand. That is the parallel-record shape RS-3 spent a slice
+deleting, and what it would buy is half a dot's width on a disc twenty canvas pixels across. The
+wide dot is `COMX` and `COMY` doubled.
+
+`DOT`'s block-or-dash by colour is a decision; the twin draws a 4×4 block for ahead and a 4×2 dash
+for behind, which is the canvas's shape halved — one fat pixel of width instead of two, as the blip
+is.
 
 ### 5.3 The picture
 
 `DASHBOARD_IMAGE` is 2,241 bytes of two-bit pixels, 160×56, coloured per cell by
-`DASHBOARD_SCREEN_COLOURS`; `wantdials` copies it into the bitmap. The 2× picture is a 640×112
-sixteen-colour image, `DASHBOARD_IMAGE_2X`, 71,680 bytes in its own generated file, copied into the
-dashboard plane where `ShowDashboard`'s twin runs.
+`DASHBOARD_SCREEN_COLOURS`; `wantdials` copies it into the bitmap.
 
-**It needs a person with a paint program, and the design says so rather than pretending a tool can
-draw it — the owner, by ruling (§11.1), on the bootstrap below, on no slice's schedule.** What a tool can do is start it: `tools/bitmaps.py` gains a fourth sheet and one command,
-`bootstrap-2x`, which resolves the faithful dashboard through `Canvas::Resolve` (so the cell colours
-are already applied), doubles every pixel, and writes it as an indexed BMP in the sixteen VIC-II
-colours. That file imports as the first `DASHBOARD_IMAGE_2X` and the tree plays. The re-authoring —
-a round ellipse instead of a stepped one, thin frame lines, legible labels — is then an edit of a
-BMP and an import, the same round trip the tool already proves for the three existing sheets. Two
-constraints for whoever draws it, checked by the import: only the sixteen palette colours, and the
-positions the twins draw into (the bar troughs, the indicator tracks, the missile blocks, the
-scanner ellipse's interior, the compass disc) are read from a small table of rectangles in
-`Dashboard2x.h` that the picture must leave as its background colour — the check refuses a picture
-that paints inside them.
+**CORRECTED AT RS-4: there is no `DASHBOARD_IMAGE_2X` and there is no `bootstrap-2x`.** The design
+had a 71,680-byte generated table holding the faithful picture upscaled, and a fourth sheet in
+`tools/bitmaps.py` to produce it. A generated table that is a pure function of a table already in
+the tree is a COPY, and this repository has spent three slices removing copies that two people have
+to keep in step. So the bootstrap is computed where it is needed instead — `CopyDashboardPicture2x`
+decodes each dashboard cell through `Canvas::ResolveCell`, with the loader's cell colours and colour
+RAM already applied, and doubles it into the plane. Same pixels, no second file, and it is checked
+by an EQUALITY rather than by a golden: `TheBootstrapIsTheCanvasDoubledExactly` compares all 71,680
+of them against the resolved canvas.
+
+It still **needs a person with a paint program, and the design still says so rather than pretending
+a tool can draw it — the owner, by ruling (§11.1), on no slice's schedule.** What it no longer needs
+is a tool to start it: `Testing::WritePicturePng` already writes the resolved 640×400 picture as an
+indexed PNG, which is the bootstrap image to paint over. RS-4-art replaces the call to
+`CopyDashboardPicture2x` with an imported table and changes nothing else.
+
+Two constraints for whoever draws it, which RS-4-art should check on import: only the sixteen
+palette colours, and the positions the twins draw into (the bar troughs, the indicator tracks, the
+missile blocks, the scanner ellipse's interior, the compass disc) left as the background colour, so
+that a dial's unlit steps read as a trough rather than as artwork.
 
 ### 5.4 Sprites
 
@@ -703,8 +742,8 @@ path the layout did not see — are what the estimate cannot price.
 | **RS-1 The text layer** ✅ **built 2026-09-07 (§13)** | `PrintGlyph2x`, `EraseCell2x`, `ClearTextArea2x`, `TextLayout` and `LayoutForView` (§6.2), the centred default and the space view's layout; `check_twins.py` (§8.6). **NOT the borders or `CLYNS`** — see §13. The space-view REGION does not flip here — it flips when RS-3 completes it, so this slice's pixels are drawn and not shown | The text shadow test (§8.1) green over eight scenes; the glyph lands on the cell the layout names; the check in CI | 2–3 |
 | **RS-2 Ship lines** ✅ **built 2026-09-07 (§13)** | `Bresenham2x`, `ClipLine2x`, `LineHeap2x`, `Doubled`, `PushEdges`' and `EraseShip`'s twins, `SHPPT`'s dot (§4.1). **NOT `Project2x` or `Divide512`** — the premise for them was measured false; they move to RS-3 where the planet needs `DVID3B` twinned anyway. The borders and the loader move there too, for a different reason (§13) | The space-view shadow test green over three ship distances; the wide vertex is the faithful one doubled over all 65,536 values; the half-open line drawer measured against `LOIN` | 3–4 |
 | **RS-3 Planet, sun, dust, beams, rings** ✅ **built 2026-09-07 (§13)** | §4.2 and §4.3, **and everything else the upper region carries**, because a region is native for every screen that draws in it: the border and the rules, `TTX66K`'s wipe and the loader's, the cell palettes, `CLYNS`, and both charts at twice the scale (RS-5 re-flows them). **NOT `ball2x`, `sun2x` or `isqrt`** — all three premises measured false or invisible. **The space-view region flips here**, and this is the first slice a person sees | Shadow tests green on the planet, the sun over three frames of drift, the explosion cloud, the beam and the border; the stardust half-pixel swept over 262,144 cases; the wide line swept over 18,432 lines in both directions | 2–3 |
-| **RS-4 The dashboard** | §5: the dial, indicator, missile and bulb twins, the scanner and compass twins, `bitmaps.py`'s fourth sheet and `bootstrap-2x`, `DASHBOARD_IMAGE_2X` as bootstrapped, the rectangle table and its import check, sprites pixel-doubled in `Resolve` | The per-instrument shadow properties green; the flight view entirely native (no region upscaled) and a hand-check recorded; the scanner sweep of §8.2 | 3 |
-| **RS-4-art The picture** | The owner redraws `DASHBOARD_IMAGE_2X` on the bootstrap (§5.3, ruling §11.1); no slice waits on it | Imports clean; a hand-check; a screen golden re-recorded with the diff attached | owner's |
+| **RS-4 The dashboard** ✅ **built 2026-09-07 (§13)** | §5: the dial, indicator, missile and bulb twins, the scanner and compass twins, and the bootstrap. **NOT `DASHBOARD_IMAGE_2X`, `bitmaps.py`'s fourth sheet or `bootstrap-2x`** — a generated table that is a pure function of one already in the tree is a copy, so the bootstrap is computed (§5.3). Sprites were already doubled in `Resolve` at RS-0. **The dashboard region flips here, so nothing on the screen is upscaled any more** | The bootstrap equal to the canvas doubled over all 71,680 pixels; the bar sweep over every value at every entry point; the scanner's fraction swept over both signs and every high byte; a whole `DIALS` frame shadow-tested; blips erase by redraw | 3 |
+| **RS-4-art The picture** | The owner redraws the dashboard at 640×112 over the bootstrap PNG (§5.3, ruling §11.1); the import replaces `CopyDashboardPicture2x`'s call and nothing else; no slice waits on it | Imports clean; a hand-check; a screen golden re-recorded with the diff attached | owner's |
 | **RS-5 The re-flow** | One sub-slice per row of §6.3 in that order, each a layout table and, where named, one twin; the wide sink's re-wrap for the data screen and the briefings; the charts' twins | Per screen: the sketch accepted before the table is written (ruling §11.2); the text shadow test green including the no-collision clause; a hand-check | 1 each, 8–10 in all; the charts are two each |
 | **RS-6 Close** | The upscale removed from `Resolve` and its region flags with it; the amendments of §9; ADR-008; `outpost-elite-names` re-ceilinged; `check_outpost.py` over `ScreenPresenter`; this document's status | `check_all.py` green with the upscale gone; every ADR named in §9 amended; the plan's Phase 6 row written | 1–2 |
 | **Later, optional** | Re-authored 48×42 sprites (§5.4); an aspect-ratio option (ADR-005 §1, unchanged) | — | — |
@@ -749,7 +788,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 | R24 | **A re-flow table collides or rots.** A layout anchor that puts two fields on one cell, or a screen routine that grows a placement the table does not know, prints garbage on the screen while the canvas is perfect | The no-collision clause of the text shadow test, run over every docked screen the session tests drive; the default layout catches an unknown placement by centring it, so the failure is visible rather than silent |
 | R25 | **The extra bit is wrong and nothing sees it.** A twin that halves to the faithful value at every pixel can still be off by one hi-res pixel everywhere, and the shadow test allows one | The property sweeps of §8.2 on every twin divide and root; a screen golden per scene |
 | R26 | **The screen leaks into the game.** A twin that reads the RNG, or a heap carve that moves the faithful pointer differently with the twin region present | §8.4's replay run both ways; T1 as a review rule; and since RS-3 there is no second heap at all — the twins read the faithful bytes, so there is no second pointer to move |
-| R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the picture is part canvas-upscaled and part native, and a screenshot taken then is not the design | `Picture::NativeRegions` is a struct with a `Complete()` test that RS-6 asserts, and `ThePicture::TheRegionsSayWhichSlicesHaveLanded` fails the day every region is native and the fallback is still there; the journal names which regions are native at each slice. **The upper region flipped at RS-3 and only the dashboard is upscaled now.** **CORRECTED at RS-0: two regions, not three.** The design named a third, "text", and text is not an AREA — it lands over the space view in flight and over the whole screen when docked. The regions are the two the raster split already makes, and the text layer belongs to the upper one, which flips when RS-3 completes it |
+| R27 | **The tree is half-native for weeks.** Between RS-0 and RS-6 the picture is part canvas-upscaled and part native, and a screenshot taken then is not the design | `Picture::NativeRegions` is a struct with a `Complete()` test that RS-6 asserts, and `ThePicture::TheRegionsSayWhichSlicesHaveLanded` fails the day every region is native and the fallback is still there; the journal names which regions are native at each slice. **Both regions flipped by RS-4 and `Complete()` now holds — the tripwire has fired and RS-6 is the only slice left that owes anything to it.** **CORRECTED at RS-0: two regions, not three.** The design named a third, "text", and text is not an AREA — it lands over the space view in flight and over the whole screen when docked. The regions are the two the raster split already makes, and the text layer belongs to the upper one, which flips when RS-3 completes it |
 
 ---
 
@@ -759,7 +798,7 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->445 tests with the oracle present, all passing, and all
+<!--count:tests-->452 tests with the oracle present, all passing, and all
 <!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
@@ -843,7 +882,7 @@ the part of §7 with no evidence behind it at all.
 **Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
 `LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
 `ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
-twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->445 tests, green with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->452 tests, green with
 the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
 
 **What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
@@ -896,7 +935,7 @@ of the evidence, which is what §10 said this slice would be.
 **Built and green.** `GameLogic/ShipDraw2x.h` and `.cpp` are the layer: `Line2x`, `LineHeap2x`,
 `Doubled`, `ClipLine2x`, `Bresenham2x`, `PushHeapLine2x` and `DrawShipLines2x`. `Universe` owns the
 wide heap beside the faithful one; `ShipRender` carries the surface; `PushEdges`, `EraseShip`,
-`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->445 tests, green with the
+`DrawShipLines` and `SHPPT`'s dot all pair. The suite is <!--count:tests-->452 tests, green with the
 oracle present, and all <!--count:checks-->eighteen repository checks pass.
 
 **THE SLICE'S REAL FINDING IS THAT ITS PREMISE WAS FALSE, and it took a measurement to see it.**
@@ -1067,3 +1106,95 @@ AGENTS.md §6 says two CI legs rather than one.
 the dials are the original's blocks — RS-4. Nothing is re-flowed: the charts, the data screens and
 the market are at their original coordinates on a screen with room for twice as much, which is RS-5
 and is the first slice with a design question in it rather than a measurement.
+
+### RS-4 — the dashboard, 2026-09-07
+
+**Nothing on the screen is the canvas upscaled any more.** `NativeRegions::Complete()` holds from
+this slice, which is the state Risk R27's tripwire was built to catch — it fired, as designed, and
+the reminder it carried moves to §10's RS-6 row, which is the only slice that still owes anything to
+it. `UpscaleCell` stays until RS-6 deletes it, because every test that compares the doubling asks
+for it by name.
+
+**THE LOWER REGION IS AN INDEX PLANE AND THAT CHANGES THE SHAPE OF THE EVIDENCE.** Above the raster
+split a twin writes bits, and a shadow test can ask "is this pixel lit on both surfaces". Below it a
+twin writes COLOURS, and a twin that put the right shape in the wrong colour would pass a shape test
+and look wrong. So the slice's strongest test is an equality over the whole region: the bootstrap
+resolves to exactly the canvas doubled, all 71,680 pixels of it. Everything else is drawn on top of
+a picture already proved right.
+
+**A twin has to know what colour a pattern is, and it is not the pattern's business.** `COL` holds
+four two-bit codes and the codes select from the CELL — %00 the background register, %01 the high
+nibble of screen RAM, %10 the low nibble, %11 colour RAM. So every twin here takes the canvas as
+well as the picture and resolves the pattern through the same cell the faithful store lands in.
+`Canvas::DashboardChoices` is the lift, the fourth in this track after `ResolveCell`,
+`ToSpaceViewPoint` and `LineSlope`. `Striped` — the Thargoid's %01 %01 %10 %10 — is why the
+resolution is per pixel rather than per pattern.
+
+**Three of the four things ruling 1's table promised are here; the fourth was declined, measured.**
+
+- **The BARS gain their bit.** `DIL` draws `value >> shifts` of sixteen and the twin draws
+  `value >> (shifts - 1)` of thirty-two, from the same byte, swept over all 256 values at all three
+  shifted entry points. The sweep also caught the exception the design had not named: `DILX` reached
+  with NO shift is the four energy bars, whose value `DLL24` has already dealt out sixteen at a
+  time, so there is no bit under it and the twin doubles. Both cases are asserted, not just the
+  happy one.
+- **The ROLL indicator gains one and the PITCH does not**, which is a distinction the design did not
+  draw. `DIALS` builds the roll from `alp1 >> 2` — two bits thrown away — so `alp1 >> 1` is one of
+  them back, with the centre doubled to match. The pitch's `beta` is `bet1` with its sign on, and
+  `bet1` was shifted down four places in the flight loop within four instructions of the joystick:
+  by the time the dial sees it the bit is game state that no longer exists.
+- **The SCANNER gains two bits across.** `x_lo` is a byte the game maintains on every ship in the
+  bubble and `SCAN` never reads, and `CPIX2` indexes the ALIGNED mask table so the faithful dot
+  snaps to a fat pixel and loses `X1`'s bottom bit as well — four times finer, and the sweep says so
+  by drawing the same ship twice with the bit both ways and requiring that the CANVAS blip did not
+  move and the wide one did, over every high byte and both signs.
+- **The COMPASS gains nothing, and this is the one place the building declined a bit it had
+  measured.** `DVID4`'s whole part is exact division — swept over all 65,280 pairs, worst error
+  zero — so a twin dividing at twice the radius would be the same function on a bigger domain and
+  entirely legitimate. It may not, because `COMPAS` erases last frame's dot by drawing it again out
+  of `COMX` and `COMY`, and those two bytes are the game's: a finer position would have to be
+  remembered beside them, unhashed, and kept in step by hand. That is the parallel-record shape RS-3
+  spent a slice deleting, and what it would buy is half a dot's width on a disc twenty canvas pixels
+  across. Its FRACTION byte, incidentally, is `LL28`'s and out by up to 3 — so even the tempting
+  cheap version was not available.
+
+**And the scanner's VERTICAL fractions are named as not taken.** `z_lo` and `y_lo` are the same kind
+of byte, but the blip's row is a clamped sum of two negated magnitudes in eight-bit wrapping that is
+load-bearing, and reproducing it at twice the scale is a second copy of `SCAN`'s arithmetic to keep
+in step for one hi-res row on a fifty-two row scale. Written down rather than left to be
+rediscovered; a small follow-up with a sweep behind it if the owner wants it.
+
+**`DASHBOARD_IMAGE_2X` does not exist and `bitmaps.py` gained nothing.** §5.3 asked for a
+71,680-byte generated table holding the faithful picture upscaled, plus a tool command to produce
+it. A generated table that is a pure function of a table already in the tree is a copy, and this
+repository has spent three slices removing copies that two people have to keep in step. The
+bootstrap is computed at the one call site instead, and — better than a golden — it is checked by an
+equality against the resolved canvas. `WritePicturePng` already hands the owner the PNG to paint
+over, so RS-4-art loses nothing and gains a file that has to exist rather than one that had to be
+generated first.
+
+**One twin serves the missile indicators, both bulbs and the bootstrap, and finding that out was the
+slice's tidiest moment.** `MSBAR` writes a screen-RAM palette byte and the bulbs exclusive-or one:
+what that does on the hardware is recolour whatever bits are already in the cell. So the honest twin
+is not a fill — it is to decode that cell again and double what comes out, which is exactly
+`ResolveDashboardCell2x`, which is exactly the bootstrap over one cell instead of two hundred and
+eighty. The cost is named in the header: a blip drawn finely inside such a cell is flattened back to
+the canvas's resolution until the next `SCAN`, which is one frame.
+
+**A test that passed for the wrong reason, caught by reading its own failure.** The `DIALS` shadow
+test reported twenty-seven orphan pixels at the right-hand end of every bar. They were not orphans:
+a bar drawn at half the step ends one canvas pixel past the faithful one, and the check was growing
+the window around the CANVAS pixel and then asking whether any wide pixel in it had ink — which
+attributes a wide pixel to the wrong canvas column at the boundary. Walking the second direction
+over WIDE pixels instead, as the space-view tests do, is the same slack asked the right way round.
+The lesson is the shape of the question rather than the number.
+
+**Two arithmetic slips in §5 corrected in passing.** A bar is three canvas rows tall and therefore
+six hi-res ones; §5.1 said fourteen. And §5.2's `(x_hi << 2) | (x_lo >> 6)` reads two bits of the
+fraction where the hi-res grid can only hold one — a fat pixel is four hi-res pixels wide, but a
+canvas pixel is two, and `x_hi` moves in canvas pixels.
+
+**What RS-4 does NOT do.** The artwork is still the original's, upscaled: a stepped ellipse, chunky
+frame lines, the same labels. That is RS-4-art and it is the owner's, on no slice's schedule. And
+nothing is re-flowed — RS-5 is the first slice with a design question in it rather than a
+measurement, and its rulings ask for a sketch per screen before a table is written.
