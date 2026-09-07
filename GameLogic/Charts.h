@@ -162,6 +162,11 @@ namespace Elite
    */
   void DrawSeparator(Canvas& _canvas, std::uint8_t _y) noexcept;
 
+  /// 6502: NLIN -- LDA #23 / JSR INCYC / NLIN2. The cursor moves down one line and a rule is drawn
+  /// at pixel row 23, in that order; the increment is `INCYC`'s and has nothing to do with the 23.
+  /// One routine rather than two calls at its caller, so that it can be compared as one (M6-0-e).
+  void DrawTitleRule(Canvas& _canvas, TextState& _text) noexcept;
+
   /*
    * 6502: TT22 -- the long-range chart.
    *

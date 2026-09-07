@@ -258,8 +258,7 @@ namespace Elite
     }
 
     case KeyAction::MarketPrice:
-      SetUpScreen(m_universe, m_ports, BUY_CARGO_VIEW); // 6502: TT167's TRADEMODE -- TT66 and FLKB
-      m_ports.keyboard.Flush();
+      SetUpTradeScreen(m_universe, m_ports, BUY_CARGO_VIEW); // 6502: TT167's TRADEMODE -- TT66 and FLKB
       PrintMarketScreen(m_recursive, m_characters, m_universe.text, m_universe.current.economy, m_universe.market, false);
       return;
 
@@ -731,6 +730,10 @@ namespace Elite
      * so in a comment and slice 4e is what answers it. `CPX #&40 / BNE DK2`: the pause key
      * freezes the game and everything else carries on to the dispatch.
      */
+    // 6502: LDX thiskey / STX KL -- the key that arrived, into byte 0 of the logger, which nothing
+    // on this build reads back but the image compares (M6-0-e).
+    m_universe.keys[0] = _key;
+
     if (_key == PAUSE_KEY)
     {
       m_paused = true;

@@ -311,6 +311,53 @@ namespace GameLogicTests
   {
   public:
     /*
+     * 6502: NLIN -- the rule under a chart's title, and the cursor moved down first (M6-0-e).
+     *
+     * Ported since the charts were and never compared on its own: the screens that reach it
+     * trapped it, because their comparison is the text and not the canvas. This is the routine
+     * alone, over a marked screen, from every row the cursor can be on.
+     */
+    TEST_METHOD(TheTitleRuleMatchesNLIN)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const Scratch zp(oracle);
+      const std::uint16_t nlin = oracle.Label("NLIN");
+      const std::uint16_t screen = zp.screen;
+
+      std::uint32_t compared = 0;
+      for (const std::uint8_t row : {std::uint8_t{0}, std::uint8_t{1}, std::uint8_t{7}, std::uint8_t{22}, std::uint8_t{23}})
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        Elite::Canvas canvas;
+        for (std::uint16_t offset = 0; offset < Elite::Canvas::SCREEN_SIZE; ++offset)
+        {
+          canvas.Write(offset, 0xA5u);
+          cpu.memory[static_cast<std::uint16_t>(screen + offset)] = 0xA5u;
+        }
+        cpu.memory[zp.yc] = row;
+        Elite::TextState text;
+        text.row = row;
+
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(nlin, 200'000);
+        Assert::IsTrue(run.completed, L"NLIN returned");
+
+        Elite::DrawTitleRule(canvas, text);
+
+        const std::string what = "NLIN from row " + std::to_string(row);
+        const std::wstring where(what.begin(), what.end());
+        Assert::AreEqual(cpu.memory[zp.yc], text.row, (where + L": YC, moved down one by INCYC").c_str());
+        CompareScreens(cpu, screen, canvas, where);
+        ++compared;
+      }
+      Assert::AreEqual<std::uint32_t>(5u, compared, L"the whole sweep ran");
+    }
+
+    /*
      * 6502: TT123 -- every value against every step, all 65,536 of them.
      *
      * Exhaustive because the routine's whole content is one comparison between the step's sign and
@@ -533,6 +580,9 @@ namespace GameLogicTests
                 chart.homeY = 100;
 
                 Cpu6502 cpu = oracle.Fresh();
+                // 6502: WSCAN waits for the vertical sync. It is the platform's (ADR-005 section 3)
+                // and a flat interpreter has no raster to wait for, so it is trapped and never will
+                // be compared (M6-0-e).
                 cpu.AddTrap(oracle.Label("WSCAN"));
                 SeedChart(cpu, zp, chart);
                 cpu.a = 0;

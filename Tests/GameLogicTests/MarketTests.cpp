@@ -620,6 +620,8 @@ namespace GameLogicTests
 
           Cpu6502 cpu = oracle.Fresh();
           cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+          // `TRADEMODE` is trapped because this sweep compares the prices, not the screen; the
+          // routine itself is `SetUpTradeScreen` and is compared whole in `ShellTests` (M6-0-e).
           cpu.AddTrap(oracle.Label("TRADEMODE"));
           cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 

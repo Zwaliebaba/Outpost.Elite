@@ -5,6 +5,7 @@
 #include "EliteTypes.h"
 #include "Ports.h"
 #include "Universe.h"
+#include "MarketScreen.h"
 #include "ViewChange.h"
 
 /*
@@ -129,8 +130,7 @@ namespace Elite
   void StatusScreen(Universe& _universe, Ports& _ports, const ShipCondition& _condition) noexcept
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    SetUpScreen(_universe, _ports, INVENTORY_VIEW);
-    _ports.keyboard.Flush();
+    SetUpTradeScreen(_universe, _ports, INVENTORY_VIEW);
 
     /*
      * 6502: JSR TT111 -- the system nearest the crosshairs, whose seeds the title line then prints.

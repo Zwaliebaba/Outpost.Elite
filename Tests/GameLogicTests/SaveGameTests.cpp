@@ -220,6 +220,15 @@ namespace GameLogicTests
       for (const Commander& original : Commanders())
       {
         Cpu6502 cpu = oracle.Fresh();
+        /*
+         * The four are trapped because this test compares the SHAPE of the save -- what is printed
+         * and what is written -- and each of them is compared on its own elsewhere (M6-0-e):
+         * `GTNMEW` is `GTNME` on this build (the delay before it is the disc version's; the two
+         * labels are the same address, asserted below) and is compared key for key in
+         * `NameEntryTests`; `DETOK` is `ExtendedTokenTests`'; `BPRNT` is `NumberTests`'; `TT67` is
+         * two instructions, `LDA #12 / JMP TT27`, compared in `TokenTests`.
+         */
+        Assert::AreEqual<std::uint32_t>(oracle.Label("GTNME"), oracle.Label("GTNMEW"), L"GTNMEW is GTNME on the C64");
         cpu.AddTrap(oracle.Label("GTNMEW"));
         cpu.AddTrap(oracle.Label("DETOK"));
         cpu.AddTrap(oracle.Label("BPRNT"));

@@ -7,6 +7,7 @@
 #include "LookupTables.h"
 #include "Ports.h"
 #include "Universe.h"
+#include "MarketScreen.h"
 #include "ViewChange.h"
 #include "TextPrint.h"
 #include "SoundEffects.h"
@@ -200,8 +201,7 @@ namespace Elite
     for (;;)
     {
       // 6502: LDA #32 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-      SetUpScreen(_universe, _ports, EQUIP_SHIP_VIEW);
-      _ports.keyboard.Flush();
+      SetUpTradeScreen(_universe, _ports, EQUIP_SHIP_VIEW);
 
       // 6502: LDA #12 / JSR DOXC / LDA #207 / JSR spc / LDA #185 / JSR NLIN3.
       _universe.text.column = TITLE_COLUMN;

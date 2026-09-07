@@ -69,9 +69,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4137,
+      "ceiling": 4143,
       "slack": 0,
-      "slice": "M6-0-c: RunControlCode's case 26 carries MT26's label"
+      "slice": "M6-0-e: NLIN, TRADEMODE and DK4's store carry their labels as routines of their own"
     },
     "oracle-test-files": {
       "ceiling": 48,
