@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->397 tests, oracle present), all <!--count:checks-->fourteen repository checks pass,
+(<!--count:tests-->389 tests, oracle present), all <!--count:checks-->thirteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -347,7 +347,7 @@ each an inherited flag the port cannot see — the parameter is what makes the a
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
 **P12 — The original as a build and test dependency.** <!--count:origin-markers-->3,937 `6502:`
-references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
+references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
 `MasterFile/`; CI builds an assembler on every push. This was the port's method, not a defect in
@@ -692,8 +692,8 @@ original was here. A behaviour no test reached before M6-b is unpinned for ever 
 nothing can ask the original again. That is Risk R19, and it is why M6 is last and why M6-a begins
 with a coverage review: every routine the ledger marks *Port* must have a test that calls it before
 its answers are recorded, and the M0-c replay must cover launch, flight, combat, docking, death and
-the escape pod. The data tables' `extract_tables.py --check` becomes a digest of the generated files
-committed beside them; the tables themselves are already the port's own C++.
+the escape pod. The data tables need nothing here: their oracle comparison (`extract_tables.py
+--check` and `TableTests`) was retired on 2026-09-07, and the tables are already the port's own C++.
 
 **What M6 removes, in order**: the label names from identifiers (M6-c), the assembly from the
 comments (M6-d), the markers and the ledger with `inventory.py` and AGENTS.md R7 (M6-e), and then
@@ -1311,7 +1311,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
 | **M6-a Coverage review and the recorder** | Every *Port* row of the ledger has a test that calls it (the review is the ledger's last job); the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | The suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
-| **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed; `extract_tables.py --check` becomes a digest of the generated files. | Green on both legs with no assembler installed and the submodule uninitialised; the five mutation units at their M0-d tallies. | 2 |
+| **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the five mutation units at their M0-d tallies. | 2 |
 | **M6-c Identifiers** | Every identifier that is a 6502 label — the workspace fields, `xx*`/`k*`/`qq*` names, `INWK`-style parameters — renamed for what it holds, in the code and the tests; a ratchet counter (`origin-identifiers`) at zero. | Green; replay hashes unchanged; ratchet at zero. | 4 |
 | **M6-d Comments** | The assembly transcribed in comments rewritten as prose about the behaviour, keeping the REASON every time (Risk R20); the plan's own journal is history and is left alone. | A ratchet counter over opcode-shaped comment lines at zero; per-file review that no "why" was lost. | 8–10 |
 | **M6-e Markers and the ledger** | `// 6502:` markers removed; `Source-Inventory.md` and `inventory.py` deleted; AGENTS.md R7 and §7 amended; ADR-004 §4 amended. | `check_all.py` green with `inventory.py` gone; `origin-markers` at zero. | 1 |

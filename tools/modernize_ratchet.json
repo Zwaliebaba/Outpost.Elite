@@ -74,7 +74,7 @@
       "slice": "M3-a-2: the markers on the reference members that named a byte Universe.h already names"
     },
     "oracle-test-files": {
-      "ceiling": 50,
+      "ceiling": 48,
       "slack": 0,
       "slice": "M0-a"
     },
