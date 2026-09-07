@@ -93,17 +93,40 @@ namespace Elite
       return m_lastOutcome;
     }
 
-    /// 6502: QQ12 -- which half of the main loop the game is in.
+    /*
+     * 6502: QQ12, and the one state the original does not have (M4-d).
+     *
+     * `FRCE` is `LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100` -- a two-way dispatch on a byte the
+     * game keeps -- so two of these three values are the game's own. `Paused` is the third and it
+     * is the PORT's: `FREEZE` is a loop that reads the keyboard and does not return, and a windowed
+     * program cannot stop pumping messages, so the freeze is a state the outer loop is in rather
+     * than a loop inside it (ADR-005 §3 makes the same trade for the frame rate).
+     *
+     * IT IS ONE ANSWER BECAUSE THE THREE ARE ORDERED. A frozen game is frozen in BOTH halves, so
+     * the pause test has to come above the `QQ12` test; the executable did that with two calls and
+     * a comment explaining the order, which is a rule a caller could get wrong. One value cannot be.
+     */
+    enum class Mode : std::uint8_t
+    {
+      Flight, ///< 6502: QQ12 = 0 -- `FRCE`'s `JMP TT100`
+      Docked, ///< 6502: QQ12 non-zero -- `FRCE`'s `JMP MLOOP`
+      Paused, ///< 6502: DK4's `CPX #&40` freeze, which is a state here and a loop there
+    };
+
+    [[nodiscard]] Mode ModeNow() const noexcept
+    {
+      if (m_paused)
+      {
+        return Mode::Paused;
+      }
+      return (m_universe.dockedFlag != 0u) ? Mode::Docked : Mode::Flight;
+    }
+
+    /// 6502: QQ12 -- which half of the main loop the game is in, for a caller that wants the byte
+    /// rather than the state. `ModeNow` is what the loop should ask.
     [[nodiscard]] bool Docked() const noexcept
     {
       return m_universe.dockedFlag != 0u;
-    }
-
-    /// 6502: DK4's `CPX #&40` -- see `m_paused`. The executable asks because a frozen game is
-    /// frozen in both halves and the test has to be above them.
-    [[nodiscard]] bool Paused() const noexcept
-    {
-      return m_paused;
     }
 
     /*
