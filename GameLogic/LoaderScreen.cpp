@@ -155,12 +155,12 @@ namespace Elite
     _video.expanded = 0xFFu; // 6502: LDA #%11111111 / STA VIC+&17 / STA VIC+&1D -- all double height and width
 
     // 6502: LDA #9 / STA VIC+&29 ... LDA #9 / STA VIC+&2E -- the six Trumbles' colours.
-    _video.colour[2] = 9u;  // brown
-    _video.colour[3] = 12u; // grey
-    _video.colour[4] = 6u;  // blue
-    _video.colour[5] = 1u;  // white
-    _video.colour[6] = 5u;  // green
-    _video.colour[7] = 9u;  // brown
+    _video.colour[2] = Colour::Brown;
+    _video.colour[3] = Colour::Grey;
+    _video.colour[4] = Colour::Blue;
+    _video.colour[5] = Colour::White;
+    _video.colour[6] = Colour::Green;
+    _video.colour[7] = Colour::Brown;
 
     // 6502: LDA #0 / STA VIC+&10 -- bit 9 of every x clear, which the sixteen-bit x carries.
     // 6502: LDX #161 / LDY #101 / STX VIC+0 / STY VIC+1 -- the sights, in the centre of the view.

@@ -63,6 +63,34 @@ Deferred, with the reason in the plan: strong types for the one-byte fields that
 subtracted at many sites (`fuel`, the lasers, the equipment bytes) wait for M5, where a type earns
 its operators; the flag bytes' owning types likewise.
 
+**M5-a's strong types, and the three that were examined and NOT built** (2026-09-07). `SoundEffect`
+and `Colour` are built. The other three the plan named are refused, each for a reason the build
+found rather than for want of time, and this is where they are recorded so the plan's row is not
+read as unfinished work:
+
+- **`Options`, the thirteen pause-screen toggles as one struct.** §4.4 deliberately splits the
+  thirteen bytes across six owners, because each is state some part of the game already owns.
+  Gathering them into one struct so `DKS3` can walk an array of member pointers would put them back
+  where §4.4 took them from, and the array of member pointers needs exactly that one struct. The
+  ordering `DKS3` depends on is pinned instead by the byte-checked `TGINT` table and the 3,328-case
+  sweep that closed slice 4e — a stronger statement than a struct's field order, because it is the
+  original's table rather than a C++ declaration order that anybody could reorder.
+- **`View`.** `QQ11` is BOTH an index and an arithmetic value: the space views are 0..3 and the
+  docked screens are bit values (2, 4, 8, 32) that the game tests with `AND` and combines. A scoped
+  enum makes the indexing a cast at every site and forbids the combination outright, so it would
+  cost more casts than it removes and misdescribe the byte besides.
+- **`Message`.** The same shape: token numbers are indexed into tables and added to, and `MESS`
+  reaches them by arithmetic on a base.
+
+**AND `Colour` DID NOT SURVIVE THE PLAN'S OWN DESCRIPTION EITHER**, which is why it is worth
+recording next to the three. The row asked for "scoped enums with the original values", and the
+C64 build's colour constants are not colours: `RED`, `YELLOW`, `GREEN` and `WHITE` are four
+multicolour PIXELS packed in a byte (with `BLUE`, `CYAN` and `MAG` all aliased to `YELLOW`), and
+`RED2`, `GREEN2`, `YELLOW2`, `BLACK2`, `MAG2` and `BULBCOL` are screen RAM palette bytes holding TWO
+colour indices each, two of them named for the wrong nibble. The thing that is one colour is the
+VIC-II index, which the original never names at all. `Elite::Colour` is that index, and the two
+constant families get their own slices rather than being forced into it (§8).
+
 ### §3 Calling conventions: value in, value out
 
 **Opened by M2-a, 2026-09-06.** Every kernel routine's inputs are parameters and its outputs a

@@ -5,7 +5,7 @@
 namespace Elite
 {
 
-  void ApplySightColour(VideoState& _video, std::uint8_t _colour) noexcept
+  void ApplySightColour(VideoState& _video, Colour _colour) noexcept
   {
     _video.colour[0] = _colour; // 6502: STA VIC+&27
   }

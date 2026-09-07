@@ -342,7 +342,9 @@ namespace Elite
       _canvas.Write(SIGHT_SPRITE_CELL_2, pointer);
 
       // 6502: LDA sightcol-SPOFF%,Y / STA VIC+&27.
-        ApplySightColour(_video, LASER_SIGHT_COLOUR_TABLE[static_cast<std::size_t>(pointer - SPRITE_POINTER_BASE)]);
+        // `sightcol` is an extracted table of bytes and the register takes four bits, so the
+        // conversion is the VIC-II's latch and belongs here (slice 5a).
+        ApplySightColour(_video, ColourOf(LASER_SIGHT_COLOUR_TABLE[static_cast<std::size_t>(pointer - SPRITE_POINTER_BASE)]));
     }
 
     // 6502: LDA #1 / .SIG3 STA T -- one if a laser was found, and the zero `LDA LASER,Y` left if

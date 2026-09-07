@@ -451,6 +451,48 @@ namespace GameLogicTests
       (void)Elite::TickRasterInterrupt(screen, 0x7Fu);
       Assert::AreEqual<int>(0, screen.backgroundFlash, L"a bomb byte without bit 7 is not a bomb");
     }
+
+    /*
+     * THE BYTE THE BOMB PUTS ON THE BUS IS NOT A COLOUR INDEX, and this is the test that says so.
+     *
+     * `welcome` is a counter and `COMIRQ1` stores it whole into VIC+&21, so eight frames of bomb
+     * carry it past 15 and it keeps going to 255 and wraps. The VIC-II keeps four bits of it; a
+     * port that resolves its canvas into indices for a sixteen-entry palette must do the same, and
+     * this one did not until slice 5a. `TheRasterInterruptMatchesCOMIRQ1` already proves the STORE
+     * is right at &9C and &FF -- the defect was one step further on, where nothing looked.
+     */
+    TEST_METHOD(TheBombFlashCountsPastEveryColourTheChipHas)
+    {
+      Elite::ScreenState screen{};
+      screen.backgroundFlash = 0u;
+
+      Elite::RasterRegisters space{};
+      for (int pass = 0; pass < 40; ++pass)
+      {
+        const Elite::RasterRegisters registers = Elite::TickRasterInterrupt(screen, Elite::BOMB_RUNNING);
+        if (registers.spaceView)
+        {
+          space = registers;
+        }
+      }
+
+      Assert::AreEqual<int>(40, screen.backgroundFlash, L"forty passes, forty increments");
+      Assert::IsTrue(space.background > 15u, L"and the byte VIC+&21 is given is past every colour there is");
+
+      // The canvas is the chip: what it holds is four bits of what it was given, whatever it was
+      // given, so no resolved pixel can index past the palette.
+      Elite::Canvas canvas;
+      canvas.SetSpaceViewBackground(space.background);
+      Assert::AreEqual<int>(space.background & 0x0F, Elite::ColourIndex(canvas.SpaceViewBackground()), L"the register latched it");
+
+      canvas.SetSpaceViewMulticolour(true);
+      std::array<std::uint8_t, Elite::Canvas::WIDTH * Elite::Canvas::HEIGHT> image{};
+      canvas.Resolve(image);
+      for (std::size_t pixel = 0; pixel < image.size(); ++pixel)
+      {
+        Assert::IsTrue(image[pixel] < 16u, L"every resolved index is a colour the palette has");
+      }
+    }
   };
 
 } // namespace GameLogicTests

@@ -166,7 +166,7 @@ namespace GameLogicTests
     {
       Elite::VideoState video;
       Elite::ApplyExplosionSprite(video, 300u, 120u);
-      Elite::ApplySightColour(video, 0x0Du);
+      Elite::ApplySightColour(video, Elite::Colour::LightGreen);
       Elite::ApplySpriteExpansion(video, 0xFFu);
 
       Elite::ApplyHideAllSprites(video);
@@ -174,7 +174,7 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint8_t>(0u, video.enabled, L"every sprite is off");
       Assert::AreEqual<std::uint16_t>(300u, video.x[1], L"and the burst is still where it was");
       Assert::AreEqual<std::uint8_t>(120u, video.y[1], L"including its y");
-      Assert::AreEqual<std::uint8_t>(0x0Du, video.colour[0], L"and the sights keep their colour");
+      Assert::AreEqual<std::uint8_t>(13u, Elite::ColourIndex(video.colour[0]), L"and the sights keep their colour");
       Assert::AreEqual<std::uint8_t>(0xFFu, video.expanded, L"and the expand byte is untouched");
     }
 
@@ -226,12 +226,12 @@ namespace GameLogicTests
       Assert::AreEqual<std::uint16_t>(144u, video.x[4], L"VIC+8 -- Trumble 2");
       Assert::AreEqual<std::uint16_t>(56u, video.x[7], L"VIC+14 -- Trumble 5");
       Assert::AreEqual<std::uint8_t>(12u, video.y[7], L"VIC+15 -- the top row for every one");
-      Assert::AreEqual<std::uint8_t>(12u, video.colour[3], L"VIC+&2A -- Trumble 1 is grey");
-      Assert::AreEqual<std::uint8_t>(0u, video.colour[0], L"and the sights' colour is SIGHT's to write");
+      Assert::AreEqual<std::uint8_t>(12u, Elite::ColourIndex(video.colour[3]), L"VIC+&2A -- Trumble 1 is grey");
+      Assert::AreEqual<std::uint8_t>(0u, Elite::ColourIndex(video.colour[0]), L"and the sights' colour is SIGHT's to write");
 
       // 6502: SIGHT, for the pulse laser -- the pointer is already the loader's in PointedCanvas.
       const Elite::Canvas canvas = PointedCanvas();
-      Elite::ApplySightColour(video, 0x07u);
+      Elite::ApplySightColour(video, Elite::Colour::Yellow);
       Elite::ApplySpritesEnabled(video, 0x01u);
 
       Image plain{};
@@ -293,7 +293,7 @@ namespace GameLogicTests
 
       Elite::VideoState video;
       Elite::ApplySpritesEnabled(video, 0x01u);
-      Elite::ApplySightColour(video, 0x07u);
+      Elite::ApplySightColour(video, Elite::Colour::Yellow);
       video.x[0] = Elite::SPRITE_ORIGIN_X;
       video.y[0] = Elite::SPRITE_ORIGIN_Y;
 
@@ -329,7 +329,7 @@ namespace GameLogicTests
 
       Elite::VideoState plain;
       Elite::ApplySpritesEnabled(plain, 0x01u);
-      Elite::ApplySightColour(plain, 0x07u);
+      Elite::ApplySightColour(plain, Elite::Colour::Yellow);
       plain.x[0] = Elite::SPRITE_ORIGIN_X;
       plain.y[0] = Elite::SPRITE_ORIGIN_Y;
 
@@ -396,7 +396,7 @@ namespace GameLogicTests
 
       Elite::VideoState video;
       Elite::ApplySpritesEnabled(video, 0x20u); // bit 5
-      video.colour[5] = 0x09u;
+      video.colour[5] = Elite::Colour::Brown;
       video.x[5] = Elite::SPRITE_ORIGIN_X + 40u;
       video.y[5] = Elite::SPRITE_ORIGIN_Y + 40u;
 
@@ -415,7 +415,8 @@ namespace GameLogicTests
       Assert::IsTrue(!painted.empty(), L"the Trumble paints something");
       for (const std::uint8_t index : painted)
       {
-        const bool known = (index == 0x09u) || (index == Elite::SPRITE_MULTICOLOUR_1) || (index == Elite::SPRITE_MULTICOLOUR_2);
+        const bool known = (index == 0x09u) || (index == Elite::ColourIndex(Elite::SPRITE_MULTICOLOUR_1)) ||
+                           (index == Elite::ColourIndex(Elite::SPRITE_MULTICOLOUR_2));
         Assert::IsTrue(known, (L"unexpected colour index " + std::to_wstring(index)).c_str());
       }
       Assert::IsTrue(painted.count(0x09u) == 1u, L"%10 is the sprite's own colour");
@@ -433,8 +434,8 @@ namespace GameLogicTests
 
       Elite::VideoState video;
       Elite::ApplySpritesEnabled(video, 0x05u); // sprites 0 and 2
-      video.colour[0] = 0x01u;
-      video.colour[2] = 0x0Fu;
+      video.colour[0] = Elite::Colour::White;
+      video.colour[2] = Elite::Colour::LightGrey;
       video.x[0] = video.x[2] = Elite::SPRITE_ORIGIN_X;
       video.y[0] = video.y[2] = Elite::SPRITE_ORIGIN_Y;
 
@@ -467,7 +468,7 @@ namespace GameLogicTests
 
       Elite::VideoState video;
       Elite::ApplySpritesEnabled(video, 0x01u);
-      Elite::ApplySightColour(video, 0x07u);
+      Elite::ApplySightColour(video, Elite::Colour::Yellow);
       video.x[0] = Elite::SPRITE_ORIGIN_X;
       video.y[0] = Elite::SPRITE_ORIGIN_Y;
 
@@ -481,7 +482,7 @@ namespace GameLogicTests
 
       Elite::VideoState video;
       Elite::ApplySpritesEnabled(video, 0x01u);
-      Elite::ApplySightColour(video, 0x07u);
+      Elite::ApplySightColour(video, Elite::Colour::Yellow);
 
       // Hard against the top-left, so most of it is above and left of the screen.
       video.x[0] = 0u;

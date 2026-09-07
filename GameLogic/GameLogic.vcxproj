@@ -150,6 +150,7 @@
     <ClInclude Include="Game.h" />
     <ClInclude Include="LookupTables.h" />
     <ClInclude Include="Canvas.h" />
+    <ClInclude Include="Colours.h" />
     <ClInclude Include="LoaderScreen.h" />
     <ClInclude Include="TextPrint.h" />
     <ClInclude Include="Galaxy.h" />
