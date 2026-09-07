@@ -121,9 +121,16 @@ def strip_comments_and_strings(_text: str) -> str:
 
 
 # Identifiers that <windows.h> defines as macros. The portable runner and CI's Ubuntu leg compile
-# GameLogic without it and never notice; the Windows leg fails to parse the line. `near` cost a red
-# CI run in slice 3d-d-iii-b -- `const bool near = ...` becomes `const bool = ...` after the
-# preprocessor, and the error names neither the macro nor the header.
+# without it and never notice; the Windows leg fails to parse the line. `near` cost a red CI run in
+# slice 3d-d-iii-b -- `const bool near = ...` becomes `const bool = ...` after the preprocessor, and
+# the error names neither the macro nor the header.
+#
+# AND IT IS EVERY C++ FILE THE WINDOWS JOB COMPILES, not just this library, which is a correction
+# RS-3 made after the trap sprang a SECOND time. The rest of this scanner is about GameLogic being
+# deterministic and platform-free, so it reads `GameLogic/` alone; this rule is about the TOOLCHAIN,
+# and `Tests/GameLogicTests/PictureLineTests.cpp` declaring `bool near` broke the Windows build with
+# every one of the eighteen checks green -- because the one check that catches it was pointed at a
+# directory the file is not in (Resolution.md section 13).
 #
 # Declarations only. These words appear in prose constantly ("a ship far away", "the near case"),
 # so the pattern requires a type in front of the name, which is what a declaration looks like and
@@ -142,8 +149,21 @@ DECLARATION_RE = re.compile(
 )
 
 
+def scan_windows_macros(_name: str, _text: str) -> list[str]:
+    """The toolchain rule, which applies to every C++ file the Windows job compiles."""
+    code = strip_comments_and_strings(_text)
+    findings: list[str] = []
+
+    for match in DECLARATION_RE.finditer(code):
+        name = match.group(1)
+        line = code.count("\n", 0, match.start()) + 1
+        findings.append(f"{_name}:{line}: declares '{name}' -- {WINDOWS_MACROS[name]}")
+
+    return findings
+
+
 def scan_text(_name: str, _text: str) -> list[str]:
-    """Findings for one file's contents. Empty means clean."""
+    """Findings for one GameLogic file's contents. Empty means clean."""
     findings: list[str] = []
 
     for header in INCLUDE_RE.findall(_text):
@@ -158,11 +178,7 @@ def scan_text(_name: str, _text: str) -> list[str]:
             line = code.count("\n", 0, match.start()) + 1
             findings.append(f"{_name}:{line}: names '{identifier}' -- {why}")
 
-    for match in DECLARATION_RE.finditer(code):
-        name = match.group(1)
-        line = code.count("\n", 0, match.start()) + 1
-        findings.append(f"{_name}:{line}: declares '{name}' -- {WINDOWS_MACROS[name]}")
-
+    findings.extend(scan_windows_macros(_name, _text))
     return findings
 
 
@@ -177,6 +193,9 @@ def self_test() -> int:
         ("file access", "#include <fstream>\n"),
         ("a windows macro as a name", "void F() { const bool near = true; (void)near; }\n"),
         ("the same with a std type", "void F() { std::uint8_t small = 0; (void)small; }\n"),
+        # RS-3's planted case: the exact declaration that broke the Windows build from `Tests/`,
+        # against the scanner that now reads that directory too.
+        ("a bare bool near in a test", "void F() { bool near = false; (void)near; }\n"),
     ]
     good_cases = [
         ("a comment mentioning float", "// float and double are banned here\nvoid F() { }\n"),
@@ -228,7 +247,19 @@ def main() -> int:
     for source in sources:
         findings.extend(scan_text(source.name, source.read_text(encoding="utf-8", errors="replace")))
 
-    print(f"scanned   {len(sources)} file(s) in {TARGET.name}/")
+    # And the toolchain rule over every other C++ file the Windows job compiles, which is the half
+    # of the `near`/`far` trap a GameLogic-shaped scanner cannot see.
+    elsewhere = 0
+    for folder in ("Outpost", "NeuronCore", "Tests"):
+        root = REPO / folder
+        if not root.is_dir():
+            continue
+        for source in sorted(list(root.rglob("*.h")) + list(root.rglob("*.cpp"))):
+            elsewhere += 1
+            findings.extend(scan_windows_macros(str(source.relative_to(REPO)),
+                                                source.read_text(encoding="utf-8", errors="replace")))
+
+    print(f"scanned   {len(sources)} file(s) in {TARGET.name}/, and {elsewhere} elsewhere for the Windows macros")
 
     if findings:
         print(f"findings  {len(findings)}\n")

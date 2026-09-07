@@ -138,7 +138,12 @@ namespace GameLogicTests
     {
       Canvas canvas;
       DrawAScene(canvas);
-      const Picture picture;
+
+      // The fallback is asked for EXPLICITLY, because the space view stopped defaulting to it at
+      // RS-3. It is still what the dashboard region gets and still what RS-6 deletes, so the
+      // mechanism is tested on a surface that names it rather than on one that happens to have it.
+      Picture picture;
+      picture.SetNative({false, false});
 
       for (const bool dashboard : {false, true})
       {
@@ -160,7 +165,8 @@ namespace GameLogicTests
       Canvas canvas;
       DrawAScene(canvas);
       canvas.SetDashboardShown(true);
-      const Picture picture;
+      Picture picture;
+      picture.SetNative({false, false});
 
       Elite::VideoState video;
       video.enabled = 0b0000'1111u;
@@ -188,7 +194,8 @@ namespace GameLogicTests
       DrawAScene(canvas);
       canvas.SetSpaceViewMulticolour(true);
       canvas.SetSpaceViewBackground(6u);
-      const Picture picture;
+      Picture picture;
+      picture.SetNative({false, false});
 
       const std::wstring wrong = TheCanvasDoubled(ResolveBoth(canvas, picture, nullptr));
       Assert::IsTrue(wrong.empty(), (L"with the bomb burning: " + wrong).c_str());
@@ -304,22 +311,23 @@ namespace GameLogicTests
       DrawAScene(canvas);
       Picture picture;
 
+      // The DASHBOARD is still upscaled (RS-4 has not landed), so a canvas byte in its rows moves
+      // the hash. `DASHBOARD_BITMAP` is character row 18, and the flag is what puts those rows in
+      // that region at all.
+      canvas.SetDashboardShown(true);
       const std::uint64_t base = picture.Hash(canvas);
       Assert::AreEqual(base, picture.Hash(canvas), L"the same surface hashed differently twice");
 
-      // While no region is native the hash follows the CANVAS, which is what makes a golden of it
-      // meaningful this slice: it is a hash of the doubling.
-      canvas.Write(0x0123u, static_cast<std::uint8_t>(canvas.Read(0x0123u) ^ 0xFFu));
-      Assert::AreNotEqual(base, picture.Hash(canvas), L"a canvas byte did not move the picture's hash");
+      canvas.Write(0x1D00u, static_cast<std::uint8_t>(canvas.Read(0x1D00u) ^ 0xFFu));
+      Assert::AreNotEqual(base, picture.Hash(canvas), L"a canvas byte in the upscaled region did not move the hash");
 
       /*
-       * With a region native the hash follows the SURFACE -- and the cell has to be painted first,
+       * In the NATIVE region the hash follows the SURFACE -- and the cell has to be painted first,
        * which is not a detail of this test but the behaviour it pins. A cell nobody has coloured is
        * `CellPalette{}`, black over black, so a lit bit and a clear one are both colour 0 and the
        * point is invisible: exactly what `COL2` does on the canvas before `RES2` writes it, where a
        * screen printed without it prints invisibly. This test failed that way when it was written.
        */
-      picture.SetNative({true, false});
       picture.SetCell(1, 1, Elite::CellPalette{Elite::Colour::White, Elite::Colour::Black});
       const std::uint64_t native = picture.Hash(canvas);
       picture.PlotPoint(11, 13);
@@ -336,9 +344,9 @@ namespace GameLogicTests
     TEST_METHOD(TheRegionsSayWhichSlicesHaveLanded)
     {
       const Picture picture;
-      Assert::IsFalse(picture.Native().spaceView, L"RS-1 to RS-3 have not landed");
+      Assert::IsTrue(picture.Native().spaceView, L"RS-3 completed the upper region and turned it over");
       Assert::IsFalse(picture.Native().dashboard, L"RS-4 has not landed");
-      Assert::IsFalse(picture.Native().Complete(), L"the canvas fallback is still what draws the picture");
+      Assert::IsFalse(picture.Native().Complete(), L"the canvas fallback is still what draws the dashboard");
 
       Picture done;
       done.SetNative({true, true});

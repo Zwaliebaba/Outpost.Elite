@@ -449,6 +449,29 @@ namespace Elite
   [[nodiscard]] bool PlotRelativePixel(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _distance) noexcept;
 
   /*
+   * What the two conversions at the top of `PIXEL2` leave -- a point in the space view's own
+   * screen coordinates, and the early exit.
+   *
+   * LIFTED OUT OF `PlotRelativePixel` FOR THE PICTURE'S SAKE (Resolution.md RS-3), the same way
+   * `Canvas::ResolveCell` was lifted for it at RS-0. The wide mark sits at twice this point plus
+   * the bit the stardust's fraction byte holds, and computing the point twice in two files is how
+   * two files come to disagree. Nothing about the faithful routine changes: it calls this and then
+   * calls `PIXEL`, which is what it did inline.
+   */
+  struct SpaceViewPoint
+  {
+    std::uint8_t x = 0;     ///< `X1` as `PIXEL` receives it, measured from the view's left edge
+    std::uint8_t y = 0;     ///< `Y1` as `PIXEL` receives it, measured down
+    bool offScreen = false; ///< the `CMP #72 / BCS PX4` exit -- more than 72 rows from the centre
+  };
+
+  /// `PIXEL2`'s `EOR #%01111111 / ADC #1 / EOR #%10000000` on x and its `LDA #73 / SBC T` on y.
+  /// The y half carries the borrow the x half did not clear, which is why negative zero and
+  /// negative one are the same row; the marker and the reasoning are on the body in `Lines.cpp`.
+  [[nodiscard]] SpaceViewPoint ToSpaceViewPoint(std::uint8_t _across, std::uint8_t _down) noexcept;
+
+
+  /*
    * 6502: what `CPIX2` leaves in SC(1 0), Y and X, and `SCAN` is the caller that reads all three.
    *
    * The scanner's stick is drawn by walking on from where the dot finished rather than by plotting
@@ -493,6 +516,21 @@ namespace Elite
     Line ends;
     bool swapped = false; ///< 6502: SWAP
   };
+
+  /*
+   * `LOIN`'s slope, as a byte of two-hundred-and-fifty-sixths: the `LL28`-shaped divide at `LI3`
+   * and `LIfudge`. The marker and the reasoning are on the body in `Lines.cpp`.
+   *
+   * IT IS A LOGARITHM-TABLE LOOKUP AND NOT A DIVISION, which is the whole reason it is declared
+   * here rather than left in `Lines.cpp`'s anonymous namespace. The 640x400 picture draws each line
+   * a second time (Resolution.md section 4.1), and a twin that used an exact slope would draw a
+   * DIFFERENT line -- measured, over 18,432 lines, at up to three canvas pixels away from the one
+   * the game draws. So the twin runs this, on the same two magnitudes, and gets the same line.
+   *
+   * Lifted at RS-3 for that reason, as `PIXEL2`'s conversion was above it. Nothing about the
+   * faithful routine changes: it calls this where it had the body.
+   */
+  [[nodiscard]] std::uint8_t LineSlope(std::uint8_t _numerator, std::uint8_t _denominator) noexcept;
 
   /// 6502: LOIN / LL30 -- a line from (X1, Y1) to (X2, Y2), plotted one BIT at a time so that it
   /// alternates between each cell's two colours. The shipped code unrolls it into thirty-two

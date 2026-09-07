@@ -91,6 +91,9 @@
     <ClInclude Include="ShipDraw2x.h">
       <Filter>Canvas</Filter>
     </ClInclude>
+    <ClInclude Include="Lines2x.h">
+      <Filter>Canvas</Filter>
+    </ClInclude>
     <ClInclude Include="LineHeap.h">
       <Filter>Canvas</Filter>
     </ClInclude>
@@ -323,6 +326,9 @@
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="ShipDraw2x.cpp">
+      <Filter>Canvas</Filter>
+    </ClCompile>
+    <ClCompile Include="Lines2x.cpp">
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="SoundEffects.cpp">

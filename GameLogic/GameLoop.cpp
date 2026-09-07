@@ -50,7 +50,8 @@ namespace Elite
       if (_universe.view != 0u)
       {
         // 6502: JSR CLYNS -- a text screen's message is in the bottom rows. A seam until M3-b-3b.
-        ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message);
+        ClearMessageRows(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message,
+                       &_universe.picture, _universe.view);
       }
       else
       {
@@ -62,7 +63,7 @@ namespace Elite
          * STA DLY` after it is not redundant -- it undoes what the call just did.
          */
         ShowMessage(_universe.canvas, _ports.printer, _universe.text, _universe.sentences, _universe.message, _universe.message.token,
-                    _universe.view);
+                    _universe.view, &_universe.picture);
         _universe.message.delay = 0u;
       }
     }

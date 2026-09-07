@@ -49,6 +49,6 @@ namespace Elite
    * (§6.66). Reproduced, not fixed (ADR-003).
    */
   void ShowMessage(Canvas& _canvas, TokenPrinter& _printer, TextState& _text, ExtendedTextState& _extended, MessageState& _message,
-                   std::uint8_t _token, std::uint8_t _view) noexcept;
+                   std::uint8_t _token, std::uint8_t _view, Picture* _picture = nullptr) noexcept;
 
 } // namespace Elite

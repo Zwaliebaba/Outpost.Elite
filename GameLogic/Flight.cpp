@@ -5,6 +5,7 @@
 #include "Scanner.h"
 
 #include "Combat.h"
+#include "Lines2x.h"
 #include "Market.h"
 #include "Music.h"
 #include "PlanetDraw.h"
@@ -213,7 +214,8 @@ namespace Elite
     _universe.view = saved;
 
     // 6502: falls into HFS1.
-    DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present);
+    DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present,
+                        &_universe.picture);
   }
 
   void DrawHyperspaceTunnel(Universe& _universe, Ports& _ports) noexcept
@@ -290,7 +292,8 @@ namespace Elite
        * `STP` is still the 8 `LAUN` stored, which is the second half of §6.94's answer: the step
        * IS written on this path, by the routine the port had left as a stub (§6.109).
        */
-      DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present);
+      DrawHyperspaceRings(_universe.canvas, _universe.heaps, _universe.geometry, _universe.math, _universe.clip, _ports.present,
+                        &_universe.picture);
     }
 
     // 6502: .NLUNCH LDX #0 / STX QQ12 / JMP LOOK1 -- and the X that clears the flag is the X the
@@ -457,15 +460,17 @@ namespace Elite
     SetUpScreen(_universe, _ports, DEATH_VIEW);
 
     // 6502: JSR BOX -- the SAME border again, and `BOX2` EORs, so drawing it twice rubs it out.
-    DrawFullBorder(_universe.canvas);
+    DrawFullBorder(_universe.canvas, &_universe.picture);
 
     // 6502: LDA #0 / STA SCBASE+&1F1F / STA SCBASE+&118 -- the two bytes `BOX` STORES instead of
     // EORing, which a second pass therefore cannot remove.
     _universe.canvas.Write(BOTTOM_RIGHT_CORNER, 0u);
     _universe.canvas.Write(BORDER_TOP_RIGHT, 0u);
+    WriteBitmapByte2x(_universe.picture, BOTTOM_RIGHT_CORNER, 0u, false);
+    WriteBitmapByte2x(_universe.picture, BORDER_TOP_RIGHT, 0u, false);
 
     // 6502: JSR nWq -- a whole new stardust field over the cleared screen.
-    SeedStardustField(_universe.canvas, _universe.dust, _universe.rng, false);
+    SeedStardustField(_universe.canvas, _universe.dust, _universe.rng, false, &_universe.picture);
 
     // 6502: LDA #12 / JSR DOYC / JSR DOXC -- the cursor, then the sign.
     _universe.text.row = GAME_OVER_ROW;

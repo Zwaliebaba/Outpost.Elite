@@ -2,6 +2,7 @@
 
 #include "Arith.h"
 #include "Canvas.h"
+#include "Picture.h"
 #include "ShipDraw.h"
 #include "Rng.h"
 #include "Scanner.h"
@@ -179,7 +180,8 @@ namespace Elite
    * written would draw whatever `X1` and `X2` happened to hold, and the port reproduces that rather
    * than adding the branch the game does not have (ADR-003).
    */
-  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row) noexcept;
+  void EraseSunRow(Canvas& _canvas, PlanetSunState& _state, SignMag16 _centre, std::uint8_t _halfWidth, std::uint8_t _row,
+                   Picture* _picture = nullptr) noexcept;
 
   /// 6502: FLFLLS -- forget the whole sun. Rows 1 to 199 are zeroed and entry 0 becomes 255.
   void ClearSunHeap(PlanetSunState& _state) noexcept;
@@ -194,7 +196,7 @@ namespace Elite
    * The 143 is the literal `2*Y-1` and not `Yx2M1`, in the same build where `CHKON` reads the
    * variable. Reproduced as written.
    */
-  void EraseSun(Canvas& _canvas, PlanetSunState& _state) noexcept;
+  void EraseSun(Canvas& _canvas, PlanetSunState& _state, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: WPLS2 -- rub the planet out, one segment at a time.
@@ -203,11 +205,11 @@ namespace Elite
    * run's START rather than another segment's end. `BLINE` writes those breaks when a segment is
    * clipped away, which is how a circle half off the screen comes back as several polylines.
    */
-  void EraseBall(Canvas& _canvas, PlanetSunState& _state) noexcept;
+  void EraseBall(Canvas& _canvas, PlanetSunState& _state, Picture* _picture = nullptr) noexcept;
 
   /// 6502: PL2 -- rub out whichever of the two this is. `TYPE` is 128 for the planet and 129 for
   /// the sun, and the routine tells them apart with an `LSR` rather than a comparison.
-  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, ShipType _type) noexcept;
+  void ErasePlanetOrSun(Canvas& _canvas, PlanetSunState& _state, ShipType _type, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: CHKON -- is a circle of radius K at (K3, K4) worth drawing?
@@ -257,7 +259,7 @@ namespace Elite
    */
   [[nodiscard]] std::uint8_t DrawBallLine(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
                                           MathWorkspace& _math, ClipState& _clip, const Projection& _centre, SignMag16 _offset,
-                                          std::uint8_t _cnt, bool _carryIn) noexcept;
+                                          std::uint8_t _cnt, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: CIRCLE2 -- walk a whole circle, sixty-four steps at most, `STP` at a time.
@@ -268,7 +270,8 @@ namespace Elite
    * a count that has already been advanced.
    */
   void DrawBall(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                ClipState& _clip, const Projection& _centre, std::uint8_t _radius, bool _carryIn) noexcept;
+                ClipState& _clip, const Projection& _centre, std::uint8_t _radius, bool _carryIn,
+                Picture* _picture = nullptr) noexcept;
 
   /*
    * What a tunnel needs from the platform, which is a display that is still there while it draws.
@@ -309,7 +312,8 @@ namespace Elite
    * carry and stops there, so the loop ends on whichever comes first.
    */
   void DrawHyperspaceRing(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                          ClipState& _clip, const Projection& _centre, std::uint8_t _index, Presenter& _present) noexcept;
+                          ClipState& _clip, const Projection& _centre, std::uint8_t _index, Presenter& _present,
+                          Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: HFS1 -- the whole effect, eight rings from the centre of the space view.
@@ -318,7 +322,7 @@ namespace Elite
    * around the crosshairs whatever the ship is doing. `XX4` counts the eight.
    */
   void DrawHyperspaceRings(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
-                           MathWorkspace& _math, ClipState& _clip, Presenter& _present) noexcept;
+                           MathWorkspace& _math, ClipState& _clip, Presenter& _present, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: CIRCLE -- is it worth drawing, how coarse should it be, and then draw it.
@@ -328,8 +332,8 @@ namespace Elite
    * 8, and the `LSR A` pair that chooses is two instructions rather than a table.
    */
   [[nodiscard]] bool DrawCircle(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry,
-                                MathWorkspace& _math, ClipState& _clip, const Projection& _centre,
-                                std::uint8_t _radius) noexcept;
+                                MathWorkspace& _math, ClipState& _clip, const Projection& _centre, std::uint8_t _radius,
+                                Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: PLS1 -- one axis of the planet's position, divided by its distance.
@@ -393,11 +397,12 @@ namespace Elite
   /// `_axes` is `K2(3 2 1 0)`, `_angle` the `CNT2` the caller chose and `_target` the `TGT` it stops
   /// at: all three parameters since M2-c-3.
   void DrawEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                   ClipState& _clip, const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle,
-                   std::uint8_t _target) noexcept;
+                   ClipState& _clip, const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle, std::uint8_t _target,
+                   Picture* _picture = nullptr) noexcept;
 
   void DrawHalfEllipse(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                       ClipState& _clip, const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle) noexcept;
+                       ClipState& _clip, const Projection& _centre, EllipseAxes _axes, std::uint8_t _angle,
+                       Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: PL9, in its three parts -- the planet's outline and then its markings.
@@ -411,7 +416,8 @@ namespace Elite
    * away from you (`INWK+20` negative, which is the nose vector pointing off).
    */
   void DrawPlanetDetail(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                        ClipState& _clip, const Ship& _ship, Projection& _centre, KBlock _radius, ShipType _type) noexcept;
+                        ClipState& _clip, const Ship& _ship, Projection& _centre, KBlock _radius, ShipType _type,
+                        Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: PLANET -- the entry the main loop calls for both the planet and the sun.
@@ -441,10 +447,11 @@ namespace Elite
    * radius, so a small sun is smooth and a large one is not.
    */
   void DrawSun(Canvas& _canvas, PlanetSunState& _state, MathWorkspace& _math, Rng& _rng, const Projection& _centre,
-               std::uint8_t _radius) noexcept;
+               std::uint8_t _radius, Picture* _picture = nullptr) noexcept;
 
   void DrawPlanetOrSun(Canvas& _canvas, PlanetSunState& _state, GeometryWorkspace& _geometry, MathWorkspace& _math,
-                       ClipState& _clip, Rng& _rng, const Ship& _ship, Projection& _centre, ShipType _type) noexcept;
+                       ClipState& _clip, Rng& _rng, const Ship& _ship, Projection& _centre, ShipType _type,
+                       Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: ZINF -- clear a ship's data block and give it an identity orientation.
@@ -464,7 +471,7 @@ namespace Elite
    * `WPSHPS` into `FLFLLS` -- which is why the ledger listing them as four rows is misleading
    * (§6.45): you cannot port the head without the tail.
    */
-  void SeedStardustField(Canvas& _canvas, Stardust& _dust, Rng& _rng, bool _carryIn) noexcept;
+  void SeedStardustField(Canvas& _canvas, Stardust& _dust, Rng& _rng, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
   /*
    * 6502: WPSHPS -- rub every ship off the screen and forget both line heaps.
@@ -488,6 +495,6 @@ namespace Elite
   void ClearAllShips(Canvas& _canvas, PlanetSunState& _state, Bubble& _bubble, Ship& _work, FlightState& _flight, std::uint8_t _view) noexcept;
 
   void SeedStardustAndClearShips(Canvas& _canvas, Stardust& _dust, Rng& _rng, PlanetSunState& _state, Bubble& _bubble, Ship& _work,
-                                 FlightState& _flight, std::uint8_t _view, bool _carryIn) noexcept;
+                                 FlightState& _flight, std::uint8_t _view, bool _carryIn, Picture* _picture = nullptr) noexcept;
 
 } // namespace Elite

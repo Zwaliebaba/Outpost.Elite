@@ -89,10 +89,18 @@ namespace Elite
      * the intermediate slices are verified by the shadow tests of Resolution.md section 8.1 rather
      * than by eye, and the picture changes region by region rather than half a picture at a time.
      * `Complete()` is what the last slice asserts before the canvas fallback is deleted.
+     *
+     * THE UPPER REGION FLIPPED AT RS-3 AND THE DEFAULT IS HOW IT DID. There is no runtime decision
+     * here and no setter in the library: which regions are native is a fact about which slices have
+     * been built, so it is stated where a reader looks for it. What RS-3 had to finish before it
+     * could be turned over was more than section 4.2 and 4.3 named -- the borders and the rules, the
+     * screen clears, the cell palettes every one of those bits is coloured through, the charts, and
+     * `CLYNS` -- because a region is native for EVERY screen that draws in it, not only for the
+     * space view it is named after (section 13).
      */
     struct NativeRegions
     {
-      bool spaceView = false; ///< rows 0..287, and every row of a docked screen -- RS-1 to RS-3
+      bool spaceView = true;  ///< rows 0..287, and every row of a docked screen -- LANDED at RS-3
       bool dashboard = false; ///< rows 288..399, while the dashboard is shown -- RS-4
 
       [[nodiscard]] constexpr bool Complete() const noexcept
