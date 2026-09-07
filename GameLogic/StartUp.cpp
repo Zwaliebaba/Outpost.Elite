@@ -99,7 +99,7 @@ namespace Elite
     (void)LoadCommander(_universe.commanderFile, _universe.commander, _universe.commanderName);
 
     // 6502: JSR msblob.
-    ResetMissileIndicators(_universe.canvas, _universe.commander.missiles);
+    ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture);
 
     // 6502: LDA #7 / LDX #ADA / LDY #48 / JSR TITLE -- an Adder, close up. Its key is discarded.
     (void)ShowTitleShip(_universe, _ports, TITLE_START_TOKEN, ShipType::Adder, TITLE_ADDER_DISTANCE);

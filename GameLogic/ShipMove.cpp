@@ -468,7 +468,8 @@ namespace Elite
      * here rather than duplicated. Everything in it is about the ship's OWN motion: its speed along
      * its own z axis, and its own roll and pitch.
      */
-    void MoveShipTail(Canvas& _canvas, Ship& _work, MathWorkspace& _math, FlightState& _flight, std::uint8_t _view) noexcept
+    void MoveShipTail(Canvas& _canvas, Ship& _work, MathWorkspace& _math, FlightState& _flight, std::uint8_t _view,
+                      Picture* _picture) noexcept
     {
       // 6502: LDA DELTA / STA R / LDA #128 / LDX #6 / JSR MVT1 -- z -= the player's speed. The 128 is
       // a sign and nothing else, which is why this is the unmasked entry point.
@@ -541,7 +542,7 @@ namespace Elite
       _work.state = With(_work.state, ShipStateBit::OnScanner);
 
       // 6502: JMP SCAN -- a tail call, so it is the last thing done.
-      DrawScannerBlip(_canvas, _work, _flight.type, _view);
+      DrawScannerBlip(_canvas, _work, _flight.type, _view, _picture);
     }
   } // namespace
 
@@ -566,7 +567,7 @@ namespace Elite
       if (IsBody(flight.type))
       {
         MovePlanetOrSun(work, _universe.math, flight.alpha, flight.beta);
-        MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view);
+        MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view, &_universe.picture);
         return true;
       }
 
@@ -587,7 +588,7 @@ namespace Elite
       }
     }
 
-    DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view); // 6502: MV30 -- JSR SCAN
+DrawScannerBlip(_universe.canvas, work, flight.type, _universe.view, &_universe.picture); // 6502: MV30 -- JSR SCAN
 
     /*
      * 6502: LDA INWK+27 / ASL A / ASL A / STA Q, then three axes of FMLTU and MVT1-2.
@@ -691,7 +692,7 @@ namespace Elite
     wide = MultiplyWide(work.y.hi, static_cast<std::uint8_t>(work.y.lo ^ 0xFFu), flight.alp1);
     work.x = AddShipCoordinateToP(work, SignMag24{wide.mid, wide.high, static_cast<std::uint8_t>(flight.alp2 ^ work.y.sgn)}, 0u);
 
-    MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view); // 6502: falls into MV45
+    MoveShipTail(_universe.canvas, work, _universe.math, flight, _universe.view, &_universe.picture); // 6502: falls into MV45
     return true;
   }
 

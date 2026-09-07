@@ -324,7 +324,7 @@ namespace Elite
         else
         {
           _universe.commander.missiles = missiles;
-          ResetMissileIndicators(_universe.canvas, _universe.commander.missiles); // 6502: JSR msblob
+          ResetMissileIndicators(_universe.canvas, _universe.commander.missiles, &_universe.picture); // 6502: JSR msblob
         }
       }
 

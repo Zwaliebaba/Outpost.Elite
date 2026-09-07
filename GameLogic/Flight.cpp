@@ -120,17 +120,18 @@ namespace Elite
     // only because it was lit, and the test is what keeps the two in step.
     if (_universe.bubble.Count(ShipType::Station) != 0u)
     {
-      ToggleStationIndicator(_universe.canvas);
+      ToggleStationIndicator(_universe.canvas, &_universe.picture);
     }
 
     // 6502: LDA ECMA / BEQ yu / JSR ECMOF.
     if (_universe.status.ecmCountdown != 0u)
     {
-      StopEcm(_universe.canvas, _universe.status, _universe.sound);
+      StopEcm(_universe.canvas, _universe.status, _universe.sound, &_universe.picture);
     }
 
     // 6502: .yu JSR WPSHPS -- rub every ship off the screen and forget both line heaps.
-    ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view);
+    ClearAllShips(_universe.canvas, _universe.heaps, _universe.bubble, _universe.work, _universe.flight, _universe.view,
+                  &_universe.picture);
 
     ClearBubbleState(_universe, _ports); // 6502: JSR ZERO
 
@@ -656,7 +657,7 @@ namespace Elite
 
     // 6502: JSR SCAN -- and it is drawn ONCE, after the loop, so the blip the animation left
     // on the scanner is erased rather than added to. `SCAN` is an EOR.
-    DrawScannerBlip(_universe.canvas, _universe.work, _universe.flight.type, _universe.view);
+    DrawScannerBlip(_universe.canvas, _universe.work, _universe.flight.type, _universe.view, &_universe.picture);
 
     // 6502: LDA #0 / LDX #16 / .ESL2 STA QQ20,X / DEX / BPL ESL2 -- SEVENTEEN bytes, because the
     // loop runs from 16 down THROUGH zero.
