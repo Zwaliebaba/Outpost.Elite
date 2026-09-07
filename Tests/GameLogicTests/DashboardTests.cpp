@@ -514,7 +514,7 @@ namespace GameLogicTests
       (void)CompareScreens(cpu, at.screen, canvas, 0x00u, L"ECBLB2");
       Assert::AreEqual(cpu.memory[at.ecma], status.ecmCountdown, L"ECMA");
       CompareSoundBuffer(cpu, oracle, sound, L"ECBLB2");
-      const std::uint8_t wanted = static_cast<std::uint8_t>(0x80u | (Elite::SOUND_ECM + 1u));
+      const std::uint8_t wanted = static_cast<std::uint8_t>(0x80u | (static_cast<std::uint8_t>(Elite::SoundEffect::Ecm) + 1u));
       Assert::IsTrue(sound.flag[0] == wanted || sound.flag[1] == wanted || sound.flag[2] == wanted,
                      L"and the hum took a voice");
     }

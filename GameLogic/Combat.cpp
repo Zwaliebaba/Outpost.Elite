@@ -70,7 +70,7 @@ namespace Elite
      * they shift X, which `quiet`'s ladder leaves between 11 and 15, so the value is under 128
      * before the last shift and the carry that comes out is zero every time. `ORA` touches no flag.
      */
-    return PlaySoundEffectPitched(_sound, SOUND_SHIP_EXPLODING, sustain, EXPLOSION_PITCH_HIT, false).a;
+    return PlaySoundEffectPitched(_sound, SoundEffect::ShipExploding, sustain, EXPLOSION_PITCH_HIT, false).a;
   }
 
   std::uint8_t RecordKill(Universe& _universe, Ports& _ports, ShipType _type) noexcept
@@ -108,7 +108,7 @@ namespace Elite
     // `quiet2`'s ladder leaves X between 11 and 15 and four `ASL A` cannot carry out of that, so
     // `NOISE2` is reached with the flag clear here as well.
     const std::uint8_t sustain = KillVolume(_universe.work.z.hi);
-    return PlaySoundEffectPitched(_universe.sound, SOUND_EXPLOSION, sustain, EXPLOSION_PITCH_KILL, false).a;
+    return PlaySoundEffectPitched(_universe.sound, SoundEffect::Explosion, sustain, EXPLOSION_PITCH_KILL, false).a;
   }
 
   bool TakeDamage(Universe& _universe, Ports& _ports, const Ship& _target, std::uint8_t _damage,
@@ -162,7 +162,7 @@ namespace Elite
      * this line is only reached when the energy addition carried. A silent build passes it
      * straight through (§6.99), so with sound off the roll below is the one a carry of 1 gives.
      */
-    const bool heard = PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true).carry;
+    const bool heard = PlaySoundEffect(_universe.sound, SoundEffect::Explosion, true).carry;
     DamageEquipment(_universe, _ports, heard);
     return true;
   }

@@ -116,8 +116,8 @@ namespace Elite
   /// 6502: CPX #&0D, CPX #&07, CPX #&02 and CPX #&33 -- resume, quit, and the two sound keys.
   inline constexpr std::uint8_t RESUME_KEY = 0x0D;
   inline constexpr std::uint8_t QUIT_KEY = 0x07;
-  inline constexpr std::uint8_t SOUND_OFF_KEY = 0x02;
-  inline constexpr std::uint8_t SOUND_ON_KEY = 0x33;
+  inline constexpr std::uint8_t KEY_SOUND_OFF = 0x02;
+  inline constexpr std::uint8_t KEY_SOUND_ON = 0x33;
 
   /// What one pass round `FREEZE` did, which is a toggle or two and then a decision.
   struct PausePass

@@ -362,7 +362,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,105 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,107 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1774,6 +1774,36 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-4: `SoundEffect`, and the sixteen sounds were declared in eight different
+headers.**
+
+M5-a asks for `SoundEffect` as a strong type, and building it found why it was worth asking. The
+sixteen ids were `inline constexpr std::uint8_t` declarations spread over EIGHT headers — three in
+`Combat.h`, five in `FlightLoop.h`, two in `Tactics.h`, one each in `Dashboard.h`, `Flight.h`,
+`ViewChange.h` and `SoundEffects.h` — each sitting beside whichever routine first played it, while
+`SOUND_EFFECT_COUNT = 16` sat on its own. **They are one table**: `sfxatk`, `sfxcnt`, `sfxvch`,
+`sfxpr`, `sfxsus` and `sfxfrq` are six arrays indexed 0 to 15 by the same number. §6.121 said this
+for the ship types — a number is a property of the table, not of the routine that first happened to
+want one — and it is the same finding a second time.
+
+**SLOT 8 IS NAMED FOR THE FIRST TIME.** The port had fifteen constants for sixteen entries and
+nothing said which was missing. The original calls it `sfxeng` and its own comment says "This sound
+is not used".
+
+**TWO OF THE `SOUND_*` NAMES WERE NOT SOUNDS.** `SOUND_OFF_KEY = 0x02` and `SOUND_ON_KEY = 0x33`
+are C64 key codes that the pause screen tests for; they are `KEY_SOUND_OFF` and `KEY_SOUND_ON` now.
+A prefix that means two different things is the kind of thing a strong type makes impossible to keep.
+
+**AND THE `+ 128` IS AN ENUMERATOR RATHER THAN A CAST.** `HYPNOISE` plays `sfxhyp1` pitched, then
+`sfxwhosh`, then `LDY #sfxhyp1+128` — the one place in the game that sets bit 7. It is not a
+seventeenth sound: it is sound 7 with an index that falls PAST the end of `SFXPR`, so the priority
+byte reads as zero and the routine looks for a voice already playing it rather than taking a new
+one. It was `static_cast<std::uint8_t>(SOUND_HYPERSPACE + 128u)` at the call site and is
+`SoundEffect::HyperspaceAgain = 135` in the enum, because the trick is the point.
+
+`origin-markers` 4,105 → 4,107 for the two slots the port had never named. 402 of 402, the replay
+digest unchanged, all 14 repository checks.
 
 **2026-09-07 — M5-a-3: `out-params` at ZERO, which is M5-a's acceptance, and the last four split two
 ways.**

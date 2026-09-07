@@ -72,7 +72,8 @@ namespace GameLogicTests
 
         Assert::AreEqual(cpu.trapHits[0].a, ours, (where + L": sustain").c_str());
         Assert::AreEqual<std::uint8_t>(Elite::EXPLOSION_PITCH_HIT, cpu.trapHits[0].x, (where + L": frequency").c_str());
-        Assert::AreEqual<std::uint8_t>(Elite::SOUND_SHIP_EXPLODING, cpu.trapHits[0].y, (where + L": effect").c_str());
+        Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(Elite::SoundEffect::ShipExploding), cpu.trapHits[0].y,
+          (where + L": effect").c_str());
 
         levels.insert(ours);
         ++compared;
@@ -127,7 +128,7 @@ namespace GameLogicTests
           sounded = true;
           Assert::AreEqual(hit.a, ours, (where + L": sustain").c_str());
           Assert::AreEqual<std::uint8_t>(Elite::EXPLOSION_PITCH_KILL, hit.x, (where + L": frequency").c_str());
-          Assert::AreEqual<std::uint8_t>(Elite::SOUND_EXPLOSION, hit.y, (where + L": effect").c_str());
+          Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(Elite::SoundEffect::Explosion), hit.y, (where + L": effect").c_str());
         }
         Assert::IsTrue(sounded, (where + L": NOISE2 was reached").c_str());
 

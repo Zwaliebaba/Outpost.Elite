@@ -95,7 +95,6 @@ namespace Elite
   // 6502: abraxas, caravanserai, DFLAG, moonflower, welcome and HFX -- `ScreenState` moved to
   // `Universe.h` with M3-a, because it is state and that is where the state lives now.
 
-
   /// 6502: the two values `wantdials` writes -- screen RAM at &6400 and multicolour with the
   /// extra bit the dashboard's bottom half needs.
   inline constexpr std::uint8_t COLOUR_BANK_DASHBOARD = 0x91;
@@ -214,9 +213,6 @@ namespace Elite
    * the other. Both are `PlaySoundEffect` over `Universe::sound` now. `WARP` tail-calls and drops
    * the carry both ways, which is why its caller passed false and discarded the answer (§6.99).
    */
-
-  /// 6502: sfxboop -- the effect number `WARP` asks for when it refuses.
-  inline constexpr std::uint8_t SOUND_BOOP = 6;
 
   // `FlightScreen` was the argument list a screen change took -- twenty-seven references, each one
   // 6502 label. Every byte of it is `Universe`'s since M3-a and the four seams are `Ports`'.

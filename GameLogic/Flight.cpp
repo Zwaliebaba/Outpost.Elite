@@ -180,7 +180,7 @@ namespace Elite
   {
     // 6502: .LAUN LDY #sfxwhosh / JSR NOISE -- and the carry it returns is dropped, because the
     // next instruction is a load. §6.99's third answer costs nothing here.
-    (void)PlaySoundEffect(_universe.sound, SOUND_MISSILE, false);
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false);
 
     // 6502: LDA #8 -- and `HFS2`'s first instruction, `STA STP`, is what receives it. This is the
     // only writer of the step on the launch path, and its absence is what §6.95 was working around.
@@ -235,13 +235,13 @@ namespace Elite
      * `NOISE` reads it on one path only, `LDA DNOIZ / BNE SOUR1`, where it becomes the RETURN
      * value; nothing it writes depends on it, and `HYPNOISE` discards the answer.
      */
-    (void)PlaySoundEffectPitched(_universe.sound, SOUND_HYPERSPACE, HYPERSPACE_SUSTAIN, HYPERSPACE_FREQUENCY, false);
-    (void)PlaySoundEffect(_universe.sound, SOUND_MISSILE, false);
+    (void)PlaySoundEffectPitched(_universe.sound, SoundEffect::Hyperspace, HYPERSPACE_SUSTAIN, HYPERSPACE_FREQUENCY, false);
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Missile, false);
 
     // 6502: LDY #1 / JSR DELAY -- one vertical sync, which is what the pacing object holds for.
     _ports.present.Present();
 
-    (void)PlaySoundEffect(_universe.sound, static_cast<std::uint8_t>(SOUND_HYPERSPACE + 128u), false);
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::HyperspaceAgain, false);
 
     // 6502: LDA #4 / JSR HFS2 / RTS.
     DrawTunnel(_universe, _ports, HYPERSPACE_TUNNEL_STEP);
@@ -451,7 +451,7 @@ namespace Elite
   {
 
     // 6502: JSR EXNO3 -- `LDY #sfxexpl / BNE NOISE`, and the carry is whatever killed us.
-    (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, false);
+    (void)PlaySoundEffect(_universe.sound, SoundEffect::Explosion, false);
 
     ResetShipAndBubble(_universe, _ports); // 6502: JSR RES2
 

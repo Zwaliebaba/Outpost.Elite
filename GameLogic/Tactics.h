@@ -158,10 +158,6 @@ namespace Elite
   inline constexpr std::uint8_t DOCKING_RAT2 = 6;
   inline constexpr std::uint8_t DOCKING_CNT2 = 29;
 
-  /// 6502: sfxelas and sfxelas2 -- the two halves of being hit by a laser, played back to back.
-  inline constexpr std::uint8_t SOUND_HIT_BY_LASER = 1;
-  inline constexpr std::uint8_t SOUND_HIT_BY_LASER_2 = 15;
-
   /// 6502: LDA #80 / JSR OOPS and LDA #250 / JMP OOPS -- a collision and a missile going off.
   inline constexpr std::uint8_t COLLISION_DAMAGE = 80;
   inline constexpr std::uint8_t MISSILE_DAMAGE = 250;

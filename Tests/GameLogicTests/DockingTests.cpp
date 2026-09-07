@@ -360,7 +360,8 @@ namespace GameLogicTests
        * holds the effect number PLUS ONE with bit 7 set for "new, not yet started". So the flag on
        * the voice `sfxwhosh` takes is what says the noise was made, and which voice took it.
        */
-      Assert::AreEqual<std::uint8_t>(static_cast<std::uint8_t>(0x80u | (Elite::SOUND_MISSILE + 1u)), universe.sound.flag[2],
+      constexpr std::uint8_t LAUNCH_FLAG = static_cast<std::uint8_t>(0x80u | (static_cast<std::uint8_t>(Elite::SoundEffect::Missile) + 1u));
+      Assert::AreEqual<std::uint8_t>(LAUNCH_FLAG, universe.sound.flag[2],
                                      L"LAUN made the sfxwhosh noise");
 
       std::uint8_t frames = 0;

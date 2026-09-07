@@ -14,7 +14,6 @@ namespace Elite
 
   struct Universe; // Universe.h -- forward, because Universe.h includes this one
 
-
   /*
    * The dashboard (slice 3d-b).
    *
@@ -290,9 +289,6 @@ namespace Elite
    * and `LASLI`'s opening `DORND` rolls that flag into its own answer (§6.86, §6.99).
    * `PlaySoundEffect` answers the same `bool` for the same reason.
    */
-
-  /// 6502: sfxecm -- the effect number `ECBLB2` asks for.
-  inline constexpr std::uint8_t SOUND_ECM = 9;
 
   /*
    * 6502: ECBLB2 -- start the E.C.M.: thirty-two passes on the countdown, the noise, and the bulb.

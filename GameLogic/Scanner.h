@@ -9,7 +9,6 @@
 namespace Elite
 {
 
-
   /*
    * The scanner and the compass (slice 3d-a).
    *

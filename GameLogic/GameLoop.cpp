@@ -256,7 +256,7 @@ namespace Elite
     }
 
     // 6502: LDY #sfxtrib / JSR NOISE2, and then `.NOSQUEEK JSR TT17`.
-    static_cast<void>(PlaySoundEffectPitched(_universe.sound, SOUND_TRUMBLES, sustain, frequency, burning));
+    static_cast<void>(PlaySoundEffectPitched(_universe.sound, SoundEffect::Trumbles, sustain, frequency, burning));
     return requestedFrames;
   }
 
