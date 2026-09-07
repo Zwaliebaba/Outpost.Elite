@@ -125,7 +125,7 @@ namespace GameLogicTests
               TextState state;
               state.column = static_cast<std::uint8_t>(column);
               state.row = static_cast<std::uint8_t>(row);
-              state.cellColour = colour;
+              state.palette = Elite::CellPalette::Of(colour);
               TextPrinter printer(canvas, state);
               const std::uint8_t returned = printer.Print(static_cast<std::uint8_t>(character));
 
@@ -201,7 +201,7 @@ namespace GameLogicTests
             TextState state;
             state.column = static_cast<std::uint8_t>(column);
             state.row = static_cast<std::uint8_t>(row);
-            state.cellColour = 0x40;
+            state.palette = Elite::TEXT_COLOUR_PURPLE;
             TextPrinter printer(canvas, state);
             const std::uint8_t returned = printer.Print(character);
 
@@ -347,7 +347,7 @@ namespace GameLogicTests
         const std::uint16_t base = static_cast<std::uint16_t>(Canvas::CellRowOffset(row) + 1);
         for (int cell = 0; cell < 32; ++cell)
         {
-          Assert::AreEqual<std::uint32_t>(Elite::TEXT_COLOUR_WHITE, canvas.Read(static_cast<std::uint16_t>(base + cell)),
+          Assert::AreEqual<std::uint32_t>(Elite::TEXT_COLOUR_WHITE.Byte(), canvas.Read(static_cast<std::uint16_t>(base + cell)),
                                           (L"cell " + std::to_wstring(cell) + L" of row " + std::to_wstring(row)).c_str());
         }
       }
@@ -359,7 +359,7 @@ namespace GameLogicTests
       TextState state;
       state.column = 1;
       state.row = 1;
-      state.cellColour = Elite::TEXT_COLOUR_WHITE;
+      state.palette = Elite::TEXT_COLOUR_WHITE;
       TextPrinter printer(canvas, state);
       printer.Print('A');
 

@@ -70,7 +70,7 @@ namespace GameLogicTests
     }
 
     /// 6502: MAG2 -- purple for %01 on a black %10, which is what the text view sets.
-    constexpr std::uint8_t TEXT_CELL_COLOUR = 0x40;
+    constexpr Elite::CellPalette TEXT_CELL_COLOUR = Elite::TEXT_COLOUR_PURPLE;
 
     /*
      * Colour RAM, which supplies %11, is a STAND-IN and these goldens say so rather than implying
@@ -143,7 +143,7 @@ namespace GameLogicTests
       // ---- the shipped routines ----
       Cpu6502 cpu = oracle.Fresh();
       cpu.memory[oracle.Label("QQ17")] = 0;
-      cpu.memory[oracle.Label("COL2")] = TEXT_CELL_COLOUR;
+      cpu.memory[oracle.Label("COL2")] = TEXT_CELL_COLOUR.Byte();
 
       Canvas actual;
       FillPalettePlane(cpu.memory, base, actual);
@@ -186,7 +186,7 @@ namespace GameLogicTests
       TextState state;
       state.column = 4;
       state.row = 5;
-      state.cellColour = TEXT_CELL_COLOUR;
+      state.palette = TEXT_CELL_COLOUR;
       TextPrinter printer(actual, state);
       for (const char* character = text; *character != 0; ++character)
       {

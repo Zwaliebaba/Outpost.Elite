@@ -393,7 +393,7 @@ namespace GameLogicTests
 
     _universe.text.column = 0x1Fu;
     _universe.text.row = 0x0Bu;
-    _universe.text.cellColour = Elite::TEXT_COLOUR_WHITE;
+    _universe.text.palette = Elite::TEXT_COLOUR_WHITE;
     _universe.printer.SetCaseFlags(0x40u);
     _universe.characters.state.lowerCaseBits = 0u;
     _universe.characters.state.sentenceStart = 0u;

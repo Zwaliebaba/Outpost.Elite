@@ -405,7 +405,7 @@ namespace GameLogicTests
           const Elite::Testing::RunResult run = cpu.CallSubroutine(msbar, 200);
           Assert::IsTrue(run.completed, L"MSBAR returned");
 
-          Elite::SetMissileIndicator(canvas, static_cast<std::uint8_t>(missile), static_cast<std::uint8_t>(colour));
+          Elite::SetMissileIndicator(canvas, static_cast<std::uint8_t>(missile), Elite::CellPalette::Of(static_cast<std::uint8_t>(colour)));
 
           const std::wstring where = Widen("MSBAR(" + std::to_string(missile) + ", " + std::to_string(colour) + ")");
           (void)CompareScreens(cpu, at.screen, canvas, 0x11u, where);
@@ -547,9 +547,9 @@ namespace GameLogicTests
       };
 
       const std::vector<Case> CASES = {
-        {"the bulb colour everywhere, ours, a full countdown", Elite::BULB_COLOUR, 0x20u, 0xFFu},
-        {"the bulb colour everywhere, ours, one pass left", Elite::BULB_COLOUR, 0x01u, 0xFFu},
-        {"the bulb colour everywhere, somebody else's E.C.M.", Elite::BULB_COLOUR, 0x11u, 0x00u},
+        {"the bulb colour everywhere, ours, a full countdown", Elite::BULB_COLOUR.Byte(), 0x20u, 0xFFu},
+        {"the bulb colour everywhere, ours, one pass left", Elite::BULB_COLOUR.Byte(), 0x01u, 0xFFu},
+        {"the bulb colour everywhere, somebody else's E.C.M.", Elite::BULB_COLOUR.Byte(), 0x11u, 0x00u},
         {"a blank screen and nothing running", 0x00u, 0x00u, 0x00u},
         {"a blank screen but the flags set, so the bulb LIGHTS", 0x00u, 0x20u, 0xFFu},
         {"a screen full of something else", 0x5Au, 0x07u, 0x03u},
@@ -805,7 +805,7 @@ namespace GameLogicTests
       // 6502: the screen -- the universe's since M5-a-2, because that is what the routine draws into.
       Elite::Universe lock;
 
-      const std::uint8_t COLOURS[] = {Elite::MISSILE_NONE, Elite::MISSILE_LOCKED, Elite::MISSILE_ARMED, Elite::MISSILE_READY};
+      const Elite::CellPalette COLOURS[] = {Elite::MISSILE_NONE, Elite::MISSILE_LOCKED, Elite::MISSILE_ARMED, Elite::MISSILE_READY};
 
       std::uint32_t compared = 0;
 
@@ -813,7 +813,7 @@ namespace GameLogicTests
       {
         for (std::uint32_t missiles = 1; missiles <= 4; ++missiles)
         {
-          for (const std::uint8_t colour : COLOURS)
+          for (const Elite::CellPalette colour : COLOURS)
           {
             for (const std::uint8_t target : {std::uint8_t{0}, std::uint8_t{3}, std::uint8_t{0xFF}})
             {
@@ -823,7 +823,7 @@ namespace GameLogicTests
               cpu.memory[mstg] = 0x2Au;
               cpu.memory[msar] = 0x2Au;
               cpu.x = target;
-              cpu.y = colour;
+              cpu.y = colour.Byte();
 
               const Elite::Testing::RunResult run = cpu.CallSubroutine(viaAbort ? abort : abort2, 2'000);
               Assert::IsTrue(run.completed, L"ABORT returned");
@@ -844,7 +844,7 @@ namespace GameLogicTests
               }
 
               const std::wstring where = Widen(std::string(viaAbort ? "ABORT" : "ABORT2") + "(target " + std::to_string(target) +
-                                               ", colour " + std::to_string(colour) + ", NOMSL " + std::to_string(missiles) + ")");
+                                               ", palette " + std::to_string(colour.Byte()) + ", NOMSL " + std::to_string(missiles) + ")");
 
               (void)CompareScreens(cpu, at.screen, lock.canvas, 0x00u, where);
               Assert::AreEqual(cpu.memory[mstg], lock.bubble.missileTarget, (where + L": MSTG").c_str());

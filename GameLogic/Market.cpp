@@ -12,16 +12,6 @@ namespace Elite
 
   namespace
   {
-    /*
-     * 6502: MAG2 = $40 (elite-source.asm) and the &10 that OUT stores over it.
-     *
-     * The first is a multicolour palette byte for screen RAM -- purple on black -- and gnum uses it
-     * to mark what the player is typing. The second is white, which is what the rest of a text screen
-     * is drawn in. They are colour cell values rather than indices, so they go into COL2 as they are.
-     */
-    constexpr std::uint8_t TEXT_COLOUR_TYPING = 0x40;
-    constexpr std::uint8_t TEXT_COLOUR_NORMAL = 0x10;
-
     /// 6502: LDX #12 / STX T1 -- how many keys gnum will take before ending the number itself.
     constexpr int KEY_LIMIT = 12;
   } // namespace
@@ -193,7 +183,6 @@ namespace Elite
 
   bool CargoFits(const Commander& _commander, std::uint8_t _item, std::uint8_t _amount) noexcept
   {
-
     // 6502: LDX #12 / CPX QQ29 / BCC kg.
     constexpr std::uint8_t LAST_TONNE_ITEM = 12;
 
@@ -234,7 +223,6 @@ namespace Elite
 
   std::uint8_t ContrabandPenalty(const Commander& _commander) noexcept
   {
-
     // 6502: LDA QQ20+3 / CLC / ADC QQ20+6 -- slaves plus narcotics, and the `CLC` is real: this
     // is the only addition in the routine that does not read a carry it was handed.
     const AddResult illegal = AddWithCarry(_commander.cargoHold[3], _commander.cargoHold[6], false);
@@ -463,7 +451,7 @@ namespace Elite
   NumberEntry ReadNumber(Keyboard& _keys, CharacterPrinter& _characters, TextState& _text, std::uint8_t _available) noexcept
   {
     // 6502: LDA #MAG2 / STA COL2 -- purple for what the player types.
-    _text.cellColour = TEXT_COLOUR_TYPING;
+    _text.palette = TEXT_COLOUR_PURPLE; // 6502: MAG2 -- and TextPrint.h's, not a second copy (slice 5a-8)
 
     NumberEntry entry{};
 
@@ -517,7 +505,7 @@ namespace Elite
      */
     if (entry.outcome != DigitResult::LeaveScreen)
     {
-      _text.cellColour = TEXT_COLOUR_NORMAL;
+      _text.palette = TEXT_COLOUR_WHITE;
     }
 
     return entry;

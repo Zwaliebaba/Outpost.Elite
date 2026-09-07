@@ -106,4 +106,58 @@ namespace Elite
     return static_cast<PixelPattern>(_byte);
   }
 
+  /*
+   * 6502: RED2, GREEN2, YELLOW2, BLACK2, MAG2 and BULBCOL -- the second family, as its own type
+   * (slice 5a-8).
+   *
+   * A SCREEN RAM BYTE IN MULTICOLOUR BITMAP MODE IS TWO COLOURS: the high nibble is what a %01
+   * pixel draws in and the low nibble what a %10 pixel draws in (%11 comes from colour RAM and %00
+   * from the background register). So `COL2`, the missile indicators, the bulbs and the loader's
+   * border are all PAIRS, and the type says so where the constants' names did not -- `YELLOW2` is
+   * `{Orange, Yellow}` and `BLACK2` is `{DarkGrey, Yellow}`, which is what the original's own
+   * comments say and what the names hide. `MISSILE_NONE` was zero in this port until slice
+   * 3d-d-iii-b, a colour-shaped number in a pair-shaped byte; with this type that mistake does not
+   * compile.
+   *
+   * The default is `{Black, Black}`, which is `COL2`'s shipped value: uninitialised memory that
+   * `RES2` overwrites with white before anything prints, so a printer run without `RES2` prints
+   * invisibly, exactly as the original does.
+   */
+  struct CellPalette
+  {
+    constexpr CellPalette() noexcept = default;
+    constexpr CellPalette(Colour _high, Colour _low) noexcept
+      : byte(static_cast<std::uint8_t>((ColourIndex(_high) << 4) | ColourIndex(_low)))
+    {
+    }
+
+    /// The byte as the game stored it -- the memory image the oracle compares, and `Canvas::Write`.
+    [[nodiscard]] static constexpr CellPalette Of(std::uint8_t _byte) noexcept
+    {
+      CellPalette palette;
+      palette.byte = _byte;
+      return palette;
+    }
+
+    [[nodiscard]] constexpr Colour High() const noexcept
+    {
+      return ColourOf(static_cast<std::uint8_t>(byte >> 4));
+    } ///< what %01 draws in
+    [[nodiscard]] constexpr Colour Low() const noexcept
+    {
+      return ColourOf(byte);
+    } ///< what %10 draws in
+    [[nodiscard]] constexpr std::uint8_t Byte() const noexcept
+    {
+      return byte;
+    }
+
+    [[nodiscard]] constexpr bool operator==(const CellPalette&) const noexcept = default;
+
+    std::uint8_t byte = 0;
+  };
+
+  static_assert(CellPalette{Colour::Orange, Colour::Yellow}.Byte() == 0x87u, "YELLOW2 is orange over yellow");
+  static_assert(CellPalette::Of(0xB7u).High() == Colour::DarkGrey, "BLACK2 is dark grey over yellow");
+
 } // namespace Elite

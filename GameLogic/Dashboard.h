@@ -35,7 +35,7 @@ namespace Elite
    * are toggled by EORing it in and out. That is why `ECBLB` and `SPBLB` are four instructions each
    * and why calling either twice puts the screen back.
    */
-  inline constexpr std::uint8_t BULB_COLOUR = 0xE0;
+  inline constexpr CellPalette BULB_COLOUR{Colour::LightBlue, Colour::Black};
 
   /*
    * 6502: DLOC%, ECELL, SCELL, MCELL -- where the dashboard is.
@@ -217,7 +217,7 @@ namespace Elite
    *
    * It leaves Y at zero, which the original's callers rely on and which nothing here does.
    */
-  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, std::uint8_t _colour) noexcept;
+  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, CellPalette _palette) noexcept;
 
   /*
    * 6502: msblob -- redraw all four indicators from `NOMSL`.
@@ -240,10 +240,10 @@ namespace Elite
    * byte it is given and the port matched the game on that byte -- but the NAME claimed to be a
    * value the game uses and was not one.
    */
-  inline constexpr std::uint8_t MISSILE_NONE = 0xB7;   ///< 6502: BLACK2 -- no missile in this slot
-  inline constexpr std::uint8_t MISSILE_LOCKED = 0x27; ///< 6502: RED2 -- armed and locked
-  inline constexpr std::uint8_t MISSILE_ARMED = 0x87;  ///< 6502: YELLOW2 -- armed, seeking
-  inline constexpr std::uint8_t MISSILE_READY = 0x57;  ///< 6502: GREEN2 -- unarmed
+  inline constexpr CellPalette MISSILE_NONE{Colour::DarkGrey, Colour::Yellow}; ///< 6502: BLACK2 -- no missile, and not black
+  inline constexpr CellPalette MISSILE_LOCKED{Colour::Red, Colour::Yellow};    ///< 6502: RED2 -- armed and locked
+  inline constexpr CellPalette MISSILE_ARMED{Colour::Orange, Colour::Yellow};  ///< 6502: YELLOW2 -- armed, seeking, and not yellow
+  inline constexpr CellPalette MISSILE_READY{Colour::Green, Colour::Yellow}; ///< 6502: GREEN2 -- unarmed, and what KILLSHP hands ABORT too
 
   /*
    * 6502: ABORT2 -- point the leftmost missile at slot X, and recolour its indicator.
@@ -254,10 +254,10 @@ namespace Elite
    * side effect surviving a `JSR`, and the reason `SetMissileIndicator` is documented as leaving
    * Y at zero even though nothing in the port needs it to (§6.68).
    */
-  void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, std::uint8_t _colour) noexcept;
+  void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, CellPalette _palette) noexcept;
 
   /// 6502: ABORT -- `LDX #&FF` and then straight into `ABORT2`: no target, so the lock is off.
-  void AbortMissileLock(Universe& _universe, std::uint8_t _missiles, std::uint8_t _colour) noexcept;
+  void AbortMissileLock(Universe& _universe, std::uint8_t _missiles, CellPalette _palette) noexcept;
 
   /// 6502: ECBLB -- toggle the E.C.M. bulb, two cells of it, by EORing `BULBCOL` in and out.
   void ToggleEcmIndicator(Canvas& _canvas) noexcept;
@@ -265,9 +265,8 @@ namespace Elite
   /// 6502: SPBLB -- the same for the space station bulb, seventeen cells to the right.
   void ToggleStationIndicator(Canvas& _canvas) noexcept;
 
-  /// 6502: GREEN2 -- the palette byte `KILLSHP` hands `ABORT`. It was `SpawnEffects::MISSILE_GREEN`
-  /// until M3-b-1 took the seam away; the constant belongs beside the routine that takes it.
-  inline constexpr std::uint8_t MISSILE_GREEN = 0x57;
+  // `MISSILE_GREEN` WAS HERE AND WAS `MISSILE_READY` UNDER A SECOND NAME: both were `GREEN2`, &57, one
+  // for `msblob`'s indicator and one for the byte `KILLSHP` hands `ABORT`. Slice 5a-8 kept the one.
 
   /// What `ECBLB2` and `ECMOF` reach outside this slice: the sound, which is hardware.
   /*

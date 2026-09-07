@@ -111,7 +111,7 @@ namespace Elite
     _universe.flight.alpha = LAUNCH_ROLL;
     _universe.flight.alp1 = LAUNCH_ROLL;
 
-    _universe.text.cellColour = TEXT_COLOUR_WHITE; // 6502: LDA #&10 / STA COL2
+    _universe.text.palette = TEXT_COLOUR_WHITE; // 6502: LDA #&10 / STA COL2
     _universe.clip.dontclip = 0u;                  // 6502: LDA #0 / STA dontclip
     _universe.heaps.yx2M1 = SPACE_VIEW_LAST_ROW;   // 6502: LDA #2*Y-1 / STA Yx2M1
 

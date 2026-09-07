@@ -5,6 +5,8 @@
 #include "SoundEffects.h"
 #include "Tokens.h"
 
+#include "Colours.h"
+
 #include <array>
 #include <cstdint>
 
@@ -20,11 +22,11 @@ namespace Elite
    */
   /// 6502: the `&10` RES2 stores in COL2 -- colour 1 (white) for bitmap code %01 and colour 0
   /// (black) for %10. The default text colour of every screen in the game.
-  inline constexpr std::uint8_t TEXT_COLOUR_WHITE = 0x10;
+  inline constexpr CellPalette TEXT_COLOUR_WHITE{Colour::White, Colour::Black};
 
   /// 6502: MAG2 -- purple for %01, black for %10. GNUM and MT26 switch to it while the player is
   /// typing and back to `TEXT_COLOUR_WHITE` when the line is done.
-  inline constexpr std::uint8_t TEXT_COLOUR_PURPLE = 0x40;
+  inline constexpr CellPalette TEXT_COLOUR_PURPLE{Colour::Purple, Colour::Black};
 
   struct TextState
   {
@@ -44,7 +46,7 @@ namespace Elite
      * prints invisibly, exactly as the original would -- the default is left at zero rather than
      * "fixed" here so that a screen compared against the oracle starts from the same byte it does.
      */
-    std::uint8_t cellColour = 0;
+    CellPalette palette{};
   };
 
   /*

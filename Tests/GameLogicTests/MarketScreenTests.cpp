@@ -374,7 +374,7 @@ namespace GameLogicTests
         Assert::IsFalse(keys.Overran(), (where + L": the port asked for more keys than the script holds").c_str());
         Assert::AreEqual(run.keysTaken, keys.Taken(), (where + L": how many keys were read").c_str());
         Assert::AreEqual(cpu.memory[r], entry.value, (where + L": the number in R").c_str());
-        Assert::AreEqual(cpu.memory[col2], text.cellColour, (where + L": the text colour on exit").c_str());
+        Assert::AreEqual(cpu.memory[col2], text.palette.Byte(), (where + L": the text colour on exit").c_str());
 
         /*
          * What a CALLER can tell apart, which is less than this enum carries.

@@ -359,7 +359,7 @@ namespace GameLogicTests
         Assert::AreEqual(cpu.c, result.escaped, (where + L": the carry ESCAPE sets").c_str());
 
         // 6502: COL2 -- purple while typing, white on both exits.
-        Assert::AreEqual(cpu.memory[col2], text.cellColour, (where + L": the text colour on exit").c_str());
+        Assert::AreEqual(cpu.memory[col2], text.palette.Byte(), (where + L": the text colour on exit").c_str());
 
         // The buffer itself, including the carriage return RETURN writes into it and the bytes
         // beyond the line that must be left alone.

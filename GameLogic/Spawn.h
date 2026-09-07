@@ -32,7 +32,7 @@ namespace Elite
   /// state that slice 3d-b and 3d-c own; the scanner was here too until 3d-a built it (§6.59).
   // `SpawnEffects` was `AbortMissile`, `ShowMessage`, `ToggleStationIndicator` and
   // `ResetMissileIndicators` -- four routines `GameLogic` did not contain when `KILLSHP` and
-  // `SOLAR` were ported and contains now. M3-b-1 calls them, and `MISSILE_GREEN` moved to
+  // `SOLAR` were ported and contains now. M3-b-1 calls them, and `MISSILE_GREEN` (now `MISSILE_READY`) moved to
   // `Dashboard.h` beside the routine that takes it.
 
   /*

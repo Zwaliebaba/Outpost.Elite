@@ -137,6 +137,12 @@ namespace Elite
       }
     }
 
+    /// A cell's palette is a screen RAM byte, and this is the store that says which byte is one.
+    void Write(std::uint16_t _offset, CellPalette _palette) noexcept
+    {
+      Write(_offset, _palette.Byte());
+    }
+
     /// 6502: EOR (SC),Y / STA (SC),Y -- the only way the drawing code puts anything on screen,
     /// and the reason drawing a thing twice erases it (plan section 4.6).
     void ExclusiveOr(std::uint16_t _offset, std::uint8_t _mask) noexcept
@@ -145,6 +151,12 @@ namespace Elite
       {
         m_screen[_offset] ^= _mask;
       }
+    }
+
+    /// 6502: EOR #BULBCOL / STA (SC),Y -- the bulbs toggle a PALETTE in and out of screen RAM.
+    void ExclusiveOr(std::uint16_t _offset, CellPalette _palette) noexcept
+    {
+      ExclusiveOr(_offset, _palette.Byte());
     }
 
     [[nodiscard]] std::span<const std::uint8_t> Screen() const noexcept
