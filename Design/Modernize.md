@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->395 tests, oracle present), all <!--count:checks-->thirteen repository checks pass,
+(<!--count:tests-->395 tests, oracle present), all <!--count:checks-->fifteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -1488,7 +1488,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 |---|---|---|---|
 | **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are M5-a-8 and M5-a-9. | 3 |
 | **M5-b constexpr data** | The generated tables as `constexpr std::array`; the codecs, the trig lookups and the token decoder evaluated at compile time where the tests can `static_assert` a known value. | `TableTests` green; one `static_assert` per table against the oracle-checked value. | 2 |
-| **M5-c The ledger** | The <!--count:inventory-stale-files-->20 file names in `Source-Inventory.md` that name no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. | In CI. | 1 |
+| **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture, written at M2's opening) amended from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
@@ -1774,6 +1774,46 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-c: twenty ledger homes named files the port never built, and ten more names are
+history that must NOT be corrected.**
+
+`Source-Inventory.md` is the coverage ledger: one row per family of 6502 labels, with a HOME cell
+saying which port file holds them. Twenty of those cells named files that are not on disk, and the
+ratchet had been counting them since M3-c without anybody reading what they were. Reading them is
+the slice, and the twenty split cleanly:
+
+  - **Most are the port filing a routine by what it TOUCHES rather than by what it is near**, which
+    the journal has recorded happening nine separate times. `main_game_loop` went to `GameLoop.cpp`
+    and not `Spawner.cpp`; `circle`/`circle2`/`bline` to `PlanetDraw.cpp` and not `Circles.cpp`;
+    `TITLE` to `Flight.cpp`, because it creates a ship, moves it and draws it. `MAS1`–`MAS3` are in
+    `FlightLoop.cpp` and `TAS1`–`TAS6` in `Tactics.cpp`, where the plan had one `Orientation.cpp`
+    for both.
+  - **Some are a plan file that was never built at all**, and the workspace row is the one worth
+    naming. `ZeroPage.h` and `Workspace.h` do not exist because §4.4 files a byte with its OWNER, so
+    the zero page split across `MathWorkspace` (`Arith.h`), `GeometryWorkspace`, `Projection` and
+    `ClipState` (`ShipDraw.h`), `Universe` and `ShipSlot.h`. The row now says that rather than
+    pointing at two files nobody wrote.
+  - **And one row already knew**: §6.129's raster row says in as many words that "this row is
+    misnamed, and its home does not exist". It is `ScreenTables.cpp` and `Raster.cpp` now.
+
+**THE TEN THAT REMAIN ARE THE FINDING, AND CORRECTING THEM WOULD BE VANDALISM.** With every home
+fixed the counter still read ten, because it counted every backticked file name in the file and the
+NOTES are history: "built 2026-09-05 in `Spawner.cpp` as one function" was true the day it was
+written. The plan's own rule for numbers says the same thing — a journal number is history and is
+never touched, only a marked one describes the tree. Two of the ten are stronger than that: §6.129's
+note and the workspace note above name a missing file precisely IN ORDER TO SAY the tree does not
+have it, so a counter over the whole file demands that a finding be deleted to reach zero.
+
+So the counter reads the HOME cell and nothing else, and that is a narrowing of what it measures
+rather than a ceiling lowered to meet the tree — R18's failure mode is the other direction, and the
+ceiling went 20 → **0**, not up. `inventory.py --check-homes` applies the same rule and is the
+repository check behind it; `inventory.py --self-test` plants BOTH traps, a stale home that must
+fail and a stale note that must not, because a check that could not tell them apart is the one that
+would have made this slice destroy history to go green.
+
+`check_all.py` is fifteen checks (`--check-homes` and `--self-test`), the workflow runs both,
+`inventory-stale-files` 20 → 0. 395 of 395; nothing in `GameLogic/` or `Outpost/` changed.
 
 **2026-09-07 — M5-a-7: `Colour`, and the original has no colour constants at all.**
 

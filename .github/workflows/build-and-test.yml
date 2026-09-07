@@ -131,6 +131,16 @@ jobs:
       - name: Coverage ledger
         run: python tools/inventory.py --strict
 
+      # M5-c, 2026-09-07: a row's HOME cell is its live claim about where its labels are, and twenty
+      # of them named files the port never built. The notes beside a home are HISTORY and two of them
+      # name a missing file deliberately, to say the tree does not have it -- so this reads the home
+      # cell and nothing else, and the self-test plants both traps.
+      - name: Every ledger home names a file on disk
+        run: python tools/inventory.py --check-homes
+
+      - name: The ledger check catches a planted stale home
+        run: python tools/inventory.py --self-test
+
       # Modernize.md section 4.3 lists, for every zero-page workspace field, who writes it and who
       # reads it before writing it, with a verdict each; this regenerates the table from the tree
       # and fails when the two differ or a field has no verdict (Modernize.md M2-a).
