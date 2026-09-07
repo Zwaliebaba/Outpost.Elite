@@ -172,6 +172,7 @@
     <ClCompile Include="GameLoopTests.cpp" />
     <ClCompile Include="PauseScreenTests.cpp" />
     <ClCompile Include="PictureTests.cpp" />
+    <ClCompile Include="PictureTextTests.cpp" />
     <ClCompile Include="TacticsTests.cpp" />
     <ClCompile Include="RasterTests.cpp" />
     <ClCompile Include="SidRenderTests.cpp" />

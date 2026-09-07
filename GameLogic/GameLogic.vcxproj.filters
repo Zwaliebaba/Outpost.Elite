@@ -58,6 +58,9 @@
     <ClInclude Include="TextPrint.h">
       <Filter>Text</Filter>
     </ClInclude>
+    <ClInclude Include="TextPrint2x.h">
+      <Filter>Text</Filter>
+    </ClInclude>
     <ClInclude Include="Galaxy.h">
       <Filter>Universe</Filter>
     </ClInclude>
@@ -239,6 +242,9 @@
       <Filter>Canvas</Filter>
     </ClCompile>
     <ClCompile Include="TextPrint.cpp">
+      <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="TextPrint2x.cpp">
       <Filter>Text</Filter>
     </ClCompile>
     <ClCompile Include="Galaxy.cpp">

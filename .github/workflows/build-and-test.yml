@@ -151,6 +151,15 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq clang-tidy
           python tools/check_tidy.py
 
+      # Resolution.md sections 4 and 8.6: the picture is drawn beside the canvas at the same call
+      # sites, and nothing in the compiler or the suite makes that pairing hold -- a faithful routine
+      # that loses its twin leaves every oracle test green and the picture wrong (Risk R23).
+      - name: Every twinned routine still draws on both surfaces
+        run: python tools/check_twins.py
+
+      - name: The twin check catches a planted unpaired routine
+        run: python tools/check_twins.py --self-test
+
       # Modernize.md section 4.3 lists, for every zero-page workspace field, who writes it and who
       # reads it before writing it, with a verdict each; this regenerates the table from the tree
       # and fails when the two differ or a field has no verdict (Modernize.md M2-a).

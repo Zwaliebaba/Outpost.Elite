@@ -3,7 +3,7 @@
 **Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
 the shape (§1) and four on what the shape left open (§11). **RS-0 is built, 2026-09-07** (§13): the
 surface, the presenter, the upscale and eleven tests, with the suite at
-<!--count:tests-->419 green against the oracle and all <!--count:checks-->16 repository checks
+<!--count:tests-->427 green against the oracle and all <!--count:checks-->18 repository checks
 passing. Three things the building corrected are marked **CORRECTED** below. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
@@ -449,6 +449,9 @@ layout maps them to; `BOX`'s border is drawn thin at 2× by `DrawBorder2x` round
 
 ### 6.2 The layout — how a faithful cursor becomes a wide one
 
+**CORRECTED at RS-1: there is no second cursor.** What follows is the mechanism as designed, and
+the paragraph after the table says what was built instead and why.
+
 The faithful printer keeps `XC`/`YC` in `TextState` and every screen routine stores to them. The
 screen keeps a second cursor, `TextState::wide`, and a **layout** decides where it goes whenever the
 faithful one is *placed* (stored to); when the faithful cursor *advances* (a glyph, a space), the wide
@@ -465,6 +468,24 @@ struct TextLayout
   std::span<const Anchor> anchors; // (fieldColumn, fieldRow) -> (wideColumn, wideRow) exceptions
 };
 ```
+
+**What RS-1 built instead, and the reason is that the design's version cannot be built.** A stored
+wide cursor has to be updated whenever the faithful one is *placed*, and the faithful one is placed
+by forty-odd plain field assignments (`text.column = 7;`) spread through the library. A plain field
+assignment cannot be hooked in C++ without changing every site — which is a refactor of the faithful
+code, for a cursor that turns out to be unnecessary. At the moment a glyph is drawn the faithful
+cursor already holds the cell the printer is about to use, so **the wide cell is a pure function of
+the faithful cell and the layout**, computed where it is needed and stored nowhere. `TextLayout::Map`
+is that function and `TextState` is untouched. What the stored cursor was really for is RS-5's
+re-wrapping, where the wide column stops being a function of the faithful one; that slice can store
+what it needs when it needs it, and until then there is nothing to keep in step.
+
+**And the offsets are measured in CANVAS CELLS, not in `XC`.** §6.2's original numbers mixed the two:
+the space view's `columnOffset` is given as 24, which is right in `XC` — counted from the view's own
+left edge — and 20 in canvas cells, which is what the clears count because that is what the game's
+own loops count. Both layouts are +20 in canvas cells, and `24 + XC` is `(4 + XC) + 20`. A layout
+measured in `XC` would have put every glyph sixteen cells right of the cell meant to clear it;
+`TextPrint2x.h` carries the arithmetic and four `static_assert`s.
 
 The default layout — what a view gets until §6.3 gives it its own — centres the faithful 40×25 grid
 on the wide one: `columnOffset = 20`, `rowOffset = 12`, `rowStride = 1`, no anchors. That is the
@@ -652,7 +673,7 @@ path the layout did not see — are what the estimate cannot price.
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
 | **RS-0 The picture and the presenter** ✅ **built 2026-09-07 (§13)** | `Picture` (§3) with `Resolve`, `Hash` and the energy-bomb decode; `Universe::picture` and the hash exclusion (§3.4); `ScreenPresenter`, `FitPicture`, the root constants, `INITIAL_SCALE = 2`; **the upscale**: `Picture::Resolve` fills every region it has no native content for from the canvas doubled, per region flag, so the tree plays at 1280×800 from this slice on; `GoldenCanvas.cpp` and `golden_diff.py` at both sizes | The game plays at 640×400 looking exactly as today; `ShellTests` moved; `UniverseImage` names the field excluded; §8.4 green with nothing to twin yet | 2 |
-| **RS-1 The text layer** | `PrintGlyph2x`, `TextLayout` and `TextState::wide` (§6.2), the default centred layout, the space view's layout, `TT66simp`'s and `BOX`'s twins, the loader's; `check_twins.py` (§8.6). The space-view REGION does not flip here — it flips when RS-3 completes it, so this slice's pixels are drawn and not shown | The text shadow test (§8.1) green over `TextPrintTests`' scenes; the glyph lands on the cell the layout names; the seventeenth check in CI | 2–3 |
+| **RS-1 The text layer** ✅ **built 2026-09-07 (§13)** | `PrintGlyph2x`, `EraseCell2x`, `ClearTextArea2x`, `TextLayout` and `LayoutForView` (§6.2), the centred default and the space view's layout; `check_twins.py` (§8.6). **NOT the borders or `CLYNS`** — see §13. The space-view REGION does not flip here — it flips when RS-3 completes it, so this slice's pixels are drawn and not shown | The text shadow test (§8.1) green over eight scenes; the glyph lands on the cell the layout names; the check in CI | 2–3 |
 | **RS-2 Ship lines** | `Project2x`, `Divide512`, `ClipLine2x`, `Bresenham2x`, `LineHeap2x`, `PushEdges`' and `EraseShip`'s twins, `SHPPT`'s dot (§4.1) | The title ship and a flight with ships at 2×; the space-view shadow test green on `MA23`'s ship frames; the property sweeps of §8.2 for `Project2x` and `Divide512`; the first screen golden | 3–4 |
 | **RS-3 Planet, sun, dust, beams, rings** | §4.2 and §4.3: `ball2x`, `sun2x`, `isqrt`, the stardust and particle twins, the laser and tunnel twins. **The space-view region flips here**, which is the first slice a person sees any of RS-1 to RS-3 | Shadow test green on the sun frame and the explosion frame; `isqrt` swept; the launch tunnel presents thin rings; a hand-check of the whole upper region | 2–3 |
 | **RS-4 The dashboard** | §5: the dial, indicator, missile and bulb twins, the scanner and compass twins, `bitmaps.py`'s fourth sheet and `bootstrap-2x`, `DASHBOARD_IMAGE_2X` as bootstrapped, the rectangle table and its import check, sprites pixel-doubled in `Resolve` | The per-instrument shadow properties green; the flight view entirely native (no region upscaled) and a hand-check recorded; the scanner sweep of §8.2 | 3 |
@@ -711,8 +732,8 @@ written. They are recorded here as rulings rather than as open items, so nobody 
 
 **Built and green.** `GameLogic/Picture.h` and `Picture.cpp` are the 640×400 surface; `Universe`
 owns one beside the canvas; `Outpost::ScreenPresenter` uploads it at 1280×800. The suite is
-<!--count:tests-->419 tests with the oracle present, all passing, and all
-<!--count:checks-->16 repository checks pass. The canvas is untouched: every oracle comparison,
+<!--count:tests-->427 tests with the oracle present, all passing, and all
+<!--count:checks-->18 repository checks pass. The canvas is untouched: every oracle comparison,
 whole-bitmap comparison, golden and replay digest is unmoved, which is what the slice had to prove.
 
 **What it can claim.** `ThePicture::WithNoRegionOfItsOwnItIsTheCanvasDoubled` asserts the equation
@@ -789,3 +810,56 @@ spot only a compiler closes).
 so its `#include` of the FXC-generated shader headers had resolved -- which means the HLSL compiled,
 and the `uint2 gImageSize` root constants and the pixel shader that reads them are sound. That was
 the part of §7 with no evidence behind it at all.
+
+### RS-1 — the text layer, 2026-09-07
+
+**Built and green.** `GameLogic/TextPrint2x.h` and `.cpp` are the layer: `TextLayout` and its `Map`,
+`LayoutForView`, `PrintGlyph2x`, `EraseCell2x`, `ClearCells2x`, `ClearTextArea2x` and
+`ClearMessageRows2x`. `TextPrinter` gained `AttachPicture` and pairs its three canvas writes with
+twins; `Game` attaches the picture and `QQ11`. The suite is <!--count:tests-->427 tests, green with
+the oracle present, and all <!--count:checks-->eighteen repository checks pass — two of them new.
+
+**What it can claim.** The shadow test resolves nothing: it reads the two surfaces' planes and
+requires that every canvas cell with ink on it has the SAME eight bytes on the picture at the cell
+the layout names, that no wide cell has ink the canvas cannot account for, and that no two canvas
+cells map onto one wide cell — §8.1's three clauses, including the no-collision one that Risk R24 is
+about. Because the glyph does not change size, that is an equality rather than a resemblance, so a
+twin one cell out fails on the first character. It runs over four views, a message printed twice, a
+delete, an explicit clear, a form feed through the printer, and a printer with nothing attached.
+
+**Two things the design could not have known, both now corrected above.**
+
+1. **There is no wide cursor, because there cannot be one.** §6.2 had `TextState::wide` updated
+   whenever the faithful cursor is *placed* — and the faithful cursor is placed by forty-odd plain
+   field assignments, which C++ cannot hook without changing every site. It does not need one: at
+   the moment a glyph is drawn the faithful cursor holds the cell, so the wide cell is a pure
+   function of it and the layout. `TextState` is untouched.
+2. **The layout is measured in canvas cells, and §6.2's numbers were in `XC`.** Both are right about
+   different origins — `XC` counts from the view's left edge and a canvas cell from the screen's —
+   and the clears count canvas cells because the game's own loops do. Mixed, they would have put
+   every glyph sixteen cells right of the cell meant to clear it. Both layouts are +20 in canvas
+   cells; four `static_assert`s pin it.
+
+**Two things moved OUT of the slice, and the reason is the same for both.** §6.1 grouped `BOX`'s
+border and the loader's furniture with the text wipe, and building shows they need a different tool:
+a border is LINES, and the 2× line drawer is `Bresenham2x`, which is RS-2's. Drawing a "thin border"
+now would mean inventing a line primitive that RS-2 then builds properly. `ClearMessageRows` moved to
+RS-5 for a different reason — its ten callers are spread over six files and most have no picture in
+scope, so pairing it is the docked screens' slice rather than this one. Its twin exists and is
+unused; `check_twins.py`'s `NEEDS_NO_TWIN` says so by name, with the reason, rather than staying
+silent.
+
+**`check_twins.py` is the check, and it has three rules rather than §8.6's two.** Every `*2x`
+routine names what it twins with a `/// 2x of:` line and the named routine must exist — which is the
+M6-c hazard, a twin named for an identifier that has been renamed away. Every drawing function in a
+twinned file calls a twin, or is named in `PAIRED_BY_CALLER` or `NEEDS_NO_TWIN` with a reason. And
+the third rule is what earns the second's exemption: **a routine paired by its caller is paired by
+every caller**, checked across all of `GameLogic`. Without it, "the caller pairs them" is a promise
+nobody checks — which is exactly how RS-0 broke the Windows build. Its self-test plants all three.
+It reports the files not yet twinned as a COUNT rather than a failure (fifteen today), because a
+check that went red from RS-1 to RS-4 would teach people to skip it.
+
+**What RS-1 does NOT do.** Nothing is shown. The space-view region flips at RS-3, so every glyph
+this slice draws goes onto a surface nobody presents, and the picture on screen is still the canvas
+doubled. There is no screenshot to sign off and no hand-check to record; the shadow test is the whole
+of the evidence, which is what §10 said this slice would be.

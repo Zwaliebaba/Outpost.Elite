@@ -207,7 +207,7 @@ and always run.
 
 Repository checks:
 
-**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->sixteen in CI's
+**Run them with `python tools/check_all.py`**, which runs all <!--count:checks-->eighteen in CI's
 order and takes no arguments. Do not retype the list into a loop: that is how a push went red on
 2026-09-05 with the one check that would have caught it left out (§6.127). What it runs:
 
@@ -227,6 +227,8 @@ python tools/inventory.py --strict            # coverage ledger: every master-le
 python tools/inventory.py --check-homes       # every file a ledger row's HOME cell names is on disk
 python tools/inventory.py --self-test         # that check still catches a planted stale home
 python tools/check_tidy.py                    # clang-tidy over GameLogic/, through the portable runner's shim
+python tools/check_twins.py                   # every routine with a 640x400 twin still calls it (Resolution.md §8.6)
+python tools/check_twins.py --self-test       # that check still catches a routine whose twin went missing
 python tools/channel_census.py --check        # the channel census names every workspace field and matches the plan
 ```
 
@@ -247,7 +249,7 @@ test runs them.
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->419 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->427 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.
