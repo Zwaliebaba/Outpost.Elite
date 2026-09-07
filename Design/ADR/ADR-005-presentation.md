@@ -91,8 +91,8 @@ main loop that ran as fast as the scene allowed.
   **Prerequisite, and it should be done first regardless. Done.** `SPRITE.bin` was a fourth assembly
   `tools/labels.py` did not build — 84 lines of source and 448 bytes, seven sprite definitions. It is
   built on the `LOADER_ASSEMBLY` pattern (`SPRITE_ASSEMBLY` in `labels.py`, its own reference pair,
-  kept out of the oracle image because `CODE% = &7C3A`), and the definitions are byte-checked by
-  `extract_tables.py --check` like every other table.
+  kept out of the oracle image because `CODE% = &7C3A`). The definitions were byte-checked against it
+  until 2026-09-07, when the oracle comparison of the generated tables was retired.
 
   **What stays unverified, said plainly.** The blit rule itself — sprite-over-bitmap priority, the
   multicolour sprite bit pairs, and the x-expand flag. That is documented VIC-II behaviour and it is
