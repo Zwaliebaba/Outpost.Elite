@@ -9,6 +9,7 @@
 #include "Hyperspace.h"
 #include "PauseScreen.h"
 #include "Ports.h"
+#include "SoundEffects.h"
 #include "StateTokens.h"
 #include "TextPrint.h"
 #include "Tokens.h"
@@ -48,8 +49,8 @@ namespace Elite
   class Game
   {
   public:
-    Game(Universe& _universe, ShipDrawEffects& _drawing, SidWriteLog& _sid, StartUpEffects& _start, Presenter& _present,
-         Keyboard& _keyboard, CommanderStore& _store, ControlEffects& _controls) noexcept;
+    Game(Universe& _universe, ShipDrawEffects& _drawing, StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard,
+         CommanderStore& _store, ControlEffects& _controls) noexcept;
 
     Game(const Game&) = delete;
     Game& operator=(const Game&) = delete;
@@ -150,6 +151,28 @@ namespace Elite
 
     /// The seams, for a caller that has to reach one directly -- the loader screen on start-up and
     /// the suites that drive a routine rather than a pass.
+    /*
+     * 6502: SID -- the register writes the game side has made since the executable last drained
+     * them, in the order it made them (§4.4's `Sounds()`, built M5-e-1).
+     *
+     * THE LOG IS THE GAME'S NOW AND THE EXECUTABLE READS IT. Until M5-e-1 the executable owned the
+     * log and handed the game a reference to write into -- the one place the app reached INTO
+     * library state rather than being handed a value. `Ports::sid` still binds to it, because the
+     * library's routines take the port; what changed is who owns the bytes behind the reference.
+     * It answers the whole log rather than §4.4's sketched span because the log carries its own
+     * `dropped` count and the executable's `Apply` takes a log; a span would lose the count.
+     */
+    [[nodiscard]] const SidWriteLog& Sounds() const noexcept
+    {
+      return m_sid;
+    }
+
+    /// The executable has applied what `Sounds()` answered; the next frame's writes start clean.
+    void ClearSounds() noexcept
+    {
+      m_sid.Clear();
+    }
+
     [[nodiscard]] Ports& PortsOf() noexcept
     {
       return m_ports;
@@ -249,6 +272,7 @@ namespace Elite
     LoopOutcome m_lastOutcome = LoopOutcome::Continued;
 
     /// LAST, because every reference in it is bound at construction (§4.5).
+    SidWriteLog m_sid; ///< 6502: SID -- the game side's writes, declared before the `Ports` that binds to it
     Ports m_ports;
   };
 

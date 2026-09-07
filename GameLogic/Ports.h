@@ -47,9 +47,9 @@ namespace Elite
   struct Ports
   {
     // ---- the text machinery, bound to the universe's own bytes -------------------------------
-    TokenPrinter& printer;       ///< 6502: TT27 and the routines it falls into
+    TokenPrinter& printer;        ///< 6502: TT27 and the routines it falls into
     CharacterPrinter& characters; ///< 6502: CHPR, and `DTW1` to `DTW8` are its own state
-    TextSink& sink;              ///< what `printer` and `characters` put characters through
+    TextSink& sink;               ///< what `printer` and `characters` put characters through
 
     // ---- the seams the platform answers ------------------------------------------------------
     ShipDrawEffects& drawing; ///< 6502: `LL9`'s planet and explosion seams
@@ -77,6 +77,10 @@ namespace Elite
      *
      * It is here and not in `Universe` because it is not state: nothing in the library reads it
      * back, it is drained and cleared every frame, and the M0-c replay hashes the universe.
+     *
+     * SINCE M5-e-1 THE LOG IS `Game`'s (`Game::Sounds()`) and this reference binds to it. Until then
+     * the executable owned it and the game wrote into the executable's buffer -- the one place the
+     * app reached into library state rather than being handed a value.
      */
     SidWriteLog& sid;
 

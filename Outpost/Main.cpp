@@ -63,7 +63,7 @@ namespace
     App()
       : shell(window, presenter, universe.canvas, universe.view),
         flight(window, universe),
-        game(universe, flight, audio.Direct(), shell, shell, shell, store, flight)
+        game(universe, flight, shell, shell, shell, store, flight)
     {
       // The seams the session and the shell answer that are CALLS needing the seams themselves --
       // `DOCKIT` and the title screen -- so the composition lends the struct back to two of the
@@ -72,7 +72,7 @@ namespace
       shell.AttachPorts(game.PortsOf());
       shell.AttachFlight(flight, universe.dockedFlag);
       shell.AttachVideo(universe.video); // ADR-005 §1 -- the sprites composite in Resolve
-      shell.AttachSound(audio, universe.sound, universe.music);
+      shell.AttachSound(audio, universe.sound, universe.music, game);
     }
 
     App(const App&) = delete;
