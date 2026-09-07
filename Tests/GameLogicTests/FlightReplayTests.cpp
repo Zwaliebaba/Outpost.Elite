@@ -55,7 +55,8 @@ namespace GameLogicTests
     struct Checkpoint
     {
       std::uint32_t step;
-      std::uint64_t digest;
+      std::uint64_t digest; ///< the label hash: `UniverseImage` widened with the pixels, the heap and the controls
+      std::uint64_t state;  ///< `Game::StateHash()`, library-native (M5-e-3) -- the one that outlives the labels
     };
 
     /// Digests are taken this often, and at every turn of the script besides.
@@ -107,6 +108,12 @@ namespace GameLogicTests
      * which is the evidence that the five new cells agree with the oracle wherever `CompareState`
      * already looks; only the record needed re-taking.
      *
+     * 2026-09-07, M5-e-3: the record gains a SECOND COLUMN and the first does not move. Each
+     * checkpoint carries `Game::StateHash()` beside the label digest -- the library-native fold
+     * over `Universe` (`Elite::HashState`), which needs no oracle and is the hash that outlives
+     * M6-f. Not a re-take: the label column is the one above, to the bit; the state column is new,
+     * taken from the same flight, and `StateHashTests` holds the fold to the label table's cells.
+     *
      * 2026-09-07, M5-e-2, `Game` owns the universe: every digest moved and not one step did, and
      * this time the proof is in the fixture rather than the suite. Nine of the image's cells --
      * `QQ17` and `DTW1`-`DTW8` -- read the two printers, which are not in `Elite::Universe`, and
@@ -118,22 +125,22 @@ namespace GameLogicTests
      * flight is the flight it was, and what moved is nine bytes that had been constants.
      */
     constexpr Checkpoint RECORDED[] = {
-      {0, 0x909fe1b60aaeaaa3ull},     // launched from Lave
-      {40, 0x675c4ebfead5ddd7ull},    // coasted
-      {100, 0xc1e7f6396098466eull},   // at full speed
-      {200, 0xeed0525c4ecf84acull},
-      {300, 0x23a0db1828f5a272ull},
-      {340, 0x646cdd1bb2e870daull},   // the Viper fought
-      {342, 0xb743e871a6d2709cull},   // the docking computer engaged
-      {400, 0xa2bd18019dcd16e2ull},
-      {500, 0xdbeeebc08212af5full},
-      {600, 0xa8dcfa3259952a30ull},
-      {700, 0x0dcdd86e1fe21826ull},
-      {800, 0xc4f44d9e16fc2ad5ull},
-      {900, 0x3f14440f7e4f27a3ull},
-      {1000, 0xfdd2b0e7814f9d63ull},
-      {1100, 0x718387e97ffa1260ull},
-      {1170, 0xd0ab7775735990d0ull},  // docked
+      {0, 0x909fe1b60aaeaaa3ull, 0x2ab36cb10fc3d025ull},     // launched from Lave
+      {40, 0x675c4ebfead5ddd7ull, 0x41c73e56e5b6dec0ull},    // coasted
+      {100, 0xc1e7f6396098466eull, 0x52b4ee3425808769ull},   // at full speed
+      {200, 0xeed0525c4ecf84acull, 0x38f68d860fee04daull},
+      {300, 0x23a0db1828f5a272ull, 0x8cacc02d70b22da1ull},
+      {340, 0x646cdd1bb2e870daull, 0xf1365571ec21753bull},   // the Viper fought
+      {342, 0xb743e871a6d2709cull, 0xe40530ef96dd4a8aull},   // the docking computer engaged
+      {400, 0xa2bd18019dcd16e2ull, 0x7cc5be3c31affc57ull},
+      {500, 0xdbeeebc08212af5full, 0x650920d3bf96ad4dull},
+      {600, 0xa8dcfa3259952a30ull, 0x6ab3ccd16ef631ccull},
+      {700, 0x0dcdd86e1fe21826ull, 0x8e7b06a8fc599754ull},
+      {800, 0xc4f44d9e16fc2ad5ull, 0x5625267a616ccbd3ull},
+      {900, 0x3f14440f7e4f27a3ull, 0xece8c828544e5bc6ull},
+      {1000, 0xfdd2b0e7814f9d63ull, 0xb8e25422b42eb7b9ull},
+      {1100, 0x718387e97ffa1260ull, 0xb2527b82bca1dbf0ull},
+      {1170, 0xd0ab7775735990d0ull, 0xf42b8700b049cf7cull},  // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;
@@ -174,7 +181,7 @@ namespace GameLogicTests
     {
       Trace trace;
       std::uint32_t step = 0;
-      auto checkpoint = [&]() { trace.checkpoints.push_back(Checkpoint{step, _port.Digest()}); };
+      auto checkpoint = [&]() { trace.checkpoints.push_back(Checkpoint{step, _port.Digest(), _port.StateDigest()}); };
 
       Prepare(_port);
       Elite::SystemSeeds selected{};
@@ -281,8 +288,8 @@ namespace GameLogicTests
       out << L"\n    constexpr Checkpoint RECORDED[] = {\n";
       for (const Checkpoint& point : _trace.checkpoints)
       {
-        out << L"      {" << point.step << L", 0x" << std::hex << std::setw(16) << std::setfill(L'0') << point.digest << std::dec
-            << L"ull},\n";
+        out << L"      {" << point.step << L", 0x" << std::hex << std::setw(16) << std::setfill(L'0') << point.digest << L"ull, 0x"
+            << std::setw(16) << std::setfill(L'0') << point.state << std::dec << L"ull},\n";
       }
       out << L"    };\n    constexpr std::uint32_t RECORDED_STEPS = " << _trace.steps << L";\n"
           << L"    constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::"
@@ -302,7 +309,7 @@ namespace GameLogicTests
       }
       for (std::size_t index = 0; index < _left.size(); ++index)
       {
-        if (_left[index].step != _right[index].step || _left[index].digest != _right[index].digest)
+        if (_left[index].step != _right[index].step || _left[index].digest != _right[index].digest || _left[index].state != _right[index].state)
         {
           return false;
         }
@@ -329,7 +336,8 @@ namespace GameLogicTests
       std::size_t first = 0;
       for (std::size_t index = 0; same && index < recorded; ++index)
       {
-        if (RECORDED[index].step != trace.checkpoints[index].step || RECORDED[index].digest != trace.checkpoints[index].digest)
+        if (RECORDED[index].step != trace.checkpoints[index].step || RECORDED[index].digest != trace.checkpoints[index].digest ||
+            RECORDED[index].state != trace.checkpoints[index].state)
         {
           same = false;
           first = index;

@@ -230,7 +230,7 @@ python tools/channel_census.py --check        # the channel census names every w
 
 **A NUMBER IN A DOCUMENT IS A CLAIM, AND `check_counts.py` IS THE TEST BEHIND IT.** Prose about a
 decision ages well; a number beside it ages badly and in silence (§6.145). So a number that
-describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->395 tests` — and the
+describes the tree AS IT IS carries a marker — `the suite is <!--count:tests-->399 tests` — and the
 check reads the tree and compares. Numbers in the plan's journal entries are HISTORY, carry no
 marker and are never touched: "321 tests" was true the day it was written and must stay. Before
 writing a new live number, `python tools/check_counts.py --list` says what the tree holds.

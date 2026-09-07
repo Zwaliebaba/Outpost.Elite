@@ -173,6 +173,9 @@ namespace Elite
       m_sid.Clear();
     }
 
+    /// §4.4's `StateHash`: every byte of game state, library-native (`HashState`, M5-e-3).
+    [[nodiscard]] std::uint64_t StateHash() const noexcept;
+
     [[nodiscard]] Ports& PortsOf() noexcept
     {
       return m_ports;

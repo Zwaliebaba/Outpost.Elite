@@ -2,6 +2,8 @@
 
 #include "Game.h"
 
+#include "StateHash.h"
+
 #include "Canvas.h"
 #include "Commander.h"
 #include "Docking.h"
@@ -55,6 +57,11 @@ namespace Elite
     // 6502: DTW2 -- the extended printer starts between sentences, which is what the first capital
     // letter of the first screen depends on.
     m_universe.sentences.sentenceStart = 0xFF;
+  }
+
+  std::uint64_t Game::StateHash() const noexcept
+  {
+    return HashState(m_universe);
   }
 
   std::uint8_t Game::ShipsInBubble() const noexcept

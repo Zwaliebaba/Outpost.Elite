@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->395 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
+(<!--count:tests-->399 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -310,7 +310,8 @@ state behind them, and `check_outpost.py`'s surface fell with it — the executa
 <!--count:outpost-elite-names-->69 distinct `Elite::` names where it reached 205 when M3 opened.
 
 What §2.1 asked for and this did not have until M5-e is `Frame()`, `Sounds()` and `StateHash()` —
-`Sounds()` is built (M5-e-1) and `Frame()` is `State().canvas`, which the executable already reaches —
+`Sounds()` is built (M5-e-1), `StateHash()` is built library-native (M5-e-3, `Elite::HashState`) and
+`Frame()` is `State().canvas`, which the executable already reaches —
 and one thing it did not ask for, which M5-e-2 closed: `Elite::Universe` was the composition root's
 until then, because both sessions bound it at construction and `Game` needs both of them at its own.
 The sessions take it afterwards now (`AttachUniverse`) and `Game` owns it, as §4.4 drew.
@@ -365,7 +366,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,127 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,130 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -498,18 +499,18 @@ never global.
 <!--census:start-->
 | Field | 6502 | Written by | Read before written, from the caller | Read after a call | Verdict |
 |---|---|---|---|---|---|
-| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail, ProjectVertices | RunCycleStep | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
-| `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
-| `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
-| `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
-| `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, MeasureSlope, OpenHeapRun, PushEdges, SelectFaces | FaceVisibility | ProjectVertices (after ?), SelectFaces (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
-| `GeometryWorkspace.xx2` | `XX2` | ScaleShip, SelectFaces | EitherFaceVisible, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
-| `GeometryWorkspace.xx3` | `XX3` | MeasureRange, ProjectVertices | DrawExplosionCloud, OpenHeapRun | PushEdges (after EitherFaceVisible) | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
-| `ClipState.dontclip` | `dontclip` | DrawShortRangeChart, Game::DrawChart, ResetShipAndBubble | ClipLineKeepingSwap | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
-| `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
-| `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
-| `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
-| `Projection.y1` | `K4+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine | DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
+| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail, ProjectVertices | FoldIntoStateHash, RunCycleStep | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
+| `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | FoldIntoStateHash, MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
+| `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator, FoldIntoStateHash | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
+| `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, FoldIntoStateHash, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
+| `GeometryWorkspace.xx12` | `XX12` | BothEndsBeyondTheSameEdge, ClipLineKeepingSwap, DotProducts, DrawBallLine, MeasureSlope, OpenHeapRun, PushEdges, SelectFaces | FaceVisibility, FoldIntoStateHash | ProjectVertices (after ?), SelectFaces (after ?) | **Stage result** (M2-c-3 leaves it in the frame). `LL51` leaves three dot products that `LL9` parts 4 and 6 read, and `LL83`/`LL115` work in the same bytes while a line is being clipped -- the original's reuse, which nothing reads across. `DIALS` stopped borrowing them in M2-c-1. |
+| `GeometryWorkspace.xx2` | `XX2` | ScaleShip, SelectFaces | EitherFaceVisible, FoldIntoStateHash, RunDockingComputer | — | **Stage result, and one reader outside** (M2-c-3 leaves it). Face visibility, written by part 4 and read by parts 6 and 10; `DOCKIT` reads `XX2+10` as the memory it is (§6.112), which is why the frame is a struct and not four more locals. |
+| `GeometryWorkspace.xx3` | `XX3` | MeasureRange, ProjectVertices | DrawExplosionCloud, FoldIntoStateHash, OpenHeapRun | PushEdges (after EitherFaceVisible) | **Stage result, and one reader outside** (M2-c-3 leaves it). The projected vertices, filled by part 8 and read by parts 9 to 11; `DOEXP` copies them onto the heap for the burst, which is the frame's second outward reader. |
+| `ClipState.dontclip` | `dontclip` | DrawShortRangeChart, Game::DrawChart, ResetShipAndBubble | ClipLineKeepingSwap, FoldIntoStateHash | — | **State one screen writes and the clipper reads** (M2-c-2 leaves it). `TT23` sets it to 199 so the short-range chart can use the whole screen and `RES2` clears it again -- `Main.cpp` and `ResetShipAndBubble` in this port -- so it is not the clipper's scratch and did not become a `ClipResult` field with `XX13` and `SWAP`. `TT23` writes `Yx2M1` in the same two instructions and that byte is on `PlanetSunState`; whichever slice wires `TT23` puts this one beside it. |
+| `Projection.x` | `K3` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, FoldIntoStateHash, StorePoint | DrawPlanetDetail (after DrawHalfEllipse), DrawSun (after CircleOffScreen) | **State that outlives the call, deliberately** (§4.3's `PROJ` row; ADR-001 §6, `SHPPT`). `Project` writes it half at a time and `DrawShipAsPoint`, the planet drawer's `CircleOffScreen`, `DrawBall`, `DrawEllipse` and `DrawSun` read what the last `Project` left; `DrawPlanetDetail` rewrites it for the crater. Stays a parameter. |
+| `Projection.x1` | `K3+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBall, DrawEllipse, FoldIntoStateHash | DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`: the stale `K3+1` `SHPPT` reads is the ADR row. |
+| `Projection.y` | `K4` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine, FoldIntoStateHash | DrawPlanetDetail (after DrawHalfEllipse), DrawShipAsPoint (after Project), DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
+| `Projection.y1` | `K4+1` | DrawPlanetDetail, Project | CircleOffScreen, DrawBallLine, FoldIntoStateHash | DrawSun (after CircleOffScreen) | **State, deliberately**, with `x`. |
 | `K3Block.*` | `K3 to K3+9` | DecideDisposition, DecideMissile, LoadPlanetAxis, LoadStationAxes, NormaliseAxes, OffsetAxis, SubtractShipAxis | BuildUnitVector, NormaliseAxes, OffsetAxis | RunDockingComputer (after SubtractStationAxes) | **Parameter and result** (M2-c). `SPS1` (`LoadPlanetAxis`, `NormaliseAxes`) leaves the vector `BuildUnitVector` and part 9 read; `TAS2`/`OffsetAxis` take and return it: `UnitVector`/`Vector24`, §4.3's `XX15 after SPS1` row. |
 <!--census:end-->
 
@@ -561,7 +562,7 @@ namespace Elite
     void Step(const InputFrame& _input);              // one pass of FRCE: a docked pass, a flight frame, or a paused pass
     [[nodiscard]] const Canvas& Frame() const noexcept;
     [[nodiscard]] std::span<const SoundEvent> Sounds() const noexcept;
-    [[nodiscard]] std::uint64_t StateHash() const noexcept;  // over UniverseImage (§4.7), so it survives refactors
+    [[nodiscard]] std::uint64_t StateHash() const noexcept;  // built M5-e-3 as a library-native fold (StateHash.cpp), recorded beside §4.7's label hash until M6-f
     [[nodiscard]] const Universe& State() const noexcept;
   private:
     Universe m_universe;  Ports m_ports;   // both members as built: the universe since M5-e-2, the ports since M3-c
@@ -688,8 +689,10 @@ there is no generated `Labels.h`. The table maps port fields to label NAMES and 
 exactly as `Where` does; Q7 closes as "not needed".
 The invariant every M1–M4 slice is measured by: **`Materialise` produces the same bytes before and
 after the slice for the same game**, and every oracle test compares through it rather than through
-`math.k[3]`. `Game::StateHash` is `Hash`, so the replay suite ADR-003 §3 asked for — the docked
-transcript and a flight script through the null port, hashed at every step, stored — is
+`math.k[3]`. `Game::StateHash` was to be `Hash`; **built M5-e-3 as `Elite::HashState`**, a
+library-native fold over `Universe` that needs no label, recorded BESIDE `Hash` in the replay until
+M6-f retires the labels and the fold is the record. So the replay suite ADR-003 §3 asked for — the
+docked transcript and a flight script through the null port, hashed at every step, stored — is
 layout-independent by construction and is the one instrument that sees composition.
 
 ### 4.8 What the executable becomes
@@ -1493,7 +1496,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
-| **M5-e `Game` as §2.1 drew it** | Task #13, the M3-c follow-ons, under the owner's ruling of 2026-09-07: `Sounds()` real (**M5-e-1**, built), `Frame()` recorded as `State().canvas`, `Universe m_universe` (**M5-e-2**, built — and the replay digest was found hashing the fixture's idle printers, §8), the eight `DTW` bytes into `Universe` (**M5-e-2b**, built) and the doubled `QQ17` collapsed into `TextState` with the token printer bound to it (**M5-e-2c**, built), `StateHash()` library-native beside the label hash (**M5-e-3**). | The executable holds no game state and lends no buffer; the replay hashes what `Game` drove; `check_outpost.py` agrees with every signature. | 4 |
+| **M5-e `Game` as §2.1 drew it** | Task #13, the M3-c follow-ons, under the owner's ruling of 2026-09-07: `Sounds()` real (**M5-e-1**, built), `Frame()` recorded as `State().canvas`, `Universe m_universe` (**M5-e-2**, built — and the replay digest was found hashing the fixture's idle printers, §8), the eight `DTW` bytes into `Universe` (**M5-e-2b**, built) and the doubled `QQ17` collapsed into `TextState` with the token printer bound to it (**M5-e-2c**, built), `StateHash()` library-native beside the label hash (**M5-e-3**, built — `Elite::HashState`, with a completeness test that walks the label table and found five fields the first fold forgot). | The executable holds no game state and lends no buffer; the replay hashes what `Game` drove; `check_outpost.py` agrees with every signature. | 4 |
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
 
@@ -1804,6 +1807,43 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-e-3: `Game::StateHash()`, library-native, and the record's second column.**
+
+Task #13's last item, under the ruling of the same day: library-native, kept beside the label
+hash. `Elite::HashState(const Universe&)` is FNV-1a over every byte of game state, folded in
+`Universe`'s declaration order through the codecs where a struct has one (`Ship`, `Commander`) and
+byte by byte where it is bytes — one `FoldIntoStateHash` overload per state struct in
+`StateHash.cpp`, and the fold order is the whole definition. No label, no oracle, nothing from the test tree: `UniverseImage`'s
+hash is the same idea over the label table and needs `Where`; this one ships. `Game::StateHash()`
+answers it over the universe it owns, and `FlightPort::StateDigest()` is that call — the pixels, the
+heap arena and the controls the label digest has to fold on beside the image are bytes of `Universe`
+and need no folding on.
+
+**THE RECORD GAINS A COLUMN AND THE FIRST DOES NOT MOVE.** `Checkpoint` carries both digests; the
+label column is the one M5-e-2 took, to the bit, and the state column is new — taken from the same
+flight, not a re-take under rule 1 at all. Both are compared on every run until M6-f retires the
+labels, when the state column is the record.
+
+**WHAT HOLDS A HAND-WRITTEN FOLD TO THE STATE.** The risk of a fold is a field it forgot, and the
+first build forgot five: the completeness test in `StateHashTests` walks the label table UNRESOLVED
+(every address zero, as the replay hashes it, so the suite loads no oracle), flips each cell through
+its own setter and asks whether the state hash moved — and it named `safehouse`, `QQ8+1`, `JSTGY`,
+`JSTE` and `MUTOKOLD`, the five bytes M5-a-6 appended to `Universe` after `crosshairStep`, which the
+member listing the fold was written from had been cut before. 1,473 cells move the hash; the seven
+that cannot are the table's own no-op setter (`XX0`'s high byte) and the low halves of its word
+pairs, which `AddressPair` holds back until the high half commits. That last one is worth a line:
+the pair helper is stateful, and a walker that flips a low half and moves on without restoring it
+carries the flipped byte into the next cell's commit — the test restores every cell, inert or not.
+The three things the image leaves to the replay's digest are checked by hand, and `Game` is shown
+to hash its own universe and nothing else.
+
+Two accessors for the fold — `Canvas::SpriteMulticolour()`/`ExplosionColour()` and
+`LineHeap::Bytes()` (the arena only; the lent sun heap is `PlanetSunState::sun`'s and is folded
+there). 399 of 399 (four new); `origin-markers` 4,127 → 4,130 for the three codec layouts the fold
+names (rule 4); `oracle-test-files` unmoved at 48, because the suite walks the table unresolved;
+all 16 checks; the channel census regenerated, since a fold that reads every workspace field is a
+reader the census has to list.
 
 **2026-09-07 — M5-e-2c: `QQ17` is one byte, and the token printer binds to `TextState`.**
 
