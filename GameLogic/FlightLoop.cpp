@@ -321,9 +321,16 @@ namespace Elite
     (void)PlaySoundEffect(_universe.sound, SOUND_MISSILE, false); // 6502: LDY #sfxwhosh / JMP NOISE
   }
 
-  LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept
+  /*
+   * ---- part 1: the generator and the Trumbles --------------------------------------------------
+   *
+   * The frame's first two instructions and its ninth seam (M4-a-3). `BeginFlightFrame` was three
+   * hundred and twenty-four lines with parts 1, 2, 3 and 3's tail written out inside it under
+   * comment rules; the comment rules are function boundaries now, which is what the M4-a row asks
+   * for by "split at their annotated parts".
+   */
+  void StirTheFrame(Universe& _universe) noexcept
   {
-
     /*
      * 6502: LDA K% / STA RAND -- the planet's own x low byte, into the generator, every frame.
      *
@@ -347,7 +354,17 @@ namespace Elite
       MoveTrumbleSprites(_universe.trumbles, _universe.video, _universe.rng, _universe.flight.mainLoopCounter,
                          _universe.memoryMap);
     }
+  }
 
+  /*
+   * ---- part 2: the roll and the pitch, which are not the same shape ----------------------------
+   *
+   * The two halves are ONE function because the roll's exit carry is the pitch's `ADC #4` input
+   * (§6.85) -- a flag that is live across what looks like a boundary, so a split here would need a
+   * carry parameter to say what a local already says.
+   */
+  void TurnTheShip(Universe& _universe) noexcept
+  {
     // ---- part 2: the roll ------------------------------------------------------------------------
 
     // 6502: LDX JSTX / JSR cntr / JSR cntr -- twice, so the roll creeps back by two per frame.
@@ -428,7 +445,15 @@ namespace Elite
 
     _universe.flight.bet1 = pitchMagnitude; // 6502: STA BET1
     _universe.flight.beta = static_cast<std::uint8_t>(pitchMagnitude | _universe.flight.bet2);
+  }
 
+  /*
+   * ---- part 3: the keys ------------------------------------------------------------------------
+   *
+   * Answers `Escaped` for `JMP ESCAPE`, which does not come back, and `Continued` otherwise.
+   */
+  [[nodiscard]] LoopOutcome RunFlightKeys(Universe& _universe, Ports& _ports) noexcept
+  {
     // ---- part 3: the keys ------------------------------------------------------------------------
 
     Commander& commander = _universe.commander;
@@ -565,6 +590,19 @@ namespace Elite
       StartDockingMusic(_universe.music, _universe.memoryMap, _ports.sid);
     }
 
+    return LoopOutcome::Continued;
+  }
+
+  /*
+   * ---- part 3's tail: the guns -----------------------------------------------------------------
+   *
+   * 6502: .MA68 -- every path through part 3 reaches this label, including the one `BMI MA64` cut
+   * five keys short of.
+   */
+  [[nodiscard]] LoopOutcome FireTheGuns(Universe& _universe, Ports& _ports) noexcept
+  {
+    Commander& commander = _universe.commander;
+
     // ---- part 3's tail: the guns -----------------------------------------------------------------
 
     _universe.status.laserPower = 0u; // 6502: .MA68 LDA #0 / STA LAS
@@ -644,6 +682,21 @@ namespace Elite
     _universe.status.laserCount = static_cast<std::uint8_t>(countdown & 0xFAu);
 
     return LoopOutcome::Continued;
+  }
+
+  LoopOutcome BeginFlightFrame(Universe& _universe, Ports& _ports) noexcept
+  {
+    StirTheFrame(_universe); // 6502: part 1
+    TurnTheShip(_universe);  // 6502: part 2
+
+    // 6502: part 3 -- and `JMP ESCAPE` is the one exit it has, which is why this is not a `void`.
+    const LoopOutcome keys = RunFlightKeys(_universe, _ports);
+    if (keys != LoopOutcome::Continued)
+    {
+      return keys;
+    }
+
+    return FireTheGuns(_universe, _ports); // 6502: .MA68 -- part 3's tail
   }
 
   namespace
@@ -1384,19 +1437,19 @@ namespace Elite
     return LoopOutcome::Continued;
   }
 
-  LoopOutcome EndFlightFrame(Universe& _universe, Ports& _ports) noexcept
+  /*
+   * ---- part 13's head: the energy bomb burns down --------------------------------------------
+   *
+   * 6502: .MA18 LDA BOMB / BPL MA77 / ASL BOMB / BMI MA77 / JSR BOMBOFF.
+   *
+   * The bomb is a countdown kept as a shift register: part 3 doubles it when the key is pressed and
+   * this doubles it again every frame, so it burns for as many frames as it has bits left and ends
+   * when the top bit falls off. It runs on EVERY frame, which is why it is above the `AND #7`.
+   */
+  void BurnEnergyBomb(Universe& _universe) noexcept
   {
     Commander& commander = _universe.commander;
 
-    /*
-     * ---- part 13: the bomb, the shields and the banks -----------------------------------------
-     *
-     * 6502: .MA18 LDA BOMB / BPL MA77 / ASL BOMB / BMI MA77 / JSR BOMBOFF.
-     *
-     * The bomb is a countdown kept as a shift register: part 3 doubles it when the key is pressed
-     * and this doubles it again every frame, so it burns for as many frames as it has bits left and
-     * ends when the top bit falls off.
-     */
     if ((commander.energyBomb & 0x80u) != 0u)
     {
       commander.energyBomb = static_cast<std::uint8_t>(commander.energyBomb << 1u);
@@ -1406,87 +1459,103 @@ namespace Elite
         StopEnergyBomb(_universe.screen);
       }
     }
+  }
 
-    // 6502: .MA77 LDA MCNT / AND #7 / BNE MA22 -- seven frames in eight skip straight to part 15.
-    const std::uint8_t counter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter & 31u);
+  /*
+   * ---- part 13's tail: the shields and the banks ---------------------------------------------
+   *
+   * Every eighth frame, which is what `AND #7` selects.
+   */
+  void RechargeBanks(Universe& _universe) noexcept
+  {
+    Commander& commander = _universe.commander;
 
-    if ((_universe.flight.mainLoopCounter & 7u) == 0u)
+    /*
+     * 6502: LDX ENERGY / BPL b -- the shields are fed FROM the banks, so they only recharge while
+     * the banks are at least half full. `SHD` itself takes a unit of energy per shield (§6.83).
+     */
+    if ((_universe.status.energy & 0x80u) != 0u)
     {
-      /*
-       * 6502: LDX ENERGY / BPL b -- the shields are fed FROM the banks, so they only recharge while
-       * the banks are at least half full. `SHD` itself takes a unit of energy per shield (§6.83).
-       */
-      if ((_universe.status.energy & 0x80u) != 0u)
-      {
-        _universe.status.aftShield = RechargeShield(_universe.status, _universe.status.aftShield);
-        _universe.status.forwardShield = RechargeShield(_universe.status, _universe.status.forwardShield);
-      }
-
-      /*
-       * 6502: .b SEC / LDA ENGY / ADC ENERGY / BCS P%+5 / STA ENERGY.
-       *
-       * The `SEC` is the recharge: a commander with no energy unit still gains one point every
-       * eighth frame. And the overflow branch SKIPS the store rather than clamping, so banks that
-       * would pass 255 are left exactly where they were.
-       */
-      const AddResult banks = AddWithCarry(commander.energyUnit, _universe.status.energy, true);
-      if (!banks.carry)
-      {
-        _universe.status.energy = banks.value;
-      }
-
-      /*
-       * ---- part 14: bringing the space station back --------------------------------------------
-       *
-       * 6502: LDA MJ / BNE MA23S / LDA MCNT / AND #31 / BNE MA93.
-       *
-       * Once every thirty-two frames, and only when the station is NOT in the bubble, the loop
-       * checks whether the planet is close enough to have one -- and `MAS1` is called three times
-       * to DOUBLE the planet's coordinates into `INWK`, so the test is run at twice the distance.
-       */
-      if (_universe.status.midJump == 0u && counter == 0u && _universe.bubble.Count(ShipType::Station) == 0u &&
-          LargestAxis(_universe.bubble, 0u) == 0u)
-      {
-        // 6502: LDX #28 / .MAL4 LDA K%,X / STA INWK,X / DEX / BPL MAL4 -- 29 bytes, not the block:
-        // the position, the orientation, the speed and the acceleration, and nothing after.
-        std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _universe.work.ToBytes();
-        const std::array<std::uint8_t, SHIP_BLOCK_SIZE> planet = _universe.bubble.blocks[0].ToBytes();
-        std::copy_n(planet.begin(), 29u, bytes.begin());
-        _universe.work = Ship::FromBytes(bytes);
-
-        // 6502: INX / LDY #9 / JSR MAS1 / BNE MA23S, and twice more at (3, 11) and (6, 13).
-        // The `&&`s short-circuit and have to: each `MAS1` DOUBLES the coordinate it reads, in
-        // place, so a second call after a non-zero answer would move the planet twice.
-        const bool ahead = DoubleAndAddCoordinate(_universe.work, 9u, 0u) == 0u && DoubleAndAddCoordinate(_universe.work, 11u, 3u) == 0u &&
-                           DoubleAndAddCoordinate(_universe.work, 13u, 6u) == 0u;
-
-        if (ahead && WithinRange(_universe.work, STATION_SPAWN_RANGE))
-        {
-          EraseSun(_universe.canvas, _universe.heaps); // 6502: JSR WPLS
-
-          // 6502: JSR NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties
-          // the sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
-          (void)AddStation(_universe, _ports);
-        }
-      }
-
-      return EndFlightFrameTail(_universe, _ports);
+      _universe.status.aftShield = RechargeShield(_universe.status, _universe.status.aftShield);
+      _universe.status.forwardShield = RechargeShield(_universe.status, _universe.status.forwardShield);
     }
 
     /*
-     * ---- part 15: one job every sixteen frames -----------------------------------------------
+     * 6502: .b SEC / LDA ENGY / ADC ENERGY / BCS P%+5 / STA ENERGY.
      *
-     * 6502: .MA22 LDA MJ / BNE MA23S / LDA MCNT / AND #31 / .MA93 CMP #10 / BNE MA29.
-     *
-     * `MA93` is entered from part 14 as well, with the same masked counter in A -- so the three
-     * jobs below run on steps 10, 15 and 20 of a thirty-two step cycle whichever way in it came.
+     * The `SEC` is the recharge: a commander with no energy unit still gains one point every
+     * eighth frame. And the overflow branch SKIPS the store rather than clamping, so banks that
+     * would pass 255 are left exactly where they were.
      */
-    if (_universe.status.midJump != 0u)
+    const AddResult banks = AddWithCarry(commander.energyUnit, _universe.status.energy, true);
+    if (!banks.carry)
     {
-      return EndFlightFrameTail(_universe, _ports);
+      _universe.status.energy = banks.value;
+    }
+  }
+
+  /*
+   * ---- part 14: bringing the space station back ------------------------------------------------
+   *
+   * Once every thirty-two frames, and only when the station is NOT in the bubble, the loop checks
+   * whether the planet is close enough to have one -- and `MAS1` is called three times to DOUBLE
+   * the planet's coordinates into `INWK`, so the test is run at twice the distance.
+   */
+  void MaybeSpawnStation(Universe& _universe, Ports& _ports) noexcept
+  {
+    // 6502: LDA SSPR / BNE MA23S, then TAY / JSR MAS2 / BNE MA23S.
+    if (_universe.bubble.Count(ShipType::Station) != 0u || LargestAxis(_universe.bubble, 0u) != 0u)
+    {
+      return;
     }
 
-    if (counter == STEP_ENERGY_CHECK)
+    // 6502: LDX #28 / .MAL4 LDA K%,X / STA INWK,X / DEX / BPL MAL4 -- 29 bytes, not the block:
+    // the position, the orientation, the speed and the acceleration, and nothing after.
+    std::array<std::uint8_t, SHIP_BLOCK_SIZE> bytes = _universe.work.ToBytes();
+    const std::array<std::uint8_t, SHIP_BLOCK_SIZE> planet = _universe.bubble.blocks[0].ToBytes();
+    std::copy_n(planet.begin(), 29u, bytes.begin());
+    _universe.work = Ship::FromBytes(bytes);
+
+    // 6502: INX / LDY #9 / JSR MAS1 / BNE MA23S, and twice more at (3, 11) and (6, 13).
+    // The `&&`s short-circuit and have to: each `MAS1` DOUBLES the coordinate it reads, in
+    // place, so a second call after a non-zero answer would move the planet twice.
+    const bool ahead = DoubleAndAddCoordinate(_universe.work, 9u, 0u) == 0u && DoubleAndAddCoordinate(_universe.work, 11u, 3u) == 0u &&
+                       DoubleAndAddCoordinate(_universe.work, 13u, 6u) == 0u;
+
+    if (ahead && WithinRange(_universe.work, STATION_SPAWN_RANGE))
+    {
+      EraseSun(_universe.canvas, _universe.heaps); // 6502: JSR WPLS
+
+      // 6502: JSR NWSPS -- and the erase above is half of one thought with it: `NWSPS` empties
+      // the sun's SLOT and takes its line heap, so this rubs the sun off the screen first.
+      (void)AddStation(_universe, _ports);
+    }
+  }
+
+  /*
+   * ---- part 15: the thirty-two step cycle, as the table it is ----------------------------------
+   *
+   * 6502: .MA22 LDA MJ / BNE MA23S / LDA MCNT / AND #31 / .MA93 CMP #10 / BNE MA29.
+   *
+   * THE CYCLE IS THIRTY-TWO STEPS AND NOT SIXTEEN. The M4-a row and this block's own heading both
+   * said sixteen and neither is right: `MCNT` is masked with 31, so the three jobs below fire once
+   * each per thirty-two frames, and part 13's shields-and-banks fire once per eight. Nothing in the
+   * original mentions sixteen at all; the number was carried in the plan from M0 and is corrected
+   * here rather than left to be repeated (M4-a-3).
+   *
+   *   step 10  the energy warning, then the altitude -- and `MA28` out of it is death
+   *   step 15  the docking-computer reminder
+   *   step 20  the cabin temperature, the Trumbles cooking, and fuel scooping -- death here too
+   *   others   nothing, which is the `BNE MA29 / BNE MA33 / BNE MA23` chain falling through
+   *
+   * `MCNT` DECREMENTS rather than increments (`MLOOP`'s `DEC MCNT`), so the cycle runs backwards
+   * through those residues; every one of the thirty-two is still visited once per block.
+   */
+  [[nodiscard]] LoopOutcome RunCycleStep(Universe& _universe, Ports& _ports, std::uint8_t _counter) noexcept
+  {
+    Commander& commander = _universe.commander;
+
+    if (_counter == STEP_ENERGY_CHECK)
     {
       /*
        * 6502: LDA #50 / CMP ENERGY / BCC P%+6 / ASL A / JSR MESS.
@@ -1551,7 +1620,7 @@ namespace Elite
         }
       }
     }
-    else if (counter == STEP_DOCKING_REMINDER)
+    else if (_counter == STEP_DOCKING_REMINDER)
     {
       // 6502: .MA29 CMP #15 / BNE MA33 / LDA auto / BEQ MA23 / LDA #123 / BNE MA34.
       if (_universe.control.dockingComputer != 0u)
@@ -1560,7 +1629,7 @@ namespace Elite
                     _universe.view);
       }
     }
-    else if (counter == STEP_CABIN_TEMPERATURE)
+    else if (_counter == STEP_CABIN_TEMPERATURE)
     {
       /*
        * 6502: .MA33 CMP #20 / BNE MA23 / LDA #30 / STA CABTMP / LDA SSPR / BNE MA23.
@@ -1637,6 +1706,50 @@ namespace Elite
     }
 
     return EndFlightFrameTail(_universe, _ports);
+  }
+
+  LoopOutcome EndFlightFrame(Universe& _universe, Ports& _ports) noexcept
+  {
+    BurnEnergyBomb(_universe); // 6502: part 13's head, on every frame
+
+    // 6502: .MA77 LDA MCNT / AND #7 / BNE MA22 -- seven frames in eight skip straight to part 15.
+    const std::uint8_t counter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter & 31u);
+
+    if ((_universe.flight.mainLoopCounter & 7u) == 0u)
+    {
+      RechargeBanks(_universe); // 6502: part 13's tail
+
+      // 6502: part 14 opens LDA MJ / BNE MA23S -- no space stations in witchspace.
+      if (_universe.status.midJump != 0u)
+      {
+        return EndFlightFrameTail(_universe, _ports);
+      }
+
+      /*
+       * 6502: LDA MCNT / AND #31 / BNE MA93 -- and the fall-through matters (M4-a-3).
+       *
+       * A zero runs part 14 and every path through it ends at `MA23S`; anything else drops into
+       * `MA93`, which is part 15's first compare. The port used to return the tail on BOTH, which
+       * is observationally identical -- a step that is 0 mod 8 is never 10, 15 or 20 mod 32, so the
+       * three jobs could not have fired anyway -- but it was an argument nothing had written down,
+       * and the comment above part 15 asserted the opposite. The shape is the original's again.
+       */
+      if (counter == 0u)
+      {
+        MaybeSpawnStation(_universe, _ports);
+        return EndFlightFrameTail(_universe, _ports);
+      }
+    }
+    else
+    {
+      // 6502: .MA22 LDA MJ / BNE MA23S -- part 15's own witchspace test, the twin of part 14's.
+      if (_universe.status.midJump != 0u)
+      {
+        return EndFlightFrameTail(_universe, _ports);
+      }
+    }
+
+    return RunCycleStep(_universe, _ports, counter); // 6502: .MA93
   }
 
   LoopOutcome MainFlightLoop(Universe& _universe, Ports& _ports) noexcept

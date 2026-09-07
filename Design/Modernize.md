@@ -149,7 +149,7 @@ aggregates, which is the shape M4 changes and M3 makes possible.
 |---|---|---|---|---|
 | `BeginFlightFrame` | `M%` to `MA3` (parts 1–3) | Seeds `RAND` from the planet's x, moves the Trumbles, reads the key logger into roll/pitch/speed, fires lasers, missiles, the E.C.M., the energy bomb, the escape pod, the docking computer | keys, controls, commander, status | `FlightState` (alpha/beta/delta and their sign/magnitude copies), `RAND`, sounds |
 | `MoveEveryShip` | `MA3` to `MAL1` (parts 4–12) and `KS1` | Per occupied slot: copy the block into `INWK`, look up the blueprint, let the bomb kill it, `MVEIT` (motion, tactics one pass in eight, scanner blip), copy back, contact test, scooping, docking, collision damage, `LL9`, laser hit, kill or write-back | bubble, `INWK`, blueprint, status, commander | the same, plus the canvas, the line heap, the scanner, sounds |
-| `EndFlightFrame` | `MA18` to `STARS` (parts 13–16) | Shield and bank recharge every eighth frame, the sixteen-step housekeeping cycle (energy warning, docking-computer reminder, cabin temperature, altitude, fuel scooping, the planet and sun through `PLANET`), then the stardust | status, bubble slots 0 and 1 | status, canvas, `FlightState::delt4` |
+| `EndFlightFrame` | `MA18` to `STARS` (parts 13–16) | Shield and bank recharge every eighth frame, the thirty-two-step housekeeping cycle (energy warning, docking-computer reminder, cabin temperature, altitude, fuel scooping, the planet and sun through `PLANET`), then the stardust | status, bubble slots 0 and 1 | status, canvas, `FlightState::delt4` |
 
 The loop over slots is a `for (;;)` with a hand-advanced index because `KILLSHP` shuffles the slots
 down and the slot that took the dead one's place is processed next. Three things leave the frame
@@ -326,11 +326,18 @@ the language's rule and a smell. One seam carries a CPU flag across the platform
 `PlaySound(std::uint8_t _effect, bool _carryIn)` returns a carry because `NOISE` does (§6.99), and
 the *window* is asked to preserve it.
 
-**P8 — Monolithic frame procedures.** `MoveEveryShip` is four hundred lines over nine annotated
+**P8 — Monolithic frame procedures.** `MoveEveryShip` was four hundred lines over nine annotated
 parts; `BeginFlightFrame` and `EndFlightFrame` about the same between them; `DrawShip` 531 and
 `RunTactics` 567; `RunDockingComputer` two hundred. Each is one routine in the original and one
 function here, with local `bool`s standing in for the branch targets (`docking`, `scoopable`,
 `collision`, `holdFull`, `crashed`) and results carried in the workspaces.
+
+**M4-a HAS DONE THE THREE IN THE FLIGHT LOOP** (§8, 2026-09-07). `MoveEveryShip` is 143 lines and
+its parts answer `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim`, `LaserHit` and
+`KillOutcome`; `BeginFlightFrame` is 14 over `StirTheFrame`, `TurnTheShip`, `RunFlightKeys` and
+`FireTheGuns`; `EndFlightFrame` is 43 over `BurnEnergyBomb`, `RechargeBanks`, `MaybeSpawnStation`
+and `RunCycleStep`. Every one of the five `bool`s is a value some stage returns. `DrawShip` is
+M4-b's and `RunTactics` and `RunDockingComputer` are M4-c's.
 
 **P9 — Implicit state machines.** The game's mode is `dockedFlag` (a `std::uint8_t&` written by
 `RESET`, `DOENTRY` and `TT110`), `paused` (a `bool` in `Main.cpp`), `LoopOutcome` plus `Leave`, and
@@ -355,7 +362,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,042 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,053 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->50 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -488,7 +495,7 @@ never global.
 <!--census:start-->
 | Field | 6502 | Written by | Read before written, from the caller | Read after a call | Verdict |
 |---|---|---|---|---|---|
-| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail | EndFlightFrame | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
+| `MathWorkspace.q` | `Q` | AddStep, DivideByShipZ, DrawExplosionCloud, DrawParticles, DrawShip, DrawSun, MeasureSlope, MovePlanetOrSun, MoveShipTail | RunCycleStep | — | **The frame's Q**, and one of the two bytes left (M2-b, §8; risk R22). `MA23`'s altitude check takes whatever the frame last left in `Q` as its radicand's low byte, so `MoveShipTail`, `MovePlanetOrSun`, `DivideByShipZ`, `DrawShip`, `DrawSun`, `DOEXP`'s two routines and the clipper's `LL115` and `LL118` write it for that read alone, as the original's `STA Q`s do. R22 said `LOIN` was a tenth writer this port never modelled and it is not: this build's `LOIN` works in `P2`, `Q2`, `R2` and `S2` at 188-191 and never touches `Q` at 154. Closed 2026-09-06 by measurement -- `TheFramesOwnQReachesTheAltitude` runs the whole frame with the planet in range and compares `ALTIT`. |
 | `MathWorkspace.k2Low` | `K2` | DrawPlanetDetail, DrawSun | MovePlanetOrSun | — | **One byte of state, deliberately** (M2-b, §8). `MV40` never writes `K2` and its `LDA K / CLC / ADC K2` reads this byte for the carry of its first addition, so what it gets is whatever the last planet or sun drawer left there a frame ago. `PL9`, `PL26` and `SUN` store to it where the original's `STA K2` is; the other three bytes of the block are the ellipse's axes and travel as an `EllipseAxes` value since M2-c-3. |
 | `DrawWorkspace.sc` | `SC(1 0)` | DrawBar, DrawDials, DrawIndicator | DrawBar, DrawIndicator | — | **State, deliberately** (M2-c leaves it; M4 names it). `DIALS` sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running (its own comment, slice 3d-b): a cursor the dashboard drawer owns, not scratch. |
 | `GeometryWorkspace.xx16` | `XX16` | DrawEllipse, DrawPlanetDetail, LoadTwoAxes, ScaleOrientation | DotProducts, TransposeOrientation | — | **Stage result** (M2-c-3 leaves it in the frame; M4 makes it a pipeline). `LL15`/`LL21` fill it, `LL51` and the transpose read it, and the planet drawer uses the same six bytes for the ellipse's four signs -- two meanings, one block, as `RAT` and `RAT2` are. |
@@ -1454,7 +1461,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M4-a Flight frame stages** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the sixteen-step cycle as a table. **M4-a-1 built 2026-09-07 (§8):** `SPIN` and `SPIN2` answer an `Elite::Drop` and `PerformDrop` spawns, which is what `SpawnChildEffects` was waiting on — the seam goes, and the frame fixtures untrap `SFS1` on both machines. **M4-a-2 built 2026-09-07 (§8):** parts 7 to 12 as `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and `KillOutcome` beside the existing `LaserHit`; `MoveEveryShip` 426 → 143 lines, and three dead stores at the end of part 9 that only a type could show were dead. | `FlightLoopTests` green frame for frame; replay hashes unchanged. M4-a-1: both, plus `effects-seams` 9 → 8 and `aggregate-refs` 11 → 10. | 4 |
+| **M4-a Flight frame stages** ✅ **built 2026-09-07 (§8)** | `MoveEveryShip`'s parts 7–12 as typed stages (`Contact`, `ScoopResult`, `DockingTest`, `LaserHit`, `KillOutcome`); `BeginFlightFrame` and `EndFlightFrame` split at their annotated parts with the housekeeping cycle as a table. **M4-a-1 built 2026-09-07 (§8):** `SPIN` and `SPIN2` answer an `Elite::Drop` and `PerformDrop` spawns, which is what `SpawnChildEffects` was waiting on — the seam goes, and the frame fixtures untrap `SFS1` on both machines. **M4-a-2 built 2026-09-07 (§8):** parts 7 to 12 as `Contact`, `ScoopResult`, `DockingTest`, `Impact`, `Aim` and `KillOutcome` beside the existing `LaserHit`; `MoveEveryShip` 426 → 143 lines, and three dead stores at the end of part 9 that only a type could show were dead. **M4-a-3 built 2026-09-07 (§8):** the head and the tail split at their annotated parts — 324 → 14 and 254 → 43 — with the cycle as a table, the thirty-two-step count corrected in three places, and part 14's fall-through into part 15 restored. **M4-a is complete.** | `FlightLoopTests` green frame for frame; replay hashes unchanged. M4-a-1: both, plus `effects-seams` 9 → 8 and `aggregate-refs` 11 → 10. | 4 |
 | **M4-b LL9 stages** | `DrawShip` as the six stages of §4.6 over a `ShipRender` frame. | `ShipDrawTests` green; the whole-bitmap comparisons unchanged. | 4 |
 | **M4-c Decisions** | `TACTICS`, `DOCKIT` and `MLOOP` parts 1–4 return `Decision`s applied by one function; the sixteen `tactics` mutants re-anchored and re-run to zero survivors. | `TacticsTests` green; `mutate.py --unit tactics` at the recorded tally. | 5 |
 | **M4-d Mode machine polish** | The mission sub-machine, the death sequence and the pause as explicit states; `LoopOutcome` retired. | Replay hashes unchanged. | 2 |
@@ -1751,6 +1758,43 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M4-a-3: the frame's head and tail split at their annotated parts, and the port had
+been collapsing a branch the original does not.**
+
+`BeginFlightFrame` was 324 lines and `EndFlightFrame` 254, each with the original's part numbers
+written into the comments as rules across the page. The rules are function boundaries now:
+`StirTheFrame`, `TurnTheShip`, `RunFlightKeys` and `FireTheGuns` for parts 1, 2, 3 and 3's tail;
+`BurnEnergyBomb`, `RechargeBanks`, `MaybeSpawnStation` and `RunCycleStep` for parts 13's two halves,
+14 and 15. The two entry points are 14 and 43 lines. **The roll and the pitch stay in ONE function
+on purpose** — the roll's exit carry is the pitch's `ADC #4` input (§6.85), a flag live across what
+looks like a boundary, and splitting there would need a carry parameter to say what a local already
+says.
+
+**AND THE SPLIT FOUND A BRANCH THE PORT WAS NOT TAKING.** Part 14 ends `LDA MCNT / AND #31 /
+BNE MA93`, and `MA93` is part 15's first compare — so on a frame where `MCNT` is 0 mod 8 but not 0
+mod 32, the original runs part 13's tail and then falls into part 15's three tests. The port
+returned the frame tail on BOTH sides of that branch. It is observationally identical, and the
+argument is arithmetic: a step that is 0 mod 8 is never 10, 15 or 20 mod 32, so the three jobs could
+not have fired. **Nothing had written that argument down**, and the comment above part 15 asserted
+the opposite — "`MA93` is entered from part 14 as well ... whichever way in it came" — which is
+false of this port and true of the original. The fall-through is restored, so the shape is the
+original's again and the argument is not needed.
+
+**THE CYCLE IS THIRTY-TWO STEPS AND NOT SIXTEEN.** The M4-a row asked for "the sixteen-step cycle as
+a table", §2's decode table said "the sixteen-step housekeeping cycle", and part 15's own heading
+said "one job every sixteen frames". All three are wrong: `MCNT` is masked with 31, the three jobs
+fire at steps 10, 15 and 20 of a thirty-two step block, and the shields and banks fire once per
+eight. Sixteen appears nowhere in the original. `RunCycleStep` carries the table, all three places
+are corrected, and `MCNT`'s DECREMENT is recorded beside it — the residues are visited backwards and
+all thirty-two are still visited once per block.
+
+**Counts.** `origin-markers` 4,042 → 4,053, the third rise and the last of M4-a's: eleven labels on
+the new function boundaries, which is `MA18`, `MA77`, `MA22`, `MA93`, `MA23S`, `MA68` and the rest
+written where the code splits rather than inside a comment rule. The channel census moves one
+reader with the code — `MathWorkspace.q`'s is `RunCycleStep` rather than `EndFlightFrame`, which is
+the same read in a smaller function — and P8's paragraph in §3 records what M4-a did to the three
+frame procedures it names. 402 of 402, all 14 repository checks, the replay digest unchanged.
 
 **2026-09-07 — M4-a-2: parts 7 to 12 as typed stages, and five booleans that were a state machine
 nobody had written down.**
