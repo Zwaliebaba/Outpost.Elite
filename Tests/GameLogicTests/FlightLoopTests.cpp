@@ -1362,7 +1362,6 @@ namespace GameLogicTests
              * `MCNT` at zero, `MVTRIBS` moves sprite 0 and takes a random number for it, which is
              * why the generator's state is part of what `CompareState` checks.
              */
-            frame.universe.spriteRegistersAreOurs = true;
             frame.universe.trumbles.count = ((roll & 1u) != 0u) ? 0u : 3u;
             for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
             {

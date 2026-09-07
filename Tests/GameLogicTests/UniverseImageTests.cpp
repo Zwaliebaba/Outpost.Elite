@@ -43,7 +43,6 @@ namespace GameLogicTests
       const Where at(oracle);
 
       Universe universe;
-      universe.spriteRegistersAreOurs = true; // so the sprite cells are in the table too
       const std::vector<Cell> cells = ImageCells(universe, at);
 
       Assert::IsTrue(cells.size() > 500u, L"the table is far shorter than the state it describes");
@@ -71,7 +70,6 @@ namespace GameLogicTests
 
       Universe seeded;
       Seed(seeded, 7u);
-      seeded.spriteRegistersAreOurs = true;
       for (std::size_t sprite = 0; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
         seeded.video.x[sprite] = static_cast<std::uint16_t>(0x120u + 3u * sprite);
@@ -82,7 +80,6 @@ namespace GameLogicTests
       Materialise(seeded, cpu, at);
 
       Universe absorbed;
-      absorbed.spriteRegistersAreOurs = true;
       Absorb(cpu, absorbed, at);
 
       Assert::AreEqual(Hash(seeded, at), Hash(absorbed, at), L"a round trip through memory changed the image");

@@ -68,9 +68,10 @@ namespace GameLogicTests
 
     /// The record. Empty is a failure, so a tree can never carry an unpinned replay.
     /*
-     * RE-TAKEN SEVEN TIMES. Five were Modernize.md rule 1's second case (the port was wrong); the
-     * fifth, M5-a-6, and the seventh, M6-0-d, are the FIRST case (the digest was deliberately
-     * widened). The count said "twice" until 2026-09-07 and had never counted the owner's fix below.
+     * RE-TAKEN EIGHT TIMES. Five were Modernize.md rule 1's second case (the port was wrong); the
+     * fifth, M5-a-6, the seventh, M6-0-d, and the eighth, M6-0-a, are the FIRST case (the digest was
+     * deliberately widened). The count said "twice" until 2026-09-07 and had never counted the
+     * owner's fix below.
      *
      * 2026-09-06, M2-c-1: every digest moved and not one step did. What changed was the SHAPE of
      * the image the digest is taken over -- `UniverseImage` hashed a `T2` cell holding a byte the
@@ -108,6 +109,11 @@ namespace GameLogicTests
      * which is the evidence that the five new cells agree with the oracle wherever `CompareState`
      * already looks; only the record needed re-taking.
      *
+     * 2026-09-07, M6-0-a: the label column again, the state column not at all. The interpreter
+     * banks the I/O page now, so the VIC-II's sprite registers stopped being `XX21`'s bytes and
+     * the seventeen sprite cells joined the image unconditionally -- a fixture used to have to
+     * CLAIM them. Rule 1's first case, and the state column is the witness as before.
+     *
      * 2026-09-07, M6-0-d: the label column moves on every checkpoint and THE STATE COLUMN DOES
      * NOT -- which is the state column doing the job it was built for. Nine planet-and-sun cells
      * joined the image (`SUNX`, `Yx2M1`, `K5`, `K6`, `STP`, `FLAG`, `PLTOG`, `V`), so the label hash
@@ -132,22 +138,22 @@ namespace GameLogicTests
      * flight is the flight it was, and what moved is nine bytes that had been constants.
      */
     constexpr Checkpoint RECORDED[] = {
-      {0, 0xe78eb14b5d1bf7f0ull, 0x2ab36cb10fc3d025ull},     // launched from Lave
-      {40, 0x06a203f1b099a3eeull, 0x41c73e56e5b6dec0ull},    // coasted
-      {100, 0xb67addd5dfecde33ull, 0x52b4ee3425808769ull},   // at full speed
-      {200, 0x36b048c68d25f975ull, 0x38f68d860fee04daull},
-      {300, 0x3d8bbf2a94bf7683ull, 0x8cacc02d70b22da1ull},
-      {340, 0xa5f58d6b5237f0ebull, 0xf1365571ec21753bull},   // the Viper fought
-      {342, 0x6d7d1b0c25a52355ull, 0xe40530ef96dd4a8aull},   // the docking computer engaged
-      {400, 0xf5c0ff2eec8bb7e7ull, 0x7cc5be3c31affc57ull},
-      {500, 0xf699debe2e23b0e6ull, 0x650920d3bf96ad4dull},
-      {600, 0x761c2d0688bf8d55ull, 0x6ab3ccd16ef631ccull},
-      {700, 0x1358ee82a6032d2full, 0x8e7b06a8fc599754ull},
-      {800, 0xec713d92fac6d8dcull, 0x5625267a616ccbd3ull},
-      {900, 0x47b4ece6085d6c3eull, 0xece8c828544e5bc6ull},
-      {1000, 0x069441bb19953ed2ull, 0xb8e25422b42eb7b9ull},
-      {1100, 0xd8fa081acbeb751dull, 0xb2527b82bca1dbf0ull},
-      {1170, 0x4d18c62bec68382bull, 0xf42b8700b049cf7cull},  // docked
+      {0, 0xe2e8e3e51484050eull, 0x2ab36cb10fc3d025ull},     // launched from Lave
+      {40, 0x213b1335554bb32cull, 0x41c73e56e5b6dec0ull},    // coasted
+      {100, 0x37de3b418e64b8d9ull, 0x52b4ee3425808769ull},   // at full speed
+      {200, 0xa989b80ffa644f23ull, 0x38f68d860fee04daull},
+      {300, 0x187d3ff1a6cb13e7ull, 0x8cacc02d70b22da1ull},
+      {340, 0x2ed5b019a755b387ull, 0xf1365571ec21753bull},   // the Viper fought
+      {342, 0x59ff6b54f8754ff5ull, 0xe40530ef96dd4a8aull},   // the docking computer engaged
+      {400, 0xdcc716aab0968035ull, 0x7cc5be3c31affc57ull},
+      {500, 0x29c7fa21f4caa8e2ull, 0x650920d3bf96ad4dull},
+      {600, 0x3b8efac5f86b0ad9ull, 0x6ab3ccd16ef631ccull},
+      {700, 0x16c67711a7f6774bull, 0x8e7b06a8fc599754ull},
+      {800, 0xd400072409783fe8ull, 0x5625267a616ccbd3ull},
+      {900, 0x83f04d7051b44b8aull, 0xece8c828544e5bc6ull},
+      {1000, 0xf9264bf01da1822eull, 0xb8e25422b42eb7b9ull},
+      {1100, 0xdf5dfbe0a0c56019ull, 0xb2527b82bca1dbf0ull},
+      {1170, 0x5ae981a85f5bc5f9ull, 0xf42b8700b049cf7cull},  // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;

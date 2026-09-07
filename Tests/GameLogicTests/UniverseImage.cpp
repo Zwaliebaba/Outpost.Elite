@@ -132,12 +132,7 @@ namespace GameLogicTests
 
   } // namespace
 
-  std::vector<Cell> ImageCells(Universe& _universe, const Where& _at)
-  {
-    return ImageCells(static_cast<Elite::Universe&>(_universe), _universe.spriteRegistersAreOurs, _at);
-  }
-
-  std::vector<Cell> ImageCells(Elite::Universe& _universe, bool _spriteRegistersAreOurs, const Where& _at)
+  std::vector<Cell> ImageCells(Elite::Universe& _universe, const Where& _at)
   {
     std::vector<Cell> cells;
     cells.reserve(1200);
@@ -209,15 +204,13 @@ namespace GameLogicTests
     }
 
     /*
-     * The VIC-II sprite coordinates, and ONLY when the fixture has claimed them (slice 4d-a).
-     *
-     * In the flat image the VIC-II is `XX21` (§6.108), so these addresses hold the blueprint
-     * pointers for ship types 3 to 9 on one side and sprite registers on the other. A fixture sets
-     * `spriteRegistersAreOurs` when it intends `MVTRIBS` to run and promises to draw no ship after;
-     * every other fixture leaves the bytes alone, and so does this table. The nine-bit x is one
-     * value on the port's side and a low byte per sprite plus one shared high-bit byte on the game's.
+     * The VIC-II sprite coordinates -- registers on the I/O page, which the interpreter banks
+     * since M6-0-a. Until then they were `XX21` in a flat image (§6.108): the same addresses held
+     * the blueprint pointers for ship types 3 to 9 on one side and sprite registers on the other,
+     * so a fixture had to CLAIM them (`spriteRegistersAreOurs`) and promise to draw no ship after.
+     * The nine-bit x is one value on the port's side and a low byte per sprite plus one shared
+     * high-bit byte on the game's.
      */
-    if (_spriteRegistersAreOurs)
     {
       for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
@@ -227,18 +220,22 @@ namespace GameLogicTests
         low.name = L"sprite " + std::to_wstring(sprite) + L" x";
         low.address = at;
         low.scope = CellScope::Compared;
+        low.io = true;
         low.get = [universe, sprite]() { return static_cast<std::uint8_t>(universe->video.x[sprite] & 0xFFu); };
         low.set = [universe, sprite](std::uint8_t _byte)
         { universe->video.x[sprite] = static_cast<std::uint16_t>((universe->video.x[sprite] & 0x100u) | _byte); };
         cells.push_back(std::move(low));
 
-        cells.push_back(Direct(L"sprite y", static_cast<std::uint16_t>(at + 1u), _universe.video.y[sprite], CellScope::Compared));
+        Cell y = Direct(L"sprite y", static_cast<std::uint16_t>(at + 1u), _universe.video.y[sprite], CellScope::Compared);
+        y.io = true;
+        cells.push_back(std::move(y));
       }
 
       Cell shared;
       shared.name = L"sprite x high bits";
       shared.address = static_cast<std::uint16_t>(_at.vic + 0x10u);
       shared.scope = CellScope::Compared;
+      shared.io = true;
       shared.mask = static_cast<std::uint8_t>(0xFFu << Elite::FIRST_TRUMBLE_SPRITE);
       shared.get = [universe]()
       {
@@ -489,7 +486,7 @@ namespace GameLogicTests
     // The getters are all that runs; see the note on `ImageCells`.
     for (const Cell& cell : ImageCells(const_cast<Universe&>(_universe), _at))
     {
-      _cpu.memory[cell.address] = cell.get();
+      (cell.io ? _cpu.Io(cell.address) : _cpu.memory[cell.address]) = cell.get();
     }
   }
 
@@ -499,7 +496,7 @@ namespace GameLogicTests
     {
       if (cell.scope != CellScope::Seeded)
       {
-        cell.set(static_cast<std::uint8_t>(_cpu.memory[cell.address] & cell.mask));
+        cell.set(static_cast<std::uint8_t>((cell.io ? _cpu.Io(cell.address) : _cpu.memory[cell.address]) & cell.mask));
       }
     }
   }
@@ -513,7 +510,7 @@ namespace GameLogicTests
       {
         continue;
       }
-      const std::uint8_t theirs = static_cast<std::uint8_t>(_cpu.memory[cell.address] & cell.mask);
+      const std::uint8_t theirs = static_cast<std::uint8_t>((cell.io ? _cpu.Io(cell.address) : _cpu.memory[cell.address]) & cell.mask);
       const std::uint8_t ours = static_cast<std::uint8_t>(cell.get() & cell.mask);
       if (theirs != ours)
       {
@@ -549,7 +546,7 @@ namespace GameLogicTests
   std::uint64_t Hash(const Elite::Universe& _universe)
   {
     const Where unresolved{};
-    return HashCells(ImageCells(const_cast<Elite::Universe&>(_universe), false, unresolved));
+    return HashCells(ImageCells(const_cast<Elite::Universe&>(_universe), unresolved));
   }
 
   // ---- the two names the suites already use --------------------------------------------------------

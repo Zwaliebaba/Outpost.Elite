@@ -622,8 +622,8 @@ namespace GameLogicTests
             cpu.memory[view] = which;
             cpu.memory[tribct] = 0x9Cu;
             cpu.memory[t] = 0x9Cu;
-            cpu.memory[vicColour] = 0x00u;
-            cpu.memory[vicEnable] = 0x00u;
+            cpu.Io(vicColour) = 0x00u;
+            cpu.Io(vicEnable) = 0x00u;
             cpu.memory[0x0001u] = PORT_SEED; // 6502: l1 -- see the bracket assertion below
 
             const Elite::Testing::RunResult run = cpu.CallSubroutine(sight, 5'000);
@@ -649,18 +649,18 @@ namespace GameLogicTests
             Assert::AreEqual(cpu.memory[tribct], trumbles.count, (where + L": TRIBCT").c_str());
             // `T` is `SIGHT`'s own since M2-c-3 -- one if a laser was found, zero if not -- and
             // what it produced is the sprite-enable byte compared on the next line.
-            Assert::AreEqual(cpu.memory[vicEnable], video.enabled, (where + L": VIC+&15").c_str());
+            Assert::AreEqual(cpu.Io(vicEnable), video.enabled, (where + L": VIC+&15").c_str());
 
             // The colour register is only written when a laser was found, so a case with none
             // leaves the marker on BOTH sides rather than a colour.
             // The register takes four bits, so the two sides are compared through the same latch
             // the chip applies -- `sightcol` never sets the others, and a byte that did would be
             // the game's business rather than a difference (slice 5a).
-            Assert::AreEqual<std::uint32_t>(Elite::ColourIndex(Elite::ColourOf(cpu.memory[vicColour])),
+            Assert::AreEqual<std::uint32_t>(Elite::ColourIndex(Elite::ColourOf(cpu.Io(vicColour))),
                                             Elite::ColourIndex(video.colour[0]), (where + L": VIC+&27").c_str());
             if (!laser.Fitted())
             {
-              Assert::AreEqual<std::uint32_t>(0u, cpu.memory[vicColour], (where + L": and neither wrote it").c_str());
+              Assert::AreEqual<std::uint32_t>(0u, cpu.Io(vicColour), (where + L": and neither wrote it").c_str());
             }
 
             /*

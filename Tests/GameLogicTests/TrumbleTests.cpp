@@ -491,8 +491,9 @@ namespace GameLogicTests
       const std::uint16_t mcnt = oracle.Label("MCNT");
       const std::uint16_t rand = oracle.Label("RAND");
 
-      // 6502: VIC -- and in a flat image the label at that address is `XX21` (§6.108).
-      const std::uint16_t vic = oracle.Label("XX21");
+      // 6502: VIC -- the chip's own address. The flat image's label there was `XX21`, and until
+      // M6-0-a the two were one page; the interpreter banks them now, so these are `Io` accesses.
+      const std::uint16_t vic = Cpu6502::IO_BASE;
 
       Cpu6502 cpu = oracle.Fresh();
       cpu.memory[0x0001u] = PORT_SEED; // 6502: l1
@@ -515,14 +516,14 @@ namespace GameLogicTests
       for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
         const std::uint16_t at = static_cast<std::uint16_t>(vic + 2u * sprite);
-        cpu.memory[at] = static_cast<std::uint8_t>(_bank.video.x[sprite] & 0xFFu);
-        cpu.memory[static_cast<std::uint16_t>(at + 1u)] = _bank.video.y[sprite];
+        cpu.Io(at) = static_cast<std::uint8_t>(_bank.video.x[sprite] & 0xFFu);
+        cpu.Io(static_cast<std::uint16_t>(at + 1u)) = _bank.video.y[sprite];
         if ((_bank.video.x[sprite] & 0x100u) != 0u)
         {
           shared = static_cast<std::uint8_t>(shared | (1u << sprite));
         }
       }
-      cpu.memory[static_cast<std::uint16_t>(vic + 0x10u)] = static_cast<std::uint8_t>(shared | _bank.sharedEntry);
+      cpu.Io(static_cast<std::uint16_t>(vic + 0x10u)) = static_cast<std::uint8_t>(shared | _bank.sharedEntry);
       for (std::size_t index = 0; index < 4u; ++index)
       {
         cpu.memory[static_cast<std::uint16_t>(rand + index)] = _bank.seed[index];
@@ -556,14 +557,14 @@ namespace GameLogicTests
        * corresponding to VIC+&10, so asserting on one would be asserting about a fiction. What the
        * two OTHER bits of that register do is checked separately, by `TheSpriteBitsAreThisSpritesOnly`.
        */
-      const std::uint8_t theirShared = cpu.memory[static_cast<std::uint16_t>(vic + 0x10u)];
+      const std::uint8_t theirShared = cpu.Io(static_cast<std::uint16_t>(vic + 0x10u));
       for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
         const std::uint16_t at = static_cast<std::uint16_t>(vic + 2u * sprite);
         const std::wstring where = _where + L" [sprite " + std::to_wstring(sprite) + L"]";
-        const std::uint16_t theirX = static_cast<std::uint16_t>(cpu.memory[at] | (((theirShared >> sprite) & 1u) != 0u ? 0x100u : 0u));
+        const std::uint16_t theirX = static_cast<std::uint16_t>(cpu.Io(at) | (((theirShared >> sprite) & 1u) != 0u ? 0x100u : 0u));
         Assert::AreEqual(theirX, _bank.video.x[sprite], (where + L": sprite x").c_str());
-        Assert::AreEqual(cpu.memory[static_cast<std::uint16_t>(at + 1u)], _bank.video.y[sprite], (where + L": sprite y").c_str());
+        Assert::AreEqual(cpu.Io(static_cast<std::uint16_t>(at + 1u)), _bank.video.y[sprite], (where + L": sprite y").c_str());
       }
       Assert::AreEqual(cpu.memory[tribct], _bank.sprites.count, (_where + L": TRIBCT").c_str());
 

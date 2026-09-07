@@ -214,17 +214,8 @@ namespace GameLogicTests
     }
 
     
-    /*
-     * Whether the Trumbles' COORDINATE REGISTERS are mirrored into the oracle and compared back.
-     *
-     * Off by default, and the reason is `Where::vic`: those registers are `XX21` in a flat image,
-     * so mirroring them overwrites the blueprint pointers for ship types 3 to 9 on one side of the
-     * comparison and nothing on the other. A fixture turns this on when it intends `MVTRIBS` to
-     * run, which is also a promise that the frame stops before any ship is drawn. `TRIBCT` and the
-     * three velocity tables are real RAM and are always mirrored, so a fixture that only wants to
-     * see the count written leaves this alone.
-     */
-    bool spriteRegistersAreOurs = false;
+    // `spriteRegistersAreOurs` WAS HERE AND IS NOT ANY MORE (M6-0-a): the interpreter banks the I/O
+    // page, so the sprite registers are ordinary cells and no fixture has to claim them.
 
 
     /*
@@ -571,7 +562,7 @@ namespace GameLogicTests
        * Trumbles has to stop before the ships are drawn, and `TheControlRatesMatchM` -- the only
        * one that does -- runs the frame's HEAD.
        */
-      vic = _oracle.Label("XX21");
+      vic = Cpu6502::IO_BASE; // 6502: VIC -- the chip, which the flat image labelled `XX21` until M6-0-a banked the page
       tp = _oracle.Label("TP");
       mch = _oracle.Label("MCH");
       messxc = _oracle.Label("messXC");
