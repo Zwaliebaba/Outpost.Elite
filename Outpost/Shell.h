@@ -53,12 +53,18 @@ namespace Outpost
   class GameShell final : public Elite::Presenter, public Elite::StartUpEffects, public Elite::Keyboard
   {
   public:
-    GameShell(Window& _window, CanvasPresenter& _presenter, Elite::Canvas& _canvas, std::uint8_t& _view) noexcept
+    GameShell(Window& _window, CanvasPresenter& _presenter) noexcept
       : m_window(_window),
-        m_presenter(_presenter),
-        m_canvas(_canvas),
-        m_view(_view)
+        m_presenter(_presenter)
     {
+    }
+
+    /// The canvas this presents and the view byte it reads -- `Game`'s, attached once `Game` exists
+    /// (M5-e-2), because `Game` needs this object at construction and owns the universe now.
+    void AttachUniverse(Elite::Universe& _universe) noexcept
+    {
+      m_canvas = &_universe.canvas;
+      m_view = &_universe.view;
     }
 
     /*
@@ -163,11 +169,11 @@ namespace Outpost
      * directly.
      */
 
-    /// 6502: QQ11 -- which screen is showing. See `m_view`: the byte is the composition root's,
-    /// because the flight half writes it too.
+    /// 6502: QQ11 -- which screen is showing. See `m_view`: the byte is `Game`'s universe's, because
+    /// the flight half writes it too.
     [[nodiscard]] std::uint8_t View() const noexcept
     {
-      return m_view;
+      return *m_view;
     }
 
     /// The extended token printer, for the control codes that print. Set by the composition root
@@ -224,7 +230,7 @@ namespace Outpost
 
     Window& m_window;
     CanvasPresenter& m_presenter;
-    Elite::Canvas& m_canvas;
+    Elite::Canvas* m_canvas = nullptr; ///< attached by `AttachUniverse`
 
     /// 6502: the sprite registers, null until the composition root attaches them.
     const Elite::VideoState* m_video = nullptr;
@@ -245,7 +251,7 @@ namespace Outpost
      * flight loop `ChangeView`, `TT110` and the whole of `FlightScreen`, all of which write the
      * same address. Two copies would have agreed until the first launch.
      */
-    std::uint8_t& m_view;
+    std::uint8_t* m_view = nullptr; ///< attached by `AttachUniverse`
 
     /*
      * What paces the title screen's ship, and it is a CLOCK because the thing being paced is not

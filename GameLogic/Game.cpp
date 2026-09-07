@@ -32,10 +32,9 @@ namespace Elite
    * the character printer, the state tokens need the token printer AND the commander, and the token
    * printer needs the state tokens back -- which is the cycle `SetValueTokens` exists to break.
    */
-  Game::Game(Universe& _universe, ShipDrawEffects& _drawing, StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard,
-             CommanderStore& _store, ControlEffects& _controls) noexcept
-    : m_universe(_universe),
-      m_screen(m_universe.canvas, m_universe.text, &m_universe.sound),
+  Game::Game(ShipDrawEffects& _drawing, StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard, CommanderStore& _store,
+             ControlEffects& _controls) noexcept
+    : m_screen(m_universe.canvas, m_universe.text, &m_universe.sound),
       m_characters(m_screen),
       m_recursive(m_characters),
       m_values(m_recursive, m_universe.text, m_universe.commander, m_universe.commanderName, m_universe.current.seeds,

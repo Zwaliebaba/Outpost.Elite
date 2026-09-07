@@ -78,7 +78,7 @@ namespace Outpost
       return !m_window.Closed();
     }
 
-    return m_presenter.Present(m_canvas, m_video, width, height);
+    return m_presenter.Present(*m_canvas, m_video, width, height);
   }
 
   std::uint8_t GameShell::NextKey()
@@ -140,7 +140,7 @@ namespace Outpost
      */
     if (m_flight == nullptr || m_ports == nullptr)
     {
-      m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the universe
+      *m_view = _view; // 6502: STA QQ11, which is all of it that can be done without the universe
       return;
     }
 

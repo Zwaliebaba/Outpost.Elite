@@ -69,10 +69,25 @@ namespace GameLogicTests
 
   /*
    * The table. Non-const because the setters write the universe; the const entry points below
-   * cast that away and call only the getters, which is the one `const_cast` in the test tree and
+   * cast that away and call only the getters, which are the only `const_cast`s in the test tree and
    * is here so that the table is written once rather than twice.
    */
   [[nodiscard]] std::vector<Cell> ImageCells(Universe& _universe, const Where& _at);
+
+  /*
+   * What the table reads that is NOT in `Elite::Universe`: the two printers (6502: QQ17 and
+   * DTW1-8) and the fixture's claim on the VIC-II sprite registers. An oracle fixture's cells read
+   * the wrapper's printers, which are what it drove; the replay's must read `Game`'s, which is what
+   * IT drove, and until M5-e-2 they did not: `Hash(universe)` hashed the wrapper's idle printers next
+   * to a `Game` that had printed with its own. M5-e-2b moves the nine bytes into `Elite::Universe`.
+   */
+  struct Beside
+  {
+    Elite::TokenPrinter& recursive;
+    Elite::CharacterPrinter& characters;
+    bool spriteRegistersAreOurs = false;
+  };
+  [[nodiscard]] std::vector<Cell> ImageCells(Elite::Universe& _universe, Beside _beside, const Where& _at);
 
   /// Port -> 6502 memory, every cell.
   void Materialise(const Universe& _universe, Cpu6502& _cpu, const Where& _at);
@@ -97,6 +112,11 @@ namespace GameLogicTests
   /// The same, with no oracle to resolve the addresses: the cells are read in table order and
   /// their addresses are never used. This is the hash a replay stores (slice M0-c).
   [[nodiscard]] std::uint64_t Hash(const Universe& _universe);
+
+  /// The replay's hash: `Game`'s universe and `Game`'s printers (M5-e-2). Const like the entry
+  /// points above, and cast away inside for the same reason: only the getters run.
+  [[nodiscard]] std::uint64_t Hash(const Elite::Universe& _universe, const Elite::TokenPrinter& _recursive,
+                                   const Elite::CharacterPrinter& _characters);
 
   /*
    * The FNV-1a offset basis and prime, 64-bit. Any stable hash would do; this one is

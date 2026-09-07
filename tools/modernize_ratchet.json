@@ -34,9 +34,9 @@
       "slice": "M4-a-1: SFS1 leaves Ports, which is ten references"
     },
     "main-lines": {
-      "ceiling": 253,
+      "ceiling": 251,
       "slack": 0,
-      "slice": "M4-d: Game::Mode answers the ordering rule the loop was keeping by hand"
+      "slice": "M5-e-2: the composition root holds no game state, and says so in fewer lines"
     },
     "outpost-elite-names": {
       "ceiling": 69,
@@ -69,9 +69,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4125,
+      "ceiling": 4126,
       "slack": 0,
-      "slice": "M5-e-1: Game owns the SID log, two markers on the member and its accessor"
+      "slice": "M5-e-2: Game owns the universe, one marker on the two printer accessors the replay hashes through"
     },
     "oracle-test-files": {
       "ceiling": 48,
