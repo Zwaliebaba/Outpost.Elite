@@ -116,6 +116,7 @@ namespace GameLogicTests
 
       Assert::IsFalse(bare.game.Step(Elite::PAUSE_KEY), L"the pause key ends the batch of steps");
       Assert::IsTrue(bare.game.ModeNow() == Elite::Game::Mode::Paused, L"and freezes the game");
+      Assert::AreEqual<std::uint8_t>(Elite::PAUSE_KEY, bare.game.State().keys[0], L"6502: STX KL -- the key that arrived, in byte 0 of the logger");
 
       // 6502: CPX #&0D -- and `DK2`'s `RTS`. A key `FREEZE` does not know leaves it frozen.
       bare.game.StepPaused(0u);

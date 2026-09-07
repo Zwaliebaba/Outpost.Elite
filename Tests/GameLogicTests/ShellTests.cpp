@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "Cpu6502.h"
+#include "NullSeams.h"
 #include "OracleImage.h"
 
 #include "Canvas.h"
@@ -149,6 +150,79 @@ namespace GameLogicTests
      * a docked screen IS entered with QQ11 non-zero, so `LDA QQ11 / BNE tt66` takes the branch that
      * skips printing the space view's name -- which is the path the shell actually takes.
      */
+    /*
+     * 6502: TRADEMODE -- `TT66` with the view in A, then `FLKB` -- as one routine (M6-0-e).
+     *
+     * Every docked screen opens with it and `MarketTests` traps it, because what that sweep
+     * compares is the prices. The port had inlined its two calls at five callers; it is
+     * `SetUpTradeScreen` now, and this compares it whole: the text state `TT66` leaves, the view,
+     * and the one flush.
+     */
+    TEST_METHOD(TheTradeScreenMatchesTRADEMODE)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t flkb = oracle.Label("FLKB");
+
+      struct CountingKeys final : NullSeams
+      {
+        std::uint32_t flushes = 0;
+        void Flush() override
+        {
+          ++flushes;
+        }
+      };
+
+      std::uint32_t compared = 0;
+      for (const std::uint8_t view : {Elite::BUY_CARGO_VIEW, Elite::INVENTORY_VIEW, Elite::EQUIP_SHIP_VIEW})
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.AddTrap(oracle.Label("TTX66K"));
+        cpu.AddTrap(oracle.Label("FLFLLS"));
+        cpu.AddTrap(flkb);
+        cpu.memory[static_cast<std::uint16_t>(oracle.Label("QQ22") + 1u)] = 0;
+        Write(cpu, oracle, {17, 9, 0xFF, 0, 0, 0xFF});
+        cpu.a = view;
+        const Elite::Testing::RunResult run = cpu.CallSubroutine(oracle.Label("TRADEMODE"));
+        Assert::IsTrue(run.completed, L"TRADEMODE returned");
+
+        Elite::Universe universe;
+        Discard sink;
+        NullSeams nulls;
+        CountingKeys keys;
+        Elite::CharacterPrinter characters{sink, universe.sentences};
+        Elite::TokenPrinter printer{characters, universe.text};
+        Elite::ExtendedTokenPrinter extended{characters, printer, universe.rng};
+        Elite::SidWriteLog sid;
+        Elite::Ports ports{printer, characters, characters, sid, extended, nulls, keys, nulls};
+        universe.text.column = 17;
+        universe.text.row = 9;
+        printer.SetCaseFlags(0xFF);
+        characters.State().lowerCaseBits = 0;
+        characters.State().sentenceStart = 0;
+        characters.State().alwaysLower = 0xFF;
+        Elite::SetUpTradeScreen(universe, ports, view);
+
+        const std::wstring where = Widen("TRADEMODE view " + std::to_string(view));
+        CompareTextState(FromOracle(cpu, oracle), FromPort(printer, universe.text, characters.State()), where.c_str());
+        Assert::AreEqual<std::uint8_t>(view, cpu.memory[oracle.Label("QQ11")], (where + L": the view it set").c_str());
+        Assert::AreEqual<std::uint8_t>(view, universe.view, (where + L": and the port's").c_str());
+        std::uint32_t flushed = 0;
+        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+        {
+          flushed += (hit.address == flkb) ? 1u : 0u;
+        }
+        Assert::AreEqual<std::uint32_t>(1u, flushed, (where + L": TRADEMODE ends in FLKB").c_str());
+        Assert::AreEqual<std::uint32_t>(1u, keys.flushes, (where + L": and the port flushes once").c_str());
+        ++compared;
+      }
+      Assert::AreEqual<std::uint32_t>(3u, compared, L"the whole sweep ran");
+    }
+
     TEST_METHOD(TheTradeScreenSeamLeavesTheTextSystemWhereTT66Does)
     {
       if (OracleMissing())

@@ -110,11 +110,15 @@ namespace Elite
     }
   } // namespace
 
+  void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept
+  {
+    SetUpScreen(_universe, _ports, _view); // 6502: JSR TT66
+    _ports.keyboard.Flush();               // 6502: JMP FLKB
+  }
+
   void BuyScreen(Universe& _universe, Ports& _ports, bool _misJumped) noexcept
   {
-    // 6502: LDA #2 / JSR TRADEMODE.
-    SetUpScreen(_universe, _ports, BUY_CARGO_VIEW);
-    _ports.keyboard.Flush();
+    SetUpTradeScreen(_universe, _ports, BUY_CARGO_VIEW); // 6502: LDA #2 / JSR TRADEMODE
 
     _universe.text.column = 1;
     _universe.text.row = 1;
@@ -409,8 +413,7 @@ namespace Elite
   void InventoryScreen(Universe& _universe, Ports& _ports) noexcept
   {
     // 6502: LDA #8 / JSR TRADEMODE -- which sets the cursor and the case flags too.
-    SetUpScreen(_universe, _ports, INVENTORY_VIEW);
-    _ports.keyboard.Flush();
+    SetUpTradeScreen(_universe, _ports, INVENTORY_VIEW);
 
     // 6502: LDA #11 / JSR DOXC / LDA #164 / JSR TT60 -- and TT60 is four routines deep.
     _universe.text.column = INVENTORY_TITLE_COLUMN;

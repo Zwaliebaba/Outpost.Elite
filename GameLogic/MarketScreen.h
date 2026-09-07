@@ -97,6 +97,11 @@ namespace Elite
    */
   void BuyScreen(Universe& _universe, Ports& _ports, bool _misJumped) noexcept;
 
+  /// 6502: TRADEMODE -- `TT66` with the view in A, then `FLKB`. Every docked screen opens with it;
+  /// one routine here rather than the two calls at each caller, so that it can be compared as one
+  /// (M6-0-e), which the trap `MarketTests` puts on its label stands in for.
+  void SetUpTradeScreen(Universe& _universe, Ports& _ports, std::uint8_t _view) noexcept;
+
   /*
    * 6502: TT210 -- list what is in the hold, and on the Sell Cargo screen offer each item for sale.
    *

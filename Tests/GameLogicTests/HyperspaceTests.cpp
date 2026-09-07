@@ -148,7 +148,8 @@ namespace GameLogicTests
 
                 Cpu6502 cpu = oracle.Fresh();
                 // `TT114` is the chart's own redraw, which `TT18` JUMPS to rather than calls -- the
-                // port hands it back as an outcome for the caller, so here it is a trap.
+                // port hands it back as an outcome for the caller, so here it is a trap. `WSCAN`
+                // and `DELAY` wait for the raster and are the platform's (ADR-005 section 3; M6-0-e).
                 for (const char* seam : {"MESS", "WSCAN", "DELAY", "TT114"})
                 {
                   std::uint16_t address = 0;

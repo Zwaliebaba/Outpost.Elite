@@ -192,7 +192,8 @@ namespace GameLogicTests
           {
             Cpu6502 cpu = oracle.Fresh();
             // `CLYNS` is not trapped since M3-b-3b -- both machines run it. `WSCAN` and `DELAY`
-            // still are: `DELAY` waits for a raster line a flat-memory interpreter never reaches.
+            // still are and always will be: both wait for a raster line a flat-memory interpreter
+            // never reaches, and both are the platform's (ADR-005 section 3; M6-0-e).
             for (const char* seam : {"WSCAN", "DELAY"})
             {
               std::uint16_t address = 0;

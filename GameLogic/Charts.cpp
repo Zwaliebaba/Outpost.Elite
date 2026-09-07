@@ -264,6 +264,14 @@ namespace Elite
     }
   }
 
+  void DrawTitleRule(Canvas& _canvas, TextState& _text) noexcept
+  {
+    // 6502: LDA #23 / JSR INCYC / (fall into NLIN2) -- the cursor moves down one line FIRST, and
+    // the increment is INCYC's own; the 23 is where the rule goes and nothing else.
+    ++_text.row;
+    DrawSeparator(_canvas, LONG_RANGE_RULE_TOP);
+  }
+
   void DrawSeparator(Canvas& _canvas, std::uint8_t _y) noexcept
   {
     // 6502: NLIN2 -- LDX #0 / STX X1 / DEX / STX X2, so the line runs to 255 rather than to the
@@ -277,14 +285,8 @@ namespace Elite
     _universe.text.column = 7;
     _ports.printer.Print(TITLE_LONG_RANGE);
 
-    /*
-     * 6502: JSR NLIN, which is LDA #23 / JSR INCYC / NLIN2.
-     *
-     * The rule goes at row 23 and the CURSOR moves down one, in that order -- the increment is
-     * INCYC's and has nothing to do with the 23. Then a second rule at 152, under the chart.
-     */
-    ++_universe.text.row;
-    DrawSeparator(_universe.canvas, LONG_RANGE_RULE_TOP);
+    // 6502: JSR NLIN -- the rule under the title, and then a second rule at 152, under the chart.
+    DrawTitleRule(_universe.canvas, _universe.text);
     DrawSeparator(_universe.canvas, LONG_RANGE_RULE_BOTTOM);
 
     // 6502: JSR TT14 -- the fuel circle, before the dots rather than after.

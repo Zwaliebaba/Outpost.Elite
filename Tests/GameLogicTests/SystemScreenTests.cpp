@@ -170,6 +170,8 @@ namespace GameLogicTests
           // ---- the shipped routine -----------------------------------------------------------
           Cpu6502 cpu = oracle.Fresh();
           cpu.AddTrap(chpr, Cpu6502::TrapExit::ClearCarry);
+          // `NLIN` is trapped because this compares the text and not the canvas; the rule itself is
+          // `DrawTitleRule` and is compared on its own in `ChartTests` (M6-0-e).
           cpu.AddTrap(oracle.Label("NLIN"));
           cpu.watch = {oracle.Label("XC"), oracle.Label("YC"), 0, 0};
 

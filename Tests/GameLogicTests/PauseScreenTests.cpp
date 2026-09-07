@@ -199,6 +199,51 @@ namespace GameLogicTests
      * is the original saying "still paused", and reaching `DK2` instead is "resumed". `DEATH2` is
      * trapped, and hitting that trap is "quit".
      */
+    /*
+     * 6502: DK4's head -- LDX thiskey / STX KL / CPX #&40 / BNE DK2 (M6-0-e).
+     *
+     * `DOKEY` falls into it on every pass and `ControlsTests` traps it there, because that sweep
+     * ends where the port's `ReadFlightControls` ends. The head is `Game::Step`'s: the key that
+     * arrived goes into byte 0 of the logger and INST/DEL freezes the game. Compared here on its
+     * own -- which key reaches `FREEZE`, and what is left in `KL` -- against the constant the port
+     * tests and the store it makes.
+     */
+    TEST_METHOD(ThePauseKeyMatchesDK4)
+    {
+      if (OracleMissing())
+      {
+        return;
+      }
+
+      const OracleImage& oracle = OracleImage::Instance();
+      const std::uint16_t dk4 = oracle.Label("DK4");
+      const std::uint16_t dk2 = oracle.Label("DK2");
+      const std::uint16_t freeze = oracle.Label("FREEZE");
+      const std::uint16_t thiskey = oracle.Label("thiskey");
+      const std::uint16_t kl = oracle.Label("KL");
+
+      std::uint32_t frozen = 0;
+      for (std::uint32_t key = 0; key < 256u; ++key)
+      {
+        Cpu6502 cpu = oracle.Fresh();
+        cpu.AddTrap(dk2);
+        cpu.AddTrap(freeze);
+        cpu.memory[thiskey] = static_cast<std::uint8_t>(key);
+        cpu.memory[kl] = 0xAAu;
+        Assert::IsTrue(cpu.CallSubroutine(dk4, 1'000).completed, (L"DK4 left at key " + std::to_wstring(key)).c_str());
+
+        bool reachedFreeze = false;
+        for (const Cpu6502::TrapHit& hit : cpu.trapHits)
+        {
+          reachedFreeze = reachedFreeze || (hit.address == freeze);
+        }
+        Assert::AreEqual<std::uint32_t>(key, cpu.memory[kl], (L"KL holds the key that arrived, key " + std::to_wstring(key)).c_str());
+        Assert::AreEqual(key == Elite::PAUSE_KEY, reachedFreeze, (L"FREEZE is reached by the pause key alone, key " + std::to_wstring(key)).c_str());
+        frozen += reachedFreeze ? 1u : 0u;
+      }
+      Assert::AreEqual<std::uint32_t>(1u, frozen, L"exactly one key freezes the game");
+    }
+
     TEST_METHOD(ThePauseLoopMatchesFREEZE)
     {
       const OracleImage& oracle = OracleImage::Instance();
@@ -225,6 +270,9 @@ namespace GameLogicTests
              * and a trap pops a return address the `JMP` never pushed -- which unbalances the
              * stack and sends the eventual `RTS` somewhere arbitrary. It is self-modifying code
              * inside the interrupt handler, so in an interpreter it is three harmless stores.
+             *
+             * `WSCAN` waits for the vertical sync -- the platform's (ADR-005 section 3), which a
+             * flat interpreter has no raster for; it is trapped here and everywhere (M6-0-e).
              */
             for (const char* seam : {"BELL", "DELAY", "NOISE", "NOISE2", "WSCAN", "RDKEY", "SOFLUSH", "BDENTRY"})
             {
