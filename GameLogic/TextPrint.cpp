@@ -437,7 +437,7 @@ namespace Elite
 
     // 6502: LDY YC / celllook / LDY XC / LDA COL2 / STA (SC),Y -- the cell's colour, written after
     // the cursor moved, which is what makes the three-cell offset in celllook come out right.
-    m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.cellColour);
+    m_canvas.Write(static_cast<std::uint16_t>(Canvas::CellRowOffset(m_state.row) + m_state.column), m_state.palette);
   }
 
   void MoveCursorDown(TextState& _text) noexcept

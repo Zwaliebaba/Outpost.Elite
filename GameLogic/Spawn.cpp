@@ -30,7 +30,7 @@ namespace Elite
     // so it is unlocked and the player told.
     if (_universe.bubble.missileTarget == _slot)
     {
-      AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_GREEN); // 6502: JSR ABORT with GREEN2
+      AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_READY); // 6502: JSR ABORT with GREEN2 -- the indicator's own green
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, 200,
                   _universe.view); // 6502: LDA #200 / JSR MESS
     }
@@ -203,10 +203,10 @@ namespace Elite
     // 6502: LDX #%10000001 / STX INWK+32 -- the AI byte: hostile, and AI enabled.
     _universe.work.ai = Mask(AiBit::Active, AiBit::HasEcm);
 
-    _universe.work.pitchCounter = 0u;                // 6502: LDX #0 / STX INWK+30 -- the pitch counter
-    _universe.work.newb = 0u; // 6502: STX NEWB, which `NWSHP` ORs into rather than sets
-    _universe.bubble.slots[1] = 0u;         // 6502: STX FRIN+1 -- and slot 1 is the SUN's
-    _universe.work.rollCounter = 0xFFu;             // 6502: DEX / STX INWK+29 -- the roll counter, at maximum
+    _universe.work.pitchCounter = 0u;   // 6502: LDX #0 / STX INWK+30 -- the pitch counter
+    _universe.work.newb = 0u;           // 6502: STX NEWB, which `NWSHP` ORs into rather than sets
+    _universe.bubble.slots[1] = 0u;     // 6502: STX FRIN+1 -- and slot 1 is the SUN's
+    _universe.work.rollCounter = 0xFFu; // 6502: DEX / STX INWK+29 -- the roll counter, at maximum
 
     /*
      * 6502: LDX #10 / JSR NwS1, three times.
@@ -410,8 +410,8 @@ namespace Elite
     AddToShipCoordinate(_work, sign, doubled, _axis, false);
   }
 
-  NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent, ShipType _parentType,
-                         std::uint8_t _aiFlag, ShipType _shipType, const Blueprint*& _blueprint) noexcept
+  NewShip SpawnChildShip(Bubble& _bubble, Ship& _work, Rng& _rng, std::uint8_t _parent, ShipType _parentType, std::uint8_t _aiFlag,
+                         ShipType _shipType, const Blueprint*& _blueprint) noexcept
   {
     // 6502: STA T1 / TXA / PHA / LDA XX0 / PHA ... -- the AI byte kept and the caller's state saved.
     // `T1` is this routine's own since M2-c-3: `FRS1` parks the byte across the copy below and

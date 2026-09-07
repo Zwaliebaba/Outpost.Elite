@@ -634,7 +634,7 @@ namespace GameLogicTests
       _cpu.memory[_to.alp2Next] = universe.flight.alp2Next;
       _cpu.memory[_to.bet2] = universe.flight.bet2;
       _cpu.memory[_to.bet2Next] = universe.flight.bet2Next;
-      _cpu.memory[_to.col2] = universe.text.cellColour;
+      _cpu.memory[_to.col2] = universe.text.palette.Byte();
       _cpu.memory[_to.dontclip] = _leaving.universe.clip.dontclip;
       _cpu.memory[_to.yx2m1] = universe.heaps.yx2M1;
       _cpu.memory[_to.qq22] = universe.status.hyperspaceCounter;
@@ -679,7 +679,7 @@ namespace GameLogicTests
       same(_to.alp2Next, universe.flight.alp2Next, L"ALP2+1");
       same(_to.bet2, universe.flight.bet2, L"BET2");
       same(_to.bet2Next, universe.flight.bet2Next, L"BET2+1");
-      same(_to.col2, universe.text.cellColour, L"COL2");
+      same(_to.col2, universe.text.palette.Byte(), L"COL2");
       same(_to.dontclip, _leaving.universe.clip.dontclip, L"dontclip");
       same(_to.yx2m1, universe.heaps.yx2M1, L"Yx2M1");
       same(_to.qq22, universe.status.hyperspaceCounter, L"QQ22");

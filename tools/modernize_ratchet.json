@@ -69,9 +69,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4122,
+      "ceiling": 4123,
       "slack": 0,
-      "slice": "M5-a-9: Colours.h names the pixel-pattern family, one marker"
+      "slice": "M5-a-8: Colours.h names the palette-pair family, one marker"
     },
     "oracle-test-files": {
       "ceiling": 48,

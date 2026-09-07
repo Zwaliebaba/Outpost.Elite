@@ -234,7 +234,7 @@ namespace GameLogicTests
         text.column = 1;
         text.row = 1;
         text.caseFlags = 0x80;
-        text.cellColour = 0x40;
+        text.palette = Elite::TEXT_COLOUR_PURPLE;
         characters.state.sentenceStart = 0xFF;
         printer.SetCaseFlags(0x80);
       }

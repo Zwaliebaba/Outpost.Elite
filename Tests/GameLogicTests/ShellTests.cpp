@@ -178,7 +178,7 @@ namespace GameLogicTests
       Discard sink;
       Elite::CharacterPrinter characters{sink};
       Elite::TokenPrinter printer{characters};
-      Elite::TextState text{17, 9, 0xFF, 0};
+      Elite::TextState text{17, 9, 0xFF, {}};
       printer.SetCursor(&text);
       printer.SetCaseFlags(0xFF);
       characters.state.lowerCaseBits = 0;
@@ -221,7 +221,7 @@ namespace GameLogicTests
       Discard sink;
       Elite::CharacterPrinter characters{sink};
       Elite::TokenPrinter printer{characters};
-      Elite::TextState text{17, 9, 0, 0};
+      Elite::TextState text{17, 9, 0, {}};
       printer.SetCursor(&text);
       printer.SetCaseFlags(0);
       characters.state.lowerCaseBits = 0;

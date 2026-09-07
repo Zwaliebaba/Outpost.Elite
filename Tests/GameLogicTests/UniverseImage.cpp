@@ -53,6 +53,19 @@ namespace GameLogicTests
       return cell;
     }
 
+    /// A screen RAM palette the port holds as a `CellPalette` -- one byte to the image, two colours to the compiler.
+    Cell Palette(const wchar_t* _name, std::uint16_t _address, Elite::CellPalette& _field, CellScope _scope)
+    {
+      Cell cell;
+      cell.name = _name;
+      cell.address = _address;
+      cell.scope = _scope;
+      Elite::CellPalette* at = &_field;
+      cell.get = [at]() { return at->Byte(); };
+      cell.set = [at](std::uint8_t _value) { *at = Elite::CellPalette::Of(_value); };
+      return cell;
+    }
+
     /// A run of directly held bytes, one cell each, named with their index.
     /// A sixteen-bit address the port holds as a POINTER -- `XX0`, the station's `XX21` entry --
     /// as two cells: reads give the pointee's address, and a write reassembles the address from
@@ -377,7 +390,7 @@ namespace GameLogicTests
      */
     CodecCells(cells, L"TP", _at.tp, _universe.commander, CellScope::Image);
 
-    cells.push_back(Direct(L"COL2", _at.col2, _universe.text.cellColour, CellScope::Image));
+    cells.push_back(Palette(L"COL2", _at.col2, _universe.text.palette, CellScope::Image));
     /*
      * The rest of the extended printer's state, which no screen routine reads but `MESS` does: it
      * turns the justifier into a measuring device (`DTW4` = %11000000, print, read `DTW5`) and a

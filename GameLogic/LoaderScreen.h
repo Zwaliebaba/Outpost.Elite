@@ -3,6 +3,8 @@
 #include "Canvas.h"
 #include "VideoState.h"
 
+#include "Colours.h"
+
 #include <cstdint>
 
 namespace Elite
@@ -60,7 +62,7 @@ namespace Elite
    * The border box's palette, and the reason the box is yellow. It is a SCREEN RAM byte, so the
    * high nibble is the colour a set bit takes and the low nibble the colour a clear one takes.
    */
-  inline constexpr std::uint8_t SCREEN_YELLOW_ON_BLACK = 0x70;
+  inline constexpr CellPalette SCREEN_YELLOW_ON_BLACK{Colour::Yellow, Colour::Black};
 
   /*
    * 6502: LDA #&00 -- black on black, for the three cells outside the border box on each side.
@@ -70,7 +72,7 @@ namespace Elite
    * all, and this is what "nothing at all" is spelled as -- not an absence of pixels, but a
    * palette in which both of a bit's two choices are black.
    */
-  inline constexpr std::uint8_t SCREEN_BLACK_ON_BLACK = 0x00;
+  inline constexpr CellPalette SCREEN_BLACK_ON_BLACK{Colour::Black, Colour::Black};
 
   /*
    * 6502: LDA #&07 -- colour 7, yellow, in the LOW nibble because colour RAM only has one.

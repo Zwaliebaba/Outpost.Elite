@@ -152,12 +152,12 @@ namespace Elite
     _draw.sc = static_cast<std::uint16_t>(_draw.sc + 0x140u);
   }
 
-  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, std::uint8_t _colour) noexcept
+  void SetMissileIndicator(Canvas& _canvas, std::uint8_t _missile, CellPalette _palette) noexcept
   {
     // 6502: DEX / TXA / INX / EOR #3 -- missile 1 to 4 becomes cell 3 down to 0, so they fill from
     // the right. `STY SC / TAY / LDA SC` is a register shuffle and not a use of the screen pointer.
     const std::uint8_t cell = static_cast<std::uint8_t>(static_cast<std::uint8_t>(_missile - 1u) ^ 3u);
-    _canvas.Write(static_cast<std::uint16_t>(MISSILE_CELL + cell), _colour);
+    _canvas.Write(static_cast<std::uint16_t>(MISSILE_CELL + cell), _palette);
   }
 
   void ResetMissileIndicators(Canvas& _canvas, std::uint8_t _missiles) noexcept
@@ -178,19 +178,19 @@ namespace Elite
     }
   }
 
-  void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, std::uint8_t _colour) noexcept
+  void SetMissileTarget(Universe& _universe, std::uint8_t _missiles, std::uint8_t _target, CellPalette _palette) noexcept
   {
-    _universe.bubble.missileTarget = _target;                  // 6502: STX MSTG
-    SetMissileIndicator(_universe.canvas, _missiles, _colour); // 6502: LDX NOMSL / JSR MSBAR
+    _universe.bubble.missileTarget = _target;                   // 6502: STX MSTG
+    SetMissileIndicator(_universe.canvas, _missiles, _palette); // 6502: LDX NOMSL / JSR MSBAR
 
     // 6502: STY MSAR -- and Y is the ZERO `MSBAR` ended on, not the colour that went in.
     _universe.status.missileArmed = 0;
   }
 
-  void AbortMissileLock(Universe& _universe, std::uint8_t _missiles, std::uint8_t _colour) noexcept
+  void AbortMissileLock(Universe& _universe, std::uint8_t _missiles, CellPalette _palette) noexcept
   {
     // 6502: ABORT -- LDX #&FF, and no RTS: it runs straight into ABORT2.
-    SetMissileTarget(_universe, _missiles, 0xFFu, _colour);
+    SetMissileTarget(_universe, _missiles, 0xFFu, _palette);
   }
 
   void ToggleEcmIndicator(Canvas& _canvas) noexcept

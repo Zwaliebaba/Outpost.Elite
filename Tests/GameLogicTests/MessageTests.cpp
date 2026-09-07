@@ -192,7 +192,7 @@ namespace GameLogicTests
               port.text.row = 5u;
               port.text.column = 7u;
               port.text.caseFlags = 0x80u;
-              port.text.cellColour = 0x40u;
+              port.text.palette = Elite::TEXT_COLOUR_PURPLE;
               port.characters.state.sentenceStart = 0xFFu;
               port.printer.SetCaseFlags(0x80u);
 
@@ -290,7 +290,7 @@ namespace GameLogicTests
         port.text.row = 16u;
         port.text.column = 1u;
         port.text.caseFlags = 0u;
-        port.text.cellColour = 0x40u;
+        port.text.palette = Elite::TEXT_COLOUR_PURPLE;
         port.characters.state.sentenceStart = 0xFFu;
         port.printer.SetCaseFlags(0u);
 

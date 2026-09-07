@@ -365,7 +365,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,122 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,123 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1489,7 +1489,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families: `PixelPattern` is built (M5-a-9, 2026-09-07); the palette pairs are M5-a-8. | 3 |
+| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. | 3 |
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07.** | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
@@ -1802,6 +1802,38 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-8: a screen RAM byte is two colours, and the type makes the original's names
+tell the truth.**
+
+The second family. `RED2`, `GREEN2`, `YELLOW2`, `BLACK2`, `MAG2` and `BULBCOL` are screen RAM bytes
+in multicolour bitmap mode — the high nibble is what a `%01` pixel draws in and the low nibble what
+`%10` draws in — and the port had them as `std::uint8_t` constants whose names were the original's.
+`CellPalette` is the pair, built from two `Colour`s, and writing the constants as pairs is the
+finding made permanent: `MISSILE_ARMED` is `{Orange, Yellow}` and the original calls it `YELLOW2`;
+`MISSILE_NONE` is `{DarkGrey, Yellow}` and the original calls it `BLACK2`. A `static_assert` in
+`Colours.h` pins both. The default is `{Black, Black}`, because that is `COL2`'s shipped value and
+a printer that runs before `RES2` must print invisibly, as the original's does.
+
+**TWO CONSTANTS WERE DEFINED TWICE, and the type is how they were found.** `Market.cpp` and
+`NameEntry.cpp` each carried a private `TEXT_COLOUR_TYPING = 0x40` and `TEXT_COLOUR_NORMAL = 0x10`
+in an anonymous namespace — the same bytes `TextPrint.h` exports as `TEXT_COLOUR_PURPLE` and
+`TEXT_COLOUR_WHITE`, two files away, under other names. And `Dashboard.h`'s `MISSILE_GREEN` was
+`MISSILE_READY` under a second name: both `GREEN2`, both `&57`, one for `msblob`'s indicator and one
+for the byte `KILLSHP` hands `ABORT`, which are the same green for the same reason. Four constants
+collapsed to two headers' worth; nothing in the game changed.
+
+`Canvas::Write` and `ExclusiveOr` take a `CellPalette` beside the byte, because the bulbs toggle a
+palette and the text printer stores one; `TextState::cellColour` is `palette`, named for what it
+holds (rule 7); the missile API takes the type; the loader's border pair joins the family;
+`UniverseImage` gains a `Palette` cell and `COL2` uses it. The two sweeps that hand the routines every
+byte — `MSBAR` over 256, `CHPR` over `COL2` — go through `CellPalette::Of`, because every byte IS a
+palette and the sweep is the point.
+
+The one thing that is NOT a pair and stays a byte: `COLOUR_RAM_YELLOW`, colour RAM's single nibble,
+which is a `Colour` in memory the oracle compares — M5-a-7's line, unchanged.
+
+395 of 395; all 16 repository checks; the replay digest unmoved; `origin-markers` 4,122 → 4,123.
 
 **2026-09-07 — M5-a-9: `COL` is a pixel pattern, and the compass and the dials had been calling one
 a colour since slice 3d.**

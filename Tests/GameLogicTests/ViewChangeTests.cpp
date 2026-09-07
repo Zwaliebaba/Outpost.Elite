@@ -1078,7 +1078,7 @@ namespace GameLogicTests
            * on black outside it, and the bottom row yellow so a text screen's box has a floor.
            * Everything else is the white `TTX66K` rewrites on every clear.
            */
-          std::uint8_t expected = Elite::TEXT_COLOUR_WHITE;
+          Elite::CellPalette expected = Elite::TEXT_COLOUR_WHITE;
           if (column < 3 || column > 36)
           {
             expected = Elite::SCREEN_BLACK_ON_BLACK;
@@ -1087,7 +1087,7 @@ namespace GameLogicTests
           {
             expected = Elite::SCREEN_YELLOW_ON_BLACK;
           }
-          Assert::AreEqual<std::uint32_t>(expected, canvas.Read(static_cast<std::uint16_t>(Elite::Canvas::SCREEN_CELLS + cell)),
+          Assert::AreEqual<std::uint32_t>(expected.Byte(), canvas.Read(static_cast<std::uint16_t>(Elite::Canvas::SCREEN_CELLS + cell)),
                                           (L"screen RAM, " + where).c_str());
 
           /*
@@ -1098,9 +1098,9 @@ namespace GameLogicTests
           if (row >= Elite::Canvas::DASHBOARD_CELL_ROW)
           {
             const std::size_t index = static_cast<std::size_t>(cell) - Elite::Canvas::DASHBOARD_CELL_ROW * Elite::Canvas::CELL_COLUMNS;
-            expected = Elite::DASHBOARD_SCREEN_COLOURS[index];
+            expected = Elite::CellPalette::Of(Elite::DASHBOARD_SCREEN_COLOURS[index]); // sdump's bytes are pairs too
           }
-          Assert::AreEqual<std::uint32_t>(expected, canvas.Read(static_cast<std::uint16_t>(Elite::Canvas::DASHBOARD_CELLS + cell)),
+          Assert::AreEqual<std::uint32_t>(expected.Byte(), canvas.Read(static_cast<std::uint16_t>(Elite::Canvas::DASHBOARD_CELLS + cell)),
                                           (L"dashboard screen RAM, " + where).c_str());
 
           /*
