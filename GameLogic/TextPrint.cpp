@@ -78,12 +78,12 @@ namespace Elite
       // 6502: TT36 / tt37 -- how many times ten to the eleventh goes into what is left.
       for (;;)
       {
-        std::uint8_t remainder[4] = {0, 0, 0, 0};
+        std::array<std::uint8_t, 4> remainder = {0, 0, 0, 0};
         bool noBorrow = true;
         for (int index = 3; index >= 0; --index)
         {
-          const std::uint16_t difference = static_cast<std::uint16_t>(_value[static_cast<std::size_t>(index)]) - TEN_TO_THE_ELEVENTH[index] -
-                                           (noBorrow ? 0u : 1u);
+          const std::uint16_t difference =
+            static_cast<std::uint16_t>(_value[static_cast<std::size_t>(index)]) - TEN_TO_THE_ELEVENTH[index] - (noBorrow ? 0u : 1u);
           remainder[index] = static_cast<std::uint8_t>(difference);
           noBorrow = difference < 0x100u;
         }
@@ -160,7 +160,7 @@ namespace Elite
        * 6502: TT35 -- multiply the five-byte accumulator by ten. Shift once and keep a copy, shift
        * twice more, then add the copy back: x * 8 + x * 2.
        */
-      std::uint8_t copy[4] = {0, 0, 0, 0};
+      std::array<std::uint8_t, 4> copy = {0, 0, 0, 0};
       std::uint8_t copyHigh = 0;
 
       const auto shiftLeft = [&]() noexcept

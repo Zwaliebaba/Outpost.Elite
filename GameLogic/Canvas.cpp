@@ -27,7 +27,7 @@ namespace Elite
       const std::uint8_t low = static_cast<std::uint8_t>(_cellByte & 0x0Fu);
 
       // The four colours a multicolour cell can offer, in the order the two bits select them.
-      const std::uint8_t colours[4] = {ColourIndex(_background), high, low, static_cast<std::uint8_t>(_colourRam & 0x0Fu)};
+      const std::array<std::uint8_t, 4> colours = {ColourIndex(_background), high, low, static_cast<std::uint8_t>(_colourRam & 0x0Fu)};
 
       for (int subRow = 0; subRow < 8; ++subRow)
       {
@@ -173,10 +173,10 @@ namespace Elite
     /// the two the raster split rewrites, each as the pair `COMIRQ1` programs them in.
     struct SpriteRegisters
     {
-      int sprite = 0;                    ///< which of the eight, because &1C is indexed by it
-      Colour colour = Colour::Black;     ///< 6502: VIC+&27 + N -- this sprite's own colour
-      const std::uint8_t* multicolour{}; ///< 6502: santana -- [0] the space view's, [1] the dashboard's
-      const Colour* explosion{};         ///< 6502: lotus -- VIC+&28, and sprite 1 is the only reader
+      int sprite = 0;                               ///< which of the eight, because &1C is indexed by it
+      Colour colour = Colour::Black;                ///< 6502: VIC+&27 + N -- this sprite's own colour
+      std::span<const std::uint8_t, 2> multicolour; ///< 6502: santana -- [0] the space view's, [1] the dashboard's
+      std::span<const Colour, 2> explosion;         ///< 6502: lotus -- VIC+&28, and sprite 1 is the only reader
     };
 
     void BlitSprite(std::uint8_t* _out, const std::uint8_t* _definition, const SpriteRegisters& _registers, int _left, int _top,

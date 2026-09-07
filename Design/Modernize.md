@@ -1492,7 +1492,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is built and found a defect (the background register was never latched); `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006 §2. The original's two colour-constant families are both built: `PixelPattern` (M5-a-9) and `CellPalette` (M5-a-8), 2026-09-07 — and the second found two constants defined twice. | 3 |
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
-| **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07.** | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
+| **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
 
@@ -1511,7 +1511,8 @@ What is NOT in the gate, deliberately: `Frame()`, `Sounds()`, `StateHash()` and 
 `Universe` (task #13, structure, no oracle involved); M1's deferred `LightYearsTenths`, `Laser` and
 `Equipment` types, which ADR-006 §2 parked "for M5, where a type earns its operators" and M5 did not
 build — that is a decision to take, not a gap to close, and it needs no original; M5-a-8 and
-M5-a-9; `modernize-avoid-c-arrays`' hundred sites. All of them are safe after M6-f.
+M5-a-9 (both built the same day); `modernize-avoid-c-arrays`' sites (M5-d-2, built). All of them
+were safe after M6-f, and none of them waited.
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
@@ -1802,6 +1803,25 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-d-2: the hundred C arrays were thirteen, and the thirteen are `std::array`.**
+
+M5-d left `-modernize-avoid-c-arrays` excluded with the note "100 real findings, its own slice". The
+hundred was a phantom: clang-tidy reports a diagnostic in a HEADER once for every translation unit
+that includes it, and 96 of the hundred were three lines of `VideoState.h` and two of `Canvas.h`
+counted over the files that include them. Unique sites: thirteen, in nine files. That is worth
+recording as a lesson about reading the tool — a count from a sweep is a count of REPORTS, and the
+assessment that wrote "100" into M6-0's prose had not de-duplicated it.
+
+Eleven of the thirteen were indexed and are `std::array` by substitution. The two that were not
+are the pair `Canvas` hands `BlitSprite` — `santana` and `lotus` as the raster split leaves them,
+one entry per half — which `SpriteRegisters` held as raw pointers because a C array decays to one.
+They are `std::span<const T, 2>` now: the extent is in the type, the aggregate initialiser is
+unchanged, and `[half]` reads the same. The exclusion is gone and `check_tidy.py` is clean with the
+check on; `modernize-*` runs less two — trailing return types and `auto`, both style decisions this
+tree has made and neither of them a site count.
+
+395 of 395; all 16 repository checks; no ratchet count moved.
 
 **2026-09-07 — M5-a-8: a screen RAM byte is two colours, and the type makes the original's names
 tell the truth.**

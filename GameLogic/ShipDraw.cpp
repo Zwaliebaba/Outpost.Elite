@@ -5,6 +5,7 @@
 #include "EliteTypes.h"
 #include "ShipBlueprint.h"
 
+#include <array>
 #include <utility>
 
 namespace Elite
@@ -251,8 +252,8 @@ namespace Elite
   void DotProducts(Vector16 _vector, GeometryWorkspace& _geometry) noexcept
   {
     // The six bytes of XX15, as the three sign-magnitude pairs the dot product treats them as.
-    const std::uint8_t magnitude[3] = {_vector.x.lo, _vector.y.lo, _vector.z.lo};
-    const std::uint8_t sign[3] = {_vector.x.hi, _vector.y.hi, _vector.z.hi};
+    const std::array<std::uint8_t, 3> magnitude = {_vector.x.lo, _vector.y.lo, _vector.z.lo};
+    const std::array<std::uint8_t, 3> sign = {_vector.x.hi, _vector.y.hi, _vector.z.hi};
 
     // Three vectors of six, and the loop in the original ends on `CMP #17 / BCC`, so it runs for
     // X = 0, 6 and 12 and stops at 18 rather than testing a count.
@@ -976,8 +977,7 @@ namespace Elite
     {
       _render.detail = static_cast<std::uint8_t>(RotateRight(distanceLow, spare).value >> 3);
     }
-    else if (_render.blueprint.visibility < _render.work.z.hi &&
-             !Has(_render.work.state, ShipStateBit::Exploding))
+    else if (_render.blueprint.visibility < _render.work.z.hi && !Has(_render.work.state, ShipStateBit::Exploding))
     {
       // 6502: LL13 -- past the blueprint's own visibility distance, so a dot will do.
       return Range::Dot;
@@ -1452,24 +1452,24 @@ namespace Elite
    * Every stage answers and this performs: the two seam calls, the dot and the explosion are here,
    * where the `ShipDrawEffects` reference is, and no stage carries it.
    */
-  void DrawShip(Canvas& _canvas, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip,
-                Projection& _screen, Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type,
-                ShipDrawEffects& _effects, Rng& _rng, bool _carryIn) noexcept
+  void DrawShip(Canvas& _canvas, GeometryWorkspace& _geometry, MathWorkspace& _math, const ClipState& _clip, Projection& _screen,
+                Ship& _work, Ship& _slot, LineHeap& _heap, const Blueprint& _blueprint, ShipType _type, ShipDrawEffects& _effects,
+                Rng& _rng, bool _carryIn) noexcept
   {
     ShipRender render{_canvas, _geometry, _math, _clip, _screen, _work, _heap, _blueprint};
 
     switch (TestPresence(render, _slot, _type, _rng, _carryIn)) // 6502: part 1
     {
-      case Presence::Draw:
-        break;
-      case Presence::Body:
-        _effects.DrawPlanetOrSun(); // 6502: LL25's JMP PLANET
-        return;
-      case Presence::Erased:
-        return; // 6502: EE51 -- and the flag it leaves is `LL9`'s exit, which nothing reads
-      case Presence::Exploded:
-        _effects.DrawExplosion(); // 6502: LL14's JMP DOEXP
-        return;
+    case Presence::Draw:
+      break;
+    case Presence::Body:
+      _effects.DrawPlanetOrSun(); // 6502: LL25's JMP PLANET
+      return;
+    case Presence::Erased:
+      return; // 6502: EE51 -- and the flag it leaves is `LL9`'s exit, which nothing reads
+    case Presence::Exploded:
+      _effects.DrawExplosion(); // 6502: LL14's JMP DOEXP
+      return;
     }
 
     if (MeasureRange(render) == Range::Dot) // 6502: part 2

@@ -7,6 +7,7 @@
 #include "EliteConfig.h"
 #include "LookupTables.h"
 
+#include <array>
 #include <algorithm>
 
 /*
@@ -52,7 +53,7 @@ namespace Elite
     constexpr std::uint8_t SPACE = ' ';
 
     /// The four thresholds that turn a random byte into one of five alternatives.
-    constexpr std::uint8_t VARIANT_THRESHOLDS[4] = {51, 102, 153, 204};
+    constexpr std::array<std::uint8_t, 4> VARIANT_THRESHOLDS = {51, 102, 153, 204};
 
     /// 6502: VOWEL -- ORA #%00100000 folds the case, then five comparisons. The carry is set on a
     /// match and cleared by the CLC that the fall-through reaches, so "carry set" means vowel.
