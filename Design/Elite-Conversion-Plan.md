@@ -124,7 +124,7 @@ is preserved in the history and was true then.
 - `Outpost.slnx` with four projects: `NeuronCore`, `GameLogic`, `GameLogicTests` and `Outpost`.
 - `NeuronCore/` — the foundation static library: the shared precompiled-header content and
   `Debug.h`. No game semantics, and no C++/WinRT in the two libraries that never used it.
-- `GameLogic/` — **the port**, namespace `Elite`: <!--count:gamelogic-sources-->69 translation units and <!--count:gamelogic-headers-->63 headers,
+- `GameLogic/` — **the port**, namespace `Elite`: <!--count:gamelogic-sources-->70 translation units and <!--count:gamelogic-headers-->64 headers,
   deterministic and platform-free, guarded by `tools/check_gamelogic.py`. Everything phases 0 to 3
   name is here — the arithmetic kernel, the text system, the universe, every docked screen, the
   ship slots and motion, `LL9` and the clipper, the planet, sun and stardust, all sixteen parts of
@@ -140,7 +140,7 @@ is preserved in the history and was true then.
   `Main.cpp` with both of the original's outer loops. It builds unpackaged on CI; MSIX stays and
   WinUI 3 is ignored rather than stripped (ADR-005 §5, owner ruling). It launches, flies, fights,
   docks and dies.
-- `Tests/GameLogicTests/` — <!--count:tests-->395 tests in <!--count:test-files-->56 files: the 6502 interpreter with its cycle counter and
+- `Tests/GameLogicTests/` — <!--count:tests-->399 tests in <!--count:test-files-->57 files: the 6502 interpreter with its cycle counter and
   its in-order store log, the oracle fixture over the assembled game and the loader, and the
   suites. `Tests/PortableRunner/` runs the same suite under g++ in about a minute from cold and
   twenty seconds warm.
@@ -889,7 +889,7 @@ is a fourth assembly `tools/labels.py` does not build") — the reasoning is kep
 and the status is marked beside it. `GameLogic/Explosion.h` said the `VideoState` work "is not
 done". Risk R2 said thirteen masters where there are twelve, R5 described two write-only sprite
 seams that no longer exist, and R11's "~45 C++ homes" was a design-time estimate against
-<!--count:gamelogic-sources-->69 sources and <!--count:gamelogic-headers-->63 headers. The three
+<!--count:gamelogic-sources-->70 sources and <!--count:gamelogic-headers-->64 headers. The three
 counts now carry markers, which is the difference between correcting a number and stopping it
 rotting again.
 

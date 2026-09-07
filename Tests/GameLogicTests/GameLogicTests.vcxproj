@@ -137,6 +137,7 @@
     <ClCompile Include="GameTests.cpp" />
     <ClCompile Include="UniverseImage.cpp" />
     <ClCompile Include="UniverseImageTests.cpp" />
+    <ClCompile Include="StateHashTests.cpp" />
     <ClCompile Include="FlightReplayTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MissionTests.cpp" />

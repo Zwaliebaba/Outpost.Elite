@@ -241,9 +241,11 @@ the seconds, the files, the device). **And a byte in `Universe` gets a cell in `
   `Game` owns the SID log now and the executable drains it through `Sounds()`/`ClearSounds()`, where until then
   the executable owned the log and handed the game a reference to write into — the one place the app reached
   INTO library state. `Frame()` would be an alias of `State().canvas`, which the executable already reaches, so
-  §4.4's line is served rather than built; `StateHash` wants `UniverseImage`'s
-  hash, which lives in the test tree and would have to move to ship; `Mode` was M4-d's, for §2's
-  reason. Each is a named follow-on rather than a gap discovered later.
+  §4.4's line is served rather than built; `StateHash` wanted `UniverseImage`'s
+  hash, which lives in the test tree and would have to move to ship — **built M5-e-3 as
+  `Elite::HashState` instead**, a library-native fold over `Universe` recorded beside the label hash
+  until M6-f, with `StateHashTests` holding the fold to the label table's cells; `Mode` was M4-d's,
+  for §2's reason. Each was a named follow-on rather than a gap discovered later.
 - **Two seams survive M3 deliberately** — `TextSink` and `ValueTokens` are the text system's own
   polymorphism, not platform (Modernize.md §4.5) — **and two because a comparison is blocked**:
   `ShipDrawEffects` on the emulator's flat memory, `SpawnChildEffects` on M4-a's typed stage result.
@@ -257,8 +259,8 @@ the seconds, the files, the device). **And a byte in `Universe` gets a cell in `
 | `Universe` owns every byte of game state | Built; §3's seven moved in 2026-09-07 and are not yet hashed | Modernize.md §8, M3-a and the follow-on |
 | Twenty-two seams to four ports | Built; nine abstract classes remain, four of them named above | §8, M3-b |
 | `Game` owns the dispatch and both loops | Built | §8, M3-c |
-| `Universe` owned by `Game` | Not built — see Consequences | §8, M3-c |
-| `Frame`, `Sounds`, `StateHash` | Not built | §8, M3-c |
+| `Universe` owned by `Game` | Built 2026-09-07 (M5-e-2) — see Consequences | §8, M3-c, M5-e-2 |
+| `Frame`, `Sounds`, `StateHash` | `Sounds` built (M5-e-1); `Frame` served by `State().canvas`; `StateHash` built library-native (M5-e-3) | §8, M3-c, M5-e |
 | `Mode` | Built 2026-09-07 (M4-d); `LoopOutcome` deliberately kept beside it | §2 above; §8 |
 | The replay digest survives M3 | Verified — unchanged across ten commits | §4 above |
 | The replay drives `Game` | Built 2026-09-07; record re-taken for three fixture defects, 0 steps moved | §5 above; §8 |

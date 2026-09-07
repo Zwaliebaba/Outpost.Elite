@@ -57,6 +57,13 @@ namespace Elite
      * relies on: `NWSPS` evicts the sun before it takes the heap, so a station and a sun are never
      * in the bubble at once. Nothing else in the build points a ship at anything but this arena.
      */
+    /// The arena's own bytes, `BASE` upwards -- what the state hash folds (M5-e-3). The lent sun
+    /// heap is not here: those bytes are `PlanetSunState::sun`'s and are hashed there.
+    [[nodiscard]] std::span<const std::uint8_t> Bytes() const noexcept
+    {
+      return m_bytes;
+    }
+
     void AttachSunHeap(std::span<std::uint8_t> _bytes) noexcept
     {
       m_sun = _bytes;

@@ -129,7 +129,8 @@ are blocked on a comparison the emulator cannot yet make (ADR-007 §6, Modernize
 
 **Three claims above did not survive the build.** `Step(InputFrame)` is three `Step`s taking a key,
 because `FRCE` chooses between three routines rather than three branches of one. `Frame()`,
-`Sounds()`, `StateHash()` and `Mode` are not built, and `Mode` is M4-d's. And the executive decides
+`Sounds()`, `StateHash()` and `Mode` were not built by M3-c: `Mode` is M4-d's, `Sounds()` M5-e-1's,
+`StateHash()` M5-e-3's (library-native), and `Frame()` is served by `State().canvas`. And the executive decides
 how many steps because it MUST: the count is floating point and the determinism guard forbids the
 library one. ADR-007 §2 and §3 have the reasoning; the ownership and the replay hash are its §1 and
 §4.

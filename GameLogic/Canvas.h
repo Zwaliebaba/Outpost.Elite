@@ -280,6 +280,17 @@ namespace Elite
      * whole screen is standard bitmap mode coloured from the first block, which is every docked
      * screen; the flight half sets it every frame through `FlightSession::SyncVideoRegisters`.
      */
+    /// The two sprite multicolour registers as stored, and the two explosion colours -- one each
+    /// for the space view and the dashboard. Read by the state hash (M5-e-3).
+    [[nodiscard]] std::span<const std::uint8_t, 2> SpriteMulticolour() const noexcept
+    {
+      return m_spriteMulticolour;
+    }
+    [[nodiscard]] std::span<const Colour, 2> ExplosionColour() const noexcept
+    {
+      return m_explosionColour;
+    }
+
     [[nodiscard]] bool DashboardShown() const noexcept
     {
       return m_dashboardShown;

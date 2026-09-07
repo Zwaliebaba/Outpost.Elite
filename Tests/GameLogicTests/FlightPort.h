@@ -176,6 +176,13 @@ namespace GameLogicTests
       return FoldBytes(digest, rest);
     }
 
+    /// The library-native digest beside it (M5-e-3): `Game::StateHash()`, which already folds the
+    /// pixels, the heap and the controls because they are bytes of `Universe`.
+    [[nodiscard]] std::uint64_t StateDigest() const noexcept
+    {
+      return game.StateHash();
+    }
+
     // `SpawnChild` WAS ANSWERED HERE AND IS NOT ANY MORE (M4-a-1): it was one call to
     // `Elite::SpawnChildShip` over this port's own universe, which is exactly what
     // `Elite::PerformDrop` does inside the library now.

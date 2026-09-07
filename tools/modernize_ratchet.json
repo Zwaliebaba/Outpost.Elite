@@ -69,9 +69,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4127,
+      "ceiling": 4130,
       "slack": 0,
-      "slice": "M5-e-2b: DTW1-8 are Universe::sentences, one marker on the field"
+      "slice": "M5-e-3: HashState names the three codec layouts it folds (K%, TP-CHK, XX0)"
     },
     "oracle-test-files": {
       "ceiling": 48,

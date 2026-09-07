@@ -149,6 +149,7 @@
     <ClInclude Include="ExtendedTokens.h" />
     <ClInclude Include="Game.h" />
     <ClInclude Include="LookupTables.h" />
+    <ClInclude Include="StateHash.h" />
     <ClInclude Include="Canvas.h" />
     <ClInclude Include="Colours.h" />
     <ClInclude Include="LoaderScreen.h" />
@@ -225,6 +226,7 @@
     <ClCompile Include="Canvas.cpp" />
     <ClCompile Include="LoaderScreen.cpp" />
     <ClCompile Include="LookupTables.cpp" />
+    <ClCompile Include="StateHash.cpp" />
     <ClCompile Include="Lines.cpp" />
     <ClCompile Include="TextPrint.cpp" />
     <ClCompile Include="Galaxy.cpp" />
