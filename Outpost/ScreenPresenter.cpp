@@ -363,7 +363,7 @@ namespace Outpost
     CreateRenderTargets();
   }
 
-  bool ScreenPresenter::Present(const Elite::Picture& _screen, const Elite::Canvas& _canvas, const Elite::VideoState* _video,
+  bool ScreenPresenter::Present(const Elite::Picture& _picture, const Elite::Canvas& _canvas, const Elite::VideoState* _video,
                                 int _clientWidth, int _clientHeight)
   {
     if (!m_device || _clientWidth <= 0 || _clientHeight <= 0)
