@@ -450,6 +450,12 @@ namespace GameLogicTests
     std::uint16_t soflg, socnt, sopr, pulsew, sofrch, sofrq, socr, soatk, sosus, sovch, dnoiz;
 
     /*
+     * 6502: safehouse, QQ8, JSTGY, JSTE and MUTOKOLD -- five bytes M3's follow-on moved into
+     * `Universe` and the digest could not see (ADR-007 §5, closed by this widening).
+     */
+    std::uint16_t safehouse, qq8, jstgy, jste, mutokold;
+
+    /*
      * 6502: MUPLA and MULIE -- the music player's own two bytes that a routine outside `Music.cpp`
      * can reach (M3-b-2b).
      *
@@ -570,6 +576,11 @@ namespace GameLogicTests
       sosus = _oracle.Label("SOSUS");
       sovch = _oracle.Label("SOVCH");
       dnoiz = _oracle.Label("DNOIZ");
+      safehouse = _oracle.Label("safehouse");
+      qq8 = _oracle.Label("QQ8");
+      jstgy = _oracle.Label("JSTGY");
+      jste = _oracle.Label("JSTE");
+      mutokold = _oracle.Label("MUTOKOLD");
       mupla = _oracle.Label("MUPLA");
       mulie = _oracle.Label("MULIE");
       l1m = _oracle.Label("L1M");

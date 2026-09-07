@@ -255,6 +255,33 @@ namespace GameLogicTests
     cells.push_back(Direct(L"DNOIZ", _at.dnoiz, _universe.sound.soundOff, CellScope::Compared));
 
     /*
+     * 6502: safehouse, QQ8, JSTGY, JSTE and MUTOKOLD -- the widening ADR-007 §5 named, taken.
+     *
+     * M3's follow-on moved seven bytes out of `Elite::Game` and into `Universe` because every one
+     * has a 6502 name, and §4.4's rule puts a named byte in the universe. Moving them did not put
+     * them in the DIGEST: `Hash` walks this table, so a field is unhashed until a cell names it,
+     * and a slice that broke `MUTOKOLD` or `QQ8` would not have moved the record. That is rule 1's
+     * FIRST case -- a deliberately widened digest -- and taking it moves every checkpoint.
+     *
+     * FIVE OF THE SEVEN, and the arithmetic is the finding. One was a duplicate (`soundDisabled`,
+     * a second `DNOIZ`, removed by M5-a-5 -- the cell above was already watching the real one). The
+     * other is `crosshairStep`, and it CANNOT have a cell: it is what `TT17` leaves in X and Y,
+     * which are REGISTERS. The original keeps them nowhere, so there is no address to compare
+     * against; the port has to put them somewhere and that somewhere is not memory the game has.
+     * ADR-007 §5 listed all seven as one kind of gap and they are three kinds.
+     */
+    Run(cells, L"safehouse", _at.safehouse, _universe.jumpTarget.bytes.data(), _universe.jumpTarget.bytes.size(), CellScope::Compared);
+    cells.push_back(Direct(L"JSTGY", _at.jstgy, _universe.joystickGeometry, CellScope::Compared));
+    cells.push_back(Direct(L"JSTE", _at.jste, _universe.joystickEnabled, CellScope::Compared));
+    cells.push_back(Direct(L"MUTOKOLD", _at.mutokold, _universe.musicSwitchWas, CellScope::Compared));
+
+    // 6502: QQ8 -- two bytes, and the port keeps it as one `std::uint16_t`, so it goes through the
+    // same pair helper `XX0` uses.
+    AddressPair(
+      cells, L"QQ8", L"QQ8+1", _at.qq8, [&_universe]() { return _universe.jumpDistance; },
+      [&_universe](std::uint16_t _value) { _universe.jumpDistance = _value; }, CellScope::Compared);
+
+    /*
      * 6502: MUPLA and MULIE -- what `startbd`, `stopbd`, `startat` and `stopat` leave behind
      * (M3-b-2b).
      *

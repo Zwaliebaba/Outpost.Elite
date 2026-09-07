@@ -119,9 +119,15 @@ the dispatch, and carrying them across with it was the smallest change that comp
 
 **MOVING THEM DID NOT MOVE THE DIGEST, and that is the second half of the finding.** `Hash` walks
 `UniverseImage`'s table of cells, not the struct's bytes, so a field added to `Universe` is not
-hashed until a cell names it. Giving them cells is a deliberate widening under rule 1's first case
-and is still open — so §5's gap is relocated rather than closed, and it is now one edit away from
-closing instead of a refactor away.
+hashed until a cell names it. **The cells were added on 2026-09-07 (M5-a-6) and §5's gap is closed**
+— and closing it corrected the count above. The seven were never one gap: **five of them can have
+cells and now do** (`safehouse`, `QQ8`, `JSTGY`, `JSTE`, `MUTOKOLD`, beside the `DNOIZ` cell that
+already existed), **one was a duplicate** — `m_soundDisabled` was a SECOND `DNOIZ` beside
+`Sound::soundOff`, which is the defect M5-a-5 found and deleted — and **one cannot be hashed at
+all**: `m_crosshairStep` is what `TT17` leaves in X and Y, and REGISTERS have no address for `Where`
+to look up, so there is nothing for a cell to name. A cell is a port field paired with a 6502
+LABEL; state that lives in a register between two calls is outside what this instrument can measure
+by construction, and §5 records it as such rather than as an open edit.
 
 `m_paused` is the exception and stays. The original does not have the byte — `FREEZE` is a loop
 that reads the keyboard and does not return until CLR/HOME — and a windowed program cannot stop
@@ -168,12 +174,18 @@ that could have hidden them.
 
 ### §5 What the hash does not cover, named rather than assumed
 
-- **The seven bytes of §3.** They are in `Universe` now and still not cells in the image, so a slice
-  that broke `MUTOKOLD` or `QQ8` would not move the digest. Giving them cells is the widening under
-  rule 1's first case, and it moves the record for every checkpoint — which is why it is a decision
-  rather than a tidy-up. It was to be taken with the one below and was not: the one below was rule
-  1's SECOND case once the defects behind it were named, and a widening does not ride along with a
-  fix. It stands on its own and is still open.
+- **~~The seven bytes of §3~~ — five of them are cells since 2026-09-07 (M5-a-6), and the arithmetic
+  is the finding.** This section had named seven bytes as one gap and they are three kinds.
+  `safehouse`, `QQ8`, `JSTGY`, `JSTE` and `MUTOKOLD` have cells now, taken as the widening under
+  rule 1's first case — the only re-take of the record so far under that case, and the record moved
+  for every checkpoint while the flight did not (1,170 steps ending `Docked`, and no line of
+  `GameLogic/` changed at all). `DNOIZ` needed nothing: it had a cell already, and the field §3
+  listed beside it was a DUPLICATE of it — M5-a-5's finding, deleted. And **`crosshairStep` cannot
+  have a cell and this is now the standing statement about it**: it is `TT17`'s X and Y, a pair of
+  REGISTERS, and a cell is a port field paired with a 6502 label. There is no label. What the scan
+  leaves for the dispatch a call later is pinned by `KeyboardTests` comparing `TT17` against the
+  oracle, and by nothing in the digest — the one piece of flight state the replay is structurally
+  blind to, named here rather than left to be rediscovered.
 - **The docked half.** The replay is a FLIGHT replay. The docked side is `DockedSessionTests`'
   transcript — a character stream and a screen — which is a different instrument and not a hash.
 - **`Ports` and the text objects.** They are not state and are not hashed. What they do reaches the
@@ -196,9 +208,10 @@ that could have hidden them.
 
 **A byte of game state goes in `Universe`.** If it cannot, the reason is written down where it
 lives and named here. There are three such reasons on the tree today and no others: it is not the
-game's (the eight of §3 are, and are the defect); it would cost `Universe` one of its three
-properties (the text objects); or it is the platform's by the determinism guard (the clock, the
-seconds, the files, the device).
+game's (`m_paused`, which no 6502 byte backs); it would cost `Universe` one of its three properties
+(the text objects); or it is the platform's by the determinism guard (the clock, the seconds, the
+files, the device). **And a byte in `Universe` gets a cell in `UniverseImage`, unless it has no
+6502 label to pair with** — which on the tree today is `crosshairStep` and nothing else (§5).
 
 ## Consequences
 

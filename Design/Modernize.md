@@ -1486,7 +1486,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 
 | Slice | Scope | Acceptance | Sittings |
 |---|---|---|---|
-| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. | Green; `out-params` at <!--count:out-params-->0. The strong types and the `Options` struct are still to do. | 3 |
+| **M5-a Strong types** | `View`, `SoundEffect`, `Message`, `Colour`, the option toggles as an `Options` struct (the thirteen become fields; `DKS3` walks a `constexpr` array of member pointers so the order stays the only definition). **The `out-params` half is built 2026-09-07 (§8)** in three slices: four routines were handed a field of the `Universe` they already took, six more took it, and the two that were not state returned instead. `SoundEffect` is built; two defects came out of the state moves (a second `DNOIZ`, and the digest gap ADR-007 §5 named) and both are closed. | Green; `out-params` at <!--count:out-params-->0. `Colour` is still to do; `Options`, `View` and `Message` were examined and refused, with the evidence in §8 and ADR-006. | 3 |
 | **M5-b constexpr data** | The generated tables as `constexpr std::array`; the codecs, the trig lookups and the token decoder evaluated at compile time where the tests can `static_assert` a known value. | `TableTests` green; one `static_assert` per table against the oracle-checked value. | 2 |
 | **M5-c The ledger** | The <!--count:inventory-stale-files-->20 file names in `Source-Inventory.md` that name no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. | In CI. | 1 |
 | **M5-d ADR-006 and the tidy checks** | ADR-006 (modernisation architecture, written at M2's opening) amended from what was built; `.clang-tidy` widened one `modernize-` check per commit (Q8). | Accepted; `WarningsAsErrors` still `'*'`. | 2 |
@@ -1774,6 +1774,43 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-a-6: the digest gap ADR-007 §5 named is closed, and the seven bytes it named were
+three kinds.**
+
+The owner's ruling was "close it now", and closing it is the FIRST time this project has re-taken
+the replay record under rule 1's first case — a deliberate widening — in five re-takes. The other
+four were all the second case, a defect found and fixed. **No line of `GameLogic/` changed.** What
+changed is what the digest looks at: `Where` gained five label lookups and `UniverseImage` five
+cells, and every one of the sixteen checkpoints moved while the flight did not — 1,170 steps ending
+`Docked`, before and after, which is what a widening should look like and what a behavioural change
+would not.
+
+**THE ARITHMETIC IS THE FINDING.** ADR-007 §5 listed seven bytes as one gap. They are three kinds
+and the section is amended to say so:
+
+  - **Five can have cells and now do** — `safehouse`, `QQ8`, `JSTGY`, `JSTE`, `MUTOKOLD`. `QQ8` is
+    two bytes the port keeps as one `std::uint16_t`, so it goes through the same `AddressPair`
+    helper `XX0` uses; `safehouse` is six bytes and goes through `Run`.
+  - **One was a duplicate**: `soundDisabled`, a second `DNOIZ` beside the one the sound system
+    reads, which M5-a-5 found and deleted. It never needed a cell; `DNOIZ` has had one since
+    M3-b-2a and it was bound to the working half all along.
+  - **One cannot have a cell at all, and this is the durable part.** `crosshairStep` is what `TT17`
+    leaves in X and Y. A cell is a port field paired with a 6502 LABEL, and REGISTERS have no
+    address for `Where` to look up — so there is nothing to name, and no amount of widening reaches
+    it. It is pinned by `KeyboardTests` comparing `TT17` against the oracle and by nothing in the
+    digest. ADR-007 §5 and §6 now say that outright rather than leaving it filed as an open edit,
+    which is how it would have been rediscovered.
+
+**AND THE OTHER 401 TESTS PASSING IS THE EVIDENCE THE WIDENING IS SOUND.** The five new cells are
+`CellScope::Compared`, so `CompareState` now checks them against the oracle everywhere it already
+ran; the first run after adding them was 401 passed, 1 failed, and the one failure was the record
+itself. Had any of the five disagreed with the original the suite would have said which byte and
+where, before the record was touched. Re-taking a record on a suite that is otherwise green is the
+only safe order to do it in, and it is the order the failure message is designed for.
+
+402 of 402; all 14 repository checks; no ratchet count moved (`origin-markers` counts `GameLogic/`
+and the change is entirely in `Tests/`).
 
 **2026-09-07 — M5-a-5: there were TWO `DNOIZ` bytes, and the pause screen's sound-off key has never
 worked in this port.**
