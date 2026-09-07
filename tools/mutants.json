@@ -617,7 +617,7 @@
       "filter": [
         "TheRasterInterrupt"
       ],
-      "tests": 7,
+      "tests": 8,
       "note": [
         "COMIRQ1's VIC-II half (plan section 6.155). Written with the slice, so this unit is a",
         "measurement from its first run rather than a test of a reconstruction.",
