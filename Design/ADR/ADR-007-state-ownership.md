@@ -80,9 +80,9 @@ the passes are the game's.
 of the whole batch — `M%` leaving the flight half, or the pause key freezing it. A caller that
 ignored the answer would run a docked pass through the flight loop.
 
-### §3 The eight bytes that are on `Game` and should be in `Universe`
+### §3 The eight bytes that were on `Game`, seven of which are in `Universe` now
 
-`Game` holds eight bytes that were loose members of `Main.cpp`'s composition struct:
+`Game` held eight bytes that were loose members of `Main.cpp`'s composition struct:
 
 | Field | 6502 | What it is |
 |---|---|---|
@@ -96,10 +96,16 @@ ignored the answer would run a docked pass through the flight loop.
 | `m_paused` | — | the port's own; the original FREEZES in a loop instead |
 
 **SEVEN OF THE EIGHT HAVE A 6502 NAME, WHICH MEANS THEY ARE GAME STATE, WHICH MEANS §4.4's OWN RULE
-PUTS THEM IN `Universe`.** They are not there, and this ADR records that as a defect of the build
-rather than a decision: they were loose in the executable when M3-c moved the dispatch, and moving
-them across with it was the smallest change that compiled. They belong in `Universe`, and the
-consequence of their not being there is §5's: the replay hash does not cover them.
+PUTS THEM IN `Universe`.** They were not there when this ADR was first written, and it recorded that
+as a defect of the build rather than a decision: they were loose in the executable when M3-c moved
+the dispatch, and carrying them across with it was the smallest change that compiled. **They are in
+`Universe` as of 2026-09-07** (§8), which is the follow-on this section asked for.
+
+**MOVING THEM DID NOT MOVE THE DIGEST, and that is the second half of the finding.** `Hash` walks
+`UniverseImage`'s table of cells, not the struct's bytes, so a field added to `Universe` is not
+hashed until a cell names it. Giving them cells is a deliberate widening under rule 1's first case
+and is still open — so §5's gap is relocated rather than closed, and it is now one edit away from
+closing instead of a refactor away.
 
 `m_paused` is the exception and stays. The original does not have the byte — `FREEZE` is a loop
 that reads the keyboard and does not return until CLR/HOME — and a windowed program cannot stop
@@ -140,18 +146,24 @@ not change**. That is what "no behavioural change" means when it is measured rat
 
 ### §5 What the hash does not cover, named rather than assumed
 
-- **The eight bytes of §3.** They are not cells in the image, so a slice that broke `MUTOKOLD` or
-  `QQ8` would not move the digest. Moving them into `Universe` and giving them cells is a
-  deliberate widening under rule 1's first case, and it is the follow-on this ADR asks for.
+- **The seven bytes of §3.** They are in `Universe` now and still not cells in the image, so a slice
+  that broke `MUTOKOLD` or `QQ8` would not move the digest. Giving them cells is the widening under
+  rule 1's first case, and it moves the record for every checkpoint — which is why it is a decision
+  rather than a tidy-up, and why it is taken with the one below rather than separately.
 - **The docked half.** The replay is a FLIGHT replay. The docked side is `DockedSessionTests`'
   transcript — a character stream and a screen — which is a different instrument and not a hash.
 - **`Ports` and the text objects.** They are not state and are not hashed. What they do reaches the
   universe or the canvas, and that is where it is compared.
-- **The replay does not drive `Game`.** `FlightReplayTests` composes `FlightPort` and calls the
-  library's routines directly, as it has since M0-c. Modernize.md's M3-c row asked for the replay
-  and `DockedSessionTests` to drive `Game::Step`; neither does. The digest is therefore a statement
-  about the ROUTINES, not about the object that dispatches them, and `GameTests` is what covers the
-  object until that changes.
+- **The replay does not drive `Game`, and pointing it at one changes the flight.** `FlightReplayTests`
+  composes `FlightPort` and calls the library's routines directly, as it has since M0-c —
+  `FlightPort::Step` is a second transcription of `M%`, `MLOOP`'s head, the spawner, part 5's tail
+  and the keyboard scan, beside `Game::Step`'s. **It was measured on 2026-09-07 and the answer is
+  not a tidy-up** (§8): a `FlightPort` built over an `Elite::Game` starts from `NA%` rather than a
+  zeroed commander, and its text chain runs the value tokens and the control codes rather than
+  deferring them. The scripted flight becomes a different flight — 1,170 steps ending `Docked`
+  becomes 2,589 ending `Died` — so the record moves for a reason that is neither of rule 1's two
+  cases as written. Until that is decided the digest is a statement about the ROUTINES and not about
+  the object that dispatches them, and `GameTests` is what covers the object.
 
 ### §6 The rule that follows from all of it
 
@@ -188,7 +200,7 @@ seconds, the files, the device).
 
 | Claim | State | Recorded in |
 |---|---|---|
-| `Universe` owns every byte of game state | Built, with §3's eight outstanding | Modernize.md §8, M3-a |
+| `Universe` owns every byte of game state | Built; §3's seven moved in 2026-09-07 and are not yet hashed | Modernize.md §8, M3-a and the follow-on |
 | Twenty-two seams to four ports | Built; nine abstract classes remain, four of them named above | §8, M3-b |
 | `Game` owns the dispatch and both loops | Built | §8, M3-c |
 | `Universe` owned by `Game` | Not built — see Consequences | §8, M3-c |

@@ -1282,10 +1282,10 @@ namespace GameLogicTests
     {
       auto port = std::make_unique<FlightPort>();
       port->universe.commander = Elite::DefaultCommander();
-      Elite::ResetGame(port->universe, port->ports, port->docked); // 6502: RESET
+      Elite::ResetGame(port->universe, port->Ports(), port->docked); // 6502: RESET
 
       Elite::SystemSeeds selected{};
-      Elite::Launch(port->universe, port->ports, port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
+      Elite::Launch(port->universe, port->Ports(), port->docked, port->universe.commander.systemX, port->universe.commander.systemY,
                     selected); // 6502: TT110
 
       // Some way out from the station at speed, so `ASL DELTA` twice has something to work on.
@@ -1377,7 +1377,7 @@ namespace GameLogicTests
 
       Watching watching(*port);
       port->watching = &watching;
-      Elite::Die(port->universe, port->ports);
+      Elite::Die(port->universe, port->Ports());
 
       Assert::IsTrue(watching.failure.empty(), watching.failure.c_str());
       Assert::AreEqual<std::uint32_t>(Elite::DEATH_FRAMES + 1u, watching.frames, L"every frame of the sequence was shown");

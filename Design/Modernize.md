@@ -1752,6 +1752,46 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-07 — the ADR-007 §3 follow-on: seven bytes go where they belong, and the replay slice
+that was to come first turns out to be a decision rather than a tidy-up.**
+
+**THE SEVEN BYTES ARE IN `Universe`.** `crosshairStep`, `jumpTarget`, `jumpDistance`,
+`joystickGeometry`, `joystickEnabled`, `musicSwitchWas` and `soundDisabled` — `TT17`'s X and Y,
+`safehouse`, `QQ8`, `JSTGY`, `JSTE`, `MUTOKOLD` and `DNOIZ`. Every one has a 6502 name, which makes
+it game state, which §4.4's rule puts in the universe; they were on `Game` because M3-c carried them
+across from `Main.cpp`'s composition struct and not because anything decided they belonged.
+`Game::m_paused` stays: the original has no such byte, `FREEZE` is a loop that does not return, and
+the state a windowed program is in instead is the port's own.
+
+**AND MOVING THEM DID NOT MOVE THE DIGEST, which is the half of the finding worth keeping.** `Hash`
+walks `UniverseImage`'s table of cells rather than the struct's bytes, so a field added to `Universe`
+is not hashed until a cell names it. The gap ADR-007 §5 records is relocated rather than closed — but
+it is one edit away from closing now instead of a refactor away, and that edit is a deliberate
+widening under rule 1's first case which moves every checkpoint in the record.
+
+**THE REPLAY SLICE WAS BUILT, MEASURED AND PARKED.** `FlightPort::Step` is a second transcription of
+`M%`, `MLOOP`'s head, the spawner, part 5's tail and the keyboard scan, sitting beside
+`Elite::Game::Step`'s — M3-c deleted the executable's copy and left this one, so the replay digest
+measures a TRANSCRIPTION of the loop rather than the loop. Pointing `FlightPort` at an `Elite::Game`
+compiles and runs. It also changes the flight:
+
+  - **1,170 steps ending `Docked` becomes 2,589 ending `Died`**, and every checkpoint differs.
+  - Bisecting the composition says why, in two independent parts. **Without `SetValueTokens` and
+    `SetGame` the flight is 1,170 steps again** and only the digests differ — so the value tokens
+    and the control codes running rather than deferring is what changes the LENGTH of the flight.
+    **With `Game` present but its ports unused the record first differs at step 400** — so
+    `Game`'s constructor writing `NA%` into the commander is a second, separate cause: the replay
+    has been flying a commander of all zeros, with no fuel, no laser and a galaxy seed of zero.
+
+Both are the fixture becoming what the app is, and both are defensible as rule 1's second case — a
+defect in the port found and fixed. But the two together replace the project's primary regression
+instrument with a different flight, and "the record moved and the flight is now a death" is not a
+change to make on a slice's own judgement. **It is recorded here and put to the owner rather than
+taken.** What is committed is the diagnosis, the `FlightPort::Ports()` accessor the change pivots on,
+and this entry; `FlightPort` still steps its own transcription.
+
+402 of 402, all 14 repository checks, the digest unchanged.
+
 **2026-09-07 — M3-d: ADR-007, and writing it from what was built found three things the plan had
 wrong and one the build has wrong.** The row asks for state ownership and the replay hash "written
 from M3-a..c as built", and the value of that phrasing is that it forces a comparison. ADR-006 §4

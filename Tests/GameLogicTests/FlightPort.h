@@ -39,8 +39,13 @@
  * routine the executable calls, with the same arguments, so that a flight through this port is
  * the flight the app would run -- which is the property the replay hash pins.
  *
- * It is the second copy of `FlightSession`'s wiring, and the plan says so (P6): slice M3-b replaces
- * both with direct calls, and this port is what makes M3-b measurable before it lands.
+ * IT IS THE SECOND COPY OF THE FLIGHT PASS AND THE LAST ONE. `Main.cpp`'s `Advance` and this port's
+ * `Step` each spelled out `M%`, `MLOOP`'s head, the spawner, part 5's tail and the keyboard scan in
+ * that order; M3-c moved the executable's into `Elite::Game::Step` and left this one, so the replay
+ * digest measures a TRANSCRIPTION of the loop rather than the loop (ADR-007 §5). Pointing it at
+ * `Elite::Game` is a decided change rather than a tidy-up: the game's own composition sets `NA%` and
+ * runs the value tokens and the control codes, and the scripted flight becomes a different flight.
+ * The measurement is in §8, 2026-09-07.
  */
 namespace GameLogicTests
 {
@@ -257,8 +262,14 @@ namespace GameLogicTests
      */
 
     /// The seams and the text machinery, last because every reference in it is bound at
-    /// construction. Twelve where the two aggregates held thirty-nine (M3-a).
+    /// construction. Eleven where the two aggregates held thirty-nine (M3-a).
     Elite::Ports ports;
+
+    /// The seams as `Ports`, for the replay's own calls into `RESET` and `LAUN`.
+    [[nodiscard]] Elite::Ports& Ports() noexcept
+    {
+      return ports;
+    }
   };
 
 } // namespace GameLogicTests

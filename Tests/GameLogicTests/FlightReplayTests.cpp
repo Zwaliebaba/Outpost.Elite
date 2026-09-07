@@ -129,7 +129,7 @@ namespace GameLogicTests
       _port.universe.current.techLevel = home.data.techLevel;
       _port.universe.view = 1u; // a docked screen, which the launch replaces with the space view
 
-      Elite::ResetGame(_port.universe, _port.ports, _port.docked); // 6502: RESET
+      Elite::ResetGame(_port.universe, _port.Ports(), _port.docked); // 6502: RESET
     }
 
     using Perturbation = std::function<void(FlightPort&)>;
@@ -143,7 +143,7 @@ namespace GameLogicTests
 
       Prepare(_port);
       Elite::SystemSeeds selected{};
-      Elite::Launch(_port.universe, _port.ports, _port.docked, _port.universe.commander.systemX,
+      Elite::Launch(_port.universe, _port.Ports(), _port.docked, _port.universe.commander.systemX,
                     _port.universe.commander.systemY, selected); // 6502: TT110
       checkpoint();
 

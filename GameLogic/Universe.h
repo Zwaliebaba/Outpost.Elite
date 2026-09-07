@@ -268,6 +268,57 @@ namespace Elite
     MusicPlayer music;
 
     /*
+     * The seven that were loose in the executable's composition struct until M3-c and on
+     * `Elite::Game` until this slice, and every one of them has a 6502 name (ADR-007 §3).
+     *
+     * They are here because §4.4's rule is "every byte of game state, and nothing else" and a byte
+     * with a label in the original is game state by definition. They were on `Game` for one reason
+     * and it was not a design one: they were loose members of `Main.cpp`'s struct when M3-c moved
+     * the dispatch, and carrying them across with it was the smallest change that compiled.
+     *
+     * `Game::m_paused` is the one that did NOT come with them and stays where it is: the original
+     * has no such byte, `FREEZE` is a loop that reads the keyboard and does not return, and the
+     * state a windowed program is in instead is the port's own (ADR-005 §3's trade).
+     */
+
+    /*
+     * 6502: what `TT17` leaves in X and Y -- the crosshair steps, held between the scan and the
+     * dispatch that uses them.
+     *
+     * On the 6502 they are registers and the two routines are consecutive; here `TT102`'s work is
+     * a function call away, so they have to live somewhere. Both halves of the loop write it.
+     */
+    CrosshairStep crosshairStep;
+
+    /*
+     * 6502: safehouse and QQ8 -- the system the countdown is running towards, and its distance.
+     *
+     * Separate from `selectedSeeds` (`QQ15`) because the player keeps moving the crosshairs while
+     * the countdown runs, and `TT18` arrives at what was chosen when the key was pressed rather
+     * than at whatever is under the crosshairs when it expires. `QQ8` is here for the same reason:
+     * `hyp` measures the distance once and `TT18` spends that much fuel.
+     */
+    SystemSeeds jumpTarget{};
+    std::uint16_t jumpDistance = 0;
+
+    /*
+     * 6502: JSTGY and JSTE -- two of the thirteen that NOTHING ELSE IN THE PORT READS.
+     *
+     * They are the joystick's y-inversion and its enable, and the flight controls read `JSTK` for
+     * both. They are here because `DKS3` walks a contiguous run and the run is thirteen long: a
+     * port that left them out would shift every option after them by two, and the "D" key would
+     * switch the music instead of the disk.
+     */
+    std::uint8_t joystickGeometry = 0;
+    std::uint8_t joystickEnabled = 0;
+
+    /// 6502: MUTOKOLD -- what `MUTOKCH` saw last, which is how it notices the switch moving.
+    std::uint8_t musicSwitchWas = 0;
+
+    /// 6502: DNOIZ -- non-zero disables the sound, and the pause screen stores the KEY CODE in it.
+    std::uint8_t soundDisabled = 0;
+
+    /*
      * 6502: LSO -- the sun's heap, which `NWSPS` hands to the SPACE STATION (§6.112).
      *
      * The line heap and the sun heap are separate arrays here and one region in the original, and

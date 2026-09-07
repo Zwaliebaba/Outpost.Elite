@@ -183,52 +183,25 @@ namespace Elite
     ControlEffects& m_controls;
 
     /*
-     * 6502: what `TT17` leaves in X and Y -- the crosshair steps, held between the scan and the
-     * dispatch that uses them.
+     * THE SEVEN BYTES THAT WERE HERE ARE IN `Universe` SINCE THE ADR-007 §3 FOLLOW-ON.
      *
-     * On the 6502 they are registers and the two routines are consecutive; here `TT102`'s work is
-     * a function call away, so they have to live somewhere. This is that somewhere, and both halves
-     * of the loop write it.
+     * `crosshairStep`, `jumpTarget`, `jumpDistance`, `joystickGeometry`, `joystickEnabled`,
+     * `musicSwitchWas` and `soundDisabled` -- `TT17`'s X and Y, `safehouse`, `QQ8`, `JSTGY`,
+     * `JSTE`, `MUTOKOLD` and `DNOIZ`. Every one has a 6502 name, which makes it game state, which
+     * §4.4's rule puts in `Universe`. They were here because M3-c carried them across from
+     * `Main.cpp`'s composition struct, not because anything decided they belonged.
      */
-    CrosshairStep m_crosshairStep;
-
-    /*
-     * 6502: safehouse -- the seeds of the system the countdown is running towards.
-     *
-     * Separate from `selectedSeeds` (`QQ15`) because the player keeps moving the crosshairs while
-     * the countdown runs, and `TT18` arrives at what was chosen when the key was pressed rather
-     * than at whatever is under the crosshairs when it expires. `QQ8` is here for the same reason:
-     * `hyp` measures the distance once and `TT18` spends that much fuel.
-     */
-    SystemSeeds m_jumpTarget{};
-    std::uint16_t m_jumpDistance = 0;
 
     /*
      * 6502: DK4's `CPX #&40 / BNE DK2` -- and the frozen state it leaves behind.
      *
-     * The original does not have this byte: it FREEZES, in a loop that reads the keyboard and does
-     * not return until CLR/HOME. A windowed program cannot stop pumping messages, so the freeze is
-     * a state the outer loop is in rather than a loop inside it -- which is the same trade
-     * `PlanSteps` makes for the frame rate (ADR-005 §3).
+     * The one of the eight that STAYS. The original does not have this byte: it FREEZES, in a loop
+     * that reads the keyboard and does not return until CLR/HOME. A windowed program cannot stop
+     * pumping messages, so the freeze is a state the outer loop is in rather than a loop inside it
+     * -- which is the same trade `PlanSteps` makes for the frame rate (ADR-005 §3), and a port
+     * decision with no 6502 byte behind it.
      */
     bool m_paused = false;
-
-    /*
-     * 6502: JSTGY and JSTE -- two of the thirteen that NOTHING ELSE IN THE PORT READS.
-     *
-     * They are the joystick's y-inversion and its enable, and the flight controls read `JSTK` for
-     * both. They are here because `DKS3` walks a contiguous run and the run is thirteen long: a
-     * port that left them out would shift every option after them by two, and the "D" key would
-     * switch the music instead of the disk.
-     */
-    std::uint8_t m_joystickGeometry = 0;
-    std::uint8_t m_joystickEnabled = 0;
-
-    /// 6502: MUTOKOLD -- what `MUTOKCH` saw last, which is how it notices the switch moving.
-    std::uint8_t m_musicSwitchWas = 0;
-
-    /// 6502: DNOIZ -- non-zero disables the sound, and the pause screen stores the KEY CODE in it.
-    std::uint8_t m_soundDisabled = 0;
 
     /// LAST, because every reference in it is bound at construction (§4.5).
     Ports m_ports;
