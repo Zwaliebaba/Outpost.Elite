@@ -1808,6 +1808,28 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-07 — M6-0-a-2: `DOEXP` untrapped, and the first whole-frame comparison with an explosion in it.**
+
+The second third of M6-0-a, and the row's own acceptance line. The frame fixture's recorder no
+longer counts `DrawExplosion`: it draws the cloud, the way M6-0-d made it draw the planet, and the
+trap on `DOEXP` comes off `CompareFrames`. Every case of the per-ship sweep that kills a ship now
+draws its cloud on both machines — the sprite writes reach the banked page (M6-0-a-1), the
+particles reach the bitmap, `RAND` leaves the routine in the mixture §6.86 records — and the
+frame compares the bitmap, the seventeen sprite cells, the heap and `RAND` afterwards.
+
+**ONE CASE FAILED, AND IT WAS THE FIXTURE.** The asteroid shot to bits differed on five bitmap
+bytes with every cell agreeing, which is the signature of the arena's edge and nothing else.
+`PopulateBubble` carves the three ships' heaps for types 3, 5 and 11 and the case retyped them as
+asteroids afterwards: an asteroid's explosion count is 34, the heap carved for type 3 is 29 bytes,
+and the last two vertices `EXL1` copies land above `LS%` — in RAM the oracle happily reads back,
+and outside the arena the port reads as zero. `PopulateBubble` takes the asteroid flag now and
+carves the heaps to the blueprint that will explode. Not a port defect: the port's `LineHeap`
+reads zero past the arena on purpose, and a ship whose heap `NWSHP` carved never overruns it.
+
+The replay record does not move: the replay never trapped `DOEXP`. 399 of 399; all 16 checks.
+The seam itself, and the two `DOEXP` traps still standing in `MissionTests` and `ShipDrawTests`
+that count its calls, are M6-0-a-3.
+
 **2026-09-07 — M6-0-a-1: the interpreter banks the I/O page, and `NOSPRITES` runs on both machines.**
 
 The first third of the row that cannot be done after M6-b at any price. `Cpu6502` models the

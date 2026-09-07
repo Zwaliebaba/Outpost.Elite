@@ -9,6 +9,7 @@
 #include "FlightLoop.h"
 #include "Rng.h"
 #include "Dashboard.h"
+#include "Explosion.h"
 #include "ShipBlueprint.h"
 #include "ShipSlot.h"
 #include "Tactics.h"
@@ -857,9 +858,10 @@ namespace GameLogicTests
      * What `MVEIT` and `LL9` reach through the seam. The planet and the sun are DRAWN, on both
      * machines, since M6-0-d: this counted the call and `CompareFrames` trapped `PLANET` on the
      * oracle, so no frame had ever put a drawn body on the bitmap of both -- the sun case of the
-     * altitude sweep was "compared on the whole bitmap" with nothing on it. The explosion is still
-     * counted, because `DOEXP`'s sprite writes land on `XX21` in the oracle's flat memory (§6.108),
-     * which is M6-0-a's.
+     * altitude sweep was "compared on the whole bitmap" with nothing on it. The explosion is drawn
+     * too, since M6-0-a-2: its sprite writes go to the banked I/O page on both machines now that
+     * `Cpu6502` models the 6510 port (M6-0-a-1), so the `DOEXP` trap comes off and a frame with a
+     * ship shot to bits is compared on the bitmap, the sprite registers, the heap and `RAND`.
      */
     struct RecordingUniverse final : Elite::ShipDrawEffects
     {
@@ -876,6 +878,8 @@ namespace GameLogicTests
       void DrawExplosion() override
       {
         ++explosions;
+        Universe& u = *universe;
+        Elite::DrawExplosionCloud(u.canvas, u.math, u.rng, u.work, u.heap, u.geometry, u.bubble, u.video, u.memoryMap);
       }
     };
 
@@ -1025,7 +1029,7 @@ namespace GameLogicTests
      * player -- which is what parts 7 to 12 branch on. `Seed`'s own blocks are random, and random is
      * exactly wrong here: a ship at a random distance is almost always too far to do anything.
      */
-    void PopulateBubble(Frame& _frame, std::uint8_t _distance, std::uint8_t _state, bool _empty)
+    void PopulateBubble(Frame& _frame, std::uint8_t _distance, std::uint8_t _state, bool _empty, bool _asteroids = false)
     {
       Universe& universe = _frame.universe;
 
@@ -1044,7 +1048,16 @@ namespace GameLogicTests
         return;
       }
 
-      const std::uint8_t TYPES[] = {128u, 129u, 3u, 5u, 11u};
+      /*
+       * The three shootable ships are asteroids when the case says so, and they have to be so HERE
+       * rather than retyped afterwards: the heap is carved to the blueprint's size, and an
+       * asteroid's explosion count (byte 2 of its heap, 34) runs past the 29 bytes a type 3 gets.
+       * On the machine those bytes are whatever sits above `LS%`; in the port they are outside the
+       * arena and read as zero, which is the last-vertex mismatch M6-0-a-2 found in the cloud.
+       */
+      const std::uint8_t asteroid = Elite::Byte(Elite::ShipType::Asteroid);
+      const std::uint8_t TYPES[] = {128u, 129u, _asteroids ? asteroid : std::uint8_t{3u}, _asteroids ? asteroid : std::uint8_t{5u},
+                                    _asteroids ? asteroid : std::uint8_t{11u}};
 
       // 6502: SLSP -- the ships' line heaps, carved down from LS% the way `NWSHP` carves them, each
       // the size its blueprint asks for. They were all at &0C00 until M6-0-d, outside the arena the
@@ -1150,7 +1163,6 @@ namespace GameLogicTests
         cpu.Load(EXITS[index], leave, sizeof(leave));
       }
 
-      cpu.AddTrap(_loop.doexp);
       cpu.AddTrap(_loop.dovdu19);
       /*
        * `SFS1` IS NOT TRAPPED (M4-a-1). It was, to `SEC` or `CLC` depending on what the port's seam
@@ -1805,7 +1817,7 @@ namespace GameLogicTests
         for (const std::uint8_t missileArmed : {std::uint8_t{0}, std::uint8_t{0xFF}})
         {
           Frame frame(0x4Du);
-          PopulateBubble(frame, item.distance, item.state, item.empty);
+          PopulateBubble(frame, item.distance, item.state, item.empty, item.asteroids);
 
           /*
            * "On top of us" is BEHIND us by the time `HITCH` looks: `MVEIT` takes the player's speed
@@ -1822,20 +1834,10 @@ namespace GameLogicTests
             }
           }
 
-          // 6502: INWK+35 and FRIN/MANY -- what a laser has to get through, and what it is shooting.
+          // 6502: INWK+35 -- what a laser has to get through. FRIN/MANY were set by `PopulateBubble`.
           for (std::size_t slot = 2; slot < 5u; ++slot)
           {
             frame.universe.bubble.blocks[slot].energy = item.energy;
-            if (item.asteroids)
-            {
-              const std::uint8_t was = frame.universe.bubble.slots[slot];
-              if (was < 34u && frame.universe.bubble.counts[was] != 0u)
-              {
-                --frame.universe.bubble.counts[was];
-              }
-              frame.universe.bubble.slots[slot] = Elite::Byte(Elite::ShipType::Asteroid);
-              ++frame.universe.bubble.counts[Elite::Byte(Elite::ShipType::Asteroid)];
-            }
           }
 
           frame.universe.status.laserPower = item.laser;
