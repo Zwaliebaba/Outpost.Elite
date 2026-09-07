@@ -35,6 +35,10 @@ UPSTREAM = REPO / "Upstream" / "elite-source-code-library"
 LEDGER = REPO / "Design" / "Source-Inventory.md"
 PORT = REPO / "GameLogic"
 
+# Where a ledger row's `Home` may point. A row names a file the port actually has, or the row is a
+# claim about the tree that has stopped being true.
+HOME_FOLDERS = ("GameLogic", "Outpost", "NeuronCore", "Tests/GameLogicTests", "Tests/PortableRunner/Shim")
+
 INCLUDE_RE = re.compile(r'^\s*INC(?:LUDE|BIN)\s+"([^"]+)"', re.MULTILINE)
 MARKER_RE = re.compile(r"//\s*6502:\s*([^\n]+)")
 # A ledger row names its labels in backticks in the first column.
@@ -111,6 +115,58 @@ def ledger_labels() -> set[str]:
     return labels
 
 
+def ledger_homes() -> list[tuple[int, str, str]]:
+    """Every `.h`/`.cpp` name in a ledger row's HOME cell, as (line number, row label, file name).
+
+    THE HOME CELL IS THE ROW'S CLAIM ABOUT THE TREE and the notes beside it are its HISTORY. A note
+    that says a routine was built "in `Spawner.cpp` as one function" was true on the day it was
+    written and stays; the plan's own rule for numbers says the same thing (AGENTS.md: journal
+    numbers are history and are never touched). Two of the notes go further and name a file to say
+    it does NOT exist -- §6.129's raster row, and the workspace row M5-c corrected -- so a check
+    over the whole file would demand that a finding be deleted to go green. So this reads the third
+    cell of a table row and nothing else.
+    """
+    if not LEDGER.is_file():
+        return []
+    found: list[tuple[int, str, str]] = []
+    for number, line in enumerate(LEDGER.read_text(encoding="utf-8", errors="replace").split("\n"), start=1):
+        if not line.startswith("|"):
+            continue
+        cells = line.split("|")
+        if len(cells) < 5:
+            continue
+        label = cells[1].strip()
+        # A separator row (|---|---|) names nothing and a header row has no backticks either.
+        for name in re.findall(r"`([A-Za-z0-9_]+\.(?:h|cpp))`", cells[3]):
+            found.append((number, label, name))
+    return found
+
+
+def check_homes() -> int:
+    """Every file a ledger row's HOME cell names exists in one of the port's folders."""
+    on_disk: set[str] = set()
+    for folder in HOME_FOLDERS:
+        directory = REPO / folder
+        if directory.is_dir():
+            on_disk.update(path.name for path in directory.iterdir() if path.is_file())
+
+    homes = ledger_homes()
+    stale = [(number, label, name) for number, label, name in homes if name not in on_disk]
+
+    print(f"ledger rows with a home   {len({number for number, _, _ in homes}):>4}")
+    print(f"file names in those homes {len(homes):>4}")
+    if stale:
+        print("\nFAIL  a ledger row's home names a file the tree does not have:")
+        for number, label, name in stale:
+            print(f"      line {number}: {name} -- {label[:70]}")
+        print("\n      A home is where the labels LIVE. Correct the cell to the file that holds them,")
+        print("      and leave the notes alone: they are history and say where things used to go.")
+        return 1
+
+    print("\nOK    every file a ledger row's home names is on disk")
+    return 0
+
+
 def port_markers() -> dict[str, list[str]]:
     """"// 6502: LABEL" markers in the port, mapped to the files that carry them."""
     markers: dict[str, list[str]] = {}
@@ -167,11 +223,66 @@ def report(paths: dict[str, list[str]], strict: bool) -> int:
     return 0
 
 
+def self_test() -> int:
+    """A ledger whose home names a file that is not there must fail, and one that does must pass.
+
+    The trap is the one this check exists for: a note that names a missing file is HISTORY and must
+    NOT fail, so the sample carries both and only the home is counted.
+    """
+    global LEDGER, REPO  # noqa: PLW0603 -- the sample tree stands in for the repository
+    import tempfile
+
+    real_ledger, real_repo = LEDGER, REPO
+    complaints: list[str] = []
+    try:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / "GameLogic").mkdir()
+            (root / "GameLogic" / "Here.cpp").write_text("// present\n", encoding="utf-8")
+            REPO = root
+            LEDGER = root / "Ledger.md"
+
+            LEDGER.write_text(
+                "| Labels | N | Home | Disposition | Notes |\n"
+                "|---|---|---|---|---|\n"
+                "| `alpha` | 1 | `Here.cpp` | Port | Was in `Gone.cpp` until it moved. |\n",
+                encoding="utf-8",
+            )
+            if check_homes() != 0:
+                complaints.append("self-test: a clean home failed, and a note naming `Gone.cpp` must not count")
+
+            LEDGER.write_text(
+                "| Labels | N | Home | Disposition | Notes |\n"
+                "|---|---|---|---|---|\n"
+                "| `alpha` | 1 | `Here.cpp`, `Gone.cpp` | Port | notes |\n",
+                encoding="utf-8",
+            )
+            if check_homes() == 0:
+                complaints.append("self-test: a planted stale home was not caught")
+    finally:
+        LEDGER, REPO = real_ledger, real_repo
+
+    for line in complaints:
+        print(line)
+    if complaints:
+        print(f"\nFAIL  {len(complaints)} self-test failure(s)")
+        return 1
+    print("\nOK    self-test passed: a planted stale home was caught and a stale NOTE was not")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check-includes", action="store_true", help="resolve every master INCLUDE against Upstream/")
     parser.add_argument("--strict", action="store_true", help="fail when a library file has no ledger row")
+    parser.add_argument("--check-homes", action="store_true", help="every file a ledger row's home names is on disk")
+    parser.add_argument("--self-test", action="store_true", help="prove --check-homes catches a planted stale home")
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
+    if args.check_homes:
+        return check_homes()
 
     paths = master_includes()
     if args.check_includes:

@@ -18,7 +18,7 @@ covered by whole-bitmap oracle comparisons and the fourth of which is a sound ha
 **A fresh clone needs
 `git submodule update --init` and `python tools/labels.py --assemble`** before the oracle tests mean
 anything (Elite-Conversion-Plan.md §6.9, Risk R9). The suite is **<!--count:tests-->395 tests** and
-CI runs **<!--count:checks-->thirteen repository checks** beside it.
+CI runs **<!--count:checks-->fifteen repository checks** beside it.
 
 The task this corpus plans: take the annotated 6502 source of **Commodore 64 Elite** that sits
 under [`MasterFile/`](../MasterFile/) and produce a modern C++ port of the game inside the

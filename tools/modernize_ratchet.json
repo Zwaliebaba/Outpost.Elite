@@ -64,9 +64,9 @@
       "slice": "death-sequence fix 2026-09-06 (plan 6.157): the cloud-seed unit, seven mutants"
     },
     "inventory-stale-files": {
-      "ceiling": 20,
+      "ceiling": 0,
       "slack": 0,
-      "slice": "M3-c"
+      "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
       "ceiling": 4107,
