@@ -1,7 +1,7 @@
 # Resolution — the game at 640×400
 
-**Status:** Proposed · 2026-09-07 · **four owner rulings taken the day it was opened** (§1), which
-settle the shape; nothing below is built. Reads after [Modernize.md](Modernize.md), because it starts
+**Status:** Proposed · 2026-09-07 · **eight owner rulings taken the day it was opened** — four on
+the shape (§1) and four on what the shape left open (§11); nothing below is built. Reads after [Modernize.md](Modernize.md), because it starts
 where that plan's rules end and obeys them.
 **Depends on:** ADR-001 (fidelity — §1 and §4 amended by this design, §2), ADR-002 (the numeric
 model — unchanged for the canvas, and §4's "parallel path" is this), ADR-005 (presentation — §1
@@ -43,8 +43,8 @@ One new object, one rule, and a build order that keeps the game playable at ever
 - **The screen starts as a 2× upscale of the canvas and is taken over region by region**, so the
   tree plays at every slice and the last slice removes the upscale (§10).
 
-Four rulings shaped it (§1). The largest cost is not the arithmetic but the docked screens, and §6
-says why and how much.
+Four rulings shaped it (§1) and four more closed what it left open (§11). The largest cost is not
+the arithmetic but the docked screens, and §6 says why and how much.
 
 ---
 
@@ -387,7 +387,7 @@ sixteen-colour image, `DASHBOARD_IMAGE_2X`, 71,680 bytes in its own generated fi
 dashboard plane where `ShowDashboard`'s twin runs.
 
 **It needs a person with a paint program, and the design says so rather than pretending a tool can
-draw it.** What a tool can do is start it: `tools/bitmaps.py` gains a fourth sheet and one command,
+draw it — the owner, by ruling (§11.1), on the bootstrap below, on no slice's schedule.** What a tool can do is start it: `tools/bitmaps.py` gains a fourth sheet and one command,
 `bootstrap-2x`, which resolves the faithful dashboard through `Canvas::Resolve` (so the cell colours
 are already applied), doubles every pixel, and writes it as an indexed BMP in the sixteen VIC-II
 colours. That file imports as the first `DASHBOARD_IMAGE_2X` and the tree plays. The re-authoring —
@@ -457,7 +457,8 @@ starts at `(32 - n) / 2` on the canvas and `8 + (64 - n) / 2 = 24 + (32 - n) / 2
 ### 6.3 The re-flow, screen by screen
 
 Ruling 3's cost. Each screen below gets a layout table and, where the table cannot express it, a
-twin of one drawing routine. The anchor table for a screen is sized off its placed-cursor stores
+twin of one drawing routine. By ruling (§11.2) every RS-5 sub-slice OPENS with an ASCII sketch of
+its screen for the owner to accept or redraw, and only then writes the table. The anchor table for a screen is sized off its placed-cursor stores
 (`text.column = ...`, `text.row = ...`) when its slice opens — the market and equipment screens
 have the most, the status and data screens one each; the sketches are proposals for the owner to
 accept or redraw (§11) and are not normative until a slice lands them.
@@ -519,8 +520,8 @@ re-flow that changed it would be a change to the game.
 `Screen::Resolve`. The pixel shader's literal `float2(320.0, 200.0)` becomes two root constants
 beside the palette, so the shader never again knows the size. `FitCanvas` becomes `FitScreen` over
 the screen's constants and `ShellTests` moves with it. `Window::Create`'s client area is the screen
-at `INITIAL_SCALE`, which drops from 3 to 2: **1280×800**, which fits a 1080p display with room for
-a title bar where 3× (1920×1200) would not. On a 1440p display the largest integer scale is 3×, on a
+at `INITIAL_SCALE`, which drops from 3 to 2: **1280×800** (owner ruling, §11.3), which fits a 1080p
+display with room for a title bar where 3× (1920×1200) would not. On a 1440p display the largest integer scale is 3×, on a
 4K one 5×; the letterbox rule is unchanged. `GoldenCanvas.cpp`'s PNG writer and `golden_diff.py`
 take a width and a height rather than the canvas's.
 
@@ -624,8 +625,8 @@ path the layout did not see — are what the estimate cannot price.
 | **RS-2 Ship lines** | `Project2x`, `Divide512`, `ClipLine2x`, `Bresenham2x`, `LineHeap2x`, `PushEdges`' and `EraseShip`'s twins, `SHPPT`'s dot (§4.1) | The title ship and a flight with ships at 2×; the space-view shadow test green on `MA23`'s ship frames; the property sweeps of §8.2 for `Project2x` and `Divide512`; the first screen golden | 3–4 |
 | **RS-3 Planet, sun, dust, beams, rings** | §4.2 and §4.3: `ball2x`, `sun2x`, `isqrt`, the stardust and particle twins, the laser and tunnel twins | Shadow test green on the sun frame and the explosion frame; `isqrt` swept; the launch tunnel presents thin rings | 2–3 |
 | **RS-4 The dashboard** | §5: the dial, indicator, missile and bulb twins, the scanner and compass twins, `bitmaps.py`'s fourth sheet and `bootstrap-2x`, `DASHBOARD_IMAGE_2X` as bootstrapped, the rectangle table and its import check, sprites pixel-doubled in `Resolve` | The per-instrument shadow properties green; the flight view entirely native (no region upscaled) and a hand-check recorded; the scanner sweep of §8.2 | 3 |
-| **RS-4-art The picture** | A person redraws `DASHBOARD_IMAGE_2X` (§5.3) | Imports clean; a hand-check; a screen golden re-recorded with the diff attached | owner's |
-| **RS-5 The re-flow** | One sub-slice per row of §6.3 in that order, each a layout table and, where named, one twin; the wide sink's re-wrap for the data screen and the briefings; the charts' twins | Per screen: the text shadow test green including the no-collision clause; a hand-check; the owner's acceptance of the layout against the sketch | 1 each, 8–10 in all; the charts are two each |
+| **RS-4-art The picture** | The owner redraws `DASHBOARD_IMAGE_2X` on the bootstrap (§5.3, ruling §11.1); no slice waits on it | Imports clean; a hand-check; a screen golden re-recorded with the diff attached | owner's |
+| **RS-5 The re-flow** | One sub-slice per row of §6.3 in that order, each a layout table and, where named, one twin; the wide sink's re-wrap for the data screen and the briefings; the charts' twins | Per screen: the sketch accepted before the table is written (ruling §11.2); the text shadow test green including the no-collision clause; a hand-check | 1 each, 8–10 in all; the charts are two each |
 | **RS-6 Close** | The upscale removed from `Resolve` and its region flags with it; the amendments of §9; ADR-008; `outpost-elite-names` re-ceilinged; `check_outpost.py` over `ScreenPresenter`; this document's status | `check_all.py` green with the upscale gone; every ADR named in §9 amended; the plan's Phase 6 row written | 1–2 |
 | **Later, optional** | Re-authored 48×42 sprites (§5.4); an aspect-ratio option (ADR-005 §1, unchanged) | — | — |
 
@@ -637,16 +638,26 @@ and touches almost no faithful routine, and may interleave.
 
 ---
 
-## 11. Open — what needs the owner and not a slice
+## 11. Rulings on what the shape left open — taken 2026-09-07
 
-1. **Who draws the dashboard.** §5.3's bootstrap ships a doubled picture; the redrawn one is a
-   person's work, and the design has no row for it because it cannot estimate it.
-2. **The layouts of §6.3** are proposals. Each RS-5 sub-slice opens with its sketch and closes with
-   the owner's acceptance of the screen as drawn; a layout the owner redraws is a table edit.
-3. **1280×800 as the opening window** (§7). 3× is 1920×1200 and does not fit a 1080p display with a
-   title bar; 2× is the design's default and a one-constant change if the owner prefers larger.
-4. **Aspect ratio stays 8:5.** Ruled out of scope above rather than decided; noted so nobody reads
-   640×400 as a decision about it.
+Four things needed the owner and not a slice, and all four were ruled the day the design was
+written. They are recorded here as rulings rather than as open items, so nobody re-opens them.
+
+1. **The dashboard picture is the owner's to draw, on the bootstrap.** RS-4 ships the pixel-doubled
+   `DASHBOARD_IMAGE_2X` that `bitmaps.py bootstrap-2x` produces, so the tree plays; the owner edits
+   the exported BMP and imports it whenever it is ready, and no slice waits on it. The alternatives
+   — a procedural first pass drawn by a script, or keeping the doubled picture as final — were put
+   and declined.
+2. **Every re-flowed screen is sketched before it is built.** Each RS-5 sub-slice opens with an
+   ASCII sketch of that screen at 80×50 for the owner to accept or redraw, and the layout table is
+   written only after acceptance. §6.3's descriptions and its two sketches are proposals, not
+   approvals.
+3. **The window opens at 2×, 1280×800.** It fits every common display; the player resizes and the
+   letterbox picks the largest integer scale that fits. 3× and a size measured from the monitor's
+   work area were put and declined.
+4. **The aspect ratio stays 8:5 with square pixels, and is out of this design's scope.** ADR-005 §1's
+   "5:4 or 4:3 aspect option is phase 6" stands unchanged; adding a 4:3 option here, or making 4:3
+   the only mode, were put and declined.
 
 ---
 
