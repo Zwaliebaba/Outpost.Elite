@@ -42,10 +42,10 @@ namespace Elite
      * as (K, K+1) and part 3 stores them the other way round, so the same test means the opposite
      * thing for the energy bars.
      */
-    std::uint8_t colour = _colours.atOrAbove; // 6502: COL
-    if (value < _threshold && _colours.below != 0u)
+    PixelPattern ink = _colours.atOrAbove; // 6502: COL
+    if (value < _threshold && _colours.below != PixelPattern::Blank)
     {
-      colour = _colours.below;
+      ink = _colours.below;
     }
 
     // 6502: LDY #2 / LDX #3 -- rows 2 to 4 of four character cells, so a bar is three pixels tall.
@@ -86,7 +86,7 @@ namespace Elite
 
       // 6502: DL5 -- AND COL / STA (SC),Y three times over. It STORES rather than EORs, which is
       // why the dashboard needs no erase and the space view does.
-      const std::uint8_t byte = static_cast<std::uint8_t>(pattern & colour);
+      const std::uint8_t byte = static_cast<std::uint8_t>(pattern & PatternByte(ink));
       for (std::uint8_t within = 0; within < 3u; ++within)
       {
         _canvas.Write(static_cast<std::uint16_t>(_draw.sc + row + within), byte);
@@ -108,7 +108,7 @@ namespace Elite
 
   void DrawIndicator(Canvas& _canvas, DrawWorkspace& _draw, std::uint8_t _value) noexcept
   {
-    std::uint8_t row = 1u; // 6502: LDY #1 -- rows 1 to 4, so this bar is four pixels tall
+    std::uint8_t row = 1u;   // 6502: LDY #1 -- rows 1 to 4, so this bar is four pixels tall
     std::uint8_t q = _value; // 6502: STA Q -- this routine's own (M2-c)
 
     do
@@ -129,7 +129,7 @@ namespace Elite
          * The lit pixel, and then `Q` is set to 255 so that no later block can match -- a loop exit
          * written as data rather than as a branch.
          */
-        byte = static_cast<std::uint8_t>(DASHBOARD_PIXEL_TABLE[q & 3u] & DIAL_NORMAL);
+        byte = static_cast<std::uint8_t>(DASHBOARD_PIXEL_TABLE[q & 3u] & PatternByte(DIAL_NORMAL));
         q = 0xFFu;
       }
 
@@ -214,16 +214,16 @@ namespace Elite
      * is an argument and not a constant: the pass-through §6.99 found at the seam runs through the
      * routine above it too (§6.118).
      */
-    _status.ecmCountdown = 32u;                    // 6502: LDA #32 / STA ECMA
+    _status.ecmCountdown = 32u;                                // 6502: LDA #32 / STA ECMA
     (void)PlaySoundEffect(_sound, SoundEffect::Ecm, _carryIn); // 6502: LDY #sfxecm / JSR NOISE
-    ToggleEcmIndicator(_canvas);                   // 6502: and no RTS -- it falls into ECBLB
+    ToggleEcmIndicator(_canvas);                               // 6502: and no RTS -- it falls into ECBLB
   }
 
   void StopEcm(Canvas& _canvas, FlightStatus& _status, SoundBuffer& _sound) noexcept
   {
-    _status.ecmCountdown = 0u;     // 6502: LDA #0 / STA ECMA
-    _status.ecmOurs = 0u;          // 6502: STA ECMP
-    ToggleEcmIndicator(_canvas);   // 6502: JSR ECBLB
+    _status.ecmCountdown = 0u;                 // 6502: LDA #0 / STA ECMA
+    _status.ecmOurs = 0u;                      // 6502: STA ECMP
+    ToggleEcmIndicator(_canvas);               // 6502: JSR ECBLB
     StopSoundEffect(_sound, SoundEffect::Ecm); // 6502: LDY #sfxecm / JMP NOISEOFF -- a tail call, so this ends it
   }
 

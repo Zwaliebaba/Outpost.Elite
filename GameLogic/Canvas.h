@@ -410,12 +410,12 @@ namespace Elite
   /// WHITE are four multicolour pixels each rather than a colour number). The second pixel can
   /// land in the next character cell, and the routine detects that from the mask rather than from
   /// x -- which is why the cursor it returns can point one cell to the right of (X1, Y1)'s own.
-  CellCursor PlotDash(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _colour) noexcept;
+  CellCursor PlotDash(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept;
 
   /// 6502: CPIX4 -- a two-by-two block: CPIX2, then the row above it. The cursor is the SECOND
   /// call's, which is the row `SCAN` starts its stick from. The original leaves `Y1` decremented;
   /// nothing reads it, and since M2-c nothing can.
-  CellCursor PlotBlock(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, std::uint8_t _colour) noexcept;
+  CellCursor PlotBlock(Canvas& _canvas, std::uint8_t _across, std::uint8_t _down, PixelPattern _pattern) noexcept;
 
   /*
    * What `LOIN` leaves behind: the four bytes as it left them -- the other way round from the line
