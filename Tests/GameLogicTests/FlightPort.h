@@ -74,7 +74,7 @@ namespace GameLogicTests
      * screen and writes no commander file.
      */
     FlightPort()
-      : game(universe, *this, universe.unused, *this, *this, universe.unused, *this)
+      : game(*this, unused, *this, *this, unused, *this)
     {
       // What `FlightSession`'s constructor and the cold start do before a launch can happen.
       universe.heaps.stp = LAST_CIRCLE_STEP;
@@ -89,13 +89,25 @@ namespace GameLogicTests
 
     // ---- the universe and the loop over it ----------------------------------------------------------
 
+    /// The seams this port does not answer, declared before the game that takes them.
+    UnusedSeams unused;
+
     /*
-     * The universe, and it is all of them now: the controls, the keys, the burst, the line heap,
-     * the clipper's flag, the projection and the axes were eight members here because `FlightLoop`
-     * held references to them. `Elite::Universe` owns every one since M3-a, so `universe.keys` is
-     * the byte the app's is.
+     * The game FIRST, because it owns the universe (M5-e-2) and everything below borrows from it --
+     * where until then this port owned a test wrapper and lent it to `Game`, and `Game` was last
+     * because it bound every one of the above. It builds `Ports` and the text chain over the
+     * universe exactly as `Outpost::App` does, and it is what `Step` steps.
      */
-    Universe universe;
+    Elite::Game game;
+
+    /*
+     * The universe, and it is all of them: the controls, the keys, the burst, the line heap, the
+     * clipper's flag, the projection and the axes were eight members here because `FlightLoop` held
+     * references to them. `Elite::Universe` owns every one since M3-a, `Game` owns the universe since
+     * M5-e-2, and `universe.keys` is the byte the app's is -- the same direction the executable's
+     * sessions borrow it in.
+     */
+    Elite::Universe& universe = game.State();
 
     /// 6502: the sound variables, the music player and the SID they write -- the game's own
     /// objects, so that a flight makes the same register writes it would make in the app.
@@ -145,7 +157,7 @@ namespace GameLogicTests
      */
     [[nodiscard]] std::uint64_t Digest() const
     {
-      std::uint64_t digest = Hash(universe);
+      std::uint64_t digest = Hash(universe, game.Recursive(), game.Characters());
       digest = FoldBytes(digest, universe.canvas.Screen());
 
       std::array<std::uint8_t, Elite::LineHeap::SIZE> arena{};
@@ -259,13 +271,6 @@ namespace GameLogicTests
      * Six overrides, and five of them were already one line into `Universe::video`; the sixth kept
      * `SETL1`'s byte in this object where nothing could read it. Both are library state now.
      */
-
-    /*
-     * The game, LAST because it binds every one of the above, and the whole of what this port is
-     * for since 2026-09-07: it builds `Ports` and the text chain over the universe exactly as
-     * `Outpost::App` does, and it is what `Step` steps.
-     */
-    Elite::Game game;
 
     /// The seams as `Ports`, for the replay's own calls into `RESET` and `LAUN` -- the same struct
     /// the game steps through, not a second one built beside it.

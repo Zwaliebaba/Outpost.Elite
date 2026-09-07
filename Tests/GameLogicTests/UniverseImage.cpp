@@ -134,9 +134,15 @@ namespace GameLogicTests
 
   std::vector<Cell> ImageCells(Universe& _universe, const Where& _at)
   {
+    return ImageCells(static_cast<Elite::Universe&>(_universe), Beside{_universe.printer, _universe.characters, _universe.spriteRegistersAreOurs}, _at);
+  }
+
+  std::vector<Cell> ImageCells(Elite::Universe& _universe, Beside _beside, const Where& _at)
+  {
     std::vector<Cell> cells;
     cells.reserve(1200);
-    Universe* universe = &_universe;
+    Elite::Universe* universe = &_universe;
+    Elite::TokenPrinter* recursive = &_beside.recursive;
 
     // ---- compared, in the order `CompareState` checked them -----------------------------------------
 
@@ -148,13 +154,13 @@ namespace GameLogicTests
       cell.name = L"QQ17";
       cell.address = _at.qq17;
       cell.scope = CellScope::Compared;
-      cell.get = [universe]() { return universe->printer.CaseFlags(); };
-      cell.set = [universe](std::uint8_t _flags) { universe->printer.SetCaseFlags(_flags); };
+      cell.get = [recursive]() { return recursive->CaseFlags(); };
+      cell.set = [recursive](std::uint8_t _flags) { recursive->SetCaseFlags(_flags); };
       cells.push_back(std::move(cell));
     }
-    cells.push_back(Direct(L"DTW1", _at.dtw1, _universe.characters.state.lowerCaseBits, CellScope::Compared));
-    cells.push_back(Direct(L"DTW2", _at.dtw2, _universe.characters.state.sentenceStart, CellScope::Compared));
-    cells.push_back(Direct(L"DTW6", _at.dtw6, _universe.characters.state.alwaysLower, CellScope::Compared));
+    cells.push_back(Direct(L"DTW1", _at.dtw1, _beside.characters.state.lowerCaseBits, CellScope::Compared));
+    cells.push_back(Direct(L"DTW2", _at.dtw2, _beside.characters.state.sentenceStart, CellScope::Compared));
+    cells.push_back(Direct(L"DTW6", _at.dtw6, _beside.characters.state.alwaysLower, CellScope::Compared));
     cells.push_back(Direct(L"LSP", _at.lsp, _universe.heaps.lsp, CellScope::Compared));
     cells.push_back(Direct(L"DLY", _at.dly, _universe.message.delay, CellScope::Compared));
     cells.push_back(Direct(L"de", _at.de, _universe.message.append, CellScope::Compared));
@@ -198,7 +204,7 @@ namespace GameLogicTests
      * every other fixture leaves the bytes alone, and so does this table. The nine-bit x is one
      * value on the port's side and a low byte per sprite plus one shared high-bit byte on the game's.
      */
-    if (_universe.spriteRegistersAreOurs)
+    if (_beside.spriteRegistersAreOurs)
     {
       for (std::size_t sprite = Elite::FIRST_TRUMBLE_SPRITE; sprite < Elite::SPRITE_COUNT; ++sprite)
       {
@@ -397,10 +403,10 @@ namespace GameLogicTests
      * stale byte in either would centre the message in the wrong column. `DTW7` is not in this
      * build -- the Master's literal-character byte has no C64 label.
      */
-    cells.push_back(Direct(L"DTW3", _at.dtw3, _universe.characters.state.toLineBuffer, CellScope::Image));
-    cells.push_back(Direct(L"DTW4", _at.dtw4, _universe.characters.state.justify, CellScope::Image));
-    cells.push_back(Direct(L"DTW5", _at.dtw5, _universe.characters.state.bufferLength, CellScope::Image));
-    cells.push_back(Direct(L"DTW8", _at.dtw8, _universe.characters.state.caseMask, CellScope::Image));
+    cells.push_back(Direct(L"DTW3", _at.dtw3, _beside.characters.state.toLineBuffer, CellScope::Image));
+    cells.push_back(Direct(L"DTW4", _at.dtw4, _beside.characters.state.justify, CellScope::Image));
+    cells.push_back(Direct(L"DTW5", _at.dtw5, _beside.characters.state.bufferLength, CellScope::Image));
+    cells.push_back(Direct(L"DTW8", _at.dtw8, _beside.characters.state.caseMask, CellScope::Image));
     cells.push_back(Direct(L"MCH", _at.mch, _universe.message.token, CellScope::Image));
     cells.push_back(Direct(L"messXC", _at.messxc, _universe.message.column, CellScope::Image));
     cells.push_back(Direct(L"QQ22+1", static_cast<std::uint16_t>(_at.qq22 + 1u), _universe.status.hyperspaceCountdown, CellScope::Image));
@@ -504,25 +510,40 @@ namespace GameLogicTests
     return differences;
   }
 
+  namespace
+  {
+    std::uint64_t HashCells(const std::vector<Cell>& _cells)
+    {
+      std::uint64_t hash = FNV_OFFSET;
+      for (const Cell& cell : _cells)
+      {
+        if (cell.scope == CellScope::Seeded)
+        {
+          continue;
+        }
+        hash ^= static_cast<std::uint8_t>(cell.get() & cell.mask);
+        hash *= FNV_PRIME;
+      }
+      return hash;
+    }
+  } // namespace
+
   std::uint64_t Hash(const Universe& _universe, const Where& _at)
   {
-    std::uint64_t hash = FNV_OFFSET;
-    for (const Cell& cell : ImageCells(const_cast<Universe&>(_universe), _at))
-    {
-      if (cell.scope == CellScope::Seeded)
-      {
-        continue;
-      }
-      hash ^= static_cast<std::uint8_t>(cell.get() & cell.mask);
-      hash *= FNV_PRIME;
-    }
-    return hash;
+    return HashCells(ImageCells(const_cast<Universe&>(_universe), _at));
   }
 
   std::uint64_t Hash(const Universe& _universe)
   {
     const Where unresolved{};
     return Hash(_universe, unresolved);
+  }
+
+  std::uint64_t Hash(const Elite::Universe& _universe, const Elite::TokenPrinter& _recursive, const Elite::CharacterPrinter& _characters)
+  {
+    const Where unresolved{};
+    const Beside beside{const_cast<Elite::TokenPrinter&>(_recursive), const_cast<Elite::CharacterPrinter&>(_characters), false};
+    return HashCells(ImageCells(const_cast<Elite::Universe&>(_universe), beside, unresolved));
   }
 
   // ---- the two names the suites already use --------------------------------------------------------

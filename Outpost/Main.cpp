@@ -51,23 +51,23 @@ namespace
   /*
    * The platform, and one `Elite::Game` on the other side of it.
    *
-   * The declaration order is the construction order and it is load-bearing. `Elite::Universe` is
-   * here rather than inside `Elite::Game` for one reason, and `Game.h` records it: `FlightSession`
-   * binds the universe at construction and answers two of the seams `Game`'s `Ports` needs, so
-   * whichever of the two is built first needs the other. It was three until M4-a-1 took `SFS1`
-   * away; one of the two left is scheduled to go, and when it does this member moves across and
-   * the composition root stops holding any game state at all.
+   * The declaration order is the construction order and it is load-bearing. THE COMPOSITION ROOT
+   * HOLDS NO GAME STATE since M5-e-2: `Elite::Game` owns the universe, and the two sessions that
+   * bound it at construction -- which kept it here, because `Game` needs both at ITS construction --
+   * take it afterwards through `AttachUniverse`, as they take the ports. Platform, sessions, game.
    */
   struct App
   {
     App()
-      : shell(window, presenter, universe.canvas, universe.view),
-        flight(window, universe),
-        game(universe, flight, shell, shell, shell, store, flight)
+      : shell(window, presenter),
+        flight(window),
+        game(flight, shell, shell, shell, store, flight)
     {
+      Elite::Universe& universe = game.State(); // the game's since M5-e-2; the sessions take it now
+      shell.AttachUniverse(universe);
+      flight.AttachUniverse(universe);
       // The seams the session and the shell answer that are CALLS needing the seams themselves --
-      // `DOCKIT` and the title screen -- so the composition lends the struct back to two of the
-      // objects inside it.
+      // `DOCKIT` and the title screen -- so the composition lends the struct back to both.
       flight.AttachPorts(game.PortsOf());
       shell.AttachPorts(game.PortsOf());
       shell.AttachFlight(flight, universe.dockedFlag);
@@ -90,8 +90,6 @@ namespace
      */
     Outpost::SoundOutput audio;
     Outpost::SaveStore store;
-
-    Elite::Universe universe;
 
     Outpost::GameShell shell;
     Outpost::FlightSession flight;

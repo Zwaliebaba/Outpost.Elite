@@ -67,9 +67,9 @@ namespace GameLogicTests
 
     /// The record. Empty is a failure, so a tree can never carry an unpinned replay.
     /*
-     * RE-TAKEN FIVE TIMES. The first four were Modernize.md rule 1's second case (the port was
-     * wrong); the fifth, at the bottom, is the FIRST case (the digest was deliberately widened).
-     * The count said "twice" until 2026-09-07 and had never counted the owner's fix below.
+     * RE-TAKEN SIX TIMES. Five were Modernize.md rule 1's second case (the port was wrong); the
+     * fifth, M5-a-6, is the FIRST case (the digest was deliberately widened). The count said
+     * "twice" until 2026-09-07 and had never counted the owner's fix below.
      *
      * 2026-09-06, M2-c-1: every digest moved and not one step did. What changed was the SHAPE of
      * the image the digest is taken over -- `UniverseImage` hashed a `T2` cell holding a byte the
@@ -106,24 +106,34 @@ namespace GameLogicTests
      * nothing a cell can name. Everything else in the suite stayed green through the widening,
      * which is the evidence that the five new cells agree with the oracle wherever `CompareState`
      * already looks; only the record needed re-taking.
+     *
+     * 2026-09-07, M5-e-2, `Game` owns the universe: every digest moved and not one step did, and
+     * this time the proof is in the fixture rather than the suite. Nine of the image's cells --
+     * `QQ17` and `DTW1`-`DTW8` -- read the two printers, which are not in `Elite::Universe`, and
+     * `Hash(universe)` read the test WRAPPER's printers: idle objects the wrapper's constructor set
+     * and nothing in the flight ever drove, while `Game` printed every message with its own. The
+     * second-`QQ12` shape again, a level up. The digest reads `Game`'s printers now
+     * (`Hash(universe, game.Recursive(), game.Characters())`), and hashing a fresh idle wrapper's
+     * printers in their place reproduces the previous sixteen digests to the bit -- so the
+     * flight is the flight it was, and what moved is nine bytes that had been constants.
      */
     constexpr Checkpoint RECORDED[] = {
-      {0, 0xc2a3e48227134ddaull},     // launched from Lave
-      {40, 0x179e0ca78bc8cc96ull},    // coasted
-      {100, 0x08d647f8922541bbull},   // at full speed
-      {200, 0x35b55f993da2a5ddull},
-      {300, 0xc1df956a3c8771fbull},
-      {340, 0x783b9fa74aba4373ull},   // the Viper fought
-      {342, 0x9ae380cc6842cc5dull},   // the docking computer engaged
-      {400, 0xcd89c8a02d449682ull},
-      {500, 0x31f671da70802fbfull},
-      {600, 0x642a182c731f46d0ull},
-      {700, 0x501ad714c1b984c6ull},
-      {800, 0x18b0e72bb30c53b5ull},
-      {900, 0xdb175a33f8463103ull},
-      {1000, 0x60853975fbdae483ull},
-      {1100, 0xc2eb3b28251bfe80ull},
-      {1170, 0xe52cedff9e152e2dull},  // docked
+      {0, 0x909fe1b60aaeaaa3ull},     // launched from Lave
+      {40, 0x675c4ebfead5ddd7ull},    // coasted
+      {100, 0xc1e7f6396098466eull},   // at full speed
+      {200, 0xeed0525c4ecf84acull},
+      {300, 0x23a0db1828f5a272ull},
+      {340, 0x646cdd1bb2e870daull},   // the Viper fought
+      {342, 0xb743e871a6d2709cull},   // the docking computer engaged
+      {400, 0xa2bd18019dcd16e2ull},
+      {500, 0xdbeeebc08212af5full},
+      {600, 0xa8dcfa3259952a30ull},
+      {700, 0x0dcdd86e1fe21826ull},
+      {800, 0xc4f44d9e16fc2ad5ull},
+      {900, 0x3f14440f7e4f27a3ull},
+      {1000, 0xfdd2b0e7814f9d63ull},
+      {1100, 0x718387e97ffa1260ull},
+      {1170, 0xd0ab7775735990d0ull},  // docked
     };
     constexpr std::uint32_t RECORDED_STEPS = 1170;
     constexpr Elite::LoopOutcome RECORDED_OUTCOME = Elite::LoopOutcome::Docked;
@@ -231,7 +241,7 @@ namespace GameLogicTests
 
       // Phase three: a hostile Viper straight ahead, and the laser at it.
       {
-        Universe& universe = _port.universe;
+        Elite::Universe& universe = _port.universe;
         const Elite::NewShip viper = Elite::SpawnShipAhead(universe.bubble, universe.work, Elite::ShipType::Viper, universe.flight.delta,
                                                            universe.bubble.missileTarget, universe.flight.blueprint); // 6502: FRS1
         trace.viperCreated = viper.created;

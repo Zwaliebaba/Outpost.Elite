@@ -189,7 +189,15 @@ that could have hidden them.
 - **The docked half.** The replay is a FLIGHT replay. The docked side is `DockedSessionTests`'
   transcript — a character stream and a screen — which is a different instrument and not a hash.
 - **`Ports` and the text objects.** They are not state and are not hashed. What they do reaches the
-  universe or the canvas, and that is where it is compared.
+  universe or the canvas, and that is where it is compared. **Except for nine bytes, and M5-e-2
+  (2026-09-07) found the digest reading the wrong copy of them.** `QQ17` and `DTW1`–`DTW8` live in
+  the two printers, not in `Universe`, and the image reads them through the printers — which, for
+  the replay, were the test wrapper's idle pair and not `Game`'s. The image takes them as an
+  argument now (`Beside`) and the replay passes `Game`'s; the record moved on every checkpoint and
+  the flight on none. That the bytes have labels and cells makes them game state by §6's rule, and
+  M5-e-2b moves them into `Universe` — the vtable reason is the printers', not their bytes' — and
+  collapses `QQ17`, which is two bytes on the tree (`TokenPrinter::m_caseFlags` and
+  `TextState::caseFlags`, written in step at two sites and separately at five).
 - **~~The replay does not drive `Game`~~ — it does, since 2026-09-07, and this entry is what it
   found.** `FlightReplayTests` composed `FlightPort` and called the library's routines directly from
   M0-c until then, so `FlightPort::Step` was a second transcription of `M%`, `MLOOP`'s head, the
@@ -219,13 +227,12 @@ files, the device). **And a byte in `Universe` gets a cell in `UniverseImage`, u
   `Elite::` names where it reached 205 when M3 opened, so R15 — the app breaking on a type change
   no Linux leg can see — is a third of the risk it was. Seven Windows-only breaks during M3 each
   added a half to that check; the eighth has a much smaller file to hide in.
-- **`Elite::Universe` is still the composition root's member, not `Game`'s.** §4.4 planned
-  `Universe m_universe` and what is built is `Universe&`. `Outpost::FlightSession` binds the
-  universe at construction and answers three of the seams `Game`'s `Ports` needs, so whichever of
-  the two is built first needs the other. Two of those three seams are already scheduled to go —
-  `ShipDrawEffects` when the emulator models the banking §6.108 found, `SpawnChildEffects` in M4-a —
-  and what is left of that class afterwards is `DOCKIT`. When it goes, the member moves across and
-  the composition root stops holding any game state at all.
+- **`Elite::Universe` is `Game`'s member since M5-e-2 (2026-09-07), as §4.4 planned; it was the composition
+  root's from M3-c until then.** What held it there was not the seams this bullet once blamed but a
+  construction-order cycle: both sessions bound the universe at construction and `Game` needs both at its
+  own. Waiting for the seams to go would not have broken it — `GameShell` answers three ports `Game` cannot
+  do without — so the sessions take the universe afterwards instead (`AttachUniverse`, the shape the four
+  `Attach`es already had), and the composition root holds no game state at all.
 - **`Sounds()` is built (M5-e-1, 2026-09-07) and `Frame()` is recorded rather than built** (`Mode` is, since M4-d — see §2).
   `Game` owns the SID log now and the executable drains it through `Sounds()`/`ClearSounds()`, where until then
   the executable owned the log and handed the game a reference to write into — the one place the app reached

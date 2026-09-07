@@ -49,8 +49,8 @@ namespace Elite
   class Game
   {
   public:
-    Game(Universe& _universe, ShipDrawEffects& _drawing, StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard,
-         CommanderStore& _store, ControlEffects& _controls) noexcept;
+    Game(ShipDrawEffects& _drawing, StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard, CommanderStore& _store,
+         ControlEffects& _controls) noexcept;
 
     Game(const Game&) = delete;
     Game& operator=(const Game&) = delete;
@@ -173,6 +173,28 @@ namespace Elite
       m_sid.Clear();
     }
 
+    /*
+     * 6502: QQ17 and DTW1-8 -- the bytes of game state that live in two printers rather than in
+     * `Universe`. The replay digest reads them beside `State()` so that it hashes the printers the
+     * frames actually drove (M5-e-2); M5-e-2b moves the bytes into `Universe` and removes these.
+     */
+    [[nodiscard]] TokenPrinter& Recursive() noexcept
+    {
+      return m_recursive;
+    }
+    [[nodiscard]] const TokenPrinter& Recursive() const noexcept
+    {
+      return m_recursive;
+    }
+    [[nodiscard]] CharacterPrinter& Characters() noexcept
+    {
+      return m_characters;
+    }
+    [[nodiscard]] const CharacterPrinter& Characters() const noexcept
+    {
+      return m_characters;
+    }
+
     [[nodiscard]] Ports& PortsOf() noexcept
     {
       return m_ports;
@@ -215,17 +237,17 @@ namespace Elite
     // ---- the universe, the text system and the seams --------------------------------------------
 
     /*
-     * Every byte of game state, in one place (§4.4, slice M3-a) -- and a REFERENCE rather than a
-     * member, which §2.1 does not ask for and this slice cannot yet give it.
+     * Every byte of game state, in one place (§4.4, slice M3-a) -- and a MEMBER since M5-e-2, which
+     * is what §2.1 asked for and M3-c could not give it.
      *
-     * `Outpost::FlightSession` binds the universe at construction and answers two seams this
-     * object's `Ports` needs, so the two cannot both own it: whichever is built first needs the
-     * other. `SpawnChildEffects` was a third until M4-a-1 removed it, and `ShipDrawEffects` is
-     * scheduled to go when the emulator models the banking §6.108 found -- what is left of that
-     * class afterwards is `DOCKIT`. When it goes, this becomes a member and the composition root
-     * stops holding any game state at all. Named here rather than discovered later (§8).
+     * What stopped it was the executable's two sessions binding the universe at CONSTRUCTION while
+     * this object needed both of them at its own: whichever was built first needed the other, so the
+     * composition root held the universe and lent it to all three. M5-e-2 had the sessions take it
+     * afterwards instead -- `AttachUniverse`, the same shape as the four `Attach`es `GameShell`
+     * already had -- and the cycle was never in the library at all. The composition root holds no
+     * game state now; `State()` is where the executable reads it and the test ports too.
      */
-    Universe& m_universe;
+    Universe m_universe;
 
     /*
      * The printers, which are NOT in the universe: `Universe` copies and has no vtable, which is

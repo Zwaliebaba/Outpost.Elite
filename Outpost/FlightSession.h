@@ -72,16 +72,21 @@ namespace Outpost
   class FlightSession final : public Elite::ShipDrawEffects, public Elite::ControlEffects
   {
   public:
-    FlightSession(Window& _window, Elite::Universe& _universe) noexcept;
+    explicit FlightSession(Window& _window) noexcept;
+
+    /// Every byte the flight works on -- `Game`'s, attached once `Game` exists (M5-e-2) -- and the two
+    /// bytes the game would have had that a fresh object does not (§6.95), written here because this
+    /// is the first moment there is a universe to write them into.
+    void AttachUniverse(Elite::Universe& _universe) noexcept;
 
     FlightSession(const FlightSession&) = delete;
     FlightSession& operator=(const FlightSession&) = delete;
 
-    /// The universe the routines work on, which is the composition root's -- as is the `Ports&`
-    /// that goes beside it in every signature, since M3-a-3.
+    /// The universe the routines work on, which is `Game`'s since M5-e-2 -- as is the `Ports&` that
+    /// goes beside it in every signature, since M3-a-3.
     [[nodiscard]] Elite::Universe& Universe() noexcept
     {
-      return m_universe;
+      return *m_universe;
     }
 
     /// The seams, lent back by the composition root once it has built them. This object's own
@@ -133,7 +138,6 @@ namespace Outpost
 
     // ---- Elite::ControlEffects ------------------------------------------------------------------
 
-
     // `ChartShapes` was answered here rather than removed "because the charts are compared against
     // the shipped game through it (§6.115)". M3-b-1b removed it: the charts draw through the
     // universe's own heaps and the comparison is the chart's pixels.
@@ -148,23 +152,22 @@ namespace Outpost
      * `Universe::memoryMap` is that byte now, in the library, compared against the game's own.
      */
 
-
   private:
     Window& m_window;
 
     /*
      * Every byte the flight works on, and it is the DOCKED HALF'S TOO (Modernize.md §4.4).
      *
-     * A reference rather than twenty-two members, since M3-a. The sprite registers went with them
+     * A pointer to `Game`'s since M5-e-2, a reference to the composition root's from M3-a until then,
+     * and never twenty-two members. The sprite registers went with them
      * -- ADR-005 §1 settled that compositing belongs in `Canvas::Resolve`, so they have to be data
      * rather than private state behind a getter (§6.133, §6.148), and `Video()` is the one line
      * that hands `m_universe.video` to the presenter.
      */
-    Elite::Universe& m_universe;
+    Elite::Universe* m_universe = nullptr; ///< attached by `AttachUniverse`
 
     /// 6502: the sound buffer, the music player and the chip they write -- the composition root's,
     /// because the docked half beeps and starts the theme through the shell.
-
 
     /// 6502: the seams, null until the composition root attaches them -- see `AttachPorts`.
     Elite::Ports* m_ports = nullptr;

@@ -303,7 +303,7 @@ with four ports without touching a signature again, and three of the four have l
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
-`Outpost/Main.cpp` is <!--count:main-lines-->253 lines and every one of them is the platform: the
+`Outpost/Main.cpp` is <!--count:main-lines-->251 lines and every one of them is the platform: the
 window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
 paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
@@ -311,10 +311,9 @@ state behind them, and `check_outpost.py`'s surface fell with it — the executa
 
 What §2.1 asked for and this did not have until M5-e is `Frame()`, `Sounds()` and `StateHash()` —
 `Sounds()` is built (M5-e-1) and `Frame()` is `State().canvas`, which the executable already reaches —
-and one thing it did not ask for: `Elite::Universe` is still the composition root's, because
-`Outpost::FlightSession` binds it at construction and answers three of the seams `Game`'s `Ports`
-needs. Two of the three are already scheduled to go, and the member moves across when they do
-(§8, 2026-09-06).
+and one thing it did not ask for, which M5-e-2 closed: `Elite::Universe` was the composition root's
+until then, because both sessions bound it at construction and `Game` needs both of them at its own.
+The sessions take it afterwards now (`AttachUniverse`) and `Game` owns it, as §4.4 drew.
 
 **P7 — Seams that outlived their reason.** <!--count:effects-seams-->8 abstract classes in
 `GameLogic/*.h`. Some are platform (`Keyboard`, `Presenter`, `CommanderStore`); `TextSink` and
@@ -366,7 +365,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,125 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,126 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -565,7 +564,7 @@ namespace Elite
     [[nodiscard]] std::uint64_t StateHash() const noexcept;  // over UniverseImage (§4.7), so it survives refactors
     [[nodiscard]] const Universe& State() const noexcept;
   private:
-    Universe m_universe;  Ports& m_ports;
+    Universe m_universe;  Ports m_ports;   // both members as built: the universe since M5-e-2, the ports since M3-c
   };
 }
 ```
@@ -1494,6 +1493,7 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 | **M5-b constexpr data** ✅ | All <!--count:generated-tables-->55 generated tables as `constexpr std::array`, emitted that way by `tools/extract_tables.py`; `GameLogic/LookupTables.cpp` asserts their SHAPES against the constants that index them. **Built 2026-09-07** (§8). **The row's second clause is answered rather than built, and the acceptance is rewritten because it named a suite that no longer exists** — `TableTests` was deleted on `main` when the oracle comparison of the generated tables was retired, and the codecs already `static_assert` their round trip (ADR-006 §2, M1). | Green; the shape assertions fail the build when a table's length stops matching what indexes it, shown by planting one. | 2 |
 | **M5-c The ledger** ✅ | The twenty file names in `Source-Inventory.md`'s HOME cells that named no file on disk corrected; `inventory.py` gains `--check-homes` so it cannot happen again. **Built 2026-09-07** (§8), and the count of ten that were left over is the finding: they are in the NOTES, which are history, and two of them name a missing file deliberately. | In CI, with a self-test that plants both traps; <!--count:inventory-stale-files-->0 stale homes. | 1 |
 | **M5-d ADR-006 and the tidy checks** ✅ | ADR-006 amended from what was built — §2 (the strong types that were refused), §5 (M4's stages, four of which the plan predicted wrongly), §8 (the `constexpr` tables) and the status table. `.clang-tidy` **rewritten for this repository**: every word of its status block and three of its four exclusions were about the sibling tree it was adopted from, and **nothing here had ever run it** (§8). `modernize-` goes from two checks to all but three, and two inherited exclusions are removed rather than widened around. **Built 2026-09-07**; `-modernize-avoid-c-arrays` came off the same day (M5-d-2), so all but two. | `tools/check_tidy.py` sweeps `GameLogic/` on the Linux leg of every push and comes back clean; `WarningsAsErrors` still `'*'`, and now with a gate behind it. | 2 |
+| **M5-e `Game` as §2.1 drew it** | Task #13, the M3-c follow-ons, under the owner's ruling of 2026-09-07: `Sounds()` real (**M5-e-1**, built), `Frame()` recorded as `State().canvas`, `Universe m_universe` (**M5-e-2**, built — and the replay digest was found hashing the fixture's idle printers, §8), the nine printer bytes with 6502 labels into `Universe` and the doubled `QQ17` collapsed (**M5-e-2b**), `StateHash()` library-native beside the label hash (**M5-e-3**). | The executable holds no game state and lends no buffer; the replay hashes what `Game` drove; `check_outpost.py` agrees with every signature. | 4 |
 
 ### Phase M6 — Detach (owner ruling, §1 R-a to R-d)
 
@@ -1804,6 +1804,45 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M5-e-2: `Game` owns `Universe`, and the digest had been hashing an idle printer.**
+
+Task #13's second item and §4.4's `Universe m_universe`, which M3-c built as `Universe&` and blamed
+on the seams `FlightSession` answers. That was the wrong diagnosis: the seams were never in the way,
+the CONSTRUCTION ORDER was. Both sessions bound the universe in their constructors and `Game` needs
+both sessions in its own, so whichever was built first needed the other. `GameShell` and
+`FlightSession` take the universe afterwards now — `AttachUniverse`, the shape the four `Attach`es
+already had — and `Main.cpp`'s `App` holds no game state at all: `game.State()` is the one universe
+and the sessions are pointed at it. `Main.cpp` is 251 lines, from 253, and the ceiling follows it.
+`FlightPort` and `GameTests`' `Bare` lose the universe member the same way.
+
+**THE FINDING IS IN THE REPLAY, AND IT IS THE SECOND-`QQ12` SHAPE A LEVEL UP.** Nine cells of the
+image are not `Elite::Universe` fields: `QQ17` reads the token printer's case flags and `DTW1`–`DTW8`
+read the character printer's `ExtendedTextState`, because ADR-007 §6 keeps the text objects out of
+the universe. `Hash(universe)` took the TEST WRAPPER, whose printers those were — and `FlightPort`
+had two of everything: the wrapper's printers, which its constructor set and the flight never drove,
+and `Game`'s, which printed every message of the flight. The digest hashed the idle pair. It could
+not be told apart from a correct digest by any test, because nine constants hash as well as nine
+bytes; what exposed it is that the wrapper's base is no longer the universe `Game` runs on, so the
+old call stopped compiling. `UniverseImage` now takes what it reads BESIDE the universe as an
+argument (`Beside`: the two printers and the fixture's sprite-register claim), the wrapper overloads
+forward their own, and the replay hashes `Game`'s (`Hash(universe, game.Recursive(),
+game.Characters())`). Rule 1's second case: the record is re-taken and every checkpoint moves, with
+the proof taken before the re-take rather than argued after it — hashing a fresh idle wrapper's
+printers in the new call reproduces the previous sixteen digests to the bit, so the flight is the
+flight it was (1,170 steps ending `Docked`) and what moved is nine bytes that had been constants.
+
+Two consequences, both slices rather than fixes here. **M5-e-2b**: nine bytes with 6502 labels that
+the digest reads through a fixture argument are game state by ADR-007 §6's own rule, and the reason
+they are outside `Universe` — the printers have vtables — is about the PRINTERS, not their bytes;
+`ExtendedTextState` and `QQ17` move into `Universe` and `Beside` shrinks to the sprite claim. And
+`QQ17` is TWO bytes on the tree: `TokenPrinter::m_caseFlags` and `TextState::caseFlags` both carry
+the marker, `CHPR` reads the second to notice 255 and the token printer reads the first for
+everything else, and `TextPrint.cpp` writes both in step at two sites while `Tokens.cpp` and
+`ExtendedTokens.cpp` write only the first — the same doubling as `QQ12` and `DNOIZ`, found by the
+same route, and M5-e-2b's to collapse. 395 of 395; all 16 repository checks; `main-lines` 253 → 251;
+`outpost-elite-names` unmoved at 69 (`AttachUniverse` is a member of the app's own classes);
+`origin-markers` 4,125 → 4,126, the marker on `Game`'s two printer accessors (rule 4).
 
 **2026-09-07 — M5-e-1: `Game::Sounds()`, and the one place the executable reached INTO the library.**
 

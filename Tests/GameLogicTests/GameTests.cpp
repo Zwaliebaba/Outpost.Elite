@@ -40,7 +40,7 @@ namespace GameLogicTests
     struct Bare
     {
       Bare()
-        : game(universe, nulls, nulls, nulls, nulls, nulls, controls)
+        : game(nulls, nulls, nulls, nulls, nulls, controls)
       {
       }
 
@@ -53,7 +53,6 @@ namespace GameLogicTests
         void RunDockingComputer(Elite::Ship&) override {}
       };
 
-      Elite::Universe universe;
       NullSeams nulls;
       NoAutopilot controls;
       Elite::Game game;
