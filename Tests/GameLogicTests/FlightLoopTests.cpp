@@ -1606,7 +1606,7 @@ namespace GameLogicTests
       const Where at(oracle);
       const LoopWhere loop(oracle);
 
-      const std::uint8_t FITTED[] = {0u, Elite::LASER_PULSE, Elite::LASER_BEAM, Elite::LASER_MILITARY, Elite::LASER_POWER_MINING};
+      const Elite::Laser FITTED[] = {Elite::LASER_NONE, Elite::LASER_PULSE, Elite::LASER_BEAM, Elite::LASER_MILITARY, Elite::LASER_MINING};
       const std::uint8_t HEAT[] = {0u, 100u, 241u, 242u, 243u};
       const std::uint8_t COUNTS[] = {0u, 1u, 7u};
 
@@ -1615,13 +1615,13 @@ namespace GameLogicTests
 
       for (std::uint8_t view = 0; view < 4u; ++view)
       {
-        for (const std::uint8_t fitted : FITTED)
+        for (const Elite::Laser fitted : FITTED)
         {
           for (const std::uint8_t heat : HEAT)
           {
             for (const std::uint8_t count : COUNTS)
             {
-              Frame frame(view * 13u + fitted + heat + count);
+              Frame frame(view * 13u + fitted.byte + heat + count);
               frame.universe.spaceView = view;
               frame.universe.view = 0u;
               frame.universe.status.laserTemperature = heat;
@@ -1629,10 +1629,10 @@ namespace GameLogicTests
               frame.universe.keys[Elite::KEY_FIRE] = 0xFFu;
               for (std::size_t index = 0; index < 4u; ++index)
               {
-                frame.universe.commander.lasers[index] = (index == view) ? fitted : 0u;
+                frame.universe.commander.lasers[index] = (index == view) ? fitted : Elite::LASER_NONE;
               }
 
-              const std::wstring where = WidenText("M% (VIEW " + std::to_string(view) + ", LASER " + std::to_string(fitted) + ", GNTMP " +
+              const std::wstring where = WidenText("M% (VIEW " + std::to_string(view) + ", LASER " + std::to_string(fitted.byte) + ", GNTMP " +
                                                    std::to_string(heat) + ", LASCT " + std::to_string(count) + ")");
               CompareFrames(frame, oracle, at, loop, where);
 

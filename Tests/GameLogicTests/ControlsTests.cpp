@@ -576,13 +576,13 @@ namespace GameLogicTests
       constexpr std::uint8_t PORT_AFTER_IN = (PORT_SEED & 0xF8u) | Elite::MEMORY_MAP_IO;
       constexpr std::uint8_t PORT_AFTER_BOTH = (PORT_SEED & 0xF8u) | Elite::MEMORY_MAP_RAM;
 
-      const std::vector<std::uint8_t> LASERS = {
-        0, // none fitted on this view
+      const std::vector<Elite::Laser> LASERS = {
+        Elite::LASER_NONE, // none fitted on this view
         Elite::LASER_PULSE,
         Elite::LASER_BEAM,
         Elite::LASER_MILITARY,
-        50, // 6502: Mlas -- the mining laser, which nothing tests for
-        99, // a power the game does not have, which gets the same sprite
+        Elite::LASER_MINING, // which nothing tests for
+        Elite::Laser{99},    // a power the game does not have, which gets the same sprite
       };
       const std::vector<std::uint8_t> POPULATIONS = {0, 0x0F, 0x10, 0x2F, 0x60, 0x70, 0x80, 0xFF};
 
@@ -590,7 +590,7 @@ namespace GameLogicTests
       std::set<std::uint32_t> pointers;
       std::set<std::uint32_t> masks;
 
-      for (const std::uint8_t laser : LASERS)
+      for (const Elite::Laser laser : LASERS)
       {
         for (std::uint8_t which = 0; which < 4u; ++which)
         {
@@ -609,9 +609,9 @@ namespace GameLogicTests
             for (std::uint8_t slot = 0; slot < 4u; ++slot)
             {
               // A different laser on every other view, so a port that ignored VIEW would be caught.
-              const std::uint8_t fitted = (slot == which) ? laser : Elite::LASER_BEAM;
+              const Elite::Laser fitted = (slot == which) ? laser : Elite::LASER_BEAM;
               commander.lasers[slot] = fitted;
-              cpu.memory[static_cast<std::uint16_t>(laserBase + slot)] = fitted;
+              cpu.memory[static_cast<std::uint16_t>(laserBase + slot)] = fitted.byte;
             }
 
             commander.tribbles.lo = 0x77u;
@@ -642,7 +642,7 @@ namespace GameLogicTests
 
             Elite::DrawLaserSights(canvas, commander, trumbles, which, video, map);
 
-            const std::wstring where = Widen("SIGHT(laser " + std::to_string(laser) + " on view " + std::to_string(which) + ", Trumbles " +
+            const std::wstring where = Widen("SIGHT(laser " + std::to_string(laser.byte) + " on view " + std::to_string(which) + ", Trumbles " +
                                              std::to_string(population) + ")");
 
             CompareScreens(cpu, screen, canvas, where);
@@ -658,7 +658,7 @@ namespace GameLogicTests
             // the game's business rather than a difference (slice 5a).
             Assert::AreEqual<std::uint32_t>(Elite::ColourIndex(Elite::ColourOf(cpu.memory[vicColour])),
                                             Elite::ColourIndex(video.colour[0]), (where + L": VIC+&27").c_str());
-            if (laser == 0u)
+            if (!laser.Fitted())
             {
               Assert::AreEqual<std::uint32_t>(0u, cpu.memory[vicColour], (where + L": and neither wrote it").c_str());
             }
