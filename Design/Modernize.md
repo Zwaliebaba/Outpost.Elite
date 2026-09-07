@@ -5,7 +5,7 @@ ninth the owner added: the port is DETACHED from the original at the end — the
 source, the labels in the code and the assembly in the comments all go, §6 Phase M6). **The gate ADR-001
 §4 set for phase 6 is met**: every oracle
 suite, every whole-bitmap comparison and the docked replay are green on the faithful build
-(<!--count:tests-->401 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
+(<!--count:tests-->404 tests, oracle present), all <!--count:checks-->sixteen repository checks pass,
 and every recorded mutant is caught or a proved equivalent (plan §6.156). Plan §4.2 and §4.3 said
 the original's data model would be kept "until the oracle is green, then and only then tidy"; this
 document is the tidy, planned.
@@ -371,7 +371,7 @@ computed flag the port models, three were passed the wrong value, and the litera
 each an inherited flag the port cannot see — the parameter is what makes the assumption visible at
 the call site rather than buried in the routine. §4.7 is the table and §8 the three defects.
 
-**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,136 `6502:`
+**P12 — The original as a build and test dependency.** <!--count:origin-markers-->4,137 `6502:`
 references in `GameLogic/`'s comments; <!--count:oracle-test-files-->48 of the test translation
 units load the assembled original through `OracleImage` and cannot run without BeebAsm, the
 submodule and the label map; <!--count:origin-tools-->7 of the tools read `Upstream/` or
@@ -1527,7 +1527,7 @@ were safe after M6-f, and none of them waited.
 |---|---|---|---|
 | **M6-0-a The 6510 port register** ✅ **built 2026-09-07 (§8, four sittings)** | `Cpu6502` models the port register `SETL1` writes, so that with the I/O page mapped in a store to `&D000`–`&DFFF` reaches a VIC register file rather than RAM. Known since M3-b (§8, `ShipDrawEffects`): the oracle's memory is flat, the VIC registers alias `XX21`, and an explosion drawn on the oracle side corrupts the blueprints of the ships drawn after it. Then `ShipDrawEffects` goes the way of every other seam — `DrawPlanetOrSun` and `DrawExplosion` become library calls — and `MVTRIBS` and a drawn ship can share one oracle frame. | **The first whole-frame comparison with an explosion in it**, green; `effects-seams` 8 → 7; the trap on `DOEXP` gone from every composition test; `RDKEY` compared with the banked writes rather than around them. This is the one row that cannot be done after M6-b at any price. | 3 |
 | **M6-0-b The replay reaches death and the escape pod** ✅ **built 2026-09-07 (§8)** | §4.10 says the replay "must cover launch, flight, combat, docking, death and the escape pod" and it covers four of the six: the script has a launch, a coast, a Viper and the docking computer. Two more scripted phases — a flight that ends in `DEATH`'s wreckage, and one that ends in the escape pod — each digested at its turns; both are rule 1's first case and the journal names them. Death and the pod are compared per routine today and nowhere in composition, and composition is what the replay is for (R14). | Sixteen-plus checkpoints re-recorded with the two endings named; every other test unmoved; the digests taken while the original can still say whether a moved one is a defect. | 2 |
-| **M6-0-c The eleven control codes** | Task #12. Five (9, 21, 25, 27, 28) are comparable now given a `Ports` and a canvas comparison; three (22, 24, 26) need a scripted keyboard on both sides first; three (11, 30, 31) have nothing behind them on either side and fall to `default`. The eight get compared; the three get the sentence that says why not, next to the `DEFERRED` array. | `ExtendedTokenTests` defers three and says which; the eight compared against the original. | 2 |
+| **M6-0-c The eleven control codes** ✅ **built 2026-09-07 (§8)** | Task #12. Five (9, 21, 25, 27, 28) are comparable now given a `Ports` and a canvas comparison; three (22, 24, 26) need a scripted keyboard on both sides first; three (11, 30, 31) have nothing behind them on either side and fall to `default`. The eight get compared; the three get the sentence that says why not, next to the `DEFERRED` array. | `ExtendedTokenTests` defers three and says which; the eight compared against the original. | 2 |
 | **M6-0-d Two fixture faults from M3-b** ✅ **built 2026-09-07 (§8)** | `Where` has no `SUNX` and no `LSY2`, so a fixture cannot put a DRAWN sun into both machines and `MA23 whole frame (a sun close enough to draw)` has differed at screen offset 8033 since it was first run; the flight-loop fixtures give every ship a line heap at `&0C00`, outside `LineHeap`'s window, so "the seeds it writes are compared nowhere." Both were called one-line fixes at the time and neither was made. **Built:** nine planet-and-sun cells, the heaps carved from `LS%`, `PLANET` untrapped and drawn on both machines — and the first drawn-sun frames found a stale zero-page read in the original's `WPLS` that no game state reaches. | The sun frame compared on the whole bitmap; the heaps inside the arena and compared; no case excluded by name that this row could include. | 1 |
 | **M6-0-e Seven routines only ever trapped** | `TRADEMODE`, `NLIN`, `TT67` and `DK4` are ported and have no direct comparison against the original anywhere — every test that reaches them traps them; `WSCAN` is the platform's (ADR-005 §3), `REDU` is proven unreachable, `GTNMEW` is the load path's name entry. A trapped routine's fixture records the TRAP's answer. Each of the seven gets a ruling: compared before M6-a, or a sentence beside its trap saying it never will be and why. | No `AddTrap` on a label that has neither a direct comparison nor a recorded reason. | 1 |
 | **M6-0-f A coverage instrument** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
@@ -1812,6 +1812,32 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-c: the eleven control codes — eight compared through the dispatch, three named.**
+
+The codes that leave the text system are compared the way a token reaches them now: `DETOK2`
+with the code in A on the oracle, `PrintByte(code)` over a universe on the port, in
+`MissionTests`. Six of the eight were already compared as routines there — `PAUSE`, `PAUSE2`,
+`BRIS`, `MT27`, `MT28` by their own labels, `MT9` alone through the dispatch — and the labels are
+`DETOK2` now, so the jump table's entry and the push and pop of `V` around it are inside every
+comparison. Two are new: `CLYNS` through the dispatch, over a universe with the message counters
+it zeroes (`ShellTests` had it over bare printers), and `MT26`, which needed a port first.
+
+**CODE 26 IS PORTED.** `RunControlCode`'s `default` had said `MT26` "has no answer for whose
+buffer the line goes into"; the answer is `INWK+5`, which is `Universe::lineBuffer`, and the
+line's limits are `RLINE`'s at rest — nine — because the one routine that lowers them, `GTNME`,
+calls `MT26` directly and never through a token. The case reads a line with `ReadLine`, and its
+comparison scripts `TT217` on the oracle the way `RDKEY` was scripted for `PAUSE` (an eleven-byte
+counted stub over a table of typed keys) and gives `ScriptedStart` a typed script on the port,
+compared on the screen, `COL2`, `XC`, `YC`, the delay, the flush, and the sixteen bytes at `INWK+5`.
+
+**THE THREE ARE NAMED, NOT DEFERRED SILENTLY.** 11 is `NLIN4`, 30 and 31 are `FILEPR` and
+`OTHERFILEPR` — routines in the original, `default` in the port — and the row's "nothing behind
+them on either side" was wrong about the oracle: the jump table has an entry for each, and the
+new table test reads all eleven entries out of the image and pins them to their labels, then runs
+the three through the port and asserts its universe does not move. `ExtendedTokenTests` says the
+same in its own terms: eight compared through the dispatch elsewhere, three deferred for good.
+404 of 404; all 16 checks.
 
 **2026-09-07 — M6-0-b: the replay reaches death and the escape pod.**
 
