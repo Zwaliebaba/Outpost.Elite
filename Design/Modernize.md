@@ -1446,9 +1446,9 @@ stage results and `Projection`'s four. The ratchet moved `register-params` 64 �
 |---|---|---|---|
 | **M3-0 The app's member check** ✅ **built 2026-09-06 (§8)** | `check_outpost.py` gains a third half: every member the app names on an `Elite::`-typed variable, against that type's members as `GameLogic/*.h` declares them, bases closed over. A `--self-test` plants one that cannot resolve. | In CI as the fourteenth check; 111 accesses resolved on the tree as it stands. | 1 |
 | **M3-a Universe** ✅ **built 2026-09-06 (§8)** | `Elite::Universe` as a plain aggregate; `FlightScreen`/`FlightLoop`/`TradeScreen`/`SaveScreen`/`GameStart`/`MissionScreen`/`TitleScreen`/`MissionBay` replaced by `(Universe&, Ports&)` on every routine; `FlightSession` and `Outpost::Game` own the universe and the ports between them. | Green on both legs; `aggregate-refs` 78 → 14, and the fourteen ARE `Ports` — "at zero" is M3-b's, which collapses that one struct. `JumpState` is values rather than references and goes with M3-c's `Game`. **The Windows job was the gate and caught two defects** (§8). | 4 |
-| **M3-b Ports** | The four port interfaces; the phase-order seams replaced by direct calls; the null port in tests replaces `NullShell`, `LoopRecording`, `RecordingSight`, `RecordingView`, `RecordingDashboard`. | Green; `effects-seams` at **six**, not four: `SpawnChildEffects` needs M4-a's typed stage result and `ShipDrawEffects` needs the oracle to model the 6510 port register, and the slice plan records both. | 4 |
+| **M3-b Ports** ✅ **built 2026-09-06 (§8)** | Three of the four port interfaces (`CommanderStore` keeps its name — §4.5); **five seams that turned out to be `GameLogic` reached through the executable**: `TradeScreenEffects`, `TunnelEffects`, `ControlEffects::ScanKeyboard`, `TextEffects` and `ControlCodes`; the null port folded to one class. | Green; `effects-seams` at **nine**, not six. Two more than the row expected and both are named rather than counted away: `TextSink` and `ValueTokens` are the text system's own polymorphism and stay (§4.5). `SpawnChildEffects` needs M4-a's typed stage result and `ShipDrawEffects` needs the emulator to model the 6510 port register, as the row said. `aggregate-refs` 14 → 11, `outpost-elite-names` 205 → 157. | 4 |
 | **M3-c Game** ✅ **built 2026-09-06 (§8)** | `Elite::Game` with `Reset` and three `Step`s; `Perform`, `Leave`, `MissionOf`, the chart draw, the docked pass and the pause pass moved from `Main.cpp`, with the eight bytes of game state that were in no struct and the five text objects. `Advance` SPLIT rather than moved — the count of passes is a `double` and the determinism guard forbids one here. | `main-lines` 1,219 → <!--count:main-lines-->256, under the 300 the row asked for, and `outpost-elite-names` 205 → <!--count:outpost-elite-names-->71. `GameTests` drives the object as `Run` drives it. `Frame`, `Sounds` and `StateHash` are not built and `DockedSessionTests` still owns its own composition (§8). | 4–5 |
-| **M3-d ADR-007** | State ownership and the replay hash, written from M3-a..c as built. | Accepted. | 1 |
+| **M3-d ADR-007** ✅ **built 2026-09-07 (§8)** | State ownership and the replay hash, written from M3-a..c as built — with the three places ADR-006 §4 was wrong, the eight bytes that should be in `Universe` and are not, and what the digest does not cover. ADR-006 §4 amended in place. | Accepted; `Design/ADR/ADR-007-state-ownership.md`. | 1 |
 
 ### Phase M4 — Control flow
 
@@ -1751,6 +1751,57 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M3-d: ADR-007, and writing it from what was built found three things the plan had
+wrong and one the build has wrong.** The row asks for state ownership and the replay hash "written
+from M3-a..c as built", and the value of that phrasing is that it forces a comparison. ADR-006 §4
+planned `Elite::Game` with `Universe m_universe; Ports& m_ports;` and a `Step(const InputFrame&)`.
+What exists is the ownership INVERTED — `Universe& m_universe; Ports m_ports;` — three `Step`s
+rather than one, and no `Frame`, `Sounds`, `StateHash` or `Mode`. Each has a reason and ADR-007
+records it; ADR-006 §4 is amended in place rather than left to disagree with the tree.
+
+**THE THREE `Step`s ARE THE ORIGINAL'S SHAPE AND NOT A COMPROMISE.** `FRCE` is
+`LDA QQ12 / BEQ P%+5 / JMP MLOOP / JMP TT100` — a jump to one of two entry points — and `FREEZE` is
+a third that `DK4` reaches and does not return from. One method behind a mode byte would be
+inventing the machine `Mode` is, which is M4-d's when it retires `LoopOutcome`. Until then the
+caller's choice IS the game's.
+
+**AND THE BUILD HAS EIGHT BYTES IN THE WRONG PLACE, which is the finding this ADR exists to
+produce.** `Game` holds `crosshairStep`, `jumpTarget`, `jumpDistance`, `joystickGeometry`,
+`joystickEnabled`, `musicSwitchWas`, `soundDisabled` and `paused`. **Seven of the eight have a 6502
+name** — `TT17`'s X and Y, `safehouse`, `QQ8`, `JSTGY`, `JSTE`, `MUTOKOLD`, `DNOIZ` — which by §4.4's
+own rule makes them game state, which puts them in `Universe`. They are not there because they were
+loose in `Main.cpp`'s composition struct when M3-c moved the dispatch and carrying them across was
+the smallest change that compiled. The consequence is exact and is now written down: they are not
+cells in `UniverseImage`, so a slice that broke `MUTOKOLD` or `QQ8` would not move the replay
+digest. Moving them in and giving them cells is a deliberate widening under rule 1's first case.
+`paused` is the one that stays: the original has no such byte, it FREEZES in a loop, and a windowed
+program cannot.
+
+**THE DIGEST DID NOT MOVE ACROSS THE PHASE, and that is the sentence the whole apparatus exists to
+be able to write.** It moved twice, both in M3-b, both for defects the slice found — `NOISE2`
+answering the sustain it went in with rather than the flag byte it wrote (2a), and `Music.cpp`
+missing the `SETL1` brackets around `stopat` and `BDENTRY` (2b) — each with the defect named, which
+is rule 1's second case. From M3-b-3a to M3-c inclusive it has not moved: eleven commits, eleven
+interfaces collapsed to four ports and five direct calls, eight hundred lines of dispatch out of the
+executable, `Main.cpp` from 1,197 lines to 256. That is "no behavioural change" measured rather than
+asserted, and it is the one thing the per-routine oracle cannot say (risk R14).
+
+**WHAT THE DIGEST DOES NOT COVER IS NAMED RATHER THAN ASSUMED**, because a hash everybody trusts and
+nobody has bounded is worse than no hash: the eight bytes above; the docked half, which is
+`DockedSessionTests`' transcript and a different instrument; `Ports` and the text objects, which are
+not state; and — the one that matters most — **the replay does not drive `Game`**. `FlightReplayTests`
+composes `FlightPort` and calls the library's routines directly, as it has since M0-c, so the digest
+is a statement about the ROUTINES and not about the object that dispatches them. M3-c's row asked
+for the replay and `DockedSessionTests` to drive `Game::Step` and neither does; `GameTests` is what
+covers the object until that changes.
+
+**M3 IS COMPLETE.** Five slices over two days: M3-0 (the app's member check, which grew to seven
+halves under seven Windows-only breaks), M3-a (`Universe`), M3-b (the ports), M3-c (`Game`) and this.
+`aggregate-refs` 78 → 11, `effects-seams` 22 → 9, `outpost-elite-names` 205 → 71, `main-lines`
+1,219 → 256. The M3-b row expected `effects-seams` at six and it closes at nine, which is two seams
+the row did not know were the text system's own and is recorded as a correction to §4.5 rather than
+as a shortfall. Next is M4-a, which is also what unblocks `SpawnChildEffects`.
 
 **2026-09-06 — M3-c: the top of the program moves into the library, and `Main.cpp` goes from 1,160
 lines to 256.** `Outpost/Main.cpp` held the universe, the text system, the ports, eight bytes of
