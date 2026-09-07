@@ -806,6 +806,376 @@ namespace Elite
     return {true, RecordKill(_universe, _ports, _type)};
   }
 
+  /*
+   * ---- part 7: is it touching us? -------------------------------------------------------------
+   *
+   * 6502: LDA INWK+31 / AND #%10100000 / JSR MAS4 / BNE MA65.
+   *
+   * ONE TEST DOES FOUR JOBS. `MAS4` ORs the three high bytes into whatever it is handed, so seeding
+   * it with the "exploding or dead" bits means a ship that is far away on any axis, or already
+   * exploding, or already killed, all fail together. What survives is close and intact.
+   *
+   * AND THE ANSWER IS ONE OF FOUR AND NOT THREE BOOLEANS (M4-a-2). It was `docking`, `scoopable`
+   * and `collision` declared above the block and set inside it, and the three are mutually
+   * exclusive by construction: a station takes the first branch and nothing else can. Part 9 ended
+   * by clearing the other two, which were already clear on every path that reached it -- three dead
+   * stores that only a type could say were dead.
+   */
+  enum class Contact : std::uint8_t
+  {
+    Clear,     ///< 6502: MA65 -- far away on some axis, or exploding, or already killed
+    Docking,   ///< 6502: ISDK -- the station, close enough to try
+    Scoopable, ///< 6502: the `BST AND INWK+5` path -- under us, with fuel scoops fitted
+    Collision, ///< 6502: MA58 -- close, intact, and not one of the above
+  };
+
+  [[nodiscard]] Contact TestContact(const Ship& _work, const Commander& _commander, ShipType _type, bool _isBody) noexcept
+  {
+    const std::uint8_t seed = static_cast<std::uint8_t>(_work.state & Mask(ShipStateBit::Killed, ShipStateBit::Exploding));
+
+    if (LargestShipAxis(_work, seed) != 0u)
+    {
+      return Contact::Clear;
+    }
+
+    // 6502: LDA INWK / ORA INWK+3 / ORA INWK+6 / BMI MA65 -- and A survives to the `AND` below.
+    const std::uint8_t low = static_cast<std::uint8_t>(_work.x.lo | _work.y.lo | _work.z.lo);
+    if ((low & 0x80u) != 0u || _isBody)
+    {
+      return Contact::Clear;
+    }
+
+    if (_type == ShipType::Station)
+    {
+      return Contact::Docking; // 6502: CPX #SST / BEQ ISDK
+    }
+
+    if ((low & 0xC0u) != 0u || _type == ShipType::Missile)
+    {
+      return Contact::Clear;
+    }
+
+    /*
+     * 6502: LDA BST / AND INWK+5 / BPL MA58.
+     *
+     * `BST` is &FF with fuel scoops fitted and byte 5 is the ship's y sign, so the `AND` is "we have
+     * scoops AND it is below us" -- scooping only works on things that come up from underneath.
+     * Anything else at this range is a collision.
+     */
+    const std::uint8_t under = static_cast<std::uint8_t>(_commander.fuelScoops & _work.y.sgn);
+    return ((under & 0x80u) != 0u) ? Contact::Scoopable : Contact::Collision;
+  }
+
+  /*
+   * ---- part 8: scooping it up -------------------------------------------------------------------
+   *
+   * 6502: CPX #OIL / BEQ oily / LDY #0 / LDA (XX0),Y / LSR A x4 / BEQ MA58 / ADC #1.
+   *
+   * AND THE `ADC` TAKES THE FOURTH `LSR`'s CARRY, which is bit 3 of the blueprint's first byte.
+   * `BEQ MA58` sits between them and tests A without touching the flags, so what lands in the hold
+   * is the top nibble plus one plus a bit of the bottom nibble (§6.89). A cargo canister skips all
+   * of that and rolls for a random item instead.
+   */
+  enum class ScoopResult : std::uint8_t
+  {
+    Stowed,   ///< it is in the hold and `NEWB` bit 7 is set, so part 12 takes the ship away
+    HoldFull, ///< 6502: BCS MA59 -- `tnpr1` said no, which is a bounce rather than damage
+    Crashed,  ///< 6502: BEQ MA58 -- nothing worth scooping, so it is a collision after all
+  };
+
+  [[nodiscard]] ScoopResult ScoopCargo(Universe& _universe, Ports& _ports, ShipType _type) noexcept
+  {
+    Commander& commander = _universe.commander;
+    std::uint8_t item = 0;
+
+    if (_type == ShipType::Canister)
+    {
+      // 6502: .oily JSR DORND / AND #7 -- and the carry it rolls in is SET, because the only way
+      // here is `CPX #OIL / BEQ oily`, and a compare that finds its operand equal sets it. The
+      // port passed a clear one until 2026-09-06, hidden behind a comparison that skipped the
+      // generator on every frame that also seeded a cloud (§6.157).
+      item = static_cast<std::uint8_t>(_universe.rng.Next(true).value & 7u);
+    }
+    else
+    {
+      const std::uint8_t nibble = _universe.flight.blueprint->cargo;
+      const std::uint8_t worth = static_cast<std::uint8_t>(nibble >> 4u);
+      if (worth == 0u)
+      {
+        return ScoopResult::Crashed; // 6502: BEQ MA58 -- nothing worth scooping
+      }
+
+      item = static_cast<std::uint8_t>(worth + 1u + ((nibble & 0x08u) != 0u ? 1u : 0u));
+    }
+
+    // 6502: .slvy2 JSR tnpr1 / LDY #78 / BCS MA59 -- `tnpr1` stores the item and asks for ONE.
+    if (!CargoFits(commander, item, 1u))
+    {
+      return ScoopResult::HoldFull;
+    }
+
+    // 6502: LDY QQ29 / ADC QQ20,Y / STA QQ20,Y -- A is the 1 `tnpr` pushed and popped, and the
+    // carry is clear because that is how the `BCS` was not taken.
+    std::uint8_t& held = commander.cargoHold[item];
+    const AddResult stored = AddWithCarry(1u, held, false);
+    held = stored.value;
+
+    // 6502: TYA / ADC #208 / JSR MESS -- on the carry the store above left behind.
+    const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
+    ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, token.value,
+                _universe.view);
+
+    // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
+    // canister is removed by part 12 rather than by anything here.
+    _universe.work.newb = With(_universe.work.newb, NewbBit::Remove);
+    return ScoopResult::Stowed;
+  }
+
+  /*
+   * ---- part 9: docking, or not ------------------------------------------------------------------
+   *
+   * Four tests and every one of them has to pass. The station must not be hostile, the ship must be
+   * pointing the right way (`INWK+14` is the nose vector's z high byte -- the port's own constant
+   * called it the pitch counter until Modernize.md M1-a named the byte), the player must be lined up
+   * with the slot, and the roll must be slow enough. `SPS1` is called for its side effect: it leaves
+   * the normalised vector to the PLANET in `XX15`, and `XX15+2` is what the alignment test reads.
+   */
+  enum class DockingTest : std::uint8_t
+  {
+    Arrived, ///< 6502: GOIN -- all four passed
+    TooFast, ///< 6502: .MA62 CMP #5 / JMP DEATH
+    Bumped,  ///< 6502: MA67 -- a miss slow enough to survive, which part 10 charges for
+  };
+
+  [[nodiscard]] DockingTest TestDocking(Universe& _universe) noexcept
+  {
+    const bool hostile = Has(_universe.bubble.blocks[STATION_SLOT].newb, NewbBit::Hostile);
+
+    if (!hostile && _universe.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
+    {
+      (void)LoadPlanetAxes(_universe.bubble, _universe.axes); // 6502: JSR SPS1
+      const UnitVector towards = NormaliseAxes(_universe.axes).vector; // the fall-through
+
+      if (towards.z >= DOCK_MINIMUM_ALIGNMENT && static_cast<std::uint8_t>(_universe.work.roof.x.hi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
+      {
+        return DockingTest::Arrived;
+      }
+    }
+
+    // 6502: .MA62 LDA DELTA / CMP #5 / BCC MA67 -- fast enough and you are dead.
+    return (_universe.flight.delta >= DOCK_SURVIVABLE_SPEED) ? DockingTest::TooFast : DockingTest::Bumped;
+  }
+
+  /*
+   * ---- part 10: what the collision costs ---------------------------------------------------------
+   *
+   * Three entries into one call, and this enumerates them. `MA59` is a full hold, which is not
+   * damage at all -- the thing bounces off and the frame carries on. `MA67` is a slow bump into the
+   * station, worth five. `MA58` is everything else, and its damage is HALF THE OTHER SHIP'S OWN
+   * ENERGY: `LDA INWK+35 / SEC / ROR A`, which is also where `OOPS`'s carry comes from (§6.87).
+   */
+  enum class Impact : std::uint8_t
+  {
+    None,    ///< nothing touched us, or it was scooped
+    Bounced, ///< 6502: MA59 -- a full hold
+    Bumped,  ///< 6502: MA67 -- the station, slowly
+    Crashed, ///< 6502: MA58 -- everything else
+  };
+
+  /// Answers whether the player survived it. False is `JMP DEATH` out of `OOPS`.
+  [[nodiscard]] bool SurviveImpact(Universe& _universe, Ports& _ports, Ship& _block, Impact _impact) noexcept
+  {
+    if (_impact == Impact::None)
+    {
+      return true;
+    }
+
+    if (_impact == Impact::Bounced)
+    {
+      // 6502: .MA59 JSR EXNO3 -- and the carry is SET, because `BCS MA59` in part 8 is the only way
+      // here: a full hold is exactly the carry the capacity test leaves.
+      (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true);
+      _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA60
+      // 6502: .MA61 BNE MA26 -- and `ROR` has just set bit 7, so it always branches.
+      return true;
+    }
+
+    std::uint8_t damage = 0;
+    bool carry = false;
+
+    if (_impact == Impact::Bumped)
+    {
+      _universe.flight.delta = 1u;    // 6502: .MA67 LDA #1 / STA DELTA
+      damage = DOCK_SURVIVABLE_SPEED; // 6502: LDA #5 -- and the carry is the `BCC`'s, so clear
+    }
+    else
+    {
+      _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA58
+      const ShiftResult halved = RotateRight(_universe.work.energy, true);
+      damage = halved.value;
+      carry = halved.carry;
+    }
+
+    // 6502: .MA63 JSR OOPS / JSR EXNO3 -- and `OOPS` makes the same noise itself on the path that
+    // survives, so a hit that costs the banks is heard twice.
+    if (!TakeDamage(_universe, _ports, _block, damage, carry))
+    {
+      return false;
+    }
+
+    /*
+     * 6502: .MA63 JSR OOPS / JSR EXNO3 -- and the carry into `EXNO3` is the one `OOPS` left.
+     *
+     * `OOPS` ends `ADC ENERGY / STA ENERGY / BEQ / BCS`, and reaching here at all means the `BCS`
+     * was taken, so it is SET. Nothing between the two calls touches the flag.
+     */
+    (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true);
+    return true;
+  }
+
+  /*
+   * ---- part 11: our laser, and the scanner --------------------------------------------------------
+   *
+   * 6502: .MA26 LDA NEWB / BPL P%+5 / JSR SCAN.
+   *
+   * Bit 7 of `NEWB` is "take this out of the bubble" AND "it is on the scanner", one bit doing two
+   * jobs: a ship marked for removal has its blip drawn here so that the EOR erases it.
+   */
+  struct Aim
+  {
+    /// 6502: LDA QQ11 / BNE MA15 -- a chart on screen skips the aiming AND the `JSR LL9` below it.
+    bool draws;
+
+    /*
+     * The carry `JSR LL9` is reached with, which `LL9` reads on exactly one path: a ship that
+     * arrives killed, not yet exploding and not on the screen seeds its cloud's first `DORND` on it
+     * (§6.157). Every arrival at `MA8` is traced in the body, and each one is a flag some routine
+     * left rather than one this part sets.
+     */
+    bool carry;
+  };
+
+  [[nodiscard]] Aim AimAtShip(Universe& _universe, Ports& _ports, ShipType _type) noexcept
+  {
+    if (Has(_universe.work.newb, NewbBit::Remove))
+    {
+      DrawScannerBlip(_universe.canvas, _universe.work, _type, _universe.view);
+    }
+
+    if (_universe.view != 0u) // 6502: LDA QQ11 / BNE MA15 -- a chart means no drawing at all
+    {
+      return {false, false};
+    }
+
+    FlipAxesForView(_universe.work, _universe.flight, _universe.spaceView); // 6502: JSR PLUT
+
+    if (!IsHit(_universe.work, *_universe.flight.blueprint, _type)) // 6502: JSR HITCH / BCC MA8
+    {
+      return {true, false}; // 6502: BCC MA8 -- not in the sights, and `HITCH` cleared it saying so
+    }
+
+    bool carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it
+
+    // 6502: LDA MSAR / BEQ MA47 / JSR BEEP / LDX XSAV / LDY #RED2 / JSR ABORT2 -- an armed missile
+    // locks onto whatever the sights are on, and the indicator turns red. `BEEP` is `NOISE`, whose
+    // exit carry is the answer here (§6.86); `ABORT2` and `MSBAR` are stores and register moves and
+    // leave it alone.
+    if (_universe.status.missileArmed != 0u)
+    {
+      // The flag going IN is the one two lines above -- `HITCH`'s `SEC`, which `LDA MSAR` and `BEQ`
+      // do not touch. `NOISE` hands it straight back when the sound is switched off, so passing
+      // `false` here (which the port did until M2-d) changed the carry `LL9` seeds an explosion
+      // cloud on, on a silent build (§8).
+      carry = PlaySoundEffect(_universe.sound, SOUND_BEEP, carry).carry;
+      SetMissileTarget(_universe.canvas, _universe.bubble, _universe.status.missileArmed, _universe.commander.missiles,
+                       _universe.flight.slot, MISSILE_LOCKED);
+    }
+
+    // 6502: .MA47 LDA LAS / BEQ MA8 -- no laser firing this frame, so nothing is damaged.
+    if (_universe.status.laserPower != 0u)
+    {
+      const LaserHit hit = ApplyLaserHit(_universe, _ports, *_universe.flight.blueprint, _type);
+      if (hit.stores)
+      {
+        _universe.work.energy = hit.energy; // 6502: .MA14 STA INWK+35
+      }
+
+      // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too. INF is
+      // this ship's block here, the one the loop is on, so the slot is XSAV's. Every laser path ends
+      // in this call, so its exit carry is the one `LL9` gets.
+      carry = Anger(_universe.bubble, _universe.flight, _universe.flight.slot, _type);
+    }
+
+    return {true, carry};
+  }
+
+  /*
+   * ---- part 12: what is written back, and what is removed ----------------------------------------
+   *
+   * 6502: .MA15 LDY #35 / LDA INWK+35 / STA (INF),Y -- the energy goes back on every path, and byte
+   * 31 only on the path that keeps the ship. That asymmetry is the routine: a ship being removed has
+   * its block shuffled away by `KILLSHP`, so writing its state would be wasted.
+   */
+  enum class KillOutcome : std::uint8_t
+  {
+    Kept,    ///< 6502: .MA27 -- the state byte goes back and the index advances
+    Removed, ///< 6502: .KS1 -- `KILLSHP`, and the index does NOT advance
+  };
+
+  [[nodiscard]] KillOutcome RetireShip(Universe& _universe, Ports& _ports, Ship& _block, ShipType _type, bool _isBody) noexcept
+  {
+    Commander& commander = _universe.commander;
+
+    _block.energy = _universe.work.energy;
+
+    if (Has(_universe.work.newb, NewbBit::Remove))
+    {
+      return KillOutcome::Removed;
+    }
+
+    if (Has(_universe.work.state, ShipStateBit::Killed) && Has(_universe.work.state, ShipStateBit::Exploding))
+    {
+      /*
+       * 6502: LDA NEWB / AND #%01000000 / ORA FIST / STA FIST.
+       *
+       * Bit 6 is "shooting this was a crime", and it is ORed into the legal status rather than added
+       * -- so the offence is recorded once however many innocents die, and a fugitive cannot become
+       * more of one this way.
+       */
+      commander.legalStatus = static_cast<std::uint8_t>(commander.legalStatus | (_universe.work.newb & Mask(NewbBit::Cop)));
+
+      // 6502: LDA DLY / ORA MJ / BNE KS1S -- no bounty while a message is up or in witchspace,
+      // because the bounty IS a message and there is nowhere to put it.
+      const bool quiet = (_universe.message.delay | _universe.status.midJump) == 0u;
+
+      if (quiet)
+      {
+        // 6502: LDY #10 / LDA (XX0),Y / BEQ KS1S / TAX / INY / LDA (XX0),Y / TAY / JSR MCASH.
+        const std::uint8_t low = static_cast<std::uint8_t>(_universe.flight.blueprint->bounty & 0xFFu);
+
+        if (low != 0u)
+        {
+          ReceiveCash(commander, _universe.flight.blueprint->bounty);
+
+          /*
+           * 6502: LDA #0 / JSR MESS.
+           *
+           * TOKEN ZERO IS THE CASH. `TT27` opens `TAX / BEQ csh`, so the bounty message is the
+           * player's balance printed in flight -- and `MESS` then stores that zero in `MCH`, so the
+           * next message within twenty frames erases this one by printing the balance again.
+           */
+          ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, 0u, _universe.view);
+        }
+      }
+
+      return KillOutcome::Removed; // 6502: .KS1S JMP KS1 -- every path through this block ends there
+    }
+
+    // 6502: .MAC1 LDA TYPE / BMI MA27 / JSR FAROF / BCC KS1S -- and the planet and the sun are never
+    // out of range, because they are what range is measured against.
+    return (!_isBody && !WithinLoopRange(_universe.work)) ? KillOutcome::Removed : KillOutcome::Kept;
+  }
+
   LoopOutcome MoveEveryShip(Universe& _universe, Ports& _ports) noexcept
   {
     Commander& commander = _universe.commander;
@@ -873,347 +1243,64 @@ namespace Elite
       block = _universe.work;
 
       /*
-       * ---- part 7: is it touching us? ---------------------------------------------------------
+       * ---- parts 7 to 12, each one a stage that ANSWERS and a caller that acts (M4-a-2) ---------
        *
-       * 6502: LDA INWK+31 / AND #%10100000 / JSR MAS4 / BNE MA65.
-       *
-       * ONE TEST DOES FOUR JOBS. `MAS4` ORs the three high bytes into whatever it is handed, so
-       * seeding it with the "exploding or dead" bits means a ship that is far away on any axis, or
-       * already exploding, or already killed, all fail together. What survives is close and intact.
+       * This was three hundred and fifty-seven lines of the parts written out in place, sharing five
+       * booleans -- `docking`, `scoopable`, `collision`, `holdFull`, `drawIt` -- declared above the
+       * block they were set in and read two parts later. Every one of them is now a value some stage
+       * returns, and the exclusivity the booleans only implied is what the types say.
        */
-      bool docking = false;
-      bool scoopable = false;
-      bool collision = false;
+
+      const Contact contact = TestContact(_universe.work, commander, type, isBody);
+
+      Impact impact = (contact == Contact::Collision) ? Impact::Crashed : Impact::None;
+
+      if (contact == Contact::Scoopable)
       {
-        const std::uint8_t seed = static_cast<std::uint8_t>(_universe.work.state & Mask(ShipStateBit::Killed, ShipStateBit::Exploding));
-
-        if (LargestShipAxis(_universe.work, seed) == 0u)
+        switch (ScoopCargo(_universe, _ports, type))
         {
-          // 6502: LDA INWK / ORA INWK+3 / ORA INWK+6 / BMI MA65 -- and A survives to the `AND` below.
-          const std::uint8_t low = static_cast<std::uint8_t>(_universe.work.x.lo | _universe.work.y.lo | _universe.work.z.lo);
-
-          if ((low & 0x80u) == 0u && !isBody)
-          {
-            if (type == ShipType::Station)
-            {
-              docking = true; // 6502: CPX #SST / BEQ ISDK
-            }
-            else if ((low & 0xC0u) == 0u && type != ShipType::Missile)
-            {
-              /*
-               * 6502: LDA BST / AND INWK+5 / BPL MA58.
-               *
-               * `BST` is &FF with fuel scoops fitted and byte 5 is the ship's y sign, so the `AND`
-               * is "we have scoops AND it is below us" -- scooping only works on things that come
-               * up from underneath. Anything else at this range is a collision.
-               */
-              const std::uint8_t under = static_cast<std::uint8_t>(commander.fuelScoops & _universe.work.y.sgn);
-              scoopable = (under & 0x80u) != 0u;
-              collision = !scoopable;
-            }
-          }
+          case ScoopResult::Stowed:
+            break;
+          case ScoopResult::HoldFull:
+            impact = Impact::Bounced;
+            break;
+          case ScoopResult::Crashed:
+            impact = Impact::Crashed;
+            break;
         }
       }
 
-      /*
-       * ---- part 8: scooping it up ---------------------------------------------------------------
-       *
-       * 6502: CPX #OIL / BEQ oily / LDY #0 / LDA (XX0),Y / LSR A x4 / BEQ MA58 / ADC #1.
-       *
-       * AND THE `ADC` TAKES THE FOURTH `LSR`'s CARRY, which is bit 3 of the blueprint's first byte.
-       * `BEQ MA58` sits between them and tests A without touching the flags, so what lands in the
-       * hold is the top nibble plus one plus a bit of the bottom nibble (§6.89). A cargo canister
-       * skips all of that and rolls for a random item instead.
-       */
-      bool holdFull = false;
-      if (scoopable)
+      if (contact == Contact::Docking)
       {
-        std::uint8_t item = 0;
-        bool crashed = false;
-
-        if (type == ShipType::Canister)
+        switch (TestDocking(_universe))
         {
-          // 6502: .oily JSR DORND / AND #7 -- and the carry it rolls in is SET, because the only way
-          // here is `CPX #OIL / BEQ oily`, and a compare that finds its operand equal sets it. The
-          // port passed a clear one until 2026-09-06, hidden behind a comparison that skipped the
-          // generator on every frame that also seeded a cloud (§6.157).
-          item = static_cast<std::uint8_t>(_universe.rng.Next(true).value & 7u);
-        }
-        else
-        {
-          const std::uint8_t nibble = _universe.flight.blueprint->cargo;
-          const std::uint8_t worth = static_cast<std::uint8_t>(nibble >> 4u);
-          if (worth == 0u)
-          {
-            crashed = true; // 6502: BEQ MA58 -- nothing worth scooping, so it is a collision
-          }
-          else
-          {
-            item = static_cast<std::uint8_t>(worth + 1u + ((nibble & 0x08u) != 0u ? 1u : 0u));
-          }
-        }
-
-        if (crashed)
-        {
-          scoopable = false;
-          collision = true;
-        }
-        else
-        {
-          // 6502: .slvy2 JSR tnpr1 / LDY #78 / BCS MA59 -- `tnpr1` stores the item and asks for ONE.
-          if (!CargoFits(commander, item, 1u))
-          {
-            holdFull = true;
-            scoopable = false;
-          }
-          else
-          {
-            // 6502: LDY QQ29 / ADC QQ20,Y / STA QQ20,Y -- A is the 1 `tnpr` pushed and popped, and
-            // the carry is clear because that is how the `BCS` was not taken.
-            std::uint8_t& held = commander.cargoHold[item];
-            const AddResult stored = AddWithCarry(1u, held, false);
-            held = stored.value;
-
-            // 6502: TYA / ADC #208 / JSR MESS -- on the carry the store above left behind.
-            const AddResult token = AddWithCarry(item, MESSAGE_FIRST_CARGO, stored.carry);
-            ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, token.value,
-                        _universe.view);
-
-            // 6502: ASL NEWB / SEC / ROR NEWB -- bit 7 is "take it out of the bubble", so a scooped
-            // canister is removed by part 12 rather than by anything here.
-            _universe.work.newb = With(_universe.work.newb, NewbBit::Remove);
-          }
+          case DockingTest::Arrived:
+            // 6502: .GOIN JSR stopbd / JMP DOENTRY
+            StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap, _ports.sid);
+            return LoopOutcome::Docked;
+          case DockingTest::TooFast:
+            return LoopOutcome::Died; // 6502: JMP DEATH
+          case DockingTest::Bumped:
+            impact = Impact::Bumped;
+            break;
         }
       }
 
-      /*
-       * ---- part 9: docking, or not ------------------------------------------------------------
-       *
-       * Four tests and every one of them has to pass. The station must not be hostile, the ship
-       * must be pointing the right way (`INWK+14` is the nose vector's z high byte -- the port's own
-       * constant called it the pitch counter until Modernize.md M1-a named the byte), the player must be lined
-       * up with the slot, and the roll must be slow enough. `SPS1` is called for its side effect:
-       * it leaves the normalised vector to the PLANET in `XX15`, and `XX15+2` is what the
-       * alignment test reads.
-       */
-      if (docking)
+      if (!SurviveImpact(_universe, _ports, block, impact))
       {
-        bool arrived = false;
-
-        const bool hostile = Has(_universe.bubble.blocks[STATION_SLOT].newb, NewbBit::Hostile);
-
-        if (!hostile && _universe.work.nose.z.hi >= DOCK_MINIMUM_PITCH)
-        {
-          (void)LoadPlanetAxes(_universe.bubble, _universe.axes);                     // 6502: JSR SPS1
-          const UnitVector towards = NormaliseAxes(_universe.axes).vector; // the fall-through
-
-          if (towards.z >= DOCK_MINIMUM_ALIGNMENT &&
-              static_cast<std::uint8_t>(_universe.work.roof.x.hi & 0x7Fu) >= DOCK_MAXIMUM_ROLL)
-          {
-            arrived = true;
-          }
-        }
-
-        if (arrived)
-        {
-          // 6502: .GOIN JSR stopbd / JMP DOENTRY
-          StopDockingMusic(_universe.music, _universe.status.titleReset, _universe.sound, _universe.memoryMap,
-                         _ports.sid);
-          return LoopOutcome::Docked;
-        }
-
-        // 6502: .MA62 LDA DELTA / CMP #5 / BCC MA67 / JMP DEATH -- fast enough and you are dead.
-        if (_universe.flight.delta >= DOCK_SURVIVABLE_SPEED)
-        {
-          return LoopOutcome::Died;
-        }
-
-        collision = false;
-        scoopable = false;
-        holdFull = false;
+        return LoopOutcome::Died;
       }
 
-      /*
-       * ---- part 10: what the collision costs ---------------------------------------------------
-       *
-       * Three entries into one call. `MA59` is a full hold, which is not damage at all -- the thing
-       * bounces off and the frame carries on. `MA67` is a slow bump into the station, worth five.
-       * `MA58` is everything else, and its damage is HALF THE OTHER SHIP'S OWN ENERGY: `LDA INWK+35
-       * / SEC / ROR A`, which is also where `OOPS`'s carry comes from (§6.87).
-       */
-      if (holdFull)
-      {
-        // 6502: .MA59 JSR EXNO3 -- and the carry is SET, because `BCS MA59` in part 8 is the
-        // only way here: a full hold is exactly the carry the capacity test leaves.
-        (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true);
-        _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA60
-        // 6502: .MA61 BNE MA26 -- and `ROR` has just set bit 7, so it always branches.
-      }
-      else if (collision || docking)
-      {
-        std::uint8_t damage = 0;
-        bool carry = false;
-
-        if (docking)
-        {
-          _universe.flight.delta = 1u;       // 6502: .MA67 LDA #1 / STA DELTA
-          damage = DOCK_SURVIVABLE_SPEED; // 6502: LDA #5 -- and the carry is the `BCC`'s, so clear
-        }
-        else
-        {
-          _universe.work.state = MarkKilled(_universe.work.state); // 6502: .MA58
-          const ShiftResult halved = RotateRight(_universe.work.energy, true);
-          damage = halved.value;
-          carry = halved.carry;
-        }
-
-        // 6502: .MA63 JSR OOPS / JSR EXNO3 -- and `OOPS` makes the same noise itself on the path
-        // that survives, so a hit that costs the banks is heard twice.
-        if (!TakeDamage(_universe, _ports, block, damage, carry))
-        {
-          return LoopOutcome::Died;
-        }
-        /*
-         * 6502: .MA63 JSR OOPS / JSR EXNO3 -- and the carry into `EXNO3` is the one `OOPS` left.
-         *
-         * `OOPS` ends `ADC ENERGY / STA ENERGY / BEQ / BCS`, and reaching here at all means the
-         * `BCS` was taken, so it is SET. Nothing between the two calls touches the flag.
-         */
-        (void)PlaySoundEffect(_universe.sound, SOUND_EXPLOSION, true);
-      }
-
-      /*
-       * ---- part 11: our laser, and the scanner -------------------------------------------------
-       *
-       * 6502: .MA26 LDA NEWB / BPL P%+5 / JSR SCAN.
-       *
-       * Bit 7 of `NEWB` is "take this out of the bubble" AND "it is on the scanner", one bit doing
-       * two jobs: a ship marked for removal has its blip drawn here so that the EOR erases it.
-       */
-      if (Has(_universe.work.newb, NewbBit::Remove))
-      {
-        DrawScannerBlip(_universe.canvas, _universe.work, type, _universe.view);
-      }
-
-      bool drawIt = true;
-
-      /*
-       * The carry `JSR LL9` is reached with, which `LL9` reads on exactly one path: a ship that
-       * arrives killed, not yet exploding and not on the screen seeds its cloud's first `DORND` on
-       * it (§6.157). Every arrival at `MA8` is traced below, and each one is a flag some routine
-       * left rather than one this part sets.
-       */
-      bool carry = false; // 6502: BCC MA8 -- not in the sights, and `HITCH` cleared it saying so
-
-      if (_universe.view == 0u) // 6502: LDA QQ11 / BNE MA15 -- a chart means no drawing at all
-      {
-        FlipAxesForView(_universe.work, _universe.flight, _universe.spaceView); // 6502: JSR PLUT
-
-        if (IsHit(_universe.work, *_universe.flight.blueprint, type)) // 6502: JSR HITCH / BCC MA8
-        {
-          carry = true; // 6502: HITCH's SEC, and nothing on the way to `MA47` touches it
-
-          // 6502: LDA MSAR / BEQ MA47 / JSR BEEP / LDX XSAV / LDY #RED2 / JSR ABORT2 -- an armed
-          // missile locks onto whatever the sights are on, and the indicator turns red. `BEEP` is
-          // `NOISE`, whose exit carry is the answer here (§6.86); `ABORT2` and `MSBAR` are stores
-          // and register moves and leave it alone.
-          if (_universe.status.missileArmed != 0u)
-          {
-            // The flag going IN is the one two lines above -- `HITCH`'s `SEC`, which `LDA MSAR`
-            // and `BEQ` do not touch. `NOISE` hands it straight back when the sound is switched
-            // off, so passing `false` here (which the port did until M2-d) changed the carry `LL9`
-            // seeds an explosion cloud on, on a silent build (§8).
-            carry = PlaySoundEffect(_universe.sound, SOUND_BEEP, carry).carry;
-            SetMissileTarget(_universe.canvas, _universe.bubble, _universe.status.missileArmed, commander.missiles, _universe.flight.slot,
-                             MISSILE_LOCKED);
-          }
-
-          // 6502: .MA47 LDA LAS / BEQ MA8 -- no laser firing this frame, so nothing is damaged.
-          if (_universe.status.laserPower != 0u)
-          {
-            const LaserHit hit = ApplyLaserHit(_universe, _ports, *_universe.flight.blueprint, type);
-            if (hit.stores)
-            {
-              _universe.work.energy = hit.energy; // 6502: .MA14 STA INWK+35
-            }
-
-            // 6502: `MA14+2` -- LDA TYPE / JSR ANGRY, which both skip-the-store paths land on too. INF
-            // is this ship's block here, the one the loop is on, so the slot is XSAV's. Every laser
-            // path ends in this call, so its exit carry is the one `LL9` gets.
-            carry = Anger(_universe.bubble, _universe.flight, _universe.flight.slot, type);
-          }
-        }
-      }
-      else
-      {
-        drawIt = false;
-      }
+      const Aim aim = AimAtShip(_universe, _ports, type);
 
       // 6502: .MA8 JSR LL9 -- and it is the same call that erases the last frame's ship.
-      if (drawIt)
+      if (aim.draws)
       {
         DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work, block,
-                 _universe.heap, *_universe.flight.blueprint, type, _ports.drawing, _universe.rng, carry);
+                 _universe.heap, *_universe.flight.blueprint, type, _ports.drawing, _universe.rng, aim.carry);
       }
 
-      /*
-       * ---- part 12: what is written back, and what is removed ----------------------------------
-       *
-       * 6502: .MA15 LDY #35 / LDA INWK+35 / STA (INF),Y -- the energy goes back on every path, and
-       * byte 31 only on the path that keeps the ship. That asymmetry is the routine: a ship being
-       * removed has its block shuffled away by `KILLSHP`, so writing its state would be wasted.
-       */
-      block.energy = _universe.work.energy;
-
-      bool remove = Has(_universe.work.newb, NewbBit::Remove);
-
-      if (!remove && Has(_universe.work.state, ShipStateBit::Killed) && Has(_universe.work.state, ShipStateBit::Exploding))
-      {
-        /*
-         * 6502: LDA NEWB / AND #%01000000 / ORA FIST / STA FIST.
-         *
-         * Bit 6 is "shooting this was a crime", and it is ORed into the legal status rather than
-         * added -- so the offence is recorded once however many innocents die, and a fugitive
-         * cannot become more of one this way.
-         */
-        commander.legalStatus =
-          static_cast<std::uint8_t>(commander.legalStatus | (_universe.work.newb & Mask(NewbBit::Cop)));
-
-        // 6502: LDA DLY / ORA MJ / BNE KS1S -- no bounty while a message is up or in witchspace,
-        // because the bounty IS a message and there is nowhere to put it.
-        const bool quiet = (_universe.message.delay | _universe.status.midJump) == 0u;
-
-        if (quiet)
-        {
-          // 6502: LDY #10 / LDA (XX0),Y / BEQ KS1S / TAX / INY / LDA (XX0),Y / TAY / JSR MCASH.
-          const std::uint8_t low = static_cast<std::uint8_t>(_universe.flight.blueprint->bounty & 0xFFu);
-
-          if (low != 0u)
-          {
-            ReceiveCash(commander, _universe.flight.blueprint->bounty);
-
-            /*
-             * 6502: LDA #0 / JSR MESS.
-             *
-             * TOKEN ZERO IS THE CASH. `TT27` opens `TAX / BEQ csh`, so the bounty message is the
-             * player's balance printed in flight -- and `MESS` then stores that zero in `MCH`, so
-             * the next message within twenty frames erases this one by printing the balance again.
-             */
-            ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, 0u, _universe.view);
-          }
-        }
-
-        remove = true; // 6502: .KS1S JMP KS1 -- every path through this block ends there
-      }
-
-      if (!remove)
-      {
-        // 6502: .MAC1 LDA TYPE / BMI MA27 / JSR FAROF / BCC KS1S -- and the planet and the sun are
-        // never out of range, because they are what range is measured against.
-        remove = !isBody && !WithinLoopRange(_universe.work);
-      }
-
-      if (remove)
+      if (RetireShip(_universe, _ports, block, type, isBody) == KillOutcome::Removed)
       {
         /*
          * 6502: .KS1 LDX XSAV / JSR KILLSHP / LDX XSAV / JMP MAL1.
@@ -1228,7 +1315,7 @@ namespace Elite
       else
       {
         block.state = _universe.work.state; // 6502: .MA27 LDY #31 / STA (INF),Y
-        ++slot;                                      // 6502: LDX XSAV / INX / JMP MAL1
+        ++slot;                             // 6502: LDX XSAV / INX / JMP MAL1
       }
     }
   }
