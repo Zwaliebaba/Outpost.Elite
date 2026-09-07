@@ -164,6 +164,7 @@
     <ClInclude Include="ShipType.h" />
     <ClInclude Include="ShipMove.h" />
     <ClInclude Include="ShipDraw.h" />
+    <ClInclude Include="ShipDraw2x.h" />
     <ClInclude Include="LineHeap.h" />
     <ClInclude Include="Stardust.h" />
     <ClInclude Include="PlanetDraw.h" />
@@ -259,6 +260,7 @@
     <ClCompile Include="ShipSlot.cpp" />
     <ClCompile Include="ShipMove.cpp" />
     <ClCompile Include="ShipDraw.cpp" />
+    <ClCompile Include="ShipDraw2x.cpp" />
     <ClCompile Include="Stardust.cpp" />
     <ClCompile Include="PlanetDraw.cpp" />
     <ClCompile Include="Dashboard.cpp" />

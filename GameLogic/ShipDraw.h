@@ -3,6 +3,7 @@
 #include "Arith.h"
 #include "Canvas.h"
 #include "LineHeap.h"
+#include "ShipDraw2x.h"
 #include "Rng.h"
 #include "ShipSlot.h"
 
@@ -131,7 +132,8 @@ namespace Elite
    * `LOIN` plots by EOR, so this both draws a ship and rubs it out; which one it is depends only on
    * whether the same lines are already on the screen. That is the whole of Elite's ship animation.
    */
-  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run) noexcept;
+  void DrawShipLines(Canvas& _canvas, const LineHeap& _heap, HeapOffset _run, Picture* _picture = nullptr,
+                     const LineHeap2x* _wide = nullptr) noexcept;
 
   /*
    * 6502: LL81 -- store the heap's length in byte 0 and fall straight into `LL155`.
@@ -141,7 +143,8 @@ namespace Elite
    * already in A. Both then draw. Ported as one function with the length as a parameter, because
    * the difference between the two entry points is only where the byte came from.
    */
-  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count) noexcept;
+  void StoreLineCountAndDraw(Canvas& _canvas, LineHeap& _heap, HeapOffset _run, std::uint8_t _count, Picture* _picture = nullptr,
+                             const LineHeap2x* _wide = nullptr) noexcept;
 
   /*
    * 6502: EE51 -- take the ship off the screen, if it is on it.
@@ -157,7 +160,8 @@ namespace Elite
    * bytes leaves `CMP #4 / BCC LL82` -- CLEAR; and a ship that was not on the screen returns through
    * a bare `RTS` with the flag the caller arrived with, which is `_carryIn`.
    */
-  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn) noexcept;
+  bool EraseShip(Canvas& _canvas, Ship& _ship, const LineHeap& _heap, bool _carryIn, Picture* _picture = nullptr,
+                 const LineHeap2x* _wide = nullptr) noexcept;
 
   /*
    * 6502: the six instructions after `JSR EE51` in `LL9` part 1, and the `EE55` loop -- set up a
@@ -190,7 +194,8 @@ namespace Elite
    * last one was, and reproducing that is why `_screen` is a parameter that outlives the call
    * rather than a local. It is a bug in the original, forty years old and shipped.
    */
-  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen) noexcept;
+  void DrawShipAsPoint(Canvas& _canvas, Ship& _ship, LineHeap& _heap, MathWorkspace& _math, Projection& _screen,
+                       Picture* _picture = nullptr, LineHeap2x* _wide = nullptr) noexcept;
 
   /*
    * 6502: XX16 and XX12 -- the workspace `LL9`'s geometry runs in (slice 3b).
