@@ -65,10 +65,11 @@ namespace GameLogicTests
      * a game, so the codes that leave are ignored -- which is exactly what a null `ControlCodes*`
      * meant and is what keeps this sweep about the text system rather than about the game.
      *
-     * WHAT THAT COSTS IS NAMED RATHER THAN HIDDEN. The eleven deferred codes are still deferred,
-     * and five of them (9, 21, 25, 27 and 28) could be compared here against a real universe --
-     * see §8. Three more (22, 24, 26) need a scripted keyboard on both sides first, and three
-     * (11, 30, 31) have nothing behind them on either.
+     * WHAT THAT COSTS IS NAMED RATHER THAN HIDDEN. The eleven codes that leave are not compared
+     * HERE, because this printer has no game behind it. Eight of them are compared through the
+     * dispatch over a universe in `MissionTests` since M6-0-c (9, 21, 22, 24, 25, 26, 27, 28), and
+     * three (11, 30, 31) are named there and in `RunControlCode`'s `default`: routines no token
+     * this build prints reaches, unported on purpose.
      */
     /// Value tokens reach commander state, which is phase 2's.
     class DeferredValues : public Elite::ValueTokens
@@ -430,18 +431,25 @@ namespace GameLogicTests
       const OracleImage& oracle = OracleImage::Instance();
 
       /*
-       * The codes the port cannot compare against the shipped routine.
+       * The codes this fixture cannot compare against the shipped routine, because they leave the
+       * text system and this printer has no game to leave into (M6-0-c).
        *
-       * 9, 11 and 21 reach the canvas. 22, 24 and 26 wait for a key or read a typed line, so
-       * running them in the oracle would spin until the instruction budget ran out; 25 prints a
-       * token and then delays for a hundred frames. 27, 28, 30 and 31 print a token chosen by
-       * GCNT or DISK, which is game state the printer does not hold.
+       * Eight are compared THROUGH THE DISPATCH elsewhere: `MissionTests` runs `DETOK2` with the
+       * code in A on the oracle and `PrintByte(code)` over a universe on the port for 9 (`MT9`),
+       * 21 (`CLYNS`), 22 (`PAUSE`), 24 (`PAUSE2`), 25 (`BRIS`), 26 (`MT26`), 27 and 28 (`MT27`,
+       * `MT28`), with the keyboard scripted on both sides where a code waits for a key.
        *
-       * 21 is in this list and still has a ported half -- see REACHES_SEAM below. It is here
-       * because CLYNS clears screen memory the port has no canvas for, not because its flags are
-       * unported.
+       * Three are DEFERRED FOR GOOD and named: 11 is `NLIN4`, a rule across the screen; 30 and 31
+       * are `FILEPR` and `OTHERFILEPR`, the media names under `DISK`. No token this build prints
+       * reaches them and the port's `default` does nothing for them; `MissionTests` pins the table
+       * entries they would dispatch to and the port's nothing.
+       *
+       * 21 has a ported half beside its screen half -- see REACHES_SEAM below.
        */
+      constexpr std::array<std::uint8_t, 8> COMPARED_THROUGH_THE_DISPATCH = {9, 21, 22, 24, 25, 26, 27, 28};
+      constexpr std::array<std::uint8_t, 3> DEFERRED_FOR_GOOD = {11, 30, 31};
       constexpr std::array<std::uint8_t, 11> DEFERRED = {9, 11, 21, 22, 24, 25, 26, 27, 28, 30, 31};
+      static_assert(COMPARED_THROUGH_THE_DISPATCH.size() + DEFERRED_FOR_GOOD.size() == DEFERRED.size(), "eight and three are the eleven");
 
       /// 8, 21, 23 and 29 are split: the flags they set are text state and stay here, and only the
       /// cursor move or the screen clear is passed on. So they reach the seam AND are comparable
@@ -556,8 +564,9 @@ namespace GameLogicTests
         }
       }
 
-      Logger::WriteMessage(("JMTB: " + std::to_string(compared) + " control code expansions compared, " + std::to_string(DEFERRED.size()) +
-                            " of 31 codes deferred")
+      Logger::WriteMessage(("JMTB: " + std::to_string(compared) + " control code expansions compared here, " +
+                            std::to_string(COMPARED_THROUGH_THE_DISPATCH.size()) + " compared through the dispatch in MissionTests, " +
+                            std::to_string(DEFERRED_FOR_GOOD.size()) + " of 31 codes deferred for good")
                              .c_str());
 
       // Twenty of the thirty-one reachable codes are compared, in two case states each. The table

@@ -69,9 +69,9 @@
       "slice": "M5-c: every ledger home names a file on disk, and the counter reads the home cell"
     },
     "origin-markers": {
-      "ceiling": 4136,
+      "ceiling": 4137,
       "slack": 0,
-      "slice": "M5-a-11: Laser names LASER,Y, bit 7, LAS and the four powers once each"
+      "slice": "M6-0-c: RunControlCode's case 26 carries MT26's label"
     },
     "oracle-test-files": {
       "ceiling": 48,

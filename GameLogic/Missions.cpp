@@ -4,6 +4,7 @@
 
 #include "EliteTypes.h"
 #include "Market.h"
+#include "NameEntry.h"
 #include "PlanetDraw.h"
 #include "SaveGame.h"
 #include "ShipDraw.h"
@@ -201,6 +202,16 @@ namespace Elite
     case 25:
       ShowIncomingMessage(_universe, _ports);
       return;
+    case 26:
+      /*
+       * 6502: MT26 -- read a line from the keyboard into `INWK+5`, which is `Universe::lineBuffer`
+       * (M6-0-c). `RLINE+2` is the line's length limit and is nine except inside `GTNME`, which
+       * lowers it to seven and calls `MT26` directly rather than through a token -- so a code 26
+       * reached THROUGH the dispatch reads with the limits `RLINE` holds at rest. No token this
+       * build prints from here contains one; the dispatch is compared in `MissionTests`.
+       */
+      static_cast<void>(ReadLine(_ports.keyboard, _ports.sink, _universe.text, _ports.present, _universe.lineBuffer, LineLimits{}));
+      return;
 
     case 27:
     case 28:
@@ -211,10 +222,11 @@ namespace Elite
 
     default:
       /*
-       * 11 is `NLIN4`, a rule across the screen; 26 is `MT26`, which reads a line and has no
-       * answer for whose buffer the line goes into; 30 and 31 are `FILEPR` and `OTHERFILEPR`,
-       * tokens under `DISK`. Four codes with nothing behind them, and no token the game prints
-       * from here contains one -- which is what the suites assert rather than assume.
+       * THE THREE NAMED (M6-0-c): 11 is `NLIN4`, a rule across the screen at pixel row 19; 30 and
+       * 31 are `FILEPR` and `OTHERFILEPR`, the selected and the other medium's name under `DISK`.
+       * All three are routines in the original and this is `default` in the port: no token this
+       * build prints from here contains one, `MissionTests` pins the table entries they would
+       * dispatch to, and porting a routine nothing reaches would be a routine nothing compares.
        */
       return;
     }
