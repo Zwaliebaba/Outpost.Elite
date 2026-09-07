@@ -162,7 +162,7 @@ namespace Outpost
      * and never twenty-two members. The sprite registers went with them
      * -- ADR-005 §1 settled that compositing belongs in `Canvas::Resolve`, so they have to be data
      * rather than private state behind a getter (§6.133, §6.148), and `Video()` is the one line
-     * that hands `m_universe.video` to the presenter.
+     * that hands `m_universe->video` to the presenter.
      */
     Elite::Universe* m_universe = nullptr; ///< attached by `AttachUniverse`
 
