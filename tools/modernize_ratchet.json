@@ -49,9 +49,9 @@
       "slice": "M4-a-1: SpawnChildEffects goes -- SPIN and SPIN2 answer a Drop and PerformDrop spawns"
     },
     "out-params": {
-      "ceiling": 12,
+      "ceiling": 4,
       "slack": 0,
-      "slice": "M5-a-1: four routines were handed a field of the Universe they already take"
+      "slice": "M5-a-2: the six stragglers take Universe&, which is M3-a's pattern finishing"
     },
     "carry-params": {
       "ceiling": 30,

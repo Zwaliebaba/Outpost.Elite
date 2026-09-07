@@ -192,7 +192,7 @@ namespace Elite
      */
     if (result.outcome == DockingOutcome::DockingBay)
     {
-      result.bay = EnterDockingBay(_universe.dockedFlag, _view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
+      result.bay = EnterDockingBay(_universe, _view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
     }
 
     return result;

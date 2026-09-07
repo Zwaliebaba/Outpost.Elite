@@ -16,11 +16,11 @@
 namespace Elite
 {
 
-  void CrosshairsToCurrentSystem(const Commander& _commander, std::uint8_t& _crosshairX, std::uint8_t& _crosshairY) noexcept
+  void CrosshairsToCurrentSystem(Universe& _universe) noexcept
   {
     // 6502: ping -- and QQ0 is TP+1, so this reads the commander block itself.
-    _crosshairX = _commander.systemX;
-    _crosshairY = _commander.systemY;
+    _universe.crosshairX = _universe.commander.systemX;
+    _universe.crosshairY = _universe.commander.systemY;
   }
 
   void CurrentSystemToCrosshairs(Commander& _commander, std::uint8_t _crosshairX, std::uint8_t _crosshairY) noexcept
@@ -43,13 +43,13 @@ namespace Elite
     return result;
   }
 
-  ForcedKey EnterDockingBay(std::uint8_t& _dockedFlag, std::uint8_t _view, std::uint8_t _countdown, bool _hyperspaceHeld) noexcept
+  ForcedKey EnterDockingBay(Universe& _universe, std::uint8_t _view, std::uint8_t _countdown, bool _hyperspaceHeld) noexcept
   {
     // 6502: LDA #&FF / STA QQ12 -- and &FF rather than 1, which is what TT102's BIT/BPL needs.
-    _dockedFlag = 0xFF;
+    _universe.dockedFlag = 0xFF;
 
     // 6502: LDA #f8 / JMP FRCE -- the status key, pressed by the game on the player's behalf.
-    return ForceKey(KEY_STATUS, _dockedFlag, _view, _countdown, _hyperspaceHeld);
+    return ForceKey(KEY_STATUS, _universe.dockedFlag, _view, _countdown, _hyperspaceHeld);
   }
 
   ForcedKey StartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept
@@ -115,7 +115,7 @@ namespace Elite
      * they are copied into the commander. A file whose coordinates fall between two systems starts
      * the game at whichever one was nearest.
      */
-    CrosshairsToCurrentSystem(_universe.commander, _universe.crosshairX, _universe.crosshairY);
+    CrosshairsToCurrentSystem(_universe);
 
     const NearestSystem found = FindNearestSystem(_universe.commander.galaxySeeds, _universe.crosshairX, _universe.crosshairY,
                                                   _universe.commander.systemX, _universe.commander.systemY);
@@ -149,7 +149,7 @@ namespace Elite
     _universe.current.government = found.data.government;
 
     // 6502: and then BR1 runs off its end into BAY, which is the next routine in the binary.
-    return EnterDockingBay(_universe.dockedFlag, _universe.view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
+    return EnterDockingBay(_universe, _universe.view, _universe.status.hyperspaceCountdown, _hyperspaceHeld);
   }
 
   ForcedKey ResetAndStartGame(Universe& _universe, Ports& _ports, bool _hyperspaceHeld) noexcept

@@ -8,6 +8,8 @@
 namespace Elite
 {
 
+  struct Universe; // Universe.h -- forward, so this header stays under it
+
   /*
    * The pause screen -- `DK4`, `FREEZE` and `DKS3` (slice 4e).
    *
@@ -97,7 +99,7 @@ namespace Elite
    * comparison is against what the LAST pass saw and not against what the option was before the
    * key. Returns what the caller should do to the player, because the music belongs to phase 5.
    */
-  [[nodiscard]] MusicChange NoteMusicSwitch(std::uint8_t _mutok, std::uint8_t& _mutokOld, std::uint8_t _dockingComputer) noexcept;
+  [[nodiscard]] MusicChange NoteMusicSwitch(Universe& _universe, std::uint8_t _mutok, std::uint8_t _dockingComputer) noexcept;
 
   /// What the pause screen decided about the key just pressed.
   enum class PauseOutcome : std::uint8_t
@@ -136,7 +138,7 @@ namespace Elite
    * the sound flag rather than a true, because the routine never loads a value. Any non-zero
    * disables sound, so the byte the game leaves there is the key code itself.
    */
-  [[nodiscard]] PausePass PressPauseKey(const OptionBlock& _options, std::uint8_t& _soundDisabled, std::uint8_t& _mutokOld,
-                                        std::uint8_t _dockingComputer, std::uint8_t _key) noexcept;
+  [[nodiscard]] PausePass PressPauseKey(Universe& _universe, const OptionBlock& _options, std::uint8_t _dockingComputer,
+                                        std::uint8_t _key) noexcept;
 
 } // namespace Elite

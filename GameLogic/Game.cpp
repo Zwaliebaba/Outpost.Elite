@@ -361,7 +361,7 @@ namespace Elite
       ChartView chart = ChartOf();
 
       DrawTargetCrosshairs(m_universe.canvas, chart);
-      CrosshairsToCurrentSystem(m_universe.commander, m_universe.crosshairX, m_universe.crosshairY);
+      CrosshairsToCurrentSystem(m_universe);
 
       chart.cursorX = m_universe.crosshairX;
       chart.cursorY = m_universe.crosshairY;
@@ -582,7 +582,7 @@ namespace Elite
     case DockingOutcome::DockingBay:
     default:
       // 6502: EN6 -- JMP BAY, and nothing happened.
-      return EnterDockingBay(universe.dockedFlag, universe.view, universe.status.hyperspaceCountdown, false);
+      return EnterDockingBay(universe, universe.view, universe.status.hyperspaceCountdown, false);
     }
   }
 
@@ -791,7 +791,7 @@ namespace Elite
   void Game::StepPaused(std::uint8_t _key) noexcept
   {
     const PausePass pass =
-      PressPauseKey(OptionsOf(), m_universe.soundDisabled, m_universe.musicSwitchWas, m_universe.control.dockingComputer, _key);
+      PressPauseKey(m_universe, OptionsOf(), m_universe.control.dockingComputer, _key);
 
     /*
      * 6502: JSR MUTOKCH -- the `Stop` answer goes through `stopbd`, which starts the music again

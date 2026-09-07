@@ -30,8 +30,7 @@ namespace Elite
     // so it is unlocked and the player told.
     if (_universe.bubble.missileTarget == _slot)
     {
-      AbortMissileLock(_universe.canvas, _universe.bubble, _universe.status.missileArmed, _universe.commander.missiles,
-                       MISSILE_GREEN); // 6502: JSR ABORT with GREEN2
+      AbortMissileLock(_universe, _universe.commander.missiles, MISSILE_GREEN); // 6502: JSR ABORT with GREEN2
       ShowMessage(_universe.canvas, _ports.printer, _universe.text, _ports.characters.state, _universe.message, 200,
                   _universe.view); // 6502: LDA #200 / JSR MESS
     }
