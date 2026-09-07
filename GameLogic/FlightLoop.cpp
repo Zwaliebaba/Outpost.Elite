@@ -1340,8 +1340,7 @@ namespace Elite
       // 6502: .MA8 JSR LL9 -- and it is the same call that erases the last frame's ship.
       if (aim.draws)
       {
-        DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work, block,
-                 _universe.heap, *_universe.flight.blueprint, type, _ports.drawing, _universe.rng, aim.carry);
+        DrawShip(_universe, block, aim.carry);
       }
 
       if (RetireShip(_universe, _ports, block, type, isBody) == KillOutcome::Removed)

@@ -547,27 +547,26 @@ namespace GameLogicTests
      * ever asserted on it. The seam was inherited because `Ports` carried it, not because this
      * fixture wanted it.
      */
-    struct CountingEffects final : Elite::ShipDrawEffects
-    {
-      void DrawPlanetOrSun() override {}
-      void DrawExplosion() override {}
-    };
+    /*
+     * `CountingEffects` -- `ShipDrawEffects` answered with nothing -- WAS HERE AND IS NOT ANY MORE
+     * (M6-0-a-3). `TACTICS` never draws, so it was one seam this fixture had to declare because
+     * `Ports` carried it.
+     */
 
     /// Everything a `TACTICS` case has to put into both machines before it can be compared.
     struct TacticsUniverse
     {
       Universe universe; ///< every byte of it, since M3-a
-      CountingEffects effects;
 
       std::array<std::uint8_t, 4> seed{};
       std::uint8_t ecm = 0;
       std::uint8_t legal = 0;
       std::uint8_t slot = 2;
 
-      /// The three seams the AI reaches, all counted in one place.
+      /// The seams the AI reaches, all answered with nothing in one place.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(effects, universe.unused);
+        return universe.PortsWith(universe.unused);
       }
     };
 

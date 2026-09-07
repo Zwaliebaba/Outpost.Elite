@@ -352,7 +352,7 @@ namespace GameLogicTests
         Assert::IsTrue(run.completed, L"LL164 returned");
 
         Counting counting;
-        Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused, counting);
+        Elite::Ports ports = universe.PortsWith(universe.unused, counting);
         Elite::DrawHyperspaceTunnel(universe, ports);
 
         const std::wstring where = WidenText("LL164 (QQ11 " + std::to_string(view) + ")");
@@ -523,17 +523,16 @@ namespace GameLogicTests
      * because `Ports` carried it.
      */
 
-    struct RecordingOutside final : Elite::ShipDrawEffects
-    {
-      void DrawPlanetOrSun() override {}
-      void DrawExplosion() override {}
-    };
+    /*
+     * `RecordingOutside` -- `ShipDrawEffects` answered with nothing -- WAS HERE AND IS NOT ANY
+     * MORE (M6-0-a-3). A launch draws the tunnel and the station and never a body or a cloud, so
+     * it was one seam this fixture had to declare because `Ports` carried it.
+     */
 
     /// Everything the launch works on, and the oracle's memory beside it.
     struct Leaving
     {
       Universe universe; ///< every byte of it, since M3-a
-      RecordingOutside outside;
       RecordingStart start;
 
       // 6502: LSO -- `NWSPS` hands the station the sun's heap, and this launch creates one, so the
@@ -543,10 +542,10 @@ namespace GameLogicTests
         universe.LendSunHeap();
       }
 
-      /// The seams a launch reaches: the AI and the drawing, the sounds, and `RESET`'s own.
+      /// The seams a launch reaches: the sounds, and `RESET`'s own.
       [[nodiscard]] Elite::Ports Ports() noexcept
       {
-        return universe.PortsWith(outside, start, start, start);
+        return universe.PortsWith(start, start, start);
       }
     };
 
@@ -945,7 +944,7 @@ namespace GameLogicTests
       leaving.universe.view = 1u;
 
       Counting counting;
-      Elite::Ports ports = leaving.universe.PortsWith(leaving.outside, leaving.start, counting);
+      Elite::Ports ports = leaving.universe.PortsWith(leaving.start, counting);
 
       leaving.universe.dockedFlag = 0xFFu; // 6502: QQ12 -- docked, so the launch is not the refusal path
       Elite::SystemSeeds selected{};
@@ -959,7 +958,7 @@ namespace GameLogicTests
       Occupy(flying, 0x4Du);
 
       Counting none;
-      Elite::Ports flyingPorts = flying.universe.PortsWith(flying.outside, flying.start, none);
+      Elite::Ports flyingPorts = flying.universe.PortsWith(flying.start, none);
 
       flying.universe.dockedFlag = 0u; // 6502: LDX QQ12 / BEQ NLUNCH
       Elite::SystemSeeds ignored{};

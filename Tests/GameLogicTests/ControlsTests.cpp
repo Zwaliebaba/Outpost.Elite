@@ -306,7 +306,7 @@ namespace GameLogicTests
        * `&DC01` eight columns at a time, and `Cpu6502`'s memory is flat -- one byte at `&DC01`
        * whatever column was selected -- so an oracle that ran the real routine would read the same
        * column eight times. Comparing it needs the CIA modelled in the emulator, which is the same
-       * shape of blocker `ShipDrawEffects` is waiting on (§6.108) and is recorded beside it.
+       * shape of blocker `ShipDrawEffects` waited on (§6.108) until M6-0-a banked the I/O page.
        */
       struct ScriptedMatrix final : Elite::Keyboard
       {
@@ -379,7 +379,7 @@ namespace GameLogicTests
       Elite::TokenPrinter printer{characters, universe.text};
       Elite::ExtendedTokenPrinter extended{characters, printer, universe.rng};
       Elite::SidWriteLog sid;
-      Elite::Ports ports{printer,  characters, characters, nulls, sid,
+      Elite::Ports ports{printer,  characters, characters, sid,
                          extended, nulls,      nulls,      board, nulls};
 
       std::uint32_t recentredByStick = 0;

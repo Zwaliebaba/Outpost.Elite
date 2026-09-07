@@ -16,11 +16,9 @@ namespace Elite
   namespace
   {
     /// 6502: JSR LL9 -- the briefing's ship, drawn from `INWK` with its block in `K%`.
-    void DrawBriefingShip(Universe& _universe, Ports& _ports) noexcept
+    void DrawBriefingShip(Universe& _universe) noexcept
     {
-      DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work,
-               _universe.bubble.blocks[_universe.shipSlot], _universe.heap, *_universe.flight.blueprint, _universe.flight.type,
-               _ports.drawing, _universe.rng,
+      DrawShip(_universe, _universe.bubble.blocks[_universe.shipSlot],
                false); // a briefing's ship is never killed, so the carry goes unread
     }
 
@@ -54,9 +52,7 @@ namespace Elite
     _universe.work.z.hi = BRIEFING_SHIP_DISTANCE;
 
     // 6502: JSR LL9 -- a briefing's ship is never killed, so the carry it is reached with goes unread.
-    DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work,
-             _universe.bubble.blocks[_universe.shipSlot], _universe.heap, *_universe.flight.blueprint, _universe.flight.type,
-             _ports.drawing, _universe.rng, false);
+    DrawShip(_universe, _universe.bubble.blocks[_universe.shipSlot], false);
 
     /*
      * 6502: JSR MVEIT.
@@ -93,7 +89,7 @@ namespace Elite
     SetUpScreen(_universe, _ports, MT9_COLUMN_AND_VIEW);
 
     // 6502: JSR LL9 -- one more draw, onto the screen that was just cleared.
-    DrawBriefingShip(_universe, _ports);
+    DrawBriefingShip(_universe);
 
     /*
      * 6502: the fall-through into MT23 -- `LDA #10 / JSR DOYC`, and that is all of it that lands
@@ -283,7 +279,7 @@ namespace Elite
       _universe.work.rollCounter = BRIEFING_SPIN;
       _universe.work.pitchCounter = BRIEFING_SPIN;
 
-      DrawBriefingShip(_universe, _ports); // 6502: JSR LL9
+      DrawBriefingShip(_universe); // 6502: JSR LL9
       MoveBriefingShip(_universe, _ports); // 6502: JSR MVEIT
 
       _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);
@@ -326,7 +322,7 @@ namespace Elite
       }
       _universe.work.y.lo = height;
 
-      DrawBriefingShip(_universe, _ports); // 6502: JSR LL9
+      DrawBriefingShip(_universe); // 6502: JSR LL9
       MoveBriefingShip(_universe, _ports); // 6502: JSR MVEIT
 
       _universe.flight.mainLoopCounter = static_cast<std::uint8_t>(_universe.flight.mainLoopCounter - 1u);

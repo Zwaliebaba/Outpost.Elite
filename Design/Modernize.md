@@ -270,8 +270,8 @@ left, and both outlive their writer on purpose (§4.3). `DrawWorkspace`, `Geomet
 `Projection` and `K3Block` are the same pattern for other zero-page runs. M2-c emptied most of
 them: `NumberWorkspace` went with M2-c-1, `DrawWorkspace` is the dashboard's screen cursor since
 M2-c-2, `MathWorkspace` is `Q` and `K2`'s bottom byte since M2-c-3, and `GeometryWorkspace` is
-`LL9`'s four stage results. <!--count:workspace-params-->45 parameters in the headers are still one
-of them by reference. The pattern is faithful and it is also the reason no signature says what a function
+`LL9`'s four stage results. <!--count:workspace-params-->43 parameters in the headers are still one
+of them by reference (`DrawShip` handed its eight back to the universe in M6-0-a-3). The pattern is faithful and it is also the reason no signature says what a function
 consumes or produces.
 
 **P3 — Flat byte blobs addressed by number.** `ShipBlock` is `std::array<std::uint8_t, 37>` with
@@ -294,12 +294,13 @@ each is a 6502 address doing the job of a reference or an index. `NWSHP`'s refus
 the arithmetic is load-bearing — is a carry-dependent subtraction of two addresses that the port
 reproduces exactly and must keep reproducing (§4.2).
 
-**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->10 reference members,
+**P5 — Reference aggregates as argument lists.** <!--count:aggregate-refs-->9 reference members,
 and they were seventy-eight before M3-a. All seven argument-list structs are gone — `FlightScreen`,
 `FlightLoop`, `MissionScreen` and `TitleScreen` in M3-a-2, `TradeScreen`, `SaveScreen`, `GameStart`
-and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The eleven that
+and `MissionBay` in M3-a-3 — and every routine takes `(Universe&, Ports&)`. **The nine that
 remain ARE `Ports`**, which is the one struct §4.5 exists to collapse: M3-b replaces its interfaces
-with four ports without touching a signature again, and three of the four have landed. `ViewChange.h` said it plainly while
+with four ports without touching a signature again, and three of the four have landed; M4-a-1 took
+`SFS1` out and M6-0-a-3 took `LL9`'s two tail jumps out. `ViewChange.h` said it plainly while
 the rest existed: "the struct is the argument list".
 
 **P6 — Game state and the top of the program in the executable.** §2.6, **closed by M3-c**.
@@ -307,7 +308,7 @@ the rest existed: "the struct is the argument list".
 window, the swap chain, the audio device, the files, the two outer loops and the accumulator that
 paces them. §2.1's `class Game` exists (`GameLogic/Game.h`) with `Reset`, three `Step`s and the
 state behind them, and `check_outpost.py`'s surface fell with it — the executable reaches
-<!--count:outpost-elite-names-->69 distinct `Elite::` names where it reached 205 when M3 opened.
+<!--count:outpost-elite-names-->66 distinct `Elite::` names where it reached 205 when M3 opened.
 
 What §2.1 asked for and this did not have until M5-e is `Frame()`, `Sounds()` and `StateHash()` —
 `Sounds()` is built (M5-e-1), `StateHash()` is built library-native (M5-e-3, `Elite::HashState`) and
@@ -316,15 +317,16 @@ and one thing it did not ask for, which M5-e-2 closed: `Elite::Universe` was the
 until then, because both sessions bound it at construction and `Game` needs both of them at its own.
 The sessions take it afterwards now (`AttachUniverse`) and `Game` owns it, as §4.4 drew.
 
-**P7 — Seams that outlived their reason.** <!--count:effects-seams-->8 abstract classes in
+**P7 — Seams that outlived their reason.** <!--count:effects-seams-->7 abstract classes in
 `GameLogic/*.h`. Some are platform (`Keyboard`, `Presenter`, `CommanderStore`); `TextSink` and
-`ValueTokens` are the text system's own and are argued about in §8 rather than assumed away. Most are **phase order**:
+`ValueTokens` are the text system's own and are argued about in §8 rather than assumed away. Most were **phase order**:
 `ShipDrawEffects::DrawPlanetOrSun` and `DrawExplosion`, `SpawnChildEffects::SpawnChild`,
 `ViewEffects::PlaySound`, `SightEffects`, `ExplosionEffects` — each declared when the routine on the
 far side was "phase 4's" and kept after it landed, which §6.73 already names as a mistake made four
 times. `SpawnEffects`, `ChartShapes`, `ShipEffects::RunTactics`, `FlightLoopEffects`'s `SpawnAhead`
 and `Anger`, and `StartUpEffects`'s `ResetUniverse`, `ResetShip` and `ResetMissileIndicators` are
-gone (M3-b-1a to M3-b-1e). Three methods
+gone (M3-b-1a to M3-b-1e); `SpawnChildEffects` went in M4-a-1 and `ShipDrawEffects`, the last of
+the phase-order seams and the one the flat oracle image kept alive (§6.108), in M6-0-a-3. Three methods
 are declared on two interfaces each and one override satisfies both, which is
 the language's rule and a smell. One seam carries a CPU flag across the platform boundary:
 `PlaySound(std::uint8_t _effect, bool _carryIn)` returns a carry because `NOISE` does (§6.99), and
@@ -1807,6 +1809,29 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-a-3: `ShipDrawEffects` goes, and `DrawShip` takes the universe.**
+
+The last of the phase-order seams, and the one §6.108 kept alive after every other had gone.
+`LL25`'s `JMP PLANET` and `LL14`'s `JMP DOEXP` are calls inside `DrawShip` now — the same two
+library calls every implementer of the seam had been making, `FlightSession`, `FlightPort` and
+the frame fixture's recorder alike — and `DrawShip(Universe&, Ship& _slot, bool _carryIn)` replaces
+the twelve-parameter signature, because eleven of the twelve were `_universe.x` at every call site
+and the twelfth, the slot `INF` points at, is the caller's decision. `Ports` is nine references;
+`Game` takes five and a `ControlEffects`; `effects-seams` 8 → 7, `aggregate-refs` 10 → 9,
+`workspace-params` 45 → 43, `outpost-elite-names` 69 → 66. Seven fixtures stop declaring a seam
+they never reached; `NullSeams`, `FlightPort` and `FlightSession` stop answering it.
+
+**THE SHIP-DRAW SWEEP'S EXPLODING PLACEMENT WAS ANOTHER UNREACHABLE STATE.** Its heap was all
+zeroes with the exploding bit set, which the game never produces — `EE55` writes the counter, the
+explosion count and four seeds the moment a ship dies — and the `DOEXP` trap had hidden it: with
+the trap gone the oracle walked byte 2 (zero) down through 255 copying vertices and read its own
+stack page where the port reads zero. The placement's heap is seeded the way `EE55` leaves one,
+`RAND` is seeded on both sides because the cloud consumes it, and the first four face flags are
+left out of that placement's `XX2` comparison because they are `K3` and `DOEXP` writes its last
+vertex over them (the port's `k3` is a local). The same shape as M6-0-d and M6-0-a-2: not a port
+defect, a fixture describing a state the game has no path to. The `DOEXP` traps in `MissionTests`
+and `ShipDrawTests` are gone with the seam; `RDKEY` is M6-0-a-4. 399 of 399; all 16 checks.
 
 **2026-09-07 — M6-0-a-2: `DOEXP` untrapped, and the first whole-frame comparison with an explosion in it.**
 

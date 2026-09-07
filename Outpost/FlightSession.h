@@ -7,14 +7,12 @@
 #include "Charts.h"
 #include "Controls.h"
 #include "Dashboard.h"
-#include "Explosion.h"
 #include "ExtendedTokens.h"
 #include "Flight.h"
 #include "FlightLoop.h"
 #include "Lasers.h"
 #include "LineHeap.h"
 #include "VideoState.h"
-#include "PlanetDraw.h"
 #include "Rng.h"
 #include "Scanner.h"
 #include "ShipDraw.h"
@@ -69,7 +67,7 @@ namespace Outpost
    * What DOES work is the frame itself: the controls, the stardust, the dashboard, the planet, the
    * ship renderer and all sixteen parts of `M%`.
    */
-  class FlightSession final : public Elite::ShipDrawEffects, public Elite::ControlEffects
+  class FlightSession final : public Elite::ControlEffects
   {
   public:
     explicit FlightSession(Window& _window) noexcept;
@@ -122,10 +120,9 @@ namespace Outpost
      * library.
      */
 
-    // ---- Elite::ShipDrawEffects -----------------------------------------------------------------
-
-    void DrawPlanetOrSun() override;
-    void DrawExplosion() override;
+    // `Elite::ShipDrawEffects` WAS ANSWERED HERE AND IS NOT ANY MORE (M6-0-a-3): `DrawPlanetOrSun`
+    // and `DrawExplosion` were one library call each over the universe, which is exactly what
+    // `Elite::DrawShip` does inside the library now.
 
     /*
      * 6502: RDKEY, once, into whichever logger the caller owns.

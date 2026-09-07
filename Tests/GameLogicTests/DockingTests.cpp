@@ -325,7 +325,7 @@ namespace GameLogicTests
       universe.status.aftShield = 0x5C;
       universe.status.energy = 0x5C;
 
-      Elite::Ports ports = universe.PortsWith(universe.unused, effects, effects);
+      Elite::Ports ports = universe.PortsWith(effects, effects);
       const Elite::DockingResult result = Elite::DockAtStation(universe, ports, 0, false);
 
       Assert::AreEqual(static_cast<int>(DockingOutcome::DockingBay), static_cast<int>(result.outcome), L"this commander earns no briefing");
@@ -406,7 +406,7 @@ namespace GameLogicTests
       Universe earnerUniverse;
       earnerUniverse.commander = earner;
       earnerUniverse.heaps.stp = 4u; // §6.95, as above
-      Elite::Ports earnerPorts = earnerUniverse.PortsWith(earnerUniverse.unused, briefed, briefed);
+      Elite::Ports earnerPorts = earnerUniverse.PortsWith(briefed, briefed);
       const Elite::DockingResult briefing =
         Elite::DockAtStation(earnerUniverse, earnerPorts, 0, false);
 

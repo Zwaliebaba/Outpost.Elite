@@ -61,7 +61,7 @@ namespace
     App()
       : shell(window, presenter),
         flight(window),
-        game(flight, shell, shell, shell, store, flight)
+        game(shell, shell, shell, store, flight)
     {
       Elite::Universe& universe = game.State(); // the game's since M5-e-2; the sessions take it now
       shell.AttachUniverse(universe);

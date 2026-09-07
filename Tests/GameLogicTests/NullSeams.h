@@ -41,15 +41,13 @@
 namespace GameLogicTests
 {
 
-  struct NullSeams : Elite::ShipDrawEffects,
-                     Elite::StartUpEffects,
+  struct NullSeams : Elite::StartUpEffects,
                      Elite::Keyboard,
                      Elite::Presenter,
                      Elite::CommanderStore
   {
-    // Elite::ShipDrawEffects
-    void DrawPlanetOrSun() override {}
-    void DrawExplosion() override {}
+    // `Elite::ShipDrawEffects` WAS HERE AND IS NOT ANY MORE (M6-0-a-3): `LL9`'s two tail jumps
+    // are calls inside `Elite::DrawShip`, so nothing answers them with nothing any more.
 
     /*
      * `Elite::SpawnChildEffects` AND ITS `spawnRoom` WERE HERE AND ARE NOT ANY MORE (M4-a-1).

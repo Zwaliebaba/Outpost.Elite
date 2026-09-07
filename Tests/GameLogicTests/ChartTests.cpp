@@ -227,7 +227,7 @@ namespace GameLogicTests
           characters(screen, universe.sentences),
           printer(characters, text, &galaxy),
           extended(characters, printer, rng),
-          ports{printer,  characters, characters, nulls, sid,
+          ports{printer,  characters, characters, sid,
                 extended, nulls,      nulls,      nulls, nulls}
       {
         galaxy.number = _galaxy;

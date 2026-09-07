@@ -14,9 +14,9 @@
       "slice": "M3-b-3a: DrawLaserSights takes the state, not a _view plus a seam"
     },
     "workspace-params": {
-      "ceiling": 45,
+      "ceiling": 43,
       "slack": 0,
-      "slice": "M2-c-3: MathWorkspace is Q and K2's bottom byte, and no drawing routine takes the others"
+      "slice": "M6-0-a-3: DrawShip takes Universe& -- its eight workspaces were the universe's"
     },
     "ship-literal-sites": {
       "ceiling": 0,
@@ -29,9 +29,9 @@
       "slice": "M1-a"
     },
     "aggregate-refs": {
-      "ceiling": 10,
+      "ceiling": 9,
       "slack": 0,
-      "slice": "M4-a-1: SFS1 leaves Ports, which is ten references"
+      "slice": "M6-0-a-3: ShipDrawEffects leaves Ports, which is nine references"
     },
     "main-lines": {
       "ceiling": 251,
@@ -39,14 +39,14 @@
       "slice": "M5-e-2: the composition root holds no game state, and says so in fewer lines"
     },
     "outpost-elite-names": {
-      "ceiling": 69,
+      "ceiling": 66,
       "slack": 0,
-      "slice": "M4-a-1: FlightSession stops answering SFS1"
+      "slice": "M6-0-a-3: FlightSession stops answering LL9's two tail jumps"
     },
     "effects-seams": {
-      "ceiling": 8,
+      "ceiling": 7,
       "slack": 0,
-      "slice": "M4-a-1: SpawnChildEffects goes -- SPIN and SPIN2 answer a Drop and PerformDrop spawns"
+      "slice": "M6-0-a-3: ShipDrawEffects goes -- DrawShip calls PlanetDraw and Explosion itself"
     },
     "out-params": {
       "ceiling": 0,

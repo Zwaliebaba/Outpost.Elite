@@ -411,9 +411,7 @@ namespace Elite
       _universe.work.y.lo = 0u;
 
       // 6502: JSR LL9 -- the title's ship is never killed, so the carry it is reached with goes unread.
-      DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work,
-               _universe.bubble.blocks[slot], _universe.heap, *_universe.flight.blueprint, _universe.flight.type, _ports.drawing,
-               _universe.rng, false);
+      DrawShip(_universe, _universe.bubble.blocks[slot], false);
 
       // 6502: JSR RDKEY / DEC MCNT.
       _ports.present.HoldTitleFrame(_universe.work.z.hi); // 6502: TLL2's pace
@@ -646,9 +644,7 @@ namespace Elite
        * `INF`. Handing it slot 0 would have `LL9` writing its bookkeeping into the PLANET, which
        * is what the port did until the oracle disagreed about the planet's speed byte.
        */
-      DrawShip(_universe.canvas, _universe.geometry, _universe.math, _universe.clip, _universe.projection, _universe.work,
-               _universe.bubble.blocks[abandoned.slot], _universe.heap, *_universe.flight.blueprint, _universe.flight.type, _ports.drawing,
-               _universe.rng,
+      DrawShip(_universe, _universe.bubble.blocks[abandoned.slot],
                false); // the pod is never killed, so the carry goes unread
       --_universe.work.ai;
     }

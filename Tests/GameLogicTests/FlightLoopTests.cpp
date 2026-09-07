@@ -792,7 +792,7 @@ namespace GameLogicTests
       std::uint16_t klo, tp, mch, messxc, gntmp, energy;
 
       std::uint16_t ma3, ma18, escape;
-      std::uint16_t mainLoop, death, doentry, doexp, planet, sfs1;
+      std::uint16_t mainLoop, death, doentry, sfs1;
       std::uint16_t dovdu19, slsp;
 
       explicit LoopWhere(const OracleImage& _oracle)
@@ -829,8 +829,6 @@ namespace GameLogicTests
         ma18 = _oracle.Label("MA18");
         death = _oracle.Label("DEATH");
         doentry = _oracle.Label("DOENTRY");
-        doexp = _oracle.Label("DOEXP");
-        planet = _oracle.Label("PLANET");
         sfs1 = _oracle.Label("SFS1");
         dovdu19 = _oracle.Label("DOVDU19");
         slsp = _oracle.Label("SLSP");
@@ -855,33 +853,12 @@ namespace GameLogicTests
      */
 
     /*
-     * What `MVEIT` and `LL9` reach through the seam. The planet and the sun are DRAWN, on both
-     * machines, since M6-0-d: this counted the call and `CompareFrames` trapped `PLANET` on the
-     * oracle, so no frame had ever put a drawn body on the bitmap of both -- the sun case of the
-     * altitude sweep was "compared on the whole bitmap" with nothing on it. The explosion is drawn
-     * too, since M6-0-a-2: its sprite writes go to the banked I/O page on both machines now that
-     * `Cpu6502` models the 6510 port (M6-0-a-1), so the `DOEXP` trap comes off and a frame with a
-     * ship shot to bits is compared on the bitmap, the sprite registers, the heap and `RAND`.
+     * `RecordingUniverse` -- `ShipDrawEffects` over the frame's universe -- WAS HERE AND IS NOT ANY
+     * MORE (M6-0-a-3). It counted `LL9`'s two tail jumps while `CompareFrames` trapped `PLANET` and
+     * `DOEXP` on the oracle, so no frame had ever put a drawn body or a cloud on the bitmap of
+     * both; M6-0-d made it draw the planet and the sun, M6-0-a-2 the cloud, and with both drawn on
+     * both machines there was nothing left for it to count. `Elite::DrawShip` makes the calls.
      */
-    struct RecordingUniverse final : Elite::ShipDrawEffects
-    {
-      Universe* universe = nullptr;
-      std::uint32_t planets = 0;
-      std::uint32_t explosions = 0;
-
-      void DrawPlanetOrSun() override
-      {
-        ++planets;
-        Universe& u = *universe;
-        Elite::DrawPlanetOrSun(u.canvas, u.heaps, u.geometry, u.math, u.clip, u.rng, u.work, u.projection, u.flight.type);
-      }
-      void DrawExplosion() override
-      {
-        ++explosions;
-        Universe& u = *universe;
-        Elite::DrawExplosionCloud(u.canvas, u.math, u.rng, u.work, u.heap, u.geometry, u.bubble, u.video, u.memoryMap);
-      }
-    };
 
     /// Everything one frame needs that the shared `Universe` does not carry.
     struct Frame
@@ -889,12 +866,10 @@ namespace GameLogicTests
       Universe universe; ///< every byte of it, since M3-a -- the controls, the keys, the burst,
                          ///< the heap, the clipper's flag, the projection and the axes were eight
                          ///< members here while `FlightLoop` held references to them
-      RecordingUniverse outside;
 
       explicit Frame(std::uint32_t _seed)
       {
         Seed(universe, _seed);
-        outside.universe = &universe;
 
         /*
          * 6502: TRIBCT -- ZERO here, and `Seed` leaves it at 90 (slice 4d-a).
@@ -1234,7 +1209,7 @@ namespace GameLogicTests
       const Elite::Testing::RunResult run = cpu.CallSubroutine(entry, 8'000'000);
       Assert::IsTrue(run.completed, (_context + L": M% reached an exit").c_str());
 
-      Elite::Ports ports = _frame.universe.PortsWith(_frame.outside, _frame.universe.unused);
+      Elite::Ports ports = _frame.universe.PortsWith(_frame.universe.unused);
       const Elite::LoopOutcome outcome = (_reach == Reach::Ships)   ? Elite::MoveEveryShip(_frame.universe, ports)
                                          : (_reach == Reach::Tail)  ? Elite::EndFlightFrame(_frame.universe, ports)
                                          : (_reach == Reach::Whole) ? Elite::MainFlightLoop(_frame.universe, ports)
@@ -2256,7 +2231,7 @@ namespace GameLogicTests
       frame.universe.view = 0u;
       frame.universe.spaceView = 0u;
 
-      Elite::Ports ports = frame.universe.PortsWith(frame.outside, frame.universe.unused);
+      Elite::Ports ports = frame.universe.PortsWith(frame.universe.unused);
 
       frame.universe.dockedFlag = 0xFFu; // 6502: QQ12 -- docked, which is the path that launches
       Elite::SystemSeeds selected{};

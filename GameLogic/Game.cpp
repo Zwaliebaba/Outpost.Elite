@@ -34,8 +34,7 @@ namespace Elite
    * the character printer, the state tokens need the token printer AND the commander, and the token
    * printer needs the state tokens back -- which is the cycle `SetValueTokens` exists to break.
    */
-  Game::Game(ShipDrawEffects& _drawing, StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard, CommanderStore& _store,
-             ControlEffects& _controls) noexcept
+  Game::Game(StartUpEffects& _start, Presenter& _present, Keyboard& _keyboard, CommanderStore& _store, ControlEffects& _controls) noexcept
     : m_screen(m_universe.canvas, m_universe.text, &m_universe.sound),
       m_characters(m_screen, m_universe.sentences),
       m_recursive(m_characters, m_universe.text),
@@ -43,7 +42,7 @@ namespace Elite
                m_universe.selectedSeeds, false),
       m_extended(m_characters, m_recursive, m_universe.rng),
       m_controls(_controls),
-      m_ports{m_recursive, m_characters, m_characters, _drawing, m_sid, m_extended, _start, _present, _keyboard, _store}
+      m_ports{m_recursive, m_characters, m_characters, m_sid, m_extended, _start, _present, _keyboard, _store}
   {
     m_recursive.SetValueTokens(&m_values);
     m_extended.SetGame(m_universe, m_ports); // 6502: DT3 -- a control code that leaves is the library's

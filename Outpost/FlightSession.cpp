@@ -151,25 +151,6 @@ namespace Outpost
    * calls through it; they answer an `Elite::Drop` now and the comparison is that answer, so the
    * bubble is a real bubble on both sides of the trap.
    */
-  // ---- the ships ----------------------------------------------------------------------------------
-
-  void FlightSession::DrawPlanetOrSun()
-  {
-    // 6502: LL25 -- JMP PLANET, taken for a type with bit 7 set. `INWK` is the body and `TYPE`
-    // decides which of the two it is, exactly as the tail jump does.
-    Elite::DrawPlanetOrSun(m_universe->canvas, m_universe->heaps, m_universe->geometry, m_universe->math, m_universe->clip, m_universe->rng,
-                           m_universe->work, m_universe->projection, m_universe->flight.type);
-  }
-
-  void FlightSession::DrawExplosion()
-  {
-    // 6502: LL14's JMP DOEXP -- age the cloud by one frame and draw it, which is how the last
-    // frame is erased as well as how this one appears. `INWK` is the exploding ship and `XX3` the
-    // vertices `LL9` part 8 projected, which `DOEXP` copies onto the ship's line heap.
-    Elite::DrawExplosionCloud(m_universe->canvas, m_universe->math, m_universe->rng, m_universe->work, m_universe->heap,
-                              m_universe->geometry, m_universe->bubble, m_universe->video, m_universe->memoryMap);
-  }
-
   // ---- the controls -------------------------------------------------------------------------------
 
   /*

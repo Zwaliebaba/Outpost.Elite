@@ -692,7 +692,7 @@ namespace GameLogicTests
         Universe universe;
         // 6502: SFS1's carry was a fixture boolean here until M4-a-1, when `PerformDrop` started
         // spawning into the real bubble and the answer became the slot list's.
-        Elite::Ports ports = universe.PortsWith(universe.unused, universe.unused);
+        Elite::Ports ports = universe.PortsWith(universe.unused);
         Elite::Ship& work = universe.work;
         Elite::FlightState& flight = universe.flight;
         Elite::Canvas& canvas = universe.canvas;
