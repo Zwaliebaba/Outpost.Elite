@@ -236,9 +236,19 @@ Three instruments are in place and every slice below leans on them:
 - **The whole-bitmap comparisons**: `TITLE`, `TT110`, the dashboard, the planet and the stardust
   suites compare the whole `SCBASE` region byte for byte. They see composition where the per-routine
   tests see routines.
-- **The mutants**: <!--count:mutants-->72 recorded edits in nine files, each anchored to a line of
-  source that must match exactly once, each expected to be caught. `mutate.py --check` runs in CI;
-  the run itself works through the portable runner on Linux (`--runner portable`).
+- **The mutants**: <!--count:mutants-->95 recorded edits in <!--count:mutant-files-->sixteen files,
+  each anchored to a line of source that must match exactly once, each expected to be caught or
+  recorded as an equivalent with its proof. `mutate.py --check` runs in CI; the run itself works
+  through the portable runner on Linux (`--runner portable`). **The floor (M6-0-g)**: `mutants.json`
+  names fourteen `.cpp` files that must each carry a mutant the suite catches -- the arithmetic
+  kernel and the generator, the flight model (`ShipMove`, `Spawn`, `Flight`, `FlightLoop`,
+  `Tactics`), the drawing that composes (`PlanetDraw`, `ShipDraw`, `Canvas`, `Raster`) and the
+  three state machines with their own rows (`Hyperspace`, `Missions`, `Trumbles`) -- because in
+  each of them a slip is invisible to every per-routine comparison except the one on that file.
+  `mutate.py --check` refuses a floor file whose only mutants are survivors or equivalents. A
+  ported file that composes what these do (`GameLoop`, `Controls`, `Docking`, the screens) is
+  covered by the whole-frame comparisons and the replay and is not on the floor; the floor grows
+  when a file joins that list, never shrinks.
 
 What nothing pins: the presenter (R5, by design); timing (ADR-005 §3, by design); and the things
 M6-0 names — a whole frame with an explosion in it, the escape pod and the death sequence in
@@ -1531,7 +1541,7 @@ were safe after M6-f, and none of them waited.
 | **M6-0-d Two fixture faults from M3-b** ✅ **built 2026-09-07 (§8)** | `Where` has no `SUNX` and no `LSY2`, so a fixture cannot put a DRAWN sun into both machines and `MA23 whole frame (a sun close enough to draw)` has differed at screen offset 8033 since it was first run; the flight-loop fixtures give every ship a line heap at `&0C00`, outside `LineHeap`'s window, so "the seeds it writes are compared nowhere." Both were called one-line fixes at the time and neither was made. **Built:** nine planet-and-sun cells, the heaps carved from `LS%`, `PLANET` untrapped and drawn on both machines — and the first drawn-sun frames found a stale zero-page read in the original's `WPLS` that no game state reaches. | The sun frame compared on the whole bitmap; the heaps inside the arena and compared; no case excluded by name that this row could include. | 1 |
 | **M6-0-e Seven routines only ever trapped** ✅ **built 2026-09-07 (§8)** | `TRADEMODE`, `NLIN`, `TT67` and `DK4` are ported and have no direct comparison against the original anywhere — every test that reaches them traps them; `WSCAN` is the platform's (ADR-005 §3), `REDU` is proven unreachable, `GTNMEW` is the load path's name entry. A trapped routine's fixture records the TRAP's answer. Each of the seven gets a ruling: compared before M6-a, or a sentence beside its trap saying it never will be and why. | No `AddTrap` on a label that has neither a direct comparison nor a recorded reason. | 1 |
 | **M6-0-f A coverage instrument** ✅ **built 2026-09-07 (§8)** | M6-a's acceptance is "every *Port* row has a test that calls it" and nothing can answer that: the ledger's ✅ is per label and inconsistent (twelve of thirty-three Port rows carry none, the flight loop's sixteen parts among them), and a marker-to-test name match is noise. `OracleImage` gains a `--coverage` mode that records which labels each test calls, and `inventory.py` reads it against the ledger's Port rows. R19 says the review is a gate, and a gate needs a reading. | The review is a tool's output, not a person's; every Port row's labels appear in some test's call list or the row says which do not and why. | 2 |
-| **M6-0-g Mutants to a stated floor** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
+| **M6-0-g Mutants to a stated floor** ✅ **built 2026-09-07 (§8)** | Eight of fifty-two hand-written `.cpp` files carry a mutant. After M6-b a fixture says what the tests ASKED and a mutant is the only instrument that says whether a test would NOTICE — and `Rng.cpp`, `Arith.cpp`, `ShipMove.cpp`, `PlanetDraw.cpp`, `Spawn.cpp` and `Flight.cpp` have none. A floor is chosen and written here; M6-b's "five mutation units" is a count from before the corpus reached nine files and is replaced by it. | Every file the floor names has a caught mutant; `mutants.json`'s note per unit says what the mutant would have hidden. | 3 |
 | **M6-0-h The two seams that outlived their reason** ✅ **built 2026-09-07 (§8, three sittings)** | Written as "the empty seams" and corrected on 2026-09-07 (§8, M6-0-h-1): `StartUpEffects` was NOT a bare destructor. It carried `ClearKeyLogger` (`ZEKTRAN`, which is `Universe::keys` and which the executable answered by flushing the window) and `ShowTitleScreen` (`TITLE`, a forward to `Elite::ShowTitleShip` since §6.107), and `ControlEffects` holds `RunDockingComputer`, which M4-c-2 made a library routine but which the `DOKEY` sweep still stubs through the seam to isolate `DOKEY` from `DOCKIT`. Three pieces: `ZEKTRAN` to the library (h-1); `TITLE` called directly, which makes the title screen run inside every fixture that drives a `Game` and needs each of their keyboards to end it (h-2); `DOCKIT` called directly, which puts the real autopilot into the `DOKEY` sweep over a seeded bubble in place of scripted answers (h-3). Still worth doing before M6-a, so the seam count M6 inherits is the real one. | `effects-seams` at the number §4.5 can explain: the four ports, the text system's two, and whatever M6-0-a leaves. | 3 |
 | **M6-a Coverage review and the recorder** | **Blocked on M6-0.** Every *Port* row of the ledger has a test that calls it, read off M6-0-f's instrument rather than reviewed by eye; the `Oracle` seam of §4.10; `RecordingOracle` writes `Tests/Fixtures/*.oracle`; the record-size threshold measured and written here. | M6-0's eight rows green first. Then the suite runs green through the recorder on both legs and the fixtures are committed; a second recording run produces identical files. | 3 |
 | **M6-b Fixtures answer** | `RecordedOracle` serves the suite; `LiveOracle` and the BeebAsm steps leave CI; `OracleIsPresent` retired; `mutate.py`'s oracle check removed (the tables' own oracle comparison went on 2026-09-07). | Green on both legs with no assembler installed and the submodule uninitialised; the mutant corpus at M6-0-g's floor with every tally unchanged. | 2 |
@@ -1812,6 +1822,31 @@ sets the screen pointer once and `DIL`/`DIL2` advance it seven calls running, wh
 documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
+
+**2026-09-07 — M6-0-g: the floor, and twenty-three mutants on the six files that had none.**
+
+The floor is fourteen files, written in §2.7 and carried as data in `tools/mutants.json`, and
+`mutate.py --check` -- the half that runs on every push -- now refuses a floor file whose mutants
+are all survivors or equivalents. `--unit` is repeatable, so the six new units run on one worktree
+and one baseline. Each of `Rng`, `Arith`, `ShipMove`, `PlanetDraw`, `Spawn` and `Flight` gets a
+selftest and three mutants, and every one of the twenty-three is placed on a line the plan has a
+section about: the two carries `DORND` threads; `MU1`'s `CLC`, `ADD`'s exit carry and `LL5`'s last
+`ROL` (§6.55); the inverted `BPL MV43` and `TIDY`'s loop that stops at INWK+23; `PL82`'s 248,
+`CHKON`'s branch to `PLS6`'s `CLC` (§6.45) and `SUN`'s middle threshold; `ze`'s fall into `DORND2`
+(§6.117), `SFS1`'s set carry (§6.121) and the Dodo's tech level; `RES2` re-centring the pitch and
+not the roll, `RESET`'s seven bytes being this build's, and `INC INWK+7` once on launch. Each
+mutant's note says what it would have hidden, which is the acceptance.
+
+**TWENTY-TWO CAUGHT, AND THE ONE SURVIVOR IS A PROOF.** `sm-mltu2-carry` turns the carry `MVEIT`'s
+`ADC K2+1` runs on -- the one `MLTU2` left, with no `CLC` between them -- into `false`, and the
+suite did not notice. It cannot: `MLTU2` opens with `LSR A / STA P+1`, so bit 7 of P+1 is zero,
+and its sixteen `ROR P+1 / ROR P` pairs shift exactly that bit out on the last one. The carry is
+never set, the `ADC` without a `CLC` is safe by construction, and the wide-multiply sweep now
+COUNTS the carries the shipped routine leaves over 150,000 samples and asserts zero, so the
+equivalence is measured rather than argued. It is recorded as an equivalent with that proof in its
+note, which is what rule 3 says a survivor becomes or does not stay. 95 mutants in sixteen files,
+94 expected caught and one equivalent; the floor's fourteen all carry a catch. 408 of 408; all 16
+checks.
 
 **2026-09-07 — M6-0-f: the coverage instrument, and the first honest reading of the Port rows.**
 

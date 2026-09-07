@@ -15,6 +15,7 @@ says what happened.
 
     python tools/mutate.py --list                 what is recorded, and for which slice
     python tools/mutate.py --unit tactics         run one unit's mutants
+    python tools/mutate.py --unit rng --unit arith  or several, on one worktree and one baseline
     python tools/mutate.py --id ta-253            run one mutant
     python tools/mutate.py                        run everything (slow: builds once per mutant)
 
@@ -107,10 +108,22 @@ def load_units() -> list[dict]:
     return data["units"]
 
 
-def select(_units: list[dict], _unit: str | None, _ident: str | None) -> list[Mutant]:
+def load_floor() -> list[str]:
+    """The files that must each carry a caught mutant -- M6-0-g's floor, stated in the plan (§6 M6-0-g).
+
+    A fixture says what a test ASKED; a mutant is the only instrument that says whether the test
+    would NOTICE. The floor is the list of ported files where an arithmetic slip is invisible to
+    every per-routine comparison but the one on that file, so each of them must have at least one
+    recorded mutant the suite catches.
+    """
+    data = json.loads(MUTANTS.read_text(encoding="utf-8"))
+    return list(data.get("floor", []))
+
+
+def select(_units: list[dict], _unit: list[str] | None, _ident: str | None) -> list[Mutant]:
     chosen: list[Mutant] = []
     for unit in _units:
-        if _unit and unit["name"] != _unit:
+        if _unit and unit["name"] not in _unit:
             continue
         for mutant in unit["mutants"]:
             # A selftest mutant is never filtered out: --id runs the one asked for AND the proof
@@ -500,7 +513,25 @@ def warn_if_dirty(_chosen: list[Mutant]) -> None:
         print()
 
 
-def check_applicable(_chosen: list[Mutant]) -> int:
+def check_floor(_chosen: list[Mutant], _floor: list[str]) -> list[str]:
+    """Every file the floor names carries at least one mutant the suite is expected to catch.
+
+    A selftest counts: it is a caught mutant like any other, and its job of proving the harness
+    observes a catch is a job the floor's file needs done too. What does not count is a file whose
+    only mutants are recorded survivors or equivalents -- those say the tests would NOT notice,
+    which is the opposite of what the floor asks.
+    """
+    complaints: list[str] = []
+    caught_in = {mutant.file for mutant in _chosen if mutant.expect == CAUGHT}
+    for path in _floor:
+        if not (REPO / path).is_file():
+            complaints.append(f"floor: {path} does not exist")
+        elif path not in caught_in:
+            complaints.append(f"floor: {path} has no mutant recorded as caught, and the floor says it must")
+    return complaints
+
+
+def check_applicable(_chosen: list[Mutant], _floor: list[str] | None = None) -> int:
     """Every recorded mutant still points at code that exists, without building anything.
 
     This is the half of the tool that can run on every push. A mutation PASS is minutes per mutant
@@ -535,7 +566,13 @@ def check_applicable(_chosen: list[Mutant]) -> int:
         if not any(mutant.selftest for mutant in _chosen if mutant.unit == unit):
             complaints.append(f"{unit}: no mutant is marked `selftest`, so a run of it cannot prove it observes a catch")
 
-    print(f"recorded mutants {len(_chosen)}")
+    # The floor is checked only over the whole corpus: a `--unit` selection cannot say anything
+    # about files it did not select.
+    if _floor is not None:
+        complaints.extend(check_floor(_chosen, _floor))
+
+    files = sorted({mutant.file for mutant in _chosen})
+    print(f"recorded mutants {len(_chosen)} in {len(files)} files" + (f"; floor {len(_floor)} files" if _floor is not None else ""))
     if complaints:
         print("FAIL  mutants that no longer apply to the tree:")
         for complaint in complaints:
@@ -553,7 +590,7 @@ def main(_argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--list", action="store_true", help="print the recorded mutants and stop")
     parser.add_argument("--check", action="store_true", help="every mutant still applies to the tree; no build, no worktree")
-    parser.add_argument("--unit", help="only this unit")
+    parser.add_argument("--unit", action="append", help="only this unit (repeatable: one worktree and one baseline for all of them)")
     parser.add_argument("--id", dest="ident", help="only this mutant")
     parser.add_argument("--runner", choices=["portable", "msbuild"], help="which test runner (default: portable if available)")
     parser.add_argument("--worktree", help="where to put the scratch worktree")
@@ -563,6 +600,11 @@ def main(_argv: list[str]) -> int:
     units = load_units()
 
     if arguments.list:
+        floor = load_floor()
+        print(f"floor: {len(floor)} files that must each carry a caught mutant (plan M6-0-g)")
+        for path in floor:
+            print(f"    {path}")
+        print()
         for unit in units:
             print(f"{unit['name']}  (slice {unit['slice']}, filter '{unit['filter']}')")
             for mutant in unit["mutants"]:
@@ -576,7 +618,8 @@ def main(_argv: list[str]) -> int:
         return 1
 
     if arguments.check:
-        return check_applicable(chosen)
+        whole_corpus = not arguments.unit and not arguments.ident
+        return check_applicable(chosen, load_floor() if whole_corpus else None)
 
     check_oracle_present()
     warn_if_dirty(chosen)
