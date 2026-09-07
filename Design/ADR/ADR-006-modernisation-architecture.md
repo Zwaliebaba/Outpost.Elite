@@ -1,8 +1,9 @@
 # ADR-006 — Modernisation Architecture
 
 **Status:** Accepted · 2026-09-06, written at Phase M2's opening from what M0 and M1 built and from
-[Modernize.md](../Modernize.md) §4 as accepted; amended as each later phase lands (M3-d adds
-ADR-007 on state ownership and the replay hash; M5-d revises this document from what was built)
+[Modernize.md](../Modernize.md) §4 as accepted; amended as each later phase lands. **§4 amended
+2026-09-07 at M3's close**, where three of its claims did not survive the build; ADR-007 records the
+ownership and the replay hash as they are. M5-d revises this document from what was built.
 **Depends on:** ADR-001 (fidelity — unchanged: the game does not change), ADR-002 (numeric model —
 unchanged: every byte keeps its width), ADR-003 (the oracle stays the judge until M6 records it),
 ADR-004 (projects and layout), ADR-005 (presentation)
@@ -90,13 +91,20 @@ register until M6.
 
 ### §4 Ownership: `Universe`, `Game`, four ports
 
-**Planned, M3.** `Elite::Universe` is a plain aggregate owning every byte of game state and nothing
-else; `Elite::Game` owns `Reset`, `Step(InputFrame)`, `Frame()`, `Sounds()` and `StateHash()`, with
-`Mode` the explicit machine `Main.cpp` spells out by hand today. The twenty-two effects seams collapse
-to four ports — `Presenter`, `Keyboard`, `SoundSink`, `SaveStore` — and everything else in them is a
-call into a routine that now exists or a `VideoState` write the library makes itself. The executive
-decides how many steps and the library takes them. ADR-007 records the ownership and the replay hash
-when M3 has built them.
+**Built by M3, 2026-09-06/07, and ADR-007 records it — including the three places this paragraph
+was wrong.** `Elite::Universe` is a plain aggregate owning every byte of game state and nothing
+else, `Elite::Game` owns the dispatch and both outer loops, and `Outpost/Main.cpp` is 256 lines of
+platform. The twenty-two effects seams became four ports — `Presenter`, `Keyboard`, `SoundSink` and
+`CommanderStore` — plus five that turned out to be `GameLogic` reached through the executable, and
+nine abstract classes remain rather than four: two are the text system's own polymorphism and two
+are blocked on a comparison the emulator cannot yet make (ADR-007 §6, Modernize.md §4.5).
+
+**Three claims above did not survive the build.** `Step(InputFrame)` is three `Step`s taking a key,
+because `FRCE` chooses between three routines rather than three branches of one. `Frame()`,
+`Sounds()`, `StateHash()` and `Mode` are not built, and `Mode` is M4-d's. And the executive decides
+how many steps because it MUST: the count is floating point and the determinism guard forbids the
+library one. ADR-007 §2 and §3 have the reasoning; the ownership and the replay hash are its §1 and
+§4.
 
 ### §5 Control flow: pipelines with named stages
 
@@ -160,7 +168,7 @@ needs it.
 | M0 The safety net | Built 2026-09-06 | Modernize.md §6 M0, §8 |
 | M1 Typed data | Built 2026-09-06 | §2 above; Modernize.md §6 M1 |
 | M2 Calling conventions | M2-a and M2-b built 2026-09-06 (the kernel takes values and returns structs; the frame's `Q` named, Modernize.md §8 and R22); M2-c's first of three commits built the same day (the line, the pixel, the blip, the compass, the dials and the number printer); M2-c-2, M2-c-3 and M2-d open | §3 above; Modernize.md §4.3 |
-| M3 Ownership | Planned | §4; ADR-007 when built |
+| M3 Ownership | Built 2026-09-06/07 (M3-0, M3-a, M3-b, M3-c, M3-d) | §4 above, amended from what was built; ADR-007 |
 | M4 Control flow | Planned | §5 |
 | M5 Polish and the ledger | Planned; amends this document | Modernize.md §6 M5 |
 | M6 Detach | Planned | §7 |
