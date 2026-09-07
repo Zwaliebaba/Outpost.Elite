@@ -238,7 +238,6 @@ namespace GameLogicTests
        * &D000 and so are the VIC-II registers, so its `STA VIC+&15` lands on a blueprint pointer
        * in a flat image and `NWSHP` then refuses the ship it names.
        */
-      _cpu.AddTrap(_to.nosprites);
       _cpu.AddTrap(OracleImage::Instance().Label("DOEXP"));
       _cpu.AddTrap(OracleImage::Instance().Label("PLANET"));
     }

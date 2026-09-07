@@ -92,12 +92,12 @@ namespace GameLogicTests
     /// Put all seven where both sides can see them.
     void SeedVideoRegisters(Cpu6502& _cpu)
     {
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x02u)] = SPRITE_X_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x03u)] = SPRITE_Y_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x10u)] = SPRITE_X_HIGH_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x15u)] = SPRITE_ENABLE_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x17u)] = SPRITE_EXPAND_SEED;
-      _cpu.memory[static_cast<std::uint16_t>(VIC + 0x1Du)] = SPRITE_EXPAND_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x02u)) = SPRITE_X_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x03u)) = SPRITE_Y_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x10u)) = SPRITE_X_HIGH_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x15u)) = SPRITE_ENABLE_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x17u)) = SPRITE_EXPAND_SEED;
+      _cpu.Io(static_cast<std::uint16_t>(VIC + 0x1Du)) = SPRITE_EXPAND_SEED;
       _cpu.memory[IO_PORT] = IO_PORT_SEED;
     }
 
@@ -221,12 +221,12 @@ namespace GameLogicTests
       const std::uint8_t expansion = _video.expanded;
       const std::uint8_t port = _map.port;
 
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x17u)], expansion, (_context + L": VIC+&17").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x1Du)], expansion, (_context + L": VIC+&1D").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x02u)], lowX, (_context + L": VIC+&2").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x03u)], row, (_context + L": VIC+&3").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x10u)], xHigh, (_context + L": VIC+&10").c_str());
-      Assert::AreEqual(_cpu.memory[static_cast<std::uint16_t>(VIC + 0x15u)], enable, (_context + L": VIC+&15").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x17u)), expansion, (_context + L": VIC+&17").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x1Du)), expansion, (_context + L": VIC+&1D").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x02u)), lowX, (_context + L": VIC+&2").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x03u)), row, (_context + L": VIC+&3").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x10u)), xHigh, (_context + L": VIC+&10").c_str());
+      Assert::AreEqual(_cpu.Io(static_cast<std::uint16_t>(VIC + 0x15u)), enable, (_context + L": VIC+&15").c_str());
       Assert::AreEqual(_cpu.memory[IO_PORT], port, (_context + L": the 6510 port register").c_str());
     }
 

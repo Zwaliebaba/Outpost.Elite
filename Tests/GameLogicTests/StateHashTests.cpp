@@ -35,7 +35,6 @@ namespace GameLogicTests
       const Where at{};
 
       Universe universe;
-      universe.spriteRegistersAreOurs = true;
       Seed(universe, 5u);
       const std::uint64_t base = Elite::HashState(universe);
 

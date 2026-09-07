@@ -253,7 +253,6 @@ namespace GameLogicTests
         // The three the platform owns, plus §6.108's: `TT66` reaches `NOSPRITES`, and `NOSPRITES`
         // writes VIC registers that are the ship blueprint table in the oracle's flat memory.
         cpu.AddTrap(oracle.Label("DOVDU19"));
-        cpu.AddTrap(oracle.Label("NOSPRITES"));
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(laun, 40'000'000);
         Assert::IsTrue(run.completed, (std::wstring(L"LAUN returned -- illegal ") + std::to_wstring(run.illegalOpcode) + L", stoppedAt " +
@@ -348,7 +347,6 @@ namespace GameLogicTests
 
         cpu.AddTrap(delay);
         cpu.AddTrap(oracle.Label("DOVDU19"));
-        cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, third time
 
         const Elite::Testing::RunResult run = cpu.CallSubroutine(ll164, 40'000'000);
         Assert::IsTrue(run.completed, L"LL164 returned");
@@ -877,7 +875,6 @@ namespace GameLogicTests
              * a planet and a station AFTER the tunnel, so an untrapped store here makes `NWSPS`
              * refuse and the two sides disagree about the bubble rather than about the drawing.
              */
-            cpu.AddTrap(oracle.Label("NOSPRITES"));
             FillScreens(cpu, leaving.universe.canvas, at.screen, 0x1Du);
             Mirror(leaving.universe, cpu, at);
             leaving.universe.dockedFlag = docked; // 6502: QQ12 -- the scenario, on the byte `LAUN` reads
@@ -1074,7 +1071,6 @@ namespace GameLogicTests
 
       cpu.AddTrap(oracle.Label("EXNO3"), Cpu6502::TrapExit::SetCarry);
       cpu.AddTrap(oracle.Label("DOVDU19"));
-      cpu.AddTrap(oracle.Label("NOSPRITES")); // §6.108, fourth time
 
       cpu.a = cpu.x = cpu.y = 0;
       cpu.sp = 0xFD;
@@ -1451,7 +1447,6 @@ namespace GameLogicTests
                  * The port writes those registers through `SightEffects` and touches no memory, so
                  * trapping the routine is what makes the two sides agree rather than a convenience.
                  */
-                cpu.AddTrap(oracle.Label("NOSPRITES"));
                 
                 /*
                  * The counted `RDKEY`, written over the real one.

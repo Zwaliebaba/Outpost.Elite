@@ -1808,6 +1808,34 @@ documented and the census now lists. The tool is the thirteenth repository check
 (`channel_census.py --check`: the table in §4.3 matches the tree and no field lacks a verdict);
 nothing in `GameLogic/` changed.
 
+**2026-09-07 — M6-0-a-1: the interpreter banks the I/O page, and `NOSPRITES` runs on both machines.**
+
+The first third of the row that cannot be done after M6-b at any price. `Cpu6502` models the
+6510's port register: `memory` is the 64K of RAM and a second array, `io`, is the 4K page the
+VIC-II, the SID, the colour RAM and the CIAs occupy at `&D000`–`&DFFF`; a data read or a store on
+that page reaches the chips when bits 0 to 2 of `&0001` say so (CHAREN set and LORAM or HIRAM set —
+`%101` is what `SETL1` maps in with, `%100` what it maps out with) and the RAM under them
+otherwise. Instruction fetches, the stack and zero-page pointers never reach the page. Every one of
+the interpreter's sixty-two data reads and twenty-four read-modify-writes goes through `Read` and
+`Store` now; the store log is by address and sees both. A fixture that seeds or reads a register
+does so through `Io`, whatever the port register holds.
+
+**WHAT THAT UNDOES.** §6.108 found that in a flat image `XX21` — the blueprint pointer table at
+`&D000` — and the VIC-II's registers were the same bytes, so `NOSPRITES`' `STA VIC+&15` zeroed
+ship type 11's pointer and `NWSHP` refused the ship; the fix was to trap `NOSPRITES` in five suites,
+trap `DOEXP` in every composition test, keep `ShipDrawEffects` as a seam after every other seam
+had gone, and have each fixture CLAIM the sprite registers (`spriteRegistersAreOurs`) before the
+image would carry them. The five `NOSPRITES` traps are gone and the routine runs on both machines;
+the claim is gone and the seventeen sprite cells are ordinary cells, marked `io` so the image
+reads and writes the page; `TrumbleTests`, `ExplosionTests`, `ControlsTests` and `RasterTests`
+address the registers as registers. The first build routed every read above `&D000` to the page,
+which put the line-heap arena at `&F900` behind the chips and broke the explosion cloud; the
+bound is on both ends now.
+
+The replay record's label column moves (the sprite cells joined the image) and the state column
+does not — rule 1's first case, witnessed. 399 of 399; all 16 checks. `DOEXP` and the seam are
+M6-0-a-2 and -3.
+
 **2026-09-07 — M6-0-d: the two fixture faults, and a drawn sun on both machines for the first time.**
 
 The first M6-0 row built, and the smallest; it was "two one-line fixes" in M3-b's journal and is

@@ -185,7 +185,7 @@ namespace GameLogicTests
 
                   // The latch read is a blueprint pointer in a flat image, so it is pinned rather
                   // than left to whatever `XX21` holds -- see the file comment.
-                  cpu.memory[VIC_INTERRUPT_LATCH] = 0u;
+                  cpu.Io(VIC_INTERRUPT_LATCH) = 0u;
 
                   cpu.LogStores(VIC_BASE, static_cast<std::uint16_t>(VIC_BASE + 0x2E));
                   const std::wstring where =

@@ -59,6 +59,10 @@ namespace GameLogicTests
     /// the Trumbles own bits 2 to 7 and the laser sights own the other two.
     std::uint8_t mask = 0xFFu;
 
+    /// The byte is a chip register on the I/O page rather than RAM (the VIC-II's sprite
+    /// registers), reached through `Cpu6502::Io` whatever the port register says (M6-0-a).
+    bool io = false;
+
     /// The random number generator, which one caller asks to leave uncompared (`CompareState`'s
     /// `_compareRng`, and the reason is in `FlightUniverse.h`).
     bool generator = false;
@@ -72,15 +76,15 @@ namespace GameLogicTests
    * cast that away and call only the getters, which are the only `const_cast`s in the test tree and
    * is here so that the table is written once rather than twice.
    */
-  [[nodiscard]] std::vector<Cell> ImageCells(Universe& _universe, const Where& _at);
-
   /*
-   * The table over a bare `Elite::Universe`, which since M5-e-2c is every byte the image reads;
-   * the one thing beside it is the fixture's claim on the VIC-II sprite registers. M5-e-2 found
-   * `Hash(universe)` reading the test wrapper's idle printers for QQ17 and DTW1-8 next to a `Game`
-   * that had printed with its own, and M5-e-2b/2c moved those nine bytes into the universe.
+   * The table over a bare `Elite::Universe`, which since M5-e-2c is every byte the image reads.
+   * M5-e-2 found `Hash(universe)` reading the test wrapper's idle printers for QQ17 and DTW1-8
+   * next to a `Game` that had printed with its own, and M5-e-2b/2c moved those nine bytes into
+   * the universe. The sprite registers were the fixture's to CLAIM until M6-0-a, because in a
+   * flat image they were `XX21`; the interpreter banks the I/O page now and they are ordinary
+   * cells, on the page rather than in RAM.
    */
-  [[nodiscard]] std::vector<Cell> ImageCells(Elite::Universe& _universe, bool _spriteRegistersAreOurs, const Where& _at);
+  [[nodiscard]] std::vector<Cell> ImageCells(Elite::Universe& _universe, const Where& _at);
 
   /// Port -> 6502 memory, every cell.
   void Materialise(const Universe& _universe, Cpu6502& _cpu, const Where& _at);
