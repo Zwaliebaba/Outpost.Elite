@@ -146,7 +146,9 @@ namespace Elite
    * same slow duty-cycle wobble. It starts at 2 because that is the byte the binary loads with.
    *
    * `soundOff` is `DNOIZ`, which is a configuration byte the pause screen toggles rather than sound
-   * state, and it is here because `NOISE` is its only reader in this library.
+   * state, and it is here because `NOISE` is its only reader in this library. It is also the ONLY
+   * `DNOIZ`: `Universe` carried a second one that the pause screen wrote and nothing read, until
+   * M5-a-5 found it.
    */
   struct SoundBuffer
   {

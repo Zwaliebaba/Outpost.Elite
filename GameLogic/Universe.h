@@ -315,8 +315,16 @@ namespace Elite
     /// 6502: MUTOKOLD -- what `MUTOKCH` saw last, which is how it notices the switch moving.
     std::uint8_t musicSwitchWas = 0;
 
-    /// 6502: DNOIZ -- non-zero disables the sound, and the pause screen stores the KEY CODE in it.
-    std::uint8_t soundDisabled = 0;
+    /*
+     * `soundDisabled` WAS HERE AND IT WAS A SECOND `DNOIZ` (M5-a-5).
+     *
+     * The original has ONE: `DK4` writes it (`STX DNOIZ`, the key code itself) and `NOISE` reads it
+     * (`LDA DNOIZ / BNE SOUR1`). This port had two -- this one, which the pause screen wrote, and
+     * `SoundBuffer::soundOff`, which `MakeNoise` reads -- so the byte was written twice and read
+     * NEVER, and pressing "2" on the pause screen did not switch the sound off. The same shape as
+     * the duplicate `QQ12` the replay slice found in `FlightPort`, and found the same way: by
+     * asking which bytes the digest was not watching.
+     */
 
     /*
      * 6502: LSO -- the sun's heap, which `NWSPS` hands to the SPACE STATION (§6.112).
